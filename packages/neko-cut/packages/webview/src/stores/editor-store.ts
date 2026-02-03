@@ -18,7 +18,6 @@ import { ElementSplitSlice, createElementSplitSlice } from './slices/elementSpli
 import { ClipboardSlice, createClipboardSlice } from './slices/clipboardSlice';
 import { ShapeOpsSlice, createShapeOpsSlice } from './slices/shapeOpsSlice';
 import { AIActionSlice, createAIActionSlice } from './slices/aiActionSlice';
-import { MediaEngineModeSlice, createMediaEngineModeSlice } from './slices/mediaEngineModeSlice';
 
 // Combined store type - intersection of all slices
 export type EditorStore =
@@ -33,8 +32,7 @@ export type EditorStore =
   & ElementSplitSlice
   & ClipboardSlice
   & ShapeOpsSlice
-  & AIActionSlice
-  & MediaEngineModeSlice;
+  & AIActionSlice;
 
 /**
  * Create the combined editor store
@@ -63,7 +61,6 @@ export const useEditorStore = create<EditorStore>()((set, get, store) => ({
   ...createClipboardSlice(set, get, store),
   ...createShapeOpsSlice(set, get, store),
   ...createAIActionSlice(set, get, store),
-  ...createMediaEngineModeSlice(set, get, store),
 }));
 
 // Export individual slice types for external use
@@ -80,5 +77,4 @@ export type {
   ClipboardSlice,
   ShapeOpsSlice,
   AIActionSlice,
-  MediaEngineModeSlice,
 };

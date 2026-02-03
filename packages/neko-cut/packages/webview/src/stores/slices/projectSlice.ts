@@ -5,7 +5,6 @@
 
 import { StateCreator } from 'zustand';
 import type { ProjectData } from '../../types';
-import type { MediaEngineModeSlice } from './mediaEngineModeSlice';
 
 export interface ProjectSlice {
   // State
@@ -22,7 +21,7 @@ export interface ProjectSlice {
 }
 
 export const createProjectSlice: StateCreator<
-  ProjectSlice & Partial<MediaEngineModeSlice>,
+  ProjectSlice,
   [],
   [],
   ProjectSlice

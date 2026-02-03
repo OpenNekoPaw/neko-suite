@@ -15,7 +15,6 @@ import { getService } from '../../base';
 import { IPlatform, IConnectionStateManager, IAgentManager } from '../../bootstrap';
 import { ConfigBridge } from '../../services/configBridge';
 import type { Platform } from '@neko/platform';
-import { getAudioDecoderService } from '../../services/audioDecoderService';
 
 // Agent context interface (provided by neko-agent extension)
 interface IAgentContext {
@@ -117,18 +116,6 @@ export class MessageHandler {
 
 			case 'executeAIAction':
 				await this.handleExecuteAIAction(message.actionId, message.elementIds, message.params);
-				break;
-
-			case 'decodeAudio':
-				await this.handleDecodeAudio(
-					message.requestId,
-					message.videoPath,
-					message.startTime,
-					message.duration,
-					message.format,
-					message.sampleRate,
-					message.channels
-				);
 				break;
 
 			case 'readFileRange':
@@ -957,73 +944,6 @@ ${elementDescriptions}
 ${params ? `Additional parameters: ${JSON.stringify(params, null, 2)}` : ''}
 
 Please provide specific, actionable suggestions or perform the requested operation.`;
-	}
-
-	// ==========================================================================
-	// 音频解码处理方法
-	// ==========================================================================
-
-	/**
-	 * Handle audio decode request from WebView
-	 */
-	private async handleDecodeAudio(
-		requestId: string,
-		videoPath: string,
-		startTime: number,
-		duration: number,
-		format?: 'wav' | 'mp3',
-		sampleRate?: number,
-		channels?: number
-	): Promise<void> {
-		try {
-			// Resolve path relative to .jvi file directory (same as other media paths)
-			const absolutePath = this.resolveMediaPath(videoPath);
-
-			// 检查文件是否存在
-			const fileUri = vscode.Uri.file(absolutePath);
-			try {
-				await vscode.workspace.fs.stat(fileUri);
-			} catch {
-				console.error('[MessageHandler] File not found:', absolutePath);
-				this.webview.postMessage({
-					type: 'audioDecodeResult',
-					requestId,
-					success: false,
-					error: `File not found: ${videoPath}`,
-				});
-				return;
-			}
-
-			// 使用 AudioDecoderService 解码
-			const audioDecoderService = getAudioDecoderService();
-			const result = await audioDecoderService.decodeAudioSegment({
-				videoPath: absolutePath,
-				startTime,
-				duration,
-				format,
-				sampleRate,
-				channels,
-			});
-
-			// 发送结果到 WebView
-			this.webview.postMessage({
-				type: 'audioDecodeResult',
-				requestId,
-				success: true,
-				data: result.data,
-				mimeType: result.mimeType,
-				duration: result.duration,
-				cached: result.cached,
-			});
-		} catch (error) {
-			console.error('[MessageHandler] Audio decode error:', error);
-			this.webview.postMessage({
-				type: 'audioDecodeResult',
-				requestId,
-				success: false,
-				error: error instanceof Error ? error.message : 'Failed to decode audio',
-			});
-		}
 	}
 
 	/**

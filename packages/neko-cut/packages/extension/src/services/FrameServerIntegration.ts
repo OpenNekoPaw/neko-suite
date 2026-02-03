@@ -7,7 +7,9 @@
  * - 提供 Pull 模式支持（Webview 通过 WebSocket 拉取帧）
  * - 使用共享渲染管线进行多轨道视频渲染合成
  *
- * 架构（符合 docs/video-editor-principles.md）：
+ * 注意：音频播放由 neko-engine 处理，不在此服务中
+ *
+ * 架构：
  * ```
  * SharedRenderPipeline (渲染) → PreviewOutputAdapter (JPEG + WebSocket) → Webview
  *
@@ -23,8 +25,6 @@ import * as vscode from 'vscode';
 import { FrameServerService } from './FrameServerService';
 import type { RustMediaProcessorService } from './RustMediaProcessorService';
 import { KeyframeCacheService } from './KeyframeCacheService';
-import { AudioServerService } from './AudioServerService';
-import { StreamingAudioDecoderService } from './StreamingAudioDecoderService';
 import { getFFmpegService, type FFmpegService } from './FFmpegService';
 import type { ProjectData } from '@neko/shared';
 import {
@@ -94,8 +94,6 @@ export class FrameServerIntegration implements vscode.Disposable {
 	private _outputHeight: number = 1080;
 	private _compositeLayers: CompositeLayerConfig[] = [];
 	private _keyframeCacheService: KeyframeCacheService | null = null;
-	private _audioServer: AudioServerService | null = null;
-	private _audioDecoder: StreamingAudioDecoderService | null = null;
 	private _projectData: ProjectData | null = null;
 	private _projectRoot: string = '';
 	private _isScrubbingMode = false;
@@ -203,39 +201,14 @@ export class FrameServerIntegration implements vscode.Disposable {
 				return false;
 			}
 
-			// 初始化音频服务器
-			this._audioServer = await AudioServerService.tryCreate({
-				sampleRate: 48000,
-				channels: 2,
-			});
-
-			if (this._audioServer) {
-				// 初始化音频解码器
-				this._audioDecoder = new StreamingAudioDecoderService({
-					sampleRate: 48000,
-					channels: 2,
-				});
-
-				// 设置音频数据回调，推送到 WebSocket
-				this._audioDecoder.setDataCallback((pcmData, timestamp) => {
-					this._audioServer?.pushAudioData(pcmData, timestamp);
-				});
-
-				console.log(
-					`[FrameServerIntegration] Audio server initialized on port ${this._audioServer.getPort()}`
-				);
-			} else {
-				console.warn('[FrameServerIntegration] Audio server not available');
-			}
-
 			// 初始化共享渲染管线
 			this._renderPipeline = createSharedRenderPipeline(this._rustService);
 			this._syncRenderPipelineConfig();
 
-			// 初始化预览输出适配器
+			// 初始化预览输出适配器（音频参数传 null，由 neko-engine 处理）
 			this._previewAdapter = createPreviewOutputAdapter(
 				this._frameServer,
-				this._audioServer,
+				null,
 				this._rustService
 			);
 
@@ -270,20 +243,6 @@ export class FrameServerIntegration implements vscode.Disposable {
 	}
 
 	/**
-	 * 获取音频服务器端口
-	 */
-	getAudioServerPort(): number | null {
-		return this._audioServer?.getPort() ?? null;
-	}
-
-	/**
-	 * 获取音频服务器 WebSocket URL
-	 */
-	getAudioWebsocketUrl(): string | null {
-		return this._audioServer?.getWebsocketUrl() ?? null;
-	}
-
-	/**
 	 * 获取 WebSocket URL
 	 */
 	getWebSocketUrl(): string | null {
@@ -295,6 +254,14 @@ export class FrameServerIntegration implements vscode.Disposable {
 	 */
 	getMjpegUrl(): string | null {
 		return this._frameServer?.getMjpegUrl() ?? null;
+	}
+
+	/**
+	 * 设置项目数据
+	 */
+	setProjectData(project: ProjectData, projectRoot: string): void {
+		this._projectData = project;
+		this._projectRoot = projectRoot;
 	}
 
 	/**
@@ -363,7 +330,7 @@ export class FrameServerIntegration implements vscode.Disposable {
 			return;
 		}
 
-		console.log(`[FrameServerIntegration] Triggering Rust keyframe cache (compat mode)`);
+		console.log(`[FrameServerIntegration] Triggering Rust keyframe cache`);
 
 		try {
 			// Build timeline data for Rust API
@@ -492,129 +459,12 @@ export class FrameServerIntegration implements vscode.Disposable {
 	}
 
 	// ---------------------------------------------------------------------------
-	// Audio Playback API (符合 docs/principle.md: 音频输出流程)
-	// ---------------------------------------------------------------------------
-
-	/**
-	 * 设置项目数据（用于音频播放）
-	 */
-	setProjectData(project: ProjectData, projectRoot: string): void {
-		this._projectData = project;
-		this._projectRoot = projectRoot;
-	}
-
-	/**
-	 * 开始音频播放
-	 * 按设计原则：原生ffmpeg（解封+解码）->混音->WebSocket输出->Webview播放音频
-	 */
-	async startAudioPlayback(startTime: number, duration: number): Promise<boolean> {
-		if (!this._audioDecoder || !this._audioServer || !this._projectData) {
-			console.warn('[FrameServerIntegration] Audio services not available');
-			return false;
-		}
-
-		try {
-			// 发送播放控制命令
-			this._audioServer.sendControl('play');
-
-			// 开始音频解码和推送
-			await this._audioDecoder.startPlayback(
-				this._projectData,
-				this._projectRoot,
-				startTime,
-				duration
-			);
-
-			console.log(
-				`[FrameServerIntegration] Audio playback started: startTime=${startTime}s, duration=${duration}s`
-			);
-			return true;
-		} catch (error) {
-			console.error('[FrameServerIntegration] Failed to start audio playback:', error);
-			return false;
-		}
-	}
-
-	/**
-	 * 暂停音频播放
-	 */
-	pauseAudio(): void {
-		if (this._audioDecoder) {
-			this._audioDecoder.pause();
-			this._audioServer?.sendControl('pause');
-		}
-	}
-
-	/**
-	 * 恢复音频播放
-	 */
-	resumeAudio(): void {
-		if (this._audioDecoder) {
-			this._audioDecoder.resume();
-			this._audioServer?.sendControl('play');
-		}
-	}
-
-	/**
-	 * 停止音频播放
-	 */
-	stopAudio(): void {
-		if (this._audioDecoder) {
-			this._audioDecoder.stop();
-			this._audioServer?.sendControl('stop');
-		}
-	}
-
-	/**
-	 * 跳转音频播放位置
-	 */
-	async seekAudio(time: number, duration: number): Promise<boolean> {
-		if (!this._audioDecoder || !this._projectData) {
-			return false;
-		}
-
-		// 停止当前播放
-		this._audioDecoder.stop();
-
-		// 发送 seek 控制命令
-		this._audioServer?.sendControl('seek', time);
-
-		// 从新位置开始播放
-		return this.startAudioPlayback(time, duration - time);
-	}
-
-	/**
-	 * 获取音频播放状态
-	 */
-	getAudioState(): 'idle' | 'starting' | 'decoding' | 'paused' | 'completed' | 'error' {
-		return this._audioDecoder?.state ?? 'idle';
-	}
-
-	/**
-	 * 获取音频当前播放时间
-	 */
-	getAudioCurrentTime(): number {
-		return this._audioDecoder?.currentTime ?? 0;
-	}
-
-	/**
-	 * 获取音频服务器统计信息
-	 */
-	getAudioStats(): {
-		chunksSent: number;
-		connectedClients: number;
-		isRunning: boolean;
-	} | null {
-		return this._audioServer?.getStats() ?? null;
-	}
-
-	// ---------------------------------------------------------------------------
 	// Scrubbing Mode API (视频编辑器拖动预览)
 	// ---------------------------------------------------------------------------
 
 	/**
 	 * 进入 Scrubbing 模式
-	 * Scrubbing 时只推送视频帧，暂停音频播放
+	 * Scrubbing 时只推送视频帧
 	 */
 	enterScrubbingMode(): void {
 		if (this._isScrubbingMode) {
@@ -624,31 +474,18 @@ export class FrameServerIntegration implements vscode.Disposable {
 		this._isScrubbingMode = true;
 		this._lastScrubbingTime = Date.now();
 
-		// 暂停音频播放
-		if (this._audioDecoder && this._audioDecoder.state === 'decoding') {
-			this._audioDecoder.pause();
-			this._audioServer?.sendControl('pause');
-		}
-
 		console.log('[FrameServerIntegration] Entered scrubbing mode');
 	}
 
 	/**
 	 * 退出 Scrubbing 模式
-	 * 恢复音频播放（如果之前在播放）
 	 */
-	exitScrubbingMode(resumeAudio = true): void {
+	exitScrubbingMode(): void {
 		if (!this._isScrubbingMode) {
 			return;
 		}
 
 		this._isScrubbingMode = false;
-
-		// 恢复音频播放
-		if (resumeAudio && this._audioDecoder && this._audioDecoder.state === 'paused') {
-			this._audioDecoder.resume();
-			this._audioServer?.sendControl('play');
-		}
 
 		console.log('[FrameServerIntegration] Exited scrubbing mode');
 	}
@@ -661,7 +498,7 @@ export class FrameServerIntegration implements vscode.Disposable {
 	}
 
 	/**
-	 * Scrubbing 时请求单帧（不播放音频）
+	 * Scrubbing 时请求单帧
 	 * @param time 目标时间（秒）
 	 */
 	async scrubToTime(time: number): Promise<void> {
@@ -671,7 +508,7 @@ export class FrameServerIntegration implements vscode.Disposable {
 
 		this._lastScrubbingTime = Date.now();
 
-		// 只推送视频帧，不处理音频
+		// 只推送视频帧
 		if (this._frameServer && this._ffmpegService) {
 			// 获取主视频路径（第一个合成层或默认）
 			const videoPath = this._compositeLayers[0]?.videoPath;
@@ -1025,18 +862,6 @@ export class FrameServerIntegration implements vscode.Disposable {
 		if (this._keyframeCacheService) {
 			this._keyframeCacheService.dispose();
 			this._keyframeCacheService = null;
-		}
-
-		// 释放音频解码服务
-		if (this._audioDecoder) {
-			this._audioDecoder.dispose();
-			this._audioDecoder = null;
-		}
-
-		// 释放音频服务器
-		if (this._audioServer) {
-			this._audioServer.dispose();
-			this._audioServer = null;
 		}
 
 		console.log('[FrameServerIntegration] Disposed');

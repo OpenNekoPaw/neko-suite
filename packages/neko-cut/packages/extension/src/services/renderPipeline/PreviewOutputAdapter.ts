@@ -13,13 +13,14 @@
  * Scrubbing (拖动) → H.264 硬件流    → WebSocket /ws/h264
  * ```
  *
+ * 注意：音频由 neko-engine 直接处理，不经过此适配器
+ *
  * 设计原则（SOLID）：
- * - 单一职责 (S)：仅负责预览输出
+ * - 单一职责 (S)：仅负责视频预览输出
  * - 依赖倒置 (D)：依赖 FrameServerService 和 RustMediaProcessorService 接口
  */
 
 import type { FrameServerService } from '../FrameServerService';
-import type { AudioServerService } from '../AudioServerService';
 import type { RustMediaProcessorService } from '../RustMediaProcessorService';
 import type {
 	IPreviewOutputAdapter,
@@ -65,7 +66,6 @@ export class PreviewOutputAdapter implements IPreviewOutputAdapter {
 	readonly name = 'PreviewOutput';
 
 	private _frameServer: FrameServerService | null;
-	private _audioServer: AudioServerService | null;
 	private _rustService: RustMediaProcessorService | null;
 	private _encoder: VideoEncoderSession = null;
 	private _encoderConfig: PreviewEncoderConfig | null = null;
@@ -79,11 +79,9 @@ export class PreviewOutputAdapter implements IPreviewOutputAdapter {
 
 	constructor(
 		frameServer: FrameServerService | null,
-		audioServer: AudioServerService | null,
 		rustService: RustMediaProcessorService | null
 	) {
 		this._frameServer = frameServer;
-		this._audioServer = audioServer;
 		this._rustService = rustService;
 	}
 
@@ -106,50 +104,61 @@ export class PreviewOutputAdapter implements IPreviewOutputAdapter {
 			} catch {
 				// Ignore close errors
 			}
-			this._encoder = null;
 		}
+
+		// Create new encoder
+		this._encoder = this._rustService.createVideoEncoder({
+			width: config.width,
+			height: config.height,
+			fps: config.fps,
+			bitrate: config.bitrate,
+			codec: config.codec,
+			preset: config.preset,
+			keyframeInterval: config.keyframeInterval,
+		});
 
 		this._encoderConfig = config;
-
-		// Create H.264 encoder using ffmpeg-next
-		this._encoder = this._rustService.createPreviewEncoder(
-			config.width,
-			config.height,
-			config.fps,
-			config.bitrate
-		);
-
-		if (!this._encoder) {
-			throw new Error('Failed to create preview encoder');
-		}
+		this._frameIndex = 0;
 
 		console.log(
-			`[PreviewOutputAdapter] Encoder initialized: ${config.width}x${config.height}@${config.fps}fps, ` +
-			`hw_active=${this._encoder.isHwActive()}`
+			`[PreviewOutputAdapter] Encoder initialized: ${config.width}x${config.height} @ ${config.fps}fps, ` +
+			`${config.codec}, ${config.bitrate / 1000}kbps`
 		);
-	}
-
-	/**
-	 * 获取编码后的视频包
-	 */
-	getEncodedPacket(): EncodedVideoPacket | null {
-		return this._lastEncodedPacket;
-	}
-
-	/**
-	 * 检查编码器是否可用
-	 */
-	isEncoderAvailable(): boolean {
-		return this._encoder !== null;
 	}
 
 	/**
 	 * 设置预览模式
 	 */
 	setPreviewMode(mode: PreviewMode): void {
-		if (this._previewMode !== mode) {
-			console.log(`[PreviewOutputAdapter] Mode changed: ${this._previewMode} → ${mode}`);
-			this._previewMode = mode;
+		if (this._previewMode === mode) {
+			return;
+		}
+
+		const prevMode = this._previewMode;
+		this._previewMode = mode;
+
+		console.log(`[PreviewOutputAdapter] Preview mode changed: ${prevMode} → ${mode}`);
+
+		// Mode transition logic
+		if (mode === 'idle') {
+			// Transitioning to idle: flush encoder, prepare for JPEG
+			if (this._encoder) {
+				try {
+					const packets = this._encoder.flush();
+					for (const packet of packets) {
+						if (this._frameServer?.pushH264Packet) {
+							this._frameServer.pushH264Packet(
+								packet.data,
+								packet.pts,
+								packet.dts,
+								packet.isKeyframe
+							);
+						}
+					}
+				} catch (error) {
+					console.warn('[PreviewOutputAdapter] Encoder flush on mode change failed:', error);
+				}
+			}
 		}
 	}
 
@@ -161,177 +170,120 @@ export class PreviewOutputAdapter implements IPreviewOutputAdapter {
 	}
 
 	/**
-	 * 设置混合预览配置
+	 * 配置混合预览参数
 	 */
-	setHybridConfig(config: HybridPreviewConfig): void {
-		this._hybridConfig = { ...DEFAULT_HYBRID_CONFIG, ...config };
+	setHybridConfig(config: Partial<HybridPreviewConfig>): void {
+		this._hybridConfig = {
+			...this._hybridConfig,
+			...config,
+			idle: { ...this._hybridConfig.idle, ...config.idle },
+			streaming: { ...this._hybridConfig.streaming, ...config.streaming },
+		};
 	}
 
 	/**
-	 * 输出静态帧（Idle 模式）
-	 * 使用 H264 编码器输出单帧（作为关键帧）
+	 * 输出 NV12 纹理（GPU 路径）
 	 */
-	async outputStaticFrame(frame: RenderedFrame): Promise<void> {
-		if (this._disposed || !this._frameServer) {
+	async outputNV12Texture(texture: NV12Texture): Promise<void> {
+		if (this._disposed || !this._encoder || !this._frameServer) {
 			return;
 		}
 
-		// Use H264 encoder for static frame (as keyframe)
-		if (this._encoder && this._rustService) {
-			try {
-				const pts = Math.round(frame.timestamp * 1_000_000);
-				const packets = this._encoder.encodeFrame(
-					{
-						data: frame.data,
-						width: frame.width,
-						height: frame.height,
-						format: 'rgba',
-						timestamp: frame.timestamp,
-						isKeyframe: true, // Force keyframe for static frame
-					},
-					pts
-				);
-
-				for (const packet of packets) {
-					if (this._frameServer.pushH264Packet) {
-						this._frameServer.pushH264Packet(
-							packet.data,
-							packet.pts,
-							packet.dts,
-							packet.isKeyframe
-						);
-					}
-				}
-			} catch (error) {
-				console.error('[PreviewOutputAdapter] Failed to output static frame:', error);
-			}
-		}
-	}
-
-	/**
-	 * 输出视频帧（NV12 格式）
-	 *
-	 * 所有模式都使用 H.264 流（NV12 直接编码，零拷贝）
-	 */
-	async outputVideoNV12(texture: NV12Texture): Promise<void> {
-		if (this._disposed || !this._frameServer || !this._encoder) {
-			return;
-		}
-
+		// Encode NV12 to H.264
 		try {
-			// Combine Y and UV planes into single NV12 buffer
-			const nv12Buffer = Buffer.concat([texture.yPlane, texture.uvPlane]);
-
-			// Encode NV12 frame directly to H264 using ffmpeg-next
-			const pts = Math.round(texture.timestamp * 1_000_000); // Convert to microseconds
-			const packets = this._encoder.encodeFrame(
-				{
-					data: nv12Buffer,
-					width: texture.width,
-					height: texture.height,
-					format: 'nv12',
-					timestamp: texture.timestamp,
-					isKeyframe: this._previewMode === 'idle', // Force keyframe for idle mode
-				},
-				pts
+			const packet = this._encoder.encodeNV12(
+				texture.yPlane,
+				texture.uvPlane,
+				texture.width,
+				texture.height,
+				texture.yStride,
+				texture.uvStride,
+				this._frameIndex++
 			);
 
-			// Send encoded packets via WebSocket
-			for (const packet of packets) {
-				this._lastEncodedPacket = {
-					data: packet.data,
-					pts: packet.pts,
-					dts: packet.dts,
-					isKeyframe: packet.isKeyframe,
-					frameIndex: this._frameIndex++,
-				};
-
-				// Push H.264 packet to WebSocket
-				if (this._frameServer.pushH264Packet) {
-					this._frameServer.pushH264Packet(
-						packet.data,
-						packet.pts,
-						packet.dts,
-						packet.isKeyframe
-					);
-				}
+			if (packet && this._frameServer.pushH264Packet) {
+				this._frameServer.pushH264Packet(
+					packet.data,
+					packet.pts,
+					packet.dts,
+					packet.isKeyframe
+				);
+				this._lastEncodedPacket = packet;
 			}
 		} catch (error) {
-			console.error('[PreviewOutputAdapter] Failed to encode NV12 frame:', error);
+			console.error('[PreviewOutputAdapter] NV12 encoding failed:', error);
 		}
 	}
 
 	/**
-	 * 输出视频帧（RGBA 格式）
-	 *
-	 * 所有模式都使用 H.264 流
+	 * 输出渲染帧（CPU 路径）
 	 */
-	async outputVideo(frame: RenderedFrame): Promise<void> {
+	async outputFrame(frame: RenderedFrame): Promise<void> {
 		if (this._disposed || !this._frameServer) {
 			return;
 		}
 
-		// All modes use H.264 stream
-		if (this._encoder) {
-			try {
-				// Encode RGBA frame directly (encoder will convert to NV12 internally)
-				const pts = Math.round(frame.timestamp * 1_000_000);
-				const packets = this._encoder.encodeFrame(
-					{
-						data: frame.data,
-						width: frame.width,
-						height: frame.height,
-						format: 'rgba',
-						timestamp: frame.timestamp,
-						isKeyframe: this._previewMode === 'idle', // Force keyframe for idle mode
-					},
-					pts
-				);
+		// Hybrid mode: choose output format based on preview mode
+		if (this._previewMode === 'idle') {
+			// Idle mode: output high-quality JPEG
+			if (this._frameServer.pushFrame) {
+				// Convert RGBA to JPEG using sharp (if available)
+				try {
+					// eslint-disable-next-line @typescript-eslint/no-require-imports
+					const sharp = require('sharp');
+					const jpegBuffer = await sharp(frame.data, {
+						raw: {
+							width: frame.width,
+							height: frame.height,
+							channels: 4,
+						},
+					})
+						.jpeg({ quality: this._hybridConfig.idle.quality })
+						.toBuffer();
 
-				// Send encoded packets via WebSocket
-				for (const packet of packets) {
-					this._lastEncodedPacket = {
-						data: packet.data,
-						pts: packet.pts,
-						dts: packet.dts,
-						isKeyframe: packet.isKeyframe,
-						frameIndex: this._frameIndex++,
-					};
+					this._frameServer.pushFrame(
+						jpegBuffer,
+						Math.round(frame.timestamp * 1_000_000),
+						frame.width,
+						frame.height
+					);
+				} catch (error) {
+					console.error('[PreviewOutputAdapter] JPEG conversion failed:', error);
+				}
+			}
+		} else {
+			// Playback/Scrubbing mode: encode to H.264
+			if (this._encoder) {
+				try {
+					const packet = this._encoder.encodeRGBA(
+						frame.data,
+						frame.width,
+						frame.height,
+						this._frameIndex++
+					);
 
-					// Push H.264 packet to WebSocket
-					if (this._frameServer.pushH264Packet) {
+					if (packet && this._frameServer.pushH264Packet) {
 						this._frameServer.pushH264Packet(
 							packet.data,
 							packet.pts,
 							packet.dts,
 							packet.isKeyframe
 						);
+						this._lastEncodedPacket = packet;
 					}
+				} catch (error) {
+					console.error('[PreviewOutputAdapter] H.264 encoding failed:', error);
 				}
-			} catch (error) {
-				console.error('[PreviewOutputAdapter] H.264 encoding failed:', error);
 			}
 		}
 	}
 
 	/**
 	 * 输出音频数据
+	 * 注意：音频由 neko-engine 直接处理，此方法为空实现
 	 */
-	async outputAudio(buffer: AudioBuffer): Promise<void> {
-		if (this._disposed || !this._audioServer) {
-			return;
-		}
-
-		try {
-			const float32Data = new Float32Array(
-				buffer.data.buffer,
-				buffer.data.byteOffset,
-				buffer.data.byteLength / 4
-			);
-			this._audioServer.pushAudioData(float32Data, buffer.startTime);
-		} catch (error) {
-			console.error('[PreviewOutputAdapter] Failed to output audio:', error);
-		}
+	async outputAudio(_buffer: AudioBuffer): Promise<void> {
+		// Audio is handled by neko-engine directly, not through this adapter
 	}
 
 	/**
@@ -380,7 +332,6 @@ export class PreviewOutputAdapter implements IPreviewOutputAdapter {
 
 		// Don't dispose external services
 		this._frameServer = null;
-		this._audioServer = null;
 		this._rustService = null;
 		this._lastEncodedPacket = null;
 	}
@@ -406,8 +357,8 @@ export class PreviewOutputAdapter implements IPreviewOutputAdapter {
  */
 export function createPreviewOutputAdapter(
 	frameServer: FrameServerService | null,
-	audioServer: AudioServerService | null,
+	_audioServer: unknown, // Deprecated, kept for API compatibility
 	rustService: RustMediaProcessorService | null
 ): PreviewOutputAdapter {
-	return new PreviewOutputAdapter(frameServer, audioServer, rustService);
+	return new PreviewOutputAdapter(frameServer, rustService);
 }

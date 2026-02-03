@@ -13,9 +13,21 @@
 import { StateCreator } from 'zustand';
 import type { ProjectData, TimelineElement, TrackType, MediaElement, AudioElement } from '../../types';
 import { generateId } from '../../utils';
-import { detectVideoHasAudio } from '../../utils/audioDetection';
 import { getMediaProxy } from '../../services/mediaProxyFactory';
 import { createDefaultSubtitleStyle } from '../../types/subtitle';
+
+/**
+ * Detect if video file has audio track via Extension FFmpeg probe
+ */
+async function detectVideoHasAudio(src: string): Promise<boolean> {
+  try {
+    const mediaInfo = await getMediaProxy().probeMediaInfo(src);
+    return mediaInfo?.hasAudio ?? false;
+  } catch (error) {
+    console.warn('[detectVideoHasAudio] Failed to detect audio:', error);
+    return false;
+  }
+}
 
 // =============================================================================
 // 依赖接口

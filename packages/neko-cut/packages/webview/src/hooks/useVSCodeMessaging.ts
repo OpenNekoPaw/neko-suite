@@ -444,110 +444,6 @@ if (typeof window !== 'undefined') {
   (window as unknown as { testFileRangeRead: typeof testFileRangeRead }).testFileRangeRead = testFileRangeRead;
 }
 
-/**
- * Handle mediaEngine messages from Extension Host
- * Updates the Zustand store based on message type
- */
-function handleMediaEngineMessage(message: { type: string; payload?: unknown; error?: string; requestId?: string }): void {
-  const store = useEditorStore.getState();
-  const { type, payload, error } = message;
-
-  // Handle response messages
-  if (type === 'mediaEngine:response:setMode') {
-    // Response format: { payload: { success, activeMode } }
-    if (payload && typeof payload === 'object') {
-      const p = payload as { success?: boolean; activeMode?: string };
-      if (p.success) {
-        // Update currentMode from activeMode, keep the user's preference
-        store._updateModeState({
-          currentMode: 'compatible',
-          isModeLoading: false,
-          modeError: null,
-        });
-      } else {
-        store._updateModeState({
-          isModeLoading: false,
-          modeError: error || 'Failed to set mode',
-        });
-      }
-    } else {
-      store._updateModeState({
-        isModeLoading: false,
-        modeError: error || 'Failed to set mode',
-      });
-    }
-    return;
-  }
-
-  if (type === 'mediaEngine:response:getMode') {
-    // Response format: { payload: { currentMode, compatibleModeInstalled } }
-    if (payload && typeof payload === 'object') {
-      const p = payload as { currentMode?: string; compatibleModeInstalled?: boolean };
-      store._updateModeState({
-        currentMode: 'compatible',
-        compatibleModeInstalled: p.compatibleModeInstalled ?? false,
-        isModeLoading: false,
-      });
-    } else {
-      store._updateModeState({ isModeLoading: false });
-    }
-    return;
-  }
-
-  if (type === 'mediaEngine:response:getDownloadStatus') {
-    // Response format: { payload: DownloadStatus }
-    if (payload && typeof payload === 'object') {
-      const p = payload as { installed?: boolean; state?: string; progress?: number; version?: string; error?: string };
-      store._updateModeState({
-        compatibleModeInstalled: p.installed ?? false,
-        downloadStatus: {
-          installed: p.installed ?? false,
-          state: (p.state as 'idle' | 'downloading' | 'extracting' | 'completed' | 'error') || 'idle',
-          progress: p.progress,
-          version: p.version,
-          error: p.error,
-        },
-        isModeLoading: false,
-      });
-    }
-    return;
-  }
-
-  if (type === 'mediaEngine:response:startDownload') {
-    // Response format: { payload: { started: boolean }, error?: string }
-    if (payload && typeof payload === 'object') {
-      const p = payload as { started?: boolean };
-      if (!p.started) {
-        store._setDownloadComplete(false, error || 'Download failed');
-      }
-    } else if (error) {
-      store._setDownloadComplete(false, error);
-    }
-    // Success case will be handled by downloadProgress/downloadComplete notifications
-    return;
-  }
-
-  // Handle push notifications
-  if (type === 'mediaEngine:downloadProgress') {
-    if (payload && typeof payload === 'object' && 'progress' in payload) {
-      const p = payload as { progress: number; state?: string };
-      store._setDownloadProgress(
-        p.progress,
-        (p.state as 'downloading' | 'extracting') || 'downloading'
-      );
-    }
-    return;
-  }
-
-  if (type === 'mediaEngine:downloadComplete') {
-    if (payload && typeof payload === 'object') {
-      const p = payload as { success: boolean; error?: string; version?: string };
-      store._setDownloadComplete(p.success, p.error, p.version);
-    }
-    return;
-  }
-}
-
 export function useVSCodeMessaging() {
   const { setProject, project, currentTime, isPlaying, selectElement, seek, setAIActionStatus } = useEditorStore();
   const projectRef = useRef(project);
@@ -851,18 +747,15 @@ export function useVSCodeMessaging() {
           break;
 
         default:
-          // Handle mediaEngine responses
-          if (message.type?.startsWith('mediaEngine:')) {
-            handleMediaEngineMessage(message);
-            break;
-          }
           // Ignore media:response:* messages - they are handled by MediaRequestProxy
           // Ignore export:* messages - they are handled by StreamingExportManager
           // Ignore fileRangeResult - handled by initFileRangeListener
           // Ignore audioDecodeResult - handled by setupAudioDecodeListener
+          // Ignore mediaEngine:* messages - mode management removed
           if (
             !message.type?.startsWith('media:response:') &&
             !message.type?.startsWith('export:') &&
+            !message.type?.startsWith('mediaEngine:') &&
             message.type !== 'fileRangeResult' &&
             message.type !== 'audioDecodeResult'
           ) {

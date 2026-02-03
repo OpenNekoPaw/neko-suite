@@ -10,7 +10,7 @@ import { VideoEditorModel } from './videoEditorModel';
 import { MessageHandler } from './messageHandler';
 import { MediaProcessorService } from '../../services/MediaProcessorService';
 import { FrameServerService } from '../../services/FrameServerService';
-import { handleExportMessage, isExportMessage, CompatibleExportHandler, isCompatibleModeMessage, handleMediaEngineModeMessage, isMediaEngineModeMessage } from '../../handlers';
+import { handleExportMessage, isExportMessage, CompatibleExportHandler, isCompatibleModeMessage } from '../../handlers';
 import { getService } from '../../base';
 import { IStatusBar } from '../../views/statusBar';
 import { IVideoProjectOutlineProvider } from '../../views/outlineProvider';
@@ -319,18 +319,6 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 				if (isCompatibleModeMessage(message)) {
 					const compatibleHandled = await compatibleExportHandler.handleMessage(message);
 					if (compatibleHandled) {
-						return;
-					}
-				}
-
-				// 2.5. Try to handle media engine mode requests (mediaEngine:*)
-				if (isMediaEngineModeMessage(message)) {
-					const postMessage = (response: unknown) => {
-						webviewPanel.webview.postMessage(response);
-					};
-					const manager = getService(IMediaEngineManager);
-					const modeHandled = await handleMediaEngineModeMessage(message, postMessage, manager ?? null);
-					if (modeHandled) {
 						return;
 					}
 				}

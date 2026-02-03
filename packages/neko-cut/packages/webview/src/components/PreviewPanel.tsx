@@ -13,7 +13,6 @@
 import { useRef, useEffect, useCallback, useState, memo } from 'react';
 import { useEditorStore } from '../stores/editor-store';
 import { useTranslation } from '../i18n/I18nContext';
-import { usePreviewAudio } from '../hooks/usePreviewAudio';
 import { useMediaInfoCache } from '../hooks/useMediaInfoCache';
 import { PreviewOverlay } from './PreviewOverlay';
 import { PREVIEW_QUALITY } from '../constants';
@@ -63,13 +62,12 @@ export const PreviewPanel = memo(function PreviewPanel({
   isCapturingScreenshot: _isCapturingScreenshot,
 }: PreviewPanelProps = {}) {
   const { t } = useTranslation();
-  const { project, currentTime, isPlaying, previewQuality, previewVolume, previewMuted } = useEditorStore();
+  const { project, currentTime, isPlaying, previewQuality } = useEditorStore();
   const showFpsCounter = useEditorStore((state) => state.showFpsCounter);
   const currentFps = useEditorStore((state) => state.currentFps);
   const performanceStats = useEditorStore((state) => state.performanceStats);
   const setCurrentFps = useEditorStore((state) => state.setCurrentFps);
   const setPerformanceStats = useEditorStore((state) => state.setPerformanceStats);
-  const setFrameServerPortInStore = useEditorStore((state) => state.setFrameServerPort);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mediaInfoRef = useRef({ bitrate: '', codec: '', resolution: '' });
@@ -81,11 +79,6 @@ export const PreviewPanel = memo(function PreviewPanel({
   // State
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
-
-  // Audio playback hook - disabled as audio is handled by Extension (Rust/WGPU)
-  usePreviewAudio(project, currentTime, isPlaying, previewVolume, previewMuted, {
-    enabled: false,
-  });
 
   // Media info cache
   const mediaInfo = useMediaInfoCache();
@@ -105,13 +98,12 @@ export const PreviewPanel = memo(function PreviewPanel({
       if (message.type === 'frameServer:config' && typeof message.port === 'number') {
         console.log(`[PreviewPanel] Received frame server config, port: ${message.port}`);
         setFrameServerPort(message.port);
-        setFrameServerPortInStore(message.port);
       }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [setFrameServerPortInStore]);
+  }, []);
 
   // ==========================================================================
   // H.264 Stream Client Setup

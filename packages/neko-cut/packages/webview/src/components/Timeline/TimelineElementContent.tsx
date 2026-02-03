@@ -5,7 +5,6 @@ import { generateWaveform } from '../../utils/waveform';
 import { getCachedFileUri, subscribeToUriCacheUpdates } from '../../hooks/useVSCodeMessaging';
 import { ShapeElementContent } from '../ShapeElementContent';
 import { getThumbnailService, type ThumbnailData } from '../../services';
-import { useEditorStore } from '../../stores/editor-store';
 import type { ThumbnailViewport } from '../../utils/pyramidThumbnail';
 
 interface VisibleRange {
@@ -67,10 +66,6 @@ const MediaElementContent = memo(function MediaElementContent({
   const [isLoading, setIsLoading] = useState(true);
   const lastViewportRef = useRef<string>('');
 
-  // Wait for mode to be determined before generating thumbnails
-  const currentMode = useEditorStore((state) => state.currentMode);
-  const isModeLoading = useEditorStore((state) => state.isModeLoading);
-
   // Calculate element's time range
   const elementStartTime = element.startTime;
   const elementDuration = element.duration - element.trimStart - element.trimEnd;
@@ -129,12 +124,6 @@ const MediaElementContent = memo(function MediaElementContent({
   }, [element.src, viewportInfo.startTime, viewportInfo.endTime, viewportInfo.pixelsPerSecond, thumbHeight]);
 
   useEffect(() => {
-    // Wait for mode to be determined before generating thumbnails
-    // This ensures we use the correct mode (basic vs compatible) for decoding
-    if (currentMode === null || isModeLoading) {
-      return;
-    }
-
     // Skip if viewport hasn't changed significantly (debounce)
     if (lastViewportRef.current === cacheKey) {
       return;
@@ -175,7 +164,7 @@ const MediaElementContent = memo(function MediaElementContent({
     return () => {
       abortController.abort();
     };
-  }, [cacheKey, element.src, viewportInfo, currentMode, isModeLoading]);
+  }, [cacheKey, element.src, viewportInfo]);
 
   // If no thumbnails yet, show element name
   if (isLoading || thumbnails.length === 0) {
