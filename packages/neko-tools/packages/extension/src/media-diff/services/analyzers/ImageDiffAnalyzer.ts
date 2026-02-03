@@ -14,7 +14,7 @@ import type {
 	DiffOptions,
 	DiffResult,
 	ImageDiffDetails,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 
 // Sharp types (for type safety without importing the module at top level)

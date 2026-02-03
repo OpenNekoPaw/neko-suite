@@ -1,7 +1,7 @@
 /**
  * VSCode API Wrapper - Type-safe singleton for VSCode Webview API access
  *
- * Re-exports core VSCode API from @uniedit/shared and adds webview-specific
+ * Re-exports core VSCode API from @neko/shared and adds webview-specific
  * message types and helper functions.
  */
 
@@ -21,10 +21,10 @@ export {
   type VSCodeResponseMessage,
   type PendingRequest,
   type SendRequestOptions,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Import for local use
-import { postMessage } from '@uniedit/shared';
+import { postMessage } from '@neko/shared';
 
 // =============================================================================
 // Webview-specific Message Types

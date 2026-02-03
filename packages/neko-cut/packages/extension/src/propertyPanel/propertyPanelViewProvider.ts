@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { TimelineElement, EasingType, ProjectDefaults } from '@uniedit/shared';
+import type { TimelineElement, EasingType, ProjectDefaults } from '@neko/shared';
 
 /**
  * Message types for communication between main editor and property panel

@@ -28,7 +28,7 @@ tools/
 ## 依赖
 
 ```
-→ @uniedit/platform   # 工具注册表
+→ @neko/platform   # 工具注册表
 → editor/video/       # Webview 操作
 ← bootstrap/          # 工具注册
 ```

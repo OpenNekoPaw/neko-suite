@@ -12,7 +12,7 @@ import type {
   IToolRegistry,
   IToolGroupRegistry,
   IToolCategoryRegistry,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Re-export validation types
 export type {

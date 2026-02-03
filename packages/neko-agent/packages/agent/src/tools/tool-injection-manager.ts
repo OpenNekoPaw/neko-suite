@@ -19,8 +19,8 @@ import type {
   InjectionEventListener,
   IToolProvider,
   IToolCategoryRegistry,
-} from '@uniedit/shared';
-import { DEFAULT_INJECTION_CONFIG, CORE_TOOLS } from '@uniedit/shared';
+} from '@neko/shared';
+import { DEFAULT_INJECTION_CONFIG, CORE_TOOLS } from '@neko/shared';
 
 /**
  * Tool Injection Manager implementation

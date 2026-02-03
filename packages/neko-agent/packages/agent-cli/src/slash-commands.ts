@@ -2,7 +2,7 @@
  * Slash Command Handler
  *
  * Handles built-in slash commands for the CLI.
- * Uses shared command definitions from @uniedit/agent.
+ * Uses shared command definitions from @neko/agent.
  */
 
 import {
@@ -14,7 +14,7 @@ import {
   isSlashCommand as checkIsSlashCommand,
   parseSlashCommand as parseCommand,
   getCliCommands,
-} from '@uniedit/agent';
+} from '@neko/agent';
 import type { CLIConfig } from './types';
 import { PROVIDERS } from './types';
 

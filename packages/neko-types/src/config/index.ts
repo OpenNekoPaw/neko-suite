@@ -8,7 +8,7 @@
  * - Workspace config: .neko/config.json
  *
  * NOTE: config-reader.ts uses Node.js APIs (fs, path, os) and is NOT exported
- * from the main entry point. Import it directly from '@uniedit/shared/config/config-reader'
+ * from the main entry point. Import it directly from '@neko/shared/config/config-reader'
  * in Node.js environments only.
  *
  * @example
@@ -17,13 +17,13 @@
  * import {
  *   type UnifiedConfig,
  *   processConfig,
- * } from '@uniedit/shared';
+ * } from '@neko/shared';
  *
  * // In Node.js (extension, agent-cli) - import reader directly
  * import {
  *   readUserConfig,
  *   readWorkspaceConfig,
- * } from '@uniedit/shared/config/config-reader';
+ * } from '@neko/shared/config/config-reader';
  * ```
  */
 
@@ -64,4 +64,4 @@ export type {
 export { BaseConfigAdapter } from './config-adapter';
 
 // NOTE: config-reader.ts is NOT exported here because it uses Node.js APIs.
-// Import directly from '@uniedit/shared/config/config-reader' in Node.js environments.
+// Import directly from '@neko/shared/config/config-reader' in Node.js environments.

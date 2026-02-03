@@ -14,7 +14,7 @@ import type {
 	MediaDiffRequest,
 	MediaDiffResponse,
 	DiffResult,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { MediaDiffService } from '../services/MediaDiffService';
 
 // =============================================================================

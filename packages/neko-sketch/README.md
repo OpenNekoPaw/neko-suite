@@ -4,7 +4,7 @@
 
 ## Context Summary
 
-- **项目**：Neko Creator Suite - VS Code 全能内容创作工作站
+- **项目**：Neko Suite - VS Code 全能内容创作工作站
 - **角色**：绘图工具，压感手绘增强
 - **规范**：[README.md](../../README.md)
 
@@ -12,7 +12,7 @@
 
 ## 概述
 
-**Neko Sketch** 是 Neko Creator Suite 的绘图增强模块，为 NekoCanvas 注入 Krita 级别的绘图能力。支持压感手写板、多种笔刷、图层混合，让创作者可以直接在视频帧上进行手绘创作。
+**Neko Sketch** 是 Neko Suite 的绘图增强模块，为 NekoCanvas 注入 Krita 级别的绘图能力。支持压感手写板、多种笔刷、图层混合，让创作者可以直接在视频帧上进行手绘创作。
 
 ---
 
@@ -83,7 +83,7 @@ NekoCanvas 画布
 ```
 neko-sketch
     ├── neko-canvas (扩展依赖)
-    └── @uniedit/shared (类型)
+    └── @neko/shared (类型)
 ```
 
 ---
@@ -92,7 +92,7 @@ neko-sketch
 
 - **输入**：Pointer Events API (压感)
 - **渲染**：Canvas 2D / GPU Pipeline
-- **类型**：@uniedit/shared
+- **类型**：@neko/shared
 
 ---
 

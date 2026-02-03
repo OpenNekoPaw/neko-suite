@@ -15,14 +15,14 @@ import type {
   SessionMemory,
   ContextManager,
   ChatMessage,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import {
   type RetryPolicy,
   type BackoffStrategy,
   calculateBackoff,
   shouldRetry,
   BaseError,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { AgentError } from '../errors';
 
 /**

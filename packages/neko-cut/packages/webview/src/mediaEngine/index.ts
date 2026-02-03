@@ -4,10 +4,10 @@
  * Provides WebCodecs + libav.js based media processing
  * for the Webview environment.
  *
- * Note: Effect processing has been moved to @uniedit/effects-runtime.
+ * Note: Effect processing has been moved to @neko/effects-runtime.
  * For GPU effects, use:
  * ```typescript
- * import { createEffectRunner } from '@uniedit/effects-runtime';
+ * import { createEffectRunner } from '@neko/effects-runtime';
  * ```
  *
  * Usage:

@@ -14,7 +14,7 @@ import type {
 	EncoderProgress,
 	EncoderResult,
 	EncoderEvent,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Types

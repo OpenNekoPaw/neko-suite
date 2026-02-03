@@ -4,7 +4,7 @@ import type {
   CanvasNode,
   CanvasConnection,
   CanvasViewport,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Types

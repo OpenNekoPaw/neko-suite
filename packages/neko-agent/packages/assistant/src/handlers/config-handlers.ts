@@ -52,7 +52,7 @@ const handleProjectFiles: MessageHandler = (message, context) => {
 const handleConfigState: MessageHandler = (message, context) => {
   if (message.config) {
     // Map providers from ConfigState to ConfiguredProvider format
-    const mappedProviders = (message.config.providers || []).map((p: import('@uniedit/shared').ProviderConfig) => ({
+    const mappedProviders = (message.config.providers || []).map((p: import('@neko/shared').ProviderConfig) => ({
       id: p.id,
       type: p.type,
       name: p.displayName || p.name, // Use displayName for UI, fallback to name

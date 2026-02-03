@@ -3,7 +3,7 @@
  */
 
 import type { Tool, ToolCategory, ToolResult } from '../types/tool';
-import { BuiltinTool } from '@uniedit/shared';
+import { BuiltinTool } from '@neko/shared';
 
 /**
  * Project context interface for tools

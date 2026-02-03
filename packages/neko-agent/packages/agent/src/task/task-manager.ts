@@ -18,12 +18,12 @@ import type {
   TaskRecoveryInfo,
   SerializableTask,
   TaskExecutor,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import {
   BaseError,
   ConcurrencyPool,
   KeyedConcurrencyPool,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { MemoryTaskStorage } from './task-storage';
 import { MemoryTaskRecoveryStorage } from './task-recovery-storage';
 

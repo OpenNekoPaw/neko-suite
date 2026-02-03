@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as vscode from 'vscode';
 import { VideoEditorModel, VideoEditorModelProvider } from './videoEditorModel';
-import { ProjectData } from '@uniedit/shared';
+import { ProjectData } from '@neko/shared';
 
 // =============================================================================
 // Mock VSCode TextDocument

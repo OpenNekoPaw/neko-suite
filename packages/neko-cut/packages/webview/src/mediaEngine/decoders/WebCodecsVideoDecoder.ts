@@ -13,7 +13,7 @@ import type {
 	DecodedVideoFrame,
 	PixelFormat,
 	MediaInfo,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Types

@@ -15,7 +15,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type { PromptPresetConfig, PromptSource } from '@uniedit/shared';
+import type { PromptPresetConfig, PromptSource } from '@neko/shared';
 
 // =============================================================================
 // Types

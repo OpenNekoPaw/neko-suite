@@ -6,7 +6,7 @@
  * @module generation-tools
  * @example
  * ```typescript
- * import { registerGenerationTools, GenerateImageTool } from '@uniedit/platform';
+ * import { registerGenerationTools, GenerateImageTool } from '@neko/platform';
  *
  * // Register all generation tools with a service
  * registerGenerationTools(registry, aiService);

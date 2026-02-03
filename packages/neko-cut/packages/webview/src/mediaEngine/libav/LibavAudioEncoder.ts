@@ -16,7 +16,7 @@ import type {
   EncoderState,
   EncoderProgress,
   EncoderEvent,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type { LibAV } from 'libav.js';
 import { libavCore } from './LibavCore';
 

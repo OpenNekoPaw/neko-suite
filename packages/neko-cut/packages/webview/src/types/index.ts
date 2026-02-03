@@ -2,7 +2,7 @@
  * Types Module - Export all type definitions
  * 类型模块 - 导出所有类型定义
  *
- * Core types are re-exported from @uniedit/shared for Single Source of Truth.
+ * Core types are re-exported from @neko/shared for Single Source of Truth.
  * Webview-specific extensions (i18n keys, presets, factory functions) are defined locally.
  */
 
@@ -17,7 +17,7 @@ export type {
   ProjectData,
   TimelineTrack,
   TrackType,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 export * from './animation';
 export * from './transition';

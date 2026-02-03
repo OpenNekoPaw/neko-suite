@@ -4,7 +4,7 @@
 
 ## Context Summary
 
-- **项目**：Neko Creator Suite - VS Code 全能内容创作工作站
+- **项目**：Neko Suite - VS Code 全能内容创作工作站
 - **角色**：音频工作站，波形编辑与处理
 - **规范**：[README.md](../../README.md)
 
@@ -12,7 +12,7 @@
 
 ## 概述
 
-**Neko Audio** 是 Neko Creator Suite 的音频工作站，提供专业级的音频编辑能力。支持波形可视化、频谱分析、麦克风录制、AI 降噪等功能，让音频处理变得简单高效。
+**Neko Audio** 是 Neko Suite 的音频工作站，提供专业级的音频编辑能力。支持波形可视化、频谱分析、麦克风录制、AI 降噪等功能，让音频处理变得简单高效。
 
 ---
 
@@ -91,7 +91,7 @@
 
 ```
 neko-audio (独立)
-    └── @uniedit/shared (类型)
+    └── @neko/shared (类型)
 ```
 
 ---
@@ -101,7 +101,7 @@ neko-audio (独立)
 - **音频处理**：Web Audio API
 - **可视化**：Canvas 2D
 - **录制**：MediaRecorder API
-- **类型**：@uniedit/shared
+- **类型**：@neko/shared
 
 ---
 

@@ -9,7 +9,7 @@ import type {
 	AddFileOptions,
 	MediaFileMetadata,
 	AssetMediaType,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type { IAssetStorage } from '../storage/IAssetStorage';
 import { generateFileId } from './utils';
 

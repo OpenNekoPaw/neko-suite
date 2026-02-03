@@ -11,7 +11,7 @@ import {
   Tool,
   ToolResult,
   ToolCategory,
-} from '@uniedit/platform';
+} from '@neko/platform';
 
 // Define a custom tool
 class GetTimelineInfoTool implements Tool {

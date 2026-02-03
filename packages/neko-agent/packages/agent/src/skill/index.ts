@@ -89,7 +89,7 @@ export {
   type YamlValue,
 } from './markdown-parser';
 
-// Re-export types from @uniedit/shared for convenience
+// Re-export types from @neko/shared for convenience
 export type {
   // Core types - Skill (semantic discovery)
   Skill,
@@ -130,9 +130,9 @@ export type {
   LegacySkill,
   LegacySkillFrontmatter,
   SkillSlashCommand,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
-// Re-export utility functions from @uniedit/shared
+// Re-export utility functions from @neko/shared
 export {
   // Skill functions
   toSkillSummary,
@@ -152,4 +152,4 @@ export {
   // Constants
   SKILL_DIRECTORIES,
   COMMAND_DIRECTORIES,
-} from '@uniedit/shared';
+} from '@neko/shared';

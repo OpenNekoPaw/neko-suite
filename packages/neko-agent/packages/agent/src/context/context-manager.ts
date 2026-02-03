@@ -17,8 +17,8 @@ import type {
   ContextEventListener,
   LayerUsage,
   ILayeredContextManager,
-} from '@uniedit/shared';
-import { DEFAULT_LAYERED_CONTEXT_MANAGER_CONFIG } from '@uniedit/shared';
+} from '@neko/shared';
+import { DEFAULT_LAYERED_CONTEXT_MANAGER_CONFIG } from '@neko/shared';
 
 /**
  * Layered Context Manager implementation

@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { AssetLibrary } from '../../service/AssetLibrary';
 import { InMemoryStorage } from '../../storage/InMemoryStorage';
 import type { IAssetClassifier } from '../../classifier/IClassifier';
-import type { ClassificationResult, SuggestedEntity } from '@uniedit/shared';
+import type { ClassificationResult, SuggestedEntity } from '@neko/shared';
 
 describe('AssetLibrary', () => {
 	let storage: InMemoryStorage;

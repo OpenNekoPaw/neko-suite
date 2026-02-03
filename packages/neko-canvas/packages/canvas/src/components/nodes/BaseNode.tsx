@@ -4,7 +4,7 @@
  */
 
 import { useCallback, type ReactNode } from 'react';
-import type { CanvasNode, CanvasViewport } from '@uniedit/shared';
+import type { CanvasNode, CanvasViewport } from '@neko/shared';
 import { useNodeDrag } from '../../hooks/useNodeDrag';
 import clsx from 'clsx';
 

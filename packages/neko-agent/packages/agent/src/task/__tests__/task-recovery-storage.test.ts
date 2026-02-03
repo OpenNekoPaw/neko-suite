@@ -8,7 +8,7 @@ import {
   FileTaskRecoveryStorage,
   createFileRecoveryStorage,
 } from '../task-recovery-storage';
-import type { TaskRecoveryInfo } from '@uniedit/shared';
+import type { TaskRecoveryInfo } from '@neko/shared';
 
 describe('MemoryTaskRecoveryStorage', () => {
   let storage: MemoryTaskRecoveryStorage;

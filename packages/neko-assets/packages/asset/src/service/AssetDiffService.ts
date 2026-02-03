@@ -15,7 +15,7 @@ import type {
 	FileVersion,
 	AttributeDiff,
 	VariantAttributes,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type { IAssetStorage } from '../storage/IAssetStorage';
 
 // =============================================================================

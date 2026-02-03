@@ -17,7 +17,7 @@ import type {
 	ModeSelectionResult,
 	ResolveAutoModeContext,
 	TimelineMediaAnalysisResult,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { postMessage } from '../../utils/vscodeApi';
 import { getKeyframeCacheClient } from '../../services/KeyframeCacheClient';
 import type { ProjectSlice } from './projectSlice';

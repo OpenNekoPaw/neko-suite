@@ -1,5 +1,5 @@
 {
-  "name": "@uniedit/platform",
+  "name": "@neko/platform",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -7,7 +7,7 @@
     "@ai-sdk/anthropic": "^3.0.2",
     "@ai-sdk/google": "^3.0.2",
     "@ai-sdk/openai": "^3.0.2",
-    "@uniedit/shared": "workspace:*",
+    "@neko/shared": "workspace:*",
     "ai": "^6.0.6"
   },
   "exports": {

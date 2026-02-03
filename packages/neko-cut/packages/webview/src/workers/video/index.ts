@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { createWorkerVideoDecoder } from '@uniedit/webview/workers/video';
+ * import { createWorkerVideoDecoder } from '@neko/webview/workers/video';
  *
  * const decoder = createWorkerVideoDecoder({ source: videoUrl });
  * await decoder.open();

@@ -17,7 +17,7 @@ import type {
 	CompatibleExportProgress,
 	CompatibleExportResult,
 	MessageToWebview,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Types

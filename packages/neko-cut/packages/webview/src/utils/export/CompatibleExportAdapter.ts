@@ -26,7 +26,7 @@ import type {
 	CompatibleExportConfig,
 	CompatibleExportProgress,
 	CompatibleExportResult,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Types

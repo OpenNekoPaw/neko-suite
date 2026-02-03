@@ -3,7 +3,7 @@
  */
 
 import type { Provider, Model } from '../types/provider';
-import type { ProviderTemplate } from '@uniedit/shared';
+import type { ProviderTemplate } from '@neko/shared';
 import type { Group } from '../types/group';
 import type { ExecutionGroup } from '../types/execution-group';
 import type { RetryTimeoutPreset, BuiltinPresetName } from '../types/error';

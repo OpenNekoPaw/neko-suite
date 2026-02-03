@@ -1,7 +1,7 @@
 /**
  * Prompt Types - Re-export from shared
  *
- * @deprecated Import directly from @uniedit/shared instead
+ * @deprecated Import directly from @neko/shared instead
  */
 
 export type {
@@ -12,4 +12,4 @@ export type {
   ChainPrompt,
   ChainPromptStep,
   IPromptManager,
-} from '@uniedit/shared';
+} from '@neko/shared';

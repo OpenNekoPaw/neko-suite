@@ -11,7 +11,7 @@
  *
  * @example Settings-based hooks (recommended)
  * ```typescript
- * import { SettingsHookLoader } from '@uniedit/agent';
+ * import { SettingsHookLoader } from '@neko/agent';
  *
  * const loader = new SettingsHookLoader({
  *   fs: nodeFileSystem,
@@ -24,7 +24,7 @@
  *
  * @example Directory-based hooks (legacy)
  * ```typescript
- * import { HookLoader } from '@uniedit/agent';
+ * import { HookLoader } from '@neko/agent';
  *
  * const loader = new HookLoader({
  *   fs: nodeFileSystem,

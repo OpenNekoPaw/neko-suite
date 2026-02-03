@@ -260,7 +260,7 @@ export interface IWorkflowManager {
 /**
  * Media task manager interface (for async media generation tasks)
  * This is a simplified interface for UI/platform integration.
- * For the full TaskManager implementation, see @uniedit/agent.
+ * For the full TaskManager implementation, see @neko/agent.
  */
 export interface IMediaTaskManager {
     /**

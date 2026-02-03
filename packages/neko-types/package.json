@@ -1,6 +1,6 @@
 {
-  "name": "@uniedit/shared",
-  "description": "Shared types, protocols and utilities for Neko Creative Suite",
+  "name": "@neko/shared",
+  "description": "Shared types, protocols and utilities for Neko Suite",
   "private": true,
   "version": "0.0.1",
   "type": "module",

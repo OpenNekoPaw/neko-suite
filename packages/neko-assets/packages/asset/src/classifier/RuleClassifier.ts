@@ -14,7 +14,7 @@ import type {
 	ExpressionState,
 	ActionState,
 	ClassifierOptions,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type { IAssetClassifier } from './IClassifier';
 
 /**

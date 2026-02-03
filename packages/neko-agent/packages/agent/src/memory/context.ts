@@ -12,7 +12,7 @@ import type {
   ContextCompressor,
   ContextManager as IContextManager,
   ContextManagerConfig,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * Extract text content from ChatMessage content (handles both string and ContentPart[] formats)

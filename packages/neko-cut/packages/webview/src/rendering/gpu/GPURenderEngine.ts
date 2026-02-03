@@ -29,7 +29,7 @@ import type { EffectInstance, EffectParameterValue } from '../../types/effects';
 import { getEffectParametersAtTime } from '../../types/effects';
 import type { MaskInstance } from '../../types/mask';
 import { getComputedMaskAtTime } from '../../types/mask';
-import type { ElementTransition, TransitionType, EasingType } from '@uniedit/shared';
+import type { ElementTransition, TransitionType, EasingType } from '@neko/shared';
 import type { IMediaFrameProvider } from '../unified/mediaFrameProvider';
 import {
   createWebviewMediaFrameProvider,
@@ -48,14 +48,14 @@ import type { BlendModeType, ColorCorrectionParams, GPUTransitionType, Transitio
 import { GPU_TRANSITION_TYPE_MAP } from './types';
 import { createCompositor, type CompositorFactoryOptions } from './CompositorFactory';
 
-// Effect Runner integration (from @uniedit/effects-runtime)
+// Effect Runner integration (from @neko/effects-runtime)
 import type {
   IEffectRunner,
   IEffectContext,
   EffectInstance as RuntimeEffectInstance,
   EffectType as RuntimeEffectType,
-} from '@uniedit/effects-runtime';
-import { createWebGPUEffectRunner, isWebGPUSupported } from '@uniedit/effects-runtime';
+} from '@neko/effects-runtime';
+import { createWebGPUEffectRunner, isWebGPUSupported } from '@neko/effects-runtime';
 
 // =============================================================================
 // Types
@@ -2145,7 +2145,7 @@ export class GPURenderEngine {
 
   /**
    * Apply easing function to progress value
-   * Supports all EasingType values defined in @uniedit/shared
+   * Supports all EasingType values defined in @neko/shared
    */
   private _applyEasing(t: number, easing: EasingType): number {
     switch (easing) {

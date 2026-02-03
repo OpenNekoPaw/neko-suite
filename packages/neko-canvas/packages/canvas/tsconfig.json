@@ -20,7 +20,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@uniedit/shared": ["../shared/src"]
+      "@neko/shared": ["../shared/src"]
     }
   },
   "include": ["src"],

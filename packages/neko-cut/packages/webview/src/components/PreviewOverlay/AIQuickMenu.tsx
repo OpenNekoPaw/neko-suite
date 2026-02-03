@@ -4,8 +4,8 @@
  */
 
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
-import type { TimelineElement } from '@uniedit/shared';
-import { getActionsForElementType, type AIQuickAction } from '@uniedit/shared';
+import type { TimelineElement } from '@neko/shared';
+import { getActionsForElementType, type AIQuickAction } from '@neko/shared';
 import { useTranslation } from '../../i18n/I18nContext';
 
 export interface AIQuickMenuProps {

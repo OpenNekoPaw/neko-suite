@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { Platform } from '@uniedit/platform';
+import type { Platform } from '@neko/platform';
 import type { ConversationMessage } from './conversationManager';
 import type { IAgentManager } from '../ai/agentManager';
 import { createDefaultAgentContext } from '../ai/agentContext';
@@ -19,7 +19,7 @@ import {
   createInputProcessor,
   type InputProcessor,
   type IFileReader,
-} from '@uniedit/agent';
+} from '@neko/agent';
 
 /**
  * Plan step for plan persistence

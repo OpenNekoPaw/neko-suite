@@ -36,7 +36,7 @@ export { MediaDiffMessageHandler } from './editor/MediaDiffMessageHandler';
 // =============================================================================
 
 import * as vscode from 'vscode';
-import { getMediaType } from '@uniedit/shared';
+import { getMediaType } from '@neko/shared';
 import { MediaDiffService, getMediaDiffService } from './services/MediaDiffService';
 import { ImageDiffAnalyzer } from './services/analyzers/ImageDiffAnalyzer';
 import { VideoDiffAnalyzer } from './services/analyzers/VideoDiffAnalyzer';

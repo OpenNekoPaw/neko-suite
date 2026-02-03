@@ -4,7 +4,7 @@
 
 ## Context Summary
 
-- **项目**：Neko Creator Suite - VS Code 全能内容创作工作站
+- **项目**：Neko Suite - VS Code 全能内容创作工作站
 - **角色**：AI Agent，自然语言驱动创作
 - **规范**：[README.md](../../README.md)
 
@@ -12,7 +12,7 @@
 
 ## 概述
 
-**NekoAgent** 是 Neko Creator Suite 的 AI 大脑，接收用户的自然语言意图，将其转化为 Neko-Script 指令流，直接操作渲染引擎。支持多种 AI 提供商、MCP 协议扩展、以及丰富的 AI 生成能力。
+**NekoAgent** 是 Neko Suite 的 AI 大脑，接收用户的自然语言意图，将其转化为 Neko-Script 指令流，直接操作渲染引擎。支持多种 AI 提供商、MCP 协议扩展、以及丰富的 AI 生成能力。
 
 ---
 
@@ -120,9 +120,9 @@
 
 ```
 neko-agent
-    ├── @uniedit/agent (Agent 框架)
-    ├── @uniedit/platform (平台服务)
-    └── @uniedit/shared (类型)
+    ├── @neko/agent (Agent 框架)
+    ├── @neko/platform (平台服务)
+    └── @neko/shared (类型)
 ```
 
 ---
@@ -132,7 +132,7 @@ neko-agent
 - **LLM**：Claude API / OpenAI API
 - **协议**：MCP (Model Context Protocol)
 - **UI**：React 18 + Zustand
-- **类型**：@uniedit/shared
+- **类型**：@neko/shared
 
 ---
 

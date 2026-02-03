@@ -25,8 +25,8 @@ import type {
 	Event,
 	VideoCodecCapability,
 	MediaInfo,
-} from '@uniedit/shared';
-import { BASIC_MODE_CAPABILITIES } from '@uniedit/shared';
+} from '@neko/shared';
+import { BASIC_MODE_CAPABILITIES } from '@neko/shared';
 
 import {
 	WebCodecsVideoDecoder,
@@ -34,7 +34,7 @@ import {
 } from './decoders';
 import { createWebviewAudioDecoder } from './decoders/WebviewAudioDecoder';
 import { WebCodecsEncoder } from './encoders';
-import { isWebGPUSupported } from '@uniedit/effects-runtime';
+import { isWebGPUSupported } from '@neko/effects-runtime';
 
 // =============================================================================
 // Types
@@ -213,10 +213,10 @@ export class WebMediaEngine implements IMediaEngine {
 	// =========================================================================
 
 	async getEffectProcessor(): Promise<IEffectProcessor> {
-		// Effect processing has been moved to @uniedit/effects-runtime
-		// Use createEffectRunner() from @uniedit/effects-runtime instead
+		// Effect processing has been moved to @neko/effects-runtime
+		// Use createEffectRunner() from @neko/effects-runtime instead
 		throw new Error(
-			'getEffectProcessor is deprecated. Use createEffectRunner() from @uniedit/effects-runtime instead.'
+			'getEffectProcessor is deprecated. Use createEffectRunner() from @neko/effects-runtime instead.'
 		);
 	}
 

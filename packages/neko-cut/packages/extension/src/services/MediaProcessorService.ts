@@ -40,7 +40,7 @@ import {
 	type AudioStreamSeekRequest,
 	type AudioStreamWebviewMessage,
 	type ProjectData,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // LRU Cache Implementation

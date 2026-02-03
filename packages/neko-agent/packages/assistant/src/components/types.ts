@@ -1,8 +1,8 @@
 // Re-export MessageAttachment from shared (Single Source of Truth)
-export type { MessageAttachment, AttachmentType } from '@uniedit/shared';
+export type { MessageAttachment, AttachmentType } from '@neko/shared';
 
 // Import for local use
-import type { MessageAttachment } from '@uniedit/shared';
+import type { MessageAttachment } from '@neko/shared';
 
 export interface Message {
   id: string;
@@ -158,7 +158,7 @@ export type {
   PromptPresetConfig as ConfiguredPrompt,
   PromptPresetType,
   ChatModelOption,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Settings state interface
 export interface SettingsState {
@@ -177,27 +177,27 @@ export interface SettingsState {
   // Provider 模板列表 (用于添加 Provider 的下拉框)
   providerTemplates: Array<ProviderTemplateInfo>;
   // 已配置的 Model 列表 (从 Platform ConfigManager 获取)
-  configuredModels: Array<import('@uniedit/shared').ModelConfig>;
+  configuredModels: Array<import('@neko/shared').ModelConfig>;
   // 已配置的 Prompt 列表 (alias: configuredAgents for backward compatibility)
-  configuredPrompts: Array<import('@uniedit/shared').PromptPresetConfig>;
+  configuredPrompts: Array<import('@neko/shared').PromptPresetConfig>;
   /** @deprecated Use configuredPrompts instead */
-  configuredAgents: Array<import('@uniedit/shared').PromptPresetConfig>;
+  configuredAgents: Array<import('@neko/shared').PromptPresetConfig>;
   // 当前选中的 Prompt ID (alias: selectedAgentId for backward compatibility)
   selectedPromptId: string | null;
   /** @deprecated Use selectedPromptId instead */
   selectedAgentId: string | null;
   // 已配置的 MCP 服务器列表
-  configuredMCPServers: Array<import('@uniedit/shared').MCPServerConfig>;
+  configuredMCPServers: Array<import('@neko/shared').MCPServerConfig>;
   // 已配置的工作流列表
-  configuredWorkflows: Array<import('@uniedit/shared').WorkflowConfig>;
+  configuredWorkflows: Array<import('@neko/shared').WorkflowConfig>;
   // 已配置的 Skills 列表
-  configuredSkills: Array<import('@uniedit/shared').ConfiguredSkill>;
+  configuredSkills: Array<import('@neko/shared').ConfiguredSkill>;
   // 已配置的 Slash Commands 列表
-  configuredCommands: Array<import('@uniedit/shared').ConfiguredSlashCommand>;
+  configuredCommands: Array<import('@neko/shared').ConfiguredSlashCommand>;
   // 已配置的 Hooks 列表
-  configuredHooks: Array<import('@uniedit/shared').ConfiguredHook>;
+  configuredHooks: Array<import('@neko/shared').ConfiguredHook>;
   // 已配置的 ToolSkills 列表 (动态工具注入)
-  configuredToolSkills: Array<import('@uniedit/shared').ConfiguredToolSkill>;
+  configuredToolSkills: Array<import('@neko/shared').ConfiguredToolSkill>;
   selectedProviderId: string | null;
   selectedModelId: string | null;
   systemPrompt: string;
@@ -211,7 +211,7 @@ export interface SettingsState {
   // Prompt mode: default or plan (research/planning mode)
   promptMode: PromptMode;
   // Chat model options for UI model selector (from Platform ConfigManager)
-  chatModelOptions: Array<import('@uniedit/shared').ChatModelOption>;
+  chatModelOptions: Array<import('@neko/shared').ChatModelOption>;
 }
 
 export interface ConfiguredProvider {
@@ -239,17 +239,17 @@ export interface ProviderTemplateInfo {
 }
 
 // Re-export VSCodeAPI from shared (Single Source of Truth)
-export type { VSCodeAPI } from '@uniedit/shared';
+export type { VSCodeAPI } from '@neko/shared';
 
 /**
  * Model option for UI model selector
- * @deprecated Use ChatModelOption from @uniedit/shared instead
+ * @deprecated Use ChatModelOption from @neko/shared instead
  */
-export type ModelOption = import('@uniedit/shared').ChatModelOption;
+export type ModelOption = import('@neko/shared').ChatModelOption;
 
 // Legacy type aliases for backward compatibility during migration
 // TODO: Remove these after migration is complete
 /** @deprecated Use ConfiguredPrompt from shared package */
-export type ConfiguredAgent = import('@uniedit/shared').PromptPresetConfig;
+export type ConfiguredAgent = import('@neko/shared').PromptPresetConfig;
 /** @deprecated Use PromptPresetType from shared package */
-export type AgentType = import('@uniedit/shared').PromptPresetType;
+export type AgentType = import('@neko/shared').PromptPresetType;

@@ -8,7 +8,7 @@
  * Users can create custom slash commands in .neko/commands/ directory.
  */
 
-import type { ConfiguredSkill, ConfiguredSlashCommand } from '@uniedit/shared';
+import type { ConfiguredSkill, ConfiguredSlashCommand } from '@neko/shared';
 
 /**
  * Built-in Skills (Semantic Discovery)

@@ -12,7 +12,7 @@ import type {
   ToolGroup,
   ToolGroupMatch,
   IToolGroupRegistry,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * ToolGroupRegistry implementation

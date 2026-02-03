@@ -15,7 +15,7 @@ import type {
   IPromptManager,
   ChainPrompt,
   ChainPromptStep,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * Chain execution result

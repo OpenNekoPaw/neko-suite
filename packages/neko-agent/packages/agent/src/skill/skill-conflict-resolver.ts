@@ -14,8 +14,8 @@ import type {
   SkillPriority,
   ISkillConflictResolver,
   Skill,
-} from '@uniedit/shared';
-import { DEFAULT_SKILL_CONFLICT_CONFIG } from '@uniedit/shared';
+} from '@neko/shared';
+import { DEFAULT_SKILL_CONFLICT_CONFIG } from '@neko/shared';
 
 /**
  * Skill conflict resolver implementation

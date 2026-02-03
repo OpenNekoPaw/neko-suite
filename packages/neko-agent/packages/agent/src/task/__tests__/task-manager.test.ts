@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { TaskManager } from '../task-manager';
-import type { TaskInput, Task, TaskStatus, TaskExecutor } from '@uniedit/shared';
+import type { TaskInput, Task, TaskStatus, TaskExecutor } from '@neko/shared';
 
 describe('TaskManager', () => {
   let manager: TaskManager;

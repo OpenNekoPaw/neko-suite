@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import { createPlatform, type Platform, type ITaskManager } from '@uniedit/platform';
+import { createPlatform, type Platform, type ITaskManager } from '@neko/platform';
 import { VSCodeConfigStorage, migrateFromLegacyConfig } from '../services/vscodeConfigStorage';
 
 /**

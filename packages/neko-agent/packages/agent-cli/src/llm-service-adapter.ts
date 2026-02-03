@@ -11,7 +11,7 @@ import type {
   ServiceOptions,
   ServiceResponse,
   StreamChunk,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type { CLIConfig } from './types';
 import { createLLMClient, type ILLMClient } from './llm-client';
 

@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { BaseEditorModel, EditorCapabilities, IModelChangeEvent } from '../common/editorModel';
-import { ProjectData, createDefaultProject } from '@uniedit/shared';
+import { ProjectData, createDefaultProject } from '@neko/shared';
 
 // =============================================================================
 // 视频编辑器模型

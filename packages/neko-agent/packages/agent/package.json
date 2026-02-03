@@ -1,5 +1,5 @@
 {
-  "name": "@uniedit/agent",
+  "name": "@neko/agent",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -12,13 +12,13 @@
     "test:run": "vitest --run"
   },
   "dependencies": {
-    "@uniedit/shared": "workspace:*"
+    "@neko/shared": "workspace:*"
   },
   "peerDependencies": {
-    "@uniedit/platform": "workspace:*"
+    "@neko/platform": "workspace:*"
   },
   "peerDependenciesMeta": {
-    "@uniedit/platform": {
+    "@neko/platform": {
       "optional": true
     }
   },

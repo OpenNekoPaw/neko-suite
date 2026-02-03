@@ -1,7 +1,7 @@
 /**
- * Task Types - Re-export from @uniedit/shared
+ * Task Types - Re-export from @neko/shared
  *
- * @deprecated Import from '@uniedit/shared' directly for new code.
+ * @deprecated Import from '@neko/shared' directly for new code.
  */
 
 export type {
@@ -17,4 +17,4 @@ export type {
   TaskRecoveryInfo,
   SerializableTask,
   TaskExecutor,
-} from '@uniedit/shared';
+} from '@neko/shared';

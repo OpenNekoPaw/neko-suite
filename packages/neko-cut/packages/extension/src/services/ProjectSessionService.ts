@@ -12,8 +12,8 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { ProjectData } from '@uniedit/shared';
-import { createDefaultProject } from '@uniedit/shared';
+import type { ProjectData } from '@neko/shared';
+import { createDefaultProject } from '@neko/shared';
 import { createServiceId } from '../base';
 
 export interface ProjectSessionInfo {

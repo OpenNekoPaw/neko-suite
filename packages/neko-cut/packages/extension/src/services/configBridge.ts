@@ -9,7 +9,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { Platform } from '@uniedit/platform';
+import type { Platform } from '@neko/platform';
 import type {
   ConfigState,
   MCPServerConfig,
@@ -21,7 +21,7 @@ import type {
   ConfiguredSlashCommand,
   ConfiguredHook,
   ConfiguredToolSkill,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type {
   ConnectionStateManager,
   ConnectionStateChangeEvent,

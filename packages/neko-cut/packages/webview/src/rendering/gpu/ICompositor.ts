@@ -5,7 +5,7 @@
  * 提供统一的合成器接口，支持 WebGPU 和 WebGL 两种后端实现
  */
 
-import type { MaskInstance } from '@uniedit/shared';
+import type { MaskInstance } from '@neko/shared';
 import type { BlendModeType, ColorCorrectionParams, GPUTransitionType, TransitionRenderParams } from './types';
 
 // =============================================================================

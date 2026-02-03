@@ -7,7 +7,7 @@ import type {
   KeyFact,
   SessionMemoryEntry,
   SessionMemory as ISessionMemory,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * In-memory session memory implementation

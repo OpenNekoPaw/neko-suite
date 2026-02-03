@@ -10,7 +10,7 @@ import type {
 	UpdateVariantInput,
 	MoveVariantInput,
 	MoveVariantResult,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type { IAssetStorage } from '../storage/IAssetStorage';
 import { generateVariantId } from './utils';
 

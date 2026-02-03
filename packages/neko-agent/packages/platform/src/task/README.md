@@ -219,7 +219,7 @@ pending → running → completed
 ### 基础任务管理
 
 ```typescript
-import { TaskManager, MemoryTaskStorage } from '@uniedit/platform';
+import { TaskManager, MemoryTaskStorage } from '@neko/platform';
 
 const manager = new TaskManager({
   storage: new MemoryTaskStorage(),
@@ -256,7 +256,7 @@ console.log('Status:', status);
 ### 任务持久化和恢复
 
 ```typescript
-import { TaskManager, TaskRecoveryStorage } from '@uniedit/platform';
+import { TaskManager, TaskRecoveryStorage } from '@neko/platform';
 
 const storage = new TaskRecoveryStorage({
   storagePath: '/path/to/task-storage',

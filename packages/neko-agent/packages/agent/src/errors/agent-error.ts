@@ -8,7 +8,7 @@ import {
   BaseError,
   type BaseErrorInfo,
   type ErrorCategory,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * Agent-specific error categories (subset of ErrorCategory)

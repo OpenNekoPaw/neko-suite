@@ -3,7 +3,7 @@ import {
   getPromptTypeName,
   getPromptTypeIcon,
 } from '../prompts';
-import type { PromptPresetType } from '@uniedit/shared';
+import type { PromptPresetType } from '@neko/shared';
 
 describe('prompts config', () => {
   const validTypes: PromptPresetType[] = [

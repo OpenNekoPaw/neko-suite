@@ -4,7 +4,7 @@
 
 ## Context Summary
 
-- **项目**：Neko Creator Suite - VS Code 全能内容创作工作站
+- **项目**：Neko Suite - VS Code 全能内容创作工作站
 - **角色**：媒体工具，Diff 比较与信息查看
 - **规范**：[README.md](../../README.md)
 
@@ -12,7 +12,7 @@
 
 ## 概述
 
-**Neko Tools** 是 Neko Creator Suite 的通用工具集，提供图片、视频、音频的 Diff 比较功能，以及媒体信息查看等实用工具。帮助创作者快速对比不同版本的媒体文件，了解文件详细信息。
+**Neko Tools** 是 Neko Suite 的通用工具集，提供图片、视频、音频的 Diff 比较功能，以及媒体信息查看等实用工具。帮助创作者快速对比不同版本的媒体文件，了解文件详细信息。
 
 ---
 
@@ -109,7 +109,7 @@
 ```
 neko-tools (独立)
     ├── sharp (图片处理)
-    └── @uniedit/shared (类型)
+    └── @neko/shared (类型)
 ```
 
 ---
@@ -119,7 +119,7 @@ neko-tools (独立)
 - **图片处理**：Sharp
 - **视频分析**：WebCodecs / FFprobe
 - **UI**：React 18
-- **类型**：@uniedit/shared
+- **类型**：@neko/shared
 
 ---
 

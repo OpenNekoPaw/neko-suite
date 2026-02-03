@@ -12,7 +12,7 @@
 import type { IMediaFrameProvider, CompositeTrackConfig } from './types';
 import type { WebviewMediaFrameProvider } from './WebviewMediaFrameProvider';
 import type { CompatibleMediaFrameProvider } from './CompatibleMediaFrameProvider';
-import type { MediaEngineMode } from '@uniedit/shared';
+import type { MediaEngineMode } from '@neko/shared';
 
 // =============================================================================
 // Types

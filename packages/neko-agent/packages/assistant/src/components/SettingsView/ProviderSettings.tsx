@@ -8,7 +8,7 @@ import {
 } from '@/config/ui-metadata';
 import { useTranslation } from '@/i18n/I18nContext';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
-import type { ModelConfig, ProviderModelInfo, ProviderType } from '@uniedit/shared';
+import type { ModelConfig, ProviderModelInfo, ProviderType } from '@neko/shared';
 
 /**
  * Combined provider info from Platform data + UI metadata

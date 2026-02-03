@@ -4,7 +4,7 @@
  * Types for asset-level diff viewing (variants, versions, AI analysis).
  */
 
-import type { AssetEntity, AssetVariant, VariantAttributes, FileVersion } from '@uniedit/shared';
+import type { AssetEntity, AssetVariant, VariantAttributes, FileVersion } from '@neko/shared';
 
 // =============================================================================
 // Component Props

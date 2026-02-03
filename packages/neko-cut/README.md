@@ -4,7 +4,7 @@
 
 ## Context Summary
 
-- **项目**：Neko Creator Suite - VS Code 全能内容创作工作站
+- **项目**：Neko Suite - VS Code 全能内容创作工作站
 - **角色**：视频剪辑器，时间线编辑核心
 - **规范**：[README.md](../../README.md)
 
@@ -12,7 +12,7 @@
 
 ## 概述
 
-**NekoCut** 是 Neko Creator Suite 的视频剪辑核心，提供专业级的时间线编辑能力。支持多轨道合成、关键帧动画、特效转场、色彩校正等完整的视频制作功能。
+**NekoCut** 是 Neko Suite 的视频剪辑核心，提供专业级的时间线编辑能力。支持多轨道合成、关键帧动画、特效转场、色彩校正等完整的视频制作功能。
 
 ---
 
@@ -120,10 +120,10 @@ NekoCut Extension
 
 ```
 neko-cut
-    ├── neko-server (扩展依赖)
-    ├── @uniedit/platform (平台服务)
-    ├── @uniedit/shared (类型)
-    └── @vedit/media-processor-rs (媒体处理)
+    ├── neko-engine (扩展依赖)
+    ├── @neko/platform (平台服务)
+    ├── @neko/shared (类型)
+    └── @neko/media-processor-rs (媒体处理)
 ```
 
 ---

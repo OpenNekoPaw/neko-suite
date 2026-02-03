@@ -11,7 +11,7 @@ import type {
   MediaCanvasNode,
   StoryboardCanvasNode,
   AnnotationCanvasNode,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { CanvasGrid } from './CanvasGrid';
 import { CanvasViewport } from './CanvasViewport';
 import { MediaNode, StoryboardNode, AnnotationNode } from './nodes';

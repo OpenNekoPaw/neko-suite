@@ -5,7 +5,7 @@
  * Builtin prompts are loaded from platform via ConfigManager.
  */
 
-import type { PromptPresetConfig, PromptPresetType, PromptSource } from '@uniedit/shared';
+import type { PromptPresetConfig, PromptPresetType, PromptSource } from '@neko/shared';
 
 // Re-export types from shared package
 export type { PromptPresetConfig, PromptPresetType, PromptSource };

@@ -1,4 +1,4 @@
-# @uniedit/asset
+# @neko/asset
 
 > 素材管理核心包，提供 Entity-Variant-File 三层层次结构的素材管理能力
 
@@ -12,7 +12,7 @@
 
 - **职责**：素材实体管理、变体管理、文件管理、搜索、AI 分类
 - **入口**：`AssetLibrary` facade
-- **依赖**：`@uniedit/shared`（类型）, `@uniedit/platform`（可选，AI 分类）
+- **依赖**：`@neko/shared`（类型）, `@neko/platform`（可选，AI 分类）
 
 ## 核心概念
 
@@ -29,7 +29,7 @@ AssetEntity（素材实体）     // 一个人物/物品/特效，如"小明"
 ## 使用示例
 
 ```typescript
-import { AssetLibrary, InMemoryStorage } from '@uniedit/asset';
+import { AssetLibrary, InMemoryStorage } from '@neko/asset';
 
 // 初始化
 const storage = new InMemoryStorage();

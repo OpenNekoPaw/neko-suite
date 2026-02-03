@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `@uniedit/platform` will be documented in this file.
+All notable changes to `@neko/platform` will be documented in this file.
 
 ## [0.1.0] - 2024-12-24
 

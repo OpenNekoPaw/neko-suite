@@ -27,4 +27,4 @@ export type {
   TaskRecoveryInfo,
   SerializableTask,
   TaskExecutor,
-} from '@uniedit/shared';
+} from '@neko/shared';

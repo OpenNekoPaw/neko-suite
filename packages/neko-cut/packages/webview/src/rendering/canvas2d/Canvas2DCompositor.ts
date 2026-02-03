@@ -346,7 +346,7 @@ export class Canvas2DCompositor implements ICanvas2DCompositor {
 
   private _drawRectangleMask(
     ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
-    shape: import('@uniedit/shared').RectangleMask
+    shape: import('@neko/shared').RectangleMask
   ): void {
     // Shape uses centerX/centerY and width/height as percentages (0-100)
     const centerX = (shape.centerX / 100) * this._width;
@@ -381,7 +381,7 @@ export class Canvas2DCompositor implements ICanvas2DCompositor {
 
   private _drawEllipseMask(
     ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
-    shape: import('@uniedit/shared').EllipseMask
+    shape: import('@neko/shared').EllipseMask
   ): void {
     // Shape uses centerX/centerY and width/height as percentages (0-100)
     const centerX = (shape.centerX / 100) * this._width;
@@ -395,7 +395,7 @@ export class Canvas2DCompositor implements ICanvas2DCompositor {
 
   private _drawPolygonMask(
     ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
-    shape: import('@uniedit/shared').PolygonMask
+    shape: import('@neko/shared').PolygonMask
   ): void {
     const points = shape.points;
     if (!points || points.length < 3) return;

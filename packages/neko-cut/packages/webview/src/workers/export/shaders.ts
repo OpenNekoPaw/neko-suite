@@ -12,8 +12,8 @@
 
 // Import shader strings directly from effects-core (browser-compatible)
 // Using relative path imports to avoid alias resolution issues in workers
-import { COMMON_WGSL } from '../../../../../../neko-server/packages/effects-core/src/shaders/common.wgsl';
-import { COLOR_CORRECTION_WGSL } from '../../../../../../neko-server/packages/effects-core/src/shaders/colorCorrection.wgsl';
+import { COMMON_WGSL } from '../../../../../../neko-engine/packages/effects-core/src/shaders/common.wgsl';
+import { COLOR_CORRECTION_WGSL } from '../../../../../../neko-engine/packages/effects-core/src/shaders/colorCorrection.wgsl';
 
 // =============================================================================
 // External Texture Shader (Basic)

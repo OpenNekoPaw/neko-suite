@@ -10,8 +10,8 @@
 
 import * as vscode from 'vscode';
 import { createServiceId } from '../base';
-import type { Platform } from '@uniedit/platform';
-import type { ChatMessage } from '@uniedit/shared';
+import type { Platform } from '@neko/platform';
+import type { ChatMessage } from '@neko/shared';
 import { AgentRunner, IAgentRunner, IAgentConfig } from './agentRunner';
 
 // =============================================================================

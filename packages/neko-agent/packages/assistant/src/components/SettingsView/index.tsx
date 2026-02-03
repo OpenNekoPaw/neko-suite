@@ -6,7 +6,7 @@ import { WorkflowSettings } from '@/components/SettingsView/WorkflowSettings';
 import { ModelSettings, UIModelConfig } from '@/components/SettingsView/ModelSettings';
 import { SkillSettings } from '@/components/SettingsView/SkillSettings';
 import { useTranslation } from '@/i18n/I18nContext';
-import type { ModelConfig, ConfiguredSkill, ConfiguredSlashCommand, ConfiguredToolSkill } from '@uniedit/shared';
+import type { ModelConfig, ConfiguredSkill, ConfiguredSlashCommand, ConfiguredToolSkill } from '@neko/shared';
 
 interface SettingsViewProps {
   settings: SettingsState;

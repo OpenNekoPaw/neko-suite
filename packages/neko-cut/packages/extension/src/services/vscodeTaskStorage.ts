@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { ITaskStorage, SerializableTask } from '@uniedit/platform';
+import type { ITaskStorage, SerializableTask } from '@neko/platform';
 
 const STORAGE_KEY = 'uniedit.tasks';
 

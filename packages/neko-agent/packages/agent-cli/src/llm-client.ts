@@ -6,7 +6,7 @@
  * 2. Built-in HTTP client (fallback)
  */
 
-import type { ChatMessage, IService, ServiceOptions, ServiceResponse } from '@uniedit/shared';
+import type { ChatMessage, IService, ServiceOptions, ServiceResponse } from '@neko/shared';
 import type { CLIConfig } from './types';
 
 /**

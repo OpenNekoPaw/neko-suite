@@ -16,8 +16,8 @@ import type {
   SettingsHookAction,
   HookInput,
   HookOutput,
-} from '@uniedit/shared';
-import { matchHookMatcher } from '@uniedit/shared';
+} from '@neko/shared';
+import { matchHookMatcher } from '@neko/shared';
 
 // =============================================================================
 // Types

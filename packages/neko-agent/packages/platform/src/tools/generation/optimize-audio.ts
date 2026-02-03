@@ -3,7 +3,7 @@
  */
 
 import type { ToolResult, ToolCategory } from '../../types/tool';
-import { BuiltinTool } from '@uniedit/shared';
+import { BuiltinTool } from '@neko/shared';
 import type { AIGenerationService } from './types';
 
 export class OptimizeAudioTool extends BuiltinTool {

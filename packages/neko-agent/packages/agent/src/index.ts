@@ -1,5 +1,5 @@
 /**
- * @uniedit/agent - Agent Application Package
+ * @neko/agent - Agent Application Package
  *
  * This package provides the agent runtime for AI-powered task execution.
  * It can run standalone (without platform) or integrated with platform.
@@ -73,7 +73,7 @@ export type {
   ServiceOptions,
   ToolDefinition,
   LLMProviderConfig,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Export errors
 export { AgentError, type AgentErrorCategory, type AgentErrorInfo } from './errors';
@@ -284,7 +284,7 @@ export {
   extractSupportFileRefs,
   SKILL_DIRECTORIES,
   COMMAND_DIRECTORIES,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Export tools
 export {

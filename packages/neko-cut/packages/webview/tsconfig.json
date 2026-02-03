@@ -18,10 +18,10 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@uniedit/shared": ["../shared/src/index.ts"],
-      "@uniedit/shared/*": ["../shared/src/*"],
-      "@uniedit/effects-runtime": ["../effects-runtime/src/index.ts"],
-      "@uniedit/effects-runtime/*": ["../effects-runtime/src/*"]
+      "@neko/shared": ["../shared/src/index.ts"],
+      "@neko/shared/*": ["../shared/src/*"],
+      "@neko/effects-runtime": ["../effects-runtime/src/index.ts"],
+      "@neko/effects-runtime/*": ["../effects-runtime/src/*"]
     },
     "ignoreDeprecations": "5.0"
   },

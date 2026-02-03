@@ -15,7 +15,7 @@ import type {
   ToolCallInfo,
   ToolResultWithMeta,
   ToolResult,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * Recording configuration

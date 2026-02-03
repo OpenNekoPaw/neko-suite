@@ -2,7 +2,7 @@
  * Prompt Manager - Simple implementation for Platform
  *
  * This is a lightweight PromptManager for the platform layer.
- * For advanced features like ChainPromptExecutor, use @uniedit/agent.
+ * For advanced features like ChainPromptExecutor, use @neko/agent.
  */
 
 import type {
@@ -10,7 +10,7 @@ import type {
   PromptCategory,
   RenderedPrompt,
   IPromptManager,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * Platform Prompt Manager implementation

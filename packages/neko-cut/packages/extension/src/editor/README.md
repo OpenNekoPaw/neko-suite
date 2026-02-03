@@ -29,8 +29,8 @@ editor/
 ## 依赖
 
 ```
-→ @uniedit/webview    # Webview UI
-→ @uniedit/shared     # 项目类型
+→ @neko/webview    # Webview UI
+→ @neko/shared     # 项目类型
 ← extension.ts        # 编辑器注册
 ← commands/           # 命令操作
 ← tools/              # 工具桥接

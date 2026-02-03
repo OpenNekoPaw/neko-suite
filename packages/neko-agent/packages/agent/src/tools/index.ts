@@ -8,12 +8,12 @@
  * - ToolInjectionManager: Three-layer tool injection mechanism
  * - createTool: Factory function for creating simple tools
  *
- * Note: Platform-specific tools (generation, analysis, document) remain in @uniedit/platform.
+ * Note: Platform-specific tools (generation, analysis, document) remain in @neko/platform.
  * This module only contains core infrastructure that agent can use standalone.
  */
 
 // Base class and factory - import from shared
-export { BuiltinTool, createTool } from '@uniedit/shared';
+export { BuiltinTool, createTool } from '@neko/shared';
 
 // Registry
 export { ToolRegistry, createToolRegistry } from './tool-registry';
@@ -59,7 +59,7 @@ export type {
   IToolInjectionManager,
   InjectionEvent,
   InjectionEventListener,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Re-export injection constants
-export { DEFAULT_INJECTION_CONFIG, CORE_TOOLS } from '@uniedit/shared';
+export { DEFAULT_INJECTION_CONFIG, CORE_TOOLS } from '@neko/shared';

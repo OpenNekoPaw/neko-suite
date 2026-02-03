@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MemoryTaskStorage } from '../task-storage';
-import type { SerializableTask } from '@uniedit/shared';
+import type { SerializableTask } from '@neko/shared';
 
 describe('MemoryTaskStorage', () => {
   let storage: MemoryTaskStorage;

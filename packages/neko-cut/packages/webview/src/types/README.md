@@ -28,14 +28,14 @@ types/
 ## 依赖
 
 ```
-→ @uniedit/shared # 基础类型
+→ @neko/shared # 基础类型
 ← 所有其他模块   # 类型引用
 ```
 
 ## 与 shared 的关系
 
 ```
-@uniedit/shared: 跨包共享的基础类型
+@neko/shared: 跨包共享的基础类型
 webview/types:   Webview 特有的扩展类型
 
 // 示例：扩展元素类型

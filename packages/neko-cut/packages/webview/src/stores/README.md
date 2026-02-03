@@ -40,7 +40,7 @@ stores/
 ## 依赖
 
 ```
-→ @uniedit/shared # 项目类型
+→ @neko/shared # 项目类型
 ← hooks/          # Hooks 使用
 ← components/     # 组件使用
 ```

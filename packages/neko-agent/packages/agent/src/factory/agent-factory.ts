@@ -22,7 +22,7 @@ import type {
   IToolSkillRegistry,
   IToolInjectionManager,
   IToolCategoryRegistry,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 import type {
   ToolConfirmationRequest,

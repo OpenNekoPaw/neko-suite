@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { handleAssetMessage } from '../handlers/assetHandlers';
 import { getFFmpegService } from '../services/FFmpegService';
-import type { AssetRequest, AssetResponse, AssetEntity, AssetVariant, AssetFile } from '@uniedit/shared';
+import type { AssetRequest, AssetResponse, AssetEntity, AssetVariant, AssetFile } from '@neko/shared';
 
 // Video file extensions for thumbnail generation
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v']);

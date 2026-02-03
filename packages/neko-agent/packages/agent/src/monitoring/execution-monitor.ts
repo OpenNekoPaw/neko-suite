@@ -2,7 +2,7 @@
  * Execution Monitor - Track and aggregate execution metrics
  */
 
-import type { AgentStep, AgentResult } from '@uniedit/shared';
+import type { AgentStep, AgentResult } from '@neko/shared';
 
 // =============================================================================
 // Event Types (simplified for agent package)

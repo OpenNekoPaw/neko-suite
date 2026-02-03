@@ -1,4 +1,4 @@
-# @uniedit/agent-cli
+# @neko/agent-cli
 
 > UniEdit AI Agent 命令行工具 - 独立运行 AI Agent
 
@@ -12,7 +12,7 @@
 
 - **职责**：CLI 入口，配置管理，Agent 执行
 - **入口**：`nekoagent` 命令
-- **依赖**：`@uniedit/agent`, `@uniedit/shared`
+- **依赖**：`@neko/agent`, `@neko/shared`
 
 ## 安装
 
@@ -21,7 +21,7 @@
 npm install
 
 # 或全局安装（发布后）
-npm install -g @uniedit/agent-cli
+npm install -g @neko/agent-cli
 ```
 
 ## 使用
@@ -345,19 +345,19 @@ agent-cli/
 
 ```
 agent-cli
-    ├── @uniedit/agent    # Agent 核心
-    └── @uniedit/shared   # 共享类型
+    ├── @neko/agent    # Agent 核心
+    └── @neko/shared   # 共享类型
 ```
 
 ## 开发
 
 ```bash
 # 开发模式运行
-npm -w @uniedit/agent-cli run dev -- run "test prompt"
+npm -w @neko/agent-cli run dev -- run "test prompt"
 
 # 构建
-npm -w @uniedit/agent-cli run build
+npm -w @neko/agent-cli run build
 
 # 测试
-npm -w @uniedit/agent-cli run test
+npm -w @neko/agent-cli run test
 ```

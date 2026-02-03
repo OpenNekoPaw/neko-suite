@@ -29,7 +29,7 @@ services/
 ## 依赖
 
 ```
-→ @uniedit/platform   # Platform 类型
+→ @neko/platform   # Platform 类型
 → base/               # 服务容器
 ← bootstrap/          # 服务初始化
 ← chat/               # 状态查询

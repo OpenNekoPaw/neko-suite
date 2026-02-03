@@ -176,7 +176,7 @@ type ErrorCategory =
 ### 使用示例
 
 ```typescript
-import { PlatformError } from '@uniedit/platform';
+import { PlatformError } from '@neko/platform';
 
 try {
   await service.chat(messages);

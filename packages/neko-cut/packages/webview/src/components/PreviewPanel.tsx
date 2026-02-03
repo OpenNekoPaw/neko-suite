@@ -26,7 +26,7 @@ import { getRemoteMediaProxy } from '../services/mediaProxyFactory';
 import { PreviewOverlay } from './PreviewOverlay';
 import { PREVIEW_QUALITY } from '../constants';
 import { postMessage } from '../utils/vscodeApi';
-import type { ProjectData, MediaElement } from '@uniedit/shared';
+import type { ProjectData, MediaElement } from '@neko/shared';
 
 // =============================================================================
 // Helper Functions

@@ -4,7 +4,7 @@
  * Demonstrates streaming responses for real-time output.
  */
 
-import { createPlatform } from '@uniedit/platform';
+import { createPlatform } from '@neko/platform';
 
 async function main() {
   const platform = createPlatform();

@@ -10,7 +10,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { AgentConfig } from '@uniedit/shared';
+import type { AgentConfig } from '@neko/shared';
 import type {
   SubAgentConfig,
   SubAgentResult,

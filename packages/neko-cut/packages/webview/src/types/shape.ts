@@ -2,7 +2,7 @@
  * Shape Layer Types
  * 形状图层类型定义
  *
- * Core types are imported from @uniedit/shared for Single Source of Truth.
+ * Core types are imported from @neko/shared for Single Source of Truth.
  * This file extends with webview-specific utilities (factory functions, type guards).
  *
  * 形状图层是一种可动画的矢量图形元素，
@@ -35,14 +35,14 @@ export type {
   ShapeInstance,
   Point2D,
   BezierPoint,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 export {
   DEFAULT_SHAPE_FILL,
   DEFAULT_SHAPE_STROKE,
   DEFAULT_SHAPE_SHADOW,
   DEFAULT_SHAPE_STYLE,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 import type {
   RectangleShape,
@@ -58,14 +58,14 @@ import type {
   ShapeStyle,
   ShapeInstance,
   Point2D,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 import {
   DEFAULT_SHAPE_FILL,
   DEFAULT_SHAPE_STROKE,
   DEFAULT_SHAPE_SHADOW,
   DEFAULT_SHAPE_STYLE,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 import type { ShapeAnimationState } from './shapeAnimation';
 

@@ -4,7 +4,7 @@
  * Type definitions for custom hook loading system
  */
 
-import type { ExecutorHooks } from '@uniedit/shared';
+import type { ExecutorHooks } from '@neko/shared';
 
 // =============================================================================
 // Source Types

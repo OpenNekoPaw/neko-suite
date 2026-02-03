@@ -75,7 +75,7 @@ export class FrameServerService implements vscode.Disposable {
 	private async initialize(config?: FrameServerConfig): Promise<boolean> {
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const addon = require('@vedit/media-processor-rs') as MediaProcessorAddon;
+			const addon = require('@neko/media-processor-rs') as MediaProcessorAddon;
 
 			this.session = addon.FrameServerSession.start(config);
 

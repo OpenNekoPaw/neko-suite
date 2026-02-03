@@ -8,7 +8,7 @@ import type {
   ToolCategory,
   MCPToolDefinition,
   ToolDefinition,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { MCPManager } from './mcp-manager';
 
 /**

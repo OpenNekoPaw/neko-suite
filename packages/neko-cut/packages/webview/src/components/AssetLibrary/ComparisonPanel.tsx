@@ -6,7 +6,7 @@
  */
 
 import { memo } from 'react';
-import type { AssetEntity, AssetVariant } from '@uniedit/shared';
+import type { AssetEntity, AssetVariant } from '@neko/shared';
 import { AssetVariantDiffViewer } from './DiffViewer/AssetVariantDiffViewer';
 import type { AttributeDiff } from './DiffViewer/types';
 import { useTranslation } from '@/i18n/I18nContext';

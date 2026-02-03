@@ -12,8 +12,8 @@ import type {
   TurnInfo,
   ISummarizer,
   IConversationCompressor,
-} from '@uniedit/shared';
-import { DEFAULT_COMPRESSOR_CONFIG } from '@uniedit/shared';
+} from '@neko/shared';
+import { DEFAULT_COMPRESSOR_CONFIG } from '@neko/shared';
 
 /**
  * Simple token estimator (approximation: 1 token ≈ 4 characters)

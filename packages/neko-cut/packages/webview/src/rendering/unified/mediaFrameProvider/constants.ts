@@ -9,7 +9,7 @@ import {
   PRELOAD_TIME_WINDOW,
   MAX_PRELOAD_FRAMES_PER_VIDEO,
   GLOBAL_FRAME_CACHE_LIMIT,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Re-export shared constants

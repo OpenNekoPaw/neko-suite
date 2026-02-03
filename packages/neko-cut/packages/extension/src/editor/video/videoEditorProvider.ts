@@ -16,8 +16,8 @@ import { IStatusBar } from '../../views/statusBar';
 import { IVideoProjectOutlineProvider } from '../../views/outlineProvider';
 import { getStreamingExportService } from '../../services/StreamingExportService';
 import { IMediaEngineManager } from '../../bootstrap/serviceBootstrap';
-import type { TimelineElement, ProjectDefaults } from '@uniedit/shared';
-import { extractMediaPaths } from '@uniedit/shared';
+import type { TimelineElement, ProjectDefaults } from '@neko/shared';
+import { extractMediaPaths } from '@neko/shared';
 
 /**
  * 元素选择事件数据

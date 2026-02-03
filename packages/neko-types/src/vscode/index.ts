@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { vscodeApi, postMessage, sendRequest } from '@uniedit/shared/vscode';
+ * import { vscodeApi, postMessage, sendRequest } from '@neko/shared/vscode';
  *
  * // Simple message
  * postMessage({ type: 'save', content: data });

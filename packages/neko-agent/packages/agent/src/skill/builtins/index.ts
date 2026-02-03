@@ -9,7 +9,7 @@
  * - SlashCommand: Explicit /command trigger, supports $ARGUMENTS and $1, $2, etc.
  */
 
-import type { Skill, SlashCommand, ISkillRegistry } from '@uniedit/shared';
+import type { Skill, SlashCommand, ISkillRegistry } from '@neko/shared';
 import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
 
 // Re-export ai-generate for external use

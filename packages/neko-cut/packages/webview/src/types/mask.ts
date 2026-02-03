@@ -2,7 +2,7 @@
  * Mask Types
  * 蒙版类型定义
  *
- * Core types are imported from @uniedit/shared for Single Source of Truth.
+ * Core types are imported from @neko/shared for Single Source of Truth.
  * This file extends with webview-specific utilities (factory functions, animation utilities).
  */
 
@@ -26,7 +26,7 @@ export type {
   AnimatableMaskProperty,
   MaskAnimationData,
   MaskInstance,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 import type {
   Point2D,
@@ -42,7 +42,7 @@ import type {
   MaskPropertyKeyframe,
   AnimatableMaskProperty,
   MaskInstance,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Webview-Specific Extensions: Mask Tracking (Future)

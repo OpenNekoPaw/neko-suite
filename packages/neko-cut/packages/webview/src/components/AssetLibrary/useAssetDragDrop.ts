@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import type { MoveVariantInput, MergeEntitiesInput, MoveVariantResult, MergeEntitiesResult } from '@uniedit/shared';
+import type { MoveVariantInput, MergeEntitiesInput, MoveVariantResult, MergeEntitiesResult } from '@neko/shared';
 import type { SelectionItem } from './types';
 
 // Internal drag data type identifier

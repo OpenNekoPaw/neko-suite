@@ -23,7 +23,7 @@ import type {
 	MoveVariantResult,
 	MergeEntitiesInput,
 	MergeEntitiesResult,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type { IAssetStorage } from '../storage/IAssetStorage';
 import type { IAssetClassifier } from '../classifier/IClassifier';
 import { EntityService } from './EntityService';

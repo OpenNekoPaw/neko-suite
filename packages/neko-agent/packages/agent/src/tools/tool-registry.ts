@@ -1,7 +1,7 @@
 /**
  * Tool Registry - Manages tool registration and execution
  *
- * Implements IToolRegistry interface from @uniedit/shared.
+ * Implements IToolRegistry interface from @neko/shared.
  * Provides central management for all tools available to the agent.
  */
 
@@ -10,7 +10,7 @@ import type {
   ToolCategory,
   ToolResult,
   IToolRegistry,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { AgentError } from '../errors';
 
 /**

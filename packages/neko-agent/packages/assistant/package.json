@@ -1,5 +1,5 @@
 {
-  "name": "@uniedit/assistant",
+  "name": "@neko/assistant",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.14",
-    "@uniedit/shared": "workspace:*",
+    "@neko/shared": "workspace:*",
     "clsx": "^2.1.1",
     "devlop": "^1.1.0",
     "hast-util-to-jsx-runtime": "^2.3.6",

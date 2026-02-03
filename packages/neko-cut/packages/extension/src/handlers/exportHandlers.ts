@@ -34,7 +34,7 @@ import type {
 	ExportCompleteResponse,
 	ExportErrorResponse,
 	StreamingExportJobStatus,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Types

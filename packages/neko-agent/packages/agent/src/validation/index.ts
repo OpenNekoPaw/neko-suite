@@ -9,7 +9,7 @@
  *   createValidationHooks,
  *   createImageValidator,
  *   createOutputValidator,
- * } from '@uniedit/agent';
+ * } from '@neko/agent';
  *
  * // Create validation hooks for agent executor
  * const hooks = createValidationHooks({

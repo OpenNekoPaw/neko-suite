@@ -5,7 +5,7 @@
  */
 
 // Re-export MessageAttachment from shared (Single Source of Truth)
-export type { MessageAttachment, AttachmentType } from '@uniedit/shared';
+export type { MessageAttachment, AttachmentType } from '@neko/shared';
 
 // =============================================================================
 // UI 层类型（WebView 通信）

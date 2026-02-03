@@ -8,7 +8,7 @@
 
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { ToolResult } from '@uniedit/agent';
+import type { ToolResult } from '@neko/agent';
 import type {
   ProjectData,
   TimelineElement,
@@ -17,7 +17,7 @@ import type {
   Shape,
   ShapeStyle,
   ShapeInstance,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import {
   DEFAULT_AUDIO_PROPERTIES,
   DEFAULT_COLOR_CORRECTION,
@@ -26,7 +26,7 @@ import {
   createDefaultProject,
   generateId,
   getTotalDuration,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { getService } from '../base';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
 import type { VideoEditorModel } from '../editor/video/videoEditorModel';

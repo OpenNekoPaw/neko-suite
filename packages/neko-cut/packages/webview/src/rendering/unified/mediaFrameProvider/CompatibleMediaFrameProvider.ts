@@ -15,7 +15,7 @@
 
 import type { IMediaFrameProvider, CompositeTrackConfig, UrlResolver } from './types';
 import type { IMediaRequestProxy, MediaRequestOptions } from '../../../services/MediaRequestProxy';
-import type { CompositeLayerConfig } from '@uniedit/shared';
+import type { CompositeLayerConfig } from '@neko/shared';
 import { H264StreamClient } from '../../../services/H264StreamClient';
 
 // =============================================================================

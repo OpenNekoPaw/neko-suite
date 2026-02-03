@@ -13,7 +13,7 @@ import type {
   PolygonMask,
   BezierMask,
   Point2D,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type {
   ICompositor,
   CompositorBackend,

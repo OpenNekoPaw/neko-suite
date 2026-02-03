@@ -6,7 +6,7 @@
 
 import { useMemo } from 'react';
 import { useTranslation } from '@/i18n/I18nContext';
-import type { SubAgentInfo, SubAgentUIStatus, SubAgentUIType } from '@uniedit/shared';
+import type { SubAgentInfo, SubAgentUIStatus, SubAgentUIType } from '@neko/shared';
 
 // =============================================================================
 // Types

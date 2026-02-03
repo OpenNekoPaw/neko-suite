@@ -7,7 +7,7 @@ import { useState, useRef, useEffect, memo } from 'react';
 import { useTranslation } from '../i18n/I18nContext';
 import { useEditorStore } from '../stores/editor-store';
 import { formatTimeFull } from '../utils';
-import type { ModePreference } from '@uniedit/shared';
+import type { ModePreference } from '@neko/shared';
 
 // Resolution presets
 export type ResolutionPreset = '720p@60fps' | '1080p@30fps' | '1080p@60fps' | '4k@30fps' | '4k@60fps';

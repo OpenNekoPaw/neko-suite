@@ -5,7 +5,7 @@
  */
 
 import { memo, useCallback, useState, useMemo } from 'react';
-import type { ViewAngle, ExpressionState, ActionState } from '@uniedit/shared';
+import type { ViewAngle, ExpressionState, ActionState } from '@neko/shared';
 import type { VariantAttributeFilter } from './types';
 import { useTranslation } from '@/i18n/I18nContext';
 

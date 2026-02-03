@@ -1,0 +1,51 @@
+{
+  "name": "@neko/effects-runtime",
+  "version": "0.0.1",
+  "description": "GPU effect runtime for video editing - WebGPU/WebGL effect execution",
+  "type": "module",
+  "private": true,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./runners": {
+      "types": "./dist/runners/index.d.ts",
+      "import": "./dist/runners/index.js"
+    },
+    "./adapters": {
+      "types": "./dist/adapters/index.d.ts",
+      "import": "./dist/adapters/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@neko/effects-core": "workspace:*",
+    "@neko/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@webgpu/types": "^0.1.40",
+    "typescript": "^5.3.3"
+  },
+  "keywords": [
+    "video",
+    "effects",
+    "webgpu",
+    "webgl",
+    "gpu",
+    "runtime"
+  ],
+  "license": "MIT"
+}

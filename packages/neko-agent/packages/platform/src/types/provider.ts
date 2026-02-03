@@ -13,7 +13,7 @@ export type {
   ProtocolVariant,
   AuthType,
   StreamFormat,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * Provider status

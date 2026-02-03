@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Neko Creative Suite Install Script
+# Neko Suite Install Script
 set -e
 
-echo "🐱 Neko Creative Suite Installer"
+echo "🐱 Neko Suite Installer"
 echo ""
 
 # Parse arguments
@@ -25,7 +25,7 @@ while [[ $# -gt 0 ]]; do
       echo "  neko-cut           Video editor (base)"
       echo "  neko-canvas        Canvas editor"
       echo "  neko-agent         AI assistant"
-      echo "  neko-server        Media processing server"
+      echo "  neko-engine        Media processing server"
       echo "  neko-tools         Media diff tools"
       echo "  neko-story         Storyboard editor"
       echo "  neko-sketch        Drawing tools"
@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
       echo "  neko-live          Virtual production"
       echo "  neko-script        Script editor"
       echo "  neko-assets        Asset management"
-      echo "  neko-creative-suite Extension pack (all)"
+      echo "  neko-suite Extension pack (all)"
       exit 0
       ;;
     *) echo "Unknown option: $1"; exit 1 ;;
@@ -64,7 +64,7 @@ uninstall_package() {
 # Install all packages
 install_all() {
   local packages=(
-    "neko-server"
+    "neko-engine"
     "neko-cut"
     "neko-canvas"
     "neko-agent"

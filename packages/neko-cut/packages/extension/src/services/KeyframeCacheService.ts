@@ -500,7 +500,7 @@ export class KeyframeCacheService {
 	private async _probeKeyframes(videoPath: string): Promise<KeyframeInfo[]> {
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const { MediaProcessor } = require('@vedit/media-processor-rs');
+			const { MediaProcessor } = require('@neko/media-processor-rs');
 			const processor = await MediaProcessor.create();
 
 			// 获取视频信息
@@ -616,7 +616,7 @@ export class KeyframeCacheService {
 
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const { MediaProcessor } = require('@vedit/media-processor-rs');
+			const { MediaProcessor } = require('@neko/media-processor-rs');
 			const processor = await MediaProcessor.create();
 
 			const config = {

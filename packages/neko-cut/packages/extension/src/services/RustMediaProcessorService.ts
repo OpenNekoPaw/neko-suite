@@ -2,7 +2,7 @@
  * RustMediaProcessorService - Rust Native Addon 媒体处理服务
  *
  * 职责：
- * - 封装 @vedit/media-processor-rs native addon
+ * - 封装 @neko/media-processor-rs native addon
  * - 提供 GPU 加速的帧解码和特效处理
  * - 提供媒体探测、帧提取、字幕提取功能（替代 FFmpegService）
  * - 与 FFmpegService 接口兼容，支持降级
@@ -14,7 +14,7 @@
  */
 
 import * as vscode from 'vscode';
-import { MediaInfo, SubtitleStream, ExtractedSubtitleTrack, SubtitleCueData } from '@uniedit/shared';
+import { MediaInfo, SubtitleStream, ExtractedSubtitleTrack, SubtitleCueData } from '@neko/shared';
 
 // Types from the native addon
 interface GpuInfo {
@@ -246,7 +246,7 @@ export class RustMediaProcessorService implements vscode.Disposable {
 		try {
 			// Try to load the native addon
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const addon = require('@vedit/media-processor-rs') as MediaProcessorAddon;
+			const addon = require('@neko/media-processor-rs') as MediaProcessorAddon;
 			this.addon = addon;
 
 			// Create processor instance via static method

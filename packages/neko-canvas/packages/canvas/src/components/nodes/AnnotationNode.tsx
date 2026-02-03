@@ -3,7 +3,7 @@
  * Displays text annotations with customizable styling
  */
 
-import type { AnnotationCanvasNode, CanvasViewport } from '@uniedit/shared';
+import type { AnnotationCanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 
 // =============================================================================

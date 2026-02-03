@@ -8,7 +8,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useEditorStore } from '../stores/editor-store';
 import { getLocalMediaProcessor, getRemoteMediaProxy } from '../services/mediaProxyFactory';
-import type { MediaInfo } from '@uniedit/shared';
+import type { MediaInfo } from '@neko/shared';
 
 // =============================================================================
 // Types

@@ -4,7 +4,7 @@ import { useTranslation } from '../../i18n/I18nContext';
 import { useToast } from './../Toast';
 import { useVSCodeMessaging } from '../../hooks/useVSCodeMessaging';
 import { postMessage as vscodePostMessage } from '../../utils/vscodeApi';
-import type { ProjectData } from '@uniedit/shared';
+import type { ProjectData } from '@neko/shared';
 import {
   getExportEngine,
   isExportFormatSupported,

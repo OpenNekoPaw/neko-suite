@@ -13,7 +13,7 @@ import {
   isAudioDiffDetails,
   type IMediaDiffAnalyzer,
 } from './IMediaDiffAnalyzer';
-import type { DiffResult, DiffOptions, MediaType, ImageDiffDetails, VideoDiffDetails, AudioDiffDetails } from '@uniedit/shared';
+import type { DiffResult, DiffOptions, MediaType, ImageDiffDetails, VideoDiffDetails, AudioDiffDetails } from '@neko/shared';
 
 // =============================================================================
 // Test Fixtures

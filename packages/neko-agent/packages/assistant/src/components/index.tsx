@@ -823,11 +823,11 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
     const adapterType = getAdapterType(provider.type);
 
     // Convert to ProviderConfig and use new API
-    const providerConfig: import('@uniedit/shared').ProviderConfig = {
+    const providerConfig: import('@neko/shared').ProviderConfig = {
       id: providerId,
       name: provider.name || provider.type,
       displayName: provider.name || provider.type,
-      type: adapterType as import('@uniedit/shared').ProviderType,
+      type: adapterType as import('@neko/shared').ProviderType,
       apiUrl: provider.baseUrl || '',
       apiKey: provider.apiKey,
       enabled: true,
@@ -878,11 +878,11 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
       // Get the correct adapter type from Platform builtin providers
       const adapterType = getAdapterType(provider.type);
 
-      const providerConfig: import('@uniedit/shared').ProviderConfig = {
+      const providerConfig: import('@neko/shared').ProviderConfig = {
         id: provider.id,
         name: provider.name,
         displayName: provider.name,
-        type: adapterType as import('@uniedit/shared').ProviderType,
+        type: adapterType as import('@neko/shared').ProviderType,
         apiUrl: provider.baseUrl || '',
         apiKey: provider.apiKey,
         enabled: enabled,
@@ -938,11 +938,11 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
       // Get the correct adapter type from Platform builtin providers
       const adapterType = getAdapterType(provider.type);
 
-      const providerConfig: import('@uniedit/shared').ProviderConfig = {
+      const providerConfig: import('@neko/shared').ProviderConfig = {
         id: provider.id,
         name: provider.name,
         displayName: provider.name,
-        type: adapterType as import('@uniedit/shared').ProviderType,
+        type: adapterType as import('@neko/shared').ProviderType,
         apiUrl: provider.baseUrl || '',
         apiKey: provider.apiKey,
         enabled: provider.enabled ?? true,
@@ -960,8 +960,8 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
   };
 
   // Model CRUD handlers
-  const handleAddModel = (model: Omit<import('@uniedit/shared').ModelConfig, 'id'>) => {
-    const newModel: import('@uniedit/shared').ModelConfig = {
+  const handleAddModel = (model: Omit<import('@neko/shared').ModelConfig, 'id'>) => {
+    const newModel: import('@neko/shared').ModelConfig = {
       ...model,
       id: `model-${Date.now()}`,
     };
@@ -972,7 +972,7 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
     VSCodeMessages.updateModel(newModel);
   };
 
-  const handleUpdateModel = (model: import('@uniedit/shared').ModelConfig) => {
+  const handleUpdateModel = (model: import('@neko/shared').ModelConfig) => {
     setSettings(prev => ({
       ...prev,
       configuredModels: prev.configuredModels.map(m => m.id === model.id ? model : m),
@@ -989,7 +989,7 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
   };
 
   // Skill handlers
-  const handleUpdateSkill = (skill: import('@uniedit/shared').ConfiguredSkill) => {
+  const handleUpdateSkill = (skill: import('@neko/shared').ConfiguredSkill) => {
     setSettings(prev => ({
       ...prev,
       configuredSkills: prev.configuredSkills.map(s => s.name === skill.name ? skill : s),
@@ -1005,7 +1005,7 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
     VSCodeMessages.deleteSkill(skillName);
   };
 
-  const handleUpdateCommand = (command: import('@uniedit/shared').ConfiguredSlashCommand) => {
+  const handleUpdateCommand = (command: import('@neko/shared').ConfiguredSlashCommand) => {
     setSettings(prev => ({
       ...prev,
       configuredCommands: prev.configuredCommands.map(c => c.command === command.command ? command : c),
@@ -1021,7 +1021,7 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
     VSCodeMessages.deleteCommand(commandName);
   };
 
-  const handleDuplicateSkill = (skill: import('@uniedit/shared').ConfiguredSkill) => {
+  const handleDuplicateSkill = (skill: import('@neko/shared').ConfiguredSkill) => {
     // Determine target source:
     // - personal stays personal
     // - builtin/project go to project
@@ -1043,7 +1043,7 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
     // Note: The skill list will be updated via the broadcast from ConfigBridge after scanning
   };
 
-  const handleDuplicateCommand = (command: import('@uniedit/shared').ConfiguredSlashCommand) => {
+  const handleDuplicateCommand = (command: import('@neko/shared').ConfiguredSlashCommand) => {
     // Generate unique name by checking existing commands
     const baseName = command.command.replace(/-copy(-\d+)?$/, ''); // Remove existing -copy suffix
     let newCommandName = `${baseName}-copy`;
@@ -1059,7 +1059,7 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
     // Use the source from the passed command (already computed in SkillSettings):
     // - personal stays personal
     // - builtin/project go to project
-    const newCommand: import('@uniedit/shared').ConfiguredSlashCommand = {
+    const newCommand: import('@neko/shared').ConfiguredSlashCommand = {
       ...command,
       command: newCommandName,
     };

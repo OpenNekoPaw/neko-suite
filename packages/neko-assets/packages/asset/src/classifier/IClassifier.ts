@@ -9,7 +9,7 @@ import type {
 	SuggestedEntity,
 	VariantAttributes,
 	ClassifierOptions,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * Asset classifier interface

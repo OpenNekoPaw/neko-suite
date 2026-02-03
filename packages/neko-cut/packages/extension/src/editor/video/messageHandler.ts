@@ -10,14 +10,14 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { VideoEditorModel } from './videoEditorModel';
-import { MessageFromWebview, ProjectData, ContextMenuItem, AI_ACTIONS } from '@uniedit/shared';
+import { MessageFromWebview, ProjectData, ContextMenuItem, AI_ACTIONS } from '@neko/shared';
 import { getService } from '../../base';
 import { IPlatform, IConnectionStateManager } from '../../bootstrap';
 import { ConfigBridge } from '../../services/configBridge';
 import { IAgentManager } from '../../ai/agentManager';
 import { IAgentManager as IAgentManagerId } from '../../bootstrap';
 import { createDefaultAgentContext } from '../../ai/agentContext';
-import type { Platform } from '@uniedit/platform';
+import type { Platform } from '@neko/platform';
 import { getAudioDecoderService } from '../../services/audioDecoderService';
 
 /**

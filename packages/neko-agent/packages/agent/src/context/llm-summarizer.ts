@@ -10,7 +10,7 @@ import type {
   SummarizationResult,
   ISummarizer,
   IService,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * LLM Summarizer configuration

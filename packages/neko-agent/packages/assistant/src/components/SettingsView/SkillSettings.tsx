@@ -17,7 +17,7 @@ import {
   type SkillReference,
   type ConfiguredToolSkill,
   type ToolSkillSource,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { useTranslation } from '@/i18n/I18nContext';
 import { SkillContentEditor } from './SkillContentEditor';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';

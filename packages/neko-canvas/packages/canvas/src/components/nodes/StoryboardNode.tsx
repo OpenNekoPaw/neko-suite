@@ -3,7 +3,7 @@
  * Displays storyboard information with title, description, and duration
  */
 
-import type { StoryboardCanvasNode, CanvasViewport } from '@uniedit/shared';
+import type { StoryboardCanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 
 // =============================================================================

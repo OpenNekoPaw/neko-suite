@@ -4,7 +4,7 @@
  */
 
 import { useCallback } from 'react';
-import type { TimelineElement } from '@uniedit/shared';
+import type { TimelineElement } from '@neko/shared';
 import type { CoordinateMapper } from './useCoordinateMapping';
 
 export interface ElementBounds {

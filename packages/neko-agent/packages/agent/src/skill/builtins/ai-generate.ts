@@ -5,7 +5,7 @@
  * Triggered when user mentions: generate image, create video, TTS, background music, etc.
  */
 
-import type { Skill, SkillToolDefinition } from '@uniedit/shared';
+import type { Skill, SkillToolDefinition } from '@neko/shared';
 
 /**
  * Tool definitions for AI generation

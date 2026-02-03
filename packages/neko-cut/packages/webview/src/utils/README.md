@@ -36,7 +36,7 @@ utils/
 ## 依赖
 
 ```
-→ @uniedit/shared        # 类型定义
+→ @neko/shared        # 类型定义
 → services/              # IPC 代理
 ← components/            # UI 组件
 ← hooks/                 # Hooks

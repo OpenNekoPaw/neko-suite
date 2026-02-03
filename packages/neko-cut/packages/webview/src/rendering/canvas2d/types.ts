@@ -2,7 +2,7 @@
  * Canvas 2D Compositor Types
  * Canvas 2D 合成器类型定义
  *
- * 替代 @uniedit/media-engine 的 ICompositor 接口
+ * 替代 @neko/media-engine 的 ICompositor 接口
  * 使用 Canvas 2D API 实现多图层合成
  */
 

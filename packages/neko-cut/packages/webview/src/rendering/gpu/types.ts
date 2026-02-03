@@ -8,12 +8,12 @@ import type {
   ColorWheelsParams as SharedColorWheelsParams,
   ColorWheelValue as SharedColorWheelValue,
   BlendModeType as SharedBlendModeType,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 import {
   DEFAULT_VIGNETTE_PARAMS as SHARED_DEFAULT_VIGNETTE_PARAMS,
   DEFAULT_COLOR_WHEEL_VALUE as SHARED_DEFAULT_COLOR_WHEEL_VALUE,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Re-export BlendModeType from shared (Single Source of Truth)
 export type BlendModeType = SharedBlendModeType;

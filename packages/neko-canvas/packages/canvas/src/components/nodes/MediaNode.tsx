@@ -3,7 +3,7 @@
  * Displays video, image, or audio assets with thumbnail preview
  */
 
-import type { MediaCanvasNode, CanvasViewport } from '@uniedit/shared';
+import type { MediaCanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 
 // =============================================================================

@@ -12,7 +12,7 @@ import type {
 	EntityMetadata,
 	MergeEntitiesInput,
 	MergeEntitiesResult,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type { IAssetStorage } from '../storage/IAssetStorage';
 import { generateEntityId } from './utils';
 

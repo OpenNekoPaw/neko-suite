@@ -10,7 +10,7 @@ import {
   registerTimelineTools,
   type TimelineToolConfig,
 } from './timeline-bridge';
-import type { Tool, ToolResult } from '@uniedit/agent';
+import type { Tool, ToolResult } from '@neko/agent';
 
 // Mock vscode module
 vi.mock('vscode', () => ({}));

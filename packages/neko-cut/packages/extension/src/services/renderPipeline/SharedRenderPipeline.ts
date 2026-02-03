@@ -18,7 +18,7 @@
  * - 依赖倒置 (D)：依赖 RustMediaProcessorService 接口
  */
 
-import type { ProjectData } from '@uniedit/shared';
+import type { ProjectData } from '@neko/shared';
 import type { RustMediaProcessorService } from '../RustMediaProcessorService';
 import type {
 	IRenderPipeline,

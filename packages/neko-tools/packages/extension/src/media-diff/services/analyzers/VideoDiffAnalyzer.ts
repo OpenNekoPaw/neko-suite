@@ -17,8 +17,8 @@ import type {
 	DiffResult,
 	VideoDiffDetails,
 	KeyframeDiff,
-} from '@uniedit/shared';
-import { DEFAULT_KEYFRAME_SAMPLES } from '@uniedit/shared';
+} from '@neko/shared';
+import { DEFAULT_KEYFRAME_SAMPLES } from '@neko/shared';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 import { FFmpegService } from '../../../services/FFmpegService';
 import { ImageDiffAnalyzer } from './ImageDiffAnalyzer';

@@ -9,7 +9,7 @@
  * 5. extractSubtitles - Returns empty (basic mode limitation)
  */
 
-import type { MediaInfo, ExtractedSubtitleTrack } from '@uniedit/shared';
+import type { MediaInfo, ExtractedSubtitleTrack } from '@neko/shared';
 import { createMP4Demuxer, type DemuxedMediaInfo } from '../mediaEngine/demuxers';
 import { WebviewVideoDecoder } from '../mediaEngine/decoders/WebviewVideoDecoder';
 import { WebviewAudioDecoder, createWebviewAudioDecoder } from '../mediaEngine/decoders/WebviewAudioDecoder';

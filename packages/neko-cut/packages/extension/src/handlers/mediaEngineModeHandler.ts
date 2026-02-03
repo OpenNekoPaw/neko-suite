@@ -19,7 +19,7 @@ import type {
 	DownloadStatus,
 	ResolveAutoModeContext,
 	TimelineMediaAnalysisResult,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type { MediaEngineManager } from '../mediaEngine/MediaEngineManager';
 
 // =============================================================================

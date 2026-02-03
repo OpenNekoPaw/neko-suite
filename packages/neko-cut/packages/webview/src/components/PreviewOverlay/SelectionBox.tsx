@@ -4,7 +4,7 @@
  */
 
 import { memo, useMemo } from 'react';
-import type { TimelineElement } from '@uniedit/shared';
+import type { TimelineElement } from '@neko/shared';
 import type { CoordinateMapper } from './hooks/useCoordinateMapping';
 
 export interface SelectionBoxProps {

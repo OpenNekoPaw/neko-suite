@@ -9,7 +9,7 @@
  * - On-Demand (11): Activated by keyword matching
  */
 
-import type { ToolGroup, IToolGroupRegistry } from '@uniedit/shared';
+import type { ToolGroup, IToolGroupRegistry } from '@neko/shared';
 
 // Legacy type alias
 type ToolSkill = ToolGroup;

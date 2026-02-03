@@ -26,7 +26,7 @@ commands/
 ```
 → editor/video/       # 编辑器操作
 → views/              # 大纲视图
-→ @uniedit/platform   # 工具注册表
+→ @neko/platform   # 工具注册表
 ← extension.ts        # 命令注册
 ```
 

@@ -108,14 +108,14 @@ export type {
   AIActionElementType,
   AIActionCapability,
   AIQuickAction,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Re-export AI action helpers
 export {
   AI_ACTIONS,
   getActionsForElementType,
   mapElementTypeToAIType,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Re-export constants and functions from shared
 export {
@@ -142,7 +142,7 @@ export {
   DEFAULT_SHAPE_STROKE,
   DEFAULT_SHAPE_SHADOW,
   DEFAULT_SHAPE_STYLE,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Re-export Types from Local Modules (webview-specific extensions)
@@ -241,7 +241,7 @@ export {
 // All Timeline Element (includes shapes)
 // =============================================================================
 
-import type { TimelineElement, ShapeElement } from '@uniedit/shared';
+import type { TimelineElement, ShapeElement } from '@neko/shared';
 
 /**
  * All timeline element types including shapes
@@ -252,8 +252,8 @@ export type AllTimelineElement = TimelineElement | ShapeElement;
 // VSCode API Type (re-export from shared)
 // =============================================================================
 
-export type { VSCodeAPI } from '@uniedit/shared';
+export type { VSCodeAPI } from '@neko/shared';
 
 declare global {
-  function acquireVsCodeApi(): import('@uniedit/shared').VSCodeAPI;
+  function acquireVsCodeApi(): import('@neko/shared').VSCodeAPI;
 }

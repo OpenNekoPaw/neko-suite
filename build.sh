@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Neko Creative Suite Build Script
+# Neko Suite Build Script
 set -e
 
-echo "🔨 Building Neko Creative Suite..."
+echo "🔨 Building Neko Suite..."
 
 # 避免写入全局 ~/.npm 缓存导致权限问题
 export npm_config_cache="${PWD}/.npm-cache"
@@ -43,25 +43,25 @@ install_deps() {
 # Build UI packages (webview, canvas, assistant)
 build_ui() {
   echo "🧩 Building webview..."
-  npm -w @uniedit/webview run build
+  npm -w @neko/webview run build
 
   echo "🎨 Building canvas..."
-  npm -w @uniedit/canvas run build
+  npm -w @neko/canvas run build
 
   echo "🤖 Building assistant..."
-  npm -w @uniedit/assistant run build
+  npm -w @neko/assistant run build
 }
 
 # Build effects-core
 build_effects() {
   echo "✨ Building effects-core..."
-  npm -w @uniedit/effects-core run build
+  npm -w @neko/effects-core run build
 }
 
 # Build Rust native addon
 build_rust() {
   echo "🦀 Building Rust native addon..."
-  npm -w @vedit/media-processor-rs run build
+  npm -w @neko/media-processor-rs run build
 }
 
 # Build single neko package
@@ -89,7 +89,7 @@ build_all_neko() {
     "neko-cut"
     "neko-canvas"
     "neko-agent"
-    "neko-server"
+    "neko-engine"
     "neko-story"
     "neko-sketch"
     "neko-audio"
@@ -105,7 +105,7 @@ build_all_neko() {
   done
 
   # Package extension pack
-  package_extension "neko-creative-suite"
+  package_extension "neko-suite"
 }
 
 # Main build flow

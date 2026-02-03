@@ -15,7 +15,7 @@ import {
 	type MediaType,
 	type DiffViewMode,
 	getMediaType,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { MediaDiffService } from '../services/MediaDiffService';
 import { MediaDiffMessageHandler } from './MediaDiffMessageHandler';
 

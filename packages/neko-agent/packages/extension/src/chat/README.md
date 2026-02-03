@@ -37,7 +37,7 @@ chat/
 ```
 → ai/                 # Agent 执行
 → bootstrap/          # Platform 获取
-→ @uniedit/assistant  # 聊天 UI
+→ @neko/assistant  # 聊天 UI
 ← extension.ts        # 视图注册
 ```
 

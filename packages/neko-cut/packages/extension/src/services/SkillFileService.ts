@@ -24,9 +24,9 @@ import type {
   SkillLoadResult,
   ConfiguredSkill,
   ConfiguredSlashCommand,
-} from '@uniedit/shared';
-import { SkillLoader, createNodeSkillLoader } from '@uniedit/agent/skill/skill-loader';
-import { builtinSkills, builtinCommands } from '@uniedit/agent';
+} from '@neko/shared';
+import { SkillLoader, createNodeSkillLoader } from '@neko/agent/skill/skill-loader';
+import { builtinSkills, builtinCommands } from '@neko/agent';
 
 // =============================================================================
 // Types

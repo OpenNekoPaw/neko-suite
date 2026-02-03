@@ -3,7 +3,7 @@
  * Canvas 2D based rendering hook for preview
  *
  * 替代 useCompositorRender，使用 Canvas 2D API 进行渲染
- * 不依赖 @uniedit/media-engine
+ * 不依赖 @neko/media-engine
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';

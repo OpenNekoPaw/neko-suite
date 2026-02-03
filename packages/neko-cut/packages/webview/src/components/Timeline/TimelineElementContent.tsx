@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, memo, useRef } from 'react';
 import type { TimelineElement, MediaElement, TextElement, AudioElement, TrackType, ShapeElement, AllTimelineElement } from '../../types';
-import type { SubtitleElement } from '@uniedit/shared';
+import type { SubtitleElement } from '@neko/shared';
 import { generateWaveformForViewport, type WaveformViewport } from '../../utils/waveform';
 import { getCachedFileUri, subscribeToUriCacheUpdates } from '../../hooks/useVSCodeMessaging';
 import { ShapeElementContent } from '../ShapeElementContent';

@@ -35,14 +35,14 @@ import type {
   SkillReference,
   SkillScript,
   SkillContentConfig,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import {
   createSkill,
   createCommand,
   validateSkill,
   validateCommand,
   extractSupportFileRefs,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { MarkdownParser, type IMarkdownParser } from './markdown-parser';
 import { LazyLoader, type ILazyLoader, type LazySkillLoadResult } from './lazy-loader';
 import type { LazySkill, LazyCommand } from './lazy-loader';

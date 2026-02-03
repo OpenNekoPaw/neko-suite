@@ -15,8 +15,8 @@ import type {
   ChatResponse,
   ChatChunk,
   ToolCall,
-} from '@uniedit/platform';
-import { ToolRegistry } from '@uniedit/agent';
+} from '@neko/platform';
+import { ToolRegistry } from '@neko/agent';
 
 // =============================================================================
 // Mock Service

@@ -11,7 +11,7 @@ import {
   disposeMediaDiffService,
 } from './MediaDiffService';
 import { AnalyzerRegistry, type IMediaDiffAnalyzer } from './analyzers/IMediaDiffAnalyzer';
-import type { DiffResult, DiffOptions, MediaType } from '@uniedit/shared';
+import type { DiffResult, DiffOptions, MediaType } from '@neko/shared';
 
 // =============================================================================
 // Mock Analyzer

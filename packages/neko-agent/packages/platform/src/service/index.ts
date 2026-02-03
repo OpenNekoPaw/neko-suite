@@ -13,7 +13,7 @@ export {
   type ChainExecutionResult,
   type ChainExecutionOptions,
   type StepExecutor,
-} from '@uniedit/agent';
+} from '@neko/agent';
 
 // Tools - re-export from tools/ for backwards compatibility
 export {

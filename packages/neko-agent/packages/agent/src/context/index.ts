@@ -70,4 +70,4 @@ export type {
   SessionMetadata,
   IContextStorage,
   IContextPersistence,
-} from '@uniedit/shared';
+} from '@neko/shared';

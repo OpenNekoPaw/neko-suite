@@ -18,7 +18,7 @@ import {
   type HookLoadError,
   type ExecutorHooks,
   HOOK_DIRECTORIES,
-} from '@uniedit/agent';
+} from '@neko/agent';
 
 // =============================================================================
 // esbuild Compiler Implementation
@@ -157,8 +157,8 @@ class EsbuildHookCompiler implements IHookCompiler {
         return baseRequire(id);
       }
 
-      // Allow @uniedit/platform types (they're stripped at runtime anyway)
-      if (id === '@uniedit/platform') {
+      // Allow @neko/platform types (they're stripped at runtime anyway)
+      if (id === '@neko/platform') {
         // Return empty object - types are compile-time only
         return {};
       }

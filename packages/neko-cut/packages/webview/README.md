@@ -1,4 +1,4 @@
-# @uniedit/webview
+# @neko/webview
 
 UniEdit 视频编辑器的 Webview UI 包，基于 React + Zustand + Tailwind CSS 构建，运行在 VSCode Webview 沙箱中。
 
@@ -92,7 +92,7 @@ Zustand 状态管理：
 
 ```
 webview
-    ├── @uniedit/shared        # 共享类型定义
+    ├── @neko/shared        # 共享类型定义
     ├── react / react-dom      # UI 框架
     ├── zustand                # 状态管理
     ├── tailwindcss            # CSS 框架

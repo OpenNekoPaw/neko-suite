@@ -6,7 +6,7 @@
  * - Slash Commands: Explicit /command trigger with argument support
  */
 
-import type { Skill, SlashCommand, ISkillRegistry } from '@uniedit/shared';
+import type { Skill, SlashCommand, ISkillRegistry } from '@neko/shared';
 
 /**
  * Skill registry implementation - Manages both skills and slash commands

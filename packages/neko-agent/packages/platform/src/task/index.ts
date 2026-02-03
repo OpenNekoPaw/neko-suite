@@ -1,11 +1,11 @@
 /**
  * Task Module - DEPRECATED
  *
- * TaskManager has been moved to @uniedit/agent package.
- * This module now re-exports types from @uniedit/shared for backwards compatibility.
+ * TaskManager has been moved to @neko/agent package.
+ * This module now re-exports types from @neko/shared for backwards compatibility.
  *
- * @deprecated Import from '@uniedit/agent' for TaskManager implementation,
- *             or from '@uniedit/shared' for types only.
+ * @deprecated Import from '@neko/agent' for TaskManager implementation,
+ *             or from '@neko/shared' for types only.
  */
 
 // Re-export types from shared for backwards compatibility
@@ -22,7 +22,7 @@ export type {
   TaskRecoveryInfo,
   SerializableTask,
   TaskExecutor,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Re-export storage implementations (still available in platform for convenience)
 export { MemoryTaskStorage } from './task-storage';

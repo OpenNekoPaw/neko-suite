@@ -205,7 +205,7 @@ class RateLimiter {
 ### 创建自定义注册表
 
 ```typescript
-import { BaseRegistry } from '@uniedit/platform';
+import { BaseRegistry } from '@neko/platform';
 
 interface MyItem {
   id: string;
@@ -221,7 +221,7 @@ registry.register('item1', { id: 'item1', name: 'Item 1' });
 ### 使用选择策略
 
 ```typescript
-import { SelectionStrategyFactory } from '@uniedit/platform';
+import { SelectionStrategyFactory } from '@neko/platform';
 
 const strategy = SelectionStrategyFactory.create('priority');
 const selected = strategy.select(candidates, {
@@ -233,7 +233,7 @@ const selected = strategy.select(candidates, {
 ### 使用熔断器
 
 ```typescript
-import { CircuitBreaker } from '@uniedit/platform';
+import { CircuitBreaker } from '@neko/platform';
 
 const breaker = new CircuitBreaker({
   failureThreshold: 5,

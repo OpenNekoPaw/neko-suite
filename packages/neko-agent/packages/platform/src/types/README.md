@@ -120,7 +120,7 @@ const COMMAND_DIRECTORIES = {
 ## 依赖
 
 ```
-→ @uniedit/shared # 共享类型
+→ @neko/shared # 共享类型
 ← 所有其他模块    # 类型引用
 ```
 

@@ -10,7 +10,7 @@ import {
   type RecordingConfig,
   type AgentRecording,
 } from '../recording-hooks';
-import type { AgentContext, AgentResult, AgentStep, ToolCallInfo, ToolResultWithMeta } from '@uniedit/shared';
+import type { AgentContext, AgentResult, AgentStep, ToolCallInfo, ToolResultWithMeta } from '@neko/shared';
 
 describe('RecordingHooks', () => {
   let hooks: RecordingHooks;

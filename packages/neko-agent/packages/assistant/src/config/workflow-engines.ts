@@ -9,7 +9,7 @@ import type {
   WorkflowConfig,
   WorkflowEngineType,
   WorkflowCategory,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Re-export types from shared package
 export type {

@@ -3,11 +3,11 @@
  *
  * High-level API for media generation (images, videos, audio)
  *
- * NOTE: TaskManager has been moved to @uniedit/agent package.
+ * NOTE: TaskManager has been moved to @neko/agent package.
  * This service now accepts ITaskManager interface for flexibility.
  */
 
-import type { Task, ITaskManager } from '@uniedit/shared';
+import type { Task, ITaskManager } from '@neko/shared';
 import type {
   MediaGenerationType,
   MediaTask,

@@ -5,8 +5,8 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { createDefaultProject, DEFAULT_CANVAS_DATA } from '@uniedit/shared';
-import { ToolRegistry } from '@uniedit/agent';
+import { createDefaultProject, DEFAULT_CANVAS_DATA } from '@neko/shared';
+import { ToolRegistry } from '@neko/agent';
 import type { VideoProjectOutlineProvider } from '../views/outlineProvider';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
 import type { ChatViewProvider } from '../chat/chatProvider';

@@ -14,7 +14,7 @@ import type {
 	MuxerVideoChunk,
 	MuxerAudioChunk,
 	MuxerEvent,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Types

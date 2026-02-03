@@ -17,7 +17,7 @@ import type {
 	ImageDiffDetails,
 	VideoDiffDetails,
 	AudioDiffDetails,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Analyzer Interface

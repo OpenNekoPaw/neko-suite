@@ -5,7 +5,7 @@
  * only those tools can be used during skill execution.
  */
 
-import { isToolAllowed } from '@uniedit/shared';
+import { isToolAllowed } from '@neko/shared';
 
 /**
  * Tool call input for guard checking

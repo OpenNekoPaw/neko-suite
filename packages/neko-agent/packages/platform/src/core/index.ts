@@ -74,7 +74,7 @@ export {
   ConcurrencyPool,
   KeyedConcurrencyPool,
   withConcurrencyLimit,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Circuit Breaker
 export {

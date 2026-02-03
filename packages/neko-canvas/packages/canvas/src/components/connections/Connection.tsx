@@ -4,7 +4,7 @@
  */
 
 import { useMemo } from 'react';
-import type { CanvasConnection, CanvasNode } from '@uniedit/shared';
+import type { CanvasConnection, CanvasNode } from '@neko/shared';
 
 // =============================================================================
 // Types

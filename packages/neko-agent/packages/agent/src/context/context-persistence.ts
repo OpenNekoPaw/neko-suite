@@ -12,12 +12,12 @@ import type {
   SessionMetadata,
   IContextStorage,
   IContextPersistence,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import {
   DEFAULT_PERSISTENCE_CONFIG,
   serializeContextState,
   deserializeContextState,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * Generate a unique session ID

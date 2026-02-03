@@ -9,7 +9,7 @@ export default defineConfig({
     preserveSymlinks: true,
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@uniedit/shared': path.resolve(__dirname, '../shared/src/index.ts'),
+      '@neko/shared': path.resolve(__dirname, '../shared/src/index.ts'),
     },
   },
   server: {
@@ -38,6 +38,6 @@ export default defineConfig({
     modulePreload: false,
   },
   optimizeDeps: {
-    include: ['@uniedit/shared'],
+    include: ['@neko/shared'],
   },
 });

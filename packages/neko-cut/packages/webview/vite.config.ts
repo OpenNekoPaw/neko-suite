@@ -26,15 +26,15 @@ export default defineConfig(({ command }) => {
     preserveSymlinks: true,
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@uniedit/shared': path.resolve(__dirname, '../../../neko-types/src'),
-      '@uniedit/effects-runtime': path.resolve(__dirname, '../../../neko-server/packages/effects-runtime/src'),
-      '@uniedit/effects-core': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src'),
-      '@uniedit/effects-core/shaders/common': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/shaders/common.wgsl.ts'),
-      '@uniedit/effects-core/shaders/colorCorrection': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/shaders/colorCorrection.wgsl.ts'),
-      '@uniedit/effects-core/shaders/blendModes': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/shaders/blendModes.wgsl.ts'),
-      '@uniedit/effects-core/shaders/transitions': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/shaders/transitions.wgsl.ts'),
-      '@uniedit/effects-core/shaders/effects': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/shaders/effects.wgsl.ts'),
-      '@uniedit/effects-core/shaders': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/shaders'),
+      '@neko/shared': path.resolve(__dirname, '../../../neko-types/src'),
+      '@neko/effects-runtime': path.resolve(__dirname, '../../../neko-engine/packages/effects-runtime/src'),
+      '@neko/effects-core': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src'),
+      '@neko/effects-core/shaders/common': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/common.wgsl.ts'),
+      '@neko/effects-core/shaders/colorCorrection': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/colorCorrection.wgsl.ts'),
+      '@neko/effects-core/shaders/blendModes': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/blendModes.wgsl.ts'),
+      '@neko/effects-core/shaders/transitions': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/transitions.wgsl.ts'),
+      '@neko/effects-core/shaders/effects': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/effects.wgsl.ts'),
+      '@neko/effects-core/shaders': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders'),
       // Alias for static import of libav.js asm.mjs factory (bypasses package exports)
       '@wcpeter/libav.js-h264-aac-wav/dist/libav-6.4.7.1-h264-aac-wav.asm.mjs': path.resolve(
         __dirname,
@@ -58,7 +58,7 @@ export default defineConfig(({ command }) => {
       port: 5173,
     },
     fs: {
-      // 允许通过 workspace 依赖访问 monorepo 内其它包（例如 @uniedit/shared）
+      // 允许通过 workspace 依赖访问 monorepo 内其它包（例如 @neko/shared）
       allow: [path.resolve(__dirname, '../../..'), path.resolve(__dirname, '../../../..')],
     },
   },
@@ -76,15 +76,15 @@ export default defineConfig(({ command }) => {
         name: 'worker-alias',
         resolveId(source) {
           const aliasMap: Record<string, string> = {
-            '@uniedit/effects-core/shaders/common': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/shaders/common.wgsl.ts'),
-            '@uniedit/effects-core/shaders/colorCorrection': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/shaders/colorCorrection.wgsl.ts'),
-            '@uniedit/effects-core/shaders/blendModes': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/shaders/blendModes.wgsl.ts'),
-            '@uniedit/effects-core/shaders/transitions': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/shaders/transitions.wgsl.ts'),
-            '@uniedit/effects-core/shaders/effects': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/shaders/effects.wgsl.ts'),
-            '@uniedit/effects-core/shaders': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/shaders/index.ts'),
-            '@uniedit/effects-core': path.resolve(__dirname, '../../../neko-server/packages/effects-core/src/index.ts'),
-            '@uniedit/effects-runtime': path.resolve(__dirname, '../../../neko-server/packages/effects-runtime/src/index.ts'),
-            '@uniedit/shared': path.resolve(__dirname, '../../../neko-types/src/index.ts'),
+            '@neko/effects-core/shaders/common': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/common.wgsl.ts'),
+            '@neko/effects-core/shaders/colorCorrection': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/colorCorrection.wgsl.ts'),
+            '@neko/effects-core/shaders/blendModes': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/blendModes.wgsl.ts'),
+            '@neko/effects-core/shaders/transitions': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/transitions.wgsl.ts'),
+            '@neko/effects-core/shaders/effects': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/effects.wgsl.ts'),
+            '@neko/effects-core/shaders': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/index.ts'),
+            '@neko/effects-core': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/index.ts'),
+            '@neko/effects-runtime': path.resolve(__dirname, '../../../neko-engine/packages/effects-runtime/src/index.ts'),
+            '@neko/shared': path.resolve(__dirname, '../../../neko-types/src/index.ts'),
           };
           if (aliasMap[source]) {
             return aliasMap[source];
@@ -118,16 +118,16 @@ export default defineConfig(({ command }) => {
       },
       // Externalize dynamically imported modules that are not available in webview
       // Only apply in build mode, dev mode needs to resolve these for HMR
-      external: isBuild ? ['webm-muxer', '@vedit/media-processor-rs'] : [],
+      external: isBuild ? ['webm-muxer', '@neko/media-processor-rs'] : [],
     },
     // Disable module preload polyfill which causes issues in VSCode webview
     modulePreload: false,
   },
   // Optimize dependencies to avoid worker issues
   optimizeDeps: {
-    include: ['@uniedit/shared'],
+    include: ['@neko/shared'],
     // Exclude optional dependencies that may not be installed
-    exclude: ['webm-muxer', '@vedit/media-processor-rs'],
+    exclude: ['webm-muxer', '@neko/media-processor-rs'],
   },
 };
 });

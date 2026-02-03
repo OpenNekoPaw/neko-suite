@@ -12,8 +12,8 @@ import type {
   IToolCategoryRegistry,
   IToolSkillRegistry,
   IToolInjectionManager,
-} from '@uniedit/shared';
-import { BuiltinTool } from '@uniedit/shared';
+} from '@neko/shared';
+import { BuiltinTool } from '@neko/shared';
 
 /**
  * SearchTools - Meta tool for discovering available tools

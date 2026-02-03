@@ -21,7 +21,7 @@ import type {
   ISkillRegistry,
   ISkillMatcher,
   ISkillInjector,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { SkillRegistry } from './skill-registry';
 import { SkillInjector } from './skill-injector';
 import { KeywordSkillMatcher } from './skill-matcher';

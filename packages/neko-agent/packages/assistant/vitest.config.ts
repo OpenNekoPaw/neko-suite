@@ -16,7 +16,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
-      '@uniedit/shared': resolve(__dirname, '../shared/src'),
+      '@neko/shared': resolve(__dirname, '../shared/src'),
     },
   },
 });

@@ -13,7 +13,7 @@ import type {
   ToolCallInfo,
   ToolResultWithMeta,
   ToolResult,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type {
   PermissionConfig,
   PermissionMode,

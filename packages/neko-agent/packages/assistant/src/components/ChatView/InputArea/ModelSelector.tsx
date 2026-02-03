@@ -7,7 +7,7 @@ import { ModelOption, ChatModelOption } from '@/components/types';
 import { useClickOutsideSingle } from './useClickOutside';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useTranslation } from '@/i18n/I18nContext';
-import type { ModelCategory } from '@uniedit/shared';
+import type { ModelCategory } from '@neko/shared';
 
 interface ModelSelectorProps {
   selectedModel: string;

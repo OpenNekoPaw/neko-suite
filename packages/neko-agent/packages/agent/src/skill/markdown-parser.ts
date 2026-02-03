@@ -8,8 +8,8 @@ import type {
   SkillFrontmatter,
   CommandFrontmatter,
   ParsedSkillFile,
-} from '@uniedit/shared';
-import { extractSupportFileRefs } from '@uniedit/shared';
+} from '@neko/shared';
+import { extractSupportFileRefs } from '@neko/shared';
 
 /**
  * Parsed YAML value types

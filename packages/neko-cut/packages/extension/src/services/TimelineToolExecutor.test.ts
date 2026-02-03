@@ -8,8 +8,8 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as vscode from 'vscode';
-import type { ProjectData, TimelineElement } from '@uniedit/shared';
-import { DEFAULT_TRANSFORM } from '@uniedit/shared';
+import type { ProjectData, TimelineElement } from '@neko/shared';
+import { DEFAULT_TRANSFORM } from '@neko/shared';
 import { ServiceCollection, setGlobalServices } from '../base';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
 import { TimelineToolExecutor } from './TimelineToolExecutor';

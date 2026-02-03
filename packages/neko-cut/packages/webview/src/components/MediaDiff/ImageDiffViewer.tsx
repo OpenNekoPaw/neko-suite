@@ -4,7 +4,7 @@
  */
 
 import { memo, useRef, useState, useCallback, useEffect } from 'react';
-import type { ImageDiffDetails } from '@uniedit/shared';
+import type { ImageDiffDetails } from '@neko/shared';
 import type { ImageDiffViewerProps } from './types';
 
 // =============================================================================

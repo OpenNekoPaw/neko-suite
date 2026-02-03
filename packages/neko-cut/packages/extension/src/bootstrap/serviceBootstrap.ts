@@ -11,12 +11,12 @@ import {
   type ToolRegistry,
   registerGenerationTools,
   createMediaServiceAdapter,
-} from '@uniedit/platform';
+} from '@neko/platform';
 import {
   MCPManager,
   ToolCategoryRegistry,
   TaskManager,
-} from '@uniedit/agent';
+} from '@neko/agent';
 import { ServiceCollection, createServiceId } from '../base';
 import { IEditorRegistry, EditorRegistry } from '../editor/common/editorRegistry';
 import { VideoEditorModelProvider } from '../editor/video/videoEditorModel';

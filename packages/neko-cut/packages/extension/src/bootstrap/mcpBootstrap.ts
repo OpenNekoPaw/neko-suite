@@ -8,9 +8,9 @@
  * 3. 记录连接状态到 ConnectionStateManager
  */
 
-import type { Platform } from '@uniedit/platform';
-import { MCPManager } from '@uniedit/agent';
-import type { IToolRegistry, Tool, ToolCategory } from '@uniedit/agent';
+import type { Platform } from '@neko/platform';
+import { MCPManager } from '@neko/agent';
+import type { IToolRegistry, Tool, ToolCategory } from '@neko/agent';
 import type { ConnectionStateManager } from '../services/connectionStateManager';
 
 /**

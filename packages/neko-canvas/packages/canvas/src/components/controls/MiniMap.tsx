@@ -4,7 +4,7 @@
  */
 
 import { useMemo, useCallback, useRef } from 'react';
-import type { CanvasNode, CanvasViewport } from '@uniedit/shared';
+import type { CanvasNode, CanvasViewport } from '@neko/shared';
 
 // =============================================================================
 // Types

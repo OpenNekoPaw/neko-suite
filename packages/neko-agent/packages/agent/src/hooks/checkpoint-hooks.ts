@@ -17,7 +17,7 @@ import type {
   ToolResultWithMeta,
   ToolResult,
   ChatMessage,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * Checkpoint policy configuration

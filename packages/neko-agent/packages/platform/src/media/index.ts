@@ -122,7 +122,7 @@ export type { MediaGenerationServiceOptions } from './media-generation-service';
 // Factory
 import { ConfigManager } from '../config/config-manager';
 import { ProviderRegistry } from '../provider/provider-registry';
-import type { ITaskManager } from '@uniedit/shared';
+import type { ITaskManager } from '@neko/shared';
 import type { IMediaTaskManager } from './media-generation-service';
 import { MediaAdapterRegistry, getMediaAdapterRegistry } from './adapters/media-adapter-registry';
 import { OpenAICompatMediaAdapter } from './adapters/openai-compat-media-adapter';

@@ -23,9 +23,9 @@ import type {
   SkillApplicationResult,
   IToolGuard,
   SkillService,
-} from '@uniedit/agent';
-import { toSkillSummary, createToolGuard } from '@uniedit/agent';
-import type { SkillToolDefinition } from '@uniedit/shared';
+} from '@neko/agent';
+import { toSkillSummary, createToolGuard } from '@neko/agent';
+import type { SkillToolDefinition } from '@neko/shared';
 
 export interface SkillHandlerDeps {
   skillService?: SkillService;

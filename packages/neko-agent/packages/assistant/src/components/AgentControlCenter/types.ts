@@ -6,12 +6,12 @@
  */
 
 import type { AgentState } from '@/components/types';
-import type { SubAgentInfo } from '@uniedit/shared';
+import type { SubAgentInfo } from '@neko/shared';
 
 // Re-export AgentState for convenience
 export type { AgentState, AgentPhase } from '@/components/types';
 // Re-export SubAgent types for convenience
-export type { SubAgentInfo, SubAgentUIStatus, SubAgentUIType } from '@uniedit/shared';
+export type { SubAgentInfo, SubAgentUIStatus, SubAgentUIType } from '@neko/shared';
 
 /**
  * Agent session information for monitoring

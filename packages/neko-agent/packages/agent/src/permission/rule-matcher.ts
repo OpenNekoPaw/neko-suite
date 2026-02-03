@@ -11,7 +11,7 @@
  * - "Read(src/**)" - Path pattern with glob
  */
 
-import type { ToolCallInfo } from '@uniedit/shared';
+import type { ToolCallInfo } from '@neko/shared';
 import type {
   PermissionRules,
   PermissionDecision,

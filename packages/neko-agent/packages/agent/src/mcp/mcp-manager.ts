@@ -7,7 +7,7 @@ import type {
   IMCPClient,
   MCPServerConfig,
   MCPToolDefinition,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { createMCPClient } from './mcp-client';
 import { AgentError } from '../errors';
 

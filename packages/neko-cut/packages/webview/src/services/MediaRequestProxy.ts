@@ -28,8 +28,8 @@ import type {
 	CompatibleGetVideoFrameRequest,
 	CompatibleGetVideoFrameResponse,
 	CompositeLayerConfig,
-} from '@uniedit/shared';
-import { MAX_CONCURRENT_REQUESTS, MEDIA_REQUEST_TIMEOUT } from '@uniedit/shared';
+} from '@neko/shared';
+import { MAX_CONCURRENT_REQUESTS, MEDIA_REQUEST_TIMEOUT } from '@neko/shared';
 import { getVSCodeAPI } from '../utils/vscodeApi';
 
 // =============================================================================

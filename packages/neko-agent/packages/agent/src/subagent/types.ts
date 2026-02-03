@@ -12,7 +12,7 @@ import type {
   IToolRegistry,
   ISkillService,
   IToolSkillRegistry,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Core Types

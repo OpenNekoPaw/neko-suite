@@ -18,4 +18,4 @@ export type {
 	MuxerAudioChunk,
 	MuxerVideoConfig,
 	MuxerAudioConfig,
-} from '@uniedit/shared';
+} from '@neko/shared';

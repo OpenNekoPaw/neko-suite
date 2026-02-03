@@ -18,8 +18,8 @@
 import type {
 	BackpressureConfig,
 	BackpressureStatus,
-} from '@uniedit/shared';
-import { DEFAULT_BACKPRESSURE_CONFIG } from '@uniedit/shared';
+} from '@neko/shared';
+import { DEFAULT_BACKPRESSURE_CONFIG } from '@neko/shared';
 
 // =============================================================================
 // Types

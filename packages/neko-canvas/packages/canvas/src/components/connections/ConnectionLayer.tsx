@@ -3,7 +3,7 @@
  * Manages rendering of all connections and pending connection preview
  */
 
-import type { CanvasConnection, CanvasNode } from '@uniedit/shared';
+import type { CanvasConnection, CanvasNode } from '@neko/shared';
 import { Connection } from './Connection';
 
 // =============================================================================

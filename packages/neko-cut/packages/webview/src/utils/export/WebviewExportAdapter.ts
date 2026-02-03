@@ -32,7 +32,7 @@ import type {
 	UrlResolver,
 	ExportPerformanceStats,
 } from './IExportEngine';
-import type { IAudioEncoder } from '@uniedit/shared';
+import type { IAudioEncoder } from '@neko/shared';
 import { getDefaultBitrate } from './IExportEngine';
 import { createGPURenderEngine, type GPURenderEngine } from '../../rendering/gpu';
 import {

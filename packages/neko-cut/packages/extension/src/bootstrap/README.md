@@ -34,7 +34,7 @@ bootstrap/
 ## 依赖
 
 ```
-→ @uniedit/platform   # Platform 创建
+→ @neko/platform   # Platform 创建
 → base/               # 服务注册
 ← extension.ts        # 扩展入口调用
 ```

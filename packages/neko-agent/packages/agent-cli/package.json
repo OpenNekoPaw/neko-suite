@@ -1,5 +1,5 @@
 {
-  "name": "@uniedit/agent-cli",
+  "name": "@neko/agent-cli",
   "version": "0.0.1",
   "description": "CLI for UniEdit AI Agent - standalone agent execution from command line",
   "type": "module",
@@ -24,8 +24,8 @@
     "outputPath": "dist"
   },
   "dependencies": {
-    "@uniedit/agent": "workspace:*",
-    "@uniedit/shared": "workspace:*",
+    "@neko/agent": "workspace:*",
+    "@neko/shared": "workspace:*",
     "commander": "^12.0.0",
     "chalk": "^5.3.0",
     "ora": "^8.0.0",

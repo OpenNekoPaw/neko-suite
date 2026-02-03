@@ -15,7 +15,7 @@ import type {
   AgentStep,
   ChatMessage,
   ContentPart,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { AgentError } from '../errors';
 import { ImageValidator, ImageValidationError } from './image-validator';
 import { OutputValidator } from './output-validator';

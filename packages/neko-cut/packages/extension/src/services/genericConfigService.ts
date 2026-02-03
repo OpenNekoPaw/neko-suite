@@ -8,7 +8,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { Platform, ConfigManager, ConfigExportData, ConfigImportResult } from '@uniedit/platform';
+import type { Platform, ConfigManager, ConfigExportData, ConfigImportResult } from '@neko/platform';
 import { VSCodeConfigStorage, createConfigWatcher } from './vscodeConfigStorage';
 
 /**

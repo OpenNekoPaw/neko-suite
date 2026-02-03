@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import type { CanvasViewport } from '@uniedit/shared';
+import type { CanvasViewport } from '@neko/shared';
 
 // =============================================================================
 // Types

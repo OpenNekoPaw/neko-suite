@@ -1,7 +1,7 @@
 /**
  * Standalone Mode Tests
  *
- * Verifies that @uniedit/agent can work independently without @uniedit/platform
+ * Verifies that @neko/agent can work independently without @neko/platform
  */
 
 import { describe, it, expect } from 'vitest';

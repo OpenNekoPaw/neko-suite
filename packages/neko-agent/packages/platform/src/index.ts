@@ -180,9 +180,9 @@ export {
   type ChainExecutionResult,
   type ChainExecutionOptions,
   type StepExecutor,
-} from '@uniedit/agent';
+} from '@neko/agent';
 
-// Task types - re-exported from shared (TaskManager implementation is in @uniedit/agent)
+// Task types - re-exported from shared (TaskManager implementation is in @neko/agent)
 export type {
   Task,
   TaskType,
@@ -196,7 +196,7 @@ export type {
   TaskRecoveryInfo,
   SerializableTask,
   TaskExecutor,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Task storage implementations (still available in platform)
 export {
@@ -390,9 +390,9 @@ import { ProviderRegistry } from './provider/provider-registry';
 import { GroupManager } from './provider/group-manager';
 import { Service } from './service/service';
 import { ToolRegistry } from './service/tool-registry';
-// TaskManager is now in @uniedit/agent, but we need it for createPlatform
+// TaskManager is now in @neko/agent, but we need it for createPlatform
 // Import from agent package (optional peer dependency)
-import type { ITaskManager, ITaskStorage } from '@uniedit/shared';
+import type { ITaskManager, ITaskStorage } from '@neko/shared';
 import { PromptManager } from './service/prompt-manager';
 import { WorkflowManager } from './workflow/workflow-manager';
 import type { Workflow } from './types/workflow';
@@ -416,7 +416,7 @@ export interface PlatformOptions {
   locale?: string;
   /**
    * Task manager instance for media generation
-   * NOTE: TaskManager implementation is now in @uniedit/agent package.
+   * NOTE: TaskManager implementation is now in @neko/agent package.
    * Pass an instance from agent package for full functionality.
    */
   taskManager?: ITaskManager & {
@@ -523,7 +523,7 @@ export function createPlatform(options: PlatformOptions = {}): Platform {
   if (!mediaTaskManager) {
     throw new Error(
       '[Platform] taskManager is required. ' +
-      'Import TaskManager from @uniedit/agent and pass it in options.'
+      'Import TaskManager from @neko/agent and pass it in options.'
     );
   }
 

@@ -25,7 +25,7 @@ import type {
   IToolSkillRegistry,
   ToolFilterOptions,
   IToolInjectionManager,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { AgentError } from '../errors';
 
 /**

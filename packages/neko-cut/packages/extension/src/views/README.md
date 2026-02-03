@@ -25,7 +25,7 @@ views/
 ## 依赖
 
 ```
-→ @uniedit/shared     # 项目类型
+→ @neko/shared     # 项目类型
 ← extension.ts        # 视图注册
 ← commands/           # 命令操作
 ```

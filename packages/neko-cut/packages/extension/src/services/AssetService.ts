@@ -1,7 +1,7 @@
 /**
  * Asset Service
  *
- * Extension Host 层的素材管理服务，桥接 @uniedit/asset 和 Webview。
+ * Extension Host 层的素材管理服务，桥接 @neko/asset 和 Webview。
  * 负责：
  * - 素材库初始化和持久化
  * - 处理来自 Webview 的素材操作请求
@@ -18,7 +18,7 @@ import {
 	RuleClassifier,
 	type IAssetStorage,
 	type IFileSystem,
-} from '@uniedit/asset';
+} from '@neko/asset';
 import type {
 	AssetEntity,
 	AssetVariant,
@@ -41,7 +41,7 @@ import type {
 	VariantAttributes,
 	AssetDiffResult,
 	AssetChangeAnalysis,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { ImageDiffAnalyzer } from '../media-diff/services/analyzers/ImageDiffAnalyzer';
 import { createServiceId } from '../base';
 
@@ -624,7 +624,7 @@ export class AssetService implements vscode.Disposable {
 	/**
 	 * Extract metadata from a file
 	 */
-	private async extractMetadata(filePath: string): Promise<import('@uniedit/shared').MediaFileMetadata> {
+	private async extractMetadata(filePath: string): Promise<import('@neko/shared').MediaFileMetadata> {
 		const stats = await fs.stat(filePath);
 		const ext = path.extname(filePath).toLowerCase();
 
@@ -662,7 +662,7 @@ export class AssetService implements vscode.Disposable {
 		};
 
 		const mimeType = mimeTypes[ext] ?? 'application/octet-stream';
-		const metadata: import('@uniedit/shared').MediaFileMetadata = {
+		const metadata: import('@neko/shared').MediaFileMetadata = {
 			fileSize: stats.size,
 			mimeType,
 		};

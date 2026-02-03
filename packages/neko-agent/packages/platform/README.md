@@ -1,4 +1,4 @@
-# @uniedit/platform
+# @neko/platform
 
 UniEdit AI 服务平台，提供统一的 AI 服务层，支持多提供商、智能路由、Agent 执行、Skill 系统、工作流集成等能力。
 
@@ -152,7 +152,7 @@ src/
 ## 快速开始
 
 ```typescript
-import { createPlatform } from '@uniedit/platform';
+import { createPlatform } from '@neko/platform';
 
 // 创建平台实例
 const platform = createPlatform({
@@ -434,7 +434,7 @@ platform.config.updateGroup('default', {
 ## 错误处理
 
 ```typescript
-import { PlatformError } from '@uniedit/platform';
+import { PlatformError } from '@neko/platform';
 
 try {
   await service.chat(messages);
@@ -453,8 +453,8 @@ try {
 ## 依赖关系
 
 ```
-@uniedit/platform
-└── @uniedit/shared    # 共享类型定义
+@neko/platform
+└── @neko/shared    # 共享类型定义
 
 被依赖：
 extension → platform   # VSCode 扩展依赖

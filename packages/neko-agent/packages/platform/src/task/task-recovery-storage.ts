@@ -5,7 +5,7 @@
  * Does NOT store full task state - that's handled by external platforms.
  */
 
-import type { ITaskRecoveryStorage, TaskRecoveryInfo } from '@uniedit/shared';
+import type { ITaskRecoveryStorage, TaskRecoveryInfo } from '@neko/shared';
 
 /**
  * In-memory recovery storage (default implementation)

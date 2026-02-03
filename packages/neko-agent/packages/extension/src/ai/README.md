@@ -28,7 +28,7 @@ ai/
 ## 依赖
 
 ```
-→ @uniedit/platform   # Agent 执行器
+→ @neko/platform   # Agent 执行器
 → bootstrap/          # 服务获取
 ← chat/               # 聊天面板调用
 ```

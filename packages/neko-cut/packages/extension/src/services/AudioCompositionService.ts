@@ -27,7 +27,7 @@ import type {
 	MediaElement,
 	AudioElement,
 	AudioProperties,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import * as path from 'path';
 import { getFFmpegService } from './FFmpegService';
 

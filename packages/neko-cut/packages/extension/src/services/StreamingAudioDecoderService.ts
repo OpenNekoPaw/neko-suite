@@ -14,7 +14,7 @@
  * ```
  */
 
-import type { ProjectData } from '@uniedit/shared';
+import type { ProjectData } from '@neko/shared';
 import { getAudioCompositionService } from './AudioCompositionService';
 import * as path from 'path';
 
@@ -150,7 +150,7 @@ export class StreamingAudioDecoderService {
 
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const { MediaProcessor } = require('@vedit/media-processor-rs');
+			const { MediaProcessor } = require('@neko/media-processor-rs');
 			const processor = await MediaProcessor.create();
 
 			// Initialize audio decoders for each input
@@ -213,7 +213,7 @@ export class StreamingAudioDecoderService {
 
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const { MediaProcessor } = require('@vedit/media-processor-rs');
+			const { MediaProcessor } = require('@neko/media-processor-rs');
 			const processor = await MediaProcessor.create();
 
 			const decoder = processor.createAudioDecoder(audioPath);

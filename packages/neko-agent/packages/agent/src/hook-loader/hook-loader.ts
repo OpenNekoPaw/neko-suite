@@ -4,7 +4,7 @@
  * Loads custom ExecutorHooks from .hook/ directory
  */
 
-import type { ExecutorHooks } from '@uniedit/shared';
+import type { ExecutorHooks } from '@neko/shared';
 import type {
   HookSource,
   HookMetadata,

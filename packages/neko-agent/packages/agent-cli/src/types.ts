@@ -2,7 +2,7 @@
  * Agent CLI Types
  */
 
-import type { AgentConfig, AgentResult, MCPServerConfig } from '@uniedit/agent';
+import type { AgentConfig, AgentResult, MCPServerConfig } from '@neko/agent';
 
 /**
  * CLI configuration

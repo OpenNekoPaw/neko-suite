@@ -112,7 +112,7 @@ import type {
   VideoProject,
   TimelineElement,
   ExtensionToWebviewMessage
-} from '@uniedit/shared';
+} from '@neko/shared';
 ```
 
 ## 设计原则

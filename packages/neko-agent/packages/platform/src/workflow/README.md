@@ -164,7 +164,7 @@ interface WorkflowDefinition {
 ### 注册工作流
 
 ```typescript
-import { WorkflowManager, N8nWorkflowExecutor } from '@uniedit/platform';
+import { WorkflowManager, N8nWorkflowExecutor } from '@neko/platform';
 
 const manager = new WorkflowManager();
 
@@ -211,7 +211,7 @@ if (result.success) {
 ### ComfyUI 集成
 
 ```typescript
-import { ComfyUIWorkflowExecutor } from '@uniedit/platform';
+import { ComfyUIWorkflowExecutor } from '@neko/platform';
 
 const comfyExecutor = new ComfyUIWorkflowExecutor({
   serverUrl: 'http://localhost:8188',
@@ -253,7 +253,7 @@ const agent = platform.createAgent({
 ### 测试工作流连接
 
 ```typescript
-import { WorkflowTestService } from '@uniedit/platform';
+import { WorkflowTestService } from '@neko/platform';
 
 const testService = new WorkflowTestService(manager);
 

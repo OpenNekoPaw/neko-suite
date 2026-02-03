@@ -2,7 +2,7 @@
  * Task Storage - Persistence layer for tasks
  */
 
-import type { ITaskStorage, SerializableTask } from '@uniedit/shared';
+import type { ITaskStorage, SerializableTask } from '@neko/shared';
 
 /**
  * In-memory task storage (default implementation)

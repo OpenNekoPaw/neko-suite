@@ -14,7 +14,7 @@ import {
   Tool,
   ToolResult,
   ToolCategory,
-} from '@uniedit/platform';
+} from '@neko/platform';
 
 // Custom context manager
 class SimpleContextManager {

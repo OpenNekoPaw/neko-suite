@@ -32,7 +32,7 @@ import type {
 	CompatibleExportProgress,
 	CompatibleExportResult,
 	ProjectData,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { JviProjectLoader } from '../mediaEngine/export/JviProjectLoader';
 import WebSocket from 'ws';
 

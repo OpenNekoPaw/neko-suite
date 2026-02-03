@@ -1,5 +1,5 @@
 {
-  "name": "@uniedit/webview",
+  "name": "@neko/webview",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -9,9 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@uniedit/effects-core": "workspace:*",
-    "@uniedit/effects-runtime": "workspace:*",
-    "@uniedit/shared": "workspace:*",
+    "@neko/effects-core": "workspace:*",
+    "@neko/effects-runtime": "workspace:*",
+    "@neko/shared": "workspace:*",
     "@wcpeter/libav.js-h264-aac-wav": "6.4.7",
     "libav.js": "^6.8.8",
     "mp4box": "^0.5.2",

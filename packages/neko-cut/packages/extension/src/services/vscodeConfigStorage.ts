@@ -6,7 +6,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { UserConfigStorage } from '@uniedit/platform';
+import type { UserConfigStorage } from '@neko/platform';
 
 /**
  * VS Code configuration storage implementation

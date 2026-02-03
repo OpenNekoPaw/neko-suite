@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useMemo } from 'react';
-import type { AssetEntity } from '@uniedit/shared';
+import type { AssetEntity } from '@neko/shared';
 import type { AssetSelectionState, SelectionItem } from './types';
 import { isEntitySelected, isVariantSelected } from './types';
 

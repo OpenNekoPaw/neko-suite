@@ -11,7 +11,7 @@ import type {
   AgentResult,
   ExecutorHooks,
   AgentEvent,
-} from '@uniedit/agent';
+} from '@neko/agent';
 import {
   MCPManager,
   createAllMCPTools,
@@ -26,9 +26,9 @@ import {
   createInputProcessor,
   type ExecutionMode,
   type InputProcessor,
-} from '@uniedit/agent';
-import type { IService } from '@uniedit/shared';
-import type { SkillService } from '@uniedit/agent';
+} from '@neko/agent';
+import type { IService } from '@neko/shared';
+import type { SkillService } from '@neko/agent';
 import type { CLIConfig, RunOptions, CLIResult } from './types';
 import { createLLMServiceAdapter } from './llm-service-adapter';
 import {

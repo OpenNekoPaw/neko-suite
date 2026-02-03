@@ -7,7 +7,7 @@
 
 import type { ToolHandler, ToolHandlerResult } from '../types';
 import { useEditorStore } from '../../stores/editor-store';
-import type { ExportRequest, ExportResponse, ExportSettings } from '@uniedit/shared';
+import type { ExportRequest, ExportResponse, ExportSettings } from '@neko/shared';
 import { generateId } from '../../utils';
 import { getMediaProxy } from '../../services/mediaProxyFactory';
 import { hasMediaSource, isTimeInElement } from '../../types/capabilities';

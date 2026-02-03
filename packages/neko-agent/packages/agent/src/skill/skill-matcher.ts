@@ -7,7 +7,7 @@
  * - Semantic similarity (future: embeddings)
  */
 
-import type { Skill, SkillMatch, ISkillMatcher } from '@uniedit/shared';
+import type { Skill, SkillMatch, ISkillMatcher } from '@neko/shared';
 
 /**
  * Base skill matcher class

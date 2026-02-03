@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { TaskManager } from '../task-manager';
 import { MemoryTaskStorage } from '../task-storage';
-import type { ITaskStorage, SerializableTask, TaskExecutor } from '@uniedit/shared';
+import type { ITaskStorage, SerializableTask, TaskExecutor } from '@neko/shared';
 
 describe('TaskManager Persistence', () => {
   let manager: TaskManager;

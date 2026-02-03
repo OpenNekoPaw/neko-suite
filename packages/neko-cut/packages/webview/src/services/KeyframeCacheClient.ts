@@ -10,7 +10,7 @@
  * - Compat 模式：使用此客户端调用 Rust HTTP API
  */
 
-import type { MediaEngineMode } from '@uniedit/shared';
+import type { MediaEngineMode } from '@neko/shared';
 
 // =============================================================================
 // Types

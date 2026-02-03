@@ -1,6 +1,6 @@
-# Neko Creator Suite：全能内容创作 IDE 架构白皮书
+# Neko Suite：全能内容创作 IDE 架构白皮书
 
-**Neko Creator Suite** 是一款专为开发者设计的、深度集成于 VS Code 的「全能内容创作工作站」。它通过 **Sidecar 独立进程架构** 突破了编辑器性能限制，实现了从剧本创作到 4K 视频合成、3D 渲染及虚拟直播的完整闭环。
+**Neko Suite** 是一款专为开发者设计的、深度集成于 VS Code 的「全能内容创作工作站」。它通过 **Sidecar 独立进程架构** 突破了编辑器性能限制，实现了从剧本创作到 4K 视频合成、3D 渲染及虚拟直播的完整闭环。
 
 ---
 
@@ -10,8 +10,8 @@
 
 | 模块名称 | 定位与核心职能 | 技术底座 |
 |---------|--------------|---------|
-| **neko-creative-suite** | 门户总管：管理全家桶安装、全局配置与插件间通讯 | VS Code Extension Pack |
-| **neko-server** | 动力引擎：独立侧边进程，处理 FFmpeg 编解码与重度计算 | Rust / Node.js + FFmpeg |
+| **neko-suite** | 门户总管：管理全家桶安装、全局配置与插件间通讯 | VS Code Extension Pack |
+| **neko-engine** | 动力引擎：独立侧边进程，处理 FFmpeg 编解码与重度计算 | Rust / Node.js + FFmpeg |
 | **neko-story** | 文学入口：利用 VS Code 原生编辑器，实现「文驱动制片」 | LSP (语言服务器协议) |
 | **neko-cut** | 剪辑中枢：管理时间线轨道、关键帧动画与素材同步 | Webview + React |
 | **neko-canvas** | 渲染核心：支持 2D/3D 混合、后期特效与 4K 实时预览 | WebGPU + WebCodecs |
@@ -46,10 +46,10 @@
 
 ### 3. Sidecar 性能隔离
 
-核心计算逻辑驻留在 **neko-server** 独立进程中。通过 WebSocket 或共享内存与 VS Code 通讯，彻底解决大文件读写与 FFmpeg 运行导致的编辑器卡顿问题。
+核心计算逻辑驻留在 **neko-engine** 独立进程中。通过 WebSocket 或共享内存与 VS Code 通讯，彻底解决大文件读写与 FFmpeg 运行导致的编辑器卡顿问题。
 
 ```
-VS Code Extension Host ←─ WebSocket ─→ neko-server (Rust/Node.js)
+VS Code Extension Host ←─ WebSocket ─→ neko-engine (Rust/Node.js)
                                               │
                                               ├─ FFmpeg 编解码
                                               ├─ 帧缓存服务
@@ -93,9 +93,9 @@ VS Code Extension Host ←─ WebSocket ─→ neko-server (Rust/Node.js)
 ### 插件化架构
 
 每个子插件可独立安装、独立升级。用户可根据需求选择安装：
-- 仅剪辑：`neko-cut` + `neko-server`
+- 仅剪辑：`neko-cut` + `neko-engine`
 - 仅直播：`neko-live` + `neko-canvas`
-- 全功能：`neko-creative-suite`（Extension Pack）
+- 全功能：`neko-suite`（Extension Pack）
 
 ---
 
@@ -115,10 +115,10 @@ VS Code Extension Host ←─ WebSocket ─→ neko-server (Rust/Node.js)
 ## 六、项目结构
 
 ```
-neko-creator-suite/
+neko-suite/
 ├── packages/
-│   ├── neko-creative-suite/   # Extension Pack 门户
-│   ├── neko-server/           # Sidecar 计算引擎
+│   ├── neko-suite/   # Extension Pack 门户
+│   ├── neko-engine/           # Sidecar 计算引擎
 │   ├── neko-story/            # 剧本编辑器 (LSP)
 │   ├── neko-cut/              # 视频剪辑器
 │   │   └── packages/

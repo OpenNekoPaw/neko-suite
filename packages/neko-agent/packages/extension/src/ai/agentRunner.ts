@@ -2,23 +2,23 @@
  * Agent Runner - Lightweight VSCode wrapper for AgentSession
  *
  * This class focuses on VSCode integration while delegating session management
- * to @uniedit/agent's AgentSession.
+ * to @neko/agent's AgentSession.
  *
  * Key responsibilities:
  * - VSCode EventEmitter integration for UI notifications
  * - Message queue management for concurrent requests
  * - Tool confirmation flow bridging
  *
- * All core agent functionality is delegated to AgentSession from @uniedit/agent.
+ * All core agent functionality is delegated to AgentSession from @neko/agent.
  */
 
 import * as vscode from 'vscode';
 import { createServiceId } from '../base';
-import type { Platform, ChatMessage } from '@uniedit/platform';
-import { getBuiltinPrompt } from '@uniedit/platform';
+import type { Platform, ChatMessage } from '@neko/platform';
+import { getBuiltinPrompt } from '@neko/platform';
 import type {
   ToolConfirmationRequest,
-} from '@uniedit/agent';
+} from '@neko/agent';
 import {
   AgentSession,
   createAgentSession,
@@ -30,7 +30,7 @@ import {
   type ExecutionMode,
   type AgentEvent,
   type AgentEventType,
-} from '@uniedit/agent';
+} from '@neko/agent';
 import { IAgentContext } from './agentContext';
 import type { HookManager } from './hookManager';
 
@@ -50,14 +50,14 @@ export const IAgentRunner = createServiceId<IAgentRunner>('agentRunner');
 export type { ExecutionMode };
 
 /**
- * Re-export AgentEvent and AgentEventType from @uniedit/agent
+ * Re-export AgentEvent and AgentEventType from @neko/agent
  * This ensures type consistency across the codebase
  */
 export type { AgentEvent, AgentEventType };
 
 /**
  * Legacy type alias for backward compatibility
- * @deprecated Use AgentEvent from @uniedit/agent instead
+ * @deprecated Use AgentEvent from @neko/agent instead
  */
 export type IAgentEvent = AgentEvent;
 
@@ -279,7 +279,7 @@ export interface IAgentRunner extends vscode.Disposable {
   /**
    * Get all registered ToolGroups
    */
-  getToolSkills(): import('@uniedit/shared').ConfiguredToolGroup[];
+  getToolSkills(): import('@neko/shared').ConfiguredToolGroup[];
 }
 
 // =============================================================================
@@ -295,7 +295,7 @@ export interface IAgentRunner extends vscode.Disposable {
  * - Tool confirmation UI bridge
  * - Conversation history management
  *
- * Session management is delegated to @uniedit/agent's AgentSession.
+ * Session management is delegated to @neko/agent's AgentSession.
  */
 export class AgentRunner implements IAgentRunner {
   private _config?: IAgentConfig;
@@ -382,7 +382,7 @@ export class AgentRunner implements IAgentRunner {
 
     // Create agent session
     this._session = createAgentSession({
-      service: service as unknown as import('@uniedit/shared').IService,
+      service: service as unknown as import('@neko/shared').IService,
       toolRegistry: config.platform.tools,
       systemPrompt: effectiveSystemPrompt,
       executionMode: config.executionMode ?? 'auto',
@@ -581,7 +581,7 @@ export class AgentRunner implements IAgentRunner {
   // ToolGroup Management
   // -------------------------------------------------------------------------
 
-  getToolSkills(): import('@uniedit/shared').ConfiguredToolGroup[] {
+  getToolSkills(): import('@neko/shared').ConfiguredToolGroup[] {
     if (!this._toolGroupRegistry) {
       return [];
     }

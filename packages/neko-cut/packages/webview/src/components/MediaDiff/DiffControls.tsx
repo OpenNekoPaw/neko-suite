@@ -4,7 +4,7 @@
  */
 
 import { memo } from 'react';
-import type { DiffViewMode } from '@uniedit/shared';
+import type { DiffViewMode } from '@neko/shared';
 import type { DiffControlsProps } from './types';
 
 // =============================================================================

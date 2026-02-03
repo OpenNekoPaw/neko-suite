@@ -11,7 +11,7 @@ import type {
   MCPToolResult,
   MCPResource,
   MCPPrompt,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { AgentError } from '../errors';
 
 /**

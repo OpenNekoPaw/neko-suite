@@ -1,7 +1,7 @@
 /**
  * Service Collection - VS Code style DI container
  *
- * Migrated from @uniedit/platform to local extension implementation.
+ * Migrated from @neko/platform to local extension implementation.
  * This provides a simple service locator pattern for VS Code extensions.
  */
 

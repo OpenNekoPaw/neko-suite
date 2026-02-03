@@ -11,7 +11,7 @@ import type {
 	AssetVariant,
 	VariantComparisonResult,
 	VariantAttributes,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Message Types

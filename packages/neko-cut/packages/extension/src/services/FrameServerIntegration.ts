@@ -26,7 +26,7 @@ import { KeyframeCacheService } from './KeyframeCacheService';
 import { AudioServerService } from './AudioServerService';
 import { StreamingAudioDecoderService } from './StreamingAudioDecoderService';
 import { getFFmpegService, type FFmpegService } from './FFmpegService';
-import type { ProjectData, MediaEngineMode } from '@uniedit/shared';
+import type { ProjectData, MediaEngineMode } from '@neko/shared';
 import {
 	SharedRenderPipeline,
 	createSharedRenderPipeline,

@@ -3,8 +3,8 @@
  */
 
 // Re-export MessageAttachment from shared and alias as AttachedFile for backward compatibility
-import type { MessageAttachment, AttachmentType } from '@uniedit/shared';
-export type { MessageAttachment, AttachmentType } from '@uniedit/shared';
+import type { MessageAttachment, AttachmentType } from '@neko/shared';
+export type { MessageAttachment, AttachmentType } from '@neko/shared';
 
 /**
  * @deprecated Use MessageAttachment instead
@@ -54,7 +54,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 ];
 
 /**
- * Skill summary for UI display (from @uniedit/platform)
+ * Skill summary for UI display (from @neko/platform)
  * Duplicated here to avoid direct dependency on platform package
  */
 export interface SkillSummary {

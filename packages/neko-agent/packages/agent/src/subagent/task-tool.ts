@@ -6,7 +6,7 @@
  * - task_output: Get results from background SubAgents
  */
 
-import type { Tool, ToolResult, ToolCategory } from '@uniedit/shared';
+import type { Tool, ToolResult, ToolCategory } from '@neko/shared';
 import type {
   ISubAgentManager,
   SubAgentConfig,

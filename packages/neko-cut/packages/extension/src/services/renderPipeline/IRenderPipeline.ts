@@ -26,7 +26,7 @@
  * - 依赖倒置 (D)：高层模块依赖抽象接口
  */
 
-import type { ProjectData } from '@uniedit/shared';
+import type { ProjectData } from '@neko/shared';
 
 // =============================================================================
 // Types

@@ -4,7 +4,7 @@
  * Demonstrates simple chat interaction with the platform.
  */
 
-import { createPlatform } from '@uniedit/platform';
+import { createPlatform } from '@neko/platform';
 
 async function main() {
   // Create platform instance

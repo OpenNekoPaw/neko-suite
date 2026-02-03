@@ -190,7 +190,7 @@ interface LLMRoutingResult {
 ### 自定义适配器
 
 ```typescript
-import { BaseAdapter } from '@uniedit/platform';
+import { BaseAdapter } from '@neko/platform';
 
 class MyProviderAdapter extends BaseAdapter {
   readonly type = 'my-provider';
@@ -221,7 +221,7 @@ registry.register('my-provider', new MyProviderAdapter());
 ### 自定义路由策略
 
 ```typescript
-import type { LLMRoutingStrategy, LLMRoutingCandidate } from '@uniedit/platform';
+import type { LLMRoutingStrategy, LLMRoutingCandidate } from '@neko/platform';
 
 class PriorityModelStrategy implements LLMRoutingStrategy {
   name = 'priority-model';

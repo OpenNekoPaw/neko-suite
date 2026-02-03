@@ -11,7 +11,7 @@ import type {
 	AssetVariant,
 	AssetQuery,
 	SearchResult,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 /**
  * Asset storage interface

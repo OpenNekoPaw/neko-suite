@@ -13,7 +13,7 @@ import type {
   CommandFrontmatter,
   SkillLoadError,
   ISkillFileSystem,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import type { IMarkdownParser } from './markdown-parser';
 
 // =============================================================================

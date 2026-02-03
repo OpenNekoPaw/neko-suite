@@ -10,7 +10,7 @@ import type { Group } from '../types/group';
 import type { ExecutionGroup } from '../types/execution-group';
 import type { RetryTimeoutPreset, BuiltinPresetName } from '../types/error';
 import type { MCPServerPreset, WorkflowPreset, PromptPreset } from '../types/config';
-import type { ChatModelOption } from '@uniedit/shared';
+import type { ChatModelOption } from '@neko/shared';
 import { loadBuiltinPresets, setLocale, type BuiltinPresets } from './builtin-presets';
 import { UserConfigManager, type UserConfig, type UserConfigStorage } from './user-config';
 import { loadWorkspaceConfig, watchWorkspaceConfig, type WorkspaceConfig } from './workspace-config';

@@ -10,7 +10,7 @@
  */
 
 // Base class - import from shared
-export { BuiltinTool } from '@uniedit/shared';
+export { BuiltinTool } from '@neko/shared';
 
 // Project tools (timeline, media operations)
 export {

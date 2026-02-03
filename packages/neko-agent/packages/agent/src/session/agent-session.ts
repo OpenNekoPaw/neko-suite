@@ -19,7 +19,7 @@ import type {
   ChatMessage,
   AgentStep,
   ExecutorHooks,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 import type {
   IAgentSession,

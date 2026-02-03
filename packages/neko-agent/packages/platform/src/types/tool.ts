@@ -1,7 +1,7 @@
 /**
- * Tool Types - Re-export from @uniedit/shared
+ * Tool Types - Re-export from @neko/shared
  *
- * DEPRECATED: Import from '@uniedit/shared' directly for new code.
+ * DEPRECATED: Import from '@neko/shared' directly for new code.
  */
 
 export type {
@@ -19,4 +19,4 @@ export type {
 
   // Filter options
   ToolFilterOptions,
-} from '@uniedit/shared';
+} from '@neko/shared';

@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { VariantService } from '../../service/VariantService';
 import { EntityService } from '../../service/EntityService';
 import { InMemoryStorage } from '../../storage/InMemoryStorage';
-import type { AssetEntity, CreateVariantInput } from '@uniedit/shared';
+import type { AssetEntity, CreateVariantInput } from '@neko/shared';
 
 describe('VariantService', () => {
 	let storage: InMemoryStorage;

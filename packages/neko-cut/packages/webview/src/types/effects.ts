@@ -2,7 +2,7 @@
  * Video Effects Types
  * 视频特效类型定义
  *
- * Core types are imported from @uniedit/shared for Single Source of Truth.
+ * Core types are imported from @neko/shared for Single Source of Truth.
  * This file extends with webview-specific utilities (effect definitions, presets, animation).
  */
 
@@ -17,7 +17,7 @@ export type {
   EffectParameterKeyframe,
   AnimatableEffectParameter,
   EffectInstance,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 import type {
   EffectCategory,
@@ -26,7 +26,7 @@ import type {
   EffectParameterKeyframe,
   AnimatableEffectParameter,
   EffectInstance,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Webview-Specific Extensions: Effect Parameter Definitions
@@ -170,7 +170,7 @@ export interface GlowParams {
  * Vignette effect parameters (for visual effects, not color correction)
  * 暗角特效参数（用于视觉特效，非色彩校正）
  *
- * Note: This is distinct from VignetteParams in @uniedit/shared which is
+ * Note: This is distinct from VignetteParams in @neko/shared which is
  * used for color correction. This effect version has center position control.
  */
 export interface VignetteEffectParams {

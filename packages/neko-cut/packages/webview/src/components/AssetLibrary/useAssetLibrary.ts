@@ -17,7 +17,7 @@ import type {
 	MoveVariantResult,
 	MergeEntitiesInput,
 	MergeEntitiesResult,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { sendRequest, sendMessage } from '../../utils/vscodeApi';
 import type {
 	AssetFilterState,

@@ -4,7 +4,7 @@
 
 ## Context Summary
 
-- **项目**：Neko Creator Suite - VS Code 全能内容创作工作站
+- **项目**：Neko Suite - VS Code 全能内容创作工作站
 - **角色**：画布编辑器，WebGPU 渲染核心
 - **规范**：[README.md](../../README.md)
 
@@ -12,7 +12,7 @@
 
 ## 概述
 
-**NekoCanvas** 是 Neko Creator Suite 的渲染核心，提供 2D/3D 混合渲染能力。利用 WebGPU 在 GPU 显存中直接合成视频帧、3D 模型与手绘图层，支持非破坏性编辑和 4K 实时预览。
+**NekoCanvas** 是 Neko Suite 的渲染核心，提供 2D/3D 混合渲染能力。利用 WebGPU 在 GPU 显存中直接合成视频帧、3D 模型与手绘图层，支持非破坏性编辑和 4K 实时预览。
 
 ---
 
@@ -104,7 +104,7 @@ NekoCanvas Extension
 
 ```
 neko-canvas
-    └── @uniedit/shared (类型)
+    └── @neko/shared (类型)
 ```
 
 ---

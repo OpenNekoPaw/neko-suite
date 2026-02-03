@@ -5,7 +5,7 @@
  */
 
 import type { Model, Provider } from '../types/provider';
-import type { ChatModelOption, ModelCapability, ModelCategory } from '@uniedit/shared';
+import type { ChatModelOption, ModelCapability, ModelCategory } from '@neko/shared';
 
 /**
  * Chat model service interface

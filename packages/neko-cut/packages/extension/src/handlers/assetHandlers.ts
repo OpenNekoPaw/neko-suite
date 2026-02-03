@@ -18,7 +18,7 @@ import type {
 	AddFileOptions,
 	MoveVariantInput,
 	MergeEntitiesInput,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { getService } from '../base';
 import { IAssetService, type AssetService, type ImportOptions } from '../services/AssetService';
 

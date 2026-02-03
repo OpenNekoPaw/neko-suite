@@ -4,7 +4,7 @@
 
 ## Context Summary
 
-- **项目**：Neko Creator Suite - VS Code 全能内容创作工作站
+- **项目**：Neko Suite - VS Code 全能内容创作工作站
 - **角色**：资产管理，版本控制与云同步
 - **规范**：[README.md](../../README.md)
 
@@ -12,7 +12,7 @@
 
 ## 概述
 
-**Neko Assets** 是 Neko Creator Suite 的资产管理模块，提供 Git/LFS 版本控制、云端同步、CI/CD 自动渲染等功能。让创作者可以像管理代码一样管理媒体资产，支持团队协作和自动化工作流。
+**Neko Assets** 是 Neko Suite 的资产管理模块，提供 Git/LFS 版本控制、云端同步、CI/CD 自动渲染等功能。让创作者可以像管理代码一样管理媒体资产，支持团队协作和自动化工作流。
 
 ---
 
@@ -134,8 +134,8 @@ jobs:
 
 ```
 neko-assets
-    ├── packages/asset (@uniedit/asset 素材库核心)
-    └── @uniedit/shared (类型)
+    ├── packages/asset (@neko/asset 素材库核心)
+    └── @neko/shared (类型)
 ```
 
 ---
@@ -145,7 +145,7 @@ neko-assets
 - **版本控制**：Git / Git LFS
 - **云同步**：rclone
 - **CI/CD**：GitHub Actions / GitLab CI
-- **类型**：@uniedit/shared
+- **类型**：@neko/shared
 
 ---
 

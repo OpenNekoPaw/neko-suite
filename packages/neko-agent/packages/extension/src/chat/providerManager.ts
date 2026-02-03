@@ -6,9 +6,9 @@
  */
 
 import * as vscode from 'vscode';
-import type { Platform } from '@uniedit/platform';
-import { getBuiltinProviderTemplates } from '@uniedit/platform';
-import type { ProviderTemplate } from '@uniedit/shared';
+import type { Platform } from '@neko/platform';
+import { getBuiltinProviderTemplates } from '@neko/platform';
+import type { ProviderTemplate } from '@neko/shared';
 import { ProviderConfig, ConfiguredProvider, ProviderInfo, ProviderTemplateInfo } from './types';
 
 /**

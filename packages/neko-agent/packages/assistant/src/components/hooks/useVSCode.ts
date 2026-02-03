@@ -4,7 +4,7 @@
  * Provides type-safe communication between the Assistant UI webview
  * and the VS Code extension host via postMessage.
  *
- * Core VSCode API is imported from @uniedit/shared.
+ * Core VSCode API is imported from @neko/shared.
  * This file defines assistant-specific message builders.
  */
 
@@ -12,7 +12,7 @@ import {
   getVSCodeAPI,
   postMessage,
   type VSCodeAPI,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // Re-export for backward compatibility
 export { getVSCodeAPI, postMessage, type VSCodeAPI };
@@ -272,7 +272,7 @@ export const VSCodeMessages = {
    * Update an MCP server configuration
    * @param server - MCP server configuration
    */
-  updateMCPServer: (server: import('@uniedit/shared').MCPServerConfig) => {
+  updateMCPServer: (server: import('@neko/shared').MCPServerConfig) => {
     postMessage({ type: 'updateMCPServer', server });
   },
 
@@ -288,7 +288,7 @@ export const VSCodeMessages = {
    * Update a workflow configuration
    * @param workflow - Workflow configuration
    */
-  updateWorkflow: (workflow: import('@uniedit/shared').WorkflowConfig) => {
+  updateWorkflow: (workflow: import('@neko/shared').WorkflowConfig) => {
     postMessage({ type: 'updateWorkflow', workflow });
   },
 
@@ -304,7 +304,7 @@ export const VSCodeMessages = {
    * Update a prompt preset
    * @param prompt - Prompt preset configuration
    */
-  updatePrompt: (prompt: import('@uniedit/shared').PromptPresetConfig) => {
+  updatePrompt: (prompt: import('@neko/shared').PromptPresetConfig) => {
     postMessage({ type: 'updatePrompt', prompt });
   },
 
@@ -320,7 +320,7 @@ export const VSCodeMessages = {
    * Update a provider configuration
    * @param provider - Provider configuration
    */
-  updateProvider: (provider: import('@uniedit/shared').ProviderConfig) => {
+  updateProvider: (provider: import('@neko/shared').ProviderConfig) => {
     postMessage({ type: 'updateProvider', provider });
   },
 
@@ -336,7 +336,7 @@ export const VSCodeMessages = {
    * Update a model configuration
    * @param model - Model configuration
    */
-  updateModel: (model: import('@uniedit/shared').ModelConfig) => {
+  updateModel: (model: import('@neko/shared').ModelConfig) => {
     postMessage({ type: 'updateModel', model });
   },
 
@@ -477,7 +477,7 @@ export const VSCodeMessages = {
    * Update a skill configuration
    * @param skill - Skill configuration to update
    */
-  updateSkill: (skill: import('@uniedit/shared').ConfiguredSkill) => {
+  updateSkill: (skill: import('@neko/shared').ConfiguredSkill) => {
     postMessage({ type: 'updateSkill', skill });
   },
 
@@ -496,7 +496,7 @@ export const VSCodeMessages = {
    * @param targetSource - Target source ('personal' or 'project')
    */
   duplicateSkill: (
-    skill: import('@uniedit/shared').ConfiguredSkill,
+    skill: import('@neko/shared').ConfiguredSkill,
     newName: string,
     targetSource: 'personal' | 'project'
   ) => {
@@ -516,7 +516,7 @@ export const VSCodeMessages = {
    * Update a command configuration
    * @param command - Command configuration to update
    */
-  updateCommand: (command: import('@uniedit/shared').ConfiguredSlashCommand) => {
+  updateCommand: (command: import('@neko/shared').ConfiguredSlashCommand) => {
     postMessage({ type: 'updateCommand', command });
   },
 

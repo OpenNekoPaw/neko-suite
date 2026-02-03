@@ -5,7 +5,7 @@
 
 import type { ToolHandler, ToolHandlerResult } from '../types';
 import { useEditorStore } from '../../stores/editor-store';
-import type { ExportRequest, ExportResponse, ExportSettings, ExportFormat, ExportQuality } from '@uniedit/shared';
+import type { ExportRequest, ExportResponse, ExportSettings, ExportFormat, ExportQuality } from '@neko/shared';
 import { calculateProjectDuration } from '../../utils/exportEngine';
 import { getVSCodeAPI } from '../../utils/vscodeApi';
 

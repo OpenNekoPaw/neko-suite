@@ -2,7 +2,7 @@
  * Color Correction Types
  * 颜色校正类型定义
  *
- * Core types are imported from @uniedit/shared for Single Source of Truth.
+ * Core types are imported from @neko/shared for Single Source of Truth.
  * This file extends with webview-specific utilities (presets, LUT data structure).
  */
 
@@ -24,7 +24,7 @@ export type {
   LUTAdjustment,
   VignetteParams,
   ColorCorrection,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 export {
   DEFAULT_BASIC_COLOR_ADJUSTMENT,
@@ -37,10 +37,10 @@ export {
   DEFAULT_LUT_ADJUSTMENT,
   DEFAULT_VIGNETTE_PARAMS,
   DEFAULT_COLOR_CORRECTION,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
-import type { ColorCorrection } from '@uniedit/shared';
-import { DEFAULT_COLOR_CORRECTION } from '@uniedit/shared';
+import type { ColorCorrection } from '@neko/shared';
+import { DEFAULT_COLOR_CORRECTION } from '@neko/shared';
 
 // =============================================================================
 // Webview-Specific Extensions: LUT Data Structure

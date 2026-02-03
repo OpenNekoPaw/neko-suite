@@ -207,7 +207,7 @@ interface MediaServiceAdapter {
 ### 注册内置工具
 
 ```typescript
-import { registerBuiltinTools, ToolRegistry } from '@uniedit/platform';
+import { registerBuiltinTools, ToolRegistry } from '@neko/platform';
 
 const registry = new ToolRegistry();
 registerBuiltinTools(registry, {
@@ -222,7 +222,7 @@ const definitions = registry.toToolDefinitions();
 ### 自定义工具
 
 ```typescript
-import { BuiltinTool } from '@uniedit/platform';
+import { BuiltinTool } from '@neko/platform';
 
 class MyCustomTool extends BuiltinTool {
   name = 'my_tool';

@@ -6,7 +6,7 @@
  */
 
 import { memo, useCallback, useState, useMemo } from 'react';
-import type { AssetEntity, AssetVariant, CreateEntityInput } from '@uniedit/shared';
+import type { AssetEntity, AssetVariant, CreateEntityInput } from '@neko/shared';
 import { useAssetLibrary } from './useAssetLibrary';
 import { useAssetSelection } from './useAssetSelection';
 import { useAssetDragDrop } from './useAssetDragDrop';

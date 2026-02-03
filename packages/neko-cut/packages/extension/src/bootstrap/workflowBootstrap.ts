@@ -9,7 +9,7 @@
 import * as http from 'http';
 import * as https from 'https';
 import { URL } from 'url';
-import type { Platform } from '@uniedit/platform';
+import type { Platform } from '@neko/platform';
 import type { ConnectionStateManager } from '../services/connectionStateManager';
 
 /**

@@ -4,7 +4,7 @@
  */
 
 import { useMemo } from 'react';
-import type { CanvasViewport } from '@uniedit/shared';
+import type { CanvasViewport } from '@neko/shared';
 
 // =============================================================================
 // Constants

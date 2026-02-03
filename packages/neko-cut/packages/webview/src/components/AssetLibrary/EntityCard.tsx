@@ -6,7 +6,7 @@
  */
 
 import { memo, useCallback, useState, useRef, useEffect } from 'react';
-import type { AssetEntity, AssetVariant } from '@uniedit/shared';
+import type { AssetEntity, AssetVariant } from '@neko/shared';
 import { getCategoryInfo } from './types';
 import { useTranslation } from '@/i18n/I18nContext';
 import type { ComparisonTarget } from './useAssetLibrary';

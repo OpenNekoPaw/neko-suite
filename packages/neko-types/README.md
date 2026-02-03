@@ -1,10 +1,10 @@
-# Neko Types (@uniedit/shared)
+# Neko Types (@neko/shared)
 
 > 交互契约：跨包共享的类型定义与通信协议
 
 ## Context Summary
 
-- **项目**：Neko Creator Suite - VS Code 全能内容创作工作站
+- **项目**：Neko Suite - VS Code 全能内容创作工作站
 - **角色**：共享类型包，跨包类型定义
 - **规范**：[README.md](../../README.md)
 
@@ -12,7 +12,7 @@
 
 ## 概述
 
-**Neko Types** (包名 `@uniedit/shared`) 是 Neko Creator Suite 的共享类型定义包，提供跨包使用的 TypeScript 类型定义和常量。它是所有其他包的基础依赖，确保类型一致性。
+**Neko Types** (包名 `@neko/shared`) 是 Neko Suite 的共享类型定义包，提供跨包使用的 TypeScript 类型定义和常量。它是所有其他包的基础依赖，确保类型一致性。
 
 ---
 
@@ -110,10 +110,10 @@ interface WebviewToExtensionMessage {
 
 ```typescript
 // 导入全部类型
-import type { VideoProject, TimelineElement } from '@uniedit/shared';
+import type { VideoProject, TimelineElement } from '@neko/shared';
 
 // 导入特定模块类型
-import type { TransitionType } from '@uniedit/shared/types/transition';
+import type { TransitionType } from '@neko/shared/types/transition';
 ```
 
 ---
@@ -121,8 +121,8 @@ import type { TransitionType } from '@uniedit/shared/types/transition';
 ## 依赖关系
 
 ```
-@uniedit/shared (被所有包依赖)
-    ├── neko-server
+@neko/shared (被所有包依赖)
+    ├── neko-engine
     ├── neko-story
     ├── neko-cut
     ├── neko-canvas

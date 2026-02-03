@@ -17,8 +17,8 @@ import type {
 	DiffResult,
 	AudioDiffDetails,
 	TimeRange,
-} from '@uniedit/shared';
-import { DEFAULT_WAVEFORM_SAMPLES } from '@uniedit/shared';
+} from '@neko/shared';
+import { DEFAULT_WAVEFORM_SAMPLES } from '@neko/shared';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 import { FFmpegService } from '../../../services/FFmpegService';
 

@@ -4,7 +4,7 @@
 
 ## Context Summary
 
-- **项目**：Neko Creator Suite - VS Code 全能内容创作工作站
+- **项目**：Neko Suite - VS Code 全能内容创作工作站
 - **角色**：脚本协议，自动化剪辑 DSL
 - **规范**：[README.md](../../README.md)
 
@@ -12,7 +12,7 @@
 
 ## 概述
 
-**Neko Script** 是 Neko Creator Suite 的通讯协议层，定义了 AI 指令流与自动化剪辑的底层标准语言。它是连接 AI Agent 与渲染引擎的桥梁，让所有视频编辑操作都可以用文本指令表达。
+**Neko Script** 是 Neko Suite 的通讯协议层，定义了 AI 指令流与自动化剪辑的底层标准语言。它是连接 AI Agent 与渲染引擎的桥梁，让所有视频编辑操作都可以用文本指令表达。
 
 ---
 
@@ -141,7 +141,7 @@ git checkout HEAD~1 project.nksc
 
 ```
 neko-script (独立)
-    └── @uniedit/shared (类型)
+    └── @neko/shared (类型)
 ```
 
 ---
@@ -151,7 +151,7 @@ neko-script (独立)
 - **语言服务**：LSP (Language Server Protocol)
 - **语法定义**：TextMate Grammar
 - **解析器**：TypeScript
-- **类型**：@uniedit/shared
+- **类型**：@neko/shared
 
 ---
 

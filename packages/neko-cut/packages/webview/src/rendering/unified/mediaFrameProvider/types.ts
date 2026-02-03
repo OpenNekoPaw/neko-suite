@@ -2,7 +2,7 @@
  * MediaFrameProvider Types
  */
 
-import type { MediaInfo } from '@uniedit/shared';
+import type { MediaInfo } from '@neko/shared';
 
 // =============================================================================
 // Configuration Types

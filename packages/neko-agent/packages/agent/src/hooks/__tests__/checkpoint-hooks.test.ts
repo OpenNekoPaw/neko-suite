@@ -11,7 +11,7 @@ import {
   DEFAULT_CHECKPOINT_POLICY,
   type CheckpointPolicy,
 } from '../checkpoint-hooks';
-import type { AgentContext, AgentCheckpoint, ToolResultWithMeta } from '@uniedit/shared';
+import type { AgentContext, AgentCheckpoint, ToolResultWithMeta } from '@neko/shared';
 
 describe('CheckpointHooks', () => {
   let hooks: CheckpointHooks;

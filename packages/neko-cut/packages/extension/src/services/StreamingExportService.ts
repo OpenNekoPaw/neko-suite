@@ -39,8 +39,8 @@ import type {
 	AudioCodec,
 	VideoSourceInfo,
 	StreamingExportJobState,
-} from '@uniedit/shared';
-import { DEFAULT_STREAMING_EXPORT_SETTINGS } from '@uniedit/shared';
+} from '@neko/shared';
+import { DEFAULT_STREAMING_EXPORT_SETTINGS } from '@neko/shared';
 import {
 	SharedRenderPipeline,
 	ExportOutputAdapter,
@@ -53,15 +53,15 @@ import {
 // =============================================================================
 
 // Rust N-API types
-type ExportPipelineSession = import('@vedit/media-processor-rs').ExportPipelineSession;
-type MuxerSession = import('@vedit/media-processor-rs').MuxerSession;
-type AudioDecoderSession = import('@vedit/media-processor-rs').AudioDecoderSession;
-type AudioEncoderSession = import('@vedit/media-processor-rs').AudioEncoderSession;
-type JsPipelineConfig = import('@vedit/media-processor-rs').JsPipelineConfig;
-type JsPipelineFrame = import('@vedit/media-processor-rs').JsPipelineFrame;
-type JsPipelineProgress = import('@vedit/media-processor-rs').JsPipelineProgress;
-type JsEncoderConfig = import('@vedit/media-processor-rs').JsEncoderConfig;
-type JsCompositeLayer = import('@vedit/media-processor-rs').JsCompositeLayer;
+type ExportPipelineSession = import('@neko/media-processor-rs').ExportPipelineSession;
+type MuxerSession = import('@neko/media-processor-rs').MuxerSession;
+type AudioDecoderSession = import('@neko/media-processor-rs').AudioDecoderSession;
+type AudioEncoderSession = import('@neko/media-processor-rs').AudioEncoderSession;
+type JsPipelineConfig = import('@neko/media-processor-rs').JsPipelineConfig;
+type JsPipelineFrame = import('@neko/media-processor-rs').JsPipelineFrame;
+type JsPipelineProgress = import('@neko/media-processor-rs').JsPipelineProgress;
+type JsEncoderConfig = import('@neko/media-processor-rs').JsEncoderConfig;
+type JsCompositeLayer = import('@neko/media-processor-rs').JsCompositeLayer;
 
 /**
  * 流式导出初始化参数
@@ -684,7 +684,7 @@ export class StreamingExportService {
 
 		// Create pipeline using Rust N-API
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		const { ExportPipelineSession } = require('@vedit/media-processor-rs');
+		const { ExportPipelineSession } = require('@neko/media-processor-rs');
 		activeExport.pipeline = await ExportPipelineSession.create(pipelineConfig);
 
 		console.log('[StreamingExportService] Export pipeline started');
@@ -811,7 +811,7 @@ export class StreamingExportService {
 
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const { MuxerSession, MediaProcessor } = require('@vedit/media-processor-rs');
+			const { MuxerSession, MediaProcessor } = require('@neko/media-processor-rs');
 
 			// Create muxer
 			const muxer = MuxerSession.create({

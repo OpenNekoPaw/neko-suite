@@ -25,7 +25,7 @@ import { AlignmentGuides, calculateAlignmentGuides, snapToGuides, type Alignment
 import { MarqueeSelection } from './MarqueeSelection';
 import { ContextMenu } from './ContextMenu';
 import { SafeZones } from './SafeZones';
-import type { TimelineElement } from '@uniedit/shared';
+import type { TimelineElement } from '@neko/shared';
 
 export interface PreviewOverlayProps {
   /** Canvas element ref for coordinate mapping */

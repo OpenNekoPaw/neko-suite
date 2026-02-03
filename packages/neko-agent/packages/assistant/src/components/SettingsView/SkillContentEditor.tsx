@@ -15,7 +15,7 @@
  * └── scripts/
  *     └── helper.py      # Helper scripts
  */
-import type { SkillReference, SkillScript, SkillSource } from '@uniedit/shared';
+import type { SkillReference, SkillScript, SkillSource } from '@neko/shared';
 import { useTranslation } from '@/i18n/I18nContext';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 

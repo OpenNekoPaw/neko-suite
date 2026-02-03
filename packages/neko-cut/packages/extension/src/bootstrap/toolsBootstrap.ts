@@ -11,8 +11,8 @@ import {
   builtinToolGroups,
   SearchToolsTool,
   ToolGroupRegistry,
-} from '@uniedit/agent';
-import type { IToolCategoryRegistry } from '@uniedit/shared';
+} from '@neko/agent';
+import type { IToolCategoryRegistry } from '@neko/shared';
 import {
   registerGenerationTools,
   registerAnalysisTools,
@@ -20,7 +20,7 @@ import {
   type AIGenerationService,
   type VisionAnalysisService,
   type DocumentGenerationService,
-} from '@uniedit/platform';
+} from '@neko/platform';
 import * as vscode from 'vscode';
 import { exec, ExecOptions } from 'child_process';
 import { TimelineBridge, registerTimelineTools } from '../tools/timeline-bridge';

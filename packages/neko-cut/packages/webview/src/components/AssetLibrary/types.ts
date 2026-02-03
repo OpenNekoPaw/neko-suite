@@ -4,7 +4,7 @@
  * UI-specific types for the asset library component.
  */
 
-import type { AssetEntity, AssetVariant, EntityCategory, ViewAngle, ExpressionState, ActionState } from '@uniedit/shared';
+import type { AssetEntity, AssetVariant, EntityCategory, ViewAngle, ExpressionState, ActionState } from '@neko/shared';
 
 // =============================================================================
 // View State

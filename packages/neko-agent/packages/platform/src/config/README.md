@@ -150,7 +150,7 @@ interface ConfigSection<T> {
 ### 获取配置
 
 ```typescript
-import { ConfigManager } from '@uniedit/platform';
+import { ConfigManager } from '@neko/platform';
 
 const config = new ConfigManager({ locale: 'zh-cn' });
 

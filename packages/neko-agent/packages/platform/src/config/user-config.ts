@@ -5,20 +5,20 @@
  * 1. VS Code globalState (UserConfigManager) - for VSCode extension
  * 2. File-based storage (FileUserConfigManager) - for CLI and standalone use
  *
- * Uses shared configuration module from @uniedit/shared for unified format.
+ * Uses shared configuration module from @neko/shared for unified format.
  */
 
 import type { Provider, Model } from '../types/provider';
 import type { Group } from '../types/group';
 import type { MCPServerPreset, WorkflowPreset, PromptPreset } from '../types/config';
-import type { UnifiedConfig } from '@uniedit/shared';
+import type { UnifiedConfig } from '@neko/shared';
 // Node.js config reader - direct import
 import {
   readUserConfig as readUserConfigFile,
   writeUserConfig as writeUserConfigFile,
   watchUserConfig as watchUserConfigFile,
   getUserConfigPath,
-} from '@uniedit/shared/config/config-reader.ts';
+} from '@neko/shared/config/config-reader.ts';
 
 /**
  * User configuration structure

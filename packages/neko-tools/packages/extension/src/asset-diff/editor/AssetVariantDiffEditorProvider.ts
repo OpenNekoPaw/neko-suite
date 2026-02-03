@@ -14,7 +14,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { AssetEntity, AssetVariant, VariantComparisonResult } from '@uniedit/shared';
+import type { AssetEntity, AssetVariant, VariantComparisonResult } from '@neko/shared';
 import { AssetVariantDiffMessageHandler } from './AssetVariantDiffMessageHandler';
 
 // Storage key for persisting comparison state

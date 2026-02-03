@@ -4,7 +4,7 @@
  * Handles async media generation tasks with polling and recovery support
  */
 
-import type { TaskInput, TaskOutput, TaskRecoveryInfo, TaskExecutor } from '@uniedit/shared';
+import type { TaskInput, TaskOutput, TaskRecoveryInfo, TaskExecutor } from '@neko/shared';
 import type { Provider, Model } from '../types/provider';
 import type {
   MediaAdapter,

@@ -2,8 +2,8 @@
  * Base Error - Shared error base class
  *
  * All package-specific errors should extend this class.
- * - AgentError extends BaseError (in @uniedit/agent)
- * - PlatformError extends BaseError (in @uniedit/platform)
+ * - AgentError extends BaseError (in @neko/agent)
+ * - PlatformError extends BaseError (in @neko/platform)
  */
 /**
  * Error category for classification

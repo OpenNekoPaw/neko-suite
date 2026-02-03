@@ -49,7 +49,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: [
-      '@uniedit/shared',
+      '@neko/shared',
       'mermaid',
       'd3',
       'd3-array',

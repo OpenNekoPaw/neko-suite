@@ -6,7 +6,7 @@
 
 import type { ToolResult, ToolCategory } from '../../types/tool';
 import type { ExecutionRoutingOptions, ExecutionFallbackTrigger } from '../../types/execution-group';
-import { BuiltinTool } from '@uniedit/shared';
+import { BuiltinTool } from '@neko/shared';
 import { ExecutionGroupManager, isRoutingError } from '../../provider/execution-group-manager';
 import type { AIGenerationService, GenerationRoutingParams, GeneratedMedia } from './types';
 

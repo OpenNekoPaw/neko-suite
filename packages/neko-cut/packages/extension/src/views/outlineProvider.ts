@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { createServiceId } from '../base';
-import type { ProjectData, TimelineTrack, TimelineElement } from '@uniedit/shared';
+import type { ProjectData, TimelineTrack, TimelineElement } from '@neko/shared';
 
 // =============================================================================
 // 服务标识符

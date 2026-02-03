@@ -1,5 +1,5 @@
 {
-  "name": "@uniedit/asset",
+  "name": "@neko/asset",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -13,13 +13,13 @@
     "lint": "eslint src --ext ts"
   },
   "dependencies": {
-    "@uniedit/shared": "workspace:*"
+    "@neko/shared": "workspace:*"
   },
   "peerDependencies": {
-    "@uniedit/platform": "workspace:*"
+    "@neko/platform": "workspace:*"
   },
   "peerDependenciesMeta": {
-    "@uniedit/platform": {
+    "@neko/platform": {
       "optional": true
     }
   },

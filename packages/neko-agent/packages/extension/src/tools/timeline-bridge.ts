@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { Tool, ToolCategory, ToolResult } from '@uniedit/agent';
+import type { Tool, ToolCategory, ToolResult } from '@neko/agent';
 import { TimelineToolExecutor } from '../services/TimelineToolExecutor';
 
 /**

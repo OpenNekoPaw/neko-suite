@@ -4,7 +4,7 @@
 
 ## Context Summary
 
-- **项目**：Neko Creator Suite - VS Code 全能内容创作工作站
+- **项目**：Neko Suite - VS Code 全能内容创作工作站
 - **角色**：虚拟直播，VTuber 动捕
 - **规范**：[README.md](../../README.md)
 
@@ -12,7 +12,7 @@
 
 ## 概述
 
-**Neko Live** 是 Neko Creator Suite 的虚拟制片模块，通过摄像头驱动 3D 虚拟形象，支持面部追踪、动作捕捉、AR 直播等功能。让创作者可以轻松进行 VTuber 直播或虚拟角色录制。
+**Neko Live** 是 Neko Suite 的虚拟制片模块，通过摄像头驱动 3D 虚拟形象，支持面部追踪、动作捕捉、AR 直播等功能。让创作者可以轻松进行 VTuber 直播或虚拟角色录制。
 
 ---
 
@@ -107,7 +107,7 @@
 
 ```
 neko-live (独立)
-    └── @uniedit/shared (类型)
+    └── @neko/shared (类型)
 ```
 
 ---
@@ -117,7 +117,7 @@ neko-live (独立)
 - **追踪**：MediaPipe
 - **协议**：VMC (Virtual Motion Capture)
 - **渲染**：WebGL / Three.js
-- **类型**：@uniedit/shared
+- **类型**：@neko/shared
 
 ---
 

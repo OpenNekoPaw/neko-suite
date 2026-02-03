@@ -8,10 +8,10 @@
  * Implements IMediaRequestProxy interface for drop-in replacement.
  */
 
-import type { MediaInfo, ExtractedSubtitleTrack, CompositeLayerConfig } from '@uniedit/shared';
+import type { MediaInfo, ExtractedSubtitleTrack, CompositeLayerConfig } from '@neko/shared';
 import type { IMediaRequestProxy, MediaRequestOptions } from './MediaRequestProxy';
 import type { LocalMediaProcessor, TimelineVideoInfo } from './LocalMediaProcessor';
-import type { MediaEngineMode } from '@uniedit/shared';
+import type { MediaEngineMode } from '@neko/shared';
 
 // =============================================================================
 // Types

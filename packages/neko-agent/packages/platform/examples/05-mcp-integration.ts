@@ -10,7 +10,7 @@ import {
   createAllMCPTools,
   AgentExecutor,
   ToolRegistry,
-} from '@uniedit/platform';
+} from '@neko/platform';
 
 async function main() {
   const platform = createPlatform();

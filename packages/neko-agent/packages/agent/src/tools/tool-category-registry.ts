@@ -11,8 +11,8 @@ import type {
   CategorizedTool,
   ToolInjectionLayer,
   IToolCategoryRegistry,
-} from '@uniedit/shared';
-import { DEFAULT_TOOL_CATEGORIES, CORE_TOOLS } from '@uniedit/shared';
+} from '@neko/shared';
+import { DEFAULT_TOOL_CATEGORIES, CORE_TOOLS } from '@neko/shared';
 
 /**
  * Tool Category Registry implementation

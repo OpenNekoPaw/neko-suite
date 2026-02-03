@@ -5,8 +5,8 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { CanvasData } from '@uniedit/shared';
-import { DEFAULT_CANVAS_DATA } from '@uniedit/shared';
+import type { CanvasData } from '@neko/shared';
+import { DEFAULT_CANVAS_DATA } from '@neko/shared';
 
 export class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
   public static readonly viewType = 'uniedit.canvasEditor';

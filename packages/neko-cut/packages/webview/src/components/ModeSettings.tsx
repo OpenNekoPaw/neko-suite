@@ -8,7 +8,7 @@
 import { memo, useCallback } from 'react';
 import { useTranslation } from '../i18n/I18nContext';
 import { useEditorStore } from '../stores/editor-store';
-import type { ModePreference } from '@uniedit/shared';
+import type { ModePreference } from '@neko/shared';
 
 interface ModeSettingsProps {
 	className?: string;

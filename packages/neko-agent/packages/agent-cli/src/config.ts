@@ -18,7 +18,7 @@
  * 4. User config (~/.neko/config.json)
  * 5. Default values
  *
- * Uses shared configuration module from @uniedit/shared for unified
+ * Uses shared configuration module from @neko/shared for unified
  * configuration format with platform package.
  */
 
@@ -30,7 +30,7 @@ import {
   migrateLegacyFields,
   mergeConfigs,
   type UnifiedConfig,
-} from '@uniedit/shared';
+} from '@neko/shared';
 // Config reading (Node.js only - direct import)
 import {
   getUserConfigDir,
@@ -43,7 +43,7 @@ import {
   readConfigFile,
   writeUserConfig as writeUserConfigFile,
   writeWorkspaceConfig as writeWorkspaceConfigFile,
-} from '@uniedit/shared/config/config-reader.ts';
+} from '@neko/shared/config/config-reader.ts';
 
 // Re-export path utilities for backward compatibility
 export {

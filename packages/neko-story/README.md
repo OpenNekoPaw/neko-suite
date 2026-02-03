@@ -4,7 +4,7 @@
 
 ## Context Summary
 
-- **项目**：Neko Creator Suite - VS Code 全能内容创作工作站
+- **项目**：Neko Suite - VS Code 全能内容创作工作站
 - **角色**：剧本编辑器，LSP 语言服务支持
 - **规范**：[README.md](../../README.md)
 
@@ -12,7 +12,7 @@
 
 ## 概述
 
-**Neko Story** 是 Neko Creator Suite 的文学创作入口，利用 VS Code 原生编辑器的强大能力，为剧本创作提供语法高亮、智能补全、实时预览等功能。通过「文驱动制片」的理念，让创作者专注于故事本身。
+**Neko Story** 是 Neko Suite 的文学创作入口，利用 VS Code 原生编辑器的强大能力，为剧本创作提供语法高亮、智能补全、实时预览等功能。通过「文驱动制片」的理念，让创作者专注于故事本身。
 
 ---
 
@@ -97,7 +97,7 @@
 
 ```
 neko-story (独立)
-    └── @uniedit/shared (类型)
+    └── @neko/shared (类型)
 ```
 
 ---
@@ -106,7 +106,7 @@ neko-story (独立)
 
 - **语言服务**：LSP (Language Server Protocol)
 - **语法定义**：TextMate Grammar
-- **类型**：@uniedit/shared
+- **类型**：@neko/shared
 
 ---
 

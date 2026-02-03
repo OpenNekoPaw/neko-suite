@@ -7,7 +7,7 @@ import { FileService } from '../../service/FileService';
 import { VariantService } from '../../service/VariantService';
 import { EntityService } from '../../service/EntityService';
 import { InMemoryStorage } from '../../storage/InMemoryStorage';
-import type { AssetEntity, AssetVariant } from '@uniedit/shared';
+import type { AssetEntity, AssetVariant } from '@neko/shared';
 
 describe('FileService', () => {
 	let storage: InMemoryStorage;

@@ -1,5 +1,5 @@
 /**
- * @uniedit/agent-cli - CLI for UniEdit AI Agent
+ * @neko/agent-cli - CLI for UniEdit AI Agent
  *
  * This package provides a command-line interface for running the UniEdit AI Agent
  * standalone, without requiring the VSCode extension.
@@ -12,8 +12,8 @@
  * - Multiple LLM provider support (Anthropic, OpenAI, DeepSeek)
  *
  * Usage:
- *   npx @uniedit/agent-cli run "your prompt"
- *   npx @uniedit/agent-cli interactive
+ *   npx @neko/agent-cli run "your prompt"
+ *   npx @neko/agent-cli interactive
  */
 
 // Types

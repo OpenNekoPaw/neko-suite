@@ -12,7 +12,7 @@
  * - This keeps the initial context small and loads details as needed
  */
 
-import type { Skill, SlashCommand, SkillInjection, ISkillInjector } from '@uniedit/shared';
+import type { Skill, SlashCommand, SkillInjection, ISkillInjector } from '@neko/shared';
 
 /**
  * Skill injector implementation

@@ -1,5 +1,5 @@
 /**
- * @uniedit/asset
+ * @neko/asset
  *
  * Asset management system for UniEdit video editor.
  * Provides structured management of media assets with:

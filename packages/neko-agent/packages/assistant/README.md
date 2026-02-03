@@ -1,4 +1,4 @@
-# @uniedit/assistant
+# @neko/assistant
 
 > UniEdit AI 助手独立 Webview UI，运行在 VSCode 侧边栏 Panel
 
@@ -17,7 +17,7 @@
 | 状态 | `hooks/` 分离式状态管理（conversation/config/ui/resource）|
 | 消息 | `handlers/` 注册表模式处理 Extension 消息 |
 | 视图 | ChatView / SettingsView / TaskListView |
-| 依赖 | `@uniedit/shared` 类型定义 |
+| 依赖 | `@neko/shared` 类型定义 |
 
 **目录结构**：
 ```
@@ -139,8 +139,8 @@ registry.handle(message, context);
 ## 依赖
 
 ```
-@uniedit/assistant
-├── @uniedit/shared      # 共享类型定义
+@neko/assistant
+├── @neko/shared      # 共享类型定义
 ├── react / react-dom    # UI 框架
 ├── tailwindcss          # CSS 框架
 ├── mermaid              # 图表渲染（自定义高对比度主题）

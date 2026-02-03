@@ -13,7 +13,7 @@ export { AssetVariantDiffMessageHandler } from './editor/AssetVariantDiffMessage
 // =============================================================================
 
 import * as vscode from 'vscode';
-import type { AssetEntity, VariantComparisonResult } from '@uniedit/shared';
+import type { AssetEntity, VariantComparisonResult } from '@neko/shared';
 import {
 	AssetVariantDiffEditorProvider,
 	AssetVariantDiffFileSystemProvider,

@@ -22,8 +22,8 @@ import type {
   HookLoadError,
   ConfiguredHook,
   SkillSource,
-} from '@uniedit/shared';
-import { createHook, parseHookEvent } from '@uniedit/shared';
+} from '@neko/shared';
+import { createHook, parseHookEvent } from '@neko/shared';
 
 // =============================================================================
 // Types

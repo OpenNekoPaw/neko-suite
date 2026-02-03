@@ -23,7 +23,7 @@ import {
 	type GitChangeStatus,
 	getMediaType,
 	isSupportedMediaFile,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 const execAsync = promisify(exec);
 

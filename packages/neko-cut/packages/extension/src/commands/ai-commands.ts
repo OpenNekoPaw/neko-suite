@@ -8,8 +8,8 @@ import type {
   AIGenerationService,
   VisionAnalysisService,
   DocumentGenerationService,
-} from '@uniedit/platform';
-import { ToolRegistry } from '@uniedit/agent';
+} from '@neko/platform';
+import { ToolRegistry } from '@neko/agent';
 
 // AI Services (to be set when available)
 let aiGenerationService: AIGenerationService | null = null;

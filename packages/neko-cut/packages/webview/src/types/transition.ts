@@ -2,7 +2,7 @@
  * Transition Types - Transition effect system
  * 转场效果系统类型定义
  *
- * Core types are imported from @uniedit/shared for Single Source of Truth.
+ * Core types are imported from @neko/shared for Single Source of Truth.
  * This file extends with webview-specific utilities (i18n keys, icons, presets).
  */
 
@@ -18,7 +18,7 @@ export type {
   TransitionPlacement,
   ElementTransition,
   EasingType,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 import type {
   TransitionType,
@@ -26,7 +26,7 @@ import type {
   TransitionParams,
   TransitionPlacement,
   EasingType,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Webview-Specific Extensions: i18n Keys

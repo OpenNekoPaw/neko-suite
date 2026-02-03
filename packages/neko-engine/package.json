@@ -1,0 +1,128 @@
+{
+  "name": "neko-engine",
+  "displayName": "Neko Engine",
+  "description": "Sidecar process for heavy computation - FFmpeg encoding, media processing",
+  "version": "0.0.1",
+  "publisher": "neko",
+  "l10n": "./l10n",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neko/creative-suite"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "video",
+    "engine",
+    "media",
+    "ffmpeg",
+    "processing"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "extensionDependencies": [
+    "neko.neko-cut"
+  ],
+  "activationEvents": [
+    "onCommand:neko.engine.start"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "neko.engine.start",
+        "title": "%neko.engine.start.title%",
+        "category": "Neko Engine"
+      },
+      {
+        "command": "neko.engine.stop",
+        "title": "%neko.engine.stop.title%",
+        "category": "Neko Engine"
+      },
+      {
+        "command": "neko.engine.status",
+        "title": "%neko.engine.status.title%",
+        "category": "Neko Engine"
+      },
+      {
+        "command": "neko.engine.openDocs",
+        "title": "Open API Documentation",
+        "category": "Neko Engine"
+      }
+    ],
+    "configuration": {
+      "title": "Neko Engine",
+      "properties": {
+        "neko.engine.ws.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable WebSocket server"
+        },
+        "neko.engine.ws.port": {
+          "type": "number",
+          "default": 9528,
+          "description": "WebSocket server port"
+        },
+        "neko.engine.http.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable HTTP API server"
+        },
+        "neko.engine.http.port": {
+          "type": "number",
+          "default": 9527,
+          "description": "HTTP API server port"
+        },
+        "neko.engine.http.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "HTTP API server host (127.0.0.1 for local only)"
+        },
+        "neko.engine.auth.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable API authentication"
+        },
+        "neko.engine.auth.token": {
+          "type": "string",
+          "default": "",
+          "description": "API authentication token"
+        },
+        "neko.engine.headless.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable headless webview for tool execution without open editor"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "npm run compile -- --watch",
+    "lint": "eslint src --ext ts,tsx",
+    "test": "vitest",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.10",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@neko/shared": "workspace:*",
+    "esbuild": "^0.19.8",
+    "eslint": "^8.55.0",
+    "typescript": "^5.3.2",
+    "vitest": "^1.0.4"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}

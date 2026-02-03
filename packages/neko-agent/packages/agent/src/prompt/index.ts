@@ -42,7 +42,7 @@ export {
   type BuiltinPromptKey,
 } from './builtin-prompts';
 
-// Re-export types from @uniedit/shared for convenience
+// Re-export types from @neko/shared for convenience
 export type {
   Prompt,
   PromptVariable,
@@ -51,4 +51,4 @@ export type {
   IPromptManager,
   ChainPrompt,
   ChainPromptStep,
-} from '@uniedit/shared';
+} from '@neko/shared';

@@ -3,20 +3,20 @@
  * Loads configuration from .neko/config.json
  *
  * This is shared with agent-cli for unified configuration.
- * Uses shared configuration module from @uniedit/shared.
+ * Uses shared configuration module from @neko/shared.
  */
 
 import type { Provider, Model } from '../types/provider';
 import type { Group } from '../types/group';
 import type { MCPServerPreset, WorkflowPreset, PromptPreset, TemplatePreset } from '../types/config';
-import type { UnifiedConfig } from '@uniedit/shared';
+import type { UnifiedConfig } from '@neko/shared';
 // Node.js config reader - direct import
 import {
   readWorkspaceConfig as readWorkspaceConfigFile,
   writeWorkspaceConfig as writeWorkspaceConfigFile,
   watchWorkspaceConfig as watchWorkspaceConfigFile,
   getWorkspaceConfigPath,
-} from '@uniedit/shared/config/config-reader.ts';
+} from '@neko/shared/config/config-reader.ts';
 
 /**
  * Workspace configuration structure

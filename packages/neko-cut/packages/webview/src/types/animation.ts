@@ -2,7 +2,7 @@
  * Animation Types - Keyframe animation system
  * 关键帧动画系统类型定义
  *
- * Core types are imported from @uniedit/shared for Single Source of Truth.
+ * Core types are imported from @neko/shared for Single Source of Truth.
  * This file extends with webview-specific utilities (i18n keys, factory functions).
  */
 
@@ -18,18 +18,18 @@ export type {
   AnimatablePropertyName,
   ElementTransform,
   ComputedTransform,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 export {
   createAnimatableProperty,
   createDefaultElementTransform,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 import type {
   EasingType,
   AnimatablePropertyName,
   AnimationKeyframe,
-} from '@uniedit/shared';
+} from '@neko/shared';
 
 // =============================================================================
 // Webview-Specific Extensions: i18n Keys

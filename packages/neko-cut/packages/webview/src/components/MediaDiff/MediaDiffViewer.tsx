@@ -4,7 +4,7 @@
  */
 
 import { memo, useState, useCallback } from 'react';
-import type { DiffViewMode } from '@uniedit/shared';
+import type { DiffViewMode } from '@neko/shared';
 import type { MediaDiffViewerProps } from './types';
 import { DiffControls } from './DiffControls';
 import { ImageDiffViewer } from './ImageDiffViewer';

@@ -18,7 +18,7 @@ import {
 	type FileVersionPair,
 	getMediaType,
 	DEFAULT_DIFF_TIMEOUT,
-} from '@uniedit/shared';
+} from '@neko/shared';
 import { GitMediaService, type IGitMediaService } from './GitMediaService';
 import {
 	AnalyzerRegistry,

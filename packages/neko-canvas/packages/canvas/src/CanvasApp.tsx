@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import type { CanvasData, CanvasViewport } from '@uniedit/shared';
+import type { CanvasData, CanvasViewport } from '@neko/shared';
 import { useCanvasStore } from './stores/canvasStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
