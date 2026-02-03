@@ -86,7 +86,7 @@ export class FFmpegService {
 	private isInitialized = false;
 
 	constructor() {
-		this.tempDir = path.join(os.tmpdir(), 'uniedit-media-cache');
+		this.tempDir = path.join(os.tmpdir(), 'neko-media-cache');
 	}
 
 	/**

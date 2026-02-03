@@ -10,7 +10,7 @@ All notable changes to `@neko/platform` will be documented in this file.
 - Three-tier configuration system (builtin < user < workspace)
 - `ConfigManager` with automatic config merging
 - `UserConfigManager` for VS Code globalState integration
-- Workspace config loader (`.uniedit/config.json`)
+- Workspace config loader (`.neko/config.json`)
 - Builtin presets for providers, models, and groups
 
 #### Adapter Layer

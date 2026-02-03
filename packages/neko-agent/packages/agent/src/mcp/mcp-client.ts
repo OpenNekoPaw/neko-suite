@@ -229,7 +229,7 @@ export class StdioMCPClient extends BaseMCPClient {
       await this.sendRequest('initialize', {
         protocolVersion: '2024-11-05',
         capabilities: {},
-        clientInfo: { name: 'uniedit-agent', version: '1.0.0' },
+        clientInfo: { name: 'neko-agent', version: '1.0.0' },
       });
 
       // Send initialized notification
@@ -355,7 +355,7 @@ export class HttpMCPClient extends BaseMCPClient {
       const result = (await this.sendRequest('initialize', {
         protocolVersion: '2024-11-05',
         capabilities: {},
-        clientInfo: { name: 'uniedit-agent', version: '1.0.0' },
+        clientInfo: { name: 'neko-agent', version: '1.0.0' },
       })) as { sessionId?: string };
 
       this.sessionId = result.sessionId || null;

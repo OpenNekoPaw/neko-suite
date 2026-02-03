@@ -4,7 +4,7 @@ GPU effect runtime for video editing. Provides zero-copy texture processing with
 
 ## Context Summary
 
-- **Project**: UniEdit - VSCode 视频编辑器
+- **Project**: Neko Suite - VSCode 视频编辑器
 - **Architecture**: IEffectRunner 接口 + WebGPU/WebGL/wgpu 实现
 - **Design**: Zero-copy 纹理传递，与 GPURenderEngine 集成
 - **Spec**: [CLAUDE.md](../../CLAUDE.md)

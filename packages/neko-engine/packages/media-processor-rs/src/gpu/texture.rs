@@ -408,7 +408,7 @@ impl SharedTextureBuffer {
     /// Create a new shared texture buffer
     pub fn new(width: u32, height: u32, format: TextureFormat) -> Self {
         let size = (width * height * format.bytes_per_pixel()) as usize;
-        let key = format!("vedit_texture_{}_{}", std::process::id(), uuid_simple());
+        let key = format!("neko_texture_{}_{}", std::process::id(), uuid_simple());
 
         Self {
             data: vec![0u8; size],

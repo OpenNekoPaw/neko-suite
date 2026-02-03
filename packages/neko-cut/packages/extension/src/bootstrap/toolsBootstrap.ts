@@ -144,8 +144,8 @@ export function registerBuiltinTools(
         }
 
         // Log command execution
-        console.log(`[UniEdit] Executing shell command: ${command}`);
-        console.log(`[UniEdit] Working directory: ${cwd}`);
+        console.log(`[Neko Suite] Executing shell command: ${command}`);
+        console.log(`[Neko Suite] Working directory: ${cwd}`);
 
         return new Promise((resolve) => {
           const execOptions: ExecOptions = {
@@ -174,7 +174,7 @@ export function registerBuiltinTools(
 
             if (error) {
               // Command failed
-              console.error(`[UniEdit] Shell command failed:`, error.message);
+              console.error(`[Neko Suite] Shell command failed:`, error.message);
               resolve({
                 success: false,
                 error: error.message,
@@ -188,7 +188,7 @@ export function registerBuiltinTools(
               });
             } else {
               // Command succeeded
-              console.log(`[UniEdit] Shell command completed successfully`);
+              console.log(`[Neko Suite] Shell command completed successfully`);
               resolve({
                 success: true,
                 data: {
@@ -582,7 +582,7 @@ export function registerBuiltinTools(
           const encoder = new TextEncoder();
           await vscode.workspace.fs.writeFile(uri, encoder.encode(content));
 
-          console.log(`[UniEdit] Wrote file: ${fullPath}`);
+          console.log(`[Neko Suite] Wrote file: ${fullPath}`);
           return {
             success: true,
             data: {
@@ -668,7 +668,7 @@ export function registerBuiltinTools(
           const encoder = new TextEncoder();
           await vscode.workspace.fs.writeFile(uri, encoder.encode(lines.join('\n')));
 
-          console.log(`[UniEdit] Edited file: ${fullPath} (lines ${startLine}-${actualEndLine})`);
+          console.log(`[Neko Suite] Edited file: ${fullPath} (lines ${startLine}-${actualEndLine})`);
           return {
             success: true,
             data: {
@@ -730,7 +730,7 @@ export function registerBuiltinTools(
             return fullPath;
           });
 
-          console.log(`[UniEdit] Found ${results.length} files matching: ${pattern}`);
+          console.log(`[Neko Suite] Found ${results.length} files matching: ${pattern}`);
           return {
             success: true,
             data: {
@@ -944,7 +944,7 @@ export function registerBuiltinTools(
           const uri = vscode.Uri.file(fullPath);
           await vscode.workspace.fs.createDirectory(uri);
 
-          console.log(`[UniEdit] Created directory: ${fullPath}`);
+          console.log(`[Neko Suite] Created directory: ${fullPath}`);
           return {
             success: true,
             data: { path: fullPath },
@@ -997,7 +997,7 @@ export function registerBuiltinTools(
           const uri = vscode.Uri.file(fullPath);
           await vscode.workspace.fs.delete(uri, { recursive });
 
-          console.log(`[UniEdit] Deleted: ${fullPath}`);
+          console.log(`[Neko Suite] Deleted: ${fullPath}`);
           return {
             success: true,
             data: { path: fullPath, recursive },
@@ -1048,7 +1048,7 @@ export function registerBuiltinTools(
           const html = await new Promise<string>((resolve, reject) => {
             const req = https.get(searchUrl, {
               headers: {
-                'User-Agent': 'Mozilla/5.0 (compatible; UniEdit/1.0)',
+                'User-Agent': 'Mozilla/5.0 (compatible; Neko Suite/1.0)',
               },
             }, (res) => {
               let data = '';
@@ -1102,7 +1102,7 @@ export function registerBuiltinTools(
             };
           }
 
-          console.log(`[UniEdit] Web search: ${query} - found ${results.length} results`);
+          console.log(`[Neko Suite] Web search: ${query} - found ${results.length} results`);
           return {
             success: true,
             data: {
@@ -1216,7 +1216,7 @@ export function registerBuiltinTools(
           const encoder = new TextEncoder();
           await vscode.workspace.fs.writeFile(archivePath, encoder.encode(archiveContent));
 
-          console.log(`[UniEdit] Plan archived to: ${archivePath.fsPath}`);
+          console.log(`[Neko Suite] Plan archived to: ${archivePath.fsPath}`);
 
           return {
             success: true,
@@ -1265,7 +1265,7 @@ export function registerBuiltinTools(
     toolRegistry.register(searchTool);
     categoryRegistry.categorizeTool(searchTool.name, 'system', 'core');
   } else {
-    console.warn('[UniEdit] categoryRegistry is undefined, SearchToolsTool not registered');
+    console.warn('[Neko Suite] categoryRegistry is undefined, SearchToolsTool not registered');
   }
 
   // Register timeline bridge tools (execute in Webview via WebCodecs/WebGPU)

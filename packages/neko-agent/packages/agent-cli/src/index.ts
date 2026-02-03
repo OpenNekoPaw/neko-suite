@@ -1,7 +1,7 @@
 /**
- * @neko/agent-cli - CLI for UniEdit AI Agent
+ * @neko/agent-cli - CLI for Neko Suite AI Agent
  *
- * This package provides a command-line interface for running the UniEdit AI Agent
+ * This package provides a command-line interface for running the Neko Suite AI Agent
  * standalone, without requiring the VSCode extension.
  *
  * Features:

@@ -34,9 +34,9 @@ commands/
 
 | 命令 | 用途 |
 |------|------|
-| `uniedit.newProject` | 新建项目 |
-| `uniedit.addToTimeline` | 添加媒体到时间线 |
-| `uniedit.openInEditor` | 在编辑器中打开 |
-| `uniedit.openAIAssistant` | 打开 AI 助手 |
-| `uniedit.selectElement` | 选择元素 |
-| `uniedit.showExportPanel` | 显示导出面板 |
+| `neko.newProject` | 新建项目 |
+| `neko.addToTimeline` | 添加媒体到时间线 |
+| `neko.openInEditor` | 在编辑器中打开 |
+| `neko.openAIAssistant` | 打开 AI 助手 |
+| `neko.selectElement` | 选择元素 |
+| `neko.showExportPanel` | 显示导出面板 |

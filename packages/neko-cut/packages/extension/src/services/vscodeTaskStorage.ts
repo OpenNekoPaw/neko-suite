@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import type { ITaskStorage, SerializableTask } from '@neko/platform';
 
-const STORAGE_KEY = 'uniedit.tasks';
+const STORAGE_KEY = 'neko.tasks';
 
 /**
  * VSCode GlobalState based task storage

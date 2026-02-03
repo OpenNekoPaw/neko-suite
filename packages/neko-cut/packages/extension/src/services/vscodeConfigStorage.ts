@@ -37,7 +37,7 @@ export function createConfigWatcher(
   onConfigChange: () => void
 ): vscode.Disposable {
   return vscode.workspace.onDidChangeConfiguration((e) => {
-    if (e.affectsConfiguration('uniedit')) {
+    if (e.affectsConfiguration('neko')) {
       onConfigChange();
     }
   });
@@ -45,7 +45,7 @@ export function createConfigWatcher(
 
 /**
  * Migrate from legacy configuration format
- * This handles migration from the old uniedit.providers format to the new platform config
+ * This handles migration from the old neko.providers format to the new platform config
  */
 export async function migrateFromLegacyConfig(
   context: vscode.ExtensionContext
@@ -57,11 +57,11 @@ export async function migrateFromLegacyConfig(
   await fixPromptsEnabled(context);
 
   // Debug: Log all relevant globalState keys
-  const debugLegacyProviders = context.globalState.get<Record<string, unknown>>('uniedit.providers');
+  const debugLegacyProviders = context.globalState.get<Record<string, unknown>>('neko.providers');
   const debugUserConfig = context.globalState.get<{
     providerOverrides?: Record<string, unknown>;
-  }>('uniedit.platform.userConfig');
-  const migrationDone = context.globalState.get<boolean>('uniedit.platform.migrationDone');
+  }>('neko.platform.userConfig');
+  const migrationDone = context.globalState.get<boolean>('neko.platform.migrationDone');
 
   // Force re-migration if providerOverrides is empty but legacy data exists
   if (debugLegacyProviders && Object.keys(debugLegacyProviders).length > 0) {
@@ -69,12 +69,12 @@ export async function migrateFromLegacyConfig(
       Object.values(debugUserConfig.providerOverrides).some((o: any) => o?.apiKey);
 
     if (!hasValidOverrides) {
-      await context.globalState.update('uniedit.platform.migrationDone', false);
+      await context.globalState.update('neko.platform.migrationDone', false);
     }
   }
 
   // Check if migration already done
-  const migrationKey = 'uniedit.platform.migrationDone';
+  const migrationKey = 'neko.platform.migrationDone';
   // Re-read after potential reset
   const shouldSkipMigration = context.globalState.get<boolean>(migrationKey);
   if (shouldSkipMigration) {
@@ -87,7 +87,7 @@ export async function migrateFromLegacyConfig(
     apiKey?: string;
     baseUrl?: string;
     model?: string;
-  }>>('uniedit.providers', {});
+  }>>('neko.providers', {});
 
   if (Object.keys(legacyProviders).length > 0) {
     // Build provider overrides from legacy config
@@ -107,14 +107,14 @@ export async function migrateFromLegacyConfig(
     // Save to new location
     const existingUserConfig = context.globalState.get<{
       providerOverrides?: Record<string, unknown>;
-    }>('uniedit.platform.userConfig', {});
+    }>('neko.platform.userConfig', {});
 
     existingUserConfig.providerOverrides = {
       ...existingUserConfig.providerOverrides,
       ...providerOverrides,
     };
 
-    await context.globalState.update('uniedit.platform.userConfig', existingUserConfig);
+    await context.globalState.update('neko.platform.userConfig', existingUserConfig);
   }
 
   // Mark migration as done
@@ -126,14 +126,14 @@ export async function migrateFromLegacyConfig(
  */
 async function fixBaseUrlToApiUrl(context: vscode.ExtensionContext): Promise<void> {
   // Use versioned key to allow re-running fix when needed
-  const fixKey = 'uniedit.platform.baseUrlFixDone.v2';
+  const fixKey = 'neko.platform.baseUrlFixDone.v2';
   if (context.globalState.get<boolean>(fixKey)) {
     return;
   }
 
   const userConfig = context.globalState.get<{
     providerOverrides?: Record<string, { apiKey?: string; baseUrl?: string; apiUrl?: string }>;
-  }>('uniedit.platform.userConfig');
+  }>('neko.platform.userConfig');
 
   if (userConfig?.providerOverrides) {
     let needsUpdate = false;
@@ -157,7 +157,7 @@ async function fixBaseUrlToApiUrl(context: vscode.ExtensionContext): Promise<voi
 
     if (needsUpdate) {
       userConfig.providerOverrides = fixedOverrides;
-      await context.globalState.update('uniedit.platform.userConfig', userConfig);
+      await context.globalState.update('neko.platform.userConfig', userConfig);
     }
   }
 
@@ -169,7 +169,7 @@ async function fixBaseUrlToApiUrl(context: vscode.ExtensionContext): Promise<voi
  * Remove builtin prompts from user config to let builtin defaults take effect
  */
 async function fixPromptsEnabled(context: vscode.ExtensionContext): Promise<void> {
-  const fixKey = 'uniedit.platform.promptsEnabledFix.v1';
+  const fixKey = 'neko.platform.promptsEnabledFix.v1';
   if (context.globalState.get<boolean>(fixKey)) {
     return;
   }
@@ -180,7 +180,7 @@ async function fixPromptsEnabled(context: vscode.ExtensionContext): Promise<void
   const userConfig = context.globalState.get<{
     prompts?: Array<{ id: string; enabled?: boolean; [key: string]: unknown }>;
     promptOverrides?: Record<string, { enabled?: boolean; [key: string]: unknown }>;
-  }>('uniedit.platform.userConfig');
+  }>('neko.platform.userConfig');
 
   if (userConfig) {
     let needsUpdate = false;
@@ -205,7 +205,7 @@ async function fixPromptsEnabled(context: vscode.ExtensionContext): Promise<void
     }
 
     if (needsUpdate) {
-      await context.globalState.update('uniedit.platform.userConfig', userConfig);
+      await context.globalState.update('neko.platform.userConfig', userConfig);
     }
   }
 

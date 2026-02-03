@@ -1,10 +1,10 @@
 # @neko/agent-cli
 
-> UniEdit AI Agent 命令行工具 - 独立运行 AI Agent
+> Neko Suite AI Agent 命令行工具 - 独立运行 AI Agent
 
 ## Context Summary
 
-- 项目：UniEdit - VSCode 视频编辑器
+- 项目：Neko Suite - VSCode 视频编辑器
 - 定位：提供命令行方式运行 AI Agent，无需 VSCode 环境
 - 规范：[CLAUDE.md](../../CLAUDE.md)
 

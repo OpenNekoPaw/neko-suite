@@ -1,7 +1,7 @@
 /**
  * HTTP Server - REST API for external tools
  *
- * Provides HTTP endpoints for Python/Shell scripts to call UniEdit tools.
+ * Provides HTTP endpoints for Python/Shell scripts to call Neko Suite tools.
  * Binds to localhost only for security.
  */
 
@@ -58,7 +58,7 @@ export interface WebviewStatusChecker {
 }
 
 /**
- * UniEdit HTTP Server
+ * Neko Suite HTTP Server
  *
  * REST API endpoints:
  * - GET  /api/v1/health              - Health check
@@ -69,7 +69,7 @@ export interface WebviewStatusChecker {
  * - POST /api/v1/project/load        - Load project file
  * - POST /api/v1/project/create      - Create empty project
  */
-export class UniEditHttpServer {
+export class Neko SuiteHttpServer {
   private server: http.Server | null = null;
   private toolRegistry: ToolRegistry;
   private config: HttpServerConfig;
@@ -132,7 +132,7 @@ export class UniEditHttpServer {
   private async tryStartOnPort(port: number): Promise<void> {
     this.server = http.createServer((req, res) => {
       this.handleRequest(req, res).catch((error) => {
-        console.error('[UniEdit HTTP] Request error:', error);
+        console.error('[Neko Suite HTTP] Request error:', error);
         this.sendError(res, 500, 'Internal server error', 'INTERNAL_ERROR');
       });
     });
@@ -247,7 +247,7 @@ export class UniEditHttpServer {
         this.sendError(res, 404, `Endpoint not found: ${method} ${path}`, 'NOT_FOUND');
       }
     } catch (error) {
-      console.error('[UniEdit HTTP] Handler error:', error);
+      console.error('[Neko Suite HTTP] Handler error:', error);
       this.sendError(res, 500, String(error), 'HANDLER_ERROR');
     }
   }

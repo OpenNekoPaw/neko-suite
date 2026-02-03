@@ -1,7 +1,7 @@
 /**
  * Builtin Skills and Slash Commands - Creative Media Domain
  *
- * UniEdit focuses on creative content creation, so builtin skills are
+ * Neko Suite focuses on creative content creation, so builtin skills are
  * limited to media generation, video editing, and content creation tasks.
  *
  * Key distinction:

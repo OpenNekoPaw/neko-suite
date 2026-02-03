@@ -51,7 +51,7 @@ export const zhCN: Translations = {
     defaultAgent: '默认',
     noProvidersConfigured: '未配置服务商。请前往设置添加服务商。',
     emptyState: {
-      title: 'UniEdit AI 助手',
+      title: 'Neko Suite AI 助手',
       description: '问我任何关于视频编辑、时间轴管理或项目组织的问题。',
       disclaimer: 'AI 回复可能不准确。',
     },

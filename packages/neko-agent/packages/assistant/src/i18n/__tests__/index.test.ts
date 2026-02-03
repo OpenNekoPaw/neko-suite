@@ -25,7 +25,7 @@ describe('i18n module', () => {
 
     it('should return translation for nested key path', () => {
       setLocale('en');
-      expect(t('chat.emptyState.title')).toBe('UniEdit AI Assistant');
+      expect(t('chat.emptyState.title')).toBe('Neko Suite AI Assistant');
     });
 
     it('should return keyPath when key is not found', () => {

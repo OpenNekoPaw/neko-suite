@@ -1,5 +1,5 @@
 /**
- * UniEdit Platform - AI Service Platform
+ * Neko Suite Platform - AI Service Platform
  *
  * A unified AI service layer providing:
  * - Multi-provider support (OpenAI, Anthropic, Google, Azure, Ollama)
@@ -408,7 +408,7 @@ import { LLMRoutingManager } from './llm/routing/llm-routing-manager';
 export interface PlatformOptions {
   /** User config storage (VS Code globalState) */
   userConfigStorage?: UserConfigStorage;
-  /** Workspace path for .uniedit/config.json */
+  /** Workspace path for .neko/config.json */
   workspacePath?: string;
   /** Default group ID for routing */
   defaultGroupId?: string;

@@ -66,7 +66,7 @@ export function initializeAssetDiff(
 	// Register command for comparing two variants
 	context.subscriptions.push(
 		vscode.commands.registerCommand(
-			'uniedit.assetDiff.compareVariants',
+			'neko.assetDiff.compareVariants',
 			async (entityId: string, variantIdA: string, variantIdB: string) => {
 				// Create the comparison URI
 				const uri = AssetVariantDiffEditorProvider.createCompareUri(

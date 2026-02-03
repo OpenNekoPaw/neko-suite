@@ -722,7 +722,7 @@ export class MessageHandler {
                   try {
                     return webview.asWebviewUri(vscode.Uri.file(filePath)).toString();
                   } catch {
-                    console.warn('[UniEdit] Failed to convert path to webview URI:', filePath);
+                    console.warn('[Neko Suite] Failed to convert path to webview URI:', filePath);
                     return filePath;
                   }
                 };
@@ -938,13 +938,13 @@ export class MessageHandler {
       // Log any errors
       if (result.errors.length > 0) {
         for (const error of result.errors) {
-          console.warn(`[UniEdit] Could not read file: ${error.reference}`, error.error);
+          console.warn(`[Neko Suite] Could not read file: ${error.reference}`, error.error);
         }
       }
 
       return { message: messageText, fileContents };
     } catch (error) {
-      console.error('[UniEdit] InputProcessor error:', error);
+      console.error('[Neko Suite] InputProcessor error:', error);
       // Fallback to empty on error
       return { message: messageText, fileContents: [] };
     }
@@ -998,12 +998,12 @@ export class MessageHandler {
       // Get workspace folder
       const workspaceFolders = vscode.workspace.workspaceFolders;
       if (!workspaceFolders || workspaceFolders.length === 0) {
-        console.warn('[UniEdit] No workspace folder, cannot save outputs locally');
+        console.warn('[Neko Suite] No workspace folder, cannot save outputs locally');
         return savedPaths;
       }
 
       const workspaceRoot = workspaceFolders[0].uri.fsPath;
-      const outputDir = path.join(workspaceRoot, '.uniedit', 'generated');
+      const outputDir = path.join(workspaceRoot, '.neko', 'generated');
 
       // Create output directory if not exists
       await fs.promises.mkdir(outputDir, { recursive: true });
@@ -1033,7 +1033,7 @@ export class MessageHandler {
         try {
           const response = await fetch(output.url);
           if (!response.ok) {
-            console.error('[UniEdit] Download failed:', response.status, response.statusText);
+            console.error('[Neko Suite] Download failed:', response.status, response.statusText);
             continue;
           }
 
@@ -1041,13 +1041,13 @@ export class MessageHandler {
           await fs.promises.writeFile(localPath, buffer);
           savedPaths.push(localPath);
         } catch (downloadError) {
-          console.error('[UniEdit] Failed to download/save output:', downloadError);
+          console.error('[Neko Suite] Failed to download/save output:', downloadError);
           // Keep original URL as fallback
           savedPaths.push(output.url);
         }
       }
     } catch (error) {
-      console.error('[UniEdit] Failed to save outputs locally:', error);
+      console.error('[Neko Suite] Failed to save outputs locally:', error);
     }
 
     return savedPaths;
@@ -1146,7 +1146,7 @@ export class MessageHandler {
         this._conversations.manager.updateMessages(conversationId, updatedMessages);
       }
     } catch (error) {
-      console.error('[UniEdit] Failed to update tool result with URLs:', error);
+      console.error('[Neko Suite] Failed to update tool result with URLs:', error);
     }
   }
 }

@@ -1,7 +1,7 @@
 /**
  * @neko/asset
  *
- * Asset management system for UniEdit video editor.
+ * Asset management system for Neko Suite video editor.
  * Provides structured management of media assets with:
  * - Entity-Variant-File hierarchy
  * - AI-powered classification

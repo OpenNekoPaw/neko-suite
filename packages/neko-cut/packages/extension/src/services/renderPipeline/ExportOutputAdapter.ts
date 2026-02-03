@@ -123,7 +123,7 @@ export class ExportOutputAdapter implements IExportOutputAdapter {
 
 		// Create temp directory
 		const jobId = `export-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-		this._tempDir = path.join(os.tmpdir(), `uniedit-export-${jobId}`);
+		this._tempDir = path.join(os.tmpdir(), `neko-export-${jobId}`);
 		fs.mkdirSync(this._tempDir, { recursive: true });
 		this._tempVideoPath = path.join(this._tempDir, 'video_only.mp4');
 

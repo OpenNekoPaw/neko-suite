@@ -30,51 +30,51 @@ export function registerCommands(
 ): void {
   // Command: New Video Project
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.newProject', async (uri: vscode.Uri) => {
+    vscode.commands.registerCommand('neko.newProject', async (uri: vscode.Uri) => {
       await createNewProject(uri);
     })
   );
 
   // Command: New Canvas
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.canvas.new', async (uri: vscode.Uri) => {
+    vscode.commands.registerCommand('neko.canvas.new', async (uri: vscode.Uri) => {
       await createNewCanvas(uri);
     })
   );
 
   // Command: Add to Timeline
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.addToTimeline', async (uri: vscode.Uri) => {
+    vscode.commands.registerCommand('neko.addToTimeline', async (uri: vscode.Uri) => {
       await addToTimeline(uri, videoEditorProvider);
     })
   );
 
   // Command: Add to Asset Library
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.addToAssetLibrary', async (uri: vscode.Uri, uris?: vscode.Uri[]) => {
+    vscode.commands.registerCommand('neko.addToAssetLibrary', async (uri: vscode.Uri, uris?: vscode.Uri[]) => {
       await addToAssetLibrary(uri, uris, assetLibraryProvider);
     })
   );
 
   // Command: Open in Video Editor
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.openInEditor', async (uri: vscode.Uri) => {
+    vscode.commands.registerCommand('neko.openInEditor', async (uri: vscode.Uri) => {
       await openInEditor(uri);
     })
   );
 
   // Command: Open AI Assistant in secondary sidebar
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.openAIAssistant', async () => {
+    vscode.commands.registerCommand('neko.openAIAssistant', async () => {
       // Focus the AI Assistant view and move it to secondary sidebar
-      await vscode.commands.executeCommand('uniedit.aiAssistant.focus');
-      await vscode.commands.executeCommand('workbench.action.moveViewToSecondarySidebar', 'uniedit.aiAssistant');
+      await vscode.commands.executeCommand('neko.aiAssistant.focus');
+      await vscode.commands.executeCommand('workbench.action.moveViewToSecondarySidebar', 'neko.aiAssistant');
     })
   );
 
   // Command: Select element from outline (internal)
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.selectElement', async (trackId: string, elementId: string) => {
+    vscode.commands.registerCommand('neko.selectElement', async (trackId: string, elementId: string) => {
       // Get the active webview and send a message to select the element
       const webview = videoEditorProvider.getActiveWebview();
 
@@ -96,7 +96,7 @@ export function registerCommands(
 
   // Command: Show Export Panel (triggered from status bar)
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.showExportPanel', async () => {
+    vscode.commands.registerCommand('neko.showExportPanel', async () => {
       const webview = videoEditorProvider.getActiveWebview();
 
       if (!webview) {
@@ -181,7 +181,7 @@ async function createNewProject(folderUri: vscode.Uri): Promise<void> {
   await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
 
   // Open the file in the video editor
-  await vscode.commands.executeCommand('vscode.openWith', fileUri, 'uniedit.videoEditor');
+  await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.videoEditor');
 
   vscode.window.showInformationMessage(vscode.l10n.t('project.success.created', { filename: fileName }));
 }
@@ -236,7 +236,7 @@ async function createNewCanvas(folderUri: vscode.Uri): Promise<void> {
   await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
 
   // Open the file in the canvas editor
-  await vscode.commands.executeCommand('vscode.openWith', fileUri, 'uniedit.canvasEditor');
+  await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.canvasEditor');
 
   vscode.window.showInformationMessage(`Canvas "${fileName}" created successfully`);
 }
@@ -289,7 +289,7 @@ async function addToTimeline(fileUri: vscode.Uri, editorProvider: VideoEditorPro
  * Open a .jvi file in the video editor
  */
 async function openInEditor(fileUri: vscode.Uri): Promise<void> {
-  await vscode.commands.executeCommand('vscode.openWith', fileUri, 'uniedit.videoEditor');
+  await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.videoEditor');
 }
 
 /**

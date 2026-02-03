@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { UniEditHttpServer } from '../http-server';
+import { Neko SuiteHttpServer } from '../http-server';
 import type { ToolRegistry, Tool, ToolResult } from '@neko/agent';
 
 // Mock ToolRegistry
@@ -84,14 +84,14 @@ async function httpRequest(
   return { status: response.status, data };
 }
 
-describe('UniEditHttpServer', () => {
-  let server: UniEditHttpServer;
+describe('Neko SuiteHttpServer', () => {
+  let server: Neko SuiteHttpServer;
   let toolRegistry: ToolRegistry;
   const testPort = 19527; // Use different port for tests
 
   beforeEach(() => {
     toolRegistry = createMockToolRegistry();
-    server = new UniEditHttpServer(toolRegistry, {
+    server = new Neko SuiteHttpServer(toolRegistry, {
       port: testPort,
       host: '127.0.0.1',
     });

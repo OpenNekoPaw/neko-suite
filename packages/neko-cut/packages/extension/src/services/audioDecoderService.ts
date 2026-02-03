@@ -74,7 +74,7 @@ export class AudioDecoderService {
 
 	constructor() {
 		// 创建缓存目录
-		this._cacheDir = path.join(os.tmpdir(), 'uniedit-audio-cache');
+		this._cacheDir = path.join(os.tmpdir(), 'neko-audio-cache');
 		if (!fs.existsSync(this._cacheDir)) {
 			fs.mkdirSync(this._cacheDir, { recursive: true });
 		}

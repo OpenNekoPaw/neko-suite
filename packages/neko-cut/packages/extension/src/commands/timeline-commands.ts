@@ -18,7 +18,7 @@ export function registerTimelineCommands(
 
   // Timeline Info Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.timeline.getInfo', async () => {
+    vscode.commands.registerCommand('neko.timeline.getInfo', async () => {
       const webview = videoEditorProvider.getActiveWebview();
       if (!webview) {
         vscode.window.showWarningMessage('No video project is open.');
@@ -31,7 +31,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.timeline.listElements', async (trackType?: string) => {
+    vscode.commands.registerCommand('neko.timeline.listElements', async (trackType?: string) => {
       const webview = videoEditorProvider.getActiveWebview();
       if (!webview) {
         vscode.window.showWarningMessage('No video project is open.');
@@ -45,7 +45,7 @@ export function registerTimelineCommands(
 
   // Element Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.element.add', async (params: {
+    vscode.commands.registerCommand('neko.element.add', async (params: {
       type: string;
       trackId?: string;
       startTime?: number;
@@ -64,7 +64,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.element.update', async (params: {
+    vscode.commands.registerCommand('neko.element.update', async (params: {
       elementId: string;
       properties: Record<string, unknown>;
     }) => {
@@ -80,7 +80,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.element.delete', async (elementId: string) => {
+    vscode.commands.registerCommand('neko.element.delete', async (elementId: string) => {
       const webview = videoEditorProvider.getActiveWebview();
       if (!webview) {
         vscode.window.showWarningMessage('No video project is open.');
@@ -93,7 +93,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.element.getInfo', async (elementId: string) => {
+    vscode.commands.registerCommand('neko.element.getInfo', async (elementId: string) => {
       const webview = videoEditorProvider.getActiveWebview();
       if (!webview) {
         vscode.window.showWarningMessage('No video project is open.');
@@ -107,7 +107,7 @@ export function registerTimelineCommands(
 
   // Track Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.track.add', async (params: {
+    vscode.commands.registerCommand('neko.track.add', async (params: {
       type: string;
       name?: string;
       index?: number;
@@ -124,7 +124,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.track.delete', async (trackId: string) => {
+    vscode.commands.registerCommand('neko.track.delete', async (trackId: string) => {
       const webview = videoEditorProvider.getActiveWebview();
       if (!webview) {
         vscode.window.showWarningMessage('No video project is open.');
@@ -137,7 +137,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.track.reorder', async (params: {
+    vscode.commands.registerCommand('neko.track.reorder', async (params: {
       trackId: string;
       newIndex: number;
     }) => {
@@ -154,7 +154,7 @@ export function registerTimelineCommands(
 
   // Effect Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.effect.list', async () => {
+    vscode.commands.registerCommand('neko.effect.list', async () => {
       const webview = videoEditorProvider.getActiveWebview();
       if (!webview) {
         vscode.window.showWarningMessage('No video project is open.');
@@ -167,7 +167,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.effect.add', async (params: {
+    vscode.commands.registerCommand('neko.effect.add', async (params: {
       elementId: string;
       effectType: string;
       parameters?: Record<string, unknown>;
@@ -184,7 +184,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.effect.update', async (params: {
+    vscode.commands.registerCommand('neko.effect.update', async (params: {
       elementId: string;
       effectId: string;
       params: Record<string, unknown>;
@@ -201,7 +201,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.effect.remove', async (params: {
+    vscode.commands.registerCommand('neko.effect.remove', async (params: {
       elementId: string;
       effectId: string;
     }) => {
@@ -218,7 +218,7 @@ export function registerTimelineCommands(
 
   // Transition Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.transition.list', async () => {
+    vscode.commands.registerCommand('neko.transition.list', async () => {
       const webview = videoEditorProvider.getActiveWebview();
       if (!webview) {
         vscode.window.showWarningMessage('No video project is open.');
@@ -231,7 +231,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.transition.add', async (params: {
+    vscode.commands.registerCommand('neko.transition.add', async (params: {
       elementId: string;
       transitionType: string;
       duration?: number;
@@ -249,7 +249,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.transition.remove', async (params: {
+    vscode.commands.registerCommand('neko.transition.remove', async (params: {
       elementId: string;
       placement: 'in' | 'out';
     }) => {
@@ -266,7 +266,7 @@ export function registerTimelineCommands(
 
   // Mask Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.mask.add', async (params: {
+    vscode.commands.registerCommand('neko.mask.add', async (params: {
       elementId: string;
       maskType: string;
       params: Record<string, unknown>;
@@ -283,7 +283,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.mask.update', async (params: {
+    vscode.commands.registerCommand('neko.mask.update', async (params: {
       elementId: string;
       maskId: string;
       params: Record<string, unknown>;
@@ -300,7 +300,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.mask.remove', async (params: {
+    vscode.commands.registerCommand('neko.mask.remove', async (params: {
       elementId: string;
       maskId: string;
     }) => {
@@ -317,7 +317,7 @@ export function registerTimelineCommands(
 
   // Keyframe Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.keyframe.get', async (params: {
+    vscode.commands.registerCommand('neko.keyframe.get', async (params: {
       elementId: string;
       property?: string;
     }) => {
@@ -333,7 +333,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.keyframe.add', async (params: {
+    vscode.commands.registerCommand('neko.keyframe.add', async (params: {
       elementId: string;
       property: string;
       time: number;
@@ -352,7 +352,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.keyframe.update', async (params: {
+    vscode.commands.registerCommand('neko.keyframe.update', async (params: {
       elementId: string;
       keyframeId: string;
       time?: number;
@@ -371,7 +371,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.keyframe.remove', async (params: {
+    vscode.commands.registerCommand('neko.keyframe.remove', async (params: {
       elementId: string;
       keyframeId: string;
     }) => {
@@ -388,7 +388,7 @@ export function registerTimelineCommands(
 
   // Shape Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.shape.add', async (params: {
+    vscode.commands.registerCommand('neko.shape.add', async (params: {
       trackId: string;
       shapeType: string;
       name?: string;
@@ -409,7 +409,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.shape.update', async (params: {
+    vscode.commands.registerCommand('neko.shape.update', async (params: {
       shapeId?: string;
       elementId?: string;
       position?: { x?: number; y?: number };
@@ -431,7 +431,7 @@ export function registerTimelineCommands(
 
   // Color Correction Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.color.set', async (params: {
+    vscode.commands.registerCommand('neko.color.set', async (params: {
       elementId: string;
       brightness?: number;
       contrast?: number;
@@ -452,7 +452,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.color.reset', async (elementId: string) => {
+    vscode.commands.registerCommand('neko.color.reset', async (elementId: string) => {
       const webview = videoEditorProvider.getActiveWebview();
       if (!webview) {
         vscode.window.showWarningMessage('No video project is open.');
@@ -466,7 +466,7 @@ export function registerTimelineCommands(
 
   // Audio Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.audio.setProperties', async (params: {
+    vscode.commands.registerCommand('neko.audio.setProperties', async (params: {
       elementId: string;
       volume?: number;
       pan?: number;
@@ -486,7 +486,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.audio.addKeyframe', async (params: {
+    vscode.commands.registerCommand('neko.audio.addKeyframe', async (params: {
       elementId: string;
       property: 'volume' | 'pan';
       time: number;
@@ -505,7 +505,7 @@ export function registerTimelineCommands(
 
   // Track Properties Command
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.track.setProperties', async (params: {
+    vscode.commands.registerCommand('neko.track.setProperties', async (params: {
       trackId: string;
       name?: string;
       muted?: boolean;
@@ -525,7 +525,7 @@ export function registerTimelineCommands(
 
   // Media Separate Audio Command
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.media.separateAudio', async (params: {
+    vscode.commands.registerCommand('neko.media.separateAudio', async (params: {
       elementId: string;
       targetTrackId?: string;
     }) => {
@@ -542,7 +542,7 @@ export function registerTimelineCommands(
 
   // Export Progress Command
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.export.getProgress', async (exportId: string) => {
+    vscode.commands.registerCommand('neko.export.getProgress', async (exportId: string) => {
       const webview = videoEditorProvider.getActiveWebview();
       if (!webview) {
         vscode.window.showWarningMessage('No video project is open.');
@@ -556,7 +556,7 @@ export function registerTimelineCommands(
 
   // Animation Commands (existing add_animation -> add_keyframe)
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.animation.add', async (params: {
+    vscode.commands.registerCommand('neko.animation.add', async (params: {
       elementId: string;
       property: string;
       keyframes: Array<{ time: number; value: unknown; easing?: string }>;
@@ -574,7 +574,7 @@ export function registerTimelineCommands(
 
   // Subtitle Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.subtitle.add', async (params: {
+    vscode.commands.registerCommand('neko.subtitle.add', async (params: {
       text: string;
       startTime: number;
       endTime: number;
@@ -592,7 +592,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.subtitle.import', async (params: {
+    vscode.commands.registerCommand('neko.subtitle.import', async (params: {
       format: 'srt' | 'vtt' | 'ass';
       content: string;
     }) => {
@@ -609,7 +609,7 @@ export function registerTimelineCommands(
 
   // Media Operation Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.media.trim', async (params: {
+    vscode.commands.registerCommand('neko.media.trim', async (params: {
       elementId: string;
       startTime: number;
       endTime: number;
@@ -626,7 +626,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.media.split', async (params: {
+    vscode.commands.registerCommand('neko.media.split', async (params: {
       elementId: string;
       splitTime: number;
     }) => {
@@ -642,7 +642,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.media.setSpeed', async (params: {
+    vscode.commands.registerCommand('neko.media.setSpeed', async (params: {
       elementId: string;
       speed: number;
     }) => {
@@ -659,7 +659,7 @@ export function registerTimelineCommands(
 
   // Render Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.render.frame', async (params: {
+    vscode.commands.registerCommand('neko.render.frame', async (params: {
       time: number;
       width?: number;
       height?: number;
@@ -677,7 +677,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.render.clip', async (params: {
+    vscode.commands.registerCommand('neko.render.clip', async (params: {
       startTime: number;
       endTime: number;
       format?: 'mp4' | 'webm';
@@ -695,7 +695,7 @@ export function registerTimelineCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.render.thumbnail', async (params: {
+    vscode.commands.registerCommand('neko.render.thumbnail', async (params: {
       elementId: string;
       time?: number;
       width?: number;
@@ -714,7 +714,7 @@ export function registerTimelineCommands(
 
   // Export Command
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.export.video', async (params?: {
+    vscode.commands.registerCommand('neko.export.video', async (params?: {
       format?: 'mp4' | 'webm';
       quality?: 'low' | 'medium' | 'high' | 'ultra';
       resolution?: string;

@@ -39,7 +39,7 @@ export function registerScriptCommands(
 ): void {
   // Generate Script - Create script from topic/outline
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.script.generate', async () => {
+    vscode.commands.registerCommand('neko.script.generate', async () => {
       const editorText = getEditorText();
 
       let prompt: string;
@@ -65,7 +65,7 @@ export function registerScriptCommands(
 
   // Optimize Script - Improve existing script
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.script.optimize', async () => {
+    vscode.commands.registerCommand('neko.script.optimize', async () => {
       const editorText = getEditorText();
 
       if (!editorText?.text.trim()) {
@@ -93,7 +93,7 @@ export function registerScriptCommands(
 
   // Generate Image from Script - Use selected text as prompt
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.script.generateImage', async () => {
+    vscode.commands.registerCommand('neko.script.generateImage', async () => {
       const editorText = getEditorText();
 
       let imagePrompt: string;
@@ -116,7 +116,7 @@ export function registerScriptCommands(
 
   // Generate Video from Script - Use selected text as prompt
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.script.generateVideo', async () => {
+    vscode.commands.registerCommand('neko.script.generateVideo', async () => {
       const editorText = getEditorText();
 
       let videoPrompt: string;

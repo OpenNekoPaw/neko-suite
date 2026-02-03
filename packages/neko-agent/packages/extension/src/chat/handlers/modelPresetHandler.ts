@@ -154,7 +154,7 @@ export class ModelPresetHandler {
 
       // Save to file using VS Code's save dialog
       vscode.window.showSaveDialog({
-        defaultUri: vscode.Uri.file(`uniedit-models-config${includeSecrets ? '-with-keys' : ''}.json`),
+        defaultUri: vscode.Uri.file(`neko-models-config${includeSecrets ? '-with-keys' : ''}.json`),
         filters: { 'JSON': ['json'] },
       }).then(uri => {
         if (uri) {

@@ -30,8 +30,8 @@ import { ConfigBridge } from '../services/configBridge';
 import { TaskHandler, ModelPresetHandler, SkillHandler } from './handlers';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
-  public static readonly viewType = 'uniedit.aiAssistant';
-  private static readonly TAB_STATE_KEY = 'uniedit.tabState';
+  public static readonly viewType = 'neko.aiAssistant';
+  private static readonly TAB_STATE_KEY = 'neko.tabState';
 
   private _view?: vscode.WebviewView;
 
@@ -202,10 +202,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
    */
   public async sendMessageToAssistant(message: string, autoSend: boolean = true): Promise<void> {
     // Focus the AI Assistant panel
-    await vscode.commands.executeCommand('uniedit.aiAssistant.focus');
+    await vscode.commands.executeCommand('neko.aiAssistant.focus');
 
     if (!this._view?.webview) {
-      console.warn('[UniEdit] AI Assistant webview not available');
+      console.warn('[Neko Suite] AI Assistant webview not available');
       return;
     }
 
@@ -546,7 +546,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       // Open the file
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
-      console.error('[UniEdit] Failed to open file:', error);
+      console.error('[Neko Suite] Failed to open file:', error);
       vscode.window.showErrorMessage(`Failed to open file: ${filePath}`);
     }
   }
@@ -560,7 +560,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     try {
       await vscode.env.openExternal(vscode.Uri.parse(url));
     } catch (error) {
-      console.error('[UniEdit] Failed to open URL:', error);
+      console.error('[Neko Suite] Failed to open URL:', error);
       vscode.window.showErrorMessage(`Failed to open URL: ${url}`);
     }
   }
@@ -627,7 +627,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       const uri = vscode.Uri.file(filePath);
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
-      console.error('[UniEdit] Failed to open prompt config:', error);
+      console.error('[Neko Suite] Failed to open prompt config:', error);
       vscode.window.showErrorMessage(`Failed to open prompt config: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -642,7 +642,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       const promptFileService = getPromptFileService();
       await promptFileService.openAgentsFile(source);
     } catch (error) {
-      console.error('[UniEdit] Failed to open AGENTS.md:', error);
+      console.error('[Neko Suite] Failed to open AGENTS.md:', error);
       vscode.window.showErrorMessage(`Failed to open AGENTS.md: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -693,7 +693,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       const uri = vscode.Uri.file(filePath);
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
-      console.error('[UniEdit] Failed to open settings.json:', error);
+      console.error('[Neko Suite] Failed to open settings.json:', error);
       vscode.window.showErrorMessage(`Failed to open settings.json: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -797,7 +797,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       const uri = vscode.Uri.file(fullPath);
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
-      console.error('[UniEdit] Failed to open skill file:', error);
+      console.error('[Neko Suite] Failed to open skill file:', error);
       vscode.window.showErrorMessage(`Failed to open skill file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -842,7 +842,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       const uri = vscode.Uri.file(fullPath);
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
-      console.error('[UniEdit] Failed to open command file:', error);
+      console.error('[Neko Suite] Failed to open command file:', error);
       vscode.window.showErrorMessage(`Failed to open command file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -867,7 +867,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         vscode.window.showInformationMessage(`SVG saved to ${uri.fsPath}`);
       }
     } catch (error) {
-      console.error('[UniEdit] Failed to save SVG:', error);
+      console.error('[Neko Suite] Failed to save SVG:', error);
       vscode.window.showErrorMessage('Failed to save SVG file');
     }
   }
@@ -1140,9 +1140,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     const args = argsInput ? argsInput.split(',').map(s => s.trim()) : [];
 
-    const mcpServers = this._context.globalState.get<Record<string, any>>('uniedit.mcpServers', {});
+    const mcpServers = this._context.globalState.get<Record<string, any>>('neko.mcpServers', {});
     mcpServers[serverName] = { command, args };
-    await this._context.globalState.update('uniedit.mcpServers', mcpServers);
+    await this._context.globalState.update('neko.mcpServers', mcpServers);
 
     vscode.window.showInformationMessage(`MCP Server "${serverName}" added successfully.`);
     this._sendSettings();
@@ -1172,9 +1172,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     if (!baseUrl) return;
 
-    const workflows = this._context.globalState.get<Record<string, any>>('uniedit.workflows', {});
+    const workflows = this._context.globalState.get<Record<string, any>>('neko.workflows', {});
     workflows[workflowName] = { type: workflowType, baseUrl };
-    await this._context.globalState.update('uniedit.workflows', workflows);
+    await this._context.globalState.update('neko.workflows', workflows);
 
     vscode.window.showInformationMessage(`Workflow "${workflowName}" added successfully.`);
     this._sendSettings();

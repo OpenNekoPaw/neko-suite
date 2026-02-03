@@ -1,6 +1,6 @@
 //! JVI file format types - mirrors TypeScript ProjectData
 //!
-//! These types represent the .jvi project file format used by UniEdit.
+//! These types represent the .jvi project file format used by Neko Suite.
 
 use serde::{Deserialize, Serialize};
 

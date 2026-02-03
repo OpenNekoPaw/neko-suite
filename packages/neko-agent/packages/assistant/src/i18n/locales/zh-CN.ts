@@ -60,7 +60,7 @@ export const zhCN: Translations = {
     categoryAudio: '音频',
     categoryOther: '其他',
     emptyState: {
-      title: 'UniEdit AI 助手',
+      title: 'Neko Suite AI 助手',
       description: '问我任何关于视频编辑、时间轴管理或项目组织的问题。',
       disclaimer: 'AI 回复可能不准确。',
     },

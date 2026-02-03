@@ -55,7 +55,7 @@ export interface RemoveKeyframeMessage extends PropertyPanelMessage {
 }
 
 export class PropertyPanelViewProvider implements vscode.WebviewViewProvider {
-  public static readonly viewType = 'uniedit.propertyPanel';
+  public static readonly viewType = 'neko.propertyPanel';
 
   private _view?: vscode.WebviewView;
   private _selectedElement: TimelineElement | null = null;

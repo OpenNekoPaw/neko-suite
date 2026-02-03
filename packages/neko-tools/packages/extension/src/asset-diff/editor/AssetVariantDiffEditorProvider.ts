@@ -77,7 +77,7 @@ export class AssetVariantDiffFileSystemProvider implements vscode.FileSystemProv
  * Custom editor provider for asset variant diff visualization
  */
 export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEditorProvider {
-	public static readonly viewType = 'uniedit.assetVariantDiff';
+	public static readonly viewType = 'neko.assetVariantDiff';
 	public static readonly scheme = 'asset-variant-diff';
 
 	private activeWebviews: Map<string, vscode.WebviewPanel> = new Map();

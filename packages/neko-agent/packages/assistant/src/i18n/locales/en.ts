@@ -58,7 +58,7 @@ export const en = {
     categoryAudio: 'Audio',
     categoryOther: 'Other',
     emptyState: {
-      title: 'UniEdit AI Assistant',
+      title: 'Neko Suite AI Assistant',
       description: 'Ask me anything about video editing, timeline management, or project organization.',
       disclaimer: 'AI responses may be inaccurate.',
     },

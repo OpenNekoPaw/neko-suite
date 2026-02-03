@@ -48,7 +48,7 @@ export function registerAICommands(
 
   // Generate Image
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.generateImage', async (params: {
+    vscode.commands.registerCommand('neko.ai.generateImage', async (params: {
       prompt: string;
       size?: string;
       quality?: 'standard' | 'hd';
@@ -66,7 +66,7 @@ export function registerAICommands(
 
   // Generate Video
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.generateVideo', async (params: {
+    vscode.commands.registerCommand('neko.ai.generateVideo', async (params: {
       prompt: string;
       duration?: number;
       resolution?: string;
@@ -84,7 +84,7 @@ export function registerAICommands(
 
   // Generate TTS
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.generateTTS', async (params: {
+    vscode.commands.registerCommand('neko.ai.generateTTS', async (params: {
       text: string;
       voice?: string;
       language?: string;
@@ -102,7 +102,7 @@ export function registerAICommands(
 
   // Generate Music
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.generateMusic', async (params: {
+    vscode.commands.registerCommand('neko.ai.generateMusic', async (params: {
       prompt: string;
       duration?: number;
       genre?: string;
@@ -120,7 +120,7 @@ export function registerAICommands(
 
   // Generate Character
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.generateCharacter', async (params: {
+    vscode.commands.registerCommand('neko.ai.generateCharacter', async (params: {
       prompt: string;
       referenceImageUrl?: string;
       style?: string;
@@ -139,7 +139,7 @@ export function registerAICommands(
 
   // Transfer Style
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.transferStyle', async (params: {
+    vscode.commands.registerCommand('neko.ai.transferStyle', async (params: {
       sourceImageUrl: string;
       stylePrompt: string;
       styleStrength?: number;
@@ -156,7 +156,7 @@ export function registerAICommands(
 
   // Enhance Video
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.enhanceVideo', async (params: {
+    vscode.commands.registerCommand('neko.ai.enhanceVideo', async (params: {
       videoUrl: string;
       targetResolution?: string;
       denoise?: boolean;
@@ -175,7 +175,7 @@ export function registerAICommands(
 
   // Optimize Audio
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.optimizeAudio', async (params: {
+    vscode.commands.registerCommand('neko.ai.optimizeAudio', async (params: {
       audioUrl: string;
       denoise?: boolean;
       normalize?: boolean;
@@ -196,7 +196,7 @@ export function registerAICommands(
 
   // Analyze Image
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.analyzeImage', async (params: {
+    vscode.commands.registerCommand('neko.ai.analyzeImage', async (params: {
       imageId: string;
       analysisType?: 'description' | 'objects' | 'text' | 'faces' | 'colors' | 'composition';
       prompt?: string;
@@ -213,7 +213,7 @@ export function registerAICommands(
 
   // Extract Image Text (OCR)
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.extractImageText', async (params: {
+    vscode.commands.registerCommand('neko.ai.extractImageText', async (params: {
       imageId: string;
       language?: string;
     }) => {
@@ -229,7 +229,7 @@ export function registerAICommands(
 
   // Analyze Video
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.analyzeVideo', async (params: {
+    vscode.commands.registerCommand('neko.ai.analyzeVideo', async (params: {
       videoId: string;
       analysisType?: 'description' | 'scene-detection' | 'action' | 'summary';
       sampleInterval?: number;
@@ -246,7 +246,7 @@ export function registerAICommands(
 
   // Extract Video Summary
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.extractVideoSummary', async (params: {
+    vscode.commands.registerCommand('neko.ai.extractVideoSummary', async (params: {
       videoId: string;
       maxLength?: number;
     }) => {
@@ -264,7 +264,7 @@ export function registerAICommands(
 
   // Generate Script
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.generateScript', async (params: {
+    vscode.commands.registerCommand('neko.ai.generateScript', async (params: {
       topic: string;
       style?: 'professional' | 'casual' | 'educational' | 'promotional';
       length?: string;
@@ -282,7 +282,7 @@ export function registerAICommands(
 
   // Optimize Script
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.optimizeScript', async (params: {
+    vscode.commands.registerCommand('neko.ai.optimizeScript', async (params: {
       scriptText: string;
       optimizationType?: 'engagement' | 'clarity' | 'brevity' | 'seo' | 'accessibility';
     }) => {
@@ -298,7 +298,7 @@ export function registerAICommands(
 
   // Generate Storyboard
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.generateStoryboard', async (params: {
+    vscode.commands.registerCommand('neko.ai.generateStoryboard', async (params: {
       scriptText: string;
       numScenes?: number;
       style?: 'realistic' | 'cartoon' | 'sketch' | 'minimal';
@@ -315,7 +315,7 @@ export function registerAICommands(
 
   // Generate Subtitles
   context.subscriptions.push(
-    vscode.commands.registerCommand('uniedit.ai.generateSubtitles', async (params: {
+    vscode.commands.registerCommand('neko.ai.generateSubtitles', async (params: {
       mediaId: string;
       language?: string;
       maxCharsPerLine?: number;

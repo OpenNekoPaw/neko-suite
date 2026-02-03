@@ -2,12 +2,12 @@
  * External API Server
  *
  * Unified manager for HTTP Server and Headless Webview.
- * Provides external access to UniEdit tools via REST API and MCP protocol.
+ * Provides external access to Neko Suite tools via REST API and MCP protocol.
  */
 
 import * as vscode from 'vscode';
 import type { IToolRegistry as ToolRegistry, ToolResult } from '@neko/agent';
-import { UniEditHttpServer, type HttpServerConfig, type WebviewStatusChecker } from './http-server';
+import { Neko SuiteHttpServer, type HttpServerConfig, type WebviewStatusChecker } from './http-server';
 import { HeadlessWebviewManager } from './headless-webview';
 import type { IProjectSessionService } from '../services/ProjectSessionService';
 
@@ -81,7 +81,7 @@ class CombinedWebviewChecker implements WebviewStatusChecker {
  * - Integration with editor webviews
  */
 export class ExternalAPIServer implements vscode.Disposable {
-  private httpServer: UniEditHttpServer;
+  private httpServer: Neko SuiteHttpServer;
   private headlessManager: HeadlessWebviewManager | null = null;
   private config: ExternalAPIServerConfig;
   private disposables: vscode.Disposable[] = [];
@@ -96,7 +96,7 @@ export class ExternalAPIServer implements vscode.Disposable {
     this.config = { ...DEFAULT_CONFIG, ...config };
 
     // Create HTTP server
-    this.httpServer = new UniEditHttpServer(toolRegistry, this.config.http);
+    this.httpServer = new Neko SuiteHttpServer(toolRegistry, this.config.http);
 
     // Create headless webview manager if enabled
     if (this.config.enableHeadless) {
@@ -138,12 +138,12 @@ export class ExternalAPIServer implements vscode.Disposable {
 
       // Show info message
       vscode.window.showInformationMessage(
-        `UniEdit HTTP API available at ${this.httpServer.getUrl()}`
+        `Neko Suite HTTP API available at ${this.httpServer.getUrl()}`
       );
     } catch (error) {
       console.error('[ExternalAPI] Failed to start HTTP server:', error);
       vscode.window.showErrorMessage(
-        `Failed to start UniEdit HTTP API: ${error}`
+        `Failed to start Neko Suite HTTP API: ${error}`
       );
     }
   }
@@ -230,7 +230,7 @@ export function createExternalAPIServer(
   projectSession: IProjectSessionService
 ): ExternalAPIServer {
   // Read configuration from VSCode settings
-  const config = vscode.workspace.getConfiguration('uniedit.server');
+  const config = vscode.workspace.getConfiguration('neko.server');
 
   const serverConfig: ExternalAPIServerConfig = {
     http: {

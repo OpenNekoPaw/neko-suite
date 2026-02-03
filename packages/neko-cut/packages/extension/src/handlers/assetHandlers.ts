@@ -185,7 +185,7 @@ export async function handleAssetMessage(
 				};
 				// Trigger VSCode command to open variant diff editor
 				await vscode.commands.executeCommand(
-					'uniedit.assetDiff.compareVariants',
+					'neko.assetDiff.compareVariants',
 					entityId,
 					variantIdA,
 					variantIdB

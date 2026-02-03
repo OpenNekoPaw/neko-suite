@@ -18,7 +18,7 @@ const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v
 const thumbnailCache = new Map<string, string>();
 
 export class AssetLibraryViewProvider implements vscode.WebviewViewProvider {
-	public static readonly viewType = 'uniedit.assetLibrary';
+	public static readonly viewType = 'neko.assetLibrary';
 
 	private _view?: vscode.WebviewView;
 

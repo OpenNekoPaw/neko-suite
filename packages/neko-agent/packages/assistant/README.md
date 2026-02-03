@@ -1,10 +1,10 @@
 # @neko/assistant
 
-> UniEdit AI 助手独立 Webview UI，运行在 VSCode 侧边栏 Panel
+> Neko Suite AI 助手独立 Webview UI，运行在 VSCode 侧边栏 Panel
 
 ## Context Summary
 
-- 项目：UniEdit - VSCode 视频编辑器
+- 项目：Neko Suite - VSCode 视频编辑器
 - 架构：Webview (React) + Extension Host 双进程通信
 - 通信：postMessage 协议，消息类型见下方
 - 规范：[CLAUDE.md](../../CLAUDE.md)

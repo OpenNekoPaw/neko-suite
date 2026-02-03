@@ -1,6 +1,6 @@
 # @neko/platform
 
-UniEdit AI 服务平台，提供统一的 AI 服务层，支持多提供商、智能路由、Agent 执行、Skill 系统、工作流集成等能力。
+Neko Suite AI 服务平台，提供统一的 AI 服务层，支持多提供商、智能路由、Agent 执行、Skill 系统、工作流集成等能力。
 
 ## 架构图
 
@@ -229,7 +229,7 @@ Skill 系统与 Claude Code 兼容，提供两种技能类型：
 │   ├── commit.md              # /commit 命令
 │   └── review-pr.md           # /review-pr 命令
 │
-~/.uniedit/
+~/.neko/
 ├── skills/                    # 个人技能
 └── commands/                  # 个人命令
 ```

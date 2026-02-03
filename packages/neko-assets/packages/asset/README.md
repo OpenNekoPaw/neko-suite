@@ -4,7 +4,7 @@
 
 ## Context Summary
 
-- 项目：UniEdit - VSCode 视频编辑器
+- 项目：Neko Suite - VSCode 视频编辑器
 - 架构：独立包，被 Extension 集成使用
 - 规范：[CLAUDE.md](../../CLAUDE.md)
 

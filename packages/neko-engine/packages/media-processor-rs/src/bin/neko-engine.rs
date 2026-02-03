@@ -1,4 +1,4 @@
-//! UniEdit Video Export Server
+//! Neko Suite Video Export Server
 //!
 //! Standalone WebSocket server for compat mode video export.
 //! Supports two modes:
@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    tracing::info!("UniEdit Video Export Server v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!("Neko Suite Video Export Server v{}", env!("CARGO_PKG_VERSION"));
 
     // Run the appropriate command
     let runner = Runner::new();

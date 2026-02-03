@@ -89,7 +89,7 @@ export async function connectMCPServers(
         });
       } else {
         const error = 'Connection failed - client not connected';
-        console.warn(`[UniEdit] MCP server ${serverConfig.name} connection failed`);
+        console.warn(`[Neko Suite] MCP server ${serverConfig.name} connection failed`);
         stateManager?.updateState(serverConfig.id, serverConfig.name, 'mcp', 'error', error);
         results.push({
           serverId: serverConfig.id,
@@ -101,7 +101,7 @@ export async function connectMCPServers(
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[UniEdit] Failed to connect MCP server ${serverConfig.name}:`, errorMessage);
+      console.error(`[Neko Suite] Failed to connect MCP server ${serverConfig.name}:`, errorMessage);
 
       // 更新状态为错误
       stateManager?.updateState(serverConfig.id, serverConfig.name, 'mcp', 'error', errorMessage);

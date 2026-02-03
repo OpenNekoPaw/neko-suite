@@ -142,7 +142,7 @@ export async function checkWorkflowEngines(
     // 检查 URL 配置
     if (!workflowConfig.url) {
       const error = 'Missing URL';
-      console.warn(`[UniEdit] Workflow ${workflowConfig.name} missing URL, skipping`);
+      console.warn(`[Neko Suite] Workflow ${workflowConfig.name} missing URL, skipping`);
       stateManager?.updateState(workflowConfig.id, workflowConfig.name, 'workflow', 'error', error);
       return {
         workflowId: workflowConfig.id,
@@ -171,7 +171,7 @@ export async function checkWorkflowEngines(
         success: true,
       };
     } else {
-      console.warn(`[UniEdit] Workflow ${workflowConfig.name} health check failed:`, checkResult.error);
+      console.warn(`[Neko Suite] Workflow ${workflowConfig.name} health check failed:`, checkResult.error);
       stateManager?.updateState(workflowConfig.id, workflowConfig.name, 'workflow', 'error', checkResult.error);
       return {
         workflowId: workflowConfig.id,

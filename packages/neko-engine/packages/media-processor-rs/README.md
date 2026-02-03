@@ -1,10 +1,10 @@
 # media-processor-rs
 
-High-performance media processor with GPU acceleration for UniEdit.
+High-performance media processor with GPU acceleration for Neko Suite.
 
 ## Context Summary
 
-- 项目：UniEdit - VSCode 视频编辑器
+- 项目：Neko Suite - VSCode 视频编辑器
 - 职责：提供视频/音频编解码、GPU 加速特效处理
 - 规范：[CLAUDE.md](../../CLAUDE.md)
 

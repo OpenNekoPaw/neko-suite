@@ -1,6 +1,6 @@
 # platform/src
 
-UniEdit AI 服务平台源码根目录，提供多提供商 AI 服务、智能路由、Agent 执行等核心能力。
+Neko Suite AI 服务平台源码根目录，提供多提供商 AI 服务、智能路由、Agent 执行等核心能力。
 
 ## 架构图
 
@@ -326,7 +326,7 @@ src/
     ↓ loadBuiltinPresets()
 用户配置 (VSCode globalState)
     ↓ UserConfigManager
-工作区配置 (.uniedit/config.json)
+工作区配置 (.neko/config.json)
     ↓ loadWorkspaceConfig()
 ConfigManager (三层合并)
     ↓ getMergedConfig()

@@ -30,7 +30,7 @@ const LOCAL_COMPARE_FILES_KEY = 'mediaDiff.localCompareFiles';
  * Custom editor provider for media diff visualization
  */
 export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvider {
-	public static readonly viewType = 'uniedit.mediaDiff';
+	public static readonly viewType = 'neko.mediaDiff';
 
 	private readonly diffService: MediaDiffService;
 	private activeWebviews: Map<string, vscode.WebviewPanel> = new Map();

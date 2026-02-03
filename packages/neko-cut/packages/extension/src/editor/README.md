@@ -43,7 +43,7 @@ editor/
 {
   "contributes": {
     "customEditors": [{
-      "viewType": "uniedit.videoEditor",
+      "viewType": "neko.videoEditor",
       "displayName": "Video Editor",
       "selector": [{ "filenamePattern": "*.jvi" }]
     }]

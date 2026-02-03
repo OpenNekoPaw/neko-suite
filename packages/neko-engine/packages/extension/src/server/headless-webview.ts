@@ -66,8 +66,8 @@ export class HeadlessWebviewManager implements WebviewStatusChecker, vscode.Disp
 
     // Create hidden webview panel
     this.panel = vscode.window.createWebviewPanel(
-      'uniedit.headless',
-      'UniEdit (Headless)',
+      'neko.headless',
+      'Neko Suite (Headless)',
       {
         viewColumn: vscode.ViewColumn.Beside,
         preserveFocus: true,
@@ -341,7 +341,7 @@ export class HeadlessWebviewManager implements WebviewStatusChecker, vscode.Disp
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval'; worker-src ${webview.cspSource} blob:; img-src ${webview.cspSource} data: blob: https:; media-src ${webview.cspSource} data: blob: https: file:; font-src ${webview.cspSource}; connect-src ${webview.cspSource} https: data: blob:;">
   <link rel="stylesheet" href="${styleUri}">
-  <title>UniEdit - Headless</title>
+  <title>Neko Suite - Headless</title>
   <style>
     /* Hide UI in headless mode */
     body[data-headless="true"] #root {

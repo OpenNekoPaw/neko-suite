@@ -1,6 +1,6 @@
 # @neko/webview
 
-UniEdit 视频编辑器的 Webview UI 包，基于 React + Zustand + Tailwind CSS 构建，运行在 VSCode Webview 沙箱中。
+Neko Suite 视频编辑器的 Webview UI 包，基于 React + Zustand + Tailwind CSS 构建，运行在 VSCode Webview 沙箱中。
 
 ## 概述
 

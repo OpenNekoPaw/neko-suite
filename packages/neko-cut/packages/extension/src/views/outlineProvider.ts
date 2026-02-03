@@ -218,7 +218,7 @@ export class VideoProjectOutlineProvider implements IVideoProjectOutlineProvider
 
         // Add command to select element when clicked
         item.command = {
-          command: 'uniedit.selectElement',
+          command: 'neko.selectElement',
           title: vscode.l10n.t('Select Element'),
           arguments: [track.id, el.id]
         };

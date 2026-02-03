@@ -153,13 +153,13 @@ export interface Skill {
     directoryPath?: string;
     /**
      * Icon (emoji or icon name)
-     * **UniEdit extension** - Not in Claude spec
+     * **Neko Suite extension** - Not in Claude spec
      * @example "📄", "🔍"
      */
     icon?: string;
     /**
      * Whether the skill is enabled
-     * **UniEdit extension** - Not in Claude spec
+     * **Neko Suite extension** - Not in Claude spec
      * @default true
      */
     enabled: boolean;
@@ -218,12 +218,12 @@ export interface SlashCommand {
     filePath?: string;
     /**
      * Icon
-     * **UniEdit extension** - Not in Claude spec
+     * **Neko Suite extension** - Not in Claude spec
      */
     icon?: string;
     /**
      * Whether enabled
-     * **UniEdit extension** - Not in Claude spec
+     * **Neko Suite extension** - Not in Claude spec
      */
     enabled: boolean;
 }

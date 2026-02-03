@@ -70,7 +70,7 @@ export interface ContextPersistenceConfig {
  */
 export const DEFAULT_PERSISTENCE_CONFIG: ContextPersistenceConfig = {
   enabled: true,
-  keyPrefix: 'uniedit_context_',
+  keyPrefix: 'neko_context_',
   autoSaveInterval: 30000, // 30 seconds
   maxSessions: 10,
   sessionExpiryMs: 7 * 24 * 60 * 60 * 1000, // 7 days

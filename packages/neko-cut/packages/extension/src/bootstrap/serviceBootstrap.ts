@@ -181,14 +181,14 @@ export async function bootstrapCoreServices(
 
   // 后台连接启用的 MCP 服务器并记录状态
   connectMCPServers(platform, mcpManager, toolRegistry, connectionStateManager).catch(error => {
-    console.error('[UniEdit] Failed to connect MCP servers:', error);
+    console.error('[Neko Suite] Failed to connect MCP servers:', error);
   });
 
   // ==========================================================================
   // 7. Workflow 健康检查 (后台执行)
   // ==========================================================================
   checkWorkflowEngines(platform, connectionStateManager).catch(error => {
-    console.error('[UniEdit] Failed to check workflow engines:', error);
+    console.error('[Neko Suite] Failed to check workflow engines:', error);
   });
 
   // ==========================================================================
@@ -197,7 +197,7 @@ export async function bootstrapCoreServices(
   taskManager.initialize().then(() => {
     return taskManager.resumePendingTasks();
   }).catch((err) => {
-    console.error('[UniEdit] Failed to initialize TaskManager:', err);
+    console.error('[Neko Suite] Failed to initialize TaskManager:', err);
   });
 
   // ==========================================================================
@@ -230,7 +230,7 @@ export async function bootstrapCoreServices(
 
   // Start HTTP server in background
   externalAPIServer.start().catch(error => {
-    console.error('[UniEdit] Failed to start External API Server:', error);
+    console.error('[Neko Suite] Failed to start External API Server:', error);
   });
 
   // ==========================================================================
@@ -242,7 +242,7 @@ export async function bootstrapCoreServices(
 
   // Initialize asset service in background
   assetService.initialize().catch(error => {
-    console.error('[UniEdit] Failed to initialize AssetService:', error);
+    console.error('[Neko Suite] Failed to initialize AssetService:', error);
   });
 
   // ==========================================================================

@@ -4,13 +4,13 @@
  * This module provides two distinct concepts:
  *
  * 1. **Skill** - Semantic discovery, auto-triggered based on description matching
- *    - Located in: `.skill/skill-name/SKILL.md` (project) or `~/.uniedit/skills/` (personal)
+ *    - Located in: `.skill/skill-name/SKILL.md` (project) or `~/.neko/skills/` (personal)
  *    - Triggered by: Semantic matching of user input against description
  *    - Arguments: NOT supported (no $ARGUMENTS, $1, $2)
  *    - File structure: skill-name/SKILL.md + support files
  *
  * 2. **Slash Command** - Explicit trigger with /command
- *    - Located in: `.command/command-name.md` (project) or `~/.uniedit/commands/` (personal)
+ *    - Located in: `.command/command-name.md` (project) or `~/.neko/commands/` (personal)
  *    - Triggered by: User typing /command
  *    - Arguments: Supported ($ARGUMENTS, $1, $2, etc.)
  *    - File structure: Single .md file

@@ -60,7 +60,7 @@ interface Skill {
   model?: string;            // 模型覆盖
   source: SkillSource;       // 来源：builtin/personal/project
   directoryPath?: string;    // 技能目录路径
-  icon?: string;             // 图标（UniEdit 扩展）
+  icon?: string;             // 图标（Neko Suite 扩展）
   enabled: boolean;          // 启用状态
 }
 
@@ -108,12 +108,12 @@ interface SkillMatch {
 ```typescript
 const SKILL_DIRECTORIES = {
   project: '.skill',              // 项目级技能
-  personal: '~/.uniedit/skills',  // 个人技能
+  personal: '~/.neko/skills',  // 个人技能
 };
 
 const COMMAND_DIRECTORIES = {
   project: '.command',            // 项目级命令
-  personal: '~/.uniedit/commands', // 个人命令
+  personal: '~/.neko/commands', // 个人命令
 };
 ```
 
@@ -129,4 +129,4 @@ const COMMAND_DIRECTORIES = {
 - 纯类型定义，无运行时代码
 - 使用 interface 优先
 - 充分使用泛型保持灵活性
-- UniEdit 扩展字段明确标注（icon, enabled）
+- Neko Suite 扩展字段明确标注（icon, enabled）

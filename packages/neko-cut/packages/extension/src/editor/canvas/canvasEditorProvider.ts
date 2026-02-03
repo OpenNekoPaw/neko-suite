@@ -9,7 +9,7 @@ import type { CanvasData } from '@neko/shared';
 import { DEFAULT_CANVAS_DATA } from '@neko/shared';
 
 export class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
-  public static readonly viewType = 'uniedit.canvasEditor';
+  public static readonly viewType = 'neko.canvasEditor';
 
   private activeWebviews: Map<string, vscode.Webview> = new Map();
   private activeWebviewPanels: Map<string, vscode.WebviewPanel> = new Map();

@@ -20,7 +20,7 @@ server/
 
 | 导出 | 类型 | 用途 |
 |------|------|------|
-| `UniEditHttpServer` | 类 | HTTP 服务器 |
+| `Neko SuiteHttpServer` | 类 | HTTP 服务器 |
 | `HeadlessWebviewManager` | 类 | 无头 Webview |
 | `ExternalAPIServer` | 类 | 外部 API |
 | `createExternalAPIServer()` | 函数 | 创建 API 服务器 |
@@ -47,8 +47,8 @@ POST /api/export            # 导出视频
 
 ```json
 {
-  "uniedit.server.http.enabled": true,
-  "uniedit.server.http.port": 9527,
-  "uniedit.server.http.host": "127.0.0.1"
+  "neko.server.http.enabled": true,
+  "neko.server.http.port": 9527,
+  "neko.server.http.host": "127.0.0.1"
 }
 ```

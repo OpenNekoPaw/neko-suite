@@ -1,23 +1,23 @@
 #!/usr/bin/env node
 /**
- * MCP Proxy - Bridges MCP Stdio protocol to UniEdit HTTP API
+ * MCP Proxy - Bridges MCP Stdio protocol to Neko Suite HTTP API
  *
  * This standalone script allows Claude Desktop, Cursor, and other
- * MCP-compatible AI tools to communicate with UniEdit via the
+ * MCP-compatible AI tools to communicate with Neko Suite via the
  * Model Context Protocol.
  *
  * Usage:
  *   node mcp-proxy.js [--port PORT] [--host HOST]
  *
  * Environment variables:
- *   UNIEDIT_HTTP_URL - Full URL to UniEdit HTTP server (default: http://127.0.0.1:9527)
+ *   UNIEDIT_HTTP_URL - Full URL to Neko Suite HTTP server (default: http://127.0.0.1:9527)
  *   UNIEDIT_PORT     - Port number (default: 9527)
  *   UNIEDIT_HOST     - Host address (default: 127.0.0.1)
  *
  * Claude Desktop configuration example (claude_desktop_config.json):
  *   {
  *     "mcpServers": {
- *       "uniedit": {
+ *       "neko": {
  *         "command": "node",
  *         "args": ["/path/to/mcp-proxy.js"],
  *         "env": {
@@ -76,7 +76,7 @@ const HTTP_BASE =
   `http://${process.env.UNIEDIT_HOST || '127.0.0.1'}:${process.env.UNIEDIT_PORT || '9527'}`;
 
 const SERVER_INFO = {
-  name: 'uniedit',
+  name: 'neko',
   version: '1.0.0',
 };
 

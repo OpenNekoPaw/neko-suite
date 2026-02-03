@@ -1,4 +1,4 @@
-# UniEdit Platform 架构文档
+# Neko Suite Platform 架构文档
 
 > 版本: 1.0 | 更新日期: 2026-01-01
 
@@ -16,7 +16,7 @@
 
 ## 概述
 
-UniEdit Platform 是一个统一的 AI 服务平台层，提供：
+Neko Suite Platform 是一个统一的 AI 服务平台层，提供：
 
 - **多 Provider 支持**: OpenAI, Anthropic, Google, Azure, Ollama 等 LLM 提供商
 - **媒体生成服务**: Runway, Luma, MiniMax, Suno 等媒体生成提供商

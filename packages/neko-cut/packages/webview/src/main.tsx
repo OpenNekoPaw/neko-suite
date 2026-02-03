@@ -79,8 +79,8 @@ try {
       </React.StrictMode>
     );
   } else {
-    console.error('[UniEdit] Root element not found!');
+    console.error('[Neko Suite] Root element not found!');
   }
 } catch (error) {
-  console.error('[UniEdit] Error rendering app:', error);
+  console.error('[Neko Suite] Error rendering app:', error);
 }

@@ -3,7 +3,7 @@
 > Core effects library for video editing - animations, transitions, filters, masks, colors
 
 ## Context Summary
-- Project: UniEdit - VSCode video editor
+- Project: Neko Suite - VSCode video editor
 - Purpose: Platform-agnostic effects system shared across WebGL, WebGPU, and wgpu (Rust)
 - Spec: [CLAUDE.md](../../CLAUDE.md)
 

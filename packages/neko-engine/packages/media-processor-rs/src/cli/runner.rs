@@ -46,7 +46,7 @@ impl Runner {
         port: u16,
         _config: Option<PathBuf>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        tracing::info!("Starting UniEdit Export Server on port {}", port);
+        tracing::info!("Starting Neko Suite Export Server on port {}", port);
 
         let config = FrameServerConfig {
             port,

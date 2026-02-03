@@ -156,7 +156,7 @@ export const DEFAULT_READ_ONLY_TOOLS = [
   'ExitPlanMode',
   'EnterPlanMode',
   'AskUserQuestion',
-  // UniEdit internal read-only tools (Claude Code PascalCase naming)
+  // Neko Suite internal read-only tools (Claude Code PascalCase naming)
   'Read',
   'ListDirectory',
   'Glob',

@@ -58,7 +58,7 @@ export interface UserConfigStorage {
   update(key: string, value: unknown): Promise<void>;
 }
 
-const USER_CONFIG_KEY = 'uniedit.platform.userConfig';
+const USER_CONFIG_KEY = 'neko.platform.userConfig';
 
 const DEFAULT_USER_CONFIG: UserConfig = {
   providers: [],

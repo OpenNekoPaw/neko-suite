@@ -41,7 +41,7 @@ function toWebviewUri(webview: vscode.Webview, filePath: string): string {
   try {
     return webview.asWebviewUri(vscode.Uri.file(filePath)).toString();
   } catch {
-    console.warn('[UniEdit] Failed to convert path to webview URI:', filePath);
+    console.warn('[Neko Suite] Failed to convert path to webview URI:', filePath);
     return filePath;
   }
 }
@@ -207,7 +207,7 @@ export class ConversationHandler {
     // Clean up empty conversations from previous sessions
     const cleaned = this._conversationManager.cleanupEmpty();
     if (cleaned > 0) {
-      console.log(`[UniEdit] Cleaned up ${cleaned} empty conversation(s)`);
+      console.log(`[Neko Suite] Cleaned up ${cleaned} empty conversation(s)`);
     }
   }
 

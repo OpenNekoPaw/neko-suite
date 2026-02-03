@@ -84,7 +84,7 @@ export function initializeMediaDiff(
 	// Register command for comparing two selected files (local comparison)
 	context.subscriptions.push(
 		vscode.commands.registerCommand(
-			'uniedit.mediaDiff.compareFiles',
+			'neko.mediaDiff.compareFiles',
 			async (uri?: vscode.Uri, uris?: vscode.Uri[]) => {
 				// Multi-select: uris contains all selected files
 				// Single-select: only uri is provided

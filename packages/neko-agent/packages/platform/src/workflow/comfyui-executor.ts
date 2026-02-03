@@ -169,7 +169,7 @@ export class ComfyUIWorkflowExecutor implements WorkflowExecutor {
       headers: {},
       body: {
         prompt,
-        client_id: clientId || `uniedit_${Date.now()}`,
+        client_id: clientId || `neko_${Date.now()}`,
       },
     });
 

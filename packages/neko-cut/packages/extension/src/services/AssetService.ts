@@ -167,10 +167,10 @@ export class AssetService implements vscode.Disposable {
 	private getDefaultStoragePath(): string {
 		const workspaceFolders = vscode.workspace.workspaceFolders;
 		if (workspaceFolders && workspaceFolders.length > 0) {
-			return path.join(workspaceFolders[0].uri.fsPath, '.uniedit', 'assets');
+			return path.join(workspaceFolders[0].uri.fsPath, '.neko', 'assets');
 		}
 		// Fallback to global storage
-		return path.join(process.env.HOME ?? '/tmp', '.uniedit', 'assets');
+		return path.join(process.env.HOME ?? '/tmp', '.neko', 'assets');
 	}
 
 	/**

@@ -61,27 +61,27 @@ export class StatusBar implements IStatusBar {
       vscode.StatusBarAlignment.Left,
       100
     );
-    this.playStateItem.name = 'UniEdit Play State';
+    this.playStateItem.name = 'Neko Suite Play State';
 
     this.timeItem = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Left,
       99
     );
-    this.timeItem.name = 'UniEdit Timeline';
+    this.timeItem.name = 'Neko Suite Timeline';
 
     this.infoItem = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Left,
       98
     );
-    this.infoItem.name = 'UniEdit Info';
+    this.infoItem.name = 'Neko Suite Info';
 
     // Export progress item - right aligned for visibility
     this.exportItem = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Right,
       1000
     );
-    this.exportItem.name = 'UniEdit Export';
-    this.exportItem.command = 'uniedit.showExportPanel';
+    this.exportItem.name = 'Neko Suite Export';
+    this.exportItem.command = 'neko.showExportPanel';
   }
 
   public show(): void {

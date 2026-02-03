@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * UniEdit Agent CLI
+ * Neko Suite Agent CLI
  *
- * Command-line interface for running the UniEdit AI Agent standalone.
+ * Command-line interface for running the Neko Suite AI Agent standalone.
  *
  * Usage:
- *   uniedit-agent run "your prompt here"
- *   uniedit-agent interactive
- *   uniedit-agent config set provider anthropic
+ *   neko-agent run "your prompt here"
+ *   neko-agent interactive
+ *   neko-agent config set provider anthropic
  */
 
 import { Command } from 'commander';

@@ -275,7 +275,7 @@ export class StreamingExportService {
 		const useCompatMode = params.useCompatMode ?? false;
 
 		// Create temp directory
-		const tempDir = path.join(os.tmpdir(), `uniedit-stream-${jobId}`);
+		const tempDir = path.join(os.tmpdir(), `neko-stream-${jobId}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 
 		// Temp video path (for audio muxing later)
