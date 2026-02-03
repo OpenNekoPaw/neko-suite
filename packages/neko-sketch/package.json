@@ -30,9 +30,7 @@
   "extensionDependencies": [
     "neko.neko-canvas"
   ],
-  "activationEvents": [
-    "onCommand:neko.sketch.enable"
-  ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [

@@ -8,3 +8,12 @@ node_modules/**
 .gitignore
 tsconfig.json
 *.md
+
+# Build tools
+.turbo/**
+Cargo.lock
+Cargo.toml
+
+# Rust build artifacts - exclude everything except the final .dylib
+target/**
+!target/release/libneko_native_napi.dylib

@@ -28,9 +28,11 @@
   "extensionKind": [
     "workspace"
   ],
-  "activationEvents": [
-    "onCommand:neko.live.start"
+  "extensionDependencies": [
+    "neko.neko-engine",
+    "neko.neko-tools"
   ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {

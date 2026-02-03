@@ -29,11 +29,7 @@
   "extensionKind": [
     "workspace"
   ],
-  "activationEvents": [
-    "onCustomEditor:neko.mediaDiff",
-    "onCustomEditor:neko.assetVariantDiff",
-    "onCommand:neko.tools.compareFiles"
-  ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "customEditors": [

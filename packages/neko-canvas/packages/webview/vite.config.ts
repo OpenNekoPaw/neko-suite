@@ -9,7 +9,7 @@ export default defineConfig({
     preserveSymlinks: true,
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@neko/shared': path.resolve(__dirname, '../shared/src/index.ts'),
+      '@neko/shared': path.resolve(__dirname, '../../../neko-shared/src/index.ts'),
     },
   },
   server: {
@@ -22,14 +22,14 @@ export default defineConfig({
     cssCodeSplit: false,
     rollupOptions: {
       input: {
-        canvas: path.resolve(__dirname, 'index.html'),
+        index: path.resolve(__dirname, 'index.html'),
       },
       output: {
-        entryFileNames: 'assets/[name].js',
+        entryFileNames: 'assets/index.js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: (assetInfo) => {
           if (assetInfo.name === 'style.css') {
-            return 'assets/canvas-style.css';
+            return 'assets/index.css';
           }
           return 'assets/[name].[ext]';
         },

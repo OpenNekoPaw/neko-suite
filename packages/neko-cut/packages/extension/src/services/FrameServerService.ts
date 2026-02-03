@@ -74,8 +74,10 @@ export class FrameServerService implements vscode.Disposable {
 	 */
 	private async initialize(config?: FrameServerConfig): Promise<boolean> {
 		try {
+			console.log('[FrameServerService] Loading native addon...');
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const addon = require('@neko/native-napi') as MediaProcessorAddon;
+			const addon = require('@neko-engine/native-napi') as MediaProcessorAddon;
+			console.log('[FrameServerService] Native addon loaded, starting frame server...');
 
 			this.session = addon.FrameServerSession.start(config);
 
@@ -85,9 +87,10 @@ export class FrameServerService implements vscode.Disposable {
 
 			return true;
 		} catch (error) {
-			console.warn(
+			console.error(
 				'[FrameServerService] Failed to initialize:',
-				error instanceof Error ? error.message : error
+				error instanceof Error ? error.message : error,
+				error instanceof Error ? error.stack : ''
 			);
 			return false;
 		}

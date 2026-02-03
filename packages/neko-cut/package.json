@@ -26,10 +26,11 @@
   "extensionKind": [
     "workspace"
   ],
-  "activationEvents": [
-    "onCustomEditor:neko.videoEditor",
-    "onCommand:neko.newProject"
+  "extensionDependencies": [
+    "neko.neko-engine",
+    "neko.neko-tools"
   ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "customEditors": [
@@ -322,12 +323,12 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "npm run compile:extension && npm run copy:webview",
-    "compile:extension": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:sharp --external:@neko/native-napi --format=cjs --platform=node",
+    "compile:extension": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:sharp --external:@neko-engine/native-napi --format=cjs --platform=node",
     "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp packages/webview/dist/*.html dist/webview/ && cp -R packages/webview/dist/assets/* dist/webview/assets/",
     "watch": "npm run compile:extension -- --watch",
     "lint": "eslint packages/extension/src --ext ts,tsx",
     "test": "vitest",
-    "package": "vsce package"
+    "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
@@ -342,7 +343,7 @@
     "vitest": "^1.0.4"
   },
   "dependencies": {
-    "@neko/native-napi": "workspace:*",
+    "@neko-engine/native-napi": "workspace:*",
     "sharp": "^0.34.0"
   }
 }

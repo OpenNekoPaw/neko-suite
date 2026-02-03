@@ -61,6 +61,17 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 	constructor(private readonly context: vscode.ExtensionContext) {}
 
 	/**
+	 * Handle messages from the PropertyPanel
+	 * Forwards the message to the active webview
+	 */
+	public handlePropertyPanelMessage(message: unknown): void {
+		const webview = this.getActiveWebview();
+		if (webview) {
+			webview.postMessage(message);
+		}
+	}
+
+	/**
 	 * Pin the editor tab for the given document URI to prevent accidental closure during export
 	 */
 	private pinEditorTab(documentUri: vscode.Uri): void {

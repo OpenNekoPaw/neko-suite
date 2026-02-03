@@ -4,23 +4,19 @@
   "packageManager": "pnpm@9.15.0",
   "workspaces": [
     "packages/*",
-    "packages/neko-agent/packages/*",
-    "packages/neko-canvas/packages/*",
-    "packages/neko-cut/packages/*",
-    "packages/neko-engine/packages/*",
-    "packages/neko-tools/packages/*",
-    "packages/neko-assets/packages/*"
+    "packages/*/packages/*"
   ],
   "scripts": {
     "build": "turbo run build",
     "build:ui": "turbo run build --filter=@neko/webview --filter=@neko/assistant --filter=@neko/canvas --filter=@neko/effects-core",
+    "build:core": "turbo run compile --filter=neko-engine --filter=neko-tools",
     "build:extensions": "turbo run compile --filter='neko-*'",
     "build:neko-cut": "turbo run compile --filter=neko-cut",
     "build:neko-canvas": "turbo run compile --filter=neko-canvas",
+    "build:neko-sketch": "turbo run compile --filter=neko-sketch",
     "build:neko-agent": "turbo run compile --filter=neko-agent",
     "build:neko-engine": "turbo run compile --filter=neko-engine",
     "build:neko-story": "turbo run compile --filter=neko-story",
-    "build:neko-sketch": "turbo run compile --filter=neko-sketch",
     "build:neko-audio": "turbo run compile --filter=neko-audio",
     "build:neko-live": "turbo run compile --filter=neko-live",
     "build:neko-assets": "turbo run compile --filter=neko-assets",

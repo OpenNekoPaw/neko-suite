@@ -17,6 +17,7 @@ import { CanvasViewport } from './CanvasViewport';
 import { MediaNode, StoryboardNode, AnnotationNode } from './nodes';
 import { ConnectionLayer } from './connections';
 import { useViewportTransform } from '../hooks/useViewportTransform';
+import { useViewportCulling } from '../hooks/useViewportCulling';
 
 // =============================================================================
 // Types
@@ -33,6 +34,8 @@ export interface InfiniteCanvasProps {
   onNodeMove?: (nodeId: string, position: { x: number; y: number }) => void;
   onConnectionSelect?: (connectionId: string) => void;
   onCanvasClick?: () => void;
+  /** 是否启用视口裁剪（默认启用） */
+  enableCulling?: boolean;
 }
 
 // =============================================================================
@@ -50,6 +53,7 @@ export function InfiniteCanvas({
   onNodeMove,
   onConnectionSelect,
   onCanvasClick,
+  enableCulling = true,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -58,6 +62,15 @@ export function InfiniteCanvas({
   const { state: viewportState, handlers: viewportHandlers } = useViewportTransform({
     viewport,
     onViewportChange,
+  });
+
+  // Viewport culling - 只渲染可见节点
+  const { visibleNodes, culledCount, totalCount } = useViewportCulling({
+    nodes,
+    viewport,
+    containerWidth: containerSize.width,
+    containerHeight: containerSize.height,
+    enabled: enableCulling,
   });
 
   // Update container size on resize
@@ -127,8 +140,8 @@ export function InfiniteCanvas({
           onConnectionSelect={onConnectionSelect}
         />
 
-        {/* Node layer */}
-        {nodes.map((node) => {
+        {/* Node layer - 使用裁剪后的可见节点 */}
+        {visibleNodes.map((node) => {
           const isSelected = selectedNodeIds.includes(node.id);
 
           return renderNode(node, viewport, isSelected, onNodeSelect, onNodeMove);
@@ -137,7 +150,11 @@ export function InfiniteCanvas({
 
       {/* Canvas info overlay */}
       <div className="absolute bottom-2 left-2 text-xs text-gray-500 pointer-events-none">
-        {nodes.length} nodes | {connections.length} connections
+        {enableCulling && culledCount > 0 ? (
+          <span>{visibleNodes.length} visible / {totalCount} total ({culledCount} culled)</span>
+        ) : (
+          <span>{nodes.length} nodes | {connections.length} connections</span>
+        )}
       </div>
     </div>
   );

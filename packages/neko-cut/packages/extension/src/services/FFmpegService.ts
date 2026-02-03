@@ -2,7 +2,7 @@
  * FFmpegService - 媒体处理服务（Rust N-API 后端）
  *
  * 职责：
- * - 封装 @neko/native-napi native addon
+ * - 封装 @neko-engine/native-napi native addon
  * - 提供媒体探测、字幕提取功能
  *
  * NOTE: 视频帧提取已移至 GPU 路径 (RustMediaProcessorService)
@@ -97,7 +97,7 @@ export class FFmpegService {
 
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			this.addon = require('@neko/native-napi') as MediaProcessorAddon;
+			this.addon = require('@neko-engine/native-napi') as MediaProcessorAddon;
 			this.isInitialized = true;
 			console.log('[FFmpegService] Initialized with Rust N-API backend');
 		} catch (error) {

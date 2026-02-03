@@ -286,8 +286,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const { canvasData } = get();
     if (!canvasData?.viewport) return;
 
-    // Clamp zoom between 10% and 400%
-    const clampedZoom = Math.max(0.1, Math.min(4, zoom));
+    // Clamp zoom between 5% and 1600%
+    const clampedZoom = Math.max(0.05, Math.min(16, zoom));
 
     set({
       canvasData: {

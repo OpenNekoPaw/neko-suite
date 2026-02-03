@@ -7,3 +7,6 @@ export type { ZoomControlsProps } from './ZoomControls';
 
 export { MiniMap } from './MiniMap';
 export type { MiniMapProps } from './MiniMap';
+
+export { LayerPanel } from './LayerPanel';
+export type { LayerPanelProps } from './LayerPanel';

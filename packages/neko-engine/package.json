@@ -26,12 +26,7 @@
   "extensionKind": [
     "workspace"
   ],
-  "extensionDependencies": [
-    "neko.neko-cut"
-  ],
-  "activationEvents": [
-    "onCommand:neko.engine.start"
-  ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [

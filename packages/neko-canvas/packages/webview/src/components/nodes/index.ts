@@ -13,3 +13,9 @@ export type { StoryboardNodeProps } from './StoryboardNode';
 
 export { AnnotationNode } from './AnnotationNode';
 export type { AnnotationNodeProps } from './AnnotationNode';
+
+export { TextNode } from './TextNode';
+export type { TextNodeProps } from './TextNode';
+
+export { ArtboardNode, createArtboardData } from './ArtboardNode';
+export type { ArtboardNodeProps } from './ArtboardNode';

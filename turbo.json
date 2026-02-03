@@ -16,6 +16,56 @@
       "outputs": ["dist/**"],
       "cache": true
     },
+    "neko-engine#compile": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
+    "neko-tools#compile": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
+    "neko-cut#compile": {
+      "dependsOn": ["neko-engine#compile", "neko-tools#compile", "@neko/webview#build"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
+    "neko-canvas#compile": {
+      "dependsOn": ["neko-engine#compile", "neko-tools#compile"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
+    "neko-agent#compile": {
+      "dependsOn": ["neko-engine#compile", "neko-tools#compile"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
+    "neko-audio#compile": {
+      "dependsOn": ["neko-engine#compile", "neko-tools#compile"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
+    "neko-assets#compile": {
+      "dependsOn": ["neko-engine#compile", "neko-tools#compile"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
+    "neko-live#compile": {
+      "dependsOn": ["neko-engine#compile", "neko-tools#compile"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
+    "neko-story#compile": {
+      "dependsOn": ["neko-engine#compile", "neko-tools#compile"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
+    "neko-sketch#compile": {
+      "dependsOn": ["neko-canvas#compile"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
     "dev": {
       "cache": false,
       "persistent": true

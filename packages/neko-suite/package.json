@@ -28,15 +28,15 @@
   ],
   "extensionPack": [
     "neko.neko-engine",
-    "neko.neko-story",
+    "neko.neko-tools",
     "neko.neko-cut",
     "neko.neko-canvas",
     "neko.neko-sketch",
     "neko.neko-audio",
+    "neko.neko-assets",
     "neko.neko-agent",
     "neko.neko-live",
-    "neko.neko-assets",
-    "neko.neko-tools"
+    "neko.neko-story"
   ],
   "scripts": {
     "vscode:prepublish": "echo 'Extension pack - no build required'",

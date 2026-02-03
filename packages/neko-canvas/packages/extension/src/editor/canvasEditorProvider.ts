@@ -35,7 +35,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     webviewPanel.webview.options = {
       enableScripts: true,
       localResourceRoots: [
-        vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'canvas'),
+        vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
       ],
     };
 
@@ -117,8 +117,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   private getHtmlForWebview(webview: vscode.Webview, documentUri: vscode.Uri): string {
-    const canvasUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'canvas')
+    const webviewUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')
     );
 
     const nonce = this.getNonce();
@@ -130,14 +130,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource};">
   <title>Canvas Editor</title>
-  <link rel="stylesheet" href="${canvasUri}/assets/index.css">
+  <link rel="stylesheet" href="${webviewUri}/assets/index.css">
 </head>
 <body>
   <div id="root"></div>
   <script nonce="${nonce}">
     window.documentUri = "${documentUri.toString()}";
   </script>
-  <script nonce="${nonce}" type="module" src="${canvasUri}/assets/index.js"></script>
+  <script nonce="${nonce}" type="module" src="${webviewUri}/assets/index.js"></script>
 </body>
 </html>`;
   }

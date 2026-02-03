@@ -29,7 +29,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Create providers
   const videoEditorProvider = new VideoEditorProvider(context);
-  const propertyPanelProvider = new PropertyPanelViewProvider(context);
+  const propertyPanelProvider = new PropertyPanelViewProvider(context.extensionUri, context);
 
   // Register custom editor (CustomTextEditorProvider for .jvi files)
   context.subscriptions.push(
@@ -84,19 +84,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   // Connect property panel changes back to editor
-  propertyPanelProvider.onElementPropertyChange((message) => {
+  propertyPanelProvider.onDidChangeProperty((message) => {
     videoEditorProvider.handlePropertyPanelMessage(message);
   });
 
-  propertyPanelProvider.onDefaultsPropertyChange((message) => {
+  propertyPanelProvider.onDidChangeDefaults((message) => {
     videoEditorProvider.handlePropertyPanelMessage(message);
   });
 
-  propertyPanelProvider.onAddKeyframe((message) => {
+  propertyPanelProvider.onDidAddKeyframe((message) => {
     videoEditorProvider.handlePropertyPanelMessage(message);
   });
 
-  propertyPanelProvider.onRemoveKeyframe((message) => {
+  propertyPanelProvider.onDidRemoveKeyframe((message) => {
     videoEditorProvider.handlePropertyPanelMessage(message);
   });
 

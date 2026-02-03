@@ -53,22 +53,31 @@
 ## 架构
 
 ```
-NekoCanvas Extension
-    │
-    ├── src/extension.ts      # 扩展入口
-    │
-    └── packages/canvas/      # Canvas UI
-            │
-            ├── components/   # UI 组件
-            │   ├── InfiniteCanvas/
-            │   ├── ShapeEditor/
-            │   └── AssetLibrary/
-            │
-            └── rendering/    # WebGPU 渲染
-                    │
-                    ├── Compositor/
-                    ├── ShapeRenderer/
-                    └── TextureManager/
+neko-canvas/
+├── packages/
+│   ├── extension/           # VS Code 扩展 (Host)
+│   │   └── src/
+│   │       ├── extension.ts # 扩展入口
+│   │       ├── api.ts       # 导出 API
+│   │       ├── editor/      # 画布编辑器
+│   │       └── views/       # 资产库视图
+│   │
+│   └── webview/             # React UI (Webview)
+│       └── src/
+│           ├── components/  # UI 组件
+│           │   ├── InfiniteCanvas.tsx
+│           │   ├── nodes/   # 节点组件
+│           │   ├── connections/
+│           │   └── controls/
+│           ├── hooks/       # 自定义 Hooks
+│           ├── stores/      # Zustand 状态
+│           └── services/    # 通信服务
+│
+├── dist/                    # 构建产物
+│   ├── extension.js
+│   └── webview/
+│
+└── package.json             # VS Code 扩展配置
 ```
 
 ---

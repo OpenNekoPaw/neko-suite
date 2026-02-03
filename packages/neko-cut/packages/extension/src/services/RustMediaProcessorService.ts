@@ -2,7 +2,7 @@
  * RustMediaProcessorService - Rust Native Addon 媒体处理服务
  *
  * 职责：
- * - 封装 @neko/native-napi native addon
+ * - 封装 @neko-engine/native-napi native addon
  * - 提供 GPU 加速的帧解码和特效处理
  * - 提供媒体探测、帧提取、字幕提取功能（替代 FFmpegService）
  * - 与 FFmpegService 接口兼容，支持降级
@@ -246,7 +246,7 @@ export class RustMediaProcessorService implements vscode.Disposable {
 		try {
 			// Try to load the native addon
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const addon = require('@neko/native-napi') as MediaProcessorAddon;
+			const addon = require('@neko-engine/native-napi') as MediaProcessorAddon;
 			this.addon = addon;
 
 			// Create processor instance via static method

@@ -27,16 +27,19 @@
   "extensionKind": [
     "workspace"
   ],
-  "activationEvents": [
-    "onView:neko.assetManager"
+  "extensionDependencies": [
+    "neko.neko-engine",
+    "neko.neko-tools"
   ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
           "id": "neko-asset-manager",
-          "title": "Asset Manager"
+          "title": "Asset Manager",
+          "icon": "$(file-media)"
         }
       ]
     },

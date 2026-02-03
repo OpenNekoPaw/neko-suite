@@ -1,6 +1,6 @@
 # Neko Engine
 
-> 动力引擎：独立侧边进程，处理 FFmpeg 编解码与重度计算
+> 动力引擎：GPU 加速的媒体处理核心，支持硬件编解码与实时特效渲染
 
 ## Context Summary
 
@@ -12,7 +12,7 @@
 
 ## 概述
 
-**Neko Engine** 是 Neko Suite 的核心计算引擎，作为独立的 Sidecar 进程运行，通过 WebSocket/HTTP 与 VS Code 通讯。它承担了所有重度计算任务，彻底解决大文件读写与 FFmpeg 运行导致的编辑器卡顿问题。
+**Neko Engine** 是 Neko Suite 的核心计算引擎，采用 Rust + TypeScript 混合架构。通过 wgpu 实现跨平台 GPU 加速，FFmpeg 提供硬件编解码支持。作为独立 Sidecar 进程运行，彻底解决大文件读写与重度计算导致的编辑器卡顿问题。
 
 ---
 
@@ -20,83 +20,156 @@
 
 | 功能 | 说明 |
 |------|------|
-| **HTTP API** | RESTful API 服务，支持外部工具访问 |
-| **WebSocket** | 实时双向通讯，状态同步 |
-| **FFmpeg 编解码** | 视频/音频编解码、格式转换 |
-| **帧缓存服务** | 视频帧提取与缓存 |
-| **导出渲染** | 视频导出、批量渲染 |
-| **Headless 模式** | 无界面执行工具操作 |
+| **GPU 加速渲染** | wgpu 跨平台 GPU 计算（Metal/Vulkan/DX12） |
+| **硬件编解码** | VideoToolbox (macOS) / VAAPI (Linux) / NVENC (Windows) |
+| **零拷贝管线** | GPU 纹理直通，避免 CPU-GPU 数据传输 |
+| **实时特效** | 滤镜、转场、混合模式、色彩校正 |
+| **帧缓存服务** | 关键帧扫描与智能缓存 |
+| **视频导出** | 异步导出管线，支持音视频混流 |
+
+---
+
+## 包结构
+
+```
+packages/
+├── native-core/        # Rust 核心库 - GPU 处理、编解码、导出
+├── native-napi/        # N-API 绑定 - Node.js 调用 Rust
+├── native-cli/         # CLI 工具 - 命令行媒体处理
+├── effects-core/       # 特效核心 - 类型定义、算法、WGSL 着色器
+├── effects-runtime/    # 特效运行时 - WebGPU/wgpu 执行器
+└── extension/          # VS Code 扩展集成
+```
 
 ---
 
 ## 架构
 
 ```
-VS Code Extension Host
-        │
-        ├─ WebSocket (ws://127.0.0.1:9528)
-        │       │
-        │       └─→ 实时状态同步、进度推送
-        │
-        └─ HTTP API (http://127.0.0.1:9527)
-                │
-                └─→ RESTful 接口、工具调用
-                        │
-                        ▼
-                ┌─────────────────┐
-                │   Neko Engine   │
-                │  (独立进程)      │
-                ├─────────────────┤
-                │ • FFmpeg 编解码  │
-                │ • 帧缓存服务     │
-                │ • 导出渲染      │
-                │ • 媒体处理      │
-                └─────────────────┘
-```
+┌─────────────────────────────────────────────────────────────┐
+│                    VS Code Extension Host                    │
+├─────────────────────────────────────────────────────────────┤
+│  @neko-engine/extension                                      │
+│  ├── MediaEngineManager (生命周期管理)                        │
+│  ├── NativeMediaEngine (N-API 调用)                          │
+│  └── ExportService (导出服务)                                │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ N-API
+┌───────────────────────────▼─────────────────────────────────┐
+│                    @neko-engine/native-napi                  │
+│                    (Node.js ↔ Rust 桥接)                     │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+┌───────────────────────────▼─────────────────────────────────┐
+│                      neko-native-core                        │
+├─────────────────────────────────────────────────────────────┤
+│  gpu/           │ wgpu 上下文、纹理合成、NV12 渲染            │
+│  decoder/       │ 硬件解码器、零拷贝管线                      │
+│  encoder/       │ 硬件编码器、异步导出管线                    │
+│  animation/     │ 关键帧、缓动、时间轴                        │
+│  audio/         │ 音频编解码、混音                           │
+│  frame_server/  │ HTTP 帧服务、媒体探测                       │
+│  keyframe_cache/│ 关键帧缓存、IDR 扫描                        │
+│  export/        │ GPU 导出管线、音视频混流                    │
+│  jvi/           │ JVI 项目格式加载                           │
+└─────────────────────────────────────────────────────────────┘
 
----
-
-## 配置项
-
-| 配置 | 默认值 | 说明 |
-|------|--------|------|
-| `neko.engine.ws.enabled` | `true` | 启用 WebSocket 服务 |
-| `neko.engine.ws.port` | `9528` | WebSocket 端口 |
-| `neko.engine.http.enabled` | `true` | 启用 HTTP API 服务 |
-| `neko.engine.http.port` | `9527` | HTTP API 端口 |
-| `neko.engine.http.host` | `127.0.0.1` | HTTP 绑定地址 |
-| `neko.engine.auth.enabled` | `false` | 启用 API 认证 |
-| `neko.engine.auth.token` | `""` | API 认证令牌 |
-| `neko.engine.headless.enabled` | `true` | 启用 Headless 模式 |
-
----
-
-## 命令
-
-| 命令 | 说明 |
-|------|------|
-| `Neko Engine: Start` | 启动引擎 |
-| `Neko Engine: Stop` | 停止引擎 |
-| `Neko Engine: Status` | 查看引擎状态 |
-| `Neko Engine: Open API Documentation` | 打开 API 文档 |
-
----
-
-## 依赖关系
-
-```
-neko-engine
-    └── neko-cut (被依赖)
+┌─────────────────────────────────────────────────────────────┐
+│                    TypeScript Effects Layer                  │
+├─────────────────────────────────────────────────────────────┤
+│  @neko-engine/effects-core                                   │
+│  ├── types/     (动画、转场、滤镜、遮罩、混合模式)             │
+│  ├── algorithms/(缓动函数、颜色空间、混合算法)                 │
+│  └── shaders/   (WGSL 着色器：色彩校正、转场、特效)            │
+├─────────────────────────────────────────────────────────────┤
+│  @neko-engine/effects-runtime                                │
+│  ├── runners/   (WebGPUEffectRunner, WgpuEffectRunner)       │
+│  ├── compositor/(WgpuCompositor 多图层合成)                   │
+│  └── adapters/  (EffectProcessorAdapter)                     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 技术栈
 
-- **运行时**：Node.js / Rust
-- **通讯**：WebSocket (ws)
-- **编解码**：FFmpeg
-- **类型**：@neko/shared
+### Rust (native-core)
+
+| 依赖 | 用途 |
+|------|------|
+| `wgpu` | 跨平台 GPU 计算 (Metal/Vulkan/DX12) |
+| `ffmpeg-next` | 视频/音频编解码 |
+| `tokio` | 异步运行时 |
+| `axum` | HTTP/WebSocket 服务 |
+| `metal` / `ash` / `windows` | 平台原生 GPU 互操作 |
+
+### TypeScript (effects-*)
+
+| 依赖 | 用途 |
+|------|------|
+| `@webgpu/types` | WebGPU 类型定义 |
+| `@neko/shared` | 共享类型 |
+
+---
+
+## 硬件加速支持
+
+| 平台 | 解码 | 编码 | GPU |
+|------|------|------|-----|
+| macOS | VideoToolbox | VideoToolbox | Metal |
+| Linux | VAAPI | VAAPI | Vulkan |
+| Windows | D3D11VA | NVENC / QSV | DX12 |
+
+---
+
+## 构建
+
+```bash
+# 构建 Rust 原生库
+cargo build --release
+
+# 构建 N-API 绑定
+cd packages/native-napi && pnpm build
+
+# 构建 TypeScript 包
+pnpm build
+```
+
+---
+
+## 导出的 API
+
+### native-core (Rust)
+
+```rust
+// GPU 处理
+pub use gpu::{GpuContext, GpuProcessor, TextureCompositor, Nv12Renderer};
+
+// 编解码
+pub use decoder::{ZeroCopyDecoder, HwAccelType};
+pub use encoder::{AsyncExportPipeline, HwAccelEncoder};
+
+// 动画
+pub use animation::{AnimationTimeline, Keyframe, Easing};
+
+// 服务
+pub use frame_server::FrameServer;
+pub use keyframe_cache::KeyframeCacheService;
+```
+
+### effects-runtime (TypeScript)
+
+```typescript
+// 特效运行器
+export { createEffectRunner, createCrossProcessEffectRunner };
+export { WebGPUEffectRunner, WgpuEffectRunner };
+
+// 合成器
+export { WgpuCompositor, createWgpuCompositor };
+
+// 适配器
+export { EffectProcessorAdapter };
+```
 
 ---
 

@@ -10,9 +10,14 @@ import type { CanvasViewport } from '@neko/shared';
 // Constants
 // =============================================================================
 
-export const MIN_ZOOM = 0.1;
-export const MAX_ZOOM = 4;
+/** 最小缩放比例 (5%) */
+export const MIN_ZOOM = 0.05;
+/** 最大缩放比例 (1600%) */
+export const MAX_ZOOM = 16;
+/** 滚轮缩放灵敏度 */
 export const ZOOM_WHEEL_SENSITIVITY = 0.001;
+/** 预设缩放级别 */
+export const ZOOM_PRESETS = [0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 8, 16];
 
 // =============================================================================
 // Types
