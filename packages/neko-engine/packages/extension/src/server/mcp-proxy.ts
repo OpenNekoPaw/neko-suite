@@ -10,9 +10,9 @@
  *   node mcp-proxy.js [--port PORT] [--host HOST]
  *
  * Environment variables:
- *   UNIEDIT_HTTP_URL - Full URL to Neko Suite HTTP server (default: http://127.0.0.1:9527)
- *   UNIEDIT_PORT     - Port number (default: 9527)
- *   UNIEDIT_HOST     - Host address (default: 127.0.0.1)
+ *   NEKO_HTTP_URL - Full URL to Neko Suite HTTP server (default: http://127.0.0.1:9527)
+ *   NEKO_PORT     - Port number (default: 9527)
+ *   NEKO_HOST     - Host address (default: 127.0.0.1)
  *
  * Claude Desktop configuration example (claude_desktop_config.json):
  *   {
@@ -21,7 +21,7 @@
  *         "command": "node",
  *         "args": ["/path/to/mcp-proxy.js"],
  *         "env": {
- *           "UNIEDIT_HTTP_URL": "http://127.0.0.1:9527"
+ *           "NEKO_HTTP_URL": "http://127.0.0.1:9527"
  *         }
  *       }
  *     }
@@ -72,8 +72,8 @@ interface ToolInfo {
 // =============================================================================
 
 const HTTP_BASE =
-  process.env.UNIEDIT_HTTP_URL ||
-  `http://${process.env.UNIEDIT_HOST || '127.0.0.1'}:${process.env.UNIEDIT_PORT || '9527'}`;
+  process.env.NEKO_HTTP_URL ||
+  `http://${process.env.NEKO_HOST || '127.0.0.1'}:${process.env.NEKO_PORT || '9527'}`;
 
 const SERVER_INFO = {
   name: 'neko',

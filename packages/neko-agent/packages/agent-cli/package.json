@@ -1,7 +1,7 @@
 {
   "name": "@neko/agent-cli",
   "version": "0.0.1",
-  "description": "CLI for UniEdit AI Agent - standalone agent execution from command line",
+  "description": "CLI for Neko AI Agent - standalone agent execution from command line",
   "type": "module",
   "bin": {
     "nekoagent": "./dist/cli.js"

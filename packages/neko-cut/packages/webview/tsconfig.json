@@ -18,10 +18,10 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@neko/shared": ["../shared/src/index.ts"],
-      "@neko/shared/*": ["../shared/src/*"],
-      "@neko/effects-runtime": ["../effects-runtime/src/index.ts"],
-      "@neko/effects-runtime/*": ["../effects-runtime/src/*"]
+      "@neko/shared": ["../../../neko-types/src/index.ts"],
+      "@neko/shared/*": ["../../../neko-types/src/*"],
+      "@neko/effects-runtime": ["../../../neko-engine/packages/effects-runtime/src/index.ts"],
+      "@neko/effects-runtime/*": ["../../../neko-engine/packages/effects-runtime/src/*"]
     },
     "ignoreDeprecations": "5.0"
   },
