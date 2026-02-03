@@ -1,0 +1,5 @@
+{
+  "neko.server.start.title": "启动服务器",
+  "neko.server.stop.title": "停止服务器",
+  "neko.server.status.title": "服务器状态"
+}

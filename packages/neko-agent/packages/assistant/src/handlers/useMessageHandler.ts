@@ -1,0 +1,217 @@
+/**
+ * useMessageHandler Hook
+ *
+ * Provides message handler registry and context creation.
+ */
+
+import { useMemo, useCallback, type MutableRefObject } from 'react';
+import {
+  createConfiguredRegistry,
+  type MessageHandlerContext,
+  type StreamingState,
+  type NonCurrentConversationUpdater,
+} from '@/handlers';
+import type {
+  Message,
+  ConversationSummary,
+  OpenTab,
+  TabType,
+  SettingsState,
+  AgentState,
+} from '@/components/types';
+import type { UIModelConfig } from '@/components/SettingsView/ModelSettings';
+import type { BackgroundTask } from '@/components/TaskListView';
+import type { ProjectFileInfo } from '@/hooks/useConfigState';
+
+/**
+ * Props for useMessageHandler hook
+ */
+export interface UseMessageHandlerProps {
+  // Current state values
+  activeConversationId: string | null;
+  streamingMessageId: string | null;
+  openTabs: OpenTab[];
+
+  // Refs
+  activeConversationIdRef: MutableRefObject<string | null>;
+  streamingMessageIdRef: MutableRefObject<string | null>;
+  conversationMessagesRef: MutableRefObject<Map<string, Message[]>>;
+  conversationStreamingRef: MutableRefObject<Map<string, StreamingState>>;
+
+  // State setters - Chat
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+  setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
+  setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
+
+  // State setters - Conversation
+  setConversations: React.Dispatch<React.SetStateAction<ConversationSummary[]>>;
+  setActiveConversationId: React.Dispatch<React.SetStateAction<string | null>>;
+
+  // State setters - Tabs
+  setOpenTabs: React.Dispatch<React.SetStateAction<OpenTab[]>>;
+  setActiveTabId: React.Dispatch<React.SetStateAction<string | null>>;
+  setActiveTab: React.Dispatch<React.SetStateAction<TabType>>;
+
+  // State setters - Settings
+  setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
+  setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
+
+  // State setters - Tasks
+  setBackgroundTasks: React.Dispatch<React.SetStateAction<BackgroundTask[]>>;
+
+  // State setters - Model Presets
+  setModelPresets: React.Dispatch<React.SetStateAction<UIModelConfig[]>>;
+
+  // State setters - Project
+  setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
+
+  // State setters - Agent state
+  setAgentState: React.Dispatch<React.SetStateAction<AgentState | null>>;
+  conversationAgentStateRef: MutableRefObject<Map<string, AgentState>>;
+  // Force re-render when agent state changes (for useMemo recalculation)
+  forceAgentStateUpdate: () => void;
+}
+
+/**
+ * Hook return type
+ */
+export interface UseMessageHandlerReturn {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handleMessage: (event: MessageEvent<any>) => void;
+}
+
+/**
+ * Custom hook for message handling
+ */
+export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHandlerReturn {
+  const {
+    activeConversationId,
+    streamingMessageId,
+    openTabs,
+    activeConversationIdRef,
+    streamingMessageIdRef,
+    conversationMessagesRef,
+    conversationStreamingRef,
+    setMessages,
+    setIsThinking,
+    setStreamingMessageId,
+    setConversations,
+    setActiveConversationId,
+    setOpenTabs,
+    setActiveTabId,
+    setActiveTab,
+    setSettings,
+    setSelectedModel,
+    setBackgroundTasks,
+    setModelPresets,
+    setProjectFiles,
+    setAgentState,
+    conversationAgentStateRef,
+    forceAgentStateUpdate,
+  } = props;
+
+  // Create registry once
+  const registry = useMemo(
+    () => createConfiguredRegistry(),
+    []
+  );
+
+  // Helper: check if message is for current conversation
+  const isCurrentConversation = useCallback(
+    (conversationId?: string): boolean => {
+      if (!conversationId) return true;
+      return conversationId === activeConversationIdRef.current;
+    },
+    [activeConversationIdRef]
+  );
+
+  // Helper: update non-current conversation state
+  const updateNonCurrentConversation = useCallback(
+    (conversationId: string, updater: NonCurrentConversationUpdater): void => {
+      const currentMessages = conversationMessagesRef.current.get(conversationId) || [];
+      const currentStreaming = conversationStreamingRef.current.get(conversationId) || {
+        streamingMessageId: null,
+        isThinking: false,
+      };
+      const updated = updater(currentMessages, currentStreaming);
+      conversationMessagesRef.current.set(conversationId, updated.messages);
+      conversationStreamingRef.current.set(conversationId, updated.streaming);
+    },
+    [conversationMessagesRef, conversationStreamingRef]
+  );
+
+  // Create context object
+  const context = useMemo<MessageHandlerContext>(
+    () => ({
+      activeConversationId,
+      activeConversationIdRef,
+      conversationMessagesRef,
+      conversationStreamingRef,
+      setMessages,
+      setIsThinking,
+      setStreamingMessageId,
+      streamingMessageId,
+      streamingMessageIdRef,
+      setConversations,
+      setActiveConversationId,
+      openTabs,
+      setOpenTabs,
+      setActiveTabId,
+      setActiveTab,
+      setSettings,
+      setSelectedModel,
+      setBackgroundTasks,
+      setModelPresets,
+      setProjectFiles,
+      setAgentState,
+      conversationAgentStateRef,
+      forceAgentStateUpdate,
+      isCurrentConversation,
+      updateNonCurrentConversation,
+    }),
+    [
+      activeConversationId,
+      activeConversationIdRef,
+      conversationMessagesRef,
+      conversationStreamingRef,
+      setMessages,
+      setIsThinking,
+      setStreamingMessageId,
+      streamingMessageId,
+      streamingMessageIdRef,
+      setConversations,
+      setActiveConversationId,
+      openTabs,
+      setOpenTabs,
+      setActiveTabId,
+      setActiveTab,
+      setSettings,
+      setSelectedModel,
+      setBackgroundTasks,
+      setModelPresets,
+      setProjectFiles,
+      setAgentState,
+      conversationAgentStateRef,
+      forceAgentStateUpdate,
+      isCurrentConversation,
+      updateNonCurrentConversation,
+    ]
+  );
+
+  // Message handler function
+  const handleMessage = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (event: MessageEvent<any>): void => {
+      const message = event.data;
+      if (!message || !message.type) return;
+
+      const handled = registry.handle(message, context);
+      if (!handled) {
+        console.warn(`[AIAssistant] Unknown message type: ${message.type}`);
+      }
+    },
+    [registry, context]
+  );
+
+  return { handleMessage };
+}

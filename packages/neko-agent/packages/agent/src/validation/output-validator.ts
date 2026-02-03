@@ -1,0 +1,283 @@
+/**
+ * Output Validator
+ *
+ * Orchestrates validation of LLM output content including Mermaid diagrams and JSON schemas.
+ * Uses specialized validators for each type of validation.
+ */
+
+import type {
+  OutputConstraints,
+  ValidationError,
+  ValidationWarning,
+  ValidationResult,
+  MermaidBlockValidationResult,
+  JsonBlockValidationResult,
+  ValidationResultWithBlocks,
+} from './types';
+import { DEFAULT_OUTPUT_CONSTRAINTS } from './types';
+
+// Import specialized components
+import { MermaidExtractor } from './extractors/mermaid-extractor';
+import { JsonExtractor } from './extractors/json-extractor';
+import { MermaidValidator } from './validators/mermaid-validator';
+import { JsonSchemaValidator } from './validators/json-schema-validator';
+import { LengthValidator } from './validators/length-validator';
+import { MermaidBlockChecker } from './checkers/mermaid-block-checker';
+
+/**
+ * OutputValidator - Orchestrates LLM output validation
+ *
+ * Single responsibility: Coordinate validation components
+ */
+export class OutputValidator {
+  readonly constraints: OutputConstraints;
+
+  // Specialized components
+  private readonly mermaidExtractor = new MermaidExtractor();
+  private readonly jsonExtractor = new JsonExtractor();
+  private readonly mermaidValidator = new MermaidValidator();
+  private readonly jsonSchemaValidator = new JsonSchemaValidator();
+  private readonly lengthValidator = new LengthValidator();
+  private readonly mermaidBlockChecker = new MermaidBlockChecker();
+
+  constructor(constraints: Partial<OutputConstraints> = {}) {
+    this.constraints = {
+      ...DEFAULT_OUTPUT_CONSTRAINTS,
+      ...constraints,
+    };
+  }
+
+  /**
+   * Validate output content
+   */
+  async validate(content: string): Promise<ValidationResult> {
+    const errors: ValidationError[] = [];
+    const warnings: ValidationWarning[] = [];
+
+    // 1. Check length
+    if (this.constraints.maxLength !== undefined) {
+      const lengthResult = this.lengthValidator.validate(content, {
+        maxLength: this.constraints.maxLength,
+      });
+      warnings.push(...lengthResult.warnings);
+    }
+
+    // 2. Mermaid validation
+    if (this.constraints.mermaidPreValidate) {
+      const mermaidResult = await this.validateMermaid(content);
+      errors.push(...mermaidResult.errors);
+      warnings.push(...mermaidResult.warnings);
+    }
+
+    // 3. JSON Schema validation
+    if (this.constraints.jsonSchema) {
+      const schemaResult = await this.validateJsonSchema(content);
+      errors.push(...schemaResult.errors);
+      warnings.push(...schemaResult.warnings);
+    }
+
+    return { errors, warnings };
+  }
+
+  /**
+   * Validate Mermaid diagrams in content
+   */
+  async validateMermaid(content: string): Promise<ValidationResult> {
+    const errors: ValidationError[] = [];
+    const warnings: ValidationWarning[] = [];
+
+    // Check for structural issues (unclosed, malformed blocks)
+    const blockCheckResult = this.mermaidBlockChecker.checkAll(content);
+    errors.push(...blockCheckResult.errors);
+    warnings.push(...blockCheckResult.warnings);
+
+    // Extract and validate complete mermaid blocks
+    const mermaidBlocks = this.mermaidExtractor.extract(content);
+
+    if (mermaidBlocks.length === 0 && blockCheckResult.errors.length === 0) {
+      return { errors, warnings };
+    }
+
+    for (let i = 0; i < mermaidBlocks.length; i++) {
+      const block = mermaidBlocks[i];
+      if (!block) continue;
+
+      const result = await this.mermaidValidator.validate(block);
+
+      if (!result.valid) {
+        errors.push({
+          type: 'mermaid',
+          code: 'MERMAID_SYNTAX_ERROR',
+          message: `Mermaid diagram #${i + 1} has syntax error: ${result.error}`,
+          details: {
+            blockIndex: i,
+            lineNumber: result.lineNumber,
+            code: block.substring(0, 200) + (block.length > 200 ? '...' : ''),
+          },
+        });
+      }
+    }
+
+    return { errors, warnings };
+  }
+
+  /**
+   * Validate content against JSON Schema
+   */
+  async validateJsonSchema(content: string): Promise<ValidationResult> {
+    const errors: ValidationError[] = [];
+    const warnings: ValidationWarning[] = [];
+
+    if (!this.constraints.jsonSchema) {
+      return { errors, warnings };
+    }
+
+    // Extract JSON from content
+    const jsonContent = this.jsonExtractor.extractFirst(content);
+
+    if (jsonContent === null) {
+      warnings.push({
+        type: 'schema',
+        code: 'NO_JSON_FOUND',
+        message: 'No valid JSON found in output for schema validation',
+      });
+      return { errors, warnings };
+    }
+
+    // Check if ajv is available
+    const isAvailable = await this.jsonSchemaValidator.isLibraryAvailable();
+
+    if (!isAvailable) {
+      warnings.push({
+        type: 'schema',
+        code: 'AJV_UNAVAILABLE',
+        message: 'JSON Schema validation skipped: ajv library not available',
+      });
+      return { errors, warnings };
+    }
+
+    // Validate against schema
+    const result = await this.jsonSchemaValidator.validate(
+      jsonContent,
+      this.constraints.jsonSchema
+    );
+
+    if (!result.valid && result.errors) {
+      for (const err of result.errors) {
+        errors.push({
+          type: 'schema',
+          code: 'SCHEMA_VALIDATION_ERROR',
+          message: `Schema validation failed: ${err.message}`,
+          details: { path: err.path },
+        });
+      }
+    }
+
+    return { errors, warnings };
+  }
+
+  /**
+   * Validate with detailed block position info
+   */
+  async validateWithBlockInfo(content: string): Promise<ValidationResultWithBlocks> {
+    const baseResult = await this.validate(content);
+    const result: ValidationResultWithBlocks = { ...baseResult };
+
+    // Mermaid validation with block info
+    if (this.constraints.mermaidPreValidate) {
+      const blocks = this.mermaidExtractor.extractWithPosition(content);
+      const mermaidBlocks: MermaidBlockValidationResult[] = [];
+
+      for (let i = 0; i < blocks.length; i++) {
+        const block = blocks[i]!;
+        const validationResult = await this.mermaidValidator.validate(block.content);
+
+        mermaidBlocks.push({
+          blockIndex: i,
+          block,
+          valid: validationResult.valid,
+          error: validationResult.error,
+          lineNumber: validationResult.lineNumber,
+        });
+      }
+
+      result.mermaidBlocks = mermaidBlocks;
+    }
+
+    // JSON Schema validation with block info
+    if (this.constraints.jsonSchema) {
+      const jsonBlocks = await this.validateJsonBlocksWithPosition(content);
+      result.jsonBlocks = jsonBlocks;
+    }
+
+    return result;
+  }
+
+  /**
+   * Validate JSON blocks against schema with position info
+   */
+  private async validateJsonBlocksWithPosition(
+    content: string
+  ): Promise<JsonBlockValidationResult[]> {
+    const blocks = this.jsonExtractor.extractWithPosition(content);
+    const results: JsonBlockValidationResult[] = [];
+
+    if (!this.constraints.jsonSchema || blocks.length === 0) {
+      return results;
+    }
+
+    const isAvailable = await this.jsonSchemaValidator.isLibraryAvailable();
+    if (!isAvailable) {
+      return results;
+    }
+
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i]!;
+      const validationResult = await this.jsonSchemaValidator.validate(
+        block.parsed,
+        this.constraints.jsonSchema
+      );
+
+      results.push({
+        blockIndex: i,
+        block,
+        valid: validationResult.valid,
+        errors: validationResult.errors,
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * Extract mermaid blocks with position info
+   * (Exposed for backward compatibility)
+   */
+  extractMermaidBlocksWithPosition(content: string) {
+    return this.mermaidExtractor.extractWithPosition(content);
+  }
+
+  /**
+   * Extract JSON blocks with position info
+   * (Exposed for backward compatibility)
+   */
+  extractJsonBlocksWithPosition(content: string) {
+    return this.jsonExtractor.extractWithPosition(content);
+  }
+
+  /**
+   * Get current constraints
+   */
+  getConstraints(): OutputConstraints {
+    return { ...this.constraints };
+  }
+}
+
+/**
+ * Factory function to create OutputValidator
+ */
+export function createOutputValidator(
+  constraints?: Partial<OutputConstraints>
+): OutputValidator {
+  return new OutputValidator(constraints);
+}

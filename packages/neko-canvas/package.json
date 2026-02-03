@@ -1,0 +1,149 @@
+{
+  "name": "neko-canvas",
+  "displayName": "NekoCanvas",
+  "description": "Canvas editor and asset library for VSCode",
+  "version": "0.0.1",
+  "publisher": "neko",
+  "l10n": "./l10n",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neko/creative-suite"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "canvas",
+    "design",
+    "assets",
+    "library"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onCustomEditor:neko.canvasEditor",
+    "onView:neko.assetLibrary"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "neko.canvasEditor",
+        "displayName": "Canvas Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.jvc"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "neko-assets",
+          "title": "%neko.assets.title%",
+          "icon": "$(file-media)"
+        }
+      ]
+    },
+    "views": {
+      "neko-assets": [
+        {
+          "type": "webview",
+          "id": "neko.assetLibrary",
+          "name": "%neko.assets.name%",
+          "contextualTitle": "%neko.assets.contextualTitle%"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "neko.canvas.new",
+        "title": "%neko.canvas.new.title%",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.addShape",
+        "title": "Add Shape",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.updateShape",
+        "title": "Update Shape",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.asset.import",
+        "title": "%neko.asset.import.title%",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.asset.organize",
+        "title": "Organize Assets",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.asset.search",
+        "title": "Search Assets",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.addToAssetLibrary",
+        "title": "%neko.addToAssetLibrary.title%",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.template.apply",
+        "title": "Apply Template",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.template.save",
+        "title": "Save as Template",
+        "category": "NekoCanvas"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "neko.canvas.new",
+          "group": "neko@1",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "neko.addToAssetLibrary",
+          "group": "neko@3",
+          "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|mp3|wav|ogg|m4a|aac|flac|png|jpg|jpeg|gif|webp|bmp|svg|txt|md|json|srt|vtt|ass|ssa)$/i"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "npm run compile:extension && npm run copy:canvas",
+    "compile:extension": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "copy:canvas": "rm -rf dist/canvas && mkdir -p dist/canvas/assets && cp packages/canvas/dist/*.html dist/canvas/ 2>/dev/null || true && cp -R packages/canvas/dist/assets/* dist/canvas/assets/ 2>/dev/null || true",
+    "watch": "npm run compile:extension -- --watch",
+    "lint": "eslint src --ext ts,tsx",
+    "test": "vitest",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@uniedit/shared": "workspace:*",
+    "esbuild": "^0.19.8",
+    "eslint": "^8.55.0",
+    "typescript": "^5.3.2",
+    "vitest": "^1.0.4"
+  }
+}

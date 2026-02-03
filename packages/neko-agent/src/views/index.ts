@@ -1,0 +1,1 @@
+export { AIAssistantProvider } from './aiAssistant';

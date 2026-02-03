@@ -1,0 +1,670 @@
+/**
+ * Agent Runner - Lightweight VSCode wrapper for AgentSession
+ *
+ * This class focuses on VSCode integration while delegating session management
+ * to @uniedit/agent's AgentSession.
+ *
+ * Key responsibilities:
+ * - VSCode EventEmitter integration for UI notifications
+ * - Message queue management for concurrent requests
+ * - Tool confirmation flow bridging
+ *
+ * All core agent functionality is delegated to AgentSession from @uniedit/agent.
+ */
+
+import * as vscode from 'vscode';
+import { createServiceId } from '../base';
+import type { Platform, ChatMessage } from '@uniedit/platform';
+import { getBuiltinPrompt } from '@uniedit/platform';
+import type {
+  ToolConfirmationRequest,
+} from '@uniedit/agent';
+import {
+  AgentSession,
+  createAgentSession,
+  SystemPromptBuilder,
+  createSystemPromptBuilder,
+  getDefaultPersonalPath,
+  ToolGroupRegistry,
+  ToolCategoryRegistry,
+  type ExecutionMode,
+  type AgentEvent,
+  type AgentEventType,
+} from '@uniedit/agent';
+import { IAgentContext } from './agentContext';
+import type { HookManager } from './hookManager';
+
+// =============================================================================
+// Service Identifier
+// =============================================================================
+
+export const IAgentRunner = createServiceId<IAgentRunner>('agentRunner');
+
+// =============================================================================
+// Agent Configuration
+// =============================================================================
+
+/**
+ * Execution mode type (re-exported for convenience)
+ */
+export type { ExecutionMode };
+
+/**
+ * Re-export AgentEvent and AgentEventType from @uniedit/agent
+ * This ensures type consistency across the codebase
+ */
+export type { AgentEvent, AgentEventType };
+
+/**
+ * Legacy type alias for backward compatibility
+ * @deprecated Use AgentEvent from @uniedit/agent instead
+ */
+export type IAgentEvent = AgentEvent;
+
+/**
+ * Agent configuration
+ */
+export interface IAgentConfig {
+  /** Platform instance */
+  platform: Platform;
+
+  /** Group ID */
+  groupId?: string;
+
+  /** System prompt */
+  systemPrompt?: string;
+
+  /** Max iterations (prevent infinite loops) */
+  maxIterations?: number;
+
+  /** Whether to auto execute tools */
+  autoExecuteTools?: boolean;
+
+  /** Temperature */
+  temperature?: number;
+
+  /** Max tokens */
+  maxTokens?: number;
+
+  /** Model ID */
+  modelId?: string;
+
+  /**
+   * Extended thinking budget tokens (Claude only)
+   * Set to enable extended thinking. Recommended: 10000-50000
+   */
+  thinkingBudget?: number;
+
+  /**
+   * Tool execution mode
+   * - plan: Only generate plan, don't execute
+   * - ask: Require user confirmation for each operation
+   * - auto: Auto execute
+   */
+  executionMode?: ExecutionMode;
+
+  /**
+   * Hook manager for custom hooks from .hook/ directory
+   * Must be initialized before configure() is called
+   */
+  hookManager?: HookManager;
+
+  /**
+   * Tool category registry for three-layer injection
+   * If not provided, a new one will be created
+   */
+  toolCategoryRegistry?: ToolCategoryRegistry;
+
+  /**
+   * Workspace root path for AGENTS.md loading
+   */
+  workspaceRoot?: string;
+
+  /**
+   * Locale for system prompt (en/zh)
+   */
+  locale?: 'en' | 'zh';
+}
+
+// =============================================================================
+// Agent Runner Interface
+// =============================================================================
+
+/**
+ * Agent Runner interface
+ */
+export interface IAgentRunner extends vscode.Disposable {
+  // -------------------------------------------------------------------------
+  // Configuration
+  // -------------------------------------------------------------------------
+
+  /**
+   * Configure Agent
+   * @param config Agent configuration
+   */
+  configure(config: IAgentConfig): void;
+
+  /**
+   * Get current configuration
+   */
+  getConfig(): IAgentConfig | undefined;
+
+  // -------------------------------------------------------------------------
+  // Execution
+  // -------------------------------------------------------------------------
+
+  /**
+   * Execute user request
+   * @param input User input
+   * @param context Agent context
+   * @returns Agent event stream
+   */
+  execute(
+    input: string,
+    context: IAgentContext
+  ): AsyncIterable<AgentEvent>;
+
+  /**
+   * Cancel current execution
+   */
+  cancel(): void;
+
+  /**
+   * Check if running
+   */
+  isRunning(): boolean;
+
+  /**
+   * Append a message to the running agent's context
+   * If agent is not running, returns false
+   * @param input User input to append
+   * @returns true if message was queued, false if agent is not running
+   */
+  appendMessage(input: string): boolean;
+
+  /**
+   * Get pending messages count
+   */
+  getPendingMessagesCount(): number;
+
+  /**
+   * Clear all pending messages (user manual management)
+   */
+  clearPendingMessages(): void;
+
+  // -------------------------------------------------------------------------
+  // Context Management
+  // -------------------------------------------------------------------------
+
+  /**
+   * Get current context token count
+   * @returns Token count estimate
+   */
+  getContextTokenCount(): number;
+
+  /**
+   * Manually trigger context compression
+   * @returns Compression result with before/after token counts
+   */
+  compressContext(): Promise<{
+    originalTokens: number;
+    compressedTokens: number;
+    ratio: number;
+  }>;
+
+  // -------------------------------------------------------------------------
+  // Tool Confirmation
+  // -------------------------------------------------------------------------
+
+  /**
+   * Confirm tool execution
+   * @param toolCallId Tool call ID
+   * @param approved Whether approved
+   */
+  confirmTool(toolCallId: string, approved: boolean): void;
+
+  /**
+   * Get pending confirmations
+   */
+  getPendingConfirmations(): Array<{
+    toolCallId: string;
+    toolName: string;
+    action: string;
+    description: string;
+    details: Record<string, unknown>;
+  }>;
+
+  // -------------------------------------------------------------------------
+  // Conversation History
+  // -------------------------------------------------------------------------
+
+  /**
+   * Get conversation history
+   */
+  getHistory(): ChatMessage[];
+
+  /**
+   * Clear conversation history
+   */
+  clearHistory(): void;
+
+  /**
+   * Add message to history
+   */
+  addMessage(message: ChatMessage): void;
+
+  // -------------------------------------------------------------------------
+  // Events
+  // -------------------------------------------------------------------------
+
+  /** Agent start event */
+  readonly onDidStart: vscode.Event<void>;
+
+  /** Agent stop event */
+  readonly onDidStop: vscode.Event<void>;
+
+  /** Tool confirmation event */
+  readonly onDidRequestConfirmation: vscode.Event<{
+    toolCallId: string;
+    toolName: string;
+    action: string;
+    description: string;
+    details: Record<string, unknown>;
+  }>;
+
+  // -------------------------------------------------------------------------
+  // ToolGroup Management
+  // -------------------------------------------------------------------------
+
+  /**
+   * Get all registered ToolGroups
+   */
+  getToolSkills(): import('@uniedit/shared').ConfiguredToolGroup[];
+}
+
+// =============================================================================
+// Agent Runner Implementation
+// =============================================================================
+
+/**
+ * Agent Runner - Lightweight VSCode wrapper for AgentSession
+ *
+ * This class focuses on VSCode integration:
+ * - VSCode events (onDidStart, onDidStop, onDidRequestConfirmation)
+ * - Pending message queue management
+ * - Tool confirmation UI bridge
+ * - Conversation history management
+ *
+ * Session management is delegated to @uniedit/agent's AgentSession.
+ */
+export class AgentRunner implements IAgentRunner {
+  private _config?: IAgentConfig;
+  private _session?: AgentSession;
+  private _promptBuilder?: SystemPromptBuilder;
+  private _toolGroupRegistry?: ToolGroupRegistry;
+  private _isRunning = false;
+
+  // Pending messages queue (for messages sent while agent is running)
+  private _pendingMessages: string[] = [];
+
+  // Pending tool confirmations
+  private _pendingConfirmations = new Map<string, {
+    toolCallId: string;
+    toolName: string;
+    action: string;
+    description: string;
+    details: Record<string, unknown>;
+    confirmationToken?: string;
+  }>();
+
+  // VSCode event emitters
+  private readonly _onDidStart = new vscode.EventEmitter<void>();
+  private readonly _onDidStop = new vscode.EventEmitter<void>();
+  private readonly _onDidRequestConfirmation = new vscode.EventEmitter<{
+    toolCallId: string;
+    toolName: string;
+    action: string;
+    description: string;
+    details: Record<string, unknown>;
+  }>();
+
+  // -------------------------------------------------------------------------
+  // Events
+  // -------------------------------------------------------------------------
+
+  get onDidStart(): vscode.Event<void> {
+    return this._onDidStart.event;
+  }
+
+  get onDidStop(): vscode.Event<void> {
+    return this._onDidStop.event;
+  }
+
+  get onDidRequestConfirmation(): vscode.Event<{
+    toolCallId: string;
+    toolName: string;
+    action: string;
+    description: string;
+    details: Record<string, unknown>;
+  }> {
+    return this._onDidRequestConfirmation.event;
+  }
+
+  // -------------------------------------------------------------------------
+  // Configuration
+  // -------------------------------------------------------------------------
+
+  configure(config: IAgentConfig): void {
+    this._config = config;
+
+    // Create system prompt builder
+    this._promptBuilder = createSystemPromptBuilder({
+      locale: config.locale ?? 'en',
+      mode: config.executionMode === 'plan' ? 'plan' : 'default',
+    });
+
+    // Load AGENTS.md if workspace root is provided
+    if (config.workspaceRoot) {
+      this._promptBuilder.loadAgentsFile(config.workspaceRoot, getDefaultPersonalPath())
+        .catch(err => {
+          console.warn('[AgentRunner] Failed to load AGENTS.md:', err);
+        });
+    }
+
+    // Resolve system prompt
+    const effectiveSystemPrompt = this._resolveSystemPrompt(config);
+
+    // Get custom hooks from HookManager (if available)
+    const customHooks = config.hookManager?.getHooks() ?? [];
+
+    // Create service from platform
+    const service = config.platform.createService(config.groupId);
+
+    // Create agent session
+    this._session = createAgentSession({
+      service: service as unknown as import('@uniedit/shared').IService,
+      toolRegistry: config.platform.tools,
+      systemPrompt: effectiveSystemPrompt,
+      executionMode: config.executionMode ?? 'auto',
+      maxIterations: config.maxIterations,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+      thinkingBudget: config.thinkingBudget,
+      modelId: config.modelId,
+      hooks: customHooks.length > 0 ? customHooks : undefined,
+      toolCategoryRegistry: config.toolCategoryRegistry,
+      onConfirmTool: async (request) => {
+        return this._handleToolConfirmation(request);
+      },
+      onValidationWarning: (warning) => {
+        console.warn('[AgentRunner] Validation warning:', warning.message);
+      },
+      onValidationError: (error) => {
+        console.error('[AgentRunner] Validation error:', error.message, error.details);
+      },
+    });
+  }
+
+  getConfig(): IAgentConfig | undefined {
+    return this._config;
+  }
+
+  // -------------------------------------------------------------------------
+  // Execution
+  // -------------------------------------------------------------------------
+
+  async *execute(
+    input: string,
+    context: IAgentContext
+  ): AsyncIterable<AgentEvent> {
+    if (!this._config || !this._session) {
+      yield { type: 'error', error: new Error('Agent not configured') };
+      return;
+    }
+
+    // If already running, queue the message
+    if (this._isRunning) {
+      this._pendingMessages.push(input);
+      yield {
+        type: 'messageQueued',
+        content: `Message queued (${this._pendingMessages.length} pending)`,
+      };
+      return;
+    }
+
+    this._isRunning = true;
+    this._onDidStart.fire();
+
+    try {
+      let currentInput = input;
+
+      while (currentInput) {
+        // Execute via AgentSession - directly yield events (types are now unified)
+        for await (const event of this._session.execute(currentInput, {
+          workspaceRoot: context.workspaceRoot,
+          projectType: context.projectType,
+          activeFile: context.activeEditor?.uri?.toString(),
+        })) {
+          yield event;
+        }
+
+        // Process pending messages
+        if (this._pendingMessages.length > 0) {
+          currentInput = this._pendingMessages.shift()!;
+
+          yield {
+            type: 'text',
+            content: `\n\n---\n**Processing queued message...**\n\n`,
+          };
+        } else {
+          currentInput = '';
+        }
+      }
+
+      // Emit done event
+      const totalTokens = this.getContextTokenCount();
+      yield {
+        type: 'done',
+        usage: {
+          inputTokens: totalTokens,
+          outputTokens: 0,
+          totalTokens,
+        },
+      };
+    } catch (error) {
+      yield {
+        type: 'error',
+        error: error instanceof Error ? error : new Error(String(error)),
+      };
+    } finally {
+      this._isRunning = false;
+      this._onDidStop.fire();
+    }
+  }
+
+  cancel(): void {
+    this._session?.cancel();
+    this._pendingMessages = [];
+  }
+
+  isRunning(): boolean {
+    return this._isRunning;
+  }
+
+  appendMessage(input: string): boolean {
+    if (!this._isRunning) {
+      return false;
+    }
+    this._pendingMessages.push(input);
+    return true;
+  }
+
+  getPendingMessagesCount(): number {
+    return this._pendingMessages.length;
+  }
+
+  clearPendingMessages(): void {
+    this._pendingMessages = [];
+  }
+
+  // -------------------------------------------------------------------------
+  // Context Management
+  // -------------------------------------------------------------------------
+
+  getContextTokenCount(): number {
+    if (this._session) {
+      return this._session.getTokenCount();
+    }
+    return 0;
+  }
+
+  async compressContext(): Promise<{
+    originalTokens: number;
+    compressedTokens: number;
+    ratio: number;
+  }> {
+    if (!this._session) {
+      return { originalTokens: 0, compressedTokens: 0, ratio: 1 };
+    }
+
+    const result = await this._session.compressContext();
+    return result;
+  }
+
+  // -------------------------------------------------------------------------
+  // Tool Confirmation
+  // -------------------------------------------------------------------------
+
+  confirmTool(toolCallId: string, approved: boolean): void {
+    const pending = this._pendingConfirmations.get(toolCallId);
+    if (pending) {
+      this._session?.confirmTool(toolCallId, approved);
+      this._pendingConfirmations.delete(toolCallId);
+    } else {
+      console.warn('[AgentRunner] No pending confirmation found for toolCallId:', toolCallId);
+    }
+  }
+
+  getPendingConfirmations(): Array<{
+    toolCallId: string;
+    toolName: string;
+    action: string;
+    description: string;
+    details: Record<string, unknown>;
+  }> {
+    return Array.from(this._pendingConfirmations.values()).map(p => ({
+      toolCallId: p.toolCallId,
+      toolName: p.toolName,
+      action: p.action,
+      description: p.description,
+      details: p.details,
+    }));
+  }
+
+  // -------------------------------------------------------------------------
+  // Conversation History
+  // -------------------------------------------------------------------------
+
+  getHistory(): ChatMessage[] {
+    return this._session?.getHistory() ?? [];
+  }
+
+  clearHistory(): void {
+    this._session?.clearHistory();
+  }
+
+  addMessage(message: ChatMessage): void {
+    this._session?.addMessage(message);
+  }
+
+  // -------------------------------------------------------------------------
+  // ToolGroup Management
+  // -------------------------------------------------------------------------
+
+  getToolSkills(): import('@uniedit/shared').ConfiguredToolGroup[] {
+    if (!this._toolGroupRegistry) {
+      return [];
+    }
+    return this._toolGroupRegistry.list().map(ts => ({ ...ts }));
+  }
+
+  // -------------------------------------------------------------------------
+  // Private Methods
+  // -------------------------------------------------------------------------
+
+  private _resolveSystemPrompt(config: IAgentConfig): string {
+    // If custom system prompt is provided, use it
+    if (config.systemPrompt) {
+      return config.systemPrompt;
+    }
+
+    // If prompt builder has AGENTS.md content, use it
+    if (this._promptBuilder) {
+      const agentsContent = this._promptBuilder.getAgentsContent();
+      if (agentsContent) {
+        return agentsContent;
+      }
+    }
+
+    // Use plan mode preset if in plan mode
+    if (config.executionMode === 'plan') {
+      const planModePreset = getBuiltinPrompt('plan-mode');
+      if (planModePreset?.systemPrompt) {
+        console.log('[AgentRunner] Using plan-mode system prompt');
+        return planModePreset.systemPrompt;
+      }
+      console.warn('[AgentRunner] Plan-mode preset not found, using default prompt');
+    }
+
+    // Use prompt builder's built-in prompt
+    if (this._promptBuilder) {
+      return this._promptBuilder.build();
+    }
+
+    // Fallback default prompt
+    return `You are a helpful AI assistant for video editing.
+You can use the available tools to help users edit their videos.
+When using tools, always explain what you are doing.`;
+  }
+
+  private _handleToolConfirmation(request: ToolConfirmationRequest): Promise<boolean> {
+    return new Promise((_resolve) => {
+      const toolCallId = request.toolCall.id;
+
+      this._pendingConfirmations.set(toolCallId, {
+        toolCallId,
+        toolName: request.toolCall.name,
+        action: request.action,
+        description: request.description,
+        details: request.details,
+        confirmationToken: request.confirmationToken,
+      });
+
+      this._onDidRequestConfirmation.fire({
+        toolCallId,
+        toolName: request.toolCall.name,
+        action: request.action,
+        description: request.description,
+        details: request.details,
+      });
+
+      // The confirmation will be resolved when confirmTool is called
+      // For now, we need to wait for user input
+      // This is handled by the session's internal confirmation flow
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Lifecycle
+  // -------------------------------------------------------------------------
+
+  dispose(): void {
+    this.cancel();
+    this._session?.dispose();
+    this._isRunning = false;
+    this._pendingConfirmations.clear();
+    this._onDidStart.dispose();
+    this._onDidStop.dispose();
+    this._onDidRequestConfirmation.dispose();
+  }
+}

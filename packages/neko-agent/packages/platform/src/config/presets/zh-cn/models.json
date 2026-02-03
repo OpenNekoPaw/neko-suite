@@ -1,0 +1,201 @@
+{
+  "models": [
+    {
+      "id": "openai-gpt-4o",
+      "name": "gpt-4o",
+      "displayName": "GPT-4o",
+      "providerId": "openai",
+      "capabilities": ["chat", "vision", "function_calling", "json_mode", "streaming"],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "inputCostPer1k": 0.0025,
+      "outputCostPer1k": 0.01,
+      "enabled": true
+    },
+    {
+      "id": "openai-gpt-4o-mini",
+      "name": "gpt-4o-mini",
+      "displayName": "GPT-4o Mini",
+      "providerId": "openai",
+      "capabilities": ["chat", "vision", "function_calling", "json_mode", "streaming"],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "inputCostPer1k": 0.00015,
+      "outputCostPer1k": 0.0006,
+      "enabled": true
+    },
+    {
+      "id": "openai-gpt-4-turbo",
+      "name": "gpt-4-turbo",
+      "displayName": "GPT-4 Turbo",
+      "providerId": "openai",
+      "capabilities": ["chat", "vision", "function_calling", "json_mode", "streaming"],
+      "contextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "inputCostPer1k": 0.01,
+      "outputCostPer1k": 0.03,
+      "enabled": true
+    },
+    {
+      "id": "openai-o1",
+      "name": "o1",
+      "displayName": "OpenAI o1",
+      "providerId": "openai",
+      "capabilities": ["chat", "vision", "function_calling", "streaming"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "inputCostPer1k": 0.015,
+      "outputCostPer1k": 0.06,
+      "enabled": true
+    },
+    {
+      "id": "openai-o1-mini",
+      "name": "o1-mini",
+      "displayName": "OpenAI o1 Mini",
+      "providerId": "openai",
+      "capabilities": ["chat", "function_calling", "streaming"],
+      "contextWindow": 128000,
+      "maxOutputTokens": 65536,
+      "inputCostPer1k": 0.003,
+      "outputCostPer1k": 0.012,
+      "enabled": true
+    },
+    {
+      "id": "openai-dall-e-3",
+      "name": "dall-e-3",
+      "displayName": "DALL-E 3",
+      "providerId": "openai",
+      "capabilities": ["image_generation"],
+      "contextWindow": 4000,
+      "enabled": true
+    },
+    {
+      "id": "openai-text-embedding-3-small",
+      "name": "text-embedding-3-small",
+      "displayName": "文本嵌入 3 Small",
+      "providerId": "openai",
+      "capabilities": ["embedding"],
+      "contextWindow": 8191,
+      "inputCostPer1k": 0.00002,
+      "enabled": true
+    },
+    {
+      "id": "openai-text-embedding-3-large",
+      "name": "text-embedding-3-large",
+      "displayName": "文本嵌入 3 Large",
+      "providerId": "openai",
+      "capabilities": ["embedding"],
+      "contextWindow": 8191,
+      "inputCostPer1k": 0.00013,
+      "enabled": true
+    },
+    {
+      "id": "anthropic-claude-sonnet-4",
+      "name": "claude-sonnet-4-20250514",
+      "displayName": "Claude Sonnet 4",
+      "providerId": "anthropic",
+      "capabilities": ["chat", "vision", "function_calling", "streaming"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "inputCostPer1k": 0.003,
+      "outputCostPer1k": 0.015,
+      "enabled": true
+    },
+    {
+      "id": "anthropic-claude-3-5-sonnet",
+      "name": "claude-3-5-sonnet-latest",
+      "displayName": "Claude 3.5 Sonnet",
+      "providerId": "anthropic",
+      "capabilities": ["chat", "vision", "function_calling", "streaming"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 16384,
+      "inputCostPer1k": 0.003,
+      "outputCostPer1k": 0.015,
+      "enabled": true
+    },
+    {
+      "id": "anthropic-claude-3-5-haiku",
+      "name": "claude-3-5-haiku-latest",
+      "displayName": "Claude 3.5 Haiku",
+      "providerId": "anthropic",
+      "capabilities": ["chat", "vision", "function_calling", "streaming"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 16384,
+      "inputCostPer1k": 0.001,
+      "outputCostPer1k": 0.005,
+      "enabled": true
+    },
+    {
+      "id": "anthropic-claude-3-opus",
+      "name": "claude-3-opus-latest",
+      "displayName": "Claude 3 Opus",
+      "providerId": "anthropic",
+      "capabilities": ["chat", "vision", "function_calling", "streaming"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 4096,
+      "inputCostPer1k": 0.015,
+      "outputCostPer1k": 0.075,
+      "enabled": true
+    },
+    {
+      "id": "google-gemini-2-flash",
+      "name": "gemini-2.0-flash-exp",
+      "displayName": "Gemini 2.0 Flash",
+      "providerId": "google",
+      "capabilities": ["chat", "vision", "function_calling", "streaming"],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 8192,
+      "inputCostPer1k": 0.0,
+      "outputCostPer1k": 0.0,
+      "enabled": true
+    },
+    {
+      "id": "google-gemini-1-5-pro",
+      "name": "gemini-1.5-pro",
+      "displayName": "Gemini 1.5 Pro",
+      "providerId": "google",
+      "capabilities": ["chat", "vision", "function_calling", "streaming", "audio"],
+      "contextWindow": 2000000,
+      "maxOutputTokens": 8192,
+      "inputCostPer1k": 0.00125,
+      "outputCostPer1k": 0.005,
+      "enabled": true
+    },
+    {
+      "id": "google-gemini-1-5-flash",
+      "name": "gemini-1.5-flash",
+      "displayName": "Gemini 1.5 Flash",
+      "providerId": "google",
+      "capabilities": ["chat", "vision", "function_calling", "streaming"],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 8192,
+      "inputCostPer1k": 0.000075,
+      "outputCostPer1k": 0.0003,
+      "enabled": true
+    },
+    {
+      "id": "deepseek-chat",
+      "name": "deepseek-chat",
+      "displayName": "DeepSeek V3",
+      "providerId": "deepseek",
+      "capabilities": ["chat", "function_calling", "streaming"],
+      "contextWindow": 64000,
+      "maxOutputTokens": 8192,
+      "inputCostPer1k": 0.00014,
+      "outputCostPer1k": 0.00028,
+      "enabled": true
+    },
+    {
+      "id": "deepseek-reasoner",
+      "name": "deepseek-reasoner",
+      "displayName": "DeepSeek R1",
+      "providerId": "deepseek",
+      "capabilities": ["chat", "streaming"],
+      "contextWindow": 64000,
+      "maxOutputTokens": 8192,
+      "inputCostPer1k": 0.00055,
+      "outputCostPer1k": 0.00219,
+      "enabled": true
+    }
+  ]
+}

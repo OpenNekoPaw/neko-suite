@@ -1,0 +1,47 @@
+{
+  "name": "uniedit-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "packages/neko-agent/packages/*",
+    "packages/neko-canvas/packages/*",
+    "packages/neko-cut/packages/*",
+    "packages/neko-server/packages/*",
+    "packages/neko-tools/packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build:effects-core && npm run build:webview && npm run build:assistant && npm run build:canvas && npm run build:extension",
+    "build:effects-core": "npm -w @uniedit/effects-core run build",
+    "build:webview": "npm -w @uniedit/webview run build",
+    "build:assistant": "npm -w @uniedit/assistant run build",
+    "build:canvas": "npm -w @uniedit/canvas run build",
+    "build:extension": "npm -w uniedit run compile",
+    "build:agent-cli": "pnpm -w @uniedit/agent-cli run build",
+    "dev": "npm -w uniedit run dev",
+    "lint": "npm -w uniedit run lint",
+    "test": "vitest",
+    "nekoagent": "npx tsx packages/neko-agent/packages/agent-cli/src/cli.ts",
+    "build:neko": "npm run build:webview && npm run build:assistant && npm run build:canvas && npm run build:neko-cut && npm run build:neko-canvas && npm run build:neko-agent && npm run build:neko-server && npm run build:neko-story && npm run build:neko-sketch && npm run build:neko-audio && npm run build:neko-live && npm run build:neko-script && npm run build:neko-assets && npm run build:neko-tools",
+    "build:neko-cut": "npm -w neko-cut run compile",
+    "build:neko-canvas": "npm -w neko-canvas run compile",
+    "build:neko-agent": "npm -w neko-agent run compile",
+    "build:neko-server": "npm -w neko-server run compile",
+    "build:neko-story": "npm -w neko-story run compile",
+    "build:neko-sketch": "npm -w neko-sketch run compile",
+    "build:neko-audio": "npm -w neko-audio run compile",
+    "build:neko-live": "npm -w neko-live run compile",
+    "build:neko-script": "npm -w neko-script run compile",
+    "build:neko-assets": "npm -w neko-assets run compile",
+    "build:neko-tools": "npm -w neko-tools run compile",
+    "dev:neko": "npm -w neko-cut run watch"
+  },
+  "dependencies": {
+    "@img/sharp-wasm32": "^0.34.5",
+    "d3-array": "^3.2.4",
+    "d3-shape": "^3.2.0",
+    "mp4-muxer": "^5.2.2"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.7.1"
+  }
+}

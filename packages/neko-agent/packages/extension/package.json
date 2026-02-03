@@ -1,0 +1,11 @@
+{
+  "name": "@neko-agent/extension",
+  "private": true,
+  "version": "0.0.1",
+  "description": "NekoAgent extension source code",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  }
+}

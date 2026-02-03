@@ -1,0 +1,328 @@
+/**
+ * Permission Hooks - ExecutorHooks implementation for permission management
+ *
+ * Implements Claude Code compatible permission model:
+ * - Integrates with AgentExecutor via hooks system
+ * - Supports deny/allow/ask rules
+ * - Handles plan/ask/auto execution modes
+ * - Provides confirmation callback for ask decisions
+ */
+
+import type {
+  ExecutorHooks,
+  ToolCallInfo,
+  ToolResultWithMeta,
+  ToolResult,
+} from '@uniedit/shared';
+import type {
+  PermissionConfig,
+  PermissionMode,
+  PermissionRules,
+  ConfirmToolCallback,
+  ToolConfirmationRequest,
+} from './types';
+import { DEFAULT_PERMISSION_CONFIG } from './types';
+import {
+  PermissionRuleMatcher,
+  normalizeToolCall,
+} from './rule-matcher';
+
+/**
+ * Permission hooks options
+ */
+export interface PermissionHooksOptions {
+  /** Initial permission config */
+  config?: PermissionConfig;
+
+  /** Callback for tool confirmation (ask mode) */
+  onConfirmTool?: ConfirmToolCallback;
+
+  /** Callback when tool is denied */
+  onToolDenied?: (toolCall: ToolCallInfo, reason: string) => void;
+
+  /** Callback when tool is allowed */
+  onToolAllowed?: (toolCall: ToolCallInfo, reason: string) => void;
+
+  /** Callback when entering ask flow */
+  onToolAskStarted?: (request: ToolConfirmationRequest) => void;
+}
+
+/**
+ * Permission Hooks - Implements permission checking in agent execution
+ */
+export class PermissionHooks implements ExecutorHooks {
+  name = 'permission';
+
+  private matcher: PermissionRuleMatcher;
+  private onConfirmTool?: ConfirmToolCallback;
+  private onToolDenied?: (toolCall: ToolCallInfo, reason: string) => void;
+  private onToolAllowed?: (toolCall: ToolCallInfo, reason: string) => void;
+  private onToolAskStarted?: (request: ToolConfirmationRequest) => void;
+
+  // Pending confirmations
+  private pendingConfirmations = new Map<
+    string,
+    {
+      resolve: (approved: boolean) => void;
+      request: ToolConfirmationRequest;
+    }
+  >();
+
+  // Token counter for unique confirmation IDs
+  private tokenCounter = 0;
+
+  constructor(options: PermissionHooksOptions = {}) {
+    const config = options.config || DEFAULT_PERMISSION_CONFIG;
+    this.matcher = new PermissionRuleMatcher(config);
+    this.onConfirmTool = options.onConfirmTool;
+    this.onToolDenied = options.onToolDenied;
+    this.onToolAllowed = options.onToolAllowed;
+    this.onToolAskStarted = options.onToolAskStarted;
+  }
+
+  /**
+   * Update permission configuration
+   */
+  updateConfig(config: Partial<PermissionConfig>): void {
+    this.matcher.updateConfig(config);
+  }
+
+  /**
+   * Set execution mode
+   */
+  setMode(mode: PermissionMode): void {
+    this.matcher.updateConfig({ mode });
+  }
+
+  /**
+   * Get current mode
+   */
+  getMode(): PermissionMode {
+    return this.matcher.getMode() as PermissionMode;
+  }
+
+  /**
+   * Update rules
+   */
+  updateRules(rules: PermissionRules): void {
+    this.matcher.updateConfig({ rules });
+  }
+
+  /**
+   * Add a rule dynamically (e.g., from "Allow Always" action)
+   */
+  addAllowRule(pattern: string): void {
+    this.matcher.addRule('allow', pattern);
+  }
+
+  /**
+   * Get current rules
+   */
+  getRules(): PermissionRules {
+    return this.matcher.getRules();
+  }
+
+  /**
+   * Confirm a pending tool call externally
+   */
+  confirmTool(confirmationToken: string, approved: boolean, allowAlways?: boolean): void {
+    console.log('[PermissionHooks] confirmTool called:', {
+      confirmationToken,
+      approved,
+      allowAlways,
+      hasPending: this.pendingConfirmations.has(confirmationToken),
+      pendingCount: this.pendingConfirmations.size,
+    });
+
+    const pending = this.pendingConfirmations.get(confirmationToken);
+    if (pending) {
+      // If allowAlways, add to allow rules
+      if (approved && allowAlways) {
+        const pattern = normalizeToolCall(pending.request.toolCall);
+        this.addAllowRule(pattern);
+      }
+
+      console.log('[PermissionHooks] Resolving Promise for:', pending.request.toolCall.name);
+      pending.resolve(approved);
+      this.pendingConfirmations.delete(confirmationToken);
+    } else {
+      console.warn('[PermissionHooks] No pending confirmation found for token:', confirmationToken);
+    }
+  }
+
+  /**
+   * Get pending confirmations
+   */
+  getPendingConfirmations(): ToolConfirmationRequest[] {
+    return Array.from(this.pendingConfirmations.values()).map((p) => p.request);
+  }
+
+  /**
+   * Hook: onToolCall - Main permission checking logic
+   *
+   * Called for each tool execution. Returns result or throws to block.
+   */
+  async onToolCall(
+    info: ToolCallInfo,
+    execute: () => Promise<ToolResult>
+  ): Promise<ToolResultWithMeta> {
+    // Check permission
+    const result = this.matcher.check(info);
+
+    console.log('[PermissionHooks] onToolCall:', {
+      toolName: info.name,
+      toolId: info.id,
+      decision: result.decision,
+      reason: result.reason,
+      mode: this.matcher.getMode(),
+    });
+
+    switch (result.decision) {
+      case 'deny':
+        // Tool is denied - return error result without executing
+        this.onToolDenied?.(info, result.reason);
+        return {
+          success: false,
+          error: result.reason,
+          callId: info.id,
+          name: info.name,
+        };
+
+      case 'allow':
+        // Tool is allowed - execute directly
+        this.onToolAllowed?.(info, result.reason);
+        const allowResult = await execute();
+        return {
+          ...allowResult,
+          callId: info.id,
+          name: info.name,
+        };
+
+      case 'ask':
+        // Tool requires confirmation
+        const approved = await this.requestConfirmation(info);
+
+        if (approved) {
+          this.onToolAllowed?.(info, 'User approved');
+          const askResult = await execute();
+          return {
+            ...askResult,
+            callId: info.id,
+            name: info.name,
+          };
+        } else {
+          this.onToolDenied?.(info, 'User denied');
+          return {
+            success: false,
+            error: 'Tool execution denied by user',
+            callId: info.id,
+            name: info.name,
+          };
+        }
+
+      default:
+        // Should not reach here
+        const defaultResult = await execute();
+        return {
+          ...defaultResult,
+          callId: info.id,
+          name: info.name,
+        };
+    }
+  }
+
+  /**
+   * Request user confirmation for a tool call
+   */
+  private async requestConfirmation(toolCall: ToolCallInfo): Promise<boolean> {
+    const confirmationToken = this.generateToken();
+    const normalizedTool = normalizeToolCall(toolCall);
+
+    const request: ToolConfirmationRequest = {
+      toolCall,
+      action: this.getActionDescription(toolCall),
+      description: `Execute ${toolCall.name}`,
+      details: {
+        normalizedTool,
+        arguments: toolCall.arguments,
+      },
+      confirmationToken,
+    };
+
+    console.log('[PermissionHooks] requestConfirmation: Creating Promise for', {
+      toolName: toolCall.name,
+      toolId: toolCall.id,
+      confirmationToken,
+    });
+
+    // Notify that ask flow started
+    this.onToolAskStarted?.(request);
+
+    // If we have a callback, use it
+    if (this.onConfirmTool) {
+      console.log('[PermissionHooks] Using onConfirmTool callback');
+      const response = await this.onConfirmTool(request);
+
+      // Handle allow always
+      if (response.approved && response.allowAlways) {
+        this.addAllowRule(normalizedTool);
+      }
+
+      return response.approved;
+    }
+
+    // Otherwise, wait for external confirmation via confirmTool()
+    console.log('[PermissionHooks] Waiting for external confirmation via confirmTool()');
+    return new Promise<boolean>((resolve) => {
+      this.pendingConfirmations.set(confirmationToken, { resolve, request });
+      console.log('[PermissionHooks] Pending confirmations count:', this.pendingConfirmations.size);
+
+      // Timeout after 5 minutes - deny by default
+      setTimeout(() => {
+        if (this.pendingConfirmations.has(confirmationToken)) {
+          console.log('[PermissionHooks] Confirmation timeout for:', confirmationToken);
+          this.pendingConfirmations.delete(confirmationToken);
+          resolve(false);
+        }
+      }, 5 * 60 * 1000);
+    });
+  }
+
+  /**
+   * Generate human-readable action description
+   */
+  private getActionDescription(toolCall: ToolCallInfo): string {
+    const { name, arguments: args } = toolCall;
+
+    switch (name) {
+      case 'Bash':
+        return `Run command: ${args?.command || 'unknown'}`;
+      case 'Read':
+        return `Read file: ${args?.file_path || args?.path || 'unknown'}`;
+      case 'Write':
+        return `Write file: ${args?.file_path || 'unknown'}`;
+      case 'Edit':
+        return `Edit file: ${args?.file_path || 'unknown'}`;
+      case 'WebFetch':
+        return `Fetch URL: ${args?.url || 'unknown'}`;
+      default:
+        return `Execute ${name}`;
+    }
+  }
+
+  /**
+   * Generate unique confirmation token
+   */
+  private generateToken(): string {
+    return `perm_${Date.now()}_${++this.tokenCounter}`;
+  }
+}
+
+/**
+ * Create permission hooks with default options
+ */
+export function createPermissionHooks(
+  options?: PermissionHooksOptions
+): PermissionHooks {
+  return new PermissionHooks(options);
+}

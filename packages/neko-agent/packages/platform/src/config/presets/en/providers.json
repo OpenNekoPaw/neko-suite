@@ -1,0 +1,209 @@
+{
+  "providers": [
+    {
+      "id": "openai",
+      "name": "openai",
+      "displayName": "OpenAI",
+      "type": "openai",
+      "apiUrl": "https://api.openai.com/v1",
+      "enabled": false,
+      "builtin": true
+    },
+    {
+      "id": "anthropic",
+      "name": "anthropic",
+      "displayName": "Anthropic",
+      "type": "anthropic",
+      "apiUrl": "https://api.anthropic.com/v1",
+      "enabled": false,
+      "builtin": true
+    },
+    {
+      "id": "google",
+      "name": "google",
+      "displayName": "Gemini",
+      "type": "google",
+      "apiUrl": "https://generativelanguage.googleapis.com/v1beta",
+      "enabled": false,
+      "builtin": true
+    },
+    {
+      "id": "grok",
+      "name": "grok",
+      "displayName": "Grok",
+      "type": "openai",
+      "apiUrl": "https://api.x.ai/v1",
+      "enabled": false,
+      "builtin": true
+    },
+    {
+      "id": "deepseek",
+      "name": "deepseek",
+      "displayName": "DeepSeek",
+      "type": "openai",
+      "apiUrl": "https://api.deepseek.com/v1",
+      "enabled": false,
+      "builtin": true
+    }
+  ],
+  "templates": [
+    {
+      "id": "ollama",
+      "name": "ollama",
+      "displayName": "Ollama",
+      "type": "ollama",
+      "apiUrl": "http://localhost:11434/api"
+    },
+    {
+      "id": "azure",
+      "name": "azure",
+      "displayName": "Azure OpenAI",
+      "type": "azure",
+      "apiUrl": ""
+    },
+    {
+      "id": "kimi",
+      "name": "kimi",
+      "displayName": "Kimi (Moonshot)",
+      "type": "openai",
+      "apiUrl": "https://api.moonshot.cn/v1"
+    },
+    {
+      "id": "glm",
+      "name": "glm",
+      "displayName": "GLM (Zhipu)",
+      "type": "openai",
+      "apiUrl": "https://open.bigmodel.cn/api/paas/v4"
+    },
+    {
+      "id": "qwen",
+      "name": "qwen",
+      "displayName": "Qwen (Alibaba)",
+      "type": "openai",
+      "apiUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    {
+      "id": "lmstudio",
+      "name": "lmstudio",
+      "displayName": "LM Studio",
+      "type": "openai",
+      "apiUrl": "http://localhost:1234/v1"
+    },
+    {
+      "id": "siliconflow",
+      "name": "siliconflow",
+      "displayName": "SiliconFlow",
+      "type": "generic",
+      "apiUrl": "https://api.siliconflow.cn/v1",
+      "protocolVariant": {
+        "basePath": ""
+      }
+    },
+    {
+      "id": "302ai",
+      "name": "302ai",
+      "displayName": "302.AI",
+      "type": "generic",
+      "apiUrl": "https://api.302.ai/v1",
+      "protocolVariant": {
+        "basePath": ""
+      }
+    },
+    {
+      "id": "groq",
+      "name": "groq",
+      "displayName": "Groq",
+      "type": "generic",
+      "apiUrl": "https://api.groq.com/openai/v1",
+      "protocolVariant": {
+        "basePath": ""
+      }
+    },
+    {
+      "id": "together",
+      "name": "together",
+      "displayName": "Together AI",
+      "type": "generic",
+      "apiUrl": "https://api.together.xyz/v1",
+      "protocolVariant": {
+        "basePath": ""
+      }
+    },
+    {
+      "id": "openrouter",
+      "name": "openrouter",
+      "displayName": "OpenRouter",
+      "type": "generic",
+      "apiUrl": "https://openrouter.ai/api/v1",
+      "protocolVariant": {
+        "basePath": ""
+      }
+    },
+    {
+      "id": "fireworks",
+      "name": "fireworks",
+      "displayName": "Fireworks AI",
+      "type": "generic",
+      "apiUrl": "https://api.fireworks.ai/inference/v1",
+      "protocolVariant": {
+        "basePath": ""
+      }
+    },
+    {
+      "id": "midjourney",
+      "name": "midjourney",
+      "displayName": "Midjourney",
+      "type": "midjourney",
+      "apiUrl": ""
+    },
+    {
+      "id": "liblib",
+      "name": "liblib",
+      "displayName": "LiblibAI",
+      "type": "liblib",
+      "apiUrl": "https://openapi.liblibai.cloud"
+    },
+    {
+      "id": "kling",
+      "name": "kling",
+      "displayName": "Kling",
+      "type": "kling",
+      "apiUrl": "https://api.klingai.com"
+    },
+    {
+      "id": "vidu",
+      "name": "vidu",
+      "displayName": "Vidu",
+      "type": "vidu",
+      "apiUrl": "https://api.vidu.com/v1"
+    },
+    {
+      "id": "runway",
+      "name": "runway",
+      "displayName": "Runway",
+      "type": "runway",
+      "apiUrl": "https://api.runwayml.com/v1"
+    },
+    {
+      "id": "luma",
+      "name": "luma",
+      "displayName": "Luma AI",
+      "type": "luma",
+      "apiUrl": "https://api.lumalabs.ai"
+    },
+    {
+      "id": "minimax",
+      "name": "minimax",
+      "displayName": "MiniMax",
+      "type": "minimax",
+      "apiUrl": "https://api.minimax.chat/v1"
+    },
+    {
+      "id": "suno",
+      "name": "suno",
+      "displayName": "Suno",
+      "type": "suno",
+      "apiUrl": "https://api.suno.ai/v1"
+    }
+  ]
+}

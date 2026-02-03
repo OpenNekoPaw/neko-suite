@@ -1,0 +1,51 @@
+/**
+ * Message Handlers Module
+ *
+ * Exports all message handlers and the registry.
+ */
+
+export * from './types';
+export * from './registry';
+export * from './useMessageHandler';
+
+export { streamingHandlers } from './streaming-handlers';
+export { toolHandlers } from './tool-handlers';
+export { conversationHandlers } from './conversation-handlers';
+export { configHandlers } from './config-handlers';
+export { taskHandlers } from './task-handlers';
+export { tabHandlers } from './tab-handlers';
+export { commandHandlers } from './command-handlers';
+export {
+  externalHandlers,
+  setExternalMessageContext,
+  type ExternalMessageContext,
+} from './external-handlers';
+
+import { MessageHandlerRegistry } from './registry';
+import { streamingHandlers } from './streaming-handlers';
+import { toolHandlers } from './tool-handlers';
+import { conversationHandlers } from './conversation-handlers';
+import { configHandlers } from './config-handlers';
+import { taskHandlers } from './task-handlers';
+import { tabHandlers } from './tab-handlers';
+import { commandHandlers } from './command-handlers';
+import { externalHandlers } from './external-handlers';
+
+/**
+ * Create a fully configured message handler registry
+ */
+export function createConfiguredRegistry(): MessageHandlerRegistry {
+  const registry = new MessageHandlerRegistry();
+
+  // Register all static handlers
+  registry.registerAll(streamingHandlers);
+  registry.registerAll(toolHandlers);
+  registry.registerAll(conversationHandlers);
+  registry.registerAll(configHandlers);
+  registry.registerAll(taskHandlers);
+  registry.registerAll(tabHandlers);
+  registry.registerAll(commandHandlers);
+  registry.registerAll(externalHandlers);
+
+  return registry;
+}

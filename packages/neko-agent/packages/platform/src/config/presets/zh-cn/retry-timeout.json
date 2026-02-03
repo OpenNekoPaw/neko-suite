@@ -1,0 +1,69 @@
+{
+  "presets": {
+    "modelCall": {
+      "name": "Model Call",
+      "retry": {
+        "maxRetries": 3,
+        "backoffStrategy": {
+          "type": "exponential",
+          "initialDelayMs": 1000,
+          "multiplier": 2,
+          "maxDelayMs": 30000
+        },
+        "retryableCategories": ["rate_limit", "timeout", "network", "server"]
+      },
+      "timeout": {
+        "requestTimeout": 60000,
+        "totalTimeout": 180000,
+        "streamTimeout": 30000
+      }
+    },
+    "toolExecution": {
+      "name": "Tool Execution",
+      "retry": {
+        "maxRetries": 2,
+        "backoffStrategy": {
+          "type": "fixed",
+          "delayMs": 1000
+        },
+        "retryableCategories": ["timeout", "network"]
+      },
+      "timeout": {
+        "requestTimeout": 30000,
+        "totalTimeout": 60000
+      }
+    },
+    "mcpRequest": {
+      "name": "MCP Request",
+      "retry": {
+        "maxRetries": 2,
+        "backoffStrategy": {
+          "type": "linear",
+          "initialDelayMs": 500,
+          "incrementMs": 500,
+          "maxDelayMs": 5000
+        },
+        "retryableCategories": ["timeout", "network", "server"]
+      },
+      "timeout": {
+        "requestTimeout": 30000,
+        "totalTimeout": 90000
+      }
+    },
+    "workflowExecution": {
+      "name": "Workflow Execution",
+      "retry": {
+        "maxRetries": 1,
+        "backoffStrategy": {
+          "type": "fixed",
+          "delayMs": 2000
+        },
+        "retryableCategories": ["timeout", "network"]
+      },
+      "timeout": {
+        "requestTimeout": 300000,
+        "totalTimeout": 600000
+      }
+    }
+  }
+}

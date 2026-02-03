@@ -1,0 +1,348 @@
+{
+  "name": "neko-cut",
+  "displayName": "NekoCut",
+  "description": "Professional video editor for VSCode",
+  "version": "0.0.1",
+  "publisher": "neko",
+  "l10n": "./l10n",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neko/creative-suite"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "video",
+    "editor",
+    "timeline",
+    "editing"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onCustomEditor:neko.videoEditor",
+    "onCommand:neko.newProject"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "neko.videoEditor",
+        "displayName": "Video Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.jvi"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "neko-properties",
+          "title": "%neko.properties.title%",
+          "icon": "$(symbol-property)"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "neko.projectOutline",
+          "name": "%neko.outline.title%",
+          "contextualTitle": "%neko.outline.contextualTitle%",
+          "icon": "$(list-tree)",
+          "visibility": "visible"
+        }
+      ],
+      "neko-properties": [
+        {
+          "type": "webview",
+          "id": "neko.propertyPanel",
+          "name": "%neko.properties.name%",
+          "contextualTitle": "%neko.properties.contextualTitle%"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "neko.newProject",
+        "title": "%neko.newProject.title%",
+        "category": "NekoCut"
+      },
+      {
+        "command": "neko.addToTimeline",
+        "title": "%neko.addToTimeline.title%",
+        "category": "NekoCut"
+      },
+      {
+        "command": "neko.openInEditor",
+        "title": "%neko.openInEditor.title%",
+        "category": "NekoCut"
+      },
+      {
+        "command": "neko.timeline.getInfo",
+        "title": "Get Timeline Info",
+        "category": "NekoCut: Timeline"
+      },
+      {
+        "command": "neko.timeline.listElements",
+        "title": "List Timeline Elements",
+        "category": "NekoCut: Timeline"
+      },
+      {
+        "command": "neko.element.add",
+        "title": "Add Element",
+        "category": "NekoCut: Element"
+      },
+      {
+        "command": "neko.element.update",
+        "title": "Update Element",
+        "category": "NekoCut: Element"
+      },
+      {
+        "command": "neko.element.delete",
+        "title": "Delete Element",
+        "category": "NekoCut: Element"
+      },
+      {
+        "command": "neko.element.getInfo",
+        "title": "Get Element Info",
+        "category": "NekoCut: Element"
+      },
+      {
+        "command": "neko.track.add",
+        "title": "Add Track",
+        "category": "NekoCut: Track"
+      },
+      {
+        "command": "neko.track.delete",
+        "title": "Delete Track",
+        "category": "NekoCut: Track"
+      },
+      {
+        "command": "neko.track.reorder",
+        "title": "Reorder Track",
+        "category": "NekoCut: Track"
+      },
+      {
+        "command": "neko.track.setProperties",
+        "title": "Set Track Properties",
+        "category": "NekoCut: Track"
+      },
+      {
+        "command": "neko.effect.list",
+        "title": "List Effects",
+        "category": "NekoCut: Effect"
+      },
+      {
+        "command": "neko.effect.add",
+        "title": "Add Effect",
+        "category": "NekoCut: Effect"
+      },
+      {
+        "command": "neko.effect.update",
+        "title": "Update Effect",
+        "category": "NekoCut: Effect"
+      },
+      {
+        "command": "neko.effect.remove",
+        "title": "Remove Effect",
+        "category": "NekoCut: Effect"
+      },
+      {
+        "command": "neko.transition.list",
+        "title": "List Transitions",
+        "category": "NekoCut: Transition"
+      },
+      {
+        "command": "neko.transition.add",
+        "title": "Add Transition",
+        "category": "NekoCut: Transition"
+      },
+      {
+        "command": "neko.transition.remove",
+        "title": "Remove Transition",
+        "category": "NekoCut: Transition"
+      },
+      {
+        "command": "neko.mask.add",
+        "title": "Add Mask",
+        "category": "NekoCut: Mask"
+      },
+      {
+        "command": "neko.mask.update",
+        "title": "Update Mask",
+        "category": "NekoCut: Mask"
+      },
+      {
+        "command": "neko.mask.remove",
+        "title": "Remove Mask",
+        "category": "NekoCut: Mask"
+      },
+      {
+        "command": "neko.keyframe.get",
+        "title": "Get Keyframes",
+        "category": "NekoCut: Keyframe"
+      },
+      {
+        "command": "neko.keyframe.add",
+        "title": "Add Keyframe",
+        "category": "NekoCut: Keyframe"
+      },
+      {
+        "command": "neko.keyframe.update",
+        "title": "Update Keyframe",
+        "category": "NekoCut: Keyframe"
+      },
+      {
+        "command": "neko.keyframe.remove",
+        "title": "Remove Keyframe",
+        "category": "NekoCut: Keyframe"
+      },
+      {
+        "command": "neko.shape.add",
+        "title": "Add Shape",
+        "category": "NekoCut: Shape"
+      },
+      {
+        "command": "neko.shape.update",
+        "title": "Update Shape",
+        "category": "NekoCut: Shape"
+      },
+      {
+        "command": "neko.color.set",
+        "title": "Set Color Correction",
+        "category": "NekoCut: Color"
+      },
+      {
+        "command": "neko.color.reset",
+        "title": "Reset Color Correction",
+        "category": "NekoCut: Color"
+      },
+      {
+        "command": "neko.audio.setProperties",
+        "title": "Set Audio Properties",
+        "category": "NekoCut: Audio"
+      },
+      {
+        "command": "neko.audio.addKeyframe",
+        "title": "Add Audio Keyframe",
+        "category": "NekoCut: Audio"
+      },
+      {
+        "command": "neko.animation.add",
+        "title": "Add Animation",
+        "category": "NekoCut: Animation"
+      },
+      {
+        "command": "neko.subtitle.add",
+        "title": "Add Subtitle",
+        "category": "NekoCut: Subtitle"
+      },
+      {
+        "command": "neko.subtitle.import",
+        "title": "Import Subtitles",
+        "category": "NekoCut: Subtitle"
+      },
+      {
+        "command": "neko.media.trim",
+        "title": "Trim Media",
+        "category": "NekoCut: Media"
+      },
+      {
+        "command": "neko.media.split",
+        "title": "Split Media",
+        "category": "NekoCut: Media"
+      },
+      {
+        "command": "neko.media.setSpeed",
+        "title": "Set Media Speed",
+        "category": "NekoCut: Media"
+      },
+      {
+        "command": "neko.media.separateAudio",
+        "title": "Separate Audio",
+        "category": "NekoCut: Media"
+      },
+      {
+        "command": "neko.render.frame",
+        "title": "Render Frame",
+        "category": "NekoCut: Render"
+      },
+      {
+        "command": "neko.render.clip",
+        "title": "Render Clip",
+        "category": "NekoCut: Render"
+      },
+      {
+        "command": "neko.render.thumbnail",
+        "title": "Get Thumbnail",
+        "category": "NekoCut: Render"
+      },
+      {
+        "command": "neko.export.video",
+        "title": "Export Video",
+        "category": "NekoCut: Export"
+      },
+      {
+        "command": "neko.export.getProgress",
+        "title": "Get Export Progress",
+        "category": "NekoCut: Export"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "neko.newProject",
+          "group": "neko@1",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "neko.addToTimeline",
+          "group": "neko@2",
+          "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|mp3|wav|ogg|m4a|aac|flac|png|jpg|jpeg|gif|webp|bmp|svg)$/i"
+        },
+        {
+          "command": "neko.openInEditor",
+          "group": "neko@3",
+          "when": "resourceExtname == .jvi"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "npm run compile:extension && npm run copy:webview",
+    "compile:extension": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:sharp --external:@vedit/media-processor-rs --format=cjs --platform=node",
+    "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp packages/webview/dist/*.html dist/webview/ && cp -R packages/webview/dist/assets/* dist/webview/assets/",
+    "watch": "npm run compile:extension -- --watch",
+    "lint": "eslint src --ext ts,tsx",
+    "test": "vitest",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@uniedit/platform": "workspace:*",
+    "@uniedit/shared": "workspace:*",
+    "esbuild": "^0.19.8",
+    "eslint": "^8.55.0",
+    "typescript": "^5.3.2",
+    "vitest": "^1.0.4"
+  },
+  "dependencies": {
+    "@vedit/media-processor-rs": "workspace:*",
+    "sharp": "^0.34.0"
+  }
+}

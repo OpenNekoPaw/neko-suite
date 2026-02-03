@@ -1,0 +1,258 @@
+{
+  "executionGroups": [
+    {
+      "id": "image_generation",
+      "name": "Image Generation",
+      "description": "Text-to-image generation targets",
+      "taskType": "image_generation",
+      "targets": [
+        {
+          "id": "openai-dalle3",
+          "type": "api",
+          "providerId": "openai",
+          "modelId": "dall-e-3",
+          "displayName": "DALL-E 3",
+          "capabilities": ["text-to-image"],
+          "estimatedLatency": 15000,
+          "estimatedCost": 0.04,
+          "qualityScore": 0.9,
+          "enabled": true
+        },
+        {
+          "id": "fal-flux-pro",
+          "type": "api",
+          "providerId": "fal",
+          "modelId": "flux-pro",
+          "displayName": "Flux Pro",
+          "capabilities": ["text-to-image"],
+          "estimatedLatency": 8000,
+          "estimatedCost": 0.03,
+          "qualityScore": 0.92,
+          "enabled": true
+        },
+        {
+          "id": "stability-sd3",
+          "type": "api",
+          "providerId": "stability",
+          "modelId": "sd3-large",
+          "displayName": "Stable Diffusion 3",
+          "capabilities": ["text-to-image", "img2img"],
+          "estimatedLatency": 10000,
+          "estimatedCost": 0.04,
+          "qualityScore": 0.88,
+          "enabled": true
+        },
+        {
+          "id": "comfyui-sdxl",
+          "type": "workflow",
+          "workflowId": "comfyui-sdxl-basic",
+          "displayName": "ComfyUI SDXL",
+          "capabilities": ["text-to-image", "controlnet", "lora", "ip-adapter"],
+          "estimatedLatency": 20000,
+          "estimatedCost": 0,
+          "qualityScore": 0.95,
+          "enabled": true
+        },
+        {
+          "id": "comfyui-flux",
+          "type": "workflow",
+          "workflowId": "comfyui-flux-schnell",
+          "displayName": "ComfyUI Flux",
+          "capabilities": ["text-to-image"],
+          "estimatedLatency": 5000,
+          "estimatedCost": 0,
+          "qualityScore": 0.88,
+          "enabled": true
+        }
+      ],
+      "strategy": { "type": "priority" },
+      "fallback": {
+        "enabled": true,
+        "maxAttempts": 3,
+        "triggerOn": ["rate_limit", "timeout", "server_error", "unavailable"]
+      },
+      "enabled": true
+    },
+    {
+      "id": "video_generation",
+      "name": "Video Generation",
+      "description": "Text-to-video generation targets",
+      "taskType": "video_generation",
+      "targets": [
+        {
+          "id": "runway-gen3",
+          "type": "api",
+          "providerId": "fal",
+          "modelId": "runway-gen3-turbo",
+          "displayName": "Runway Gen-3",
+          "capabilities": ["text-to-video", "image-to-video"],
+          "estimatedLatency": 60000,
+          "estimatedCost": 0.25,
+          "qualityScore": 0.92,
+          "enabled": true
+        },
+        {
+          "id": "kling-2",
+          "type": "api",
+          "providerId": "fal",
+          "modelId": "kling-video-2",
+          "displayName": "Kling 2.0",
+          "capabilities": ["text-to-video"],
+          "estimatedLatency": 120000,
+          "estimatedCost": 0.15,
+          "qualityScore": 0.88,
+          "enabled": true
+        },
+        {
+          "id": "pika-2",
+          "type": "api",
+          "providerId": "replicate",
+          "modelId": "pika-2",
+          "displayName": "Pika 2.0",
+          "capabilities": ["text-to-video", "image-to-video"],
+          "estimatedLatency": 45000,
+          "estimatedCost": 0.20,
+          "qualityScore": 0.85,
+          "enabled": true
+        }
+      ],
+      "strategy": { "type": "quality-optimal" },
+      "fallback": {
+        "enabled": true,
+        "maxAttempts": 2,
+        "triggerOn": ["rate_limit", "timeout", "server_error"]
+      },
+      "enabled": true
+    },
+    {
+      "id": "tts",
+      "name": "Text-to-Speech",
+      "description": "TTS generation targets",
+      "taskType": "tts",
+      "targets": [
+        {
+          "id": "openai-tts",
+          "type": "api",
+          "providerId": "openai",
+          "modelId": "tts-1-hd",
+          "displayName": "OpenAI TTS HD",
+          "capabilities": ["tts"],
+          "estimatedLatency": 3000,
+          "estimatedCost": 0.03,
+          "qualityScore": 0.9,
+          "enabled": true
+        },
+        {
+          "id": "elevenlabs",
+          "type": "api",
+          "providerId": "elevenlabs",
+          "modelId": "eleven_multilingual_v2",
+          "displayName": "ElevenLabs",
+          "capabilities": ["tts", "voice-clone"],
+          "estimatedLatency": 2000,
+          "estimatedCost": 0.05,
+          "qualityScore": 0.95,
+          "enabled": true
+        }
+      ],
+      "strategy": { "type": "priority" },
+      "fallback": {
+        "enabled": true,
+        "maxAttempts": 2,
+        "triggerOn": ["rate_limit", "timeout"]
+      },
+      "enabled": true
+    },
+    {
+      "id": "music_generation",
+      "name": "Music Generation",
+      "description": "Background music generation targets",
+      "taskType": "music_generation",
+      "targets": [
+        {
+          "id": "suno",
+          "type": "api",
+          "providerId": "replicate",
+          "modelId": "suno-v3.5",
+          "displayName": "Suno v3.5",
+          "capabilities": ["music-generation"],
+          "estimatedLatency": 30000,
+          "estimatedCost": 0.10,
+          "qualityScore": 0.9,
+          "enabled": true
+        }
+      ],
+      "strategy": { "type": "priority" },
+      "fallback": {
+        "enabled": true,
+        "maxAttempts": 2,
+        "triggerOn": ["rate_limit", "timeout", "server_error"]
+      },
+      "enabled": true
+    },
+    {
+      "id": "style_transfer",
+      "name": "Style Transfer",
+      "description": "Image style transfer targets",
+      "taskType": "style_transfer",
+      "targets": [
+        {
+          "id": "comfyui-style",
+          "type": "workflow",
+          "workflowId": "comfyui-style-transfer",
+          "displayName": "ComfyUI Style Transfer",
+          "capabilities": ["style-transfer", "img2img"],
+          "estimatedLatency": 15000,
+          "estimatedCost": 0,
+          "qualityScore": 0.9,
+          "enabled": true
+        },
+        {
+          "id": "fal-style",
+          "type": "api",
+          "providerId": "fal",
+          "modelId": "style-transfer",
+          "displayName": "Fal Style Transfer",
+          "capabilities": ["style-transfer"],
+          "estimatedLatency": 10000,
+          "estimatedCost": 0.02,
+          "qualityScore": 0.85,
+          "enabled": true
+        }
+      ],
+      "strategy": { "type": "priority" },
+      "fallback": {
+        "enabled": true,
+        "maxAttempts": 2,
+        "triggerOn": ["timeout", "server_error"]
+      },
+      "enabled": true
+    },
+    {
+      "id": "character_generation",
+      "name": "Character Generation",
+      "description": "Consistent character image generation",
+      "taskType": "character_generation",
+      "targets": [
+        {
+          "id": "comfyui-character",
+          "type": "workflow",
+          "workflowId": "comfyui-instantid",
+          "displayName": "ComfyUI InstantID",
+          "capabilities": ["character-generation", "ip-adapter", "face-swap"],
+          "estimatedLatency": 25000,
+          "estimatedCost": 0,
+          "qualityScore": 0.95,
+          "enabled": true
+        }
+      ],
+      "strategy": { "type": "priority" },
+      "fallback": {
+        "enabled": true,
+        "maxAttempts": 2,
+        "triggerOn": ["timeout", "server_error"]
+      },
+      "enabled": true
+    }
+  ]
+}

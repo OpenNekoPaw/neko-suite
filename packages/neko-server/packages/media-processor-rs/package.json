@@ -1,0 +1,42 @@
+{
+  "name": "@vedit/media-processor-rs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "High-performance media processor with GPU acceleration",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "media-processor",
+    "triples": {
+      "defaults": false,
+      "additional": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-pc-windows-msvc"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "npm run build:napi && npm run build:server",
+    "build:napi": "npm run build:ffmpeg-env && npx @napi-rs/cli build --platform --release --cargo-flags=\"--lib\"",
+    "build:server": "npm run build:ffmpeg-env && cargo build --release --bin vedit-server --no-default-features",
+    "build:debug": "npm run build:ffmpeg-env && npx @napi-rs/cli build --platform",
+    "build:ffmpeg-env": "node scripts/setup-ffmpeg-env.js",
+    "test": "cargo test",
+    "artifacts": "npx @napi-rs/cli artifacts",
+    "prepublishOnly": "npx @napi-rs/cli prepublish -t npm",
+    "universal": "npx @napi-rs/cli universal"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  },
+  "engines": {
+    "node": ">= 18"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "*.node"
+  ]
+}

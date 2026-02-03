@@ -1,0 +1,96 @@
+{
+  "mcpServers": [
+    {
+      "id": "filesystem",
+      "name": "文件系统",
+      "description": "读取、写入和管理文件和目录",
+      "category": "filesystem",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/dir"],
+      "enabled": true,
+      "builtin": true,
+      "homepage": "https://github.com/modelcontextprotocol/servers",
+      "tools": [
+        { "name": "read_file", "description": "读取文件内容" },
+        { "name": "write_file", "description": "写入文件" },
+        { "name": "list_directory", "description": "列出目录内容" },
+        { "name": "create_directory", "description": "创建目录" },
+        { "name": "move_file", "description": "移动或重命名文件" },
+        { "name": "search_files", "description": "搜索文件" }
+      ]
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "description": "与 GitHub 仓库、Issue 和 Pull Request 交互",
+      "category": "development",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "" },
+      "enabled": true,
+      "builtin": true,
+      "homepage": "https://github.com/modelcontextprotocol/servers",
+      "tools": [
+        { "name": "search_repositories", "description": "搜索 GitHub 仓库" },
+        { "name": "get_file_contents", "description": "获取仓库中的文件内容" },
+        { "name": "create_issue", "description": "创建新 Issue" },
+        { "name": "list_issues", "description": "列出仓库 Issue" },
+        { "name": "create_pull_request", "description": "创建 Pull Request" }
+      ]
+    },
+    {
+      "id": "fetch",
+      "name": "网页抓取",
+      "description": "抓取网页内容并转换为 Markdown",
+      "category": "api",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"],
+      "enabled": true,
+      "builtin": true,
+      "homepage": "https://github.com/modelcontextprotocol/servers",
+      "tools": [
+        { "name": "fetch", "description": "抓取 URL 并转换为 Markdown" }
+      ]
+    },
+    {
+      "id": "memory",
+      "name": "记忆存储",
+      "description": "在知识图谱中存储和检索信息",
+      "category": "ai",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "enabled": true,
+      "builtin": true,
+      "homepage": "https://github.com/modelcontextprotocol/servers",
+      "tools": [
+        { "name": "create_entities", "description": "创建新实体" },
+        { "name": "create_relations", "description": "创建实体间关系" },
+        { "name": "search_nodes", "description": "搜索节点" },
+        { "name": "open_nodes", "description": "打开指定节点" }
+      ]
+    },
+    {
+      "id": "puppeteer",
+      "name": "Puppeteer",
+      "description": "浏览器自动化和网页抓取",
+      "category": "api",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"],
+      "enabled": true,
+      "builtin": true,
+      "homepage": "https://github.com/modelcontextprotocol/servers",
+      "tools": [
+        { "name": "navigate", "description": "导航到 URL" },
+        { "name": "screenshot", "description": "截取屏幕截图" },
+        { "name": "click", "description": "点击元素" },
+        { "name": "fill", "description": "填写表单字段" },
+        { "name": "evaluate", "description": "执行 JavaScript" }
+      ]
+    }
+  ]
+}

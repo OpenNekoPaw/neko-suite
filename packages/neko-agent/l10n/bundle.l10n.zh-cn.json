@@ -1,0 +1,9 @@
+{
+  "neko.aiAssistant.name": "AI 助手",
+  "neko.aiAssistant.contextualTitle": "Neko AI 助手",
+  "neko.ai.chat.title": "打开 AI 对话",
+  "neko.script.generate.title": "生成脚本",
+  "neko.script.optimize.title": "优化脚本",
+  "neko.script.generateImage.title": "从脚本生成图片",
+  "neko.script.generateVideo.title": "从脚本生成视频"
+}

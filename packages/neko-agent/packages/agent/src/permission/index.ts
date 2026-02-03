@@ -1,0 +1,48 @@
+/**
+ * Permission Module - Tool execution permission management
+ *
+ * Implements Claude Code compatible permission model:
+ * - deny/allow/ask rules with pattern matching
+ * - plan/ask/auto execution modes
+ * - Integration with AgentExecutor via hooks
+ */
+
+// Types
+export type {
+  PermissionMode,
+  PermissionDecision,
+  PermissionRules,
+  PermissionConfig,
+  PermissionCheckResult,
+  ToolConfirmationRequest,
+  ToolConfirmationResponse,
+  ConfirmToolCallback,
+  PlanFileResult,
+} from './types';
+
+// Constants
+export {
+  DEFAULT_READ_ONLY_TOOLS,
+  READ_ONLY_MCP_PREFIXES,
+  DEFAULT_PERMISSION_CONFIG,
+  PLAN_MODE_SYSTEM_REMINDER,
+  PLAN_FILE_PATH,
+} from './types';
+
+// Rule Matcher
+export {
+  PermissionRuleMatcher,
+  createPermissionRuleMatcher,
+  normalizeToolCall,
+  matchesPattern,
+  isInPatternList,
+  isReadOnlyTool,
+  isPlanFileWrite,
+} from './rule-matcher';
+
+// Permission Hooks
+export {
+  PermissionHooks,
+  createPermissionHooks,
+  type PermissionHooksOptions,
+} from './permission-hooks';

@@ -1,0 +1,320 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* VSCode Theme Integration - CSS Custom Properties
+   VSCode automatically injects theme variables into webviews.
+   These fallbacks are only used when running outside VSCode (e.g., development mode).
+   Note: VSCode variables are injected directly, so we don't redefine them here.
+   We only define fallback custom properties for development/standalone use.
+*/
+:root {
+  /* Fallback values for when VSCode variables are not available */
+  /* These use different names to avoid circular references */
+
+  /* Font settings - fallback */
+  --fallback-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --fallback-font-size: 13px;
+
+  /* Editor - fallback (dark theme) */
+  --fallback-editor-bg: #1e1e1e;
+  --fallback-editor-fg: #cccccc;
+
+  /* Panel - fallback */
+  --fallback-panel-bg: #252526;
+  --fallback-panel-border: #454545;
+
+  /* Sidebar - fallback */
+  --fallback-sidebar-bg: #252526;
+  --fallback-sidebar-fg: #cccccc;
+
+  /* Input - fallback */
+  --fallback-input-bg: #3c3c3c;
+  --fallback-input-fg: #cccccc;
+  --fallback-input-border: #3c3c3c;
+
+  /* Button - fallback */
+  --fallback-button-bg: #0e639c;
+  --fallback-button-fg: #ffffff;
+  --fallback-button-hover-bg: #1177bb;
+  --fallback-button-secondary-bg: #3a3d41;
+  --fallback-button-secondary-fg: #ffffff;
+
+  /* List - fallback */
+  --fallback-list-hover-bg: #2a2d2e;
+  --fallback-list-selection-bg: #094771;
+  --fallback-list-selection-fg: #ffffff;
+
+  /* Dropdown - fallback */
+  --fallback-dropdown-bg: #3c3c3c;
+  --fallback-dropdown-fg: #f0f0f0;
+  --fallback-dropdown-border: #3c3c3c;
+
+  /* Focus/Accent - fallback */
+  --fallback-focus-border: #007acc;
+
+  /* Description text - fallback */
+  --fallback-description-fg: #9d9d9d;
+
+  /* Menu - fallback (for context menus) */
+  --fallback-menu-bg: #252526;
+  --fallback-menu-fg: #cccccc;
+  --fallback-menu-selection-bg: #04395e;
+  --fallback-menu-selection-fg: #ffffff;
+  --fallback-menu-separator-bg: #454545;
+  --fallback-menu-border: #454545;
+
+  /* Error - fallback */
+  --fallback-error-fg: #f14c4c;
+
+  /* Widget shadow - fallback */
+  --fallback-widget-shadow: rgba(0, 0, 0, 0.36);
+
+  /* Scrollbar - fallback */
+  --fallback-scrollbar-bg: rgba(121, 121, 121, 0.4);
+  --fallback-scrollbar-hover-bg: rgba(121, 121, 121, 0.7);
+  --fallback-scrollbar-active-bg: rgba(121, 121, 121, 0.8);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  background-color: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  overflow: hidden;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* VSCode-style buttons */
+.vscode-button {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 4px 14px;
+  cursor: pointer;
+  border-radius: 2px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.vscode-button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.vscode-button:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.vscode-button-secondary {
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.vscode-button-secondary:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* VSCode-style inputs */
+.vscode-input {
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border);
+  padding: 4px 8px;
+  font-size: 13px;
+  line-height: 18px;
+  outline: none;
+}
+
+.vscode-input:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.vscode-input::placeholder {
+  color: var(--vscode-input-placeholderForeground, #9d9d9d);
+}
+
+/* VSCode-style dropdowns */
+.vscode-dropdown {
+  background-color: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+  border: 1px solid var(--vscode-dropdown-border);
+  padding: 4px 8px;
+  font-size: 13px;
+  outline: none;
+}
+
+.vscode-dropdown:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+/* VSCode-style list items */
+.vscode-list-item {
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.vscode-list-item:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.vscode-list-item.active {
+  background-color: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+/* Timeline styles */
+.timeline-element {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.timeline-element:hover {
+  opacity: 0.9;
+}
+
+.timeline-element.selected {
+  box-shadow: 0 0 0 2px var(--vscode-focusBorder);
+}
+
+/* Scrollbar styles - VSCode theme aware */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--vscode-scrollbarSlider-activeBackground);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Icon button styling - matches VSCode */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
+  opacity: 0.8;
+}
+
+.icon-button:hover {
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+  opacity: 1;
+}
+
+.icon-button:active {
+  background-color: var(--vscode-toolbar-activeBackground, rgba(99, 102, 103, 0.31));
+}
+
+.icon-button:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* Tooltip styling */
+.vscode-tooltip {
+  position: absolute;
+  background-color: var(--vscode-editorWidget-background, #252526);
+  border: 1px solid var(--vscode-editorWidget-border, #454545);
+  color: var(--vscode-editorWidget-foreground, #cccccc);
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 3px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+  z-index: 1000;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Description/secondary text */
+.vscode-description {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+/* Badge styling */
+.vscode-badge {
+  display: inline-block;
+  background-color: var(--vscode-badge-background, #4d4d4d);
+  color: var(--vscode-badge-foreground, #ffffff);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+/* Toast notification animations */
+@keyframes toast-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: toast-slide-in 0.3s ease-out;
+}
+
+/* Export progress shimmer animation */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite linear;
+}

@@ -1,0 +1,140 @@
+/**
+ * System Prompt Builder Types
+ */
+
+/**
+ * Prompt mode
+ */
+export type PromptMode = 'default' | 'plan';
+
+/**
+ * Locale for built-in prompts
+ */
+export type PromptLocale = 'en' | 'zh';
+
+/**
+ * AGENTS.md source
+ */
+export type AgentsSource = 'project' | 'personal' | null;
+
+/**
+ * System prompt builder configuration
+ */
+export interface SystemPromptBuilderConfig {
+  /** Locale for built-in prompts */
+  locale?: PromptLocale;
+
+  /** Initial mode */
+  mode?: PromptMode;
+
+  /** Custom default prompt (overrides built-in) */
+  customDefaultPrompt?: string;
+
+  /** Custom plan mode prompt (overrides built-in) */
+  customPlanPrompt?: string;
+}
+
+/**
+ * AGENTS.md load result
+ */
+export interface AgentsLoadResult {
+  /** Content of AGENTS.md */
+  content: string;
+
+  /** Source of the file */
+  source: 'project' | 'personal';
+
+  /** File path */
+  path: string;
+}
+
+/**
+ * System prompt builder interface
+ */
+export interface ISystemPromptBuilder {
+  // ---------------------------------------------------------------------------
+  // Configuration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Set locale for built-in prompts
+   */
+  setLocale(locale: PromptLocale | string): void;
+
+  /**
+   * Get current locale
+   */
+  getLocale(): PromptLocale;
+
+  /**
+   * Set prompt mode
+   */
+  setMode(mode: PromptMode): void;
+
+  /**
+   * Get current mode
+   */
+  getMode(): PromptMode;
+
+  /**
+   * Toggle between default and plan mode
+   */
+  togglePlanMode(): PromptMode;
+
+  /**
+   * Check if in plan mode
+   */
+  isPlanMode(): boolean;
+
+  // ---------------------------------------------------------------------------
+  // AGENTS.md Management
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Load AGENTS.md from project and/or personal directories
+   * @param projectPath Project directory path (for .neko/AGENTS.md)
+   * @param personalPath Personal directory path (for ~/.neko/AGENTS.md)
+   */
+  loadAgentsFile(projectPath?: string, personalPath?: string): Promise<AgentsLoadResult | null>;
+
+  /**
+   * Set AGENTS.md content directly (for testing or custom sources)
+   */
+  setAgentsContent(content: string | null, source?: AgentsSource): void;
+
+  /**
+   * Get current AGENTS.md content
+   */
+  getAgentsContent(): string | null;
+
+  /**
+   * Get AGENTS.md source
+   */
+  getAgentsSource(): AgentsSource;
+
+  // ---------------------------------------------------------------------------
+  // Prompt Building
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build the final system prompt
+   *
+   * Priority:
+   * 1. Plan mode prompt (if in plan mode)
+   * 2. AGENTS.md content (project > personal)
+   * 3. Built-in default prompt (locale-aware)
+   */
+  build(): string;
+
+  /**
+   * Build prompt with skill injection
+   * @param skillPrompt Skill prompt to append
+   */
+  buildWithSkill(skillPrompt: string): string;
+
+  /**
+   * Build prompt with custom suffix
+   * @param suffix Custom content to append
+   */
+  buildWithSuffix(suffix: string): string;
+}

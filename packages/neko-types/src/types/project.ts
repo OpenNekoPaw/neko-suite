@@ -1,0 +1,205 @@
+// =============================================================================
+// Project Data (.jvi file format)
+// =============================================================================
+
+import { TimelineTrack } from './timelineTrack';
+import { TimelineElement } from './element';
+import { TrackType } from './track';
+
+// =============================================================================
+// Project Defaults (Global default values for new elements)
+// =============================================================================
+
+export interface ProjectDefaults {
+  // Text element defaults
+  text: {
+    fontSize: number;
+    fontFamily: string;
+    color: string;
+    backgroundColor: string;
+    textAlign: 'left' | 'center' | 'right';
+    fontWeight: 'normal' | 'bold';
+    fontStyle: 'normal' | 'italic';
+    textDecoration: 'none' | 'underline' | 'line-through';
+  };
+  // Transform defaults (for media and text)
+  transform: {
+    x: number;
+    y: number;
+    scaleX: number;
+    scaleY: number;
+    rotation: number;
+    opacity: number;
+  };
+  // Audio defaults (for media and audio)
+  audio: {
+    volume: number;
+    pan: number;
+    fadeIn: number;
+    fadeOut: number;
+    gain: number;
+  };
+}
+
+export interface ProjectData {
+  version: string;
+  name: string;
+  resolution: {
+    width: number;
+    height: number;
+  };
+  fps: number;
+  tracks: TimelineTrack[];
+  defaults?: ProjectDefaults;
+}
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+export function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+}
+
+/**
+ * Create default project defaults (global settings)
+ */
+export function createDefaultProjectDefaults(): ProjectDefaults {
+  return {
+    text: {
+      fontSize: 48,
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      backgroundColor: 'transparent',
+      textAlign: 'center',
+      fontWeight: 'normal',
+      fontStyle: 'normal',
+      textDecoration: 'none',
+    },
+    transform: {
+      x: 0.5,
+      y: 0.5,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      opacity: 1,
+    },
+    audio: {
+      volume: 1,
+      pan: 0,
+      fadeIn: 0,
+      fadeOut: 0,
+      gain: 0,
+    },
+  };
+}
+
+export function createDefaultProject(name: string = 'Untitled Project'): ProjectData {
+  return {
+    version: '2.0',
+    name,
+    resolution: { width: 1920, height: 1080 },
+    fps: 30,
+    tracks: [
+      {
+        id: generateId(),
+        name: 'Main Track',
+        type: 'media',
+        elements: [],
+        muted: false,
+        isMain: true,
+      },
+    ],
+    defaults: createDefaultProjectDefaults(),
+  };
+}
+
+import { TextElement } from './element';
+
+export function createDefaultTextElement(startTime: number = 0): TextElement {
+  return {
+    id: generateId(),
+    type: 'text',
+    name: 'New Text',
+    content: 'Enter text here',
+    duration: 5,
+    startTime,
+    trimStart: 0,
+    trimEnd: 0,
+    fontSize: 48,
+    fontFamily: 'Arial',
+    color: '#ffffff',
+    backgroundColor: 'transparent',
+    textAlign: 'center',
+    fontWeight: 'normal',
+    fontStyle: 'normal',
+    textDecoration: 'none',
+    x: 0,
+    y: 0,
+    rotation: 0,
+    opacity: 1,
+  };
+}
+
+/**
+ * Sort tracks by type: text on top, shape, media in middle, audio/subtitle at bottom
+ */
+export function sortTracksByType(tracks: TimelineTrack[]): TimelineTrack[] {
+  return [...tracks].sort((a, b) => {
+    const order: Record<TrackType, number> = { text: 0, shape: 1, media: 2, audio: 3, subtitle: 4 };
+    return order[a.type] - order[b.type];
+  });
+}
+
+/**
+ * Calculate the effective duration of an element (after trim)
+ */
+export function getEffectiveDuration(element: TimelineElement): number {
+  return element.duration - element.trimStart - element.trimEnd;
+}
+
+/**
+ * Calculate the end time of an element on the timeline
+ */
+export function getElementEndTime(element: TimelineElement): number {
+  return element.startTime + getEffectiveDuration(element);
+}
+
+/**
+ * Get the total duration of all tracks
+ */
+export function getTotalDuration(tracks: TimelineTrack[]): number {
+  let maxEnd = 0;
+  for (const track of tracks) {
+    for (const element of track.elements) {
+      const endTime = getElementEndTime(element);
+      if (endTime > maxEnd) {
+        maxEnd = endTime;
+      }
+    }
+  }
+  return maxEnd;
+}
+
+/**
+ * Extract all media file paths from project data
+ * Only extracts paths from media and audio elements (files that need codec analysis)
+ */
+export function extractMediaPaths(project: ProjectData): string[] {
+  const paths: string[] = [];
+  const seen = new Set<string>();
+
+  for (const track of project.tracks) {
+    for (const element of track.elements) {
+      if (element.type === 'media' || element.type === 'audio') {
+        const src = element.src;
+        if (src && !seen.has(src)) {
+          seen.add(src);
+          paths.push(src);
+        }
+      }
+    }
+  }
+
+  return paths;
+}

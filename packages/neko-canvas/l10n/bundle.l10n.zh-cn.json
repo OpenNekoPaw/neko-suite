@@ -1,0 +1,10 @@
+{
+  "neko.assets.title": "素材",
+  "neko.assets.name": "素材库",
+  "neko.assets.contextualTitle": "素材库",
+  "neko.canvas.new.title": "新建画布",
+  "neko.asset.import.title": "导入素材",
+  "neko.addToAssetLibrary.title": "添加到素材库",
+  "neko.assetDiff.displayName": "素材变体对比",
+  "neko.assetDiff.compareVariants.title": "比较素材变体"
+}

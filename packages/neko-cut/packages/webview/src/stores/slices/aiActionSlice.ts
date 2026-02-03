@@ -1,0 +1,153 @@
+/**
+ * AI Action Slice
+ * Manages AI-related operations state and actions
+ * Centralizes AI action dispatching to replace scattered event/postMessage calls
+ */
+
+import { StateCreator } from 'zustand';
+import { sendAIAction, isVSCodeContext } from '../../utils/vscodeApi';
+
+// AI Action types matching shared/src/types/ai-actions.ts
+export type AIActionId =
+  | 'ai-enhance'
+  | 'ai-background-remove'
+  | 'ai-style-transfer'
+  | 'ai-upscale'
+  | 'ai-denoise'
+  | 'ai-speech-to-text'
+  | 'ai-generate-subtitles'
+  | 'ai-auto-edit'
+  | 'ai-match-music'
+  | 'ai-remove-silence'
+  | 'ai-color-grade'
+  | 'ai-smart-crop';
+
+export interface AIActionRequest {
+  actionId: AIActionId;
+  elementIds: string[];
+  trackIds?: string[];
+  params?: Record<string, unknown>;
+}
+
+export interface AIActionStatus {
+  actionId: AIActionId;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  progress?: number;
+  message?: string;
+  error?: string;
+}
+
+export interface AIActionSlice {
+  // State
+  pendingAIActions: AIActionRequest[];
+  activeAIAction: AIActionStatus | null;
+  aiActionHistory: AIActionStatus[];
+
+  // Actions
+  executeAIAction: (actionId: AIActionId, elementIds: string[], trackIds?: string[]) => void;
+  setAIActionStatus: (status: AIActionStatus) => void;
+  clearAIActionStatus: () => void;
+
+  // Timeline context menu AI operations
+  aiGenerateSubtitles: () => void;
+  aiAutoEdit: () => void;
+  aiMatchMusic: () => void;
+  aiRemoveSilence: () => void;
+}
+
+export const createAIActionSlice: StateCreator<
+  AIActionSlice,
+  [],
+  [],
+  AIActionSlice
+> = (set, get) => ({
+  // Initial state
+  pendingAIActions: [],
+  activeAIAction: null,
+  aiActionHistory: [],
+
+  // Execute AI action - sends to Extension Host via postMessage
+  executeAIAction: (actionId, elementIds, trackIds) => {
+    const request: AIActionRequest = { actionId, elementIds, trackIds };
+
+    // Add to pending queue
+    set((state) => ({
+      pendingAIActions: [...state.pendingAIActions, request],
+      activeAIAction: {
+        actionId,
+        status: 'pending',
+        message: `Preparing ${actionId}...`,
+      },
+    }));
+
+    // Send to Extension Host
+    if (isVSCodeContext()) {
+      sendAIAction(actionId, elementIds, trackIds);
+      console.log('[AIAction] Sent to Extension:', actionId, 'elements:', elementIds);
+    } else {
+      // Development mode - simulate action
+      console.log('[AIAction] Dev mode - would execute:', actionId, 'elements:', elementIds);
+
+      // Simulate processing for dev mode
+      setTimeout(() => {
+        set((state) => ({
+          activeAIAction: {
+            actionId,
+            status: 'completed',
+            message: `${actionId} completed (dev mode)`,
+          },
+          pendingAIActions: state.pendingAIActions.filter(
+            (a) => a.actionId !== actionId || a.elementIds !== elementIds
+          ),
+          aiActionHistory: [
+            ...state.aiActionHistory,
+            { actionId, status: 'completed', message: 'Dev mode simulation' },
+          ],
+        }));
+      }, 1000);
+    }
+  },
+
+  // Set AI action status (called when Extension sends status updates)
+  setAIActionStatus: (status) => {
+    set((state) => {
+      const newState: Partial<AIActionSlice> = { activeAIAction: status };
+
+      // If completed or failed, move to history and remove from pending
+      if (status.status === 'completed' || status.status === 'failed') {
+        newState.pendingAIActions = state.pendingAIActions.filter(
+          (a) => a.actionId !== status.actionId
+        );
+        newState.aiActionHistory = [...state.aiActionHistory, status];
+      }
+
+      return newState;
+    });
+  },
+
+  clearAIActionStatus: () => {
+    set({ activeAIAction: null });
+  },
+
+  // Timeline context menu AI operations
+  aiGenerateSubtitles: () => {
+    const { executeAIAction } = get();
+    // For timeline-level operations, use empty elementIds to indicate whole project
+    executeAIAction('ai-generate-subtitles', []);
+  },
+
+  aiAutoEdit: () => {
+    const { executeAIAction } = get();
+    executeAIAction('ai-auto-edit', []);
+  },
+
+  aiMatchMusic: () => {
+    const { executeAIAction } = get();
+    executeAIAction('ai-match-music', []);
+  },
+
+  aiRemoveSilence: () => {
+    const { executeAIAction } = get();
+    executeAIAction('ai-remove-silence', []);
+  },
+});

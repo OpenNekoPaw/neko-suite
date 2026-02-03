@@ -1,0 +1,12 @@
+packages:
+  - packages/*
+  - packages/neko-agent/packages/*
+  - packages/neko-assets/packages/*
+  - packages/neko-canvas/packages/*
+  - packages/neko-cut/packages/*
+  - packages/neko-server/packages/*
+  - packages/neko-tools/packages/*
+
+ignoredBuiltDependencies:
+  - esbuild
+  - sharp

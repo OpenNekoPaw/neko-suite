@@ -1,0 +1,11 @@
+{
+  "name": "@neko-tools/extension",
+  "private": true,
+  "version": "0.0.1",
+  "description": "NekoTools extension source code",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  }
+}

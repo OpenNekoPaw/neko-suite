@@ -1,0 +1,142 @@
+{
+  "name": "neko-assets",
+  "displayName": "Neko Assets",
+  "description": "Asset management with Git/LFS version control, cloud sync, and CI/CD auto-rendering",
+  "version": "0.0.1",
+  "publisher": "neko",
+  "l10n": "./l10n",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neko/creative-suite"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "SCM Providers"
+  ],
+  "keywords": [
+    "assets",
+    "git-lfs",
+    "cloud-sync",
+    "version-control",
+    "ci-cd"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onView:neko.assetManager"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "neko-asset-manager",
+          "title": "Asset Manager"
+        }
+      ]
+    },
+    "views": {
+      "neko-asset-manager": [
+        {
+          "id": "neko.assetManager",
+          "name": "Assets",
+          "contextualTitle": "Asset Manager"
+        },
+        {
+          "id": "neko.assetHistory",
+          "name": "History",
+          "contextualTitle": "Asset History"
+        },
+        {
+          "id": "neko.cloudSync",
+          "name": "Cloud Sync",
+          "contextualTitle": "Cloud Sync Status"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "neko.assets.sync",
+        "title": "Sync Assets",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.push",
+        "title": "Push to Cloud",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.pull",
+        "title": "Pull from Cloud",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.initLfs",
+        "title": "Initialize Git LFS",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.trackLfs",
+        "title": "Track with LFS",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.triggerRender",
+        "title": "Trigger CI/CD Render",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.viewHistory",
+        "title": "View Asset History",
+        "category": "Neko Assets"
+      }
+    ],
+    "configuration": {
+      "title": "Neko Assets",
+      "properties": {
+        "neko.assets.cloudProvider": {
+          "type": "string",
+          "enum": ["github", "gitlab", "s3", "rclone"],
+          "default": "github",
+          "description": "Cloud storage provider"
+        },
+        "neko.assets.autoSync": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically sync assets on save"
+        },
+        "neko.assets.lfsThreshold": {
+          "type": "number",
+          "default": 1048576,
+          "description": "File size threshold (bytes) for automatic LFS tracking"
+        },
+        "neko.assets.cicdEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable CI/CD auto-rendering on push"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "npm run compile -- --watch",
+    "lint": "eslint src --ext ts,tsx",
+    "test": "vitest",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@uniedit/shared": "workspace:*",
+    "esbuild": "^0.19.8",
+    "typescript": "^5.3.2",
+    "vitest": "^1.0.4"
+  }
+}

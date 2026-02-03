@@ -1,0 +1,84 @@
+{
+  "name": "neko-story",
+  "displayName": "Neko Story",
+  "description": "Script-driven filmmaking with LSP support for story files",
+  "version": "0.0.1",
+  "publisher": "neko",
+  "l10n": "./l10n",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neko/creative-suite"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "story",
+    "script",
+    "screenplay",
+    "lsp",
+    "filmmaking"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onLanguage:nekostory"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "nekostory",
+        "aliases": ["Neko Story", "nekostory"],
+        "extensions": [".nks", ".story"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nekostory",
+        "scopeName": "source.nekostory",
+        "path": "./syntaxes/nekostory.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "neko.story.preview",
+        "title": "Preview Story",
+        "category": "Neko Story"
+      },
+      {
+        "command": "neko.story.toTimeline",
+        "title": "Convert to Timeline",
+        "category": "Neko Story"
+      },
+      {
+        "command": "neko.story.generateStoryboard",
+        "title": "Generate Storyboard",
+        "category": "Neko Story"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "npm run compile -- --watch",
+    "lint": "eslint src --ext ts,tsx",
+    "test": "vitest",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@uniedit/shared": "workspace:*",
+    "esbuild": "^0.19.8",
+    "typescript": "^5.3.2",
+    "vitest": "^1.0.4"
+  }
+}

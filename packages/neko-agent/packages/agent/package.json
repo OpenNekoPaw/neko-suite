@@ -1,0 +1,29 @@
+{
+  "name": "@uniedit/agent",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest --run"
+  },
+  "dependencies": {
+    "@uniedit/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "@uniedit/platform": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@uniedit/platform": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}

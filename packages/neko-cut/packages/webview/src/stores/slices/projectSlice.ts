@@ -1,0 +1,72 @@
+/**
+ * Project Slice
+ * 管理项目数据和基本操作
+ */
+
+import { StateCreator } from 'zustand';
+import type { ProjectData } from '../../types';
+import type { MediaEngineModeSlice } from './mediaEngineModeSlice';
+
+export interface ProjectSlice {
+  // State
+  project: ProjectData | null;
+  /** Project root directory (.jvi file location) for resolving relative media paths */
+  projectRoot: string | null;
+
+  // Actions
+  setProject: (project: ProjectData, projectRoot?: string) => void;
+  updateProject: (updates: Partial<ProjectData>) => void;
+
+  // Computed
+  getTotalDuration: () => number;
+}
+
+export const createProjectSlice: StateCreator<
+  ProjectSlice & Partial<MediaEngineModeSlice>,
+  [],
+  [],
+  ProjectSlice
+> = (set, get) => ({
+  // Initial state
+  project: null,
+  projectRoot: null,
+
+  // Actions
+  setProject: (project, projectRoot) => {
+    const newProjectRoot = projectRoot ?? get().projectRoot;
+    set({
+      project,
+      projectRoot: newProjectRoot,
+    });
+
+    // Set active project ID for multi-timeline mode support
+    // Use projectRoot as unique identifier for the project
+    if (newProjectRoot) {
+      const setActiveProject = get().setActiveProject;
+      if (setActiveProject) {
+        setActiveProject(newProjectRoot);
+      }
+    }
+  },
+
+  updateProject: (updates) => {
+    const { project } = get();
+    if (!project) return;
+    set({ project: { ...project, ...updates } });
+  },
+
+  // Computed
+  getTotalDuration: () => {
+    const { project } = get();
+    if (!project) return 0;
+
+    let maxEnd = 0;
+    for (const track of project.tracks) {
+      for (const element of track.elements) {
+        const endTime = element.startTime + element.duration - element.trimStart - element.trimEnd;
+        if (endTime > maxEnd) maxEnd = endTime;
+      }
+    }
+    return maxEnd;
+  },
+});

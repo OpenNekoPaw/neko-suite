@@ -1,0 +1,73 @@
+{
+  "workflows": [
+    {
+      "id": "comfyui-local",
+      "name": "ComfyUI（本地）",
+      "description": "本地 ComfyUI 实例，用于 AI 图像生成",
+      "engineType": "comfyui",
+      "url": "http://127.0.0.1:8188",
+      "icon": "🎨",
+      "category": "image-generation",
+      "docsUrl": "https://github.com/comfyanonymous/ComfyUI",
+      "requiresApiKey": false,
+      "defaultPort": 8188,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "id": "dify-cloud",
+      "name": "Dify（云端）",
+      "description": "Dify.AI 云平台，用于构建 AI 应用程序",
+      "engineType": "dify",
+      "url": "https://api.dify.ai/v1",
+      "icon": "🔄",
+      "category": "ai-workflow",
+      "docsUrl": "https://docs.dify.ai",
+      "requiresApiKey": true,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "id": "langflow-local",
+      "name": "Langflow（本地）",
+      "description": "用于构建多智能体和 RAG 应用的可视化框架",
+      "engineType": "langflow",
+      "url": "http://127.0.0.1:7860",
+      "icon": "🌊",
+      "category": "ai-workflow",
+      "docsUrl": "https://docs.langflow.org",
+      "requiresApiKey": false,
+      "defaultPort": 7860,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "id": "n8n-local",
+      "name": "n8n（自托管）",
+      "description": "自托管 n8n 工作流自动化平台",
+      "engineType": "n8n",
+      "url": "http://localhost:5678",
+      "icon": "⚡",
+      "category": "automation",
+      "docsUrl": "https://docs.n8n.io/hosting/",
+      "requiresApiKey": false,
+      "defaultPort": 5678,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "id": "flowise-local",
+      "name": "Flowise（本地）",
+      "description": "开源低代码工具，用于构建 LLM 应用",
+      "engineType": "flowise",
+      "url": "http://localhost:3000",
+      "icon": "🌸",
+      "category": "ai-workflow",
+      "docsUrl": "https://docs.flowiseai.com",
+      "requiresApiKey": false,
+      "defaultPort": 3000,
+      "enabled": true,
+      "builtin": true
+    }
+  ]
+}

@@ -1,0 +1,337 @@
+/**
+ * Shared HTTP Client - Common HTTP functionality for all adapters
+ *
+ * Provides unified HTTP request handling, error parsing, and streaming support
+ * for both LLM and Media adapters.
+ */
+
+/**
+ * HTTP request configuration
+ */
+export interface HttpRequestConfig {
+  /** Full URL to request */
+  url: string;
+  /** HTTP method */
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  /** Request headers */
+  headers?: Record<string, string>;
+  /** Request body (will be JSON.stringify'd) */
+  body?: unknown;
+  /** AbortSignal for cancellation */
+  signal?: AbortSignal;
+  /** Request timeout in milliseconds */
+  timeout?: number;
+}
+
+/**
+ * HTTP error with structured information
+ */
+export interface HttpError {
+  /** Error code (e.g., 'RATE_LIMITED', 'AUTH_ERROR') */
+  code: string;
+  /** Human-readable error message */
+  message: string;
+  /** HTTP status code */
+  statusCode: number;
+  /** Whether the request can be retried */
+  retryable: boolean;
+  /** Suggested retry delay in milliseconds */
+  retryAfterMs?: number;
+}
+
+/**
+ * Result type for HTTP requests (union of success or error)
+ */
+export type HttpResult<T> =
+  | { success: true; data: T }
+  | { success: false; error: HttpError };
+
+/**
+ * Shared HTTP client with common functionality
+ */
+export class HttpClient {
+  /**
+   * Make HTTP request and return parsed JSON
+   * Throws on error (use for simple cases)
+   */
+  async request<T>(
+    config: HttpRequestConfig,
+    errorPrefix: string = 'HTTP error'
+  ): Promise<T> {
+    const response = await this.fetch(config);
+
+    if (!response.ok) {
+      const error = await this.parseError(response);
+      throw new Error(`${errorPrefix}: ${error.statusCode} ${error.code} - ${error.message}`);
+    }
+
+    const data = await response.json() as T;
+    console.log(`[HttpClient] Response (${response.status}):`, {
+      url: response.url,
+      status: response.status,
+    });
+    return data;
+  }
+
+  /**
+   * Make HTTP request and return Result type
+   * Never throws, returns error in result (use for detailed error handling)
+   */
+  async requestSafe<T>(config: HttpRequestConfig): Promise<HttpResult<T>> {
+    try {
+      const response = await this.fetch(config);
+
+      if (!response.ok) {
+        const error = await this.parseError(response);
+        return { success: false, error };
+      }
+
+      const data = (await response.json()) as T;
+      return { success: true, data };
+    } catch (err) {
+      // Handle timeout/abort errors
+      if (err instanceof Error && err.name === 'AbortError') {
+        return {
+          success: false,
+          error: {
+            code: 'TIMEOUT',
+            message: config.timeout
+              ? `Request timed out after ${config.timeout}ms`
+              : 'Request was aborted',
+            statusCode: 0,
+            retryable: true,
+            retryAfterMs: 5000,
+          },
+        };
+      }
+
+      return {
+        success: false,
+        error: {
+          code: 'NETWORK_ERROR',
+          message: err instanceof Error ? err.message : 'Network error',
+          statusCode: 0,
+          retryable: true,
+          retryAfterMs: 5000,
+        },
+      };
+    }
+  }
+
+  /**
+   * Make streaming HTTP request and yield SSE data lines
+   * Handles common Server-Sent Events parsing logic
+   */
+  async *stream(
+    config: HttpRequestConfig,
+    errorPrefix: string = 'Stream error'
+  ): AsyncIterable<string> {
+    const response = await this.fetch(config);
+
+    if (!response.ok) {
+      const error = await this.parseError(response);
+      throw new Error(`${errorPrefix}: ${error.statusCode} ${error.code} - ${error.message}`);
+    }
+
+    console.log(`[HttpClient] Stream started (${response.status}):`, {
+      url: response.url,
+      status: response.status,
+    });
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') {
+              return;
+            }
+            yield data;
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  /**
+   * Parse HTTP error response into structured error
+   */
+  async parseError(response: Response): Promise<HttpError> {
+    let message = `HTTP ${response.status}`;
+    let code = 'HTTP_ERROR';
+    let retryable = false;
+    let retryAfterMs: number | undefined;
+    let rawBody: string | undefined;
+
+    // Try to parse error body
+    try {
+      rawBody = await response.text();
+      const body = JSON.parse(rawBody) as {
+        error?: { message?: string; code?: string; type?: string };
+        message?: string;
+      };
+      message = body.error?.message || body.message || message;
+      code = body.error?.code || body.error?.type || code;
+
+      // Log detailed error response
+      console.error(`[HttpClient] Error response (${response.status}):`, {
+        url: response.url,
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        body: body,
+      });
+    } catch {
+      // Use status text if JSON parsing fails
+      message = response.statusText || message;
+      console.error(`[HttpClient] Error response (${response.status}):`, {
+        url: response.url,
+        status: response.status,
+        statusText: response.statusText,
+        rawBody: rawBody || '(failed to read body)',
+      });
+    }
+
+    // Determine retryability and code based on status
+    switch (response.status) {
+      case 429:
+        code = 'RATE_LIMITED';
+        retryable = true;
+        const retryAfter = response.headers.get('Retry-After');
+        retryAfterMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : 60000;
+        break;
+      case 500:
+      case 502:
+      case 503:
+      case 504:
+        code = 'SERVER_ERROR';
+        retryable = true;
+        retryAfterMs = 5000;
+        break;
+      case 400:
+        code = 'INVALID_REQUEST';
+        break;
+      case 401:
+        code = 'AUTH_ERROR';
+        break;
+      case 402:
+        code = 'QUOTA_EXCEEDED';
+        break;
+      case 403:
+        code = 'FORBIDDEN';
+        break;
+      case 404:
+        code = 'NOT_FOUND';
+        break;
+      case 408:
+        code = 'TIMEOUT';
+        retryable = true;
+        retryAfterMs = 5000;
+        break;
+    }
+
+    return {
+      code,
+      message,
+      statusCode: response.status,
+      retryable,
+      retryAfterMs,
+    };
+  }
+
+  /**
+   * Build Authorization header with Bearer token
+   */
+  buildBearerAuth(apiKey: string): Record<string, string> {
+    return { Authorization: `Bearer ${apiKey}` };
+  }
+
+  /**
+   * Build custom API key header (for providers like Anthropic)
+   */
+  buildApiKeyHeader(
+    headerName: string,
+    apiKey: string
+  ): Record<string, string> {
+    return { [headerName]: apiKey };
+  }
+
+  /**
+   * Internal fetch wrapper
+   */
+  private async fetch(config: HttpRequestConfig): Promise<Response> {
+    const { url, method, headers = {}, body, signal, timeout } = config;
+
+    // Debug log for request
+    console.log(`[HttpClient] ${method} ${url}`);
+    console.log(`[HttpClient] Headers:`, JSON.stringify(headers, null, 2));
+    if (body) {
+      console.log(`[HttpClient] Body:`, JSON.stringify(body, null, 2));
+    }
+
+    // Create abort signal with timeout if specified
+    let fetchSignal = signal;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    if (timeout && !signal) {
+      const controller = new AbortController();
+      fetchSignal = controller.signal;
+      timeoutId = setTimeout(() => controller.abort(), timeout);
+    }
+
+    try {
+      return await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: fetchSignal,
+      });
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  }
+}
+
+/**
+ * Singleton HTTP client instance
+ */
+let httpClientInstance: HttpClient | null = null;
+
+/**
+ * Get shared HTTP client instance
+ */
+export function getHttpClient(): HttpClient {
+  if (!httpClientInstance) {
+    httpClientInstance = new HttpClient();
+  }
+  return httpClientInstance;
+}
+
+/**
+ * Create new HTTP client instance
+ */
+export function createHttpClient(): HttpClient {
+  return new HttpClient();
+}

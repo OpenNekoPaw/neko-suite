@@ -1,0 +1,111 @@
+[package]
+name = "media-processor-rs"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance media processor with GPU acceleration for UniEdit"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "vedit-server"
+path = "src/bin/vedit-server.rs"
+# vedit-server is a standalone binary, it should NOT depend on napi feature
+required-features = []
+
+[dependencies]
+# N-API bindings (optional, for Node.js integration)
+napi = { version = "2", features = ["async", "napi8"], optional = true }
+napi-derive = { version = "2", optional = true }
+
+# CLI (for standalone server)
+clap = { version = "4.4", features = ["derive"] }
+
+# System monitoring
+sysinfo = "0.30"
+
+# UUID generation
+uuid = { version = "1.6", features = ["v4"] }
+
+# GPU - wgpu for cross-platform GPU compute
+# metal feature enables Metal backend for macOS zero-copy texture import
+wgpu = { version = "0.19", features = ["metal"] }
+wgpu-hal = { version = "0.19", features = ["metal"] }
+wgpu-core = { version = "0.19" }
+pollster = "0.3"
+
+# FFmpeg bindings
+ffmpeg-next = "8.0"
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "net", "io-util", "signal"] }
+
+# HTTP/WebSocket server for frame streaming
+axum = { version = "0.7", features = ["ws"] }
+tower-http = { version = "0.5", features = ["cors"] }
+hyper = { version = "1.0", features = ["full"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1.5"
+async-stream = "0.3"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utilities
+bytemuck = { version = "1.14", features = ["derive"] }
+
+# Multi-threaded pipeline
+crossbeam-channel = "0.5"
+
+# Platform-specific GPU interop
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = "0.27"
+objc = "0.2"
+core-foundation = "0.9"
+block = "0.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ash = "0.37"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.52", features = [
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Foundation",
+    "Win32_Security",
+] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
+tempfile = "3"
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = true
+opt-level = 3
+
+[profile.dev]
+opt-level = 1
+
+[features]
+default = ["napi"]
+napi = ["dep:napi", "dep:napi-derive"]
+# Enable hardware acceleration features per platform
+videotoolbox = []  # macOS VideoToolbox
+vaapi = []         # Linux VAAPI
+cuda = []          # NVIDIA CUDA

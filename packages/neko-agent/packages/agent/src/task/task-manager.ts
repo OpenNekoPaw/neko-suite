@@ -1,0 +1,591 @@
+/**
+ * Task Manager - Async task management for Agent
+ *
+ * Manages async tasks like media generation, workflow execution, etc.
+ * Supports persistence, recovery, and concurrency control.
+ */
+
+import type {
+  Task,
+  TaskType,
+  TaskStatus,
+  TaskInput,
+  TaskOutput,
+  TaskProgressCallback,
+  ITaskManager,
+  ITaskStorage,
+  ITaskRecoveryStorage,
+  TaskRecoveryInfo,
+  SerializableTask,
+  TaskExecutor,
+} from '@uniedit/shared';
+import {
+  BaseError,
+  ConcurrencyPool,
+  KeyedConcurrencyPool,
+} from '@uniedit/shared';
+import { MemoryTaskStorage } from './task-storage';
+import { MemoryTaskRecoveryStorage } from './task-recovery-storage';
+
+/**
+ * Concurrency configuration
+ */
+export interface ConcurrencyConfig {
+  /** Global max concurrent tasks (default: 10) */
+  maxConcurrent?: number;
+  /** Per-type concurrency limits */
+  perTypeLimits?: Partial<Record<TaskType, number>>;
+  /** Queue timeout in ms (default: 60000) */
+  queueTimeout?: number;
+}
+
+/**
+ * Task manager options
+ */
+export interface TaskManagerOptions {
+  /** Custom storage implementation */
+  storage?: ITaskStorage;
+  /** Custom recovery storage for external task resumption */
+  recoveryStorage?: ITaskRecoveryStorage;
+  /** Auto-cleanup interval in ms (default: 1 hour) */
+  cleanupIntervalMs?: number;
+  /** Task retention period in ms (default: 7 days) */
+  retentionPeriodMs?: number;
+  /** Concurrency configuration */
+  concurrency?: ConcurrencyConfig;
+}
+
+/**
+ * Task manager implementation with optional persistence
+ */
+export class TaskManager implements ITaskManager {
+  private tasks: Map<string, Task> = new Map();
+  private executors: Map<TaskType, TaskExecutor> = new Map();
+  private progressCallbacks: Map<string, Set<TaskProgressCallback>> = new Map();
+  private taskCounter = 0;
+  private storage: ITaskStorage;
+  private recoveryStorage: ITaskRecoveryStorage;
+  private cleanupTimer?: ReturnType<typeof setInterval>;
+  private retentionPeriodMs: number;
+
+  // Concurrency control
+  private globalPool: ConcurrencyPool;
+  private typePools: KeyedConcurrencyPool;
+  private concurrencyConfig: ConcurrencyConfig;
+
+  constructor(options: TaskManagerOptions = {}) {
+    this.storage = options.storage ?? new MemoryTaskStorage();
+    this.recoveryStorage = options.recoveryStorage ?? new MemoryTaskRecoveryStorage();
+    this.retentionPeriodMs = options.retentionPeriodMs ?? 7 * 24 * 60 * 60 * 1000; // 7 days
+
+    // Initialize concurrency control
+    this.concurrencyConfig = options.concurrency ?? {};
+    const queueTimeout = this.concurrencyConfig.queueTimeout ?? 60000;
+
+    this.globalPool = new ConcurrencyPool({
+      maxConcurrent: this.concurrencyConfig.maxConcurrent ?? 10,
+      queueTimeout,
+    });
+
+    this.typePools = new KeyedConcurrencyPool({
+      maxConcurrent: 5, // Default per-type limit
+      queueTimeout,
+    });
+
+    // Setup auto-cleanup if interval is specified
+    const cleanupInterval = options.cleanupIntervalMs ?? 60 * 60 * 1000; // 1 hour
+    if (cleanupInterval > 0) {
+      this.cleanupTimer = setInterval(() => {
+        this.cleanupOldTasks().catch((err) => {
+          console.error('[TaskManager] Cleanup failed:', err);
+        });
+      }, cleanupInterval);
+    }
+  }
+
+  /**
+   * Initialize storage and recover pending tasks
+   */
+  async initialize(): Promise<void> {
+    // Load all tasks from storage
+    const storedTasks = await this.storage.loadAll();
+
+    for (const task of storedTasks) {
+      this.tasks.set(task.id, task);
+      // Update counter to avoid ID collisions
+      const match = task.id.match(/task_\d+_(\d+)/);
+      if (match) {
+        const counter = parseInt(match[1], 10);
+        if (counter >= this.taskCounter) {
+          this.taskCounter = counter;
+        }
+      }
+    }
+  }
+
+  /**
+   * Resume pending/running tasks after restart
+   * Returns the list of resumed task IDs
+   */
+  async resumePendingTasks(): Promise<string[]> {
+    const pendingTasks = await this.storage.loadPending();
+    const resumedIds: string[] = [];
+
+    for (const task of pendingTasks) {
+      // Mark running tasks as pending for retry
+      if (task.status === 'running') {
+        task.status = 'pending';
+        task.retryCount = (task.retryCount ?? 0) + 1;
+        await this.storage.save(task);
+      }
+
+      // Update in-memory state
+      this.tasks.set(task.id, task);
+
+      // Re-execute the task
+      this.executeTask(task).catch((error) => {
+        this.updateTask(task.id, {
+          status: 'failed',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+
+      resumedIds.push(task.id);
+    }
+
+    return resumedIds;
+  }
+
+  /**
+   * Cleanup old completed/failed tasks
+   */
+  async cleanupOldTasks(): Promise<number> {
+    const cleaned = await this.storage.cleanup(this.retentionPeriodMs);
+
+    // Also remove from in-memory map
+    if (cleaned > 0) {
+      const cutoff = Date.now() - this.retentionPeriodMs;
+      for (const [id, task] of this.tasks.entries()) {
+        if (
+          (task.status === 'completed' ||
+            task.status === 'failed' ||
+            task.status === 'cancelled') &&
+          task.updatedAt < cutoff
+        ) {
+          this.tasks.delete(id);
+        }
+      }
+    }
+
+    return cleaned;
+  }
+
+  /**
+   * Dispose resources
+   */
+  dispose(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
+    }
+    this.globalPool.dispose();
+    this.typePools.dispose();
+  }
+
+  /**
+   * Get concurrency statistics
+   */
+  getConcurrencyStats(): {
+    global: { running: number; queued: number; maxConcurrent: number };
+    perType: Map<string, { running: number; queued: number; maxConcurrent: number }>;
+  } {
+    return {
+      global: this.globalPool.stats,
+      perType: this.typePools.getAllStats(),
+    };
+  }
+
+  // ============================================================================
+  // Recovery Methods - Lightweight persistence for external task resumption
+  // ============================================================================
+
+  /**
+   * Save recovery info for an external task
+   * Call this when an external platform returns a task ID
+   */
+  async saveRecoveryInfo(
+    taskId: string,
+    externalTaskId: string,
+    providerId: string
+  ): Promise<void> {
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      console.warn('[TaskManager] Cannot save recovery info: task not found', taskId);
+      return;
+    }
+
+    const info: TaskRecoveryInfo = {
+      taskId,
+      externalTaskId,
+      providerId,
+      taskType: task.type,
+      payload: task.input.payload,
+      createdAt: task.createdAt,
+      updatedAt: Date.now(),
+    };
+
+    await this.recoveryStorage.save(info);
+    console.log('[TaskManager] Saved recovery info:', { taskId, externalTaskId, providerId });
+  }
+
+  /**
+   * Delete recovery info for a task
+   * Call this when a task completes, fails, or is cancelled
+   */
+  async deleteRecoveryInfo(taskId: string): Promise<void> {
+    await this.recoveryStorage.delete(taskId);
+  }
+
+  /**
+   * Get all pending recovery infos
+   * Call this on startup to resume external tasks
+   */
+  async getRecoveryInfos(): Promise<TaskRecoveryInfo[]> {
+    return this.recoveryStorage.loadAll();
+  }
+
+  /**
+   * Get recovery storage instance
+   * For external use (e.g., MediaTaskExecutor)
+   */
+  getRecoveryStorage(): ITaskRecoveryStorage {
+    return this.recoveryStorage;
+  }
+
+  /**
+   * Register a task executor
+   */
+  registerExecutor(type: TaskType, executor: TaskExecutor): void {
+    this.executors.set(type, executor);
+  }
+
+  /**
+   * Submit a new task
+   */
+  async submit(input: TaskInput): Promise<string> {
+    const id = this.generateTaskId();
+    const now = Date.now();
+
+    const task: Task = {
+      id,
+      type: input.type,
+      status: 'pending',
+      input,
+      progress: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.tasks.set(id, task);
+
+    // Debug: log task submission
+    console.log('[TaskManager] Submitting task:', {
+      id,
+      type: input.type,
+      registeredExecutors: Array.from(this.executors.keys()),
+      hasExecutor: this.executors.has(input.type),
+    });
+
+    // Persist to storage
+    await this.storage.save(task as SerializableTask);
+
+    // Start execution asynchronously
+    this.executeTask(task).catch((error) => {
+      console.error('[TaskManager] Task execution failed:', {
+        id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.updateTask(id, {
+        status: 'failed',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
+    return id;
+  }
+
+  /**
+   * Get task by ID
+   */
+  async get(id: string): Promise<Task | undefined> {
+    return this.tasks.get(id);
+  }
+
+  /**
+   * Cancel a task
+   */
+  async cancel(id: string): Promise<boolean> {
+    const task = this.tasks.get(id);
+    if (!task) return false;
+
+    if (task.status === 'pending' || task.status === 'running') {
+      this.updateTask(id, { status: 'cancelled' });
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Wait for task completion
+   */
+  async waitForCompletion(id: string, timeoutMs: number = 300000): Promise<Task> {
+    const startTime = Date.now();
+
+    while (true) {
+      const task = this.tasks.get(id);
+      if (!task) {
+        throw new BaseError({
+          category: 'not_found',
+          code: 'TASK_NOT_FOUND',
+          message: `Task ${id} not found`,
+          retryable: false,
+        });
+      }
+
+      if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
+        return task;
+      }
+
+      if (Date.now() - startTime > timeoutMs) {
+        throw new BaseError({
+          category: 'timeout',
+          code: 'TASK_TIMEOUT',
+          message: `Task ${id} timed out after ${timeoutMs}ms`,
+          retryable: false,
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  /**
+   * List tasks by status
+   */
+  async list(status?: TaskStatus): Promise<Task[]> {
+    const tasks = Array.from(this.tasks.values());
+    return status ? tasks.filter((t) => t.status === status) : tasks;
+  }
+
+  /**
+   * Delete a task
+   */
+  async delete(id: string): Promise<boolean> {
+    const task = this.tasks.get(id);
+    if (!task) return false;
+
+    // Remove from in-memory map
+    this.tasks.delete(id);
+
+    // Remove from storage
+    await this.storage.delete(id);
+
+    // Remove recovery info
+    await this.recoveryStorage.delete(id);
+
+    // Clean up callbacks
+    this.progressCallbacks.delete(id);
+
+    return true;
+  }
+
+  /**
+   * Update task output data (e.g., to store local file paths)
+   */
+  async updateOutputData(id: string, outputData: Record<string, unknown>): Promise<boolean> {
+    const task = this.tasks.get(id);
+    if (!task) return false;
+
+    // Merge new output data with existing
+    const updatedOutput = {
+      ...task.output,
+      data: {
+        ...(task.output?.data as object || {}),
+        ...outputData,
+      },
+    };
+
+    this.updateTask(id, { output: updatedOutput });
+    return true;
+  }
+
+  /**
+   * Subscribe to task progress
+   */
+  onProgress(id: string, callback: TaskProgressCallback): () => void {
+    let callbacks = this.progressCallbacks.get(id);
+    if (!callbacks) {
+      callbacks = new Set();
+      this.progressCallbacks.set(id, callbacks);
+    }
+    callbacks.add(callback);
+
+    return () => {
+      callbacks?.delete(callback);
+      if (callbacks?.size === 0) {
+        this.progressCallbacks.delete(id);
+      }
+    };
+  }
+
+  private async executeTask(task: Task): Promise<void> {
+    const executor = this.executors.get(task.type);
+    if (!executor) {
+      throw new Error(`No executor registered for task type: ${task.type}`);
+    }
+
+    // Acquire concurrency slots (global + per-type)
+    const priority = task.input.options?.priority ?? 0;
+    const typeLimit = this.concurrencyConfig.perTypeLimits?.[task.type];
+
+    // If per-type limit is configured, update the pool
+    if (typeLimit !== undefined) {
+      this.typePools.getPool(task.type).setMaxConcurrent(typeLimit);
+    }
+
+    // Acquire global slot first
+    await this.globalPool.acquire(priority);
+
+    try {
+      // Then acquire type-specific slot
+      await this.typePools.getPool(task.type).acquire(priority);
+
+      try {
+        await this.executeTaskCore(task, executor);
+      } finally {
+        // Release type-specific slot
+        this.typePools.getPool(task.type).release();
+      }
+    } finally {
+      // Release global slot
+      this.globalPool.release();
+    }
+  }
+
+  private async executeTaskCore(task: Task, executor: TaskExecutor): Promise<void> {
+    // Check if task was cancelled before starting execution
+    const currentTask = this.tasks.get(task.id);
+    if (currentTask?.status === 'cancelled') {
+      return;
+    }
+
+    this.updateTask(task.id, { status: 'running' });
+
+    // Inject taskId into payload for recovery support
+    const inputWithTaskId: TaskInput = {
+      ...task.input,
+      payload: {
+        ...task.input.payload,
+        __taskId: task.id,
+      },
+    };
+
+    const startTime = Date.now();
+    let retries = 0;
+    const maxRetries = task.input.options?.retry?.maxRetries || 0;
+
+    while (retries <= maxRetries) {
+      // Check if cancelled
+      const currentTask = this.tasks.get(task.id);
+      if (currentTask?.status === 'cancelled') {
+        return;
+      }
+
+      try {
+        const output = await executor(inputWithTaskId, (progress) => {
+          this.updateTask(task.id, { progress });
+        });
+
+        const endTime = Date.now();
+
+        // Check if executor returned an error (API error, not exception)
+        if (output.error) {
+          this.updateTask(task.id, {
+            status: 'failed',
+            error: output.error,
+            output: {
+              ...output,
+              metrics: {
+                startTime,
+                endTime,
+                duration: endTime - startTime,
+                retries,
+              },
+            },
+          });
+          return;
+        }
+
+        this.updateTask(task.id, {
+          status: 'completed',
+          progress: 100,
+          output: {
+            ...output,
+            metrics: {
+              startTime,
+              endTime,
+              duration: endTime - startTime,
+              retries,
+            },
+          },
+        });
+
+        return;
+      } catch (error) {
+        retries++;
+        if (retries > maxRetries) {
+          throw error;
+        }
+
+        const backoff = task.input.options?.retry?.backoffMs || 1000;
+        await new Promise((resolve) => setTimeout(resolve, backoff * retries));
+      }
+    }
+  }
+
+  private updateTask(id: string, updates: Partial<Task>): void {
+    const task = this.tasks.get(id);
+    if (!task) return;
+
+    const updatedTask: Task = {
+      ...task,
+      ...updates,
+      updatedAt: Date.now(),
+    };
+
+    this.tasks.set(id, updatedTask);
+
+    // Persist to storage (async, don't block)
+    this.storage.save(updatedTask as SerializableTask).catch((err) => {
+      console.error('[TaskManager] Failed to persist task:', err);
+    });
+
+    // Notify progress callbacks
+    const callbacks = this.progressCallbacks.get(id);
+    if (callbacks) {
+      for (const callback of callbacks) {
+        try {
+          callback(updatedTask);
+        } catch {
+          // Ignore callback errors
+        }
+      }
+    }
+  }
+
+  private generateTaskId(): string {
+    this.taskCounter++;
+    return `task_${Date.now()}_${this.taskCounter}`;
+  }
+}

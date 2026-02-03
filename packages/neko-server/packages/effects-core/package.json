@@ -1,0 +1,69 @@
+{
+	"name": "@uniedit/effects-core",
+	"version": "0.0.1",
+	"description": "Core effects library for video editing - animations, transitions, filters, masks, colors",
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./shaders": {
+			"types": "./dist/shaders/index.d.ts",
+			"import": "./dist/shaders/index.js"
+		},
+		"./shaders/common": {
+			"types": "./dist/shaders/common.wgsl.d.ts",
+			"import": "./dist/shaders/common.wgsl.js"
+		},
+		"./shaders/colorCorrection": {
+			"types": "./dist/shaders/colorCorrection.wgsl.d.ts",
+			"import": "./dist/shaders/colorCorrection.wgsl.js"
+		},
+		"./shaders/blendModes": {
+			"types": "./dist/shaders/blendModes.wgsl.d.ts",
+			"import": "./dist/shaders/blendModes.wgsl.js"
+		},
+		"./shaders/transitions": {
+			"types": "./dist/shaders/transitions.wgsl.d.ts",
+			"import": "./dist/shaders/transitions.wgsl.js"
+		},
+		"./shaders/effects": {
+			"types": "./dist/shaders/effects.wgsl.d.ts",
+			"import": "./dist/shaders/effects.wgsl.js"
+		},
+		"./algorithms": {
+			"types": "./dist/algorithms/index.d.ts",
+			"import": "./dist/algorithms/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"src"
+	],
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch",
+		"clean": "rm -rf dist",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {},
+	"devDependencies": {
+		"typescript": "^5.3.3"
+	},
+	"keywords": [
+		"video",
+		"effects",
+		"filters",
+		"transitions",
+		"animations",
+		"webgpu",
+		"webgl",
+		"wgpu",
+		"shaders"
+	],
+	"license": "MIT"
+}
