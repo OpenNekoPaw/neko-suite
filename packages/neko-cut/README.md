@@ -123,7 +123,7 @@ neko-cut
     ├── neko-engine (扩展依赖)
     ├── @neko/platform (平台服务)
     ├── @neko/shared (类型)
-    └── @neko/media-processor-rs (媒体处理)
+    └── @neko/native-napi (媒体处理)
 ```
 
 ---

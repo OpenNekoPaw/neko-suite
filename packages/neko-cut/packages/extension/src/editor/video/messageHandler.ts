@@ -12,13 +12,23 @@ import * as fs from 'fs';
 import { VideoEditorModel } from './videoEditorModel';
 import { MessageFromWebview, ProjectData, ContextMenuItem, AI_ACTIONS } from '@neko/shared';
 import { getService } from '../../base';
-import { IPlatform, IConnectionStateManager } from '../../bootstrap';
+import { IPlatform, IConnectionStateManager, IAgentManager } from '../../bootstrap';
 import { ConfigBridge } from '../../services/configBridge';
-import { IAgentManager } from '../../ai/agentManager';
-import { IAgentManager as IAgentManagerId } from '../../bootstrap';
-import { createDefaultAgentContext } from '../../ai/agentContext';
 import type { Platform } from '@neko/platform';
 import { getAudioDecoderService } from '../../services/audioDecoderService';
+
+// Agent context interface (provided by neko-agent extension)
+interface IAgentContext {
+  workspaceRoot: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Create a default agent context (fallback when neko-agent not available)
+ */
+function createDefaultAgentContext(workspaceRoot: string): IAgentContext {
+  return { workspaceRoot };
+}
 
 /**
  * Handles messages between Extension Host and WebView
@@ -859,11 +869,11 @@ export class MessageHandler {
 	}
 
 	/**
-	 * Get AgentManager service
+	 * Get AgentManager service (optional, from neko-agent extension)
 	 */
-	private getAgentManager(): IAgentManager | null {
+	private getAgentManager(): unknown | null {
 		try {
-			return getService<IAgentManager>(IAgentManagerId) ?? null;
+			return getService(IAgentManager) ?? null;
 		} catch {
 			console.warn('[MessageHandler] AgentManager service not available');
 			return null;

@@ -3,6 +3,11 @@
  * 核心服务初始化模块
  *
  * 职责：协调所有服务的初始化和注册
+ *
+ * 架构说明：
+ * - neko-cut 是独立的视频编辑器核心
+ * - Agent 功能 (neko-agent) 和媒体引擎 (neko-engine) 通过可选服务发现
+ * - 增强功能通过 HTTP/命令通信，非强制依赖
  */
 
 import * as vscode from 'vscode';
@@ -22,20 +27,13 @@ import { IEditorRegistry, EditorRegistry } from '../editor/common/editorRegistry
 import { VideoEditorModelProvider } from '../editor/video/videoEditorModel';
 import { IStatusBar, StatusBar } from '../views/statusBar';
 import { IVideoProjectOutlineProvider, VideoProjectOutlineProvider } from '../views/outlineProvider';
-import { IAgentManager, AgentManager } from '../ai/agentManager';
 import {
   ConnectionStateManager,
   IConnectionStateManager,
 } from '../services/connectionStateManager';
 import { VSCodeTaskStorage } from '../services/vscodeTaskStorage';
 import { IProjectSessionService, ProjectSessionService } from '../services/ProjectSessionService';
-import { ExternalAPIServer, createExternalAPIServer } from '../server';
 import { IAssetService, AssetService } from '../services/AssetService';
-import {
-  IMediaEngineManager,
-  createMediaEngineManager,
-  type MediaEngineManager,
-} from '../mediaEngine';
 
 // Bootstrap modules (same directory)
 import { createPlatformInstance } from './platformFactory';
@@ -51,10 +49,43 @@ export const IPlatform = createServiceId<Platform>('platform');
 export const IToolRegistry = createServiceId<ToolRegistry>('toolRegistry');
 export const IMCPManager = createServiceId<MCPManager>('mcpManager');
 export const ITaskManager = createServiceId<TaskManager>('taskManager');
-export const IExternalAPIServer = createServiceId<ExternalAPIServer>('externalAPIServer');
 
-// Re-export ConnectionStateManager, AgentManager and AssetService service IDs
-export { IConnectionStateManager, IAgentManager, IAssetService, IMediaEngineManager };
+// Re-export service IDs
+export { IConnectionStateManager, IAssetService };
+
+// =============================================================================
+// Optional Service Identifiers (provided by other extensions)
+// =============================================================================
+
+/**
+ * Optional Agent Manager interface (provided by neko-agent)
+ */
+export interface IOptionalAgentManager {
+  getOrCreate(conversationId: string): unknown;
+  get(conversationId: string): unknown | undefined;
+  isRunning(conversationId: string): boolean;
+}
+
+/**
+ * Optional Media Engine Manager interface (provided by neko-engine)
+ */
+export interface IOptionalMediaEngineManager {
+  getMode(): string;
+  setMode(mode: string): Promise<void>;
+  analyzeMedia(mediaInfo: unknown): unknown;
+}
+
+/**
+ * Optional External API Server interface (provided by neko-engine)
+ */
+export interface IOptionalExternalAPIServer {
+  start(): Promise<void>;
+  stop(): Promise<void>;
+}
+
+export const IAgentManager = createServiceId<IOptionalAgentManager | null>('agentManager');
+export const IMediaEngineManager = createServiceId<IOptionalMediaEngineManager | null>('mediaEngineManager');
+export const IExternalAPIServer = createServiceId<IOptionalExternalAPIServer | null>('externalAPIServer');
 
 // =============================================================================
 // VS Code Tool Types
@@ -88,10 +119,63 @@ export interface IServiceBootstrapResult {
   statusBar: StatusBar;
   outlineProvider: VideoProjectOutlineProvider;
   connectionStateManager: ConnectionStateManager;
-  externalAPIServer: ExternalAPIServer;
-  agentManager: AgentManager;
   assetService: AssetService;
-  mediaEngineManager: MediaEngineManager;
+  // Optional services (may be null if extensions not installed)
+  agentManager: IOptionalAgentManager | null;
+  mediaEngineManager: IOptionalMediaEngineManager | null;
+  externalAPIServer: IOptionalExternalAPIServer | null;
+}
+
+// =============================================================================
+// Optional Service Discovery
+// =============================================================================
+
+/**
+ * Try to get AgentManager from neko-agent extension
+ */
+async function discoverAgentManager(): Promise<IOptionalAgentManager | null> {
+  try {
+    const agentExt = vscode.extensions.getExtension('neko.neko-agent');
+    if (agentExt) {
+      const api = agentExt.isActive ? agentExt.exports : await agentExt.activate();
+      return api?.agentManager ?? null;
+    }
+  } catch (error) {
+    console.warn('[NekoCut] AgentManager not available:', error);
+  }
+  return null;
+}
+
+/**
+ * Try to get MediaEngineManager from neko-engine extension
+ */
+async function discoverMediaEngineManager(): Promise<IOptionalMediaEngineManager | null> {
+  try {
+    const engineExt = vscode.extensions.getExtension('neko.neko-engine');
+    if (engineExt) {
+      const api = engineExt.isActive ? engineExt.exports : await engineExt.activate();
+      return api?.mediaEngineManager ?? null;
+    }
+  } catch (error) {
+    console.warn('[NekoCut] MediaEngineManager not available:', error);
+  }
+  return null;
+}
+
+/**
+ * Try to get ExternalAPIServer from neko-engine extension
+ */
+async function discoverExternalAPIServer(): Promise<IOptionalExternalAPIServer | null> {
+  try {
+    const engineExt = vscode.extensions.getExtension('neko.neko-engine');
+    if (engineExt) {
+      const api = engineExt.isActive ? engineExt.exports : await engineExt.activate();
+      return api?.externalAPIServer ?? null;
+    }
+  } catch (error) {
+    console.warn('[NekoCut] ExternalAPIServer not available:', error);
+  }
+  return null;
 }
 
 // =============================================================================
@@ -181,14 +265,14 @@ export async function bootstrapCoreServices(
 
   // 后台连接启用的 MCP 服务器并记录状态
   connectMCPServers(platform, mcpManager, toolRegistry, connectionStateManager).catch(error => {
-    console.error('[Neko Suite] Failed to connect MCP servers:', error);
+    console.error('[NekoCut] Failed to connect MCP servers:', error);
   });
 
   // ==========================================================================
   // 7. Workflow 健康检查 (后台执行)
   // ==========================================================================
   checkWorkflowEngines(platform, connectionStateManager).catch(error => {
-    console.error('[Neko Suite] Failed to check workflow engines:', error);
+    console.error('[NekoCut] Failed to check workflow engines:', error);
   });
 
   // ==========================================================================
@@ -197,7 +281,7 @@ export async function bootstrapCoreServices(
   taskManager.initialize().then(() => {
     return taskManager.resumePendingTasks();
   }).catch((err) => {
-    console.error('[Neko Suite] Failed to initialize TaskManager:', err);
+    console.error('[NekoCut] Failed to initialize TaskManager:', err);
   });
 
   // ==========================================================================
@@ -214,27 +298,7 @@ export async function bootstrapCoreServices(
   services.set(IVideoProjectOutlineProvider, outlineProvider);
 
   // ==========================================================================
-  // 11. Agent Manager (管理多会话 Agent 实例)
-  // ==========================================================================
-  const agentManager = new AgentManager();
-  agentManager.setPlatform(platform);
-  services.set(IAgentManager, agentManager);
-  context.subscriptions.push(agentManager);
-
-  // ==========================================================================
-  // 12. External API Server (HTTP + Headless Webview)
-  // ==========================================================================
-  const externalAPIServer = createExternalAPIServer(toolRegistry, context, projectSessionService);
-  services.set(IExternalAPIServer, externalAPIServer);
-  context.subscriptions.push(externalAPIServer);
-
-  // Start HTTP server in background
-  externalAPIServer.start().catch(error => {
-    console.error('[Neko Suite] Failed to start External API Server:', error);
-  });
-
-  // ==========================================================================
-  // 13. Asset Service (素材管理)
+  // 11. Asset Service (素材管理)
   // ==========================================================================
   const assetService = new AssetService();
   services.set(IAssetService, assetService);
@@ -242,19 +306,37 @@ export async function bootstrapCoreServices(
 
   // Initialize asset service in background
   assetService.initialize().catch(error => {
-    console.error('[Neko Suite] Failed to initialize AssetService:', error);
+    console.error('[NekoCut] Failed to initialize AssetService:', error);
   });
 
   // ==========================================================================
-  // 14. Media Engine Manager (模式管理)
+  // 12. Optional Services Discovery (from other extensions)
   // ==========================================================================
-  const mediaEngineManager = createMediaEngineManager(context.globalStorageUri, {
-    defaultMode: 'auto',
-    autoDownload: false,
-    showDownloadPrompts: true,
-  });
+
+  // Discover optional services in background (non-blocking)
+  const [agentManager, mediaEngineManager, externalAPIServer] = await Promise.all([
+    discoverAgentManager(),
+    discoverMediaEngineManager(),
+    discoverExternalAPIServer(),
+  ]);
+
+  services.set(IAgentManager, agentManager);
   services.set(IMediaEngineManager, mediaEngineManager);
-  context.subscriptions.push(mediaEngineManager);
+  services.set(IExternalAPIServer, externalAPIServer);
+
+  // Log optional service status
+  console.log('[NekoCut] Optional services:', {
+    agentManager: agentManager ? 'available' : 'not available',
+    mediaEngineManager: mediaEngineManager ? 'available' : 'not available',
+    externalAPIServer: externalAPIServer ? 'available' : 'not available',
+  });
+
+  // Start external API server if available
+  if (externalAPIServer) {
+    externalAPIServer.start().catch(error => {
+      console.error('[NekoCut] Failed to start External API Server:', error);
+    });
+  }
 
   return {
     platform,
@@ -265,10 +347,10 @@ export async function bootstrapCoreServices(
     statusBar,
     outlineProvider,
     connectionStateManager,
-    externalAPIServer,
-    agentManager,
     assetService,
+    agentManager,
     mediaEngineManager,
+    externalAPIServer,
   };
 }
 

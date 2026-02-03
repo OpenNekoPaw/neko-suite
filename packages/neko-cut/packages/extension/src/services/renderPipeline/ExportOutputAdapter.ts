@@ -32,10 +32,10 @@ import {
 } from '../ExportBackpressureController';
 
 // Rust N-API types
-type ExportPipelineSession = import('@neko/media-processor-rs').ExportPipelineSession;
-type JsPipelineConfig = import('@neko/media-processor-rs').JsPipelineConfig;
-type JsPipelineFrame = import('@neko/media-processor-rs').JsPipelineFrame;
-type JsEncoderConfig = import('@neko/media-processor-rs').JsEncoderConfig;
+type ExportPipelineSession = import('@neko/native-napi').ExportPipelineSession;
+type JsPipelineConfig = import('@neko/native-napi').JsPipelineConfig;
+type JsPipelineFrame = import('@neko/native-napi').JsPipelineFrame;
+type JsEncoderConfig = import('@neko/native-napi').JsEncoderConfig;
 
 // =============================================================================
 // Codec Mapping
@@ -161,7 +161,7 @@ export class ExportOutputAdapter implements IExportOutputAdapter {
 
 		// Create pipeline using Rust N-API
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		const { ExportPipelineSession } = require('@neko/media-processor-rs');
+		const { ExportPipelineSession } = require('@neko/native-napi');
 		this._pipeline = await ExportPipelineSession.create(pipelineConfig);
 
 		this._initialized = true;

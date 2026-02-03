@@ -4,23 +4,29 @@
  * Handles mode-related messages from Webview.
  * Routes messages to MediaEngineManager for processing.
  *
+ * Only compatible mode is supported (Native FFmpeg + wgpu via NAPI).
+ *
  * Message Types:
  * - mediaEngine:getMode          : Get current mode and status
- * - mediaEngine:setMode          : Set mode preference
  * - mediaEngine:getDownloadStatus: Get compatible mode download status
  * - mediaEngine:startDownload    : Start compatible mode download
- * - mediaEngine:analyzeMedia     : Analyze media and get mode recommendation
  */
 
 import type {
 	MediaEngineMode,
-	ModePreference,
-	ModeSelectionResult,
 	DownloadStatus,
-	ResolveAutoModeContext,
-	TimelineMediaAnalysisResult,
 } from '@neko/shared';
-import type { MediaEngineManager } from '../mediaEngine/MediaEngineManager';
+
+// MediaEngineManager interface (provided by neko-engine extension)
+// Using interface instead of direct import for loose coupling
+interface IMediaEngineManager {
+	currentMode: MediaEngineMode;
+	isCompatibleModeInstalled: boolean;
+	getDownloadStatus(): DownloadStatus;
+	downloadCompatibleMode(onProgress: (percent: number) => void): Promise<void>;
+}
+
+type MediaEngineManager = IMediaEngineManager;
 
 // =============================================================================
 // Types
@@ -43,22 +49,6 @@ interface GetModeRequest extends BaseRequest {
 }
 
 /**
- * Set mode request (extended with context support)
- */
-interface SetModeRequest extends BaseRequest {
-	type: 'mediaEngine:setMode';
-	payload: {
-		mode: ModePreference;
-		/** Context for auto mode resolution */
-		context?: ResolveAutoModeContext;
-		/** Media paths from timeline (for editor context) */
-		mediaPaths?: string[];
-		/** Project directory for resolving relative paths */
-		projectDir?: string;
-	};
-}
-
-/**
  * Get download status request
  */
 interface GetDownloadStatusRequest extends BaseRequest {
@@ -73,37 +63,12 @@ interface StartDownloadRequest extends BaseRequest {
 }
 
 /**
- * Analyze media request
- */
-interface AnalyzeMediaRequest extends BaseRequest {
-	type: 'mediaEngine:analyzeMedia';
-	payload: {
-		videoPath: string;
-	};
-}
-
-/**
- * Resolve auto mode request (for context-aware mode selection)
- */
-interface ResolveAutoModeRequest extends BaseRequest {
-	type: 'mediaEngine:resolveAutoMode';
-	payload: {
-		context: ResolveAutoModeContext;
-		mediaPaths?: string[];
-		projectDir?: string;
-	};
-}
-
-/**
  * Media engine message union type
  */
 export type MediaEngineModeMessage =
 	| GetModeRequest
-	| SetModeRequest
 	| GetDownloadStatusRequest
-	| StartDownloadRequest
-	| AnalyzeMediaRequest
-	| ResolveAutoModeRequest;
+	| StartDownloadRequest;
 
 /**
  * Response types
@@ -112,18 +77,8 @@ interface GetModeResponse {
 	type: 'mediaEngine:response:getMode';
 	requestId?: string;
 	payload?: {
-		currentMode: MediaEngineMode | null;
+		currentMode: MediaEngineMode;
 		compatibleModeInstalled: boolean;
-	};
-	error?: string;
-}
-
-interface SetModeResponse {
-	type: 'mediaEngine:response:setMode';
-	requestId?: string;
-	payload?: {
-		success: boolean;
-		activeMode: MediaEngineMode | null;
 	};
 	error?: string;
 }
@@ -140,26 +95,6 @@ interface StartDownloadResponse {
 	requestId?: string;
 	payload?: {
 		started: boolean;
-	};
-	error?: string;
-}
-
-interface AnalyzeMediaResponse {
-	type: 'mediaEngine:response:analyzeMedia';
-	requestId?: string;
-	payload?: ModeSelectionResult & {
-		mediaInfo?: unknown;
-	};
-	error?: string;
-}
-
-interface ResolveAutoModeResponse {
-	type: 'mediaEngine:response:resolveAutoMode';
-	requestId?: string;
-	payload?: {
-		resolvedMode: MediaEngineMode;
-		analysis?: TimelineMediaAnalysisResult;
-		requiresDownload?: boolean;
 	};
 	error?: string;
 }
@@ -183,11 +118,8 @@ interface DownloadCompleteNotification {
 
 type MediaEngineModeResponse =
 	| GetModeResponse
-	| SetModeResponse
 	| GetDownloadStatusResponse
 	| StartDownloadResponse
-	| AnalyzeMediaResponse
-	| ResolveAutoModeResponse
 	| DownloadProgressNotification
 	| DownloadCompleteNotification;
 
@@ -229,20 +161,11 @@ export async function handleMediaEngineModeMessage(
 			case 'mediaEngine:getMode':
 				return handleGetMode(requestId, postMessage, manager);
 
-			case 'mediaEngine:setMode':
-				return handleSetMode(requestId, message.payload, postMessage, manager);
-
 			case 'mediaEngine:getDownloadStatus':
 				return handleGetDownloadStatus(requestId, postMessage, manager);
 
 			case 'mediaEngine:startDownload':
 				return handleStartDownload(requestId, postMessage, manager);
-
-			case 'mediaEngine:analyzeMedia':
-				return handleAnalyzeMedia(requestId, message.payload.videoPath, postMessage, manager);
-
-			case 'mediaEngine:resolveAutoMode':
-				return handleResolveAutoMode(requestId, message.payload, postMessage, manager);
 
 			default:
 				return false;
@@ -270,65 +193,6 @@ async function handleGetMode(
 			compatibleModeInstalled: manager.isCompatibleModeInstalled,
 		},
 	});
-	return true;
-}
-
-async function handleSetMode(
-	requestId: string | undefined,
-	payload: SetModeRequest['payload'],
-	postMessage: PostMessageFn,
-	manager: MediaEngineManager
-): Promise<boolean> {
-	const { mode, context, mediaPaths, projectDir } = payload;
-
-	try {
-		// Handle 'auto' mode - use context-aware resolution
-		if (mode === 'auto') {
-			// If context is provided, use resolveAutoMode
-			if (context) {
-				const autoMode = await manager.resolveAutoMode(context, mediaPaths, projectDir);
-				postMessage({
-					type: 'mediaEngine:response:setMode',
-					requestId,
-					payload: {
-						success: true,
-						activeMode: autoMode,
-					},
-				});
-				return true;
-			}
-
-			// Fallback to legacy behavior (non-editor, use autoSelectedMode)
-			const autoMode = manager.autoSelectedMode;
-			postMessage({
-				type: 'mediaEngine:response:setMode',
-				requestId,
-				payload: {
-					success: true,
-					activeMode: autoMode,
-				},
-			});
-			return true;
-		}
-
-		// Force specific mode
-		await manager.forceMode(mode);
-
-		postMessage({
-			type: 'mediaEngine:response:setMode',
-			requestId,
-			payload: {
-				success: true,
-				activeMode: manager.currentMode,
-			},
-		});
-	} catch (error) {
-		postMessage({
-			type: 'mediaEngine:response:setMode',
-			requestId,
-			error: error instanceof Error ? error.message : String(error),
-		});
-	}
 	return true;
 }
 
@@ -393,77 +257,6 @@ async function handleStartDownload(
 				success: false,
 				error: error instanceof Error ? error.message : String(error),
 			},
-		});
-	}
-	return true;
-}
-
-async function handleAnalyzeMedia(
-	requestId: string | undefined,
-	videoPath: string,
-	postMessage: PostMessageFn,
-	manager: MediaEngineManager
-): Promise<boolean> {
-	try {
-		const { mediaInfo, recommendation } = await manager.probeMediaWithRecommendation(videoPath);
-
-		postMessage({
-			type: 'mediaEngine:response:analyzeMedia',
-			requestId,
-			payload: {
-				...recommendation,
-				mediaInfo,
-			},
-		});
-	} catch (error) {
-		postMessage({
-			type: 'mediaEngine:response:analyzeMedia',
-			requestId,
-			error: error instanceof Error ? error.message : String(error),
-		});
-	}
-	return true;
-}
-
-/**
- * Handle resolveAutoMode request
- * Resolves auto mode based on context (editor vs non-editor)
- */
-async function handleResolveAutoMode(
-	requestId: string | undefined,
-	payload: ResolveAutoModeRequest['payload'],
-	postMessage: PostMessageFn,
-	manager: MediaEngineManager
-): Promise<boolean> {
-	const { context, mediaPaths, projectDir } = payload;
-
-	try {
-		// Resolve the mode based on context
-		const resolvedMode = await manager.resolveAutoMode(context, mediaPaths, projectDir);
-
-		// Get analysis for editor context
-		let analysis: TimelineMediaAnalysisResult | undefined;
-		if (context === 'editor' && mediaPaths && mediaPaths.length > 0) {
-			analysis = await manager.analyzeTimelineMedia(mediaPaths, projectDir);
-		}
-
-		// Check if download is required for compatible mode
-		const requiresDownload = resolvedMode === 'compatible' && !manager.isCompatibleModeInstalled;
-
-		postMessage({
-			type: 'mediaEngine:response:resolveAutoMode',
-			requestId,
-			payload: {
-				resolvedMode,
-				analysis,
-				requiresDownload,
-			},
-		});
-	} catch (error) {
-		postMessage({
-			type: 'mediaEngine:response:resolveAutoMode',
-			requestId,
-			error: error instanceof Error ? error.message : String(error),
 		});
 	}
 	return true;

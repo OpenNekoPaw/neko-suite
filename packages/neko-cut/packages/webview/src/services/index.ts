@@ -30,29 +30,15 @@ export {
   type UrlResolver,
 } from './urlResolverFactory';
 
-// Media Request Proxy (Extension FFmpeg IPC)
+// Media Request Proxy (Extension FFmpeg via NAPI)
 export {
   MediaRequestProxy,
   type IMediaRequestProxy,
 } from './MediaRequestProxy';
 
-// Local Media Processor (Basic Mode - Webview only)
-export {
-  LocalMediaProcessor,
-  createLocalMediaProcessor,
-} from './LocalMediaProcessor';
-
-// Mode-Aware Media Proxy (Routes based on mode)
-export {
-  ModeAwareMediaProxy,
-  createModeAwareMediaProxy,
-} from './ModeAwareMediaProxy';
-
 // Media Proxy Factory (Singleton access)
 export {
   getMediaProxy,
-  getLocalMediaProcessor,
-  getRemoteMediaProxy,
   resetMediaProxy,
 } from './mediaProxyFactory';
 

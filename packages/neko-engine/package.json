@@ -104,9 +104,9 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "compile": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
     "watch": "npm run compile -- --watch",
-    "lint": "eslint src --ext ts,tsx",
+    "lint": "eslint packages/extension/src --ext ts,tsx",
     "test": "vitest",
     "package": "vsce package"
   },

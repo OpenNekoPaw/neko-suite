@@ -1,5 +1,5 @@
 {
-	"name": "@neko/effects-core",
+	"name": "@neko-engine/effects-core",
 	"version": "0.0.1",
 	"description": "Core effects library for video editing - animations, transitions, filters, masks, colors",
 	"type": "module",

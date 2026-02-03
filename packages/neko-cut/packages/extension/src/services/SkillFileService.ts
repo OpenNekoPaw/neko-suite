@@ -25,7 +25,7 @@ import type {
   ConfiguredSkill,
   ConfiguredSlashCommand,
 } from '@neko/shared';
-import { SkillLoader, createNodeSkillLoader } from '@neko/agent/skill/skill-loader';
+import { SkillLoader, createNodeSkillLoader } from '@neko/agent/skill/skill-loader.ts';
 import { builtinSkills, builtinCommands } from '@neko/agent';
 
 // =============================================================================

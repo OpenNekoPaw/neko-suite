@@ -1,11 +1,10 @@
 /**
  * ExportEngineFactory - 导出引擎工厂
  *
- * 遵循工厂模式和开闭原则，根据导出格式和运行模式选择合适的导出引擎
+ * 遵循工厂模式和开闭原则，根据导出格式选择合适的导出引擎
  *
  * 导出引擎选择：
- * - 基础模式 (basic)：WebviewExportAdapter（纯 Web 端，WebCodecs + GPURender + Muxer）
- * - 兼容模式 (compatible)：CompatibleExportAdapter（纯 Extension 端，FFmpeg 全流程）
+ * - 视频格式 (mp4/webm)：CompatibleExportAdapter（Extension 端，FFmpeg 全流程 via NAPI）
  * - GIF/图片序列：CanvasExportAdapter
  */
 
@@ -15,11 +14,6 @@ import {
   isVideoFormat,
   isImageSequenceFormat,
 } from './IExportEngine';
-import {
-  createWebviewExportAdapter,
-  isWebviewExportAvailable,
-  type RenderEngineFactory,
-} from './WebviewExportAdapter';
 import {
   createCompatibleExportAdapter,
   isCompatibleExportAvailable,
@@ -33,7 +27,7 @@ import { createCanvasExportAdapter } from './CanvasExportAdapter';
 /**
  * 导出引擎类型
  */
-export type ExportEngineType = 'webview' | 'compatible' | 'canvas';
+export type ExportEngineType = 'compatible' | 'canvas';
 
 /**
  * 引擎能力信息
@@ -61,40 +55,16 @@ export interface EngineCapabilities {
  * 导出引擎工厂
  *
  * 职责:
- * - 根据模式和格式自动选择合适的导出引擎
+ * - 根据格式自动选择合适的导出引擎
  * - 提供引擎能力查询
  * - 管理引擎生命周期
  *
  * 选择策略:
- * - basic 模式 → WebviewExportAdapter (纯 Web)
- * - compatible 模式 → CompatibleExportAdapter (纯 Extension)
+ * - 视频格式 → CompatibleExportAdapter (Extension FFmpeg via NAPI)
  * - GIF/图片序列 → CanvasExportAdapter
  */
 export class ExportEngineFactory {
   private static _engines: Map<ExportEngineType, IExportEngine> = new Map();
-  private static _webviewRenderEngineFactory: RenderEngineFactory | null = null;
-  private static _useCompatibleMode = false;
-
-  // ---------------------------------------------------------------------------
-  // Configuration
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Set render engine factory for pure Webview export (basic mode)
-   */
-  static setWebviewRenderEngineFactory(factory: RenderEngineFactory): void {
-    this._webviewRenderEngineFactory = factory;
-  }
-
-  /**
-   * Set whether to use compatible mode (Extension-side export)
-   * When true, uses CompatibleExportAdapter for video formats
-   */
-  static setUseCompatibleMode(useCompatible: boolean): void {
-    this._useCompatibleMode = useCompatible;
-    // Clear cached engines when mode changes
-    this._engines.clear();
-  }
 
   // ---------------------------------------------------------------------------
   // 公共静态方法
@@ -104,8 +74,7 @@ export class ExportEngineFactory {
    * 获取指定格式的导出引擎
    *
    * 选择策略:
-   * - compatible 模式 → CompatibleExportAdapter (纯 Extension)
-   * - basic 模式 → WebviewExportAdapter (纯 Web)
+   * - 视频格式 → CompatibleExportAdapter (Extension FFmpeg via NAPI)
    * - GIF/图片序列 → Canvas2D
    */
   static getEngine(format: ExportFormat): IExportEngine {
@@ -127,24 +96,13 @@ export class ExportEngineFactory {
   static getCapabilities(): EngineCapabilities[] {
     const capabilities: EngineCapabilities[] = [];
 
-    // Pure Webview 引擎 (basic mode)
-    const webviewAvailable = isWebviewExportAvailable();
-    capabilities.push({
-      name: 'Pure Webview (WebCodecs + GPU)',
-      type: 'webview',
-      supportedFormats: ['mp4', 'webm'],
-      gpuAccelerated: true,
-      available: webviewAvailable,
-      unavailableReason: webviewAvailable ? undefined : 'WebCodecs or GPU not available',
-    });
-
-    // Compatible 引擎 (compatible mode)
+    // Compatible 引擎 (via NAPI)
     const compatibleAvailable = isCompatibleExportAvailable();
     capabilities.push({
-      name: 'Compatible (Extension FFmpeg)',
+      name: 'Compatible (Extension FFmpeg via NAPI)',
       type: 'compatible',
       supportedFormats: ['mp4', 'webm'],
-      gpuAccelerated: false,
+      gpuAccelerated: true, // wgpu acceleration
       available: compatibleAvailable,
       unavailableReason: compatibleAvailable ? undefined : 'VSCode API not available',
     });
@@ -166,7 +124,7 @@ export class ExportEngineFactory {
    */
   static isFormatSupported(format: ExportFormat): boolean {
     if (format === 'mp4' || format === 'webm') {
-      return isWebviewExportAvailable() || isCompatibleExportAvailable();
+      return isCompatibleExportAvailable();
     }
     return true;
   }
@@ -175,8 +133,8 @@ export class ExportEngineFactory {
    * 获取格式不支持的原因
    */
   static getUnsupportedReason(format: ExportFormat): string | null {
-    if ((format === 'mp4' || format === 'webm') && !isWebviewExportAvailable() && !isCompatibleExportAvailable()) {
-      return 'Neither Webview export nor Compatible export is available.';
+    if ((format === 'mp4' || format === 'webm') && !isCompatibleExportAvailable()) {
+      return 'Compatible export is not available. Extension Host may not be ready.';
     }
     return null;
   }
@@ -187,7 +145,7 @@ export class ExportEngineFactory {
   static getRecommendedFormats(): ExportFormat[] {
     const formats: ExportFormat[] = [];
 
-    if (isWebviewExportAvailable() || isCompatibleExportAvailable()) {
+    if (isCompatibleExportAvailable()) {
       formats.push('mp4', 'webm');
     }
 
@@ -211,26 +169,12 @@ export class ExportEngineFactory {
 
   private static _selectEngineType(format: ExportFormat): ExportEngineType {
     if (isVideoFormat(format)) {
-      // Compatible mode: use Extension FFmpeg
-      if (this._useCompatibleMode && isCompatibleExportAvailable()) {
+      if (isCompatibleExportAvailable()) {
         return 'compatible';
       }
-      // Basic mode: use Webview WebCodecs
-      // NOTE: Basic mode does NOT fallback to compatible mode - they are independent
-      if (!this._useCompatibleMode) {
-        if (isWebviewExportAvailable()) {
-          return 'webview';
-        }
-        // Do NOT fallback to compatible mode in basic mode
-        throw new Error(
-          '基础模式导出不可用：WebCodecs API 不支持。\n' +
-          '请切换到兼容模式导出（设置 → 媒体引擎模式 → 兼容模式）'
-        );
-      }
-      // Compatible mode requested but not available
       throw new Error(
-        '兼容模式导出不可用：Extension Host 未就绪。\n' +
-        '请尝试重新加载窗口或切换到基础模式。'
+        '视频导出不可用：Extension Host 未就绪。\n' +
+        '请尝试重新加载窗口。'
       );
     }
 
@@ -252,13 +196,6 @@ export class ExportEngineFactory {
 
   private static _createEngine(type: ExportEngineType): IExportEngine {
     switch (type) {
-      case 'webview': {
-        const adapter = createWebviewExportAdapter();
-        if (this._webviewRenderEngineFactory) {
-          adapter.setRenderEngineFactory(this._webviewRenderEngineFactory);
-        }
-        return adapter;
-      }
       case 'compatible': {
         return createCompatibleExportAdapter();
       }

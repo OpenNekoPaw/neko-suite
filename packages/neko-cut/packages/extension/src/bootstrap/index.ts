@@ -4,7 +4,13 @@
  */
 
 export { createPlatformInstance } from './platformFactory';
-export { registerBuiltinTools } from './toolsBootstrap';
+export {
+  registerBuiltinTools,
+  initializeTimelineBridge,
+  getTimelineBridge,
+  setTimelineBridgeWebview,
+  handleToolResult,
+} from './toolsBootstrap';
 export { connectMCPServers, type MCPConnectResult } from './mcpBootstrap';
 export { checkWorkflowEngines, type WorkflowCheckResult } from './workflowBootstrap';
 export {

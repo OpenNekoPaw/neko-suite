@@ -1,7 +1,7 @@
 /**
  * Media Engine Capabilities
  *
- * Defines capability detection types for media engines.
+ * Defines capability detection types for the compatible mode media engine.
  */
 
 // =============================================================================
@@ -69,7 +69,7 @@ export type HardwareAccelType =
 	| 'vaapi' // Linux
 	| 'qsv' // Intel Quick Sync
 	| 'd3d11va' // Windows
-	| 'webgpu'; // WebGPU (basic mode)
+	| 'wgpu'; // wgpu (compatible mode)
 
 /**
  * Hardware acceleration info
@@ -98,8 +98,7 @@ export interface HardwareAccelInfo {
 /**
  * Media engine capabilities
  *
- * Describes what a media engine can do, used for mode selection
- * and feature availability checks.
+ * Describes what the media engine can do, used for feature availability checks.
  */
 export interface MediaEngineCapabilities {
 	/** Supported video codecs */
@@ -116,12 +115,10 @@ export interface MediaEngineCapabilities {
 	maxResolution: { width: number; height: number };
 	/** Whether HDR is supported */
 	hdrSupport: boolean;
-	/** Whether this engine requires Webview to be active */
-	requiresWebview: boolean;
 	/** Whether GPU effects processing is available */
 	gpuEffects: boolean;
-	/** GPU backend (if GPU effects available) */
-	gpuBackend?: 'webgpu' | 'webgl' | 'wgpu';
+	/** GPU backend */
+	gpuBackend?: 'wgpu';
 }
 
 // =============================================================================
@@ -196,33 +193,7 @@ export function supportsContainer(
 // =============================================================================
 
 /**
- * Default capabilities for basic mode (WebCodecs + FFmpeg.wasm + WebGPU)
- */
-export const BASIC_MODE_CAPABILITIES: MediaEngineCapabilities = {
-	videoCodecs: [
-		{ codec: 'h264', decode: true, encode: true, profiles: ['baseline', 'main', 'high'] },
-		{ codec: 'vp8', decode: true, encode: true },
-		{ codec: 'vp9', decode: true, encode: false },
-	],
-	audioCodecs: [
-		{ codec: 'aac', decode: true, encode: true, maxSampleRate: 48000, maxChannels: 2 },
-		{ codec: 'mp3', decode: true, encode: false, maxSampleRate: 48000, maxChannels: 2 },
-		{ codec: 'opus', decode: true, encode: true, maxSampleRate: 48000, maxChannels: 2 },
-		{ codec: 'vorbis', decode: true, encode: false, maxSampleRate: 48000, maxChannels: 2 },
-		{ codec: 'flac', decode: true, encode: false, maxSampleRate: 96000, maxChannels: 2 },
-		{ codec: 'pcm', decode: true, encode: true, maxSampleRate: 96000, maxChannels: 2 },
-	],
-	containerFormats: ['mp4', 'webm', 'ogg', 'mov'],
-	hardwareAcceleration: true,
-	maxResolution: { width: 4096, height: 2160 },
-	hdrSupport: false,
-	requiresWebview: true,
-	gpuEffects: true,
-	gpuBackend: 'webgpu',
-};
-
-/**
- * Default capabilities for compatible mode (Native FFmpeg + wgpu)
+ * Default capabilities for compatible mode (Native FFmpeg + wgpu via NAPI)
  */
 export const COMPATIBLE_MODE_CAPABILITIES: MediaEngineCapabilities = {
 	videoCodecs: [
@@ -248,7 +219,6 @@ export const COMPATIBLE_MODE_CAPABILITIES: MediaEngineCapabilities = {
 	hardwareAcceleration: true,
 	maxResolution: { width: 8192, height: 4320 },
 	hdrSupport: true,
-	requiresWebview: false,
 	gpuEffects: true,
 	gpuBackend: 'wgpu',
 };

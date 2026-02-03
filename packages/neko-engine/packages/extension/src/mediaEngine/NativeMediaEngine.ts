@@ -35,7 +35,7 @@ import { getFFmpegService } from '../services/FFmpegService';
 
 type EventListener<T> = (data: T) => void;
 
-// MediaProcessor type from @neko/media-processor-rs
+// MediaProcessor type from @neko-engine/native-napi
 // Dynamically imported to handle cases where native module is not built
 interface MediaProcessorType {
 	getGpuInfo(): { name: string; vendor: string; backend: string; deviceType: string };
@@ -428,7 +428,7 @@ export class NativeMediaEngine implements IMediaEngine {
 		// Try to load media-processor-rs native module
 		try {
 			// Dynamic import of native module
-			const module = await import('@neko/media-processor-rs') as MediaProcessorModule;
+			const module = await import('@neko-engine/native-napi') as MediaProcessorModule;
 			this._nativeModule = module;
 			this._nativeProcessor = await module.MediaProcessor.create();
 

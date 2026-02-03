@@ -93,7 +93,7 @@ export class VideoFrameProvider implements FrameProvider {
 		if (this._initialized) return;
 
 		try {
-			this._nativeModule = await import('@neko/media-processor-rs') as unknown as MediaProcessorModule;
+			this._nativeModule = await import('@neko-engine/native-napi') as unknown as MediaProcessorModule;
 			this._processor = await this._nativeModule.MediaProcessor.create();
 			this._initialized = true;
 			console.log('[VideoFrameProvider] Initialized successfully');

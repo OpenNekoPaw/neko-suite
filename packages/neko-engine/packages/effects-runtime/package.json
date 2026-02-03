@@ -1,5 +1,5 @@
 {
-  "name": "@neko/effects-runtime",
+  "name": "@neko-engine/effects-runtime",
   "version": "0.0.1",
   "description": "GPU effect runtime for video editing - WebGPU/WebGL effect execution",
   "type": "module",
@@ -32,7 +32,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@neko/effects-core": "workspace:*",
+    "@neko-engine/effects-core": "workspace:*",
     "@neko/shared": "workspace:*"
   },
   "devDependencies": {

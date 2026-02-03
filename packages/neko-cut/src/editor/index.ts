@@ -1,1 +1,0 @@
-export { VideoEditorProvider } from './videoEditorProvider';

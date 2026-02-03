@@ -212,7 +212,7 @@ export class AudioDecoderService {
 	): Promise<void> {
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const { MediaProcessor } = require('@neko/media-processor-rs');
+			const { MediaProcessor } = require('@neko/native-napi');
 
 			const processor = await MediaProcessor.create();
 

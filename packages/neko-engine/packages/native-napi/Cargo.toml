@@ -1,0 +1,25 @@
+[package]
+name = "neko-native-napi"
+version.workspace = true
+edition.workspace = true
+description = "Node.js N-API bindings for neko-native-core"
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+neko-native-core = { path = "../native-core" }
+napi = { version = "2", features = ["async", "napi8"] }
+napi-derive = "2"
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+wgpu.workspace = true
+pollster.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+bytemuck.workspace = true
+
+[build-dependencies]
+napi-build = "2"

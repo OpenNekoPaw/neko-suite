@@ -2,19 +2,10 @@
  * MediaFrameProvider Module
  * 媒体帧提供器模块
  *
- * WebviewMediaFrameProvider (Recommended for basic mode)
- * - Uses WebCodecs + mp4box.js for Zero-Copy decoding
- * - Supports H.264, VP8, VP9 video codecs
- * - Best performance for supported formats
- *
- * CompatibleMediaFrameProvider (For compatible mode)
+ * CompatibleMediaFrameProvider (Compatible mode via NAPI)
  * - Uses Extension Host with FFmpeg for decoding
- * - Supports all formats via native FFmpeg
- * - Falls back when WebCodecs not available
- *
- * ModeAwareMediaFrameProvider (Automatic routing)
- * - Routes to appropriate provider based on currentMode
- * - Seamless switching between basic and compatible modes
+ * - Supports all formats via native FFmpeg + wgpu
+ * - H264 stream mode for real-time preview
  */
 
 // Types
@@ -30,36 +21,12 @@ export type {
 } from './types';
 
 // =============================================================================
-// Webview-based frame provider (Basic mode - Recommended)
-// =============================================================================
-
-export {
-  WebviewMediaFrameProvider,
-  createWebviewMediaFrameProvider,
-  getWebviewMediaFrameProvider,
-  disposeWebviewMediaFrameProvider,
-  BasicModeUnsupportedReason,
-  type BasicModeError,
-  type WebviewMediaFrameProviderConfig,
-} from './WebviewMediaFrameProvider';
-
-// =============================================================================
-// Compatible mode frame provider (Extension-based)
+// Compatible mode frame provider (Extension-based via NAPI)
 // =============================================================================
 
 export {
   CompatibleMediaFrameProvider,
   createCompatibleMediaFrameProvider,
   type CompatibleMediaFrameProviderConfig,
+  type FrameTransportMode,
 } from './CompatibleMediaFrameProvider';
-
-// =============================================================================
-// Mode-aware frame provider (Automatic routing)
-// =============================================================================
-
-export {
-  ModeAwareMediaFrameProvider,
-  createModeAwareMediaFrameProvider,
-  type ModeGetter,
-  type ModeAwareMediaFrameProviderConfig,
-} from './ModeAwareMediaFrameProvider';

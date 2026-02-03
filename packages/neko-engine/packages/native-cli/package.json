@@ -1,0 +1,13 @@
+{
+  "name": "@neko-engine/native-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Command-line tool for neko media processing",
+  "scripts": {
+    "build": "cargo build --release",
+    "build:debug": "cargo build"
+  },
+  "engines": {
+    "node": ">= 18"
+  }
+}

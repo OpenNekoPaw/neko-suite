@@ -174,7 +174,7 @@ interface NativeTextureHandle {
 }
 
 /**
- * MediaProcessor type from @neko/media-processor-rs
+ * MediaProcessor type from @neko-engine/native-napi
  * Dynamically imported to handle cases where native module is not available
  */
 interface MediaProcessorType {
@@ -326,7 +326,7 @@ export class WgpuEffectRunner implements ICrossProcessEffectRunner {
 
     try {
       // Dynamically import media-processor-rs
-      const module = (await import('@neko/media-processor-rs')) as MediaProcessorModule;
+      const module = (await import('@neko-engine/native-napi')) as MediaProcessorModule;
       this._processor = await module.MediaProcessor.create();
 
       // Get GPU info
@@ -936,7 +936,7 @@ export function isWgpuSupported(): boolean {
     if (globalRequire && typeof globalRequire === 'function') {
       const requireFn = globalRequire as { resolve?: (id: string) => string };
       if (requireFn.resolve) {
-        requireFn.resolve('@neko/media-processor-rs');
+        requireFn.resolve('@neko-engine/native-napi');
         return true;
       }
     }

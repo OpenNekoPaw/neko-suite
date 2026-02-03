@@ -23,7 +23,15 @@ import {
 } from '@neko/platform';
 import * as vscode from 'vscode';
 import { exec, ExecOptions } from 'child_process';
-import { TimelineBridge, registerTimelineTools } from '../tools/timeline-bridge';
+
+// Timeline bridge is optional (provided by neko-agent extension)
+// We use dynamic import to avoid hard dependency
+interface ITimelineBridge {
+  setWebview(webview: vscode.Webview): void;
+  handleResponse(requestId: string, success: boolean, result?: unknown, error?: string): void;
+}
+
+type RegisterTimelineToolsFn = (registry: IToolRegistry, bridge: ITimelineBridge) => void;
 
 // =============================================================================
 // Plan Mode Constants (Claude Code Compatible)
@@ -47,16 +55,33 @@ export function getPlanFilePath(workspaceRoot: string): string {
   return `${workspaceRoot}/${PLAN_FILE_PATH}`;
 }
 
-// Timeline bridge singleton
-let timelineBridge: TimelineBridge | null = null;
+// Timeline bridge singleton (optional, provided by neko-agent)
+let timelineBridge: ITimelineBridge | null = null;
+let registerTimelineToolsFn: RegisterTimelineToolsFn | null = null;
 
 /**
- * Get or create the timeline bridge singleton
+ * Try to discover timeline bridge from neko-agent extension
  */
-export function getTimelineBridge(): TimelineBridge {
-  if (!timelineBridge) {
-    timelineBridge = new TimelineBridge();
+async function discoverTimelineBridge(): Promise<void> {
+  try {
+    const agentExt = vscode.extensions.getExtension('neko.neko-agent');
+    if (agentExt) {
+      const api = agentExt.isActive ? agentExt.exports : await agentExt.activate();
+      if (api?.timelineBridge) {
+        timelineBridge = api.timelineBridge;
+        registerTimelineToolsFn = api.registerTimelineTools;
+        console.log('[NekoCut] Timeline bridge discovered from neko-agent');
+      }
+    }
+  } catch (error) {
+    console.warn('[NekoCut] Timeline bridge not available:', error);
   }
+}
+
+/**
+ * Get the timeline bridge (may be null if neko-agent not installed)
+ */
+export function getTimelineBridge(): ITimelineBridge | null {
   return timelineBridge;
 }
 
@@ -64,8 +89,9 @@ export function getTimelineBridge(): TimelineBridge {
  * Set webview for timeline bridge (called when webview is ready)
  */
 export function setTimelineBridgeWebview(webview: vscode.Webview): void {
-  const bridge = getTimelineBridge();
-  bridge.setWebview(webview);
+  if (timelineBridge) {
+    timelineBridge.setWebview(webview);
+  }
 }
 
 /**
@@ -77,8 +103,17 @@ export function handleToolResult(
   result?: unknown,
   error?: string
 ): void {
-  const bridge = getTimelineBridge();
-  bridge.handleResponse(requestId, success, result, error);
+  if (timelineBridge) {
+    timelineBridge.handleResponse(requestId, success, result, error);
+  }
+}
+
+/**
+ * Initialize optional timeline bridge from neko-agent extension
+ * Call this before registerBuiltinTools for timeline tools support
+ */
+export async function initializeTimelineBridge(): Promise<void> {
+  await discoverTimelineBridge();
 }
 
 /**
@@ -1268,34 +1303,39 @@ export function registerBuiltinTools(
     console.warn('[Neko Suite] categoryRegistry is undefined, SearchToolsTool not registered');
   }
 
-  // Register timeline bridge tools (execute in Webview via WebCodecs/WebGPU)
+  // Register timeline bridge tools (optional, requires neko-agent extension)
   // This includes: get_timeline_info, add_element, update_element, delete_element,
   // add_subtitle, import_subtitles, effects, transitions, animations, tracks, etc.
   const bridge = getTimelineBridge();
-  registerTimelineTools(toolRegistry, bridge);
+  if (bridge && registerTimelineToolsFn) {
+    registerTimelineToolsFn(toolRegistry, bridge);
+    console.log('[NekoCut] Timeline tools registered from neko-agent');
 
-  // Register timeline tools to category registry
-  if (categoryRegistry) {
-    // Timeline tools are in 'timeline' category with 'skill' layer
-    // NOTE: All tool names use PascalCase for consistency
-    const timelineToolNames = [
-      'GetTimelineInfo', 'GetElementInfo', 'ListElements',
-      'AddElement', 'UpdateElement', 'DeleteElement',
-      'ListEffects', 'AddEffect', 'UpdateEffect', 'RemoveEffect',
-      'ListTransitions', 'SetTransition', 'RemoveTransition',
-      'GetKeyframes', 'AddKeyframe', 'UpdateKeyframe', 'RemoveKeyframe',
-      'AddShape', 'UpdateShape',
-      'SetColorCorrection', 'ResetColorCorrection',
-      'AddTrack', 'DeleteTrack', 'ReorderTracks', 'SetTrackProperties',
-      'AddMask', 'UpdateMask', 'RemoveMask',
-      'SetAudioProperties', 'AddAudioKeyframe',
-      'TrimElement', 'SplitElement', 'SetPlaybackSpeed', 'SeparateAudio',
-      'ExportVideo', 'GetExportProgress',
-      'RenderFrame', 'RenderClip', 'GetThumbnail',
-    ];
-    for (const toolName of timelineToolNames) {
-      categoryRegistry.categorizeTool(toolName, 'timeline', 'skill');
+    // Register timeline tools to category registry
+    if (categoryRegistry) {
+      // Timeline tools are in 'timeline' category with 'skill' layer
+      // NOTE: All tool names use PascalCase for consistency
+      const timelineToolNames = [
+        'GetTimelineInfo', 'GetElementInfo', 'ListElements',
+        'AddElement', 'UpdateElement', 'DeleteElement',
+        'ListEffects', 'AddEffect', 'UpdateEffect', 'RemoveEffect',
+        'ListTransitions', 'SetTransition', 'RemoveTransition',
+        'GetKeyframes', 'AddKeyframe', 'UpdateKeyframe', 'RemoveKeyframe',
+        'AddShape', 'UpdateShape',
+        'SetColorCorrection', 'ResetColorCorrection',
+        'AddTrack', 'DeleteTrack', 'ReorderTracks', 'SetTrackProperties',
+        'AddMask', 'UpdateMask', 'RemoveMask',
+        'SetAudioProperties', 'AddAudioKeyframe',
+        'TrimElement', 'SplitElement', 'SetPlaybackSpeed', 'SeparateAudio',
+        'ExportVideo', 'GetExportProgress',
+        'RenderFrame', 'RenderClip', 'GetThumbnail',
+      ];
+      for (const toolName of timelineToolNames) {
+        categoryRegistry.categorizeTool(toolName, 'timeline', 'skill');
+      }
     }
+  } else {
+    console.log('[NekoCut] Timeline tools not available (neko-agent extension not installed)');
   }
 }
 

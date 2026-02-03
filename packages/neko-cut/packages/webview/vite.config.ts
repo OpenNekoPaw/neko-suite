@@ -118,7 +118,7 @@ export default defineConfig(({ command }) => {
       },
       // Externalize dynamically imported modules that are not available in webview
       // Only apply in build mode, dev mode needs to resolve these for HMR
-      external: isBuild ? ['webm-muxer', '@neko/media-processor-rs'] : [],
+      external: isBuild ? ['webm-muxer', '@neko/native-napi'] : [],
     },
     // Disable module preload polyfill which causes issues in VSCode webview
     modulePreload: false,
@@ -127,7 +127,7 @@ export default defineConfig(({ command }) => {
   optimizeDeps: {
     include: ['@neko/shared'],
     // Exclude optional dependencies that may not be installed
-    exclude: ['webm-muxer', '@neko/media-processor-rs'],
+    exclude: ['webm-muxer', '@neko/native-napi'],
   },
 };
 });

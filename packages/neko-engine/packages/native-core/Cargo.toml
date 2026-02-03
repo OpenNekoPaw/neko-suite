@@ -1,0 +1,82 @@
+[package]
+name = "neko-native-core"
+version.workspace = true
+edition.workspace = true
+description = "Core media processing library with GPU acceleration for Neko Suite"
+license.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+# GPU - wgpu for cross-platform GPU compute
+wgpu.workspace = true
+wgpu-hal.workspace = true
+wgpu-core.workspace = true
+pollster.workspace = true
+
+# FFmpeg bindings
+ffmpeg-next.workspace = true
+
+# Async runtime
+tokio.workspace = true
+
+# HTTP/WebSocket server for frame streaming
+axum.workspace = true
+tower-http.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
+bytes.workspace = true
+async-stream.workspace = true
+
+# System monitoring
+sysinfo.workspace = true
+
+# UUID generation
+uuid.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Utilities
+bytemuck.workspace = true
+crossbeam-channel.workspace = true
+
+# Platform-specific GPU interop
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = "0.27"
+objc = "0.2"
+core-foundation = "0.9"
+block = "0.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ash = "0.37"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.52", features = [
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Foundation",
+    "Win32_Security",
+] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
+tempfile = "3"
+
+[features]
+default = []
+videotoolbox = []  # macOS VideoToolbox
+vaapi = []         # Linux VAAPI
+cuda = []          # NVIDIA CUDA

@@ -33,7 +33,7 @@ import type {
 	CompatibleExportResult,
 	ProjectData,
 } from '@neko/shared';
-import { JviProjectLoader } from '../mediaEngine/export/JviProjectLoader';
+import { JviProjectLoader } from '../project/JviProjectLoader';
 import WebSocket from 'ws';
 
 // =============================================================================

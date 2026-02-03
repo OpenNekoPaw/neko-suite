@@ -1,4 +1,4 @@
-# @neko/effects-core
+# @neko-engine/effects-core
 
 > Core effects library for video editing - animations, transitions, filters, masks, colors
 
@@ -11,22 +11,22 @@
 
 **Install:**
 ```bash
-npm install @neko/effects-core
+npm install @neko-engine/effects-core
 ```
 
 **Import:**
 ```typescript
 // Types
-import type { Keyframe, Transition, Effect, Mask, BlendModeType } from '@neko/effects-core';
+import type { Keyframe, Transition, Effect, Mask, BlendModeType } from '@neko-engine/effects-core';
 
 // Algorithms
-import { getEasingFunction, blendColors, rgbaToHsla } from '@neko/effects-core';
+import { getEasingFunction, blendColors, rgbaToHsla } from '@neko-engine/effects-core';
 
 // Shaders (WGSL) - TS string exports
-import { COMMON_WGSL, BLEND_MODE_WGSL } from '@neko/effects-core/shaders';
+import { COMMON_WGSL, BLEND_MODE_WGSL } from '@neko-engine/effects-core/shaders';
 
 // Shaders (WGSL) - Load from .wgsl files
-import { getCommonWgsl, getBlendModesWgsl } from '@neko/effects-core/shaders';
+import { getCommonWgsl, getBlendModesWgsl } from '@neko-engine/effects-core/shaders';
 ```
 
 **Rust (wgpu):**
@@ -151,9 +151,9 @@ rgb = apply_saturation(rgb, 1.1);
 
 ```typescript
 // Main entry - types + algorithms
-import { ... } from '@neko/effects-core';
+import { ... } from '@neko-engine/effects-core';
 
 // Subpath exports
-import { ... } from '@neko/effects-core/shaders';
-import { ... } from '@neko/effects-core/algorithms';
+import { ... } from '@neko-engine/effects-core/shaders';
+import { ... } from '@neko-engine/effects-core/algorithms';
 ```

@@ -1,4 +1,4 @@
-# @neko/effects-runtime
+# @neko-engine/effects-runtime
 
 GPU effect runtime for video editing. Provides zero-copy texture processing with WebGPU/WebGL backends.
 
@@ -13,7 +13,7 @@ GPU effect runtime for video editing. Provides zero-copy texture processing with
 
 - **职责**: GPU 特效执行运行时
 - **入口**: `createEffectRunner()` / `createWebGPUEffectRunner()` / `createWgpuEffectRunner()`
-- **依赖**: `@neko/effects-core` (类型), `@neko/shared` (接口), `@neko/media-processor-rs` (wgpu 后端)
+- **依赖**: `@neko-engine/effects-core` (类型), `@neko/shared` (接口), `@neko-engine/native-napi` (wgpu 后端)
 
 ## Architecture
 
@@ -46,7 +46,7 @@ GPU effect runtime for video editing. Provides zero-copy texture processing with
 ### Basic Usage (Browser)
 
 ```typescript
-import { createEffectRunner } from '@neko/effects-runtime';
+import { createEffectRunner } from '@neko-engine/effects-runtime';
 
 // Create runner
 const runner = createEffectRunner();
@@ -69,7 +69,7 @@ if (result.isNewTexture) {
 ### Extension Host (Node.js with wgpu)
 
 ```typescript
-import { createWgpuEffectRunner } from '@neko/effects-runtime';
+import { createWgpuEffectRunner } from '@neko-engine/effects-runtime';
 
 // Create wgpu runner for Extension Host
 const runner = createWgpuEffectRunner();
@@ -95,7 +95,7 @@ const transitionResult = await runner.runTransition(
 ### With GPURenderEngine
 
 ```typescript
-import { createWebGPUEffectRunner } from '@neko/effects-runtime';
+import { createWebGPUEffectRunner } from '@neko-engine/effects-runtime';
 
 class GPURenderEngine {
   private _effectRunner: IEffectRunner;

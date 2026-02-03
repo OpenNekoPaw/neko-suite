@@ -61,7 +61,7 @@ build_effects() {
 # Build Rust native addon
 build_rust() {
   echo "🦀 Building Rust native addon..."
-  npm -w @neko/media-processor-rs run build
+  npm -w @neko/native-napi run build
 }
 
 # Build single neko package

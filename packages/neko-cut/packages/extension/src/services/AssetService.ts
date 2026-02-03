@@ -42,7 +42,8 @@ import type {
 	AssetDiffResult,
 	AssetChangeAnalysis,
 } from '@neko/shared';
-import { ImageDiffAnalyzer } from '../media-diff/services/analyzers/ImageDiffAnalyzer';
+// ImageDiffAnalyzer is optional (provided by neko-tools extension)
+// When not available, file comparison returns basic results
 import { createServiceId } from '../base';
 
 // =============================================================================
@@ -472,7 +473,8 @@ export class AssetService implements vscode.Disposable {
 	}
 
 	/**
-	 * Compare two files using ImageDiffAnalyzer
+	 * Compare two files
+	 * Note: ImageDiffAnalyzer is optional (from neko-tools). When not available, returns basic comparison.
 	 */
 	private async compareFiles(
 		fileA: AssetFile,
@@ -481,43 +483,33 @@ export class AssetService implements vscode.Disposable {
 		variantB: AssetVariant
 	): Promise<AssetDiffResult> {
 		const startTime = Date.now();
-		const analyzer = new ImageDiffAnalyzer();
 
-		// Check if both files are images
-		const isImageA = analyzer.supports(fileA.path);
-		const isImageB = analyzer.supports(fileB.path);
+		// Check if files are images by extension
+		const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
+		const extA = path.extname(fileA.path).toLowerCase();
+		const extB = path.extname(fileB.path).toLowerCase();
+		const isImageA = imageExtensions.includes(extA);
+		const isImageB = imageExtensions.includes(extB);
 
+		// For images, try to get file stats for basic comparison
 		if (isImageA && isImageB) {
 			try {
-				// Read file buffers
-				const [bufferA, bufferB] = await Promise.all([
-					fs.readFile(fileA.path),
-					fs.readFile(fileB.path),
+				const [statsA, statsB] = await Promise.all([
+					fs.stat(fileA.path),
+					fs.stat(fileB.path),
 				]);
 
-				// Analyze with ImageDiffAnalyzer
-				const diffResult = await analyzer.analyze(bufferA, bufferB);
+				// Basic similarity based on file size
+				const sizeDiff = Math.abs(statsA.size - statsB.size);
+				const maxSize = Math.max(statsA.size, statsB.size);
+				const similarity = maxSize > 0 ? 1 - (sizeDiff / maxSize) : 1;
 
-				// Convert to AssetDiffResult
 				const changes: AssetChangeAnalysis = {
 					changeTypes: [],
 				};
 
-				// Determine change types based on diff details
-				if (diffResult.details && 'pixelDifference' in diffResult.details) {
-					const details = diffResult.details;
-					if (details.pixelDifference > 0.1) {
-						changes.changeTypes.push('content');
-					}
-					if (details.colorHistogramDiff > 0.1) {
-						changes.changeTypes.push('color');
-					}
-					if (
-						details.dimensions.current.width !== details.dimensions.previous.width ||
-						details.dimensions.current.height !== details.dimensions.previous.height
-					) {
-						changes.changeTypes.push('dimension');
-					}
+				if (sizeDiff > 0) {
+					changes.changeTypes.push('content');
 				}
 
 				return {
@@ -530,12 +522,12 @@ export class AssetService implements vscode.Disposable {
 						path: fileB.path,
 					},
 					mediaType: 'image',
-					similarity: diffResult.similarity,
+					similarity,
 					changes,
 					processingTime: Date.now() - startTime,
 				};
 			} catch (error) {
-				console.error('[AssetService] Image diff failed:', error);
+				console.error('[AssetService] File comparison failed:', error);
 				// Fall through to default result
 			}
 		}

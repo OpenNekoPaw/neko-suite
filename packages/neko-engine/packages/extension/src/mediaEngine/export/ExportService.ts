@@ -248,7 +248,7 @@ export class ExportService {
 
 		try {
 			// Load native module
-			this._nativeModule = await import('@neko/media-processor-rs') as unknown as NativeModuleType;
+			this._nativeModule = await import('@neko-engine/native-napi') as unknown as NativeModuleType;
 
 			// Create compositor session
 			this._compositorSession = await this._nativeModule.CompositorSession.create();

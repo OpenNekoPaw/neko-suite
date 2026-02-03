@@ -6,7 +6,7 @@
  */
 
 // =============================================================================
-// Effect Types (compatible with @neko/effects-core)
+// Effect Types (compatible with @neko-engine/effects-core)
 // =============================================================================
 
 /**
@@ -107,7 +107,7 @@ export interface EffectParams {
 
 /**
  * Effect instance on a clip
- * Compatible with @neko/effects-core EffectInstance
+ * Compatible with @neko-engine/effects-core EffectInstance
  */
 export interface EffectInstance {
   /** Instance ID */

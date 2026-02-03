@@ -53,15 +53,15 @@ import {
 // =============================================================================
 
 // Rust N-API types
-type ExportPipelineSession = import('@neko/media-processor-rs').ExportPipelineSession;
-type MuxerSession = import('@neko/media-processor-rs').MuxerSession;
-type AudioDecoderSession = import('@neko/media-processor-rs').AudioDecoderSession;
-type AudioEncoderSession = import('@neko/media-processor-rs').AudioEncoderSession;
-type JsPipelineConfig = import('@neko/media-processor-rs').JsPipelineConfig;
-type JsPipelineFrame = import('@neko/media-processor-rs').JsPipelineFrame;
-type JsPipelineProgress = import('@neko/media-processor-rs').JsPipelineProgress;
-type JsEncoderConfig = import('@neko/media-processor-rs').JsEncoderConfig;
-type JsCompositeLayer = import('@neko/media-processor-rs').JsCompositeLayer;
+type ExportPipelineSession = import('@neko/native-napi').ExportPipelineSession;
+type MuxerSession = import('@neko/native-napi').MuxerSession;
+type AudioDecoderSession = import('@neko/native-napi').AudioDecoderSession;
+type AudioEncoderSession = import('@neko/native-napi').AudioEncoderSession;
+type JsPipelineConfig = import('@neko/native-napi').JsPipelineConfig;
+type JsPipelineFrame = import('@neko/native-napi').JsPipelineFrame;
+type JsPipelineProgress = import('@neko/native-napi').JsPipelineProgress;
+type JsEncoderConfig = import('@neko/native-napi').JsEncoderConfig;
+type JsCompositeLayer = import('@neko/native-napi').JsCompositeLayer;
 
 /**
  * 流式导出初始化参数
@@ -684,7 +684,7 @@ export class StreamingExportService {
 
 		// Create pipeline using Rust N-API
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		const { ExportPipelineSession } = require('@neko/media-processor-rs');
+		const { ExportPipelineSession } = require('@neko/native-napi');
 		activeExport.pipeline = await ExportPipelineSession.create(pipelineConfig);
 
 		console.log('[StreamingExportService] Export pipeline started');
@@ -811,7 +811,7 @@ export class StreamingExportService {
 
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const { MuxerSession, MediaProcessor } = require('@neko/media-processor-rs');
+			const { MuxerSession, MediaProcessor } = require('@neko/native-napi');
 
 			// Create muxer
 			const muxer = MuxerSession.create({
