@@ -310,7 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { MediaProcessor, VideoEncoderSession, AudioDecoderSession, AudioEncoderSession, MuxerSession, CompositorSession, AnimationSession, createFadeInAnimation, createFadeOutAnimation, createSlideInLeftAnimation, createZoomInAnimation, createBounceAnimation, createPulseAnimation, ExportPipelineSession, FrameServerSession, FrameServerWithExportSession, probeMedia, extractAllSubtitles, encodeJpeg, extractFrame, compositeFrame, JsTextureFormat, JsVideoCodec, JsContainerFormat, JsEncoderPreset, JsAudioCodec, JsSampleFormat, JsBlendMode, JsEasingType, JsInterpolationMode } = nativeBinding
+const { MediaProcessor, VideoEncoderSession, AudioDecoderSession, AudioEncoderSession, MuxerSession, CompositorSession, AnimationSession, createFadeInAnimation, createFadeOutAnimation, createSlideInLeftAnimation, createZoomInAnimation, createBounceAnimation, createPulseAnimation, ExportPipelineSession, FrameServerSession, FrameServerWithExportSession, probeMedia, extractAllSubtitles, encodeJpeg, FrameFormat, extractFrame, compositeFrame, JsTextureFormat, JsVideoCodec, JsContainerFormat, JsEncoderPreset, JsAudioCodec, JsSampleFormat, JsBlendMode, JsEasingType, JsInterpolationMode } = nativeBinding
 
 module.exports.MediaProcessor = MediaProcessor
 module.exports.VideoEncoderSession = VideoEncoderSession
@@ -331,6 +331,7 @@ module.exports.FrameServerWithExportSession = FrameServerWithExportSession
 module.exports.probeMedia = probeMedia
 module.exports.extractAllSubtitles = extractAllSubtitles
 module.exports.encodeJpeg = encodeJpeg
+module.exports.FrameFormat = FrameFormat
 module.exports.extractFrame = extractFrame
 module.exports.compositeFrame = compositeFrame
 module.exports.JsTextureFormat = JsTextureFormat
