@@ -8,7 +8,6 @@
 
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { ToolResult } from '@neko/agent';
 import type {
   ProjectData,
   TimelineElement,
@@ -18,6 +17,16 @@ import type {
   ShapeStyle,
   ShapeInstance,
 } from '@neko/shared';
+
+/**
+ * Tool execution result (local type, replaces @neko/agent ToolResult)
+ */
+interface ToolResult {
+  success: boolean;
+  error?: string;
+  data?: unknown;
+  duration?: number;
+}
 import {
   DEFAULT_AUDIO_PROPERTIES,
   DEFAULT_COLOR_CORRECTION,

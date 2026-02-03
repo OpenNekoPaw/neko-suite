@@ -3,39 +3,18 @@
  * 处理 Extension Host 和 WebView 之间的消息通信
  *
  * 职责：编辑器核心消息（保存、文件请求、导出）
- * 配置消息委托给 ConfigBridge 处理
  */
 
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { VideoEditorModel } from './videoEditorModel';
-import { MessageFromWebview, ProjectData, ContextMenuItem, AI_ACTIONS } from '@neko/shared';
-import { getService } from '../../base';
-import { IPlatform, IConnectionStateManager, IAgentManager } from '../../bootstrap';
-import { ConfigBridge } from '../../services/configBridge';
-import type { Platform } from '@neko/platform';
-
-// Agent context interface (provided by neko-agent extension)
-interface IAgentContext {
-  workspaceRoot: string;
-  [key: string]: unknown;
-}
-
-/**
- * Create a default agent context (fallback when neko-agent not available)
- */
-function createDefaultAgentContext(workspaceRoot: string): IAgentContext {
-  return { workspaceRoot };
-}
+import { MessageFromWebview, ProjectData, ContextMenuItem } from '@neko/shared';
 
 /**
  * Handles messages between Extension Host and WebView
  */
 export class MessageHandler {
-	// 配置消息桥接器
-	private readonly configBridge: ConfigBridge | null;
-
 	// 当前导出文件的写入流
 	private _exportWriteStream: fs.WriteStream | null = null;
 	private _exportFilePath: string | null = null;
@@ -43,28 +22,13 @@ export class MessageHandler {
 	constructor(
 		private readonly webview: vscode.Webview,
 		private readonly model: VideoEditorModel,
-		private readonly context: vscode.ExtensionContext
-	) {
-		// 初始化 ConfigBridge
-		const platform = this.getPlatform();
-		const connectionStateManager = getService(IConnectionStateManager);
-		this.configBridge = platform ? new ConfigBridge(platform, connectionStateManager, this.context) : null;
-	}
+		private readonly _context: vscode.ExtensionContext
+	) {}
 
 	/**
 	 * Handle incoming messages from the webview
 	 */
 	public async handleMessage(message: MessageFromWebview): Promise<void> {
-		// 1. 委托配置消息给 ConfigBridge
-		if (this.configBridge) {
-			const handled = await this.configBridge.handleMessage(
-				message as { type: string; [key: string]: unknown },
-				msg => this.webview.postMessage(msg)
-			);
-			if (handled) return;
-		}
-
-		// 2. 处理编辑器核心消息
 		switch (message.type) {
 			case 'ready':
 				this.sendUpdate();
@@ -114,10 +78,6 @@ export class MessageHandler {
 				await this.handleShowContextMenu(message.menuId, message.items);
 				break;
 
-			case 'executeAIAction':
-				await this.handleExecuteAIAction(message.actionId, message.elementIds, message.params);
-				break;
-
 			case 'readFileRange':
 				await this.handleReadFileRange(
 					message.requestId,
@@ -150,18 +110,6 @@ export class MessageHandler {
 			type: 'error',
 			message,
 		});
-	}
-
-	/**
-	 * Get platform instance from service collection
-	 */
-	private getPlatform(): Platform | null {
-		try {
-			return getService<Platform>(IPlatform) ?? null;
-		} catch {
-			console.warn('[MessageHandler] Platform service not available');
-			return null;
-		}
 	}
 
 	// ==========================================================================
@@ -714,236 +662,6 @@ export class MessageHandler {
 				error: error instanceof Error ? error.message : 'Failed to save file',
 			});
 		}
-	}
-
-	// ==========================================================================
-	// AI Action 处理方法
-	// ==========================================================================
-
-	/**
-	 * Handle AI action execution request from WebView
-	 * Routes the action to the Agent system for processing
-	 */
-	private async handleExecuteAIAction(
-		actionId: string,
-		elementIds: string[],
-		params?: Record<string, unknown>
-	): Promise<void> {
-		try {
-			// Get AgentManager service
-			const agentManager = this.getAgentManager();
-			if (!agentManager) {
-				console.warn('[MessageHandler] AgentManager not available, cannot execute AI action');
-				this.webview.postMessage({
-					type: 'aiActionResult',
-					actionId,
-					success: false,
-					error: 'AI service not available. Please configure an AI provider.',
-				});
-				return;
-			}
-
-			// Get or create agent for video editor (stateless, single-request mode)
-			const agentRunner = agentManager.getOrCreate('video-editor-ai');
-			agentManager.clearHistory('video-editor-ai'); // Clear for fresh context each time
-
-			// Find the action definition
-			const action = AI_ACTIONS.find(a => a.id === actionId);
-			if (!action) {
-				console.warn('[MessageHandler] Unknown AI action:', actionId);
-				this.webview.postMessage({
-					type: 'aiActionResult',
-					actionId,
-					success: false,
-					error: `Unknown action: ${actionId}`,
-				});
-				return;
-			}
-
-			// Get element information from the project
-			const projectData = this.model.getProjectData();
-			const elements = this.findElementsById(projectData, elementIds);
-
-			if (elements.length === 0) {
-				this.webview.postMessage({
-					type: 'aiActionResult',
-					actionId,
-					success: false,
-					error: 'No elements found for the selected IDs',
-				});
-				return;
-			}
-
-			// Build the AI prompt based on action type
-			const prompt = this.buildAIActionPrompt(action.id, action.label, elements, params);
-
-			// Send start notification to WebView
-			this.webview.postMessage({
-				type: 'aiActionStarted',
-				actionId,
-				elementIds,
-			});
-
-			// Create agent context
-			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
-			const context = createDefaultAgentContext(workspaceRoot);
-
-			// Execute via agent
-			let responseContent = '';
-			for await (const event of agentRunner.execute(prompt, context)) {
-				switch (event.type) {
-					case 'text':
-						if (event.content) {
-							responseContent += event.content;
-							// Stream partial response to WebView
-							this.webview.postMessage({
-								type: 'aiActionProgress',
-								actionId,
-								content: event.content,
-							});
-						}
-						break;
-
-					case 'tool_call':
-						// Notify about tool execution
-						this.webview.postMessage({
-							type: 'aiActionProgress',
-							actionId,
-							toolCall: event.toolCall,
-						});
-						break;
-
-					case 'tool_result':
-						// Notify about tool result
-						this.webview.postMessage({
-							type: 'aiActionProgress',
-							actionId,
-							toolResult: event.toolResult,
-						});
-						break;
-
-					case 'error':
-						console.error('[MessageHandler] AI Action error:', event.error);
-						this.webview.postMessage({
-							type: 'aiActionResult',
-							actionId,
-							success: false,
-							error: event.error?.message || 'AI execution failed',
-						});
-						return;
-				}
-			}
-
-			// Send final result
-			this.webview.postMessage({
-				type: 'aiActionResult',
-				actionId,
-				success: true,
-				data: {
-					response: responseContent,
-					elementIds,
-				},
-			});
-		} catch (error) {
-			console.error('[MessageHandler] AI Action error:', error);
-			this.webview.postMessage({
-				type: 'aiActionResult',
-				actionId,
-				success: false,
-				error: error instanceof Error ? error.message : 'Failed to execute AI action',
-			});
-		}
-	}
-
-	/**
-	 * Get AgentManager service (optional, from neko-agent extension)
-	 */
-	private getAgentManager(): unknown | null {
-		try {
-			return getService(IAgentManager) ?? null;
-		} catch {
-			console.warn('[MessageHandler] AgentManager service not available');
-			return null;
-		}
-	}
-
-	/**
-	 * Find elements by their IDs from project data
-	 */
-	private findElementsById(
-		projectData: ProjectData,
-		elementIds: string[]
-	): Array<{ trackId: string; element: unknown }> {
-		const results: Array<{ trackId: string; element: unknown }> = [];
-
-		for (const track of projectData.tracks) {
-			for (const element of track.elements) {
-				if (elementIds.includes(element.id)) {
-					results.push({ trackId: track.id, element });
-				}
-			}
-		}
-
-		return results;
-	}
-
-	/**
-	 * Build AI prompt based on action type and elements
-	 */
-	private buildAIActionPrompt(
-		actionId: string,
-		actionLabel: string,
-		elements: Array<{ trackId: string; element: unknown }>,
-		params?: Record<string, unknown>
-	): string {
-		// Build element description
-		const elementDescriptions = elements.map(({ element }) => {
-			const el = element as Record<string, unknown>;
-			const type = el.type as string;
-			const name = el.name as string || 'Unnamed';
-
-			let desc = `- ${type} element: "${name}"`;
-			if (el.src) {
-				desc += ` (source: ${el.src})`;
-			}
-			if (el.duration) {
-				desc += ` (duration: ${el.duration}s)`;
-			}
-			if (el.text && typeof el.text === 'object') {
-				const textObj = el.text as { content?: string };
-				if (textObj.content) {
-					desc += ` (content: "${textObj.content.slice(0, 50)}${textObj.content.length > 50 ? '...' : ''}")`;
-				}
-			}
-			return desc;
-		}).join('\n');
-
-		// Build prompt based on action type
-		const prompts: Record<string, string> = {
-			'video-generate-variant': `Generate a creative variant of the following video element(s). Suggest modifications to visual style, timing, or effects that would create an interesting alternative version.`,
-			'video-extend': `Extend the following video element(s) by suggesting additional content or transitions that would naturally continue the visual narrative.`,
-			'video-describe': `Analyze and describe the content of the following element(s). Provide a detailed description of what appears in the media, including any visible objects, actions, or text.`,
-			'video-extract-keyframes': `Identify the optimal keyframe positions for the following video element(s). Suggest timestamps where significant visual changes occur.`,
-			'image-to-video': `Convert the following image element(s) to video by suggesting motion effects, transitions, or animations that would bring the static image(s) to life.`,
-			'image-edit': `Suggest edits for the following image element(s). Consider color corrections, cropping, or visual enhancements that would improve the image(s).`,
-			'image-upscale': `Suggest the best upscaling approach for the following element(s). Consider the source quality and target resolution.`,
-			'text-translate': `Translate the text content of the following element(s)${params?.targetLanguage ? ` to ${params.targetLanguage}` : ''}.`,
-			'text-rewrite': `Rewrite the text content of the following element(s) to improve clarity, style, or engagement while maintaining the original meaning.`,
-			'text-generate-voiceover': `Generate a voiceover script for the following text element(s). Suggest pacing, emphasis, and tone appropriate for video narration.`,
-			'audio-transcribe': `Transcribe the audio content of the following element(s). Provide accurate text transcription with timestamps if applicable.`,
-			'batch-style-unify': `Analyze the following elements and suggest adjustments to create a unified visual style across all of them. Consider color grading, filters, and visual consistency.`,
-		};
-
-		const basePrompt = prompts[actionId] || `Execute the "${actionLabel}" action on the following element(s).`;
-
-		return `${basePrompt}
-
-Selected elements:
-${elementDescriptions}
-
-${params ? `Additional parameters: ${JSON.stringify(params, null, 2)}` : ''}
-
-Please provide specific, actionable suggestions or perform the requested operation.`;
 	}
 
 	/**

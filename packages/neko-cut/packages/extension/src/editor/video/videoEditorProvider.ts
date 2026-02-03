@@ -14,8 +14,6 @@ import { handleExportMessage, isExportMessage, CompatibleExportHandler, isCompat
 import { getService } from '../../base';
 import { IStatusBar } from '../../views/statusBar';
 import { IVideoProjectOutlineProvider } from '../../views/outlineProvider';
-import { getStreamingExportService } from '../../services/StreamingExportService';
-import { IMediaEngineManager } from '../../bootstrap/serviceBootstrap';
 import type { TimelineElement, ProjectDefaults } from '@neko/shared';
 
 /**
@@ -180,16 +178,15 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 
 	/**
 	 * Broadcast export status to all active webviews
+	 * NOTE: Export is now handled by neko-engine
 	 */
 	private broadcastExportStatus() {
-		const exportService = getStreamingExportService();
-		const hasActiveExport = exportService.hasActiveExport();
-
-		// Send to all active webviews
-		for (const [uri, webview] of this.activeWebviews) {
+		// Export status is managed by neko-engine
+		// This method is kept for API compatibility
+		for (const [_uri, webview] of this.activeWebviews) {
 			webview.postMessage({
 				type: 'export:globalStatus',
-				hasActiveExport,
+				hasActiveExport: false,
 			});
 		}
 	}
@@ -395,11 +392,11 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 				}
 
 				// Handle export global status query
+				// NOTE: Export is now handled by neko-engine
 				if (message.type === 'export:queryGlobalStatus') {
-					const exportService = getStreamingExportService();
 					webviewPanel.webview.postMessage({
 						type: 'export:globalStatus',
-						hasActiveExport: exportService.hasActiveExport(),
+						hasActiveExport: false,
 					});
 					return;
 				}
@@ -530,29 +527,8 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 
 		// Clean up when editor is closed
 		webviewPanel.onDidDispose(async () => {
-			// CRITICAL: Check if there's an active export job
-			const exportService = getStreamingExportService();
-			const activeJobId = exportService.getActiveExportJobId();
-
-			if (activeJobId) {
-				// Cancel the export job
-				exportService.cancelExport(activeJobId);
-
-				// Clear status bar export progress
-				statusBar?.updateExportProgress({
-					isExporting: false,
-					percent: 0,
-					message: '',
-				});
-
-				// Show notification to user
-				vscode.window.showWarningMessage(
-					'编辑器已关闭，视频导出已自动终止。'
-				);
-
-				// Broadcast status change to other webviews
-				this.broadcastExportStatus();
-			}
+			// NOTE: Export is now handled by neko-engine
+			// Export cancellation is managed by neko-engine when connection is lost
 
 			changeDocumentSubscription.dispose();
 			modelChangeSubscription.dispose();

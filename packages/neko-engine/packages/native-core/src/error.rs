@@ -88,6 +88,10 @@ pub enum Error {
     #[error("GPU error: {0}")]
     GpuError(String),
 
+    /// JPEG encoding error
+    #[error("JPEG error: {0}")]
+    Jpeg(String),
+
     /// IO error
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

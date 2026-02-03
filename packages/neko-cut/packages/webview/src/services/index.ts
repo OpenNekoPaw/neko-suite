@@ -43,16 +43,6 @@ export {
   resetMediaProxy,
 } from './mediaProxyFactory';
 
-// Frame Stream Receiver (Localhost Server approach)
-export {
-  FrameStreamReceiver,
-  createMjpegImageUrl,
-  createWebSocketUrl,
-  createSingleFrameUrl,
-  type FrameStreamConfig,
-  type FrameStreamStats,
-} from './FrameStreamReceiver';
-
 // H.264 Stream Client (WebCodecs decoding)
 export {
   H264StreamClient,

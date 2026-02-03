@@ -6,16 +6,18 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { createDefaultProject, DEFAULT_CANVAS_DATA } from '@neko/shared';
-import { ToolRegistry } from '@neko/agent';
 import type { VideoProjectOutlineProvider } from '../views/outlineProvider';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
-import type { ChatViewProvider } from '../chat/chatProvider';
-import type { AssetLibraryViewProvider } from '../assetLibrary/assetLibraryViewProvider';
 import { registerTimelineCommands } from './timeline-commands';
-import { registerAICommands } from './ai-commands';
-import { registerScriptCommands } from './scriptCommands';
 import { getService } from '../base';
 import { IAssetService, type AssetService } from '../services/AssetService';
+
+/**
+ * Asset Library View Provider interface (optional)
+ */
+interface AssetLibraryViewProvider {
+  postMessage(message: Record<string, unknown>): void;
+}
 
 /**
  * Register all extension commands
@@ -24,8 +26,6 @@ export function registerCommands(
   context: vscode.ExtensionContext,
   _outlineProvider: VideoProjectOutlineProvider,
   videoEditorProvider: VideoEditorProvider,
-  toolRegistry?: ToolRegistry,
-  chatProvider?: ChatViewProvider,
   assetLibraryProvider?: AssetLibraryViewProvider
 ): void {
   // Command: New Video Project
@@ -60,15 +60,6 @@ export function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.openInEditor', async (uri: vscode.Uri) => {
       await openInEditor(uri);
-    })
-  );
-
-  // Command: Open AI Assistant in secondary sidebar
-  context.subscriptions.push(
-    vscode.commands.registerCommand('neko.openAIAssistant', async () => {
-      // Focus the AI Assistant view and move it to secondary sidebar
-      await vscode.commands.executeCommand('neko.aiAssistant.focus');
-      await vscode.commands.executeCommand('workbench.action.moveViewToSecondarySidebar', 'neko.aiAssistant');
     })
   );
 
@@ -118,16 +109,6 @@ export function registerCommands(
 
   // Register timeline commands (element, track, effect, transition, animation, render, export)
   registerTimelineCommands(context, videoEditorProvider);
-
-  // Register AI commands (generation, analysis, document)
-  if (toolRegistry) {
-    registerAICommands(context, toolRegistry);
-  }
-
-  // Register script commands (editor context menu)
-  if (chatProvider) {
-    registerScriptCommands(context, chatProvider);
-  }
 }
 
 /**

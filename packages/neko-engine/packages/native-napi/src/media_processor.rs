@@ -2562,7 +2562,7 @@ pub fn extract_all_subtitles(path: String) -> Result<Vec<JsExtractedSubtitleTrac
 /// * `rgba_data` - RGBA pixel data buffer
 /// * `width` - Image width in pixels
 /// * `height` - Image height in pixels
-/// * `quality` - JPEG quality (2-31, lower is better quality, default 3)
+/// * `quality` - JPEG quality (1-100, higher is better quality, default 85)
 ///
 /// # Returns
 /// * JPEG image data as Buffer
@@ -2575,7 +2575,7 @@ pub fn encode_jpeg(
 ) -> Result<Buffer> {
     use neko_native_core::media_service::encode_rgba_to_jpeg;
 
-    let jpeg_data = encode_rgba_to_jpeg(&rgba_data, width, height, quality.unwrap_or(3))
+    let jpeg_data = encode_rgba_to_jpeg(&rgba_data, width, height, quality.unwrap_or(85))
         .map_err(|e| Error::from_reason(format!("Failed to encode JPEG: {}", e)))?;
 
     Ok(Buffer::from(jpeg_data))
@@ -2642,11 +2642,9 @@ pub fn extract_frame(source: String, time: f64, quality: Option<u32>) -> Result<
     let rgba_data = read_texture_to_cpu(&gpu_ctx, &output_texture, width, height)
         .map_err(|e| Error::from_reason(format!("Failed to read texture: {}", e)))?;
 
-    // Encode to JPEG
-    // Convert quality from 1-100 to FFmpeg scale (2-31, lower is better)
-    let q = quality.unwrap_or(85).clamp(1, 100);
-    let ffmpeg_quality = ((100 - q) * 29 / 99 + 2) as u32;
-    let jpeg_data = encode_rgba_to_jpeg(&rgba_data, width, height, ffmpeg_quality)
+    // Encode to JPEG (quality is now 1-100, higher is better)
+    let jpeg_quality = quality.unwrap_or(85);
+    let jpeg_data = encode_rgba_to_jpeg(&rgba_data, width, height, jpeg_quality)
         .map_err(|e| Error::from_reason(format!("Failed to encode JPEG: {}", e)))?;
 
     Ok(Buffer::from(jpeg_data))
@@ -2799,10 +2797,9 @@ pub fn composite_frame(request: JsCompositeFrameRequest) -> Result<Buffer> {
         .composite(&composite_layers, request.width, request.height, background)
         .map_err(|e| Error::from_reason(format!("Failed to composite: {}", e)))?;
 
-    // Encode to JPEG
-    let q = request.quality.unwrap_or(85).clamp(1, 100);
-    let ffmpeg_quality = ((100 - q) * 29 / 99 + 2) as u32;
-    let jpeg_data = encode_rgba_to_jpeg(&result.data, result.width, result.height, ffmpeg_quality)
+    // Encode to JPEG (quality is now 1-100, higher is better)
+    let jpeg_quality = request.quality.unwrap_or(85);
+    let jpeg_data = encode_rgba_to_jpeg(&result.data, result.width, result.height, jpeg_quality)
         .map_err(|e| Error::from_reason(format!("Failed to encode JPEG: {}", e)))?;
 
     Ok(Buffer::from(jpeg_data))

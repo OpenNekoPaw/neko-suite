@@ -1,41 +1,50 @@
-//! JPEG Encoder - Encode RGBA frames to JPEG using FFmpeg's MJPEG encoder
+//! JPEG Encoder - High-performance JPEG encoding
 //!
-//! This provides a zero-copy alternative to sharp for JPEG encoding.
+//! This module provides JPEG encoding using the `image` crate, which is a pure Rust
+//! implementation with no external dependencies.
+//!
+//! ## Features
+//!
+//! - Pure Rust implementation (no system dependencies)
+//! - Configurable quality (1-100)
+//! - Support for RGBA, RGB, and grayscale input
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! use neko_native_core::media_service::encode_rgba_to_jpeg;
+//!
+//! let jpeg_data = encode_rgba_to_jpeg(&rgba_buffer, 1920, 1080, 85)?;
+//! ```
 
 use crate::error::{Error, Result};
-use ffmpeg_next as ffmpeg;
-use std::sync::Once;
+use image::codecs::jpeg::JpegEncoder;
+use image::{ColorType, ImageEncoder};
+use std::io::Cursor;
 
-static FFMPEG_INIT: Once = Once::new();
-
-/// Initialize FFmpeg (thread-safe, called once)
-fn init_ffmpeg() {
-    FFMPEG_INIT.call_once(|| {
-        ffmpeg::init().expect("Failed to initialize FFmpeg");
-    });
-}
-
-/// Encode RGBA buffer to JPEG using FFmpeg's MJPEG encoder
+/// Encode RGBA buffer to JPEG
 ///
 /// # Arguments
 /// * `rgba_data` - RGBA pixel data (4 bytes per pixel)
 /// * `width` - Image width in pixels
 /// * `height` - Image height in pixels
-/// * `quality` - JPEG quality (2-31, lower is better quality)
+/// * `quality` - JPEG quality (1-100, higher is better quality)
 ///
 /// # Returns
 /// * JPEG image data as Vec<u8>
+///
+/// # Example
+/// ```ignore
+/// let jpeg = encode_rgba_to_jpeg(&rgba_buffer, 1920, 1080, 85)?;
+/// assert_eq!(jpeg[0..2], [0xFF, 0xD8]); // JPEG magic bytes
+/// ```
 pub fn encode_rgba_to_jpeg(
     rgba_data: &[u8],
     width: u32,
     height: u32,
     quality: u32,
 ) -> Result<Vec<u8>> {
-    init_ffmpeg();
-
-    let width = width as usize;
-    let height = height as usize;
-    let expected_size = width * height * 4;
+    let expected_size = (width as usize) * (height as usize) * 4;
 
     if rgba_data.len() != expected_size {
         return Err(Error::InvalidParameter(format!(
@@ -45,95 +54,106 @@ pub fn encode_rgba_to_jpeg(
         )));
     }
 
-    // Find MJPEG encoder
-    let encoder = ffmpeg::encoder::find(ffmpeg::codec::Id::MJPEG)
-        .ok_or_else(|| Error::Ffmpeg("MJPEG encoder not found".to_string()))?;
+    // Convert RGBA to RGB (JPEG doesn't support alpha channel)
+    let rgb_data = rgba_to_rgb(rgba_data);
 
-    // Create encoder context
-    let context = ffmpeg::codec::context::Context::new_with_codec(encoder);
-    let mut encoder_ctx = context.encoder().video()?;
+    // Encode to JPEG
+    let mut jpeg_buffer = Cursor::new(Vec::new());
+    let quality = quality.clamp(1, 100) as u8;
 
-    // Configure encoder
-    encoder_ctx.set_width(width as u32);
-    encoder_ctx.set_height(height as u32);
-    encoder_ctx.set_format(ffmpeg::format::Pixel::YUVJ420P); // MJPEG uses YUVJ420P
-    encoder_ctx.set_time_base(ffmpeg::Rational::new(1, 25));
+    let encoder = JpegEncoder::new_with_quality(&mut jpeg_buffer, quality);
+    encoder
+        .write_image(&rgb_data, width, height, ColorType::Rgb8.into())
+        .map_err(|e| Error::Jpeg(format!("JPEG encoding failed: {}", e)))?;
 
-    // Set quality (qscale)
-    let quality = quality.clamp(2, 31);
-    unsafe {
-        (*encoder_ctx.as_mut_ptr()).global_quality = (quality as i32) * ffmpeg::ffi::FF_QP2LAMBDA;
-        (*encoder_ctx.as_mut_ptr()).flags |= ffmpeg::ffi::AV_CODEC_FLAG_QSCALE as i32;
-    }
-
-    // Open encoder
-    let mut encoder = encoder_ctx.open()?;
-
-    // Create input frame (RGBA)
-    let mut rgba_frame = ffmpeg::frame::Video::new(
-        ffmpeg::format::Pixel::RGBA,
-        width as u32,
-        height as u32,
-    );
-
-    // Get stride first before mutable borrow
-    let stride = rgba_frame.stride(0);
-
-    // Copy RGBA data to frame
-    let rgba_plane = rgba_frame.data_mut(0);
-    for y in 0..height {
-        let src_offset = y * width * 4;
-        let dst_offset = y * stride;
-        rgba_plane[dst_offset..dst_offset + width * 4]
-            .copy_from_slice(&rgba_data[src_offset..src_offset + width * 4]);
-    }
-
-    // Create output frame (YUVJ420P for MJPEG)
-    let mut yuv_frame = ffmpeg::frame::Video::new(
-        ffmpeg::format::Pixel::YUVJ420P,
-        width as u32,
-        height as u32,
-    );
-
-    // Create scaler for RGBA -> YUVJ420P conversion
-    let mut scaler = ffmpeg::software::scaling::Context::get(
-        ffmpeg::format::Pixel::RGBA,
-        width as u32,
-        height as u32,
-        ffmpeg::format::Pixel::YUVJ420P,
-        width as u32,
-        height as u32,
-        ffmpeg::software::scaling::Flags::BILINEAR,
-    )?;
-
-    // Convert RGBA to YUVJ420P
-    scaler.run(&rgba_frame, &mut yuv_frame)?;
-
-    // Set PTS
-    yuv_frame.set_pts(Some(0));
-
-    // Encode frame
-    encoder.send_frame(&yuv_frame)?;
-
-    // Receive encoded packet
-    let mut packet = ffmpeg::Packet::empty();
-    let mut jpeg_data = Vec::new();
-
-    while encoder.receive_packet(&mut packet).is_ok() {
-        jpeg_data.extend_from_slice(packet.data().unwrap_or(&[]));
-    }
-
-    // Flush encoder
-    encoder.send_eof()?;
-    while encoder.receive_packet(&mut packet).is_ok() {
-        jpeg_data.extend_from_slice(packet.data().unwrap_or(&[]));
-    }
+    let jpeg_data = jpeg_buffer.into_inner();
 
     if jpeg_data.is_empty() {
-        return Err(Error::Ffmpeg("JPEG encoding produced no output".to_string()));
+        return Err(Error::Jpeg("JPEG encoding produced no output".to_string()));
     }
 
     Ok(jpeg_data)
+}
+
+/// Encode RGB buffer to JPEG
+///
+/// # Arguments
+/// * `rgb_data` - RGB pixel data (3 bytes per pixel)
+/// * `width` - Image width in pixels
+/// * `height` - Image height in pixels
+/// * `quality` - JPEG quality (1-100, higher is better quality)
+pub fn encode_rgb_to_jpeg(
+    rgb_data: &[u8],
+    width: u32,
+    height: u32,
+    quality: u32,
+) -> Result<Vec<u8>> {
+    let expected_size = (width as usize) * (height as usize) * 3;
+
+    if rgb_data.len() != expected_size {
+        return Err(Error::InvalidParameter(format!(
+            "RGB data size mismatch: expected {} bytes, got {} bytes",
+            expected_size,
+            rgb_data.len()
+        )));
+    }
+
+    let mut jpeg_buffer = Cursor::new(Vec::new());
+    let quality = quality.clamp(1, 100) as u8;
+
+    let encoder = JpegEncoder::new_with_quality(&mut jpeg_buffer, quality);
+    encoder
+        .write_image(rgb_data, width, height, ColorType::Rgb8.into())
+        .map_err(|e| Error::Jpeg(format!("JPEG encoding failed: {}", e)))?;
+
+    Ok(jpeg_buffer.into_inner())
+}
+
+/// Convert RGBA to RGB by dropping alpha channel
+#[inline]
+fn rgba_to_rgb(rgba: &[u8]) -> Vec<u8> {
+    let pixel_count = rgba.len() / 4;
+    let mut rgb = Vec::with_capacity(pixel_count * 3);
+
+    for chunk in rgba.chunks_exact(4) {
+        rgb.push(chunk[0]); // R
+        rgb.push(chunk[1]); // G
+        rgb.push(chunk[2]); // B
+        // Skip alpha (chunk[3])
+    }
+
+    rgb
+}
+
+/// Quality presets for common use cases
+#[derive(Debug, Clone, Copy)]
+pub enum JpegQualityPreset {
+    /// Thumbnail quality (60) - small file size
+    Thumbnail,
+    /// Preview quality (75) - balanced
+    Preview,
+    /// High quality (85) - good for screenshots
+    High,
+    /// Maximum quality (95) - best quality, larger files
+    Maximum,
+}
+
+impl JpegQualityPreset {
+    /// Get the quality value (1-100)
+    pub fn value(&self) -> u32 {
+        match self {
+            JpegQualityPreset::Thumbnail => 60,
+            JpegQualityPreset::Preview => 75,
+            JpegQualityPreset::High => 85,
+            JpegQualityPreset::Maximum => 95,
+        }
+    }
+}
+
+impl From<JpegQualityPreset> for u32 {
+    fn from(preset: JpegQualityPreset) -> u32 {
+        preset.value()
+    }
 }
 
 #[cfg(test)]
@@ -142,21 +162,75 @@ mod tests {
 
     #[test]
     fn test_encode_rgba_to_jpeg() {
-        // Create a simple 2x2 red image
-        let rgba_data: Vec<u8> = vec![
-            255, 0, 0, 255, // Red pixel
-            255, 0, 0, 255, // Red pixel
-            255, 0, 0, 255, // Red pixel
-            255, 0, 0, 255, // Red pixel
-        ];
+        // Create a simple 8x8 red image
+        let width = 8u32;
+        let height = 8u32;
+        let mut rgba_data = Vec::with_capacity((width * height * 4) as usize);
+        for _ in 0..(width * height) {
+            rgba_data.extend_from_slice(&[255, 0, 0, 255]); // Red pixel
+        }
 
-        let result = encode_rgba_to_jpeg(&rgba_data, 2, 2, 3);
-        assert!(result.is_ok());
+        let result = encode_rgba_to_jpeg(&rgba_data, width, height, 85);
+        assert!(result.is_ok(), "Encoding failed: {:?}", result.err());
 
         let jpeg = result.unwrap();
         // JPEG magic bytes
         assert!(jpeg.len() > 2);
         assert_eq!(jpeg[0], 0xFF);
         assert_eq!(jpeg[1], 0xD8);
+    }
+
+    #[test]
+    fn test_encode_rgb_to_jpeg() {
+        let width = 8u32;
+        let height = 8u32;
+        let mut rgb_data = Vec::with_capacity((width * height * 3) as usize);
+        for _ in 0..(width * height) {
+            rgb_data.extend_from_slice(&[0, 255, 0]); // Green pixel
+        }
+
+        let result = encode_rgb_to_jpeg(&rgb_data, width, height, 85);
+        assert!(result.is_ok());
+
+        let jpeg = result.unwrap();
+        assert_eq!(jpeg[0], 0xFF);
+        assert_eq!(jpeg[1], 0xD8);
+    }
+
+    #[test]
+    fn test_rgba_to_rgb() {
+        let rgba = vec![255, 128, 64, 255, 0, 0, 0, 128];
+        let rgb = rgba_to_rgb(&rgba);
+        assert_eq!(rgb, vec![255, 128, 64, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_quality_presets() {
+        assert_eq!(JpegQualityPreset::Thumbnail.value(), 60);
+        assert_eq!(JpegQualityPreset::Preview.value(), 75);
+        assert_eq!(JpegQualityPreset::High.value(), 85);
+        assert_eq!(JpegQualityPreset::Maximum.value(), 95);
+    }
+
+    #[test]
+    fn test_invalid_data_size() {
+        let rgba_data = vec![0u8; 100]; // Wrong size
+        let result = encode_rgba_to_jpeg(&rgba_data, 10, 10, 85);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_quality_clamping() {
+        let width = 8u32;
+        let height = 8u32;
+        let rgba_data = vec![128u8; (width * height * 4) as usize];
+
+        // Quality 0 should be clamped to 1
+        let result = encode_rgba_to_jpeg(&rgba_data, width, height, 0);
+        assert!(result.is_ok());
+
+        // Quality 200 should be clamped to 100
+        let result = encode_rgba_to_jpeg(&rgba_data, width, height, 200);
+        assert!(result.is_ok());
     }
 }

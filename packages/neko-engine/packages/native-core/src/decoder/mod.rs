@@ -36,6 +36,7 @@
 //! ```
 
 pub mod common;
+pub mod pool;
 mod traits;
 pub mod zerocopy;
 
@@ -47,3 +48,8 @@ pub use traits::{DecodedFrame, Decoder, FrameData, GpuTextureHandle, MediaInfo, 
 
 // Re-export zero-copy decoder
 pub use zerocopy::{Nv12GpuTexture, ZeroCopyConfig, ZeroCopyDecoder};
+
+// Re-export decoder pool
+pub use pool::{
+    global_pool, init_global_pool, DecoderGuard, DecoderPool, DecoderPoolConfig, DecoderPoolStats,
+};

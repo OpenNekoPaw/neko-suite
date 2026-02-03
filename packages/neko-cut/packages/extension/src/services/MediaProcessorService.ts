@@ -19,7 +19,6 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { FFmpegService } from './FFmpegService';
 import { RustMediaProcessorService } from './RustMediaProcessorService';
-import { StreamingAudioDecoderService, getStreamingAudioDecoderService } from './StreamingAudioDecoderService';
 import {
 	MAX_CONCURRENT_REQUESTS,
 	type MediaRequest,
@@ -35,10 +34,6 @@ import {
 	type CompatibleGetVideoFrameResponse,
 	type CompatibleModeRequest,
 	type CompatibleModeResponse,
-	type AudioStreamStartRequest,
-	type AudioStreamStopRequest,
-	type AudioStreamSeekRequest,
-	type AudioStreamWebviewMessage,
 	type ProjectData,
 } from '@neko/shared';
 
@@ -215,15 +210,6 @@ export class MediaProcessorService {
 		isRunning: boolean;
 	} | null = null;
 
-	// Audio streaming for compat mode (real-time audio playback)
-	private streamingAudioDecoder: StreamingAudioDecoderService | null = null;
-	private audioStreamSessions: Map<string, {
-		projectData: ProjectData | null;
-		startTime: number;
-		duration: number;
-		isActive: boolean;
-	}> = new Map();
-
 	constructor(
 		private readonly webviewPanel: vscode.WebviewPanel,
 		documentUri?: vscode.Uri,
@@ -302,11 +288,6 @@ export class MediaProcessorService {
 			// Check for frame server playback control requests
 			if (this.isFrameServerPlaybackRequest(message)) {
 				await this.handleFrameServerPlaybackRequest(message);
-				return true;
-			}
-			// Check for audio stream requests (compat mode real-time audio)
-			if (this.isAudioStreamRequest(message)) {
-				await this.handleAudioStreamRequest(message as AudioStreamWebviewMessage);
 				return true;
 			}
 			// Check for performance stats requests
@@ -874,7 +855,6 @@ export class MediaProcessorService {
 			!msg.type.includes('renderComposite') &&
 			!msg.type.includes('pullMode') &&
 			!msg.type.includes('frameServer') &&
-			!msg.type.includes('audioStream') &&
 			msg.type !== 'media:getPerformanceStats' &&
 			msg.type !== 'media:getMediaBitrate' &&
 			typeof msg.requestId === 'string' &&
@@ -1831,274 +1811,6 @@ export class MediaProcessorService {
 	}
 
 	// ===========================================================================
-	// Audio Streaming Support (Compat Mode Real-time Audio)
-	// ===========================================================================
-
-	/**
-	 * Type guard for AudioStreamWebviewMessage
-	 */
-	private isAudioStreamRequest(message: unknown): message is AudioStreamWebviewMessage {
-		if (typeof message !== 'object' || message === null) {
-			return false;
-		}
-
-		const msg = message as Record<string, unknown>;
-
-		return (
-			typeof msg.type === 'string' &&
-			(msg.type === 'media:audioStream:start' ||
-			 msg.type === 'media:audioStream:stop' ||
-			 msg.type === 'media:audioStream:seek') &&
-			typeof msg.requestId === 'string'
-		);
-	}
-
-	/**
-	 * Handle audio stream requests
-	 */
-	private async handleAudioStreamRequest(message: AudioStreamWebviewMessage): Promise<void> {
-		switch (message.type) {
-			case 'media:audioStream:start':
-				await this.handleAudioStreamStart(message as AudioStreamStartRequest);
-				break;
-			case 'media:audioStream:stop':
-				await this.handleAudioStreamStop(message as AudioStreamStopRequest);
-				break;
-			case 'media:audioStream:seek':
-				await this.handleAudioStreamSeek(message as AudioStreamSeekRequest);
-				break;
-		}
-	}
-
-	/**
-	 * Handle audio stream start request
-	 */
-	private async handleAudioStreamStart(request: AudioStreamStartRequest): Promise<void> {
-		const { sessionId, startTime, duration, sampleRate = 48000, channels = 2 } = request.payload;
-
-		try {
-			// Initialize streaming audio decoder if needed
-			if (!this.streamingAudioDecoder) {
-				this.streamingAudioDecoder = getStreamingAudioDecoderService({
-					sampleRate,
-					channels,
-				});
-			}
-
-			// Set up data callback to send audio data to Webview
-			this.streamingAudioDecoder.setDataCallback((pcmData, timestamp) => {
-				this.sendAudioStreamData(sessionId, pcmData, timestamp, sampleRate, channels);
-			});
-
-			// Create session
-			this.audioStreamSessions.set(sessionId, {
-				projectData: null, // Will be set when project playback starts
-				startTime,
-				duration,
-				isActive: true,
-			});
-
-			console.log(`[MediaProcessor] Audio stream session started: ${sessionId}`);
-
-			// Send started response
-			this.sendAudioStreamResponse({
-				type: 'media:audioStream:started',
-				requestId: request.requestId,
-				payload: {
-					sessionId,
-					websocketUrl: '', // Not using WebSocket for now, using postMessage
-					sampleRate,
-					channels,
-				},
-			});
-		} catch (error) {
-			console.error('[MediaProcessor] Failed to start audio stream:', error);
-			this.sendAudioStreamResponse({
-				type: 'media:audioStream:started',
-				requestId: request.requestId,
-				payload: {
-					sessionId,
-					websocketUrl: '',
-					sampleRate,
-					channels,
-				},
-				error: error instanceof Error ? error.message : 'Unknown error',
-			});
-		}
-	}
-
-	/**
-	 * Handle audio stream stop request
-	 */
-	private async handleAudioStreamStop(request: AudioStreamStopRequest): Promise<void> {
-		const { sessionId } = request.payload;
-
-		const session = this.audioStreamSessions.get(sessionId);
-		if (session) {
-			session.isActive = false;
-			this.audioStreamSessions.delete(sessionId);
-		}
-
-		// Stop the audio decoder
-		if (this.streamingAudioDecoder) {
-			this.streamingAudioDecoder.stop();
-		}
-
-		console.log(`[MediaProcessor] Audio stream session stopped: ${sessionId}`);
-
-		this.sendAudioStreamResponse({
-			type: 'media:audioStream:stopped',
-			requestId: request.requestId,
-			payload: { sessionId },
-		});
-	}
-
-	/**
-	 * Handle audio stream seek request
-	 */
-	private async handleAudioStreamSeek(request: AudioStreamSeekRequest): Promise<void> {
-		const { sessionId, timeInSeconds } = request.payload;
-
-		const session = this.audioStreamSessions.get(sessionId);
-		if (!session || !session.isActive) {
-			console.warn(`[MediaProcessor] Audio stream session not found: ${sessionId}`);
-			return;
-		}
-
-		// Stop current playback and restart from new position
-		if (this.streamingAudioDecoder) {
-			this.streamingAudioDecoder.stop();
-
-			// Restart from new position if we have project data
-			if (session.projectData) {
-				await this.streamingAudioDecoder.startPlayback(
-					session.projectData,
-					this.documentDir ?? '',
-					timeInSeconds,
-					session.duration - timeInSeconds
-				);
-			}
-		}
-
-		console.log(`[MediaProcessor] Audio stream seeked to ${timeInSeconds}s`);
-	}
-
-	/**
-	 * Start audio playback for project (called when video playback starts)
-	 */
-	async startProjectAudioPlayback(
-		projectData: ProjectData,
-		startTime: number,
-		duration: number
-	): Promise<void> {
-		// Initialize streaming audio decoder if needed
-		if (!this.streamingAudioDecoder) {
-			this.streamingAudioDecoder = getStreamingAudioDecoderService({
-				sampleRate: 48000,
-				channels: 2,
-			});
-		}
-
-		// Find or create a session
-		let sessionId = '';
-		for (const [id, session] of this.audioStreamSessions) {
-			if (session.isActive) {
-				sessionId = id;
-				session.projectData = projectData;
-				break;
-			}
-		}
-
-		if (!sessionId) {
-			sessionId = `audio-${Date.now()}`;
-			this.audioStreamSessions.set(sessionId, {
-				projectData,
-				startTime,
-				duration,
-				isActive: true,
-			});
-		}
-
-		// Set up data callback
-		this.streamingAudioDecoder.setDataCallback((pcmData, timestamp) => {
-			this.sendAudioStreamData(sessionId, pcmData, timestamp, 48000, 2);
-		});
-
-		// Start playback
-		await this.streamingAudioDecoder.startPlayback(
-			projectData,
-			this.documentDir ?? '',
-			startTime,
-			duration
-		);
-
-		console.log(`[MediaProcessor] Project audio playback started: ${sessionId}`);
-	}
-
-	/**
-	 * Stop project audio playback
-	 */
-	stopProjectAudioPlayback(): void {
-		if (this.streamingAudioDecoder) {
-			this.streamingAudioDecoder.stop();
-		}
-
-		// Mark all sessions as inactive
-		for (const session of this.audioStreamSessions.values()) {
-			session.isActive = false;
-		}
-		this.audioStreamSessions.clear();
-
-		console.log('[MediaProcessor] Project audio playback stopped');
-	}
-
-	/**
-	 * Send audio stream data to Webview
-	 */
-	private sendAudioStreamData(
-		sessionId: string,
-		pcmData: Float32Array,
-		timestamp: number,
-		sampleRate: number,
-		channels: number
-	): void {
-		if (this.disposed) return;
-
-		try {
-			this.webviewPanel.webview.postMessage({
-				type: 'media:audioStream:data',
-				payload: {
-					sessionId,
-					pcmData,
-					timestamp,
-					sampleRate,
-					channels,
-				},
-			});
-		} catch {
-			// Webview was disposed, silently ignore
-		}
-	}
-
-	/**
-	 * Send audio stream response to Webview
-	 */
-	private sendAudioStreamResponse(response: {
-		type: string;
-		requestId: string;
-		payload: unknown;
-		error?: string;
-	}): void {
-		if (this.disposed) return;
-
-		try {
-			this.webviewPanel.webview.postMessage(response);
-		} catch {
-			// Webview was disposed, silently ignore
-		}
-	}
-
-	// ===========================================================================
 	// Performance Stats Support (Compat Mode Monitoring)
 	// ===========================================================================
 
@@ -2231,13 +1943,6 @@ export class MediaProcessorService {
 
 		// Stop playback push mode
 		this.stopPlaybackPush();
-
-		// Stop audio streaming
-		this.stopProjectAudioPlayback();
-		if (this.streamingAudioDecoder) {
-			this.streamingAudioDecoder.dispose();
-			this.streamingAudioDecoder = null;
-		}
 
 		// Stop stats logging
 		if (this.statsLogInterval) {
