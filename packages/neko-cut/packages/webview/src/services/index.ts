@@ -39,6 +39,7 @@ export {
 // Media Proxy Factory (Singleton access)
 export {
   getMediaProxy,
+  getRemoteMediaProxy,
   resetMediaProxy,
 } from './mediaProxyFactory';
 
@@ -58,15 +59,6 @@ export {
   type H264StreamClientConfig,
   type H264StreamClientStats,
 } from './H264StreamClient';
-
-// WebGPU Texture Importer (VideoFrame zero-copy)
-export {
-  WebGPUTextureImporter,
-  createExternalTextureRenderPipeline,
-  EXTERNAL_TEXTURE_SHADER,
-  type ImportedTexture,
-  type WebGPUTextureImporterConfig,
-} from './WebGPUTextureImporter';
 
 // Preview Mode Controller (mode state management)
 export {

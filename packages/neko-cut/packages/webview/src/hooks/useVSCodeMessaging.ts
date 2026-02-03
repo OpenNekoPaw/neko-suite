@@ -460,7 +460,7 @@ function handleMediaEngineMessage(message: { type: string; payload?: unknown; er
       if (p.success) {
         // Update currentMode from activeMode, keep the user's preference
         store._updateModeState({
-          currentMode: (p.activeMode as 'basic' | 'compatible') || null,
+          currentMode: 'compatible',
           isModeLoading: false,
           modeError: null,
         });
@@ -484,7 +484,7 @@ function handleMediaEngineMessage(message: { type: string; payload?: unknown; er
     if (payload && typeof payload === 'object') {
       const p = payload as { currentMode?: string; compatibleModeInstalled?: boolean };
       store._updateModeState({
-        currentMode: (p.currentMode as 'basic' | 'compatible') || null,
+        currentMode: 'compatible',
         compatibleModeInstalled: p.compatibleModeInstalled ?? false,
         isModeLoading: false,
       });
@@ -524,41 +524,6 @@ function handleMediaEngineMessage(message: { type: string; payload?: unknown; er
       store._setDownloadComplete(false, error);
     }
     // Success case will be handled by downloadProgress/downloadComplete notifications
-    return;
-  }
-
-  if (type === 'mediaEngine:response:analyzeMedia') {
-    // Response format: { payload: ModeSelectionResult & { mediaInfo } }
-    if (payload && typeof payload === 'object' && !error) {
-      store._setModeAnalysis(payload as Parameters<typeof store._setModeAnalysis>[0]);
-    } else {
-      store._updateModeState({
-        isModeLoading: false,
-        modeError: error || 'Analysis failed',
-      });
-    }
-    return;
-  }
-
-  if (type === 'mediaEngine:response:resolveAutoMode') {
-    // Response format: { payload: { resolvedMode, analysis?, requiresDownload? } }
-    if (payload && typeof payload === 'object' && !error) {
-      const p = payload as {
-        resolvedMode?: string;
-        analysis?: unknown;
-        requiresDownload?: boolean;
-      };
-      store._setResolvedAutoMode(
-        (p.resolvedMode as 'basic' | 'compatible') || 'basic',
-        p.analysis as Parameters<typeof store._setResolvedAutoMode>[1],
-        p.requiresDownload
-      );
-    } else {
-      store._updateModeState({
-        isModeLoading: false,
-        modeError: error || 'Failed to resolve auto mode',
-      });
-    }
     return;
   }
 

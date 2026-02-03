@@ -432,23 +432,17 @@ export class TimelineFrameCacheMemoryAdapter implements IMemoryObservable {
     return this.cache.getStats().totalMemoryBytes;
   }
 
-  evictMemory(targetBytes: number): number {
+  evictMemory(_targetBytes: number): number {
     // TimelineFrameCache 的内存管理是内部的
-    // 这里我们通过清除合成缓存来释放内存
+    // 通过清除缓存来释放内存
     const statsBefore = this.cache.getStats();
-    this.cache.invalidateCompositeCache();
+
+    // 清除所有缓存来释放内存
+    this.cache.clear();
     const statsAfter = this.cache.getStats();
 
     const evicted = statsBefore.totalMemoryBytes - statsAfter.totalMemoryBytes;
-
-    // 如果释放的不够，进一步清理（这是一个简化实现）
-    if (evicted < targetBytes) {
-      // 清除所有缓存作为最后手段
-      this.cache.clear();
-      return statsBefore.totalMemoryBytes;
-    }
-
-    return evicted;
+    return evicted > 0 ? evicted : statsBefore.totalMemoryBytes;
   }
 }
 

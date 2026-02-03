@@ -23,7 +23,6 @@ import {
 } from '@neko/shared';
 
 import { NativeMediaEngine, createNativeMediaEngine } from './NativeMediaEngine';
-import { getFFmpegService } from '../services/FFmpegService';
 
 // =============================================================================
 // Types
@@ -123,7 +122,8 @@ export class MediaEngineManager implements vscode.Disposable {
 			};
 		}
 
-		const ffmpegService = getFFmpegService();
+		// Get or create compatible engine for probing
+		const engine = await this.getCompatibleEngine();
 
 		for (const mediaPath of mediaPaths) {
 			// Resolve relative path if projectDir is provided
@@ -134,7 +134,7 @@ export class MediaEngineManager implements vscode.Disposable {
 			}
 
 			try {
-				const mediaInfo = await ffmpegService.probeMediaInfo(absolutePath);
+				const mediaInfo = await engine.probeMedia(absolutePath);
 				const analysis = this.analyzeMedia(mediaInfo);
 
 				if (analysis.recommendedMode === 'basic') {
@@ -352,8 +352,8 @@ export class MediaEngineManager implements vscode.Disposable {
 	async probeMediaWithRecommendation(
 		source: string
 	): Promise<{ mediaInfo: MediaInfo; recommendation: ModeSelectionResult }> {
-		const ffmpegService = getFFmpegService();
-		const mediaInfo = await ffmpegService.probeMediaInfo(source);
+		const engine = await this.getCompatibleEngine();
+		const mediaInfo = await engine.probeMedia(source);
 		const recommendation = this.analyzeMedia(mediaInfo);
 
 		return { mediaInfo, recommendation };

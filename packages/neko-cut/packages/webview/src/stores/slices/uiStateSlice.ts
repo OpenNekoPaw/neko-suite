@@ -31,7 +31,7 @@ export interface UIStateSlice {
     // Preview info (docs/principle.md requirement)
     resolution: string; // e.g., "1920x1080"
     bitrate: string; // e.g., "10 Mbps"
-    mode: string; // "basic" | "compat"
+    mode: 'compatible'; // Only compatible mode is supported
     // Timing stats
     decodeTime: number;
     renderTime: number;
@@ -60,7 +60,7 @@ export interface UIStateSlice {
     targetFps: number;
     resolution: string;
     bitrate: string;
-    mode: string;
+    mode: 'compatible';
     decodeTime: number;
     renderTime: number;
     compositeTime: number;
@@ -119,7 +119,7 @@ export const createUIStateSlice: StateCreator<
     targetFps: 30,
     resolution: '',
     bitrate: '',
-    mode: 'basic',
+    mode: 'compatible',
     decodeTime: 0,
     renderTime: 0,
     compositeTime: 0,

@@ -5,8 +5,7 @@
 
 import type { ToolHandler, ToolHandlerResult } from '../types';
 import { useEditorStore } from '../../stores/editor-store';
-import type { ExportRequest, ExportResponse, ExportSettings, ExportFormat, ExportQuality } from '@neko/shared';
-import { calculateProjectDuration } from '../../utils/exportEngine';
+import type { ExportRequest, ExportResponse, ExportSettings, ExportFormat, ExportQuality, ProjectData } from '@neko/shared';
 import { getVSCodeAPI } from '../../utils/vscodeApi';
 
 // Export progress tracking
@@ -23,6 +22,22 @@ interface ExportProgress {
 
 // Active exports registry
 const activeExports: Map<string, ExportProgress> = new Map();
+
+/**
+ * Calculate project duration from tracks
+ */
+function calculateProjectDuration(project: ProjectData): number {
+  let maxEndTime = 0;
+  for (const track of project.tracks) {
+    for (const element of track.elements) {
+      const endTime = element.startTime + element.duration - (element.trimStart || 0) - (element.trimEnd || 0);
+      if (endTime > maxEndTime) {
+        maxEndTime = endTime;
+      }
+    }
+  }
+  return maxEndTime;
+}
 
 /**
  * Start video export

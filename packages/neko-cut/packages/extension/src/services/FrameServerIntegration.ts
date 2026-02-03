@@ -26,7 +26,7 @@ import { KeyframeCacheService } from './KeyframeCacheService';
 import { AudioServerService } from './AudioServerService';
 import { StreamingAudioDecoderService } from './StreamingAudioDecoderService';
 import { getFFmpegService, type FFmpegService } from './FFmpegService';
-import type { ProjectData, MediaEngineMode } from '@neko/shared';
+import type { ProjectData } from '@neko/shared';
 import {
 	SharedRenderPipeline,
 	createSharedRenderPipeline,
@@ -328,10 +328,10 @@ export class FrameServerIntegration implements vscode.Disposable {
 	/**
 	 * 触发关键帧缓存（用于时间线打开或模式切换）
 	 * 按设计原则：索引所有视频的 IDR 关键帧，预缓存 playhead 后 80 个关键帧
+	 * 使用 Rust HTTP API 缓存
 	 *
 	 * @param videoSources 视频源列表
 	 * @param playheadTime 当前 playhead 时间
-	 * @param mode 当前模式：basic 使用 Extension 端缓存，compatible 使用 Rust HTTP API
 	 */
 	async triggerKeyframeCache(
 		videoSources: Array<{
@@ -340,41 +340,13 @@ export class FrameServerIntegration implements vscode.Disposable {
 			trimStart: number;
 			duration: number;
 		}>,
-		playheadTime: number,
-		mode: MediaEngineMode = 'basic'
-	): Promise<void> {
-		if (mode === 'compatible') {
-			// Compat 模式：使用 Rust HTTP API 缓存
-			await this._triggerRustKeyframeCache(videoSources, playheadTime);
-		} else {
-			// Basic 模式：使用 Extension 端 TypeScript 缓存
-			await this._triggerExtensionKeyframeCache(videoSources, playheadTime);
-		}
-	}
-
-	/**
-	 * 使用 Extension 端 TypeScript 缓存（Basic 模式）
-	 */
-	private async _triggerExtensionKeyframeCache(
-		videoSources: Array<{
-			videoPath: string;
-			startTime: number;
-			trimStart: number;
-			duration: number;
-		}>,
 		playheadTime: number
 	): Promise<void> {
-		if (!this._keyframeCacheService) {
-			console.warn('[FrameServerIntegration] Keyframe cache service not initialized');
-			return;
-		}
-
-		console.log(`[FrameServerIntegration] Triggering Extension keyframe cache (basic mode)`);
-		await this._keyframeCacheService.triggerCache(videoSources, playheadTime);
+		await this._triggerRustKeyframeCache(videoSources, playheadTime);
 	}
 
 	/**
-	 * 使用 Rust HTTP API 缓存（Compat 模式）
+	 * 使用 Rust HTTP API 缓存
 	 */
 	private async _triggerRustKeyframeCache(
 		videoSources: Array<{

@@ -7,7 +7,6 @@ import { useState, useRef, useEffect, memo } from 'react';
 import { useTranslation } from '../i18n/I18nContext';
 import { useEditorStore } from '../stores/editor-store';
 import { formatTimeFull } from '../utils';
-import type { ModePreference } from '@neko/shared';
 
 // Resolution presets
 export type ResolutionPreset = '720p@60fps' | '1080p@30fps' | '1080p@60fps' | '4k@30fps' | '4k@60fps';
@@ -145,11 +144,6 @@ export const PreviewControls = memo(function PreviewControls({
 }: PreviewControlsProps) {
   const { t } = useTranslation();
 
-  // Media engine mode state from store
-  const modePreference = useEditorStore((state) => state.modePreference);
-  const isModeLoading = useEditorStore((state) => state.isModeLoading);
-  const setModePreference = useEditorStore((state) => state.setModePreference);
-
   // FPS counter state from store
   const showFpsCounter = useEditorStore((state) => state.showFpsCounter);
   const toggleFpsCounter = useEditorStore((state) => state.toggleFpsCounter);
@@ -160,13 +154,6 @@ export const PreviewControls = memo(function PreviewControls({
     { value: 'high', label: `${t('preview.qualityOptions.high')}: 0.75` },
     { value: 'medium', label: `${t('preview.qualityOptions.medium')}: 0.5` },
     { value: 'low', label: `${t('preview.qualityOptions.low')}: 0.25` },
-  ];
-
-  // Mode preference options
-  const modeOptions: { value: ModePreference; label: string }[] = [
-    { value: 'auto', label: t('mediaEngine.preference.auto') },
-    { value: 'basic', label: t('mediaEngine.preference.basic') },
-    { value: 'compatible', label: t('mediaEngine.preference.compatible') },
   ];
 
   return (
@@ -243,16 +230,6 @@ export const PreviewControls = memo(function PreviewControls({
           value={previewQuality}
           options={qualityOptions}
           onChange={setPreviewQuality}
-        />
-
-        {/* Mode Preference Dropdown */}
-        <div className="w-px h-4 bg-vscode-panel-border mx-1" />
-        <span className="text-xs text-vscode-description whitespace-nowrap">{t('mediaEngine.settings.mode')}</span>
-        <Dropdown
-          value={modePreference}
-          options={modeOptions}
-          onChange={(value) => setModePreference(value)}
-          disabled={isModeLoading}
         />
 
         {/* Volume Controls */}

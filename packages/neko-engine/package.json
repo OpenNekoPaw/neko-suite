@@ -59,45 +59,16 @@
     "configuration": {
       "title": "Neko Engine",
       "properties": {
-        "neko.engine.ws.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable WebSocket server"
-        },
-        "neko.engine.ws.port": {
-          "type": "number",
-          "default": 9528,
-          "description": "WebSocket server port"
-        },
-        "neko.engine.http.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable HTTP API server"
-        },
-        "neko.engine.http.port": {
-          "type": "number",
-          "default": 9527,
-          "description": "HTTP API server port"
-        },
-        "neko.engine.http.host": {
+        "neko.engine.hwAccel": {
           "type": "string",
-          "default": "127.0.0.1",
-          "description": "HTTP API server host (127.0.0.1 for local only)"
+          "default": "auto",
+          "enum": ["auto", "videotoolbox", "nvenc", "vaapi", "qsv", "none"],
+          "description": "Hardware acceleration mode for encoding/decoding"
         },
-        "neko.engine.auth.enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable API authentication"
-        },
-        "neko.engine.auth.token": {
+        "neko.engine.gpuDevice": {
           "type": "string",
           "default": "",
-          "description": "API authentication token"
-        },
-        "neko.engine.headless.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable headless webview for tool execution without open editor"
+          "description": "Preferred GPU device name (empty for auto-select)"
         }
       }
     }
@@ -113,7 +84,6 @@
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
-    "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "@neko/shared": "workspace:*",
@@ -123,6 +93,6 @@
     "vitest": "^1.0.4"
   },
   "dependencies": {
-    "ws": "^8.16.0"
+    "@neko-engine/native-napi": "workspace:*"
   }
 }

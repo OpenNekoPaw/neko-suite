@@ -5,7 +5,6 @@
  *
  * 职责：
  * - 管理单轨原始帧缓存 (RawFrameCache)
- * - 管理 GPU 合成帧缓存 (CompositeCache) - 可选
  * - 统一内存管理和时间窗口驱动的淘汰策略
  *
  * 设计原则：
@@ -13,8 +12,6 @@
  * - 开闭原则 (O)：通过配置支持扩展
  * - 依赖倒置 (D)：依赖抽象接口
  */
-
-import type { ITexture } from './gpu/ICompositor';
 
 // =============================================================================
 // Types
@@ -24,7 +21,7 @@ import type { ITexture } from './gpu/ICompositor';
  * 缓存帧条目
  */
 export interface CachedFrameEntry {
-  /** 帧数据 (VideoFrame for raw, ITexture for composite) */
+  /** 帧数据 (VideoFrame) */
   frame: VideoFrame;
   /** 时间点（秒） */
   time: number;
@@ -35,11 +32,11 @@ export interface CachedFrameEntry {
 }
 
 /**
- * 合成帧缓存条目
+ * 合成帧缓存条目 (保留类型定义以兼容)
  */
 export interface CompositeCacheEntry {
-  /** GPU 纹理 */
-  texture: ITexture;
+  /** 纹理数据 */
+  texture: unknown;
   /** 时间点（秒） */
   time: number;
   /** 轨道配置 hash */
@@ -72,18 +69,12 @@ export interface TimelineFrameCacheConfig {
   maxRawFrameMemory: number;
   /** 每轨道最大帧数，默认 180 */
   maxFramesPerTrack: number;
-  /** 合成帧缓存最大内存（字节），默认 500MB */
-  maxCompositeMemory: number;
-  /** 合成帧最大数量，默认 60 */
-  maxCompositeFrames: number;
   /** 时间窗口大小（秒），默认 3 */
   timeWindow: number;
   /** 时间窗口乘数，默认 2 (缓存 = 窗口 × 乘数) */
   windowMultiplier: number;
   /** 帧时间容差（秒），默认 1/60 */
   frameTolerance: number;
-  /** 是否启用合成帧缓存，默认 true */
-  enableCompositeCache: boolean;
 }
 
 /**
@@ -92,12 +83,9 @@ export interface TimelineFrameCacheConfig {
 export const DEFAULT_CACHE_CONFIG: TimelineFrameCacheConfig = {
   maxRawFrameMemory: 1.5 * 1024 * 1024 * 1024, // 1.5GB
   maxFramesPerTrack: 180, // 6s @ 30fps
-  maxCompositeMemory: 500 * 1024 * 1024, // 500MB
-  maxCompositeFrames: 60, // 2s @ 30fps
   timeWindow: 3, // 3s
   windowMultiplier: 2, // 缓存 6s
   frameTolerance: 1 / 60, // ~16ms
-  enableCompositeCache: true,
 };
 
 /**
@@ -113,7 +101,7 @@ export interface CacheStats {
     missCount: number;
     hitRate: number;
   };
-  /** 合成帧缓存 */
+  /** 合成帧缓存 (保留以兼容) */
   compositeFrames: {
     frameCount: number;
     totalSizeBytes: number;
@@ -133,8 +121,7 @@ export interface CacheStats {
  * 时间线帧缓存管理器
  *
  * 统一管理 Webview 端的帧缓存：
- * - Layer 1: RawFrameCache - 单轨原始帧（从 Extension 获取）
- * - Layer 2: CompositeCache - GPU 合成后的帧（可选）
+ * - RawFrameCache - 单轨原始帧（从 Extension 获取）
  */
 export class TimelineFrameCache {
   // 配置
@@ -143,18 +130,12 @@ export class TimelineFrameCache {
   // 原始帧缓存: trackId -> TrackFrameCache
   private rawFrameCache = new Map<string, TrackFrameCache>();
 
-  // 合成帧缓存: configHash:time -> CompositeCacheEntry
-  private compositeCache = new Map<string, CompositeCacheEntry>();
-
   // 全局统计
   private rawCacheHitCount = 0;
   private rawCacheMissCount = 0;
-  private compositeCacheHitCount = 0;
-  private compositeCacheMissCount = 0;
 
   // 总内存使用
   private totalRawMemoryBytes = 0;
-  private totalCompositeMemoryBytes = 0;
 
   // 是否已销毁
   private disposed = false;
@@ -346,108 +327,6 @@ export class TimelineFrameCache {
   }
 
   // ===========================================================================
-  // Composite Frame Cache API
-  // ===========================================================================
-
-  /**
-   * 获取合成帧
-   * @param time 时间点（秒）
-   * @param configHash 轨道配置 hash
-   * @returns ITexture 或 null
-   */
-  getCompositeFrame(time: number, configHash: string): ITexture | null {
-    if (this.disposed || !this.config.enableCompositeCache) return null;
-
-    const cacheKey = `${configHash}:${time.toFixed(3)}`;
-    const entry = this.compositeCache.get(cacheKey);
-
-    if (entry) {
-      entry.lastAccess = Date.now();
-      this.compositeCacheHitCount++;
-      return entry.texture;
-    }
-
-    // 容差匹配
-    for (const [, e] of this.compositeCache) {
-      if (e.configHash === configHash && Math.abs(e.time - time) <= this.config.frameTolerance) {
-        e.lastAccess = Date.now();
-        this.compositeCacheHitCount++;
-        return e.texture;
-      }
-    }
-
-    this.compositeCacheMissCount++;
-    return null;
-  }
-
-  /**
-   * 设置合成帧
-   * @param time 时间点（秒）
-   * @param configHash 轨道配置 hash
-   * @param texture GPU 纹理
-   */
-  setCompositeFrame(time: number, configHash: string, texture: ITexture): void {
-    if (this.disposed || !this.config.enableCompositeCache) return;
-
-    const cacheKey = `${configHash}:${time.toFixed(3)}`;
-
-    // 估算纹理大小 (RGBA: width * height * 4)
-    const textureSize = texture.width * texture.height * 4;
-
-    // 检查是否已存在
-    const existing = this.compositeCache.get(cacheKey);
-    if (existing) {
-      this.totalCompositeMemoryBytes -= existing.sizeBytes;
-    }
-
-    // 帧数限制
-    while (this.compositeCache.size >= this.config.maxCompositeFrames) {
-      this.evictOldestCompositeFrame();
-    }
-
-    // 内存限制
-    while (this.totalCompositeMemoryBytes + textureSize > this.config.maxCompositeMemory) {
-      this.evictOldestCompositeFrame();
-    }
-
-    // 添加新帧
-    this.compositeCache.set(cacheKey, {
-      texture,
-      time,
-      configHash,
-      lastAccess: Date.now(),
-      sizeBytes: textureSize,
-    });
-    this.totalCompositeMemoryBytes += textureSize;
-  }
-
-  /**
-   * 当轨道配置变化时使合成缓存失效
-   * @param oldConfigHash 旧的配置 hash（可选，不传则清除所有）
-   */
-  invalidateCompositeCache(oldConfigHash?: string): void {
-    if (!this.config.enableCompositeCache) return;
-
-    if (oldConfigHash) {
-      // 清除特定配置的缓存
-      const keysToRemove: string[] = [];
-      for (const [key, entry] of this.compositeCache) {
-        if (entry.configHash === oldConfigHash) {
-          keysToRemove.push(key);
-          this.totalCompositeMemoryBytes -= entry.sizeBytes;
-        }
-      }
-      for (const key of keysToRemove) {
-        this.compositeCache.delete(key);
-      }
-    } else {
-      // 清除所有合成缓存
-      this.compositeCache.clear();
-      this.totalCompositeMemoryBytes = 0;
-    }
-  }
-
-  // ===========================================================================
   // Statistics API
   // ===========================================================================
 
@@ -461,7 +340,6 @@ export class TimelineFrameCache {
     }
 
     const rawTotalRequests = this.rawCacheHitCount + this.rawCacheMissCount;
-    const compositeTotalRequests = this.compositeCacheHitCount + this.compositeCacheMissCount;
 
     return {
       rawFrames: {
@@ -473,13 +351,13 @@ export class TimelineFrameCache {
         hitRate: rawTotalRequests > 0 ? this.rawCacheHitCount / rawTotalRequests : 0,
       },
       compositeFrames: {
-        frameCount: this.compositeCache.size,
-        totalSizeBytes: this.totalCompositeMemoryBytes,
-        hitCount: this.compositeCacheHitCount,
-        missCount: this.compositeCacheMissCount,
-        hitRate: compositeTotalRequests > 0 ? this.compositeCacheHitCount / compositeTotalRequests : 0,
+        frameCount: 0,
+        totalSizeBytes: 0,
+        hitCount: 0,
+        missCount: 0,
+        hitRate: 0,
       },
-      totalMemoryBytes: this.totalRawMemoryBytes + this.totalCompositeMemoryBytes,
+      totalMemoryBytes: this.totalRawMemoryBytes,
     };
   }
 
@@ -489,8 +367,6 @@ export class TimelineFrameCache {
   resetStats(): void {
     this.rawCacheHitCount = 0;
     this.rawCacheMissCount = 0;
-    this.compositeCacheHitCount = 0;
-    this.compositeCacheMissCount = 0;
   }
 
   // ===========================================================================
@@ -509,10 +385,6 @@ export class TimelineFrameCache {
     }
     this.rawFrameCache.clear();
     this.totalRawMemoryBytes = 0;
-
-    // 清除合成帧缓存
-    this.compositeCache.clear();
-    this.totalCompositeMemoryBytes = 0;
 
     // 重置统计
     this.resetStats();
@@ -581,29 +453,6 @@ export class TimelineFrameCache {
         oldestTrackCache.totalSizeBytes -= entry.sizeBytes;
         this.totalRawMemoryBytes -= entry.sizeBytes;
         oldestTrackCache.frames.delete(oldestKey);
-      }
-    }
-  }
-
-  /**
-   * 驱逐最久未访问的合成帧
-   */
-  private evictOldestCompositeFrame(): void {
-    let oldestKey: string | null = null;
-    let oldestTime = Infinity;
-
-    for (const [key, entry] of this.compositeCache) {
-      if (entry.lastAccess < oldestTime) {
-        oldestTime = entry.lastAccess;
-        oldestKey = key;
-      }
-    }
-
-    if (oldestKey !== null) {
-      const entry = this.compositeCache.get(oldestKey);
-      if (entry) {
-        this.totalCompositeMemoryBytes -= entry.sizeBytes;
-        this.compositeCache.delete(oldestKey);
       }
     }
   }

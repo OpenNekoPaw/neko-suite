@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, memo, useRef } from 'react';
 import type { TimelineElement, MediaElement, TextElement, AudioElement, TrackType, ShapeElement, AllTimelineElement } from '../../types';
 import type { SubtitleElement } from '@neko/shared';
-import { generateWaveformForViewport, type WaveformViewport } from '../../utils/waveform';
+import { generateWaveform } from '../../utils/waveform';
 import { getCachedFileUri, subscribeToUriCacheUpdates } from '../../hooks/useVSCodeMessaging';
 import { ShapeElementContent } from '../ShapeElementContent';
 import { getThumbnailService, type ThumbnailData } from '../../services';
@@ -431,14 +431,10 @@ const AudioElementContent = memo(function AudioElementContent({
 
     const loadWaveform = async () => {
       try {
-        // Use viewport-aware waveform generation
-        const viewport: WaveformViewport = {
-          startTime: viewportInfo.startTime,
-          endTime: viewportInfo.endTime,
-          pixelsPerSecond: viewportInfo.pixelsPerSecond,
-        };
-
-        const waveformData = await generateWaveformForViewport(element.src, viewport);
+        // Use simple waveform generation
+        const waveformData = await generateWaveform(element.src, {
+          samples: barCount,
+        });
 
         if (!cancelled) {
           // Resample to bar count for rendering

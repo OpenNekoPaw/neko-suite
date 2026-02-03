@@ -27,7 +27,6 @@ import type {
 	MediaInfo,
 } from '@neko/shared';
 import { COMPATIBLE_MODE_CAPABILITIES } from '@neko/shared';
-import { getFFmpegService } from '../services/FFmpegService';
 
 // =============================================================================
 // Types
@@ -371,13 +370,42 @@ export class NativeMediaEngine implements IMediaEngine {
 	// =========================================================================
 
 	async probeMedia(source: string): Promise<MediaInfo> {
-		if (!this.isReady) {
+		if (!this.isReady || !this._nativeModule) {
 			throw new Error('Engine not ready');
 		}
 
-		// Use FFmpegService (Rust N-API) to probe media
-		const ffmpegService = getFFmpegService();
-		return ffmpegService.probeMediaInfo(source);
+		// Use native module to probe media
+		try {
+			const { probeMedia } = this._nativeModule as { probeMedia: (path: string) => Promise<{
+				duration: number;
+				width: number;
+				height: number;
+				fps: number;
+				videoCodec?: string;
+				audioCodec?: string;
+				format: string;
+				hasAudio: boolean;
+				hasSubtitles: boolean;
+				audioSampleRate?: number;
+				audioChannels?: number;
+			}> };
+			const info = await probeMedia(source);
+			return {
+				duration: info.duration,
+				width: info.width,
+				height: info.height,
+				fps: info.fps,
+				codec: info.videoCodec ?? 'unknown',
+				format: info.format,
+				hasAudio: info.hasAudio,
+				audioCodec: info.audioCodec,
+				audioSampleRate: info.audioSampleRate,
+				audioChannels: info.audioChannels,
+				hasSubtitles: info.hasSubtitles,
+			};
+		} catch (error) {
+			throw new Error(`Failed to probe media: ${error}`);
+		}
 	}
 
 	canProcess(mediaInfo: MediaInfo): boolean {
@@ -477,46 +505,6 @@ export class NativeMediaEngine implements IMediaEngine {
 			};
 		}
 	}
-
-	private parseFFprobeOutput(info: {
-		format?: { duration?: string; format_name?: string };
-		streams?: Array<{
-			codec_type?: string;
-			codec_name?: string;
-			width?: number;
-			height?: number;
-			r_frame_rate?: string;
-			sample_rate?: string;
-			channels?: number;
-		}>;
-	}): MediaInfo {
-		const videoStream = info.streams?.find((s) => s.codec_type === 'video');
-		const audioStream = info.streams?.find((s) => s.codec_type === 'audio');
-		const subtitleStream = info.streams?.find((s) => s.codec_type === 'subtitle');
-
-		// Parse frame rate
-		let fps = 30;
-		if (videoStream?.r_frame_rate) {
-			const [num, den] = videoStream.r_frame_rate.split('/').map(Number);
-			if (num && den) {
-				fps = num / den;
-			}
-		}
-
-		return {
-			duration: parseFloat(info.format?.duration ?? '0'),
-			width: videoStream?.width ?? 0,
-			height: videoStream?.height ?? 0,
-			fps,
-			codec: videoStream?.codec_name ?? 'unknown',
-			format: info.format?.format_name ?? 'unknown',
-			hasAudio: !!audioStream,
-			audioCodec: audioStream?.codec_name,
-			audioSampleRate: audioStream?.sample_rate ? parseInt(audioStream.sample_rate, 10) : undefined,
-			audioChannels: audioStream?.channels,
-			hasSubtitles: !!subtitleStream,
-		};
-	}
 }
 
 // =============================================================================
@@ -544,12 +532,32 @@ class NativeVideoDecoder implements IDecoder {
 	get position() { return this._position; }
 
 	async open(): Promise<MediaInfo> {
+		if (!this._nativeProcessor) {
+			throw new Error('Native processor not available');
+		}
+
 		this._isOpen = true;
 
-		// Use FFmpegService (Rust N-API) to probe media info
-		const ffmpegService = getFFmpegService();
-		this._mediaInfo = await ffmpegService.probeMediaInfo(this._config.source);
-		return this._mediaInfo;
+		// Use native processor to get first frame info
+		try {
+			const frame = this._nativeProcessor.decodeFrame(
+				{ path: this._config.source, hwAccel: 'auto' },
+				0
+			);
+			this._mediaInfo = {
+				duration: 0, // Will be updated if needed
+				width: frame.width,
+				height: frame.height,
+				fps: 30, // Default, should be probed
+				codec: 'unknown',
+				format: frame.format,
+				hasAudio: false,
+				hasSubtitles: false,
+			};
+			return this._mediaInfo;
+		} catch (error) {
+			throw new Error(`Failed to open video: ${error}`);
+		}
 	}
 
 	async seek(time: number): Promise<void> {
@@ -563,66 +571,27 @@ class NativeVideoDecoder implements IDecoder {
 	async decodeAt(time: number): Promise<import('@neko/shared').DecodedVideoFrame | null> {
 		this._position = time;
 
-		// Use native processor if available
-		if (this._nativeProcessor) {
-			try {
-				// Use hardware acceleration with GPU color conversion
-				const frame = this._nativeProcessor.decodeFrame(
-					{ path: this._config.source, hwAccel: 'auto' },
-					time
-				);
-
-				return {
-					type: 'video' as const,
-					width: frame.width,
-					height: frame.height,
-					data: frame.data,
-					timestamp: frame.timestamp,
-					format: frame.format as 'rgba' | 'yuv420p',
-					isKeyframe: frame.isKeyframe,
-				};
-			} catch (error) {
-				console.warn('[NativeVideoDecoder] Native decode failed, falling back to FFmpegService:', error);
-			}
+		if (!this._nativeProcessor) {
+			return null;
 		}
 
-		// Fallback to FFmpegService (Rust N-API)
-		return this.decodeWithFFmpegService(time);
-	}
-
-	private async decodeWithFFmpegService(time: number): Promise<import('@neko/shared').DecodedVideoFrame | null> {
-		const width = this._mediaInfo?.width ?? 1920;
-		const height = this._mediaInfo?.height ?? 1080;
-
 		try {
-			// Use FFmpegService to extract frame (returns JPEG)
-			const ffmpegService = getFFmpegService();
-			const jpegBuffer = await ffmpegService.extractVideoFrame(
-				this._config.source,
-				time,
-				3, // quality
-				1.0 // scale
+			const frame = this._nativeProcessor.decodeFrame(
+				{ path: this._config.source, hwAccel: 'auto' },
+				time
 			);
-
-			// Decode JPEG to RGBA using sharp
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const sharp = require('sharp');
-			const { data, info } = await sharp(jpegBuffer)
-				.ensureAlpha()
-				.raw()
-				.toBuffer({ resolveWithObject: true });
 
 			return {
 				type: 'video' as const,
-				width: info.width,
-				height: info.height,
-				data: data,
-				timestamp: time,
-				format: 'rgba',
-				isKeyframe: true,
+				width: frame.width,
+				height: frame.height,
+				data: frame.data,
+				timestamp: frame.timestamp,
+				format: frame.format as 'rgba' | 'yuv420p',
+				isKeyframe: frame.isKeyframe,
 			};
 		} catch (error) {
-			console.warn('[NativeVideoDecoder] FFmpegService decode failed:', error);
+			console.warn('[NativeVideoDecoder] Decode failed:', error);
 			return null;
 		}
 	}
@@ -632,43 +601,33 @@ class NativeVideoDecoder implements IDecoder {
 		duration: number,
 		fps: number
 	): AsyncGenerator<import('@neko/shared').DecodedVideoFrame, void, undefined> {
-		const endTime = startTime + duration;
-
-		// Use native processor if available (more efficient for range decoding)
-		if (this._nativeProcessor) {
-			try {
-				// Use hardware acceleration with GPU color conversion
-				const frames = this._nativeProcessor.decodeFrameRange(
-					{ path: this._config.source, hwAccel: 'auto' },
-					startTime,
-					endTime,
-					fps
-				);
-
-				for (const frame of frames) {
-					yield {
-						type: 'video' as const,
-						width: frame.width,
-						height: frame.height,
-						data: frame.data,
-						timestamp: frame.timestamp,
-						format: frame.format as 'rgba' | 'yuv420p',
-						isKeyframe: frame.isKeyframe,
-					};
-				}
-				return;
-			} catch (error) {
-				console.warn('[NativeVideoDecoder] Native range decode failed, falling back to FFmpegService:', error);
-			}
+		if (!this._nativeProcessor) {
+			return;
 		}
 
-		// Fallback to frame-by-frame decoding using FFmpegService
-		const frameInterval = 1 / fps;
-		for (let time = startTime; time < endTime; time += frameInterval) {
-			const frame = await this.decodeWithFFmpegService(time);
-			if (frame) {
-				yield frame;
+		const endTime = startTime + duration;
+
+		try {
+			const frames = this._nativeProcessor.decodeFrameRange(
+				{ path: this._config.source, hwAccel: 'auto' },
+				startTime,
+				endTime,
+				fps
+			);
+
+			for (const frame of frames) {
+				yield {
+					type: 'video' as const,
+					width: frame.width,
+					height: frame.height,
+					data: frame.data,
+					timestamp: frame.timestamp,
+					format: frame.format as 'rgba' | 'yuv420p',
+					isKeyframe: frame.isKeyframe,
+				};
 			}
+		} catch (error) {
+			console.warn('[NativeVideoDecoder] Range decode failed:', error);
 		}
 	}
 

@@ -7,38 +7,17 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { detectLocale } from '@/i18n';
 import '@/index.css';
 
-// Export GPU test utilities to window for console debugging
-import {
-  testWebGPUSupport,
-  isWebGPUSupported,
-  isWebGL2Supported,
-  isVSCodeWebview,
-} from '@/rendering/gpu/CompositorFactory';
-
 // Export file range read utilities for testing on-demand loading
 import { readFileRange } from '@/hooks/useVSCodeMessaging';
 
 // Expose to window for console testing
 declare global {
   interface Window {
-    __GPU_TEST__: {
-      testWebGPU: typeof testWebGPUSupport;
-      isWebGPUSupported: typeof isWebGPUSupported;
-      isWebGL2Supported: typeof isWebGL2Supported;
-      isVSCodeWebview: typeof isVSCodeWebview;
-    };
     // File range read test utilities
     readFileRange: typeof readFileRange;
     testFileRangeRead: (path: string, start: number, end: number) => Promise<void>;
   }
 }
-
-window.__GPU_TEST__ = {
-  testWebGPU: testWebGPUSupport,
-  isWebGPUSupported,
-  isWebGL2Supported,
-  isVSCodeWebview,
-};
 
 // Expose file range read utilities
 window.readFileRange = readFileRange;

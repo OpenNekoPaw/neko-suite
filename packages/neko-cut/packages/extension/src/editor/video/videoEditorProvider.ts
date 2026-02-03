@@ -17,7 +17,6 @@ import { IVideoProjectOutlineProvider } from '../../views/outlineProvider';
 import { getStreamingExportService } from '../../services/StreamingExportService';
 import { IMediaEngineManager } from '../../bootstrap/serviceBootstrap';
 import type { TimelineElement, ProjectDefaults } from '@neko/shared';
-import { extractMediaPaths } from '@neko/shared';
 
 /**
  * 元素选择事件数据
@@ -613,55 +612,6 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 
 		// Initial update
 		updateWebview();
-
-		// Resolve auto mode for editor based on timeline media
-		// This runs asynchronously to avoid blocking editor initialization
-		this.resolveAutoModeForProject(model, projectDir, webviewPanel.webview).catch((error) => {
-			console.warn('[VideoEditorProvider] Failed to resolve auto mode:', error);
-		});
-	}
-
-	/**
-	 * Resolve auto mode for a project based on its timeline media
-	 * Sends the resolved mode to the Webview for UI display
-	 */
-	private async resolveAutoModeForProject(
-		model: VideoEditorModel,
-		projectDir: string,
-		webview: vscode.Webview
-	): Promise<void> {
-		const manager = getService(IMediaEngineManager);
-		if (!manager) {
-			console.warn('[VideoEditorProvider] MediaEngineManager not available');
-			return;
-		}
-
-		// Extract media paths from project
-		const projectData = model.getProjectData();
-		const mediaPaths = extractMediaPaths(projectData);
-
-		// Analyze timeline media first (only once)
-		let analysis: Awaited<ReturnType<typeof manager.analyzeTimelineMedia>> | undefined;
-		let resolvedMode: 'basic' | 'compatible';
-
-		if (mediaPaths.length === 0) {
-			resolvedMode = 'basic';
-		} else {
-			analysis = await manager.analyzeTimelineMedia(mediaPaths, projectDir);
-			resolvedMode = analysis.allSupportBasic ? 'basic' : 'compatible';
-		}
-
-		const requiresDownload = resolvedMode === 'compatible' && !manager.isCompatibleModeInstalled;
-
-		// Send the resolved mode to Webview
-		webview.postMessage({
-			type: 'mediaEngine:response:resolveAutoMode',
-			payload: {
-				resolvedMode,
-				analysis,
-				requiresDownload,
-			},
-		});
 	}
 
 	private getHtmlForWebview(webview: vscode.Webview): string {

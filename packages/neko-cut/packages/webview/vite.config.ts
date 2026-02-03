@@ -9,15 +9,9 @@ export default defineConfig(({ command }) => {
   return {
   plugins: [
     react(),
-    // Copy libav.js WASM files to dist/assets/libav
-    // Use absolute path because pnpm hoists dependencies to root node_modules
+    // Copy static assets
     viteStaticCopy({
-      targets: [
-        {
-          src: path.resolve(__dirname, '../../../../node_modules/@wcpeter/libav.js-h264-aac-wav/dist/*'),
-          dest: 'assets/libav',
-        },
-      ],
+      targets: [],
     }),
   ],
   // Use relative paths for VSCode webview compatibility
@@ -27,7 +21,6 @@ export default defineConfig(({ command }) => {
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@neko/shared': path.resolve(__dirname, '../../../neko-types/src'),
-      '@neko/effects-runtime': path.resolve(__dirname, '../../../neko-engine/packages/effects-runtime/src'),
       '@neko/effects-core': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src'),
       '@neko/effects-core/shaders/common': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/common.wgsl.ts'),
       '@neko/effects-core/shaders/colorCorrection': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/colorCorrection.wgsl.ts'),
@@ -35,11 +28,6 @@ export default defineConfig(({ command }) => {
       '@neko/effects-core/shaders/transitions': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/transitions.wgsl.ts'),
       '@neko/effects-core/shaders/effects': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/effects.wgsl.ts'),
       '@neko/effects-core/shaders': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders'),
-      // Alias for static import of libav.js asm.mjs factory (bypasses package exports)
-      '@wcpeter/libav.js-h264-aac-wav/dist/libav-6.4.7.1-h264-aac-wav.asm.mjs': path.resolve(
-        __dirname,
-        '../../../../node_modules/@wcpeter/libav.js-h264-aac-wav/dist/libav-6.4.7.1-h264-aac-wav.asm.mjs'
-      ),
     },
   },
   server: {
@@ -83,7 +71,6 @@ export default defineConfig(({ command }) => {
             '@neko/effects-core/shaders/effects': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/effects.wgsl.ts'),
             '@neko/effects-core/shaders': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/index.ts'),
             '@neko/effects-core': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/index.ts'),
-            '@neko/effects-runtime': path.resolve(__dirname, '../../../neko-engine/packages/effects-runtime/src/index.ts'),
             '@neko/shared': path.resolve(__dirname, '../../../neko-types/src/index.ts'),
           };
           if (aliasMap[source]) {
@@ -117,17 +104,14 @@ export default defineConfig(({ command }) => {
         assetFileNames: 'assets/[name].[ext]',
       },
       // Externalize dynamically imported modules that are not available in webview
-      // Only apply in build mode, dev mode needs to resolve these for HMR
-      external: isBuild ? ['webm-muxer', '@neko/native-napi'] : [],
+      external: isBuild ? [] : [],
     },
     // Disable module preload polyfill which causes issues in VSCode webview
     modulePreload: false,
   },
-  // Optimize dependencies to avoid worker issues
+  // Optimize dependencies
   optimizeDeps: {
     include: ['@neko/shared'],
-    // Exclude optional dependencies that may not be installed
-    exclude: ['webm-muxer', '@neko/native-napi'],
   },
 };
 });

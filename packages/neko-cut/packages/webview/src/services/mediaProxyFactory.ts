@@ -30,6 +30,11 @@ export function getMediaProxy(): IMediaRequestProxy {
 }
 
 /**
+ * Alias for getMediaProxy (backward compatibility)
+ */
+export const getRemoteMediaProxy = getMediaProxy;
+
+/**
  * Reset the singleton instance
  *
  * Used for testing or when reinitializing the media proxy.

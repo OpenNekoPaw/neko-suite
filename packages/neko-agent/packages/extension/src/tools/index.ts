@@ -1,12 +1,11 @@
 /**
  * Extension Tools Module
+ *
+ * Provides tools for inter-extension communication with NekoCut and NekoCanvas.
  */
 
 export {
-  TimelineBridge,
-  registerTimelineTools,
-  TIMELINE_TOOL_NAMES,
-  TIMELINE_TOOL_CONFIGS,
-  type TimelineToolName,
-  type TimelineToolConfig,
-} from './timeline-bridge';
+  createNekoCutTools,
+  createNekoCanvasTools,
+  type Tool,
+} from './extensionTools';

@@ -1,23 +1,12 @@
 /**
  * Audio waveform generation utilities
  *
- * Supports two modes:
- * - Basic mode: Uses PyramidWaveformGenerator (MP4Box.js + libav.js)
- *   - On-demand loading, supports 4GB+ files
- *   - Multi-resolution: L1 (overview), L2 (navigation), L3 (detail)
- *
- * - Compat mode: Uses Web Audio API with ffmpeg fallback
- *   - Loads first 10MB for large files
- *   - Falls back to ffmpeg for unsupported formats
+ * Uses Web Audio API with ffmpeg fallback for compat mode.
+ * - Loads first 10MB for large files
+ * - Falls back to ffmpeg for unsupported formats
  */
 
 import { getCachedFileUri, decodeAudioViaExtension, readFileRangeCached } from '../hooks/useVSCodeMessaging';
-import {
-  createPyramidWaveformGenerator,
-  peaksToNormalized,
-  type PyramidWaveformGenerator,
-  type WaveformViewport,
-} from './pyramidWaveform';
 
 export interface WaveformData {
   peaks: number[]; // Normalized peak values (0-1)
@@ -25,17 +14,11 @@ export interface WaveformData {
   sampleRate: number;
 }
 
-// Re-export WaveformViewport for external use
-export type { WaveformViewport } from './pyramidWaveform';
-
 // Cache for generated waveforms
 const waveformCache = new Map<string, WaveformData>();
 
 // Pending requests to avoid duplicate fetches
 const pendingRequests = new Map<string, Promise<WaveformData>>();
-
-// Pyramid waveform generators cache (for basic mode)
-const pyramidGenerators = new Map<string, PyramidWaveformGenerator>();
 
 // 波形生成的最大加载大小 (10MB) - 对于更大的文件只分析前 10MB
 const MAX_WAVEFORM_LOAD_SIZE = 10 * 1024 * 1024;
@@ -50,20 +33,18 @@ const SKIP_WAVEFORM_SIZE = 500 * 1024 * 1024;
  * @param options Generation options
  * @param options.samples Number of peaks to generate
  * @param options.channel Audio channel to analyze (0 = left, 1 = right)
- * @param options.mode 'basic' for MP4Box+libav, 'compat' for Web Audio+ffmpeg
  */
 export async function generateWaveform(
   src: string,
   options: {
     samples?: number; // Number of peaks to generate
     channel?: number; // Audio channel to analyze (0 = left, 1 = right)
-    mode?: 'basic' | 'compat'; // Waveform generation mode
   } = {}
 ): Promise<WaveformData> {
-  const { samples = 200, channel = 0, mode = 'basic' } = options;
+  const { samples = 200, channel = 0 } = options;
 
   // Check cache
-  const cacheKey = `${src}-${samples}-${channel}-${mode}`;
+  const cacheKey = `${src}-${samples}-${channel}`;
   const cached = waveformCache.get(cacheKey);
   if (cached) {
     return cached;
@@ -75,20 +56,6 @@ export async function generateWaveform(
     return pending;
   }
 
-  // Use basic mode (MP4Box + libav) for on-demand loading
-  if (mode === 'basic') {
-    const requestPromise = generateWaveformBasicMode(src, cacheKey, samples);
-    pendingRequests.set(cacheKey, requestPromise);
-
-    try {
-      const result = await requestPromise;
-      return result;
-    } finally {
-      pendingRequests.delete(cacheKey);
-    }
-  }
-
-  // Compat mode: use Web Audio API with ffmpeg fallback
   // Get webview URI for the source
   const webviewUri = getCachedFileUri(src);
   if (!webviewUri) {
@@ -112,145 +79,7 @@ export async function generateWaveform(
 }
 
 /**
- * Basic mode waveform generation using PyramidWaveformGenerator
- * Uses MP4Box.js for demuxing + libav.js for decoding
- * Supports on-demand loading for 4GB+ files
- */
-async function generateWaveformBasicMode(
-  originalPath: string,
-  cacheKey: string,
-  samples: number
-): Promise<WaveformData> {
-  try {
-    // Get or create pyramid generator for this file
-    let generator = pyramidGenerators.get(originalPath);
-
-    if (!generator) {
-      generator = createPyramidWaveformGenerator();
-
-      // Get webview URI for the source
-      const webviewUri = getCachedFileUri(originalPath);
-      if (!webviewUri) {
-        console.warn('[Waveform Basic] No webview URI available for:', originalPath);
-        return {
-          peaks: generatePlaceholderPeaks(samples),
-          duration: 0,
-          sampleRate: 44100,
-        };
-      }
-
-      // Initialize generator
-      console.log('[Waveform Basic] Initializing PyramidWaveformGenerator for:', originalPath);
-      await generator.initialize(webviewUri, originalPath);
-      pyramidGenerators.set(originalPath, generator);
-    }
-
-    // Generate L1 overview first (fast)
-    console.log('[Waveform Basic] Generating L1 overview...');
-    const l1Data = await generator.generateL1((progress) => {
-      console.log(`[Waveform Basic] L1 progress: ${progress.percent.toFixed(1)}%`);
-    });
-
-    // Convert peaks to normalized array
-    const normalizedPeaks = peaksToNormalized(l1Data.peaks);
-
-    // Resample to requested sample count
-    const resampledPeaks = resamplePeaksArray(normalizedPeaks, samples);
-
-    const pyramidData = generator.getPyramidData();
-
-    const waveformData: WaveformData = {
-      peaks: resampledPeaks,
-      duration: pyramidData.duration,
-      sampleRate: pyramidData.sampleRate,
-    };
-
-    // Cache the result
-    waveformCache.set(cacheKey, waveformData);
-
-    console.log('[Waveform Basic] Generation complete:', {
-      duration: pyramidData.duration,
-      sampleRate: pyramidData.sampleRate,
-      peakCount: resampledPeaks.length,
-    });
-
-    return waveformData;
-  } catch (error) {
-    console.error('[Waveform Basic] Failed to generate waveform:', error);
-    // Return placeholder data
-    return {
-      peaks: generatePlaceholderPeaks(samples),
-      duration: 0,
-      sampleRate: 44100,
-    };
-  }
-}
-
-/**
- * Generate waveform for a specific viewport (basic mode only)
- * Uses appropriate resolution level based on zoom
- */
-export async function generateWaveformForViewport(
-  src: string,
-  viewport: WaveformViewport
-): Promise<WaveformData> {
-  // Get or create pyramid generator
-  let generator = pyramidGenerators.get(src);
-
-  if (!generator) {
-    // Initialize first
-    await generateWaveform(src, { mode: 'basic' });
-    generator = pyramidGenerators.get(src);
-  }
-
-  if (!generator) {
-    return {
-      peaks: generatePlaceholderPeaks(100),
-      duration: 0,
-      sampleRate: 44100,
-    };
-  }
-
-  // Get waveform for viewport
-  const levelData = await generator.getWaveformForViewport(viewport);
-  const normalizedPeaks = peaksToNormalized(levelData.peaks);
-
-  const pyramidData = generator.getPyramidData();
-
-  return {
-    peaks: normalizedPeaks,
-    duration: pyramidData.duration,
-    sampleRate: pyramidData.sampleRate,
-  };
-}
-
-/**
- * Resample peaks array to target size
- */
-function resamplePeaksArray(peaks: number[], targetSize: number): number[] {
-  if (peaks.length === 0) return generatePlaceholderPeaks(targetSize);
-  if (peaks.length === targetSize) return peaks;
-
-  const result: number[] = [];
-  const ratio = peaks.length / targetSize;
-
-  for (let i = 0; i < targetSize; i++) {
-    const srcStart = Math.floor(i * ratio);
-    const srcEnd = Math.min(Math.ceil((i + 1) * ratio), peaks.length);
-
-    let max = 0;
-    for (let j = srcStart; j < srcEnd; j++) {
-      const val = peaks[j];
-      if (val !== undefined && val > max) max = val;
-    }
-    result.push(max);
-  }
-
-  return result;
-}
-
-/**
- * Internal waveform generation logic (compat mode)
+ * Internal waveform generation logic
  * Optimized to avoid loading large files entirely:
  * - Files > 500MB: Use placeholder waveform
  * - Files > 10MB: Use Range request to load only first 10MB
@@ -499,12 +328,6 @@ function resamplePeaks(peaks: number[], targetSize: number): number[] {
  */
 export function clearWaveformCache(): void {
   waveformCache.clear();
-
-  // Dispose all pyramid generators
-  for (const generator of pyramidGenerators.values()) {
-    generator.dispose().catch(() => {});
-  }
-  pyramidGenerators.clear();
 }
 
 /**
@@ -517,13 +340,6 @@ export function clearWaveformCacheForFile(src: string): void {
       waveformCache.delete(key);
     }
   }
-
-  // Dispose pyramid generator
-  const generator = pyramidGenerators.get(src);
-  if (generator) {
-    generator.dispose().catch(() => {});
-    pyramidGenerators.delete(src);
-  }
 }
 
 /**
@@ -533,5 +349,39 @@ export function getWaveformCacheStats(): { size: number; keys: string[] } {
   return {
     size: waveformCache.size,
     keys: Array.from(waveformCache.keys()),
+  };
+}
+
+/**
+ * Viewport for waveform generation
+ */
+export interface WaveformViewport {
+  startTime: number;
+  endTime: number;
+  pixelsPerSecond: number;
+}
+
+/**
+ * Generate waveform for a specific viewport
+ * Optimized for timeline display with viewport-aware loading
+ */
+export async function generateWaveformForViewport(
+  src: string,
+  viewport: WaveformViewport
+): Promise<WaveformData> {
+  const { startTime, endTime, pixelsPerSecond } = viewport;
+  const duration = endTime - startTime;
+
+  // Calculate number of samples based on viewport width
+  const viewportWidth = duration * pixelsPerSecond;
+  const samples = Math.max(50, Math.min(500, Math.floor(viewportWidth / 4)));
+
+  // Use generateWaveformRange for the specific time range
+  const peaks = await generateWaveformRange(src, startTime, endTime, samples);
+
+  return {
+    peaks,
+    duration,
+    sampleRate: 44100, // Default sample rate
   };
 }

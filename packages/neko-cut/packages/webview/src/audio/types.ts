@@ -128,5 +128,6 @@ export interface IAudioPlayer {
 
 /**
  * Audio player mode
+ * Only compatibility mode is supported (Extension FFmpeg via NAPI)
  */
-export type AudioPlayerMode = 'basic' | 'compatibility';
+export type AudioPlayerMode = 'compatibility';

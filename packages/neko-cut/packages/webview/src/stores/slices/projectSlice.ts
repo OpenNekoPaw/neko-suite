@@ -38,15 +38,6 @@ export const createProjectSlice: StateCreator<
       project,
       projectRoot: newProjectRoot,
     });
-
-    // Set active project ID for multi-timeline mode support
-    // Use projectRoot as unique identifier for the project
-    if (newProjectRoot) {
-      const setActiveProject = get().setActiveProject;
-      if (setActiveProject) {
-        setActiveProject(newProjectRoot);
-      }
-    }
   },
 
   updateProject: (updates) => {

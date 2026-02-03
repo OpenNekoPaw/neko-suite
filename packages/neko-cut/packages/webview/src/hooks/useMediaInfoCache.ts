@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useEditorStore } from '../stores/editor-store';
-import { getRemoteMediaProxy } from '../services/mediaProxyFactory';
+import { getMediaProxy } from '../services/mediaProxyFactory';
 
 // =============================================================================
 // Types
@@ -78,7 +78,7 @@ export function useMediaInfoCache(): CurrentMediaInfo {
     }
 
     try {
-      const proxy = getRemoteMediaProxy();
+      const proxy = getMediaProxy();
       const info = await proxy.getMediaBitrate(videoPath);
 
       // Cache the result
