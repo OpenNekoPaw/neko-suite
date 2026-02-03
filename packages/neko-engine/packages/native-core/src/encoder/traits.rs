@@ -257,6 +257,18 @@ impl EncoderConfig {
         self.hw_encoder = hw_encoder;
         self
     }
+
+    /// Set GOP size (keyframe interval)
+    pub fn with_gop_size(mut self, gop_size: u32) -> Self {
+        self.gop_size = Some(gop_size);
+        self
+    }
+
+    /// Set maximum B-frames
+    pub fn with_max_b_frames(mut self, max_b_frames: u32) -> Self {
+        self.max_b_frames = Some(max_b_frames);
+        self
+    }
 }
 
 /// Encoded video packet

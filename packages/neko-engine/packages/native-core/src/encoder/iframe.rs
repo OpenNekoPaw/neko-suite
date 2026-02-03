@@ -133,7 +133,7 @@ impl IFrameEncoder {
 
             // Create and open encoder
             let mut encoder = HwAccelEncoder::new();
-            encoder.open(encoder_config)?;
+            encoder.open(&encoder_config)?;
 
             self.encoder = Some(encoder);
             self.current_config = Some(config.clone());

@@ -10,7 +10,7 @@ import { VideoEditorModel } from './videoEditorModel';
 import { MessageHandler } from './messageHandler';
 import { MediaProcessorService } from '../../services/MediaProcessorService';
 import { FrameServerService } from '../../services/FrameServerService';
-import { handleExportMessage, isExportMessage, CompatibleExportHandler, isCompatibleModeMessage } from '../../handlers';
+import { isExportMessage, CompatibleExportHandler, isCompatibleModeMessage } from '../../handlers';
 import { getService } from '../../base';
 import { IStatusBar } from '../../views/statusBar';
 import { IVideoProjectOutlineProvider } from '../../views/outlineProvider';
@@ -321,32 +321,13 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 				}
 
 				// 3. Try to handle export requests (export:*)
+				// NOTE: Export is now handled by neko-engine
 				if (isExportMessage(message)) {
-					const postMessage = (response: unknown) => {
-						webviewPanel.webview.postMessage(response);
-					};
-					// Pass project directory for resolving relative media paths
-					const projectDir = path.dirname(document.uri.fsPath);
-
-					// Pin the editor tab when export starts to prevent accidental closure
-					if (message.type === 'export:streaming:init') {
-						this.pinEditorTab(document.uri);
-					}
-
-					const exportHandled = await handleExportMessage(message, postMessage, projectDir);
-
-					// Unpin the editor tab when export completes or fails
-					if (message.type === 'export:streaming:finalize') {
-						// Delay unpin slightly to ensure export is fully completed
-						setTimeout(() => this.unpinEditorTab(document.uri), 1000);
-					}
-
-					if (exportHandled) {
-						return;
-					}
+					// Export messages are forwarded to neko-engine via WebSocket
+					// No action needed here
 				}
 
-				// 3. Handle status updates separately
+				// 4. Handle status updates separately
 				if (message.type === 'statusUpdate') {
 					statusBar?.update({
 						currentTime: message.currentTime ?? 0,
