@@ -130,7 +130,6 @@ import type { TransitionType } from '@neko/shared/types/transition';
     ├── neko-audio
     ├── neko-agent
     ├── neko-live
-    ├── neko-script
     ├── neko-assets
     └── neko-tools
 ```

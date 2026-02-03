@@ -28,7 +28,6 @@
 | **neko-audio** | 音频工作站，波形编辑 |
 | **neko-agent** | AI Agent，自然语言驱动 |
 | **neko-live** | 虚拟直播，动捕 AR |
-| **neko-script** | 脚本协议，自动化剪辑 |
 | **neko-assets** | 资产管理，Git/LFS 同步 |
 | **neko-tools** | 媒体工具，Diff 比较 |
 
@@ -66,7 +65,6 @@ neko-suite (Extension Pack)
     ├── neko-audio       (独立)
     ├── neko-agent       (独立)
     ├── neko-live        (独立)
-    ├── neko-script      (独立)
     ├── neko-assets      (独立)
     └── neko-tools       (独立)
 ```

@@ -31,7 +31,6 @@ while [[ $# -gt 0 ]]; do
       echo "  neko-sketch        Drawing tools"
       echo "  neko-audio         Audio workstation"
       echo "  neko-live          Virtual production"
-      echo "  neko-script        Script editor"
       echo "  neko-assets        Asset management"
       echo "  neko-suite Extension pack (all)"
       exit 0
@@ -73,7 +72,6 @@ install_all() {
     "neko-sketch"
     "neko-audio"
     "neko-live"
-    "neko-script"
     "neko-assets"
   )
 

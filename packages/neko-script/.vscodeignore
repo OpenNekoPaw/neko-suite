@@ -1,9 +1,0 @@
-.vscode/**
-src/**
-packages/**
-node_modules/**
-*.ts
-!dist/**
-.gitignore
-tsconfig.json
-*.md

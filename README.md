@@ -1,39 +1,83 @@
-# Neko Suite：全能内容创作 IDE 架构白皮书
+# Neko Suite
+
+> 全能内容创作 IDE - 深度集成于 VS Code 的视频编辑工作站
+
+[![Status](https://img.shields.io/badge/Status-Alpha-orange)]()
+[![License](https://img.shields.io/badge/License-MIT-blue)]()
+[![VS Code](https://img.shields.io/badge/VS%20Code-1.85+-blue)]()
 
 **Neko Suite** 是一款专为开发者设计的、深度集成于 VS Code 的「全能内容创作工作站」。它通过 **Sidecar 独立进程架构** 突破了编辑器性能限制，实现了从剧本创作到 4K 视频合成、3D 渲染及虚拟直播的完整闭环。
 
----
-
-## 一、核心架构：1 主包 + 11 子插件
-
-为了保证极致的性能和按需加载，套件采用了 **Monorepo（单仓多插件）** 模式开发。
-
-| 模块名称 | 定位与核心职能 | 技术底座 |
-|---------|--------------|---------|
-| **neko-suite** | 门户总管：管理全家桶安装、全局配置与插件间通讯 | VS Code Extension Pack |
-| **neko-engine** | 动力引擎：独立侧边进程，处理 FFmpeg 编解码与重度计算 | Rust / Node.js + FFmpeg |
-| **neko-story** | 文学入口：利用 VS Code 原生编辑器，实现「文驱动制片」 | LSP (语言服务器协议) |
-| **neko-cut** | 剪辑中枢：管理时间线轨道、关键帧动画与素材同步 | Webview + React |
-| **neko-canvas** | 渲染核心：支持 2D/3D 混合、后期特效与 4K 实时预览 | WebGPU + WebCodecs |
-| **neko-sketch** | 绘图增强：注入 Canvas 的 Krita 级改图工具，支持压感手绘 | Canvas 2D/GPU Pipeline |
-| **neko-audio** | 音频工站：独立波形编辑、频谱分析、麦克风录制与降噪 | Web Audio API |
-| **neko-agent** | AI 大脑：接收自然语言意图，分发 Neko-Script 指令 | LLM / Copilot API |
-| **neko-live** | 虚拟制片：摄像头驱动 3D 虚拟形象，支持动捕与 AR 直播 | MediaPipe + VMC |
-| **neko-script** | 通讯协议：AI 指令流与自动化剪辑的底层标准语言 | TypeScript / JSON |
-| **neko-assets** | 资产管理：版本控制 (Git/LFS)、云端同步、CI/CD 自动渲染 | rclone / GitHub Actions |
-| **neko-tools** | 通用工具：图片、视频、音频 diff 工具，媒体信息查看 | Sharp / WebCodecs |
-| **neko-types** | 交互契约：跨包共享的类型定义与通信协议 | TypeScript |
+📋 **[查看开发路线图 →](./ROADMAP.md)**
 
 ---
 
-## 二、三大核心技术突破
+## 特性亮点
 
-### 1. AI 指令驱动（Neko-Script）
+- **AI 驱动创作** - 通过 Agent Skills 将自然语言转化为剪辑操作
+- **专业级时间线** - 多轨道、关键帧动画、精确到帧的编辑
+- **高性能渲染** - WebGPU/WebCodecs 加速，4K 实时预览
+- **Git 原生支持** - 项目文件为文本格式，支持版本控制和协作
+- **模块化架构** - 按需安装，独立升级
 
-用户无需手动剪辑，通过 **neko-agent** 直接将剧本转化为 Neko-Script 指令流。AI 成为「隐形的手」，直接操作渲染引擎，实现"所见即所得"的无感创作。
+---
+
+## 快速开始
+
+### 安装依赖
+
+```bash
+npm install
+```
+
+### 构建 + 打包
+
+```bash
+./build.sh
+```
+
+### 安装到 VS Code
+
+```bash
+./install.sh
+```
+
+### 开发模式
+
+```bash
+npm run dev
+```
+
+---
+
+## 模块架构
+
+Neko Suite 采用 **Monorepo（单仓多插件）** 模式，包含 1 个主包 + 10 个子插件：
+
+| 模块 | 职能 | 状态 |
+|------|------|------|
+| **neko-suite** | Extension Pack 门户 | Stable |
+| **neko-cut** | 视频剪辑器 - 时间线编辑 | Alpha |
+| **neko-engine** | 媒体引擎 - FFmpeg 编解码 | Alpha |
+| **neko-agent** | AI Agent - 智能创作助手 | Alpha |
+| **neko-canvas** | 画布渲染 - 2D/3D 合成 | WIP |
+| **neko-story** | 剧本编辑器 - LSP 支持 | Planned |
+| **neko-sketch** | 绘图工具 - 压感手绘 | Planned |
+| **neko-audio** | 音频工作站 - 波形编辑 | Planned |
+| **neko-live** | 虚拟直播 - 动捕 AR | Planned |
+| **neko-assets** | 资产管理 - Git/LFS 同步 | Planned |
+| **neko-tools** | 媒体工具 - Diff 比较 | WIP |
+
+---
+
+## 核心技术
+
+### 1. AI Agent Skills 驱动
+
+用户无需手动剪辑，通过 **neko-agent** 直接将剧本转化为操作指令。AI 通过 Agent Skills 直接操作渲染引擎，实现"所见即所得"的无感创作。
 
 ```
-用户意图 → neko-agent (LLM) → Neko-Script 指令 → neko-cut/canvas 执行
+用户意图 → neko-agent (LLM + Skills) → neko-cut/canvas 执行
 ```
 
 ### 2. WebGPU 渲染闭环
@@ -58,7 +102,7 @@ VS Code Extension Host ←─ WebSocket ─→ neko-engine (Rust/Node.js)
 
 ---
 
-## 三、开发者工作流（Workflow）
+## 工作流
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -80,44 +124,12 @@ VS Code Extension Host ←─ WebSocket ─→ neko-engine (Rust/Node.js)
 
 ---
 
-## 四、独立性与扩展性
-
-### 跨平台能力
-
-架构设计实现了「核壳分离」。核心引擎（Server/Canvas/Script）不依赖 VS Code API，可快速通过 Tauri 封装为独立桌面软件 **Neko Studio**。
-
-### 版本管理
-
-原生支持 Git。视频剪辑的所有改动均为文本指令（.jvi / .nksc），支持分支创作、回滚与协同。
-
-### 插件化架构
-
-每个子插件可独立安装、独立升级。用户可根据需求选择安装：
-- 仅剪辑：`neko-cut` + `neko-engine`
-- 仅直播：`neko-live` + `neko-canvas`
-- 全功能：`neko-suite`（Extension Pack）
-
----
-
-## 五、技术栈
-
-| 层级 | 技术 |
-|------|------|
-| **Frontend** | React 18 + Zustand + Tailwind CSS + Vite |
-| **Extension** | VS Code Extension API + TypeScript + esbuild |
-| **Media** | WebCodecs + WebGPU/WebGL + FFmpeg |
-| **AI** | Claude API + OpenAI API + MCP Protocol |
-| **Testing** | Vitest |
-| **Build** | npm workspaces (Monorepo) |
-
----
-
-## 六、项目结构
+## 项目结构
 
 ```
 neko-suite/
 ├── packages/
-│   ├── neko-suite/   # Extension Pack 门户
+│   ├── neko-suite/            # Extension Pack 门户
 │   ├── neko-engine/           # Sidecar 计算引擎
 │   ├── neko-story/            # 剧本编辑器 (LSP)
 │   ├── neko-cut/              # 视频剪辑器
@@ -132,53 +144,80 @@ neko-suite/
 │   │   └── packages/
 │   │       └── assistant/     # AI 助手 UI
 │   ├── neko-live/             # 虚拟直播
-│   ├── neko-script/           # 脚本协议
 │   ├── neko-assets/           # 资产管理
 │   ├── neko-tools/            # 媒体工具
 │   └── neko-types/            # 共享类型
 ├── package.json               # 根 package.json (workspaces)
+├── ROADMAP.md                 # 开发路线图
+├── CLAUDE.md                  # 开发规范
 └── tsconfig.json              # 全局 TS 配置
 ```
 
 ---
 
-## 七、快速开始
+## 技术栈
 
-### 安装依赖
-
-```bash
-# 在仓库根目录执行
-npm install
-```
-
-### 构建 + 打包
-
-```bash
-./build.sh
-```
-
-### 安装到 VS Code
-
-```bash
-./install.sh
-```
-
-### 开发模式
-
-```bash
-npm run dev
-```
+| 层级 | 技术 |
+|------|------|
+| **Frontend** | React 18 + Zustand + Tailwind CSS + Vite |
+| **Extension** | VS Code Extension API + TypeScript + esbuild |
+| **Media** | WebCodecs + WebGPU/WebGL + FFmpeg |
+| **AI** | Claude API + OpenAI API + MCP Protocol |
+| **Testing** | Vitest |
+| **Build** | pnpm workspaces + Turbo (Monorepo) |
 
 ---
 
-## 八、支持的媒体格式
+## 支持的媒体格式
 
 | 类型 | 格式 |
 |------|------|
 | **视频** | MP4, MOV, AVI, MKV, WebM, M4V |
 | **音频** | MP3, WAV, OGG, FLAC, AAC, M4A |
 | **图片** | PNG, JPG, JPEG, GIF, WebP, BMP, SVG |
-| **项目** | .jvi (视频项目), .jvc (画布项目), .nks (剧本), .nksc (脚本) |
+| **项目** | .jvi (视频项目), .jvc (画布项目), .nks (剧本) |
+
+---
+
+## 安装方式
+
+### 方式一：完整安装（推荐）
+
+安装 `Neko Suite` 即可获得所有功能：
+
+```
+ext install neko.neko-suite
+```
+
+### 方式二：按需安装
+
+根据需求单独安装子插件：
+
+- **仅剪辑**：`neko-cut` + `neko-engine`
+- **仅直播**：`neko-live` + `neko-canvas`
+- **仅 AI**：`neko-agent`
+
+---
+
+## 文档
+
+- [ROADMAP.md](./ROADMAP.md) - 开发路线图和功能规划
+- [CLAUDE.md](./CLAUDE.md) - 开发规范和架构指南
+- [packages/neko-types/README.md](./packages/neko-types/README.md) - 类型定义文档
+
+---
+
+## 贡献
+
+欢迎参与 Neko Suite 的开发！
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'Add amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 创建 Pull Request
+
+详细开发规范请参考 [CLAUDE.md](./CLAUDE.md)。
 
 ---
 
@@ -186,6 +225,10 @@ npm run dev
 
 MIT
 
-## Contributing
+---
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## 致谢
+
+- [VS Code](https://code.visualstudio.com/) - 强大的编辑器平台
+- [FFmpeg](https://ffmpeg.org/) - 媒体处理基础设施
+- [WebCodecs](https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API) - 浏览器原生编解码

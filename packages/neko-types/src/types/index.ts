@@ -143,3 +143,6 @@ export * from './mediaEngine';
 
 // Canvas types (infinite canvas editor)
 export * from './canvas';
+
+// Extension API types (inter-extension communication)
+export * from './extension-api';

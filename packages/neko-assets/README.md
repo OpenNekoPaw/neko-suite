@@ -97,7 +97,6 @@ on:
   push:
     paths:
       - '**.jvi'
-      - '**.nksc'
 
 jobs:
   render:

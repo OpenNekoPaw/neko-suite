@@ -94,7 +94,6 @@ build_all_neko() {
     "neko-sketch"
     "neko-audio"
     "neko-live"
-    "neko-script"
     "neko-assets"
     "neko-tools"
   )
