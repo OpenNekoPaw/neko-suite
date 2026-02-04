@@ -4,7 +4,6 @@
 //! using wgpu for cross-platform GPU compute.
 //!
 //! All video encoding/decoding uses hardware acceleration (GPU).
-//! Software fallback has been removed for maximum performance.
 
 #![deny(clippy::all)]
 

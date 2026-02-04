@@ -13,7 +13,7 @@
 use crate::decoder::{Decoder, HwAccelType, MediaInfo, ZeroCopyDecoder};
 use crate::error::{Error, Result};
 use crate::gpu::{
-    ColorSpace, GpuContext, GpuEncoderBridge, ImportedNv12Texture,
+    ColorSpace, GpuContext, GpuEncoderBridge,
     Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter,
 };
 
@@ -24,7 +24,7 @@ use std::sync::Arc;
 pub enum PipelineMode {
     /// Full zero-copy (GPU textures shared between all stages)
     ZeroCopy,
-    /// Hybrid (some stages use CPU transfer, but no CPU fallback for failures)
+    /// Hybrid (decode is zero-copy, encode output requires CPU readback)
     Hybrid,
 }
 
@@ -157,24 +157,23 @@ impl ZeroCopyPipeline {
 
     /// Detect the best pipeline mode for this platform
     fn detect_pipeline_mode() -> Result<PipelineMode> {
-        // TODO: Implement actual capability detection
-        // For now, use hybrid mode (some zero-copy, some CPU transfer)
+        // Zero-copy decode is required.
+        // Hybrid mode means encode output still requires CPU readback
+        // until hardware encoder zero-copy is implemented.
         #[cfg(target_os = "macos")]
         {
-            // macOS: VideoToolbox supports IOSurface sharing
-            // But wgpu_hal integration is not complete
+            // macOS: VideoToolbox IOSurface → Metal → wgpu (zero-copy decode)
+            // Encode: use process_frame_to_iosurface() for zero-copy output
             Ok(PipelineMode::Hybrid)
         }
         #[cfg(target_os = "linux")]
         {
-            // Linux: VAAPI supports DMA-BUF
-            // But wgpu_hal integration is not complete
+            // Linux: VAAPI DMA-BUF → Vulkan → wgpu (zero-copy decode)
             Ok(PipelineMode::Hybrid)
         }
         #[cfg(target_os = "windows")]
         {
-            // Windows: D3D11VA supports shared handles
-            // But wgpu_hal integration is not complete
+            // Windows: D3D11VA shared handles → wgpu (zero-copy decode)
             Ok(PipelineMode::Hybrid)
         }
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
@@ -233,96 +232,6 @@ impl ZeroCopyPipeline {
     /// Get input media info
     pub fn input_info(&self) -> Option<&MediaInfo> {
         self.input_info.as_ref()
-    }
-
-    /// Process a single frame through the pipeline
-    ///
-    /// This is a simplified interface for testing. In production, use the
-    /// async pipeline for better performance.
-    pub fn process_frame_sync(
-        &mut self,
-        nv12_data: &[u8],
-        pts: i64,
-    ) -> Result<Vec<u8>> {
-        let info = self
-            .input_info
-            .as_ref()
-            .ok_or_else(|| Error::Other("Pipeline not initialized".to_string()))?
-            .clone();
-
-        let start = std::time::Instant::now();
-
-        // 1. Import NV12 texture
-        let imported = self.import_nv12_texture(nv12_data, info.width, info.height, pts)?;
-
-        self.stats.decode_time_us += start.elapsed().as_micros() as u64;
-        self.stats.frames_decoded += 1;
-
-        // 2. Convert NV12 to RGBA for compositing
-        let composite_start = std::time::Instant::now();
-        let rgba_texture = self.nv12_renderer.render(&imported);
-        let rgba_view = rgba_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        // TODO: Run compositor shader on rgba_texture
-        // For now, just pass through
-
-        self.stats.composite_time_us += composite_start.elapsed().as_micros() as u64;
-
-        // 3. Convert RGBA back to NV12 for encoder
-        let encode_start = std::time::Instant::now();
-        let output = self.convert_rgba_to_nv12(&rgba_view, info.width, info.height)?;
-        self.stats.encode_time_us += encode_start.elapsed().as_micros() as u64;
-        self.stats.frames_encoded += 1;
-
-        self.stats.frames_processed += 1;
-
-        Ok(output)
-    }
-
-    /// Import NV12 data as GPU texture
-    fn import_nv12_texture(
-        &self,
-        nv12_data: &[u8],
-        width: u32,
-        height: u32,
-        pts: i64,
-    ) -> Result<ImportedNv12Texture> {
-        // Create a temporary Nv12GpuTexture for the importer
-        let gpu_texture = crate::decoder::Nv12GpuTexture {
-            width,
-            height,
-            handle: crate::decoder::GpuTextureHandle::None,
-            pts,
-            is_keyframe: false,
-            color_space: self.config.color_space as i32,
-        };
-
-        // Create textures and upload data
-        let imported = self.importer.import(&gpu_texture)?;
-        self.importer.upload_nv12_data(&imported, nv12_data)?;
-
-        Ok(imported)
-    }
-
-    /// Convert RGBA texture to NV12 for encoder
-    fn convert_rgba_to_nv12(
-        &mut self,
-        rgba_view: &wgpu::TextureView,
-        width: u32,
-        height: u32,
-    ) -> Result<Vec<u8>> {
-        // Create output buffers if needed
-        let output = self.converter.create_output_buffers(width, height);
-
-        // Convert RGBA to NV12 on GPU
-        self.converter.convert_sync(
-            rgba_view,
-            &output,
-            self.config.color_space as u32,
-        )?;
-
-        // Read NV12 data from GPU buffers
-        self.converter.read_nv12_data_blocking(&output)
     }
 
     /// Reset pipeline statistics

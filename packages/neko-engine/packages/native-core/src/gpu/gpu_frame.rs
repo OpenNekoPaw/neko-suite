@@ -3,7 +3,7 @@
 //! This module provides the interface for passing GPU-processed frames
 //! to FFmpeg hardware encoders with minimal CPU involvement.
 //!
-//! Only zero-copy paths are supported (no CPU fallback):
+//! Only zero-copy paths are supported:
 //! - macOS: wgpu (Metal) → IOSurface → VideoToolbox
 //! - Linux: wgpu (Vulkan) → DMA-BUF → VAAPI/NVENC
 //! - Windows: wgpu (D3D12) → SharedHandle → D3D11VA/NVENC
@@ -81,7 +81,7 @@ impl GpuFrameProducer {
         let converter = RgbaToNv12Converter::new(ctx.clone())?;
         let output_buffers = Some(converter.create_output_buffers(width, height));
 
-        tracing::info!("GPU frame producer: zero-copy mode only (no fallback)");
+        tracing::info!("GPU frame producer: zero-copy mode only");
 
         Ok(Self {
             ctx,
@@ -95,7 +95,7 @@ impl GpuFrameProducer {
     /// Produce a frame from RGBA texture
     ///
     /// Converts RGBA to NV12 and exports GPU buffer handles for encoding.
-    /// Returns error if zero-copy export fails (no CPU fallback).
+    /// Returns error if zero-copy export fails.
     pub fn produce_frame(
         &self,
         rgba_texture: &wgpu::TextureView,

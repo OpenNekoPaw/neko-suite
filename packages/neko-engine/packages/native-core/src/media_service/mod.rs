@@ -6,7 +6,6 @@
 //! - JPEG encoding (RGBA to JPEG)
 //!
 //! NOTE: Video frame extraction now uses GPU path only (ZeroCopyDecoder + Nv12Renderer).
-//! The CPU fallback (frame_extractor) has been removed.
 
 mod jpeg_encoder;
 mod probe;

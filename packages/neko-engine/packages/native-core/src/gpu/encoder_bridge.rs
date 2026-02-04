@@ -3,7 +3,7 @@
 //! This module provides zero-copy encoding by passing GPU buffers directly
 //! to FFmpeg hardware encoders without CPU readback.
 //!
-//! Supported paths (no fallback):
+//! Supported paths:
 //! - macOS: wgpu (Metal) → VideoToolbox encoder
 //! - Linux: wgpu (Vulkan) → VAAPI/NVENC encoder
 //! - Windows: wgpu (D3D12) → D3D11VA/NVENC encoder
@@ -14,7 +14,7 @@ use crate::gpu::GpuContext;
 
 use std::sync::Arc;
 
-/// GPU frame ready for encoding (always GPU texture, no CPU fallback)
+/// GPU frame ready for encoding (always GPU texture)
 pub struct GpuEncoderFrame {
     /// Frame width
     pub width: u32,
@@ -81,7 +81,7 @@ impl GpuEncoderBridge {
         let converter = RgbaToNv12Converter::new(ctx.clone())?;
         let output_buffers = Some(converter.create_output_buffers(width, height));
 
-        tracing::info!("GPU encoder bridge: zero-copy mode only (no fallback)");
+        tracing::info!("GPU encoder bridge: zero-copy mode only");
 
         Ok(Self {
             ctx,
@@ -95,7 +95,7 @@ impl GpuEncoderBridge {
     /// Process RGBA texture and prepare for encoding
     ///
     /// This converts RGBA to NV12 and exports GPU handles for encoding.
-    /// Returns error if zero-copy export fails (no CPU fallback).
+    /// Returns error if zero-copy export fails.
     pub fn process_frame(
         &self,
         rgba_texture: &wgpu::TextureView,

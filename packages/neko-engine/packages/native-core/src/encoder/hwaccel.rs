@@ -87,7 +87,7 @@ pub fn get_best_hw_encoder() -> HwEncoderType {
 // Hardware-Accelerated Encoder
 // =============================================================================
 
-/// Hardware-accelerated FFmpeg encoder (GPU-only, no software fallback)
+/// Hardware-accelerated FFmpeg encoder (GPU-only)
 ///
 /// ## Input Format
 ///
@@ -384,7 +384,7 @@ impl Encoder for HwAccelEncoder {
             }
         }
 
-        // All hardware encoders failed - no software fallback
+        // All hardware encoders failed
         Err(last_error.unwrap_or_else(|| {
             Error::Other(format!(
                 "No hardware encoder supports codec {:?} (tried: {:?})",
@@ -595,7 +595,7 @@ mod tests {
     #[test]
     fn test_detect_hw_encoders() {
         let available = detect_hw_encoders();
-        // Should have platform-specific hardware encoders only (no software fallback)
+        // Should have platform-specific hardware encoders only
         // On macOS: VideoToolbox, on Linux: Nvenc/Vaapi, on Windows: Nvenc/Qsv
         assert!(!available.contains(&HwEncoderType::None));
     }

@@ -294,10 +294,11 @@ impl ZeroCopyDecoder {
                             as usize;
 
                     if io_surface == 0 {
-                        tracing::warn!(
-                            "CVPixelBufferGetIOSurface returned null for pixel_buffer={:#x}",
+                        return Err(Error::DecodeFailed(format!(
+                            "CVPixelBufferGetIOSurface returned null for pixel_buffer={:#x}. \
+                             Zero-copy requires IOSurface-backed CVPixelBuffer.",
                             pixel_buffer
-                        );
+                        )));
                     }
 
                     Ok(GpuTextureHandle::VideoToolbox {
