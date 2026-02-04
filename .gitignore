@@ -47,6 +47,7 @@ yarn-error.log*
 
 # Rust 构建产物
 target/
+*.node
 
 # 测试覆盖率
 tests/

@@ -6,7 +6,7 @@
 //! 3. Format conversion (RGBA → NV12)
 //! 4. Hardware encode (FFmpeg) ← GPU buffer
 //!
-//! The pipeline requires GPU texture sharing support (no CPU fallback).
+//! The pipeline requires GPU texture sharing support.
 
 #![allow(dead_code)]
 

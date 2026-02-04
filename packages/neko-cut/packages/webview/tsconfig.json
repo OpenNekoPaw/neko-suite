@@ -19,9 +19,7 @@
     "paths": {
       "@/*": ["src/*"],
       "@neko/shared": ["../../../neko-types/src/index.ts"],
-      "@neko/shared/*": ["../../../neko-types/src/*"],
-      "@neko/effects-runtime": ["../../../neko-engine/packages/effects-runtime/src/index.ts"],
-      "@neko/effects-runtime/*": ["../../../neko-engine/packages/effects-runtime/src/*"]
+      "@neko/shared/*": ["../../../neko-types/src/*"]
     },
     "ignoreDeprecations": "5.0"
   },

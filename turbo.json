@@ -11,11 +11,6 @@
       "outputs": ["dist/**", "out/**"],
       "cache": true
     },
-    "@neko-engine/effects-runtime#build": {
-      "dependsOn": ["@neko-engine/effects-core#build"],
-      "outputs": ["dist/**"],
-      "cache": true
-    },
     "neko-engine#compile": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "out/**"],

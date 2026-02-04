@@ -37,7 +37,6 @@ packages/
 ├── native-napi/        # N-API 绑定 - Node.js 调用 Rust
 ├── native-cli/         # CLI 工具 - 命令行媒体处理
 ├── effects-core/       # 特效核心 - 类型定义、算法、WGSL 着色器
-├── effects-runtime/    # 特效运行时 - WebGPU/wgpu 执行器
 └── extension/          # VS Code 扩展集成
 ```
 
@@ -81,11 +80,6 @@ packages/
 │  ├── types/     (动画、转场、滤镜、遮罩、混合模式)             │
 │  ├── algorithms/(缓动函数、颜色空间、混合算法)                 │
 │  └── shaders/   (WGSL 着色器：色彩校正、转场、特效)            │
-├─────────────────────────────────────────────────────────────┤
-│  @neko-engine/effects-runtime                                │
-│  ├── runners/   (WebGPUEffectRunner, WgpuEffectRunner)       │
-│  ├── compositor/(WgpuCompositor 多图层合成)                   │
-│  └── adapters/  (EffectProcessorAdapter)                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -155,20 +149,6 @@ pub use animation::{AnimationTimeline, Keyframe, Easing};
 // 服务
 pub use frame_server::FrameServer;
 pub use keyframe_cache::KeyframeCacheService;
-```
-
-### effects-runtime (TypeScript)
-
-```typescript
-// 特效运行器
-export { createEffectRunner, createCrossProcessEffectRunner };
-export { WebGPUEffectRunner, WgpuEffectRunner };
-
-// 合成器
-export { WgpuCompositor, createWgpuCompositor };
-
-// 适配器
-export { EffectProcessorAdapter };
 ```
 
 ---

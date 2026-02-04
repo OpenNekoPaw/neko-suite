@@ -7,7 +7,6 @@
 //! - Each layer is a GPU texture (from hardware decoder or render target)
 //! - Compositing is done using render pipeline with texture sampling
 //! - Layers are composited one by one onto the output texture
-//! - No CPU data transfers required
 
 use super::context::GpuContext;
 use super::gpu_layer::GpuLayer;
