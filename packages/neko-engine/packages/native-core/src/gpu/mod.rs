@@ -19,7 +19,6 @@ mod buffer_pool;
 mod compositor;
 mod context;
 mod encoder_bridge;
-mod gpu_frame;
 mod gpu_layer;
 mod hal_import;
 mod nv12_import;
