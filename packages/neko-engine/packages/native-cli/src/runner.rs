@@ -354,9 +354,8 @@ impl Runner {
             )) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
-        // Encode to JPEG
-        let ffmpeg_quality = ((100 - quality.clamp(1, 100)) * 29 / 99 + 2) as u32;
-        let jpeg_data = encode_rgba_to_jpeg(&rgba_data, width, height, ffmpeg_quality).map_err(|e| {
+        // Encode to JPEG (quality is 1-100, higher is better)
+        let jpeg_data = encode_rgba_to_jpeg(&rgba_data, width, height, quality).map_err(|e| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Failed to encode JPEG: {}", e),
