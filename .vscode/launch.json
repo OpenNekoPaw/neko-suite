@@ -1,0 +1,106 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug neko-cut",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-cut",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/neko-cut/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-engine/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-tools/dist/**/*.js"
+      ],
+      "preLaunchTask": "build:neko-cut"
+    },
+    {
+      "name": "Debug neko-cut (CDP:9222)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "/Applications/Visual Studio Code.app/Contents/MacOS/Electron",
+      "runtimeArgs": [
+        "--remote-debugging-port=9222",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-cut",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools"
+      ],
+      "preLaunchTask": "build:neko-cut"
+    },
+    {
+      "name": "Debug neko-canvas",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-canvas"],
+      "outFiles": ["${workspaceFolder}/packages/neko-canvas/dist/**/*.js"],
+      "preLaunchTask": "build:neko-canvas"
+    },
+    {
+      "name": "Debug neko-agent",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-agent"],
+      "outFiles": ["${workspaceFolder}/packages/neko-agent/dist/**/*.js"],
+      "preLaunchTask": "build:neko-agent"
+    },
+    {
+      "name": "Debug neko-engine",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine"],
+      "outFiles": ["${workspaceFolder}/packages/neko-engine/dist/**/*.js"],
+      "preLaunchTask": "build:neko-engine"
+    },
+    {
+      "name": "Debug neko-tools",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools"],
+      "outFiles": ["${workspaceFolder}/packages/neko-tools/dist/**/*.js"],
+      "preLaunchTask": "build:neko-tools"
+    },
+    {
+      "name": "Debug neko-assets",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-assets"],
+      "outFiles": ["${workspaceFolder}/packages/neko-assets/dist/**/*.js"],
+      "preLaunchTask": "build:neko-assets"
+    },
+    {
+      "name": "Debug neko-sketch",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-sketch"],
+      "outFiles": ["${workspaceFolder}/packages/neko-sketch/dist/**/*.js"],
+      "preLaunchTask": "build:neko-sketch"
+    },
+    {
+      "name": "Debug neko-story",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-story"],
+      "outFiles": ["${workspaceFolder}/packages/neko-story/dist/**/*.js"],
+      "preLaunchTask": "build:neko-story"
+    },
+    {
+      "name": "Debug neko-audio",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-audio"],
+      "outFiles": ["${workspaceFolder}/packages/neko-audio/dist/**/*.js"],
+      "preLaunchTask": "build:neko-audio"
+    },
+    {
+      "name": "Debug neko-live",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live"],
+      "outFiles": ["${workspaceFolder}/packages/neko-live/dist/**/*.js"],
+      "preLaunchTask": "build:neko-live"
+    }
+  ]
+}

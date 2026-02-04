@@ -1,0 +1,119 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build:core",
+      "type": "shell",
+      "command": "pnpm build:neko-engine && pnpm build:neko-tools",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "detail": "Build core packages (neko-engine, neko-tools)"
+    },
+    {
+      "label": "build:neko-engine",
+      "type": "shell",
+      "command": "pnpm build:neko-engine",
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build:neko-tools",
+      "type": "shell",
+      "command": "pnpm build:neko-tools",
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build:neko-cut",
+      "type": "shell",
+      "command": "pnpm build:neko-cut",
+      "group": "build",
+      "dependsOn": ["build:core"],
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build:neko-canvas",
+      "type": "shell",
+      "command": "pnpm build:neko-canvas",
+      "group": "build",
+      "dependsOn": ["build:core"],
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build:neko-agent",
+      "type": "shell",
+      "command": "pnpm build:neko-agent",
+      "group": "build",
+      "dependsOn": ["build:core"],
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build:neko-audio",
+      "type": "shell",
+      "command": "pnpm build:neko-audio",
+      "group": "build",
+      "dependsOn": ["build:core"],
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build:neko-assets",
+      "type": "shell",
+      "command": "pnpm build:neko-assets",
+      "group": "build",
+      "dependsOn": ["build:core"],
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build:neko-live",
+      "type": "shell",
+      "command": "pnpm build:neko-live",
+      "group": "build",
+      "dependsOn": ["build:core"],
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build:neko-story",
+      "type": "shell",
+      "command": "pnpm build:neko-story",
+      "group": "build",
+      "dependsOn": ["build:core"],
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build:neko-sketch",
+      "type": "shell",
+      "command": "pnpm build:neko-sketch",
+      "group": "build",
+      "dependsOn": ["build:neko-canvas"],
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build:all",
+      "type": "shell",
+      "command": "pnpm build:extensions",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$tsc"],
+      "detail": "Build all extensions"
+    },
+    {
+      "label": "watch:neko-cut",
+      "type": "shell",
+      "command": "pnpm dev:neko",
+      "isBackground": true,
+      "group": "build",
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^.*$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "Build succeeded"
+        }
+      }
+    }
+  ]
+}
