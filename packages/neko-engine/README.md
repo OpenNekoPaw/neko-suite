@@ -33,10 +33,9 @@
 
 ```
 packages/
-├── native-core/        # Rust 核心库 - GPU 处理、编解码、导出
+├── native-core/        # Rust 核心库 - GPU 处理、编解码、导出、WGSL 着色器
 ├── native-napi/        # N-API 绑定 - Node.js 调用 Rust
 ├── native-cli/         # CLI 工具 - 命令行媒体处理
-├── effects-core/       # 特效核心 - 类型定义、算法、WGSL 着色器
 └── extension/          # VS Code 扩展集成
 ```
 
@@ -63,6 +62,7 @@ packages/
 │                      neko-native-core                        │
 ├─────────────────────────────────────────────────────────────┤
 │  gpu/           │ wgpu 上下文、纹理合成、NV12 渲染            │
+│  shaders/       │ WGSL 着色器（色彩校正、转场、特效、混合）    │
 │  decoder/       │ 硬件解码器、零拷贝管线                      │
 │  encoder/       │ 硬件编码器、异步导出管线                    │
 │  animation/     │ 关键帧、缓动、时间轴                        │
@@ -71,15 +71,6 @@ packages/
 │  keyframe_cache/│ 关键帧缓存、IDR 扫描                        │
 │  export/        │ GPU 导出管线、音视频混流                    │
 │  jvi/           │ JVI 项目格式加载                           │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│                    TypeScript Effects Layer                  │
-├─────────────────────────────────────────────────────────────┤
-│  @neko-engine/effects-core                                   │
-│  ├── types/     (动画、转场、滤镜、遮罩、混合模式)             │
-│  ├── algorithms/(缓动函数、颜色空间、混合算法)                 │
-│  └── shaders/   (WGSL 着色器：色彩校正、转场、特效)            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -96,13 +87,6 @@ packages/
 | `tokio` | 异步运行时 |
 | `axum` | HTTP/WebSocket 服务 |
 | `metal` / `ash` / `windows` | 平台原生 GPU 互操作 |
-
-### TypeScript (effects-*)
-
-| 依赖 | 用途 |
-|------|------|
-| `@webgpu/types` | WebGPU 类型定义 |
-| `@neko/shared` | 共享类型 |
 
 ---
 

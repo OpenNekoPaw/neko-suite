@@ -1,32 +1,29 @@
 //! GPU Shaders module
 //!
-//! Shared WGSL shaders from effects-core package.
+//! WGSL shaders for GPU-accelerated video processing.
 //! Uses texture format for compatibility with WebGPU.
-//!
-//! This module ensures consistency between webgpu (browser) and wgpu (Rust)
-//! by using the same shader algorithms from the effects-core package.
 
 #![allow(dead_code)]
 
 /// Common utilities (color conversion, math functions)
-pub const COMMON_WGSL: &str = include_str!("../../../../effects-core/shaders/common.wgsl");
+pub const COMMON_WGSL: &str = include_str!("../../../shaders/common.wgsl");
 
 /// Blend mode functions (26 Photoshop-compatible modes)
-pub const BLEND_MODES_WGSL: &str = include_str!("../../../../effects-core/shaders/blend_modes.wgsl");
+pub const BLEND_MODES_WGSL: &str = include_str!("../../../shaders/blend_modes.wgsl");
 
 /// Color correction functions (exposure, contrast, HSL, etc.)
 pub const COLOR_CORRECTION_WGSL: &str =
-    include_str!("../../../../effects-core/shaders/color_correction.wgsl");
+    include_str!("../../../shaders/color_correction.wgsl");
 
 /// Video transition effects
 pub const TRANSITIONS_WGSL: &str =
-    include_str!("../../../../effects-core/shaders/transitions.wgsl");
+    include_str!("../../../shaders/transitions.wgsl");
 
 /// Video effects (blur, sharpen, vignette, etc.)
-pub const EFFECTS_WGSL: &str = include_str!("../../../../effects-core/shaders/effects.wgsl");
+pub const EFFECTS_WGSL: &str = include_str!("../../../shaders/effects.wgsl");
 
 /// Easing functions for GPU animation (30+ easing types)
-pub const EASING_WGSL: &str = include_str!("../../../../effects-core/shaders/easing.wgsl");
+pub const EASING_WGSL: &str = include_str!("../../../shaders/easing.wgsl");
 
 /// Color correction compute shader using texture format
 pub const COLOR_CORRECTION_COMPUTE_SHADER: &str = r#"
