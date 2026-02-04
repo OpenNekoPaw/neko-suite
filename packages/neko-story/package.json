@@ -39,7 +39,7 @@
       {
         "id": "nekostory",
         "aliases": ["Neko Story", "nekostory"],
-        "extensions": [".nks", ".story"],
+        "extensions": [".nks", ".story", ".fountain"],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -68,16 +68,14 @@
       }
     ]
   },
-  "workspaces": [
-    "packages/extension"
-  ],
   "scripts": {
-    "vscode:prepublish": "npm run build",
-    "build": "npm run build:extension",
-    "build:extension": "npm -w @neko-story/extension run build",
-    "watch": "npm -w @neko-story/extension run watch",
-    "lint": "npm -w @neko-story/extension run lint",
-    "test": "npm -w @neko-story/extension run test",
+    "vscode:prepublish": "pnpm run build",
+    "build": "pnpm run build:webview && pnpm run build:extension",
+    "build:extension": "pnpm --filter @neko-story/extension run build",
+    "build:webview": "pnpm --filter @neko-story/webview run build",
+    "watch": "pnpm --filter @neko-story/extension run watch",
+    "lint": "pnpm --filter @neko-story/extension run lint",
+    "test": "pnpm --filter @neko-story/extension run test",
     "package": "vsce package"
   },
   "devDependencies": {

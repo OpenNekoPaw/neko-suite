@@ -1,0 +1,229 @@
+/**
+ * Standard screenplay CSS styles
+ * Based on industry standard format (Courier 12pt, specific margins)
+ */
+
+:root {
+  --page-width: 8.5in;
+  --page-padding: 1in;
+  --font-family: 'Courier New', Courier, monospace;
+  --font-size: 12pt;
+  --line-height: 1;
+
+  /* Colors for dark theme */
+  --bg-color: #1e1e1e;
+  --text-color: #d4d4d4;
+  --scene-heading-color: #569cd6;
+  --character-color: #dcdcaa;
+  --parenthetical-color: #9cdcfe;
+  --transition-color: #c586c0;
+  --section-color: #4ec9b0;
+  --note-color: #6a9955;
+  --synopsis-color: #ce9178;
+  --lyrics-color: #d7ba7d;
+  --hover-bg: rgba(255, 255, 255, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+}
+
+.screenplay {
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: var(--page-padding);
+}
+
+/* Clickable elements */
+.element {
+  cursor: pointer;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 2px;
+  transition: background-color 0.15s;
+}
+
+.element:hover {
+  background-color: var(--hover-bg);
+}
+
+/* Title Page */
+.title-page {
+  text-align: center;
+  margin-bottom: 2em;
+  padding-bottom: 2em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.title-page .title {
+  font-size: 1.5em;
+  font-weight: bold;
+  margin-bottom: 1em;
+  text-transform: uppercase;
+}
+
+.title-page .entry {
+  margin: 0.5em 0;
+}
+
+.title-page .entry-key {
+  color: var(--note-color);
+}
+
+/* Scene Heading */
+.scene-heading {
+  color: var(--scene-heading-color);
+  font-weight: bold;
+  text-transform: uppercase;
+  margin-top: 2em;
+  margin-bottom: 1em;
+}
+
+.scene-heading .scene-number {
+  float: right;
+  font-weight: normal;
+}
+
+/* Action */
+.action {
+  margin: 1em 0;
+  white-space: pre-wrap;
+}
+
+.action.centered {
+  text-align: center;
+}
+
+/* Character */
+.character {
+  color: var(--character-color);
+  text-transform: uppercase;
+  margin-top: 1em;
+  margin-left: 2in;
+}
+
+.character .extension {
+  font-weight: normal;
+}
+
+/* Dialogue */
+.dialogue {
+  margin-left: 1in;
+  margin-right: 1.5in;
+  white-space: pre-wrap;
+}
+
+/* Parenthetical */
+.parenthetical {
+  color: var(--parenthetical-color);
+  margin-left: 1.5in;
+  margin-right: 2in;
+}
+
+/* Transition */
+.transition {
+  color: var(--transition-color);
+  text-align: right;
+  text-transform: uppercase;
+  margin: 1em 0;
+}
+
+/* Centered */
+.centered {
+  text-align: center;
+  margin: 1em 0;
+}
+
+/* Section */
+.section {
+  color: var(--section-color);
+  font-weight: bold;
+  margin-top: 2em;
+  margin-bottom: 1em;
+}
+
+.section.level-1 { font-size: 1.4em; }
+.section.level-2 { font-size: 1.2em; }
+.section.level-3 { font-size: 1.1em; }
+
+/* Synopsis */
+.synopsis {
+  color: var(--synopsis-color);
+  font-style: italic;
+  margin: 0.5em 0;
+  padding-left: 1em;
+  border-left: 2px solid var(--synopsis-color);
+}
+
+/* Note */
+.note {
+  color: var(--note-color);
+  font-style: italic;
+  margin: 0.5em 0;
+  padding: 0.5em;
+  background-color: rgba(106, 153, 85, 0.1);
+  border-radius: 4px;
+}
+
+/* Page Break */
+.page-break {
+  border-top: 1px dashed rgba(255, 255, 255, 0.3);
+  margin: 2em 0;
+  text-align: center;
+  position: relative;
+}
+
+.page-break::after {
+  content: 'PAGE BREAK';
+  position: absolute;
+  top: -0.6em;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--bg-color);
+  padding: 0 1em;
+  font-size: 0.7em;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Lyrics */
+.lyrics {
+  color: var(--lyrics-color);
+  font-style: italic;
+  margin: 0.5em 0;
+  margin-left: 1in;
+}
+
+.lyrics::before {
+  content: '♪ ';
+}
+
+/* Dual Dialogue */
+.dual-dialogue {
+  display: flex;
+  gap: 1em;
+}
+
+.dual-dialogue .dialogue-column {
+  flex: 1;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 4em 2em;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.empty-state h2 {
+  margin-bottom: 0.5em;
+}

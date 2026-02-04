@@ -10,6 +10,10 @@
     "lint": "eslint src --ext ts,tsx",
     "test": "vitest"
   },
+  "dependencies": {
+    "@neko-story/parser": "workspace:*",
+    "@neko-story/types": "workspace:*"
+  },
   "devDependencies": {
     "@types/vscode": "^1.85.0"
   }

@@ -1,0 +1,218 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Neko Story (Fountain)",
+  "scopeName": "source.nekostory",
+  "patterns": [
+    { "include": "#title-page" },
+    { "include": "#section" },
+    { "include": "#synopsis" },
+    { "include": "#scene-heading" },
+    { "include": "#transition" },
+    { "include": "#centered" },
+    { "include": "#character" },
+    { "include": "#parenthetical" },
+    { "include": "#lyrics" },
+    { "include": "#note" },
+    { "include": "#boneyard" },
+    { "include": "#page-break" },
+    { "include": "#emphasis" },
+    { "include": "#action" }
+  ],
+  "repository": {
+    "title-page": {
+      "match": "^([A-Za-z ]+):\\s*(.*)$",
+      "captures": {
+        "1": { "name": "keyword.control.title-key.nekostory" },
+        "2": { "name": "string.unquoted.title-value.nekostory" }
+      }
+    },
+    "section": {
+      "match": "^(#{1,6})\\s*(.+)$",
+      "captures": {
+        "1": { "name": "punctuation.definition.heading.nekostory" },
+        "2": { "name": "entity.name.section.nekostory" }
+      }
+    },
+    "synopsis": {
+      "match": "^(=)\\s*(.+)$",
+      "captures": {
+        "1": { "name": "punctuation.definition.synopsis.nekostory" },
+        "2": { "name": "comment.line.synopsis.nekostory" }
+      }
+    },
+    "scene-heading": {
+      "patterns": [
+        {
+          "comment": "Forced scene heading with period",
+          "match": "^(\\.)(.+?)(?:\\s*(#[^#]+#))?$",
+          "captures": {
+            "1": { "name": "punctuation.definition.scene.nekostory" },
+            "2": { "name": "entity.name.tag.scene-heading.nekostory" },
+            "3": { "name": "comment.line.scene-number.nekostory" }
+          }
+        },
+        {
+          "comment": "Standard scene heading",
+          "match": "^((?:INT|EXT|EST|INT\\.?\\/EXT|I\\.?\\/E)[\\.\\s])(.+?)(?:\\s*-\\s*(.+?))?(?:\\s*(#[^#]+#))?$",
+          "captures": {
+            "1": { "name": "keyword.control.scene-prefix.nekostory" },
+            "2": { "name": "entity.name.tag.scene-heading.nekostory" },
+            "3": { "name": "constant.other.scene-time.nekostory" },
+            "4": { "name": "comment.line.scene-number.nekostory" }
+          }
+        }
+      ]
+    },
+    "transition": {
+      "patterns": [
+        {
+          "comment": "Forced transition",
+          "match": "^(>)(?!<)(.+)$",
+          "captures": {
+            "1": { "name": "punctuation.definition.transition.nekostory" },
+            "2": { "name": "keyword.other.transition.nekostory" }
+          }
+        },
+        {
+          "comment": "Standard transition ending with TO:",
+          "match": "^([A-Z ]+TO:)$",
+          "captures": {
+            "1": { "name": "keyword.other.transition.nekostory" }
+          }
+        }
+      ]
+    },
+    "centered": {
+      "match": "^(>)(.+)(<)$",
+      "captures": {
+        "1": { "name": "punctuation.definition.centered.begin.nekostory" },
+        "2": { "name": "markup.bold.centered.nekostory" },
+        "3": { "name": "punctuation.definition.centered.end.nekostory" }
+      }
+    },
+    "character": {
+      "patterns": [
+        {
+          "comment": "Forced character with @",
+          "match": "^(@)(.+)$",
+          "captures": {
+            "1": { "name": "punctuation.definition.character.nekostory" },
+            "2": { "name": "entity.name.function.character.nekostory" }
+          }
+        },
+        {
+          "comment": "Standard character (all caps)",
+          "match": "^([A-Z][A-Z0-9 ._\\-']+)(?:\\s*(\\([^)]+\\)))?(\\s*\\^)?$",
+          "captures": {
+            "1": { "name": "entity.name.function.character.nekostory" },
+            "2": { "name": "storage.modifier.character-extension.nekostory" },
+            "3": { "name": "keyword.operator.dual-dialogue.nekostory" }
+          }
+        }
+      ]
+    },
+    "parenthetical": {
+      "match": "^(\\()(.+)(\\))$",
+      "captures": {
+        "1": { "name": "punctuation.definition.parenthetical.begin.nekostory" },
+        "2": { "name": "comment.block.parenthetical.nekostory" },
+        "3": { "name": "punctuation.definition.parenthetical.end.nekostory" }
+      }
+    },
+    "lyrics": {
+      "match": "^(~)(.+)$",
+      "captures": {
+        "1": { "name": "punctuation.definition.lyrics.nekostory" },
+        "2": { "name": "string.quoted.lyrics.nekostory" }
+      }
+    },
+    "note": {
+      "patterns": [
+        {
+          "comment": "Inline note [[...]]",
+          "match": "(\\[\\[)([^\\]]+)(\\]\\])",
+          "captures": {
+            "1": { "name": "punctuation.definition.note.begin.nekostory" },
+            "2": { "name": "comment.block.note.nekostory" },
+            "3": { "name": "punctuation.definition.note.end.nekostory" }
+          }
+        },
+        {
+          "comment": "Line comment //",
+          "match": "^(//)(.*)$",
+          "captures": {
+            "1": { "name": "punctuation.definition.comment.nekostory" },
+            "2": { "name": "comment.line.nekostory" }
+          }
+        }
+      ]
+    },
+    "boneyard": {
+      "begin": "/\\*",
+      "end": "\\*/",
+      "name": "comment.block.boneyard.nekostory",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.comment.begin.nekostory" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.comment.end.nekostory" }
+      }
+    },
+    "page-break": {
+      "match": "^(===|---)$",
+      "name": "meta.separator.page-break.nekostory"
+    },
+    "emphasis": {
+      "patterns": [
+        {
+          "comment": "Bold italic ***text***",
+          "match": "(\\*\\*\\*)([^*]+)(\\*\\*\\*)",
+          "captures": {
+            "1": { "name": "punctuation.definition.bold.italic.nekostory" },
+            "2": { "name": "markup.bold.italic.nekostory" },
+            "3": { "name": "punctuation.definition.bold.italic.nekostory" }
+          }
+        },
+        {
+          "comment": "Bold **text**",
+          "match": "(\\*\\*)([^*]+)(\\*\\*)",
+          "captures": {
+            "1": { "name": "punctuation.definition.bold.nekostory" },
+            "2": { "name": "markup.bold.nekostory" },
+            "3": { "name": "punctuation.definition.bold.nekostory" }
+          }
+        },
+        {
+          "comment": "Italic *text*",
+          "match": "(\\*)([^*]+)(\\*)",
+          "captures": {
+            "1": { "name": "punctuation.definition.italic.nekostory" },
+            "2": { "name": "markup.italic.nekostory" },
+            "3": { "name": "punctuation.definition.italic.nekostory" }
+          }
+        },
+        {
+          "comment": "Underline _text_",
+          "match": "(_)([^_]+)(_)",
+          "captures": {
+            "1": { "name": "punctuation.definition.underline.nekostory" },
+            "2": { "name": "markup.underline.nekostory" },
+            "3": { "name": "punctuation.definition.underline.nekostory" }
+          }
+        }
+      ]
+    },
+    "action": {
+      "patterns": [
+        {
+          "comment": "Forced action with !",
+          "match": "^(!)(.+)$",
+          "captures": {
+            "1": { "name": "punctuation.definition.action.nekostory" },
+            "2": { "name": "meta.action.nekostory" }
+          }
+        }
+      ]
+    }
+  }
+}
