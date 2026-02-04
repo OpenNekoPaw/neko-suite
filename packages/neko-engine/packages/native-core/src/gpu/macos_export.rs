@@ -5,6 +5,12 @@
 //! 2. Use as wgpu render/compute target
 //! 3. Share IOSurface directly with VideoToolbox encoder
 //!
+//! Architecture (per-frame import/release pattern):
+//! - IOSurface is the persistent backing store (owned by this module)
+//! - Metal textures are created once from IOSurface planes
+//! - wgpu textures are imported fresh each frame and dropped after submit
+//! - This avoids wgpu internal cache conflicts with IOSurface lifecycle
+//!
 //! This eliminates the GPU → CPU → GPU roundtrip in the encoding pipeline.
 
 use crate::error::{Error, Result};
@@ -23,7 +29,7 @@ use objc::{class, msg_send, sel, sel_impl};
 use metal::foreign_types::ForeignType;
 
 /// IOSurface reference type (opaque pointer)
-type IOSurfaceRef = *mut Object;
+pub type IOSurfaceRef = *mut Object;
 
 // External C functions for IOSurface
 #[link(name = "IOSurface", kind = "framework")]
@@ -85,18 +91,85 @@ extern "C" {
 /// NV12 pixel format constant ('420v' = 0x34323076)
 const K_CV_PIXEL_FORMAT_TYPE_420_Y_P_CB_CR_8_BI_PLANAR_VIDEO_RANGE: u32 = 0x34323076;
 
-/// IOSurface-backed NV12 texture for zero-copy encoding
-#[allow(dead_code)]
-pub struct IOSurfaceNv12Texture {
+/// Persistent IOSurface backing store for NV12 textures
+///
+/// This struct owns the IOSurface and Metal textures, which are persistent.
+/// wgpu textures should be imported fresh each frame using `import_to_wgpu()`.
+///
+/// Architecture:
+/// - IOSurface: persistent, owned by this struct
+/// - Metal textures: persistent, created once from IOSurface planes
+/// - wgpu textures: temporary, imported each frame and dropped after submit
+pub struct IOSurfaceBackingStore {
     /// IOSurface handle (retained)
     io_surface: IOSurfaceRef,
-    /// Y plane Metal texture
+    /// Y plane Metal texture (persistent)
     y_metal_texture: metal::Texture,
-    /// UV plane Metal texture
+    /// UV plane Metal texture (persistent)
     uv_metal_texture: metal::Texture,
-    /// Y plane wgpu texture
+    /// Width
+    pub width: u32,
+    /// Height
+    pub height: u32,
+}
+
+impl IOSurfaceBackingStore {
+    /// Get the IOSurface handle for VideoToolbox
+    pub fn io_surface_handle(&self) -> usize {
+        self.io_surface as usize
+    }
+
+    /// Get the raw IOSurface reference
+    pub fn io_surface_ref(&self) -> IOSurfaceRef {
+        self.io_surface
+    }
+
+    /// Get references to the Metal textures
+    pub fn metal_textures(&self) -> (&metal::Texture, &metal::Texture) {
+        (&self.y_metal_texture, &self.uv_metal_texture)
+    }
+
+    /// Synchronize Metal textures to ensure GPU writes are complete
+    ///
+    /// This must be called after wgpu render pass writes to the textures
+    /// and before the IOSurface is used by VideoToolbox encoder.
+    pub fn synchronize(&self, metal_device: &MTLDevice) {
+        unsafe {
+            let command_queue = metal_device.new_command_queue();
+            let command_buffer = command_queue.new_command_buffer();
+            let blit_encoder = command_buffer.new_blit_command_encoder();
+
+            blit_encoder.synchronize_resource(&self.y_metal_texture);
+            blit_encoder.synchronize_resource(&self.uv_metal_texture);
+            blit_encoder.end_encoding();
+
+            command_buffer.commit();
+            command_buffer.wait_until_completed();
+        }
+    }
+}
+
+impl Drop for IOSurfaceBackingStore {
+    fn drop(&mut self) {
+        if !self.io_surface.is_null() {
+            unsafe {
+                IOSurfaceDecrementUseCount(self.io_surface);
+            }
+        }
+    }
+}
+
+/// Temporary wgpu texture wrapper for per-frame rendering
+///
+/// This struct holds wgpu textures imported from IOSurface Metal textures.
+/// It should be created at the start of each frame and dropped after queue.submit().
+///
+/// IMPORTANT: Do NOT cache this across frames. Create fresh each frame to avoid
+/// wgpu internal cache conflicts with IOSurface lifecycle.
+pub struct FrameNv12Textures {
+    /// Y plane wgpu texture (temporary, per-frame)
     pub y_texture: wgpu::Texture,
-    /// UV plane wgpu texture
+    /// UV plane wgpu texture (temporary, per-frame)
     pub uv_texture: wgpu::Texture,
     /// Width
     pub width: u32,
@@ -104,14 +177,7 @@ pub struct IOSurfaceNv12Texture {
     pub height: u32,
 }
 
-impl IOSurfaceNv12Texture {
-    /// Get the IOSurface handle for VideoToolbox
-    ///
-    /// The returned handle is valid as long as this struct is alive.
-    pub fn io_surface_handle(&self) -> usize {
-        self.io_surface as usize
-    }
-
+impl FrameNv12Textures {
     /// Create texture views for shader binding
     pub fn create_views(&self) -> (wgpu::TextureView, wgpu::TextureView) {
         let y_view = self.y_texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -120,21 +186,28 @@ impl IOSurfaceNv12Texture {
     }
 }
 
-impl Drop for IOSurfaceNv12Texture {
-    fn drop(&mut self) {
-        if !self.io_surface.is_null() {
-            unsafe {
-                IOSurfaceDecrementUseCount(self.io_surface);
-                // Note: IOSurface is reference counted, it will be freed when count reaches 0
-            }
-        }
-    }
-}
+/// Legacy alias for backward compatibility
+#[allow(dead_code)]
+pub type IOSurfaceNv12Texture = IOSurfaceBackingStore;
 
 /// macOS zero-copy texture exporter
 ///
 /// Creates IOSurface-backed textures that can be shared with VideoToolbox
 /// for zero-copy hardware encoding.
+///
+/// Usage pattern (per-frame import/release):
+/// ```ignore
+/// // Once: create backing store
+/// let backing = exporter.create_backing_store(width, height)?;
+///
+/// // Each frame:
+/// let frame_textures = exporter.import_frame_textures(&backing)?;
+/// // ... use frame_textures in render pass ...
+/// queue.submit(...);
+/// drop(frame_textures); // Important: drop after submit
+/// backing.synchronize(&metal_device);
+/// // ... pass backing.io_surface_handle() to VideoToolbox ...
+/// ```
 pub struct MacOsTextureExporter {
     ctx: Arc<GpuContext>,
     metal_device: MTLDevice,
@@ -151,11 +224,11 @@ impl MacOsTextureExporter {
         Ok(Self { ctx, metal_device })
     }
 
-    /// Create an IOSurface-backed NV12 texture
+    /// Create an IOSurface backing store for NV12 textures
     ///
-    /// This texture can be used as a compute shader output target and
-    /// shared directly with VideoToolbox for encoding.
-    pub fn create_nv12_texture(&self, width: u32, height: u32) -> Result<IOSurfaceNv12Texture> {
+    /// This creates the persistent IOSurface and Metal textures.
+    /// Use `import_frame_textures()` each frame to get temporary wgpu textures.
+    pub fn create_backing_store(&self, width: u32, height: u32) -> Result<IOSurfaceBackingStore> {
         // Create IOSurface with NV12 format (2 planes)
         let io_surface = unsafe { self.create_nv12_iosurface(width, height)? };
 
@@ -164,32 +237,62 @@ impl MacOsTextureExporter {
             self.create_metal_textures_from_iosurface(io_surface, width, height)?
         };
 
-        // Import Metal textures into wgpu
-        let (y_wgpu, uv_wgpu) = unsafe {
-            self.import_metal_textures_to_wgpu(&y_metal, &uv_metal, width, height)?
-        };
-
         // Increment use count to keep IOSurface alive
         unsafe {
             IOSurfaceIncrementUseCount(io_surface);
         }
 
         tracing::debug!(
-            "Created IOSurface-backed NV12 texture: {}x{}, handle={:?}",
+            "Created IOSurface backing store: {}x{}, handle={:?}",
             width,
             height,
             io_surface
         );
 
-        Ok(IOSurfaceNv12Texture {
+        Ok(IOSurfaceBackingStore {
             io_surface,
             y_metal_texture: y_metal,
             uv_metal_texture: uv_metal,
-            y_texture: y_wgpu,
-            uv_texture: uv_wgpu,
             width,
             height,
         })
+    }
+
+    /// Import Metal textures to wgpu for the current frame
+    ///
+    /// IMPORTANT: The returned `FrameNv12Textures` should be dropped after
+    /// `queue.submit()` to avoid wgpu internal cache conflicts.
+    ///
+    /// This is a lightweight operation (just pointer wrapping) and should
+    /// be called fresh each frame.
+    pub fn import_frame_textures(&self, backing: &IOSurfaceBackingStore) -> Result<FrameNv12Textures> {
+        let (y_metal, uv_metal) = backing.metal_textures();
+
+        // Import Metal textures into wgpu (fresh each frame)
+        let (y_wgpu, uv_wgpu) = unsafe {
+            self.import_metal_textures_to_wgpu(y_metal, uv_metal, backing.width, backing.height)?
+        };
+
+        Ok(FrameNv12Textures {
+            y_texture: y_wgpu,
+            uv_texture: uv_wgpu,
+            width: backing.width,
+            height: backing.height,
+        })
+    }
+
+    /// Legacy method for backward compatibility
+    ///
+    /// DEPRECATED: Use `create_backing_store()` + `import_frame_textures()` instead.
+    /// This method creates wgpu textures that may become invalid across frames.
+    #[deprecated(note = "Use create_backing_store() + import_frame_textures() for per-frame pattern")]
+    pub fn create_nv12_texture(&self, width: u32, height: u32) -> Result<IOSurfaceBackingStore> {
+        self.create_backing_store(width, height)
+    }
+
+    /// Get the Metal device
+    pub fn metal_device(&self) -> &MTLDevice {
+        &self.metal_device
     }
 
     /// Create NV12 IOSurface with proper plane layout
@@ -405,23 +508,25 @@ impl MacOsTextureExporter {
     ) -> Result<(metal::Texture, metal::Texture)> {
         let metal_device_ptr = self.metal_device.as_ptr();
 
-        // Y plane texture descriptor (R8Unorm for luma)
+        // Y plane texture descriptor (R8Unorm for NV12 luma)
+        // Note: IOSurface requires 8-bit format for NV12 compatibility with VideoToolbox
         let y_desc = TextureDescriptor::new();
         y_desc.set_texture_type(MTLTextureType::D2);
         y_desc.set_pixel_format(MTLPixelFormat::R8Unorm);
         y_desc.set_width(width as u64);
         y_desc.set_height(height as u64);
         y_desc.set_storage_mode(MTLStorageMode::Shared);
-        y_desc.set_usage(MTLTextureUsage::ShaderRead | MTLTextureUsage::ShaderWrite);
+        // RENDER_TARGET for receiving data from render pass (not storage)
+        y_desc.set_usage(MTLTextureUsage::ShaderRead | MTLTextureUsage::RenderTarget);
 
-        // UV plane texture descriptor (RG8Unorm for interleaved chroma)
+        // UV plane texture descriptor (RG8Unorm for NV12 interleaved chroma)
         let uv_desc = TextureDescriptor::new();
         uv_desc.set_texture_type(MTLTextureType::D2);
         uv_desc.set_pixel_format(MTLPixelFormat::RG8Unorm);
         uv_desc.set_width((width / 2) as u64);
         uv_desc.set_height((height / 2) as u64);
         uv_desc.set_storage_mode(MTLStorageMode::Shared);
-        uv_desc.set_usage(MTLTextureUsage::ShaderRead | MTLTextureUsage::ShaderWrite);
+        uv_desc.set_usage(MTLTextureUsage::ShaderRead | MTLTextureUsage::RenderTarget);
 
         // Create Metal textures from IOSurface planes
         let y_metal_texture: *mut Object = msg_send![
@@ -507,7 +612,8 @@ impl MacOsTextureExporter {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::R8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
+            // RENDER_ATTACHMENT for receiving data from render pass
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         };
 
@@ -522,7 +628,7 @@ impl MacOsTextureExporter {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rg8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         };
 
@@ -538,12 +644,6 @@ impl MacOsTextureExporter {
         );
 
         Ok((y_texture, uv_texture))
-    }
-
-    /// Get the Metal device
-    #[allow(dead_code)]
-    pub fn metal_device(&self) -> &MTLDevice {
-        &self.metal_device
     }
 }
 
@@ -571,20 +671,35 @@ mod tests {
             Err(_) => return, // Skip if Metal not available
         };
 
-        // Create IOSurface-backed NV12 texture
-        let result = exporter.create_nv12_texture(1920, 1080);
-
-        match result {
-            Ok(texture) => {
-                assert_eq!(texture.width, 1920);
-                assert_eq!(texture.height, 1080);
-                assert!(texture.io_surface_handle() != 0);
-                println!("IOSurface created successfully: handle={:#x}", texture.io_surface_handle());
-            }
+        // Create IOSurface backing store
+        let backing = match exporter.create_backing_store(1920, 1080) {
+            Ok(b) => b,
             Err(e) => {
-                // IOSurface creation may fail in some environments
                 println!("IOSurface creation failed (expected in some environments): {}", e);
+                return;
             }
-        }
+        };
+
+        assert_eq!(backing.width, 1920);
+        assert_eq!(backing.height, 1080);
+        assert!(backing.io_surface_handle() != 0);
+        println!("IOSurface backing store created: handle={:#x}", backing.io_surface_handle());
+
+        // Test per-frame import
+        let frame_textures = match exporter.import_frame_textures(&backing) {
+            Ok(t) => t,
+            Err(e) => {
+                println!("Frame texture import failed: {}", e);
+                return;
+            }
+        };
+
+        assert_eq!(frame_textures.width, 1920);
+        assert_eq!(frame_textures.height, 1080);
+        println!("Frame textures imported successfully");
+
+        // Drop frame textures (simulating end of frame)
+        drop(frame_textures);
+        println!("Frame textures dropped");
     }
 }

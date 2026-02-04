@@ -19,6 +19,7 @@ use crate::error::{Error, Result};
 
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::format::Pixel;
+use ffmpeg_next::util::color::Range as ColorRange;
 use ffmpeg_next::util::frame::video::Video as VideoFrame;
 use ffmpeg_next::{Dictionary, Rational};
 
@@ -259,6 +260,9 @@ impl HwAccelEncoder {
         // Hardware encoders use NV12 format
         encoder.set_format(Pixel::NV12);
 
+        // Set color range - VideoToolbox requires explicit color range
+        encoder.set_color_range(ColorRange::MPEG); // Limited range (16-235) - standard for video
+
         // Set GOP size if specified
         if let Some(gop) = config.gop_size {
             encoder.set_gop(gop);
@@ -410,8 +414,9 @@ impl Encoder for HwAccelEncoder {
         let mut frame = VideoFrame::new(Pixel::NV12, config.width, config.height);
         Self::copy_nv12_to_frame(data, &mut frame, config.width, config.height);
 
-        // Set PTS
+        // Set PTS and color range (VideoToolbox requires explicit color range)
         frame.set_pts(Some(pts));
+        frame.set_color_range(ColorRange::MPEG); // Limited range (16-235) - standard for video
 
         // Send frame to encoder
         let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
@@ -466,14 +471,16 @@ impl Encoder for HwAccelEncoder {
         // Create AVFrame and set CVPixelBuffer directly
         let mut frame = VideoFrame::new(Pixel::NV12, config.width, config.height);
         frame.set_pts(Some(pts));
+        frame.set_color_range(ColorRange::MPEG); // Limited range (16-235) - required for VideoToolbox
 
         // Set CVPixelBuffer to AVFrame.data[3] for VideoToolbox
-        // VideoToolbox encoder will read directly from GPU memory
+        // VideoToolbox encoder will read directly from GPU memory via CVPixelBuffer
+        // Note: Keep format as NV12 - the CVPixelBuffer contains NV12 data from IOSurface
         unsafe {
             let frame_ptr = frame.as_mut_ptr();
             (*frame_ptr).data[3] = cv_pixel_buffer as *mut u8;
-            // Set format to VideoToolbox hardware format
-            (*frame_ptr).format = ffmpeg::ffi::AVPixelFormat::AV_PIX_FMT_VIDEOTOOLBOX as i32;
+            // Do NOT set format to AV_PIX_FMT_VIDEOTOOLBOX - that's for decoder output
+            // The encoder expects NV12 input with CVPixelBuffer in data[3]
         }
 
         // Send frame to encoder

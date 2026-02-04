@@ -57,6 +57,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Utilities
 bytemuck = { version = "1.14", features = ["derive"] }
 crossbeam-channel = "0.5"
+indicatif = "0.17"
 
 # Image encoding - pure Rust JPEG encoder
 image = { version = "0.25", default-features = false, features = ["jpeg"] }

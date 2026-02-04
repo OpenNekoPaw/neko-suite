@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::args::Command;
+use indicatif::{ProgressBar, ProgressStyle};
 use neko_native_core::export::ExportService;
 use neko_native_core::frame_server::{FrameServer, FrameServerConfig};
 use neko_native_core::jvi::JviLoader;
@@ -74,8 +75,6 @@ impl Runner {
         preset: String,
         hw_encoder: String,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        tracing::info!("Exporting {} to {}", jvi_file.display(), output.display());
-
         // Load .jvi file
         let loader = JviLoader::new();
         let (timeline, mut settings) = loader.load(&jvi_file)?;
@@ -102,7 +101,26 @@ impl Runner {
         };
 
         let total_frames = config.timeline.total_frames(config.settings.fps);
-        tracing::info!("Starting export: {} frames at {} fps", total_frames, config.settings.fps);
+        let fps = config.settings.fps;
+
+        // Create progress bar first so we can use pb.println for messages
+        let pb = ProgressBar::new(total_frames);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} frames ({percent}%) | {msg}")
+                .unwrap()
+                .progress_chars("=>-"),
+        );
+
+        pb.println(format!(
+            "Exporting: {} -> {}",
+            jvi_file.display(),
+            output.display()
+        ));
+        pb.println(format!(
+            "Settings: {} frames @ {} fps, codec: {}, bitrate: {} kbps",
+            total_frames, fps, codec, bitrate / 1000
+        ));
 
         let response = service.start_export(config).await.map_err(|e| {
             Box::new(std::io::Error::new(
@@ -111,34 +129,44 @@ impl Runner {
             )) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
-        tracing::info!("Export job started: {}", response.job_id);
+        pb.set_message(format!("Exporting at {} fps", fps));
 
         // Poll for completion
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
             let status = service.get_progress(&response.job_id).await;
             if let Some(progress) = status {
-                tracing::info!(
-                    "Progress: {:.1}% ({}/{} frames)",
-                    progress.progress,
-                    progress.current_frame,
-                    progress.total_frames
-                );
+                pb.set_position(progress.current_frame);
+
+                // Update message with speed info
+                if let Some(ref stats) = progress.stats {
+                    if stats.avg_fps > 0.0 {
+                        let eta_secs = ((total_frames - progress.current_frame) as f64 / stats.avg_fps) as u64;
+                        pb.set_message(format!(
+                            "{:.1} fps | ETA: {}:{:02}",
+                            stats.avg_fps,
+                            eta_secs / 60,
+                            eta_secs % 60
+                        ));
+                    }
+                }
 
                 match progress.state {
                     ExportState::Completed => {
-                        tracing::info!("Export completed successfully!");
+                        pb.finish_with_message("Export completed!");
                         break;
                     }
                     ExportState::Error => {
                         let error_msg = progress.error.unwrap_or_else(|| "Unknown error".to_string());
+                        pb.finish_with_message(format!("Error: {}", error_msg));
                         return Err(Box::new(std::io::Error::new(
                             std::io::ErrorKind::Other,
                             format!("Export failed: {}", error_msg),
                         )));
                     }
                     ExportState::Cancelled => {
+                        pb.finish_with_message("Cancelled");
                         return Err(Box::new(std::io::Error::new(
                             std::io::ErrorKind::Interrupted,
                             "Export was cancelled",

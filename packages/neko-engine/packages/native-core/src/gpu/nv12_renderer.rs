@@ -99,7 +99,9 @@ impl Nv12Renderer {
                 module: &shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    // Use Rgba16Float for HDR support and to avoid color banding
+                    // during multi-pass compositing operations
+                    format: wgpu::TextureFormat::Rgba16Float,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -147,7 +149,7 @@ impl Nv12Renderer {
         })
     }
 
-    /// Create an RGBA output texture
+    /// Create an RGBA output texture (16-bit float for HDR support)
     pub fn create_output_texture(&self, width: u32, height: u32) -> wgpu::Texture {
         self.ctx.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("NV12 RGBA Output"),
@@ -159,7 +161,8 @@ impl Nv12Renderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            // Use Rgba16Float for HDR support and to avoid color banding
+            format: wgpu::TextureFormat::Rgba16Float,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
@@ -448,6 +451,7 @@ mod tests {
     }
 
     /// Helper function to read texture data back to CPU
+    /// Handles Rgba16Float format and converts to u8 values
     fn read_texture_to_cpu(
         ctx: &GpuContext,
         texture: &wgpu::Texture,
@@ -457,7 +461,9 @@ mod tests {
         let device = ctx.device();
         let queue = ctx.queue();
 
-        let bytes_per_row = width * 4;
+        // Rgba16Float = 8 bytes per pixel (4 x f16)
+        let bytes_per_pixel = 8u32;
+        let bytes_per_row = width * bytes_per_pixel;
         let padded_bytes_per_row = (bytes_per_row + 255) & !255; // Align to 256
         let buffer_size = padded_bytes_per_row * height;
 
@@ -507,12 +513,22 @@ mod tests {
 
         let data = buffer_slice.get_mapped_range();
 
-        // Remove padding
+        // Convert f16 to u8: read as half-floats and convert to 0-255 range
         let mut result = Vec::with_capacity((width * height * 4) as usize);
         for row in 0..height {
-            let start = (row * padded_bytes_per_row) as usize;
-            let end = start + (width * 4) as usize;
-            result.extend_from_slice(&data[start..end]);
+            let row_start = (row * padded_bytes_per_row) as usize;
+            for col in 0..width {
+                let pixel_start = row_start + (col * bytes_per_pixel) as usize;
+                // Read 4 f16 values (R, G, B, A)
+                for channel in 0..4 {
+                    let offset = pixel_start + channel * 2;
+                    let f16_bits = u16::from_le_bytes([data[offset], data[offset + 1]]);
+                    let f32_val = half::f16::from_bits(f16_bits).to_f32();
+                    // Clamp to 0-1 and convert to 0-255
+                    let u8_val = (f32_val.clamp(0.0, 1.0) * 255.0).round() as u8;
+                    result.push(u8_val);
+                }
+            }
         }
 
         result

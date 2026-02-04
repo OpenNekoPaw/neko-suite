@@ -43,7 +43,13 @@ extern "C" {
 #[link(name = "CoreVideo", kind = "framework")]
 extern "C" {
     fn CVPixelBufferGetIOSurface(pixelBuffer: *mut Object) -> IOSurfaceRef;
+    fn CVPixelBufferLockBaseAddress(pixelBuffer: *mut Object, lockFlags: u64) -> i32;
+    fn CVPixelBufferUnlockBaseAddress(pixelBuffer: *mut Object, unlockFlags: u64) -> i32;
 }
+
+// CVPixelBuffer lock flags
+#[allow(non_upper_case_globals)]
+const kCVPixelBufferLock_ReadOnly: u64 = 0x00000001;
 
 /// macOS zero-copy texture importer
 pub struct MacOsTextureImporter {
@@ -72,9 +78,21 @@ impl MacOsTextureImporter {
     ) -> Result<ImportedNv12Texture> {
         let cv_pixel_buffer = pixel_buffer as *mut Object;
 
-        // Get IOSurface from CVPixelBuffer
+        // CRITICAL: Lock CVPixelBuffer to ensure GPU has finished writing
+        // CVPixelBufferLockBaseAddress waits for GPU operations to complete,
+        // unlike IOSurfaceLock which only provides CPU-level synchronization.
+        let lock_result = CVPixelBufferLockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
+        if lock_result != 0 {
+            return Err(Error::Other(format!(
+                "CVPixelBufferLockBaseAddress failed: {}",
+                lock_result
+            )));
+        }
+
+        // Get IOSurface from CVPixelBuffer (now safe to access)
         let io_surface = CVPixelBufferGetIOSurface(cv_pixel_buffer);
         if io_surface.is_null() {
+            CVPixelBufferUnlockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
             return Err(Error::Other(
                 "Failed to get IOSurface from CVPixelBuffer".to_string(),
             ));
@@ -83,6 +101,7 @@ impl MacOsTextureImporter {
         // Verify plane count (NV12 has 2 planes)
         let plane_count = IOSurfaceGetPlaneCount(io_surface);
         if plane_count != 2 {
+            CVPixelBufferUnlockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
             return Err(Error::Other(format!(
                 "Expected 2 planes for NV12, got {}",
                 plane_count
@@ -95,20 +114,31 @@ impl MacOsTextureImporter {
         let uv_width = IOSurfaceGetWidthOfPlane(io_surface, 1);
         let uv_height = IOSurfaceGetHeightOfPlane(io_surface, 1);
 
-        // Try to create Metal textures from IOSurface
-        self.create_metal_textures_from_iosurface(
+        // Create Metal textures from IOSurface
+        let result = self.create_metal_textures_from_iosurface(
+            cv_pixel_buffer,
             io_surface,
             y_width,
             y_height,
             uv_width,
             uv_height,
             gpu_texture,
-        )
+        );
+
+        // Unlock CVPixelBuffer after texture creation
+        CVPixelBufferUnlockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
+
+        result
     }
 
     /// Create Metal textures from IOSurface planes
+    ///
+    /// Note: The caller must ensure GPU synchronization before calling this function.
+    /// Use CVPixelBufferLockBaseAddress to wait for VideoToolbox GPU operations.
+    #[allow(unused_variables)]
     unsafe fn create_metal_textures_from_iosurface(
         &self,
+        cv_pixel_buffer: *mut Object,
         io_surface: IOSurfaceRef,
         y_width: usize,
         y_height: usize,
@@ -116,28 +146,8 @@ impl MacOsTextureImporter {
         uv_height: usize,
         gpu_texture: &Nv12GpuTexture,
     ) -> Result<ImportedNv12Texture> {
-        // Synchronize IOSurface to ensure VideoToolbox has finished writing
-        // This is critical for zero-copy to work correctly
-        #[link(name = "IOSurface", kind = "framework")]
-        extern "C" {
-            fn IOSurfaceLock(surface: IOSurfaceRef, options: u32, seed: *mut u32) -> i32;
-            fn IOSurfaceUnlock(surface: IOSurfaceRef, options: u32, seed: *mut u32) -> i32;
-        }
-
-        #[allow(non_upper_case_globals)]
-        const kIOSurfaceLockReadOnly: u32 = 1;
-
-        // Lock IOSurface for reading to ensure GPU has finished writing
-        let lock_result = IOSurfaceLock(io_surface, kIOSurfaceLockReadOnly, std::ptr::null_mut());
-        if lock_result != 0 {
-            tracing::warn!("IOSurfaceLock returned {}, continuing anyway", lock_result);
-        }
-
-        // Immediately unlock - we just needed to synchronize
-        let unlock_result = IOSurfaceUnlock(io_surface, kIOSurfaceLockReadOnly, std::ptr::null_mut());
-        if unlock_result != 0 {
-            tracing::warn!("IOSurfaceUnlock returned {}", unlock_result);
-        }
+        // GPU synchronization is handled by CVPixelBufferLockBaseAddress in the caller.
+        // IOSurfaceLock only provides CPU-level synchronization and does NOT wait for GPU.
 
         // Create Y plane texture descriptor (R8Unorm)
         let y_desc = TextureDescriptor::new();
@@ -280,7 +290,7 @@ impl MacOsTextureImporter {
         let y_view = y_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let uv_view = uv_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        tracing::info!(
+        tracing::trace!(
             "Zero-copy import successful: {}x{} NV12 from IOSurface",
             y_width, y_height
         );
@@ -299,8 +309,13 @@ impl MacOsTextureImporter {
 
     /// Import from IOSurface handle directly (for use with FFmpeg)
     ///
+    /// WARNING: This function does NOT perform GPU synchronization.
+    /// The caller must ensure the IOSurface data is ready before calling.
+    /// For VideoToolbox output, use `import_videotoolbox` instead which
+    /// properly synchronizes using CVPixelBufferLockBaseAddress.
+    ///
     /// # Safety
-    /// The io_surface must be a valid IOSurfaceRef.
+    /// The io_surface must be a valid IOSurfaceRef with data already written.
     pub unsafe fn import_iosurface(
         &self,
         io_surface: usize,
@@ -326,7 +341,9 @@ impl MacOsTextureImporter {
         let uv_height = IOSurfaceGetHeightOfPlane(io_surface_ref, 1);
 
         // Use zero-copy Metal texture import
+        // Note: No GPU sync here - caller must ensure data is ready
         self.create_metal_textures_from_iosurface(
+            std::ptr::null_mut(), // No CVPixelBuffer available
             io_surface_ref,
             y_width,
             y_height,

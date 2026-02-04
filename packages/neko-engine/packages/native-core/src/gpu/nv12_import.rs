@@ -209,9 +209,11 @@ impl Nv12TextureImporter {
         // Create macOS texture importer and delegate to it
         let importer = MacOsTextureImporter::new(self.ctx.clone())?;
 
-        // Use the IOSurface directly for zero-copy import
-        // Safety: io_surface is a valid IOSurfaceRef from VideoToolbox decoder
-        unsafe { importer.import_iosurface(io_surface, gpu_texture) }
+        // Use CVPixelBuffer for proper GPU synchronization
+        // CVPixelBufferLockBaseAddress waits for GPU operations to complete,
+        // which is required for zero-copy import from VideoToolbox.
+        // Safety: pixel_buffer is a valid CVPixelBufferRef from VideoToolbox decoder
+        unsafe { importer.import_videotoolbox(pixel_buffer, gpu_texture) }
     }
 
     /// Import from VAAPI (Linux)

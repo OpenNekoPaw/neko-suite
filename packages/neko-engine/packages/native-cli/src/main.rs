@@ -16,12 +16,24 @@ use runner::Runner;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Suppress macOS system warnings (Context leak, msgtracer)
+    // These come from VideoToolbox/Metal frameworks and are harmless
+    #[cfg(target_os = "macos")]
+    unsafe {
+        libc::setenv(
+            b"OS_ACTIVITY_MODE\0".as_ptr() as *const i8,
+            b"disable\0".as_ptr() as *const i8,
+            1,
+        );
+    }
+
     // Parse command line arguments
     let args = Args::parse();
 
     // Determine log level based on command
     let log_level = match &args.command {
         Command::Serve { verbose, .. } if *verbose => "debug",
+        Command::Export { .. } => "warn", // Reduce log noise during export (progress bar handles display)
         _ => "info",
     };
 

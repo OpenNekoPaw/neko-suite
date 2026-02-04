@@ -345,6 +345,7 @@ impl TextureCompositor {
         });
 
         // Create render pipeline with alpha blending
+        // Use Rgba16Float for HDR support and to avoid color banding
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Texture Compositor Pipeline"),
             layout: Some(&pipeline_layout),
@@ -357,7 +358,7 @@ impl TextureCompositor {
                 module: &shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    format: wgpu::TextureFormat::Rgba16Float,
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -456,7 +457,7 @@ impl TextureCompositor {
         })
     }
 
-    /// Create an output texture
+    /// Create an output texture (16-bit float for HDR support)
     pub fn create_output_texture(&self, width: u32, height: u32) -> wgpu::Texture {
         self.ctx.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("Compositor Output"),
@@ -468,7 +469,8 @@ impl TextureCompositor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            // Use Rgba16Float for HDR support and to avoid color banding
+            format: wgpu::TextureFormat::Rgba16Float,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
