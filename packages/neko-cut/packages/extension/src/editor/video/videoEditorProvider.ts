@@ -441,6 +441,18 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 					}, 100);
 				}
 
+				// Handle webview ready message - send frame server config
+				if (message.type === 'ready') {
+					console.log('[VideoEditorProvider] Webview ready, sending frame server config');
+					if (frameServerPort) {
+						webviewPanel.webview.postMessage({
+							type: 'frameServer:config',
+							port: frameServerPort,
+						});
+					}
+					return;
+				}
+
 				messageHandler.handleMessage(message);
 			},
 			undefined,
@@ -493,14 +505,6 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 				defaults: content.defaults || null,
 			});
 		};
-
-		// Send frame server configuration to webview (if available)
-		if (frameServerPort) {
-			webviewPanel.webview.postMessage({
-				type: 'frameServer:config',
-				port: frameServerPort,
-			});
-		}
 
 		// Listen for model changes (来自 VideoEditorModel 的事件)
 		const modelChangeSubscription = model.onDidChange(() => {

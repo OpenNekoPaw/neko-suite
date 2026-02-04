@@ -1545,6 +1545,9 @@ export class MediaProcessorService {
 			}
 
 			try {
+				// Debug: Log current time and track info
+				console.log(`[MediaProcessor] Rendering frame at time=${currentTime.toFixed(3)}s, tracks=${projectData.tracks.length}`);
+
 				// Collect active layers at current time
 				const layers: Array<{
 					source: string;
@@ -1599,6 +1602,12 @@ export class MediaProcessorService {
 
 				let frameData: { imageData: Uint8Array; width: number; height: number };
 
+				// Debug: Log layers info
+				console.log(`[MediaProcessor] Active layers: ${layers.length}, elements checked: ${projectData.tracks.reduce((sum, t) => sum + (t.elements?.length || 0), 0)}`);
+				if (layers.length > 0) {
+					console.log(`[MediaProcessor] First layer: source=${layers[0].source}, sourceTime=${layers[0].sourceTime.toFixed(3)}s`);
+				}
+
 				if (layers.length === 0) {
 					// No active layers, push black frame (encode RGBA to JPEG)
 					// eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1643,10 +1652,13 @@ export class MediaProcessorService {
 					if (layers.length === 1) {
 						// Single layer: decode to RGBA then convert to NV12
 						const layer = layers[0]!;
+						console.log(`[MediaProcessor] Decoding frame: ${layer.source} @ ${layer.sourceTime.toFixed(3)}s`);
 						const rgbaFrame = this.rustService.decodeFrame(layer.source, layer.sourceTime, 'rgba');
+						console.log(`[MediaProcessor] RGBA frame: ${rgbaFrame ? `${rgbaFrame.width}x${rgbaFrame.height}, ${rgbaFrame.data.length} bytes` : 'null'}`);
 						if (rgbaFrame) {
 							// Convert RGBA to NV12 using GPU
 							const nv12Frame = this.rustService.rgbaToNv12(rgbaFrame);
+							console.log(`[MediaProcessor] NV12 frame: ${nv12Frame ? `${nv12Frame.width}x${nv12Frame.height}, ${nv12Frame.data.length} bytes, first16=[${Array.from(nv12Frame.data.slice(0, 16)).join(',')}]` : 'null'}`);
 							if (nv12Frame) {
 								nv12Data = {
 									data: nv12Frame.data as Buffer,
@@ -1671,6 +1683,8 @@ export class MediaProcessorService {
 							},
 							pts
 						);
+
+						console.log(`[MediaProcessor] H264 encoded: ${packets.length} packets, sizes=[${packets.map(p => p.data.length).join(',')}]`);
 
 						for (const packet of packets) {
 							this.frameServerService.pushH264Packet(
