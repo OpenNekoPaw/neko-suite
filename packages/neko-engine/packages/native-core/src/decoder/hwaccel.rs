@@ -1,4 +1,4 @@
-//! Zero-copy hardware decoder - FFmpeg outputs NV12 GPU textures for wgpu
+//! Hardware-accelerated decoder - FFmpeg outputs NV12 GPU textures for wgpu
 //!
 //! This module implements true zero-copy hardware decoding where:
 //! 1. FFmpeg decodes video using hardware acceleration (VideoToolbox/VAAPI/D3D11VA)
@@ -46,16 +46,16 @@ pub struct Nv12GpuTexture {
     pub color_space: i32,
 }
 
-/// Zero-copy hardware decoder configuration
+/// Hardware-accelerated decoder configuration
 #[derive(Debug, Clone)]
-pub struct ZeroCopyConfig {
+pub struct HwAccelDecoderConfig {
     /// Preferred hardware acceleration (Auto = best available)
     pub hw_accel: HwAccelType,
     /// GPU device index (for multi-GPU systems)
     pub gpu_index: u32,
 }
 
-impl Default for ZeroCopyConfig {
+impl Default for HwAccelDecoderConfig {
     fn default() -> Self {
         Self {
             hw_accel: HwAccelType::Auto,
@@ -64,7 +64,7 @@ impl Default for ZeroCopyConfig {
     }
 }
 
-/// Zero-copy hardware decoder
+/// Hardware-accelerated decoder
 ///
 /// Decodes video frames directly to GPU memory, outputting NV12 textures
 /// that can be imported by wgpu without CPU copy.
@@ -72,19 +72,19 @@ impl Default for ZeroCopyConfig {
 /// This decoder does NOT fall back to software decoding. If hardware
 /// acceleration fails, errors are returned immediately. Use this decoder
 /// only when GPU textures are required.
-pub struct ZeroCopyDecoder {
+pub struct HwAccelDecoder {
     input_ctx: Option<ffmpeg::format::context::Input>,
     decoder: Option<ffmpeg::decoder::Video>,
     stream_index: usize,
     media_info: Option<MediaInfo>,
     current_position: f64,
     time_base: f64,
-    config: ZeroCopyConfig,
+    config: HwAccelDecoderConfig,
     hw_device_ctx: Option<HwDeviceContext>,
     active_hw_type: Option<HwAccelType>,
 }
 
-impl ZeroCopyDecoder {
+impl HwAccelDecoder {
     /// Create a new zero-copy decoder
     pub fn new() -> Self {
         init_ffmpeg();
@@ -95,7 +95,7 @@ impl ZeroCopyDecoder {
             media_info: None,
             current_position: 0.0,
             time_base: 1.0,
-            config: ZeroCopyConfig::default(),
+            config: HwAccelDecoderConfig::default(),
             hw_device_ctx: None,
             active_hw_type: None,
         }
@@ -109,7 +109,7 @@ impl ZeroCopyDecoder {
     }
 
     /// Set configuration
-    pub fn with_config(mut self, config: ZeroCopyConfig) -> Self {
+    pub fn with_config(mut self, config: HwAccelDecoderConfig) -> Self {
         self.config = config;
         self
     }
@@ -415,13 +415,13 @@ impl ZeroCopyDecoder {
     }
 }
 
-impl Default for ZeroCopyDecoder {
+impl Default for HwAccelDecoder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Decoder for ZeroCopyDecoder {
+impl Decoder for HwAccelDecoder {
     fn open(&mut self, path: &str) -> Result<MediaInfo> {
         if !Path::new(path).exists() {
             return Err(Error::FileNotFound(path.to_string()));
@@ -542,7 +542,7 @@ impl Decoder for ZeroCopyDecoder {
     }
 }
 
-impl Drop for ZeroCopyDecoder {
+impl Drop for HwAccelDecoder {
     fn drop(&mut self) {
         self.close();
     }
@@ -554,21 +554,21 @@ mod tests {
 
     #[test]
     fn test_zerocopy_config_default() {
-        let config = ZeroCopyConfig::default();
+        let config = HwAccelDecoderConfig::default();
         assert_eq!(config.gpu_index, 0);
         assert_eq!(config.hw_accel, HwAccelType::Auto);
     }
 
     #[test]
     fn test_zerocopy_decoder_new() {
-        let decoder = ZeroCopyDecoder::new();
+        let decoder = HwAccelDecoder::new();
         assert!(!decoder.is_hw_active());
         assert!(decoder.active_hw_type().is_none());
     }
 
     #[test]
     fn test_with_hw_accel() {
-        let decoder = ZeroCopyDecoder::with_hw_accel(HwAccelType::VideoToolbox);
+        let decoder = HwAccelDecoder::with_hw_accel(HwAccelType::VideoToolbox);
         assert_eq!(decoder.config.hw_accel, HwAccelType::VideoToolbox);
     }
 }

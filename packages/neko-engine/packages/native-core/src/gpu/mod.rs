@@ -31,7 +31,7 @@ mod style_processor;
 mod texture;
 mod transition_processor;
 mod texture_compositor;
-mod zerocopy_pipeline;
+mod gpu_pipeline;
 
 // Platform-specific zero-copy import modules
 #[cfg(target_os = "macos")]

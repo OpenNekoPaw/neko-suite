@@ -458,22 +458,42 @@ impl Encoder for HwAccelEncoder {
     fn encode_frame_gpu(&mut self, gpu_handle: usize, pts: i64) -> Result<Vec<EncodedPacket>> {
         let config = self.config.as_ref().ok_or(Error::EncoderNotInitialized)?.clone();
 
-        // Create VideoFrame from IOSurface
-        // Note: This requires FFmpeg to be built with VideoToolbox support
-        // and the IOSurface to be in NV12 format (kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
+        // Create CVPixelBuffer from IOSurface for true zero-copy encoding
+        let cv_pixel_buffer = unsafe {
+            self.create_cv_pixel_buffer_from_iosurface(gpu_handle, config.width, config.height)?
+        };
 
-        // For now, we need to read the IOSurface data and copy to frame
-        // TODO(P0): Implement true zero-copy using CVPixelBuffer → AVFrame hw_frames_ctx
-        // This requires:
-        // 1. Create AVHWFramesContext for VideoToolbox
-        // 2. Create AVFrame with hw_frames_ctx
-        // 3. Set AVFrame.data[3] to CVPixelBuffer created from IOSurface
+        // Create AVFrame and set CVPixelBuffer directly
+        let mut frame = VideoFrame::new(Pixel::NV12, config.width, config.height);
+        frame.set_pts(Some(pts));
 
-        // Fallback: Read IOSurface data to CPU (still faster than wgpu readback due to shared memory)
-        let nv12_data = unsafe { self.read_iosurface_to_nv12(gpu_handle, config.width, config.height)? };
+        // Set CVPixelBuffer to AVFrame.data[3] for VideoToolbox
+        // VideoToolbox encoder will read directly from GPU memory
+        unsafe {
+            let frame_ptr = frame.as_mut_ptr();
+            (*frame_ptr).data[3] = cv_pixel_buffer as *mut u8;
+            // Set format to VideoToolbox hardware format
+            (*frame_ptr).format = ffmpeg::ffi::AVPixelFormat::AV_PIX_FMT_VIDEOTOOLBOX as i32;
+        }
 
-        // Use standard encode path
-        self.encode_frame(&nv12_data, pts)
+        // Send frame to encoder
+        let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
+        if let Err(e) = encoder.send_frame(&frame) {
+            // Release CVPixelBuffer on error
+            unsafe { self.release_cv_pixel_buffer(cv_pixel_buffer); }
+            return Err(Error::EncodeFailed(format!(
+                "Frame {} send failed: {}",
+                pts, e
+            )));
+        }
+
+        // Release CVPixelBuffer after encoding (encoder has retained it if needed)
+        unsafe { self.release_cv_pixel_buffer(cv_pixel_buffer); }
+
+        self.frame_count += 1;
+
+        // Receive encoded packets
+        self.receive_packets()
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -484,18 +504,78 @@ impl Encoder for HwAccelEncoder {
     }
 
     fn supports_gpu_input(&self) -> bool {
-        // Currently only macOS has partial support
+        // macOS VideoToolbox supports true zero-copy via IOSurface → CVPixelBuffer
         cfg!(target_os = "macos") && self.hw_type == HwEncoderType::VideoToolbox
     }
 }
 
 #[cfg(target_os = "macos")]
 impl HwAccelEncoder {
-    /// Read IOSurface NV12 data to CPU buffer
+    /// Create CVPixelBuffer from IOSurface for zero-copy encoding
     ///
-    /// This is a temporary implementation until true zero-copy is implemented.
-    /// It's still faster than wgpu staging buffer readback because IOSurface
-    /// uses shared memory between CPU and GPU on Apple Silicon.
+    /// Returns the CVPixelBufferRef as usize. Caller must release with release_cv_pixel_buffer.
+    unsafe fn create_cv_pixel_buffer_from_iosurface(
+        &self,
+        io_surface: usize,
+        _width: u32,
+        _height: u32,
+    ) -> Result<usize> {
+        use objc::runtime::Object;
+        use std::ptr;
+
+        type IOSurfaceRef = *mut Object;
+        type CVPixelBufferRef = *mut Object;
+
+        #[link(name = "CoreVideo", kind = "framework")]
+        extern "C" {
+            fn CVPixelBufferCreateWithIOSurface(
+                allocator: *const Object,       // kCFAllocatorDefault = NULL
+                surface: IOSurfaceRef,
+                pixel_buffer_attributes: *const Object, // NULL for default
+                pixel_buffer_out: *mut CVPixelBufferRef,
+            ) -> i32; // CVReturn, 0 = success
+        }
+
+        let io_surface_ref = io_surface as IOSurfaceRef;
+        let mut cv_pixel_buffer: CVPixelBufferRef = ptr::null_mut();
+
+        let result = CVPixelBufferCreateWithIOSurface(
+            ptr::null(),
+            io_surface_ref,
+            ptr::null(),
+            &mut cv_pixel_buffer,
+        );
+
+        if result != 0 || cv_pixel_buffer.is_null() {
+            return Err(Error::Other(format!(
+                "CVPixelBufferCreateWithIOSurface failed: {}",
+                result
+            )));
+        }
+
+        Ok(cv_pixel_buffer as usize)
+    }
+
+    /// Release CVPixelBuffer
+    unsafe fn release_cv_pixel_buffer(&self, cv_pixel_buffer: usize) {
+        use objc::runtime::Object;
+
+        type CVPixelBufferRef = *mut Object;
+
+        #[link(name = "CoreFoundation", kind = "framework")]
+        extern "C" {
+            fn CFRelease(cf: *const Object);
+        }
+
+        if cv_pixel_buffer != 0 {
+            CFRelease(cv_pixel_buffer as CVPixelBufferRef as *const Object);
+        }
+    }
+
+    /// Read IOSurface NV12 data to CPU buffer (fallback path)
+    ///
+    /// This is kept as a fallback for debugging or when zero-copy fails.
+    #[allow(dead_code)]
     unsafe fn read_iosurface_to_nv12(
         &self,
         io_surface: usize,

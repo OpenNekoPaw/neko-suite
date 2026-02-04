@@ -522,7 +522,7 @@ mod tests {
     /// This test decodes a frame from 720P.mp4 and verifies the output is colorful
     #[test]
     fn test_nv12_to_rgba_with_real_video() {
-        use crate::decoder::{Decoder, ZeroCopyDecoder};
+        use crate::decoder::{Decoder, HwAccelDecoder};
         use crate::gpu::Nv12TextureImporter;
 
         let test_video = "/Users/zhangfeng144/Git/neko-test/cases/720P.mp4";
@@ -543,7 +543,7 @@ mod tests {
         };
 
         // Create decoder
-        let mut decoder = ZeroCopyDecoder::new();
+        let mut decoder = HwAccelDecoder::new();
         let media_info = decoder.open(test_video).expect("Failed to open video");
         println!(
             "Video: {}x{}, duration: {:.2}s, codec: {}",

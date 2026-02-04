@@ -12,7 +12,7 @@ use super::types::{
     JsVignetteParams,
 };
 use neko_native_core::audio::{AudioDecoder, AudioEncoder, FfmpegAudioDecoder, FfmpegAudioEncoder};
-use neko_native_core::decoder::{Decoder, HwAccelType, ZeroCopyDecoder};
+use neko_native_core::decoder::{Decoder, HwAccelType, HwAccelDecoder};
 use neko_native_core::encoder::{Encoder, HwAccelEncoder, HwEncoderType};
 use neko_native_core::gpu::{
     BlurParams, ChromaticAberrationParams, EffectParams, FilmGrainParams, GlowParams,
@@ -179,7 +179,7 @@ impl MediaProcessor {
         );
 
         // Create zero-copy hardware decoder
-        let mut decoder = ZeroCopyDecoder::with_hw_accel(HwAccelType::VideoToolbox);
+        let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::VideoToolbox);
 
         decoder
             .open(&config.path)
@@ -269,7 +269,7 @@ impl MediaProcessor {
 
     /// Decode frame using GPU color conversion (NV12 → RGBA)
     ///
-    /// Uses ZeroCopyDecoder for hardware decoding with GPU texture output.
+    /// Uses HwAccelDecoder for hardware decoding with GPU texture output.
     /// Converts NV12 GPU texture to RGBA using wgpu shader.
     fn decode_frame_with_gpu_conversion(
         &self,
@@ -293,7 +293,7 @@ impl MediaProcessor {
         );
 
         // Create zero-copy decoder
-        let mut decoder = ZeroCopyDecoder::with_hw_accel(hw_accel_type);
+        let mut decoder = HwAccelDecoder::with_hw_accel(hw_accel_type);
 
         decoder
             .open(&config.path)
@@ -454,7 +454,7 @@ impl MediaProcessor {
         let mut frames = Vec::new();
 
         // Create zero-copy hardware decoder
-        let mut decoder = ZeroCopyDecoder::with_hw_accel(hw_accel_type);
+        let mut decoder = HwAccelDecoder::with_hw_accel(hw_accel_type);
 
         decoder
             .open(&config.path)
@@ -2627,12 +2627,12 @@ pub fn extract_frame(
 
 /// Extract frame as H.264 I-frame (hardware accelerated)
 fn extract_frame_h264(source: &str, time: f64, quality: u32) -> Result<Buffer> {
-    use neko_native_core::decoder::{Decoder, HwAccelType, ZeroCopyDecoder};
-    use neko_native_core::encoder::{encode_nv12_to_h264_iframe, IFrameConfig};
+    use neko_native_core::decoder::{Decoder, HwAccelType, HwAccelDecoder};
+    use neko_native_core::encoder::encode_nv12_to_h264_iframe;
     use neko_native_core::gpu::{GpuContext, Nv12TextureImporter};
 
     // Create decoder with hardware acceleration
-    let mut decoder = ZeroCopyDecoder::with_hw_accel(HwAccelType::Auto);
+    let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
 
     // Open video file
     let media_info = decoder
@@ -2693,7 +2693,7 @@ fn extract_frame_h264(source: &str, time: f64, quality: u32) -> Result<Buffer> {
 
 /// Extract frame as JPEG (CPU encoding)
 fn extract_frame_jpeg(source: &str, time: f64, quality: u32) -> Result<Buffer> {
-    use neko_native_core::decoder::{Decoder, HwAccelType, ZeroCopyDecoder};
+    use neko_native_core::decoder::{Decoder, HwAccelType, HwAccelDecoder};
     use neko_native_core::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
     use neko_native_core::media_service::encode_rgba_to_jpeg;
 
@@ -2703,7 +2703,7 @@ fn extract_frame_jpeg(source: &str, time: f64, quality: u32) -> Result<Buffer> {
     let gpu_ctx = std::sync::Arc::new(gpu_ctx);
 
     // Create decoder with hardware acceleration
-    let mut decoder = ZeroCopyDecoder::with_hw_accel(HwAccelType::Auto);
+    let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
 
     // Open video file
     let media_info = decoder
@@ -3025,7 +3025,7 @@ pub struct JsCompositeFrameRequest {
 /// * JPEG image data as Buffer
 #[napi]
 pub fn composite_frame(request: JsCompositeFrameRequest) -> Result<Buffer> {
-    use neko_native_core::decoder::{Decoder, HwAccelType, ZeroCopyDecoder};
+    use neko_native_core::decoder::{Decoder, HwAccelType, HwAccelDecoder};
     use neko_native_core::gpu::{
         BlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext, LayerPixelFormat,
         Nv12Renderer, Nv12TextureImporter, Transform2D,
@@ -3048,7 +3048,7 @@ pub fn composite_frame(request: JsCompositeFrameRequest) -> Result<Buffer> {
     // Decode each layer
     for layer_req in &request.layers {
         // Create decoder
-        let mut decoder = ZeroCopyDecoder::with_hw_accel(HwAccelType::Auto);
+        let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
         let media_info = decoder
             .open(&layer_req.source)
             .map_err(|e| Error::from_reason(format!("Failed to open video: {}", e)))?;

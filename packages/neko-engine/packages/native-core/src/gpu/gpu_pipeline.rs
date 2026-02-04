@@ -10,7 +10,7 @@
 
 #![allow(dead_code)]
 
-use crate::decoder::{Decoder, HwAccelType, MediaInfo, ZeroCopyDecoder};
+use crate::decoder::{Decoder, HwAccelType, MediaInfo, HwAccelDecoder};
 use crate::error::{Error, Result};
 use crate::gpu::{
     ColorSpace, GpuContext, GpuEncoderBridge,
@@ -83,7 +83,7 @@ impl PipelineStats {
 
 /// Zero-copy pipeline configuration
 #[derive(Debug, Clone)]
-pub struct ZeroCopyPipelineConfig {
+pub struct GpuPipelineConfig {
     /// Preferred hardware acceleration for decoding
     pub decode_hw_accel: HwAccelType,
     /// Preferred hardware acceleration for encoding
@@ -96,7 +96,7 @@ pub struct ZeroCopyPipelineConfig {
     pub color_space: ColorSpace,
 }
 
-impl Default for ZeroCopyPipelineConfig {
+impl Default for GpuPipelineConfig {
     fn default() -> Self {
         Self {
             decode_hw_accel: HwAccelType::Auto,
@@ -109,11 +109,11 @@ impl Default for ZeroCopyPipelineConfig {
 }
 
 /// Zero-copy video processing pipeline
-pub struct ZeroCopyPipeline {
+pub struct GpuPipeline {
     /// GPU context
     ctx: Arc<GpuContext>,
     /// Pipeline configuration
-    config: ZeroCopyPipelineConfig,
+    config: GpuPipelineConfig,
     /// Current pipeline mode
     mode: PipelineMode,
     /// Texture importer
@@ -130,9 +130,9 @@ pub struct ZeroCopyPipeline {
     input_info: Option<MediaInfo>,
 }
 
-impl ZeroCopyPipeline {
+impl GpuPipeline {
     /// Create a new zero-copy pipeline
-    pub fn new(ctx: Arc<GpuContext>, config: ZeroCopyPipelineConfig) -> Result<Self> {
+    pub fn new(ctx: Arc<GpuContext>, config: GpuPipelineConfig) -> Result<Self> {
         let importer = Nv12TextureImporter::new(ctx.clone());
         let nv12_renderer = Nv12RenderCache::new(ctx.clone())?;
         let converter = RgbaToNv12Converter::new(ctx.clone())?;
@@ -157,23 +157,23 @@ impl ZeroCopyPipeline {
 
     /// Detect the best pipeline mode for this platform
     fn detect_pipeline_mode() -> Result<PipelineMode> {
-        // Zero-copy decode is required.
-        // Hybrid mode means encode output still requires CPU readback
-        // until hardware encoder zero-copy is implemented.
         #[cfg(target_os = "macos")]
         {
-            // macOS: VideoToolbox IOSurface → Metal → wgpu (zero-copy decode)
-            // Encode: use process_frame_to_iosurface() for zero-copy output
-            Ok(PipelineMode::Hybrid)
+            // macOS: Full zero-copy pipeline
+            // Decode: VideoToolbox IOSurface → Metal → wgpu
+            // Encode: wgpu → IOSurface → CVPixelBuffer → VideoToolbox
+            Ok(PipelineMode::ZeroCopy)
         }
         #[cfg(target_os = "linux")]
         {
             // Linux: VAAPI DMA-BUF → Vulkan → wgpu (zero-copy decode)
+            // Encode: still requires CPU readback
             Ok(PipelineMode::Hybrid)
         }
         #[cfg(target_os = "windows")]
         {
             // Windows: D3D11VA shared handles → wgpu (zero-copy decode)
+            // Encode: still requires CPU readback
             Ok(PipelineMode::Hybrid)
         }
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
@@ -200,7 +200,7 @@ impl ZeroCopyPipeline {
     /// Initialize pipeline with input video
     pub fn open_input(&mut self, path: &str) -> Result<MediaInfo> {
         // Create hardware decoder with zero-copy output
-        let mut decoder = ZeroCopyDecoder::with_hw_accel(self.config.decode_hw_accel);
+        let mut decoder = HwAccelDecoder::with_hw_accel(self.config.decode_hw_accel);
 
         let info = decoder.open(path)?;
 
@@ -252,14 +252,14 @@ impl ZeroCopyPipeline {
 
 /// Builder for zero-copy pipeline
 pub struct ZeroCopyPipelineBuilder {
-    config: ZeroCopyPipelineConfig,
+    config: GpuPipelineConfig,
 }
 
 impl ZeroCopyPipelineBuilder {
     /// Create a new pipeline builder
     pub fn new() -> Self {
         Self {
-            config: ZeroCopyPipelineConfig::default(),
+            config: GpuPipelineConfig::default(),
         }
     }
 
@@ -283,8 +283,8 @@ impl ZeroCopyPipelineBuilder {
     }
 
     /// Build the pipeline
-    pub fn build(self, ctx: Arc<GpuContext>) -> Result<ZeroCopyPipeline> {
-        ZeroCopyPipeline::new(ctx, self.config)
+    pub fn build(self, ctx: Arc<GpuContext>) -> Result<GpuPipeline> {
+        GpuPipeline::new(ctx, self.config)
     }
 }
 
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn test_pipeline_config_default() {
-        let config = ZeroCopyPipelineConfig::default();
+        let config = GpuPipelineConfig::default();
         assert_eq!(config.decode_hw_accel, HwAccelType::Auto);
         assert_eq!(config.color_space, ColorSpace::Bt709);
     }

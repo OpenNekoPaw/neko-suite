@@ -3,7 +3,7 @@
 //! Orchestrates the full GPU pipeline for timeline-based video export:
 //!
 //! ```text
-//! ZeroCopyDecoder[N] → Nv12TextureImporter → Nv12RenderCache
+//! HwAccelDecoder[N] → Nv12TextureImporter → Nv12RenderCache
 //!   → GpuLayer → TextureCompositor → RGBA texture → NV12 (GPU) → Encoder
 //! ```
 //!
@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::decoder::{Decoder, HwAccelType, ZeroCopyDecoder};
+use crate::decoder::{Decoder, HwAccelType, HwAccelDecoder};
 use crate::error::{Error, Result};
 use crate::gpu::{
     GpuContext, GpuLayer, GpuLayerBuilder, Nv12OutputBuffers, Nv12RenderCache, Nv12TextureImporter,
@@ -122,7 +122,7 @@ pub struct GpuExportPipeline {
     /// Shared GPU context
     ctx: Arc<GpuContext>,
     /// Video decoders keyed by source path
-    decoders: HashMap<String, ZeroCopyDecoder>,
+    decoders: HashMap<String, HwAccelDecoder>,
     /// NV12 texture importer (hardware decoder → wgpu)
     nv12_importer: Nv12TextureImporter,
     /// NV12 → RGBA renderer (pure GPU render pipeline)
@@ -191,7 +191,7 @@ impl GpuExportPipeline {
         let sources = self.timeline.get_media_sources();
 
         for src in sources {
-            let mut decoder = ZeroCopyDecoder::with_hw_accel(HwAccelType::Auto);
+            let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
 
             match decoder.open(&src) {
                 Ok(info) => {
@@ -387,7 +387,7 @@ impl GpuExportPipeline {
 
     /// Decode a media element to a GPU layer
     ///
-    /// Pipeline: ZeroCopyDecoder → Nv12GpuTexture → ImportedNv12Texture → RGBA → GpuLayer
+    /// Pipeline: HwAccelDecoder → Nv12GpuTexture → ImportedNv12Texture → RGBA → GpuLayer
     fn decode_to_gpu_layer(
         &mut self,
         media: &MediaElementData,

@@ -1653,9 +1653,51 @@ export class MediaProcessorService {
 						// Single layer: decode to RGBA then convert to NV12
 						const layer = layers[0]!;
 						console.log(`[MediaProcessor] Decoding frame: ${layer.source} @ ${layer.sourceTime.toFixed(3)}s`);
-						const rgbaFrame = this.rustService.decodeFrame(layer.source, layer.sourceTime, 'rgba');
-						console.log(`[MediaProcessor] RGBA frame: ${rgbaFrame ? `${rgbaFrame.width}x${rgbaFrame.height}, ${rgbaFrame.data.length} bytes` : 'null'}`);
+						let rgbaFrame = this.rustService.decodeFrame(layer.source, layer.sourceTime, 'rgba');
+						// Debug: check RGBA data content
+						const rgbaFirst16 = rgbaFrame ? Array.from((rgbaFrame.data as Buffer).slice(0, 16)) : [];
+						console.log(`[MediaProcessor] RGBA frame: ${rgbaFrame ? `${rgbaFrame.width}x${rgbaFrame.height}, ${rgbaFrame.data.length} bytes, first16=[${rgbaFirst16.join(',')}]` : 'null'}`);
 						if (rgbaFrame) {
+							// Check if frame needs scaling to match project resolution
+							if (rgbaFrame.width !== resolution.width || rgbaFrame.height !== resolution.height) {
+								console.log(`[MediaProcessor] Scaling frame from ${rgbaFrame.width}x${rgbaFrame.height} to ${resolution.width}x${resolution.height}`);
+								// Use compositor to scale frame to project resolution
+								// Calculate scale factors to fit source into target resolution
+								const scaleX = resolution.width / rgbaFrame.width;
+								const scaleY = resolution.height / rgbaFrame.height;
+								const scaledResult = this.rustService.composite(
+									[{
+										data: rgbaFrame.data as Buffer,
+										width: rgbaFrame.width,
+										height: rgbaFrame.height,
+										transform: {
+											x: 0,
+											y: 0,
+											scaleX: scaleX,
+											scaleY: scaleY,
+											rotation: 0,
+											anchorX: 0,
+											anchorY: 0,
+										},
+										opacity: 1,
+										zIndex: 0,
+									}],
+									resolution.width,
+									resolution.height,
+									[0, 0, 0, 1]
+								);
+								rgbaFrame = {
+									data: scaledResult.data,
+									width: scaledResult.width,
+									height: scaledResult.height,
+									format: 'rgba',
+									timestamp: rgbaFrame.timestamp,
+									isKeyframe: rgbaFrame.isKeyframe,
+								};
+								// Debug: check scaled RGBA data content
+								const scaledFirst16 = Array.from((rgbaFrame.data as Buffer).slice(0, 16));
+								console.log(`[MediaProcessor] Scaled frame: ${rgbaFrame.width}x${rgbaFrame.height}, ${rgbaFrame.data.length} bytes, first16=[${scaledFirst16.join(',')}]`);
+							}
 							// Convert RGBA to NV12 using GPU
 							const nv12Frame = this.rustService.rgbaToNv12(rgbaFrame);
 							console.log(`[MediaProcessor] NV12 frame: ${nv12Frame ? `${nv12Frame.width}x${nv12Frame.height}, ${nv12Frame.data.length} bytes, first16=[${Array.from(nv12Frame.data.slice(0, 16)).join(',')}]` : 'null'}`);

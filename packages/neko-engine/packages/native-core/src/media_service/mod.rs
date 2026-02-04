@@ -5,7 +5,7 @@
 //! - Subtitle extraction
 //! - JPEG encoding (RGBA to JPEG)
 //!
-//! NOTE: Video frame extraction now uses GPU path only (ZeroCopyDecoder + Nv12Renderer).
+//! NOTE: Video frame extraction now uses GPU path only (HwAccelDecoder + Nv12Renderer).
 
 mod jpeg_encoder;
 mod probe;

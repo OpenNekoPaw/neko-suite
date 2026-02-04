@@ -515,7 +515,14 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(
 			(e) => {
 				if (e.document.uri.toString() === document.uri.toString()) {
-					// 重新加载模型内容
+					// Skip reload if this is an internal save (from webview)
+					// This prevents the save operation from overwriting webview state
+					if (model!.isInternalSave) {
+						console.log('[VideoEditorProvider] Skipping reload for internal save');
+						return;
+					}
+					// 重新加载模型内容 (only for external changes)
+					console.log('[VideoEditorProvider] External change detected, reloading model');
 					model!.reload();
 				}
 			}

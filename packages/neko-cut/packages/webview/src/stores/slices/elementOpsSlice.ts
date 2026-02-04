@@ -257,7 +257,7 @@ export const createElementOpsSlice: StateCreator<
       videoTrackIndex = project.tracks.findIndex(t => t.id === videoTrackId);
     }
 
-    // 2. 创建视频元素
+    // 2. 立即创建视频元素（不等待音频检测）
     const videoElementId = addElement(videoTrackId, {
       type: 'media',
       src,
@@ -268,24 +268,25 @@ export const createElementOpsSlice: StateCreator<
       trimEnd: 0,
     } as Omit<TimelineElement, 'id'>);
 
-    // 3. 异步检测音频（不阻塞主流程）
-    const detectAndCreateAudio = async (): Promise<Omit<AddMediaWithAudioResult, 'videoElementId'>> => {
+    // 3. 异步检测音频并创建音频元素（完全不阻塞主流程）
+    const detectAndCreateAudio = async (): Promise<void> => {
       try {
-        // 使用 FFmpeg probe 检测是否有音轨（直接使用文件路径，不需要 webview URI）
+        // 使用 FFmpeg probe 检测是否有音轨
         const hasAudio = await detectVideoHasAudio(src);
         if (!hasAudio) {
-          return {};
+          return;
         }
 
-        // 4. 查找或创建音频轨道（复用 separateVideoAudio 的逻辑）
+        // 查找或创建音频轨道
         const currentProject = get().project;
-        if (!currentProject) return {};
+        if (!currentProject) return;
 
         let audioTrackId: string | null = null;
-        let createdNewAudioTrack = false;
+        let currentVideoTrackIndex = currentProject.tracks.findIndex(t => t.id === videoTrackId);
+        if (currentVideoTrackIndex === -1) currentVideoTrackIndex = videoTrackIndex;
 
         // 查找视频轨道正下方的音频轨道
-        for (let i = videoTrackIndex + 1; i < currentProject.tracks.length; i++) {
+        for (let i = currentVideoTrackIndex + 1; i < currentProject.tracks.length; i++) {
           const candidateTrack = currentProject.tracks[i];
           if (candidateTrack?.type === 'audio') {
             // 检查该位置是否有冲突的元素
@@ -305,16 +306,15 @@ export const createElementOpsSlice: StateCreator<
 
         // 如果没有找到合适的轨道，创建新轨道
         if (!audioTrackId) {
-          const videoTrack = currentProject.tracks[videoTrackIndex];
+          const videoTrack = currentProject.tracks[currentVideoTrackIndex];
           const videoTrackName = videoTrack?.name || 'V1';
           const trackNumber = videoTrackName.match(/\d+/)?.[0] || '1';
           const audioTrackName = `A${trackNumber}`;
 
           audioTrackId = addTrack('audio', audioTrackName);
-          createdNewAudioTrack = true;
         }
 
-        // 5. 创建音频元素
+        // 创建音频元素
         const audioElementId = addElement(audioTrackId, {
           type: 'audio',
           name: name,
@@ -331,23 +331,16 @@ export const createElementOpsSlice: StateCreator<
           linkedVideoId: videoElementId,
         } as Partial<LinkedAudioElement> as Omit<TimelineElement, 'id'>);
 
-        // 6. 建立双向关联
+        // 建立双向关联
         updateElement(videoTrackId, videoElementId, {
           linkedAudioId: audioElementId,
         } as Partial<LinkedMediaElement>);
 
-        return {
-          audioElementId,
-          audioTrackId,
-          createdNewAudioTrack,
-        };
+        console.log('[addMediaElementWithAudio] Audio element created asynchronously:', audioElementId);
       } catch (error) {
         console.error('[addMediaElementWithAudio] Audio detection/creation failed:', error);
-        return {};
       }
     };
-
-    const audioResult = await detectAndCreateAudio();
 
     // 4. 异步检测字幕（不阻塞主流程）
     const detectAndCreateSubtitles = async (): Promise<void> => {
@@ -389,14 +382,18 @@ export const createElementOpsSlice: StateCreator<
       }
     };
 
-    // 在返回之前调用（不等待，异步执行）
+    // 异步执行音频和字幕检测（不等待，立即返回）
+    detectAndCreateAudio().catch(err => {
+      console.error('[addMediaElementWithAudio] Audio detection error:', err);
+    });
+
     detectAndCreateSubtitles().catch(err => {
       console.error('[addMediaElementWithAudio] Subtitle detection error:', err);
     });
 
+    // 立即返回视频元素 ID，不等待音频/字幕检测
     return {
       videoElementId,
-      ...audioResult,
     };
   },
 

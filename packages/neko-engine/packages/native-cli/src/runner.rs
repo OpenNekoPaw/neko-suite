@@ -275,7 +275,7 @@ impl Runner {
         _width: Option<u32>,
         _height: Option<u32>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        use neko_native_core::decoder::{Decoder, HwAccelType, ZeroCopyDecoder};
+        use neko_native_core::decoder::{Decoder, HwAccelType, HwAccelDecoder};
         use neko_native_core::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
         use neko_native_core::media_service::encode_rgba_to_jpeg;
 
@@ -290,7 +290,7 @@ impl Runner {
         })?);
 
         // Create decoder with hardware acceleration
-        let mut decoder = ZeroCopyDecoder::with_hw_accel(HwAccelType::Auto);
+        let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
 
         // Open video file
         let input_str = input.to_string_lossy();

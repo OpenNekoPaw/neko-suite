@@ -1,6 +1,6 @@
-//! Decoder module - Zero-copy hardware-accelerated video decoding
+//! Decoder module - Hardware-accelerated video decoding
 //!
-//! This module provides the `ZeroCopyDecoder` for hardware-accelerated video decoding
+//! This module provides the `HwAccelDecoder` for hardware-accelerated video decoding
 //! that outputs NV12 GPU textures directly importable by wgpu.
 //!
 //! ## Architecture
@@ -11,7 +11,7 @@
 //!
 //! ## Main Types
 //!
-//! - [`ZeroCopyDecoder`]: Hardware decoder outputting GPU textures
+//! - [`HwAccelDecoder`]: Hardware decoder outputting GPU textures
 //! - [`HwAccelType`]: Hardware acceleration backend (VideoToolbox/VAAPI/D3D11VA)
 //! - [`Nv12GpuTexture`]: Decoded frame as GPU texture handle
 //!
@@ -24,9 +24,9 @@
 //! ## Example
 //!
 //! ```ignore
-//! use media_processor::decoder::{ZeroCopyDecoder, HwAccelType};
+//! use media_processor::decoder::{HwAccelDecoder, HwAccelType};
 //!
-//! let mut decoder = ZeroCopyDecoder::with_hw_accel(HwAccelType::Auto);
+//! let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
 //! decoder.open("video.mp4")?;
 //!
 //! while let Some(texture) = decoder.decode_next_gpu()? {
@@ -38,7 +38,7 @@
 pub mod common;
 pub mod pool;
 mod traits;
-pub mod zerocopy;
+pub mod hwaccel;
 
 // Re-export common types
 pub use common::{detect_hw_accel, get_best_hw_accel, HwAccelType};
@@ -46,8 +46,8 @@ pub use common::{detect_hw_accel, get_best_hw_accel, HwAccelType};
 // Re-export decoder traits
 pub use traits::{DecodedFrame, Decoder, FrameData, GpuTextureHandle, MediaInfo, PixelFormat};
 
-// Re-export zero-copy decoder
-pub use zerocopy::{Nv12GpuTexture, ZeroCopyConfig, ZeroCopyDecoder};
+// Re-export hardware-accelerated decoder
+pub use hwaccel::{HwAccelDecoder, HwAccelDecoderConfig, Nv12GpuTexture};
 
 // Re-export decoder pool
 pub use pool::{

@@ -73,12 +73,15 @@ pub struct CompositedFrame {
     pub index: u64,
     /// Presentation timestamp
     pub pts: i64,
-    /// Composited pixel data (RGBA)
+    /// Composited pixel data (NV12) - used when gpu_handle is None
     pub data: Vec<u8>,
     /// Frame width
     pub width: u32,
     /// Frame height
     pub height: u32,
+    /// GPU handle for zero-copy encoding (IOSurface on macOS)
+    /// When Some, encoder uses encode_frame_gpu instead of encode_frame
+    pub gpu_handle: Option<usize>,
 }
 
 /// Packet ready for muxing (wraps EncodedPacket with index)
@@ -526,6 +529,7 @@ impl AsyncExportPipeline {
                         data: composited.data,
                         width: composited.width,
                         height: composited.height,
+                        gpu_handle: None, // Compose worker uses CPU data path
                     };
 
                     if tx.send(composited_frame).is_err() {
@@ -582,10 +586,18 @@ impl AsyncExportPipeline {
                 return Err(Error::Cancelled);
             }
 
-            // Encode the frame
+            // Encode the frame - use GPU path if gpu_handle is available
             // Note: Empty packets are normal for B-frame encoding (frames are buffered)
             // They will be output later or during flush
-            match encoder.encode_frame(&frame.data, frame.pts) {
+            let encode_result = if let Some(gpu_handle) = frame.gpu_handle {
+                // Zero-copy GPU encoding (macOS IOSurface)
+                encoder.encode_frame_gpu(gpu_handle, frame.pts)
+            } else {
+                // CPU data encoding
+                encoder.encode_frame(&frame.data, frame.pts)
+            };
+
+            match encode_result {
                 Ok(packets) => {
                     // Empty packets are normal - encoder is buffering for B-frames
                     // Don't count as dropped frames

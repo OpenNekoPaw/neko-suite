@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::decoder::{Decoder, HwAccelType, ZeroCopyDecoder};
+use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType};
 use crate::error::Result;
 use crate::gpu::{
     BlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext, LayerPixelFormat,
@@ -258,7 +258,7 @@ async fn composite_frame_handler(
 /// Extract a single frame from video and encode to JPEG
 async fn extract_frame_impl(state: &ExtractState, query: &ExtractQuery) -> Result<Vec<u8>> {
     // Create decoder with hardware acceleration
-    let mut decoder = ZeroCopyDecoder::with_hw_accel(HwAccelType::Auto);
+    let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
 
     // Open video file
     let media_info = decoder.open(&query.source)?;
@@ -299,7 +299,7 @@ async fn composite_frame_impl(state: &ExtractState, request: &CompositeRequest) 
     // Decode each layer
     for layer_req in &request.layers {
         // Create decoder
-        let mut decoder = ZeroCopyDecoder::with_hw_accel(HwAccelType::Auto);
+        let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
         let media_info = decoder.open(&layer_req.source)?;
 
         // Decode frame

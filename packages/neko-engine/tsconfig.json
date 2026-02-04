@@ -20,9 +20,5 @@
     "composite": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "packages"],
-  "references": [
-    { "path": "./packages/effects-core" },
-    { "path": "./packages/effects-runtime" }
-  ]
+  "exclude": ["node_modules", "dist", "packages"]
 }

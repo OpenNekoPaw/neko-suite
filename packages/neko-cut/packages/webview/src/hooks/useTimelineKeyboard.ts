@@ -1,6 +1,10 @@
 /**
  * useTimelineKeyboard Hook
  * 管理时间轴键盘快捷键
+ *
+ * NOTE: Delete/Backspace handling has been moved to useKeyboardShortcuts.ts
+ * to avoid duplicate event listeners and race conditions.
+ * This hook is kept for potential future timeline-specific shortcuts.
  */
 
 import { useEffect } from 'react';
@@ -11,30 +15,18 @@ export interface TimelineKeyboardOptions {
   clearSelectedElements: () => void;
 }
 
+/**
+ * @deprecated Delete/Backspace is now handled by useKeyboardShortcuts.ts
+ * This hook is kept for backwards compatibility and potential future use.
+ */
 export function useTimelineKeyboard({
-  selectedElements,
-  removeElement,
-  clearSelectedElements,
+  selectedElements: _selectedElements,
+  removeElement: _removeElement,
+  clearSelectedElements: _clearSelectedElements,
 }: TimelineKeyboardOptions) {
-  // Handle keyboard shortcuts for deleting selected elements
+  // Delete/Backspace handling moved to useKeyboardShortcuts.ts to avoid conflicts
+  // Keep this hook for potential future timeline-specific shortcuts
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Delete/Backspace to remove selected elements
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElements.length > 0) {
-        // Prevent default backspace navigation
-        e.preventDefault();
-
-        // Delete all selected elements
-        selectedElements.forEach(({ trackId, elementId }) => {
-          removeElement(trackId, elementId);
-        });
-
-        // Clear selection
-        clearSelectedElements();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [selectedElements, removeElement, clearSelectedElements]);
+    // No-op: shortcuts are handled by useKeyboardShortcuts.ts
+  }, []);
 }

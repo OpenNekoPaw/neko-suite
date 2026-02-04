@@ -29,9 +29,8 @@ pub use audio::{
     EncodedAudioPacket, FfmpegAudioDecoder, FfmpegAudioEncoder, SampleFormat,
 };
 pub use decoder::{
-    Decoder, DecodedFrame, FrameData, GpuTextureHandle, HwAccelType,
-    MediaInfo, Nv12GpuTexture, PixelFormat, ZeroCopyConfig, ZeroCopyDecoder,
-    detect_hw_accel, get_best_hw_accel,
+    Decoder, DecodedFrame, FrameData, GpuTextureHandle, HwAccelDecoder, HwAccelDecoderConfig,
+    HwAccelType, MediaInfo, Nv12GpuTexture, PixelFormat, detect_hw_accel, get_best_hw_accel,
 };
 pub use encoder::{
     AsyncExportPipeline, CompositedFrame, ContainerFormat, EncodedPacket, Encoder, EncoderConfig,

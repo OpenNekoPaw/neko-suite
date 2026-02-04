@@ -331,10 +331,27 @@ impl ExportService {
 
             // GPU pipeline: decode + composite + NV12 convert (all on GPU)
             let decode_start = Instant::now();
-            let nv12_data = gpu_pipeline.process_frame_to_nv12(
-                time,
-                [0.0, 0.0, 0.0, 1.0],
-            )?;
+
+            // Use zero-copy path on macOS, CPU path on other platforms
+            #[cfg(target_os = "macos")]
+            let (nv12_data, gpu_handle) = {
+                // Zero-copy: get IOSurface handle directly
+                match gpu_pipeline.process_frame_to_iosurface(time, [0.0, 0.0, 0.0, 1.0]) {
+                    Ok(io_surface) => (Vec::new(), Some(io_surface)),
+                    Err(e) => {
+                        tracing::warn!("Zero-copy failed, falling back to CPU: {}", e);
+                        let data = gpu_pipeline.process_frame_to_nv12(time, [0.0, 0.0, 0.0, 1.0])?;
+                        (data, None)
+                    }
+                }
+            };
+
+            #[cfg(not(target_os = "macos"))]
+            let (nv12_data, gpu_handle) = {
+                let data = gpu_pipeline.process_frame_to_nv12(time, [0.0, 0.0, 0.0, 1.0])?;
+                (data, None)
+            };
+
             let decode_time = decode_start.elapsed();
 
             // Mix audio for this frame
@@ -348,13 +365,14 @@ impl ExportService {
                 rt.block_on(Self::add_decode_time(&jobs, &job_id, decode_time.as_micros() as u64));
             }
 
-            // Submit NV12 frame directly to encoder
+            // Submit frame to encoder (zero-copy or CPU path)
             pipeline.submit_composited(CompositedFrame {
                 index: frame_idx,
                 pts: frame_idx as i64,
                 data: nv12_data,
                 width: output_width,
                 height: output_height,
+                gpu_handle,
             })?;
 
             // Update progress (every 10 frames to reduce overhead)

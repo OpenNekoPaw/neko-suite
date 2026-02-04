@@ -1,6 +1,6 @@
 //! Decoder Pool - Reuse hardware decoders to avoid initialization overhead
 //!
-//! This module provides a pool of `ZeroCopyDecoder` instances that can be
+//! This module provides a pool of `HwAccelDecoder` instances that can be
 //! reused across multiple frame extraction requests. This significantly
 //! reduces latency by avoiding the ~15-30ms decoder initialization cost.
 //!
@@ -30,7 +30,7 @@
 //! ```
 
 use super::traits::Decoder;
-use super::zerocopy::{ZeroCopyConfig, ZeroCopyDecoder};
+use super::hwaccel::{HwAccelDecoder, HwAccelDecoderConfig};
 use super::HwAccelType;
 use crate::error::{Error, Result};
 
@@ -64,13 +64,13 @@ impl Default for DecoderPoolConfig {
 
 /// Pooled decoder entry - stores decoder with metadata
 struct PooledDecoderEntry {
-    decoder: ZeroCopyDecoder,
+    decoder: HwAccelDecoder,
     hw_accel: HwAccelType,
     last_used: Instant,
 }
 
 impl PooledDecoderEntry {
-    fn new(decoder: ZeroCopyDecoder, hw_accel: HwAccelType) -> Self {
+    fn new(decoder: HwAccelDecoder, hw_accel: HwAccelType) -> Self {
         Self {
             decoder,
             hw_accel,
@@ -210,19 +210,19 @@ impl DecoderPool {
     }
 
     /// Create a new decoder for the given video file
-    fn create_decoder(&self, video_path: &str, hw_accel: HwAccelType) -> Result<ZeroCopyDecoder> {
+    fn create_decoder(&self, video_path: &str, hw_accel: HwAccelType) -> Result<HwAccelDecoder> {
         let actual_hw_accel = if self.config.enable_hw_accel {
             hw_accel
         } else {
             HwAccelType::Auto
         };
 
-        let config = ZeroCopyConfig {
+        let config = HwAccelDecoderConfig {
             hw_accel: actual_hw_accel,
             gpu_index: 0,
         };
 
-        let mut decoder = ZeroCopyDecoder::new().with_config(config);
+        let mut decoder = HwAccelDecoder::new().with_config(config);
         decoder.open(video_path)?;
 
         Ok(decoder)
@@ -267,7 +267,7 @@ impl DecoderPool {
     /// Return a decoder to the pool
     fn return_decoder(
         &self,
-        decoder: ZeroCopyDecoder,
+        decoder: HwAccelDecoder,
         video_path: &str,
         hw_accel: HwAccelType,
     ) {
@@ -379,22 +379,22 @@ pub struct DecoderPoolStats {
 /// RAII guard for borrowed decoder
 ///
 /// Automatically returns the decoder to the pool when dropped.
-/// Provides access to the underlying `ZeroCopyDecoder` methods.
+/// Provides access to the underlying `HwAccelDecoder` methods.
 pub struct DecoderGuard {
     pool: Arc<DecoderPool>,
-    decoder: Option<ZeroCopyDecoder>,
+    decoder: Option<HwAccelDecoder>,
     video_path: String,
     hw_accel: HwAccelType,
 }
 
 impl DecoderGuard {
     /// Get a reference to the decoder
-    pub fn decoder(&self) -> &ZeroCopyDecoder {
+    pub fn decoder(&self) -> &HwAccelDecoder {
         self.decoder.as_ref().expect("Decoder already taken")
     }
 
     /// Get a mutable reference to the decoder
-    pub fn decoder_mut(&mut self) -> &mut ZeroCopyDecoder {
+    pub fn decoder_mut(&mut self) -> &mut HwAccelDecoder {
         self.decoder.as_mut().expect("Decoder already taken")
     }
 
@@ -405,7 +405,7 @@ impl DecoderGuard {
 }
 
 impl std::ops::Deref for DecoderGuard {
-    type Target = ZeroCopyDecoder;
+    type Target = HwAccelDecoder;
 
     fn deref(&self) -> &Self::Target {
         self.decoder()
