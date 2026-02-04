@@ -519,6 +519,8 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 					// This prevents the save operation from overwriting webview state
 					if (model!.isInternalSave) {
 						console.log('[VideoEditorProvider] Skipping reload for internal save');
+						// Decrement counter after processing the event
+						model!.decrementInternalSaveCounter();
 						return;
 					}
 					// 重新加载模型内容 (only for external changes)

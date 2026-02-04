@@ -5,6 +5,7 @@ packages:
   - packages/neko-canvas/packages/*
   - packages/neko-cut/packages/*
   - packages/neko-engine/packages/*
+  - packages/neko-story/packages/*
   - packages/neko-tools/packages/*
 
 ignoredBuiltDependencies:

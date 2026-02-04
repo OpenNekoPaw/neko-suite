@@ -14,8 +14,8 @@ import { ProjectData, createDefaultProject } from '@neko/shared';
 export class VideoEditorModel extends BaseEditorModel {
   private _content: ProjectData;
   private _pendingEdit: Promise<void> | null = null;
-  /** Flag to indicate internal save in progress, used to skip reload on document change */
-  private _isInternalSave: boolean = false;
+  /** Counter for internal saves, incremented before edit, decremented after event processed */
+  private _internalSaveCounter: number = 0;
 
   constructor(document: vscode.TextDocument) {
     super(document, 'video');
@@ -27,7 +27,16 @@ export class VideoEditorModel extends BaseEditorModel {
    * Used by videoEditorProvider to skip reload on document change events
    */
   get isInternalSave(): boolean {
-    return this._isInternalSave;
+    return this._internalSaveCounter > 0;
+  }
+
+  /**
+   * Decrement internal save counter (called after document change event is processed)
+   */
+  decrementInternalSaveCounter(): void {
+    if (this._internalSaveCounter > 0) {
+      this._internalSaveCounter--;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -62,42 +71,40 @@ export class VideoEditorModel extends BaseEditorModel {
       const maxRetries = 3;
       let lastError: Error | null = null;
 
-      // Mark as internal save to prevent reload on document change
-      this._isInternalSave = true;
+      // Increment counter before edit to prevent reload on document change
+      // Counter is decremented by videoEditorProvider after processing the event
+      this._internalSaveCounter++;
 
-      try {
-        for (let i = 0; i < maxRetries; i++) {
-          try {
-            const edit = new vscode.WorkspaceEdit();
-            edit.replace(
-              this.document.uri,
-              new vscode.Range(0, 0, this.document.lineCount, 0),
-              JSON.stringify(this._content, null, 2)
-            );
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const edit = new vscode.WorkspaceEdit();
+          edit.replace(
+            this.document.uri,
+            new vscode.Range(0, 0, this.document.lineCount, 0),
+            JSON.stringify(this._content, null, 2)
+          );
 
-            const success = await vscode.workspace.applyEdit(edit);
-            if (success) {
-              // Do NOT fire change event here - save should not trigger webview update
-              // The webview already has the latest state
-              return;
-            }
-
-            // applyEdit 返回 false，等待后重试
-            await new Promise(resolve => setTimeout(resolve, 50 * (i + 1)));
-          } catch (error) {
-            lastError = error as Error;
-            // 等待后重试
-            await new Promise(resolve => setTimeout(resolve, 50 * (i + 1)));
+          const success = await vscode.workspace.applyEdit(edit);
+          if (success) {
+            // Do NOT fire change event here - save should not trigger webview update
+            // The webview already has the latest state
+            return;
           }
-        }
 
-        // 所有重试失败后，记录警告但不抛出错误
-        console.warn('[VideoEditorModel] Failed to apply edit after retries:', lastError?.message);
-      } finally {
-        // Reset flag after a short delay to ensure document change event has been processed
-        setTimeout(() => {
-          this._isInternalSave = false;
-        }, 100);
+          // applyEdit 返回 false，等待后重试
+          await new Promise(resolve => setTimeout(resolve, 50 * (i + 1)));
+        } catch (error) {
+          lastError = error as Error;
+          // 等待后重试
+          await new Promise(resolve => setTimeout(resolve, 50 * (i + 1)));
+        }
+      }
+
+      // 所有重试失败后，记录警告并重置计数器
+      console.warn('[VideoEditorModel] Failed to apply edit after retries:', lastError?.message);
+      // Decrement counter since no document change event will be fired
+      if (this._internalSaveCounter > 0) {
+        this._internalSaveCounter--;
       }
     };
 
