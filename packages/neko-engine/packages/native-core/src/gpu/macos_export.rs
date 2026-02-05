@@ -205,6 +205,106 @@ impl IOSurfaceBackingStore {
 
         Ok(())
     }
+
+    /// Import IOSurface Metal textures to wgpu for direct rendering
+    ///
+    /// This creates wgpu textures backed by the IOSurface that can be used
+    /// as render targets. The render pass output goes directly to IOSurface
+    /// without any CPU intermediate copy.
+    ///
+    /// IMPORTANT: The returned textures should be dropped after queue.submit()
+    /// to avoid wgpu internal cache conflicts.
+    ///
+    /// # Safety
+    /// This function uses unsafe wgpu_hal APIs to import Metal textures.
+    pub fn import_as_render_targets(
+        &self,
+        device: &wgpu::Device,
+    ) -> Result<(wgpu::Texture, wgpu::Texture)> {
+        let (y_metal, uv_metal) = self.metal_textures();
+
+        // Create wgpu_hal textures from Metal textures
+        let y_hal_texture = unsafe {
+            wgpu_hal::metal::Device::texture_from_raw(
+                y_metal.clone(),
+                wgpu::TextureFormat::R8Unorm,
+                MTLTextureType::D2,
+                1, // array_layers
+                1, // mip_levels
+                wgpu_hal::CopyExtent {
+                    width: self.width,
+                    height: self.height,
+                    depth: 1,
+                },
+            )
+        };
+
+        let uv_hal_texture = unsafe {
+            wgpu_hal::metal::Device::texture_from_raw(
+                uv_metal.clone(),
+                wgpu::TextureFormat::Rg8Unorm,
+                MTLTextureType::D2,
+                1,
+                1,
+                wgpu_hal::CopyExtent {
+                    width: self.width / 2,
+                    height: self.height / 2,
+                    depth: 1,
+                },
+            )
+        };
+
+        // Create wgpu texture descriptors with RENDER_ATTACHMENT usage
+        let y_texture_desc = wgpu::TextureDescriptor {
+            label: Some("IOSurface Y Render Target"),
+            size: wgpu::Extent3d {
+                width: self.width,
+                height: self.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            // RENDER_ATTACHMENT for direct rendering, TEXTURE_BINDING for potential reads
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+
+        let uv_texture_desc = wgpu::TextureDescriptor {
+            label: Some("IOSurface UV Render Target"),
+            size: wgpu::Extent3d {
+                width: self.width / 2,
+                height: self.height / 2,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rg8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+
+        // Create wgpu textures from HAL textures
+        let y_texture = unsafe {
+            device.create_texture_from_hal::<wgpu_hal::api::Metal>(y_hal_texture, &y_texture_desc)
+        };
+
+        let uv_texture = unsafe {
+            device.create_texture_from_hal::<wgpu_hal::api::Metal>(uv_hal_texture, &uv_texture_desc)
+        };
+
+        tracing::debug!(
+            "Imported IOSurface as render targets: Y={}x{}, UV={}x{}",
+            self.width,
+            self.height,
+            self.width / 2,
+            self.height / 2
+        );
+
+        Ok((y_texture, uv_texture))
+    }
 }
 
 impl Drop for IOSurfaceBackingStore {

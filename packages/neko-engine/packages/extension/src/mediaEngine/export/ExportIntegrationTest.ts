@@ -100,10 +100,16 @@ async function runExportTest(): Promise<void> {
 			fps: project.fps,
 			duration: duration,
 			videoCodec: 'h264',
-			videoBitrate: 5_000_000, // 5 Mbps
+			videoBitrate: 15_000_000, // 15 Mbps for better quality (1080P needs higher bitrate)
 			preset: 'medium',
+			profile: 'high', // Use high profile for better compression efficiency
 			container: 'mp4',
-			includeAudio: false, // Skip audio for now
+			includeAudio: true, // Enable audio export
+			audioCodec: 'aac',
+			audioBitrate: 192_000, // 192 kbps
+			audioSampleRate: 48000,
+			audioChannels: 2,
+			audioSources: loader.getAudioSources(), // Get audio sources from project
 			backgroundColor: [0, 0, 0, 1], // Black background
 		};
 

@@ -9,7 +9,7 @@ mod args;
 mod runner;
 
 use clap::Parser;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use args::{Args, Command};
 use runner::Runner;
@@ -37,14 +37,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         _ => "info",
     };
 
-    // Initialize logging
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| log_level.into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    // Initialize logging with optional Tracy integration
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| log_level.into());
+    let fmt_layer = tracing_subscriber::fmt::layer().with_target(true);
+
+    #[cfg(feature = "tracy")]
+    {
+        use tracing_tracy::TracyLayer;
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(fmt_layer)
+            .with(TracyLayer::default())
+            .init();
+        tracing::info!(tracy = true, "Telemetry initialized with Tracy profiler");
+    }
+
+    #[cfg(not(feature = "tracy"))]
+    {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(fmt_layer)
+            .init();
+    }
 
     tracing::info!("Neko Suite Video Export Server v{}", env!("CARGO_PKG_VERSION"));
 

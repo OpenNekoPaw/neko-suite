@@ -19,6 +19,7 @@ use crate::gpu::{
     GpuContext, GpuLayer, GpuLayerBuilder, Nv12OutputBuffers, Nv12RenderCache, Nv12TextureImporter,
     RgbaToNv12Converter, TextureCompositeResult, TextureCompositor,
 };
+use crate::telemetry::spans::span;
 
 use super::types::{ElementData, ExportSettings, MediaElementData, TimelineData, TrackType};
 
@@ -230,45 +231,72 @@ impl GpuExportPipeline {
     ///
     /// Full pipeline: Decode → NV12 Import → RGBA Convert → GpuLayer → Composite
     /// Returns the composited result as a GPU texture.
+    #[tracing::instrument(
+        skip(self),
+        fields(
+            time = %format!("{:.3}s", time),
+        )
+    )]
     pub fn process_frame(
         &mut self,
         time: f64,
         background_color: [f32; 4],
     ) -> Result<TextureCompositeResult> {
+        // Mark frame boundary for Tracy
+        crate::telemetry::spans::mark_frame_boundary();
+
         // Release textures from previous frame back to pool
         self.layer_texture_pool.release_all();
 
-        let media_elements = self.collect_visible_media(time);
+        let media_elements = {
+            let _span = tracing::debug_span!(span::DECODE_VISIBLE_MEDIA).entered();
+            self.collect_visible_media(time)
+        };
         tracing::debug!("Found {} visible media elements at time {:.2}s", media_elements.len(), time);
 
         let mut gpu_layers: Vec<GpuLayer> = Vec::new();
-        for (media, z_idx) in media_elements {
-            if let Some(layer) = self.decode_to_gpu_layer(&media, time, z_idx)? {
-                gpu_layers.push(layer);
+        {
+            let _span = tracing::debug_span!(span::GPU_PIPELINE, layers = media_elements.len()).entered();
+            for (media, z_idx) in media_elements {
+                if let Some(layer) = self.decode_to_gpu_layer(&media, time, z_idx)? {
+                    gpu_layers.push(layer);
+                }
             }
         }
 
         tracing::debug!("Created {} GPU layers for compositing", gpu_layers.len());
 
         let layer_refs: Vec<&GpuLayer> = gpu_layers.iter().collect();
-        self.compositor.composite(
-            &layer_refs,
-            self.output_width,
-            self.output_height,
-            background_color,
-        )
+        let result = {
+            let _span = tracing::debug_span!(
+                span::COMPOSITE,
+                width = self.output_width,
+                height = self.output_height,
+                layer_count = layer_refs.len()
+            ).entered();
+            self.compositor.composite(
+                &layer_refs,
+                self.output_width,
+                self.output_height,
+                background_color,
+            )
+        };
+
+        result
     }
 
     /// Process a single frame and read back to CPU
     ///
     /// Calls `process_frame()` then reads the GPU texture to CPU memory.
     /// CPU readback is needed because hardware encoder zero-copy is not yet implemented.
+    #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
     pub fn process_frame_to_cpu(
         &mut self,
         time: f64,
         background_color: [f32; 4],
     ) -> Result<Vec<u8>> {
         let result = self.process_frame(time, background_color)?;
+        let _span = tracing::debug_span!(span::CPU_READBACK).entered();
         self.ctx
             .read_texture_sync(&result.texture, result.width, result.height)
     }
@@ -277,6 +305,7 @@ impl GpuExportPipeline {
     ///
     /// Full pipeline: Decode → NV12 Import → RGBA Convert → Composite → NV12 Convert
     /// The RGBA→NV12 conversion is done on GPU via compute shader.
+    #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
     pub fn process_frame_to_nv12(
         &mut self,
         time: f64,
@@ -301,10 +330,16 @@ impl GpuExportPipeline {
         let nv12_output = self.nv12_output_cache.as_ref().unwrap();
 
         // Convert RGBA to NV12 on GPU (BT.709 for HD video)
-        self.rgba_to_nv12.convert(&texture_view, nv12_output, 1)?;
+        {
+            let _span = tracing::debug_span!(span::RGBA_TO_NV12).entered();
+            self.rgba_to_nv12.convert(&texture_view, nv12_output, 1)?;
+        }
 
         // Read NV12 data back to CPU
-        self.rgba_to_nv12.read_nv12_data_blocking(nv12_output)
+        {
+            let _span = tracing::debug_span!(span::CPU_READBACK).entered();
+            self.rgba_to_nv12.read_nv12_data_blocking(nv12_output)
+        }
     }
 
     /// Process a single frame and return IOSurface handle for zero-copy encoding (macOS only)
@@ -314,6 +349,7 @@ impl GpuExportPipeline {
     ///
     /// Returns the IOSurface handle that can be used with `HwAccelEncoder::encode_frame_gpu()`.
     #[cfg(target_os = "macos")]
+    #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
     pub fn process_frame_to_iosurface(
         &mut self,
         time: f64,
@@ -335,6 +371,7 @@ impl GpuExportPipeline {
         let converter = self.zerocopy_converter.as_mut().unwrap();
 
         // Convert RGBA to NV12 and return IOSurface handle
+        let _span = tracing::debug_span!(span::RGBA_TO_NV12, zerocopy = true).entered();
         converter.convert_to_iosurface(&texture_view, result.width, result.height, 1)
     }
 
@@ -391,6 +428,13 @@ impl GpuExportPipeline {
     /// Decode a media element to a GPU layer
     ///
     /// Pipeline: HwAccelDecoder → Nv12GpuTexture → ImportedNv12Texture → RGBA → GpuLayer
+    #[tracing::instrument(
+        skip(self, media),
+        fields(
+            src = %media.src,
+            z_index = z_index,
+        )
+    )]
     fn decode_to_gpu_layer(
         &mut self,
         media: &MediaElementData,
@@ -409,16 +453,18 @@ impl GpuExportPipeline {
         }
 
         // Step 1: Hardware decode → NV12 GPU texture
-        // Use decode_gpu_at which handles seeking and decoding to the target time
-        let nv12_texture = match decoder.decode_gpu_at(source_time)? {
-            Some(tex) => tex,
-            None => {
-                tracing::warn!(
-                    "No frame at source time {:.2}s for {}",
-                    source_time,
-                    media.src
-                );
-                return Ok(None);
+        let nv12_texture = {
+            let _span = tracing::trace_span!(span::HW_DECODE).entered();
+            match decoder.decode_gpu_at(source_time)? {
+                Some(tex) => tex,
+                None => {
+                    tracing::warn!(
+                        "No frame at source time {:.2}s for {}",
+                        source_time,
+                        media.src
+                    );
+                    return Ok(None);
+                }
             }
         };
 
@@ -426,15 +472,21 @@ impl GpuExportPipeline {
         let height = nv12_texture.height;
 
         // Step 2: Import NV12 GPU texture → wgpu textures
-        let imported = self.nv12_importer.import(&nv12_texture)?;
+        let imported = {
+            let _span = tracing::trace_span!(span::NV12_IMPORT).entered();
+            self.nv12_importer.import(&nv12_texture)?
+        };
 
         // Step 3: NV12 → RGBA on GPU (render pipeline)
-        let rgba_texture = self.nv12_renderer.render(&imported);
+        let rgba_texture = {
+            let _span = tracing::trace_span!(span::NV12_TO_RGBA).entered();
+            self.nv12_renderer.render(&imported)
+        };
 
         // Step 4: Copy to pooled texture (avoids per-frame allocation)
-        // Acquire texture first, then copy to avoid borrow conflict
         let tex_idx = self.layer_texture_pool.acquire(&self.ctx, width, height);
         {
+            let _span = tracing::trace_span!(span::GPU_SUBMIT).entered();
             let dst = self.layer_texture_pool.get(tex_idx);
             let mut encoder = self.ctx.device().create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Texture Copy Encoder"),
@@ -464,7 +516,6 @@ impl GpuExportPipeline {
         }
 
         // Step 5: Build GpuLayer using the pooled texture
-        // Note: We need to get the texture again after the borrow ends
         let owned_texture = self.layer_texture_pool.in_use.pop().unwrap();
 
         // Calculate transform: if no transform is specified, scale to fit output
@@ -478,19 +529,21 @@ impl GpuExportPipeline {
             transform.scale_x = scale;
             transform.scale_y = scale;
             // Center the video in the output
-            // Position is in pixels, anchor is at center of the layer
             transform.x = self.output_width as f32 / 2.0;
             transform.y = self.output_height as f32 / 2.0;
             transform.anchor_x = 0.5;
             transform.anchor_y = 0.5;
         }
 
-        let layer = GpuLayerBuilder::new()
-            .transform(transform)
-            .opacity(media.opacity)
-            .blend_mode(media.get_blend_mode())
-            .z_index(z_index)
-            .build_from_rgba(owned_texture, width, height);
+        let layer = {
+            let _span = tracing::trace_span!(span::LAYER_RENDER).entered();
+            GpuLayerBuilder::new()
+                .transform(transform)
+                .opacity(media.opacity)
+                .blend_mode(media.get_blend_mode())
+                .z_index(z_index)
+                .build_from_rgba(owned_texture, width, height)
+        };
 
         Ok(Some(layer))
     }

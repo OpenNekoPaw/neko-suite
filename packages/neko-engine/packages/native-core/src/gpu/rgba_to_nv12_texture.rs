@@ -470,7 +470,7 @@ pub type RgbaToNv12TextureUniforms = RgbaToNv12RenderUniforms;
 /// Pipeline:
 /// 1. Render Pass 1: RGBA → Y (R8Unorm) at full resolution
 /// 2. Render Pass 2: RGBA → UV (RG8Unorm) at half resolution
-/// 3. Metal blit: staging textures → IOSurface textures (GPU-to-GPU copy)
+/// 3. Direct rendering to IOSurface-backed textures (true zero-copy)
 /// 4. IOSurface ready for VideoToolbox encoding
 #[cfg(target_os = "macos")]
 pub struct RgbaToNv12TextureConverter {
@@ -483,12 +483,15 @@ pub struct RgbaToNv12TextureConverter {
     render_bind_group_layout: wgpu::BindGroupLayout,
     uniform_buffer: wgpu::Buffer,
     sampler: wgpu::Sampler,
-    /// Staging textures (R8Unorm/RG8Unorm, standard wgpu textures)
+    /// Staging textures (R8Unorm/RG8Unorm, standard wgpu textures) - kept for fallback
     staging_y_texture: Option<wgpu::Texture>,
     staging_uv_texture: Option<wgpu::Texture>,
     /// Metal staging textures (kept in sync with wgpu textures for direct Metal access)
     staging_y_metal: Option<metal::Texture>,
     staging_uv_metal: Option<metal::Texture>,
+    /// IOSurface-backed wgpu textures for direct rendering (true zero-copy)
+    iosurface_y_wgpu: Option<wgpu::Texture>,
+    iosurface_uv_wgpu: Option<wgpu::Texture>,
     /// Cached texture dimensions
     texture_size: (u32, u32),
     /// IOSurface exporter
@@ -657,14 +660,20 @@ impl RgbaToNv12TextureConverter {
             staging_uv_texture: None,
             staging_y_metal: None,
             staging_uv_metal: None,
+            iosurface_y_wgpu: None,
+            iosurface_uv_wgpu: None,
             texture_size: (0, 0),
             exporter,
             output_backing: None,
         })
     }
 
-    /// Ensure staging textures exist with correct dimensions
+    /// Ensure staging textures exist with correct dimensions (legacy, for fallback)
     /// Creates wgpu textures and uses wgpu's copy_texture_to_buffer for blit
+    ///
+    /// NOTE: This is no longer used in the main zero-copy path.
+    /// The new implementation renders directly to IOSurface-backed textures.
+    #[allow(dead_code)]
     fn ensure_staging_textures(&mut self, width: u32, height: u32) {
         if self.texture_size == (width, height)
             && self.staging_y_texture.is_some()
@@ -725,10 +734,12 @@ impl RgbaToNv12TextureConverter {
     /// This is the main entry point for zero-copy encoding.
     /// Returns the IOSurface handle that can be passed directly to VideoToolbox.
     ///
-    /// Pipeline (Dual Render Pass):
-    /// 1. Render Pass 1: RGBA → Y staging texture (full resolution)
-    /// 2. Render Pass 2: RGBA → UV staging texture (half resolution)
-    /// 3. Metal blit: staging textures → IOSurface textures (GPU-to-GPU copy)
+    /// Pipeline (True Zero-Copy - Direct Render to IOSurface):
+    /// 1. Render Pass 1: RGBA → IOSurface Y texture (full resolution)
+    /// 2. Render Pass 2: RGBA → IOSurface UV texture (half resolution)
+    /// 3. Synchronize IOSurface for VideoToolbox
+    ///
+    /// No CPU intermediate copy - render output goes directly to IOSurface.
     pub fn convert_to_iosurface(
         &mut self,
         input_texture: &wgpu::TextureView,
@@ -739,18 +750,25 @@ impl RgbaToNv12TextureConverter {
         // Wait for any pending GPU work (compositor) to complete before reading input texture
         self.ctx.device().poll(wgpu::Maintain::Wait);
 
-        // Ensure staging textures exist
-        self.ensure_staging_textures(width, height);
-
         // Ensure IOSurface backing store exists (persistent, reused across frames)
-        if self.output_backing.is_none() || self.output_backing.as_ref().unwrap().width != width {
+        if self.output_backing.is_none()
+            || self.output_backing.as_ref().unwrap().width != width
+            || self.output_backing.as_ref().unwrap().height != height
+        {
             self.output_backing = Some(self.exporter.create_backing_store(width, height)?);
-            tracing::debug!("Created new IOSurface backing store: {}x{}", width, height);
+            self.texture_size = (width, height);
+            tracing::info!(
+                "Created IOSurface backing store for true zero-copy: {}x{}",
+                width,
+                height
+            );
         }
 
         let backing = self.output_backing.as_ref().unwrap();
-        let staging_y = self.staging_y_texture.as_ref().unwrap();
-        let staging_uv = self.staging_uv_texture.as_ref().unwrap();
+
+        // Import IOSurface as wgpu render targets FRESH EACH FRAME
+        // This avoids wgpu internal cache conflicts with IOSurface lifecycle
+        let (iosurface_y, iosurface_uv) = backing.import_as_render_targets(self.ctx.device())?;
 
         // Update uniforms
         let uniforms = RgbaToNv12RenderUniforms {
@@ -763,9 +781,9 @@ impl RgbaToNv12TextureConverter {
             .queue()
             .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
 
-        // Create staging texture views
-        let staging_y_view = staging_y.create_view(&wgpu::TextureViewDescriptor::default());
-        let staging_uv_view = staging_uv.create_view(&wgpu::TextureViewDescriptor::default());
+        // Create IOSurface texture views for direct rendering
+        let y_view = iosurface_y.create_view(&wgpu::TextureViewDescriptor::default());
+        let uv_view = iosurface_uv.create_view(&wgpu::TextureViewDescriptor::default());
 
         // Create bind group (shared by both passes)
         let bind_group = self.ctx.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -791,19 +809,19 @@ impl RgbaToNv12TextureConverter {
             .ctx
             .device()
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("RGBA to NV12 Encoder"),
+                label: Some("RGBA to NV12 Direct Render Encoder"),
             });
 
-        // ========== Dual Render Pass Pipeline ==========
-        // Pass 1: Y plane (full resolution)
-        // Pass 2: UV plane (half resolution with 2x2 averaging)
+        // ========== True Zero-Copy: Direct Render to IOSurface ==========
+        // Pass 1: Y plane (full resolution) - renders directly to IOSurface
+        // Pass 2: UV plane (half resolution) - renders directly to IOSurface
 
-        // Y plane render pass (full resolution)
+        // Y plane render pass - direct to IOSurface
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("RGBA to Y Render Pass"),
+                label: Some("RGBA to Y (IOSurface Direct)"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &staging_y_view,
+                    view: &y_view, // Direct render to IOSurface-backed texture
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
@@ -819,12 +837,12 @@ impl RgbaToNv12TextureConverter {
             pass.draw(0..3, 0..1); // Fullscreen triangle
         }
 
-        // UV plane render pass (half resolution)
+        // UV plane render pass - direct to IOSurface
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("RGBA to UV Render Pass"),
+                label: Some("RGBA to UV (IOSurface Direct)"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &staging_uv_view,
+                    view: &uv_view, // Direct render to IOSurface-backed texture
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -845,19 +863,29 @@ impl RgbaToNv12TextureConverter {
             pass.draw(0..3, 0..1); // Fullscreen triangle
         }
 
-        // Submit wgpu commands and wait
+        // Submit wgpu commands and wait for completion
         self.ctx.queue().submit(std::iter::once(encoder.finish()));
         self.ctx.device().poll(wgpu::Maintain::Wait);
 
-        // ========== Metal Blit (Staging → IOSurface) ==========
-        self.blit_staging_to_iosurface(staging_y, staging_uv, backing, width, height)?;
+        // Note: wgpu poll(Wait) ensures GPU commands are complete.
+        // No need to call backing.synchronize() - it creates a new Metal command queue
+        // each frame which causes "Context leak detected" warnings.
+        //
+        // The IOSurface is already synchronized because:
+        // 1. wgpu uses Metal internally on macOS
+        // 2. poll(Wait) waits for all Metal commands to complete
+        // 3. IOSurface-backed textures are directly written by the render pass
+
+        // Note: iosurface_y and iosurface_uv (wgpu textures) are dropped here
+        // This is intentional - fresh import each frame avoids wgpu cache conflicts
 
         Ok(backing.io_surface_handle())
     }
 
+    /// Legacy CPU-intermediate blit (kept for fallback/debugging)
     /// Copy staging textures to IOSurface using wgpu buffer copy (CPU intermediate)
-    /// This avoids as_hal issues by using wgpu's copy_texture_to_buffer
-    fn blit_staging_to_iosurface(
+    #[allow(dead_code)]
+    fn blit_staging_to_iosurface_legacy(
         &self,
         staging_y: &wgpu::Texture,
         staging_uv: &wgpu::Texture,

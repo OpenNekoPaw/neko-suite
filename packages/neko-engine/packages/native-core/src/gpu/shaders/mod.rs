@@ -1833,15 +1833,18 @@ fn sample_texture_rgba(
 // =============================================================================
 
 // BT.709 YUV to RGB conversion (HD video standard)
-// Y: 0-255 (full range)
-// U, V: 0-255 with 128 as neutral
+// Uses LIMITED RANGE (TV range): Y: 16-235, UV: 16-240
+// This matches the encoding in rgba_to_nv12.rs
 fn yuv_to_rgb_bt709(y: f32, u: f32, v: f32) -> vec3<f32> {
-    // Normalize Y to 0-1, U/V to -0.5 to 0.5
-    let y_norm = y / 255.0;
-    let u_norm = (u - 128.0) / 255.0;
-    let v_norm = (v - 128.0) / 255.0;
+    // Convert from limited range to normalized values
+    // Y: 16-235 -> 0-1 (range of 219)
+    // UV: 16-240 -> -0.5 to 0.5 (range of 224, centered at 128)
+    let y_norm = (y - 16.0) / 219.0;
+    let u_norm = (u - 128.0) / 224.0;
+    let v_norm = (v - 128.0) / 224.0;
 
-    // BT.709 conversion matrix
+    // BT.709 conversion matrix (for limited range input)
+    // These coefficients are the inverse of the encoding matrix
     let r = y_norm + 1.5748 * v_norm;
     let g = y_norm - 0.1873 * u_norm - 0.4681 * v_norm;
     let b = y_norm + 1.8556 * u_norm;

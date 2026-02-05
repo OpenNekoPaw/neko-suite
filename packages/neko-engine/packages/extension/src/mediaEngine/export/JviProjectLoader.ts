@@ -283,4 +283,57 @@ export class JviProjectLoader {
 		}
 		return maxEndTime;
 	}
+
+	/**
+	 * Get audio sources from the project for export
+	 */
+	getAudioSources(): Array<{
+		path: string;
+		startTime: number;
+		duration: number;
+		trimStart: number;
+		volume: number;
+	}> {
+		if (!this._project) return [];
+
+		const audioSources: Array<{
+			path: string;
+			startTime: number;
+			duration: number;
+			trimStart: number;
+			volume: number;
+		}> = [];
+
+		for (const track of this._project.tracks) {
+			// Skip muted tracks
+			if (track.muted) continue;
+
+			// Only process audio tracks
+			if (track.type !== 'audio') continue;
+
+			for (const element of track.elements) {
+				if (!element.src) continue;
+
+				const effectiveDuration = element.duration - (element.trimStart ?? 0) - (element.trimEnd ?? 0);
+
+				// Get volume from audio settings or default to 1
+				let volume = 1;
+				if ('audio' in element && element.audio) {
+					const audioSettings = element.audio as { volume?: { baseValue?: number }; muted?: boolean };
+					if (audioSettings.muted) continue; // Skip muted elements
+					volume = audioSettings.volume?.baseValue ?? 1;
+				}
+
+				audioSources.push({
+					path: this.resolvePath(element.src),
+					startTime: element.startTime,
+					duration: effectiveDuration,
+					trimStart: element.trimStart ?? 0,
+					volume,
+				});
+			}
+		}
+
+		return audioSources;
+	}
 }

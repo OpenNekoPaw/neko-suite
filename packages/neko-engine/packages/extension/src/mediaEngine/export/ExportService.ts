@@ -176,6 +176,8 @@ export interface ExportConfig {
 	videoBitrate?: number;
 	/** Encoding preset */
 	preset?: 'ultrafast' | 'fast' | 'medium' | 'slow' | 'veryslow';
+	/** Codec profile (e.g., 'high', 'main', 'baseline' for H.264) */
+	profile?: 'high' | 'main' | 'baseline';
 	/** Container format */
 	container?: 'mp4' | 'mov' | 'webm' | 'mkv';
 	/** Include audio */
@@ -190,6 +192,21 @@ export interface ExportConfig {
 	audioChannels?: number;
 	/** Background color [r, g, b, a] (0-1) */
 	backgroundColor?: [number, number, number, number];
+	/** Audio sources for export (file paths with time ranges) */
+	audioSources?: AudioSource[];
+}
+
+export interface AudioSource {
+	/** Source file path */
+	path: string;
+	/** Start time in timeline (seconds) */
+	startTime: number;
+	/** Duration in timeline (seconds) */
+	duration: number;
+	/** Trim start from source (seconds) */
+	trimStart: number;
+	/** Volume (0-1) */
+	volume: number;
 }
 
 export interface ExportProgress {
@@ -366,7 +383,7 @@ export class ExportService {
 				format: config.container || 'mp4',
 			});
 
-			// Add video stream
+			// Add video stream with high profile for better quality
 			muxer.addVideoStream({
 				width: config.width,
 				height: config.height,
@@ -374,6 +391,7 @@ export class ExportService {
 				bitrate: config.videoBitrate,
 				codec: config.videoCodec || 'h264',
 				preset: config.preset || 'medium',
+				profile: config.profile || 'high',
 				pixelFormat: 'rgba',
 			});
 
@@ -388,7 +406,7 @@ export class ExportService {
 				});
 			}
 
-			// Create video encoder
+			// Create video encoder with high profile for better quality
 			const videoEncoder = this._nativeModule.MediaProcessor.prototype.createVideoEncoder({
 				width: config.width,
 				height: config.height,
@@ -396,6 +414,7 @@ export class ExportService {
 				bitrate: config.videoBitrate,
 				codec: config.videoCodec || 'h264',
 				preset: config.preset || 'medium',
+				profile: config.profile || 'high',
 				pixelFormat: 'rgba',
 			});
 
@@ -555,6 +574,11 @@ export class ExportService {
 			}
 			videoEncoder.close();
 
+			// Process audio if enabled
+			if (config.includeAudio && config.audioSources && config.audioSources.length > 0) {
+				await this._processAudio(config, muxer);
+			}
+
 			// Finish muxer
 			muxer.finish();
 
@@ -602,6 +626,124 @@ export class ExportService {
 	// =========================================================================
 	// Private Methods
 	// =========================================================================
+
+	/**
+	 * Process and encode audio from sources
+	 */
+	private async _processAudio(
+		config: ExportConfig,
+		muxer: MuxerSessionType
+	): Promise<void> {
+		if (!this._nativeModule || !config.audioSources || config.audioSources.length === 0) {
+			return;
+		}
+
+		console.log('[ExportService] Processing audio...');
+
+		const sampleRate = config.audioSampleRate || 48000;
+		const channels = config.audioChannels || 2;
+
+		// Create audio encoder
+		const mediaProcessor = await this._nativeModule.MediaProcessor.create();
+		const audioEncoder = mediaProcessor.createAudioEncoder({
+			sampleRate,
+			channels,
+			bitrate: config.audioBitrate,
+			codec: config.audioCodec || 'aac',
+			sampleFormat: 'f32',
+		});
+
+		// Process each audio source
+		for (const source of config.audioSources) {
+			try {
+				// Create audio decoder for this source
+				const audioDecoder = mediaProcessor.createAudioDecoder(source.path);
+				const audioInfo = audioDecoder.getInfo();
+
+				console.log(`[ExportService] Decoding audio from ${source.path}`);
+				console.log(`  Source: ${audioInfo.sampleRate}Hz, ${audioInfo.channels}ch`);
+
+				// Seek to trim start position
+				if (source.trimStart > 0) {
+					audioDecoder.seek(source.trimStart);
+				}
+
+				// Calculate end time
+				const endTime = source.trimStart + source.duration;
+				let currentPosition = source.trimStart;
+
+				// Decode and encode audio frames
+				while (currentPosition < endTime) {
+					const frame = audioDecoder.decodeNext();
+					if (!frame) break;
+
+					currentPosition = frame.timestamp;
+					if (currentPosition >= endTime) break;
+
+					// Apply volume if not 1.0
+					let audioData = frame.data;
+					if (source.volume !== 1.0) {
+						audioData = this._applyVolume(frame.data, source.volume);
+					}
+
+					// Resample if needed (simple case: same sample rate)
+					// TODO: Add proper resampling for different sample rates
+
+					// Encode audio frame
+					const packets = audioEncoder.encodeFrame(audioData, frame.samples);
+
+					// Calculate PTS based on timeline position
+					const timelinePosition = source.startTime + (frame.timestamp - source.trimStart);
+					const basePts = Math.floor(timelinePosition * sampleRate);
+
+					// Write packets to muxer
+					for (const packet of packets) {
+						muxer.writeAudioPacket({
+							data: packet.data,
+							pts: basePts + packet.pts,
+							dts: basePts + packet.pts,
+							duration: packet.duration,
+							isKeyframe: true,
+						});
+					}
+				}
+
+				audioDecoder.close();
+			} catch (error) {
+				console.error(`[ExportService] Failed to process audio from ${source.path}:`, error);
+				// Continue with other sources
+			}
+		}
+
+		// Flush audio encoder
+		const flushPackets = audioEncoder.flush();
+		for (const packet of flushPackets) {
+			muxer.writeAudioPacket({
+				data: packet.data,
+				pts: packet.pts,
+				dts: packet.pts,
+				duration: packet.duration,
+				isKeyframe: true,
+			});
+		}
+		audioEncoder.close();
+
+		console.log('[ExportService] Audio processing complete');
+	}
+
+	/**
+	 * Apply volume to audio data (f32 format)
+	 */
+	private _applyVolume(data: Buffer, volume: number): Buffer {
+		const floatArray = new Float32Array(data.buffer, data.byteOffset, data.length / 4);
+		const result = new Float32Array(floatArray.length);
+
+		for (let i = 0; i < floatArray.length; i++) {
+			result[i] = (floatArray[i] ?? 0) * volume;
+		}
+
+		return Buffer.from(result.buffer);
+	}
 
 	private _setupAnimations(layers: TrackLayer[]): void {
 		if (!this._nativeModule) return;
@@ -770,6 +912,7 @@ interface NativeModuleType {
 				bitrate?: number;
 				codec: string;
 				preset?: string;
+				profile?: string;
 				pixelFormat?: string;
 			}): VideoEncoderSessionType;
 			createAudioEncoder(config: {
@@ -779,6 +922,7 @@ interface NativeModuleType {
 				codec?: string;
 				sampleFormat?: string;
 			}): AudioEncoderSessionType;
+			createAudioDecoder(path: string): AudioDecoderSessionType;
 			decodeFrame(config: { path: string }, time: number): {
 				width: number;
 				height: number;
@@ -796,6 +940,7 @@ interface NativeModuleType {
 				bitrate?: number;
 				codec: string;
 				preset?: string;
+				profile?: string;
 				pixelFormat?: string;
 			}): VideoEncoderSessionType;
 		};
@@ -823,6 +968,14 @@ interface VideoEncoderSessionType {
 interface AudioEncoderSessionType {
 	encodeFrame(data: Buffer, samples: number): Array<{ data: Buffer; pts: number; duration: number }>;
 	flush(): Array<{ data: Buffer; pts: number; duration: number }>;
+	close(): void;
+}
+
+interface AudioDecoderSessionType {
+	getInfo(): { sampleRate: number; channels: number; duration: number; codec: string; bitrate: number; totalSamples: number };
+	seek(timeSeconds: number): void;
+	decodeNext(): { data: Buffer; samples: number; timestamp: number; sampleRate: number; channels: number } | null;
+	position(): number;
 	close(): void;
 }
 

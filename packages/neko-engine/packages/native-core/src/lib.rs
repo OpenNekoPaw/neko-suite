@@ -19,6 +19,7 @@ pub mod jvi;
 pub mod keyframe_cache;
 pub mod media_service;
 pub mod monitor;
+pub mod telemetry;
 
 pub use animation::{
     AnimatableValue, AnimationState, AnimationTimeline, Easing, EasingType, EvaluatedProperties,

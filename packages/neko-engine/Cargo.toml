@@ -50,9 +50,11 @@ anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# Logging
+# Logging & Tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-tracy = { version = "0.11", default-features = false, features = ["enable"] }
+tracy-client = { version = "0.17", default-features = false }
 
 # Utilities
 bytemuck = { version = "1.14", features = ["derive"] }
