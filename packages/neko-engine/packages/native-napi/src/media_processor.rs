@@ -229,8 +229,8 @@ impl MediaProcessor {
         let output_texture = renderer.create_output_texture(width, height);
         let output_view = output_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Render NV12 to RGBA (GPU)
-        renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
+        // Render NV12 to RGBA (GPU) using the correct color space from the video
+        renderer.render(&nv12_texture, &output_view, nv12_texture.color_space);
 
         // Read back RGBA data
         let rgba_data = self.read_texture_to_buffer(&output_texture, width, height)
@@ -332,8 +332,8 @@ impl MediaProcessor {
         let output_texture = renderer.create_output_texture(width, height);
         let output_view = output_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Render NV12 to RGBA
-        renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
+        // Render NV12 to RGBA using the correct color space from the video
+        renderer.render(&nv12_texture, &output_view, nv12_texture.color_space);
 
         // Read back RGBA data
         let device = self.gpu_ctx.device();
@@ -488,8 +488,8 @@ impl MediaProcessor {
                         let output_texture = renderer.create_output_texture(width, height);
                         let output_view = output_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-                        // Render NV12 to RGBA
-                        renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
+                        // Render NV12 to RGBA using the correct color space from the video
+                        renderer.render(&nv12_texture, &output_view, nv12_texture.color_space);
 
                         // Read back RGBA data
                         if let Ok(rgba_data) = self.read_texture_to_buffer(&output_texture, width, height) {
@@ -2725,12 +2725,12 @@ fn extract_frame_jpeg(source: &str, time: f64, quality: u32) -> Result<Buffer> {
         .import(&gpu_texture)
         .map_err(|e| Error::from_reason(format!("Failed to import texture: {}", e)))?;
 
-    // Convert NV12 to RGBA using GPU
+    // Convert NV12 to RGBA using GPU with the correct color space
     let renderer = Nv12Renderer::new(std::sync::Arc::clone(&gpu_ctx))
         .map_err(|e| Error::from_reason(format!("Failed to create renderer: {}", e)))?;
     let output_texture = renderer.create_output_texture(width, height);
     let output_view = output_texture.create_view(&wgpu::TextureViewDescriptor::default());
-    renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
+    renderer.render(&nv12_texture, &output_view, nv12_texture.color_space);
 
     // Read RGBA data from GPU
     let rgba_data = read_texture_to_cpu(&gpu_ctx, &output_texture, width, height)
@@ -3072,7 +3072,7 @@ pub fn composite_frame(request: JsCompositeFrameRequest) -> Result<Buffer> {
 
         let output_texture = renderer.create_output_texture(width, height);
         let output_view = output_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
+        renderer.render(&nv12_texture, &output_view, nv12_texture.color_space);
 
         // Read RGBA data
         let rgba_data = read_texture_to_cpu(&gpu_ctx, &output_texture, width, height)

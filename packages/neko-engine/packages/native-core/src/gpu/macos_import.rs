@@ -303,7 +303,7 @@ impl MacOsTextureImporter {
             width: y_width as u32,
             height: y_height as u32,
             pts: gpu_texture.pts,
-            color_space: ColorSpace::Bt709,
+            color_space: ColorSpace::from_ffmpeg(gpu_texture.color_space),
         })
     }
 

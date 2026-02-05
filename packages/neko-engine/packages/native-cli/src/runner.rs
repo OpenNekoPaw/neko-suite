@@ -141,13 +141,22 @@ impl Runner {
             if let Some(progress) = status {
                 pb.set_position(progress.current_frame);
 
-                // Update message with speed info
+                // Update message with speed and detailed performance stats
                 if let Some(ref stats) = progress.stats {
                     if stats.avg_fps > 0.0 {
                         let eta_secs = ((total_frames - progress.current_frame) as f64 / stats.avg_fps) as u64;
+                        // Format: fps | detailed pipeline times | ETA
+                        // dec=HW decode, imp=NV12 import, cvt=NV12→RGBA, cmp=composite, nv12=RGBA→NV12, read=CPU readback, enc=encode
                         pb.set_message(format!(
-                            "{:.1} fps | ETA: {}:{:02}",
+                            "{:.1}fps | dec:{:.1} imp:{:.1} cvt:{:.1} cmp:{:.1} nv12:{:.1} read:{:.1} enc:{:.1} | ETA {}:{:02}",
                             stats.avg_fps,
+                            stats.hw_decode_ms,
+                            stats.nv12_import_ms,
+                            stats.nv12_to_rgba_ms,
+                            stats.composite_ms,
+                            stats.rgba_to_nv12_ms,
+                            stats.cpu_readback_ms,
+                            stats.encode_submit_ms,
                             eta_secs / 60,
                             eta_secs % 60
                         ));
@@ -157,6 +166,49 @@ impl Runner {
                 match progress.state {
                     ExportState::Completed => {
                         pb.finish_with_message("Export completed!");
+
+                        // Print final detailed performance summary
+                        if let Some(ref stats) = progress.stats {
+                            println!();
+                            println!("=== Export Performance Summary ===");
+                            println!("Total frames: {}", progress.current_frame);
+                            println!("Average FPS:  {:.1}", stats.avg_fps);
+                            println!();
+                            println!("Per-frame timing (avg):");
+                            println!();
+                            println!("  [Decode]");
+                            println!("    HW Decode:     {:>6.2} ms", stats.hw_decode_ms);
+                            println!();
+                            println!("  [GPU Pipeline]");
+                            println!("    NV12 Import:   {:>6.2} ms  (CPU→GPU transfer)", stats.nv12_import_ms);
+                            println!("    NV12→RGBA:     {:>6.2} ms  (GPU shader)", stats.nv12_to_rgba_ms);
+                            println!("    Composite:     {:>6.2} ms  (GPU render)", stats.composite_ms);
+                            println!("    RGBA→NV12:     {:>6.2} ms  (GPU compute)", stats.rgba_to_nv12_ms);
+                            println!("    CPU Readback:  {:>6.2} ms  (GPU→CPU transfer)", stats.cpu_readback_ms);
+                            let gpu_total = stats.nv12_import_ms + stats.nv12_to_rgba_ms
+                                + stats.composite_ms + stats.rgba_to_nv12_ms + stats.cpu_readback_ms;
+                            println!("    ─────────────────────────");
+                            println!("    GPU Total:     {:>6.2} ms", gpu_total);
+                            println!();
+                            println!("  [Encode]");
+                            println!("    Encode Submit: {:>6.2} ms", stats.encode_submit_ms);
+                            println!();
+                            let frame_total = stats.hw_decode_ms + gpu_total + stats.encode_submit_ms;
+                            println!("  [Total]");
+                            println!("    Frame Total:   {:>6.2} ms", frame_total);
+
+                            // Resource usage section
+                            println!();
+                            println!("Resource usage:");
+                            println!("  CPU Usage:   {:>6.1} %", stats.cpu_usage_percent);
+                            if let Some(gpu) = stats.gpu_usage_percent {
+                                println!("  GPU Usage:   {:>6.1} %", gpu);
+                            }
+                            println!("  Peak RAM:    {:>6.1} MB", stats.peak_memory_bytes as f64 / 1024.0 / 1024.0);
+                            if let Some(vram) = stats.vram_usage_bytes {
+                                println!("  Peak VRAM:   {:>6.1} MB", vram as f64 / 1024.0 / 1024.0);
+                            }
+                        }
                         break;
                     }
                     ExportState::Error => {

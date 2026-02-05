@@ -12,6 +12,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::decoder::{Decoder, HwAccelType, HwAccelDecoder};
 use crate::error::{Error, Result};
@@ -22,6 +23,53 @@ use crate::gpu::{
 use crate::telemetry::spans::span;
 
 use super::types::{ElementData, ExportSettings, MediaElementData, TimelineData, TrackType};
+
+// =============================================================================
+// GPU Pipeline Timing
+// =============================================================================
+
+/// Detailed timing breakdown for GPU pipeline stages
+#[derive(Debug, Clone, Default)]
+pub struct GpuPipelineTiming {
+    /// Hardware decode time in nanoseconds
+    pub hw_decode_ns: u64,
+    /// NV12 texture import to wgpu in nanoseconds
+    pub nv12_import_ns: u64,
+    /// NV12 to RGBA conversion in nanoseconds
+    pub nv12_to_rgba_ns: u64,
+    /// Layer composition in nanoseconds
+    pub composite_ns: u64,
+    /// RGBA to NV12 conversion in nanoseconds
+    pub rgba_to_nv12_ns: u64,
+    /// CPU readback in nanoseconds
+    pub cpu_readback_ns: u64,
+}
+
+impl GpuPipelineTiming {
+    /// Get total GPU pipeline time in nanoseconds
+    pub fn total_ns(&self) -> u64 {
+        self.hw_decode_ns
+            + self.nv12_import_ns
+            + self.nv12_to_rgba_ns
+            + self.composite_ns
+            + self.rgba_to_nv12_ns
+            + self.cpu_readback_ns
+    }
+}
+
+/// Result of processing a frame to NV12 with timing information
+pub struct Nv12FrameResult {
+    /// NV12 data (empty if using zero-copy)
+    pub data: Vec<u8>,
+    /// IOSurface handle for zero-copy (macOS only)
+    pub gpu_handle: Option<usize>,
+    /// Output width
+    pub width: u32,
+    /// Output height
+    pub height: u32,
+    /// Detailed timing breakdown
+    pub timing: GpuPipelineTiming,
+}
 
 // =============================================================================
 // Layer Texture Pool
@@ -242,6 +290,19 @@ impl GpuExportPipeline {
         time: f64,
         background_color: [f32; 4],
     ) -> Result<TextureCompositeResult> {
+        let mut timing = GpuPipelineTiming::default();
+        self.process_frame_timed(time, background_color, &mut timing)
+    }
+
+    /// Process a single frame with detailed timing breakdown
+    ///
+    /// Same as `process_frame` but populates timing information.
+    fn process_frame_timed(
+        &mut self,
+        time: f64,
+        background_color: [f32; 4],
+        timing: &mut GpuPipelineTiming,
+    ) -> Result<TextureCompositeResult> {
         // Mark frame boundary for Tracy
         crate::telemetry::spans::mark_frame_boundary();
 
@@ -258,7 +319,7 @@ impl GpuExportPipeline {
         {
             let _span = tracing::debug_span!(span::GPU_PIPELINE, layers = media_elements.len()).entered();
             for (media, z_idx) in media_elements {
-                if let Some(layer) = self.decode_to_gpu_layer(&media, time, z_idx)? {
+                if let Some(layer) = self.decode_to_gpu_layer_timed(&media, time, z_idx, timing)? {
                     gpu_layers.push(layer);
                 }
             }
@@ -268,18 +329,21 @@ impl GpuExportPipeline {
 
         let layer_refs: Vec<&GpuLayer> = gpu_layers.iter().collect();
         let result = {
+            let start = Instant::now();
             let _span = tracing::debug_span!(
                 span::COMPOSITE,
                 width = self.output_width,
                 height = self.output_height,
                 layer_count = layer_refs.len()
             ).entered();
-            self.compositor.composite(
+            let result = self.compositor.composite(
                 &layer_refs,
                 self.output_width,
                 self.output_height,
                 background_color,
-            )
+            );
+            timing.composite_ns += start.elapsed().as_nanos() as u64;
+            result
         };
 
         result
@@ -311,7 +375,24 @@ impl GpuExportPipeline {
         time: f64,
         background_color: [f32; 4],
     ) -> Result<Vec<u8>> {
-        let result = self.process_frame(time, background_color)?;
+        let result = self.process_frame_to_nv12_timed(time, background_color)?;
+        Ok(result.data)
+    }
+
+    /// Process a single frame to NV12 with detailed timing breakdown
+    ///
+    /// Returns NV12 data along with timing for each pipeline stage.
+    /// Use this method when you need performance metrics.
+    #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
+    pub fn process_frame_to_nv12_timed(
+        &mut self,
+        time: f64,
+        background_color: [f32; 4],
+    ) -> Result<Nv12FrameResult> {
+        let mut timing = GpuPipelineTiming::default();
+
+        // Process frame with internal timing
+        let result = self.process_frame_timed(time, background_color, &mut timing)?;
 
         // Create texture view for the composited RGBA texture
         let texture_view = result.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -331,15 +412,28 @@ impl GpuExportPipeline {
 
         // Convert RGBA to NV12 on GPU (BT.709 for HD video)
         {
+            let start = Instant::now();
             let _span = tracing::debug_span!(span::RGBA_TO_NV12).entered();
             self.rgba_to_nv12.convert(&texture_view, nv12_output, 1)?;
+            timing.rgba_to_nv12_ns = start.elapsed().as_nanos() as u64;
         }
 
         // Read NV12 data back to CPU
-        {
+        let data = {
+            let start = Instant::now();
             let _span = tracing::debug_span!(span::CPU_READBACK).entered();
-            self.rgba_to_nv12.read_nv12_data_blocking(nv12_output)
-        }
+            let data = self.rgba_to_nv12.read_nv12_data_blocking(nv12_output)?;
+            timing.cpu_readback_ns = start.elapsed().as_nanos() as u64;
+            data
+        };
+
+        Ok(Nv12FrameResult {
+            data,
+            gpu_handle: None,
+            width: result.width,
+            height: result.height,
+            timing,
+        })
     }
 
     /// Process a single frame and return IOSurface handle for zero-copy encoding (macOS only)
@@ -355,9 +449,23 @@ impl GpuExportPipeline {
         time: f64,
         background_color: [f32; 4],
     ) -> Result<usize> {
+        let result = self.process_frame_to_iosurface_timed(time, background_color)?;
+        Ok(result.gpu_handle.unwrap())
+    }
+
+    /// Process a single frame to IOSurface with detailed timing breakdown (macOS only)
+    #[cfg(target_os = "macos")]
+    #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
+    pub fn process_frame_to_iosurface_timed(
+        &mut self,
+        time: f64,
+        background_color: [f32; 4],
+    ) -> Result<Nv12FrameResult> {
         use crate::gpu::RgbaToNv12TextureConverter;
 
-        let result = self.process_frame(time, background_color)?;
+        let mut timing = GpuPipelineTiming::default();
+
+        let result = self.process_frame_timed(time, background_color, &mut timing)?;
 
         // Create texture view for the composited RGBA texture
         let texture_view = result.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -371,8 +479,21 @@ impl GpuExportPipeline {
         let converter = self.zerocopy_converter.as_mut().unwrap();
 
         // Convert RGBA to NV12 and return IOSurface handle
-        let _span = tracing::debug_span!(span::RGBA_TO_NV12, zerocopy = true).entered();
-        converter.convert_to_iosurface(&texture_view, result.width, result.height, 1)
+        let gpu_handle = {
+            let start = Instant::now();
+            let _span = tracing::debug_span!(span::RGBA_TO_NV12, zerocopy = true).entered();
+            let handle = converter.convert_to_iosurface(&texture_view, result.width, result.height, 1)?;
+            timing.rgba_to_nv12_ns = start.elapsed().as_nanos() as u64;
+            handle
+        };
+
+        Ok(Nv12FrameResult {
+            data: Vec::new(),
+            gpu_handle: Some(gpu_handle),
+            width: result.width,
+            height: result.height,
+            timing,
+        })
     }
 
     /// Close all decoders and release resources
@@ -441,6 +562,18 @@ impl GpuExportPipeline {
         timeline_time: f64,
         z_index: i32,
     ) -> Result<Option<GpuLayer>> {
+        let mut timing = GpuPipelineTiming::default();
+        self.decode_to_gpu_layer_timed(media, timeline_time, z_index, &mut timing)
+    }
+
+    /// Decode a media element to a GPU layer with timing breakdown
+    fn decode_to_gpu_layer_timed(
+        &mut self,
+        media: &MediaElementData,
+        timeline_time: f64,
+        z_index: i32,
+        timing: &mut GpuPipelineTiming,
+    ) -> Result<Option<GpuLayer>> {
         let decoder = self.decoders.get_mut(&media.src).ok_or_else(|| {
             Error::Other(format!("No decoder found for source: {}", media.src))
         })?;
@@ -454,8 +587,9 @@ impl GpuExportPipeline {
 
         // Step 1: Hardware decode → NV12 GPU texture
         let nv12_texture = {
+            let start = Instant::now();
             let _span = tracing::trace_span!(span::HW_DECODE).entered();
-            match decoder.decode_gpu_at(source_time)? {
+            let result = match decoder.decode_gpu_at(source_time)? {
                 Some(tex) => tex,
                 None => {
                     tracing::warn!(
@@ -465,7 +599,9 @@ impl GpuExportPipeline {
                     );
                     return Ok(None);
                 }
-            }
+            };
+            timing.hw_decode_ns += start.elapsed().as_nanos() as u64;
+            result
         };
 
         let width = nv12_texture.width;
@@ -473,14 +609,20 @@ impl GpuExportPipeline {
 
         // Step 2: Import NV12 GPU texture → wgpu textures
         let imported = {
+            let start = Instant::now();
             let _span = tracing::trace_span!(span::NV12_IMPORT).entered();
-            self.nv12_importer.import(&nv12_texture)?
+            let result = self.nv12_importer.import(&nv12_texture)?;
+            timing.nv12_import_ns += start.elapsed().as_nanos() as u64;
+            result
         };
 
         // Step 3: NV12 → RGBA on GPU (render pipeline)
         let rgba_texture = {
+            let start = Instant::now();
             let _span = tracing::trace_span!(span::NV12_TO_RGBA).entered();
-            self.nv12_renderer.render(&imported)
+            let result = self.nv12_renderer.render(&imported);
+            timing.nv12_to_rgba_ns += start.elapsed().as_nanos() as u64;
+            result
         };
 
         // Step 4: Copy to pooled texture (avoids per-frame allocation)

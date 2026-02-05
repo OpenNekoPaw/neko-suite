@@ -6,13 +6,15 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use tokio::sync::{broadcast, RwLock};
 
 use crate::encoder::{AsyncExportPipeline, CompositedFrame, ContainerFormat, PipelineConfig};
 use crate::error::{Error, Result};
 use crate::gpu::GpuContext;
+use crate::monitor::SystemMonitor;
+use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
 
 use super::audio_mixer::AudioMixer;
 use super::gpu_export_pipeline::GpuExportPipeline;
@@ -42,6 +44,8 @@ struct ExportJob {
     decode_time_us: Arc<AtomicU64>,
     /// Composite time accumulator
     composite_time_us: Arc<AtomicU64>,
+    /// Detailed timing stats (updated periodically)
+    detailed_stats: Option<ExportStats>,
 }
 
 impl ExportJob {
@@ -57,6 +61,7 @@ impl ExportJob {
             stats: ExportStats::default(),
             decode_time_us: Arc::new(AtomicU64::new(0)),
             composite_time_us: Arc::new(AtomicU64::new(0)),
+            detailed_stats: None,
         }
     }
 
@@ -84,17 +89,30 @@ impl ExportJob {
             0.0
         };
 
-        // Build stats
-        let stats = ExportStats {
-            decode_time_ms: self.decode_time_us.load(Ordering::Relaxed) / 1000,
-            composite_time_ms: self.composite_time_us.load(Ordering::Relaxed) / 1000,
-            encode_time_ms: self.stats.encode_time_ms,
-            mux_time_ms: self.stats.mux_time_ms,
-            avg_fps,
-            peak_memory_bytes: self.stats.peak_memory_bytes,
-            cpu_usage_percent: self.stats.cpu_usage_percent,
-            gpu_usage_percent: self.stats.gpu_usage_percent,
-            vram_usage_bytes: self.stats.vram_usage_bytes,
+        // Use detailed stats if available, otherwise build from legacy accumulators
+        let stats = if let Some(ref detailed) = self.detailed_stats {
+            let mut s = detailed.clone();
+            s.avg_fps = avg_fps;
+            s
+        } else {
+            ExportStats {
+                hw_decode_ms: 0.0,
+                nv12_import_ms: 0.0,
+                nv12_to_rgba_ms: 0.0,
+                composite_ms: 0.0,
+                rgba_to_nv12_ms: 0.0,
+                cpu_readback_ms: 0.0,
+                encode_submit_ms: 0.0,
+                decode_time_ms: self.decode_time_us.load(Ordering::Relaxed) / 1000,
+                composite_time_ms: self.composite_time_us.load(Ordering::Relaxed) / 1000,
+                encode_time_ms: self.stats.encode_time_ms,
+                mux_time_ms: self.stats.mux_time_ms,
+                avg_fps,
+                peak_memory_bytes: self.stats.peak_memory_bytes,
+                cpu_usage_percent: self.stats.cpu_usage_percent,
+                gpu_usage_percent: self.stats.gpu_usage_percent,
+                vram_usage_bytes: self.stats.vram_usage_bytes,
+            }
         };
 
         ExportProgress {
@@ -318,6 +336,12 @@ impl ExportService {
         // Collect audio frames for later muxing
         let mut audio_frames: Vec<Vec<f32>> = Vec::new();
 
+        // Create stats collector for periodic output (every 100ms)
+        let mut stats_collector = FrameStatsCollector::new(Duration::from_millis(100));
+
+        // Create system monitor for resource tracking
+        let mut system_monitor = SystemMonitor::new();
+
         // Process frames
         let frame_duration = 1.0 / fps;
         for frame_idx in 0..total_frames {
@@ -328,44 +352,53 @@ impl ExportService {
             }
 
             let time = frame_idx as f64 * frame_duration;
+            let frame_start = Instant::now();
+            let mut timing = FrameTiming::default();
 
             // GPU pipeline: decode + composite + NV12 convert (all on GPU)
-            let decode_start = Instant::now();
-
             // Use zero-copy path on macOS, CPU path on other platforms
             #[cfg(target_os = "macos")]
-            let (nv12_data, gpu_handle) = {
+            let (nv12_data, gpu_handle, gpu_timing) = {
                 // Zero-copy: get IOSurface handle directly
-                match gpu_pipeline.process_frame_to_iosurface(time, [0.0, 0.0, 0.0, 1.0]) {
-                    Ok(io_surface) => (Vec::new(), Some(io_surface)),
+                match gpu_pipeline.process_frame_to_iosurface_timed(time, [0.0, 0.0, 0.0, 1.0]) {
+                    Ok(result) => (result.data, result.gpu_handle, result.timing),
                     Err(e) => {
                         tracing::warn!("Zero-copy failed, falling back to CPU: {}", e);
-                        let data = gpu_pipeline.process_frame_to_nv12(time, [0.0, 0.0, 0.0, 1.0])?;
-                        (data, None)
+                        let result = gpu_pipeline.process_frame_to_nv12_timed(time, [0.0, 0.0, 0.0, 1.0])?;
+                        (result.data, result.gpu_handle, result.timing)
                     }
                 }
             };
 
             #[cfg(not(target_os = "macos"))]
-            let (nv12_data, gpu_handle) = {
-                let data = gpu_pipeline.process_frame_to_nv12(time, [0.0, 0.0, 0.0, 1.0])?;
-                (data, None)
+            let (nv12_data, gpu_handle, gpu_timing) = {
+                let result = gpu_pipeline.process_frame_to_nv12_timed(time, [0.0, 0.0, 0.0, 1.0])?;
+                (result.data, result.gpu_handle, result.timing)
             };
 
-            let decode_time = decode_start.elapsed();
+            // Copy detailed GPU timing to frame timing
+            timing.hw_decode_ns = gpu_timing.hw_decode_ns;
+            timing.nv12_import_ns = gpu_timing.nv12_import_ns;
+            timing.nv12_to_rgba_ns = gpu_timing.nv12_to_rgba_ns;
+            timing.composite_ns = gpu_timing.composite_ns;
+            timing.rgba_to_nv12_ns = gpu_timing.rgba_to_nv12_ns;
+            timing.cpu_readback_ns = gpu_timing.cpu_readback_ns;
+            timing.decode_ns = gpu_timing.hw_decode_ns;
+            timing.gpu_ns = gpu_timing.total_ns();
 
             // Mix audio for this frame
             if let Ok(Some(audio_frame)) = audio_mixer.mix_frame(time) {
                 audio_frames.push(audio_frame.data);
             }
 
-            // Update decode time stats
+            // Update decode time stats (for backward compatibility)
             {
                 let rt = tokio::runtime::Handle::current();
-                rt.block_on(Self::add_decode_time(&jobs, &job_id, decode_time.as_micros() as u64));
+                rt.block_on(Self::add_decode_time(&jobs, &job_id, timing.gpu_ns / 1000));
             }
 
-            // Submit frame to encoder (zero-copy or CPU path)
+            // Submit frame to encoder
+            let encode_start = Instant::now();
             pipeline.submit_composited(CompositedFrame {
                 index: frame_idx,
                 pts: frame_idx as i64,
@@ -374,11 +407,27 @@ impl ExportService {
                 height: output_height,
                 gpu_handle,
             })?;
+            timing.encode_submit_ns = encode_start.elapsed().as_nanos() as u64;
+            timing.encode_ns = timing.encode_submit_ns;
+
+            timing.total_ns = frame_start.elapsed().as_nanos() as u64;
+
+            // Record frame timing (outputs stats every 100ms)
+            stats_collector.record_frame(timing);
 
             // Update progress (every 10 frames to reduce overhead)
             if frame_idx % 10 == 0 || frame_idx == total_frames - 1 {
+                // Sample system resources
+                system_monitor.sample();
+
                 let rt = tokio::runtime::Handle::current();
-                rt.block_on(Self::update_job_progress(&jobs, &job_id, frame_idx + 1));
+                rt.block_on(Self::update_job_progress_with_stats(
+                    &jobs,
+                    &job_id,
+                    frame_idx + 1,
+                    &stats_collector,
+                    &system_monitor,
+                ));
 
                 // Broadcast progress
                 if let Some(progress) = rt.block_on(Self::get_job_progress(&jobs, &job_id)) {
@@ -386,6 +435,9 @@ impl ExportService {
                 }
             }
         }
+
+        // Log final stats summary
+        stats_collector.log_final_summary();
 
         // Update state to Muxing (audio)
         {
@@ -544,6 +596,46 @@ impl ExportService {
         let mut jobs_guard = jobs.write().await;
         if let Some(job) = jobs_guard.get_mut(job_id) {
             job.current_frame = current_frame;
+        }
+    }
+
+    /// Update job progress with detailed stats from FrameStatsCollector and SystemMonitor
+    async fn update_job_progress_with_stats(
+        jobs: &Arc<RwLock<HashMap<String, ExportJob>>>,
+        job_id: &str,
+        current_frame: u64,
+        stats_collector: &FrameStatsCollector,
+        system_monitor: &SystemMonitor,
+    ) {
+        let mut jobs_guard = jobs.write().await;
+        if let Some(job) = jobs_guard.get_mut(job_id) {
+            job.current_frame = current_frame;
+
+            // Get average timing from collector
+            let avg_timing = stats_collector.avg_timing();
+
+            // Update detailed stats
+            job.detailed_stats = Some(ExportStats {
+                // Detailed timing (per-frame average in ms)
+                hw_decode_ms: avg_timing.hw_decode_ns as f64 / 1_000_000.0,
+                nv12_import_ms: avg_timing.nv12_import_ns as f64 / 1_000_000.0,
+                nv12_to_rgba_ms: avg_timing.nv12_to_rgba_ns as f64 / 1_000_000.0,
+                composite_ms: avg_timing.composite_ns as f64 / 1_000_000.0,
+                rgba_to_nv12_ms: avg_timing.rgba_to_nv12_ns as f64 / 1_000_000.0,
+                cpu_readback_ms: avg_timing.cpu_readback_ns as f64 / 1_000_000.0,
+                encode_submit_ms: avg_timing.encode_submit_ns as f64 / 1_000_000.0,
+                // Aggregate timing (backward compatible)
+                decode_time_ms: (avg_timing.decode_ns / 1_000_000) as u64,
+                composite_time_ms: (avg_timing.gpu_ns / 1_000_000) as u64,
+                encode_time_ms: (avg_timing.encode_ns / 1_000_000) as u64,
+                mux_time_ms: (avg_timing.mux_ns / 1_000_000) as u64,
+                // Performance metrics from SystemMonitor
+                avg_fps: stats_collector.current_fps(),
+                peak_memory_bytes: system_monitor.peak_memory(),
+                cpu_usage_percent: system_monitor.avg_cpu_usage(),
+                gpu_usage_percent: system_monitor.avg_gpu_usage(),
+                vram_usage_bytes: system_monitor.peak_vram(),
+            });
         }
     }
 

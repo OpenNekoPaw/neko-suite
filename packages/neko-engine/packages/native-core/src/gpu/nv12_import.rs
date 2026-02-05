@@ -508,17 +508,17 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 // BT.601 YUV to RGB (SD video: 480i/576i)
 // Used for NTSC/PAL content
 // Input is limited range (Y: 16-235, UV: 16-240)
+// Input y, u, v are normalized 0-1 from R8Unorm texture sampling
 fn yuv_to_rgb_bt601(y: f32, u: f32, v: f32) -> vec3<f32> {
-    // Convert from limited range to full range
-    // Y: (Y - 16/255) * 255/219 = (Y - 0.0627) * 1.164
-    // UV: (UV - 16/255) * 255/224 = (UV - 0.0627) * 1.138
-    let y_full = (y - 0.0627) * 1.164;
-    let u_shifted = (u - 0.5) * 1.138;
-    let v_shifted = (v - 0.5) * 1.138;
+    // Convert from limited range (normalized) to full range
+    let y_norm = (y - 0.0627) / 0.8588;  // Map to 0-1
+    let u_norm = (u - 0.502) / 0.8784;   // Map to -0.5 to 0.5
+    let v_norm = (v - 0.502) / 0.8784;
 
-    let r = y_full + 1.596 * v_shifted;
-    let g = y_full - 0.392 * u_shifted - 0.813 * v_shifted;
-    let b = y_full + 2.017 * u_shifted;
+    // BT.601 inverse matrix (matches rgba_to_nv12.rs encoding)
+    let r = y_norm + 1.4017 * v_norm;
+    let g = y_norm - 0.3437 * u_norm - 0.7142 * v_norm;
+    let b = y_norm + 1.7722 * u_norm;
 
     return clamp(vec3<f32>(r, g, b), vec3<f32>(0.0), vec3<f32>(1.0));
 }
@@ -526,30 +526,37 @@ fn yuv_to_rgb_bt601(y: f32, u: f32, v: f32) -> vec3<f32> {
 // BT.709 YUV to RGB (HD video: 720p/1080p)
 // Most common for modern content
 // Input is limited range (Y: 16-235, UV: 16-240)
+// Input y, u, v are normalized 0-1 from R8Unorm texture sampling
 fn yuv_to_rgb_bt709(y: f32, u: f32, v: f32) -> vec3<f32> {
-    // Convert from limited range to full range
-    let y_full = (y - 0.0627) * 1.164;
-    let u_shifted = (u - 0.5) * 1.138;
-    let v_shifted = (v - 0.5) * 1.138;
+    // Convert from limited range (normalized) to full range
+    // Y: 16/255=0.0627 to 235/255=0.9216, range=219/255=0.8588
+    // UV: 16/255=0.0627 to 240/255=0.9412, centered at 128/255=0.502
+    let y_norm = (y - 0.0627) / 0.8588;  // Map to 0-1
+    let u_norm = (u - 0.502) / 0.8784;   // Map to -0.5 to 0.5 (224/255=0.8784)
+    let v_norm = (v - 0.502) / 0.8784;
 
-    let r = y_full + 1.793 * v_shifted;
-    let g = y_full - 0.213 * u_shifted - 0.533 * v_shifted;
-    let b = y_full + 2.112 * u_shifted;
+    // BT.709 inverse matrix (matches rgba_to_nv12.rs encoding)
+    // These are the exact inverse of the encoding coefficients
+    let r = y_norm + 1.5748 * v_norm;
+    let g = y_norm - 0.1873 * u_norm - 0.4681 * v_norm;
+    let b = y_norm + 1.8556 * u_norm;
 
     return clamp(vec3<f32>(r, g, b), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
 // BT.2020 YUV to RGB (UHD/HDR video: 4K/8K)
 // Input is limited range (Y: 16-235, UV: 16-240)
+// Input y, u, v are normalized 0-1 from R8Unorm texture sampling
 fn yuv_to_rgb_bt2020(y: f32, u: f32, v: f32) -> vec3<f32> {
-    // Convert from limited range to full range
-    let y_full = (y - 0.0627) * 1.164;
-    let u_shifted = (u - 0.5) * 1.138;
-    let v_shifted = (v - 0.5) * 1.138;
+    // Convert from limited range (normalized) to full range
+    let y_norm = (y - 0.0627) / 0.8588;  // Map to 0-1
+    let u_norm = (u - 0.502) / 0.8784;   // Map to -0.5 to 0.5
+    let v_norm = (v - 0.502) / 0.8784;
 
-    let r = y_full + 1.678 * v_shifted;
-    let g = y_full - 0.187 * u_shifted - 0.650 * v_shifted;
-    let b = y_full + 2.142 * u_shifted;
+    // BT.2020 inverse matrix (matches rgba_to_nv12.rs encoding)
+    let r = y_norm + 1.4746 * v_norm;
+    let g = y_norm - 0.1645 * u_norm - 0.5713 * v_norm;
+    let b = y_norm + 1.8814 * u_norm;
 
     return clamp(vec3<f32>(r, g, b), vec3<f32>(0.0), vec3<f32>(1.0));
 }

@@ -533,14 +533,36 @@ pub struct ExportMetadata {
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportStats {
-    /// Decode time in milliseconds
+    // === Detailed Pipeline Timing (per-frame average in milliseconds) ===
+
+    /// Hardware decode time (VideoToolbox/NVDEC)
+    pub hw_decode_ms: f64,
+    /// NV12 texture import to wgpu (CPU→GPU transfer)
+    pub nv12_import_ms: f64,
+    /// NV12 to RGBA conversion (GPU shader)
+    pub nv12_to_rgba_ms: f64,
+    /// Layer composition (GPU render)
+    pub composite_ms: f64,
+    /// RGBA to NV12 conversion for encoder (GPU compute)
+    pub rgba_to_nv12_ms: f64,
+    /// GPU data readback to CPU (for software encoder)
+    pub cpu_readback_ms: f64,
+    /// Encoder submission time
+    pub encode_submit_ms: f64,
+
+    // === Aggregate Timing (backward compatible, in milliseconds) ===
+
+    /// Total decode time (hw_decode alias)
     pub decode_time_ms: u64,
-    /// Composite time in milliseconds
+    /// Total GPU pipeline time (import + nv12→rgba + composite + rgba→nv12 + readback)
     pub composite_time_ms: u64,
-    /// Encode time in milliseconds
+    /// Total encode time
     pub encode_time_ms: u64,
-    /// Mux time in milliseconds
+    /// Mux time
     pub mux_time_ms: u64,
+
+    // === Performance Metrics ===
+
     /// Average FPS during export
     pub avg_fps: f64,
     /// Peak memory usage in bytes
