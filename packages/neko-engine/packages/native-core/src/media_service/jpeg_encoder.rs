@@ -75,40 +75,6 @@ pub fn encode_rgba_to_jpeg(
     Ok(jpeg_data)
 }
 
-/// Encode RGB buffer to JPEG
-///
-/// # Arguments
-/// * `rgb_data` - RGB pixel data (3 bytes per pixel)
-/// * `width` - Image width in pixels
-/// * `height` - Image height in pixels
-/// * `quality` - JPEG quality (1-100, higher is better quality)
-pub fn encode_rgb_to_jpeg(
-    rgb_data: &[u8],
-    width: u32,
-    height: u32,
-    quality: u32,
-) -> Result<Vec<u8>> {
-    let expected_size = (width as usize) * (height as usize) * 3;
-
-    if rgb_data.len() != expected_size {
-        return Err(Error::InvalidParameter(format!(
-            "RGB data size mismatch: expected {} bytes, got {} bytes",
-            expected_size,
-            rgb_data.len()
-        )));
-    }
-
-    let mut jpeg_buffer = Cursor::new(Vec::new());
-    let quality = quality.clamp(1, 100) as u8;
-
-    let encoder = JpegEncoder::new_with_quality(&mut jpeg_buffer, quality);
-    encoder
-        .write_image(rgb_data, width, height, ColorType::Rgb8.into())
-        .map_err(|e| Error::Jpeg(format!("JPEG encoding failed: {}", e)))?;
-
-    Ok(jpeg_buffer.into_inner())
-}
-
 /// Convert RGBA to RGB by dropping alpha channel
 #[inline]
 fn rgba_to_rgb(rgba: &[u8]) -> Vec<u8> {
@@ -176,23 +142,6 @@ mod tests {
         let jpeg = result.unwrap();
         // JPEG magic bytes
         assert!(jpeg.len() > 2);
-        assert_eq!(jpeg[0], 0xFF);
-        assert_eq!(jpeg[1], 0xD8);
-    }
-
-    #[test]
-    fn test_encode_rgb_to_jpeg() {
-        let width = 8u32;
-        let height = 8u32;
-        let mut rgb_data = Vec::with_capacity((width * height * 3) as usize);
-        for _ in 0..(width * height) {
-            rgb_data.extend_from_slice(&[0, 255, 0]); // Green pixel
-        }
-
-        let result = encode_rgb_to_jpeg(&rgb_data, width, height, 85);
-        assert!(result.is_ok());
-
-        let jpeg = result.unwrap();
         assert_eq!(jpeg[0], 0xFF);
         assert_eq!(jpeg[1], 0xD8);
     }
