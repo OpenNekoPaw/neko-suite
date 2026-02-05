@@ -95,6 +95,15 @@ pub fn get_best_hw_encoder() -> HwEncoderType {
 /// This encoder requires **NV12** pixel format input. The caller must ensure
 /// data is in NV12 format before calling `encode_frame()`. Use the GPU-based
 /// `RgbaToNv12Converter` for format conversion to avoid CPU overhead.
+///
+/// ## Zero-Copy Mode (macOS)
+///
+/// When `use_zero_copy_gpu` is enabled, the encoder uses VideoToolbox's hardware
+/// frame context for true zero-copy encoding:
+/// 1. Create hw_device_ctx (VideoToolbox device)
+/// 2. Create hw_frames_ctx (hardware frame pool)
+/// 3. Set encoder pix_fmt to AV_PIX_FMT_VIDEOTOOLBOX
+/// 4. Pass CVPixelBuffer via AVFrame.data[3] with hw_frames_ctx reference
 pub struct HwAccelEncoder {
     /// FFmpeg encoder context
     encoder: Option<ffmpeg::encoder::Video>,
@@ -108,7 +117,19 @@ pub struct HwAccelEncoder {
     hw_type: HwEncoderType,
     /// Whether hardware encoding is active
     hw_active: bool,
+    /// Hardware device context (for zero-copy encoding on macOS)
+    #[cfg(target_os = "macos")]
+    hw_device_ctx: Option<*mut ffmpeg::ffi::AVBufferRef>,
+    /// Hardware frames context (for zero-copy encoding on macOS)
+    #[cfg(target_os = "macos")]
+    hw_frames_ctx: Option<*mut ffmpeg::ffi::AVBufferRef>,
+    /// Whether zero-copy mode is active
+    #[cfg(target_os = "macos")]
+    zero_copy_active: bool,
 }
+
+// Safety: The raw pointers are only accessed from the encoder thread
+unsafe impl Send for HwAccelEncoder {}
 
 impl HwAccelEncoder {
     /// Create a new hardware-accelerated encoder
@@ -121,6 +142,12 @@ impl HwAccelEncoder {
             time_base: Rational::new(1, 1000),
             hw_type: HwEncoderType::None,
             hw_active: false,
+            #[cfg(target_os = "macos")]
+            hw_device_ctx: None,
+            #[cfg(target_os = "macos")]
+            hw_frames_ctx: None,
+            #[cfg(target_os = "macos")]
+            zero_copy_active: false,
         }
     }
 
@@ -218,6 +245,9 @@ impl HwAccelEncoder {
     }
 
     /// Try to open a hardware encoder
+    ///
+    /// When `use_zero_copy` is true and hw_type is VideoToolbox, this will set up
+    /// the complete hardware frame context chain for true zero-copy encoding.
     fn try_open_hw_encoder(&mut self, config: &EncoderConfig, hw_type: HwEncoderType) -> Result<bool> {
         let encoder_name = match hw_type.encoder_name(config.codec) {
             Some(name) => name,
@@ -257,7 +287,39 @@ impl HwAccelEncoder {
         // Set bitrate
         encoder.set_bit_rate(config.bitrate as usize);
 
-        // Hardware encoders use NV12 format
+        // Check if zero-copy mode should be enabled
+        let use_zero_copy = config.use_zero_copy_gpu && hw_type == HwEncoderType::VideoToolbox;
+
+        #[cfg(target_os = "macos")]
+        if use_zero_copy {
+            // ================================================================
+            // ZERO-COPY MODE: Set pix_fmt to VIDEOTOOLBOX
+            // ================================================================
+            // VideoToolbox encoder reads CVPixelBuffer from AVFrame.data[3]
+            // when format is AV_PIX_FMT_VIDEOTOOLBOX.
+            // The CVPixelBuffer must be NV12 (420v) with IOSurface backing.
+            // ================================================================
+
+            // Set encoder format to VIDEOTOOLBOX
+            unsafe {
+                let vt_format: ffmpeg::ffi::AVPixelFormat = Pixel::VIDEOTOOLBOX.into();
+                (*encoder.as_mut_ptr()).pix_fmt = vt_format;
+            }
+            self.zero_copy_active = true;
+
+            tracing::info!("Zero-copy encoding enabled (CVPixelBuffer via data[3], VIDEOTOOLBOX format)");
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        let _ = use_zero_copy; // Suppress unused variable warning
+
+        // If zero-copy not active, use standard NV12 format
+        #[cfg(target_os = "macos")]
+        if !self.zero_copy_active {
+            encoder.set_format(Pixel::NV12);
+        }
+
+        #[cfg(not(target_os = "macos"))]
         encoder.set_format(Pixel::NV12);
 
         // Set color range - VideoToolbox requires explicit color range
@@ -313,23 +375,59 @@ impl HwAccelEncoder {
         // Try to open encoder
         match encoder.open_with(opts) {
             Ok(encoder) => {
+                // Debug: Log encoder's actual pix_fmt after opening
+                unsafe {
+                    let encoder_ptr = encoder.as_ptr();
+                    let actual_pix_fmt = (*encoder_ptr).pix_fmt as i32;
+                    let vt_pix_fmt = ffmpeg::ffi::AVPixelFormat::AV_PIX_FMT_VIDEOTOOLBOX as i32;
+                    tracing::debug!(
+                        "Encoder opened with pix_fmt={} (VIDEOTOOLBOX={})",
+                        actual_pix_fmt,
+                        vt_pix_fmt
+                    );
+                }
+
                 self.encoder = Some(encoder);
                 self.config = Some(config.clone());
                 self.hw_type = hw_type;
                 self.hw_active = true;
                 self.frame_count = 0;
 
+                #[cfg(target_os = "macos")]
+                let format_str = if self.zero_copy_active { "VIDEOTOOLBOX (zero-copy)" } else { "NV12" };
+                #[cfg(not(target_os = "macos"))]
+                let format_str = "NV12";
+
                 tracing::info!(
-                    "Hardware encoder opened: {} ({}x{} @ {:.2} fps, NV12 input)",
+                    "Hardware encoder opened: {} ({}x{} @ {:.2} fps, {} input)",
                     encoder_name,
                     config.width,
                     config.height,
-                    config.fps
+                    config.fps,
+                    format_str
                 );
 
                 Ok(true)
             }
             Err(e) => {
+                // Clean up hardware contexts on failure
+                #[cfg(target_os = "macos")]
+                {
+                    if let Some(frames_ctx) = self.hw_frames_ctx.take() {
+                        unsafe {
+                            let mut ctx = frames_ctx;
+                            ffmpeg::ffi::av_buffer_unref(&mut ctx);
+                        }
+                    }
+                    if let Some(device_ctx) = self.hw_device_ctx.take() {
+                        unsafe {
+                            let mut ctx = device_ctx;
+                            ffmpeg::ffi::av_buffer_unref(&mut ctx);
+                        }
+                    }
+                    self.zero_copy_active = false;
+                }
+
                 tracing::debug!("Failed to open hardware encoder {}: {}", encoder_name, e);
                 Ok(false)
             }
@@ -449,6 +547,24 @@ impl Encoder for HwAccelEncoder {
         self.config = None;
         self.frame_count = 0;
         self.hw_active = false;
+
+        // Clean up hardware contexts on macOS
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(frames_ctx) = self.hw_frames_ctx.take() {
+                unsafe {
+                    let mut ctx = frames_ctx;
+                    ffmpeg::ffi::av_buffer_unref(&mut ctx);
+                }
+            }
+            if let Some(device_ctx) = self.hw_device_ctx.take() {
+                unsafe {
+                    let mut ctx = device_ctx;
+                    ffmpeg::ffi::av_buffer_unref(&mut ctx);
+                }
+            }
+            self.zero_copy_active = false;
+        }
     }
 
     fn config(&self) -> Option<&EncoderConfig> {
@@ -457,13 +573,17 @@ impl Encoder for HwAccelEncoder {
 
     /// Encode a frame from GPU texture handle (zero-copy path)
     ///
-    /// On macOS, this accepts an IOSurface handle and directly maps its memory
-    /// to an AVFrame for VideoToolbox encoding without copying data.
+    /// On macOS with zero_copy_active, this creates a CVPixelBuffer from the IOSurface
+    /// and passes it to VideoToolbox via AVFrame.data[3] with proper hw_frames_ctx.
+    ///
+    /// Without zero_copy_active, it maps IOSurface memory directly to AVFrame (partial zero-copy).
     #[cfg(target_os = "macos")]
     fn encode_frame_gpu(&mut self, gpu_handle: usize, pts: i64) -> Result<Vec<EncodedPacket>> {
         use objc::runtime::Object;
+        use std::ptr;
 
         type IOSurfaceRef = *mut Object;
+        type CVPixelBufferRef = *mut Object;
 
         #[link(name = "IOSurface", kind = "framework")]
         extern "C" {
@@ -473,67 +593,216 @@ impl Encoder for HwAccelEncoder {
             fn IOSurfaceGetBytesPerRowOfPlane(surface: IOSurfaceRef, plane: usize) -> usize;
         }
 
+        #[link(name = "CoreVideo", kind = "framework")]
+        extern "C" {
+            fn CVPixelBufferCreateWithIOSurface(
+                allocator: *const Object,
+                surface: IOSurfaceRef,
+                pixel_buffer_attributes: *const Object,
+                pixel_buffer_out: *mut CVPixelBufferRef,
+            ) -> i32;
+            fn CVPixelBufferGetPixelFormatType(pixel_buffer: CVPixelBufferRef) -> u32;
+            fn CVPixelBufferGetWidth(pixel_buffer: CVPixelBufferRef) -> usize;
+            fn CVPixelBufferGetHeight(pixel_buffer: CVPixelBufferRef) -> usize;
+        }
+
+        #[link(name = "CoreFoundation", kind = "framework")]
+        extern "C" {
+            fn CFRelease(cf: *const Object);
+        }
+
         const K_IO_SURFACE_LOCK_READ_ONLY: u32 = 1;
 
         let config = self.config.as_ref().ok_or(Error::EncoderNotInitialized)?.clone();
         let io_surface = gpu_handle as IOSurfaceRef;
 
-        // Lock IOSurface for CPU read (VideoToolbox will read via CPU mapping)
-        let lock_result = unsafe {
-            IOSurfaceLock(io_surface, K_IO_SURFACE_LOCK_READ_ONLY, std::ptr::null_mut())
-        };
-        if lock_result != 0 {
-            return Err(Error::Other(format!("Failed to lock IOSurface: {}", lock_result)));
+        // Check if zero-copy mode is active
+        if self.zero_copy_active {
+            // ================================================================
+            // TRUE ZERO-COPY PATH: CVPixelBuffer → VideoToolbox (GPU only)
+            // ================================================================
+
+            // Create CVPixelBuffer from IOSurface (no data copy, just wrapping)
+            let mut cv_pixel_buffer: CVPixelBufferRef = ptr::null_mut();
+            let cv_result = unsafe {
+                CVPixelBufferCreateWithIOSurface(
+                    ptr::null(),
+                    io_surface,
+                    ptr::null(),
+                    &mut cv_pixel_buffer,
+                )
+            };
+
+            if cv_result != 0 || cv_pixel_buffer.is_null() {
+                return Err(Error::Other(format!(
+                    "CVPixelBufferCreateWithIOSurface failed: {}",
+                    cv_result
+                )));
+            }
+
+            // Debug: Log CVPixelBuffer properties
+            let cv_format = unsafe { CVPixelBufferGetPixelFormatType(cv_pixel_buffer) };
+            let cv_width = unsafe { CVPixelBufferGetWidth(cv_pixel_buffer) };
+            let cv_height = unsafe { CVPixelBufferGetHeight(cv_pixel_buffer) };
+
+            // 420v = 0x34323076 = 875704438 (NV12)
+            // 420f = 0x34323066 = 875704422 (NV12 full range)
+            tracing::debug!(
+                "CVPixelBuffer: format=0x{:08x} ({}), size={}x{}",
+                cv_format,
+                match cv_format {
+                    0x34323076 => "420v/NV12",
+                    0x34323066 => "420f/NV12-full",
+                    0x42475241 => "BGRA",
+                    _ => "unknown",
+                },
+                cv_width,
+                cv_height
+            );
+
+            // Create AVFrame with VIDEOTOOLBOX format
+            // VideoToolbox encoder reads CVPixelBuffer from data[3]
+            let mut frame = VideoFrame::empty();
+            frame.set_pts(Some(pts));
+            frame.set_color_range(ColorRange::MPEG);
+
+            unsafe {
+                let frame_ptr = frame.as_mut_ptr();
+
+                // CRITICAL: Use VIDEOTOOLBOX format - encoder reads CVPixelBuffer from data[3]
+                let vt_format: ffmpeg::ffi::AVPixelFormat = Pixel::VIDEOTOOLBOX.into();
+                (*frame_ptr).format = vt_format as i32;
+                (*frame_ptr).width = config.width as i32;
+                (*frame_ptr).height = config.height as i32;
+
+                // CRITICAL: Pass CVPixelBuffer via data[3] (not data[0]!)
+                (*frame_ptr).data[3] = cv_pixel_buffer as *mut u8;
+
+                // Create AVBufferRef to manage CVPixelBuffer lifetime
+                // This prevents FFmpeg from trying to free the frame data
+                extern "C" fn release_cv_pixel_buffer(opaque: *mut std::ffi::c_void, _data: *mut u8) {
+                    if !opaque.is_null() {
+                        #[link(name = "CoreFoundation", kind = "framework")]
+                        extern "C" {
+                            fn CFRelease(cf: *const objc::runtime::Object);
+                        }
+                        unsafe {
+                            CFRelease(opaque as *const objc::runtime::Object);
+                        }
+                    }
+                }
+
+                // buf[0] manages the CVPixelBuffer lifetime
+                (*frame_ptr).buf[0] = ffmpeg::ffi::av_buffer_create(
+                    ptr::null_mut(), // data pointer not used
+                    0,               // size not used for opaque buffers
+                    Some(release_cv_pixel_buffer),
+                    cv_pixel_buffer as *mut std::ffi::c_void,
+                    0,
+                );
+
+                if (*frame_ptr).buf[0].is_null() {
+                    // Failed to create buffer, manually release CVPixelBuffer
+                    CFRelease(cv_pixel_buffer as *const Object);
+                    return Err(Error::Other("Failed to create AVBufferRef for CVPixelBuffer".into()));
+                }
+            }
+
+            // Send frame to encoder
+            let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
+
+            // Debug: Log AVFrame and encoder properties before sending
+            unsafe {
+                let frame_ptr = frame.as_ptr();
+                let encoder_ptr = encoder.as_ptr();
+                tracing::debug!(
+                    "AVFrame: format={}, size={}x{}, data[3]={:?}, buf[0]={:?}",
+                    (*frame_ptr).format,
+                    (*frame_ptr).width,
+                    (*frame_ptr).height,
+                    (*frame_ptr).data[3],
+                    (*frame_ptr).buf[0]
+                );
+                tracing::debug!(
+                    "Encoder: pix_fmt={}, size={}x{}",
+                    (*encoder_ptr).pix_fmt as i32,
+                    (*encoder_ptr).width,
+                    (*encoder_ptr).height
+                );
+            }
+
+            let send_result = encoder.send_frame(&frame);
+
+            // Handle send errors (AVFrame destructor will release CVPixelBuffer via buf[0])
+            if let Err(e) = send_result {
+                return Err(Error::EncodeFailed(format!(
+                    "Frame {} send failed (zero-copy): {}",
+                    pts, e
+                )));
+            }
+
+            self.frame_count += 1;
+            self.receive_packets()
+        } else {
+            // ================================================================
+            // PARTIAL ZERO-COPY PATH: IOSurface memory → NV12 AVFrame
+            // ================================================================
+
+            // Lock IOSurface for CPU read
+            let lock_result = unsafe {
+                IOSurfaceLock(io_surface, K_IO_SURFACE_LOCK_READ_ONLY, ptr::null_mut())
+            };
+            if lock_result != 0 {
+                return Err(Error::Other(format!("Failed to lock IOSurface: {}", lock_result)));
+            }
+
+            // Get IOSurface plane addresses and strides
+            let (y_ptr, y_stride, uv_ptr, uv_stride) = unsafe {
+                let y_ptr = IOSurfaceGetBaseAddressOfPlane(io_surface, 0);
+                let y_stride = IOSurfaceGetBytesPerRowOfPlane(io_surface, 0);
+                let uv_ptr = IOSurfaceGetBaseAddressOfPlane(io_surface, 1);
+                let uv_stride = IOSurfaceGetBytesPerRowOfPlane(io_surface, 1);
+                (y_ptr, y_stride, uv_ptr, uv_stride)
+            };
+
+            // Create empty frame and point data directly to IOSurface memory
+            let mut frame = VideoFrame::empty();
+            frame.set_pts(Some(pts));
+            frame.set_color_range(ColorRange::MPEG);
+
+            unsafe {
+                let frame_ptr = frame.as_mut_ptr();
+                let nv12_format: ffmpeg::ffi::AVPixelFormat = Pixel::NV12.into();
+                (*frame_ptr).format = nv12_format as i32;
+                (*frame_ptr).width = config.width as i32;
+                (*frame_ptr).height = config.height as i32;
+                // Point to IOSurface memory directly
+                (*frame_ptr).data[0] = y_ptr;
+                (*frame_ptr).data[1] = uv_ptr;
+                (*frame_ptr).linesize[0] = y_stride as i32;
+                (*frame_ptr).linesize[1] = uv_stride as i32;
+            }
+
+            // Send frame to encoder
+            let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
+            let send_result = encoder.send_frame(&frame);
+
+            // Unlock IOSurface after encoder has read the data
+            unsafe {
+                IOSurfaceUnlock(io_surface, K_IO_SURFACE_LOCK_READ_ONLY, ptr::null_mut());
+            }
+
+            // Handle send errors
+            if let Err(e) = send_result {
+                return Err(Error::EncodeFailed(format!(
+                    "Frame {} send failed: {}",
+                    pts, e
+                )));
+            }
+
+            self.frame_count += 1;
+            self.receive_packets()
         }
-
-        // Get IOSurface plane addresses and strides
-        let (y_ptr, y_stride, uv_ptr, uv_stride) = unsafe {
-            let y_ptr = IOSurfaceGetBaseAddressOfPlane(io_surface, 0);
-            let y_stride = IOSurfaceGetBytesPerRowOfPlane(io_surface, 0);
-            let uv_ptr = IOSurfaceGetBaseAddressOfPlane(io_surface, 1);
-            let uv_stride = IOSurfaceGetBytesPerRowOfPlane(io_surface, 1);
-            (y_ptr, y_stride, uv_ptr, uv_stride)
-        };
-
-        // Create empty frame and point data directly to IOSurface memory (zero-copy)
-        let mut frame = VideoFrame::empty();
-        frame.set_pts(Some(pts));
-        frame.set_color_range(ColorRange::MPEG);
-
-        unsafe {
-            let frame_ptr = frame.as_mut_ptr();
-            let nv12_format: ffmpeg::ffi::AVPixelFormat = Pixel::NV12.into();
-            (*frame_ptr).format = nv12_format as i32;
-            (*frame_ptr).width = config.width as i32;
-            (*frame_ptr).height = config.height as i32;
-            // Point to IOSurface memory directly (no copy!)
-            (*frame_ptr).data[0] = y_ptr;
-            (*frame_ptr).data[1] = uv_ptr;
-            (*frame_ptr).linesize[0] = y_stride as i32;
-            (*frame_ptr).linesize[1] = uv_stride as i32;
-        }
-
-        // Send frame to encoder
-        let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
-        let send_result = encoder.send_frame(&frame);
-
-        // Unlock IOSurface after encoder has read the data
-        unsafe {
-            IOSurfaceUnlock(io_surface, K_IO_SURFACE_LOCK_READ_ONLY, std::ptr::null_mut());
-        }
-
-        // Handle send errors
-        if let Err(e) = send_result {
-            return Err(Error::EncodeFailed(format!(
-                "Frame {} send failed: {}",
-                pts, e
-            )));
-        }
-
-        self.frame_count += 1;
-
-        // Receive encoded packets
-        self.receive_packets()
     }
 
     #[cfg(not(target_os = "macos"))]

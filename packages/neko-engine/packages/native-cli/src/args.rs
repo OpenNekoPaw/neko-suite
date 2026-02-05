@@ -59,6 +59,11 @@ pub enum Command {
         /// Hardware encoder (auto, videotoolbox, nvenc, vaapi, qsv, none)
         #[arg(long, default_value = "auto")]
         hw_encoder: String,
+
+        /// Enable zero-copy GPU encoding with CVPixelBufferPool (macOS only)
+        /// Uses AV_PIX_FMT_VIDEOTOOLBOX format for true zero-copy encoding
+        #[arg(long, default_value = "false")]
+        zero_copy: bool,
     },
 
     /// Probe media file and display metadata

@@ -29,8 +29,8 @@ impl Runner {
             Command::Serve { port, config, .. } => {
                 self.run_server(port, config).await
             }
-            Command::Export { jvi_file, output, codec, bitrate, preset, hw_encoder } => {
-                self.run_export(jvi_file, output, codec, bitrate, preset, hw_encoder).await
+            Command::Export { jvi_file, output, codec, bitrate, preset, hw_encoder, zero_copy } => {
+                self.run_export(jvi_file, output, codec, bitrate, preset, hw_encoder, zero_copy).await
             }
             Command::Probe { input, format } => {
                 self.run_probe(input, format).await
@@ -74,6 +74,7 @@ impl Runner {
         bitrate: u64,
         preset: String,
         hw_encoder: String,
+        zero_copy: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Load .jvi file
         let loader = JviLoader::new();
@@ -84,6 +85,7 @@ impl Runner {
         settings.video_bitrate = Some(bitrate);
         settings.preset = parse_preset(&preset);
         settings.hw_encoder = parse_hw_encoder(&hw_encoder);
+        settings.use_zero_copy_gpu = zero_copy;
 
         // Create export service and run
         let service = Arc::new(ExportService::new().await.map_err(|e| {

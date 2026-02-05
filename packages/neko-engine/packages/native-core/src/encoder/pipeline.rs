@@ -743,10 +743,6 @@ impl Drop for AsyncExportPipeline {
 // Encoder Send trait implementation
 // =============================================================================
 
-// HwAccelEncoder needs to be Send for the pipeline
-// This is safe because FFmpeg contexts are thread-safe when used from a single thread
-unsafe impl Send for HwAccelEncoder {}
-
 #[cfg(test)]
 mod tests {
     use super::*;

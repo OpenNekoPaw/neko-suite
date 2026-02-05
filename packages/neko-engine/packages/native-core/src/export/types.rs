@@ -54,6 +54,12 @@ pub struct ExportSettings {
     /// Encoder preset
     #[serde(default)]
     pub preset: ExportPreset,
+    /// Enable zero-copy GPU encoding (macOS VideoToolbox only)
+    ///
+    /// When enabled, CVPixelBuffer is passed directly to VideoToolbox
+    /// without any CPU involvement for maximum performance.
+    #[serde(default)]
+    pub use_zero_copy_gpu: bool,
 }
 
 impl ExportSettings {
@@ -72,7 +78,8 @@ impl ExportSettings {
 
         config = config
             .with_preset(self.preset.to_encoder_preset())
-            .with_hw_encoder(self.hw_encoder.to_hw_encoder_type());
+            .with_hw_encoder(self.hw_encoder.to_hw_encoder_type())
+            .with_zero_copy_gpu(self.use_zero_copy_gpu);
 
         config
     }
@@ -631,6 +638,7 @@ mod tests {
             hw_encoder: ExportHwEncoder::Auto,
             time_range: None,
             preset: ExportPreset::Fast,
+            use_zero_copy_gpu: false,
         };
 
         let config = settings.to_encoder_config();

@@ -205,6 +205,12 @@ pub struct EncoderConfig {
     pub max_b_frames: Option<u32>,
     /// Hardware encoder type (None = software only, Auto = try hw first)
     pub hw_encoder: HwEncoderType,
+    /// Enable true zero-copy GPU encoding via CVPixelBuffer (macOS only)
+    ///
+    /// When enabled, `encode_frame_gpu` will use AV_PIX_FMT_VIDEOTOOLBOX format
+    /// and pass CVPixelBuffer directly to VideoToolbox without any CPU involvement.
+    /// This provides the best performance but requires IOSurface-backed textures.
+    pub use_zero_copy_gpu: bool,
 }
 
 impl EncoderConfig {
@@ -225,6 +231,7 @@ impl EncoderConfig {
             gop_size: None,
             max_b_frames: None,
             hw_encoder: HwEncoderType::default(),
+            use_zero_copy_gpu: false, // Disabled by default for compatibility
         }
     }
 
@@ -267,6 +274,16 @@ impl EncoderConfig {
     /// Set maximum B-frames
     pub fn with_max_b_frames(mut self, max_b_frames: u32) -> Self {
         self.max_b_frames = Some(max_b_frames);
+        self
+    }
+
+    /// Enable zero-copy GPU encoding (macOS VideoToolbox only)
+    ///
+    /// When enabled, `encode_frame_gpu` uses AV_PIX_FMT_VIDEOTOOLBOX format
+    /// and passes CVPixelBuffer directly to VideoToolbox encoder.
+    /// This eliminates all CPU-GPU data transfers for maximum performance.
+    pub fn with_zero_copy_gpu(mut self, enabled: bool) -> Self {
+        self.use_zero_copy_gpu = enabled;
         self
     }
 }

@@ -519,6 +519,7 @@ mod tests {
             hw_encoder: ExportHwEncoder::None,
             time_range: None,
             preset: ExportPreset::Medium,
+            use_zero_copy_gpu: false,
         }
     }
 

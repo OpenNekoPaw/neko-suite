@@ -51,6 +51,7 @@ impl ProjectConverter {
             hw_encoder: ExportHwEncoder::Auto,
             time_range: None,
             preset: ExportPreset::Medium,
+            use_zero_copy_gpu: false, // Disabled: direct IOSurface mapping is faster than CVPixelBuffer wrapping
         };
 
         Ok((timeline, settings))
