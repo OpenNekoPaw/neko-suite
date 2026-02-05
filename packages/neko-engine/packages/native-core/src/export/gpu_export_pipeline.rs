@@ -248,6 +248,8 @@ impl GpuExportPipeline {
             }
         }
 
+        tracing::debug!("Created {} GPU layers for compositing", gpu_layers.len());
+
         let layer_refs: Vec<&GpuLayer> = gpu_layers.iter().collect();
         self.compositor.composite(
             &layer_refs,

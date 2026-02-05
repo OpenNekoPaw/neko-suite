@@ -48,19 +48,43 @@ struct VertexOutput {
 }
 
 // Fullscreen triangle vertex shader
+// Uses oversized triangle that covers entire viewport when clipped
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     var out: VertexOutput;
-    let x = f32(i32(vertex_index & 1u) * 2 - 1);
-    let y = f32(i32(vertex_index >> 1u) * 2 - 1);
-    out.position = vec4<f32>(x, -y, 0.0, 1.0);
-    out.uv = vec2<f32>((x + 1.0) * 0.5, (y + 1.0) * 0.5);
+    // Fullscreen triangle: v0=(-1,-1), v1=(3,-1), v2=(-1,3)
+    var pos: vec2<f32>;
+    var uv: vec2<f32>;
+    switch vertex_index {
+        case 0u: { pos = vec2<f32>(-1.0, -1.0); uv = vec2<f32>(0.0, 1.0); }
+        case 1u: { pos = vec2<f32>(3.0, -1.0); uv = vec2<f32>(2.0, 1.0); }
+        case 2u: { pos = vec2<f32>(-1.0, 3.0); uv = vec2<f32>(0.0, -1.0); }
+        default: { pos = vec2<f32>(0.0, 0.0); uv = vec2<f32>(0.0, 0.0); }
+    }
+    out.position = vec4<f32>(pos, 0.0, 1.0);
+    out.uv = uv;
     return out;
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var input_texture: texture_2d<f32>;
 @group(0) @binding(2) var input_sampler: sampler;
+
+// Linear to sRGB gamma correction
+fn linear_to_srgb(linear: f32) -> f32 {
+    if (linear <= 0.0031308) {
+        return linear * 12.92;
+    }
+    return 1.055 * pow(linear, 1.0 / 2.4) - 0.055;
+}
+
+fn linear_to_srgb3(linear: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(
+        linear_to_srgb(linear.r),
+        linear_to_srgb(linear.g),
+        linear_to_srgb(linear.b),
+    );
+}
 
 // BT.601 RGB to Y (SD video)
 fn rgb_to_y_bt601(rgb: vec3<f32>) -> f32 {
@@ -87,8 +111,14 @@ fn rgb_to_y(rgb: vec3<f32>, color_space: u32) -> f32 {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) f32 {
-    let rgba = textureSample(input_texture, input_sampler, in.uv);
-    return rgb_to_y(rgba.rgb, uniforms.color_space);
+    // Use textureLoad for unfilterable Rgba16Float
+    let tex_size = textureDimensions(input_texture);
+    let tex_coord = vec2<i32>(in.uv * vec2<f32>(tex_size));
+    let rgba = textureLoad(input_texture, tex_coord, 0);
+
+    // Apply linear→sRGB gamma correction (compositor outputs linear light)
+    let rgb = linear_to_srgb3(clamp(rgba.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
+    return rgb_to_y(rgb, uniforms.color_space);
 }
 "#;
 
@@ -112,19 +142,43 @@ struct VertexOutput {
 }
 
 // Fullscreen triangle vertex shader
+// Uses oversized triangle that covers entire viewport when clipped
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     var out: VertexOutput;
-    let x = f32(i32(vertex_index & 1u) * 2 - 1);
-    let y = f32(i32(vertex_index >> 1u) * 2 - 1);
-    out.position = vec4<f32>(x, -y, 0.0, 1.0);
-    out.uv = vec2<f32>((x + 1.0) * 0.5, (y + 1.0) * 0.5);
+    // Fullscreen triangle: v0=(-1,-1), v1=(3,-1), v2=(-1,3)
+    var pos: vec2<f32>;
+    var uv: vec2<f32>;
+    switch vertex_index {
+        case 0u: { pos = vec2<f32>(-1.0, -1.0); uv = vec2<f32>(0.0, 1.0); }
+        case 1u: { pos = vec2<f32>(3.0, -1.0); uv = vec2<f32>(2.0, 1.0); }
+        case 2u: { pos = vec2<f32>(-1.0, 3.0); uv = vec2<f32>(0.0, -1.0); }
+        default: { pos = vec2<f32>(0.0, 0.0); uv = vec2<f32>(0.0, 0.0); }
+    }
+    out.position = vec4<f32>(pos, 0.0, 1.0);
+    out.uv = uv;
     return out;
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var input_texture: texture_2d<f32>;
 @group(0) @binding(2) var input_sampler: sampler;
+
+// Linear to sRGB gamma correction
+fn linear_to_srgb(linear: f32) -> f32 {
+    if (linear <= 0.0031308) {
+        return linear * 12.92;
+    }
+    return 1.055 * pow(linear, 1.0 / 2.4) - 0.055;
+}
+
+fn linear_to_srgb3(linear: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(
+        linear_to_srgb(linear.r),
+        linear_to_srgb(linear.g),
+        linear_to_srgb(linear.b),
+    );
+}
 
 // BT.601 RGB to UV (SD video)
 fn rgb_to_uv_bt601(rgb: vec3<f32>) -> vec2<f32> {
@@ -157,25 +211,29 @@ fn rgb_to_uv(rgb: vec3<f32>, color_space: u32) -> vec2<f32> {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec2<f32> {
-    // Calculate texel size for 2x2 sampling
-    let texel_x = 1.0 / uniforms.output_width;
-    let texel_y = 1.0 / uniforms.output_height;
+    // Use textureLoad for unfilterable Rgba16Float
+    let tex_size = textureDimensions(input_texture);
 
-    // Sample 2x2 block and average UV values
-    // The UV texture is half resolution, so each UV pixel corresponds to a 2x2 block
-    let base_uv = in.uv;
+    // Calculate base texel coordinate (UV texture is half resolution, so multiply by 2)
+    let base_coord = vec2<i32>(in.uv * vec2<f32>(tex_size));
 
-    // Sample 4 pixels in the 2x2 block
-    let rgba00 = textureSample(input_texture, input_sampler, base_uv);
-    let rgba10 = textureSample(input_texture, input_sampler, base_uv + vec2<f32>(texel_x, 0.0));
-    let rgba01 = textureSample(input_texture, input_sampler, base_uv + vec2<f32>(0.0, texel_y));
-    let rgba11 = textureSample(input_texture, input_sampler, base_uv + vec2<f32>(texel_x, texel_y));
+    // Sample 2x2 block using textureLoad
+    let rgba00 = textureLoad(input_texture, base_coord, 0);
+    let rgba10 = textureLoad(input_texture, base_coord + vec2<i32>(1, 0), 0);
+    let rgba01 = textureLoad(input_texture, base_coord + vec2<i32>(0, 1), 0);
+    let rgba11 = textureLoad(input_texture, base_coord + vec2<i32>(1, 1), 0);
+
+    // Clamp to valid range and apply linear→sRGB gamma correction
+    let rgb00 = linear_to_srgb3(clamp(rgba00.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
+    let rgb10 = linear_to_srgb3(clamp(rgba10.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
+    let rgb01 = linear_to_srgb3(clamp(rgba01.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
+    let rgb11 = linear_to_srgb3(clamp(rgba11.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
 
     // Convert each to UV and average
-    let uv00 = rgb_to_uv(rgba00.rgb, uniforms.color_space);
-    let uv10 = rgb_to_uv(rgba10.rgb, uniforms.color_space);
-    let uv01 = rgb_to_uv(rgba01.rgb, uniforms.color_space);
-    let uv11 = rgb_to_uv(rgba11.rgb, uniforms.color_space);
+    let uv00 = rgb_to_uv(rgb00, uniforms.color_space);
+    let uv10 = rgb_to_uv(rgb10, uniforms.color_space);
+    let uv01 = rgb_to_uv(rgb01, uniforms.color_space);
+    let uv11 = rgb_to_uv(rgb11, uniforms.color_space);
 
     return (uv00 + uv10 + uv01 + uv11) * 0.25;
 }
@@ -428,6 +486,9 @@ pub struct RgbaToNv12TextureConverter {
     /// Staging textures (R8Unorm/RG8Unorm, standard wgpu textures)
     staging_y_texture: Option<wgpu::Texture>,
     staging_uv_texture: Option<wgpu::Texture>,
+    /// Metal staging textures (kept in sync with wgpu textures for direct Metal access)
+    staging_y_metal: Option<metal::Texture>,
+    staging_uv_metal: Option<metal::Texture>,
     /// Cached texture dimensions
     texture_size: (u32, u32),
     /// IOSurface exporter
@@ -458,22 +519,22 @@ impl RgbaToNv12TextureConverter {
                         },
                         count: None,
                     },
-                    // Input RGBA texture
+                    // Input RGBA texture (use unfilterable for Rgba16Float compatibility)
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
                             view_dimension: wgpu::TextureViewDimension::D2,
                             multisampled: false,
                         },
                         count: None,
                     },
-                    // Sampler
+                    // Sampler (non-filtering for unfilterable texture)
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
                         visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                         count: None,
                     },
                 ],
@@ -566,8 +627,8 @@ impl RgbaToNv12TextureConverter {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
 
@@ -594,6 +655,8 @@ impl RgbaToNv12TextureConverter {
             sampler,
             staging_y_texture: None,
             staging_uv_texture: None,
+            staging_y_metal: None,
+            staging_uv_metal: None,
             texture_size: (0, 0),
             exporter,
             output_backing: None,
@@ -601,6 +664,7 @@ impl RgbaToNv12TextureConverter {
     }
 
     /// Ensure staging textures exist with correct dimensions
+    /// Creates wgpu textures and uses wgpu's copy_texture_to_buffer for blit
     fn ensure_staging_textures(&mut self, width: u32, height: u32) {
         if self.texture_size == (width, height)
             && self.staging_y_texture.is_some()
@@ -611,8 +675,8 @@ impl RgbaToNv12TextureConverter {
 
         let device = self.ctx.device();
 
-        // Y plane staging texture (R8Unorm, full resolution)
-        self.staging_y_texture = Some(device.create_texture(&wgpu::TextureDescriptor {
+        // Create wgpu textures normally - wgpu will use its own Metal Device
+        let y_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Staging Y Texture (R8Unorm)"),
             size: wgpu::Extent3d {
                 width,
@@ -625,10 +689,9 @@ impl RgbaToNv12TextureConverter {
             format: wgpu::TextureFormat::R8Unorm,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
-        }));
+        });
 
-        // UV plane staging texture (RG8Unorm, half resolution)
-        self.staging_uv_texture = Some(device.create_texture(&wgpu::TextureDescriptor {
+        let uv_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Staging UV Texture (RG8Unorm)"),
             size: wgpu::Extent3d {
                 width: width / 2,
@@ -641,8 +704,14 @@ impl RgbaToNv12TextureConverter {
             format: wgpu::TextureFormat::Rg8Unorm,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
-        }));
+        });
 
+        // Clear Metal texture references - we'll use wgpu copy instead
+        self.staging_y_metal = None;
+        self.staging_uv_metal = None;
+
+        self.staging_y_texture = Some(y_texture);
+        self.staging_uv_texture = Some(uv_texture);
         self.texture_size = (width, height);
 
         tracing::debug!(
@@ -667,6 +736,9 @@ impl RgbaToNv12TextureConverter {
         height: u32,
         color_space: u32,
     ) -> Result<usize> {
+        // Wait for any pending GPU work (compositor) to complete before reading input texture
+        self.ctx.device().poll(wgpu::Maintain::Wait);
+
         // Ensure staging textures exist
         self.ensure_staging_textures(width, height);
 
@@ -783,7 +855,8 @@ impl RgbaToNv12TextureConverter {
         Ok(backing.io_surface_handle())
     }
 
-    /// Blit staging textures to IOSurface using Metal
+    /// Copy staging textures to IOSurface using wgpu buffer copy (CPU intermediate)
+    /// This avoids as_hal issues by using wgpu's copy_texture_to_buffer
     fn blit_staging_to_iosurface(
         &self,
         staging_y: &wgpu::Texture,
@@ -794,95 +867,124 @@ impl RgbaToNv12TextureConverter {
     ) -> Result<()> {
         tracing::debug!("blit_staging_to_iosurface: starting, {}x{}", width, height);
 
-        unsafe {
-            let metal_device = self.exporter.metal_device();
-            tracing::debug!("blit_staging_to_iosurface: got metal device");
+        let device = self.ctx.device();
+        let queue = self.ctx.queue();
 
-            let command_queue = metal_device.new_command_queue();
-            let command_buffer = command_queue.new_command_buffer();
-            let blit_encoder = command_buffer.new_blit_command_encoder();
-            tracing::debug!("blit_staging_to_iosurface: created blit encoder");
+        // Calculate buffer sizes with proper alignment
+        let y_bytes_per_row = width; // R8Unorm = 1 byte per pixel
+        let y_padded_bytes_per_row = (y_bytes_per_row + 255) & !255; // 256-byte alignment
+        let y_buffer_size = y_padded_bytes_per_row * height;
 
-            // Get the IOSurface Metal textures
-            let (y_iosurface_tex, uv_iosurface_tex) = backing.metal_textures();
-            tracing::debug!("blit_staging_to_iosurface: got IOSurface textures");
+        let uv_width = width / 2;
+        let uv_height = height / 2;
+        let uv_bytes_per_row = uv_width * 2; // RG8Unorm = 2 bytes per pixel
+        let uv_padded_bytes_per_row = (uv_bytes_per_row + 255) & !255;
+        let uv_buffer_size = uv_padded_bytes_per_row * uv_height;
 
-            // Get the staging Metal textures from wgpu
-            tracing::debug!("blit_staging_to_iosurface: getting Y staging metal texture");
-            let y_staging_metal = self.get_metal_texture_from_wgpu(staging_y)?;
-            tracing::debug!("blit_staging_to_iosurface: got Y staging metal texture");
-
-            tracing::debug!("blit_staging_to_iosurface: getting UV staging metal texture");
-            let uv_staging_metal = self.get_metal_texture_from_wgpu(staging_uv)?;
-            tracing::debug!("blit_staging_to_iosurface: got UV staging metal texture");
-
-            // Blit Y plane: staging → IOSurface
-            tracing::debug!("blit_staging_to_iosurface: blitting Y plane");
-            blit_encoder.copy_from_texture(
-                &y_staging_metal,
-                0, // slice
-                0, // level
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-                metal::MTLSize {
-                    width: width as u64,
-                    height: height as u64,
-                    depth: 1,
-                },
-                y_iosurface_tex,
-                0, // slice
-                0, // level
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-            );
-
-            // Blit UV plane: staging → IOSurface
-            tracing::debug!("blit_staging_to_iosurface: blitting UV plane");
-            blit_encoder.copy_from_texture(
-                &uv_staging_metal,
-                0,
-                0,
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-                metal::MTLSize {
-                    width: (width / 2) as u64,
-                    height: (height / 2) as u64,
-                    depth: 1,
-                },
-                uv_iosurface_tex,
-                0,
-                0,
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-            );
-
-            tracing::debug!("blit_staging_to_iosurface: ending encoding");
-            blit_encoder.end_encoding();
-            tracing::debug!("blit_staging_to_iosurface: committing");
-            command_buffer.commit();
-            tracing::debug!("blit_staging_to_iosurface: waiting for completion");
-            command_buffer.wait_until_completed();
-            tracing::debug!("blit_staging_to_iosurface: done");
-        }
-
-        Ok(())
-    }
-
-    /// Get the underlying Metal texture from a wgpu texture
-    ///
-    /// NOTE: This is a workaround since wgpu-hal's Texture.raw field is private.
-    /// We use unsafe pointer casting to access the raw Metal texture.
-    unsafe fn get_metal_texture_from_wgpu(&self, texture: &wgpu::Texture) -> Result<metal::Texture> {
-        // Use wgpu's as_hal to get the underlying Metal texture
-        let mut result: Option<metal::Texture> = None;
-
-        texture.as_hal::<wgpu_hal::api::Metal, _>(|hal_texture| {
-            if let Some(t) = hal_texture {
-                // The wgpu_hal::metal::Texture struct has `raw: metal::Texture` as its first field
-                // We can use unsafe pointer casting to access it
-                let ptr = t as *const wgpu_hal::metal::Texture;
-                let raw_ptr = ptr as *const metal::Texture;
-                result = Some((*raw_ptr).clone());
-            }
+        // Create staging buffers
+        let y_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Y Staging Buffer"),
+            size: y_buffer_size as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
         });
 
-        result.ok_or_else(|| crate::error::Error::Other("Failed to get Metal texture from wgpu".to_string()))
+        let uv_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("UV Staging Buffer"),
+            size: uv_buffer_size as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        // Copy textures to buffers
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Texture to Buffer Copy"),
+        });
+
+        encoder.copy_texture_to_buffer(
+            wgpu::ImageCopyTexture {
+                texture: staging_y,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyBuffer {
+                buffer: &y_buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(y_padded_bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        encoder.copy_texture_to_buffer(
+            wgpu::ImageCopyTexture {
+                texture: staging_uv,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyBuffer {
+                buffer: &uv_buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(uv_padded_bytes_per_row),
+                    rows_per_image: Some(uv_height),
+                },
+            },
+            wgpu::Extent3d {
+                width: uv_width,
+                height: uv_height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        queue.submit(std::iter::once(encoder.finish()));
+
+        // Map buffers and copy to IOSurface
+        let y_slice = y_buffer.slice(..);
+        let uv_slice = uv_buffer.slice(..);
+
+        let (y_tx, y_rx) = std::sync::mpsc::channel();
+        let (uv_tx, uv_rx) = std::sync::mpsc::channel();
+
+        y_slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = y_tx.send(result);
+        });
+        uv_slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = uv_tx.send(result);
+        });
+
+        device.poll(wgpu::Maintain::Wait);
+
+        y_rx.recv().map_err(|_| crate::error::Error::Other("Y buffer map failed".to_string()))?
+            .map_err(|e| crate::error::Error::Other(format!("Y buffer async error: {:?}", e)))?;
+        uv_rx.recv().map_err(|_| crate::error::Error::Other("UV buffer map failed".to_string()))?
+            .map_err(|e| crate::error::Error::Other(format!("UV buffer async error: {:?}", e)))?;
+
+        // Copy data to IOSurface
+        unsafe {
+            backing.copy_from_buffers(
+                &y_slice.get_mapped_range(),
+                y_padded_bytes_per_row,
+                &uv_slice.get_mapped_range(),
+                uv_padded_bytes_per_row,
+                width,
+                height,
+            )?;
+        }
+
+        y_buffer.unmap();
+        uv_buffer.unmap();
+
+        tracing::debug!("blit_staging_to_iosurface: done");
+        Ok(())
     }
 
     /// Get the cached output texture dimensions

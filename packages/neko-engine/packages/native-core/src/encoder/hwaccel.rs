@@ -457,45 +457,78 @@ impl Encoder for HwAccelEncoder {
 
     /// Encode a frame from GPU texture handle (zero-copy path)
     ///
-    /// On macOS, this accepts an IOSurface handle and creates a CVPixelBuffer
-    /// that VideoToolbox can encode directly without CPU readback.
+    /// On macOS, this accepts an IOSurface handle and directly maps its memory
+    /// to an AVFrame for VideoToolbox encoding without copying data.
     #[cfg(target_os = "macos")]
     fn encode_frame_gpu(&mut self, gpu_handle: usize, pts: i64) -> Result<Vec<EncodedPacket>> {
-        let config = self.config.as_ref().ok_or(Error::EncoderNotInitialized)?.clone();
+        use objc::runtime::Object;
 
-        // Create CVPixelBuffer from IOSurface for true zero-copy encoding
-        let cv_pixel_buffer = unsafe {
-            self.create_cv_pixel_buffer_from_iosurface(gpu_handle, config.width, config.height)?
+        type IOSurfaceRef = *mut Object;
+
+        #[link(name = "IOSurface", kind = "framework")]
+        extern "C" {
+            fn IOSurfaceLock(surface: IOSurfaceRef, options: u32, seed: *mut u32) -> i32;
+            fn IOSurfaceUnlock(surface: IOSurfaceRef, options: u32, seed: *mut u32) -> i32;
+            fn IOSurfaceGetBaseAddressOfPlane(surface: IOSurfaceRef, plane: usize) -> *mut u8;
+            fn IOSurfaceGetBytesPerRowOfPlane(surface: IOSurfaceRef, plane: usize) -> usize;
+        }
+
+        const K_IO_SURFACE_LOCK_READ_ONLY: u32 = 1;
+
+        let config = self.config.as_ref().ok_or(Error::EncoderNotInitialized)?.clone();
+        let io_surface = gpu_handle as IOSurfaceRef;
+
+        // Lock IOSurface for CPU read (VideoToolbox will read via CPU mapping)
+        let lock_result = unsafe {
+            IOSurfaceLock(io_surface, K_IO_SURFACE_LOCK_READ_ONLY, std::ptr::null_mut())
+        };
+        if lock_result != 0 {
+            return Err(Error::Other(format!("Failed to lock IOSurface: {}", lock_result)));
+        }
+
+        // Get IOSurface plane addresses and strides
+        let (y_ptr, y_stride, uv_ptr, uv_stride) = unsafe {
+            let y_ptr = IOSurfaceGetBaseAddressOfPlane(io_surface, 0);
+            let y_stride = IOSurfaceGetBytesPerRowOfPlane(io_surface, 0);
+            let uv_ptr = IOSurfaceGetBaseAddressOfPlane(io_surface, 1);
+            let uv_stride = IOSurfaceGetBytesPerRowOfPlane(io_surface, 1);
+            (y_ptr, y_stride, uv_ptr, uv_stride)
         };
 
-        // Create AVFrame and set CVPixelBuffer directly
-        let mut frame = VideoFrame::new(Pixel::NV12, config.width, config.height);
+        // Create empty frame and point data directly to IOSurface memory (zero-copy)
+        let mut frame = VideoFrame::empty();
         frame.set_pts(Some(pts));
-        frame.set_color_range(ColorRange::MPEG); // Limited range (16-235) - required for VideoToolbox
+        frame.set_color_range(ColorRange::MPEG);
 
-        // Set CVPixelBuffer to AVFrame.data[3] for VideoToolbox
-        // VideoToolbox encoder will read directly from GPU memory via CVPixelBuffer
-        // Note: Keep format as NV12 - the CVPixelBuffer contains NV12 data from IOSurface
         unsafe {
             let frame_ptr = frame.as_mut_ptr();
-            (*frame_ptr).data[3] = cv_pixel_buffer as *mut u8;
-            // Do NOT set format to AV_PIX_FMT_VIDEOTOOLBOX - that's for decoder output
-            // The encoder expects NV12 input with CVPixelBuffer in data[3]
+            let nv12_format: ffmpeg::ffi::AVPixelFormat = Pixel::NV12.into();
+            (*frame_ptr).format = nv12_format as i32;
+            (*frame_ptr).width = config.width as i32;
+            (*frame_ptr).height = config.height as i32;
+            // Point to IOSurface memory directly (no copy!)
+            (*frame_ptr).data[0] = y_ptr;
+            (*frame_ptr).data[1] = uv_ptr;
+            (*frame_ptr).linesize[0] = y_stride as i32;
+            (*frame_ptr).linesize[1] = uv_stride as i32;
         }
 
         // Send frame to encoder
         let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
-        if let Err(e) = encoder.send_frame(&frame) {
-            // Release CVPixelBuffer on error
-            unsafe { self.release_cv_pixel_buffer(cv_pixel_buffer); }
+        let send_result = encoder.send_frame(&frame);
+
+        // Unlock IOSurface after encoder has read the data
+        unsafe {
+            IOSurfaceUnlock(io_surface, K_IO_SURFACE_LOCK_READ_ONLY, std::ptr::null_mut());
+        }
+
+        // Handle send errors
+        if let Err(e) = send_result {
             return Err(Error::EncodeFailed(format!(
                 "Frame {} send failed: {}",
                 pts, e
             )));
         }
-
-        // Release CVPixelBuffer after encoding (encoder has retained it if needed)
-        unsafe { self.release_cv_pixel_buffer(cv_pixel_buffer); }
 
         self.frame_count += 1;
 

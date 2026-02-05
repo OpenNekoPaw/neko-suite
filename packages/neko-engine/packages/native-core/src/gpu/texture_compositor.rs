@@ -535,8 +535,9 @@ impl TextureCompositor {
             self.composite_layer(&mut encoder, layer, &output_view, output_width, output_height)?;
         }
 
-        // Submit commands
+        // Submit commands and wait for completion
         queue.submit(std::iter::once(encoder.finish()));
+        self.ctx.device().poll(wgpu::Maintain::Wait);
 
         let elapsed = start_time.elapsed();
 

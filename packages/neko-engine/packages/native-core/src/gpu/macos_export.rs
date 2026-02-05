@@ -147,6 +147,64 @@ impl IOSurfaceBackingStore {
             command_buffer.wait_until_completed();
         }
     }
+
+    /// Copy Y and UV plane data from CPU buffers to IOSurface
+    ///
+    /// # Safety
+    /// The buffers must contain valid pixel data with correct dimensions
+    pub unsafe fn copy_from_buffers(
+        &self,
+        y_data: &[u8],
+        y_src_stride: u32,
+        uv_data: &[u8],
+        uv_src_stride: u32,
+        width: u32,
+        height: u32,
+    ) -> crate::error::Result<()> {
+        // Lock IOSurface for CPU write
+        let lock_result = IOSurfaceLock(self.io_surface, 0, std::ptr::null_mut());
+        if lock_result != 0 {
+            return Err(crate::error::Error::Other(format!(
+                "Failed to lock IOSurface: {}",
+                lock_result
+            )));
+        }
+
+        // Copy Y plane
+        let y_dst_ptr = IOSurfaceGetBaseAddressOfPlane(self.io_surface, 0) as *mut u8;
+        let y_dst_stride = IOSurfaceGetBytesPerRowOfPlane(self.io_surface, 0);
+
+        for row in 0..height as usize {
+            let src_offset = row * y_src_stride as usize;
+            let dst_offset = row * y_dst_stride;
+            std::ptr::copy_nonoverlapping(
+                y_data.as_ptr().add(src_offset),
+                y_dst_ptr.add(dst_offset),
+                width as usize,
+            );
+        }
+
+        // Copy UV plane
+        let uv_dst_ptr = IOSurfaceGetBaseAddressOfPlane(self.io_surface, 1) as *mut u8;
+        let uv_dst_stride = IOSurfaceGetBytesPerRowOfPlane(self.io_surface, 1);
+        let uv_height = height / 2;
+        let uv_width = width; // UV is interleaved, so width in bytes = width
+
+        for row in 0..uv_height as usize {
+            let src_offset = row * uv_src_stride as usize;
+            let dst_offset = row * uv_dst_stride;
+            std::ptr::copy_nonoverlapping(
+                uv_data.as_ptr().add(src_offset),
+                uv_dst_ptr.add(dst_offset),
+                uv_width as usize,
+            );
+        }
+
+        // Unlock IOSurface
+        IOSurfaceUnlock(self.io_surface, 0, std::ptr::null_mut());
+
+        Ok(())
+    }
 }
 
 impl Drop for IOSurfaceBackingStore {
@@ -343,6 +401,14 @@ impl MacOsTextureExporter {
         // Create plane info array
         let plane_info: *mut Object = msg_send![class!(NSMutableArray), arrayWithCapacity: 2usize];
 
+        if plane_info.is_null() {
+            CFRelease(width_num);
+            CFRelease(height_num);
+            CFRelease(format_num);
+            CFRelease(props as *const _);
+            return Err(Error::Other("Failed to create NSMutableArray for plane info".to_string()));
+        }
+
         // Y plane info
         let y_plane_dict = CFDictionaryCreateMutable(
             std::ptr::null(),
@@ -350,6 +416,15 @@ impl MacOsTextureExporter {
             kCFTypeDictionaryKeyCallBacks,
             kCFTypeDictionaryValueCallBacks,
         );
+
+        if y_plane_dict.is_null() {
+            let _: () = msg_send![plane_info, release];
+            CFRelease(width_num);
+            CFRelease(height_num);
+            CFRelease(format_num);
+            CFRelease(props as *const _);
+            return Err(Error::Other("Failed to create Y plane dictionary".to_string()));
+        }
 
         let y_width_num = CFNumberCreate(
             std::ptr::null(),
@@ -402,6 +477,22 @@ impl MacOsTextureExporter {
             kCFTypeDictionaryKeyCallBacks,
             kCFTypeDictionaryValueCallBacks,
         );
+
+        if uv_plane_dict.is_null() {
+            let _: () = msg_send![plane_info, release];
+            CFRelease(width_num);
+            CFRelease(height_num);
+            CFRelease(format_num);
+            CFRelease(y_width_num);
+            CFRelease(y_height_num);
+            CFRelease(y_bpr_num);
+            CFRelease(y_bpe_num);
+            CFRelease(y_offset_num);
+            CFRelease(y_size_num);
+            CFRelease(y_plane_dict as *const _);
+            CFRelease(props as *const _);
+            return Err(Error::Other("Failed to create UV plane dictionary".to_string()));
+        }
 
         let uv_width = (width / 2) as i64;
         let uv_height = (height / 2) as i64;
