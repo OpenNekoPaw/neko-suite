@@ -156,6 +156,7 @@ impl ProjectConverter {
                     duration: audio.duration,
                     trim_start: audio.trim_start,
                     trim_end: audio.trim_end,
+                    audio: None, // Already extracted volume/pan above
                     volume,
                     pan,
                     fade_in,

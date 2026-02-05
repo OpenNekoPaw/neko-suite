@@ -3209,3 +3209,209 @@ fn read_texture_to_cpu(
 
     Ok(result)
 }
+
+// =============================================================================
+// Preview Pipeline Session (Zero-Copy H.264 Streaming)
+// =============================================================================
+
+/// Configuration for preview pipeline
+#[napi(object)]
+#[derive(Debug, Clone)]
+pub struct JsPreviewPipelineConfig {
+    /// Output width
+    pub width: u32,
+    /// Output height
+    pub height: u32,
+    /// Frame rate
+    pub fps: f64,
+    /// Bitrate in bits per second (default: 2 Mbps)
+    pub bitrate: Option<i64>,
+    /// GOP size (keyframe interval, default: 30)
+    pub gop_size: Option<u32>,
+}
+
+/// Encoded preview frame (H.264 NAL unit)
+#[napi(object)]
+#[derive(Clone)]
+pub struct JsPreviewFrame {
+    /// H.264 NAL unit data
+    pub data: Buffer,
+    /// Presentation timestamp in microseconds
+    pub pts: i64,
+    /// Decode timestamp in microseconds
+    pub dts: i64,
+    /// Whether this is a keyframe (IDR)
+    pub is_keyframe: bool,
+}
+
+/// Preview Pipeline Session - Zero-copy GPU pipeline for real-time H.264 preview
+///
+/// Data flow (macOS):
+/// ```text
+/// Timeline → GpuExportPipeline (decode + composite + IOSurface)
+///         → VideoToolbox H.264 Encode → H.264 NAL units
+/// ```
+///
+/// All processing stays on GPU until final H.264 output.
+#[napi]
+pub struct PreviewPipelineSession {
+    pipeline: Mutex<neko_native_core::preview::PreviewPipeline>,
+    config: JsPreviewPipelineConfig,
+}
+
+#[napi]
+impl PreviewPipelineSession {
+    /// Create a new preview pipeline from timeline JSON
+    #[napi(factory)]
+    pub fn create(
+        timeline_json: String,
+        config: JsPreviewPipelineConfig,
+    ) -> Result<Self> {
+        use neko_native_core::export::TimelineData;
+        use neko_native_core::preview::{PreviewPipeline, PreviewPipelineConfig};
+
+        // Parse timeline
+        let timeline: TimelineData = serde_json::from_str(&timeline_json)
+            .map_err(|e| Error::from_reason(format!("Failed to parse timeline: {}", e)))?;
+
+        // Create GPU context
+        let runtime = get_runtime();
+        let gpu_ctx = runtime
+            .block_on(neko_native_core::gpu::GpuContext::new())
+            .map_err(|e| Error::from_reason(format!("GPU initialization failed: {}", e)))?;
+        let gpu_ctx = Arc::new(gpu_ctx);
+
+        // Create preview config
+        let preview_config = PreviewPipelineConfig {
+            width: config.width,
+            height: config.height,
+            fps: config.fps,
+            bitrate: config.bitrate.unwrap_or(2_000_000) as u64,
+            gop_size: config.gop_size.unwrap_or(30),
+        };
+
+        // Create pipeline
+        let mut pipeline = PreviewPipeline::new(timeline, gpu_ctx, preview_config)
+            .map_err(|e| Error::from_reason(format!("Failed to create preview pipeline: {}", e)))?;
+
+        // Initialize (open decoders)
+        pipeline
+            .initialize()
+            .map_err(|e| Error::from_reason(format!("Failed to initialize pipeline: {}", e)))?;
+
+        tracing::info!(
+            "PreviewPipelineSession created: {}x{} @ {}fps, hw={}",
+            config.width,
+            config.height,
+            config.fps,
+            pipeline.is_hw_active()
+        );
+
+        Ok(Self {
+            pipeline: Mutex::new(pipeline),
+            config,
+        })
+    }
+
+    /// Render frame at given time and encode to H.264
+    ///
+    /// Returns H.264 NAL units ready for WebSocket streaming.
+    #[napi]
+    pub fn render_frame(
+        &self,
+        time: f64,
+        background_color: Option<Vec<f64>>,
+    ) -> Result<Vec<JsPreviewFrame>> {
+        let bg = if let Some(bg) = background_color {
+            if bg.len() >= 4 {
+                [bg[0] as f32, bg[1] as f32, bg[2] as f32, bg[3] as f32]
+            } else {
+                [0.0, 0.0, 0.0, 1.0]
+            }
+        } else {
+            [0.0, 0.0, 0.0, 1.0]
+        };
+
+        let mut pipeline = self
+            .pipeline
+            .lock()
+            .map_err(|_| Error::from_reason("Failed to lock pipeline"))?;
+
+        let frames = pipeline
+            .render_frame(time, bg)
+            .map_err(|e| Error::from_reason(format!("Failed to render frame: {}", e)))?;
+
+        Ok(frames
+            .into_iter()
+            .map(|f| JsPreviewFrame {
+                data: Buffer::from(f.data),
+                pts: f.pts,
+                dts: f.dts,
+                is_keyframe: f.is_keyframe,
+            })
+            .collect())
+    }
+
+    /// Flush encoder and get remaining packets
+    #[napi]
+    pub fn flush(&self) -> Result<Vec<JsPreviewFrame>> {
+        let mut pipeline = self
+            .pipeline
+            .lock()
+            .map_err(|_| Error::from_reason("Failed to lock pipeline"))?;
+
+        let frames = pipeline
+            .flush()
+            .map_err(|e| Error::from_reason(format!("Failed to flush: {}", e)))?;
+
+        Ok(frames
+            .into_iter()
+            .map(|f| JsPreviewFrame {
+                data: Buffer::from(f.data),
+                pts: f.pts,
+                dts: f.dts,
+                is_keyframe: f.is_keyframe,
+            })
+            .collect())
+    }
+
+    /// Reset frame counter (call on seek)
+    #[napi]
+    pub fn reset_frame_counter(&self) -> Result<()> {
+        let mut pipeline = self
+            .pipeline
+            .lock()
+            .map_err(|_| Error::from_reason("Failed to lock pipeline"))?;
+
+        pipeline.reset_frame_counter();
+        Ok(())
+    }
+
+    /// Check if hardware encoding is active
+    #[napi]
+    pub fn is_hw_active(&self) -> bool {
+        self.pipeline
+            .lock()
+            .map(|p| p.is_hw_active())
+            .unwrap_or(false)
+    }
+
+    /// Get current configuration
+    #[napi]
+    pub fn get_config(&self) -> JsPreviewPipelineConfig {
+        self.config.clone()
+    }
+
+    /// Close the pipeline and release resources
+    #[napi]
+    pub fn close(&self) -> Result<()> {
+        let mut pipeline = self
+            .pipeline
+            .lock()
+            .map_err(|_| Error::from_reason("Failed to lock pipeline"))?;
+
+        pipeline.close();
+        tracing::info!("PreviewPipelineSession closed");
+        Ok(())
+    }
+}

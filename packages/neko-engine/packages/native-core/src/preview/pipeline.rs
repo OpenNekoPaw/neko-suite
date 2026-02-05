@@ -1,0 +1,261 @@
+//! Preview Pipeline - Zero-copy GPU pipeline for real-time H.264 preview
+//!
+//! Reuses GpuExportPipeline for GPU processing, adds H.264 encoding for streaming.
+//!
+//! Data flow (macOS zero-copy):
+//! ```text
+//! GpuExportPipeline (decode → composite → IOSurface)
+//!     → VideoToolbox H.264 Encode → H.264 NAL units → WebSocket
+//! ```
+
+use std::sync::Arc;
+
+use crate::encoder::{EncodedPacket, Encoder, EncoderConfig, HwAccelEncoder, VideoCodec};
+use crate::error::Result;
+use crate::export::{ExportSettings, GpuExportPipeline, TimelineData};
+use crate::gpu::GpuContext;
+
+/// Preview pipeline configuration
+#[derive(Debug, Clone)]
+pub struct PreviewPipelineConfig {
+    /// Output width
+    pub width: u32,
+    /// Output height
+    pub height: u32,
+    /// Frame rate
+    pub fps: f64,
+    /// Bitrate in bits per second (default: 2 Mbps for preview)
+    pub bitrate: u64,
+    /// GOP size (keyframe interval)
+    pub gop_size: u32,
+}
+
+impl Default for PreviewPipelineConfig {
+    fn default() -> Self {
+        Self {
+            width: 1920,
+            height: 1080,
+            fps: 30.0,
+            bitrate: 2_000_000, // 2 Mbps for preview
+            gop_size: 30,       // 1 second GOP
+        }
+    }
+}
+
+/// Encoded preview frame
+#[derive(Debug, Clone)]
+pub struct PreviewFrame {
+    /// H.264 NAL unit data
+    pub data: Vec<u8>,
+    /// Presentation timestamp in microseconds
+    pub pts: i64,
+    /// Decode timestamp in microseconds
+    pub dts: i64,
+    /// Whether this is a keyframe (IDR)
+    pub is_keyframe: bool,
+}
+
+impl From<&EncodedPacket> for PreviewFrame {
+    fn from(packet: &EncodedPacket) -> Self {
+        Self {
+            data: packet.data.clone(),
+            pts: packet.pts,
+            dts: packet.dts,
+            is_keyframe: packet.is_keyframe,
+        }
+    }
+}
+
+/// Preview Pipeline - Wraps GpuExportPipeline + H.264 encoder
+///
+/// Reuses the export pipeline for all GPU processing:
+/// - Hardware video decoding
+/// - Multi-layer GPU compositing
+/// - Zero-copy RGBA→NV12 conversion (IOSurface on macOS)
+///
+/// Adds H.264 encoding for real-time streaming.
+pub struct PreviewPipeline {
+    /// GPU export pipeline (handles decode + composite + NV12 conversion)
+    gpu_pipeline: GpuExportPipeline,
+    /// H.264 encoder
+    encoder: HwAccelEncoder,
+    /// Configuration
+    config: PreviewPipelineConfig,
+    /// Frame counter for PTS calculation
+    frame_count: u64,
+    /// Whether encoder is initialized
+    encoder_initialized: bool,
+}
+
+impl PreviewPipeline {
+    /// Create a new preview pipeline from timeline
+    pub fn new(
+        timeline: TimelineData,
+        ctx: Arc<GpuContext>,
+        config: PreviewPipelineConfig,
+    ) -> Result<Self> {
+        // Create export settings from preview config
+        let export_settings = ExportSettings {
+            width: config.width,
+            height: config.height,
+            fps: config.fps,
+            video_codec: crate::export::ExportVideoCodec::H264,
+            video_bitrate: Some(config.bitrate),
+            audio_codec: crate::export::ExportAudioCodec::Aac,
+            audio_bitrate: None,
+            hw_encoder: crate::export::ExportHwEncoder::Auto,
+            time_range: None,
+            preset: crate::export::ExportPreset::default(),
+            use_zero_copy_gpu: true, // Enable zero-copy for preview
+        };
+
+        let gpu_pipeline = GpuExportPipeline::new(timeline, export_settings, ctx)?;
+        let encoder = HwAccelEncoder::new();
+
+        Ok(Self {
+            gpu_pipeline,
+            encoder,
+            config,
+            frame_count: 0,
+            encoder_initialized: false,
+        })
+    }
+
+    /// Initialize the pipeline (open all decoders)
+    pub fn initialize(&mut self) -> Result<()> {
+        self.gpu_pipeline.initialize()?;
+        self.ensure_encoder_initialized()?;
+        Ok(())
+    }
+
+    /// Update configuration (e.g., resolution change)
+    pub fn update_config(&mut self, config: PreviewPipelineConfig) -> Result<()> {
+        if self.config.width != config.width || self.config.height != config.height {
+            self.encoder_initialized = false;
+        }
+        self.config = config;
+        Ok(())
+    }
+
+    /// Initialize encoder with current config
+    fn ensure_encoder_initialized(&mut self) -> Result<()> {
+        if self.encoder_initialized {
+            return Ok(());
+        }
+
+        let mut encoder_config = EncoderConfig::new(
+            self.config.width,
+            self.config.height,
+            self.config.fps,
+            VideoCodec::H264,
+        );
+        encoder_config.bitrate = self.config.bitrate;
+        encoder_config.gop_size = Some(self.config.gop_size);
+        encoder_config.use_zero_copy_gpu = true; // Enable zero-copy for preview
+
+        self.encoder.open(&encoder_config)?;
+        self.encoder_initialized = true;
+
+        tracing::info!(
+            "Preview encoder initialized: {}x{} @ {}fps, {}kbps, hw={}",
+            self.config.width,
+            self.config.height,
+            self.config.fps,
+            self.config.bitrate / 1000,
+            self.encoder.is_hw_active()
+        );
+
+        Ok(())
+    }
+
+    /// Render frame at given time and encode to H.264
+    ///
+    /// Uses GpuExportPipeline for all GPU processing, then encodes to H.264.
+    /// Returns H.264 NAL units ready for WebSocket streaming.
+    #[cfg(target_os = "macos")]
+    pub fn render_frame(
+        &mut self,
+        time: f64,
+        background_color: [f32; 4],
+    ) -> Result<Vec<PreviewFrame>> {
+        self.ensure_encoder_initialized()?;
+
+        // Use GpuExportPipeline to process frame to IOSurface (zero-copy)
+        let iosurface_handle = self
+            .gpu_pipeline
+            .process_frame_to_iosurface(time, background_color)?;
+
+        // Encode to H.264 via VideoToolbox (zero-copy from IOSurface)
+        let pts = (self.frame_count as f64 * 1_000_000.0 / self.config.fps) as i64;
+        let packets = self.encoder.encode_frame_gpu(iosurface_handle, pts)?;
+
+        self.frame_count += 1;
+
+        Ok(packets.iter().map(PreviewFrame::from).collect())
+    }
+
+    /// Render frame (non-macOS fallback - not zero-copy)
+    #[cfg(not(target_os = "macos"))]
+    pub fn render_frame(
+        &mut self,
+        time: f64,
+        background_color: [f32; 4],
+    ) -> Result<Vec<PreviewFrame>> {
+        self.ensure_encoder_initialized()?;
+
+        // Use CPU path on non-macOS
+        let result = self
+            .gpu_pipeline
+            .process_frame_to_nv12(time, background_color)?;
+
+        let pts = (self.frame_count as f64 * 1_000_000.0 / self.config.fps) as i64;
+        let packets = self.encoder.encode_frame(&result.data, pts)?;
+
+        self.frame_count += 1;
+
+        Ok(packets.iter().map(PreviewFrame::from).collect())
+    }
+
+    /// Flush encoder and get remaining packets
+    pub fn flush(&mut self) -> Result<Vec<PreviewFrame>> {
+        let packets = self.encoder.flush()?;
+        Ok(packets.iter().map(PreviewFrame::from).collect())
+    }
+
+    /// Reset frame counter (e.g., on seek)
+    pub fn reset_frame_counter(&mut self) {
+        self.frame_count = 0;
+    }
+
+    /// Check if hardware encoding is active
+    pub fn is_hw_active(&self) -> bool {
+        self.encoder.is_hw_active()
+    }
+
+    /// Close all resources
+    pub fn close(&mut self) {
+        self.gpu_pipeline.close();
+        self.encoder.close();
+        self.encoder_initialized = false;
+    }
+}
+
+impl Drop for PreviewPipeline {
+    fn drop(&mut self) {
+        self.close();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_preview_config_default() {
+        let config = PreviewPipelineConfig::default();
+        assert_eq!(config.width, 1920);
+        assert_eq!(config.height, 1080);
+        assert_eq!(config.fps, 30.0);
+        assert_eq!(config.bitrate, 2_000_000);
+    }
+}

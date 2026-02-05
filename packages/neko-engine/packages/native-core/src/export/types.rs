@@ -414,10 +414,13 @@ pub struct AudioElementData {
     /// Trim end (seconds from source end)
     #[serde(default)]
     pub trim_end: f64,
-    /// Volume (0.0 - 1.0)
+    /// Audio settings (nested object from JVI format)
+    #[serde(default)]
+    pub audio: Option<AudioSettings>,
+    /// Volume (0.0 - 1.0) - direct value (legacy format)
     #[serde(default = "default_volume")]
     pub volume: f32,
-    /// Pan (-1.0 = left, 0.0 = center, 1.0 = right)
+    /// Pan (-1.0 = left, 0.0 = center, 1.0 = right) - direct value (legacy format)
     #[serde(default)]
     pub pan: f32,
     /// Fade in duration (seconds)
@@ -426,6 +429,55 @@ pub struct AudioElementData {
     /// Fade out duration (seconds)
     #[serde(default)]
     pub fade_out: f64,
+}
+
+impl AudioElementData {
+    /// Get effective volume (from nested audio settings or direct value)
+    pub fn effective_volume(&self) -> f32 {
+        if let Some(ref audio) = self.audio {
+            if audio.muted {
+                return 0.0;
+            }
+            audio.volume.as_ref().map(|v| v.base_value).unwrap_or(self.volume)
+        } else {
+            self.volume
+        }
+    }
+
+    /// Get effective pan (from nested audio settings or direct value)
+    pub fn effective_pan(&self) -> f32 {
+        if let Some(ref audio) = self.audio {
+            audio.pan.as_ref().map(|p| p.base_value).unwrap_or(self.pan)
+        } else {
+            self.pan
+        }
+    }
+
+    /// Check if audio is muted
+    pub fn is_muted(&self) -> bool {
+        self.audio.as_ref().map(|a| a.muted).unwrap_or(false)
+    }
+}
+
+/// Audio settings (nested object from JVI format)
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioSettings {
+    /// Volume setting
+    pub volume: Option<AudioValue>,
+    /// Pan setting
+    pub pan: Option<AudioValue>,
+    /// Whether audio is muted
+    #[serde(default)]
+    pub muted: bool,
+}
+
+/// Audio value with baseValue (JVI format)
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioValue {
+    /// Base value
+    pub base_value: f32,
 }
 
 /// Element transform

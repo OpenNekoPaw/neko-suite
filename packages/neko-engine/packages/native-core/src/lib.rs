@@ -19,6 +19,7 @@ pub mod jvi;
 pub mod keyframe_cache;
 pub mod media_service;
 pub mod monitor;
+pub mod preview;
 pub mod telemetry;
 
 pub use animation::{
@@ -60,3 +61,4 @@ pub use media_service::{
     extract_subtitles, probe_media_info,
 };
 pub use monitor::{ResourceSnapshot, SystemMonitor};
+pub use preview::{PreviewPipeline, PreviewPipelineConfig, PreviewFrame};

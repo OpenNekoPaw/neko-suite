@@ -145,10 +145,12 @@ impl AudioMixer {
                 if !element.is_visible_at(time) { continue; }
                 match element {
                     ElementData::Audio(audio) => {
+                        // Skip muted audio elements
+                        if audio.is_muted() { continue; }
                         active.push(ActiveAudioElement {
                             src: audio.src.clone(),
-                            volume: audio.volume,
-                            pan: audio.pan,
+                            volume: audio.effective_volume(),
+                            pan: audio.effective_pan(),
                             fade_in: audio.fade_in,
                             fade_out: audio.fade_out,
                             start_time: audio.start_time,
