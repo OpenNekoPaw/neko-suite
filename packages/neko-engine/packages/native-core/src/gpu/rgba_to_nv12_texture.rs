@@ -33,6 +33,14 @@ use super::macos_export::{IOSurfaceBackingStore, MacOsTextureExporter};
 pub const RGBA_TO_Y_SHADER: &str = r#"
 // Y Plane Render Shader
 // Converts RGBA to Y (luminance) at full resolution
+//
+// NOTE: No gamma correction is applied here because:
+// 1. NV12→RGB import does NOT apply sRGB→linear conversion
+// 2. The compositor processes sRGB data (stored in Rgba16Float for precision)
+// 3. Applying linear→sRGB here would double-gamma the output
+//
+// Output is LIMITED RANGE (TV range): Y = 16-235
+// This matches the import shader which expects limited range input
 
 struct Uniforms {
     output_width: f32,
@@ -70,33 +78,17 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 @group(0) @binding(1) var input_texture: texture_2d<f32>;
 @group(0) @binding(2) var input_sampler: sampler;
 
-// Linear to sRGB gamma correction
-fn linear_to_srgb(linear: f32) -> f32 {
-    if (linear <= 0.0031308) {
-        return linear * 12.92;
-    }
-    return 1.055 * pow(linear, 1.0 / 2.4) - 0.055;
-}
-
-fn linear_to_srgb3(linear: vec3<f32>) -> vec3<f32> {
-    return vec3<f32>(
-        linear_to_srgb(linear.r),
-        linear_to_srgb(linear.g),
-        linear_to_srgb(linear.b),
-    );
-}
-
-// BT.601 RGB to Y (SD video)
+// BT.601 RGB to Y (SD video) - outputs full range 0-1
 fn rgb_to_y_bt601(rgb: vec3<f32>) -> f32 {
     return 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
 }
 
-// BT.709 RGB to Y (HD video)
+// BT.709 RGB to Y (HD video) - outputs full range 0-1
 fn rgb_to_y_bt709(rgb: vec3<f32>) -> f32 {
     return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
 }
 
-// BT.2020 RGB to Y (UHD video)
+// BT.2020 RGB to Y (UHD video) - outputs full range 0-1
 fn rgb_to_y_bt2020(rgb: vec3<f32>) -> f32 {
     return 0.2627 * rgb.r + 0.6780 * rgb.g + 0.0593 * rgb.b;
 }
@@ -109,6 +101,14 @@ fn rgb_to_y(rgb: vec3<f32>, color_space: u32) -> f32 {
     }
 }
 
+// Convert full range Y (0-1) to limited range (16-235)
+// Output is normalized 0-1 for R8Unorm texture (will be stored as 0-255)
+fn full_to_limited_y(y: f32) -> f32 {
+    // Y_limited = 16 + Y_full * 219
+    // Normalized: Y_limited / 255 = (16 + Y_full * 219) / 255
+    return (16.0 + y * 219.0) / 255.0;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) f32 {
     // Use textureLoad for unfilterable Rgba16Float
@@ -116,9 +116,15 @@ fn fs_main(in: VertexOutput) -> @location(0) f32 {
     let tex_coord = vec2<i32>(in.uv * vec2<f32>(tex_size));
     let rgba = textureLoad(input_texture, tex_coord, 0);
 
-    // Apply linear→sRGB gamma correction (compositor outputs linear light)
-    let rgb = linear_to_srgb3(clamp(rgba.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
-    return rgb_to_y(rgb, uniforms.color_space);
+    // Input is already sRGB (no gamma correction needed)
+    // The NV12→RGB import outputs sRGB, compositor preserves it
+    let rgb = clamp(rgba.rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+
+    // Calculate full range Y
+    let y_full = rgb_to_y(rgb, uniforms.color_space);
+
+    // Convert to limited range for video encoding
+    return full_to_limited_y(y_full);
 }
 "#;
 
@@ -127,6 +133,14 @@ pub const RGBA_TO_UV_SHADER: &str = r#"
 // UV Plane Render Shader
 // Converts RGBA to UV (chrominance) at half resolution
 // Each output pixel averages a 2x2 block from the input
+//
+// NOTE: No gamma correction is applied here because:
+// 1. NV12→RGB import does NOT apply sRGB→linear conversion
+// 2. The compositor processes sRGB data (stored in Rgba16Float for precision)
+// 3. Applying linear→sRGB here would double-gamma the output
+//
+// Output is LIMITED RANGE (TV range): UV = 16-240, centered at 128
+// This matches the import shader which expects limited range input
 
 struct Uniforms {
     output_width: f32,   // Full resolution width
@@ -164,41 +178,25 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 @group(0) @binding(1) var input_texture: texture_2d<f32>;
 @group(0) @binding(2) var input_sampler: sampler;
 
-// Linear to sRGB gamma correction
-fn linear_to_srgb(linear: f32) -> f32 {
-    if (linear <= 0.0031308) {
-        return linear * 12.92;
-    }
-    return 1.055 * pow(linear, 1.0 / 2.4) - 0.055;
-}
-
-fn linear_to_srgb3(linear: vec3<f32>) -> vec3<f32> {
-    return vec3<f32>(
-        linear_to_srgb(linear.r),
-        linear_to_srgb(linear.g),
-        linear_to_srgb(linear.b),
-    );
-}
-
-// BT.601 RGB to UV (SD video)
+// BT.601 RGB to UV (SD video) - outputs centered at 0.5 (full range)
 fn rgb_to_uv_bt601(rgb: vec3<f32>) -> vec2<f32> {
-    let u = -0.169 * rgb.r - 0.331 * rgb.g + 0.500 * rgb.b + 0.5;
-    let v = 0.500 * rgb.r - 0.419 * rgb.g - 0.081 * rgb.b + 0.5;
-    return vec2<f32>(u, v);
+    let u = -0.169 * rgb.r - 0.331 * rgb.g + 0.500 * rgb.b;
+    let v = 0.500 * rgb.r - 0.419 * rgb.g - 0.081 * rgb.b;
+    return vec2<f32>(u, v);  // Range: -0.5 to 0.5
 }
 
-// BT.709 RGB to UV (HD video)
+// BT.709 RGB to UV (HD video) - outputs centered at 0 (full range)
 fn rgb_to_uv_bt709(rgb: vec3<f32>) -> vec2<f32> {
-    let u = -0.1146 * rgb.r - 0.3854 * rgb.g + 0.5000 * rgb.b + 0.5;
-    let v = 0.5000 * rgb.r - 0.4542 * rgb.g - 0.0458 * rgb.b + 0.5;
-    return vec2<f32>(u, v);
+    let u = -0.1146 * rgb.r - 0.3854 * rgb.g + 0.5000 * rgb.b;
+    let v = 0.5000 * rgb.r - 0.4542 * rgb.g - 0.0458 * rgb.b;
+    return vec2<f32>(u, v);  // Range: -0.5 to 0.5
 }
 
-// BT.2020 RGB to UV (UHD video)
+// BT.2020 RGB to UV (UHD video) - outputs centered at 0 (full range)
 fn rgb_to_uv_bt2020(rgb: vec3<f32>) -> vec2<f32> {
-    let u = -0.1396 * rgb.r - 0.3604 * rgb.g + 0.5000 * rgb.b + 0.5;
-    let v = 0.5000 * rgb.r - 0.4598 * rgb.g - 0.0402 * rgb.b + 0.5;
-    return vec2<f32>(u, v);
+    let u = -0.1396 * rgb.r - 0.3604 * rgb.g + 0.5000 * rgb.b;
+    let v = 0.5000 * rgb.r - 0.4598 * rgb.g - 0.0402 * rgb.b;
+    return vec2<f32>(u, v);  // Range: -0.5 to 0.5
 }
 
 fn rgb_to_uv(rgb: vec3<f32>, color_space: u32) -> vec2<f32> {
@@ -207,6 +205,14 @@ fn rgb_to_uv(rgb: vec3<f32>, color_space: u32) -> vec2<f32> {
         case 2u: { return rgb_to_uv_bt2020(rgb); }
         default: { return rgb_to_uv_bt709(rgb); }
     }
+}
+
+// Convert full range UV (-0.5 to 0.5) to limited range (16-240, centered at 128)
+// Output is normalized 0-1 for RG8Unorm texture (will be stored as 0-255)
+fn full_to_limited_uv(uv: vec2<f32>) -> vec2<f32> {
+    // UV_limited = 128 + UV_full * 224
+    // Normalized: UV_limited / 255 = (128 + UV_full * 224) / 255
+    return (vec2<f32>(128.0) + uv * 224.0) / 255.0;
 }
 
 @fragment
@@ -223,19 +229,22 @@ fn fs_main(in: VertexOutput) -> @location(0) vec2<f32> {
     let rgba01 = textureLoad(input_texture, base_coord + vec2<i32>(0, 1), 0);
     let rgba11 = textureLoad(input_texture, base_coord + vec2<i32>(1, 1), 0);
 
-    // Clamp to valid range and apply linear→sRGB gamma correction
-    let rgb00 = linear_to_srgb3(clamp(rgba00.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
-    let rgb10 = linear_to_srgb3(clamp(rgba10.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
-    let rgb01 = linear_to_srgb3(clamp(rgba01.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
-    let rgb11 = linear_to_srgb3(clamp(rgba11.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
+    // Input is already sRGB (no gamma correction needed)
+    let rgb00 = clamp(rgba00.rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+    let rgb10 = clamp(rgba10.rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+    let rgb01 = clamp(rgba01.rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+    let rgb11 = clamp(rgba11.rgb, vec3<f32>(0.0), vec3<f32>(1.0));
 
-    // Convert each to UV and average
+    // Convert each to UV (full range, centered at 0) and average
     let uv00 = rgb_to_uv(rgb00, uniforms.color_space);
     let uv10 = rgb_to_uv(rgb10, uniforms.color_space);
     let uv01 = rgb_to_uv(rgb01, uniforms.color_space);
     let uv11 = rgb_to_uv(rgb11, uniforms.color_space);
 
-    return (uv00 + uv10 + uv01 + uv11) * 0.25;
+    let uv_avg = (uv00 + uv10 + uv01 + uv11) * 0.25;
+
+    // Convert to limited range for video encoding
+    return full_to_limited_uv(uv_avg);
 }
 "#;
 
