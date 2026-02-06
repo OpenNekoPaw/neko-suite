@@ -228,7 +228,7 @@ videos:keyframes→ native-core/keyframe_cache/scanner.rs (IdrScanner::scan_idr_
 | `:loop` | `timelines` | 设置片段循环回放区间 | `in: 10.0`, `out: 15.5`, `count: 3\|"infinite"` |
 | `:keyframe` | `timelines` | 关键帧缓存 seek：查找最近的已缓存 IDR 帧，加速 seek 操作。引擎内部自动管理缓存预热，上层无需手动 warmup | `target_time: 35.5` |
 
-> **信令 vs 独立请求**：`:pause`/`:resume`/`:speed`/`:loop`/`:keyframe` 是对已建立的 `:stream` 会话的控制信令，通过 `session_id` 关联到目标流。它们不创建新资源，而是修改现有流的播放状态。
+> **信令 vs 独立请求**：`:pause`/`:resume`/`:speed`/`:loop`/`:keyframe` 是对已建立的 `:stream` 会话的控制信令，通过 `stream_id` 精确定位目标流（而非 `session_id`，因为一个 session 可拥有多个 stream）。它们不创建新资源，而是修改现有流的播放状态。详见 §3.6 流 ID 与会话管理。
 
 **传输架构（双通道分离）：**
 
@@ -310,9 +310,12 @@ tasks:cancel  → native-core/export/service.rs (ExportService::cancel + 临时�
 
 ```json
 // POST /v1/{group}/{id}:{action}
+// id 为确定性哈希 ID（见 §3.4），格式：{prefix}_{hex16}
+// 示例：POST /v1/videos/vid_a1b2c3d4e5f6a7b8:probe
 {
-  "source": "/path/to/media.mp4",   // 路径兜底：ID 失效时自动重载
-  "session_id": "window_01",         // 会话管理：支持多窗口并发流
+  "source": "/path/to/media.mp4",   // 路径兜底：ID 失效时通过 source 自愈重建映射
+  "session_id": "window_01",         // 会话管理：支持多窗口并发
+  "stream_id": "strm_w01_0042",     // 流 ID：定位具体的回放/推流会话（信令动作必填，见 §3.6）
   "options": {                       // 差异化参数（按 action 不同）
     "time": 10.5,
     "quality": "high"
@@ -323,31 +326,44 @@ tasks:cancel  → native-core/export/service.rs (ExportService::cancel + 临时�
 #### 响应格式
 
 ```json
-// 成功
+// 成功（资源 ID 为确定性哈希，格式 {prefix}_{hex16}）
 {
-  "id": "res_abc123",
+  "id": "vid_a1b2c3d4e5f6a7b8",
   "status": "ok",
   "data": { ... }
 }
 
-// 流式（export/stream 类动作）
+// 流建立（timelines:stream / videos:stream 响应，返回 stream_id）
 {
-  "id": "res_abc123",
+  "id": "vid_a1b2c3d4e5f6a7b8",
+  "status": "ok",
+  "data": {
+    "stream_id": "strm_w01_0042",
+    "ws_port": 9527,
+    "ws_endpoint": "/stream",
+    "resolution": { "width": 1920, "height": 1080 },
+    "fps": 30.0
+  }
+}
+
+// 流式进度（export/transcode 类动作）
+{
+  "id": "vid_a1b2c3d4e5f6a7b8",
   "status": "processing",
   "progress": { "ratio": 0.45, "frames_done": 135, "frames_total": 300 }
 }
 
-// 信令确认（pause/resume/speed/loop 类动作）
+// 信令确认（pause/resume/speed/loop 类动作，通过 stream_id 定位目标流）
 // Extension 模式：NAPI 同步返回；Server 模式：WS JSON 帧回复
 {
-  "id": "res_abc123",
+  "id": "vid_a1b2c3d4e5f6a7b8",
   "status": "ok",
-  "data": { "state": "paused", "session_id": "window_01" }
+  "data": { "state": "paused", "stream_id": "strm_w01_0042", "session_id": "window_01" }
 }
 
 // 波形数据
 {
-  "id": "res_abc123",
+  "id": "vid_a1b2c3d4e5f6a7b8",
   "status": "ok",
   "data": {
     "sample_rate": 48000,
@@ -358,14 +374,14 @@ tasks:cancel  → native-core/export/service.rs (ExportService::cancel + 临时�
   }
 }
 
-// 代理文件
+// 代理文件（proxy_id 也是确定性哈希）
 {
-  "id": "res_abc123",
+  "id": "vid_a1b2c3d4e5f6a7b8",
   "status": "ok",
   "data": {
-    "proxy_id": "res_proxy_456",
-    "original_id": "res_abc123",
-    "proxy_path": "/cache/proxies/abc123_720p.mp4",
+    "proxy_id": "prx_f7e6d5c4b3a29180",
+    "original_id": "vid_a1b2c3d4e5f6a7b8",
+    "proxy_path": "/cache/proxies/a1b2c3d4_720p.mp4",
     "resolution": "1280x720",
     "codec": "h264"
   }
@@ -373,7 +389,7 @@ tasks:cancel  → native-core/export/service.rs (ExportService::cancel + 临时�
 
 // 关键帧列表 (videos:keyframes)
 {
-  "id": "res_abc123",
+  "id": "vid_a1b2c3d4e5f6a7b8",
   "status": "ok",
   "data": {
     "codec_type": "h264",
@@ -387,7 +403,7 @@ tasks:cancel  → native-core/export/service.rs (ExportService::cancel + 临时�
 
 // 关键帧缓存 seek (timelines:keyframe)
 {
-  "id": "res_abc123",
+  "id": "vid_a1b2c3d4e5f6a7b8",
   "status": "ok",
   "data": {
     "cache_hit": true,
@@ -401,81 +417,148 @@ tasks:cancel  → native-core/export/service.rs (ExportService::cancel + 临时�
 
 // 错误
 {
-  "id": "res_abc123",
+  "id": "vid_a1b2c3d4e5f6a7b8",
   "status": "error",
   "error": { "code": "DECODE_FAILED", "message": "..." }
 }
 ```
 
-### 3.4 资源管理：ID 优先，路径补偿
+### 3.4 资源管理：确定性 ID + 自愈机制
+
+#### 确定性 Resource ID
+
+资源 ID 不再由 Registry 随机分配，而是从文件路径**确定性生成**。同一路径在任何时刻、任何进程中生成的 ID 完全相同。
+
+**算法：xxHash64**
+
+| 候选 | 速度 (GB/s) | 输出长度 | Rust crate | 选择理由 |
+|------|------------|---------|------------|---------|
+| xxHash64 | ~30 | 8 bytes | `xxhash-rust` | ✅ 最快，碰撞率可接受 |
+| MurmurHash3 | ~15 | 16 bytes | `murmur3` | 速度较慢，128-bit 过长 |
+| Blake3 | ~6 | 32 bytes | `blake3` | 密码学级别，性能过剩 |
+
+**ID 格式：`{prefix}_{hex16}`**
+
+| 前缀 | 资源类型 | 示例 |
+|------|---------|------|
+| `vid_` | 视频 | `vid_a1b2c3d4e5f6a7b8` |
+| `aud_` | 音频 | `aud_9f8e7d6c5b4a3210` |
+| `img_` | 图片 | `img_1234567890abcdef` |
+| `tl_` | 时间线 | `tl_fedcba9876543210` |
+| `prx_` | 代理文件 | `prx_0011223344556677` |
+
+**路径规范化（生成 ID 前必须执行）：**
 
 ```
-Invoke(id, source?)
-  ├─ id 命中内存句柄 → 极速返回
-  ├─ id 未命中 + source 存在 → 静默挂载 → 分配新 id → 返回结果
-  └─ id 未命中 + source 缺失 → 返回 RESOURCE_NOT_FOUND 错误
+原始路径 → resolve symlinks → absolute path → normalize separators (/ on all platforms)
+         → lowercase (macOS/Windows, case-insensitive FS) → xxHash64 → {prefix}_{hex16}
 ```
 
-对应 native-api 中的 `registry.rs` 设计：
+> **为什么需要规范化？** macOS 和 Windows 文件系统大小写不敏感，`/Users/Foo/bar.mp4` 和 `/users/foo/bar.mp4` 指向同一文件，必须生成相同 ID。Linux 大小写敏感，不做 lowercase。
+
+**碰撞处理：** xxHash64 碰撞概率 ~2.7×10⁻¹⁰（10⁵ 资源下），实际项目中可忽略。Registry 在注册时检测碰撞（同 ID 不同路径），碰撞时追加 `_2` 后缀。
+
+#### 自愈 Resolve 流程
+
+```
+Frontend 发送 { id: "vid_a1b2...", source: "/path/to/file.mp4" }
+
+  Step 1: ID 命中内存
+  ├─ handles.get(id) → Some(handle)
+  └─ 返回 handle（<1μs）
+
+  Step 2: ID 未命中 + source 存在 → 自愈
+  ├─ canonicalize(source) → canonical_path
+  ├─ xxhash64(canonical_path) → derived_id
+  ├─ derived_id == request.id? → 一致，重建映射
+  │   ├─ handles.insert(id, new_handle)
+  │   ├─ path_index.insert(canonical_path, id)
+  │   └─ 返回 new_handle
+  └─ derived_id != request.id? → 路径已变更
+      ├─ 使用 derived_id 注册新映射
+      └─ 返回 new_handle + 通知前端更新 ID
+
+  Step 3: ID 未命中 + source 缺失
+  └─ 返回 RESOURCE_NOT_FOUND 错误
+```
+
+> **自愈场景**：用户刷新页面后，前端缓存的 ID 仍然有效（确定性生成，同路径同 ID）。即使 Rust 进程重启丢失内存映射，只要前端携带 `source` 路径，后端即可透明重建。
+
+#### ResourceRegistry 设计
 
 ```rust
 // native-api/src/registry.rs
+use dashmap::DashMap;
+use xxhash_rust::xxh64::xxh64;
+
+/// Resource ID — deterministic hash from canonical path
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ResourceId(String);  // e.g., "vid_a1b2c3d4e5f6a7b8"
+
+impl ResourceId {
+    /// Generate deterministic ID from file path
+    pub fn from_path(path: &Path, resource_type: ResourceType) -> Self {
+        let canonical = Self::canonicalize(path);
+        let hash = xxh64(canonical.as_bytes(), 0);
+        let prefix = resource_type.prefix();
+        Self(format!("{}_{:016x}", prefix, hash))
+    }
+
+    /// Path canonicalization for consistent hashing
+    fn canonicalize(path: &Path) -> String {
+        let abs = std::fs::canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf());
+        let normalized = abs.to_string_lossy().replace('\\', "/");
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        { normalized.to_lowercase() }
+        #[cfg(target_os = "linux")]
+        { normalized.to_string() }
+    }
+
+    pub fn prefix(&self) -> &str { self.0.split('_').next().unwrap_or("") }
+    pub fn as_str(&self) -> &str { &self.0 }
+}
+
 pub struct ResourceRegistry {
+    /// ID → handle (primary index)
     handles: DashMap<ResourceId, ResourceHandle>,
+    /// canonical path → ID (reverse lookup for dedup)
     path_index: DashMap<PathBuf, ResourceId>,
+    /// original → proxy (preview uses proxy, export uses original)
+    proxy_map: DashMap<ResourceId, ResourceId>,
 }
 
 impl ResourceRegistry {
-    /// Resolve resource by ID with path fallback
+    /// Resolve resource by ID with self-healing path fallback
     pub fn resolve(&self, id: &ResourceId, source: Option<&Path>) -> Result<ResourceHandle> {
-        // ID hit → fast path
+        // Step 1: ID hit → fast path
         if let Some(handle) = self.handles.get(id) {
             return Ok(handle.clone());
         }
-        // Path fallback → silent mount
+        // Step 2: Self-healing — re-derive ID from source path
         if let Some(path) = source {
-            if let Some(existing_id) = self.path_index.get(path) {
+            let canonical = std::fs::canonicalize(path)?;
+            // Check if path already registered under different ID
+            if let Some(existing_id) = self.path_index.get(&canonical) {
                 return self.resolve(existing_id.value(), None);
             }
-            let handle = self.mount(path)?;
-            self.register(id.clone(), handle.clone());
+            // Mount new resource and register
+            let handle = self.mount(&canonical)?;
+            self.handles.insert(id.clone(), handle.clone());
+            self.path_index.insert(canonical, id.clone());
             return Ok(handle);
         }
+        // Step 3: No source → error
         Err(Error::ResourceNotFound(id.clone()))
     }
-}
-```
 
-### 3.5 工业级补全接口
+    /// Register proxy binding (original ↔ proxy)
+    pub fn bind_proxy(&self, original_id: &ResourceId, proxy_id: ResourceId) {
+        self.proxy_map.insert(original_id.clone(), proxy_id);
+    }
 
-为达到 Premiere / DaVinci 级别的交互体验，在基础 CRUD 接口之上补全以下 3 个维度的接口：
-
-#### D. 资产辅助类：波形与代理 (Proxies & Waveforms)
-
-编辑器时间轴需要精确的音频波形可视化，4K/8K 素材需要代理文件保证流畅编辑。
-
-```
-用户拖入 4K 素材
-  ├─ videos:probe     → 获取媒体信息
-  ├─ videos:waveform  → 异步生成波形数据 → 时间轴渲染波形
-  └─ videos:proxy     → 异步生成 720p 代理 → Registry 绑定原片↔代理
-       └─ 编辑时自动使用代理，导出时切回原片
-```
-
-**Registry 代理绑定机制：**
-
-```rust
-// native-api/src/registry.rs (扩展)
-pub struct ResourceRegistry {
-    handles: DashMap<ResourceId, ResourceHandle>,
-    path_index: DashMap<PathBuf, ResourceId>,
-    proxy_map: DashMap<ResourceId, ResourceId>,  // original → proxy
-}
-
-impl ResourceRegistry {
     /// Resolve with proxy preference for preview
     pub fn resolve_for_preview(&self, id: &ResourceId) -> Result<ResourceHandle> {
-        // Prefer proxy for preview, fallback to original
         if let Some(proxy_id) = self.proxy_map.get(id) {
             if let Ok(handle) = self.resolve(proxy_id.value(), None) {
                 return Ok(handle);
@@ -491,17 +574,37 @@ impl ResourceRegistry {
 }
 ```
 
+### 3.5 工业级补全接口
+
+为达到 Premiere / DaVinci 级别的交互体验，在基础 CRUD 接口之上补全以下 3 个维度的接口：
+
+#### D. 资产辅助类：波形与代理 (Proxies & Waveforms)
+
+编辑器时间轴需要精确的音频波形可视化，4K/8K 素材需要代理文件保证流畅编辑。
+
+```
+用户拖入 4K 素材
+  ├─ videos:probe     → 获取媒体信息（返回确定性 ID: vid_xxxx）
+  ├─ videos:waveform  → 异步生成波形数据 → 时间轴渲染波形
+  └─ videos:proxy     → 异步生成 720p 代理 → Registry.bind_proxy(vid_xxxx, prx_yyyy)
+       └─ 编辑时 resolve_for_preview() 自动使用代理，导出时 resolve_for_export() 切回原片
+```
+
+> **代理 ID 也是确定性的**：`prx_` 前缀 + xxHash64(代理文件路径)。Registry 通过 `proxy_map` 维护原片↔代理的双向绑定，代理文件删除时自动降级到原片。
+
 #### E. 交互实时类：信号控制 (Control Signals)
 
 实时回放流需要精细的播放控制，超越简单的 seek。
 
 ```
-timelines:stream (建立回放流)
-  ├─ timelines:pause   → 冻结当前帧
+timelines:stream (建立回放流，返回 stream_id)
+  ├─ timelines:pause   → 冻结当前帧（通过 stream_id 定位目标流）
   ├─ timelines:resume  → 恢复播放
   ├─ timelines:speed   → 倍速 (0.25x ~ 4x) / 倒放 (-1x)
   └─ timelines:loop    → 片段循环 (in/out 点 + 次数)
 ```
+
+> **stream_id vs session_id**：`session_id` 标识一个窗口/客户端会话，`stream_id` 标识该会话内的一个具体回放流。一个 session 可拥有多个 stream（如主预览 + 画中画）。信令动作通过 `stream_id` 精确定位目标流，详见 §3.6。
 
 **信令传输方式（按接入模式区分）：**
 
@@ -512,18 +615,18 @@ timelines:stream (建立回放流)
 
 Extension 模式信令示例（postMessage）：
 ```json
-// Webview → Extension Host
-{ "type": "stream:speed", "sessionId": "window_01", "params": { "rate": 2.0 } }
-{ "type": "stream:loop", "sessionId": "window_01", "params": { "in": 10.0, "out": 15.5, "count": "infinite" } }
-{ "type": "stream:keyframe", "sessionId": "window_01", "params": { "target_time": 35.5 } }
+// Webview → Extension Host（stream_id 精确定位目标流）
+{ "type": "stream:speed", "streamId": "strm_w01_0042", "params": { "rate": 2.0 } }
+{ "type": "stream:loop", "streamId": "strm_w01_0042", "params": { "in": 10.0, "out": 15.5, "count": "infinite" } }
+{ "type": "stream:keyframe", "streamId": "strm_w01_0042", "params": { "target_time": 35.5 } }
 ```
 
 Server 模式信令示例（WS JSON 帧）：
 ```json
-// Client → Server (复用帧流 WS 连接)
-{ "signal": "speed", "session_id": "window_01", "params": { "rate": 2.0 } }
-{ "signal": "loop", "session_id": "window_01", "params": { "in": 10.0, "out": 15.5, "count": "infinite" } }
-{ "signal": "keyframe", "session_id": "window_01", "params": { "target_time": 35.5 } }
+// Client → Server (复用帧流 WS 连接，stream_id 精确定位)
+{ "signal": "speed", "stream_id": "strm_w01_0042", "params": { "rate": 2.0 } }
+{ "signal": "loop", "stream_id": "strm_w01_0042", "params": { "in": 10.0, "out": 15.5, "count": "infinite" } }
+{ "signal": "keyframe", "stream_id": "strm_w01_0042", "params": { "target_time": 35.5 } }
 ```
 
 #### F. 异步任务类：生命周期管理 (Job Lifecycle)
@@ -598,6 +701,172 @@ L2: NV12 帧数据缓存 (KeyframeLruCache)
 
 > **为什么不合并为一个动作？** `videos:keyframes` 是无状态的文件级查询，可在素材导入时批量调用，结果可持久化；`timelines:keyframe` 是有状态的会话级操作，依赖 `:stream` 会话和 NV12 缓存，两者生命周期和使用场景完全不同。
 
+### 3.6 流 ID 与会话管理
+
+#### Session 与 Stream 的关系
+
+```
+Session（会话）                    Stream（流）
+─────────────                    ──────────
+标识一个窗口/客户端               标识一个具体的回放/推流实例
+session_id = "window_01"         stream_id = "strm_w01_0042"
+生命周期 = 窗口打开 → 关闭        生命周期 = stream 建立 → 销毁
+一个 session 拥有 0..N 个 stream  一个 stream 属于且仅属于一个 session
+
+典型场景：
+  window_01 (主编辑窗口)
+    ├─ strm_w01_0042  (主预览流, timelines:stream)
+    ├─ strm_w01_0043  (画中画预览, videos:stream)
+    └─ strm_w01_0044  (音频波形实时流, audios:stream)
+  window_02 (独立预览窗口)
+    └─ strm_w02_0045  (独立预览流, timelines:stream)
+```
+
+#### Stream ID 格式
+
+**格式：`strm_{session_short}_{counter}`**
+
+| 组成部分 | 说明 | 示例 |
+|---------|------|------|
+| `strm_` | 固定前缀，标识为流 ID | — |
+| `{session_short}` | session_id 的前 3-8 字符，用于可读性和追踪 | `w01` |
+| `{counter}` | 全局原子计数器（`AtomicU64`），保证进程内唯一 | `0042` |
+
+> **为什么不用 UUID？** Stream ID 需要频繁出现在日志、WS 帧头、调试面板中。`strm_w01_0042` 比 `550e8400-e29b-41d4-a716-446655440000` 更易读、更短（节省 WS 帧头开销）。原子计数器保证进程内唯一，无需全局唯一（stream 不跨进程持久化）。
+
+#### Stream 生命周期状态机
+
+```
+Created ──→ Active ──→ Paused ──→ Active (resume)
+   │           │          │
+   │           │          └──→ Destroyed (timeout/cancel)
+   │           └──→ Destroyed (stop/error)
+   └──→ Destroyed (creation failed)
+
+状态转换规则：
+  Created → Active    : 首帧推送成功
+  Active → Paused     : timelines:pause 信令
+  Paused → Active     : timelines:resume 信令
+  Active → Destroyed  : timelines:stop / WS 断开 / 错误
+  Paused → Destroyed  : 超时（默认 5 分钟无 resume）/ cancel
+  Created → Destroyed : 初始化失败（解码器不可用等）
+```
+
+#### StreamRegistry 设计
+
+```rust
+// native-api/src/stream_registry.rs
+use dashmap::DashMap;
+use tokio::sync::broadcast;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Stream ID — short, readable, process-unique
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub struct StreamId(String);  // e.g., "strm_w01_0042"
+
+static STREAM_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+impl StreamId {
+    pub fn new(session_id: &str) -> Self {
+        let counter = STREAM_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let short = &session_id[..session_id.len().min(8)];
+        Self(format!("strm_{}_{:04}", short, counter))
+    }
+}
+
+/// Stream lifecycle state
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StreamState {
+    Created,
+    Active,
+    Paused,
+    Destroyed,
+}
+
+/// Per-stream entry with isolated broadcast channel
+pub struct StreamEntry {
+    pub id: StreamId,
+    pub session_id: String,
+    pub resource_id: ResourceId,
+    pub state: StreamState,
+    pub tx: broadcast::Sender<FrameData>,   // per-stream broadcast (NOT global)
+    pub created_at: Instant,
+    pub config: StreamConfig,
+}
+
+/// Stream registry — manages all active streams
+pub struct StreamRegistry {
+    /// stream_id → entry (primary index)
+    streams: DashMap<StreamId, StreamEntry>,
+    /// session_id → [stream_id] (session index, for batch cleanup)
+    session_index: DashMap<String, Vec<StreamId>>,
+    /// resource_id → [stream_id] (resource index, for resource-level operations)
+    resource_index: DashMap<ResourceId, Vec<StreamId>>,
+}
+
+impl StreamRegistry {
+    /// Create a new stream within a session
+    pub fn create_stream(
+        &self,
+        session_id: &str,
+        resource_id: &ResourceId,
+        config: StreamConfig,
+    ) -> Result<(StreamId, broadcast::Receiver<FrameData>)> {
+        let id = StreamId::new(session_id);
+        let (tx, rx) = broadcast::channel(64);  // per-stream channel
+        let entry = StreamEntry {
+            id: id.clone(),
+            session_id: session_id.to_string(),
+            resource_id: resource_id.clone(),
+            state: StreamState::Created,
+            tx,
+            created_at: Instant::now(),
+            config,
+        };
+        self.streams.insert(id.clone(), entry);
+        self.session_index.entry(session_id.to_string())
+            .or_default().push(id.clone());
+        self.resource_index.entry(resource_id.clone())
+            .or_default().push(id.clone());
+        Ok((id, rx))
+    }
+
+    /// Transition stream state (validates state machine rules)
+    pub fn transition(&self, stream_id: &StreamId, target: StreamState) -> Result<()> {
+        let mut entry = self.streams.get_mut(stream_id)
+            .ok_or(Error::StreamNotFound(stream_id.clone()))?;
+        match (entry.state, target) {
+            (StreamState::Created, StreamState::Active) |
+            (StreamState::Active, StreamState::Paused) |
+            (StreamState::Paused, StreamState::Active) |
+            (_, StreamState::Destroyed) => {
+                entry.state = target;
+                Ok(())
+            }
+            _ => Err(Error::InvalidStateTransition(entry.state, target)),
+        }
+    }
+
+    /// Get broadcast sender for pushing frames to a specific stream
+    pub fn get_sender(&self, stream_id: &StreamId) -> Result<broadcast::Sender<FrameData>> {
+        let entry = self.streams.get(stream_id)
+            .ok_or(Error::StreamNotFound(stream_id.clone()))?;
+        Ok(entry.tx.clone())
+    }
+
+    /// Destroy all streams in a session (called on session close)
+    pub fn destroy_session(&self, session_id: &str) {
+        if let Some((_, stream_ids)) = self.session_index.remove(session_id) {
+            for sid in stream_ids {
+                self.streams.remove(&sid);
+            }
+        }
+    }
+}
+```
+
+> **Per-Stream Broadcast 的意义**：当前 frame_server 使用全局 `broadcast::Sender<FrameData>`，所有 WS 客户端收到相同帧数据。引入 StreamRegistry 后，每个 stream 拥有独立的 broadcast channel，帧数据精确投递到目标 stream 的订阅者，彻底解决多窗口预览"画面打架"问题。
+
 ---
 
 ## 4. 重构步骤
@@ -607,15 +876,20 @@ L2: NV12 帧数据缓存 (KeyframeLruCache)
 **目标**：将散落在 native-core 和 native-napi 中的公共类型提取到独立 crate。
 
 **具体任务：**
-1. 创建 `packages/types/` crate，`Cargo.toml` 仅依赖 `serde`
+1. 创建 `packages/types/` crate，`Cargo.toml` 依赖 `serde` + `xxhash-rust`
 2. 从 `native-core/src/error.rs` 提取统一错误类型 → `types/src/error.rs`
 3. 定义统一请求/响应结构 → `types/src/request.rs`, `types/src/response.rs`
-   - `ActionRequest { group, id, action, source, session_id, options }`
-   - `ActionResponse { id, status, data, progress, error }`
-4. 从 `native-napi/src/types.rs` (55KB) 中提取与 JS 无关的纯数据类型
+   - `ActionRequest { group, id: ResourceId, action, source, session_id, stream_id: Option<StreamId>, options }`
+   - `ActionResponse { id: ResourceId, status, data, stream_id: Option<StreamId>, progress, error }`
+4. 定义确定性 ID 类型 → `types/src/id.rs`
+   - `ResourceId`：确定性哈希结构体（xxHash64），含 `from_path()` 生成方法
+   - `StreamId`：进程内唯一流 ID，含 `new(session_id)` 工厂方法
+   - `ResourceType` 枚举（Video, Audio, Image, Timeline, Proxy）
+   - `StreamState` 枚举（Created, Active, Paused, Destroyed）
+5. 从 `native-napi/src/types.rs` (55KB) 中提取与 JS 无关的纯数据类型
    - 媒体信息 → `types/src/media.rs`
    - 特效参数 → `types/src/effects.rs`
-5. native-core 和 native-napi 改为依赖 types crate
+6. native-core 和 native-napi 改为依赖 types crate
 
 **验证**：`cargo build --workspace` 通过，现有测试不回归。
 
@@ -625,10 +899,11 @@ L2: NV12 帧数据缓存 (KeyframeLruCache)
 
 **具体任务：**
 1. 创建 `packages/native-api/` crate，依赖 `types` + `native-core`
-2. 实现 `ResourceRegistry`（资源注册表 + ID/路径双索引 + LRU 淘汰）
-3. 实现 `SessionManager`（多窗口会话隔离，session_id → 独立资源作用域）
-4. 实现 `ActionRouter`（`{group}:{action}` → handler 分发）
-5. 逐个实现 groups handler，按优先级：
+2. 实现 `ResourceRegistry`（确定性 ID 生成 + 自愈 resolve + 代理绑定 + LRU 淘汰，见 §3.4）
+3. 实现 `StreamRegistry`（per-stream broadcast channel + 生命周期状态机，见 §3.6）
+4. 实现 `SessionManager`（多窗口会话隔离，session_id → 独立资源/流作用域，持有 StreamRegistry）
+5. 实现 `ActionRouter`（`{group}:{action}` → handler 分发）
+6. 逐个实现 groups handler，按优先级：
    - P0: `videos` (probe/capture/extract/stream/waveform/keyframes) — 覆盖当前 80% 使用场景
    - P0: `timelines` (composite/stream/export + pause/resume/speed/loop/keyframe 信令) — 覆盖导出与回放流程
    - P0: `tasks` (probe/pause/resume/cancel) — 覆盖任务生命周期管理
@@ -743,11 +1018,11 @@ L2: NV12 帧数据缓存 (KeyframeLruCache)
 | native-core 内部模块重构范围过大 | Phase 1-2 不改动 native-core 内部，仅在其上层封装 |
 | NAPI 绑定重构导致现有功能回归 | Phase 3 保留现有函数签名，内部改为转发，现有测试全量回归 |
 | models/canvas/scenes 尚无实现 | groups 中预留接口定义，handler 返回 `NotImplemented` |
-| types 提取可能引入编译依赖问题 | Phase 1 先做最小提取（error + request/response），逐步扩展 |
-| 有状态 Session 类（Encoder/Decoder）难以映射到无状态 REST | Session 类在 native-api 内部管理，REST 通过 session_id 关联 |
+| types 提取可能引入编译依赖问题 | Phase 1 先做最小提取（error + request/response + id），逐步扩展 |
+| 有状态 Session 类（Encoder/Decoder）难以映射到无状态 REST | Session 类在 native-api 内部管理，REST 通过 stream_id 关联 |
 | 波形生成对长音频耗时过长 | `:waveform` 作为异步任务执行，支持 `tasks:probe` 查询进度；支持分段增量返回 |
 | 代理文件磁盘占用膨胀 | Registry 维护代理文件索引，配合 LRU 策略自动清理过期代理 |
-| 回放信令与流会话的生命周期耦合 | 信令动作校验 `session_id` 有效性，会话断开时自动清理播放状态 |
+| 回放信令与流会话的生命周期耦合 | 信令动作通过 `stream_id` 校验有效性，StreamRegistry 在 session 断开时批量销毁所属 stream |
 | 任务暂停/恢复的断点续传一致性 | Encoder/Decoder 需支持 checkpoint 机制，`:resume` 从最后完成的 GOP 边界恢复 |
 | 本地 frame_server 端口冲突 | 动态分配端口（port=0 由 OS 分配），NAPI 返回实际端口号给 Extension Host |
 | Webview CSP 限制 WS 连接 | Webview 创建时配置 `connect-src ws://127.0.0.1:*`，仅允许本地回环 |
@@ -755,3 +1030,7 @@ L2: NV12 帧数据缓存 (KeyframeLruCache)
 | IDR 扫描对长视频耗时 | 首次 `videos:keyframes` 扫描可能耗时 100ms-1s（取决于文件大小），结果缓存在 `idr_indices` 内存中，后续调用 <1ms。超长视频（>2h）考虑异步扫描 + 进度回调 |
 | 关键帧缓存内存占用 | NV12 缓存默认 512MB 上限 + 200 帧数量限制，LRU 自动淘汰。1080p 每帧 ~3MB，4K 每帧 ~12MB，需根据目标分辨率调整配置 |
 | 自动预热与用户操作竞争 GPU | 预热解码在后台异步执行，优先级低于前台 seek/播放。高 GPU 负载时自动降低预热并发度 |
+| **xxHash64 碰撞** | 碰撞概率 ~2.7×10⁻¹⁰（10⁵ 资源），Registry 注册时检测同 ID 不同路径，碰撞时追加 `_2` 后缀。生产环境可升级为 xxHash128 |
+| **路径规范化跨平台差异** | macOS/Windows 做 lowercase（case-insensitive FS），Linux 保留原始大小写。symlink 统一 resolve。测试覆盖：空格路径、Unicode 路径、超长路径（>260 chars Windows） |
+| **Stream 泄漏（未正常销毁）** | StreamRegistry 定期扫描（每 60s），销毁 Paused 超过 5 分钟或 Created 超过 30 秒的 stream。Session 销毁时批量清理所属 stream |
+| **确定性 ID 与进程重启** | 确定性 ID 保证同路径同 ID，进程重启后前端携带 source 路径即可自愈重建映射，无需持久化 Registry |
