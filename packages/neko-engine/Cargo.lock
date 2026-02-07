@@ -719,6 +719,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f29059c0c2090612e8d742178b0580d2dc940c837851ad723096f87af6663e"
 
 [[package]]
+name = "futures-macro"
+version = "0.3.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "162ee34ebcb7c64a8abebc059ce0fee27c2262618d7b60ed8faf72fef13c3650"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
+]
+
+[[package]]
 name = "futures-sink"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -737,6 +748,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
 dependencies = [
  "futures-core",
+ "futures-macro",
  "futures-sink",
  "futures-task",
  "pin-project-lite",
@@ -1367,6 +1379,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "neko-native-api"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "neko-native-core",
+ "neko-types",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "neko-native-cli"
 version = "0.1.0"
 dependencies = [
@@ -1374,7 +1401,9 @@ dependencies = [
  "clap",
  "indicatif",
  "libc",
+ "neko-native-api",
  "neko-native-core",
+ "neko-types",
  "pollster",
  "serde",
  "serde_json",
@@ -1407,6 +1436,7 @@ dependencies = [
  "hyper-util",
  "image",
  "metal",
+ "neko-types",
  "objc",
  "pollster",
  "serde",
@@ -1415,6 +1445,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tower-http",
  "tracing",
  "tracing-tracy",
@@ -1427,6 +1458,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "neko-native-http"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "neko-native-api",
+ "neko-types",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-http",
+ "tracing",
+]
+
+[[package]]
 name = "neko-native-napi"
 version = "0.1.0"
 dependencies = [
@@ -1434,7 +1479,9 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "neko-native-api",
  "neko-native-core",
+ "neko-types",
  "pollster",
  "serde",
  "serde_json",
@@ -1442,6 +1489,16 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wgpu",
+]
+
+[[package]]
+name = "neko-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -2104,6 +2161,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]
@@ -2816,6 +2874,12 @@ name = "xml-rs"
 version = "0.8.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
+
+[[package]]
+name = "xxhash-rust"
+version = "0.8.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
 
 [[package]]
 name = "zerocopy"

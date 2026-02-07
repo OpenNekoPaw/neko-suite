@@ -1,0 +1,63 @@
+//! ExportService implementation
+//!
+//! Wraps the infrastructure-layer `export::ExportService` to implement
+//! the `IExportService` trait for the MVC architecture.
+
+use std::sync::Arc;
+
+use crate::error::{Error, Result};
+use crate::export::{
+    ExportJobConfig, ExportProgress, ExportStartResponse,
+};
+use crate::gpu::GpuContext;
+use crate::services::IExportService;
+
+/// Export service implementation
+///
+/// Delegates to the infrastructure-layer `export::ExportService` for actual
+/// GPU-accelerated export pipeline execution.
+pub struct ExportService {
+    inner: Arc<crate::export::ExportService>,
+}
+
+impl ExportService {
+    /// Create a new export service with GPU context
+    pub fn new(gpu_ctx: Arc<GpuContext>) -> Self {
+        let inner = Arc::new(crate::export::ExportService::with_gpu_context(gpu_ctx));
+        Self { inner }
+    }
+
+    /// Create from an existing infrastructure ExportService
+    pub fn from_inner(inner: Arc<crate::export::ExportService>) -> Self {
+        Self { inner }
+    }
+}
+
+impl IExportService for ExportService {
+    async fn start(&self, config: ExportJobConfig) -> Result<ExportStartResponse> {
+        self.inner.start_export(config).await
+    }
+
+    async fn progress(&self, job_id: &str) -> Option<ExportProgress> {
+        self.inner.get_progress(job_id).await
+    }
+
+    async fn cancel(&self, job_id: &str) -> Result<bool> {
+        Ok(self.inner.cancel_export(job_id).await)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ExportService requires GPU context, so we can only test construction logic
+    // in integration tests. Unit tests verify the type relationships.
+
+    #[test]
+    fn test_export_service_trait_object() {
+        // Verify ExportService implements IExportService (compile-time check)
+        fn _assert_impl<T: IExportService>() {}
+        _assert_impl::<ExportService>();
+    }
+}

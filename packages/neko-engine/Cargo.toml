@@ -1,7 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
+    "packages/types",
     "packages/native-core",
+    "packages/native-api",
+    "packages/native-http",
     "packages/native-napi",
     "packages/native-cli",
 ]

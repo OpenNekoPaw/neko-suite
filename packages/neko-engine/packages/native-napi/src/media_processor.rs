@@ -95,6 +95,7 @@ impl MediaProcessor {
     }
 
     /// Get GPU information
+    #[deprecated(note = "Use bridge_gpu_info() or NativeEngine.dispatch() instead")]
     #[napi]
     pub fn get_gpu_info(&self) -> JsGpuInfo {
         JsGpuInfo::from(self.gpu_ctx.info())
@@ -1280,6 +1281,7 @@ impl MediaProcessor {
     // =========================================================================
 
     /// Get audio information from a file
+    #[deprecated(note = "Use bridge_audio_info() or NativeEngine.dispatch() instead")]
     #[napi]
     pub fn get_audio_info(&self, path: String) -> Result<JsAudioInfo> {
         let mut decoder = FfmpegAudioDecoder::new();
@@ -2521,6 +2523,7 @@ use super::types::{JsExtractedSubtitleTrack, JsProbeMediaInfo};
 use neko_native_core::media_service::{extract_subtitles, probe_media_info};
 
 /// Probe media file and extract metadata
+#[deprecated(note = "Use bridge_probe_media() or NativeEngine.dispatch() instead")]
 #[napi]
 pub fn probe_media(path: String) -> Result<JsProbeMediaInfo> {
     probe_media_info(&path)
@@ -2546,6 +2549,7 @@ pub struct JsExtractedFrameWithData {
 }
 
 /// Extract all subtitle tracks from a media file
+#[deprecated(note = "Use bridge_extract_subtitles() or NativeEngine.dispatch() instead")]
 #[napi]
 pub fn extract_all_subtitles(path: String) -> Result<Vec<JsExtractedSubtitleTrack>> {
     extract_subtitles(&path)
@@ -2609,6 +2613,7 @@ pub enum FrameFormat {
 ///
 /// # Returns
 /// * Encoded frame data as Buffer (JPEG or H.264 NAL units)
+#[deprecated(note = "Use bridge_extract_frame() or NativeEngine.dispatch() instead")]
 #[napi]
 pub fn extract_frame(
     source: String,

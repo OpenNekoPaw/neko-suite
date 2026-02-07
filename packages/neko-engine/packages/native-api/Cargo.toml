@@ -1,0 +1,36 @@
+[package]
+name = "neko-native-api"
+version.workspace = true
+edition.workspace = true
+description = "Controller layer for Neko Engine - ActionRouter, Controllers, and Registries"
+license.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+# Shared types
+neko-types = { path = "../types" }
+
+# Core services
+neko-native-core = { path = "../native-core" }
+
+# Async runtime
+tokio.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Utilities
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }

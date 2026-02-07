@@ -80,6 +80,10 @@ pub enum Error {
     #[error("Operation cancelled")]
     Cancelled,
 
+    /// Resource not found
+    #[error("Not found: {0}")]
+    NotFound(String),
+
     /// Frame not found at specified time
     #[error("Frame not found at time: {0}")]
     FrameNotFound(f64),

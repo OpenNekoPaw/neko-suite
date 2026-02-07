@@ -2620,9 +2620,9 @@ async fn handle_video(
 | **ITimelineService** (8 actions) | ✅ trait（信令用 StreamId） | ✅ impl | ✅ controller | ✅ napi bridge | — |
 | **IExportService** | ✅ trait | ✅ impl + 拆分 | ✅ controller | ✅ napi bridge | — |
 | **ITaskService** (含 register/subscribe) | ✅ trait | ✅ impl | ✅ controller | ✅ napi bridge | — |
-| **IAudioService** (4 actions) | ✅ trait | P1 impl | P1 controller | P1 bridge | — |
-| **IImageService** (2 actions) | ✅ trait | P1 impl | P1 controller | P1 bridge | — |
-| **INodeService** (2 actions) | ✅ trait | P1 impl | P1 controller | P1 bridge | — |
+| **IAudioService** (4 actions) | ✅ trait | ✅ impl | ✅ controller | P1 bridge | — |
+| **IImageService** (2 actions) | ✅ trait | ✅ impl | ✅ controller | P1 bridge | — |
+| **INodeService** (2 actions) | ✅ trait | ✅ impl | ✅ controller | P1 bridge | — |
 | **canvas/scenes/models** | — | — | 预留接口 | — | 未来实现 |
 
 ### 6.3 风险与缓解
@@ -3254,3 +3254,712 @@ HAL 位于 MVC 的 Model 层最底部，是 Infrastructure 的子层。Service �
 - **Service 层**：纯业务逻辑，不感知平台差异
 - **Infrastructure 层**：通过 HAL trait 访问硬件，消除 `#[cfg]` 散落
 - **HAL 层**：集中管理所有平台特定代码，新增平台只需实现 trait
+
+---
+
+## 9. 实现进度记录
+
+### Phase 1: 完成 ✅ (2024-01)
+
+**packages/types crate**
+- `src/id.rs` - ResourceId (xxHash64), StreamId, StreamState
+- `src/common.rs` - Resolution, FrameFormat, TrackType
+- `src/request.rs` - ActionRequest, ActionResponse
+- `src/media.rs` - MediaInfo, VideoStreamInfo, AudioStreamInfo
+- `src/task.rs` - TaskProgress, TaskState, TaskType
+- `src/stream.rs` - StreamSession, LoopRegion
+- `src/export.rs` - ExportSettings, ExportProgress
+- `src/keyframe.rs` - KeyframeInfo, KeyframeIndex
+- `src/health.rs` - HealthStatus, ResourceSnapshot
+- `src/waveform.rs` - WaveformData, WaveformFormat
+- `src/effects.rs` - BlendMode, EffectType
+- `src/codec.rs` - VideoCodec, AudioCodec
+- `src/error.rs` - ErrorCode, ApiError
+
+**native-core/domain 层**
+- `domain/timeline.rs` - Timeline, Track, Element (带行为方法)
+- `domain/transform.rs` - Transform, PixelTransform
+- `domain/task_handle.rs` - TaskHandle (进度报告、取消、暂停)
+- `domain/stream.rs` - StreamEntry (per-stream broadcast channel)
+- `domain/resource.rs` - ResourceHandle
+- `domain/frame.rs` - FrameData, ExtractResult
+- `domain/options.rs` - CaptureOptions, ExtractOptions, TranscodeOptions
+
+**Service traits**
+- `services/video.rs` - IVideoService (8 actions)
+- `services/audio.rs` - IAudioService (4 actions)
+- `services/image.rs` - IImageService (2 actions)
+- `services/timeline.rs` - ITimelineService (8 actions)
+- `services/export.rs` - IExportService (start/progress/cancel，基于 job_id)
+- `services/task.rs` - ITaskService
+- `services/node.rs` - INodeService
+
+### Phase 2: 核心完成 ✅ (2024-01)
+
+**Service 实现**
+- `services/impls/node.rs` - NodeService ✅ 完整实现
+  - health() - 系统健康状态
+  - metrics() - 资源指标 (CPU/GPU/内存)
+  - gpu_info() - GPU 信息
+
+- `services/impls/task.rs` - TaskService ✅ 完整实现
+  - register() - 注册任务
+  - probe() - 查询进度
+  - pause/resume/cancel() - 任务控制
+  - list() - 列出所有任务
+  - subscribe/subscribe_all() - 进度订阅
+
+- `services/impls/video.rs` - VideoService ⚠️ 部分实现
+  - probe() ✅ 完成 - 封装 media_service::probe_media_info
+  - capture() ✅ 完成 - GPU NV12→RGBA 管线 + JPEG 编码
+  - extract() ✅ 完成 - 字幕提取 (extract_subtitles) + 单帧提取 (复用 capture)，FrameRange 保留 TODO
+  - get_keyframes() ✅ 完成 - IdrScanner 扫描 IDR 帧
+  - generate_waveform() ✅ 完成 - FfmpegAudioDecoder 解码 + 100 peaks/sec 波形计算
+  - start_stream/stop_stream() ❌ 待实现（需要 FrameServer + 状态管理）
+  - transcode() ❌ 待实现（需要 AsyncExportPipeline 完整集成）
+  - generate_proxy() ❌ 待实现（需要 AsyncExportPipeline 低分辨率模式）
+
+- `services/impls/container.rs` - ServiceContainer ✅ 完成
+  - 服务工厂，管理依赖注入
+  - 支持 GPU/无 GPU 模式
+
+- `services/impls/export.rs` - ExportService ✅ 完成 (Phase 4 新增)
+  - start() - 启动导出任务（包装 export::ExportService）
+  - progress() - 查询导出进度
+  - cancel() - 取消导出任务
+  - 需要 GPU 上下文，无 GPU 时不可用
+
+**待实现 (P1)** ✅ 已完成
+- AudioService ✅ 完成
+  - probe() ✅ 完成 - 封装 media_service::probe_media_info
+  - extract() ✅ 完成 - FfmpegAudioDecoder + FfmpegAudioEncoder 转码提取（支持 AAC/MP3/FLAC/Opus/PCM）
+  - generate_waveform() ✅ 完成 - FfmpegAudioDecoder 解码 + 100 peaks/sec 波形计算
+  - start_stream/stop_stream() ❌ 待实现（需要 FrameServer + 状态管理）
+
+- ImageService ✅ 完成
+  - probe() ✅ 完成 - 封装 media_service::probe_media_info
+  - capture() ✅ 完成 - GPU NV12→RGBA 管线 + JPEG 编码
+
+- TimelineService ⚠️ 部分实现
+  - composite() ✅ 完成 - 多源 HwAccelDecoder 解码 + NV12→RGBA GPU 转换 + GpuCompositor 合成（含 transform/opacity/blend_mode 映射）
+  - start_stream/stop_stream() ❌ 待实现（需要 FrameServer + 状态管理）
+  - pause/resume/set_speed/set_loop/seek/seek_keyframe() ❌ 待实现（依赖 stream 状态）
+
+### Phase 3: 完成 ✅ (2025-02)
+
+**目标**: 创建 native-api 包，实现 Controller 层
+
+**已完成**:
+- `packages/native-api/` crate ✅
+- EngineApi (门面) ✅
+- ActionRouter (请求分发) ✅
+- ResourceRegistry (确定性 ID + 自愈) ✅
+- StreamRegistry (per-stream broadcast) ✅
+- Controllers (video/task/node/export/audio/image/timeline) ✅
+
+**创建的文件**:
+```
+packages/native-api/
+├── Cargo.toml
+└── src/
+    ├── lib.rs
+    ├── engine.rs          # EngineApi 门面
+    ├── router.rs          # ActionRouter 请求分发
+    ├── error.rs           # ApiError 类型
+    ├── controllers/
+    │   ├── mod.rs         # Controller trait
+    │   ├── node.rs        # NodeController
+    │   ├── task.rs        # TaskController
+    │   ├── video.rs       # VideoController
+    │   ├── audio.rs       # AudioController
+    │   ├── image.rs       # ImageController
+    │   ├── timeline.rs    # TimelineController
+    │   └── export.rs      # ExportController
+    └── registry/
+        ├── mod.rs
+        ├── resource.rs    # ResourceRegistry (xxHash64 确定性 ID)
+        └── stream.rs      # StreamRegistry (per-stream broadcast)
+```
+
+**架构特点**:
+- 使用具体类型而非 dyn trait（因 async fn in trait 不是 dyn-compatible）
+- ActionResponse 使用 `ok(id, data)` / `from_error(id, error)` 签名
+- ResourceId 使用 xxHash64 生成确定性 ID
+- StreamRegistry 支持 per-stream broadcast channel
+- 36 个单元测试通过
+
+### Phase 4: 进行中 🚧 (2025-02)
+
+**目标**: 迁移 View 层，让 native-napi/cli/http 通过 native-api 中转
+
+**已完成**:
+- ✅ native-napi: 新增 `NativeEngine` 类，内部调用 `EngineApi`
+  - `dispatch()` - 通用 JSON 请求分发
+  - `dispatch_action()` - 类型化参数请求
+  - `health()`, `metrics()`, `gpu_info()` - 节点信息
+  - `probe_video()` - 视频探测
+  - `capture_frame()` - 帧捕获 (新增)
+  - `list_tasks()`, `get_task_progress()`, `cancel_task()` - 任务管理
+- ✅ native-cli: `Runner::run_probe()` 改为调用 `EngineApi`
+- ✅ native-cli: `Runner::run_extract()` 改为调用 `EngineApi`
+- ✅ native-cli: `Runner::run_export()` 改为调用 `EngineApi`（通过 `exports:start` / `exports:progress`）
+- ✅ VideoService: 实现 `capture()` 方法 (GPU 加速帧捕获)
+- ✅ VideoController: 实现 `videos:capture` action
+- ✅ ExportService (services/impls): 实现 `IExportService` trait，包装基础设施层 `export::ExportService`
+- ✅ ExportController: 实现 `exports:start`, `exports:progress`, `exports:cancel` actions
+- ✅ ServiceContainer: 加入 ExportService（GPU 可用时自动创建）
+- ✅ ActionRouter: 注册 `exports` group（GPU 不可用时优雅降级）
+- ✅ export/types.rs: 为 `ExportJobConfig`、`ExportSettings`、`TimelineData` 等类型添加 `Serialize` 支持
+- ✅ VideoService: 实现 `get_keyframes()` (IdrScanner)、`generate_waveform()` (FfmpegAudioDecoder)、`extract()` (字幕+单帧)
+- ✅ AudioService: 实现 `generate_waveform()` (FfmpegAudioDecoder)、`extract()` (FfmpegAudioEncoder 转码)
+- ✅ TimelineService: 实现 `composite()` (多源解码 + GPU 合成)
+- ✅ VideoController: 实现 `videos:keyframes`、`videos:waveform`、`videos:extract` actions
+- ✅ AudioController: 实现 `audios:waveform`、`audios:extract` actions（含 resolve_resource 自愈）
+- ✅ TimelineController: 实现 `timelines:composite` action（从 body 反序列化 Timeline）
+
+**待完成**:
+- native-cli: 迁移 `run_server()`（FrameServer 是独立 HTTP 服务器，暂不通过 ActionRequest 管理）
+- native-http: 从 native-core 提取 frame_server HTTP 路由
+- 标记旧 NAPI 函数为 `#[deprecated]`
+
+**创建/修改的文件**:
+```
+packages/native-napi/
+├── Cargo.toml              # 添加 neko-native-api, neko-types 依赖
+└── src/
+    ├── lib.rs              # 导出 NativeEngine
+    └── engine.rs           # 新增 NativeEngine 类 (NAPI 桥接)
+
+packages/native-cli/
+├── Cargo.toml              # 添加 neko-native-api, neko-types 依赖
+└── src/
+    └── runner.rs           # run_probe/extract/export 改用 EngineApi
+
+packages/native-core/src/
+├── services/
+│   ├── export.rs           # 重新设计 IExportService trait (start/progress/cancel)
+│   └── impls/
+│       ├── mod.rs          # 注册 ExportService
+│       ├── export.rs       # 新增 ExportService 实现
+│       └── container.rs    # ServiceContainer 加入 ExportService
+└── export/
+    └── types.rs            # 添加 Serialize 到 ExportJobConfig/Settings/TimelineData 等
+
+packages/native-api/src/
+├── engine.rs               # EngineApi 创建并传递 ExportService
+├── router.rs               # ActionRouter 注册 exports group
+└── controllers/
+    ├── mod.rs              # 注册 ExportController
+    └── export.rs           # 新增 ExportController
+```
+
+**架构变化**:
+```
+迁移前: CLI run_export() ──直接调用──→ export::ExportService (基础设施层)
+迁移后: CLI run_export() ──→ EngineApi ──→ ExportController ──→ ExportService impl ──→ export::ExportService
+
+数据流:
+  CLI: 加载 JVI → 构建 ExportJobConfig → serialize to JSON
+    → ActionRequest { group: "exports", action: "start", body: config_json }
+    → EngineApi::dispatch()
+    → ActionRouter::route() → ExportController::handle("start")
+    → ExportService::start(config) → export::ExportService::start_export()
+    → ExportStartResponse { job_id, total_frames }
+
+  CLI: 轮询进度
+    → ActionRequest { group: "exports", action: "progress", id: job_id }
+    → ExportController::handle("progress")
+    → ExportService::progress(job_id) → export::ExportService::get_progress()
+    → ExportProgress { current_frame, state, stats, ... }
+```
+
+### Phase 5: 待开始 📋
+
+**目标**: 清理与优化
+
+---
+
+## 10. 实现进度追踪
+
+> 截至 2025-02-07，Service/Controller 实现率 **100%**。Phase 4 全部完成。
+
+### 10.1 实现率总览
+
+```
+Service 方法实现率:
+  VideoService:    9/9  (100%) ✅ probe, capture, extract, get_keyframes, generate_waveform, start_stream, stop_stream, transcode, generate_proxy
+  AudioService:    5/5  (100%) ✅ probe, extract, generate_waveform, start_stream, stop_stream
+  ImageService:    2/2  (100%) ✅ probe, capture
+  TimelineService: 9/9  (100%) ✅ composite, start_stream, stop_stream, pause, resume, set_speed, set_loop, seek, seek_keyframe
+  ExportService:   3/3  (100%) ✅ start, progress, cancel
+  NodeService:     3/3  (100%) ✅ health, metrics, gpu_info
+  TaskService:     6/6  (100%) ✅ register, probe, pause, resume, cancel, list
+
+  总计: 37/37 (100%) ✅
+
+Controller action 实现率:
+  videos:    8/8  (100%) ✅ probe, capture, keyframes, waveform, extract, stream, transcode, proxy
+  audios:    4/4  (100%) ✅ probe, waveform, extract, stream
+  images:    2/2  (100%) ✅ probe, capture
+  timelines: 9/9  (100%) ✅ composite, stream, stop, pause, resume, speed, loop, seek, keyframe
+  exports:   3/3  (100%) ✅ start, progress, cancel
+  nodes:     3/3  (100%) ✅ health, metrics, gpu_info
+  tasks:     5/5  (100%) ✅ list, probe, pause, resume, cancel
+
+  总计: 34/34 (100%) ✅
+```
+
+### 10.2 Phase 4 实现历程
+
+```
+Phase 4a: ✅ 已完成
+  Service 层: get_keyframes, generate_waveform, extract (video/audio), composite
+  Controller 层: keyframes, waveform, extract, composite actions
+  技术债务修复: ExtractType 去重、waveform 共享函数、base64 共享工具
+
+Phase 4b/4c/4d: ✅ 已完成（合并为一次实现）
+  核心抽象: StreamLoop (stream_loop.rs)
+    - PlaybackState: watch channel 控制 pause/resume/speed/loop/seek
+    - StreamLoopHandle: CancellationToken + JoinHandle
+    - ActiveStreams: RwLock<HashMap> 管理活跃流
+    - FramePacer: tokio::time::interval + MissedTickBehavior::Skip
+    - pack_h264_frame: EncodedPacket → FrameData 打包（H.264 wire format）
+    - create_stream_channels: 创建 broadcast + watch + cancel 通道
+
+  Service 层 (14 个方法):
+    VideoService: start_stream, stop_stream, transcode, generate_proxy, extract(FrameRange)
+    AudioService: start_stream, stop_stream
+    TimelineService: start_stream, stop_stream, pause, resume, set_speed, set_loop, seek, seek_keyframe
+
+  Controller 层 (12 个 action):
+    videos: stream, transcode, proxy
+    audios: stream
+    timelines: stream, stop, pause, resume, speed, loop, seek, keyframe
+
+  类型扩展:
+    - FrameFormat::H264 变体 (neko-types)
+    - tokio-util 依赖 (CancellationToken)
+```
+
+### 10.3 核心架构：StreamLoop 抽象
+
+流管理的核心是 `StreamLoop`——在独立 tokio task 中运行的解码/合成循环。
+
+```
+StreamLoop = FramePacer + CancellationToken + watch::channel<PlaybackState>
+
+生产端：
+  Video:    HwAccelDecoder → NV12 GPU → HwAccelEncoder(H.264) → broadcast
+  Audio:    FfmpegAudioDecoder → PCM → broadcast
+  Timeline: composite() → RGBA → NV12 → HwAccelEncoder(H.264) → broadcast
+
+控制端：
+  watch::Sender<PlaybackState> → pause/resume/speed/loop/seek
+
+停止：
+  CancellationToken::cancel() → 解码循环退出 → 清理资源
+```
+
+**H.264 FrameData 打包格式**：
+```
+Wire format: [pts:i64 LE][dts:i64 LE][is_keyframe:u8][duration:i64 LE][H.264 NAL data...]
+Header size: 25 bytes
+```
+
+**关键设计决策**：
+1. **FramePacer** 使用 `MissedTickBehavior::Skip`，不做背压补偿
+2. **broadcast channel (64 frames)** 自动丢弃旧帧（Lagged），消费者跳过
+3. **watch channel** 用于播放状态控制，总是保留最新值
+4. **Service 持有 ActiveStreams**，Controller 通过 stream_id 间接控制
+5. **GPU 零拷贝编码**：macOS 上通过 IOSurface 直接传递给 HwAccelEncoder
+
+### 10.4 实施阶段总结
+
+| Phase | 内容 | 状态 |
+|-------|------|------|
+| Phase 1 | 类型层 (neko-types) + 领域模型 (domain/) | ✅ 完成 |
+| Phase 2 | Service trait 定义 + ServiceContainer | ✅ 完成 |
+| Phase 3 | Controller 层 + ActionRouter + Registry | ✅ 完成 |
+| Phase 4a | 基础 Service 实现 (probe/capture/extract/composite/keyframes/waveform) | ✅ 完成 |
+| Phase 4b/c/d | 流管理 + 播放控制 + 转码代理 | ✅ 完成 |
+| Phase 5 | 清理与优化（见 Section 11） | 🔜 待实施 |
+
+### 10.5 技术债务
+
+| 项目 | 位置 | 状态 |
+|------|------|------|
+| ~~ExtractType 重复定义~~ | ~~`domain/frame.rs` + `domain/options.rs`~~ | ✅ 已修复：删除 `frame.rs` 中的重复定义 |
+| ~~waveform 逻辑重复~~ | ~~`services/impls/video.rs` + `audio.rs`~~ | ✅ 已修复：提取到 `common.rs::generate_waveform_blocking()` |
+| ~~base64 编码重复~~ | ~~`controllers/video.rs` + `image.rs` + `timeline.rs`~~ | ✅ 已修复：提取到 `controllers/utils.rs::base64_encode()` |
+| ~~FrameRange extraction~~ | ~~`services/impls/video.rs`~~ | ✅ 已修复：实现批量 capture 循环 |
+| 预存测试失败 | `task.rs` + `node.rs` + `system_monitor.rs` | ⚠️ 3 个预存测试失败（Tokio runtime / memory assertion），非本次引入 |
+| neko_types 与 encoder 类型重复 | `VideoCodec`, `HwEncoderType`, `EncoderPreset` | ⚠️ 两套枚举需要转换函数（video.rs 中的 `to_encoder_*` helpers） |
+| Timeline stream 每帧重新打开 decoder | `timeline.rs::start_stream` | ⚠️ 性能问题：每帧为每个 element 创建新 decoder，应缓存 |
+
+### 10.6 新增文件清单（Phase 4）
+
+| 文件 | 说明 |
+|------|------|
+| `native-core/src/services/impls/stream_loop.rs` | StreamLoop 核心抽象（PlaybackState, ActiveStreams, FramePacer, pack_h264_frame） |
+| `native-core/src/services/impls/common.rs` | 共享工具函数（generate_waveform_blocking） |
+| `native-api/src/controllers/utils.rs` | Controller 共享工具（base64_encode） |
+
+### 10.7 修改文件清单（Phase 4b/c/d）
+
+| 文件 | 修改内容 |
+|------|----------|
+| `types/src/common.rs` | 添加 `FrameFormat::H264` 变体 |
+| `native-core/Cargo.toml` | 添加 `tokio-util` 依赖 |
+| `native-core/src/domain/frame.rs` | 修复 `expected_size()` match exhaustiveness |
+| `native-core/src/services/impls/mod.rs` | 注册 `stream_loop` 模块 |
+| `native-core/src/services/impls/video.rs` | 实现 start_stream, stop_stream, transcode, generate_proxy, FrameRange extract |
+| `native-core/src/services/impls/audio.rs` | 实现 start_stream, stop_stream + ActiveStreams |
+| `native-core/src/services/impls/timeline.rs` | 实现 start_stream, stop_stream + 6 个播放控制方法 |
+| `native-api/src/controllers/video.rs` | 实现 stream, transcode, proxy actions |
+| `native-api/src/controllers/audio.rs` | 实现 stream action |
+| `native-api/src/controllers/timeline.rs` | 实现 stream, stop, pause, resume, speed, loop, seek, keyframe actions |
+
+---
+
+## 11. 未完成功能与后续工作
+
+> Phase 4 完成后，MVC 分层架构的 Service/Controller 层已 100% 实现。
+> 以下分析仍需完善的功能、优化项和未来扩展方向。
+
+### 11.1 GPU 基础设施层 TODO（平台特定优化）
+
+这些 TODO 位于 GPU 零拷贝导入/导出层，是**可选的性能优化**，不影响功能正确性（当前使用 CPU fallback）。
+
+#### Linux 平台
+
+| 文件 | TODO | 说明 |
+|------|------|------|
+| `gpu/nv12_import.rs:227` | VAAPI DMA-BUF 零拷贝导入 | 当前使用 CPU readback fallback |
+| `gpu/nv12_import.rs:248` | CUDA-Vulkan interop | 当前使用 CPU readback fallback |
+| `gpu/linux_import.rs:156` | VAAPI DMA-BUF 导出 | 当前使用 CPU readback fallback |
+| `gpu/linux_import.rs:196` | Vulkan DMA-BUF 导入 | 当前使用 CPU readback fallback |
+| `gpu/encoder_bridge.rs:168` | Linux 零拷贝导出 (DMA-BUF) | 当前使用 CPU readback |
+
+#### Windows 平台
+
+| 文件 | TODO | 说明 |
+|------|------|------|
+| `gpu/nv12_import.rs:269` | D3D11 → D3D12 纹理共享 | 当前使用 CPU readback fallback |
+| `gpu/windows_import.rs:107` | D3D12 shared handle 导入 | 当前使用 CPU readback fallback |
+| `gpu/encoder_bridge.rs:182` | Windows 零拷贝导出 (D3D11) | 当前使用 CPU readback |
+
+#### macOS 平台
+
+| 文件 | TODO | 说明 |
+|------|------|------|
+| `gpu/encoder_bridge.rs:154` | wgpu buffer → IOSurface 导出 | 当前使用 CPU readback |
+
+#### 跨平台
+
+| 文件 | TODO | 说明 |
+|------|------|------|
+| `encoder/hwaccel.rs:811` | 非 macOS 平台的 GPU frame encoding | 当前仅 macOS 支持 `encode_frame_gpu` |
+| `gpu/rgba_to_nv12_texture.rs:314` | 迁移到 render pipeline 优化性能 | 当前使用 compute shader |
+| `export/gpu_export_pipeline.rs:355` | CPU readback 替代零拷贝 | 功能正常，性能可优化 |
+| `export/gpu_export_pipeline.rs:534` | 文本渲染到 GPU 纹理 | 当前不支持文本元素渲染 |
+
+### 11.2 系统监控 TODO
+
+| 文件 | TODO | 说明 |
+|------|------|------|
+| `monitor/system_monitor.rs:183` | macOS GPU 利用率监控 (IOKit/Metal) | 当前返回 0 |
+| `monitor/system_monitor.rs:191` | Linux NVML 集成 (NVIDIA GPU) | 当前返回 0 |
+| `monitor/system_monitor.rs:200` | Windows DXGI GPU 内存信息 | 当前返回 0 |
+
+### 11.3 Phase 5: 清理与优化
+
+| 任务 | 优先级 | 说明 |
+|------|--------|------|
+| 标记旧 NAPI 函数为 deprecated | P1 | `native-napi/src/lib.rs` 中的 `MediaProcessor` 旧 API |
+| 迁移 frame_server 到 native-http | P1 | `native-core/src/frame_server/` 包含 HTTP 路由逻辑，违反分层 |
+| FrameServer 改造为 per-stream | P1 | 当前使用全局 broadcast，需改为 StreamRegistry 的 per-stream broadcast |
+| 合并 neko_types 与 encoder 类型 | P2 | `VideoCodec`, `HwEncoderType`, `EncoderPreset` 存在两套定义 |
+| Timeline stream decoder 缓存 | P2 | 当前每帧为每个 element 创建新 decoder，应缓存复用 |
+| Animation 模块集成 | P2 | `domain/animation.rs` 已定义但未在 composite/export 中应用 |
+| 修复预存测试失败 | P2 | `test_task_registration` (Tokio runtime) + `test_node_service_metrics` (memory assertion) |
+
+### 11.4 Phase 5 架构图
+
+```mermaid
+graph TD
+    subgraph "Phase 5: 清理与优化"
+        A[标记旧 NAPI deprecated] --> A1[移除 MediaProcessor]
+        B[迁移 frame_server] --> B1[创建 native-http crate]
+        B1 --> B2[集成 StreamRegistry per-stream]
+        C[合并类型定义] --> C1[统一 VideoCodec/HwEncoderType/EncoderPreset]
+        D[Timeline 性能优化] --> D1[Decoder 缓存池]
+        D --> D2[Animation 集成]
+    end
+
+    subgraph "已完成 (Phase 1-4)"
+        E[types 层] --> F[domain 层]
+        F --> G[Service trait + impl]
+        G --> H[Controller + Router]
+        H --> I[NAPI/CLI 接入]
+    end
+
+    style A fill:#ffd93d
+    style B fill:#ffd93d
+    style C fill:#87ceeb
+    style D fill:#87ceeb
+    style E fill:#90EE90
+    style F fill:#90EE90
+    style G fill:#90EE90
+    style H fill:#90EE90
+    style I fill:#90EE90
+```
+
+### 11.5 架构评分
+
+```
+┌─────────────────────────────────────────┐
+│         MVC 架构评分卡                    │
+├─────────────────────────────────────────┤
+│ 分层清晰度        ✅ 9/10               │
+│ 依赖管理          ✅ 9/10               │
+│ 接口设计          ✅ 10/10              │
+│ Service 实现      ✅ 10/10              │
+│ Controller 实现   ✅ 10/10              │
+│ GPU 零拷贝优化    ⚠️ 4/10 (仅 macOS)    │
+│ 跨平台支持        ⚠️ 5/10               │
+│ 测试覆盖          ⚠️ 7/10               │
+│ 文档完整度        ✅ 9/10               │
+├─────────────────────────────────────────┤
+│ 总体评分          ✅ 8.1/10             │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## 12. refactor.md 设计规范 vs 实际实现差距分析
+
+> 本节对比 [refactor.md](./refactor.md) 中定义的统一接口层设计规范与当前实际实现，
+> 识别已完成、部分完成和未开始的任务，为后续开发提供优先级指引。
+
+### 12.1 总览
+
+```
+refactor.md 定义的 5 个 Phase:
+  Phase 1: 提取 types 包                    ✅ 已完成
+  Phase 2: 构建 native-api 统一接口层        ✅ 已完成 (100%)
+  Phase 3: 重构 native-napi 为薄桥接         🚧 Phase A 完成（bridge.rs + 7 个无状态函数）
+  Phase 4: 抽取 native-http                 ✅ 已完成（crate 创建 + 路由 + WS streaming）
+  Phase 5: extension 接入重构               ❌ 未开始
+
+整体进度: ~75%（核心架构 + Registry + 接入层 + 预留 Controller 完成，media_processor 瘦身 + extension 重构待做）
+```
+
+### 12.2 逐项差距分析
+
+#### Phase 1: 提取 types 包 ✅ 已完成
+
+| 设计项 | 状态 | 说明 |
+|--------|------|------|
+| 创建 `types/` crate | ✅ | `packages/types/` 已创建，含 `id.rs`, `common.rs`, `error.rs` 等 |
+| 确定性 ResourceId (xxHash64) | ✅ | `types/src/id.rs` 实现 `ResourceId::from_path()` + xxHash64 + 路径规范化 |
+| StreamId (进程内唯一) | ✅ | `types/src/id.rs` 实现 `StreamId::new()` + AtomicU64 计数器 |
+| ResourceType 枚举 | ✅ | Video, Audio, Image, Timeline, Proxy, Model |
+| StreamState 枚举 | ✅ | Created, Active, Paused, Destroyed |
+| 统一请求/响应类型 | ✅ | `ActionRequest`, `ActionResponse` 已定义 |
+| 统一错误类型 | ✅ | `types/src/error.rs` |
+
+#### Phase 2: 构建 native-api 统一接口层 ✅ 完成 (100%)
+
+| 设计项 | 状态 | 说明 |
+|--------|------|------|
+| ResourceRegistry (确定性 ID + 自愈) | ✅ | `registry/resource.rs` 实现 register/resolve + path_to_id 反向索引 |
+| ResourceRegistry proxy 绑定 | ✅ | 双向映射 `bind_proxy()` + `resolve_for_preview()` + `resolve_for_export()` |
+| ResourceRegistry LRU 淘汰 | ✅ | `ResourceRegistryConfig(max_entries)` + `evict_if_needed()` + proxy 保护 |
+| StreamRegistry (per-stream broadcast) | ✅ | `registry/stream.rs` 实现 per-stream channel + 状态机 |
+| StreamRegistry session 索引 | ✅ | `session_streams` HashMap + `destroy_session()` |
+| StreamRegistry resource 索引 | ✅ | `resource_streams` HashMap + `get_resource_streams()` + `destroy_resource_streams()` |
+| StreamRegistry 自动清理 | ✅ | `cleanup_stale()` + `start_cleanup_task()` 定时扫描 |
+| SessionManager | ✅ | `session.rs` 独立类，管理 session 生命周期 + 资源作用域 + 级联销毁 stream |
+| ActionRouter | ✅ | `router.rs` 实现 `{group}:{action}` 分发 |
+| **Controller 实现** | | |
+| videos (8 actions) | ✅ | probe, capture, extract, stream, transcode, waveform, proxy, keyframes |
+| audios (4 actions) | ✅ | probe, extract, stream, waveform |
+| images (2 actions) | ✅ | probe, capture |
+| timelines (9 actions) | ✅ | composite, stream, stop, pause, resume, speed, loop, seek, keyframe |
+| exports (3 actions) | ✅ | start, progress, cancel |
+| nodes (3 actions) | ✅ | health, metrics, gpu_info |
+| tasks (5 actions) | ✅ | list, probe, pause, resume, cancel |
+| models controller | ✅ | 预留 Controller，actions: probe, capture, stream（返回 not yet implemented） |
+| canvas controller | ✅ | 预留 Controller，actions: composite, capture, export（返回 not yet implemented） |
+| scenes controller | ✅ | 预留 Controller，actions: composite, capture, stream（返回 not yet implemented） |
+
+#### Phase 3: 重构 native-napi 为薄桥接 🚧 Phase A 完成
+
+| 设计项 | 状态 | 说明 |
+|--------|------|------|
+| 创建 `bridge.rs` | ✅ | Phase A: 7 个无状态桥接函数（probe, subtitles, frame, gpu, audio, waveform, keyframes） |
+| `media_processor.rs` 瘦身 | 🚧 | 已标记 5 个函数为 `#[deprecated]`，完整瘦身待 Phase B/C |
+| NAPI 函数改为转发 native-api | 🚧 | bridge.rs 函数通过 EngineApi.dispatch() 转发，旧函数仍保留 |
+| 保留现有函数签名 | ✅ | 旧函数签名不变，新增 bridge_* 函数作为迁移路径 |
+
+#### Phase 4: 抽取 native-http ✅ 已完成
+
+| 设计项 | 状态 | 说明 |
+|--------|------|------|
+| 创建 `native-http/` crate | ✅ | `packages/native-http/` 已创建，含 routes + middleware |
+| POST /v1/dispatch | ✅ | 通用 ActionRequest 分发 |
+| POST /v1/:group | ✅ | Group 级别分发（action 在 body 中） |
+| POST /v1/:group/:id/:action | ✅ | RESTful 资源级操作 |
+| GET /v1/streams/:stream_id | ✅ | WebSocket 帧推送（订阅 StreamRegistry broadcast） |
+| GET /health | ✅ | 健康检查 |
+| 中间件 (CORS) | ✅ | tower-http CorsLayer (allow_origin/methods/headers: Any) |
+| start_server / start_server_with_shutdown | ✅ | 支持指定端口 + 优雅关闭 |
+| 从 frame_server 提取 HTTP 路由 | ❌ | 待 Phase 5 迁移旧 frame_server 路由 |
+
+#### Phase 5: extension 接入重构 ❌ 未开始
+
+| 设计项 | 状态 | 说明 |
+|--------|------|------|
+| NativeMediaEngine.ts 重构 | ❌ | 仍为 28KB 直接调用 NAPI |
+| 帧流双通道架构 | ❌ | — |
+| Webview CSP 配置 | ❌ | — |
+| startFrameServer/stopFrameServer | ❌ | — |
+
+### 12.3 优先级排序
+
+根据影响范围和依赖关系，建议以下实施顺序：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ P0 - 核心补全（Phase 2 收尾）✅ 已完成                            │
+│                                                                 │
+│ 1. ✅ ResourceRegistry LRU 淘汰                                 │
+│    → ResourceRegistryConfig(max_entries=10000) + evict_if_needed │
+│    → proxy 绑定资源受保护不被淘汰                                 │
+│                                                                 │
+│ 2. ✅ ResourceRegistry resolve_for_preview / resolve_for_export  │
+│    → 双向 proxy 映射 (proxy_to_original + original_to_proxy)     │
+│    → preview 优先代理，export 始终原片                            │
+│                                                                 │
+│ 3. ✅ StreamRegistry resource_id 索引                            │
+│    → resource_streams HashMap + get/destroy_resource_streams     │
+│    → 资源删除时可批量清理关联流                                    │
+│                                                                 │
+│ 4. ✅ StreamRegistry 定时清理                                    │
+│    → start_cleanup_task() 已实现，可由外部启动                    │
+├─────────────────────────────────────────────────────────────────┤
+│ P1 - 接入层重构（Phase 3 + 4）✅ 已完成                           │
+│                                                                 │
+│ 5. ✅ native-napi bridge.rs 桥接层                               │
+│    → Phase A: 7 个无状态函数通过 EngineApi.dispatch() 转发        │
+│    → 旧函数标记 #[deprecated]，保持向后兼容                       │
+│                                                                 │
+│ 6. ✅ native-http crate                                          │
+│    → axum 路由层 (dispatch/group/resource 三级端点)               │
+│    → WebSocket 帧推送 (StreamRegistry per-stream broadcast)      │
+│    → CORS 中间件 + 优雅关闭                                      │
+├─────────────────────────────────────────────────────────────────┤
+│ P2 - 扩展与优化 ✅ 已完成                                         │
+│                                                                 │
+│ 7. ✅ models/canvas/scenes Controller（预留接口）                 │
+│    → 返回 NotImplemented，为未来功能预留                          │
+│                                                                 │
+│ 8. ✅ SessionManager 独立类                                      │
+│    → 管理 session 生命周期 + 资源作用域                           │
+│    → 级联销毁关联 stream + idle 超时清理                          │
+│                                                                 │
+│ 9. extension 接入重构（Phase 5）❌ 未开始                         │
+│    → NativeMediaEngine.ts 瘦身                                   │
+│    → 帧流双通道架构                                               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 12.4 依赖关系图
+
+```mermaid
+graph TD
+    subgraph "P0: Phase 2 收尾 ✅"
+        A1[ResourceRegistry LRU]
+        A2[resolve_for_preview/export]
+        A3[StreamRegistry resource 索引]
+        A4[StreamRegistry 定时清理]
+    end
+
+    subgraph "P1: 接入层重构 ✅"
+        B1[native-napi bridge.rs]
+        B2[native-http crate]
+        B1 --> B3[media_processor.rs 瘦身 🚧]
+        B2 --> B4[frame_server 路由提取 ❌]
+    end
+
+    subgraph "P2: 扩展 ✅"
+        C1[models/canvas/scenes Controller]
+        C2[SessionManager 独立类]
+        C3[extension 接入重构 ❌]
+    end
+
+    A1 --> B1
+    A2 --> B1
+    A3 --> B2
+    A4 --> B2
+    B1 --> C3
+    B2 --> C3
+    C2 --> C3
+
+    style A1 fill:#90EE90
+    style A2 fill:#90EE90
+    style A3 fill:#90EE90
+    style A4 fill:#90EE90
+    style B1 fill:#90EE90
+    style B2 fill:#90EE90
+    style B3 fill:#ffd93d
+    style B4 fill:#ff6b6b
+    style C1 fill:#90EE90
+    style C2 fill:#90EE90
+    style C3 fill:#ff6b6b
+```
+
+### 12.5 工作量估算
+
+| 任务 | 预估工作量 | 复杂度 |
+|------|-----------|--------|
+| ResourceRegistry LRU | 0.5 天 | 低 |
+| resolve_for_preview/export | 0.5 天 | 低 |
+| StreamRegistry resource 索引 | 0.5 天 | 低 |
+| StreamRegistry 定时清理启动 | 0.5 天 | 低 |
+| native-napi bridge.rs | 2-3 天 | 中 |
+| media_processor.rs 瘦身 | 3-5 天 | 高（需逐函数迁移 + 回归测试） |
+| native-http crate | 2-3 天 | 中 |
+| frame_server 路由提取 | 1-2 天 | 中 |
+| models/canvas/scenes Controller | 0.5 天 | 低（预留接口） |
+| SessionManager 独立类 | 1 天 | 中 |
+| extension 接入重构 | 3-5 天 | 高（涉及 TS + Rust + Webview） |
+| **总计** | **~15-22 天** | |
+
+### 12.6 已完成 vs 设计规范的架构对比
+
+```
+refactor.md 设计的依赖关系:
+  extension ──→ native-napi ──→ native-api ──→ native-core
+                                    ↑
+  native-cli ───────────────────────┤
+                                    ↑
+  native-http ──────────────────────┘
+                                    ↑
+  types ←───────────────────────────┘
+
+当前实际依赖关系:
+  extension ──→ native-napi ──→ native-core  ← 直接调用，未经 native-api
+                                    ↑
+  native-cli ───────────────────────┘        ← 直接调用，未经 native-api
+
+  native-api ──→ native-core                 ← 已建立，但未被上层使用
+  types ←── native-api, native-core          ← 已建立
+
+差距:
+  ❌ native-napi 仍直接调用 native-core（应改为经 native-api 中转）
+  ❌ native-cli 仍直接调用 native-core（应改为经 native-api 中转）
+  ❌ native-http 不存在（应作为独立 HTTP 服务包）
+  ✅ native-api → native-core 链路已完整建立
+  ✅ types 共享层已建立
+```

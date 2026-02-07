@@ -11,6 +11,8 @@ path = "src/main.rs"
 
 [dependencies]
 neko-native-core = { path = "../native-core" }
+neko-native-api = { path = "../native-api" }
+neko-types = { path = "../types" }
 clap.workspace = true
 tokio.workspace = true
 tracing.workspace = true

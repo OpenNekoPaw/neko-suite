@@ -13,7 +13,7 @@ use crate::gpu::{BlendMode, Transform2D};
 // =============================================================================
 
 /// Export job configuration from Extension
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportJobConfig {
     /// Unique job ID
@@ -27,7 +27,7 @@ pub struct ExportJobConfig {
 }
 
 /// Export settings
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportSettings {
     /// Output width
@@ -183,7 +183,7 @@ pub struct TimeRange {
 // =============================================================================
 
 /// Timeline data structure (mirrors ProjectData)
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimelineData {
     /// Timeline duration in seconds
@@ -215,7 +215,7 @@ impl TimelineData {
 }
 
 /// Track data
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackData {
     /// Track ID
@@ -248,7 +248,7 @@ pub enum TrackType {
 }
 
 /// Element data (union of all element types)
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ElementData {
     /// Media element (video/image)
@@ -302,7 +302,7 @@ impl ElementData {
 }
 
 /// Media element data (video/image)
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaElementData {
     /// Element ID
@@ -369,7 +369,7 @@ impl MediaElementData {
 }
 
 /// Text element data
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextElementData {
     /// Element ID
@@ -397,7 +397,7 @@ pub struct TextElementData {
 }
 
 /// Audio element data
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioElementData {
     /// Element ID
@@ -460,7 +460,7 @@ impl AudioElementData {
 }
 
 /// Audio settings (nested object from JVI format)
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioSettings {
     /// Volume setting
@@ -473,7 +473,7 @@ pub struct AudioSettings {
 }
 
 /// Audio value with baseValue (JVI format)
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioValue {
     /// Base value
@@ -481,7 +481,7 @@ pub struct AudioValue {
 }
 
 /// Element transform
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ElementTransform {
     /// Position X (pixels)

@@ -1,30 +1,48 @@
 //! CLI runner - handles different command modes
+//!
+//! All commands go through EngineApi for consistent MVC architecture.
+//! The CLI layer is purely a View adapter — it handles user interaction
+//! (progress bars, formatting) while delegating business logic to the engine.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::args::Command;
 use indicatif::{ProgressBar, ProgressStyle};
-use neko_native_core::export::ExportService;
+use neko_native_api::EngineApi;
+use neko_native_core::export::{
+    ExportJobConfig, ExportHwEncoder, ExportPreset, ExportVideoCodec,
+};
 use neko_native_core::frame_server::{FrameServer, FrameServerConfig};
 use neko_native_core::jvi::JviLoader;
-use neko_native_core::export::{
-    ExportJobConfig, ExportVideoCodec,
-    ExportHwEncoder, ExportPreset, ExportState,
-};
-use neko_native_core::media_service::probe_media_info;
-use neko_native_core::gpu::GpuContext;
+use neko_types::ActionRequest;
 
 /// CLI runner for executing commands
-pub struct Runner;
+pub struct Runner {
+    engine: Option<Arc<EngineApi>>,
+}
 
 impl Runner {
     pub fn new() -> Self {
-        Self
+        Self { engine: None }
+    }
+
+    /// Initialize the engine (lazy initialization)
+    async fn get_engine(&mut self) -> Result<Arc<EngineApi>, Box<dyn std::error::Error + Send + Sync>> {
+        if self.engine.is_none() {
+            let engine = EngineApi::new().await.map_err(|e| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to initialize engine: {}", e),
+                )) as Box<dyn std::error::Error + Send + Sync>
+            })?;
+            self.engine = Some(Arc::new(engine));
+        }
+        Ok(self.engine.clone().unwrap())
     }
 
     /// Run the specified command
-    pub async fn run(&self, command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn run(&mut self, command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match command {
             Command::Serve { port, config, .. } => {
                 self.run_server(port, config).await
@@ -43,7 +61,7 @@ impl Runner {
 
     /// Run in server mode
     async fn run_server(
-        &self,
+        &mut self,
         port: u16,
         _config: Option<PathBuf>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -65,9 +83,9 @@ impl Runner {
         Ok(())
     }
 
-    /// Run direct export mode
+    /// Run direct export mode (via EngineApi)
     async fn run_export(
-        &self,
+        &mut self,
         jvi_file: PathBuf,
         output: PathBuf,
         codec: String,
@@ -87,14 +105,7 @@ impl Runner {
         settings.hw_encoder = parse_hw_encoder(&hw_encoder);
         settings.use_zero_copy_gpu = zero_copy;
 
-        // Create export service and run
-        let service = Arc::new(ExportService::new().await.map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to create export service: {}", e),
-            )) as Box<dyn std::error::Error + Send + Sync>
-        })?);
-
+        // Build ExportJobConfig
         let config = ExportJobConfig {
             job_id: uuid::Uuid::new_v4().to_string(),
             output_path: output.to_string_lossy().to_string(),
@@ -105,7 +116,7 @@ impl Runner {
         let total_frames = config.timeline.total_frames(config.settings.fps);
         let fps = config.settings.fps;
 
-        // Create progress bar first so we can use pb.println for messages
+        // Create progress bar
         let pb = ProgressBar::new(total_frames);
         pb.set_style(
             ProgressStyle::default_bar()
@@ -124,102 +135,126 @@ impl Runner {
             total_frames, fps, codec, bitrate / 1000
         ));
 
-        let response = service.start_export(config).await.map_err(|e| {
+        // Start export via EngineApi
+        let engine = self.get_engine().await?;
+
+        let config_json = serde_json::to_value(&config).map_err(|e| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to start export: {}", e),
+                format!("Failed to serialize export config: {}", e),
             )) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
+        let request = ActionRequest::new("exports", "start")
+            .with_body(config_json);
+
+        let response = engine.dispatch(request).await;
+
+        if !response.is_ok() {
+            let error_msg = response.error
+                .map(|e| e.message)
+                .unwrap_or_else(|| "Unknown error".to_string());
+            pb.finish_with_message(format!("Error: {}", error_msg));
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to start export: {}", error_msg),
+            )));
+        }
+
+        // Extract job_id from response
+        let data = response.data.ok_or_else(|| {
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "No data in export start response",
+            )) as Box<dyn std::error::Error + Send + Sync>
+        })?;
+
+        let job_id = data["job_id"].as_str()
+            .or_else(|| data["jobId"].as_str())
+            .ok_or_else(|| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "No job_id in export start response",
+                )) as Box<dyn std::error::Error + Send + Sync>
+            })?
+            .to_string();
+
         pb.set_message(format!("Exporting at {} fps", fps));
 
-        // Poll for completion
+        // Poll for completion via EngineApi
         loop {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-            let status = service.get_progress(&response.job_id).await;
-            if let Some(progress) = status {
-                pb.set_position(progress.current_frame);
+            let progress_request = ActionRequest::new("exports", "progress")
+                .with_id(&job_id);
+
+            let progress_response = engine.dispatch(progress_request).await;
+
+            if let Some(data) = progress_response.data {
+                let current_frame = data["current_frame"]
+                    .as_u64()
+                    .or_else(|| data["currentFrame"].as_u64())
+                    .unwrap_or(0);
+                pb.set_position(current_frame);
 
                 // Update message with speed and detailed performance stats
-                if let Some(ref stats) = progress.stats {
-                    if stats.avg_fps > 0.0 {
-                        let eta_secs = ((total_frames - progress.current_frame) as f64 / stats.avg_fps) as u64;
-                        // Format: fps | detailed pipeline times | ETA
-                        // dec=HW decode, imp=NV12 import, cvt=NV12→RGBA, cmp=composite, nv12=RGBA→NV12, read=CPU readback, enc=encode
+                let stats = &data["stats"];
+                if !stats.is_null() {
+                    let avg_fps = stats["avg_fps"]
+                        .as_f64()
+                        .or_else(|| stats["avgFps"].as_f64())
+                        .unwrap_or(0.0);
+
+                    if avg_fps > 0.0 {
+                        let eta_secs = ((total_frames - current_frame) as f64 / avg_fps) as u64;
+                        let hw_decode_ms = stats["hw_decode_ms"].as_f64()
+                            .or_else(|| stats["hwDecodeMs"].as_f64()).unwrap_or(0.0);
+                        let nv12_import_ms = stats["nv12_import_ms"].as_f64()
+                            .or_else(|| stats["nv12ImportMs"].as_f64()).unwrap_or(0.0);
+                        let nv12_to_rgba_ms = stats["nv12_to_rgba_ms"].as_f64()
+                            .or_else(|| stats["nv12ToRgbaMs"].as_f64()).unwrap_or(0.0);
+                        let composite_ms = stats["composite_ms"].as_f64()
+                            .or_else(|| stats["compositeMs"].as_f64()).unwrap_or(0.0);
+                        let rgba_to_nv12_ms = stats["rgba_to_nv12_ms"].as_f64()
+                            .or_else(|| stats["rgbaToNv12Ms"].as_f64()).unwrap_or(0.0);
+                        let cpu_readback_ms = stats["cpu_readback_ms"].as_f64()
+                            .or_else(|| stats["cpuReadbackMs"].as_f64()).unwrap_or(0.0);
+                        let encode_submit_ms = stats["encode_submit_ms"].as_f64()
+                            .or_else(|| stats["encodeSubmitMs"].as_f64()).unwrap_or(0.0);
+
                         pb.set_message(format!(
                             "{:.1}fps | dec:{:.1} imp:{:.1} cvt:{:.1} cmp:{:.1} nv12:{:.1} read:{:.1} enc:{:.1} | ETA {}:{:02}",
-                            stats.avg_fps,
-                            stats.hw_decode_ms,
-                            stats.nv12_import_ms,
-                            stats.nv12_to_rgba_ms,
-                            stats.composite_ms,
-                            stats.rgba_to_nv12_ms,
-                            stats.cpu_readback_ms,
-                            stats.encode_submit_ms,
+                            avg_fps,
+                            hw_decode_ms,
+                            nv12_import_ms,
+                            nv12_to_rgba_ms,
+                            composite_ms,
+                            rgba_to_nv12_ms,
+                            cpu_readback_ms,
+                            encode_submit_ms,
                             eta_secs / 60,
                             eta_secs % 60
                         ));
                     }
                 }
 
-                match progress.state {
-                    ExportState::Completed => {
+                // Check terminal state
+                let state_str = data["state"].as_str().unwrap_or("");
+                match state_str {
+                    "completed" => {
                         pb.finish_with_message("Export completed!");
-
-                        // Print final detailed performance summary
-                        if let Some(ref stats) = progress.stats {
-                            println!();
-                            println!("=== Export Performance Summary ===");
-                            println!("Total frames: {}", progress.current_frame);
-                            println!("Average FPS:  {:.1}", stats.avg_fps);
-                            println!();
-                            println!("Per-frame timing (avg):");
-                            println!();
-                            println!("  [Decode]");
-                            println!("    HW Decode:     {:>6.2} ms", stats.hw_decode_ms);
-                            println!();
-                            println!("  [GPU Pipeline]");
-                            println!("    NV12 Import:   {:>6.2} ms  (CPU→GPU transfer)", stats.nv12_import_ms);
-                            println!("    NV12→RGBA:     {:>6.2} ms  (GPU shader)", stats.nv12_to_rgba_ms);
-                            println!("    Composite:     {:>6.2} ms  (GPU render)", stats.composite_ms);
-                            println!("    RGBA→NV12:     {:>6.2} ms  (GPU compute)", stats.rgba_to_nv12_ms);
-                            println!("    CPU Readback:  {:>6.2} ms  (GPU→CPU transfer)", stats.cpu_readback_ms);
-                            let gpu_total = stats.nv12_import_ms + stats.nv12_to_rgba_ms
-                                + stats.composite_ms + stats.rgba_to_nv12_ms + stats.cpu_readback_ms;
-                            println!("    ─────────────────────────");
-                            println!("    GPU Total:     {:>6.2} ms", gpu_total);
-                            println!();
-                            println!("  [Encode]");
-                            println!("    Encode Submit: {:>6.2} ms", stats.encode_submit_ms);
-                            println!();
-                            let frame_total = stats.hw_decode_ms + gpu_total + stats.encode_submit_ms;
-                            println!("  [Total]");
-                            println!("    Frame Total:   {:>6.2} ms", frame_total);
-
-                            // Resource usage section
-                            println!();
-                            println!("Resource usage:");
-                            println!("  CPU Usage:   {:>6.1} %", stats.cpu_usage_percent);
-                            if let Some(gpu) = stats.gpu_usage_percent {
-                                println!("  GPU Usage:   {:>6.1} %", gpu);
-                            }
-                            println!("  Peak RAM:    {:>6.1} MB", stats.peak_memory_bytes as f64 / 1024.0 / 1024.0);
-                            if let Some(vram) = stats.vram_usage_bytes {
-                                println!("  Peak VRAM:   {:>6.1} MB", vram as f64 / 1024.0 / 1024.0);
-                            }
-                        }
+                        print_performance_summary(&data);
                         break;
                     }
-                    ExportState::Error => {
-                        let error_msg = progress.error.unwrap_or_else(|| "Unknown error".to_string());
+                    "error" => {
+                        let error_msg = data["error"].as_str().unwrap_or("Unknown error");
                         pb.finish_with_message(format!("Error: {}", error_msg));
                         return Err(Box::new(std::io::Error::new(
                             std::io::ErrorKind::Other,
                             format!("Export failed: {}", error_msg),
                         )));
                     }
-                    ExportState::Cancelled => {
+                    "cancelled" => {
                         pb.finish_with_message("Cancelled");
                         return Err(Box::new(std::io::Error::new(
                             std::io::ErrorKind::Interrupted,
@@ -234,111 +269,91 @@ impl Runner {
         Ok(())
     }
 
-    /// Run probe command - display media file metadata
+    /// Run probe command - display media file metadata (via EngineApi)
     async fn run_probe(
-        &self,
+        &mut self,
         input: PathBuf,
         format: String,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let info = probe_media_info(&input).map_err(|e| {
+        // Use EngineApi for probe
+        let engine = self.get_engine().await?;
+
+        let request = ActionRequest::new("videos", "probe")
+            .with_source(input.to_string_lossy().to_string());
+
+        let response = engine.dispatch(request).await;
+
+        if !response.is_ok() {
+            let error_msg = response.error
+                .map(|e| e.message)
+                .unwrap_or_else(|| "Unknown error".to_string());
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to probe media: {}", error_msg),
+            )));
+        }
+
+        // Parse the response data
+        let data = response.data.ok_or_else(|| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to probe media: {}", e),
+                "No data in response",
             )) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
         match format.to_lowercase().as_str() {
             "json" => {
-                // Output as JSON
-                let json = serde_json::json!({
-                    "file": input.display().to_string(),
-                    "format": info.format,
-                    "duration": info.duration,
-                    "video": {
-                        "codec": info.codec,
-                        "width": info.width,
-                        "height": info.height,
-                        "fps": info.fps,
-                        "bitrate": info.bitrate
-                    },
-                    "audio": if info.has_audio {
-                        Some(serde_json::json!({
-                            "codec": info.audio_codec,
-                            "sample_rate": info.audio_sample_rate,
-                            "channels": info.audio_channels,
-                            "bitrate": info.audio_bitrate
-                        }))
-                    } else {
-                        None
-                    },
-                    "subtitles": info.subtitle_streams.iter().map(|s| {
-                        serde_json::json!({
-                            "index": s.index,
-                            "codec": s.codec,
-                            "language": s.language,
-                            "title": s.title,
-                            "default": s.is_default,
-                            "forced": s.is_forced
-                        })
-                    }).collect::<Vec<_>>()
-                });
-                println!("{}", serde_json::to_string_pretty(&json)?);
+                // Output as JSON (response already contains structured data)
+                println!("{}", serde_json::to_string_pretty(&data)?);
             }
             _ => {
-                // Output as text
+                // Output as text - parse MediaInfo from response
+                let info: neko_types::MediaInfo = serde_json::from_value(data.clone()).map_err(|e| {
+                    Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Failed to parse media info: {}", e),
+                    )) as Box<dyn std::error::Error + Send + Sync>
+                })?;
+
                 println!("File: {}", input.display());
                 println!("Format: {}", info.format);
                 println!("Duration: {:.2}s", info.duration);
-                println!();
-                println!("Video:");
-                println!("  Codec: {}", info.codec);
-                println!("  Resolution: {}x{}", info.width, info.height);
-                println!("  FPS: {:.2}", info.fps);
-                if let Some(bitrate) = info.bitrate {
-                    println!("  Bitrate: {} kbps", bitrate / 1000);
-                }
 
-                if info.has_audio {
+                if let Some(video) = info.primary_video() {
                     println!();
-                    println!("Audio:");
-                    if let Some(codec) = &info.audio_codec {
-                        println!("  Codec: {}", codec);
-                    }
-                    if let Some(sample_rate) = info.audio_sample_rate {
-                        println!("  Sample Rate: {} Hz", sample_rate);
-                    }
-                    if let Some(channels) = info.audio_channels {
-                        println!("  Channels: {}", channels);
-                    }
-                    if let Some(bitrate) = info.audio_bitrate {
+                    println!("Video:");
+                    println!("  Codec: {}", video.codec);
+                    println!("  Resolution: {}x{}", video.width, video.height);
+                    println!("  FPS: {:.2}", video.fps);
+                    if let Some(bitrate) = video.bitrate {
                         println!("  Bitrate: {} kbps", bitrate / 1000);
                     }
                 }
 
-                if info.has_subtitles {
+                if let Some(audio) = info.primary_audio() {
+                    println!();
+                    println!("Audio:");
+                    println!("  Codec: {}", audio.codec);
+                    println!("  Sample Rate: {} Hz", audio.sample_rate);
+                    println!("  Channels: {}", audio.channels);
+                    if let Some(bitrate) = audio.bitrate {
+                        println!("  Bitrate: {} kbps", bitrate / 1000);
+                    }
+                }
+
+                if !info.subtitle_streams.is_empty() {
                     println!();
                     println!("Subtitles:");
                     for sub in &info.subtitle_streams {
-                        let mut flags = Vec::new();
-                        if sub.is_default {
-                            flags.push("default");
-                        }
-                        if sub.is_forced {
-                            flags.push("forced");
-                        }
-                        let flags_str = if flags.is_empty() {
-                            String::new()
-                        } else {
-                            format!(" [{}]", flags.join(", "))
-                        };
-
                         println!(
-                            "  #{}: {} ({}){}",
+                            "  #{}: {} ({})",
                             sub.index,
                             sub.codec,
-                            sub.language.as_deref().unwrap_or("unknown"),
-                            flags_str
+                            sub.language.as_deref().unwrap_or("unknown")
                         );
+                        if let Some(title) = &sub.title {
+                            println!("      Title: {}", title);
+                        }
                     }
                 }
             }
@@ -347,216 +362,179 @@ impl Runner {
         Ok(())
     }
 
-    /// Run extract command - extract single frame from video
+    /// Run extract command - extract single frame from video (via EngineApi)
     async fn run_extract(
-        &self,
+        &mut self,
         input: PathBuf,
         output: PathBuf,
         time: f64,
         quality: u32,
-        _width: Option<u32>,
-        _height: Option<u32>,
+        width: Option<u32>,
+        height: Option<u32>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        use neko_native_core::decoder::{Decoder, HwAccelType, HwAccelDecoder};
-        use neko_native_core::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
-        use neko_native_core::media_service::encode_rgba_to_jpeg;
-
         tracing::info!("Extracting frame at {:.2}s from {}", time, input.display());
 
-        // Create GPU context
-        let gpu_ctx = Arc::new(GpuContext::new().await.map_err(|e| {
+        // Use EngineApi for capture
+        let engine = self.get_engine().await?;
+
+        // Build capture options
+        let mut options = serde_json::json!({
+            "source": input.to_string_lossy(),
+            "time": time,
+            "quality": quality,
+            "format": "jpeg"
+        });
+
+        // Add optional width/height
+        if let Some(w) = width {
+            options["width"] = serde_json::json!(w);
+        }
+        if let Some(h) = height {
+            options["height"] = serde_json::json!(h);
+        }
+
+        let request = ActionRequest::new("videos", "capture")
+            .with_options(options);
+
+        let response = engine.dispatch(request).await;
+
+        if !response.is_ok() {
+            let error_msg = response.error
+                .map(|e| e.message)
+                .unwrap_or_else(|| "Unknown error".to_string());
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to capture frame: {}", error_msg),
+            )));
+        }
+
+        // Parse the response data
+        let data = response.data.ok_or_else(|| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to create GPU context: {}", e),
-            )) as Box<dyn std::error::Error + Send + Sync>
-        })?);
-
-        // Create decoder with hardware acceleration
-        let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
-
-        // Open video file
-        let input_str = input.to_string_lossy();
-        let media_info = decoder.open(&input_str).map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to open video: {}", e),
-            )) as Box<dyn std::error::Error + Send + Sync>
-        })?;
-
-        tracing::info!(
-            "Video: {}x{} @ {:.2} fps, duration: {:.2}s",
-            media_info.width,
-            media_info.height,
-            media_info.fps,
-            media_info.duration
-        );
-
-        // Seek and decode frame
-        let gpu_texture = decoder.decode_gpu_at(time).map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to decode frame: {}", e),
-            )) as Box<dyn std::error::Error + Send + Sync>
-        })?.ok_or_else(|| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("Frame not found at time {}", time),
-            )) as Box<dyn std::error::Error + Send + Sync>
-        })?;
-
-        let width = media_info.width;
-        let height = media_info.height;
-
-        // Import NV12 texture to wgpu
-        let importer = Nv12TextureImporter::new(Arc::clone(&gpu_ctx));
-        let nv12_texture = importer.import(&gpu_texture).map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to import texture: {}", e),
+                "No data in response",
             )) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
-        // Convert NV12 to RGBA using GPU
-        let renderer = Nv12Renderer::new(Arc::clone(&gpu_ctx)).map_err(|e| {
+        // Extract base64-encoded frame data
+        let frame_data_b64 = data["data"].as_str().ok_or_else(|| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to create renderer: {}", e),
+                "No frame data in response",
             )) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
-        let output_texture = renderer.create_output_texture(width, height);
-        let output_view = output_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
-
-        // Read RGBA data from GPU
-        let rgba_data = read_texture_to_buffer(&gpu_ctx, &output_texture, width, height).map_err(|e| {
+        // Decode base64
+        let frame_data = base64_decode(frame_data_b64).map_err(|e| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to read texture: {}", e),
-            )) as Box<dyn std::error::Error + Send + Sync>
-        })?;
-
-        // Encode to JPEG (quality is 1-100, higher is better)
-        let jpeg_data = encode_rgba_to_jpeg(&rgba_data, width, height, quality).map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to encode JPEG: {}", e),
+                format!("Failed to decode base64: {}", e),
             )) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
         // Write to file
-        std::fs::write(&output, &jpeg_data).map_err(|e| {
+        std::fs::write(&output, &frame_data).map_err(|e| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Failed to write output file: {}", e),
             )) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
+        let frame_width = data["width"].as_u64().unwrap_or(0);
+        let frame_height = data["height"].as_u64().unwrap_or(0);
+
         tracing::info!(
-            "Frame extracted successfully: {} ({} bytes)",
+            "Frame extracted successfully: {} ({}x{}, {} bytes)",
             output.display(),
-            jpeg_data.len()
+            frame_width,
+            frame_height,
+            frame_data.len()
         );
 
         Ok(())
     }
 }
 
-/// Read texture data back to CPU buffer
-fn read_texture_to_buffer(
-    ctx: &GpuContext,
-    texture: &wgpu::Texture,
-    width: u32,
-    height: u32,
-) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    let device = ctx.device();
-    let queue = ctx.queue();
-
-    let bytes_per_row = width * 4;
-    let padded_bytes_per_row = (bytes_per_row + 255) & !255; // Align to 256
-
-    let buffer_size = (padded_bytes_per_row * height) as u64;
-    let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Texture Readback Buffer"),
-        size: buffer_size,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Texture Readback Encoder"),
-    });
-
-    encoder.copy_texture_to_buffer(
-        wgpu::ImageCopyTexture {
-            texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::ImageCopyBuffer {
-            buffer: &staging_buffer,
-            layout: wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(padded_bytes_per_row),
-                rows_per_image: Some(height),
-            },
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-
-    queue.submit(std::iter::once(encoder.finish()));
-
-    // Map buffer and read data
-    let buffer_slice = staging_buffer.slice(..);
-    let (tx, rx) = std::sync::mpsc::channel();
-    buffer_slice.map_async(wgpu::MapMode::Read, move |result: Result<(), wgpu::BufferAsyncError>| {
-        tx.send(result).unwrap();
-    });
-
-    device.poll(wgpu::Maintain::Wait);
-    rx.recv()
-        .map_err(|_| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Buffer map failed",
-            )) as Box<dyn std::error::Error + Send + Sync>
-        })?
-        .map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Buffer map error: {:?}", e),
-            )) as Box<dyn std::error::Error + Send + Sync>
-        })?;
-
-    let data = buffer_slice.get_mapped_range();
-
-    // Remove padding if necessary
-    let result = if padded_bytes_per_row == bytes_per_row {
-        data.to_vec()
-    } else {
-        let mut result = Vec::with_capacity((width * height * 4) as usize);
-        for row in 0..height {
-            let start = (row * padded_bytes_per_row) as usize;
-            let end = start + bytes_per_row as usize;
-            result.extend_from_slice(&data[start..end]);
-        }
-        result
-    };
-
-    drop(data);
-    staging_buffer.unmap();
-
-    Ok(result)
-}
-
 impl Default for Runner {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Print detailed performance summary from export progress data
+fn print_performance_summary(data: &serde_json::Value) {
+    let stats = &data["stats"];
+    if stats.is_null() {
+        return;
+    }
+
+    let current_frame = data["current_frame"]
+        .as_u64()
+        .or_else(|| data["currentFrame"].as_u64())
+        .unwrap_or(0);
+    let avg_fps = stats["avg_fps"].as_f64()
+        .or_else(|| stats["avgFps"].as_f64()).unwrap_or(0.0);
+    let hw_decode_ms = stats["hw_decode_ms"].as_f64()
+        .or_else(|| stats["hwDecodeMs"].as_f64()).unwrap_or(0.0);
+    let nv12_import_ms = stats["nv12_import_ms"].as_f64()
+        .or_else(|| stats["nv12ImportMs"].as_f64()).unwrap_or(0.0);
+    let nv12_to_rgba_ms = stats["nv12_to_rgba_ms"].as_f64()
+        .or_else(|| stats["nv12ToRgbaMs"].as_f64()).unwrap_or(0.0);
+    let composite_ms = stats["composite_ms"].as_f64()
+        .or_else(|| stats["compositeMs"].as_f64()).unwrap_or(0.0);
+    let rgba_to_nv12_ms = stats["rgba_to_nv12_ms"].as_f64()
+        .or_else(|| stats["rgbaToNv12Ms"].as_f64()).unwrap_or(0.0);
+    let cpu_readback_ms = stats["cpu_readback_ms"].as_f64()
+        .or_else(|| stats["cpuReadbackMs"].as_f64()).unwrap_or(0.0);
+    let encode_submit_ms = stats["encode_submit_ms"].as_f64()
+        .or_else(|| stats["encodeSubmitMs"].as_f64()).unwrap_or(0.0);
+    let cpu_usage_percent = stats["cpu_usage_percent"].as_f64()
+        .or_else(|| stats["cpuUsagePercent"].as_f64()).unwrap_or(0.0);
+    let gpu_usage_percent = stats["gpu_usage_percent"].as_f64()
+        .or_else(|| stats["gpuUsagePercent"].as_f64());
+    let peak_memory_bytes = stats["peak_memory_bytes"].as_u64()
+        .or_else(|| stats["peakMemoryBytes"].as_u64()).unwrap_or(0);
+    let vram_usage_bytes = stats["vram_usage_bytes"].as_u64()
+        .or_else(|| stats["vramUsageBytes"].as_u64());
+
+    println!();
+    println!("=== Export Performance Summary ===");
+    println!("Total frames: {}", current_frame);
+    println!("Average FPS:  {:.1}", avg_fps);
+    println!();
+    println!("Per-frame timing (avg):");
+    println!();
+    println!("  [Decode]");
+    println!("    HW Decode:     {:>6.2} ms", hw_decode_ms);
+    println!();
+    println!("  [GPU Pipeline]");
+    println!("    NV12 Import:   {:>6.2} ms  (CPU→GPU transfer)", nv12_import_ms);
+    println!("    NV12→RGBA:     {:>6.2} ms  (GPU shader)", nv12_to_rgba_ms);
+    println!("    Composite:     {:>6.2} ms  (GPU render)", composite_ms);
+    println!("    RGBA→NV12:     {:>6.2} ms  (GPU compute)", rgba_to_nv12_ms);
+    println!("    CPU Readback:  {:>6.2} ms  (GPU→CPU transfer)", cpu_readback_ms);
+    let gpu_total = nv12_import_ms + nv12_to_rgba_ms
+        + composite_ms + rgba_to_nv12_ms + cpu_readback_ms;
+    println!("    ─────────────────────────");
+    println!("    GPU Total:     {:>6.2} ms", gpu_total);
+    println!();
+    println!("  [Encode]");
+    println!("    Encode Submit: {:>6.2} ms", encode_submit_ms);
+    println!();
+    let frame_total = hw_decode_ms + gpu_total + encode_submit_ms;
+    println!("  [Total]");
+    println!("    Frame Total:   {:>6.2} ms", frame_total);
+
+    // Resource usage section
+    println!();
+    println!("Resource usage:");
+    println!("  CPU Usage:   {:>6.1} %", cpu_usage_percent);
+    if let Some(gpu) = gpu_usage_percent {
+        println!("  GPU Usage:   {:>6.1} %", gpu);
+    }
+    println!("  Peak RAM:    {:>6.1} MB", peak_memory_bytes as f64 / 1024.0 / 1024.0);
+    if let Some(vram) = vram_usage_bytes {
+        println!("  Peak VRAM:   {:>6.1} MB", vram as f64 / 1024.0 / 1024.0);
     }
 }
 
@@ -591,4 +569,52 @@ fn parse_hw_encoder(hw_encoder: &str) -> ExportHwEncoder {
         "none" => ExportHwEncoder::None,
         _ => ExportHwEncoder::Auto,
     }
+}
+
+/// Simple base64 decoding
+fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
+    const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    fn char_to_val(c: u8) -> Result<u8, String> {
+        if let Some(pos) = BASE64_CHARS.iter().position(|&x| x == c) {
+            Ok(pos as u8)
+        } else if c == b'=' {
+            Ok(0) // Padding
+        } else {
+            Err(format!("Invalid base64 character: {}", c as char))
+        }
+    }
+
+    let input = input.as_bytes();
+    let mut result = Vec::with_capacity(input.len() * 3 / 4);
+
+    let mut i = 0;
+    while i < input.len() {
+        // Skip whitespace
+        if input[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+
+        if i + 4 > input.len() {
+            return Err("Invalid base64 length".to_string());
+        }
+
+        let a = char_to_val(input[i])?;
+        let b = char_to_val(input[i + 1])?;
+        let c = char_to_val(input[i + 2])?;
+        let d = char_to_val(input[i + 3])?;
+
+        result.push((a << 2) | (b >> 4));
+        if input[i + 2] != b'=' {
+            result.push((b << 4) | (c >> 2));
+        }
+        if input[i + 3] != b'=' {
+            result.push((c << 6) | d);
+        }
+
+        i += 4;
+    }
+
+    Ok(result)
 }

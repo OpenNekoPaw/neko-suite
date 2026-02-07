@@ -4,12 +4,18 @@
 //! using wgpu for cross-platform GPU compute.
 //!
 //! All video encoding/decoding uses hardware acceleration (GPU).
+//!
+//! # Architecture (MVC)
+//! - `domain/` - Domain models with behavior (Timeline, Transform, TaskHandle, etc.)
+//! - `services/` - Service traits and implementations (future)
+//! - Other modules - Infrastructure layer (gpu, decoder, encoder, etc.)
 
 #![deny(clippy::all)]
 
 pub mod animation;
 pub mod audio;
 pub mod decoder;
+pub mod domain;
 pub mod encoder;
 pub mod error;
 pub mod export;
@@ -20,6 +26,7 @@ pub mod keyframe_cache;
 pub mod media_service;
 pub mod monitor;
 pub mod preview;
+pub mod services;
 pub mod telemetry;
 
 pub use animation::{
@@ -62,3 +69,8 @@ pub use media_service::{
 };
 pub use monitor::{ResourceSnapshot, SystemMonitor};
 pub use preview::{PreviewPipeline, PreviewPipelineConfig, PreviewFrame};
+pub use services::{
+    AudioService, GpuInfo, IAudioService, IExportService, IImageService, INodeService,
+    ITaskService, ITimelineService, IVideoService, ImageService, NodeService, SeekDirection,
+    ServiceContainer, TaskService, TimelineService, VideoService,
+};

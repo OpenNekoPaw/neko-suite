@@ -9,6 +9,9 @@ license.workspace = true
 crate-type = ["lib"]
 
 [dependencies]
+# Shared types
+neko-types = { path = "../types" }
+
 # GPU - wgpu for cross-platform GPU compute
 wgpu.workspace = true
 wgpu-hal.workspace = true
@@ -52,6 +55,7 @@ tracy-client = { workspace = true, optional = true }
 # Utilities
 bytemuck.workspace = true
 crossbeam-channel.workspace = true
+tokio-util = { version = "0.7", features = ["rt"] }
 
 # Image encoding - pure Rust JPEG encoder
 image.workspace = true

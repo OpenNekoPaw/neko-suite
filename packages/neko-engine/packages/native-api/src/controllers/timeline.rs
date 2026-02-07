@@ -1,0 +1,426 @@
+//! TimelineController - handles timelines:* actions
+
+use crate::controllers::utils::base64_encode;
+use crate::controllers::Controller;
+use crate::error::{ApiError, ApiResult};
+use neko_native_core::domain::{StreamConfig, Timeline};
+use neko_native_core::services::{ITimelineService, SeekDirection, TimelineService};
+use neko_types::{ActionResponse, LoopRegion, Resolution, StreamId};
+use serde::Deserialize;
+use serde_json::Value;
+use std::sync::Arc;
+
+/// Controller for timeline-related actions
+pub struct TimelineController {
+    timeline_service: Arc<TimelineService>,
+}
+
+impl TimelineController {
+    /// Create a new TimelineController
+    pub fn new(timeline_service: Arc<TimelineService>) -> Self {
+        Self { timeline_service }
+    }
+}
+
+/// Options for timelines:composite
+#[derive(Debug, Deserialize, Default)]
+struct CompositeRequestOptions {
+    /// Frame number to composite
+    #[serde(default)]
+    frame: u64,
+}
+
+/// Options for timelines:stream
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct StreamRequestOptions {
+    /// Session ID
+    session_id: Option<String>,
+    /// Output width
+    width: Option<u32>,
+    /// Output height
+    height: Option<u32>,
+    /// Frame rate
+    fps: Option<f64>,
+    /// Start time in seconds
+    #[serde(default)]
+    start_time: f64,
+}
+
+/// Options for stream control actions (stop/pause/resume/seek/speed/loop/keyframe)
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct StreamControlOptions {
+    /// Stream ID
+    stream_id: Option<String>,
+    /// Speed value (for speed action)
+    speed: Option<f64>,
+    /// Time in seconds (for seek action)
+    time: Option<f64>,
+    /// Loop in point (for loop action)
+    in_point: Option<f64>,
+    /// Loop out point (for loop action)
+    out_point: Option<f64>,
+    /// Whether to clear loop (for loop action)
+    #[serde(default)]
+    clear: bool,
+    /// Seek direction (for keyframe action): "forward", "backward", "nearest"
+    direction: Option<String>,
+}
+
+impl Controller for TimelineController {
+    async fn handle(
+        &self,
+        action: &str,
+        _resource_id: Option<&str>,
+        options: Value,
+        body: Option<Value>,
+    ) -> ApiResult<ActionResponse> {
+        match action {
+            "composite" => {
+                let opts: CompositeRequestOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                // Timeline must be provided in the body
+                let body = body.ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "Timeline data required in body for timelines:composite".to_string(),
+                    )
+                })?;
+
+                let timeline: Timeline = serde_json::from_value(body).map_err(|e| {
+                    ApiError::InvalidRequest(format!("Invalid timeline data: {}", e))
+                })?;
+
+                let frame_data = self
+                    .timeline_service
+                    .composite(&timeline, opts.frame)
+                    .await?;
+
+                let response = serde_json::json!({
+                    "width": frame_data.width,
+                    "height": frame_data.height,
+                    "format": format!("{:?}", frame_data.format).to_lowercase(),
+                    "timestamp": frame_data.timestamp,
+                    "size": frame_data.data.len(),
+                    "data": base64_encode(&frame_data.data),
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+            "stream" => {
+                let opts: StreamRequestOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                // Timeline must be provided in the body
+                let body = body.ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "Timeline data required in body for timelines:stream".to_string(),
+                    )
+                })?;
+
+                let timeline: Timeline = serde_json::from_value(body).map_err(|e| {
+                    ApiError::InvalidRequest(format!("Invalid timeline data: {}", e))
+                })?;
+
+                let session_id = opts.session_id.unwrap_or_else(|| "default".to_string());
+
+                let config = StreamConfig {
+                    resolution: Resolution::new(
+                        opts.width.unwrap_or(timeline.resolution.width),
+                        opts.height.unwrap_or(timeline.resolution.height),
+                    ),
+                    fps: opts.fps.unwrap_or(timeline.fps),
+                    start_time: opts.start_time,
+                    ..Default::default()
+                };
+
+                let (stream_id, _rx) = self
+                    .timeline_service
+                    .start_stream(&timeline, &session_id, config)
+                    .await?;
+
+                let response = serde_json::json!({
+                    "streamId": stream_id.as_str(),
+                    "status": "active",
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+            "stop" => {
+                let opts: StreamControlOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let stream_id = opts.stream_id.ok_or_else(|| {
+                    ApiError::InvalidRequest("stream_id required for timelines:stop".to_string())
+                })?;
+                let stream_id = StreamId::from_string(stream_id);
+
+                self.timeline_service.stop_stream(&stream_id).await?;
+
+                let response = serde_json::json!({
+                    "streamId": stream_id.as_str(),
+                    "status": "stopped",
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+            "pause" => {
+                let opts: StreamControlOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let stream_id = opts.stream_id.ok_or_else(|| {
+                    ApiError::InvalidRequest("stream_id required for timelines:pause".to_string())
+                })?;
+                let stream_id = StreamId::from_string(stream_id);
+
+                self.timeline_service.pause(&stream_id).await?;
+
+                let response = serde_json::json!({
+                    "streamId": stream_id.as_str(),
+                    "status": "paused",
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+            "resume" => {
+                let opts: StreamControlOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let stream_id = opts.stream_id.ok_or_else(|| {
+                    ApiError::InvalidRequest("stream_id required for timelines:resume".to_string())
+                })?;
+                let stream_id = StreamId::from_string(stream_id);
+
+                self.timeline_service.resume(&stream_id).await?;
+
+                let response = serde_json::json!({
+                    "streamId": stream_id.as_str(),
+                    "status": "active",
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+            "speed" => {
+                let opts: StreamControlOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let stream_id = opts.stream_id.ok_or_else(|| {
+                    ApiError::InvalidRequest("stream_id required for timelines:speed".to_string())
+                })?;
+                let stream_id = StreamId::from_string(stream_id);
+
+                let speed = opts.speed.ok_or_else(|| {
+                    ApiError::InvalidRequest("speed value required for timelines:speed".to_string())
+                })?;
+
+                self.timeline_service.set_speed(&stream_id, speed).await?;
+
+                let response = serde_json::json!({
+                    "streamId": stream_id.as_str(),
+                    "speed": speed,
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+            "loop" => {
+                let opts: StreamControlOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let stream_id = opts.stream_id.ok_or_else(|| {
+                    ApiError::InvalidRequest("stream_id required for timelines:loop".to_string())
+                })?;
+                let stream_id = StreamId::from_string(stream_id);
+
+                let region = if opts.clear {
+                    None
+                } else {
+                    match (opts.in_point, opts.out_point) {
+                        (Some(in_pt), Some(out_pt)) => Some(LoopRegion::new(in_pt, out_pt)),
+                        _ => {
+                            return Err(ApiError::InvalidRequest(
+                                "in_point and out_point required for timelines:loop (or set clear=true)".to_string(),
+                            ));
+                        }
+                    }
+                };
+
+                self.timeline_service.set_loop(&stream_id, region.clone()).await?;
+
+                let response = serde_json::json!({
+                    "streamId": stream_id.as_str(),
+                    "loop": region.map(|r| serde_json::json!({
+                        "inPoint": r.in_point,
+                        "outPoint": r.out_point,
+                    })),
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+            "seek" => {
+                let opts: StreamControlOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let stream_id = opts.stream_id.ok_or_else(|| {
+                    ApiError::InvalidRequest("stream_id required for timelines:seek".to_string())
+                })?;
+                let stream_id = StreamId::from_string(stream_id);
+
+                let time = opts.time.ok_or_else(|| {
+                    ApiError::InvalidRequest("time required for timelines:seek".to_string())
+                })?;
+
+                self.timeline_service.seek(&stream_id, time).await?;
+
+                let response = serde_json::json!({
+                    "streamId": stream_id.as_str(),
+                    "time": time,
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+            "keyframe" => {
+                let opts: StreamControlOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let stream_id = opts.stream_id.ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "stream_id required for timelines:keyframe".to_string(),
+                    )
+                })?;
+                let stream_id = StreamId::from_string(stream_id);
+
+                let time = opts.time.ok_or_else(|| {
+                    ApiError::InvalidRequest("time required for timelines:keyframe".to_string())
+                })?;
+
+                let direction = match opts.direction.as_deref() {
+                    Some("forward") => SeekDirection::Forward,
+                    Some("backward") => SeekDirection::Backward,
+                    _ => SeekDirection::Nearest,
+                };
+
+                let actual_time = self
+                    .timeline_service
+                    .seek_keyframe(&stream_id, time, direction)
+                    .await?;
+
+                let response = serde_json::json!({
+                    "streamId": stream_id.as_str(),
+                    "requestedTime": time,
+                    "actualTime": actual_time,
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+            _ => Err(ApiError::UnknownAction {
+                group: "timelines".to_string(),
+                action: action.to_string(),
+            }),
+        }
+    }
+
+    fn group(&self) -> &'static str {
+        "timelines"
+    }
+
+    fn actions(&self) -> &'static [&'static str] {
+        &[
+            "composite",
+            "stream",
+            "stop",
+            "pause",
+            "resume",
+            "speed",
+            "loop",
+            "seek",
+            "keyframe",
+        ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use neko_native_core::services::TaskService;
+
+    fn create_test_controller() -> TimelineController {
+        let task_service = Arc::new(TaskService::new());
+        let timeline_service = Arc::new(TimelineService::new(None, task_service));
+        TimelineController::new(timeline_service)
+    }
+
+    #[tokio::test]
+    async fn test_timeline_controller_unknown_action() {
+        let controller = create_test_controller();
+
+        let result = controller
+            .handle("unknown", None, Value::Null, None)
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_timeline_controller_composite_missing_body() {
+        let controller = create_test_controller();
+
+        let result = controller
+            .handle("composite", None, Value::Null, None)
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Timeline data required"));
+    }
+
+    #[tokio::test]
+    async fn test_timeline_controller_composite_invalid_body() {
+        let controller = create_test_controller();
+
+        let body = serde_json::json!({ "invalid": true });
+        let result = controller
+            .handle("composite", None, Value::Null, Some(body))
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Invalid timeline data"));
+    }
+
+    #[tokio::test]
+    async fn test_timeline_controller_composite_no_gpu() {
+        let controller = create_test_controller();
+
+        // Valid timeline body but no GPU context
+        let body = serde_json::json!({
+            "duration": 10.0,
+            "resolution": { "width": 1920, "height": 1080 },
+            "fps": 30.0,
+            "tracks": []
+        });
+
+        let result = controller
+            .handle("composite", None, Value::Null, Some(body))
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_timeline_controller_actions() {
+        let controller = create_test_controller();
+        let actions = controller.actions();
+
+        assert!(actions.contains(&"composite"));
+        assert!(actions.contains(&"stream"));
+        assert!(actions.contains(&"stop"));
+        assert!(actions.contains(&"pause"));
+        assert!(actions.contains(&"resume"));
+        assert!(actions.contains(&"speed"));
+        assert!(actions.contains(&"loop"));
+        assert!(actions.contains(&"seek"));
+        assert!(actions.contains(&"keyframe"));
+        assert_eq!(actions.len(), 9);
+    }
+}
