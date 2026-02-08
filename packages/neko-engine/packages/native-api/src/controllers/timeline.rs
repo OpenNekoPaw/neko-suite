@@ -4,7 +4,7 @@ use crate::controllers::utils::base64_encode;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use neko_native_core::domain::{StreamConfig, Timeline};
-use neko_native_core::services::{ITimelineService, TimelineService};
+use neko_native_core::services::{ExportService, IExportService, ITimelineService, TimelineService};
 use neko_types::{ActionResponse, LoopRegion, Resolution, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
@@ -13,12 +13,19 @@ use std::sync::Arc;
 /// Controller for timeline-related actions
 pub struct TimelineController {
     timeline_service: Arc<TimelineService>,
+    export_service: Option<Arc<ExportService>>,
 }
 
 impl TimelineController {
     /// Create a new TimelineController
-    pub fn new(timeline_service: Arc<TimelineService>) -> Self {
-        Self { timeline_service }
+    pub fn new(
+        timeline_service: Arc<TimelineService>,
+        export_service: Option<Arc<ExportService>>,
+    ) -> Self {
+        Self {
+            timeline_service,
+            export_service,
+        }
     }
 }
 
@@ -277,6 +284,39 @@ impl Controller for TimelineController {
 
                 Ok(ActionResponse::ok("", response))
             }
+            "export" => {
+                let export_service = self.export_service.as_ref().ok_or_else(|| {
+                    ApiError::ServiceError(
+                        "Export service not available (GPU required)".to_string(),
+                    )
+                })?;
+
+                let config_value = body
+                    .or_else(|| {
+                        if options.is_object() && !options.is_null() {
+                            Some(options.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or_else(|| {
+                        ApiError::InvalidRequest(
+                            "timelines:export requires ExportJobConfig in body or options"
+                                .to_string(),
+                        )
+                    })?;
+
+                let config: neko_native_core::export::ExportJobConfig =
+                    serde_json::from_value(config_value).map_err(|e| {
+                        ApiError::InvalidRequest(format!("Invalid ExportJobConfig: {}", e))
+                    })?;
+
+                let response = export_service.start(config).await.map_err(|e| {
+                    ApiError::ServiceError(format!("Failed to start export: {}", e))
+                })?;
+
+                Ok(ActionResponse::ok("", serde_json::to_value(response)?))
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "timelines".to_string(),
                 action: action.to_string(),
@@ -298,6 +338,7 @@ impl Controller for TimelineController {
             "speed",
             "loop",
             "seek",
+            "export",
         ]
     }
 }
@@ -310,7 +351,7 @@ mod tests {
     fn create_test_controller() -> TimelineController {
         let task_service = Arc::new(TaskService::new());
         let timeline_service = Arc::new(TimelineService::new(None, task_service));
-        TimelineController::new(timeline_service)
+        TimelineController::new(timeline_service, None)
     }
 
     #[tokio::test]
@@ -383,6 +424,37 @@ mod tests {
         assert!(actions.contains(&"speed"));
         assert!(actions.contains(&"loop"));
         assert!(actions.contains(&"seek"));
-        assert_eq!(actions.len(), 8);
+        assert!(actions.contains(&"export"));
+        assert_eq!(actions.len(), 9);
+    }
+
+    #[tokio::test]
+    async fn test_timeline_controller_export_no_gpu() {
+        let controller = create_test_controller();
+
+        let body = serde_json::json!({
+            "timeline": {},
+            "output": "/tmp/test.mp4"
+        });
+
+        let result = controller
+            .handle("export", None, Value::Null, Some(body))
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Export service not available"));
+    }
+
+    #[tokio::test]
+    async fn test_timeline_controller_export_missing_body() {
+        let controller = create_test_controller();
+
+        let result = controller
+            .handle("export", None, Value::Null, None)
+            .await;
+
+        // Without GPU, it should fail on export_service check first
+        assert!(result.is_err());
     }
 }

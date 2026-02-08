@@ -1,7 +1,7 @@
 //! ActionRouter - Routes ActionRequest to appropriate controllers
 
 use crate::controllers::{
-    AudioController, CanvasController, Controller, ExportController, ImageController,
+    AudioController, CanvasController, Controller, ImageController,
     ModelsController, NodeController, ScenesController, StreamController, TaskController,
     TimelineController, VideoController,
 };
@@ -22,7 +22,6 @@ pub struct ActionRouter {
     audio_controller: AudioController,
     image_controller: ImageController,
     timeline_controller: TimelineController,
-    export_controller: Option<ExportController>,
     stream_controller: StreamController,
     models_controller: ModelsController,
     canvas_controller: CanvasController,
@@ -42,16 +41,13 @@ impl ActionRouter {
         resource_registry: Arc<ResourceRegistry>,
         stream_registry: Arc<StreamRegistry>,
     ) -> Self {
-        let export_controller = export_service.map(ExportController::new);
-
         Self {
             node_controller: NodeController::new(node_service),
             task_controller: TaskController::new(task_service),
             video_controller: VideoController::new(video_service, resource_registry.clone()),
             audio_controller: AudioController::new(audio_service, resource_registry.clone()),
             image_controller: ImageController::new(image_service, resource_registry),
-            timeline_controller: TimelineController::new(timeline_service),
-            export_controller,
+            timeline_controller: TimelineController::new(timeline_service, export_service),
             stream_controller: StreamController::new(stream_registry),
             models_controller: ModelsController::new(),
             canvas_controller: CanvasController::new(),
@@ -104,18 +100,6 @@ impl ActionRouter {
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
-            "exports" => {
-                match &self.export_controller {
-                    Some(controller) => {
-                        controller
-                            .handle(&request.action, resource_id, request.options, request.body)
-                            .await
-                    }
-                    None => Err(ApiError::ServiceError(
-                        "Export service not available (GPU required)".to_string(),
-                    )),
-                }
-            }
             "models" => {
                 self.models_controller
                     .handle(&request.action, resource_id, request.options, request.body)
@@ -145,14 +129,10 @@ impl ActionRouter {
 
     /// Get list of supported groups
     pub fn groups(&self) -> Vec<&str> {
-        let mut groups = vec![
+        vec![
             "nodes", "tasks", "videos", "audios", "images", "timelines",
             "streams", "models", "canvas", "scenes",
-        ];
-        if self.export_controller.is_some() {
-            groups.push("exports");
-        }
-        groups
+        ]
     }
 
     /// Get list of supported actions for a group
@@ -164,7 +144,6 @@ impl ActionRouter {
             "audios" => Some(self.audio_controller.actions()),
             "images" => Some(self.image_controller.actions()),
             "timelines" => Some(self.timeline_controller.actions()),
-            "exports" => self.export_controller.as_ref().map(|c| c.actions()),
             "models" => Some(self.models_controller.actions()),
             "canvas" => Some(self.canvas_controller.actions()),
             "scenes" => Some(self.scenes_controller.actions()),
@@ -233,13 +212,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_route_exports_without_gpu() {
+    async fn test_route_exports_group_removed() {
         let router = create_test_router();
 
+        // "exports" group no longer exists; export is now under "timelines"
         let request = ActionRequest::new("exports", "start");
 
         let result = router.route(request).await;
         assert!(result.is_err());
+        // Should be UnknownAction since "exports" group is removed
     }
 
     #[test]
@@ -257,7 +238,7 @@ mod tests {
         assert!(groups.contains(&"canvas"));
         assert!(groups.contains(&"scenes"));
         assert!(groups.contains(&"streams"));
-        // No GPU = no exports group
+        // "exports" group has been removed; export is now a timelines action
         assert!(!groups.contains(&"exports"));
     }
 

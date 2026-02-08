@@ -4,8 +4,7 @@
 //! - VideoController: videos:* actions
 //! - AudioController: audios:* actions
 //! - ImageController: images:* actions
-//! - TimelineController: timelines:* actions
-//! - ExportController: exports:* actions
+//! - TimelineController: timelines:* actions (including export)
 //! - TaskController: tasks:* actions
 //! - NodeController: nodes:* actions
 //! - StreamController: streams:* actions (lifecycle management)
@@ -15,7 +14,6 @@
 
 mod audio;
 mod canvas;
-mod export;
 mod image;
 mod models;
 mod node;
@@ -28,7 +26,6 @@ mod video;
 
 pub use audio::AudioController;
 pub use canvas::CanvasController;
-pub use export::ExportController;
 pub use image::ImageController;
 pub use models::ModelsController;
 pub use node::NodeController;
