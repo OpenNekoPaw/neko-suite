@@ -14,6 +14,7 @@ pub mod resource;
 pub mod stream;
 pub mod task_handle;
 pub mod timeline;
+pub mod timeline_info;
 pub mod transform;
 
 // Re-export domain types
@@ -23,4 +24,5 @@ pub use resource::*;
 pub use stream::*;
 pub use task_handle::*;
 pub use timeline::*;
+pub use timeline_info::*;
 pub use transform::*;

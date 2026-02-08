@@ -373,7 +373,7 @@ mod tests {
     async fn test_audio_service_generate_waveform_nonexistent() {
         let service = create_test_service();
         let resource_id = ResourceId::from_string("/nonexistent/file.mp3".to_string());
-        let result = service.generate_waveform(&resource_id, None).await;
+        let result = service.generate_waveform(&resource_id).await;
         assert!(result.is_err());
     }
 

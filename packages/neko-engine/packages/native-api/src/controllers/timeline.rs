@@ -8,6 +8,7 @@ use neko_native_core::services::{ExportService, IExportService, ITimelineService
 use neko_types::{ActionResponse, LoopRegion, Resolution, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
+use std::path::Path;
 use std::sync::Arc;
 
 /// Controller for timeline-related actions
@@ -27,6 +28,13 @@ impl TimelineController {
             export_service,
         }
     }
+}
+
+/// Options for timelines:probe
+#[derive(Debug, Deserialize, Default)]
+struct ProbeRequestOptions {
+    /// Source .jvi file path
+    source: Option<String>,
 }
 
 /// Options for timelines:composite
@@ -82,6 +90,21 @@ impl Controller for TimelineController {
         body: Option<Value>,
     ) -> ApiResult<ActionResponse> {
         match action {
+            "probe" => {
+                let opts: ProbeRequestOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let source = opts.source.as_deref().or(_resource_id).ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "source path required for timelines:probe".to_string(),
+                    )
+                })?;
+
+                let path = Path::new(source);
+                let info = self.timeline_service.probe(path).await?;
+
+                Ok(ActionResponse::ok("", serde_json::to_value(info)?))
+            }
             "composite" => {
                 let opts: CompositeRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
@@ -330,6 +353,7 @@ impl Controller for TimelineController {
 
     fn actions(&self) -> &'static [&'static str] {
         &[
+            "probe",
             "composite",
             "stream",
             "stop",
@@ -416,6 +440,7 @@ mod tests {
         let controller = create_test_controller();
         let actions = controller.actions();
 
+        assert!(actions.contains(&"probe"));
         assert!(actions.contains(&"composite"));
         assert!(actions.contains(&"stream"));
         assert!(actions.contains(&"stop"));
@@ -425,7 +450,7 @@ mod tests {
         assert!(actions.contains(&"loop"));
         assert!(actions.contains(&"seek"));
         assert!(actions.contains(&"export"));
-        assert_eq!(actions.len(), 9);
+        assert_eq!(actions.len(), 10);
     }
 
     #[tokio::test]
@@ -455,6 +480,31 @@ mod tests {
             .await;
 
         // Without GPU, it should fail on export_service check first
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_timeline_controller_probe_missing_source() {
+        let controller = create_test_controller();
+
+        let result = controller
+            .handle("probe", None, Value::Null, None)
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("source path required"));
+    }
+
+    #[tokio::test]
+    async fn test_timeline_controller_probe_nonexistent_file() {
+        let controller = create_test_controller();
+
+        let opts = serde_json::json!({ "source": "/nonexistent/file.jvi" });
+        let result = controller
+            .handle("probe", None, opts, None)
+            .await;
+
         assert!(result.is_err());
     }
 }

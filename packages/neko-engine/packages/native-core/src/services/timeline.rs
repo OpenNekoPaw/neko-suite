@@ -1,16 +1,20 @@
 //! Timeline service trait
 
-use crate::domain::{FrameData, StreamConfig, Timeline};
+use crate::domain::{FrameData, StreamConfig, Timeline, TimelineProjectInfo};
 use crate::error::Result;
 use neko_types::{LoopRegion, StreamId};
+use std::path::Path;
 use tokio::sync::broadcast;
 
 /// Timeline service interface
 ///
 /// Handles timeline composition and playback: compositing frames,
-/// stream management, playback control.
+/// stream management, playback control, and project probing.
 #[allow(async_fn_in_trait)]
 pub trait ITimelineService: Send + Sync {
+    /// Probe a .jvi project file and return metadata without rendering
+    async fn probe(&self, jvi_path: &Path) -> Result<TimelineProjectInfo>;
+
     /// Composite a single frame at specified time
     async fn composite(
         &self,

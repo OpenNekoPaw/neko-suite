@@ -5,8 +5,9 @@
 //! and full playback control (pause/resume/speed/loop/seek).
 
 use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType};
-use crate::domain::{FrameData, StreamConfig, Timeline};
+use crate::domain::{FrameData, MediaReference, StreamConfig, Timeline, TimelineProjectInfo};
 use crate::encoder::{Encoder, EncoderConfig, HwAccelEncoder};
+use crate::jvi::JviLoader;
 use crate::error::{Error, Result};
 use crate::gpu::{
     BlendMode as GpuBlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext,
@@ -19,6 +20,7 @@ use crate::services::impls::stream_loop::{
 };
 use crate::services::{ITaskService, ITimelineService};
 use neko_types::{BlendMode, FrameFormat, LoopRegion, StreamId};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -153,6 +155,98 @@ impl TimelineService {
 }
 
 impl ITimelineService for TimelineService {
+    async fn probe(&self, jvi_path: &Path) -> Result<TimelineProjectInfo> {
+        let path = jvi_path.to_path_buf();
+
+        // Load and parse .jvi file in blocking task (file I/O)
+        let info = tokio::task::spawn_blocking(move || -> Result<TimelineProjectInfo> {
+            let loader = JviLoader::new();
+            let (timeline_data, settings) = loader.load(&path)?;
+
+            // Count elements across all tracks
+            let element_count: usize = timeline_data.tracks.iter().map(|t| t.elements.len()).sum();
+
+            // Calculate duration from elements
+            let duration = timeline_data
+                .tracks
+                .iter()
+                .flat_map(|t| t.elements.iter())
+                .map(|e| e.start_time() + e.duration())
+                .fold(0.0_f64, f64::max);
+
+            // Collect media references and check file existence
+            let base_dir = path.parent().unwrap_or_else(|| Path::new("."));
+            let mut media_references = Vec::new();
+
+            for track in &timeline_data.tracks {
+                for element in &track.elements {
+                    let (element_id, src, media_type) = match element {
+                        crate::export::ElementData::Media(m) => {
+                            (m.id.clone(), m.src.clone(), "video".to_string())
+                        }
+                        crate::export::ElementData::Audio(a) => {
+                            (a.id.clone(), a.src.clone(), "audio".to_string())
+                        }
+                        crate::export::ElementData::Text(t) => {
+                            (t.id.clone(), String::new(), "text".to_string())
+                        }
+                    };
+
+                    // Only add media references for elements with source files
+                    if !src.is_empty() {
+                        let resolved_path = if Path::new(&src).is_absolute() {
+                            PathBuf::from(&src)
+                        } else {
+                            base_dir.join(&src)
+                        };
+                        let exists = resolved_path.exists();
+
+                        media_references.push(MediaReference {
+                            element_id,
+                            path: resolved_path.to_string_lossy().to_string(),
+                            exists,
+                            media_type,
+                        });
+                    }
+                }
+            }
+
+            // Read project name and version from raw JSON
+            // (JviLoader converts to TimelineData which doesn't preserve these)
+            let raw_content = std::fs::read_to_string(&path)
+                .map_err(|e| Error::Other(format!("Failed to re-read JVI file: {}", e)))?;
+            let raw_json: serde_json::Value = serde_json::from_str(&raw_content)
+                .map_err(|e| Error::Other(format!("Failed to re-parse JVI JSON: {}", e)))?;
+
+            let name = raw_json
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Untitled")
+                .to_string();
+            let version = raw_json
+                .get("version")
+                .and_then(|v| v.as_str())
+                .unwrap_or("1.0")
+                .to_string();
+
+            Ok(TimelineProjectInfo {
+                name,
+                version,
+                width: settings.width,
+                height: settings.height,
+                fps: settings.fps,
+                duration,
+                track_count: timeline_data.tracks.len(),
+                element_count,
+                media_references,
+            })
+        })
+        .await
+        .map_err(|e| Error::Other(format!("Timeline probe task failed: {}", e)))??;
+
+        Ok(info)
+    }
+
     async fn composite(
         &self,
         timeline: &Timeline,
@@ -668,5 +762,70 @@ mod tests {
     fn test_timeline_service_trait_object() {
         fn _assert_impl<T: ITimelineService>() {}
         _assert_impl::<TimelineService>();
+    }
+
+    #[tokio::test]
+    async fn test_timeline_service_probe_file_not_found() {
+        let service = create_test_service();
+        let result = service.probe(Path::new("/nonexistent/file.jvi")).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_timeline_service_probe_valid_jvi() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let json = r#"{
+            "version": "1.0",
+            "name": "Test Project",
+            "resolution": { "width": 1920, "height": 1080 },
+            "fps": 30,
+            "tracks": [
+                {
+                    "id": "track-1",
+                    "name": "Main Track",
+                    "type": "media",
+                    "elements": [
+                        {
+                            "type": "media",
+                            "id": "elem-1",
+                            "name": "clip1.mp4",
+                            "src": "clip1.mp4",
+                            "duration": 5.0,
+                            "startTime": 0.0
+                        }
+                    ],
+                    "muted": false
+                },
+                {
+                    "id": "track-2",
+                    "name": "Audio Track",
+                    "type": "audio",
+                    "elements": [],
+                    "muted": false
+                }
+            ]
+        }"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(json.as_bytes()).unwrap();
+
+        let service = create_test_service();
+        let result = service.probe(temp_file.path()).await;
+        assert!(result.is_ok());
+
+        let info = result.unwrap();
+        assert_eq!(info.name, "Test Project");
+        assert_eq!(info.version, "1.0");
+        assert_eq!(info.width, 1920);
+        assert_eq!(info.height, 1080);
+        assert_eq!(info.fps, 30.0);
+        assert_eq!(info.track_count, 2);
+        assert_eq!(info.element_count, 1);
+        assert_eq!(info.media_references.len(), 1);
+        assert_eq!(info.media_references[0].element_id, "elem-1");
+        assert_eq!(info.media_references[0].media_type, "video");
+        assert!(!info.media_references[0].exists); // clip1.mp4 doesn't exist
     }
 }
