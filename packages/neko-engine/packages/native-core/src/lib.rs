@@ -71,6 +71,6 @@ pub use monitor::{ResourceSnapshot, SystemMonitor};
 pub use preview::{PreviewPipeline, PreviewPipelineConfig, PreviewFrame};
 pub use services::{
     AudioService, GpuInfo, IAudioService, IExportService, IImageService, INodeService,
-    ITaskService, ITimelineService, IVideoService, ImageService, NodeService, SeekDirection,
+    ITaskService, ITimelineService, IVideoService, ImageService, NodeService,
     ServiceContainer, TaskService, TimelineService, VideoService,
 };

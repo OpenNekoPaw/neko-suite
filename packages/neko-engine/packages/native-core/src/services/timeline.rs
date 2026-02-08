@@ -41,25 +41,6 @@ pub trait ITimelineService: Send + Sync {
     /// Set loop region for playback
     async fn set_loop(&self, stream_id: &StreamId, region: Option<LoopRegion>) -> Result<()>;
 
-    /// Seek to nearest keyframe
-    async fn seek_keyframe(
-        &self,
-        stream_id: &StreamId,
-        time_seconds: f64,
-        direction: SeekDirection,
-    ) -> Result<f64>;
-
     /// Seek to exact time
     async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()>;
-}
-
-/// Direction for keyframe seeking
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SeekDirection {
-    /// Seek to previous keyframe
-    Backward,
-    /// Seek to next keyframe
-    Forward,
-    /// Seek to nearest keyframe
-    Nearest,
 }

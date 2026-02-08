@@ -300,6 +300,24 @@ impl IAudioService for AudioService {
         self.active_streams.stop(stream_id).await
     }
 
+    async fn pause(&self, stream_id: &StreamId) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.paused = true)
+            .await
+    }
+
+    async fn resume(&self, stream_id: &StreamId) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.paused = false)
+            .await
+    }
+
+    async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.speed = speed)
+            .await
+    }
+
     async fn generate_waveform(
         &self,
         resource_id: &ResourceId,

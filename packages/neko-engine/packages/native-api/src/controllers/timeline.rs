@@ -4,7 +4,7 @@ use crate::controllers::utils::base64_encode;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use neko_native_core::domain::{StreamConfig, Timeline};
-use neko_native_core::services::{ITimelineService, SeekDirection, TimelineService};
+use neko_native_core::services::{ITimelineService, TimelineService};
 use neko_types::{ActionResponse, LoopRegion, Resolution, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
@@ -47,7 +47,7 @@ struct StreamRequestOptions {
     start_time: f64,
 }
 
-/// Options for stream control actions (stop/pause/resume/seek/speed/loop/keyframe)
+/// Options for stream control actions (stop/pause/resume/seek/speed/loop)
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct StreamControlOptions {
@@ -64,8 +64,6 @@ struct StreamControlOptions {
     /// Whether to clear loop (for loop action)
     #[serde(default)]
     clear: bool,
-    /// Seek direction (for keyframe action): "forward", "backward", "nearest"
-    direction: Option<String>,
 }
 
 impl Controller for TimelineController {
@@ -279,40 +277,6 @@ impl Controller for TimelineController {
 
                 Ok(ActionResponse::ok("", response))
             }
-            "keyframe" => {
-                let opts: StreamControlOptions =
-                    serde_json::from_value(options).unwrap_or_default();
-
-                let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest(
-                        "stream_id required for timelines:keyframe".to_string(),
-                    )
-                })?;
-                let stream_id = StreamId::from_string(stream_id);
-
-                let time = opts.time.ok_or_else(|| {
-                    ApiError::InvalidRequest("time required for timelines:keyframe".to_string())
-                })?;
-
-                let direction = match opts.direction.as_deref() {
-                    Some("forward") => SeekDirection::Forward,
-                    Some("backward") => SeekDirection::Backward,
-                    _ => SeekDirection::Nearest,
-                };
-
-                let actual_time = self
-                    .timeline_service
-                    .seek_keyframe(&stream_id, time, direction)
-                    .await?;
-
-                let response = serde_json::json!({
-                    "streamId": stream_id.as_str(),
-                    "requestedTime": time,
-                    "actualTime": actual_time,
-                });
-
-                Ok(ActionResponse::ok("", response))
-            }
             _ => Err(ApiError::UnknownAction {
                 group: "timelines".to_string(),
                 action: action.to_string(),
@@ -334,7 +298,6 @@ impl Controller for TimelineController {
             "speed",
             "loop",
             "seek",
-            "keyframe",
         ]
     }
 }
@@ -420,7 +383,6 @@ mod tests {
         assert!(actions.contains(&"speed"));
         assert!(actions.contains(&"loop"));
         assert!(actions.contains(&"seek"));
-        assert!(actions.contains(&"keyframe"));
-        assert_eq!(actions.len(), 9);
+        assert_eq!(actions.len(), 8);
     }
 }

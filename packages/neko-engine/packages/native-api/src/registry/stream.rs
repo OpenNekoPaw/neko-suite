@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, RwLock};
+use tokio_util::sync::CancellationToken;
 
 /// Configuration for stream cleanup
 #[derive(Debug, Clone)]
@@ -48,6 +49,11 @@ pub struct StreamRegistry {
     session_streams: Arc<RwLock<HashMap<String, Vec<String>>>>,
     /// Resource to streams mapping
     resource_streams: Arc<RwLock<HashMap<String, Vec<String>>>>,
+    /// CancellationTokens for Service-layer decode loops
+    ///
+    /// When a stream is destroyed (including session cascade), the associated
+    /// CancellationToken is cancelled to stop the Service-layer decode/encode loop.
+    cancel_tokens: Arc<RwLock<HashMap<String, CancellationToken>>>,
     /// Cleanup configuration
     cleanup_config: StreamCleanupConfig,
 }
@@ -64,6 +70,7 @@ impl StreamRegistry {
             streams: Arc::new(RwLock::new(HashMap::new())),
             session_streams: Arc::new(RwLock::new(HashMap::new())),
             resource_streams: Arc::new(RwLock::new(HashMap::new())),
+            cancel_tokens: Arc::new(RwLock::new(HashMap::new())),
             cleanup_config,
         }
     }
@@ -103,6 +110,24 @@ impl StreamRegistry {
 
         tracing::debug!("Created stream {} for session {}", stream_id.as_str(), session_id);
         (stream_id, rx)
+    }
+
+    /// Associate a CancellationToken with a stream
+    ///
+    /// When the stream is destroyed (including session cascade), the token
+    /// will be cancelled to stop the Service-layer decode/encode loop.
+    pub async fn set_cancel_token(&self, stream_id: &StreamId, token: CancellationToken) {
+        let mut tokens = self.cancel_tokens.write().await;
+        tokens.insert(stream_id.as_str().to_string(), token);
+    }
+
+    /// Get the broadcast sender for a stream (for Service-layer frame pushing)
+    ///
+    /// Returns a clone of the broadcast::Sender so the Service decode loop
+    /// can push frames directly into the Registry's channel.
+    pub async fn get_sender(&self, stream_id: &StreamId) -> Option<broadcast::Sender<FrameData>> {
+        let streams = self.streams.read().await;
+        streams.get(stream_id.as_str()).map(|e| e.tx.clone())
     }
 
     /// Get stream state by ID
@@ -160,7 +185,19 @@ impl StreamRegistry {
     }
 
     /// Destroy a stream
+    ///
+    /// Cancels the associated CancellationToken (stopping the Service-layer
+    /// decode loop), then removes the stream entry and cleans up all indices.
     pub async fn destroy(&self, stream_id: &StreamId) -> Result<(), StreamStateError> {
+        // 1. Cancel the Service-layer decode loop (if registered)
+        {
+            let mut tokens = self.cancel_tokens.write().await;
+            if let Some(token) = tokens.remove(stream_id.as_str()) {
+                token.cancel();
+            }
+        }
+
+        // 2. Remove stream entry and clean up indices
         let mut streams = self.streams.write().await;
         let mut session_map = self.session_streams.write().await;
         let mut resource_map = self.resource_streams.write().await;
@@ -560,5 +597,76 @@ mod tests {
             StreamStateError::NotFound(_) => {} // expected
             other => panic!("Expected NotFound, got: {:?}", other),
         }
+    }
+
+    #[tokio::test]
+    async fn test_destroy_cancels_token() {
+        let registry = StreamRegistry::new();
+        let (stream_id, _rx) = registry
+            .create_stream("session1", "vid_abc", test_config())
+            .await;
+
+        // Register a CancellationToken
+        let token = CancellationToken::new();
+        let token_clone = token.clone();
+        registry.set_cancel_token(&stream_id, token).await;
+
+        // Activate then destroy
+        registry.activate(&stream_id).await.unwrap();
+        registry.destroy(&stream_id).await.unwrap();
+
+        // Token should be cancelled
+        assert!(token_clone.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn test_destroy_session_cancels_tokens() {
+        let registry = StreamRegistry::new();
+        let (id1, _) = registry
+            .create_stream("session1", "vid_1", test_config())
+            .await;
+        let (id2, _) = registry
+            .create_stream("session1", "vid_2", test_config())
+            .await;
+
+        let token1 = CancellationToken::new();
+        let token2 = CancellationToken::new();
+        let t1_clone = token1.clone();
+        let t2_clone = token2.clone();
+        registry.set_cancel_token(&id1, token1).await;
+        registry.set_cancel_token(&id2, token2).await;
+
+        registry.activate(&id1).await.unwrap();
+        registry.activate(&id2).await.unwrap();
+
+        // Destroy session should cancel both tokens
+        registry.destroy_session("session1").await;
+
+        assert!(t1_clone.is_cancelled());
+        assert!(t2_clone.is_cancelled());
+        assert_eq!(registry.count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_sender() {
+        let registry = StreamRegistry::new();
+        let (stream_id, mut rx) = registry
+            .create_stream("session1", "vid_abc", test_config())
+            .await;
+
+        registry.activate(&stream_id).await.unwrap();
+
+        // Get sender and push a frame through it
+        let tx = registry.get_sender(&stream_id).await.unwrap();
+        let frame = FrameData::new(
+            vec![42u8; 100],
+            1920,
+            1080,
+            neko_types::FrameFormat::Rgba,
+        );
+        tx.send(frame).unwrap();
+
+        let received = rx.try_recv().unwrap();
+        assert_eq!(received.data[0], 42);
     }
 }

@@ -17,6 +17,7 @@ neko-native-core = { path = "../native-core" }
 
 # Async runtime
 tokio.workspace = true
+tokio-util = { version = "0.7", features = ["rt"] }
 
 # Serialization
 serde.workspace = true
@@ -34,3 +35,4 @@ uuid.workspace = true
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
+tokio-util = { version = "0.7", features = ["rt"] }

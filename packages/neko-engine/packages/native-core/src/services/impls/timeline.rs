@@ -17,7 +17,7 @@ use crate::keyframe_cache::IdrScanner;
 use crate::services::impls::stream_loop::{
     pack_h264_frame, ActiveStreams, create_stream_channels, FramePacer, StreamLoopHandle,
 };
-use crate::services::{ITaskService, ITimelineService, SeekDirection};
+use crate::services::{ITaskService, ITimelineService};
 use neko_types::{BlendMode, FrameFormat, LoopRegion, StreamId};
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -564,22 +564,6 @@ impl ITimelineService for TimelineService {
             .await
     }
 
-    async fn seek_keyframe(
-        &self,
-        stream_id: &StreamId,
-        time_seconds: f64,
-        direction: SeekDirection,
-    ) -> Result<f64> {
-        // For timeline, seek_keyframe finds the nearest keyframe across all visible sources
-        // For simplicity, we just seek to the requested time (timeline compositing doesn't
-        // depend on keyframes the same way single-source playback does)
-        self.active_streams
-            .update_state(stream_id, |s| s.seek_to = Some(time_seconds))
-            .await?;
-
-        Ok(time_seconds)
-    }
-
     async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()> {
         self.active_streams
             .update_state(stream_id, |s| s.seek_to = Some(time_seconds))
@@ -677,16 +661,6 @@ mod tests {
         let stream_id = StreamId::new("test");
         let region = LoopRegion::new(0.0, 5.0);
         let result = service.set_loop(&stream_id, Some(region)).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_timeline_service_seek_keyframe_not_found() {
-        let service = create_test_service();
-        let stream_id = StreamId::new("test");
-        let result = service
-            .seek_keyframe(&stream_id, 1.0, SeekDirection::Nearest)
-            .await;
         assert!(result.is_err());
     }
 

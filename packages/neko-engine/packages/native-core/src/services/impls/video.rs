@@ -18,7 +18,7 @@ use crate::services::impls::stream_loop::{
     StreamLoopHandle,
 };
 use crate::services::{ITaskService, IVideoService};
-use neko_types::{FrameFormat, MediaInfo, ResourceId, StreamId, WaveformData};
+use neko_types::{FrameFormat, LoopRegion, MediaInfo, ResourceId, StreamId, WaveformData};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -558,6 +558,36 @@ impl IVideoService for VideoService {
 
     async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {
         self.active_streams.stop(stream_id).await
+    }
+
+    async fn pause(&self, stream_id: &StreamId) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.paused = true)
+            .await
+    }
+
+    async fn resume(&self, stream_id: &StreamId) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.paused = false)
+            .await
+    }
+
+    async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.speed = speed)
+            .await
+    }
+
+    async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.seek_to = Some(time_seconds))
+            .await
+    }
+
+    async fn set_loop(&self, stream_id: &StreamId, region: Option<LoopRegion>) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.loop_region = region)
+            .await
     }
 
     async fn transcode(

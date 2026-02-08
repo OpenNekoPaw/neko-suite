@@ -4,7 +4,7 @@ use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
 use neko_native_core::services::{AudioService, IAudioService};
-use neko_types::{ActionResponse, ResourceId};
+use neko_types::{ActionResponse, ResourceId, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -81,6 +81,16 @@ struct StreamRequestOptions {
     source: Option<String>,
     /// Session ID for the stream
     session_id: Option<String>,
+}
+
+/// Options for stream control actions (stop/pause/resume/speed)
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct AudioStreamControlOptions {
+    /// Stream ID (required for all control actions)
+    stream_id: Option<String>,
+    /// Playback speed multiplier (for speed action)
+    speed: Option<f64>,
 }
 
 impl Controller for AudioController {
@@ -185,6 +195,55 @@ impl Controller for AudioController {
 
                 Ok(ActionResponse::ok("", response))
             }
+            "stop" | "pause" | "resume" | "speed" => {
+                let opts: AudioStreamControlOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let stream_id_str = opts.stream_id.ok_or_else(|| {
+                    ApiError::InvalidRequest(format!(
+                        "stream_id required for audios:{}",
+                        action
+                    ))
+                })?;
+                let stream_id = StreamId::from_string(stream_id_str);
+
+                match action {
+                    "stop" => {
+                        self.audio_service.stop_stream(&stream_id).await?;
+                        let response = serde_json::json!({
+                            "streamId": stream_id.as_str(),
+                            "status": "stopped",
+                        });
+                        Ok(ActionResponse::ok("", response))
+                    }
+                    "pause" => {
+                        self.audio_service.pause(&stream_id).await?;
+                        let response = serde_json::json!({
+                            "streamId": stream_id.as_str(),
+                            "status": "paused",
+                        });
+                        Ok(ActionResponse::ok("", response))
+                    }
+                    "resume" => {
+                        self.audio_service.resume(&stream_id).await?;
+                        let response = serde_json::json!({
+                            "streamId": stream_id.as_str(),
+                            "status": "active",
+                        });
+                        Ok(ActionResponse::ok("", response))
+                    }
+                    "speed" => {
+                        let speed = opts.speed.unwrap_or(1.0);
+                        self.audio_service.set_speed(&stream_id, speed).await?;
+                        let response = serde_json::json!({
+                            "streamId": stream_id.as_str(),
+                            "speed": speed,
+                        });
+                        Ok(ActionResponse::ok("", response))
+                    }
+                    _ => unreachable!(),
+                }
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "audios".to_string(),
                 action: action.to_string(),
@@ -197,7 +256,7 @@ impl Controller for AudioController {
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["probe", "extract", "stream", "waveform"]
+        &["probe", "extract", "stream", "waveform", "stop", "pause", "resume", "speed"]
     }
 }
 
@@ -279,6 +338,10 @@ mod tests {
         assert!(actions.contains(&"extract"));
         assert!(actions.contains(&"stream"));
         assert!(actions.contains(&"waveform"));
-        assert_eq!(actions.len(), 4);
+        assert!(actions.contains(&"stop"));
+        assert!(actions.contains(&"pause"));
+        assert!(actions.contains(&"resume"));
+        assert!(actions.contains(&"speed"));
+        assert_eq!(actions.len(), 8);
     }
 }

@@ -10,7 +10,8 @@ use super::super::domain::FrameData;
 
 /// Audio service interface
 ///
-/// Handles audio-related operations: probing, extraction, streaming, and waveform generation.
+/// Handles audio-related operations: probing, extraction, streaming,
+/// playback control, and waveform generation.
 #[allow(async_fn_in_trait)]
 pub trait IAudioService: Send + Sync {
     /// Probe audio file metadata
@@ -33,6 +34,15 @@ pub trait IAudioService: Send + Sync {
 
     /// Stop an audio stream
     async fn stop_stream(&self, stream_id: &StreamId) -> Result<()>;
+
+    /// Pause audio stream playback
+    async fn pause(&self, stream_id: &StreamId) -> Result<()>;
+
+    /// Resume audio stream playback
+    async fn resume(&self, stream_id: &StreamId) -> Result<()>;
+
+    /// Set audio stream playback speed
+    async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()>;
 
     /// Generate waveform visualization data
     async fn generate_waveform(
