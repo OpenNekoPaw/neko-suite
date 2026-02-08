@@ -26,16 +26,50 @@ export type GpuEffectType =
 	| 'custom';
 
 /**
- * Color correction parameters
+ * Color correction parameters — aligned with engine's JsEffectParams (13 fields).
+ *
+ * All values use engine-native ranges (NOT UI ranges).
+ * Use mapBasicColorToEngine() to convert from BasicColorAdjustment (UI ranges).
+ *
+ * @see JsEffectParams in native-napi/index.d.ts
+ * @see EffectParams in native-core/src/gpu/processor.rs
  */
 export interface ColorCorrectionParams {
 	type: 'colorCorrection';
-	brightness?: number; // -1.0 to 1.0
-	contrast?: number; // 0.0 to 2.0 (1.0 = no change)
-	saturation?: number; // 0.0 to 2.0 (1.0 = no change)
-	hue?: number; // -180 to 180 degrees
-	gamma?: number; // 0.1 to 3.0 (1.0 = no change)
-	exposure?: number; // -2.0 to 2.0 (0.0 = no change)
+
+	// --- Basic adjustments ---
+	/** Brightness (-1.0 to 1.0, 0 = no change) */
+	brightness?: number;
+	/** Contrast (0.0 to 2.0, 1.0 = no change) */
+	contrast?: number;
+	/** Saturation (0.0 to 2.0, 1.0 = no change) */
+	saturation?: number;
+	/** Exposure in stops (-3.0 to 3.0, 0 = no change) */
+	exposure?: number;
+
+	// --- Tone adjustments ---
+	/** Gamma (0.1 to 3.0, 1.0 = no change) */
+	gamma?: number;
+	/** Hue shift in degrees (-180 to 180, 0 = no change) */
+	hueShift?: number;
+	/** Vibrance (-1.0 to 1.0, 0 = no change) */
+	vibrance?: number;
+
+	// --- White balance ---
+	/** Temperature (-100 to 100, 0 = no change) */
+	temperature?: number;
+	/** Tint (-100 to 100, 0 = no change) */
+	tint?: number;
+
+	// --- Highlights / Shadows ---
+	/** Highlights (-1.0 to 1.0, 0 = no change) */
+	highlights?: number;
+	/** Shadows (-1.0 to 1.0, 0 = no change) */
+	shadows?: number;
+	/** Whites (-1.0 to 1.0, 0 = no change) */
+	whites?: number;
+	/** Blacks (-1.0 to 1.0, 0 = no change) */
+	blacks?: number;
 }
 
 /**
@@ -268,7 +302,7 @@ export function isBatchEffectProcessor(
 // =============================================================================
 
 /**
- * Create default color correction params
+ * Create default color correction params (engine-native ranges)
  */
 export function createColorCorrection(
 	overrides?: Partial<Omit<ColorCorrectionParams, 'type'>>
@@ -278,9 +312,16 @@ export function createColorCorrection(
 		brightness: 0,
 		contrast: 1,
 		saturation: 1,
-		hue: 0,
-		gamma: 1,
 		exposure: 0,
+		gamma: 1,
+		hueShift: 0,
+		vibrance: 0,
+		temperature: 0,
+		tint: 0,
+		highlights: 0,
+		shadows: 0,
+		whites: 0,
+		blacks: 0,
 		...overrides,
 	};
 }

@@ -13,3 +13,9 @@ export {
 	getComputedTransform,
 	hasKeyframes,
 } from './animation';
+
+// Color correction mapping (UI ↔ Engine)
+export {
+	mapBasicColorToEngine,
+	mapEngineColorToBasic,
+} from './colorCorrectionMapping';
