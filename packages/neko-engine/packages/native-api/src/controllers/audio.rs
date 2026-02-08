@@ -65,13 +65,22 @@ struct WaveformRequestOptions {
     source: Option<String>,
 }
 
-/// Options for audios:extract
+/// Options for audios:transcode
 #[derive(Debug, Deserialize, Default)]
-struct ExtractRequestOptions {
+#[serde(rename_all = "camelCase")]
+struct TranscodeRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
     /// Output file path
     output: Option<String>,
+    /// Force codec (overrides output extension inference)
+    codec: Option<String>,
+    /// Target bitrate in bps
+    bitrate: Option<u64>,
+    /// Target sample rate
+    sample_rate: Option<u32>,
+    /// Target channels
+    channels: Option<u16>,
 }
 
 /// Options for audios:stream
@@ -126,8 +135,8 @@ impl Controller for AudioController {
 
                 Ok(ActionResponse::ok("", response))
             }
-            "extract" => {
-                let opts: ExtractRequestOptions =
+            "transcode" => {
+                let opts: TranscodeRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
                 let res_id = self
@@ -136,12 +145,32 @@ impl Controller for AudioController {
 
                 let output_path = opts.output.ok_or_else(|| {
                     ApiError::InvalidRequest(
-                        "output path required for audios:extract".to_string(),
+                        "output path required for audios:transcode".to_string(),
                     )
                 })?;
 
+                // Build AudioTranscodeOptions from request
+                use neko_native_core::domain::{AudioOutputFormat, AudioTranscodeOptions};
+
+                let format = opts.codec.as_deref().map(|c| match c.to_lowercase().as_str() {
+                    "aac" | "m4a" => AudioOutputFormat::Aac,
+                    "mp3" => AudioOutputFormat::Mp3,
+                    "opus" | "ogg" => AudioOutputFormat::Opus,
+                    "flac" => AudioOutputFormat::Flac,
+                    "pcm" | "wav" => AudioOutputFormat::Pcm,
+                    _ => AudioOutputFormat::Aac,
+                });
+
+                let transcode_opts = AudioTranscodeOptions {
+                    format,
+                    bitrate: opts.bitrate,
+                    sample_rate: opts.sample_rate,
+                    channels: opts.channels,
+                    ..Default::default()
+                };
+
                 self.audio_service
-                    .extract(&res_id, Path::new(&output_path), None)
+                    .transcode(&res_id, Path::new(&output_path), transcode_opts)
                     .await?;
 
                 let response = serde_json::json!({
@@ -185,7 +214,7 @@ impl Controller for AudioController {
 
                 let waveform = self
                     .audio_service
-                    .generate_waveform(&res_id, None)
+                    .generate_waveform(&res_id)
                     .await?;
 
                 let response = serde_json::json!({
@@ -256,7 +285,7 @@ impl Controller for AudioController {
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["probe", "extract", "stream", "waveform", "stop", "pause", "resume", "speed"]
+        &["probe", "transcode", "stream", "waveform", "stop", "pause", "resume", "speed"]
     }
 }
 
@@ -306,23 +335,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_audio_controller_extract_missing_source() {
+    async fn test_audio_controller_transcode_missing_source() {
         let controller = create_test_controller();
 
         let result = controller
-            .handle("extract", None, Value::Null, None)
+            .handle("transcode", None, Value::Null, None)
             .await;
 
         assert!(result.is_err());
     }
 
     #[tokio::test]
-    async fn test_audio_controller_extract_missing_output() {
+    async fn test_audio_controller_transcode_missing_output() {
         let controller = create_test_controller();
 
         let opts = serde_json::json!({ "source": "/some/file.mp3" });
         let result = controller
-            .handle("extract", None, opts, None)
+            .handle("transcode", None, opts, None)
             .await;
 
         // Should fail because output path is missing
@@ -335,7 +364,7 @@ mod tests {
         let actions = controller.actions();
 
         assert!(actions.contains(&"probe"));
-        assert!(actions.contains(&"extract"));
+        assert!(actions.contains(&"transcode"));
         assert!(actions.contains(&"stream"));
         assert!(actions.contains(&"waveform"));
         assert!(actions.contains(&"stop"));

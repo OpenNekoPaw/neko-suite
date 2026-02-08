@@ -1,6 +1,6 @@
 //! Audio service trait
 
-use crate::domain::TaskHandle;
+use crate::domain::AudioTranscodeOptions;
 use crate::error::Result;
 use neko_types::{MediaInfo, ResourceId, StreamId, WaveformData};
 use std::path::Path;
@@ -10,19 +10,19 @@ use super::super::domain::FrameData;
 
 /// Audio service interface
 ///
-/// Handles audio-related operations: probing, extraction, streaming,
+/// Handles audio-related operations: probing, transcoding, streaming,
 /// playback control, and waveform generation.
 #[allow(async_fn_in_trait)]
 pub trait IAudioService: Send + Sync {
     /// Probe audio file metadata
     async fn probe(&self, path: &Path) -> Result<MediaInfo>;
 
-    /// Extract audio from media file
-    async fn extract(
+    /// Transcode audio file to a different format/codec/bitrate
+    async fn transcode(
         &self,
         resource_id: &ResourceId,
         output_path: &Path,
-        task_handle: Option<TaskHandle>,
+        options: AudioTranscodeOptions,
     ) -> Result<()>;
 
     /// Start an audio stream
@@ -48,6 +48,5 @@ pub trait IAudioService: Send + Sync {
     async fn generate_waveform(
         &self,
         resource_id: &ResourceId,
-        task_handle: Option<TaskHandle>,
     ) -> Result<WaveformData>;
 }

@@ -194,26 +194,29 @@ impl Default for CompositeOptions {
     }
 }
 
-/// Options for audio extraction (audios:extract)
+/// Options for audio transcoding (audios:transcode)
 #[derive(Debug, Clone)]
-pub struct AudioExtractOptions {
+pub struct AudioTranscodeOptions {
     /// Time range (None = full duration)
     pub time_range: Option<(f64, f64)>,
     /// Target sample rate (None = original)
     pub sample_rate: Option<u32>,
     /// Target channels (None = original)
     pub channels: Option<u16>,
-    /// Output format
+    /// Output format / codec (None = infer from output file extension)
     pub format: Option<AudioOutputFormat>,
+    /// Target bitrate in bps (None = codec default)
+    pub bitrate: Option<u64>,
 }
 
-impl Default for AudioExtractOptions {
+impl Default for AudioTranscodeOptions {
     fn default() -> Self {
         Self {
             time_range: None,
             sample_rate: None,
             channels: None,
             format: None,
+            bitrate: None,
         }
     }
 }

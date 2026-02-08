@@ -1,12 +1,12 @@
 //! AudioService implementation
 //!
-//! Provides audio-related operations: probing, extraction, streaming, and waveform generation.
+//! Provides audio-related operations: probing, transcoding, streaming, and waveform generation.
 
 use crate::audio::{
     AudioCodec as InternalAudioCodec, AudioDecoder, AudioEncoder, AudioEncoderConfig,
     FfmpegAudioDecoder, FfmpegAudioEncoder, SampleFormat,
 };
-use crate::domain::{FrameData, TaskHandle};
+use crate::domain::{AudioTranscodeOptions, FrameData};
 use crate::error::{Error, Result};
 use crate::gpu::GpuContext;
 use crate::media_service::probe_media_info;
@@ -25,7 +25,7 @@ use tokio::sync::broadcast;
 /// AudioService implementation
 ///
 /// Wraps media_service probe for audio file metadata.
-/// Supports audio extraction, PCM streaming, and waveform generation.
+/// Supports audio transcoding, PCM streaming, and waveform generation.
 pub struct AudioService {
     /// GPU context (for future waveform GPU acceleration)
     #[allow(dead_code)]
@@ -106,11 +106,11 @@ impl IAudioService for AudioService {
         Ok(Self::convert_media_info(info))
     }
 
-    async fn extract(
+    async fn transcode(
         &self,
         resource_id: &ResourceId,
         output_path: &Path,
-        _task_handle: Option<TaskHandle>,
+        options: AudioTranscodeOptions,
     ) -> Result<()> {
         let input_path = resource_id.as_str().to_string();
         let output_path = output_path.to_path_buf();
@@ -120,27 +120,39 @@ impl IAudioService for AudioService {
             let mut decoder = FfmpegAudioDecoder::new().with_output_format(SampleFormat::F32);
             let audio_info = decoder.open(&input_path)?;
 
-            // Determine codec from output extension
-            let codec = match output_path
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|e| e.to_lowercase())
-                .as_deref()
-            {
-                Some("aac" | "m4a") => InternalAudioCodec::Aac,
-                Some("mp3") => InternalAudioCodec::Mp3,
-                Some("flac") => InternalAudioCodec::Flac,
-                Some("opus" | "ogg") => InternalAudioCodec::Opus,
-                Some("wav" | "pcm") => InternalAudioCodec::Pcm,
-                _ => InternalAudioCodec::Aac,
+            // Determine codec: options.format > output extension > default
+            let codec = if let Some(fmt) = options.format {
+                match fmt {
+                    crate::domain::AudioOutputFormat::Aac => InternalAudioCodec::Aac,
+                    crate::domain::AudioOutputFormat::Mp3 => InternalAudioCodec::Mp3,
+                    crate::domain::AudioOutputFormat::Opus => InternalAudioCodec::Opus,
+                    crate::domain::AudioOutputFormat::Flac => InternalAudioCodec::Flac,
+                    crate::domain::AudioOutputFormat::Pcm => InternalAudioCodec::Pcm,
+                }
+            } else {
+                match output_path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_lowercase())
+                    .as_deref()
+                {
+                    Some("aac" | "m4a") => InternalAudioCodec::Aac,
+                    Some("mp3") => InternalAudioCodec::Mp3,
+                    Some("flac") => InternalAudioCodec::Flac,
+                    Some("opus" | "ogg") => InternalAudioCodec::Opus,
+                    Some("wav" | "pcm") => InternalAudioCodec::Pcm,
+                    _ => InternalAudioCodec::Aac,
+                }
             };
 
-            // Configure encoder
-            let config = AudioEncoderConfig::new(
-                audio_info.sample_rate,
-                audio_info.channels,
-                codec,
-            );
+            // Configure encoder with options
+            let sample_rate = options.sample_rate.unwrap_or(audio_info.sample_rate);
+            let channels = options.channels.unwrap_or(audio_info.channels as u16);
+
+            let mut config = AudioEncoderConfig::new(sample_rate, channels, codec);
+            if let Some(bitrate) = options.bitrate {
+                config = config.with_bitrate(bitrate);
+            }
 
             let mut encoder = FfmpegAudioEncoder::new();
             encoder.open(&config)?;
@@ -151,6 +163,16 @@ impl IAudioService for AudioService {
 
             // Decode → encode → write loop
             while let Some(frame) = decoder.decode_next()? {
+                // Skip frames outside time range if specified
+                if let Some((start, end)) = options.time_range {
+                    if frame.timestamp < start {
+                        continue;
+                    }
+                    if frame.timestamp > end {
+                        break;
+                    }
+                }
+
                 let packets = encoder.encode_frame(&frame.data, frame.samples)?;
                 for packet in packets {
                     output_file
@@ -174,7 +196,7 @@ impl IAudioService for AudioService {
             Ok(())
         })
         .await
-        .map_err(|e| Error::Other(format!("Audio extraction task failed: {}", e)))?
+        .map_err(|e| Error::Other(format!("Audio transcode task failed: {}", e)))?
     }
 
     async fn start_stream(
@@ -321,7 +343,6 @@ impl IAudioService for AudioService {
     async fn generate_waveform(
         &self,
         resource_id: &ResourceId,
-        _task_handle: Option<TaskHandle>,
     ) -> Result<WaveformData> {
         let path = resource_id.as_str().to_string();
 
@@ -357,11 +378,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_audio_service_extract_nonexistent() {
+    async fn test_audio_service_transcode_nonexistent() {
         let service = create_test_service();
         let resource_id = ResourceId::from_string("/nonexistent/file.mp3".to_string());
         let result = service
-            .extract(&resource_id, Path::new("/tmp/out.aac"), None)
+            .transcode(
+                &resource_id,
+                Path::new("/tmp/out.aac"),
+                AudioTranscodeOptions::default(),
+            )
             .await;
         assert!(result.is_err());
     }
