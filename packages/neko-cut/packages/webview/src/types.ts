@@ -1,20 +1,35 @@
 // =============================================================================
 // Unified Types - Re-export from shared package
 // 统一类型 - 从 shared 包重新导出
+//
+// IMPORTANT: TimelineElement and TimelineTrack are re-exported as extended
+// editor types that include UI-only fields (animTransform, masks, solo, etc.).
+// See types/editor-types.ts for details.
 // =============================================================================
+
+// Re-export editor-extended element/track types (engine + UI fields)
+export type {
+  EditorElement as TimelineElement,
+  EditorTrack as TimelineTrack,
+  EditorElement,
+  EditorMediaElement,
+  EditorAudioElement,
+  EditorTextElement,
+  EditorShapeElement,
+  EditorSubtitleElement,
+  EditorTrack,
+} from './types/editor-types';
+export { toEngineElement, toEngineTrack } from './types/editor-types';
 
 // Re-export core types from shared package (Single Source of Truth)
 export type {
   // Track types
   TrackType,
-  // Timeline elements
-  TimelineElement,
+  // Timeline element subtypes (engine-aligned)
   MediaElement,
   TextElement,
   AudioElement,
   ShapeElement,
-  // Tracks
-  TimelineTrack,
   // Project
   ProjectData,
   ProjectDefaults,
@@ -172,8 +187,6 @@ export {
   getTransitionIcon,
   isDirectionalTransition,
   getOppositeTransition,
-  is3DTransition,
-  requiresColorParam,
   getTransitionCategory,
 } from './types/transition';
 

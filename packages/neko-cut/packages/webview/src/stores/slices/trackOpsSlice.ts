@@ -44,11 +44,13 @@ export const createTrackOpsSlice: StateCreator<
 
     const trackId = generateId();
     const defaultNames: Record<TrackType, string> = {
+      video: 'Video Track',
       media: 'Media Track',
       text: 'Text Track',
       audio: 'Audio Track',
       subtitle: 'Subtitle Track',
       shape: 'Shape Track',
+      effect: 'Effect Track',
     };
     const trackName = name || defaultNames[type] || 'Track';
     const newTrack: TimelineTrack = {
@@ -57,6 +59,9 @@ export const createTrackOpsSlice: StateCreator<
       type,
       elements: [],
       muted: false,
+      locked: false,
+      hidden: false,
+      isMain: false,
     };
 
     set({

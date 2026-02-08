@@ -4,20 +4,47 @@
  *
  * Core types are re-exported from @neko/shared for Single Source of Truth.
  * Webview-specific extensions (i18n keys, presets, factory functions) are defined locally.
+ *
+ * IMPORTANT: TimelineElement and TimelineTrack are re-exported as EditorElement/EditorTrack
+ * which extend the engine types with UI-only fields (animTransform, masks, solo, etc.).
+ * This allows the webview Store to store UI state on elements/tracks without
+ * polluting the engine-aligned types in @neko/shared.
  */
 
-// Re-export core types from shared
+// Re-export core types from shared (engine-aligned)
 export type {
-  TimelineElement,
+  // Re-export engine element subtypes directly
   MediaElement,
   TextElement,
   AudioElement,
   ShapeElement,
   SubtitleElement,
+  // Project
   ProjectData,
-  TimelineTrack,
+  // Track type enum
   TrackType,
 } from '@neko/shared';
+
+// Re-export editor-extended types as the "default" element/track types in webview
+// This means all webview code that imports TimelineElement/TimelineTrack gets the
+// extended versions with UI fields, without changing any import statements.
+export type {
+  EditorElement as TimelineElement,
+  EditorTrack as TimelineTrack,
+} from './editor-types';
+
+// Editor-extended types (also available under their own names)
+export {
+  type EditorElement,
+  type EditorMediaElement,
+  type EditorAudioElement,
+  type EditorTextElement,
+  type EditorShapeElement,
+  type EditorSubtitleElement,
+  type EditorTrack,
+  toEngineElement,
+  toEngineTrack,
+} from './editor-types';
 
 export * from './animation';
 export * from './transition';
