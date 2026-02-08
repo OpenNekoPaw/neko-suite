@@ -1,248 +1,39 @@
 /**
- * Animation Calculation Engine
- * 动画计算引擎 - 处理关键帧插值和缓动函数
+ * Animation Utilities (Webview)
+ * 动画工具函数 - Webview 专用扩展
+ *
+ * Core animation functions (easing, interpolation, computed transform) are
+ * imported from @neko/shared (Single Source of Truth).
+ * This file provides webview-specific utilities (keyframe CRUD, element
+ * transform at global time, math helpers).
  */
 
 import type {
   AnimationKeyframe,
   AnimatableProperty,
-  EasingType,
   ElementTransform,
   ComputedTransform,
 } from '../types/animation';
-import { createDefaultElementTransform } from '../types/animation';
 
 // =============================================================================
-// Easing Functions
+// Re-export core animation functions from @neko/shared
 // =============================================================================
 
-/**
- * Easing function implementations
- * 缓动函数实现
- */
-export const easingFunctions: Record<EasingType, (t: number) => number> = {
-  'linear': (t) => t,
-
-  'ease-in': (t) => t * t,
-  'ease-out': (t) => t * (2 - t),
-  'ease-in-out': (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
-
-  'ease-in-quad': (t) => t * t,
-  'ease-out-quad': (t) => t * (2 - t),
-  'ease-in-out-quad': (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
-
-  'ease-in-cubic': (t) => t * t * t,
-  'ease-out-cubic': (t) => {
-    const t1 = t - 1;
-    return t1 * t1 * t1 + 1;
-  },
-  'ease-in-out-cubic': (t) => {
-    return t < 0.5
-      ? 4 * t * t * t
-      : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
-  },
-
-  'ease-in-back': (t) => t * t * (2.70158 * t - 1.70158),
-  'ease-out-back': (t) => {
-    const t1 = t - 1;
-    return 1 + t1 * t1 * (2.70158 * t1 + 1.70158);
-  },
-  'ease-in-out-back': (t) => {
-    const c = 1.70158 * 1.525;
-    return t < 0.5
-      ? (Math.pow(2 * t, 2) * ((c + 1) * 2 * t - c)) / 2
-      : (Math.pow(2 * t - 2, 2) * ((c + 1) * (t * 2 - 2) + c) + 2) / 2;
-  },
-
-  // Bezier is handled separately
-  'bezier': (t) => t,
-};
-
-/**
- * Apply easing to a progress value
- * 对进度值应用缓动
- */
-export function applyEasing(progress: number, easing: EasingType): number {
-  const fn = easingFunctions[easing];
-  return fn ? fn(progress) : progress;
-}
+export {
+  easingFunctions,
+  applyEasing,
+  cubicBezier,
+  getAnimatedValue,
+  getComputedTransform,
+  hasKeyframes,
+} from '@neko/shared';
 
 // =============================================================================
-// Bezier Interpolation
+// Element Transform at Global Time (Webview-specific)
 // =============================================================================
 
-/**
- * Cubic bezier interpolation
- * 三次贝塞尔插值
- */
-export function cubicBezier(
-  t: number,
-  p0: number,
-  p1: number,
-  p2: number,
-  p3: number
-): number {
-  const u = 1 - t;
-  return u * u * u * p0 +
-         3 * u * u * t * p1 +
-         3 * u * t * t * p2 +
-         t * t * t * p3;
-}
-
-// =============================================================================
-// Keyframe Value Calculation
-// =============================================================================
-
-/**
- * Binary search to find the pair of keyframes surrounding a given time
- * 二分查找包围给定时间的关键帧对
- *
- * @param sortedKeyframes - Pre-sorted array of keyframes
- * @param time - Time to search for
- * @returns Index of the keyframe before the given time, or -1 if before all keyframes
- */
-function findKeyframeIndex(sortedKeyframes: AnimationKeyframe[], time: number): number {
-  if (time <= sortedKeyframes[0].time) return -1;
-  if (time >= sortedKeyframes[sortedKeyframes.length - 1].time) return sortedKeyframes.length - 1;
-
-  let left = 0;
-  let right = sortedKeyframes.length - 1;
-
-  while (left <= right) {
-    const mid = Math.floor((left + right) / 2);
-
-    if (sortedKeyframes[mid].time <= time &&
-        (mid === sortedKeyframes.length - 1 || sortedKeyframes[mid + 1].time > time)) {
-      return mid;
-    }
-
-    if (sortedKeyframes[mid].time > time) {
-      right = mid - 1;
-    } else {
-      left = mid + 1;
-    }
-  }
-
-  return left - 1;
-}
-
-/**
- * Check if keyframes array is already sorted
- * 检查关键帧数组是否已排序
- */
-function isSorted(keyframes: AnimationKeyframe[]): boolean {
-  for (let i = 0; i < keyframes.length - 1; i++) {
-    if (keyframes[i].time > keyframes[i + 1].time) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/**
- * Get the animated value of a property at a specific time
- * 获取属性在指定时间的动画值
- *
- * @param property - The animatable property
- * @param localTime - Time relative to element start (in seconds)
- * @returns The interpolated value at the given time
- */
-export function getAnimatedValue(
-  property: AnimatableProperty,
-  localTime: number
-): number {
-  // Guard against undefined/null property
-  if (!property) {
-    return 0;
-  }
-
-  const { baseValue, keyframes } = property;
-
-  // No keyframes - return base value
-  if (!keyframes || keyframes.length === 0) {
-    return baseValue;
-  }
-
-  // Only sort if needed (preserve original array if possible)
-  const sorted = isSorted(keyframes)
-    ? keyframes
-    : [...keyframes].sort((a, b) => a.time - b.time);
-
-  // Before first keyframe
-  if (localTime <= sorted[0].time) {
-    return sorted[0].value;
-  }
-
-  // After last keyframe
-  if (localTime >= sorted[sorted.length - 1].time) {
-    return sorted[sorted.length - 1].value;
-  }
-
-  // Binary search for surrounding keyframes (O(log n) instead of O(n))
-  const prevIndex = findKeyframeIndex(sorted, localTime);
-  const prevFrame = sorted[prevIndex];
-  const nextFrame = sorted[prevIndex + 1];
-
-  // Calculate interpolation progress
-  const duration = nextFrame.time - prevFrame.time;
-  const progress = duration > 0 ? (localTime - prevFrame.time) / duration : 0;
-
-  // Apply bezier or standard easing
-  if (prevFrame.easing === 'bezier' && prevFrame.bezierOut && nextFrame.bezierIn) {
-    return cubicBezier(
-      progress,
-      prevFrame.value,
-      prevFrame.value + prevFrame.bezierOut.y,
-      nextFrame.value + nextFrame.bezierIn.y,
-      nextFrame.value
-    );
-  } else {
-    const easedProgress = applyEasing(progress, prevFrame.easing);
-    return prevFrame.value + (nextFrame.value - prevFrame.value) * easedProgress;
-  }
-}
-
-// =============================================================================
-// Element Transform Calculation
-// =============================================================================
-
-/**
- * Get the complete transform values for an element at a specific time
- * 获取元素在指定时间的完整变换值
- *
- * @param transform - The element's transform properties
- * @param localTime - Time relative to element start (in seconds)
- * @returns Computed transform values
- */
-export function getComputedTransform(
-  transform: ElementTransform | undefined,
-  localTime: number
-): ComputedTransform {
-  if (!transform) {
-    const defaultTransform = createDefaultElementTransform();
-    return {
-      x: defaultTransform.x.baseValue,
-      y: defaultTransform.y.baseValue,
-      scaleX: defaultTransform.scaleX.baseValue,
-      scaleY: defaultTransform.scaleY.baseValue,
-      rotation: defaultTransform.rotation.baseValue,
-      opacity: defaultTransform.opacity.baseValue,
-      anchorX: defaultTransform.anchorX,
-      anchorY: defaultTransform.anchorY,
-    };
-  }
-
-  return {
-    x: transform.x ? getAnimatedValue(transform.x, localTime) : 0.5,
-    y: transform.y ? getAnimatedValue(transform.y, localTime) : 0.5,
-    scaleX: transform.scaleX ? getAnimatedValue(transform.scaleX, localTime) : 1,
-    scaleY: transform.scaleY ? getAnimatedValue(transform.scaleY, localTime) : 1,
-    rotation: transform.rotation ? getAnimatedValue(transform.rotation, localTime) : 0,
-    opacity: transform.opacity ? getAnimatedValue(transform.opacity, localTime) : 1,
-    anchorX: transform.anchorX,
-    anchorY: transform.anchorY,
-  };
-}
+// Import for internal use
+import { getComputedTransform } from '@neko/shared';
 
 /**
  * Get element transform at global timeline time
@@ -285,16 +76,8 @@ export function getElementTransformAtTime(
 }
 
 // =============================================================================
-// Keyframe Utilities
+// Keyframe CRUD Utilities (Webview-specific)
 // =============================================================================
-
-/**
- * Check if a property has keyframes
- * 检查属性是否有关键帧
- */
-export function hasKeyframes(property: AnimatableProperty | undefined): boolean {
-  return property !== undefined && property.keyframes.length > 0;
-}
 
 /**
  * Get keyframe at specific time (within tolerance)
@@ -305,7 +88,6 @@ export function getKeyframeAtTime(
   time: number,
   tolerance: number = 0.01
 ): AnimationKeyframe | undefined {
-  // Guard against undefined/null property
   if (!property || !property.keyframes) {
     return undefined;
   }
@@ -318,16 +100,11 @@ export function getKeyframeAtTime(
 /**
  * Insert a keyframe while maintaining sorted order
  * 插入关键帧并保持有序
- *
- * @param keyframes - Existing keyframes array
- * @param newKeyframe - Keyframe to insert
- * @returns New sorted array with the keyframe inserted
  */
 export function insertKeyframeSorted(
   keyframes: AnimationKeyframe[],
   newKeyframe: AnimationKeyframe
 ): AnimationKeyframe[] {
-  // Find insertion point using binary search
   let left = 0;
   let right = keyframes.length;
 
@@ -340,7 +117,6 @@ export function insertKeyframeSorted(
     }
   }
 
-  // Insert at the found position
   const result = [...keyframes];
   result.splice(left, 0, newKeyframe);
   return result;
@@ -349,11 +125,6 @@ export function insertKeyframeSorted(
 /**
  * Remove a keyframe at a specific time
  * 删除指定时间的关键帧
- *
- * @param keyframes - Existing keyframes array
- * @param time - Time of the keyframe to remove
- * @param tolerance - Time tolerance for matching
- * @returns New array with the keyframe removed, or original array if not found
  */
 export function removeKeyframeAtTime(
   keyframes: AnimationKeyframe[],
@@ -385,7 +156,6 @@ export function getAllKeyframeTimes(transform: ElementTransform): number[] {
   ];
 
   for (const prop of properties) {
-    // Guard against undefined property or keyframes
     if (prop && prop.keyframes) {
       for (const kf of prop.keyframes) {
         times.add(kf.time);
@@ -423,7 +193,7 @@ export function getKeyframesAtTime(
 }
 
 // =============================================================================
-// Interpolation Utilities
+// Math Utilities
 // =============================================================================
 
 /**

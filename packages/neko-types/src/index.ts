@@ -1,5 +1,8 @@
 export * from './types/index';
 
+// Shared utilities (animation, easing, interpolation)
+export * from './utils/index';
+
 // Configuration (unified config format for agent-cli and platform)
 export * from './config/index';
 

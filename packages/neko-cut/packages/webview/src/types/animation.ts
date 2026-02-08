@@ -41,18 +41,51 @@ import type {
  */
 export const EASING_TYPE_I18N_KEYS: Record<EasingType, string> = {
   'linear': 'animation.easing.linear',
+  // Legacy aliases
   'ease-in': 'animation.easing.easeIn',
   'ease-out': 'animation.easing.easeOut',
   'ease-in-out': 'animation.easing.easeInOut',
+  // Quad
   'ease-in-quad': 'animation.easing.easeInQuad',
   'ease-out-quad': 'animation.easing.easeOutQuad',
   'ease-in-out-quad': 'animation.easing.easeInOutQuad',
+  // Cubic
   'ease-in-cubic': 'animation.easing.easeInCubic',
   'ease-out-cubic': 'animation.easing.easeOutCubic',
   'ease-in-out-cubic': 'animation.easing.easeInOutCubic',
+  // Quart
+  'ease-in-quart': 'animation.easing.easeInQuart',
+  'ease-out-quart': 'animation.easing.easeOutQuart',
+  'ease-in-out-quart': 'animation.easing.easeInOutQuart',
+  // Quint
+  'ease-in-quint': 'animation.easing.easeInQuint',
+  'ease-out-quint': 'animation.easing.easeOutQuint',
+  'ease-in-out-quint': 'animation.easing.easeInOutQuint',
+  // Sine
+  'ease-in-sine': 'animation.easing.easeInSine',
+  'ease-out-sine': 'animation.easing.easeOutSine',
+  'ease-in-out-sine': 'animation.easing.easeInOutSine',
+  // Expo
+  'ease-in-expo': 'animation.easing.easeInExpo',
+  'ease-out-expo': 'animation.easing.easeOutExpo',
+  'ease-in-out-expo': 'animation.easing.easeInOutExpo',
+  // Circ
+  'ease-in-circ': 'animation.easing.easeInCirc',
+  'ease-out-circ': 'animation.easing.easeOutCirc',
+  'ease-in-out-circ': 'animation.easing.easeInOutCirc',
+  // Back
   'ease-in-back': 'animation.easing.easeInBack',
   'ease-out-back': 'animation.easing.easeOutBack',
   'ease-in-out-back': 'animation.easing.easeInOutBack',
+  // Elastic
+  'ease-in-elastic': 'animation.easing.easeInElastic',
+  'ease-out-elastic': 'animation.easing.easeOutElastic',
+  'ease-in-out-elastic': 'animation.easing.easeInOutElastic',
+  // Bounce
+  'ease-in-bounce': 'animation.easing.easeInBounce',
+  'ease-out-bounce': 'animation.easing.easeOutBounce',
+  'ease-in-out-bounce': 'animation.easing.easeInOutBounce',
+  // Bezier
   'bezier': 'animation.easing.bezier',
 };
 
