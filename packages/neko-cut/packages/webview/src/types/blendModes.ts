@@ -1,60 +1,25 @@
 /**
- * Blend Modes Types
+ * Blend Modes Types — Aligned with Engine (gpu/compositor.rs)
  * 混合模式类型定义
  *
- * 实现标准图层混合模式，与 Adobe After Effects / Premiere / Photoshop 兼容
- */
-
-// =============================================================================
-// Blend Mode Types
-// =============================================================================
-
-/**
- * Standard blend mode types
- * 标准混合模式类型
+ * Authority: proto/timeline.proto → BlendMode
+ * Core type re-exported from @neko/shared as BlendModeType.
+ * This file provides webview-specific metadata (i18n, CSS mapping, categories).
  *
- * 分类:
- * - Normal: 正常混合
- * - Darken: 变暗组
- * - Lighten: 变亮组
- * - Contrast: 对比组
- * - Inversion: 反转组
- * - Component: 分量组
+ * 实现标准图层混合模式，与 Adobe After Effects / Premiere / Photoshop 兼容
+ * 命名格式：camelCase（与引擎 serde rename_all = "camelCase" 一致）
  */
-export type BlendMode =
-  // Normal (正常)
-  | 'normal'
-  | 'dissolve'
-  // Darken Group (变暗组)
-  | 'darken'
-  | 'multiply'
-  | 'color-burn'
-  | 'linear-burn'
-  | 'darker-color'
-  // Lighten Group (变亮组)
-  | 'lighten'
-  | 'screen'
-  | 'color-dodge'
-  | 'linear-dodge' // (add)
-  | 'lighter-color'
-  // Contrast Group (对比组)
-  | 'overlay'
-  | 'soft-light'
-  | 'hard-light'
-  | 'vivid-light'
-  | 'linear-light'
-  | 'pin-light'
-  | 'hard-mix'
-  // Inversion Group (反转组)
-  | 'difference'
-  | 'exclusion'
-  | 'subtract'
-  | 'divide'
-  // Component Group (分量组)
-  | 'hue'
-  | 'saturation'
-  | 'color'
-  | 'luminosity';
+
+// Re-export core type from shared (Single Source of Truth)
+export type { BlendModeType } from '@neko/shared';
+import type { BlendModeType } from '@neko/shared';
+
+// Legacy alias for backward compatibility within webview
+export type BlendMode = BlendModeType;
+
+// =============================================================================
+// Blend Mode Categories
+// =============================================================================
 
 /**
  * Blend mode category
@@ -68,13 +33,17 @@ export type BlendModeCategory =
   | 'inversion'
   | 'component';
 
+// =============================================================================
+// Blend Mode Definitions with Metadata
+// =============================================================================
+
 /**
  * Blend mode definition with metadata
  * 带元数据的混合模式定义
  */
 export interface BlendModeDefinition {
-  /** Blend mode identifier */
-  mode: BlendMode;
+  /** Blend mode identifier (camelCase, matches engine) */
+  mode: BlendModeType;
   /** Display name (i18n key) */
   nameKey: string;
   /** Category */
@@ -85,13 +54,12 @@ export interface BlendModeDefinition {
   notSupported?: boolean;
 }
 
-// =============================================================================
-// Blend Mode Definitions
-// =============================================================================
-
 /**
  * All available blend modes with metadata
  * 所有可用的混合模式及元数据
+ *
+ * mode: camelCase (engine format)
+ * cssValue: kebab-case (CSS format)
  */
 export const BLEND_MODE_DEFINITIONS: BlendModeDefinition[] = [
   // Normal
@@ -101,25 +69,25 @@ export const BLEND_MODE_DEFINITIONS: BlendModeDefinition[] = [
   // Darken Group
   { mode: 'darken', nameKey: 'blendMode.darken', category: 'darken', cssValue: 'darken' },
   { mode: 'multiply', nameKey: 'blendMode.multiply', category: 'darken', cssValue: 'multiply' },
-  { mode: 'color-burn', nameKey: 'blendMode.colorBurn', category: 'darken', cssValue: 'color-burn' },
-  { mode: 'linear-burn', nameKey: 'blendMode.linearBurn', category: 'darken', notSupported: true },
-  { mode: 'darker-color', nameKey: 'blendMode.darkerColor', category: 'darken', notSupported: true },
+  { mode: 'colorBurn', nameKey: 'blendMode.colorBurn', category: 'darken', cssValue: 'color-burn' },
+  { mode: 'linearBurn', nameKey: 'blendMode.linearBurn', category: 'darken', notSupported: true },
+  { mode: 'darkerColor', nameKey: 'blendMode.darkerColor', category: 'darken', notSupported: true },
 
   // Lighten Group
   { mode: 'lighten', nameKey: 'blendMode.lighten', category: 'lighten', cssValue: 'lighten' },
   { mode: 'screen', nameKey: 'blendMode.screen', category: 'lighten', cssValue: 'screen' },
-  { mode: 'color-dodge', nameKey: 'blendMode.colorDodge', category: 'lighten', cssValue: 'color-dodge' },
-  { mode: 'linear-dodge', nameKey: 'blendMode.linearDodge', category: 'lighten', notSupported: true },
-  { mode: 'lighter-color', nameKey: 'blendMode.lighterColor', category: 'lighten', notSupported: true },
+  { mode: 'colorDodge', nameKey: 'blendMode.colorDodge', category: 'lighten', cssValue: 'color-dodge' },
+  { mode: 'linearDodge', nameKey: 'blendMode.linearDodge', category: 'lighten', notSupported: true },
+  { mode: 'lighterColor', nameKey: 'blendMode.lighterColor', category: 'lighten', notSupported: true },
 
   // Contrast Group
   { mode: 'overlay', nameKey: 'blendMode.overlay', category: 'contrast', cssValue: 'overlay' },
-  { mode: 'soft-light', nameKey: 'blendMode.softLight', category: 'contrast', cssValue: 'soft-light' },
-  { mode: 'hard-light', nameKey: 'blendMode.hardLight', category: 'contrast', cssValue: 'hard-light' },
-  { mode: 'vivid-light', nameKey: 'blendMode.vividLight', category: 'contrast', notSupported: true },
-  { mode: 'linear-light', nameKey: 'blendMode.linearLight', category: 'contrast', notSupported: true },
-  { mode: 'pin-light', nameKey: 'blendMode.pinLight', category: 'contrast', notSupported: true },
-  { mode: 'hard-mix', nameKey: 'blendMode.hardMix', category: 'contrast', notSupported: true },
+  { mode: 'softLight', nameKey: 'blendMode.softLight', category: 'contrast', cssValue: 'soft-light' },
+  { mode: 'hardLight', nameKey: 'blendMode.hardLight', category: 'contrast', cssValue: 'hard-light' },
+  { mode: 'vividLight', nameKey: 'blendMode.vividLight', category: 'contrast', notSupported: true },
+  { mode: 'linearLight', nameKey: 'blendMode.linearLight', category: 'contrast', notSupported: true },
+  { mode: 'pinLight', nameKey: 'blendMode.pinLight', category: 'contrast', notSupported: true },
+  { mode: 'hardMix', nameKey: 'blendMode.hardMix', category: 'contrast', notSupported: true },
 
   // Inversion Group
   { mode: 'difference', nameKey: 'blendMode.difference', category: 'inversion', cssValue: 'difference' },
@@ -142,7 +110,7 @@ export const BLEND_MODE_DEFINITIONS: BlendModeDefinition[] = [
  * Get blend mode definition by mode
  * 根据模式获取混合模式定义
  */
-export function getBlendModeDefinition(mode: BlendMode): BlendModeDefinition | undefined {
+export function getBlendModeDefinition(mode: BlendModeType): BlendModeDefinition | undefined {
   return BLEND_MODE_DEFINITIONS.find(d => d.mode === mode);
 }
 
@@ -174,10 +142,10 @@ export function getUnsupportedBlendModes(): BlendModeDefinition[] {
  * Get CSS value for a blend mode
  * 获取混合模式的 CSS 值
  *
- * @param mode - Blend mode
- * @returns CSS mix-blend-mode value, or 'normal' if not CSS-supported
+ * @param mode - Blend mode (camelCase)
+ * @returns CSS mix-blend-mode value (kebab-case), or 'normal' if not CSS-supported
  */
-export function getBlendModeCSSValue(mode: BlendMode): string {
+export function getBlendModeCSSValue(mode: BlendModeType): string {
   const definition = getBlendModeDefinition(mode);
   return definition?.cssValue ?? 'normal';
 }
@@ -186,7 +154,7 @@ export function getBlendModeCSSValue(mode: BlendMode): string {
  * Check if blend mode is supported by CSS
  * 检查混合模式是否被 CSS 支持
  */
-export function isBlendModeCSSSupported(mode: BlendMode): boolean {
+export function isBlendModeCSSSupported(mode: BlendModeType): boolean {
   const definition = getBlendModeDefinition(mode);
   return !!definition?.cssValue;
 }
