@@ -1,2 +1,0 @@
-export type BlendModeType = 'normal' | 'dissolve' | 'darken' | 'multiply' | 'colorBurn' | 'linearBurn' | 'darkerColor' | 'lighten' | 'screen' | 'colorDodge' | 'linearDodge' | 'lighterColor' | 'overlay' | 'softLight' | 'hardLight' | 'vividLight' | 'linearLight' | 'pinLight' | 'hardMix' | 'difference' | 'exclusion' | 'subtract' | 'divide' | 'hue' | 'saturation' | 'color' | 'luminosity';
-//# sourceMappingURL=blendMode.d.ts.map
