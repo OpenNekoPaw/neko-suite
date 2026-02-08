@@ -53,6 +53,9 @@ export * from './subtitle';
 // Timeline tracks
 export * from './timelineTrack';
 
+// UI state (separated from engine model)
+export * from './ui-state';
+
 // Project
 export * from './project';
 

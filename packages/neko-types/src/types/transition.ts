@@ -1,59 +1,92 @@
 // =============================================================================
-// Transitions
+// Transition Types — Aligned with Engine (gpu/transition_processor.rs)
+//
+// Authority: proto/timeline.proto → TransitionType
+// Engine supports exactly 18 transition types.
+// Unsupported types from the old TS definition have been removed.
 // =============================================================================
 
 import { EasingType } from './easing';
 
+/**
+ * Transition types supported by the engine's GPU transition processor.
+ * Exactly 18 types, matching Rust TransitionType enum.
+ */
 export type TransitionType =
   // Basic
-  | 'none'
   | 'fade'
   | 'dissolve'
-  // Slide
-  | 'slide-left'
-  | 'slide-right'
-  | 'slide-up'
-  | 'slide-down'
-  // Zoom
-  | 'zoom-in'
-  | 'zoom-out'
-  | 'cross-zoom'
-  // Wipe
+  // Wipe (4 directions)
   | 'wipe-left'
   | 'wipe-right'
   | 'wipe-up'
   | 'wipe-down'
+  // Slide (2 directions)
+  | 'slide-left'
+  | 'slide-right'
+  // Zoom
+  | 'zoom-in'
+  | 'zoom-out'
   // Iris
-  | 'iris-in'
-  | 'iris-out'
-  // Clock Wipe
-  | 'clock-wipe'
-  | 'clock-wipe-ccw'
-  // Blinds
-  | 'blinds-horizontal'
-  | 'blinds-vertical'
-  // 3D Effects
-  | 'cube-left'
-  | 'cube-right'
-  | 'cube-up'
-  | 'cube-down'
-  | 'flip-horizontal'
-  | 'flip-vertical'
-  // Page
-  | 'page-curl-left'
-  | 'page-curl-right'
-  // Special
+  | 'iris-circle'
+  | 'iris-rectangle'
+  // Clock
+  | 'clock'
+  // Special effects
   | 'pixelate'
-  | 'blur'
+  | 'ripple'
+  | 'swirl'
   | 'glitch'
-  | 'radial-wipe'
-  | 'morph'
-  // Dip
-  | 'dip-to-black'
-  | 'dip-to-white'
-  | 'dip-to-color'
-  // Custom
-  | 'custom';
+  | 'flash';
+
+/**
+ * Numeric values matching the engine's TransitionType repr(u32).
+ * Used for GPU shader uniform binding.
+ */
+export enum TransitionTypeValue {
+  Fade = 0,
+  WipeLeft = 1,
+  WipeRight = 2,
+  WipeUp = 3,
+  WipeDown = 4,
+  IrisCircle = 5,
+  IrisRectangle = 6,
+  Clock = 7,
+  SlideLeft = 8,
+  SlideRight = 9,
+  ZoomIn = 10,
+  ZoomOut = 11,
+  Dissolve = 12,
+  Pixelate = 13,
+  Ripple = 14,
+  Swirl = 15,
+  Glitch = 16,
+  Flash = 17,
+}
+
+/**
+ * Map from TransitionType string to numeric value.
+ */
+export const TRANSITION_TYPE_TO_VALUE: Record<TransitionType, TransitionTypeValue> = {
+  'fade': TransitionTypeValue.Fade,
+  'dissolve': TransitionTypeValue.Dissolve,
+  'wipe-left': TransitionTypeValue.WipeLeft,
+  'wipe-right': TransitionTypeValue.WipeRight,
+  'wipe-up': TransitionTypeValue.WipeUp,
+  'wipe-down': TransitionTypeValue.WipeDown,
+  'slide-left': TransitionTypeValue.SlideLeft,
+  'slide-right': TransitionTypeValue.SlideRight,
+  'zoom-in': TransitionTypeValue.ZoomIn,
+  'zoom-out': TransitionTypeValue.ZoomOut,
+  'iris-circle': TransitionTypeValue.IrisCircle,
+  'iris-rectangle': TransitionTypeValue.IrisRectangle,
+  'clock': TransitionTypeValue.Clock,
+  'pixelate': TransitionTypeValue.Pixelate,
+  'ripple': TransitionTypeValue.Ripple,
+  'swirl': TransitionTypeValue.Swirl,
+  'glitch': TransitionTypeValue.Glitch,
+  'flash': TransitionTypeValue.Flash,
+};
 
 /** Transition direction */
 export type TransitionDirection = 'left' | 'right' | 'up' | 'down';
@@ -64,29 +97,15 @@ export interface TransitionParams {
   direction?: TransitionDirection;
   /** Edge softness (0-1) */
   softness?: number;
-  /** Color for color-based transitions (e.g., dip-to-color) */
+  /** Color for color-based transitions */
   color?: string;
-  /** Custom GLSL shader fragment */
-  customShader?: string;
-  /** Number of blinds for blinds transitions (default: 10) */
-  blindsCount?: number;
-  /** Start angle for clock wipe (0-360, default: 0) */
-  startAngle?: number;
-  /** Perspective depth for 3D transitions (default: 1000) */
-  perspective?: number;
-  /** Pixelate block size for pixelate transition (default: 10) */
-  blockSize?: number;
-  /** Blur radius for blur transition (default: 20) */
-  blurRadius?: number;
-  /** Glitch intensity for glitch transition (0-1, default: 0.5) */
-  glitchIntensity?: number;
 }
 
 /** Transition definition */
 export interface Transition {
   /** Unique identifier */
   id?: string;
-  /** Transition type */
+  /** Transition type (engine-supported only) */
   type: TransitionType;
   /** Duration in seconds */
   duration: number;
@@ -94,31 +113,16 @@ export interface Transition {
   easing: EasingType;
   /** Additional parameters */
   params?: TransitionParams;
-  // Legacy fields (deprecated, use params instead)
-  /** @deprecated Use params.softness */
-  softness?: number;
-  /** @deprecated Use params.blindsCount */
-  blindsCount?: number;
-  /** @deprecated Use params.startAngle */
-  startAngle?: number;
-  /** @deprecated Use params.color */
-  dipColor?: string;
 }
 
 // -----------------------------------------------------------------------------
 // Element Transition (元素间转场)
 // -----------------------------------------------------------------------------
 
-/**
- * Placement mode for transitions between elements
- * 元素间转场的放置模式
- */
+/** Placement mode for transitions between elements */
 export type TransitionPlacement = 'overlap' | 'cut';
 
-/**
- * Transition between two adjacent elements
- * 两个相邻元素之间的转场
- */
+/** Transition between two adjacent elements */
 export interface ElementTransition {
   /** Unique identifier */
   id: string;
@@ -128,10 +132,6 @@ export interface ElementTransition {
   toElementId: string;
   /** Transition definition */
   transition: Transition;
-  /**
-   * Placement mode:
-   * - 'overlap': Elements overlap during transition
-   * - 'cut': Transition takes extra time at the cut point
-   */
+  /** Placement mode */
   placement: TransitionPlacement;
 }

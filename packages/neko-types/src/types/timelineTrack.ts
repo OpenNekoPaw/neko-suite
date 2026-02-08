@@ -1,35 +1,36 @@
 // =============================================================================
-// Tracks
+// Timeline Track — Aligned with Engine (domain/timeline.rs → Track)
+//
+// Authority: proto/timeline.proto → Track
+// Engine fields: id, name, type, elements, muted, locked, hidden, isMain
+// UI-only fields (solo, color, height, opacity, blendMode, transitions)
+// have been moved to ui-state.ts → TrackUIState
 // =============================================================================
 
 import { TrackType } from './track';
 import { TimelineElement } from './element';
-import { BlendModeType } from './blendMode';
-import { ElementTransition } from './transition';
 
+/**
+ * Timeline Track aligned with engine's Track struct.
+ *
+ * Only contains fields the engine recognizes.
+ * UI state (solo, color, height, etc.) is in TrackUIState.
+ */
 export interface TimelineTrack {
+  /** Track ID */
   id: string;
+  /** Track name */
   name: string;
+  /** Track type */
   type: TrackType;
+  /** Elements in the track */
   elements: TimelineElement[];
-  muted?: boolean;
-  isMain?: boolean;      // Main track identifier
-
-  // Extended track properties
-  /** Whether track is locked (cannot be edited) */
-  locked?: boolean;
-  /** Solo mode (only this track is audible/visible) */
-  solo?: boolean;
-  /** Track opacity (0-1) */
-  opacity?: number;
-  /** Track blend mode */
-  blendMode?: BlendModeType;
-  /** Track color for UI display */
-  color?: string;
-  /** Track height in UI (pixels) */
-  height?: number;
-  /** Whether the track is hidden in preview */
-  hidden?: boolean;
-  /** Transitions between elements in this track */
-  transitions?: ElementTransition[];
+  /** Whether track is muted */
+  muted: boolean;
+  /** Whether track is locked */
+  locked: boolean;
+  /** Whether track is hidden in preview */
+  hidden: boolean;
+  /** Whether this is the main track */
+  isMain: boolean;
 }

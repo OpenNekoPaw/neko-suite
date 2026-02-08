@@ -107,6 +107,8 @@ export function createDefaultProject(name: string = 'Untitled Project'): Project
         type: 'media',
         elements: [],
         muted: false,
+        locked: false,
+        hidden: false,
         isMain: true,
       },
     ],
@@ -115,6 +117,7 @@ export function createDefaultProject(name: string = 'Untitled Project'): Project
 }
 
 import { TextElement } from './element';
+import { ENGINE_DEFAULT_TRANSFORM } from './transform';
 
 export function createDefaultTextElement(startTime: number = 0): TextElement {
   return {
@@ -126,6 +129,13 @@ export function createDefaultTextElement(startTime: number = 0): TextElement {
     startTime,
     trimStart: 0,
     trimEnd: 0,
+    transform: { ...ENGINE_DEFAULT_TRANSFORM },
+    opacity: 1,
+    blendMode: 'normal',
+    effects: [],
+    muted: false,
+    hidden: false,
+    locked: false,
     fontSize: 48,
     fontFamily: 'Arial',
     color: '#ffffff',
@@ -133,11 +143,6 @@ export function createDefaultTextElement(startTime: number = 0): TextElement {
     textAlign: 'center',
     fontWeight: 'normal',
     fontStyle: 'normal',
-    textDecoration: 'none',
-    x: 0,
-    y: 0,
-    rotation: 0,
-    opacity: 1,
   };
 }
 
@@ -146,7 +151,7 @@ export function createDefaultTextElement(startTime: number = 0): TextElement {
  */
 export function sortTracksByType(tracks: TimelineTrack[]): TimelineTrack[] {
   return [...tracks].sort((a, b) => {
-    const order: Record<TrackType, number> = { text: 0, shape: 1, media: 2, audio: 3, subtitle: 4 };
+    const order: Record<TrackType, number> = { text: 0, shape: 1, video: 2, media: 2, effect: 3, audio: 4, subtitle: 5 };
     return order[a.type] - order[b.type];
   });
 }

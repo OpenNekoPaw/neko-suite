@@ -1,26 +1,59 @@
 // =============================================================================
-// Transform
+// Transform — Aligned with Engine (domain/transform.rs)
+//
+// Authority: proto/timeline.proto → Transform
+// Engine fields: x, y, scaleX, scaleY, rotation, anchorX, anchorY
+// NOTE: opacity is NOT part of Transform in the engine; it's a separate
+//       field on Element. See Element.opacity.
 // =============================================================================
 
+/**
+ * 2D Transform aligned with engine's Transform struct.
+ *
+ * Coordinate semantics:
+ * - x, y: position (pixels or normalized, context-dependent)
+ * - scaleX, scaleY: scale factors (1.0 = 100%)
+ * - rotation: degrees
+ * - anchorX, anchorY: anchor point (0.0-1.0 normalized)
+ *
+ * Engine default: {x:0, y:0, scaleX:1, scaleY:1, rotation:0, anchorX:0, anchorY:0}
+ */
 export interface Transform {
-  /** X position (0-1 normalized, 0.5 = center) */
+  /** Position X (pixels or normalized, depends on context) */
   x: number;
-  /** Y position (0-1 normalized, 0.5 = center) */
+  /** Position Y (pixels or normalized, depends on context) */
   y: number;
-  /** Scale X (1 = 100%) */
+  /** Scale X (1.0 = 100%) */
   scaleX: number;
-  /** Scale Y (1 = 100%) */
+  /** Scale Y (1.0 = 100%) */
   scaleY: number;
   /** Rotation in degrees */
   rotation: number;
-  /** Anchor point X (0-1, 0.5 = center) */
+  /** Anchor point X (0.0 = left, 0.5 = center, 1.0 = right) */
   anchorX: number;
-  /** Anchor point Y (0-1, 0.5 = center) */
+  /** Anchor point Y (0.0 = top, 0.5 = center, 1.0 = bottom) */
   anchorY: number;
-  /** Opacity (0-1, 1 = fully visible) */
-  opacity?: number;
 }
 
+/**
+ * Engine-aligned default transform.
+ * Matches Rust Transform::default() exactly.
+ */
+export const ENGINE_DEFAULT_TRANSFORM: Transform = {
+  x: 0,
+  y: 0,
+  scaleX: 1,
+  scaleY: 1,
+  rotation: 0,
+  anchorX: 0,
+  anchorY: 0,
+};
+
+/**
+ * @deprecated Use ENGINE_DEFAULT_TRANSFORM instead.
+ * This constant used normalized center coordinates (0.5, 0.5) which
+ * do not match the engine's default (0, 0).
+ */
 export const DEFAULT_TRANSFORM: Transform = {
   x: 0.5,
   y: 0.5,

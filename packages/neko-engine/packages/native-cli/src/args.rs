@@ -103,4 +103,42 @@ pub enum Command {
         #[arg(long)]
         height: Option<u32>,
     },
+
+    /// Execute any engine action (group:action pattern)
+    ///
+    /// Example: neko-engine action videos probe --options '{"source":"/path/to/video.mp4"}'
+    Action {
+        /// Action group (e.g., videos, audios, timelines, tasks, nodes)
+        group: String,
+
+        /// Action name (e.g., probe, capture, export, stream)
+        action: String,
+
+        /// Resource ID (optional)
+        #[arg(long)]
+        id: Option<String>,
+
+        /// Options as JSON string
+        #[arg(long)]
+        options: Option<String>,
+
+        /// Body as JSON string (for complex payloads)
+        #[arg(long)]
+        body: Option<String>,
+
+        /// Output format (json, pretty)
+        #[arg(short, long, default_value = "pretty")]
+        format: String,
+    },
+
+    /// Any unrecognized subcommand is treated as <group> <action> [args...]
+    ///
+    /// Supported groups: videos, audios, images, timelines, streams, tasks, nodes, models, canvas, scenes
+    ///
+    /// Examples:
+    ///   neko-engine videos probe --options '{"source":"/path/to/video.mp4"}'
+    ///   neko-engine timelines export --body '{"timeline":...}'
+    ///   neko-engine nodes health
+    #[command(external_subcommand)]
+    External(Vec<String>),
 }

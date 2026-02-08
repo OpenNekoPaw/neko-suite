@@ -100,6 +100,9 @@ export type {
   SubtitleCue,
   SubtitleStyle,
   SubtitleFormat,
+  // UI State (separated from engine model)
+  TrackUIState,
+  ElementEditState,
   // Messages
   MessageToWebview,
   MessageFromWebview,
@@ -121,6 +124,7 @@ export {
 export {
   // Transform defaults
   DEFAULT_TRANSFORM,
+  ENGINE_DEFAULT_TRANSFORM,
   // Color correction defaults
   DEFAULT_BASIC_COLOR_ADJUSTMENT,
   DEFAULT_CURVE,
@@ -142,6 +146,9 @@ export {
   DEFAULT_SHAPE_STROKE,
   DEFAULT_SHAPE_SHADOW,
   DEFAULT_SHAPE_STYLE,
+  // UI state defaults
+  DEFAULT_TRACK_UI_STATE,
+  DEFAULT_ELEMENT_EDIT_STATE,
 } from '@neko/shared';
 
 // =============================================================================

@@ -340,6 +340,51 @@ impl Controller for TimelineController {
 
                 Ok(ActionResponse::ok("", serde_json::to_value(response)?))
             }
+            "export_progress" => {
+                let export_service = self.export_service.as_ref().ok_or_else(|| {
+                    ApiError::ServiceError(
+                        "Export service not available (GPU required)".to_string(),
+                    )
+                })?;
+
+                let job_id = _resource_id.ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "job_id required for timelines:export_progress".to_string(),
+                    )
+                })?;
+
+                match export_service.progress(job_id).await {
+                    Some(progress) => {
+                        Ok(ActionResponse::ok(job_id, serde_json::to_value(progress)?))
+                    }
+                    None => Err(ApiError::NotFound(format!(
+                        "Export job '{}' not found",
+                        job_id
+                    ))),
+                }
+            }
+            "export_cancel" => {
+                let export_service = self.export_service.as_ref().ok_or_else(|| {
+                    ApiError::ServiceError(
+                        "Export service not available (GPU required)".to_string(),
+                    )
+                })?;
+
+                let job_id = _resource_id.ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "job_id required for timelines:export_cancel".to_string(),
+                    )
+                })?;
+
+                let cancelled = export_service.cancel(job_id).await.map_err(|e| {
+                    ApiError::ServiceError(format!("Failed to cancel export: {}", e))
+                })?;
+
+                Ok(ActionResponse::ok(
+                    job_id,
+                    serde_json::json!({ "cancelled": cancelled }),
+                ))
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "timelines".to_string(),
                 action: action.to_string(),
@@ -363,6 +408,8 @@ impl Controller for TimelineController {
             "loop",
             "seek",
             "export",
+            "export_progress",
+            "export_cancel",
         ]
     }
 }
@@ -450,7 +497,9 @@ mod tests {
         assert!(actions.contains(&"loop"));
         assert!(actions.contains(&"seek"));
         assert!(actions.contains(&"export"));
-        assert_eq!(actions.len(), 10);
+        assert!(actions.contains(&"export_progress"));
+        assert!(actions.contains(&"export_cancel"));
+        assert_eq!(actions.len(), 12);
     }
 
     #[tokio::test]
@@ -503,6 +552,55 @@ mod tests {
         let opts = serde_json::json!({ "source": "/nonexistent/file.jvi" });
         let result = controller
             .handle("probe", None, opts, None)
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_timeline_controller_export_progress_no_gpu() {
+        let controller = create_test_controller();
+
+        let result = controller
+            .handle("export_progress", Some("test-job-id"), Value::Null, None)
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Export service not available"));
+    }
+
+    #[tokio::test]
+    async fn test_timeline_controller_export_cancel_no_gpu() {
+        let controller = create_test_controller();
+
+        let result = controller
+            .handle("export_cancel", Some("test-job-id"), Value::Null, None)
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Export service not available"));
+    }
+
+    #[tokio::test]
+    async fn test_timeline_controller_export_progress_missing_id() {
+        let controller = create_test_controller();
+
+        // Even without GPU, the service check comes first, so this will fail on service check
+        let result = controller
+            .handle("export_progress", None, Value::Null, None)
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_timeline_controller_export_cancel_missing_id() {
+        let controller = create_test_controller();
+
+        let result = controller
+            .handle("export_cancel", None, Value::Null, None)
             .await;
 
         assert!(result.is_err());

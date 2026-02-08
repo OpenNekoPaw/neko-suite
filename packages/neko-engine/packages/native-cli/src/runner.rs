@@ -53,6 +53,12 @@ impl Runner {
             Command::Extract { input, output, time, quality, width, height } => {
                 self.run_extract(input, output, time, quality, width, height).await
             }
+            Command::Action { group, action, id, options, body, format } => {
+                self.run_action(group, action, id, options, body, format).await
+            }
+            Command::External(args) => {
+                self.run_external(args).await
+            }
         }
     }
 
@@ -132,7 +138,7 @@ impl Runner {
             )) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
-        let request = ActionRequest::new("exports", "start")
+        let request = ActionRequest::new("timelines", "export")
             .with_body(config_json);
 
         let response = engine.dispatch(request).await;
@@ -172,7 +178,7 @@ impl Runner {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-            let progress_request = ActionRequest::new("exports", "progress")
+            let progress_request = ActionRequest::new("timelines", "export_progress")
                 .with_id(&job_id);
 
             let progress_response = engine.dispatch(progress_request).await;
@@ -439,6 +445,141 @@ impl Runner {
         );
 
         Ok(())
+    }
+
+    /// Run generic action command - dispatch any group:action via EngineApi
+    async fn run_action(
+        &mut self,
+        group: String,
+        action: String,
+        id: Option<String>,
+        options: Option<String>,
+        body: Option<String>,
+        format: String,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let engine = self.get_engine().await?;
+
+        let mut request = ActionRequest::new(&group, &action);
+
+        if let Some(ref id) = id {
+            request = request.with_id(id);
+        }
+        if let Some(ref opts_json) = options {
+            let opts: serde_json::Value = serde_json::from_str(opts_json).map_err(|e| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Invalid options JSON: {}", e),
+                )) as Box<dyn std::error::Error + Send + Sync>
+            })?;
+            request = request.with_options(opts);
+        }
+        if let Some(ref body_json) = body {
+            let body: serde_json::Value = serde_json::from_str(body_json).map_err(|e| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Invalid body JSON: {}", e),
+                )) as Box<dyn std::error::Error + Send + Sync>
+            })?;
+            request = request.with_body(body);
+        }
+
+        let response = engine.dispatch(request).await;
+
+        match format.as_str() {
+            "json" => println!("{}", serde_json::to_string(&response).map_err(|e| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to serialize response: {}", e),
+                )) as Box<dyn std::error::Error + Send + Sync>
+            })?),
+            _ => println!("{}", serde_json::to_string_pretty(&response).map_err(|e| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to serialize response: {}", e),
+                )) as Box<dyn std::error::Error + Send + Sync>
+            })?),
+        }
+
+        if !response.is_ok() {
+            std::process::exit(1);
+        }
+
+        Ok(())
+    }
+
+    /// Run external subcommand - parse <group> <action> [--id X] [--options JSON] [--body JSON] [-f FORMAT]
+    ///
+    /// Allows direct invocation like:
+    ///   neko-engine videos probe --options '{"source":"/path/to/video.mp4"}'
+    ///   neko-engine nodes health
+    ///   neko-engine timelines export --body '{...}'
+    async fn run_external(
+        &mut self,
+        args: Vec<String>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if args.is_empty() {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Missing group name. Usage: neko-engine <group> <action> [--id ID] [--options JSON] [--body JSON] [-f FORMAT]\n\
+                 Available groups: videos, audios, images, timelines, streams, tasks, nodes, models, canvas, scenes",
+            )));
+        }
+
+        let group = args[0].clone();
+
+        if args.len() < 2 {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "Missing action for group '{}'. Usage: neko-engine {} <action> [--id ID] [--options JSON] [--body JSON] [-f FORMAT]",
+                    group, group
+                ),
+            )));
+        }
+
+        let action = args[1].clone();
+
+        // Parse remaining args as --key value pairs
+        let mut id: Option<String> = None;
+        let mut options: Option<String> = None;
+        let mut body: Option<String> = None;
+        let mut format = "pretty".to_string();
+
+        let mut i = 2;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--id" => {
+                    i += 1;
+                    id = args.get(i).cloned();
+                }
+                "--options" => {
+                    i += 1;
+                    options = args.get(i).cloned();
+                }
+                "--body" => {
+                    i += 1;
+                    body = args.get(i).cloned();
+                }
+                "-f" | "--format" => {
+                    i += 1;
+                    if let Some(f) = args.get(i) {
+                        format = f.clone();
+                    }
+                }
+                other => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "Unknown argument '{}'. Supported: --id, --options, --body, -f/--format",
+                            other
+                        ),
+                    )));
+                }
+            }
+            i += 1;
+        }
+
+        self.run_action(group, action, id, options, body, format).await
     }
 }
 

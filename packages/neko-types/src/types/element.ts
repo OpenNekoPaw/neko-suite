@@ -1,87 +1,107 @@
 // =============================================================================
-// Timeline Elements (时间线元素)
+// Timeline Elements — Aligned with Engine (domain/timeline.rs → Element)
+//
+// Authority: proto/timeline.proto → Element
+// Engine fields on Element: id, name, elementType, startTime, duration,
+//   trimStart, trimEnd, transform, opacity, blendMode, effects, muted,
+//   hidden, locked
+// UI-only fields (animTransform, colorCorrection, masks, keyframes,
+//   transitionIn/Out, speed) have been moved to ui-state.ts → ElementEditState
 // =============================================================================
 
 import { Transform } from './transform';
-import { ElementTransform } from './animation';
 import { BlendModeType } from './blendMode';
-import { ColorCorrection } from './colorCorrection';
-import { MaskInstance } from './mask';
-import { EffectInstance } from './effects';
-import { KeyframeTrack } from './keyframe';
-import { Transition } from './transition';
-import { SpeedProperties } from './speed';
 import { AudioProperties } from './audio';
-import { Point2D } from './geometry';
-import { ShapeType, ShapeInstance } from './shape';
-import { SubtitleCue, SubtitleStyle } from './subtitle';
+import { EffectInstance } from './effects';
+
+// =============================================================================
+// Base Element — Engine-aligned fields only
+// =============================================================================
 
 interface BaseTimelineElement {
+  /** Element ID */
   id: string;
+  /** Element name */
   name: string;
-  duration: number;      // Original duration in seconds
-  startTime: number;     // Start time on timeline in seconds
-  trimStart: number;     // Trim from start
-  trimEnd: number;       // Trim from end
-  hidden?: boolean;      // Whether element is hidden
-  locked?: boolean;      // Whether element is locked
-  muted?: boolean;       // Whether audio is muted (for media/audio elements)
-
-  // Extended properties for full editing support
-  /** Static Transform (position, scale, rotation) - for non-animated elements */
-  transform?: Transform;
-  /** Animatable Transform (supports keyframes) */
-  animTransform?: ElementTransform;
-  /** Opacity (0-1) - static value */
-  opacity?: number;
-  /** Blend mode */
-  blendMode?: BlendModeType;
-  /** Color correction settings */
-  colorCorrection?: ColorCorrection;
-  /** Mask instances */
-  masks?: MaskInstance[];
-  /** Effects applied to this element */
-  effects?: EffectInstance[];
-  /** Legacy keyframe animations */
-  keyframes?: KeyframeTrack[];
-  /** Transition to next element */
-  transitionOut?: Transition;
-  /** Transition from previous element */
-  transitionIn?: Transition;
-  /** Speed control properties */
-  speed?: SpeedProperties;
+  /** Duration on timeline (seconds) */
+  duration: number;
+  /** Start time on timeline (seconds) */
+  startTime: number;
+  /** Trim from start (seconds into source) */
+  trimStart: number;
+  /** Trim from end (seconds from source end) */
+  trimEnd: number;
+  /** 2D transform (engine has default: identity) */
+  transform: Transform;
+  /** Opacity (0.0-1.0, engine default: 1.0) */
+  opacity: number;
+  /** Blend mode (engine default: 'normal') */
+  blendMode: BlendModeType;
+  /** Applied effects */
+  effects: EffectInstance[];
+  /** Whether element is muted */
+  muted: boolean;
+  /** Whether element is hidden */
+  hidden: boolean;
+  /** Whether element is locked */
+  locked: boolean;
   /** Audio properties (for media/audio elements) */
   audio?: AudioProperties;
 }
 
+// =============================================================================
+// Concrete Element Types — Aligned with Engine's ElementType enum
+// =============================================================================
+
 export interface MediaElement extends BaseTimelineElement {
   type: 'media';
-  /** Relative path to media file, e.g., "./assets/intro.mp4" */
+  /** Source file path */
   src: string;
-  /** Media type hint */
+  /** Resource ID (deterministic hash) */
+  resourceId?: string;
+  /** Media type hint (video/image) */
   mediaType?: 'video' | 'image';
+  /** Linked audio element ID */
+  linkedAudioId?: string;
+}
+
+export interface AudioElement extends BaseTimelineElement {
+  type: 'audio';
+  /** Source file path */
+  src: string;
+  /** Resource ID */
+  resourceId?: string;
+  /** Linked video element ID */
+  linkedVideoId?: string;
 }
 
 export interface TextElement extends BaseTimelineElement {
   type: 'text';
+  /** Text content */
   content: string;
+  /** Font size in pixels (engine default: 48) */
   fontSize: number;
+  /** Font family (engine default: "Arial") */
   fontFamily: string;
+  /** Text color hex (engine default: "#ffffff") */
   color: string;
+  /** Background color (engine default: "transparent") */
   backgroundColor: string;
+  /** Text alignment (engine default: "center") */
   textAlign: 'left' | 'center' | 'right';
+  /** Font weight (engine default: "normal") */
   fontWeight: 'normal' | 'bold';
+  /** Font style (engine default: "normal") */
   fontStyle: 'normal' | 'italic';
-  textDecoration: 'none' | 'underline' | 'line-through';
+  /** Text decoration — UI extension, not in engine */
+  textDecoration?: 'none' | 'underline' | 'line-through';
   /** @deprecated Use transform.x instead */
-  x: number;
+  x?: number;
   /** @deprecated Use transform.y instead */
-  y: number;
+  y?: number;
   /** @deprecated Use transform.rotation instead */
-  rotation: number;
-  /** @deprecated Use element opacity instead */
-  opacity: number;
-  /** Line height multiplier (default 1.2) */
+  rotation?: number;
+  /** Line height multiplier */
   lineHeight?: number;
   /** Letter spacing in pixels */
   letterSpacing?: number;
@@ -98,51 +118,25 @@ export interface TextElement extends BaseTimelineElement {
   };
 }
 
-export interface AudioElement extends BaseTimelineElement {
-  type: 'audio';
-  /** Relative path to audio file */
-  src: string;
-}
-
-// -----------------------------------------------------------------------------
-// Shape Element (for timeline)
-// -----------------------------------------------------------------------------
-
 export interface ShapeElement extends BaseTimelineElement {
   type: 'shape';
-  /** Shape instances within this element */
-  shapes: ShapeInstance[];
-
-  // Legacy fields (deprecated, kept for backward compatibility)
-  /** @deprecated Use shapes[0].shape.shapeType instead */
-  shapeType?: ShapeType;
-  /** @deprecated Use shapes[0].style.fill.color instead */
-  fillColor?: string;
-  /** @deprecated Use shapes[0].style.stroke.color instead */
-  strokeColor?: string;
-  /** @deprecated Use shapes[0].style.stroke.width instead */
-  strokeWidth?: number;
-  /** @deprecated Use shapes[0].shape (RectangleShape).cornerRadius instead */
-  cornerRadius?: number;
-  /** @deprecated Use shapes[0].shape (PolygonShape).points instead */
-  points?: Point2D[];
-  /** @deprecated Use shapes[0].style.fill.type !== 'none' instead */
-  filled?: boolean;
+  /** Shape type (engine field) */
+  shapeType: string;
+  /** Fill color (engine field) */
+  fill: string;
+  /** Stroke color (engine field) */
+  stroke: string;
+  /** Stroke width (engine field) */
+  strokeWidth: number;
 }
-
-// -----------------------------------------------------------------------------
-// Subtitle Element (for timeline)
-// -----------------------------------------------------------------------------
 
 export interface SubtitleElement extends BaseTimelineElement {
   type: 'subtitle';
-  /** Subtitle cues within this element */
-  cues: SubtitleCue[];
-  /** Style for this subtitle element */
-  style: SubtitleStyle;
-  /** Language code (e.g., 'en', 'zh-CN') */
-  language: string;
-  /** Whether this is the default subtitle track */
+  /** Subtitle text (engine field) */
+  text: string;
+  /** Language code (e.g., 'en', 'zh-CN') — UI extension */
+  language?: string;
+  /** Whether this is the default subtitle track — UI extension */
   isDefault?: boolean;
 }
 
