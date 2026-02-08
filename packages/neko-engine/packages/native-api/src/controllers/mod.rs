@@ -8,6 +8,7 @@
 //! - ExportController: exports:* actions
 //! - TaskController: tasks:* actions
 //! - NodeController: nodes:* actions
+//! - StreamController: streams:* actions (lifecycle management)
 //! - ModelsController: models:* actions (placeholder)
 //! - CanvasController: canvas:* actions (placeholder)
 //! - ScenesController: scenes:* actions (placeholder)
@@ -19,6 +20,7 @@ mod image;
 mod models;
 mod node;
 mod scenes;
+mod stream;
 mod task;
 mod timeline;
 pub(crate) mod utils;
@@ -31,6 +33,7 @@ pub use image::ImageController;
 pub use models::ModelsController;
 pub use node::NodeController;
 pub use scenes::ScenesController;
+pub use stream::StreamController;
 pub use task::TaskController;
 pub use timeline::TimelineController;
 pub use video::VideoController;

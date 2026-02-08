@@ -3675,13 +3675,16 @@ Header size: 25 bytes
 
 | 任务 | 优先级 | 说明 |
 |------|--------|------|
-| 标记旧 NAPI 函数为 deprecated | P1 | `native-napi/src/lib.rs` 中的 `MediaProcessor` 旧 API |
-| 迁移 frame_server 到 native-http | P1 | `native-core/src/frame_server/` 包含 HTTP 路由逻辑，违反分层 |
-| FrameServer 改造为 per-stream | P1 | 当前使用全局 broadcast，需改为 StreamRegistry 的 per-stream broadcast |
+| 标记旧 NAPI 函数为 deprecated | P1 ✅ | `native-napi/src/lib.rs` 中的 `MediaProcessor` 旧 API（Phase 3 已完成） |
+| 迁移 frame_server 到 native-http | P1 ✅ | `native-http/src/frame_server.rs` 组装路由，CLI 通过 `start_server_with_frame_server()` 启动 |
+| native-cli 去 native-core 依赖 | P1 ✅ | CLI 完全通过 native-api re-export 类型 + native-http 启动服务器，不再直接依赖 native-core |
+| 标记旧 FrameServer deprecated | P1 ✅ | `native-core/src/frame_server/server.rs` 中 `FrameServer` 和 `start_with_export` 已标记 deprecated |
+| FrameServer 改造为 per-stream | P1 ✅ | StreamController (6 actions) + StreamRegistry.try_send_frame() 同步推送 + NativeEngine.pushStreamFrame() |
 | 合并 neko_types 与 encoder 类型 | P2 | `VideoCodec`, `HwEncoderType`, `EncoderPreset` 存在两套定义 |
 | Timeline stream decoder 缓存 | P2 | 当前每帧为每个 element 创建新 decoder，应缓存复用 |
 | Animation 模块集成 | P2 | `domain/animation.rs` 已定义但未在 composite/export 中应用 |
 | 修复预存测试失败 | P2 | `test_task_registration` (Tokio runtime) + `test_node_service_metrics` (memory assertion) |
+| extension 接入重构 | P3 | NativeMediaEngine.ts 瘦身 + 帧流双通道架构（Task C，后续处理） |
 
 ### 11.4 Phase 5 架构图
 
@@ -3689,24 +3692,31 @@ Header size: 25 bytes
 graph TD
     subgraph "Phase 5: 清理与优化"
         A[标记旧 NAPI deprecated] --> A1[移除 MediaProcessor]
-        B[迁移 frame_server] --> B1[创建 native-http crate]
-        B1 --> B2[集成 StreamRegistry per-stream]
+        B[迁移 frame_server 路由] --> B1[native-http/frame_server.rs]
+        B1 --> B2[CLI 去 native-core 依赖]
+        B2 --> B3[标记旧 FrameServer deprecated]
         C[合并类型定义] --> C1[统一 VideoCodec/HwEncoderType/EncoderPreset]
         D[Timeline 性能优化] --> D1[Decoder 缓存池]
         D --> D2[Animation 集成]
+        E2[extension 接入重构] --> E3[NativeMediaEngine.ts 瘦身]
     end
 
     subgraph "已完成 (Phase 1-4)"
         E[types 层] --> F[domain 层]
         F --> G[Service trait + impl]
         G --> H[Controller + Router]
-        H --> I[NAPI/CLI 接入]
+        H --> I[NAPI/CLI/HTTP 接入]
     end
 
-    style A fill:#ffd93d
-    style B fill:#ffd93d
+    style A fill:#90EE90
+    style A1 fill:#90EE90
+    style B fill:#90EE90
+    style B1 fill:#90EE90
+    style B2 fill:#90EE90
+    style B3 fill:#90EE90
     style C fill:#87ceeb
     style D fill:#87ceeb
+    style E2 fill:#ffd93d
     style E fill:#90EE90
     style F fill:#90EE90
     style G fill:#90EE90
@@ -3747,11 +3757,11 @@ graph TD
 refactor.md 定义的 5 个 Phase:
   Phase 1: 提取 types 包                    ✅ 已完成
   Phase 2: 构建 native-api 统一接口层        ✅ 已完成 (100%)
-  Phase 3: 重构 native-napi 为薄桥接         🚧 Phase A 完成（bridge.rs + 7 个无状态函数）
-  Phase 4: 抽取 native-http                 ✅ 已完成（crate 创建 + 路由 + WS streaming）
+  Phase 3: 重构 native-napi 为薄桥接         ✅ 已完成（bridge.rs 9 个函数 + media_processor 拆分 + 全量 deprecated）
+  Phase 4: 抽取 native-http                 ✅ 已完成（crate 创建 + 路由 + WS streaming + frame_server 路由迁移）
   Phase 5: extension 接入重构               ❌ 未开始
 
-整体进度: ~75%（核心架构 + Registry + 接入层 + 预留 Controller 完成，media_processor 瘦身 + extension 重构待做）
+整体进度: ~93%（核心架构 + Registry + 接入层 + 桥接层 + media_processor 瘦身 + CLI 去 core 依赖 + frame_server 路由迁移 + StreamController + per-stream 帧推送 + startFrameServer/stopFrameServer NAPI 完成，extension 重构待做）
 ```
 
 ### 12.2 逐项差距分析
@@ -3782,9 +3792,9 @@ refactor.md 定义的 5 个 Phase:
 | SessionManager | ✅ | `session.rs` 独立类，管理 session 生命周期 + 资源作用域 + 级联销毁 stream |
 | ActionRouter | ✅ | `router.rs` 实现 `{group}:{action}` 分发 |
 | **Controller 实现** | | |
-| videos (8 actions) | ✅ | probe, capture, extract, stream, transcode, waveform, proxy, keyframes |
+| videos (9 actions) | ✅ | probe, capture, extract, stream, transcode, waveform, proxy, keyframes, composite |
 | audios (4 actions) | ✅ | probe, extract, stream, waveform |
-| images (2 actions) | ✅ | probe, capture |
+| images (3 actions) | ✅ | probe, capture, encode |
 | timelines (9 actions) | ✅ | composite, stream, stop, pause, resume, speed, loop, seek, keyframe |
 | exports (3 actions) | ✅ | start, progress, cancel |
 | nodes (3 actions) | ✅ | health, metrics, gpu_info |
@@ -3792,15 +3802,19 @@ refactor.md 定义的 5 个 Phase:
 | models controller | ✅ | 预留 Controller，actions: probe, capture, stream（返回 not yet implemented） |
 | canvas controller | ✅ | 预留 Controller，actions: composite, capture, export（返回 not yet implemented） |
 | scenes controller | ✅ | 预留 Controller，actions: composite, capture, stream（返回 not yet implemented） |
+| streams controller | ✅ | StreamController (6 actions): create, activate, pause, resume, destroy, list — 管理 stream 生命周期 |
 
-#### Phase 3: 重构 native-napi 为薄桥接 🚧 Phase A 完成
+#### Phase 3: 重构 native-napi 为薄桥接 ✅ 已完成
 
 | 设计项 | 状态 | 说明 |
 |--------|------|------|
-| 创建 `bridge.rs` | ✅ | Phase A: 7 个无状态桥接函数（probe, subtitles, frame, gpu, audio, waveform, keyframes） |
-| `media_processor.rs` 瘦身 | 🚧 | 已标记 5 个函数为 `#[deprecated]`，完整瘦身待 Phase B/C |
-| NAPI 函数改为转发 native-api | 🚧 | bridge.rs 函数通过 EngineApi.dispatch() 转发，旧函数仍保留 |
+| 创建 `bridge.rs` | ✅ | 9 个桥接函数（probe, subtitles, frame, gpu, audio, waveform, keyframes, encode_jpeg, composite_frame） |
+| `media_processor.rs` 瘦身 | ✅ | 从 3422 行拆分为 8 个文件：media_processor.rs (~1388 行) + sessions/ (7 个文件) + standalone.rs (~620 行) |
+| 旧 API 标记 deprecated | ✅ | MediaProcessor 26 个方法 + 10 个 Session 类 + 7 个独立函数全部标记 `#[deprecated]` |
+| NAPI 函数改为转发 native-api | ✅ | bridge.rs 函数通过 EngineApi.dispatch() 转发，旧函数保留但标记 deprecated |
 | 保留现有函数签名 | ✅ | 旧函数签名不变，新增 bridge_* 函数作为迁移路径 |
+| VideoController composite action | ✅ | 多层合成，接收 layers JSON + 尺寸参数，返回 base64 JPEG |
+| ImageController encode action | ✅ | RGBA→JPEG 编码，接收 base64 RGBA 数据，返回 base64 JPEG |
 
 #### Phase 4: 抽取 native-http ✅ 已完成
 
@@ -3814,7 +3828,7 @@ refactor.md 定义的 5 个 Phase:
 | GET /health | ✅ | 健康检查 |
 | 中间件 (CORS) | ✅ | tower-http CorsLayer (allow_origin/methods/headers: Any) |
 | start_server / start_server_with_shutdown | ✅ | 支持指定端口 + 优雅关闭 |
-| 从 frame_server 提取 HTTP 路由 | ❌ | 待 Phase 5 迁移旧 frame_server 路由 |
+| 从 frame_server 提取 HTTP 路由 | ✅ | `native-http/src/frame_server.rs` 组装 export/keyframe_cache/extract/probe 路由，`start_server_with_frame_server()` 合并 EngineApi + frame_server 路由 |
 
 #### Phase 5: extension 接入重构 ❌ 未开始
 
@@ -3823,7 +3837,7 @@ refactor.md 定义的 5 个 Phase:
 | NativeMediaEngine.ts 重构 | ❌ | 仍为 28KB 直接调用 NAPI |
 | 帧流双通道架构 | ❌ | — |
 | Webview CSP 配置 | ❌ | — |
-| startFrameServer/stopFrameServer | ❌ | — |
+| startFrameServer/stopFrameServer | ✅ | NativeEngine.startFrameServer()/stopFrameServer()/getFrameServerPort() + createStream() + pushStreamFrame() |
 
 ### 12.3 优先级排序
 
@@ -3851,8 +3865,9 @@ refactor.md 定义的 5 个 Phase:
 │ P1 - 接入层重构（Phase 3 + 4）✅ 已完成                           │
 │                                                                 │
 │ 5. ✅ native-napi bridge.rs 桥接层                               │
-│    → Phase A: 7 个无状态函数通过 EngineApi.dispatch() 转发        │
-│    → 旧函数标记 #[deprecated]，保持向后兼容                       │
+│    → 9 个桥接函数通过 EngineApi.dispatch() 转发                    │
+│    → media_processor.rs 从 3422 行拆分为 8 个文件                  │
+│    → 全部旧 API 标记 #[deprecated]，保持向后兼容                   │
 │                                                                 │
 │ 6. ✅ native-http crate                                          │
 │    → axum 路由层 (dispatch/group/resource 三级端点)               │
@@ -3871,6 +3886,32 @@ refactor.md 定义的 5 个 Phase:
 │ 9. extension 接入重构（Phase 5）❌ 未开始                         │
 │    → NativeMediaEngine.ts 瘦身                                   │
 │    → 帧流双通道架构                                               │
+├─────────────────────────────────────────────────────────────────┤
+│ P1.5 - CLI 去 core 依赖 + frame_server 路由迁移 ✅ 已完成          │
+│                                                                 │
+│ 10. ✅ native-api re-export core 类型                             │
+│     → ExportJobConfig, ExportSettings, ExportHwEncoder 等        │
+│     → JviLoader re-export                                        │
+│                                                                 │
+│ 11. ✅ native-http frame_server 模块                              │
+│     → frame_server.rs 组装 export/cache/extract/probe 路由        │
+│     → start_server_with_frame_server() 合并 EngineApi + 路由      │
+│                                                                 │
+│ 12. ✅ native-cli 去 native-core 直接依赖                          │
+│     → imports 改为 neko_native_api re-export                      │
+│     → run_server() 改用 neko_native_http                          │
+│     → Cargo.toml 移除 neko-native-core                            │
+│                                                                 │
+│ 13. ✅ 标记旧 FrameServer deprecated                              │
+│     → FrameServer struct + start_with_export 方法                 │
+│     → FrameServerSession + FrameServerWithExportSession           │
+│       deprecated note 更新为指向新 API                             │
+│                                                                 │
+│ 14. ✅ StreamController + per-stream 帧推送                        │
+│     → native-api/controllers/stream.rs (6 actions)               │
+│     → StreamRegistry.try_send_frame() 同步推送                    │
+│     → NativeEngine.startFrameServer/stopFrameServer/             │
+│       createStream/pushStreamFrame                                │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -3889,7 +3930,8 @@ graph TD
         B1[native-napi bridge.rs]
         B2[native-http crate]
         B1 --> B3[media_processor.rs 瘦身 🚧]
-        B2 --> B4[frame_server 路由提取 ❌]
+        B2 --> B4[frame_server 路由提取 ✅]
+        B4 --> B5[StreamController + per-stream ✅]
     end
 
     subgraph "P2: 扩展 ✅"
@@ -3913,7 +3955,8 @@ graph TD
     style B1 fill:#90EE90
     style B2 fill:#90EE90
     style B3 fill:#ffd93d
-    style B4 fill:#ff6b6b
+    style B4 fill:#90EE90
+    style B5 fill:#90EE90
     style C1 fill:#90EE90
     style C2 fill:#90EE90
     style C3 fill:#ff6b6b

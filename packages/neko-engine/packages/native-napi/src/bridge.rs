@@ -174,3 +174,47 @@ pub async fn bridge_get_keyframes(path: String) -> napi::Result<String> {
 
     dispatch_to_json(request).await
 }
+
+// ============================================================================
+// Phase B: Additional bridge functions
+// ============================================================================
+
+/// Encode RGBA pixel data to JPEG via the unified API
+///
+/// Maps to: images:encode
+///
+/// Returns JSON ActionResponse with base64-encoded JPEG data
+#[napi]
+pub async fn bridge_encode_jpeg(
+    rgba_data_base64: String,
+    width: u32,
+    height: u32,
+    quality: Option<u32>,
+) -> napi::Result<String> {
+    let request = ActionRequest::new("images", "encode")
+        .with_options(json!({
+            "data": rgba_data_base64,
+            "width": width,
+            "height": height,
+            "quality": quality.unwrap_or(85),
+        }));
+
+    dispatch_to_json(request).await
+}
+
+/// Composite multiple video frames into a single JPEG image via the unified API
+///
+/// Maps to: videos:composite
+///
+/// Takes a JSON string describing the composite request (layers, dimensions, etc.)
+/// Returns JSON ActionResponse with base64-encoded JPEG data
+#[napi]
+pub async fn bridge_composite_frame(request_json: String) -> napi::Result<String> {
+    let opts: serde_json::Value = serde_json::from_str(&request_json)
+        .map_err(|e| napi::Error::from_reason(format!("Invalid JSON: {}", e)))?;
+
+    let request = ActionRequest::new("videos", "composite")
+        .with_options(opts);
+
+    dispatch_to_json(request).await
+}

@@ -175,6 +175,7 @@ pub struct FrameServerStats {
 }
 
 /// Frame server for streaming video frames via HTTP/WebSocket
+#[deprecated(note = "Use neko_native_http::start_server_with_frame_server() instead")]
 pub struct FrameServer;
 
 impl FrameServer {
@@ -249,6 +250,7 @@ impl FrameServer {
     /// Start the frame server with export service enabled
     ///
     /// This version includes the export API endpoints for compat mode video export.
+    #[deprecated(note = "Use neko_native_http::start_server_with_frame_server() instead")]
     pub async fn start_with_export(
         config: FrameServerConfig,
     ) -> Result<FrameServerHandle, Box<dyn std::error::Error + Send + Sync>> {

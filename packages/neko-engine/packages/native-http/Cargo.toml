@@ -11,6 +11,7 @@ crate-type = ["lib"]
 [dependencies]
 # Engine API
 neko-native-api = { path = "../native-api" }
+neko-native-core = { path = "../native-core" }
 neko-types = { path = "../types" }
 
 # HTTP framework

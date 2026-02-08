@@ -76,6 +76,38 @@ impl<W: Write> Write for Base64Encoder<W> {
     }
 }
 
+/// Simple base64 decoding (no external dependency)
+pub fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
+    let input = input.trim_end_matches('=');
+    let mut output = Vec::with_capacity(input.len() * 3 / 4);
+
+    let mut buf: u32 = 0;
+    let mut bits: u32 = 0;
+
+    for ch in input.bytes() {
+        let val = match ch {
+            b'A'..=b'Z' => ch - b'A',
+            b'a'..=b'z' => ch - b'a' + 26,
+            b'0'..=b'9' => ch - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'\n' | b'\r' | b' ' | b'\t' => continue,
+            _ => return Err(format!("Invalid base64 character: {}", ch as char)),
+        };
+
+        buf = (buf << 6) | val as u32;
+        bits += 6;
+
+        if bits >= 8 {
+            bits -= 8;
+            output.push((buf >> bits) as u8);
+            buf &= (1 << bits) - 1;
+        }
+    }
+
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

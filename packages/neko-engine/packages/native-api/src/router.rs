@@ -2,8 +2,8 @@
 
 use crate::controllers::{
     AudioController, CanvasController, Controller, ExportController, ImageController,
-    ModelsController, NodeController, ScenesController, TaskController, TimelineController,
-    VideoController,
+    ModelsController, NodeController, ScenesController, StreamController, TaskController,
+    TimelineController, VideoController,
 };
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
@@ -23,6 +23,7 @@ pub struct ActionRouter {
     image_controller: ImageController,
     timeline_controller: TimelineController,
     export_controller: Option<ExportController>,
+    stream_controller: StreamController,
     models_controller: ModelsController,
     canvas_controller: CanvasController,
     scenes_controller: ScenesController,
@@ -39,7 +40,7 @@ impl ActionRouter {
         timeline_service: Arc<TimelineService>,
         export_service: Option<Arc<ExportService>>,
         resource_registry: Arc<ResourceRegistry>,
-        _stream_registry: Arc<StreamRegistry>,
+        stream_registry: Arc<StreamRegistry>,
     ) -> Self {
         let export_controller = export_service.map(ExportController::new);
 
@@ -51,6 +52,7 @@ impl ActionRouter {
             image_controller: ImageController::new(image_service, resource_registry),
             timeline_controller: TimelineController::new(timeline_service),
             export_controller,
+            stream_controller: StreamController::new(stream_registry),
             models_controller: ModelsController::new(),
             canvas_controller: CanvasController::new(),
             scenes_controller: ScenesController::new(),
@@ -129,6 +131,11 @@ impl ActionRouter {
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
+            "streams" => {
+                self.stream_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
             _ => Err(ApiError::UnknownAction {
                 group: request.group.clone(),
                 action: request.action.clone(),
@@ -140,7 +147,7 @@ impl ActionRouter {
     pub fn groups(&self) -> Vec<&str> {
         let mut groups = vec![
             "nodes", "tasks", "videos", "audios", "images", "timelines",
-            "models", "canvas", "scenes",
+            "streams", "models", "canvas", "scenes",
         ];
         if self.export_controller.is_some() {
             groups.push("exports");
@@ -161,6 +168,7 @@ impl ActionRouter {
             "models" => Some(self.models_controller.actions()),
             "canvas" => Some(self.canvas_controller.actions()),
             "scenes" => Some(self.scenes_controller.actions()),
+            "streams" => Some(self.stream_controller.actions()),
             _ => None,
         }
     }
@@ -248,6 +256,7 @@ mod tests {
         assert!(groups.contains(&"models"));
         assert!(groups.contains(&"canvas"));
         assert!(groups.contains(&"scenes"));
+        assert!(groups.contains(&"streams"));
         // No GPU = no exports group
         assert!(!groups.contains(&"exports"));
     }
@@ -294,5 +303,22 @@ mod tests {
 
         let scenes_actions = router.actions("scenes").unwrap();
         assert_eq!(scenes_actions, &["composite", "capture", "stream"]);
+    }
+
+    #[test]
+    fn test_groups_includes_streams() {
+        let router = create_test_router();
+        let groups = router.groups();
+        assert!(groups.contains(&"streams"));
+    }
+
+    #[test]
+    fn test_actions_for_streams() {
+        let router = create_test_router();
+        let actions = router.actions("streams").unwrap();
+        assert_eq!(
+            actions,
+            &["create", "activate", "pause", "resume", "destroy", "list"]
+        );
     }
 }

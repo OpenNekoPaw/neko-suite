@@ -210,6 +210,32 @@ impl StreamRegistry {
         }
     }
 
+    /// Send a frame synchronously (for high-frequency push from NAPI)
+    ///
+    /// Uses `try_read()` to avoid async overhead. This is optimized for
+    /// 30-60fps frame pushing where `broadcast::Sender::send()` is already
+    /// synchronous — only the RwLock acquisition needs to be non-blocking.
+    pub fn try_send_frame(
+        &self,
+        stream_id: &StreamId,
+        frame: FrameData,
+    ) -> Result<usize, StreamStateError> {
+        let streams = self
+            .streams
+            .try_read()
+            .map_err(|_| StreamStateError::NotActive("Registry lock contended".into()))?;
+        if let Some(entry) = streams.get(stream_id.as_str()) {
+            if !entry.is_active() {
+                return Err(StreamStateError::NotActive(stream_id.as_str().to_string()));
+            }
+            entry
+                .send_frame(frame)
+                .map_err(|_| StreamStateError::NoReceivers(stream_id.as_str().to_string()))
+        } else {
+            Err(StreamStateError::NotFound(stream_id.as_str().to_string()))
+        }
+    }
+
     /// Get all streams for a session
     pub async fn get_session_streams(&self, session_id: &str) -> Vec<StreamId> {
         let session_map = self.session_streams.read().await;
@@ -467,5 +493,72 @@ mod tests {
         registry.destroy(&stream_id).await.unwrap();
 
         assert_eq!(registry.get_resource_streams("vid_abc").await.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_try_send_frame() {
+        let registry = StreamRegistry::new();
+        let (stream_id, mut rx) = registry
+            .create_stream("session1", "vid_abc", test_config())
+            .await;
+
+        // Activate the stream
+        registry.activate(&stream_id).await.unwrap();
+
+        // Send a frame synchronously
+        let frame = FrameData::new(
+            vec![0u8; 100],
+            1920,
+            1080,
+            neko_types::FrameFormat::Rgba,
+        );
+        let result = registry.try_send_frame(&stream_id, frame);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1); // 1 receiver
+
+        // Verify the frame was received
+        let received = rx.try_recv();
+        assert!(received.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_try_send_frame_not_active() {
+        let registry = StreamRegistry::new();
+        let (stream_id, _rx) = registry
+            .create_stream("session1", "vid_abc", test_config())
+            .await;
+
+        // Stream is in Created state, not Active
+        let frame = FrameData::new(
+            vec![0u8; 100],
+            1920,
+            1080,
+            neko_types::FrameFormat::Rgba,
+        );
+        let result = registry.try_send_frame(&stream_id, frame);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            StreamStateError::NotActive(_) => {} // expected
+            other => panic!("Expected NotActive, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_try_send_frame_not_found() {
+        let registry = StreamRegistry::new();
+        let fake_id = StreamId::from_string("strm_nonexistent".to_string());
+
+        let frame = FrameData::new(
+            vec![0u8; 100],
+            1920,
+            1080,
+            neko_types::FrameFormat::Rgba,
+        );
+        let result = registry.try_send_frame(&fake_id, frame);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            StreamStateError::NotFound(_) => {} // expected
+            other => panic!("Expected NotFound, got: {:?}", other),
+        }
     }
 }

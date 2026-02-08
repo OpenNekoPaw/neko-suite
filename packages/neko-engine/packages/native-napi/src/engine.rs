@@ -2,13 +2,20 @@
 //!
 //! This module provides a Node.js-friendly interface to the EngineApi.
 //! It handles JSON serialization/deserialization and async bridging.
+//!
+//! New in P1:
+//! - `start_frame_server` / `stop_frame_server` — embedded HTTP/WS server lifecycle
+//! - `create_stream` — convenience method for stream creation with WS endpoint info
+//! - `push_stream_frame` — synchronous per-stream frame push (30-60fps optimized)
 
+use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 
 use neko_native_api::EngineApi;
-use neko_types::ActionRequest;
+use neko_native_core::domain::FrameData;
+use neko_types::{ActionRequest, FrameFormat, StreamId};
 
 /// Global engine instance (singleton)
 static ENGINE: OnceCell<Arc<EngineApi>> = OnceCell::const_new();
@@ -26,13 +33,23 @@ async fn get_engine() -> napi::Result<Arc<EngineApi>> {
         .cloned()
 }
 
+/// Internal state for the embedded HTTP/WebSocket server
+struct HttpServerState {
+    addr: std::net::SocketAddr,
+    shutdown_tx: tokio::sync::watch::Sender<()>,
+}
+
 /// NativeEngine - Main entry point for all engine operations
 ///
 /// This class provides a unified interface to the Neko Engine through
 /// the ActionRequest/ActionResponse protocol.
+///
+/// It also manages an optional embedded HTTP/WebSocket server for
+/// per-stream frame delivery to webview consumers.
 #[napi]
 pub struct NativeEngine {
     engine: Arc<EngineApi>,
+    http_server: std::sync::Mutex<Option<HttpServerState>>,
 }
 
 #[napi]
@@ -59,7 +76,10 @@ impl NativeEngine {
             if engine.has_gpu() { "enabled" } else { "disabled" }
         );
 
-        Ok(Self { engine })
+        Ok(Self {
+            engine,
+            http_server: std::sync::Mutex::new(None),
+        })
     }
 
     /// Dispatch an action request
@@ -205,6 +225,194 @@ impl NativeEngine {
             Some(options.to_string()),
         )
         .await
+    }
+
+    // ========== Frame Server Management ==========
+
+    /// Start the embedded HTTP/WebSocket server for frame streaming
+    ///
+    /// The server provides:
+    /// - `ws://127.0.0.1:{port}/v1/streams/{stream_id}` — per-stream WebSocket
+    /// - `POST http://127.0.0.1:{port}/v1/dispatch` — ActionRequest dispatch
+    /// - `GET http://127.0.0.1:{port}/health` — health check
+    ///
+    /// Returns the actual bound port (useful when port=0 for auto-assign).
+    #[napi]
+    pub async fn start_frame_server(&self, port: Option<u16>) -> napi::Result<u16> {
+        // Check if already running
+        {
+            let guard = self
+                .http_server
+                .lock()
+                .map_err(|_| napi::Error::from_reason("Failed to lock http_server state"))?;
+            if guard.is_some() {
+                return Err(napi::Error::from_reason(
+                    "Frame server is already running. Call stopFrameServer() first.",
+                ));
+            }
+        }
+
+        let bind_port = port.unwrap_or(0);
+
+        let (addr, shutdown_tx) =
+            neko_native_http::start_server_with_shutdown(self.engine.clone(), bind_port)
+                .await
+                .map_err(|e| {
+                    napi::Error::from_reason(format!("Failed to start frame server: {}", e))
+                })?;
+
+        let actual_port = addr.port();
+
+        tracing::info!(
+            "Frame server started on http://127.0.0.1:{}",
+            actual_port
+        );
+
+        // Store the server state
+        {
+            let mut guard = self
+                .http_server
+                .lock()
+                .map_err(|_| napi::Error::from_reason("Failed to lock http_server state"))?;
+            *guard = Some(HttpServerState {
+                addr,
+                shutdown_tx,
+            });
+        }
+
+        Ok(actual_port)
+    }
+
+    /// Stop the embedded HTTP/WebSocket server
+    #[napi]
+    pub async fn stop_frame_server(&self) -> napi::Result<()> {
+        let state = {
+            let mut guard = self
+                .http_server
+                .lock()
+                .map_err(|_| napi::Error::from_reason("Failed to lock http_server state"))?;
+            guard.take()
+        };
+
+        if let Some(server_state) = state {
+            let _ = server_state.shutdown_tx.send(());
+            tracing::info!(
+                "Frame server on port {} stopped",
+                server_state.addr.port()
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Get the frame server port, or null if not running
+    #[napi]
+    pub fn get_frame_server_port(&self) -> Option<u16> {
+        self.http_server
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|s| s.addr.port()))
+    }
+
+    /// Create a stream and return WebSocket endpoint info (JSON)
+    ///
+    /// Convenience method that dispatches `streams:create` and fills in the
+    /// `wsPort` field from the running frame server.
+    #[napi]
+    pub async fn create_stream(
+        &self,
+        session_id: String,
+        resource_id: String,
+        width: Option<u32>,
+        height: Option<u32>,
+        fps: Option<f64>,
+    ) -> napi::Result<String> {
+        let mut options = serde_json::json!({
+            "sessionId": session_id,
+            "resourceId": resource_id,
+        });
+
+        if let Some(w) = width {
+            options["width"] = serde_json::json!(w);
+        }
+        if let Some(h) = height {
+            options["height"] = serde_json::json!(h);
+        }
+        if let Some(f) = fps {
+            options["fps"] = serde_json::json!(f);
+        }
+
+        let request = ActionRequest {
+            group: "streams".to_string(),
+            action: "create".to_string(),
+            id: String::new(),
+            source: None,
+            session_id: Some(session_id),
+            stream_id: None,
+            options,
+            body: None,
+        };
+
+        let mut response = self.engine.dispatch(request).await;
+
+        // Inject wsPort from the running frame server
+        if let Some(ref mut data) = response.data {
+            if let Some(port) = self.get_frame_server_port() {
+                data["wsPort"] = serde_json::json!(port);
+                // Build full wsUrl for convenience
+                if let Some(endpoint) = data["wsEndpoint"].as_str() {
+                    data["wsUrl"] =
+                        serde_json::json!(format!("ws://127.0.0.1:{}{}", port, endpoint));
+                }
+            }
+        }
+
+        serde_json::to_string(&response)
+            .map_err(|e| napi::Error::from_reason(format!("Serialization error: {}", e)))
+    }
+
+    /// Push a frame to a specific stream (per-stream, replaces FrameServerSession.pushFrame)
+    ///
+    /// This is a synchronous method optimized for high-frequency calls (30-60fps).
+    /// It uses `try_read()` on the stream registry to avoid async overhead.
+    #[napi]
+    pub fn push_stream_frame(
+        &self,
+        stream_id: String,
+        data: Buffer,
+        width: u32,
+        height: u32,
+        timestamp: f64,
+        format: Option<String>,
+    ) -> napi::Result<()> {
+        let frame_format = match format.as_deref() {
+            Some("h264") => FrameFormat::H264,
+            Some("jpeg") | Some("jpg") => FrameFormat::Jpeg,
+            Some("nv12") => FrameFormat::Nv12,
+            Some("rgba") | None => FrameFormat::Rgba,
+            Some(other) => {
+                return Err(napi::Error::from_reason(format!(
+                    "Unsupported frame format: {}. Use 'rgba', 'h264', 'jpeg', or 'nv12'.",
+                    other
+                )));
+            }
+        };
+
+        let frame = FrameData {
+            data: data.to_vec(),
+            width,
+            height,
+            format: frame_format,
+            timestamp,
+        };
+
+        let sid = StreamId::from_string(stream_id);
+        self.engine
+            .stream_registry()
+            .try_send_frame(&sid, frame)
+            .map_err(|e| napi::Error::from_reason(format!("Failed to push frame: {}", e)))?;
+
+        Ok(())
     }
 }
 

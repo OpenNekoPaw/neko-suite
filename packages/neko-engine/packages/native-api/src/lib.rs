@@ -41,3 +41,9 @@ pub use session::{Session, SessionConfig, SessionManager};
 
 // Re-export common types for convenience
 pub use neko_types::{ActionRequest, ActionResponse, ResourceId, StreamId};
+
+// Re-export native-core types needed by CLI and other view adapters
+pub use neko_native_core::export::{
+    ExportHwEncoder, ExportJobConfig, ExportPreset, ExportSettings, ExportVideoCodec, TimelineData,
+};
+pub use neko_native_core::jvi::JviLoader;

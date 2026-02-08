@@ -1,6 +1,6 @@
 //! ImageController - handles images:* actions
 
-use crate::controllers::utils::base64_encode;
+use crate::controllers::utils::{base64_decode, base64_encode};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
@@ -86,6 +86,20 @@ fn default_format() -> String {
     "jpeg".to_string()
 }
 
+/// Options for images:encode
+#[derive(Debug, Deserialize, Default)]
+struct EncodeRequestOptions {
+    /// Base64-encoded RGBA pixel data
+    data: Option<String>,
+    /// Image width in pixels
+    width: Option<u32>,
+    /// Image height in pixels
+    height: Option<u32>,
+    /// JPEG quality (1-100, default 85)
+    #[serde(default = "default_quality")]
+    quality: u32,
+}
+
 impl Controller for ImageController {
     async fn handle(
         &self,
@@ -160,6 +174,42 @@ impl Controller for ImageController {
 
                 Ok(ActionResponse::ok("", response))
             }
+            "encode" => {
+                let opts: EncodeRequestOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let data_b64 = opts.data.ok_or_else(|| {
+                    ApiError::InvalidRequest("RGBA data required for images:encode".to_string())
+                })?;
+
+                let width = opts.width.ok_or_else(|| {
+                    ApiError::InvalidRequest("width required for images:encode".to_string())
+                })?;
+
+                let height = opts.height.ok_or_else(|| {
+                    ApiError::InvalidRequest("height required for images:encode".to_string())
+                })?;
+
+                // Decode base64 RGBA data
+                let rgba_data = base64_decode(&data_b64).map_err(|e| {
+                    ApiError::InvalidRequest(format!("Invalid base64 data: {}", e))
+                })?;
+
+                // Encode RGBA to JPEG
+                use neko_native_core::media_service::encode_rgba_to_jpeg;
+                let jpeg_data = encode_rgba_to_jpeg(&rgba_data, width, height, opts.quality)
+                    .map_err(|e| ApiError::ServiceError(format!("JPEG encoding failed: {}", e)))?;
+
+                let response = serde_json::json!({
+                    "width": width,
+                    "height": height,
+                    "format": "jpeg",
+                    "size": jpeg_data.len(),
+                    "data": base64_encode(&jpeg_data),
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "images".to_string(),
                 action: action.to_string(),
@@ -172,7 +222,7 @@ impl Controller for ImageController {
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["probe", "capture"]
+        &["probe", "capture", "encode"]
     }
 }
 
@@ -215,6 +265,7 @@ mod tests {
 
         assert!(actions.contains(&"probe"));
         assert!(actions.contains(&"capture"));
-        assert_eq!(actions.len(), 2);
+        assert!(actions.contains(&"encode"));
+        assert_eq!(actions.len(), 3);
     }
 }

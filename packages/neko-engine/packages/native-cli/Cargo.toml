@@ -10,8 +10,8 @@ name = "neko-engine"
 path = "src/main.rs"
 
 [dependencies]
-neko-native-core = { path = "../native-core" }
 neko-native-api = { path = "../native-api" }
+neko-native-http = { path = "../native-http" }
 neko-types = { path = "../types" }
 clap.workspace = true
 tokio.workspace = true
@@ -29,7 +29,7 @@ indicatif.workspace = true
 
 [features]
 default = []
-tracy = ["tracing-tracy", "tracy-client", "neko-native-core/tracy"]
+tracy = ["tracing-tracy", "tracy-client"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"

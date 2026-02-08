@@ -9,12 +9,9 @@ use std::sync::Arc;
 
 use crate::args::Command;
 use indicatif::{ProgressBar, ProgressStyle};
-use neko_native_api::EngineApi;
-use neko_native_core::export::{
-    ExportJobConfig, ExportHwEncoder, ExportPreset, ExportVideoCodec,
+use neko_native_api::{
+    EngineApi, ExportHwEncoder, ExportJobConfig, ExportPreset, ExportVideoCodec, JviLoader,
 };
-use neko_native_core::frame_server::{FrameServer, FrameServerConfig};
-use neko_native_core::jvi::JviLoader;
 use neko_types::ActionRequest;
 
 /// CLI runner for executing commands
@@ -67,18 +64,8 @@ impl Runner {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("Starting Neko Suite Export Server on port {}", port);
 
-        let config = FrameServerConfig {
-            port,
-            ..Default::default()
-        };
-
-        let handle = FrameServer::start_with_export(config).await?;
-        tracing::info!("Server started on http://127.0.0.1:{}", handle.port());
-
-        // Wait for shutdown signal
-        tokio::signal::ctrl_c().await?;
-        tracing::info!("Shutting down...");
-        handle.shutdown();
+        let engine = self.get_engine().await?;
+        neko_native_http::start_server_with_frame_server(engine, port).await?;
 
         Ok(())
     }
