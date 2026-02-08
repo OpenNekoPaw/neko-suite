@@ -1,14 +1,24 @@
 //! Command-line argument definitions
+//!
+//! Each engine controller group is exposed as a top-level subcommand.
+//! Actions within each group are listed as sub-subcommands with shared options.
+//!
+//! Special handling:
+//! - `timelines export` supports rich CLI flags (--jvi-file, --output, --codec, etc.)
+//!   with progress bar display, in addition to the generic JSON mode.
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-/// Neko Engine - Media Processing Server
+/// Neko Engine - Media Processing CLI
 ///
-/// Standalone WebSocket server for compat mode video export.
-/// Supports two modes:
-/// 1. Server mode: Listen for WebSocket export requests
-/// 2. CLI mode: Direct .jvi file export
+/// Dispatch actions to engine controller groups.
+///
+/// Examples:
+///   neko-engine nodes health
+///   neko-engine videos probe --options '{"source":"/path/to/video.mp4"}'
+///   neko-engine timelines export -i project.jvi -o output.mp4
+///   neko-engine serve -p 8765
 #[derive(Parser, Debug)]
 #[command(name = "neko-engine")]
 #[command(version, about, long_about = None)]
@@ -17,9 +27,89 @@ pub struct Args {
     pub command: Command,
 }
 
+// ---------------------------------------------------------------------------
+// Shared action options (--id, --options, --body, -f)
+// ---------------------------------------------------------------------------
+
+/// Common options shared by all generic actions
+#[derive(Debug, Clone, clap::Args)]
+pub struct ActionOpts {
+    /// Resource ID (optional)
+    #[arg(long)]
+    pub id: Option<String>,
+
+    /// Source file path
+    #[arg(short = 'i', long)]
+    pub source: Option<String>,
+
+    /// Session ID for multi-window isolation
+    #[arg(long)]
+    pub session: Option<String>,
+
+    /// Stream ID for stream control actions
+    #[arg(long)]
+    pub stream: Option<String>,
+
+    /// Options as JSON string
+    #[arg(long)]
+    pub options: Option<String>,
+
+    /// Body as JSON string (for complex payloads)
+    #[arg(long)]
+    pub body: Option<String>,
+
+    /// Output format (json, pretty)
+    #[arg(short, long, default_value = "pretty")]
+    pub format: String,
+}
+
+// ---------------------------------------------------------------------------
+// Macro: define action enum for a controller group
+// ---------------------------------------------------------------------------
+
+/// Generate a typed action enum where each variant carries `ActionOpts`.
+macro_rules! define_actions {
+    (
+        $enum_name:ident {
+            $( $(#[$meta:meta])* $variant:ident => $action_str:literal ),+ $(,)?
+        }
+    ) => {
+        #[derive(Subcommand, Debug)]
+        pub enum $enum_name {
+            $(
+                $(#[$meta])*
+                $variant {
+                    #[command(flatten)]
+                    opts: ActionOpts,
+                },
+            )+
+        }
+
+        impl $enum_name {
+            /// Return the engine action name string
+            pub fn action_name(&self) -> &'static str {
+                match self {
+                    $( $enum_name::$variant { .. } => $action_str, )+
+                }
+            }
+
+            /// Return the shared action options
+            pub fn opts(&self) -> &ActionOpts {
+                match self {
+                    $( $enum_name::$variant { opts, .. } => opts, )+
+                }
+            }
+        }
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Top-level commands
+// ---------------------------------------------------------------------------
+
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Start as WebSocket server, waiting for export requests
+    /// Start as WebSocket server
     Serve {
         /// Server port (default: 8765)
         #[arg(short, long, default_value = "8765")]
@@ -34,7 +124,255 @@ pub enum Command {
         verbose: bool,
     },
 
-    /// Export a .jvi project file directly
+    /// Node management: health, metric, gpu
+    Nodes {
+        #[command(subcommand)]
+        action: NodeAction,
+    },
+
+    /// Task management: probe, pause, resume, cancel, list
+    Tasks {
+        #[command(subcommand)]
+        action: TaskAction,
+    },
+
+    /// Video processing: probe, capture, extract, stream, transcode, keyframes, waveform, proxy, stop, pause, resume, speed, seek, loop
+    Videos {
+        #[command(subcommand)]
+        action: VideoAction,
+    },
+
+    /// Audio processing: probe, transcode, stream, waveform, stop, pause, resume, speed
+    Audios {
+        #[command(subcommand)]
+        action: AudioAction,
+    },
+
+    /// Image processing: probe, capture, encode
+    Images {
+        #[command(subcommand)]
+        action: ImageAction,
+    },
+
+    /// Timeline editing & export: probe, composite, stream, stop, pause, resume, speed, loop, seek, export, export_progress, export_cancel
+    Timelines {
+        #[command(subcommand)]
+        action: TimelineAction,
+    },
+
+    /// Stream lifecycle: create, activate, pause, resume, destroy, list
+    Streams {
+        #[command(subcommand)]
+        action: StreamAction,
+    },
+
+    /// 3D model operations (planned)
+    Models {
+        #[command(subcommand)]
+        action: ModelAction,
+    },
+
+    /// Canvas operations (planned)
+    Canvas {
+        #[command(subcommand)]
+        action: CanvasAction,
+    },
+
+    /// Scene operations (planned)
+    Scenes {
+        #[command(subcommand)]
+        action: SceneAction,
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Per-group action enums
+// ---------------------------------------------------------------------------
+
+define_actions!(NodeAction {
+    /// Check node health status
+    Health => "health",
+    /// Get node performance metrics
+    Metric => "metric",
+    /// Get GPU information
+    Gpu => "gpu",
+});
+
+define_actions!(TaskAction {
+    /// Query task progress by ID
+    Probe => "probe",
+    /// Pause a running task
+    Pause => "pause",
+    /// Resume a paused task
+    Resume => "resume",
+    /// Cancel a task
+    Cancel => "cancel",
+    /// List all tasks
+    List => "list",
+});
+
+define_actions!(VideoAction {
+    /// Probe video file metadata
+    Probe => "probe",
+    /// Capture a single frame as JPEG
+    Capture => "capture",
+    /// Extract subtitles, frames, or frame sequences
+    Extract => "extract",
+    /// Start video streaming
+    Stream => "stream",
+    /// Transcode video file
+    Transcode => "transcode",
+    /// Extract keyframes
+    Keyframes => "keyframes",
+    /// Generate audio waveform
+    Waveform => "waveform",
+    /// Generate proxy file
+    Proxy => "proxy",
+    /// Stop video stream
+    Stop => "stop",
+    /// Pause video stream
+    Pause => "pause",
+    /// Resume video stream
+    Resume => "resume",
+    /// Set playback speed
+    Speed => "speed",
+    /// Seek to time position
+    Seek => "seek",
+    /// Set loop region
+    Loop => "loop",
+});
+
+define_actions!(AudioAction {
+    /// Probe audio file metadata
+    Probe => "probe",
+    /// Transcode audio file
+    Transcode => "transcode",
+    /// Start audio streaming
+    Stream => "stream",
+    /// Generate audio waveform
+    Waveform => "waveform",
+    /// Stop audio stream
+    Stop => "stop",
+    /// Pause audio stream
+    Pause => "pause",
+    /// Resume audio stream
+    Resume => "resume",
+    /// Set playback speed
+    Speed => "speed",
+});
+
+define_actions!(ImageAction {
+    /// Probe image file metadata
+    Probe => "probe",
+    /// Capture/convert image
+    Capture => "capture",
+    /// Encode RGBA data to image format
+    Encode => "encode",
+});
+
+define_actions!(StreamAction {
+    /// Create a new stream
+    Create => "create",
+    /// Activate a stream
+    Activate => "activate",
+    /// Pause a stream
+    Pause => "pause",
+    /// Resume a stream
+    Resume => "resume",
+    /// Destroy a stream
+    Destroy => "destroy",
+    /// List all streams
+    List => "list",
+});
+
+define_actions!(ModelAction {
+    /// Probe 3D model metadata
+    Probe => "probe",
+    /// Capture model snapshot
+    Capture => "capture",
+    /// Stream model rendering
+    Stream => "stream",
+});
+
+define_actions!(CanvasAction {
+    /// Composite canvas layers
+    Composite => "composite",
+    /// Capture canvas snapshot
+    Capture => "capture",
+    /// Export canvas
+    Export => "export",
+});
+
+define_actions!(SceneAction {
+    /// Composite scene
+    Composite => "composite",
+    /// Capture scene snapshot
+    Capture => "capture",
+    /// Stream scene rendering
+    Stream => "stream",
+});
+
+// ---------------------------------------------------------------------------
+// Timeline actions (special: export has rich CLI flags)
+// ---------------------------------------------------------------------------
+
+#[derive(Subcommand, Debug)]
+pub enum TimelineAction {
+    /// Probe timeline (.jvi) file metadata
+    Probe {
+        #[command(flatten)]
+        opts: ActionOpts,
+    },
+
+    /// Composite a single frame from timeline
+    Composite {
+        #[command(flatten)]
+        opts: ActionOpts,
+    },
+
+    /// Start timeline streaming
+    Stream {
+        #[command(flatten)]
+        opts: ActionOpts,
+    },
+
+    /// Stop timeline stream
+    Stop {
+        #[command(flatten)]
+        opts: ActionOpts,
+    },
+
+    /// Pause timeline stream
+    Pause {
+        #[command(flatten)]
+        opts: ActionOpts,
+    },
+
+    /// Resume timeline stream
+    Resume {
+        #[command(flatten)]
+        opts: ActionOpts,
+    },
+
+    /// Set timeline playback speed
+    Speed {
+        #[command(flatten)]
+        opts: ActionOpts,
+    },
+
+    /// Set timeline loop region
+    Loop {
+        #[command(flatten)]
+        opts: ActionOpts,
+    },
+
+    /// Seek timeline to time position
+    Seek {
+        #[command(flatten)]
+        opts: ActionOpts,
+    },
+
+    /// Export a .jvi project file with progress display
     Export {
         /// Path to .jvi project file
         #[arg(short = 'i', long)]
@@ -60,85 +398,20 @@ pub enum Command {
         #[arg(long, default_value = "auto")]
         hw_encoder: String,
 
-        /// Enable zero-copy GPU encoding with CVPixelBufferPool (macOS only)
-        /// Uses AV_PIX_FMT_VIDEOTOOLBOX format for true zero-copy encoding
+        /// Enable zero-copy GPU encoding (macOS only)
         #[arg(long, default_value = "false")]
         zero_copy: bool,
     },
 
-    /// Probe media file and display metadata
-    Probe {
-        /// Path to media file
-        #[arg(short = 'i', long)]
-        input: PathBuf,
-
-        /// Output format (text, json)
-        #[arg(short, long, default_value = "text")]
-        format: String,
+    /// Query export job progress
+    ExportProgress {
+        #[command(flatten)]
+        opts: ActionOpts,
     },
 
-    /// Extract a single frame from video as JPEG
-    Extract {
-        /// Path to video file
-        #[arg(short = 'i', long)]
-        input: PathBuf,
-
-        /// Output JPEG file path
-        #[arg(short, long)]
-        output: PathBuf,
-
-        /// Time in seconds to extract frame
-        #[arg(short, long, default_value = "0.0")]
-        time: f64,
-
-        /// JPEG quality (1-100)
-        #[arg(short, long, default_value = "85")]
-        quality: u32,
-
-        /// Output width (optional, for scaling)
-        #[arg(long)]
-        width: Option<u32>,
-
-        /// Output height (optional, for scaling)
-        #[arg(long)]
-        height: Option<u32>,
+    /// Cancel an export job
+    ExportCancel {
+        #[command(flatten)]
+        opts: ActionOpts,
     },
-
-    /// Execute any engine action (group:action pattern)
-    ///
-    /// Example: neko-engine action videos probe --options '{"source":"/path/to/video.mp4"}'
-    Action {
-        /// Action group (e.g., videos, audios, timelines, tasks, nodes)
-        group: String,
-
-        /// Action name (e.g., probe, capture, export, stream)
-        action: String,
-
-        /// Resource ID (optional)
-        #[arg(long)]
-        id: Option<String>,
-
-        /// Options as JSON string
-        #[arg(long)]
-        options: Option<String>,
-
-        /// Body as JSON string (for complex payloads)
-        #[arg(long)]
-        body: Option<String>,
-
-        /// Output format (json, pretty)
-        #[arg(short, long, default_value = "pretty")]
-        format: String,
-    },
-
-    /// Any unrecognized subcommand is treated as <group> <action> [args...]
-    ///
-    /// Supported groups: videos, audios, images, timelines, streams, tasks, nodes, models, canvas, scenes
-    ///
-    /// Examples:
-    ///   neko-engine videos probe --options '{"source":"/path/to/video.mp4"}'
-    ///   neko-engine timelines export --body '{"timeline":...}'
-    ///   neko-engine nodes health
-    #[command(external_subcommand)]
-    External(Vec<String>),
 }

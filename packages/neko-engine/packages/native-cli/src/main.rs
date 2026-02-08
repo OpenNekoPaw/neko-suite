@@ -33,9 +33,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Determine log level based on command
     let log_level = match &args.command {
         Command::Serve { verbose, .. } if *verbose => "debug",
-        Command::Export { .. } => "warn", // Reduce log noise during export (progress bar handles display)
-        Command::Action { .. } | Command::External(_) => "warn",
-        _ => "info",
+        Command::Serve { .. } => "info",
+        _ => "warn", // Reduce log noise for all action commands
     };
 
     // Initialize logging with optional Tracy integration
