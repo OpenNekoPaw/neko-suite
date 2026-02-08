@@ -31,7 +31,7 @@ import {
   DEFAULT_AUDIO_PROPERTIES,
   DEFAULT_COLOR_CORRECTION,
   DEFAULT_SHAPE_STYLE,
-  DEFAULT_TRANSFORM,
+  CENTERED_TRANSFORM,
   createDefaultProject,
   generateId,
   getTotalDuration,
@@ -647,7 +647,7 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
 
       const elementId = generateId();
       const elementTransform = {
-        ...DEFAULT_TRANSFORM,
+        ...CENTERED_TRANSFORM,
         ...(transform?.x !== undefined && { x: transform.x }),
         ...(transform?.y !== undefined && { y: transform.y }),
         ...(transform?.scaleX !== undefined && { scaleX: transform.scaleX }),
@@ -771,7 +771,7 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       if (opacity !== undefined) updates.opacity = opacity;
 
       if (transform) {
-        const currentTransform = element.transform || DEFAULT_TRANSFORM;
+        const currentTransform = element.transform || CENTERED_TRANSFORM;
         updates.transform = {
           ...currentTransform,
           ...(transform.x !== undefined && { x: transform.x }),

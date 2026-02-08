@@ -50,11 +50,14 @@ export const ENGINE_DEFAULT_TRANSFORM: Transform = {
 };
 
 /**
- * @deprecated Use ENGINE_DEFAULT_TRANSFORM instead.
- * This constant used normalized center coordinates (0.5, 0.5) which
- * do not match the engine's default (0, 0).
+ * Centered transform using normalized coordinates.
+ * Matches Rust Transform::centered() — element placed at canvas center.
+ *
+ * Used by TS-side code that works in normalized coordinate space (0-1),
+ * where (0.5, 0.5) = canvas center. The JviProjectLoader converts to
+ * pixel coordinates before sending to the engine.
  */
-export const DEFAULT_TRANSFORM: Transform = {
+export const CENTERED_TRANSFORM: Transform = {
   x: 0.5,
   y: 0.5,
   scaleX: 1,
@@ -63,3 +66,9 @@ export const DEFAULT_TRANSFORM: Transform = {
   anchorX: 0.5,
   anchorY: 0.5,
 };
+
+/**
+ * @deprecated Use CENTERED_TRANSFORM (for normalized center) or
+ * ENGINE_DEFAULT_TRANSFORM (for engine origin).
+ */
+export const DEFAULT_TRANSFORM: Transform = CENTERED_TRANSFORM;

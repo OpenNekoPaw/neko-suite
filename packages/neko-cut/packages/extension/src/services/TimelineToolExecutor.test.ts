@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as vscode from 'vscode';
 import type { ProjectData, TimelineElement } from '@neko/shared';
-import { DEFAULT_TRANSFORM } from '@neko/shared';
+import { CENTERED_TRANSFORM } from '@neko/shared';
 import { ServiceCollection, setGlobalServices } from '../base';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
 import { TimelineToolExecutor } from './TimelineToolExecutor';
@@ -129,7 +129,7 @@ describe('TimelineToolExecutor', () => {
       duration: 10,
       trimStart: 0,
       trimEnd: 0,
-      transform: { ...DEFAULT_TRANSFORM },
+      transform: { ...CENTERED_TRANSFORM },
     } as TimelineElement;
 
     model = new MockVideoEditorModel({
@@ -208,7 +208,7 @@ describe('TimelineToolExecutor', () => {
       duration: 10,
       trimStart: 0,
       trimEnd: 0,
-      transform: { ...DEFAULT_TRANSFORM },
+      transform: { ...CENTERED_TRANSFORM },
     } as TimelineElement;
 
     model = new MockVideoEditorModel({
@@ -243,7 +243,7 @@ describe('TimelineToolExecutor', () => {
       duration: 10,
       trimStart: 0,
       trimEnd: 0,
-      transform: { ...DEFAULT_TRANSFORM },
+      transform: { ...CENTERED_TRANSFORM },
     } as TimelineElement;
 
     model = new MockVideoEditorModel({
@@ -289,7 +289,7 @@ describe('TimelineToolExecutor', () => {
       duration: 10,
       trimStart: 0,
       trimEnd: 0,
-      transform: { ...DEFAULT_TRANSFORM },
+      transform: { ...CENTERED_TRANSFORM },
     } as TimelineElement;
 
     model = new MockVideoEditorModel({

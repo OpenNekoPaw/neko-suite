@@ -139,6 +139,7 @@ export {
 export {
   // Transform defaults
   DEFAULT_TRANSFORM,
+  CENTERED_TRANSFORM,
   ENGINE_DEFAULT_TRANSFORM,
   // Color correction defaults
   DEFAULT_BASIC_COLOR_ADJUSTMENT,
