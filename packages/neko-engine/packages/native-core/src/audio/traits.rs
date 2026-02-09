@@ -1,6 +1,16 @@
 //! Audio codec traits and types
+//!
+//! The canonical `AudioCodec` enum lives in `neko_types` and is re-exported
+//! here. FFmpeg-specific methods are provided via [`AudioCodecExt`] in
+//! `encoder::codec_ext`.
 
 use crate::error::Result;
+
+// Re-export canonical AudioCodec from neko_types (single source of truth)
+pub use neko_types::AudioCodec;
+
+// Import extension trait so methods are available where AudioCodec is used
+use crate::encoder::codec_ext::AudioCodecExt;
 
 /// Audio sample format
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -38,51 +48,6 @@ impl SampleFormat {
             SampleFormat::F32 => "flt",
             SampleFormat::F64 => "dbl",
         }
-    }
-}
-
-/// Audio codec format
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum AudioCodec {
-    /// AAC (default)
-    #[default]
-    Aac,
-    /// MP3
-    Mp3,
-    /// Opus
-    Opus,
-    /// FLAC (lossless)
-    Flac,
-    /// PCM (uncompressed)
-    Pcm,
-}
-
-impl AudioCodec {
-    /// Get FFmpeg encoder name
-    pub fn ffmpeg_encoder_name(&self) -> &'static str {
-        match self {
-            AudioCodec::Aac => "aac",
-            AudioCodec::Mp3 => "libmp3lame",
-            AudioCodec::Opus => "libopus",
-            AudioCodec::Flac => "flac",
-            AudioCodec::Pcm => "pcm_s16le",
-        }
-    }
-
-    /// Get default bitrate for this codec (in bps)
-    pub fn default_bitrate(&self) -> u64 {
-        match self {
-            AudioCodec::Aac => 128_000,
-            AudioCodec::Mp3 => 192_000,
-            AudioCodec::Opus => 96_000,
-            AudioCodec::Flac => 0, // Lossless, no bitrate
-            AudioCodec::Pcm => 0,  // Uncompressed
-        }
-    }
-
-    /// Check if codec is lossless
-    pub fn is_lossless(&self) -> bool {
-        matches!(self, AudioCodec::Flac | AudioCodec::Pcm)
     }
 }
 

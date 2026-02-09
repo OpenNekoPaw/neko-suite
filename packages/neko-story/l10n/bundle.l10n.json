@@ -1,1 +1,7 @@
-{}
+{
+  "command.newFile": "New Story File",
+  "command.newFile.prompt": "Enter the story file name",
+  "command.newFile.noFolder": "No folder selected. Please open a workspace or right-click a folder.",
+  "command.newFile.validation": "File name cannot be empty",
+  "command.newFile.exists": "File \"{0}\" already exists"
+}

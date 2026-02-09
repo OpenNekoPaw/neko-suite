@@ -1,1 +1,7 @@
-{}
+{
+  "command.newFile": "新建故事文件",
+  "command.newFile.prompt": "请输入故事文件名",
+  "command.newFile.noFolder": "未选择文件夹。请打开工作区或右键点击文件夹。",
+  "command.newFile.validation": "文件名不能为空",
+  "command.newFile.exists": "文件 \"{0}\" 已存在"
+}

@@ -153,8 +153,8 @@ mod tests {
         assert!(service.list().is_empty());
     }
 
-    #[test]
-    fn test_task_registration() {
+    #[tokio::test]
+    async fn test_task_registration() {
         let service = TaskService::new();
         let config = TaskConfig::new("test-task", TaskType::Export, 100);
 

@@ -45,6 +45,7 @@ pub use encoder::{
     AsyncExportPipeline, CompositedFrame, ContainerFormat, EncodedPacket, Encoder, EncoderConfig,
     EncoderPreset, FfmpegMuxer, HwAccelEncoder, HwEncoderType, Muxer, PipelineConfig,
     PipelineFrame, PipelineProgress, VideoCodec,
+    AudioCodecExt, ContainerFormatExt, EncoderPresetExt, HwEncoderTypeExt, VideoCodecExt,
 };
 pub use encoder::hwaccel::{detect_hw_encoders, get_best_hw_encoder};
 pub use error::{Error, Result};

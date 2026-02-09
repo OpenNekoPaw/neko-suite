@@ -537,7 +537,7 @@ impl From<JsContainerFormat> for neko_native_core::encoder::ContainerFormat {
         match format {
             JsContainerFormat::Mp4 => neko_native_core::encoder::ContainerFormat::Mp4,
             JsContainerFormat::Mkv => neko_native_core::encoder::ContainerFormat::Mkv,
-            JsContainerFormat::WebM => neko_native_core::encoder::ContainerFormat::WebM,
+            JsContainerFormat::WebM => neko_native_core::encoder::ContainerFormat::Webm,
             JsContainerFormat::Mov => neko_native_core::encoder::ContainerFormat::Mov,
         }
     }
@@ -628,6 +628,7 @@ impl JsEncoderConfig {
             Some("nvenc") => neko_native_core::encoder::HwEncoderType::Nvenc,
             Some("vaapi") => neko_native_core::encoder::HwEncoderType::Vaapi,
             Some("qsv") => neko_native_core::encoder::HwEncoderType::Qsv,
+            Some("amf") => neko_native_core::encoder::HwEncoderType::Amf,
             Some("none") | None => neko_native_core::encoder::HwEncoderType::None,
             Some(other) => {
                 tracing::warn!("Unknown hw_encoder type: {}, using software", other);
@@ -902,7 +903,7 @@ impl JsMuxerConfig {
     pub fn container_format(&self) -> neko_native_core::encoder::ContainerFormat {
         match self.format.to_lowercase().as_str() {
             "mkv" | "matroska" => neko_native_core::encoder::ContainerFormat::Mkv,
-            "webm" => neko_native_core::encoder::ContainerFormat::WebM,
+            "webm" => neko_native_core::encoder::ContainerFormat::Webm,
             "mov" => neko_native_core::encoder::ContainerFormat::Mov,
             _ => neko_native_core::encoder::ContainerFormat::Mp4,
         }
@@ -1485,7 +1486,7 @@ impl JsPipelineConfig {
     pub fn to_pipeline_config(&self) -> neko_native_core::encoder::PipelineConfig {
         let container = match self.container.as_deref() {
             Some("mkv") | Some("matroska") => neko_native_core::encoder::ContainerFormat::Mkv,
-            Some("webm") => neko_native_core::encoder::ContainerFormat::WebM,
+            Some("webm") => neko_native_core::encoder::ContainerFormat::Webm,
             Some("mov") => neko_native_core::encoder::ContainerFormat::Mov,
             _ => neko_native_core::encoder::ContainerFormat::Mp4,
         };

@@ -310,14 +310,18 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { MediaProcessor, VideoEncoderSession, AudioDecoderSession, AudioEncoderSession, MuxerSession, CompositorSession, AnimationSession, createFadeInAnimation, createFadeOutAnimation, createSlideInLeftAnimation, createZoomInAnimation, createBounceAnimation, createPulseAnimation, ExportPipelineSession, FrameServerSession, FrameServerWithExportSession, probeMedia, extractAllSubtitles, encodeJpeg, FrameFormat, extractFrame, compositeFrame, JsTextureFormat, JsVideoCodec, JsContainerFormat, JsEncoderPreset, JsAudioCodec, JsSampleFormat, JsBlendMode, JsEasingType, JsInterpolationMode } = nativeBinding
+const { bridgeProbeMedia, bridgeExtractSubtitles, bridgeExtractFrame, bridgeGpuInfo, bridgeAudioInfo, bridgeGenerateWaveform, bridgeGetKeyframes, bridgeEncodeJpeg, NativeEngine, MediaProcessor, AnimationSession, createFadeInAnimation, createFadeOutAnimation, createSlideInLeftAnimation, createZoomInAnimation, createBounceAnimation, createPulseAnimation, CompositorSession, AudioDecoderSession, VideoEncoderSession, AudioEncoderSession, FrameServerSession, FrameServerWithExportSession, MuxerSession, ExportPipelineSession, PreviewPipelineSession, probeMedia, extractAllSubtitles, encodeJpeg, FrameFormat, extractFrame, compositeFrame, JsTextureFormat, JsVideoCodec, JsContainerFormat, JsEncoderPreset, JsAudioCodec, JsSampleFormat, JsBlendMode, JsEasingType, JsInterpolationMode } = nativeBinding
 
+module.exports.bridgeProbeMedia = bridgeProbeMedia
+module.exports.bridgeExtractSubtitles = bridgeExtractSubtitles
+module.exports.bridgeExtractFrame = bridgeExtractFrame
+module.exports.bridgeGpuInfo = bridgeGpuInfo
+module.exports.bridgeAudioInfo = bridgeAudioInfo
+module.exports.bridgeGenerateWaveform = bridgeGenerateWaveform
+module.exports.bridgeGetKeyframes = bridgeGetKeyframes
+module.exports.bridgeEncodeJpeg = bridgeEncodeJpeg
+module.exports.NativeEngine = NativeEngine
 module.exports.MediaProcessor = MediaProcessor
-module.exports.VideoEncoderSession = VideoEncoderSession
-module.exports.AudioDecoderSession = AudioDecoderSession
-module.exports.AudioEncoderSession = AudioEncoderSession
-module.exports.MuxerSession = MuxerSession
-module.exports.CompositorSession = CompositorSession
 module.exports.AnimationSession = AnimationSession
 module.exports.createFadeInAnimation = createFadeInAnimation
 module.exports.createFadeOutAnimation = createFadeOutAnimation
@@ -325,9 +329,15 @@ module.exports.createSlideInLeftAnimation = createSlideInLeftAnimation
 module.exports.createZoomInAnimation = createZoomInAnimation
 module.exports.createBounceAnimation = createBounceAnimation
 module.exports.createPulseAnimation = createPulseAnimation
-module.exports.ExportPipelineSession = ExportPipelineSession
+module.exports.CompositorSession = CompositorSession
+module.exports.AudioDecoderSession = AudioDecoderSession
+module.exports.VideoEncoderSession = VideoEncoderSession
+module.exports.AudioEncoderSession = AudioEncoderSession
 module.exports.FrameServerSession = FrameServerSession
 module.exports.FrameServerWithExportSession = FrameServerWithExportSession
+module.exports.MuxerSession = MuxerSession
+module.exports.ExportPipelineSession = ExportPipelineSession
+module.exports.PreviewPipelineSession = PreviewPipelineSession
 module.exports.probeMedia = probeMedia
 module.exports.extractAllSubtitles = extractAllSubtitles
 module.exports.encodeJpeg = encodeJpeg

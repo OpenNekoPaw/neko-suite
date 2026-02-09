@@ -59,12 +59,24 @@ pub struct SystemMonitor {
 impl SystemMonitor {
     /// Create a new system monitor
     pub fn new() -> Self {
-        let system = System::new_with_specifics(
+        let mut system = System::new_with_specifics(
             RefreshKind::new()
                 .with_processes(ProcessRefreshKind::new().with_cpu().with_memory()),
         );
 
         let pid = Pid::from_u32(std::process::id());
+
+        // Prime sysinfo with initial refresh so the first sample() returns
+        // non-zero memory data. sysinfo requires at least one prior refresh
+        // to populate baseline process metrics.
+        system.refresh_process_specifics(
+            pid,
+            ProcessRefreshKind::new().with_cpu().with_memory(),
+        );
+
+        // Set last_refresh to the past so the first sample() call is not
+        // rate-limited and actually performs a refresh.
+        let past = Instant::now() - Duration::from_secs(1);
 
         Self {
             system,
@@ -73,7 +85,7 @@ impl SystemMonitor {
             peak_vram: Arc::new(AtomicU64::new(0)),
             cpu_samples: Vec::new(),
             gpu_samples: Vec::new(),
-            last_refresh: Instant::now(),
+            last_refresh: past,
             refresh_interval: Duration::from_millis(100), // 10 Hz sampling
             last_snapshot: ResourceSnapshot::default(),
         }

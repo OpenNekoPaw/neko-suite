@@ -1,28 +1,39 @@
 import * as vscode from 'vscode';
 import { parse } from '@neko-story/parser';
 import type { Character, SceneHeading, Dialogue } from '@neko-story/types';
+import type { IWorkspaceIndex } from '../services/types';
 
 /**
- * Provides hover information for Fountain files
+ * Provides hover information for Fountain files.
+ * Uses IWorkspaceIndex for cross-file character statistics.
+ * Scene stats remain per-file (scene content is local).
  */
 export class FountainHoverProvider implements vscode.HoverProvider {
-  provideHover(
+  constructor(private readonly index: IWorkspaceIndex) {}
+
+  async provideHover(
     document: vscode.TextDocument,
     position: vscode.Position,
     _token: vscode.CancellationToken
-  ): vscode.ProviderResult<vscode.Hover> {
+  ): Promise<vscode.Hover | null> {
     const line = document.lineAt(position.line).text;
-    const text = document.getText();
-    const fountainDoc = parse(text);
+
+    await this.index.ensureInitialized();
+
+    // Use indexed document if available, otherwise parse on the fly
+    const fountainDoc = this.index.getDocument(document.uri) ?? parse(document.getText());
 
     // Check if hovering over a character name
     const charMatch = /^([A-Z][A-Z0-9 ._\-']+)(?:\s*\([^)]+\))?(\s*\^)?$/.exec(line);
     if (charMatch) {
       const charName = charMatch[1]?.trim();
       if (charName) {
-        const stats = this.getCharacterStats(fountainDoc, charName);
-        if (stats) {
-          return new vscode.Hover(this.formatCharacterStats(charName, stats));
+        const localStats = this.getLocalCharacterStats(fountainDoc, charName);
+        const crossFileStats = this.getCrossFileCharacterStats(charName);
+        if (localStats) {
+          return new vscode.Hover(
+            this.formatCharacterStats(charName, localStats, crossFileStats)
+          );
         }
       }
     }
@@ -39,10 +50,10 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     return null;
   }
 
-  private getCharacterStats(
+  private getLocalCharacterStats(
     doc: { elements: Array<{ type: string }> },
     name: string
-  ): CharacterStats | null {
+  ): LocalCharacterStats | null {
     let appearances = 0;
     let dialogueLines = 0;
     let firstAppearance = -1;
@@ -77,12 +88,24 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     return { appearances, dialogueLines, firstAppearance, lastAppearance };
   }
 
+  private getCrossFileCharacterStats(name: string): CrossFileCharacterStats {
+    const locations = this.index.findCharacterLocations(name);
+    const fileSet = new Set<string>();
+    for (const loc of locations) {
+      fileSet.add(loc.uri.toString());
+    }
+    return {
+      totalAppearances: locations.length,
+      fileCount: fileSet.size,
+    };
+  }
+
   private getSceneStats(
     doc: { elements: Array<{ type: string }> },
     lineNum: number
   ): SceneStats | null {
     let currentScene: SceneHeading | null = null;
-    let characters = new Set<string>();
+    const characters = new Set<string>();
     let dialogueCount = 0;
 
     for (const element of doc.elements) {
@@ -117,14 +140,24 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     };
   }
 
-  private formatCharacterStats(name: string, stats: CharacterStats): vscode.MarkdownString {
+  private formatCharacterStats(
+    name: string,
+    local: LocalCharacterStats,
+    crossFile: CrossFileCharacterStats
+  ): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`### ${name}\n\n`);
     md.appendMarkdown(`| Stat | Value |\n|------|-------|\n`);
-    md.appendMarkdown(`| Appearances | ${stats.appearances} |\n`);
-    md.appendMarkdown(`| Dialogue lines | ${stats.dialogueLines} |\n`);
-    md.appendMarkdown(`| First appearance | Line ${stats.firstAppearance + 1} |\n`);
-    md.appendMarkdown(`| Last appearance | Line ${stats.lastAppearance + 1} |\n`);
+    md.appendMarkdown(`| Appearances (this file) | ${local.appearances} |\n`);
+    md.appendMarkdown(`| Dialogue lines (this file) | ${local.dialogueLines} |\n`);
+    md.appendMarkdown(`| First appearance | Line ${local.firstAppearance + 1} |\n`);
+    md.appendMarkdown(`| Last appearance | Line ${local.lastAppearance + 1} |\n`);
+
+    // Cross-file stats (only show if more than 1 file)
+    if (crossFile.fileCount > 1) {
+      md.appendMarkdown(`| **Total appearances** | **${crossFile.totalAppearances} in ${crossFile.fileCount} files** |\n`);
+    }
+
     return md;
   }
 
@@ -140,11 +173,16 @@ export class FountainHoverProvider implements vscode.HoverProvider {
   }
 }
 
-interface CharacterStats {
+interface LocalCharacterStats {
   appearances: number;
   dialogueLines: number;
   firstAppearance: number;
   lastAppearance: number;
+}
+
+interface CrossFileCharacterStats {
+  totalAppearances: number;
+  fileCount: number;
 }
 
 interface SceneStats {

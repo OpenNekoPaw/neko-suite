@@ -6,6 +6,7 @@
 //! - `AsyncExportPipeline`: Three-stage concurrent export pipeline
 //! - `Muxer`: Container muxing (MP4, MKV, WebM, MOV)
 
+pub mod codec_ext;
 pub mod hwaccel;
 pub mod iframe;
 mod muxer;
@@ -21,4 +22,7 @@ pub use pipeline::{
 pub use traits::{
     ContainerFormat, EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwEncoderType,
     VideoCodec,
+};
+pub use codec_ext::{
+    AudioCodecExt, ContainerFormatExt, EncoderPresetExt, HwEncoderTypeExt, VideoCodecExt,
 };

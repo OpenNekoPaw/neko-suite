@@ -5,8 +5,16 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::encoder::{EncoderConfig, EncoderPreset, HwEncoderType, VideoCodec};
+use crate::encoder::EncoderConfig;
 use crate::gpu::{BlendMode, Transform2D};
+use neko_types::{AudioCodec, EncoderPreset, HwEncoderType, VideoCodec};
+
+// Re-export neko_types enums as the old names for backward compatibility
+// in downstream code that imports from `crate::export::types::*`
+pub type ExportVideoCodec = VideoCodec;
+pub type ExportAudioCodec = AudioCodec;
+pub type ExportHwEncoder = HwEncoderType;
+pub type ExportPreset = EncoderPreset;
 
 // =============================================================================
 // Export Job Configuration
@@ -38,22 +46,22 @@ pub struct ExportSettings {
     pub fps: f64,
     /// Video codec
     #[serde(default)]
-    pub video_codec: ExportVideoCodec,
+    pub video_codec: VideoCodec,
     /// Video bitrate (bps)
     pub video_bitrate: Option<u64>,
     /// Audio codec
     #[serde(default)]
-    pub audio_codec: ExportAudioCodec,
+    pub audio_codec: AudioCodec,
     /// Audio bitrate (bps)
     pub audio_bitrate: Option<u64>,
     /// Hardware encoder type
     #[serde(default)]
-    pub hw_encoder: ExportHwEncoder,
+    pub hw_encoder: HwEncoderType,
     /// Time range to export (optional, exports full timeline if not specified)
     pub time_range: Option<TimeRange>,
     /// Encoder preset
     #[serde(default)]
-    pub preset: ExportPreset,
+    pub preset: EncoderPreset,
     /// Enable zero-copy GPU encoding (macOS VideoToolbox only)
     ///
     /// When enabled, CVPixelBuffer is passed directly to VideoToolbox
@@ -69,7 +77,7 @@ impl ExportSettings {
             self.width,
             self.height,
             self.fps,
-            self.video_codec.to_video_codec(),
+            self.video_codec,
         );
 
         if let Some(bitrate) = self.video_bitrate {
@@ -77,94 +85,11 @@ impl ExportSettings {
         }
 
         config = config
-            .with_preset(self.preset.to_encoder_preset())
-            .with_hw_encoder(self.hw_encoder.to_hw_encoder_type())
+            .with_preset(self.preset)
+            .with_hw_encoder(self.hw_encoder)
             .with_zero_copy_gpu(self.use_zero_copy_gpu);
 
         config
-    }
-}
-
-/// Video codec enum (JSON-friendly)
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum ExportVideoCodec {
-    #[default]
-    H264,
-    H265,
-    Vp9,
-    ProRes,
-}
-
-impl ExportVideoCodec {
-    pub fn to_video_codec(self) -> VideoCodec {
-        match self {
-            ExportVideoCodec::H264 => VideoCodec::H264,
-            ExportVideoCodec::H265 => VideoCodec::H265,
-            ExportVideoCodec::Vp9 => VideoCodec::Vp9,
-            ExportVideoCodec::ProRes => VideoCodec::ProRes,
-        }
-    }
-}
-
-/// Audio codec enum
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum ExportAudioCodec {
-    #[default]
-    Aac,
-    Mp3,
-    Opus,
-    Flac,
-}
-
-/// Hardware encoder type (JSON-friendly)
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum ExportHwEncoder {
-    #[default]
-    None,
-    Auto,
-    VideoToolbox,
-    Nvenc,
-    Vaapi,
-    Qsv,
-}
-
-impl ExportHwEncoder {
-    pub fn to_hw_encoder_type(self) -> HwEncoderType {
-        match self {
-            ExportHwEncoder::None => HwEncoderType::None,
-            ExportHwEncoder::Auto => HwEncoderType::Auto,
-            ExportHwEncoder::VideoToolbox => HwEncoderType::VideoToolbox,
-            ExportHwEncoder::Nvenc => HwEncoderType::Nvenc,
-            ExportHwEncoder::Vaapi => HwEncoderType::Vaapi,
-            ExportHwEncoder::Qsv => HwEncoderType::Qsv,
-        }
-    }
-}
-
-/// Encoder preset (JSON-friendly)
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum ExportPreset {
-    Ultrafast,
-    Fast,
-    #[default]
-    Medium,
-    Slow,
-    Veryslow,
-}
-
-impl ExportPreset {
-    pub fn to_encoder_preset(self) -> EncoderPreset {
-        match self {
-            ExportPreset::Ultrafast => EncoderPreset::Ultrafast,
-            ExportPreset::Fast => EncoderPreset::Fast,
-            ExportPreset::Medium => EncoderPreset::Medium,
-            ExportPreset::Slow => EncoderPreset::Slow,
-            ExportPreset::Veryslow => EncoderPreset::Veryslow,
-        }
     }
 }
 
@@ -705,13 +630,13 @@ mod tests {
             width: 1920,
             height: 1080,
             fps: 30.0,
-            video_codec: ExportVideoCodec::H264,
+            video_codec: VideoCodec::H264,
             video_bitrate: Some(5_000_000),
-            audio_codec: ExportAudioCodec::Aac,
+            audio_codec: AudioCodec::Aac,
             audio_bitrate: Some(128_000),
-            hw_encoder: ExportHwEncoder::Auto,
+            hw_encoder: HwEncoderType::Auto,
             time_range: None,
-            preset: ExportPreset::Fast,
+            preset: EncoderPreset::Fast,
             use_zero_copy_gpu: false,
         };
 

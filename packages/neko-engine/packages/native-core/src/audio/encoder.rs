@@ -1,6 +1,7 @@
 //! FFmpeg-based audio encoder
 
 use super::traits::{AudioCodec, AudioEncoder, AudioEncoderConfig, EncodedAudioPacket, SampleFormat};
+use crate::encoder::codec_ext::AudioCodecExt;
 use crate::error::{Error, Result};
 
 use ffmpeg_next as ffmpeg;
@@ -41,6 +42,7 @@ impl FfmpegAudioEncoder {
             AudioCodec::Opus => Id::OPUS,
             AudioCodec::Flac => Id::FLAC,
             AudioCodec::Pcm => Id::PCM_S16LE,
+            AudioCodec::Vorbis => Id::VORBIS,
         }
     }
 
@@ -75,6 +77,7 @@ impl FfmpegAudioEncoder {
             AudioCodec::Opus => Sample::I16(ffmpeg::format::sample::Type::Packed),
             AudioCodec::Flac => Sample::I16(ffmpeg::format::sample::Type::Packed),
             AudioCodec::Pcm => Sample::I16(ffmpeg::format::sample::Type::Packed),
+            AudioCodec::Vorbis => Sample::F32(ffmpeg::format::sample::Type::Planar),
         }
     }
 
@@ -268,6 +271,7 @@ impl Drop for FfmpegAudioEncoder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::encoder::codec_ext::AudioCodecExt;
 
     #[test]
     fn test_audio_codec_bitrate() {
@@ -275,6 +279,7 @@ mod tests {
         assert_eq!(AudioCodec::Mp3.default_bitrate(), 192_000);
         assert_eq!(AudioCodec::Opus.default_bitrate(), 96_000);
         assert_eq!(AudioCodec::Flac.default_bitrate(), 0);
+        assert_eq!(AudioCodec::Vorbis.default_bitrate(), 128_000);
     }
 
     #[test]

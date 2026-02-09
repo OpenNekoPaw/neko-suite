@@ -1,34 +1,42 @@
 import * as vscode from 'vscode';
-import { parse } from '@neko-story/parser';
-import type { Character } from '@neko-story/types';
+import type { IWorkspaceIndex } from '../services/types';
 
 /**
- * Provides go-to-definition for Fountain files
+ * Provides go-to-definition for Fountain files.
+ * Supports cross-file navigation via IWorkspaceIndex.
  */
 export class FountainDefinitionProvider implements vscode.DefinitionProvider {
-  provideDefinition(
+  constructor(private readonly index: IWorkspaceIndex) {}
+
+  async provideDefinition(
     document: vscode.TextDocument,
     position: vscode.Position,
     _token: vscode.CancellationToken
-  ): vscode.ProviderResult<vscode.Definition> {
+  ): Promise<vscode.Definition | null> {
     const wordRange = document.getWordRangeAtPosition(position, /[A-Z][A-Z0-9 ._\-']+/);
     if (!wordRange) return null;
 
     const word = document.getText(wordRange).trim();
-    const text = document.getText();
-    const fountainDoc = parse(text);
+    await this.index.ensureInitialized();
 
-    // Find first occurrence of character
-    for (const element of fountainDoc.elements) {
-      if (element.type === 'character') {
-        const char = element as Character;
-        if (char.name === word) {
-          return new vscode.Location(
-            document.uri,
-            new vscode.Position(element.range.start.line, element.range.start.character)
-          );
-        }
-      }
+    // Try character definition (first occurrence, current file preferred)
+    const charDef = this.index.findCharacterDefinition(word, document.uri);
+    if (charDef) {
+      return new vscode.Location(charDef.uri, charDef.range.start);
+    }
+
+    // Try scene location
+    const sceneLocs = this.index.findSceneLocations(word, document.uri);
+    if (sceneLocs.length > 0) {
+      const first = sceneLocs[0]!;
+      return new vscode.Location(first.uri, first.range.start);
+    }
+
+    // Try section
+    const sectionLocs = this.index.findSectionLocations(word, document.uri);
+    if (sectionLocs.length > 0) {
+      const first = sectionLocs[0]!;
+      return new vscode.Location(first.uri, first.range.start);
     }
 
     return null;
@@ -36,38 +44,42 @@ export class FountainDefinitionProvider implements vscode.DefinitionProvider {
 }
 
 /**
- * Provides find-all-references for Fountain files
+ * Provides find-all-references for Fountain files.
+ * Returns cross-file results via IWorkspaceIndex.
  */
 export class FountainReferenceProvider implements vscode.ReferenceProvider {
-  provideReferences(
+  constructor(private readonly index: IWorkspaceIndex) {}
+
+  async provideReferences(
     document: vscode.TextDocument,
     position: vscode.Position,
     _context: vscode.ReferenceContext,
     _token: vscode.CancellationToken
-  ): vscode.ProviderResult<vscode.Location[]> {
+  ): Promise<vscode.Location[]> {
     const wordRange = document.getWordRangeAtPosition(position, /[A-Z][A-Z0-9 ._\-']+/);
-    if (!wordRange) return null;
+    if (!wordRange) return [];
 
     const word = document.getText(wordRange).trim();
-    const text = document.getText();
-    const fountainDoc = parse(text);
-    const locations: vscode.Location[] = [];
+    await this.index.ensureInitialized();
 
-    // Find all occurrences of character
-    for (const element of fountainDoc.elements) {
-      if (element.type === 'character') {
-        const char = element as Character;
-        if (char.name === word) {
-          locations.push(
-            new vscode.Location(
-              document.uri,
-              new vscode.Position(element.range.start.line, element.range.start.character)
-            )
-          );
-        }
-      }
+    // Collect all character references across workspace
+    const charLocs = this.index.findCharacterLocations(word, document.uri);
+    if (charLocs.length > 0) {
+      return charLocs.map(loc => new vscode.Location(loc.uri, loc.range));
     }
 
-    return locations;
+    // Try scene locations
+    const sceneLocs = this.index.findSceneLocations(word, document.uri);
+    if (sceneLocs.length > 0) {
+      return sceneLocs.map(loc => new vscode.Location(loc.uri, loc.range));
+    }
+
+    // Try sections
+    const sectionLocs = this.index.findSectionLocations(word, document.uri);
+    if (sectionLocs.length > 0) {
+      return sectionLocs.map(loc => new vscode.Location(loc.uri, loc.range));
+    }
+
+    return [];
   }
 }

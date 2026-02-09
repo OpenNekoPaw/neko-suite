@@ -142,6 +142,7 @@ impl MediaProcessor {
                 HwEncoderType::Vaapi => Some("vaapi".to_string()),
                 HwEncoderType::Nvenc => Some("nvenc".to_string()),
                 HwEncoderType::Qsv => Some("qsv".to_string()),
+                HwEncoderType::Amf => Some("amf".to_string()),
                 HwEncoderType::None => Some("none".to_string()),
                 HwEncoderType::Auto => None,
             })

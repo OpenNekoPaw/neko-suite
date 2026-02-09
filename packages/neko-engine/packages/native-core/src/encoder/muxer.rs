@@ -1,8 +1,10 @@
 //! Container muxer for video/audio output
 
+use super::codec_ext::ContainerFormatExt;
 use super::traits::{ContainerFormat, EncodedPacket, EncoderConfig, VideoCodec};
 use crate::audio::AudioEncoderConfig;
 use crate::error::{Error, Result};
+use neko_types::AudioCodec;
 
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::Rational;
@@ -74,18 +76,20 @@ impl FfmpegMuxer {
             VideoCodec::H264 => ffmpeg::codec::Id::H264,
             VideoCodec::H265 => ffmpeg::codec::Id::HEVC,
             VideoCodec::Vp9 => ffmpeg::codec::Id::VP9,
+            VideoCodec::Av1 => ffmpeg::codec::Id::AV1,
             VideoCodec::ProRes => ffmpeg::codec::Id::PRORES,
         }
     }
 
     /// Get FFmpeg codec ID for audio codec
-    fn audio_codec_id(codec: crate::audio::AudioCodec) -> ffmpeg::codec::Id {
+    fn audio_codec_id(codec: AudioCodec) -> ffmpeg::codec::Id {
         match codec {
-            crate::audio::AudioCodec::Aac => ffmpeg::codec::Id::AAC,
-            crate::audio::AudioCodec::Mp3 => ffmpeg::codec::Id::MP3,
-            crate::audio::AudioCodec::Opus => ffmpeg::codec::Id::OPUS,
-            crate::audio::AudioCodec::Flac => ffmpeg::codec::Id::FLAC,
-            crate::audio::AudioCodec::Pcm => ffmpeg::codec::Id::PCM_S16LE,
+            AudioCodec::Aac => ffmpeg::codec::Id::AAC,
+            AudioCodec::Mp3 => ffmpeg::codec::Id::MP3,
+            AudioCodec::Opus => ffmpeg::codec::Id::OPUS,
+            AudioCodec::Flac => ffmpeg::codec::Id::FLAC,
+            AudioCodec::Pcm => ffmpeg::codec::Id::PCM_S16LE,
+            AudioCodec::Vorbis => ffmpeg::codec::Id::VORBIS,
         }
     }
 }
@@ -390,13 +394,16 @@ impl Drop for FfmpegMuxer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::encoder::codec_ext::ContainerFormatExt;
 
     #[test]
     fn test_container_format() {
         assert_eq!(ContainerFormat::Mp4.ffmpeg_name(), "mp4");
         assert_eq!(ContainerFormat::Mkv.ffmpeg_name(), "matroska");
-        assert_eq!(ContainerFormat::WebM.ffmpeg_name(), "webm");
+        assert_eq!(ContainerFormat::Webm.ffmpeg_name(), "webm");
         assert_eq!(ContainerFormat::Mov.ffmpeg_name(), "mov");
+        assert_eq!(ContainerFormat::Avi.ffmpeg_name(), "avi");
+        assert_eq!(ContainerFormat::Ts.ffmpeg_name(), "mpegts");
     }
 
     #[test]
@@ -405,8 +412,8 @@ mod tests {
         assert!(ContainerFormat::Mp4.supports_codec(VideoCodec::H265));
         assert!(!ContainerFormat::Mp4.supports_codec(VideoCodec::Vp9));
 
-        assert!(ContainerFormat::WebM.supports_codec(VideoCodec::Vp9));
-        assert!(!ContainerFormat::WebM.supports_codec(VideoCodec::H264));
+        assert!(ContainerFormat::Webm.supports_codec(VideoCodec::Vp9));
+        assert!(!ContainerFormat::Webm.supports_codec(VideoCodec::H264));
 
         assert!(ContainerFormat::Mkv.supports_codec(VideoCodec::H264));
         assert!(ContainerFormat::Mkv.supports_codec(VideoCodec::Vp9));

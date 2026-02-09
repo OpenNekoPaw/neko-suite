@@ -23,53 +23,12 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-// =============================================================================
-// Type conversion helpers: neko_types ↔ crate::encoder types
-// =============================================================================
-
-/// Convert neko_types::VideoCodec → crate::encoder::VideoCodec
-fn to_encoder_codec(codec: neko_types::VideoCodec) -> crate::encoder::VideoCodec {
-    match codec {
-        neko_types::VideoCodec::H264 => crate::encoder::VideoCodec::H264,
-        neko_types::VideoCodec::H265 => crate::encoder::VideoCodec::H265,
-        neko_types::VideoCodec::Vp9 => crate::encoder::VideoCodec::Vp9,
-        neko_types::VideoCodec::ProRes => crate::encoder::VideoCodec::ProRes,
-        // Av1 not supported by encoder, fall back to H264
-        neko_types::VideoCodec::Av1 => crate::encoder::VideoCodec::H264,
-    }
-}
-
-/// Convert neko_types::HwEncoderType → crate::encoder::HwEncoderType
-fn to_encoder_hw_type(hw: neko_types::HwEncoderType) -> crate::encoder::HwEncoderType {
-    match hw {
-        neko_types::HwEncoderType::None => crate::encoder::HwEncoderType::None,
-        neko_types::HwEncoderType::Auto => crate::encoder::HwEncoderType::Auto,
-        neko_types::HwEncoderType::VideoToolbox => crate::encoder::HwEncoderType::VideoToolbox,
-        neko_types::HwEncoderType::Nvenc => crate::encoder::HwEncoderType::Nvenc,
-        neko_types::HwEncoderType::Vaapi => crate::encoder::HwEncoderType::Vaapi,
-        neko_types::HwEncoderType::Qsv => crate::encoder::HwEncoderType::Qsv,
-        // Amf not supported by encoder, fall back to Auto
-        neko_types::HwEncoderType::Amf => crate::encoder::HwEncoderType::Auto,
-    }
-}
-
-/// Convert neko_types::EncoderPreset → crate::encoder::EncoderPreset
-fn to_encoder_preset(preset: neko_types::EncoderPreset) -> crate::encoder::EncoderPreset {
-    match preset {
-        neko_types::EncoderPreset::Ultrafast => crate::encoder::EncoderPreset::Ultrafast,
-        neko_types::EncoderPreset::Fast => crate::encoder::EncoderPreset::Fast,
-        neko_types::EncoderPreset::Medium => crate::encoder::EncoderPreset::Medium,
-        neko_types::EncoderPreset::Slow => crate::encoder::EncoderPreset::Slow,
-        neko_types::EncoderPreset::Veryslow => crate::encoder::EncoderPreset::Veryslow,
-    }
-}
-
 /// Infer ContainerFormat from output file extension
 fn container_from_path(path: &Path) -> ContainerFormat {
     match path.extension().and_then(|e| e.to_str()) {
         Some("mp4") | Some("m4v") => ContainerFormat::Mp4,
         Some("mkv") => ContainerFormat::Mkv,
-        Some("webm") => ContainerFormat::WebM,
+        Some("webm") => ContainerFormat::Webm,
         Some("mov") => ContainerFormat::Mov,
         _ => ContainerFormat::Mp4, // Default
     }
@@ -609,15 +568,15 @@ impl IVideoService for VideoService {
             let height = options.resolution.map(|r| r.height).unwrap_or(media_info.height);
             let fps = media_info.fps;
 
-            // Configure encoder (convert neko_types → encoder types)
-            let codec = to_encoder_codec(options.video_codec);
+            // Configure encoder (neko_types types are now used directly)
+            let codec = options.video_codec;
             let mut encoder_config = EncoderConfig::new(width, height, fps, codec);
             if let Some(bitrate) = options.bitrate {
                 encoder_config = encoder_config.with_bitrate(bitrate);
             }
             encoder_config = encoder_config
-                .with_preset(to_encoder_preset(options.preset))
-                .with_hw_encoder(to_encoder_hw_type(options.hw_encoder));
+                .with_preset(options.preset)
+                .with_hw_encoder(options.hw_encoder);
 
             // Open encoder
             let mut encoder = HwAccelEncoder::new();

@@ -1,31 +1,34 @@
 import * as vscode from 'vscode';
-import { parse } from '@neko-story/parser';
-import type { Character, SceneHeading } from '@neko-story/types';
+import type { IWorkspaceIndex } from '../services/types';
 
 /**
- * Provides auto-completion for Fountain files
+ * Provides auto-completion for Fountain files.
+ * Uses IWorkspaceIndex for cross-file character and location suggestions.
  */
 export class FountainCompletionProvider implements vscode.CompletionItemProvider {
-  provideCompletionItems(
+  constructor(private readonly index: IWorkspaceIndex) {}
+
+  async provideCompletionItems(
     document: vscode.TextDocument,
     position: vscode.Position,
     _token: vscode.CancellationToken,
     _context: vscode.CompletionContext
-  ): vscode.ProviderResult<vscode.CompletionItem[]> {
+  ): Promise<vscode.CompletionItem[]> {
     const line = document.lineAt(position.line).text;
     const linePrefix = line.substring(0, position.character);
 
-    // Check context for appropriate completions
+    await this.index.ensureInitialized();
+
     const items: vscode.CompletionItem[] = [];
 
     // Character name completion (after blank line, typing uppercase)
     if (this.isCharacterContext(document, position, linePrefix)) {
-      items.push(...this.getCharacterCompletions(document));
+      items.push(...this.getCharacterCompletions());
     }
 
     // Scene heading completion
     if (this.isSceneHeadingContext(linePrefix)) {
-      items.push(...this.getSceneHeadingCompletions(document, linePrefix));
+      items.push(...this.getSceneHeadingCompletions(linePrefix));
     }
 
     // Transition completion
@@ -57,9 +60,9 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
     return /^[A-Z\s]*$/.test(linePrefix) && linePrefix.length > 0;
   }
 
-  private getCharacterCompletions(document: vscode.TextDocument): vscode.CompletionItem[] {
-    const characters = this.collectCharacters(document);
-    return characters.map(name => {
+  private getCharacterCompletions(): vscode.CompletionItem[] {
+    const names = this.index.getAllCharacterNames();
+    return names.map(name => {
       const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.User);
       item.detail = 'Character';
       item.insertText = name;
@@ -67,10 +70,7 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
     });
   }
 
-  private getSceneHeadingCompletions(
-    document: vscode.TextDocument,
-    linePrefix: string
-  ): vscode.CompletionItem[] {
+  private getSceneHeadingCompletions(linePrefix: string): vscode.CompletionItem[] {
     const items: vscode.CompletionItem[] = [];
 
     // Scene heading prefixes
@@ -90,8 +90,8 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
       }
     }
 
-    // Collect existing locations for suggestions
-    const locations = this.collectLocations(document);
+    // Collect existing locations from workspace index
+    const locations = this.index.getAllSceneLocations();
     for (const location of locations) {
       const item = new vscode.CompletionItem(location, vscode.CompletionItemKind.Reference);
       item.detail = 'Previous location';
@@ -128,37 +128,5 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
       item.detail = 'Transition';
       return item;
     });
-  }
-
-  private collectCharacters(document: vscode.TextDocument): string[] {
-    const text = document.getText();
-    const fountainDoc = parse(text);
-    const characters = new Set<string>();
-
-    for (const element of fountainDoc.elements) {
-      if (element.type === 'character') {
-        const char = element as Character;
-        characters.add(char.name);
-      }
-    }
-
-    return Array.from(characters).sort();
-  }
-
-  private collectLocations(document: vscode.TextDocument): string[] {
-    const text = document.getText();
-    const fountainDoc = parse(text);
-    const locations = new Set<string>();
-
-    for (const element of fountainDoc.elements) {
-      if (element.type === 'scene_heading') {
-        const scene = element as SceneHeading;
-        if (scene.location) {
-          locations.add(scene.location);
-        }
-      }
-    }
-
-    return Array.from(locations).sort();
   }
 }

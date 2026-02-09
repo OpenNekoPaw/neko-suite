@@ -12,6 +12,7 @@
 //! perform RGBA→NV12 conversion using compute shaders before encoding.
 //! No CPU-based format conversion is performed (zero-copy design).
 
+use super::codec_ext::HwEncoderTypeExt;
 use super::traits::{EncodedPacket, Encoder, EncoderConfig, HwEncoderType};
 #[cfg(test)]
 use super::traits::VideoCodec;
@@ -364,6 +365,10 @@ impl HwAccelEncoder {
             HwEncoderType::Qsv => {
                 // QSV specific options
                 opts.set("preset", "medium");
+            }
+            HwEncoderType::Amf => {
+                // AMF specific options (AMD)
+                opts.set("quality", "balanced");
             }
             _ => {}
         }

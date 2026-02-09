@@ -65,8 +65,22 @@
         "command": "neko.story.generateStoryboard",
         "title": "Generate Storyboard",
         "category": "Neko Story"
+      },
+      {
+        "command": "neko.story.newFile",
+        "title": "%command.newFile%",
+        "category": "Neko Story"
       }
-    ]
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "neko.story.newFile",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@10"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run build",
