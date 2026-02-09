@@ -60,6 +60,9 @@ tokio-util = { version = "0.7", features = ["rt"] }
 # Image encoding - pure Rust JPEG encoder
 image.workspace = true
 
+# Base64 encoding
+base64.workspace = true
+
 # Text rendering - font shaping, layout, rasterization
 cosmic-text.workspace = true
 

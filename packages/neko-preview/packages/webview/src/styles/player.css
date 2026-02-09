@@ -1,0 +1,361 @@
+/**
+ * Player styles - shared CSS for video and audio preview
+ *
+ * Uses VSCode CSS variables for theme integration.
+ */
+
+/* Reset */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+html,
+body,
+#root {
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	background: var(--vscode-editor-background, #1e1e1e);
+	color: var(--vscode-editor-foreground, #cccccc);
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, sans-serif);
+	font-size: var(--vscode-font-size, 13px);
+}
+
+/* ==========================================================================
+   Video Player
+   ========================================================================== */
+
+.video-player {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100%;
+}
+
+.video-player__canvas-container {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	background: #000;
+	position: relative;
+}
+
+.video-player__canvas {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}
+
+.video-player__poster {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}
+
+.video-player__overlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	transition: background 0.15s;
+}
+
+.video-player__overlay:hover {
+	background: rgba(0, 0, 0, 0.2);
+}
+
+.video-player__play-icon {
+	width: 64px;
+	height: 64px;
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.15);
+	backdrop-filter: blur(4px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: transform 0.15s, background 0.15s;
+}
+
+.video-player__overlay:hover .video-player__play-icon {
+	transform: scale(1.1);
+	background: rgba(255, 255, 255, 0.25);
+}
+
+.video-player__play-icon svg {
+	width: 28px;
+	height: 28px;
+	fill: #fff;
+	margin-left: 4px;
+}
+
+/* ==========================================================================
+   Audio Player
+   ========================================================================== */
+
+.audio-player {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100%;
+	padding: 16px;
+	gap: 16px;
+}
+
+.audio-player__info {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px;
+	border-radius: 6px;
+	background: var(--vscode-sideBar-background, #252526);
+}
+
+.audio-player__icon {
+	width: 48px;
+	height: 48px;
+	border-radius: 8px;
+	background: var(--vscode-button-background, #0e639c);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.audio-player__icon svg {
+	width: 24px;
+	height: 24px;
+	fill: var(--vscode-button-foreground, #fff);
+}
+
+.audio-player__meta {
+	flex: 1;
+	min-width: 0;
+}
+
+.audio-player__filename {
+	font-weight: 600;
+	font-size: 14px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.audio-player__details {
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground, #999);
+	margin-top: 2px;
+}
+
+.audio-player__waveform-container {
+	flex: 1;
+	min-height: 80px;
+	position: relative;
+	border-radius: 6px;
+	background: var(--vscode-sideBar-background, #252526);
+	overflow: hidden;
+	cursor: pointer;
+}
+
+.audio-player__waveform {
+	width: 100%;
+	height: 100%;
+}
+
+.audio-player__waveform-progress {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 2px;
+	height: 100%;
+	background: var(--vscode-button-background, #0e639c);
+	pointer-events: none;
+	transition: left 0.05s linear;
+}
+
+/* ==========================================================================
+   Controls (shared)
+   ========================================================================== */
+
+.controls {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	background: var(--vscode-sideBar-background, #252526);
+	border-top: 1px solid var(--vscode-panel-border, #333);
+	flex-shrink: 0;
+}
+
+.controls__btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border: none;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--vscode-editor-foreground, #ccc);
+	cursor: pointer;
+	transition: background 0.1s;
+}
+
+.controls__btn:hover {
+	background: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.1));
+}
+
+.controls__btn:active {
+	background: var(--vscode-toolbar-activeBackground, rgba(255, 255, 255, 0.15));
+}
+
+.controls__btn svg {
+	width: 16px;
+	height: 16px;
+	fill: currentColor;
+}
+
+.controls__btn--play {
+	width: 36px;
+	height: 36px;
+}
+
+.controls__btn--play svg {
+	width: 20px;
+	height: 20px;
+}
+
+.controls__time {
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	color: var(--vscode-descriptionForeground, #999);
+	white-space: nowrap;
+	min-width: 90px;
+	text-align: center;
+}
+
+.controls__progress {
+	flex: 1;
+	height: 4px;
+	border-radius: 2px;
+	background: var(--vscode-scrollbarSlider-background, rgba(255, 255, 255, 0.1));
+	cursor: pointer;
+	position: relative;
+	transition: height 0.1s;
+}
+
+.controls__progress:hover {
+	height: 6px;
+}
+
+.controls__progress-bar {
+	height: 100%;
+	border-radius: 2px;
+	background: var(--vscode-button-background, #0e639c);
+	pointer-events: none;
+	position: relative;
+}
+
+.controls__progress-bar::after {
+	content: '';
+	position: absolute;
+	right: -5px;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--vscode-button-background, #0e639c);
+	opacity: 0;
+	transition: opacity 0.1s;
+}
+
+.controls__progress:hover .controls__progress-bar::after {
+	opacity: 1;
+}
+
+.controls__volume {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.controls__volume-slider {
+	width: 60px;
+	height: 4px;
+	-webkit-appearance: none;
+	appearance: none;
+	border-radius: 2px;
+	background: var(--vscode-scrollbarSlider-background, rgba(255, 255, 255, 0.1));
+	outline: none;
+	cursor: pointer;
+}
+
+.controls__volume-slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--vscode-button-background, #0e639c);
+}
+
+.controls__speed {
+	font-size: 11px;
+	padding: 2px 6px;
+	border-radius: 3px;
+	border: 1px solid var(--vscode-panel-border, #333);
+	background: transparent;
+	color: var(--vscode-editor-foreground, #ccc);
+	cursor: pointer;
+	min-width: 40px;
+	text-align: center;
+}
+
+.controls__speed:hover {
+	background: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.1));
+}
+
+/* ==========================================================================
+   Loading / Error States
+   ========================================================================== */
+
+.loading {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	gap: 12px;
+	color: var(--vscode-descriptionForeground, #999);
+}
+
+.loading__spinner {
+	width: 32px;
+	height: 32px;
+	border: 3px solid var(--vscode-panel-border, #333);
+	border-top-color: var(--vscode-button-background, #0e639c);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+	to { transform: rotate(360deg); }
+}
+
+.error {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	color: var(--vscode-errorForeground, #f44);
+	padding: 20px;
+	text-align: center;
+}

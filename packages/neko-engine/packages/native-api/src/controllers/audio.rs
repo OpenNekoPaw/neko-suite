@@ -395,10 +395,11 @@ mod tests {
         assert!(actions.contains(&"transcode"));
         assert!(actions.contains(&"stream"));
         assert!(actions.contains(&"waveform"));
+        assert!(actions.contains(&"diff"));
         assert!(actions.contains(&"stop"));
         assert!(actions.contains(&"pause"));
         assert!(actions.contains(&"resume"));
         assert!(actions.contains(&"speed"));
-        assert_eq!(actions.len(), 8);
+        assert_eq!(actions.len(), 9);
     }
 }

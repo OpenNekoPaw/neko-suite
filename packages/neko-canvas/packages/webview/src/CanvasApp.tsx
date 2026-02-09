@@ -198,6 +198,37 @@ export function CanvasApp() {
   }, [canvasData, isReady]);
 
   // =========================================================================
+  // Sync status to extension (outline, status bar, timeline)
+  // =========================================================================
+
+  // Send canvas status to extension for status bar & outline updates
+  const lastSyncRef = useRef<string>('');
+  useEffect(() => {
+    if (!vscode || !canvasData) return;
+
+    // Build a lightweight fingerprint to avoid redundant messages
+    const fingerprint = `${nodes.length}:${connections.length}:${viewport.zoom.toFixed(2)}:${selectedNodeIds.join(',')}`;
+    if (fingerprint === lastSyncRef.current) return;
+    lastSyncRef.current = fingerprint;
+
+    vscode.postMessage({
+      type: 'canvasStatus',
+      data: {
+        nodes: canvasData.nodes,
+        connections: canvasData.connections,
+        viewport: canvasData.viewport,
+        _selection: { nodeIds: selectedNodeIds },
+      },
+    });
+  }, [nodes.length, connections.length, viewport.zoom, selectedNodeIds, canvasData]);
+
+  /** Report a user action to extension for timeline recording */
+  const reportAction = useCallback((action: string, label: string, detail?: string) => {
+    if (!vscode) return;
+    vscode.postMessage({ type: 'canvasAction', action, label, detail });
+  }, []);
+
+  // =========================================================================
   // Viewport helpers
   // =========================================================================
 
@@ -333,7 +364,8 @@ export function CanvasApp() {
       zIndex: nodes.length,
       data: { content: t('node.newText') },
     });
-  }, [addNode, nodes.length]);
+    reportAction('addNode', 'Add text note');
+  }, [addNode, nodes.length, reportAction]);
 
   const addSceneAt = useCallback((pos: { x: number; y: number }) => {
     const w = 240, h = 160;
@@ -344,9 +376,10 @@ export function CanvasApp() {
       zIndex: nodes.length,
       data: { title: t('node.newScene') },
     });
-  }, [addNode, nodes.length]);
+    reportAction('addNode', 'Add storyboard scene');
+  }, [addNode, nodes.length, reportAction]);
 
-  const addMediaAt = useCallback((pos: { x: number; y: number }, mediaType: 'image' | 'video' | 'audio', uri?: string, _name?: string) => {
+  const addMediaAt = useCallback((pos: { x: number; y: number }, mediaType: 'image' | 'video' | 'audio', uri?: string, name?: string) => {
     const w = mediaType === 'audio' ? 280 : 280;
     const h = mediaType === 'audio' ? 80 : 200;
     addNode({
@@ -361,7 +394,8 @@ export function CanvasApp() {
         duration: undefined,
       },
     });
-  }, [addNode, nodes.length]);
+    reportAction('addNode', `Add ${mediaType}`, name);
+  }, [addNode, nodes.length, reportAction]);
 
   // Toolbar add handlers (add at viewport center)
   const handleAddText = useCallback(() => {
@@ -533,10 +567,23 @@ export function CanvasApp() {
   // =========================================================================
 
   const handleKeyboardAction = useCallback((action: string) => {
+    // Handle outline selection commands (selectNode:id, selectConnection:id)
+    if (action.startsWith('selectNode:')) {
+      const nodeId = action.slice('selectNode:'.length);
+      selectNode(nodeId);
+      return;
+    }
+    if (action.startsWith('selectConnection:')) {
+      const connId = action.slice('selectConnection:'.length);
+      selectConnection(connId);
+      return;
+    }
+
     switch (action) {
       case 'deleteSelected':
         if (selectedNodeIds.length > 0 || selectedConnectionIds.length > 0) {
           deleteSelected();
+          reportAction('deleteNode', `Deleted ${selectedNodeIds.length} node(s)`);
         }
         break;
       case 'escape':
@@ -556,24 +603,32 @@ export function CanvasApp() {
         break;
       case 'undo':
         undo();
+        reportAction('undo', 'Undo');
         break;
       case 'redo':
         redo();
+        reportAction('redo', 'Redo');
         break;
       case 'copy':
         handleCopy();
         break;
       case 'cut':
         handleCut();
+        reportAction('deleteNode', `Cut ${selectedNodeIds.length} node(s)`);
         break;
       case 'paste':
         handlePaste();
+        reportAction('paste', 'Paste');
         break;
       case 'duplicate':
         handleDuplicate();
+        reportAction('paste', 'Duplicate');
+        break;
+      case 'resetZoom':
+        resetViewport();
         break;
     }
-  }, [selectedNodeIds, selectedConnectionIds, deleteSelected, isConnecting, cancelConnection, clearSelection, nodes, contextMenu, undo, redo, handleCopy, handleCut, handlePaste, handleDuplicate]);
+  }, [selectedNodeIds, selectedConnectionIds, deleteSelected, isConnecting, cancelConnection, clearSelection, nodes, contextMenu, undo, redo, handleCopy, handleCut, handlePaste, handleDuplicate, selectNode, selectConnection, resetViewport, reportAction]);
 
   // Keep ref in sync with latest handler
   keyboardActionRef.current = handleKeyboardAction;

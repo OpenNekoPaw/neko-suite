@@ -1,0 +1,110 @@
+{
+  "name": "neko-preview",
+  "displayName": "Neko Preview",
+  "description": "Lightweight media preview for video and audio files, powered by neko-engine",
+  "version": "0.0.1",
+  "publisher": "neko",
+  "l10n": "./l10n",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neko/creative-suite"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "video",
+    "audio",
+    "preview",
+    "media",
+    "player"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "extensionDependencies": [
+    "neko.neko-engine"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "neko.videoPreview",
+        "displayName": "Video Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.{mp4,mov,avi,mkv,webm,m4v,ts,flv,wmv}"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "neko.audioPreview",
+        "displayName": "Audio Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.{mp3,wav,ogg,flac,aac,m4a,wma,opus}"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "neko.preview.openVideo",
+        "title": "Open Video Preview",
+        "category": "Neko Preview"
+      },
+      {
+        "command": "neko.preview.openAudio",
+        "title": "Open Audio Preview",
+        "category": "Neko Preview"
+      }
+    ],
+    "configuration": {
+      "title": "Neko Preview",
+      "properties": {
+        "neko.preview.videoQuality": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "default": "medium",
+          "description": "Preview video quality (affects bandwidth and CPU usage)"
+        },
+        "neko.preview.autoPlay": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically start playback when opening media files"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "npm run compile:webview && npm run compile:extension && npm run copy:webview",
+    "compile:extension": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:@neko-engine/native-napi --format=cjs --platform=node",
+    "compile:webview": "cd packages/webview && npx vite build",
+    "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp packages/webview/dist/*.html dist/webview/ 2>/dev/null || true && cp -R packages/webview/dist/assets/* dist/webview/assets/ 2>/dev/null || true",
+    "watch": "npm run compile:extension -- --watch",
+    "dev:webview": "cd packages/webview && npx vite",
+    "lint": "eslint packages/extension/src --ext ts,tsx",
+    "test": "vitest",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@neko/shared": "workspace:*",
+    "esbuild": "^0.19.8",
+    "typescript": "^5.3.2",
+    "vitest": "^1.0.4"
+  },
+  "dependencies": {
+    "@neko-engine/native-napi": "workspace:*"
+  }
+}

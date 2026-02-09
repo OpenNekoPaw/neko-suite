@@ -525,10 +525,11 @@ mod tests {
         assert!(actions.contains(&"speed"));
         assert!(actions.contains(&"loop"));
         assert!(actions.contains(&"seek"));
+        assert!(actions.contains(&"diff"));
         assert!(actions.contains(&"export"));
         assert!(actions.contains(&"export_progress"));
         assert!(actions.contains(&"export_cancel"));
-        assert_eq!(actions.len(), 12);
+        assert_eq!(actions.len(), 13);
     }
 
     #[tokio::test]

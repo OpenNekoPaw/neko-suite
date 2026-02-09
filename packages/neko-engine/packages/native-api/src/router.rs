@@ -277,10 +277,10 @@ mod tests {
         let router = create_test_router();
 
         let models_actions = router.actions("models").unwrap();
-        assert_eq!(models_actions, &["probe", "capture", "stream"]);
+        assert_eq!(models_actions, &["probe", "capture", "stream", "diff"]);
 
         let canvas_actions = router.actions("canvas").unwrap();
-        assert_eq!(canvas_actions, &["composite", "capture", "export"]);
+        assert_eq!(canvas_actions, &["composite", "capture", "export", "diff"]);
 
         let scenes_actions = router.actions("scenes").unwrap();
         assert_eq!(scenes_actions, &["composite", "capture", "stream"]);

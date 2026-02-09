@@ -10,7 +10,7 @@
  * Inspired by TapNow's left sidebar design.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useHistoryStore } from '../../stores/historyStore';
 import { t } from '../../i18n';
 
@@ -46,6 +46,26 @@ export function CanvasToolbar({
   const [expandedPanel, setExpandedPanel] = useState<ExpandedPanel>(null);
   const canUndo = useHistoryStore((s) => s.canUndo());
   const canRedo = useHistoryStore((s) => s.canRedo());
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!expandedPanel) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+        setExpandedPanel(null);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setExpandedPanel(null);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [expandedPanel]);
 
   const togglePanel = useCallback((panel: ExpandedPanel) => {
     setExpandedPanel((prev) => (prev === panel ? null : panel));
@@ -57,7 +77,7 @@ export function CanvasToolbar({
   }, []);
 
   return (
-    <div className="relative flex flex-col items-center py-1 gap-0.5 z-20"
+    <div ref={toolbarRef} className="relative flex flex-col items-center py-1 gap-0.5 z-20"
       style={{
         backgroundColor: 'var(--vscode-activityBar-background, var(--toolbar-bg))',
         borderRight: '1px solid var(--toolbar-border)',
@@ -125,13 +145,19 @@ export function CanvasToolbar({
 
       {expandedPanel === 'add' && (
         <div
-          className="absolute left-full top-0 ml-1 rounded-lg shadow-xl border py-2 min-w-[200px]"
+          className="absolute left-full top-0 ml-1 py-[4px] min-w-[220px]"
           style={{
-            backgroundColor: 'var(--toolbar-bg)',
-            borderColor: 'var(--toolbar-border)',
+            backgroundColor: 'var(--vscode-menu-background, #252526)',
+            border: '1px solid var(--vscode-menu-border, #454545)',
+            borderRadius: 4,
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.36)',
+            color: 'var(--vscode-menu-foreground, #cccccc)',
           }}
         >
-          <div className="px-3 py-1 text-xs font-medium" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+          <div
+            className="px-[28px] py-[4px] text-[11px] uppercase tracking-wide"
+            style={{ color: 'var(--vscode-descriptionForeground, #717171)' }}
+          >
             {t('toolbar.addNode')}
           </div>
 
@@ -142,7 +168,7 @@ export function CanvasToolbar({
               </svg>
             }
             label={t('toolbar.text')}
-            description={t('toolbar.addText')}
+            shortcut=""
             onClick={() => handleAddAndClose(onAddText)}
           />
 
@@ -153,30 +179,36 @@ export function CanvasToolbar({
               </svg>
             }
             label={t('toolbar.scene')}
-            description={t('toolbar.addScene')}
+            shortcut=""
             onClick={() => handleAddAndClose(onAddScene)}
           />
 
-          <div className="my-1 mx-2 h-px" style={{ backgroundColor: 'var(--toolbar-border)' }} />
+          <div
+            className="my-[4px] mx-0 h-px"
+            style={{ backgroundColor: 'var(--vscode-menu-separatorBackground, #454545)' }}
+          />
 
-          <div className="px-3 py-1 text-xs font-medium" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+          <div
+            className="px-[28px] py-[4px] text-[11px] uppercase tracking-wide"
+            style={{ color: 'var(--vscode-descriptionForeground, #717171)' }}
+          >
             {t('toolbar.addMedia')}
           </div>
 
           <AddPanelItem
-            icon={<span className="text-sm">🖼️</span>}
+            icon={<span className="text-[13px]">🖼️</span>}
             label={t('menu.addImage')}
             onClick={() => handleAddAndClose(() => onAddMedia('image'))}
           />
 
           <AddPanelItem
-            icon={<span className="text-sm">🎥</span>}
+            icon={<span className="text-[13px]">🎥</span>}
             label={t('menu.addVideo')}
             onClick={() => handleAddAndClose(() => onAddMedia('video'))}
           />
 
           <AddPanelItem
-            icon={<span className="text-sm">🎵</span>}
+            icon={<span className="text-[13px]">🎵</span>}
             label={t('menu.addAudio')}
             onClick={() => handleAddAndClose(() => onAddMedia('audio'))}
           />
@@ -240,36 +272,44 @@ function ToolbarButton({ icon, title, onClick, isActive, disabled }: ToolbarButt
 interface AddPanelItemProps {
   icon: React.ReactNode;
   label: string;
-  description?: string;
+  shortcut?: string;
   onClick: () => void;
 }
 
-function AddPanelItem({ icon, label, description, onClick }: AddPanelItemProps) {
+function AddPanelItem({ icon, label, shortcut, onClick }: AddPanelItemProps) {
   return (
     <button
-      className="w-full px-3 py-2 flex items-center gap-3 text-left transition-colors"
-      style={{ color: 'var(--toolbar-fg)' }}
+      className="w-full h-[26px] px-0 flex items-center text-[12px] text-left border-0 bg-transparent"
+      style={{
+        color: 'var(--vscode-menu-foreground, #cccccc)',
+        cursor: 'pointer',
+        fontFamily: 'var(--vscode-font-family)',
+      }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = 'var(--control-hover)';
+        e.currentTarget.style.backgroundColor = 'var(--vscode-menu-selectionBackground, #094771)';
+        e.currentTarget.style.color = 'var(--vscode-menu-selectionForeground, #ffffff)';
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.backgroundColor = 'transparent';
+        e.currentTarget.style.color = 'var(--vscode-menu-foreground, #cccccc)';
       }}
       onClick={onClick}
     >
-      <div className="w-8 h-8 flex items-center justify-center rounded-md"
-        style={{ backgroundColor: 'var(--control-hover)' }}
-      >
+      {/* Icon area - fixed width for alignment (matches ContextMenu) */}
+      <span className="w-[28px] flex-shrink-0 flex items-center justify-center text-[13px]">
         {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium">{label}</div>
-        {description && (
-          <div className="text-xs truncate" style={{ color: 'var(--toolbar-fg-secondary)' }}>
-            {description}
-          </div>
-        )}
-      </div>
+      </span>
+      {/* Label */}
+      <span className="flex-1 pr-4">{label}</span>
+      {/* Shortcut */}
+      {shortcut && (
+        <span
+          className="pr-[10px] text-[11px]"
+          style={{ color: 'var(--vscode-descriptionForeground, #717171)' }}
+        >
+          {shortcut}
+        </span>
+      )}
     </button>
   );
 }

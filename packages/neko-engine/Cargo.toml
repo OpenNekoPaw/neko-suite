@@ -64,8 +64,11 @@ bytemuck = { version = "1.14", features = ["derive"] }
 crossbeam-channel = "0.5"
 indicatif = "0.17"
 
+# Base64 encoding
+base64 = "0.22"
+
 # Image encoding - pure Rust JPEG encoder
-image = { version = "0.25", default-features = false, features = ["jpeg"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 # Text rendering - font shaping, layout, rasterization
 cosmic-text = "0.12"

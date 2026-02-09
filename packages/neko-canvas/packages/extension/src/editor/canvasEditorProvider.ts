@@ -3,6 +3,9 @@
  */
 import * as vscode from 'vscode';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
+import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
+import type { CanvasTimelineProvider, CanvasTimelineEntry } from '../views/canvasTimelineProvider';
+import type { CanvasStatusBar } from '../views/canvasStatusBar';
 
 export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.CustomDocument> {
   public static readonly viewType = 'neko.canvasEditor';
@@ -16,7 +19,23 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private activeWebviewPanel: vscode.WebviewPanel | undefined;
   private activeDocument: vscode.CustomDocument | undefined;
 
+  // External providers for VSCode integration
+  private outlineProvider: CanvasOutlineProvider | undefined;
+  private timelineProvider: CanvasTimelineProvider | undefined;
+  private statusBar: CanvasStatusBar | undefined;
+
   constructor(private readonly context: vscode.ExtensionContext) {}
+
+  /** Wire up external providers after construction */
+  setProviders(opts: {
+    outline?: CanvasOutlineProvider;
+    timeline?: CanvasTimelineProvider;
+    statusBar?: CanvasStatusBar;
+  }): void {
+    this.outlineProvider = opts.outline;
+    this.timelineProvider = opts.timeline;
+    this.statusBar = opts.statusBar;
+  }
 
   async openCustomDocument(
     uri: vscode.Uri,
@@ -53,8 +72,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       if (this.activeWebviewPanel === webviewPanel) {
         this.activeWebviewPanel = undefined;
         this.activeDocument = undefined;
+        // Clear outline and hide status bar when editor closes
+        this.outlineProvider?.updateData(null);
+        this.statusBar?.hide();
       }
     });
+
+    // Show status bar when canvas editor is opened
+    this.statusBar?.show();
   }
 
   async saveCustomDocument(
@@ -187,6 +212,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           const content = Buffer.from(fileData).toString('utf-8');
           const data = content.trim() ? JSON.parse(content) : null;
           webviewPanel.webview.postMessage({ type: 'update', data });
+          // Sync outline & status bar on initial load
+          if (data) {
+            this.syncOutline(data as Record<string, unknown>);
+            this.syncStatusBar(data as Record<string, unknown>);
+          }
         } catch {
           // File is empty or invalid JSON — send null to use defaults
           webviewPanel.webview.postMessage({ type: 'update', data: null });
@@ -196,14 +226,32 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       case 'save': {
         // Save canvas data back to file
         try {
-          const content = JSON.stringify(message.data, null, 2);
+          const data = message.data as Record<string, unknown>;
+          const content = JSON.stringify(data, null, 2);
           await vscode.workspace.fs.writeFile(
             document.uri,
             Buffer.from(content, 'utf-8')
           );
+          // Sync outline & status bar on every save
+          this.syncOutline(data);
+          this.syncStatusBar(data);
         } catch (error) {
           console.error('[NekoCanvas] Failed to save:', error);
         }
+        break;
+      }
+      case 'canvasStatus': {
+        // Webview reports status update (selection change, viewport change, etc.)
+        const data = message.data as Record<string, unknown>;
+        this.syncStatusBar(data);
+        break;
+      }
+      case 'canvasAction': {
+        // Webview reports a user action for timeline recording
+        const action = message.action as CanvasTimelineEntry['action'];
+        const label = message.label as string;
+        const detail = message.detail as string | undefined;
+        this.recordTimeline({ action, label, detail });
         break;
       }
       case 'pickMedia': {
@@ -295,6 +343,100 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
   private detectMediaType(ext: string): string | null {
     return CanvasEditorProvider.MEDIA_EXTENSIONS[ext] ?? null;
+  }
+
+  // ===========================================================================
+  // Data sync helpers for VSCode integration (outline, timeline, status bar)
+  // ===========================================================================
+
+  /** Extract outline data from raw canvas JSON and push to outline provider */
+  private syncOutline(canvasData: Record<string, unknown>): void {
+    if (!this.outlineProvider) return;
+
+    const nodes = (canvasData.nodes ?? []) as Array<Record<string, unknown>>;
+    const connections = (canvasData.connections ?? []) as Array<Record<string, unknown>>;
+
+    // Build node label lookup for connection display
+    const nodeLabelMap = new Map<string, string>();
+    const outlineNodes = nodes.map((n) => {
+      const data = (n.data ?? {}) as Record<string, unknown>;
+      const type = String(n.type ?? 'unknown');
+      let label = 'Untitled';
+      let detail: string | undefined;
+
+      switch (type) {
+        case 'media': {
+          const path = String(data.assetPath ?? '');
+          label = path.split('/').pop() || 'Media';
+          detail = String(data.mediaType ?? 'media');
+          break;
+        }
+        case 'storyboard':
+          label = String(data.title ?? 'Scene');
+          detail = data.description ? String(data.description).slice(0, 40) : undefined;
+          break;
+        case 'annotation':
+          label = String(data.content ?? 'Note').slice(0, 30);
+          detail = 'annotation';
+          break;
+        case 'group':
+          label = String(data.label ?? 'Group');
+          break;
+      }
+
+      const id = String(n.id ?? '');
+      nodeLabelMap.set(id, label);
+
+      return {
+        id,
+        type: type as 'media' | 'storyboard' | 'annotation' | 'group',
+        label,
+        detail,
+        locked: Boolean(n.locked),
+      };
+    });
+
+    const outlineConnections = connections.map((c) => ({
+      id: String(c.id ?? ''),
+      sourceLabel: nodeLabelMap.get(String(c.sourceId ?? '')) ?? '?',
+      targetLabel: nodeLabelMap.get(String(c.targetId ?? '')) ?? '?',
+      label: c.label ? String(c.label) : undefined,
+    }));
+
+    const outlineData: CanvasOutlineData = {
+      name: String(canvasData.name ?? 'Canvas'),
+      nodes: outlineNodes,
+      connections: outlineConnections,
+    };
+
+    this.outlineProvider.updateData(outlineData);
+  }
+
+  /** Update VSCode status bar with canvas info */
+  private syncStatusBar(canvasData: Record<string, unknown>): void {
+    if (!this.statusBar) return;
+
+    const nodes = (canvasData.nodes ?? []) as unknown[];
+    const connections = (canvasData.connections ?? []) as unknown[];
+    const viewport = (canvasData.viewport ?? { zoom: 1 }) as Record<string, unknown>;
+    const selection = (canvasData._selection ?? {}) as Record<string, unknown>;
+    const selectedNodeIds = (selection.nodeIds ?? []) as unknown[];
+
+    this.statusBar.update({
+      nodeCount: nodes.length,
+      connectionCount: connections.length,
+      zoom: Number(viewport.zoom ?? 1),
+      selectedCount: selectedNodeIds.length,
+    });
+  }
+
+  /** Record a timeline entry for the active document */
+  private recordTimeline(entry: Omit<CanvasTimelineEntry, 'timestamp'>): void {
+    if (!this.timelineProvider || !this.activeDocument) return;
+    this.timelineProvider.addEntry(this.activeDocument.uri, {
+      ...entry,
+      timestamp: Date.now(),
+    });
   }
 
   private sendRequest<T>(type: string, data?: unknown): Promise<T> {

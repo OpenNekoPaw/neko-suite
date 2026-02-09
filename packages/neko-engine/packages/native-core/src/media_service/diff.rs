@@ -6,6 +6,8 @@
 use serde::Serialize;
 use std::path::Path;
 
+use super::audio_diff::{diff_audio_content, AudioContentDiff};
+use super::image_diff::{diff_image_content, ImageContentDiff};
 use super::probe::{probe_media_info, MediaInfo};
 use crate::error::{Error, Result};
 
@@ -59,6 +61,16 @@ impl FieldDiff {
     }
 }
 
+/// Content-level diff result (pixel/waveform comparison)
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum ContentDiff {
+    /// Image pixel-level comparison
+    Image(ImageContentDiff),
+    /// Audio waveform comparison
+    Audio(AudioContentDiff),
+}
+
 /// Result of comparing two media files
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -81,6 +93,9 @@ pub struct DiffResult {
     pub info_a: serde_json::Value,
     /// Metadata for source B
     pub info_b: serde_json::Value,
+    /// Content-level diff (pixel/waveform comparison, only for image/audio)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<ContentDiff>,
 }
 
 /// Compare two media files and return their metadata differences
@@ -116,6 +131,31 @@ pub fn diff_media<P: AsRef<Path>>(
     let diff_count = fields.iter().filter(|f| f.changed).count();
     let total_fields = fields.len();
 
+    // Content-level diff for image and audio
+    let content = match category {
+        DiffCategory::Image => {
+            match diff_image_content(path_a, path_b) {
+                Ok(img_diff) => Some(ContentDiff::Image(img_diff)),
+                Err(e) => {
+                    tracing::warn!("Image content diff failed: {}", e);
+                    None
+                }
+            }
+        }
+        DiffCategory::Audio => {
+            let sa = path_a.to_string_lossy();
+            let sb = path_b.to_string_lossy();
+            match diff_audio_content(&sa, &sb) {
+                Ok(audio_diff) => Some(ContentDiff::Audio(audio_diff)),
+                Err(e) => {
+                    tracing::warn!("Audio content diff failed: {}", e);
+                    None
+                }
+            }
+        }
+        _ => None,
+    };
+
     Ok(DiffResult {
         source_a: path_a.display().to_string(),
         source_b: path_b.display().to_string(),
@@ -126,6 +166,7 @@ pub fn diff_media<P: AsRef<Path>>(
         fields,
         info_a: media_info_to_json(&info_a),
         info_b: media_info_to_json(&info_b),
+        content,
     })
 }
 
@@ -412,6 +453,7 @@ mod tests {
             fields: vec![FieldDiff::diff("width", 1920u64, 1280u64)],
             info_a: serde_json::json!({}),
             info_b: serde_json::json!({}),
+            content: None,
         };
 
         let json = serde_json::to_value(&result).unwrap();

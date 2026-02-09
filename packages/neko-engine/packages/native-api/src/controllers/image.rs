@@ -294,6 +294,7 @@ mod tests {
         assert!(actions.contains(&"probe"));
         assert!(actions.contains(&"capture"));
         assert!(actions.contains(&"encode"));
-        assert_eq!(actions.len(), 3);
+        assert!(actions.contains(&"diff"));
+        assert_eq!(actions.len(), 4);
     }
 }

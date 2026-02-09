@@ -62,6 +62,14 @@
           "name": "%neko.assets.name%",
           "contextualTitle": "%neko.assets.contextualTitle%"
         }
+      ],
+      "explorer": [
+        {
+          "id": "neko.canvasOutline",
+          "name": "Canvas Outline",
+          "when": "activeCustomEditorId == 'neko.canvasEditor'",
+          "icon": "$(list-tree)"
+        }
       ]
     },
     "commands": [
@@ -133,6 +141,21 @@
       {
         "command": "neko.canvas.redo",
         "title": "Redo",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.selectNodeFromOutline",
+        "title": "Select Node",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.selectConnectionFromOutline",
+        "title": "Select Connection",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.resetZoom",
+        "title": "Reset Zoom",
         "category": "NekoCanvas"
       }
     ],
