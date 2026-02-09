@@ -273,8 +273,8 @@ export type AllTimelineElement = TimelineElement | ShapeElement;
 // VSCode API Type (re-export from shared)
 // =============================================================================
 
-export type { VSCodeAPI } from '@neko/shared';
+export type { VSCodeAPI } from '@neko/shared/vscode';
 
 declare global {
-  function acquireVsCodeApi(): import('@neko/shared').VSCodeAPI;
+  function acquireVsCodeApi(): import('@neko/shared/vscode').VSCodeAPI;
 }

@@ -444,12 +444,13 @@ export class AssetLibrary {
 	private getCategoryTags(category: EntityCategory): string[] {
 		const categoryTagMap: Record<EntityCategory, string[]> = {
 			character: ['character'],
-			environment: ['background', 'scene'],
+			creature: ['creature', 'animal'],
 			object: ['prop'],
+			vehicle: ['vehicle', 'transport'],
+			environment: ['background', 'scene'],
 			effect: ['effect', 'vfx'],
+			ui: ['ui', 'icon'],
 			audio: ['audio', 'sound'],
-			text: ['text'],
-			other: [],
 		};
 		return categoryTagMap[category] ?? [];
 	}

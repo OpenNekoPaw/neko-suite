@@ -9,7 +9,7 @@ export default defineConfig({
     preserveSymlinks: true,
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@neko/shared': path.resolve(__dirname, '../../../neko-shared/src/index.ts'),
+      '@neko/shared': path.resolve(__dirname, '../../../neko-types/src/index.ts'),
     },
   },
   server: {

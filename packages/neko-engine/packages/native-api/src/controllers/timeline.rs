@@ -4,6 +4,7 @@ use crate::controllers::utils::base64_encode;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use neko_native_core::domain::{StreamConfig, Timeline};
+use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{ExportService, IExportService, ITimelineService, TimelineService};
 use neko_types::{ActionResponse, LoopRegion, Resolution, StreamId};
 use serde::Deserialize;
@@ -79,6 +80,16 @@ struct StreamControlOptions {
     /// Whether to clear loop (for loop action)
     #[serde(default)]
     clear: bool,
+}
+
+/// Options for timelines:diff
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct TimelineDiffRequestOptions {
+    /// Source A file path
+    source_a: Option<String>,
+    /// Source B file path
+    source_b: Option<String>,
 }
 
 impl Controller for TimelineController {
@@ -385,6 +396,23 @@ impl Controller for TimelineController {
                     serde_json::json!({ "cancelled": cancelled }),
                 ))
             }
+            "diff" => {
+                let opts: TimelineDiffRequestOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let source_a = opts.source_a.ok_or_else(|| {
+                    ApiError::InvalidRequest("sourceA path required for timelines:diff".to_string())
+                })?;
+                let source_b = opts.source_b.ok_or_else(|| {
+                    ApiError::InvalidRequest("sourceB path required for timelines:diff".to_string())
+                })?;
+
+                let result = diff_media(&source_a, &source_b, DiffCategory::Timeline)
+                    .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+
+                let response = serde_json::to_value(&result)?;
+                Ok(ActionResponse::ok("", response))
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "timelines".to_string(),
                 action: action.to_string(),
@@ -407,6 +435,7 @@ impl Controller for TimelineController {
             "speed",
             "loop",
             "seek",
+            "diff",
             "export",
             "export_progress",
             "export_cancel",

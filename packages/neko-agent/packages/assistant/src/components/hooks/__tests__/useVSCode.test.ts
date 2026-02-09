@@ -10,7 +10,6 @@ const mockVSCodeApi = {
 
 // Setup global mock before module loads
 beforeAll(() => {
-  // @ts-expect-error - mocking global
   globalThis.acquireVsCodeApi = () => mockVSCodeApi;
 });
 

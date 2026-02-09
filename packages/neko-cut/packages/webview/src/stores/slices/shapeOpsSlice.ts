@@ -10,7 +10,8 @@
  */
 
 import { StateCreator } from 'zustand';
-import type { ProjectData, ShapeElement, TimelineTrack } from '../../types';
+import type { ProjectData, TimelineTrack } from '../../types';
+import type { ShapeElement } from '@neko/shared';
 import type {
   Shape,
   ShapeInstance,
@@ -29,6 +30,24 @@ import {
   createDefaultShapeStyle,
 } from '../../types/shape';
 import { generateId } from '../../utils';
+import { CENTERED_TRANSFORM } from '@neko/shared';
+
+// =============================================================================
+// UI-extended ShapeElement (engine ShapeElement + multi-shape layers)
+//
+// The engine's ShapeElement has simple fields (shapeType, fill, stroke, strokeWidth).
+// The webview UI supports multiple shape layers per element via `shapes` array.
+// This extended type is used only in the Store; shapes are stripped before
+// sending to the engine.
+// =============================================================================
+
+/**
+ * Webview-extended ShapeElement with multi-shape layer support.
+ * The `shapes` field is UI-only and not part of the engine model.
+ */
+interface WebviewShapeElement extends ShapeElement {
+  shapes: ShapeInstance[];
+}
 
 // =============================================================================
 // 依赖接口
@@ -74,7 +93,7 @@ function createShapeByType(shapeType: ShapeType): Shape {
 function findShapeLocation(
   project: ProjectData,
   shapeId: string
-): { track: TimelineTrack; element: ShapeElement; shapeIndex: number } | null {
+): { track: TimelineTrack; element: WebviewShapeElement; shapeIndex: number } | null {
   for (const track of project.tracks) {
     if (track.type !== 'shape') continue;
 
@@ -82,8 +101,8 @@ function findShapeLocation(
       // Type guard for ShapeElement
       if (!('shapes' in element)) continue;
 
-      const shapeElement = element as unknown as ShapeElement;
-      const shapeIndex = shapeElement.shapes.findIndex((s) => s.id === shapeId);
+      const shapeElement = element as unknown as WebviewShapeElement;
+      const shapeIndex = shapeElement.shapes.findIndex((s: ShapeInstance) => s.id === shapeId);
       if (shapeIndex !== -1) {
         return { track, element: shapeElement, shapeIndex };
       }
@@ -99,14 +118,14 @@ function findShapeElement(
   project: ProjectData,
   trackId: string,
   elementId: string
-): ShapeElement | null {
+): WebviewShapeElement | null {
   const track = project.tracks.find((t) => t.id === trackId);
   if (!track || track.type !== 'shape') return null;
 
   const element = track.elements.find((e) => e.id === elementId);
   if (!element || !('shapes' in element)) return null;
 
-  return element as unknown as ShapeElement;
+  return element as unknown as WebviewShapeElement;
 }
 
 // =============================================================================
@@ -219,7 +238,7 @@ export const createShapeOpsSlice: StateCreator<
     pushHistory(project);
 
     const elementId = generateId();
-    const shapeElement: ShapeElement = {
+    const shapeElement: WebviewShapeElement = {
       id: elementId,
       type: 'shape',
       name: 'Shape Layer',
@@ -227,6 +246,17 @@ export const createShapeOpsSlice: StateCreator<
       duration,
       trimStart: 0,
       trimEnd: 0,
+      transform: CENTERED_TRANSFORM,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      muted: false,
+      hidden: false,
+      locked: false,
+      shapeType: 'rectangle',
+      fill: '#4a90d9',
+      stroke: '#333333',
+      strokeWidth: 2,
       shapes: [],
     };
 
@@ -281,7 +311,7 @@ export const createShapeOpsSlice: StateCreator<
                   e.id === elementId && 'shapes' in e
                     ? {
                         ...e,
-                        shapes: [...(e as unknown as ShapeElement).shapes, shapeInstance],
+                        shapes: [...(e as unknown as WebviewShapeElement).shapes, shapeInstance],
                       }
                     : e
                 ),
@@ -314,7 +344,7 @@ export const createShapeOpsSlice: StateCreator<
                   e.id === elementId && 'shapes' in e
                     ? {
                         ...e,
-                        shapes: (e as unknown as ShapeElement).shapes.filter(
+                        shapes: (e as unknown as WebviewShapeElement).shapes.filter(
                           (s) => s.id !== shapeId
                         ),
                       }
@@ -358,7 +388,7 @@ export const createShapeOpsSlice: StateCreator<
                   e.id === elementId && 'shapes' in e
                     ? {
                         ...e,
-                        shapes: [...(e as unknown as ShapeElement).shapes, clonedShape],
+                        shapes: [...(e as unknown as WebviewShapeElement).shapes, clonedShape],
                       }
                     : e
                 ),
@@ -388,7 +418,7 @@ export const createShapeOpsSlice: StateCreator<
                   e.id === elementId && 'shapes' in e
                     ? {
                         ...e,
-                        shapes: (e as unknown as ShapeElement).shapes.map((s) =>
+                        shapes: (e as unknown as WebviewShapeElement).shapes.map((s) =>
                           s.id === shapeId ? { ...s, ...updates } : s
                         ),
                       }
@@ -418,7 +448,7 @@ export const createShapeOpsSlice: StateCreator<
                   e.id === elementId && 'shapes' in e
                     ? {
                         ...e,
-                        shapes: (e as unknown as ShapeElement).shapes.map((s) =>
+                        shapes: (e as unknown as WebviewShapeElement).shapes.map((s) =>
                           s.id === shapeId
                             ? { ...s, shape: { ...s.shape, ...shapeUpdates } as Shape }
                             : s
@@ -450,7 +480,7 @@ export const createShapeOpsSlice: StateCreator<
                   e.id === elementId && 'shapes' in e
                     ? {
                         ...e,
-                        shapes: (e as unknown as ShapeElement).shapes.map((s) =>
+                        shapes: (e as unknown as WebviewShapeElement).shapes.map((s) =>
                           s.id === shapeId
                             ? {
                                 ...s,
@@ -503,7 +533,7 @@ export const createShapeOpsSlice: StateCreator<
                   e.id === elementId && 'shapes' in e
                     ? {
                         ...e,
-                        shapes: (e as unknown as ShapeElement).shapes.map((s) =>
+                        shapes: (e as unknown as WebviewShapeElement).shapes.map((s) =>
                           s.id === shapeId ? { ...s, visible: !s.visible } : s
                         ),
                       }
@@ -539,7 +569,7 @@ export const createShapeOpsSlice: StateCreator<
                   e.id === elementId && 'shapes' in e
                     ? {
                         ...e,
-                        shapes: (e as unknown as ShapeElement).shapes.map((s) =>
+                        shapes: (e as unknown as WebviewShapeElement).shapes.map((s) =>
                           s.id === shapeId ? { ...s, locked: !s.locked } : s
                         ),
                       }
@@ -655,7 +685,7 @@ export const createShapeOpsSlice: StateCreator<
                   e.id === location.element.id && 'shapes' in e
                     ? {
                         ...e,
-                        shapes: (e as unknown as ShapeElement).shapes.map((s) =>
+                        shapes: (e as unknown as WebviewShapeElement).shapes.map((s) =>
                           s.id === shapeId ? { ...s, ...updates } : s
                         ),
                       }
@@ -688,7 +718,7 @@ export const createShapeOpsSlice: StateCreator<
                   e.id === location.element.id && 'shapes' in e
                     ? {
                         ...e,
-                        shapes: (e as unknown as ShapeElement).shapes.filter(
+                        shapes: (e as unknown as WebviewShapeElement).shapes.filter(
                           (s) => s.id !== shapeId
                         ),
                       }

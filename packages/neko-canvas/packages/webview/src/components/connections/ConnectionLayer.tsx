@@ -1,9 +1,14 @@
 /**
  * ConnectionLayer - Connection layer component
- * Manages rendering of all connections and pending connection preview
+ * Manages rendering of all connections and pending connection preview.
+ *
+ * Supports both legacy anchor-based and port-based connections.
+ * For port-based connections, calculates anchor points using port position
+ * and index within the same side.
  */
 
-import type { CanvasConnection, CanvasNode } from '@neko/shared';
+import type { CanvasConnection, CanvasNode, PortDefinition } from '@neko/shared';
+import { getDefaultPorts } from '@neko/shared';
 import { Connection } from './Connection';
 
 // =============================================================================
@@ -38,7 +43,10 @@ const SVG_SIZE = 100000;
 // Helpers
 // =============================================================================
 
-function getAnchorPoint(node: CanvasNode, anchor: string): Point {
+/**
+ * Get the anchor point for a legacy anchor position (center of each side).
+ */
+function getLegacyAnchorPoint(node: CanvasNode, anchor: string): Point {
   const { position, size } = node;
 
   switch (anchor) {
@@ -53,6 +61,76 @@ function getAnchorPoint(node: CanvasNode, anchor: string): Point {
     default:
       return { x: position.x + size.width / 2, y: position.y + size.height / 2 };
   }
+}
+
+/**
+ * Get the anchor point for a port-based connection.
+ * Calculates position based on port side and index among ports on the same side.
+ */
+function getPortAnchorPoint(node: CanvasNode, portId: string): Point | null {
+  const ports = node.ports ?? getDefaultPorts(node.type);
+  const port = ports.find((p: PortDefinition) => p.id === portId);
+  if (!port) return null;
+
+  // Count ports on the same side and find index
+  const portsOnSide = ports.filter((p: PortDefinition) => p.position === port.position);
+  const index = portsOnSide.indexOf(port);
+  const total = portsOnSide.length;
+
+  const { position, size } = node;
+  const spacing = 1 / (total + 1);
+  const fraction = spacing * (index + 1);
+
+  switch (port.position) {
+    case 'top':
+      return { x: position.x + size.width * fraction, y: position.y };
+    case 'right':
+      return { x: position.x + size.width, y: position.y + size.height * fraction };
+    case 'bottom':
+      return { x: position.x + size.width * fraction, y: position.y + size.height };
+    case 'left':
+      return { x: position.x, y: position.y + size.height * fraction };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Get anchor point for a connection endpoint.
+ * Tries port-based first, falls back to legacy anchor.
+ */
+function getAnchorPoint(node: CanvasNode, anchor: string, portId?: string): Point {
+  // Try port-based position first
+  if (portId) {
+    const portPoint = getPortAnchorPoint(node, portId);
+    if (portPoint) return portPoint;
+  }
+
+  // Check if anchor is actually a port ID
+  const portPoint = getPortAnchorPoint(node, anchor);
+  if (portPoint) return portPoint;
+
+  // Fall back to legacy anchor
+  return getLegacyAnchorPoint(node, anchor);
+}
+
+/**
+ * Get the anchor direction for control point calculation.
+ * For ports, uses the port's position side. For legacy, uses the anchor directly.
+ */
+function getAnchorDirection(node: CanvasNode, anchor: string, portId?: string): string {
+  if (portId) {
+    const ports = node.ports ?? getDefaultPorts(node.type);
+    const port = ports.find((p: PortDefinition) => p.id === portId);
+    if (port) return port.position;
+  }
+
+  // Check if anchor is a port ID
+  const ports = node.ports ?? getDefaultPorts(node.type);
+  const port = ports.find((p: PortDefinition) => p.id === anchor);
+  if (port) return port.position;
+
+  return anchor;
 }
 
 function getControlPoint(point: Point, anchor: string, offset: number): Point {
@@ -92,6 +170,7 @@ export function ConnectionLayer({
     if (!sourceNode) return null;
 
     const sourcePoint = getAnchorPoint(sourceNode, pendingConnection.sourceAnchor);
+    const sourceDir = getAnchorDirection(sourceNode, pendingConnection.sourceAnchor);
     const targetPoint = pendingConnection.mousePosition;
 
     // Calculate control points
@@ -100,7 +179,7 @@ export function ConnectionLayer({
     const distance = Math.sqrt(dx * dx + dy * dy);
     const controlOffset = Math.min(distance / 2, 100) + 30;
 
-    const cp1 = getControlPoint(sourcePoint, pendingConnection.sourceAnchor, controlOffset);
+    const cp1 = getControlPoint(sourcePoint, sourceDir, controlOffset);
     // For pending connection, use a simple offset toward the target
     const cp2 = {
       x: targetPoint.x - (dx > 0 ? controlOffset : -controlOffset) * 0.5,

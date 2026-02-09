@@ -5,6 +5,7 @@
 
 import { StateCreator } from 'zustand';
 import type { ProjectData } from '../../types';
+import type { EditorElement } from '../../types/editor-types';
 import type { AnimatableProperty, AnimationKeyframe, ElementTransform } from '../../types/animation';
 import type { AudioProperties } from '../../types/audio';
 import type { EffectParameterValue, EffectParameterKeyframe, AnimatableEffectParameter } from '../../types/effects';
@@ -65,7 +66,7 @@ export const createKeyframeSlice: StateCreator<
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
     if (!element) return;
 
     // Parse property path (e.g., 'transform.x' or 'audio.volume')
@@ -120,7 +121,7 @@ export const createKeyframeSlice: StateCreator<
               t.id === trackId
                 ? {
                     ...t,
-                    elements: t.elements.map(e =>
+                    elements: (t.elements as EditorElement[]).map(e =>
                       e.id === elementId
                         ? {
                             ...e,
@@ -188,7 +189,7 @@ export const createKeyframeSlice: StateCreator<
               t.id === trackId
                 ? {
                     ...t,
-                    elements: t.elements.map(e =>
+                    elements: (t.elements as EditorElement[]).map(e =>
                       e.id === elementId
                         ? {
                             ...e,
@@ -216,7 +217,7 @@ export const createKeyframeSlice: StateCreator<
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
     if (!element) return;
 
     // Parse property path
@@ -261,7 +262,7 @@ export const createKeyframeSlice: StateCreator<
               t.id === trackId
                 ? {
                     ...t,
-                    elements: t.elements.map(e =>
+                    elements: (t.elements as EditorElement[]).map(e =>
                       e.id === elementId
                         ? {
                             ...e,
@@ -318,7 +319,7 @@ export const createKeyframeSlice: StateCreator<
               t.id === trackId
                 ? {
                     ...t,
-                    elements: t.elements.map(e =>
+                    elements: (t.elements as EditorElement[]).map(e =>
                       e.id === elementId
                         ? {
                             ...e,
@@ -346,7 +347,7 @@ export const createKeyframeSlice: StateCreator<
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
     if (!element) return;
 
     const parts = property.split('.');
@@ -405,7 +406,7 @@ export const createKeyframeSlice: StateCreator<
               t.id === trackId
                 ? {
                     ...t,
-                    elements: t.elements.map(e =>
+                    elements: (t.elements as EditorElement[]).map(e =>
                       e.id === elementId
                         ? {
                             ...e,
@@ -477,7 +478,7 @@ export const createKeyframeSlice: StateCreator<
               t.id === trackId
                 ? {
                     ...t,
-                    elements: t.elements.map(e =>
+                    elements: (t.elements as EditorElement[]).map(e =>
                       e.id === elementId
                         ? {
                             ...e,
@@ -509,7 +510,7 @@ export const createKeyframeSlice: StateCreator<
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.effects) return;
 
     const effectIndex = element.effects.findIndex(e => e.id === effectId);
@@ -562,7 +563,7 @@ export const createKeyframeSlice: StateCreator<
             t.id === trackId
               ? {
                   ...t,
-                  elements: t.elements.map(e =>
+                  elements: (t.elements as EditorElement[]).map(e =>
                     e.id === elementId
                       ? {
                           ...e,
@@ -593,7 +594,7 @@ export const createKeyframeSlice: StateCreator<
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.effects) return;
 
     const effectIndex = element.effects.findIndex(e => e.id === effectId);
@@ -622,7 +623,7 @@ export const createKeyframeSlice: StateCreator<
             t.id === trackId
               ? {
                   ...t,
-                  elements: t.elements.map(e =>
+                  elements: (t.elements as EditorElement[]).map(e =>
                     e.id === elementId
                       ? {
                           ...e,
@@ -656,7 +657,7 @@ export const createKeyframeSlice: StateCreator<
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.effects) return;
 
     const effectIndex = element.effects.findIndex(e => e.id === effectId);
@@ -693,7 +694,7 @@ export const createKeyframeSlice: StateCreator<
             t.id === trackId
               ? {
                   ...t,
-                  elements: t.elements.map(e =>
+                  elements: (t.elements as EditorElement[]).map(e =>
                     e.id === elementId
                       ? {
                           ...e,
@@ -731,7 +732,7 @@ export const createKeyframeSlice: StateCreator<
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.masks) return;
 
     const maskIndex = element.masks.findIndex(m => m.id === maskId);
@@ -773,7 +774,7 @@ export const createKeyframeSlice: StateCreator<
             t.id === trackId
               ? {
                   ...t,
-                  elements: t.elements.map(e =>
+                  elements: (t.elements as EditorElement[]).map(e =>
                     e.id === elementId
                       ? {
                           ...e,
@@ -804,7 +805,7 @@ export const createKeyframeSlice: StateCreator<
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.masks) return;
 
     const maskIndex = element.masks.findIndex(m => m.id === maskId);
@@ -833,7 +834,7 @@ export const createKeyframeSlice: StateCreator<
             t.id === trackId
               ? {
                   ...t,
-                  elements: t.elements.map(e =>
+                  elements: (t.elements as EditorElement[]).map(e =>
                     e.id === elementId
                       ? {
                           ...e,
@@ -867,7 +868,7 @@ export const createKeyframeSlice: StateCreator<
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.masks) return;
 
     const maskIndex = element.masks.findIndex(m => m.id === maskId);
@@ -904,7 +905,7 @@ export const createKeyframeSlice: StateCreator<
             t.id === trackId
               ? {
                   ...t,
-                  elements: t.elements.map(e =>
+                  elements: (t.elements as EditorElement[]).map(e =>
                     e.id === elementId
                       ? {
                           ...e,
@@ -938,7 +939,7 @@ export const createKeyframeSlice: StateCreator<
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.masks) return;
 
     const maskIndex = element.masks.findIndex(m => m.id === maskId);
@@ -967,7 +968,7 @@ export const createKeyframeSlice: StateCreator<
             t.id === trackId
               ? {
                   ...t,
-                  elements: t.elements.map(e =>
+                  elements: (t.elements as EditorElement[]).map(e =>
                     e.id === elementId
                       ? {
                           ...e,
@@ -998,7 +999,7 @@ export const createKeyframeSlice: StateCreator<
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.masks) return;
 
     const maskIndex = element.masks.findIndex(m => m.id === maskId);
@@ -1027,7 +1028,7 @@ export const createKeyframeSlice: StateCreator<
             t.id === trackId
               ? {
                   ...t,
-                  elements: t.elements.map(e =>
+                  elements: (t.elements as EditorElement[]).map(e =>
                     e.id === elementId
                       ? {
                           ...e,
@@ -1058,7 +1059,7 @@ export const createKeyframeSlice: StateCreator<
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.masks) return;
 
     const maskIndex = element.masks.findIndex(m => m.id === maskId);
@@ -1095,7 +1096,7 @@ export const createKeyframeSlice: StateCreator<
             t.id === trackId
               ? {
                   ...t,
-                  elements: t.elements.map(e =>
+                  elements: (t.elements as EditorElement[]).map(e =>
                     e.id === elementId
                       ? {
                           ...e,

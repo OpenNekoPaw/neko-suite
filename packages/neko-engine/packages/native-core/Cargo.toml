@@ -60,6 +60,9 @@ tokio-util = { version = "0.7", features = ["rt"] }
 # Image encoding - pure Rust JPEG encoder
 image.workspace = true
 
+# Text rendering - font shaping, layout, rasterization
+cosmic-text.workspace = true
+
 # Platform-specific GPU interop
 [target.'cfg(target_os = "macos")'.dependencies]
 metal = "0.27"

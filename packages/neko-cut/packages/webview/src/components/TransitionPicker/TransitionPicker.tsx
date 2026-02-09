@@ -261,7 +261,7 @@ export const TransitionPicker = memo(function TransitionPicker({
       <div className="grid grid-cols-5 gap-1.5">
         {/* None option */}
         <NoneTransitionCard
-          isSelected={!transition || transition.type === 'none'}
+          isSelected={!transition}
           onClick={handleRemoveTransition}
           disabled={disabled}
         />
@@ -279,7 +279,7 @@ export const TransitionPicker = memo(function TransitionPicker({
       </div>
 
       {/* Duration & Easing Controls (only show when a transition is selected) */}
-      {transition && transition.type !== 'none' && (
+      {transition && (
         <div className="flex flex-col gap-2 pt-2 border-t border-[var(--vscode-panel-border)]">
           {showDuration && (
             <DurationControl

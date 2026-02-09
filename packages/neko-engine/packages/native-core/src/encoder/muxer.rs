@@ -328,9 +328,8 @@ impl Muxer for FfmpegMuxer {
             ffmpeg_packet.set_flags(ffmpeg::codec::packet::Flags::KEY);
         }
 
-        // Write packet directly (not interleaved) to avoid buffering issues
-        // For video-only output, interleaving is not necessary
-        ffmpeg_packet.write(output_ctx)?;
+        // Write packet interleaved (required for proper A/V sync)
+        ffmpeg_packet.write_interleaved(output_ctx)?;
 
         Ok(())
     }

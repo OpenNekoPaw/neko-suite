@@ -12,7 +12,7 @@ import {
   getVSCodeAPI,
   postMessage,
   type VSCodeAPI,
-} from '@neko/shared';
+} from '@neko/shared/vscode';
 
 // Re-export for backward compatibility
 export { getVSCodeAPI, postMessage, type VSCodeAPI };

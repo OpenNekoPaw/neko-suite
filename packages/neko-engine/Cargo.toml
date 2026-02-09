@@ -67,6 +67,9 @@ indicatif = "0.17"
 # Image encoding - pure Rust JPEG encoder
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 
+# Text rendering - font shaping, layout, rasterization
+cosmic-text = "0.12"
+
 [profile.release]
 lto = true
 opt-level = 3

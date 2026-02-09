@@ -17,11 +17,12 @@
 //! - Atomic counters track progress without locks
 //! - Cancellation flag for graceful shutdown
 
-use crossbeam_channel::{bounded, Receiver, Sender};
+use crossbeam_channel::{bounded, select, Receiver, Sender};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
+use crate::audio::AudioEncoderConfig;
 use crate::encoder::{
     ContainerFormat, EncodedPacket, Encoder, EncoderConfig, FfmpegMuxer,
     HwAccelEncoder, Muxer,
@@ -84,12 +85,19 @@ pub struct CompositedFrame {
     pub gpu_handle: Option<usize>,
 }
 
-/// Packet ready for muxing (wraps EncodedPacket with index)
-struct MuxPacket {
-    /// Frame index (for ordering)
-    index: u64,
-    /// Encoded packet
-    packet: EncodedPacket,
+/// Packet ready for muxing (video or audio)
+enum MuxPacket {
+    /// Video packet with frame index for ordering
+    Video {
+        index: u64,
+        packet: EncodedPacket,
+    },
+    /// Audio packet
+    Audio {
+        packet: EncodedPacket,
+    },
+    /// Signal that all audio packets have been sent
+    AudioFinished,
 }
 
 // =============================================================================
@@ -107,6 +115,8 @@ pub struct PipelineConfig {
     pub mux_buffer_size: usize,
     /// Encoder configuration
     pub encoder_config: EncoderConfig,
+    /// Audio encoder configuration (None = no audio)
+    pub audio_encoder_config: Option<AudioEncoderConfig>,
     /// Output container format
     pub container: ContainerFormat,
     /// Output file path
@@ -122,6 +132,7 @@ impl Default for PipelineConfig {
             encode_buffer_size: 4,
             mux_buffer_size: 8,
             encoder_config: EncoderConfig::new(1920, 1080, 30.0, crate::encoder::VideoCodec::H264),
+            audio_encoder_config: None,
             container: ContainerFormat::Mp4,
             output_path: String::new(),
             total_frames: 0,
@@ -208,6 +219,8 @@ pub struct AsyncExportPipeline {
     input_tx: Option<Sender<PipelineFrame>>,
     /// Channel to submit pre-composited frames (encode-only mode)
     composited_tx: Option<Sender<CompositedFrame>>,
+    /// Channel to submit audio packets directly to mux stage
+    audio_tx: Option<Sender<MuxPacket>>,
     /// Progress tracking
     progress: Arc<PipelineProgress>,
     /// Cancellation flag
@@ -277,10 +290,14 @@ impl AsyncExportPipeline {
 
         // Start mux worker (IO) with encoder config for proper stream setup
         let mux_encoder_config = config.encoder_config.clone();
+        let mux_audio_config = config.audio_encoder_config.clone();
+        // Full pipeline mode: create a dummy audio channel (no audio in compose mode)
+        let (_audio_tx_dummy, audio_rx_dummy) = bounded::<MuxPacket>(1);
+        drop(_audio_tx_dummy); // Close immediately so mux_worker sees audio as done
         let mux_handle = thread::Builder::new()
             .name("pipeline-mux".into())
             .spawn(move || {
-                Self::mux_worker(mux_rx, output_path, container, mux_encoder_config, cancel_mux, progress_mux)
+                Self::mux_worker(mux_rx, audio_rx_dummy, output_path, container, mux_encoder_config, mux_audio_config, cancel_mux, progress_mux)
             })
             .map_err(|e| Error::Other(format!("Failed to spawn mux worker: {}", e)))?;
 
@@ -294,6 +311,7 @@ impl AsyncExportPipeline {
         Ok(Self {
             input_tx: Some(input_tx),
             composited_tx: None,
+            audio_tx: None,
             progress,
             cancel_flag,
             compose_handle: Some(compose_handle),
@@ -306,6 +324,7 @@ impl AsyncExportPipeline {
     ///
     /// Use when compositing is done externally (e.g., by GpuExportPipeline).
     /// Submit pre-composited frames via `submit_composited()`.
+    /// Submit encoded audio packets via `submit_audio_packet()`.
     pub fn start_encode_only(config: PipelineConfig) -> Result<Self> {
         let progress = Arc::new(PipelineProgress::new(config.total_frames));
         let cancel_flag = Arc::new(AtomicBool::new(false));
@@ -313,6 +332,9 @@ impl AsyncExportPipeline {
         // Create channels: composited → encode → mux
         let (composited_tx, encode_rx) = bounded::<CompositedFrame>(config.encode_buffer_size);
         let (encode_tx, mux_rx) = bounded::<MuxPacket>(config.mux_buffer_size);
+
+        // Audio channel: audio packets go directly to mux worker
+        let (audio_tx, audio_rx) = bounded::<MuxPacket>(config.mux_buffer_size);
 
         let progress_encode = Arc::clone(&progress);
         let progress_mux = Arc::clone(&progress);
@@ -333,22 +355,25 @@ impl AsyncExportPipeline {
 
         // Start mux worker with encoder config for proper stream setup
         let mux_encoder_config = config.encoder_config.clone();
+        let mux_audio_config = config.audio_encoder_config.clone();
         let mux_handle = thread::Builder::new()
             .name("pipeline-mux".into())
             .spawn(move || {
-                Self::mux_worker(mux_rx, output_path, container, mux_encoder_config, cancel_mux, progress_mux)
+                Self::mux_worker(mux_rx, audio_rx, output_path, container, mux_encoder_config, mux_audio_config, cancel_mux, progress_mux)
             })
             .map_err(|e| Error::Other(format!("Failed to spawn mux worker: {}", e)))?;
 
         tracing::info!(
-            "AsyncExportPipeline started (encode-only, encode_buf={}, mux_buf={})",
+            "AsyncExportPipeline started (encode-only, encode_buf={}, mux_buf={}, audio={})",
             config.encode_buffer_size,
-            config.mux_buffer_size
+            config.mux_buffer_size,
+            config.audio_encoder_config.is_some(),
         );
 
         Ok(Self {
             input_tx: None,
             composited_tx: Some(composited_tx),
+            audio_tx: Some(audio_tx),
             progress,
             cancel_flag,
             compose_handle: None,
@@ -406,6 +431,30 @@ impl AsyncExportPipeline {
         Ok(())
     }
 
+    /// Submit an encoded audio packet directly to the mux stage
+    pub fn submit_audio_packet(&self, packet: EncodedPacket) -> Result<()> {
+        if self.cancel_flag.load(Ordering::Relaxed) {
+            return Err(Error::Cancelled);
+        }
+
+        let tx = self.audio_tx.as_ref().ok_or_else(|| {
+            Error::Other("Pipeline audio channel not available".into())
+        })?;
+
+        tx.send(MuxPacket::Audio { packet })
+            .map_err(|_| Error::Other("Pipeline audio channel closed".into()))?;
+
+        Ok(())
+    }
+
+    /// Signal that all audio packets have been submitted
+    pub fn finish_audio(&self) -> Result<()> {
+        if let Some(tx) = self.audio_tx.as_ref() {
+            let _ = tx.send(MuxPacket::AudioFinished);
+        }
+        Ok(())
+    }
+
     /// Get current progress
     pub fn progress(&self) -> &PipelineProgress {
         &self.progress
@@ -440,6 +489,7 @@ impl AsyncExportPipeline {
         // Take and drop input senders to signal end of input
         drop(self.input_tx.take());
         drop(self.composited_tx.take());
+        drop(self.audio_tx.take());
 
         // Wait for workers in order
         if let Some(handle) = self.compose_handle.take() {
@@ -600,9 +650,8 @@ impl AsyncExportPipeline {
             match encode_result {
                 Ok(packets) => {
                     // Empty packets are normal - encoder is buffering for B-frames
-                    // Don't count as dropped frames
                     for packet in packets {
-                        let mux_packet = MuxPacket {
+                        let mux_packet = MuxPacket::Video {
                             index: frame.index,
                             packet,
                         };
@@ -634,7 +683,7 @@ impl AsyncExportPipeline {
         match encoder.flush() {
             Ok(packets) => {
                 for packet in packets {
-                    let mux_packet = MuxPacket {
+                    let mux_packet = MuxPacket::Video {
                         index: u64::MAX, // Flush packets don't have specific indices
                         packet,
                     };
@@ -654,12 +703,14 @@ impl AsyncExportPipeline {
         Ok(())
     }
 
-    /// Mux worker - writes encoded packets to output file
+    /// Mux worker - writes encoded video and audio packets to output file
     fn mux_worker(
-        rx: Receiver<MuxPacket>,
+        video_rx: Receiver<MuxPacket>,
+        audio_rx: Receiver<MuxPacket>,
         output_path: String,
         container: ContainerFormat,
         encoder_config: EncoderConfig,
+        audio_config: Option<AudioEncoderConfig>,
         cancel: Arc<AtomicBool>,
         progress: Arc<PipelineProgress>,
     ) -> Result<()> {
@@ -670,47 +721,74 @@ impl AsyncExportPipeline {
             e
         })?;
 
-        // Note: Stream configuration should be done before writing packets
-        // For now, we rely on the first packet to configure the stream
-        // In a full implementation, this would be passed through config
-        let mut header_written = false;
+        // Add video stream
+        muxer.add_video_stream(&encoder_config).map_err(|e| {
+            progress.set_error(format!("Failed to add video stream: {}", e));
+            e
+        })?;
 
-        while let Ok(mux_packet) = rx.recv() {
+        // Add audio stream if configured
+        let has_audio = if let Some(ref audio_cfg) = audio_config {
+            match muxer.add_audio_stream(audio_cfg) {
+                Ok(_) => {
+                    tracing::info!("Audio stream added to muxer");
+                    true
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to add audio stream (continuing without audio): {}", e);
+                    false
+                }
+            }
+        } else {
+            false
+        };
+
+        muxer.write_header().map_err(|e| {
+            progress.set_error(format!("Failed to write header: {}", e));
+            e
+        })?;
+
+        let mut video_done = false;
+        let mut audio_done = !has_audio; // If no audio, mark as done immediately
+
+        loop {
             if cancel.load(Ordering::Relaxed) {
                 tracing::debug!("Mux worker cancelled");
-                // Don't finish on cancel - file may be corrupted
                 return Err(Error::Cancelled);
             }
 
-            // Write header before first packet
-            if !header_written {
-                // Use the encoder config passed from pipeline
-                muxer.add_video_stream(&encoder_config).map_err(|e| {
-                    progress.set_error(format!("Failed to add video stream: {}", e));
-                    e
-                })?;
-
-                muxer.write_header().map_err(|e| {
-                    progress.set_error(format!("Failed to write header: {}", e));
-                    e
-                })?;
-
-                header_written = true;
+            if video_done && audio_done {
+                break;
             }
 
-            // Write packet
-            match muxer.write_video_packet(&mux_packet.packet) {
-                Ok(()) => {
-                    // Only count non-flush frames
-                    if mux_packet.index != u64::MAX {
-                        progress.frames_muxed.fetch_add(1, Ordering::Relaxed);
+            // Use crossbeam select to receive from both channels
+            if !video_done && !audio_done {
+                select! {
+                    recv(video_rx) -> msg => {
+                        match msg {
+                            Ok(mux_packet) => Self::handle_mux_packet(&mut muxer, mux_packet, &progress)?,
+                            Err(_) => { video_done = true; }
+                        }
                     }
-                    tracing::trace!("Muxed packet (frame {})", mux_packet.index);
+                    recv(audio_rx) -> msg => {
+                        match msg {
+                            Ok(MuxPacket::AudioFinished) => { audio_done = true; }
+                            Ok(mux_packet) => Self::handle_mux_packet(&mut muxer, mux_packet, &progress)?,
+                            Err(_) => { audio_done = true; }
+                        }
+                    }
                 }
-                Err(e) => {
-                    progress.set_error(format!("Mux error on frame {}: {}", mux_packet.index, e));
-                    let _ = muxer.finish();
-                    return Err(e);
+            } else if !video_done {
+                match video_rx.recv() {
+                    Ok(mux_packet) => Self::handle_mux_packet(&mut muxer, mux_packet, &progress)?,
+                    Err(_) => { video_done = true; }
+                }
+            } else {
+                // Only audio remaining
+                match audio_rx.recv() {
+                    Ok(MuxPacket::AudioFinished) => { audio_done = true; }
+                    Ok(mux_packet) => Self::handle_mux_packet(&mut muxer, mux_packet, &progress)?,
+                    Err(_) => { audio_done = true; }
                 }
             }
         }
@@ -721,7 +799,46 @@ impl AsyncExportPipeline {
             e
         })?;
 
-        tracing::debug!("Mux worker: input channel closed, file finalized");
+        tracing::debug!("Mux worker: all channels closed, file finalized");
+        Ok(())
+    }
+
+    /// Handle a single mux packet (video or audio)
+    fn handle_mux_packet(
+        muxer: &mut FfmpegMuxer,
+        packet: MuxPacket,
+        progress: &PipelineProgress,
+    ) -> Result<()> {
+        match packet {
+            MuxPacket::Video { index, packet } => {
+                match muxer.write_video_packet(&packet) {
+                    Ok(()) => {
+                        if index != u64::MAX {
+                            progress.frames_muxed.fetch_add(1, Ordering::Relaxed);
+                        }
+                        tracing::trace!("Muxed video packet (frame {})", index);
+                    }
+                    Err(e) => {
+                        progress.set_error(format!("Mux error on video frame {}: {}", index, e));
+                        return Err(e);
+                    }
+                }
+            }
+            MuxPacket::Audio { packet } => {
+                match muxer.write_audio_packet(&packet) {
+                    Ok(()) => {
+                        tracing::trace!("Muxed audio packet (pts={})", packet.pts);
+                    }
+                    Err(e) => {
+                        // Audio mux errors are non-fatal
+                        tracing::warn!("Audio mux error (continuing): {}", e);
+                    }
+                }
+            }
+            MuxPacket::AudioFinished => {
+                // Handled by caller
+            }
+        }
         Ok(())
     }
 }
@@ -735,6 +852,8 @@ impl Drop for AsyncExportPipeline {
         {
             tracing::debug!("Pipeline dropped without wait(), cancelling");
             self.cancel_flag.store(true, Ordering::SeqCst);
+            // Drop audio_tx to unblock mux_worker
+            drop(self.audio_tx.take());
         }
     }
 }

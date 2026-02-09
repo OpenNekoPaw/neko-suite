@@ -20,8 +20,9 @@ export interface MediaNodeProps {
   viewport: CanvasViewport;
   isSelected: boolean;
   onSelect?: (nodeId: string, multi: boolean) => void;
+  onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
-  onConnectionStart?: (nodeId: string, anchor: string) => void;
+  onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   /** 媒体文件的基础 URL（用于构建完整路径） */
   mediaBaseUrl?: string;
 }
@@ -76,6 +77,7 @@ export function MediaNode({
   viewport,
   isSelected,
   onSelect,
+  onDrag,
   onMove,
   onConnectionStart,
   mediaBaseUrl,
@@ -225,6 +227,7 @@ export function MediaNode({
       viewport={viewport}
       isSelected={isSelected}
       onSelect={onSelect}
+      onDrag={onDrag}
       onMove={onMove}
       onConnectionStart={onConnectionStart}
     >
@@ -234,11 +237,12 @@ export function MediaNode({
 
         {/* Info area */}
         <div className="p-2 border-t border-[var(--node-border)]">
-          <div className="text-sm text-gray-200 truncate" title={fileName}>
-            {fileName}
+          <div className="text-sm truncate" style={{ color: 'var(--toolbar-fg)' }} title={fileName}>
+            {fileName || 'Untitled'}
           </div>
-          <div className="text-xs text-gray-500 truncate" title={assetPath}>
-            {assetPath}
+          <div className="text-xs truncate" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+            {getMediaIcon(mediaType)} {mediaType || 'media'}
+            {duration ? ` · ${formatDuration(duration)}` : ''}
           </div>
         </div>
       </div>

@@ -17,8 +17,9 @@ export interface AnnotationNodeProps {
   viewport: CanvasViewport;
   isSelected: boolean;
   onSelect?: (nodeId: string, multi: boolean) => void;
+  onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
-  onConnectionStart?: (nodeId: string, anchor: string) => void;
+  onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   onUpdateData?: (nodeId: string, data: Partial<AnnotationCanvasNode['data']>) => void;
 }
 
@@ -31,6 +32,7 @@ export function AnnotationNode({
   viewport,
   isSelected,
   onSelect,
+  onDrag,
   onMove,
   onConnectionStart,
   onUpdateData,
@@ -45,6 +47,7 @@ export function AnnotationNode({
       viewport={viewport}
       isSelected={isSelected}
       onSelect={onSelect}
+      onDrag={onDrag}
       onMove={onMove}
       onConnectionStart={onConnectionStart}
     >

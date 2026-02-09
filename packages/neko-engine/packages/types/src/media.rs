@@ -183,3 +183,89 @@ pub struct SubtitleCue {
     /// Subtitle text
     pub text: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_media_info(video: bool, audio: bool) -> MediaInfo {
+        let mut info = MediaInfo {
+            duration: 120.5,
+            format: "mp4".to_string(),
+            file_size: 50_000_000,
+            video_streams: vec![],
+            audio_streams: vec![],
+            subtitle_streams: vec![],
+        };
+        if video {
+            info.video_streams.push(VideoStreamInfo {
+                index: 0,
+                codec: "h264".to_string(),
+                width: 1920,
+                height: 1080,
+                fps: 30.0,
+                bitrate: Some(5_000_000),
+                pixel_format: "yuv420p".to_string(),
+                hw_accel: None,
+                frame_count: Some(3615),
+                color_space: None,
+                color_range: None,
+            });
+        }
+        if audio {
+            info.audio_streams.push(AudioStreamInfo {
+                index: 1,
+                codec: "aac".to_string(),
+                sample_rate: 48000,
+                channels: 2,
+                bitrate: Some(128_000),
+                channel_layout: Some("stereo".to_string()),
+                language: Some("eng".to_string()),
+            });
+        }
+        info
+    }
+
+    #[test]
+    fn test_media_info_has_video() {
+        assert!(make_media_info(true, false).has_video());
+        assert!(!make_media_info(false, true).has_video());
+    }
+
+    #[test]
+    fn test_media_info_has_audio() {
+        assert!(make_media_info(false, true).has_audio());
+        assert!(!make_media_info(true, false).has_audio());
+    }
+
+    #[test]
+    fn test_media_info_primary_streams() {
+        let info = make_media_info(true, true);
+        let video = info.primary_video().unwrap();
+        assert_eq!(video.width, 1920);
+        assert_eq!(video.height, 1080);
+        assert_eq!(video.fps, 30.0);
+
+        let audio = info.primary_audio().unwrap();
+        assert_eq!(audio.sample_rate, 48000);
+        assert_eq!(audio.channels, 2);
+    }
+
+    #[test]
+    fn test_media_info_no_primary_streams() {
+        let info = make_media_info(false, false);
+        assert!(info.primary_video().is_none());
+        assert!(info.primary_audio().is_none());
+    }
+
+    #[test]
+    fn test_media_info_serde_roundtrip() {
+        let info = make_media_info(true, true);
+        let json = serde_json::to_string(&info).unwrap();
+        let parsed: MediaInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.duration, 120.5);
+        assert_eq!(parsed.format, "mp4");
+        assert_eq!(parsed.video_streams.len(), 1);
+        assert_eq!(parsed.audio_streams.len(), 1);
+    }
+}

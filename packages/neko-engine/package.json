@@ -33,22 +33,38 @@
       {
         "command": "neko.engine.start",
         "title": "%neko.engine.start.title%",
-        "category": "Neko Engine"
+        "category": "Neko Engine",
+        "icon": "$(play)"
       },
       {
         "command": "neko.engine.stop",
         "title": "%neko.engine.stop.title%",
-        "category": "Neko Engine"
+        "category": "Neko Engine",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "neko.engine.status",
         "title": "%neko.engine.status.title%",
-        "category": "Neko Engine"
+        "category": "Neko Engine",
+        "icon": "$(info)"
+      },
+      {
+        "command": "neko.engine.probe",
+        "title": "%neko.engine.probe.title%",
+        "category": "Neko Engine",
+        "icon": "$(search)"
+      },
+      {
+        "command": "neko.engine.export",
+        "title": "%neko.engine.export.title%",
+        "category": "Neko Engine",
+        "icon": "$(export)"
       },
       {
         "command": "neko.engine.openDocs",
         "title": "Open API Documentation",
-        "category": "Neko Engine"
+        "category": "Neko Engine",
+        "icon": "$(book)"
       }
     ],
     "configuration": {
@@ -70,7 +86,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "compile": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:@neko-engine/native-napi --format=cjs --platform=node",
     "watch": "npm run compile -- --watch",
     "lint": "eslint packages/extension/src --ext ts,tsx",
     "test": "vitest",

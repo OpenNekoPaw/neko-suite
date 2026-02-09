@@ -1,9 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import type { CanvasData, CanvasViewport } from '@neko/shared';
 import { useCanvasStore } from './stores/canvasStore';
+import { useClipboardStore } from './stores/clipboardStore';
+import { useHistoryStore } from './stores/historyStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu, buildCanvasMenuItems, buildNodeMenuItems } from './components/common/ContextMenu';
 import type { MenuEntry } from './components/common/ContextMenu';
+import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
+import { PropertyPanel } from './components/panels/PropertyPanel';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
 import { t, setLocale, detectLocale } from './i18n';
 
@@ -29,12 +33,25 @@ const vscode = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCodeApi() : nu
 // Initialize locale
 setLocale(detectLocale());
 
+// Media type detection by file extension
+const MEDIA_EXTENSIONS: Record<string, 'image' | 'video' | 'audio'> = {
+  png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image', svg: 'image',
+  mp4: 'video', mov: 'video', avi: 'video', mkv: 'video', webm: 'video', m4v: 'video',
+  mp3: 'audio', wav: 'audio', ogg: 'audio', m4a: 'audio', aac: 'audio', flac: 'audio',
+};
+
+function detectMediaType(fileName: string): 'image' | 'video' | 'audio' | null {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+  return MEDIA_EXTENSIONS[ext] ?? null;
+}
+
 /**
  * Canvas App - Main application component
  */
 export function CanvasApp() {
   const [isReady, setIsReady] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [isDragOver, setIsDragOver] = useState(false);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
 
   // Context menu state
@@ -43,6 +60,10 @@ export function CanvasApp() {
     y: number;
     items: MenuEntry[];
   } | null>(null);
+
+  // Panel state
+  const [isLayerPanelOpen, setIsLayerPanelOpen] = useState(false);
+  const [isPropertyPanelOpen, setIsPropertyPanelOpen] = useState(true);
 
   const {
     setCanvasData,
@@ -62,6 +83,9 @@ export function CanvasApp() {
     completeConnection,
     cancelConnection,
     isConnecting,
+    undo,
+    redo,
+    moveNodeEnd,
   } = useCanvasStore();
 
   // Derive computed values from canvasData
@@ -90,38 +114,9 @@ export function CanvasApp() {
     return () => resizeObserver.disconnect();
   }, []);
 
-  // Keyboard action handler (called from extension via postMessage)
-  const handleKeyboardAction = useCallback((action: string) => {
-    switch (action) {
-      case 'deleteSelected':
-        if (selectedNodeIds.length > 0 || selectedConnectionIds.length > 0) {
-          deleteSelected();
-        }
-        break;
-      case 'escape':
-        if (contextMenu) {
-          setContextMenu(null);
-        } else if (isConnecting) {
-          cancelConnection();
-        } else {
-          clearSelection();
-        }
-        break;
-      case 'selectAll':
-        if (nodes.length > 0) {
-          const { selectNodes } = useCanvasStore.getState();
-          selectNodes(nodes.map(n => n.id));
-        }
-        break;
-      case 'undo':
-      case 'redo':
-        break;
-    }
-  }, [selectedNodeIds, selectedConnectionIds, deleteSelected, isConnecting, cancelConnection, clearSelection, nodes, contextMenu]);
-
-  // Keep a ref to the latest handler
-  const keyboardActionRef = useRef(handleKeyboardAction);
-  keyboardActionRef.current = handleKeyboardAction;
+  // handleKeyboardAction is defined after clipboard handlers below
+  // Keep a ref to the latest handler (assigned after definition)
+  const keyboardActionRef = useRef<(action: string) => void>(() => {});
 
   // Initialize from VSCode or use default data
   useEffect(() => {
@@ -145,6 +140,22 @@ export function CanvasApp() {
             // Extension sends media file info to add to canvas
             handleAddMediaFromExtension(message.mediaType as string, message.uri as string, message.name as string);
             break;
+          case 'dropMedia': {
+            // Extension resolved dropped file URIs → add media nodes at drop position
+            const pos = dropPositionRef.current ?? getViewportCenter();
+            const files = message.files as Array<{ uri: string; name: string; mediaType: string }>;
+            files.forEach((file, i) => {
+              const offset = i * 30;
+              addMediaAt(
+                { x: pos.x + offset, y: pos.y + offset },
+                file.mediaType as 'image' | 'video' | 'audio',
+                file.uri,
+                file.name,
+              );
+            });
+            dropPositionRef.current = null;
+            break;
+          }
         }
       };
 
@@ -207,9 +218,15 @@ export function CanvasApp() {
     }
   }, [isConnecting, cancelConnection, clearSelection]);
 
-  const handleNodeMove = useCallback((nodeId: string, position: { x: number; y: number }) => {
+  // Real-time position update during drag (no history recording)
+  const handleNodeDrag = useCallback((nodeId: string, position: { x: number; y: number }) => {
     moveNode(nodeId, position);
   }, [moveNode]);
+
+  // Final position update on drag end (records history for undo)
+  const handleNodeMove = useCallback((nodeId: string, position: { x: number; y: number }) => {
+    moveNodeEnd(nodeId, position);
+  }, [moveNodeEnd]);
 
   const handleConnectionSelect = useCallback((connectionId: string) => {
     selectConnection(connectionId);
@@ -220,12 +237,18 @@ export function CanvasApp() {
   }, [updateNodeData]);
 
   const handleConnectionStart = useCallback((nodeId: string, anchor: string) => {
-    if (isConnecting) {
-      completeConnection(nodeId, anchor);
-    } else {
-      startConnection(nodeId, anchor);
-    }
-  }, [isConnecting, startConnection, completeConnection]);
+    startConnection(nodeId, anchor);
+  }, [startConnection]);
+
+  const handleConnectionComplete = useCallback((sourceNodeId: string, sourceAnchor: string, targetNodeId: string, targetAnchor: string) => {
+    // Start then immediately complete the connection via the store
+    startConnection(sourceNodeId, sourceAnchor);
+    completeConnection(targetNodeId, targetAnchor);
+  }, [startConnection, completeConnection]);
+
+  const handleConnectionCancel = useCallback(() => {
+    cancelConnection();
+  }, [cancelConnection]);
 
   // =========================================================================
   // Zoom handlers
@@ -366,6 +389,196 @@ export function CanvasApp() {
   }, [addMediaAt, getViewportCenter]);
 
   // =========================================================================
+  // Drag & Drop from VSCode explorer
+  // =========================================================================
+
+  const dropPositionRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    // Only close if leaving the container (not entering a child)
+    const rect = canvasContainerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const { clientX, clientY } = e;
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        setIsDragOver(false);
+      }
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    // Save drop position for when extension responds
+    dropPositionRef.current = screenToCanvas(e.clientX, e.clientY);
+
+    // Try to get URIs from the drop data
+    const uriList = e.dataTransfer.getData('text/uri-list');
+    const textData = e.dataTransfer.getData('text/plain');
+    const files = e.dataTransfer.files;
+
+    if (vscode) {
+      // In VSCode webview: send URIs to extension for resolution
+      const uris = (uriList || textData || '')
+        .split('\n')
+        .map(u => u.trim())
+        .filter(u => u && !u.startsWith('#'));
+
+      if (uris.length > 0) {
+        vscode.postMessage({
+          type: 'resolveDroppedFiles',
+          uris,
+          dropX: e.clientX,
+          dropY: e.clientY,
+        });
+      }
+    } else {
+      // Dev mode: handle File objects from native drag
+      if (files.length > 0) {
+        const pos = dropPositionRef.current;
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (!file) continue;
+          const mediaType = detectMediaType(file.name);
+          if (mediaType) {
+            const offset = i * 30;
+            addMediaAt(
+              { x: (pos?.x ?? 0) + offset, y: (pos?.y ?? 0) + offset },
+              mediaType,
+              URL.createObjectURL(file),
+              file.name,
+            );
+          }
+        }
+      }
+    }
+  }, [screenToCanvas, addMediaAt]);
+
+  // =========================================================================
+  // Clipboard handlers
+  // =========================================================================
+
+  const handleCopy = useCallback(() => {
+    if (selectedNodeIds.length === 0) return;
+    useClipboardStore.getState().copy(selectedNodeIds, nodes, connections);
+  }, [selectedNodeIds, nodes, connections]);
+
+  const handleCut = useCallback(() => {
+    if (selectedNodeIds.length === 0) return;
+    useClipboardStore.getState().cut(selectedNodeIds, nodes, connections);
+    deleteSelected();
+  }, [selectedNodeIds, nodes, connections, deleteSelected]);
+
+  const handlePaste = useCallback(() => {
+    const result = useClipboardStore.getState().paste();
+    if (!result) return;
+
+    const { canvasData: currentData } = useCanvasStore.getState();
+    if (!currentData) return;
+
+    // Record history before batch paste
+    useHistoryStore.getState().pushState(currentData);
+
+    // Batch add: directly update canvasData for efficiency
+    const store = useCanvasStore.getState();
+    if (store.canvasData) {
+      const updatedData = {
+        ...store.canvasData,
+        nodes: [...store.canvasData.nodes, ...result.nodes],
+        connections: [...store.canvasData.connections, ...result.connections],
+      };
+      store.setCanvasData(updatedData);
+
+      // Select the pasted nodes
+      const { selectNodes } = useCanvasStore.getState();
+      selectNodes(result.nodes.map(n => n.id));
+    }
+  }, []);
+
+  const handleDuplicate = useCallback(() => {
+    if (selectedNodeIds.length === 0) return;
+    const result = useClipboardStore.getState().duplicate(selectedNodeIds, nodes, connections);
+    if (!result) return;
+
+    const { canvasData: currentData } = useCanvasStore.getState();
+    if (!currentData) return;
+
+    useHistoryStore.getState().pushState(currentData);
+
+    const store = useCanvasStore.getState();
+    if (store.canvasData) {
+      const updatedData = {
+        ...store.canvasData,
+        nodes: [...store.canvasData.nodes, ...result.nodes],
+        connections: [...store.canvasData.connections, ...result.connections],
+      };
+      store.setCanvasData(updatedData);
+
+      const { selectNodes } = useCanvasStore.getState();
+      selectNodes(result.nodes.map(n => n.id));
+    }
+  }, [selectedNodeIds, nodes, connections]);
+
+  // =========================================================================
+  // Keyboard action handler (defined after clipboard handlers)
+  // =========================================================================
+
+  const handleKeyboardAction = useCallback((action: string) => {
+    switch (action) {
+      case 'deleteSelected':
+        if (selectedNodeIds.length > 0 || selectedConnectionIds.length > 0) {
+          deleteSelected();
+        }
+        break;
+      case 'escape':
+        if (contextMenu) {
+          setContextMenu(null);
+        } else if (isConnecting) {
+          cancelConnection();
+        } else {
+          clearSelection();
+        }
+        break;
+      case 'selectAll':
+        if (nodes.length > 0) {
+          const { selectNodes } = useCanvasStore.getState();
+          selectNodes(nodes.map(n => n.id));
+        }
+        break;
+      case 'undo':
+        undo();
+        break;
+      case 'redo':
+        redo();
+        break;
+      case 'copy':
+        handleCopy();
+        break;
+      case 'cut':
+        handleCut();
+        break;
+      case 'paste':
+        handlePaste();
+        break;
+      case 'duplicate':
+        handleDuplicate();
+        break;
+    }
+  }, [selectedNodeIds, selectedConnectionIds, deleteSelected, isConnecting, cancelConnection, clearSelection, nodes, contextMenu, undo, redo, handleCopy, handleCut, handlePaste, handleDuplicate]);
+
+  // Keep ref in sync with latest handler
+  keyboardActionRef.current = handleKeyboardAction;
+
+  // =========================================================================
   // Context menu
   // =========================================================================
 
@@ -390,6 +603,15 @@ export function CanvasApp() {
       },
       onFitContent: handleFitContent,
       onResetView: handleResetViewport,
+      onCopy: handleCopy,
+      onCut: handleCut,
+      onPaste: handlePaste,
+      onDuplicate: handleDuplicate,
+      onUndo: undo,
+      onRedo: redo,
+      canPaste: useClipboardStore.getState().canPaste(),
+      canUndo: useHistoryStore.getState().canUndo(),
+      canRedo: useHistoryStore.getState().canRedo(),
     };
 
     const items = hasSelection
@@ -397,7 +619,7 @@ export function CanvasApp() {
       : buildCanvasMenuItems(menuCtx);
 
     setContextMenu({ x: e.clientX, y: e.clientY, items });
-  }, [screenToCanvas, selectedNodeIds, nodes, addTextAt, addSceneAt, handleAddMedia, deleteSelected, handleFitContent, handleResetViewport]);
+  }, [screenToCanvas, selectedNodeIds, nodes, addTextAt, addSceneAt, handleAddMedia, deleteSelected, handleFitContent, handleResetViewport, handleCopy, handleCut, handlePaste, handleDuplicate, undo, redo]);
 
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
@@ -424,10 +646,55 @@ export function CanvasApp() {
         e.preventDefault();
         handleKeyboardAction('selectAll');
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleKeyboardAction('redo');
+        } else {
+          handleKeyboardAction('undo');
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+        e.preventDefault();
+        handleKeyboardAction('copy');
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'x') {
+        e.preventDefault();
+        handleKeyboardAction('cut');
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
+        e.preventDefault();
+        handleKeyboardAction('paste');
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
+        e.preventDefault();
+        handleKeyboardAction('duplicate');
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyboardAction]);
+
+  // =========================================================================
+  // Property panel helpers
+  // =========================================================================
+
+  const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
+
+  const handleUpdateNode = useCallback((id: string, updates: Partial<import('@neko/shared').CanvasNode>) => {
+    useCanvasStore.getState().updateNode(id, updates);
+  }, []);
+
+  const handleToggleLock = useCallback((id: string) => {
+    const node = nodes.find(n => n.id === id);
+    if (node) {
+      useCanvasStore.getState().updateNode(id, { locked: !node.locked });
+    }
+  }, [nodes]);
+
+  const handleDeleteNode = useCallback((id: string) => {
+    useCanvasStore.getState().removeNode(id);
+  }, []);
 
   // =========================================================================
   // Render
@@ -443,177 +710,181 @@ export function CanvasApp() {
 
   return (
     <div className="w-full h-full flex flex-col">
-      {/* Toolbar */}
+      {/* Top bar - matches VSCode tab/title bar */}
       <div
-        className="h-10 flex items-center px-4 gap-2"
-        style={{ backgroundColor: 'var(--toolbar-bg)', borderBottom: '1px solid var(--toolbar-border)' }}
+        className="h-9 flex items-center px-3 gap-2 shrink-0"
+        style={{
+          backgroundColor: 'var(--titlebar-bg)',
+          borderBottom: '1px solid var(--titlebar-border)',
+          color: 'var(--titlebar-fg)',
+        }}
       >
-        <span className="text-sm" style={{ color: 'var(--toolbar-fg)' }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" opacity={0.6}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M12 8v8" /><path d="M8 12h8" />
+        </svg>
+        <span className="text-xs font-medium" style={{ color: 'var(--titlebar-fg)' }}>
           {canvasData?.name || 'Untitled Canvas'}
         </span>
-        <span className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
-          {t('toolbar.nodes', nodes.length)}
+        <span
+          className="text-xs px-1.5 py-0.5 rounded-sm"
+          style={{ backgroundColor: 'var(--badge-bg)', color: 'var(--badge-fg)', fontSize: 10 }}
+        >
+          {nodes.length}
         </span>
-
-        <div className="w-px h-5 mx-2" style={{ backgroundColor: 'var(--toolbar-border)' }} />
-
-        {/* Add Text */}
-        <button
-          onClick={handleAddText}
-          className="h-7 px-2 flex items-center gap-1 rounded text-xs transition-colors"
-          style={{ color: 'var(--control-fg)' }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--control-hover)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          title={t('toolbar.addText')}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M4 7V4h16v3" /><path d="M9 20h6" /><path d="M12 4v16" />
-          </svg>
-          <span>{t('toolbar.text')}</span>
-        </button>
-
-        {/* Add Scene */}
-        <button
-          onClick={handleAddScene}
-          className="h-7 px-2 flex items-center gap-1 rounded text-xs transition-colors"
-          style={{ color: 'var(--control-fg)' }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--control-hover)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          title={t('toolbar.addScene')}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" />
-          </svg>
-          <span>{t('toolbar.scene')}</span>
-        </button>
-
-        <div className="w-px h-5 mx-2" style={{ backgroundColor: 'var(--toolbar-border)' }} />
-
-        {/* Add Media buttons */}
-        <button
-          onClick={() => handleAddMedia('image')}
-          className="h-7 px-2 flex items-center gap-1 rounded text-xs transition-colors"
-          style={{ color: 'var(--control-fg)' }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--control-hover)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          title={t('menu.addImage')}
-        >
-          <span>🖼️</span>
-        </button>
-
-        <button
-          onClick={() => handleAddMedia('video')}
-          className="h-7 px-2 flex items-center gap-1 rounded text-xs transition-colors"
-          style={{ color: 'var(--control-fg)' }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--control-hover)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          title={t('menu.addVideo')}
-        >
-          <span>🎥</span>
-        </button>
-
-        <button
-          onClick={() => handleAddMedia('audio')}
-          className="h-7 px-2 flex items-center gap-1 rounded text-xs transition-colors"
-          style={{ color: 'var(--control-fg)' }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--control-hover)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          title={t('menu.addAudio')}
-        >
-          <span>🎵</span>
-        </button>
       </div>
 
-      {/* Canvas Area */}
-      <div
-        ref={canvasContainerRef}
-        className="flex-1 relative overflow-hidden"
-        style={{ backgroundColor: 'var(--canvas-bg)' }}
-        onContextMenu={handleContextMenu}
-      >
-        <InfiniteCanvas
-          nodes={nodes}
-          connections={connections}
-          viewport={viewport}
-          selectedNodeIds={selectedNodeIds}
-          selectedConnectionIds={selectedConnectionIds}
-          onViewportChange={handleViewportChange}
-          onNodeSelect={handleNodeSelect}
-          onNodeMove={handleNodeMove}
-          onNodeUpdateData={handleNodeUpdateData}
-          onConnectionSelect={handleConnectionSelect}
-          onConnectionStart={handleConnectionStart}
-          onCanvasClick={handleCanvasClick}
+      {/* Main content area: toolbar + canvas + property panel */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Toolbar */}
+        <CanvasToolbar
+          onAddText={handleAddText}
+          onAddScene={handleAddScene}
+          onAddMedia={handleAddMedia}
+          onUndo={undo}
+          onRedo={redo}
+          onToggleLayerPanel={() => setIsLayerPanelOpen(prev => !prev)}
+          isLayerPanelOpen={isLayerPanelOpen}
         />
 
-        {/* Empty state hint */}
-        {nodes.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="text-center" style={{ color: 'var(--toolbar-fg-secondary)' }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="mx-auto mb-3 opacity-40">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <path d="M12 8v8" /><path d="M8 12h8" />
-              </svg>
-              <p className="text-sm opacity-60">{t('empty.hint')}</p>
-              <p className="text-xs opacity-40 mt-1">{t('empty.zoom')}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Zoom Controls */}
-        <div className="absolute bottom-4 left-4 z-10">
-          <ZoomControls
-            zoom={viewport.zoom}
-            onZoomIn={handleZoomIn}
-            onZoomOut={handleZoomOut}
-            onZoomTo={handleZoomTo}
-            onFitContent={handleFitContent}
-            onResetViewport={handleResetViewport}
-          />
-        </div>
-
-        {/* MiniMap */}
-        <div className="absolute bottom-4 right-4 z-10">
-          <MiniMap
+        {/* Canvas Area */}
+        <div
+          ref={canvasContainerRef}
+          className="flex-1 relative overflow-hidden"
+          style={{ backgroundColor: 'var(--canvas-bg)' }}
+          onContextMenu={handleContextMenu}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <InfiniteCanvas
             nodes={nodes}
+            connections={connections}
             viewport={viewport}
-            containerWidth={containerSize.width}
-            containerHeight={containerSize.height}
+            selectedNodeIds={selectedNodeIds}
+            selectedConnectionIds={selectedConnectionIds}
             onViewportChange={handleViewportChange}
+            onNodeSelect={handleNodeSelect}
+            onNodeDrag={handleNodeDrag}
+            onNodeMove={handleNodeMove}
+            onNodeUpdateData={handleNodeUpdateData}
+            onConnectionSelect={handleConnectionSelect}
+            onConnectionStart={handleConnectionStart}
+            onConnectionComplete={handleConnectionComplete}
+            onConnectionCancel={handleConnectionCancel}
+            onCanvasClick={handleCanvasClick}
           />
+
+          {/* Empty state hint */}
+          {nodes.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="mx-auto mb-3 opacity-40">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path d="M12 8v8" /><path d="M8 12h8" />
+                </svg>
+                <p className="text-sm opacity-60">{t('empty.hint')}</p>
+                <p className="text-xs opacity-40 mt-1">{t('empty.zoom')}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Zoom Controls */}
+          <div className="absolute bottom-4 left-4 z-10">
+            <ZoomControls
+              zoom={viewport.zoom}
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
+              onZoomTo={handleZoomTo}
+              onFitContent={handleFitContent}
+              onResetViewport={handleResetViewport}
+            />
+          </div>
+
+          {/* MiniMap */}
+          <div className="absolute bottom-4 right-4 z-10">
+            <MiniMap
+              nodes={nodes}
+              viewport={viewport}
+              containerWidth={containerSize.width}
+              containerHeight={containerSize.height}
+              onViewportChange={handleViewportChange}
+            />
+          </div>
+
+          {/* Context Menu */}
+          {contextMenu && (
+            <ContextMenu
+              x={contextMenu.x}
+              y={contextMenu.y}
+              items={contextMenu.items}
+              onClose={closeContextMenu}
+            />
+          )}
+
+          {/* Drag-over overlay */}
+          {isDragOver && (
+            <div
+              className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
+              style={{
+                backgroundColor: 'rgba(0, 120, 212, 0.08)',
+                border: '2px dashed var(--node-selected)',
+                borderRadius: 4,
+              }}
+            >
+              <div
+                className="px-4 py-2 rounded-lg text-sm"
+                style={{
+                  backgroundColor: 'var(--toolbar-bg)',
+                  color: 'var(--toolbar-fg)',
+                  border: '1px solid var(--toolbar-border)',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                }}
+              >
+                {t('canvas.dropHint')}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Context Menu */}
-        {contextMenu && (
-          <ContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            items={contextMenu.items}
-            onClose={closeContextMenu}
+        {/* Right Property Panel */}
+        {isPropertyPanelOpen && (
+          <PropertyPanel
+            selectedNodes={selectedNodes}
+            onUpdateNode={handleUpdateNode}
+            onUpdateNodeData={handleNodeUpdateData}
+            onDeleteNode={handleDeleteNode}
+            onToggleLock={handleToggleLock}
           />
         )}
       </div>
 
-      {/* Status Bar */}
+      {/* Status Bar - matches VSCode status bar */}
       <div
-        className="h-6 flex items-center px-4 text-xs"
+        className="h-[22px] flex items-center px-2 text-[11px] shrink-0 gap-0"
         style={{ backgroundColor: 'var(--statusbar-bg)', color: 'var(--statusbar-fg)' }}
       >
-        <span>{t('status.zoom', (viewport.zoom * 100).toFixed(0))}</span>
-        <span className="mx-2">|</span>
-        <span>{t('status.pan', viewport.pan.x.toFixed(0), viewport.pan.y.toFixed(0))}</span>
+        <span className="px-1.5 hover:bg-white/10 cursor-default">{t('status.zoom', (viewport.zoom * 100).toFixed(0))}</span>
+        <span className="px-1.5 hover:bg-white/10 cursor-default">{t('status.pan', viewport.pan.x.toFixed(0), viewport.pan.y.toFixed(0))}</span>
         {isConnecting && (
-          <>
-            <span className="mx-2">|</span>
-            <span className="animate-pulse">{t('status.connecting')}</span>
-          </>
+          <span className="px-1.5 animate-pulse">{t('status.connecting')}</span>
         )}
         {selectedNodeIds.length > 0 && (
-          <>
-            <span className="mx-2">|</span>
-            <span>{t('status.selected', selectedNodeIds.length)}</span>
-          </>
+          <span className="px-1.5 hover:bg-white/10 cursor-default">{t('status.selected', selectedNodeIds.length)}</span>
         )}
+        <div className="flex-1" />
+        {/* Property panel toggle */}
+        <button
+          className="px-1.5 h-full flex items-center hover:bg-white/10 transition-colors"
+          style={{ color: isPropertyPanelOpen ? 'var(--statusbar-fg)' : 'var(--statusbar-fg)', opacity: isPropertyPanelOpen ? 1 : 0.7 }}
+          onClick={() => setIsPropertyPanelOpen(prev => !prev)}
+          title="Toggle Properties Panel"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M15 3v18" />
+          </svg>
+        </button>
       </div>
     </div>
   );

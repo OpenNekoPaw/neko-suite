@@ -18,6 +18,7 @@ import { MediaNode, StoryboardNode, AnnotationNode } from './nodes';
 import { ConnectionLayer } from './connections';
 import { useViewportTransform } from '../hooks/useViewportTransform';
 import { useViewportCulling } from '../hooks/useViewportCulling';
+import { useConnectionDrag } from '../hooks/useConnectionDrag';
 
 // =============================================================================
 // Types
@@ -31,10 +32,15 @@ export interface InfiniteCanvasProps {
   selectedConnectionIds?: string[];
   onViewportChange: (viewport: Partial<ViewportType>) => void;
   onNodeSelect?: (nodeId: string, multi: boolean) => void;
+  /** Called on every mousemove during node drag (real-time store update) */
+  onNodeDrag?: (nodeId: string, position: { x: number; y: number }) => void;
+  /** Called on mouseup when node drag ends (final position + history) */
   onNodeMove?: (nodeId: string, position: { x: number; y: number }) => void;
   onNodeUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
   onConnectionSelect?: (connectionId: string) => void;
   onConnectionStart?: (nodeId: string, anchor: string) => void;
+  onConnectionComplete?: (sourceNodeId: string, sourceAnchor: string, targetNodeId: string, targetAnchor: string) => void;
+  onConnectionCancel?: () => void;
   onCanvasClick?: () => void;
   /** 是否启用视口裁剪（默认启用） */
   enableCulling?: boolean;
@@ -52,10 +58,13 @@ export function InfiniteCanvas({
   selectedConnectionIds = [],
   onViewportChange,
   onNodeSelect,
+  onNodeDrag,
   onNodeMove,
   onNodeUpdateData,
   onConnectionSelect,
   onConnectionStart,
+  onConnectionComplete,
+  onConnectionCancel,
   onCanvasClick,
   enableCulling = true,
 }: InfiniteCanvasProps) {
@@ -67,6 +76,19 @@ export function InfiniteCanvas({
     viewport,
     onViewportChange,
     containerRef,
+  });
+
+  // Connection drag hook - enables drag-to-connect with mouse-follow preview
+  const {
+    pendingConnection,
+    isConnecting: isDraggingConnection,
+    startConnection: startDragConnection,
+  } = useConnectionDrag({
+    viewport,
+    containerRef: containerRef as React.RefObject<HTMLElement>,
+    onConnectionStart,
+    onConnectionComplete,
+    onConnectionCancel,
   });
 
   // Viewport culling - 只渲染可见节点
@@ -111,6 +133,7 @@ export function InfiniteCanvas({
   // Cursor style based on state
   const getCursor = () => {
     if (viewportState.isPanning) return 'grabbing';
+    if (isDraggingConnection) return 'crosshair';
     return 'default';
   };
 
@@ -136,11 +159,12 @@ export function InfiniteCanvas({
 
       {/* Viewport transform layer */}
       <CanvasViewport viewport={viewport}>
-        {/* Connection layer */}
+        {/* Connection layer with pending connection preview */}
         <ConnectionLayer
           connections={connections}
           nodes={nodes}
           selectedConnectionIds={selectedConnectionIds}
+          pendingConnection={pendingConnection}
           onConnectionSelect={onConnectionSelect}
         />
 
@@ -148,7 +172,7 @@ export function InfiniteCanvas({
         {visibleNodes.map((node) => {
           const isSelected = selectedNodeIds.includes(node.id);
 
-          return renderNode(node, viewport, isSelected, onNodeSelect, onNodeMove, onNodeUpdateData, onConnectionStart);
+          return renderNode(node, viewport, isSelected, onNodeSelect, onNodeDrag, onNodeMove, onNodeUpdateData, startDragConnection);
         })}
       </CanvasViewport>
 
@@ -173,14 +197,16 @@ function renderNode(
   viewport: ViewportType,
   isSelected: boolean,
   onSelect?: (nodeId: string, multi: boolean) => void,
+  onDrag?: (nodeId: string, position: { x: number; y: number }) => void,
   onMove?: (nodeId: string, position: { x: number; y: number }) => void,
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void,
-  onConnectionStart?: (nodeId: string, anchor: string) => void,
+  onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void,
 ): React.ReactNode {
   const commonProps = {
     viewport,
     isSelected,
     onSelect,
+    onDrag,
     onMove,
     onConnectionStart,
     onUpdateData,

@@ -273,8 +273,7 @@ const SubtitleElementContent = memo(function SubtitleElementContent({
   }
 
   const subtitleElement = element as SubtitleElement;
-  const firstCue = subtitleElement.cues?.[0];
-  const displayText = firstCue?.text || element.name;
+  const displayText = subtitleElement.text || element.name;
 
   // Subtitle elements display with a distinctive purple theme
   return (

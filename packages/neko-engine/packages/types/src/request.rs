@@ -219,3 +219,134 @@ impl ActionResponse {
         self.status == ResponseStatus::Error
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ---- ActionRequest ----
+
+    #[test]
+    fn test_request_new() {
+        let req = ActionRequest::new("videos", "probe");
+        assert_eq!(req.group, "videos");
+        assert_eq!(req.action, "probe");
+        assert_eq!(req.id, "");
+        assert!(req.source.is_none());
+        assert!(req.session_id.is_none());
+        assert!(req.stream_id.is_none());
+    }
+
+    #[test]
+    fn test_request_builder_chain() {
+        let req = ActionRequest::new("videos", "stream")
+            .with_id("vid_abc")
+            .with_source("/path/to/video.mp4")
+            .with_session("session_1")
+            .with_stream("stream_1")
+            .with_options(json!({"fps": 30}))
+            .with_body(json!({"timeline": {}}));
+
+        assert_eq!(req.id, "vid_abc");
+        assert_eq!(req.source.as_deref(), Some("/path/to/video.mp4"));
+        assert_eq!(req.session_id.as_deref(), Some("session_1"));
+        assert_eq!(req.stream_id.as_deref(), Some("stream_1"));
+        assert_eq!(req.options["fps"], 30);
+        assert!(req.body.is_some());
+    }
+
+    #[test]
+    fn test_request_option_accessors() {
+        let req = ActionRequest::new("videos", "probe")
+            .with_options(json!({
+                "path": "/video.mp4",
+                "fps": 29.97,
+                "width": 1920,
+                "loop": true
+            }));
+
+        assert_eq!(req.option_str("path"), Some("/video.mp4"));
+        assert_eq!(req.option_f64("fps"), Some(29.97));
+        assert_eq!(req.option_i64("width"), Some(1920));
+        assert_eq!(req.option_bool("loop"), Some(true));
+        assert_eq!(req.option_str("missing"), None);
+    }
+
+    #[test]
+    fn test_request_parse_body() {
+        #[derive(serde::Deserialize, PartialEq, Debug)]
+        struct MyBody { name: String }
+
+        let req = ActionRequest::new("test", "test")
+            .with_body(json!({"name": "hello"}));
+        let body: MyBody = req.parse_body().unwrap();
+        assert_eq!(body.name, "hello");
+    }
+
+    #[test]
+    fn test_request_parse_body_missing() {
+        let req = ActionRequest::new("test", "test");
+        let result = req.parse_body::<serde_json::Value>();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_request_serde_roundtrip() {
+        let req = ActionRequest::new("videos", "probe")
+            .with_id("vid_123")
+            .with_options(json!({"path": "/test.mp4"}));
+
+        let json = serde_json::to_string(&req).unwrap();
+        let parsed: ActionRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.group, "videos");
+        assert_eq!(parsed.action, "probe");
+        assert_eq!(parsed.id, "vid_123");
+    }
+
+    #[test]
+    fn test_request_serde_skip_none_fields() {
+        let req = ActionRequest::new("nodes", "health");
+        let json = serde_json::to_string(&req).unwrap();
+        // Optional None fields should be skipped
+        assert!(!json.contains("source"));
+        assert!(!json.contains("sessionId"));
+        assert!(!json.contains("streamId"));
+        assert!(!json.contains("body"));
+    }
+
+    // ---- ActionResponse ----
+
+    #[test]
+    fn test_response_ok() {
+        let resp = ActionResponse::ok("req_1", json!({"status": "ready"}));
+        assert!(resp.is_ok());
+        assert!(!resp.is_error());
+        assert_eq!(resp.id, "req_1");
+        assert!(resp.data.is_some());
+        assert!(resp.error.is_none());
+    }
+
+    #[test]
+    fn test_response_error() {
+        let resp = ActionResponse::error("req_2", ErrorCode::ResourceNotFound, "not found");
+        assert!(resp.is_error());
+        assert!(!resp.is_ok());
+        assert!(resp.error.is_some());
+        assert!(resp.data.is_none());
+    }
+
+    #[test]
+    fn test_response_pending() {
+        let resp = ActionResponse::pending("req_3", "task_abc");
+        assert_eq!(resp.status, ResponseStatus::Pending);
+        assert_eq!(resp.data.as_ref().unwrap()["taskId"], "task_abc");
+    }
+
+    #[test]
+    fn test_response_progress() {
+        let resp = ActionResponse::progress("req_4", json!({"percent": 50}));
+        assert_eq!(resp.status, ResponseStatus::Progress);
+        assert!(resp.progress.is_some());
+    }
+}

@@ -17,10 +17,20 @@ import type {
 	ResolveAutoModeContext,
 	TimelineMediaAnalysisResult,
 } from '@neko/shared';
-import {
-	isBasicModeVideoCodec,
-	isBasicModeAudioCodec,
-} from '@neko/shared';
+
+// Basic mode (WebCodecs) supported codecs — used for mode selection heuristics.
+// These functions determine if a codec can be handled by WebCodecs alone,
+// or if compatible mode (Native FFmpeg) is needed.
+const BASIC_VIDEO_CODECS = new Set(['h264', 'vp8', 'vp9', 'av1']);
+const BASIC_AUDIO_CODECS = new Set(['aac', 'opus', 'vorbis', 'mp3', 'flac']);
+
+function isBasicModeVideoCodec(codec: string): boolean {
+	return BASIC_VIDEO_CODECS.has(codec.toLowerCase());
+}
+
+function isBasicModeAudioCodec(codec: string): boolean {
+	return BASIC_AUDIO_CODECS.has(codec.toLowerCase());
+}
 
 import { NativeMediaEngine, createNativeMediaEngine } from './NativeMediaEngine';
 

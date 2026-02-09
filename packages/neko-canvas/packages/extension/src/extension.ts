@@ -189,6 +189,10 @@ function registerCommands(context: vscode.ExtensionContext): void {
     'neko.canvas.selectAll',
     'neko.canvas.undo',
     'neko.canvas.redo',
+    'neko.canvas.copy',
+    'neko.canvas.cut',
+    'neko.canvas.paste',
+    'neko.canvas.duplicate',
   ];
   for (const commandId of keyboardActions) {
     const action = commandId.replace('neko.canvas.', '');

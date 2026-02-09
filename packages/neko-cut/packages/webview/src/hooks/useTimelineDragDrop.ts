@@ -7,7 +7,7 @@ import { useCallback, useState, RefObject } from 'react';
 import { PIXELS_PER_SECOND, TRACK_HEIGHT, TRACK_LABEL_WIDTH, DEFAULT_IMAGE_DURATION, DEFAULT_VIDEO_DURATION } from '../constants';
 import { getFileType } from '../utils';
 import type { ProjectData, TimelineTrack, TextElement } from '../types';
-import { createDefaultElementTransform } from '../types/animation';
+import { CENTERED_TRANSFORM } from '@neko/shared';
 import { getMediaInfoService } from '../services';
 
 export interface TimelineDragDropOptions {
@@ -117,8 +117,13 @@ export function useTimelineDragDrop({
           x: 0.5,
           y: 0.85,
           rotation: 0,
+          transform: CENTERED_TRANSFORM,
           opacity: 1,
-          animTransform: createDefaultElementTransform(),
+          blendMode: 'normal',
+          effects: [],
+          muted: false,
+          hidden: false,
+          locked: false,
         } as Omit<TextElement, 'id'>);
       } else if (fileType === 'audio') {
         // Add audio to audio track

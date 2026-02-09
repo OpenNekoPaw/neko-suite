@@ -4,7 +4,10 @@ import type {
   CanvasNode,
   CanvasConnection,
   CanvasViewport,
+  PortDefinition,
 } from '@neko/shared';
+import { getDefaultPorts, arePortTypesCompatible } from '@neko/shared';
+import { useHistoryStore } from './historyStore';
 
 // =============================================================================
 // Types
@@ -32,6 +35,8 @@ export interface CanvasStore {
   updateNodeData: (id: string, data: Record<string, unknown>) => void;
   removeNode: (id: string) => void;
   moveNode: (id: string, position: { x: number; y: number }) => void;
+  /** Record history + update position (call on drag end) */
+  moveNodeEnd: (id: string, position: { x: number; y: number }) => void;
 
   // ==================== Connection Actions ====================
   addConnection: (connection: Omit<CanvasConnection, 'id'>) => string;
@@ -52,6 +57,10 @@ export interface CanvasStore {
   selectNodes: (ids: string[]) => void;
   clearSelection: () => void;
   deleteSelected: () => void;
+
+  // ==================== History Actions ====================
+  undo: () => void;
+  redo: () => void;
 }
 
 // =============================================================================
@@ -60,6 +69,12 @@ export interface CanvasStore {
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/** Record current state to history before a mutation */
+function recordHistory(canvasData: CanvasData | null): void {
+  if (!canvasData) return;
+  useHistoryStore.getState().pushState(canvasData);
 }
 
 // =============================================================================
@@ -89,6 +104,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const { canvasData } = get();
     if (!canvasData) return '';
 
+    recordHistory(canvasData);
+
     const id = generateId();
     const newNode = { ...node, id } as CanvasNode;
 
@@ -106,6 +123,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const { canvasData } = get();
     if (!canvasData) return;
 
+    recordHistory(canvasData);
+
     set({
       canvasData: {
         ...canvasData,
@@ -119,6 +138,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   updateNodeData: (id, data) => {
     const { canvasData } = get();
     if (!canvasData) return;
+
+    recordHistory(canvasData);
 
     set({
       canvasData: {
@@ -135,6 +156,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   removeNode: (id) => {
     const { canvasData, selection } = get();
     if (!canvasData) return;
+
+    recordHistory(canvasData);
 
     set({
       canvasData: {
@@ -156,6 +179,25 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const { canvasData } = get();
     if (!canvasData) return;
 
+    // No history recording – called on every mousemove during drag
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: canvasData.nodes.map((node) =>
+          node.id === id ? { ...node, position } : node
+        ),
+      },
+    });
+  },
+
+  moveNodeEnd: (id, position) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    // Record history before final position update (undo support)
+    recordHistory(canvasData);
+
     set({
       canvasData: {
         ...canvasData,
@@ -170,6 +212,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   addConnection: (connection) => {
     const { canvasData } = get();
     if (!canvasData) return '';
+
+    recordHistory(canvasData);
 
     const id = generateId();
     const newConnection: CanvasConnection = { ...connection, id };
@@ -187,6 +231,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   removeConnection: (id) => {
     const { canvasData, selection } = get();
     if (!canvasData) return;
+
+    recordHistory(canvasData);
 
     set({
       canvasData: {
@@ -220,20 +266,67 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       return;
     }
 
-    // Check if connection already exists
+    const sourceNode = canvasData.nodes.find(n => n.id === pendingConnectionSource.nodeId);
+    const targetNode = canvasData.nodes.find(n => n.id === nodeId);
+
+    if (!sourceNode || !targetNode) {
+      set({ isConnecting: false, pendingConnectionSource: null });
+      return;
+    }
+
+    // Resolve ports for validation
+    const sourcePorts = sourceNode.ports ?? getDefaultPorts(sourceNode.type);
+    const targetPorts = targetNode.ports ?? getDefaultPorts(targetNode.type);
+    const sourcePort = sourcePorts.find((p: PortDefinition) => p.id === pendingConnectionSource.anchor);
+    const targetPort = targetPorts.find((p: PortDefinition) => p.id === anchor);
+
+    // Port-based validation (when both nodes have ports)
+    if (sourcePort && targetPort) {
+      // Must connect output → input
+      if (sourcePort.type !== 'output' || targetPort.type !== 'input') {
+        set({ isConnecting: false, pendingConnectionSource: null });
+        return;
+      }
+
+      // Check data type compatibility
+      if (!arePortTypesCompatible(sourcePort.dataType, targetPort.dataType)) {
+        set({ isConnecting: false, pendingConnectionSource: null });
+        return;
+      }
+
+      // Check max connections on target input port
+      const maxConn = targetPort.maxConnections ?? 1;
+      const existingCount = canvasData.connections.filter(
+        c => c.targetId === nodeId && c.targetPort === anchor
+      ).length;
+      if (existingCount >= maxConn) {
+        set({ isConnecting: false, pendingConnectionSource: null });
+        return;
+      }
+    }
+
+    // Check if exact connection already exists
     const exists = canvasData.connections.some(
       (conn) =>
         conn.sourceId === pendingConnectionSource.nodeId &&
-        conn.targetId === nodeId
+        conn.targetId === nodeId &&
+        conn.sourcePort === pendingConnectionSource.anchor &&
+        conn.targetPort === anchor
     );
 
     if (!exists) {
+      // Determine anchor positions from ports or use directly
+      const sourceAnchor = sourcePort?.position ?? pendingConnectionSource.anchor;
+      const targetAnchor = targetPort?.position ?? anchor;
+
       get().addConnection({
         sourceId: pendingConnectionSource.nodeId,
-        sourceAnchor: pendingConnectionSource.anchor as CanvasConnection['sourceAnchor'],
+        sourceAnchor: sourceAnchor as CanvasConnection['sourceAnchor'],
         targetId: nodeId,
-        targetAnchor: anchor as CanvasConnection['targetAnchor'],
+        targetAnchor: targetAnchor as CanvasConnection['targetAnchor'],
         type: 'default',
+        sourcePort: sourcePort ? pendingConnectionSource.anchor : undefined,
+        targetPort: targetPort ? anchor : undefined,
       });
     }
 
@@ -362,6 +455,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const { selection, canvasData } = get();
     if (!canvasData) return;
 
+    recordHistory(canvasData);
+
     // Remove selected nodes and their connections
     const nodesToRemove = new Set(selection.nodeIds);
     const connectionsToRemove = new Set(selection.connectionIds);
@@ -379,5 +474,32 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       },
       selection: { nodeIds: [], connectionIds: [] },
     });
+  },
+
+  // ==================== History Actions ====================
+  undo: () => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    const previousState = useHistoryStore.getState().undo(canvasData);
+    if (previousState) {
+      set({
+        canvasData: previousState,
+        selection: { nodeIds: [], connectionIds: [] },
+      });
+    }
+  },
+
+  redo: () => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    const nextState = useHistoryStore.getState().redo(canvasData);
+    if (nextState) {
+      set({
+        canvasData: nextState,
+        selection: { nodeIds: [], connectionIds: [] },
+      });
+    }
   },
 }));

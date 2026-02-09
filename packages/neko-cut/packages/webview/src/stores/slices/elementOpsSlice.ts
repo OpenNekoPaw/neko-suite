@@ -14,7 +14,7 @@ import { StateCreator } from 'zustand';
 import type { ProjectData, TimelineElement, TrackType, MediaElement, AudioElement } from '../../types';
 import { generateId } from '../../utils';
 import { getMediaProxy } from '../../services/mediaProxyFactory';
-import { createDefaultSubtitleStyle } from '../../types/subtitle';
+import { CENTERED_TRANSFORM } from '@neko/shared';
 
 /**
  * Detect if video file has audio track via Extension FFmpeg probe
@@ -231,6 +231,13 @@ export const createElementOpsSlice: StateCreator<
       startTime,
       trimStart: 0,
       trimEnd: 0,
+      transform: CENTERED_TRANSFORM,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      muted: false,
+      hidden: false,
+      locked: false,
     } as Omit<TimelineElement, 'id'>);
   },
 
@@ -266,6 +273,13 @@ export const createElementOpsSlice: StateCreator<
       startTime,
       trimStart: 0,
       trimEnd: 0,
+      transform: CENTERED_TRANSFORM,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      muted: false,
+      hidden: false,
+      locked: false,
     } as Omit<TimelineElement, 'id'>);
 
     // 3. 异步检测音频并创建音频元素（完全不阻塞主流程）
@@ -361,17 +375,23 @@ export const createElementOpsSlice: StateCreator<
           const trackName = extractedTrack.title || `Subtitle ${extractedTrack.language || 'Unknown'}`;
           const subtitleTrackId = addTrack('subtitle', trackName);
 
-          // 将每个 cue 添加为字幕元素
+          // Add each cue as a subtitle element
           for (const cue of extractedTrack.cues) {
             addElement(subtitleTrackId, {
               type: 'subtitle',
               name: `${cue.text.substring(0, 30)}${cue.text.length > 30 ? '...' : ''}`,
+              text: cue.text,
               duration: cue.endTime - cue.startTime,
               startTime: cue.startTime,
               trimStart: 0,
               trimEnd: 0,
-              cues: [cue],
-              style: createDefaultSubtitleStyle(),
+              transform: CENTERED_TRANSFORM,
+              opacity: 1,
+              blendMode: 'normal',
+              effects: [],
+              muted: false,
+              hidden: false,
+              locked: false,
               language: extractedTrack.language || 'unknown',
               isDefault: extractedTrack.isDefault,
             } as Omit<TimelineElement, 'id'>);

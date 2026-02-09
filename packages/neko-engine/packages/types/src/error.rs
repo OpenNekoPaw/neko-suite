@@ -161,3 +161,85 @@ impl ApiError {
         Self::new(ErrorCode::EncodeError, message)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_code_http_status() {
+        assert_eq!(ErrorCode::ResourceNotFound.http_status(), 404);
+        assert_eq!(ErrorCode::StreamNotFound.http_status(), 404);
+        assert_eq!(ErrorCode::TaskNotFound.http_status(), 404);
+        assert_eq!(ErrorCode::InvalidParameter.http_status(), 400);
+        assert_eq!(ErrorCode::MissingParameter.http_status(), 400);
+        assert_eq!(ErrorCode::ValidationError.http_status(), 400);
+        assert_eq!(ErrorCode::InternalError.http_status(), 500);
+        assert_eq!(ErrorCode::GpuNotAvailable.http_status(), 500);
+        assert_eq!(ErrorCode::GpuContextError.http_status(), 500);
+    }
+
+    #[test]
+    fn test_api_error_new() {
+        let err = ApiError::new(ErrorCode::DecodeError, "bad frame");
+        assert_eq!(err.code, ErrorCode::DecodeError);
+        assert_eq!(err.message, "bad frame");
+        assert!(err.details.is_none());
+    }
+
+    #[test]
+    fn test_api_error_with_details() {
+        let err = ApiError::new(ErrorCode::InternalError, "oops")
+            .with_details(serde_json::json!({"file": "test.mp4"}));
+        assert!(err.details.is_some());
+        assert_eq!(err.details.unwrap()["file"], "test.mp4");
+    }
+
+    #[test]
+    fn test_api_error_convenience_constructors() {
+        let err = ApiError::resource_not_found("vid_123");
+        assert_eq!(err.code, ErrorCode::ResourceNotFound);
+        assert!(err.message.contains("vid_123"));
+
+        let err = ApiError::stream_not_found("stream_1");
+        assert_eq!(err.code, ErrorCode::StreamNotFound);
+
+        let err = ApiError::task_not_found("task_1");
+        assert_eq!(err.code, ErrorCode::TaskNotFound);
+
+        let err = ApiError::invalid_parameter("fps", "must be positive");
+        assert_eq!(err.code, ErrorCode::InvalidParameter);
+        assert!(err.message.contains("fps"));
+        assert!(err.message.contains("must be positive"));
+
+        let err = ApiError::missing_parameter("path");
+        assert_eq!(err.code, ErrorCode::MissingParameter);
+        assert!(err.message.contains("path"));
+
+        let err = ApiError::internal("something broke");
+        assert_eq!(err.code, ErrorCode::InternalError);
+
+        let err = ApiError::decode_error("corrupt frame");
+        assert_eq!(err.code, ErrorCode::DecodeError);
+
+        let err = ApiError::encode_error("encoder failed");
+        assert_eq!(err.code, ErrorCode::EncodeError);
+    }
+
+    #[test]
+    fn test_api_error_display() {
+        let err = ApiError::new(ErrorCode::DecodeError, "bad frame");
+        assert_eq!(format!("{}", err), "bad frame");
+    }
+
+    #[test]
+    fn test_api_error_serde_roundtrip() {
+        let err = ApiError::new(ErrorCode::ResourceNotFound, "not found")
+            .with_details(serde_json::json!({"id": "abc"}));
+        let json = serde_json::to_string(&err).unwrap();
+        let parsed: ApiError = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.code, ErrorCode::ResourceNotFound);
+        assert_eq!(parsed.message, "not found");
+        assert!(parsed.details.is_some());
+    }
+}

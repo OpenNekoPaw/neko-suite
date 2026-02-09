@@ -9,6 +9,7 @@ export default defineConfig({
     preserveSymlinks: true,
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@neko/shared': path.resolve(__dirname, '../../../neko-types/src'),
     },
     // Dedupe d3 modules to use single version
     dedupe: ['d3', 'd3-array', 'd3-contour', 'd3-shape', 'd3-scale', 'd3-selection', 'd3-transition'],

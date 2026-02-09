@@ -17,6 +17,29 @@ export type ConnectionAnchor = 'top' | 'right' | 'bottom' | 'left';
  */
 export type ConnectionType = 'default' | 'sequence' | 'reference';
 
+/**
+ * Data type that can flow through a port
+ */
+export type PortDataType = 'image' | 'video' | 'audio' | 'text' | 'any';
+
+/**
+ * Port definition for node input/output
+ */
+export interface PortDefinition {
+  /** Unique port identifier within the node */
+  id: string;
+  /** Port direction */
+  type: 'input' | 'output';
+  /** Which side of the node the port appears on */
+  position: ConnectionAnchor;
+  /** Data type this port accepts/produces */
+  dataType?: PortDataType;
+  /** Display label for the port */
+  label?: string;
+  /** Maximum number of connections (default: 1 for input, Infinity for output) */
+  maxConnections?: number;
+}
+
 // =============================================================================
 // Node Types
 // =============================================================================
@@ -37,6 +60,8 @@ export interface CanvasNodeBase {
   zIndex: number;
   /** Whether node is locked from editing */
   locked?: boolean;
+  /** Port definitions for data-flow connections (optional, backward compatible) */
+  ports?: PortDefinition[];
 }
 
 /**
@@ -136,6 +161,10 @@ export interface CanvasConnection {
   type?: ConnectionType;
   /** Optional label on the connection */
   label?: string;
+  /** Source port ID (for port-based connections) */
+  sourcePort?: string;
+  /** Target port ID (for port-based connections) */
+  targetPort?: string;
 }
 
 // =============================================================================
@@ -208,4 +237,55 @@ export function isAnnotationNode(node: CanvasNode): node is AnnotationCanvasNode
 
 export function isGroupNode(node: CanvasNode): node is GroupCanvasNode {
   return node.type === 'group';
+}
+
+// =============================================================================
+// Port Helpers
+// =============================================================================
+
+/** Default ports for media nodes */
+export const MEDIA_NODE_PORTS: PortDefinition[] = [
+  { id: 'out', type: 'output', position: 'right', dataType: 'any', label: 'Output' },
+];
+
+/** Default ports for storyboard nodes */
+export const STORYBOARD_NODE_PORTS: PortDefinition[] = [
+  { id: 'in', type: 'input', position: 'left', dataType: 'any', label: 'Input' },
+  { id: 'out', type: 'output', position: 'right', dataType: 'any', label: 'Output' },
+];
+
+/** Default ports for annotation nodes (no ports, uses legacy anchors) */
+export const ANNOTATION_NODE_PORTS: PortDefinition[] = [];
+
+/** Default ports for group nodes */
+export const GROUP_NODE_PORTS: PortDefinition[] = [
+  { id: 'in', type: 'input', position: 'left', dataType: 'any', label: 'Input' },
+  { id: 'out', type: 'output', position: 'right', dataType: 'any', label: 'Output' },
+];
+
+/**
+ * Get default ports for a node type.
+ * Returns empty array for types that use legacy anchors.
+ */
+export function getDefaultPorts(nodeType: CanvasNodeType): PortDefinition[] {
+  switch (nodeType) {
+    case 'media': return MEDIA_NODE_PORTS;
+    case 'storyboard': return STORYBOARD_NODE_PORTS;
+    case 'annotation': return ANNOTATION_NODE_PORTS;
+    case 'group': return GROUP_NODE_PORTS;
+    default: return [];
+  }
+}
+
+/**
+ * Check if two port data types are compatible for connection.
+ * 'any' is compatible with everything.
+ */
+export function arePortTypesCompatible(
+  sourceType: PortDataType | undefined,
+  targetType: PortDataType | undefined
+): boolean {
+  if (!sourceType || !targetType) return true;
+  if (sourceType === 'any' || targetType === 'any') return true;
+  return sourceType === targetType;
 }

@@ -1,57 +1,94 @@
 /**
- * FrameServerService - Localhost HTTP/WebSocket 帧流服务
+ * FrameServerService - Localhost HTTP/WebSocket frame streaming service
  *
- * 职责：
- * - 管理 Rust native addon 中的 FrameServerSession
- * - 提供高性能帧流传输，绕过 VSCode postMessage 开销
- * - 支持 MJPEG 和 WebSocket 两种流模式
+ * Wraps NativeEngine's embedded frame server for high-performance
+ * frame delivery to Webview consumers via WebSocket.
  *
- * 设计原则：
- * - 单一职责：仅负责帧服务器生命周期管理
- * - 依赖倒置：通过接口与 Rust addon 交互
+ * New architecture (NativeEngine):
+ * - Frame server is embedded in NativeEngine (Rust HTTP/WS server)
+ * - Frames are pushed per-stream via pushStreamFrame()
+ * - Streams are created via createStream() with WebSocket endpoints
+ * - ActionRequest dispatch available via HTTP POST
+ *
+ * Endpoints:
+ * - ws://127.0.0.1:{port}/v1/streams/{stream_id} — per-stream WebSocket
+ * - POST http://127.0.0.1:{port}/v1/dispatch — ActionRequest dispatch
+ * - GET http://127.0.0.1:{port}/health — health check
  */
 
 import * as vscode from 'vscode';
 
-// Types from the native addon
-interface FrameServerConfig {
-	port?: number;
-	maxBufferSize?: number;
-	jpegQuality?: number;
+// =============================================================================
+// Types (matching NativeEngine NAPI interface)
+// =============================================================================
+
+/**
+ * NativeEngine instance type — subset of methods used by FrameServerService
+ */
+interface NativeEngineInstance {
+	startFrameServer(port?: number | null): Promise<number>;
+	stopFrameServer(): Promise<void>;
+	getFrameServerPort(): number | null;
+	createStream(
+		sessionId: string,
+		resourceId: string,
+		width?: number | null,
+		height?: number | null,
+		fps?: number | null
+	): Promise<string>;
+	pushStreamFrame(
+		streamId: string,
+		data: Buffer,
+		width: number,
+		height: number,
+		timestamp: number,
+		format?: string | null
+	): void;
+	dispatch(requestJson: string): Promise<string>;
+	hasGpu(): boolean;
 }
 
-interface FrameServerStats {
-	framesSent: number;
-	isRunning: boolean;
-}
-
-interface FrameServerSessionInstance {
-	getPort(): number;
-	getMjpegUrl(): string;
-	getWebsocketUrl(): string;
-	getH264WebsocketUrl(): string;
-	getFrameUrl(): string;
-	pushFrame(jpegData: Buffer, timestampUs: number, width: number, height: number): void;
-	pushH264Packet(data: Buffer, pts: number, dts: number, isKeyframe: boolean): void;
-	getStats(): FrameServerStats;
-	stop(): void;
-}
-
-interface MediaProcessorAddon {
-	FrameServerSession: {
-		start(config?: FrameServerConfig): FrameServerSessionInstance;
-	};
+interface NativeEngineModule {
+	NativeEngine: { create(): Promise<NativeEngineInstance> };
 }
 
 /**
- * 帧服务器服务
+ * Stream info returned by createStream()
+ */
+export interface StreamInfo {
+	streamId: string;
+	wsUrl: string;
+	wsPort: number;
+}
+
+/**
+ * Frame server configuration
+ */
+export interface FrameServerConfig {
+	port?: number;
+}
+
+// =============================================================================
+// FrameServerService
+// =============================================================================
+
+/**
+ * Frame server service backed by NativeEngine
+ *
+ * Manages the embedded HTTP/WebSocket server lifecycle and
+ * provides per-stream frame pushing for Webview consumers.
  */
 export class FrameServerService implements vscode.Disposable {
-	private session: FrameServerSessionInstance | null = null;
-	private disposed = false;
+	private _engine: NativeEngineInstance | null = null;
+	private _port: number | null = null;
+	private _disposed = false;
+
+	// Track active streams for cleanup
+	private _activeStreams: Map<string, StreamInfo> = new Map();
 
 	/**
-	 * 尝试创建 FrameServerService 实例
+	 * Try to create a FrameServerService instance
+	 * Returns null if native addon is unavailable
 	 */
 	static async tryCreate(config?: FrameServerConfig): Promise<FrameServerService | null> {
 		const service = new FrameServerService();
@@ -70,19 +107,24 @@ export class FrameServerService implements vscode.Disposable {
 	}
 
 	/**
-	 * 初始化帧服务器
+	 * Initialize the frame server via NativeEngine
 	 */
 	private async initialize(config?: FrameServerConfig): Promise<boolean> {
 		try {
 			console.log('[FrameServerService] Loading native addon...');
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const addon = require('@neko-engine/native-napi') as MediaProcessorAddon;
-			console.log('[FrameServerService] Native addon loaded, starting frame server...');
+			const addon = require('@neko-engine/native-napi') as NativeEngineModule;
+			console.log('[FrameServerService] Native addon loaded, creating NativeEngine...');
 
-			this.session = addon.FrameServerSession.start(config);
+			this._engine = await addon.NativeEngine.create();
+			console.log(`[FrameServerService] NativeEngine created (GPU: ${this._engine.hasGpu() ? 'enabled' : 'disabled'})`);
+
+			// Start the embedded HTTP/WebSocket server
+			const requestedPort = config?.port ?? 0; // 0 = auto-assign
+			this._port = await this._engine.startFrameServer(requestedPort);
 
 			console.log(
-				`[FrameServerService] Started on port ${this.session.getPort()}`
+				`[FrameServerService] Frame server started on port ${this._port}`
 			);
 
 			return true;
@@ -96,104 +138,211 @@ export class FrameServerService implements vscode.Disposable {
 		}
 	}
 
+	// =========================================================================
+	// Properties
+	// =========================================================================
+
 	/**
-	 * 检查服务是否可用
+	 * Whether the service is available
 	 */
 	isAvailable(): boolean {
-		return this.session !== null && !this.disposed;
+		return this._engine !== null && this._port !== null && !this._disposed;
 	}
 
 	/**
-	 * 获取服务器端口
+	 * Get the frame server port
 	 */
 	getPort(): number | null {
-		return this.session?.getPort() ?? null;
+		return this._port;
 	}
 
 	/**
-	 * 获取 MJPEG 流 URL
+	 * Get the underlying NativeEngine instance
+	 * Useful for consumers that need direct dispatch access
 	 */
-	getMjpegUrl(): string | null {
-		return this.session?.getMjpegUrl() ?? null;
+	getEngine(): NativeEngineInstance | null {
+		return this._engine;
 	}
 
 	/**
-	 * 获取 WebSocket URL
+	 * Get the base URL for the frame server
 	 */
-	getWebsocketUrl(): string | null {
-		return this.session?.getWebsocketUrl() ?? null;
+	getBaseUrl(): string | null {
+		if (!this._port) return null;
+		return `http://127.0.0.1:${this._port}`;
 	}
 
 	/**
-	 * 获取单帧 URL
+	 * Get the WebSocket base URL for streams
 	 */
-	getFrameUrl(): string | null {
-		return this.session?.getFrameUrl() ?? null;
+	getWebSocketBaseUrl(): string | null {
+		if (!this._port) return null;
+		return `ws://127.0.0.1:${this._port}/v1/streams`;
 	}
 
 	/**
-	 * 获取 H.264 WebSocket URL
+	 * Get the health check URL
 	 */
-	getH264WebsocketUrl(): string | null {
-		return this.session?.getH264WebsocketUrl() ?? null;
+	getHealthUrl(): string | null {
+		if (!this._port) return null;
+		return `http://127.0.0.1:${this._port}/health`;
 	}
 
 	/**
-	 * 推送 JPEG 帧到所有连接的客户端
+	 * Get the dispatch URL for ActionRequest
 	 */
-	pushFrame(jpegData: Buffer, timestampUs: number, width: number, height: number): void {
-		if (!this.session || this.disposed) {
-			return;
-		}
-
-		this.session.pushFrame(jpegData, timestampUs, width, height);
+	getDispatchUrl(): string | null {
+		if (!this._port) return null;
+		return `http://127.0.0.1:${this._port}/v1/dispatch`;
 	}
 
+	// =========================================================================
+	// Stream Management
+	// =========================================================================
+
 	/**
-	 * 推送 H.264 包到所有连接的客户端
+	 * Create a new stream and return its WebSocket endpoint info
 	 *
-	 * @param data H.264 NAL 单元数据
-	 * @param pts 显示时间戳（微秒）
-	 * @param dts 解码时间戳（微秒）
-	 * @param isKeyframe 是否为关键帧
+	 * @param sessionId - Unique session identifier (e.g., document URI)
+	 * @param resourceId - Resource identifier (e.g., video path)
+	 * @param width - Optional output width
+	 * @param height - Optional output height
+	 * @param fps - Optional frame rate
+	 * @returns Stream info with WebSocket URL, or null if unavailable
 	 */
-	pushH264Packet(data: Buffer, pts: number, dts: number, isKeyframe: boolean): void {
-		if (!this.session || this.disposed) {
-			return;
-		}
-
-		this.session.pushH264Packet(data, pts, dts, isKeyframe);
-	}
-
-	/**
-	 * 获取服务器统计信息
-	 */
-	getStats(): FrameServerStats | null {
-		if (!this.session || this.disposed) {
+	async createStream(
+		sessionId: string,
+		resourceId: string,
+		width?: number,
+		height?: number,
+		fps?: number
+	): Promise<StreamInfo | null> {
+		if (!this._engine || this._disposed) {
 			return null;
 		}
 
-		return this.session.getStats();
+		try {
+			const responseJson = await this._engine.createStream(
+				sessionId,
+				resourceId,
+				width ?? null,
+				height ?? null,
+				fps ?? null
+			);
+			const response = JSON.parse(responseJson) as {
+				success: boolean;
+				data?: { streamId: string; wsUrl: string; wsPort: number };
+				error?: string;
+			};
+
+			if (!response.success || !response.data) {
+				console.error('[FrameServerService] Failed to create stream:', response.error);
+				return null;
+			}
+
+			const streamInfo: StreamInfo = {
+				streamId: response.data.streamId,
+				wsUrl: response.data.wsUrl,
+				wsPort: response.data.wsPort,
+			};
+
+			this._activeStreams.set(streamInfo.streamId, streamInfo);
+
+			console.log(
+				`[FrameServerService] Stream created: ${streamInfo.streamId} → ${streamInfo.wsUrl}`
+			);
+
+			return streamInfo;
+		} catch (error) {
+			console.error('[FrameServerService] createStream error:', error);
+			return null;
+		}
 	}
 
 	/**
-	 * 释放资源
+	 * Push a frame to a specific stream
+	 *
+	 * This is a synchronous, high-frequency method optimized for 30-60fps.
+	 *
+	 * @param streamId - Target stream ID
+	 * @param data - Frame pixel data (RGBA, NV12, or JPEG)
+	 * @param width - Frame width
+	 * @param height - Frame height
+	 * @param timestamp - Frame timestamp in microseconds
+	 * @param format - Pixel format ('rgba' | 'nv12' | 'jpeg'), defaults to 'jpeg'
 	 */
-	async dispose(): Promise<void> {
-		if (this.disposed) {
+	pushFrame(
+		streamId: string,
+		data: Buffer,
+		width: number,
+		height: number,
+		timestamp: number,
+		format?: string
+	): void {
+		if (!this._engine || this._disposed) {
 			return;
 		}
 
-		this.disposed = true;
+		this._engine.pushStreamFrame(streamId, data, width, height, timestamp, format ?? null);
+	}
 
-		if (this.session) {
+	/**
+	 * Get list of active stream IDs
+	 */
+	getActiveStreams(): string[] {
+		return Array.from(this._activeStreams.keys());
+	}
+
+	/**
+	 * Get stream info by ID
+	 */
+	getStreamInfo(streamId: string): StreamInfo | undefined {
+		return this._activeStreams.get(streamId);
+	}
+
+	// =========================================================================
+	// Dispatch (ActionRequest proxy)
+	// =========================================================================
+
+	/**
+	 * Dispatch an ActionRequest through the engine
+	 * Useful for keyframe cache warmup and other engine operations
+	 */
+	async dispatch(requestJson: string): Promise<string> {
+		if (!this._engine || this._disposed) {
+			throw new Error('FrameServerService not available');
+		}
+
+		return this._engine.dispatch(requestJson);
+	}
+
+	// =========================================================================
+	// Disposal
+	// =========================================================================
+
+	/**
+	 * Dispose resources and stop the frame server
+	 */
+	async dispose(): Promise<void> {
+		if (this._disposed) {
+			return;
+		}
+
+		this._disposed = true;
+
+		// Clear active streams
+		this._activeStreams.clear();
+
+		if (this._engine) {
 			try {
-				this.session.stop();
-				console.log('[FrameServerService] Stopped');
+				await this._engine.stopFrameServer();
+				console.log('[FrameServerService] Frame server stopped');
 			} catch {
 				// Ignore stop errors
 			}
-			this.session = null;
+			this._engine = null;
 		}
+
+		this._port = null;
 	}
 }

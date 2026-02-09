@@ -1,10 +1,15 @@
 /**
  * BaseNode - Base node component
- * Provides common node frame with selection, dragging, and anchor points
+ * Provides common node frame with selection, dragging, and port/anchor points.
+ *
+ * Port system:
+ * - If node.ports is defined and non-empty, renders typed input/output ports
+ * - Otherwise falls back to legacy 4-direction anchor points
  */
 
 import { useCallback, type ReactNode } from 'react';
-import type { CanvasNode, CanvasViewport } from '@neko/shared';
+import type { CanvasNode, CanvasViewport, PortDefinition } from '@neko/shared';
+import { getDefaultPorts } from '@neko/shared';
 import { useNodeDrag } from '../../hooks/useNodeDrag';
 import clsx from 'clsx';
 
@@ -17,8 +22,11 @@ export interface BaseNodeProps {
   viewport: CanvasViewport;
   isSelected: boolean;
   onSelect?: (nodeId: string, multi: boolean) => void;
+  /** Called on every mousemove during drag (real-time position update) */
+  onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
+  /** Called on mouseup when drag ends (final position + history) */
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
-  onConnectionStart?: (nodeId: string, anchor: string) => void;
+  onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   children: ReactNode;
   className?: string;
 }
@@ -31,6 +39,19 @@ type AnchorPosition = 'top' | 'right' | 'bottom' | 'left';
 
 const ANCHOR_POSITIONS: AnchorPosition[] = ['top', 'right', 'bottom', 'left'];
 
+const PORT_COLORS: Record<string, string> = {
+  input: '#3b82f6',   // blue-500
+  output: '#22c55e',  // green-500
+};
+
+const PORT_DATA_COLORS: Record<string, string> = {
+  image: '#f59e0b',   // amber-500
+  video: '#8b5cf6',   // violet-500
+  audio: '#ec4899',   // pink-500
+  text: '#06b6d4',    // cyan-500
+  any: '#6b7280',     // gray-500
+};
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -40,6 +61,7 @@ export function BaseNode({
   viewport,
   isSelected,
   onSelect,
+  onDrag,
   onMove,
   onConnectionStart,
   children,
@@ -50,9 +72,14 @@ export function BaseNode({
     nodeId: node.id,
     initialPosition: node.position,
     viewport,
+    onDrag,
     onDragEnd: onMove,
     disabled: node.locked,
   });
+
+  // Resolve ports: explicit node.ports > default ports for type > empty
+  const ports = node.ports ?? getDefaultPorts(node.type);
+  const hasPorts = ports.length > 0;
 
   // Handle node click for selection
   const handleClick = useCallback((e: React.MouseEvent) => {
@@ -60,13 +87,14 @@ export function BaseNode({
     onSelect?.(node.id, e.shiftKey || e.metaKey);
   }, [node.id, onSelect]);
 
-  // Handle anchor click for connection
-  const handleAnchorClick = useCallback((anchor: string) => (e: React.MouseEvent) => {
+  // Handle anchor/port mousedown for drag-based connection
+  const handleAnchorMouseDown = useCallback((anchor: string) => (e: React.MouseEvent) => {
     e.stopPropagation();
-    onConnectionStart?.(node.id, anchor);
+    e.preventDefault();
+    onConnectionStart?.(node.id, anchor, e);
   }, [node.id, onConnectionStart]);
 
-  // Get anchor position styles
+  // Get legacy anchor position styles
   const getAnchorStyle = (anchor: AnchorPosition): React.CSSProperties => {
     const base: React.CSSProperties = {
       position: 'absolute',
@@ -90,6 +118,47 @@ export function BaseNode({
         return { ...base, left: -6, top: '50%', transform: 'translateY(-50%)' };
     }
   };
+
+  // Get port position styles
+  const getPortStyle = (port: PortDefinition, index: number, totalOnSide: number): React.CSSProperties => {
+    const portColor = PORT_DATA_COLORS[port.dataType ?? 'any'] ?? PORT_COLORS[port.type];
+    const base: React.CSSProperties = {
+      position: 'absolute',
+      width: 14,
+      height: 14,
+      borderRadius: '50%',
+      backgroundColor: portColor,
+      border: '2px solid var(--node-bg)',
+      cursor: 'crosshair',
+      zIndex: 10,
+    };
+
+    // Calculate offset for multiple ports on the same side
+    const spacing = 100 / (totalOnSide + 1);
+    const percent = `${spacing * (index + 1)}%`;
+
+    switch (port.position) {
+      case 'top':
+        return { ...base, top: -7, left: percent, transform: 'translateX(-50%)' };
+      case 'right':
+        return { ...base, right: -7, top: percent, transform: 'translateY(-50%)' };
+      case 'bottom':
+        return { ...base, bottom: -7, left: percent, transform: 'translateX(-50%)' };
+      case 'left':
+        return { ...base, left: -7, top: percent, transform: 'translateY(-50%)' };
+    }
+  };
+
+  // Group ports by side for spacing calculation
+  const portsBySide = new Map<string, { port: PortDefinition; index: number }[]>();
+  for (const port of ports) {
+    const side = port.position;
+    if (!portsBySide.has(side)) {
+      portsBySide.set(side, []);
+    }
+    const sideList = portsBySide.get(side)!;
+    sideList.push({ port, index: sideList.length });
+  }
 
   return (
     <div
@@ -122,13 +191,42 @@ export function BaseNode({
         {children}
       </div>
 
-      {/* Connection anchors - only show when selected or hovering */}
-      {isSelected && ANCHOR_POSITIONS.map((anchor) => (
+      {/* Port-based connections (always visible for data flow clarity) */}
+      {hasPorts && Array.from(portsBySide.entries()).map(([_side, portsOnSide]) =>
+        portsOnSide.map(({ port, index }) => (
+          <div
+            key={port.id}
+            data-port-id={port.id}
+            data-port-type={port.type}
+            data-node-id={node.id}
+            data-anchor={port.position}
+            style={getPortStyle(port, index, portsOnSide.length)}
+            onMouseDown={handleAnchorMouseDown(port.id)}
+            className={clsx(
+              'transition-all duration-150',
+              isSelected ? 'scale-110 opacity-100' : 'scale-75 opacity-60 hover:scale-110 hover:opacity-100',
+            )}
+            title={port.label ?? `${port.type}: ${port.dataType ?? 'any'}`}
+          >
+            {/* Port type indicator: input has inner dot, output is solid */}
+            {port.type === 'input' && (
+              <div
+                className="absolute inset-[3px] rounded-full"
+                style={{ backgroundColor: 'var(--node-bg)' }}
+              />
+            )}
+          </div>
+        ))
+      )}
+
+      {/* Legacy anchor points (only when selected, for backward compat) */}
+      {!hasPorts && isSelected && ANCHOR_POSITIONS.map((anchor) => (
         <div
           key={anchor}
+          data-node-id={node.id}
+          data-anchor={anchor}
           style={getAnchorStyle(anchor)}
-          onClick={handleAnchorClick(anchor)}
-          onMouseDown={(e) => e.stopPropagation()}
+          onMouseDown={handleAnchorMouseDown(anchor)}
           className="hover:bg-[var(--node-selected)] hover:scale-125 transition-all duration-150"
         />
       ))}

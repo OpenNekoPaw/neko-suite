@@ -2,7 +2,9 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
+use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_types::ActionResponse;
+use serde::Deserialize;
 use serde_json::Value;
 
 /// Controller for canvas-related actions (placeholder for future implementation)
@@ -14,12 +16,22 @@ impl CanvasController {
     }
 }
 
+/// Options for canvas:diff
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct CanvasDiffRequestOptions {
+    /// Source A file path
+    source_a: Option<String>,
+    /// Source B file path
+    source_b: Option<String>,
+}
+
 impl Controller for CanvasController {
     async fn handle(
         &self,
         action: &str,
         _resource_id: Option<&str>,
-        _options: Value,
+        options: Value,
         _body: Option<Value>,
     ) -> ApiResult<ActionResponse> {
         if !self.actions().contains(&action) {
@@ -29,10 +41,29 @@ impl Controller for CanvasController {
             });
         }
 
-        Err(ApiError::ServiceError(format!(
-            "canvas:{} not yet implemented",
-            action
-        )))
+        match action {
+            "diff" => {
+                let opts: CanvasDiffRequestOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let source_a = opts.source_a.ok_or_else(|| {
+                    ApiError::InvalidRequest("sourceA path required for canvas:diff".to_string())
+                })?;
+                let source_b = opts.source_b.ok_or_else(|| {
+                    ApiError::InvalidRequest("sourceB path required for canvas:diff".to_string())
+                })?;
+
+                let result = diff_media(&source_a, &source_b, DiffCategory::Canvas)
+                    .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+
+                let response = serde_json::to_value(&result)?;
+                Ok(ActionResponse::ok("", response))
+            }
+            _ => Err(ApiError::ServiceError(format!(
+                "canvas:{} not yet implemented",
+                action
+            ))),
+        }
     }
 
     fn group(&self) -> &'static str {
@@ -40,7 +71,7 @@ impl Controller for CanvasController {
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["composite", "capture", "export"]
+        &["composite", "capture", "export", "diff"]
     }
 }
 
@@ -52,7 +83,8 @@ mod tests {
     async fn test_canvas_controller_not_implemented() {
         let controller = CanvasController::new();
 
-        for action in controller.actions() {
+        // Only non-diff actions should be "not yet implemented"
+        for action in &["composite", "capture", "export"] {
             let result = controller.handle(action, None, Value::Null, None).await;
             assert!(result.is_err());
             let err = result.unwrap_err();
@@ -63,6 +95,18 @@ mod tests {
                 err
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_canvas_controller_diff_missing_sources() {
+        let controller = CanvasController::new();
+
+        let result = controller
+            .handle("diff", None, Value::Null, None)
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("sourceA"));
     }
 
     #[tokio::test]
@@ -92,6 +136,6 @@ mod tests {
     #[test]
     fn test_canvas_controller_actions() {
         let controller = CanvasController::new();
-        assert_eq!(controller.actions(), &["composite", "capture", "export"]);
+        assert_eq!(controller.actions(), &["composite", "capture", "export", "diff"]);
     }
 }

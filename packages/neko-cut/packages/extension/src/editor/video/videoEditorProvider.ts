@@ -8,9 +8,8 @@ import * as path from 'path';
 import { IEditorRegistry } from '../common/editorRegistry';
 import { VideoEditorModel } from './videoEditorModel';
 import { MessageHandler } from './messageHandler';
-import { MediaProcessorService } from '../../services/MediaProcessorService';
+import { MediaService } from '../../services/MediaService';
 import { FrameServerService } from '../../services/FrameServerService';
-import { isExportMessage, CompatibleExportHandler, isCompatibleModeMessage } from '../../handlers';
 import { getService } from '../../base';
 import { IStatusBar } from '../../views/statusBar';
 import { IVideoProjectOutlineProvider } from '../../views/outlineProvider';
@@ -44,8 +43,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 	private activeWebviews: Map<string, vscode.Webview> = new Map();
 	private activeWebviewPanels: Map<string, vscode.WebviewPanel> = new Map();
 	private modelDisposables: Map<string, vscode.Disposable> = new Map();
-	private mediaProcessorServices: Map<string, MediaProcessorService> = new Map();
-	private compatibleExportHandlers: Map<string, CompatibleExportHandler> = new Map();
+	private mediaServices: Map<string, MediaService> = new Map();
 	private frameServerServices: Map<string, FrameServerService> = new Map();
 
 	// 事件发射器 - 用于解耦与 PropertyPanel 的通信
@@ -276,33 +274,22 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		// 设置为活动编辑器
 		editorRegistry.setActiveEditor(model);
 
-		// Create MediaProcessorService for this webview with document URI for path resolution
-		const mediaProcessorService = new MediaProcessorService(webviewPanel, document.uri);
-		this.mediaProcessorServices.set(docUri, mediaProcessorService);
-
-		// Initialize Frame Server for high-performance frame delivery (bypasses postMessage)
+		// Initialize Frame Server (NativeEngine-backed, required for all media operations)
 		let frameServerPort: number | null = null;
 		const frameServerService = await FrameServerService.tryCreate({ port: 0 });
-		if (frameServerService) {
+		if (!frameServerService) {
+			console.error('[VideoEditorProvider] Frame server not available — media operations will fail');
+		} else {
 			frameServerPort = frameServerService.getPort();
 			this.frameServerServices.set(docUri, frameServerService);
-			// Connect frame server to media processor for frame pushing
-			mediaProcessorService.setFrameServerService(frameServerService);
 			console.log(`[VideoEditorProvider] Frame server started on port ${frameServerPort}`);
-		} else {
-			console.warn('[VideoEditorProvider] Frame server not available, using postMessage fallback');
 		}
 
-		// Create CompatibleExportHandler for native mode export
-		const projectDir = path.dirname(document.uri.fsPath);
-		const projectFilePath = document.uri.fsPath;  // Pass actual .jvi file path
-		const compatibleExportHandler = new CompatibleExportHandler(
-			(msg) => webviewPanel.webview.postMessage(msg),
-			projectDir,
-			frameServerPort ?? 8765,  // Use FrameServerService's actual port
-			projectFilePath
-		);
-		this.compatibleExportHandlers.set(docUri, compatibleExportHandler);
+		// Create MediaService — routes Webview messages to NativeEngine via FrameServerService
+		if (frameServerService) {
+			const mediaService = new MediaService(webviewPanel, frameServerService, document.uri);
+			this.mediaServices.set(docUri, mediaService);
+		}
 
 		// Create message handler
 		const messageHandler = new MessageHandler(
@@ -317,28 +304,16 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		// Handle messages from the webview
 		webviewPanel.webview.onDidReceiveMessage(
 			async (message) => {
-				// 1. Try to handle media processing requests (media:*)
-				const mediaHandled = await mediaProcessorService.handleMessage(message);
-				if (mediaHandled) {
-					return;
-				}
-
-				// 2. Try to handle compatible mode export requests
-				if (isCompatibleModeMessage(message)) {
-					const compatibleHandled = await compatibleExportHandler.handleMessage(message);
-					if (compatibleHandled) {
+				// 1. Try to handle media requests via MediaService (media:*)
+				const mediaService = this.mediaServices.get(docUri);
+				if (mediaService) {
+					const mediaHandled = await mediaService.handleMessage(message);
+					if (mediaHandled) {
 						return;
 					}
 				}
 
-				// 3. Try to handle export requests (export:*)
-				// NOTE: Export is now handled by neko-engine
-				if (isExportMessage(message)) {
-					// Export messages are forwarded to neko-engine via WebSocket
-					// No action needed here
-				}
-
-				// 4. Handle status updates separately
+				// 2. Handle status updates separately
 				if (message.type === 'statusUpdate') {
 					statusBar?.update({
 						currentTime: message.currentTime ?? 0,
@@ -542,18 +517,11 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 			this.activeWebviews.delete(docUri);
 			this.activeWebviewPanels.delete(docUri);
 
-			// Dispose MediaProcessorService
-			const mediaService = this.mediaProcessorServices.get(docUri);
+			// Dispose MediaService
+			const mediaService = this.mediaServices.get(docUri);
 			if (mediaService) {
 				mediaService.dispose();
-				this.mediaProcessorServices.delete(docUri);
-			}
-
-			// Dispose CompatibleExportHandler
-			const compatibleHandler = this.compatibleExportHandlers.get(docUri);
-			if (compatibleHandler) {
-				compatibleHandler.dispose();
-				this.compatibleExportHandlers.delete(docUri);
+				this.mediaServices.delete(docUri);
 			}
 
 			// Dispose FrameServerService

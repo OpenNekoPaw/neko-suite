@@ -32,6 +32,7 @@ mod texture;
 mod transition_processor;
 mod texture_compositor;
 mod gpu_pipeline;
+mod text_renderer;
 
 // Platform-specific zero-copy import modules
 #[cfg(target_os = "macos")]
@@ -79,3 +80,4 @@ pub use windows_import::WindowsTextureImporter;
 
 pub use gpu_layer::{GpuLayer, GpuLayerBuilder};
 pub use texture_compositor::{TextureCompositeResult, TextureCompositor};
+pub use text_renderer::TextRenderer;

@@ -7,8 +7,8 @@
 
   /* Canvas background */
   --canvas-bg: var(--vscode-editor-background, #1e1e1e);
-  --canvas-grid: var(--vscode-editorWidget-border, #333333);
-  --canvas-grid-major: var(--vscode-tab-border, #444444);
+  --canvas-grid: var(--vscode-editorWidget-border, #2a2a2a);
+  --canvas-grid-major: var(--vscode-editorRuler-foreground, #333333);
 
   /* Toolbar / Panel */
   --toolbar-bg: var(--vscode-sideBar-background, #252526);
@@ -16,25 +16,47 @@
   --toolbar-fg: var(--vscode-sideBar-foreground, #cccccc);
   --toolbar-fg-secondary: var(--vscode-descriptionForeground, #999999);
 
-  /* Status bar */
+  /* Status bar - match VSCode exactly */
   --statusbar-bg: var(--vscode-statusBar-background, #007acc);
   --statusbar-fg: var(--vscode-statusBar-foreground, #ffffff);
 
+  /* Title bar */
+  --titlebar-bg: var(--vscode-titleBar-activeBackground, #3c3c3c);
+  --titlebar-fg: var(--vscode-titleBar-activeForeground, #cccccc);
+  --titlebar-border: var(--vscode-titleBar-border, #3c3c3c);
+
   /* Node styling */
   --node-bg: var(--vscode-editorWidget-background, #2d2d2d);
-  --node-border: var(--vscode-editorWidget-border, #3c3c3c);
+  --node-border: var(--vscode-editorWidget-border, #454545);
   --node-selected: var(--vscode-focusBorder, #007acc);
+  --node-header-bg: var(--vscode-sideBarSectionHeader-background, #383838);
 
   /* Controls */
-  --control-bg: var(--vscode-sideBar-background, #252526);
-  --control-border: var(--vscode-sideBar-border, #3c3c3c);
-  --control-hover: var(--vscode-list-hoverBackground, #3c3c3c);
+  --control-bg: var(--vscode-input-background, #3c3c3c);
+  --control-border: var(--vscode-input-border, #3c3c3c);
+  --control-hover: var(--vscode-list-hoverBackground, #2a2d2e);
+  --control-active: var(--vscode-list-activeSelectionBackground, #094771);
   --control-fg: var(--vscode-foreground, #cccccc);
 
-  /* Connection styling */
-  --connection-default: var(--vscode-editorLineNumber-foreground, #666666);
+  /* Buttons */
+  --button-bg: var(--vscode-button-background, #0e639c);
+  --button-fg: var(--vscode-button-foreground, #ffffff);
+  --button-hover: var(--vscode-button-hoverBackground, #1177bb);
+  --button-secondary-bg: var(--vscode-button-secondaryBackground, #3a3d41);
+  --button-secondary-fg: var(--vscode-button-secondaryForeground, #cccccc);
+
+  /* Badge */
+  --badge-bg: var(--vscode-badge-background, #4d4d4d);
+  --badge-fg: var(--vscode-badge-foreground, #ffffff);
+
+  /* Connection styling - data flow colors */
+  --connection-default: var(--vscode-editorLineNumber-activeForeground, #9a9a9a);
   --connection-sequence: #4ec9b0;
   --connection-reference: #ce9178;
+
+  /* Scrollbar */
+  --scrollbar-bg: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.4));
+  --scrollbar-hover: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.7));
 }
 
 html,
@@ -49,4 +71,50 @@ body,
   color: var(--vscode-foreground, #cccccc);
   font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
   font-size: var(--vscode-font-size, 13px);
+}
+
+/* Scrollbar styling to match VSCode */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-bg);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}
+
+/* Connection animation */
+@keyframes flowDot {
+  0% { offset-distance: 0%; }
+  100% { offset-distance: 100%; }
+}
+
+.connection-group:hover path[stroke-opacity] {
+  stroke-opacity: 1 !important;
+}
+
+/* Focus ring matching VSCode */
+*:focus-visible {
+  outline: 1px solid var(--node-selected);
+  outline-offset: -1px;
+}
+
+/* Input styling to match VSCode */
+input, textarea, select {
+  font-family: var(--vscode-font-family, inherit);
+  font-size: var(--vscode-font-size, 13px);
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--node-selected) !important;
+  outline: none;
 }

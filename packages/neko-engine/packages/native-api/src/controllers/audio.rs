@@ -3,6 +3,7 @@
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
+use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{AudioService, IAudioService};
 use neko_types::{ActionResponse, ResourceId, StreamId};
 use serde::Deserialize;
@@ -100,6 +101,16 @@ struct AudioStreamControlOptions {
     stream_id: Option<String>,
     /// Playback speed multiplier (for speed action)
     speed: Option<f64>,
+}
+
+/// Options for audios:diff
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct AudioDiffRequestOptions {
+    /// Source A file path
+    source_a: Option<String>,
+    /// Source B file path
+    source_b: Option<String>,
 }
 
 impl Controller for AudioController {
@@ -273,6 +284,23 @@ impl Controller for AudioController {
                     _ => unreachable!(),
                 }
             }
+            "diff" => {
+                let opts: AudioDiffRequestOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let source_a = opts.source_a.ok_or_else(|| {
+                    ApiError::InvalidRequest("sourceA path required for audios:diff".to_string())
+                })?;
+                let source_b = opts.source_b.ok_or_else(|| {
+                    ApiError::InvalidRequest("sourceB path required for audios:diff".to_string())
+                })?;
+
+                let result = diff_media(&source_a, &source_b, DiffCategory::Audio)
+                    .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+
+                let response = serde_json::to_value(&result)?;
+                Ok(ActionResponse::ok("", response))
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "audios".to_string(),
                 action: action.to_string(),
@@ -285,7 +313,7 @@ impl Controller for AudioController {
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["probe", "transcode", "stream", "waveform", "stop", "pause", "resume", "speed"]
+        &["probe", "transcode", "stream", "waveform", "diff", "stop", "pause", "resume", "speed"]
     }
 }
 

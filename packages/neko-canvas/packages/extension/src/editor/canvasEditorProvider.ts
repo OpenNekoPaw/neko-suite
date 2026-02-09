@@ -248,11 +248,54 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           shapeId: message.shapeId as string | undefined,
         });
         break;
+      case 'resolveDroppedFiles': {
+        // Webview dropped files from VSCode explorer - resolve URIs and detect media types
+        const droppedUris = message.uris as string[];
+        const resolvedFiles: Array<{ uri: string; name: string; mediaType: string }> = [];
+
+        for (const uriStr of droppedUris) {
+          try {
+            const fileUri = vscode.Uri.parse(uriStr);
+            const fileName = fileUri.path.split('/').pop() || 'file';
+            const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+            const mediaType = this.detectMediaType(ext);
+            if (!mediaType) continue;
+
+            const webviewUri = webviewPanel.webview.asWebviewUri(fileUri);
+            resolvedFiles.push({
+              uri: webviewUri.toString(),
+              name: fileName,
+              mediaType,
+            });
+          } catch {
+            // Skip invalid URIs
+            console.warn('[NekoCanvas] Failed to resolve dropped URI:', uriStr);
+          }
+        }
+
+        if (resolvedFiles.length > 0) {
+          webviewPanel.webview.postMessage({
+            type: 'dropMedia',
+            files: resolvedFiles,
+          });
+        }
+        break;
+      }
     }
   }
 
   private requestId = 0;
   private pendingRequests = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+
+  private static readonly MEDIA_EXTENSIONS: Record<string, string> = {
+    png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image', svg: 'image',
+    mp4: 'video', mov: 'video', avi: 'video', mkv: 'video', webm: 'video', m4v: 'video',
+    mp3: 'audio', wav: 'audio', ogg: 'audio', m4a: 'audio', aac: 'audio', flac: 'audio',
+  };
+
+  private detectMediaType(ext: string): string | null {
+    return CanvasEditorProvider.MEDIA_EXTENSIONS[ext] ?? null;
+  }
 
   private sendRequest<T>(type: string, data?: unknown): Promise<T> {
     return new Promise((resolve, reject) => {

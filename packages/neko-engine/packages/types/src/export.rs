@@ -250,3 +250,111 @@ pub struct ExportStartResponse {
 pub struct ExportCancelResponse {
     pub success: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- ExportState ----
+
+    #[test]
+    fn test_export_state_terminal() {
+        assert!(ExportState::Completed.is_terminal());
+        assert!(ExportState::Cancelled.is_terminal());
+        assert!(ExportState::Error.is_terminal());
+        assert!(!ExportState::Pending.is_terminal());
+        assert!(!ExportState::Encoding.is_terminal());
+        assert!(!ExportState::Paused.is_terminal());
+    }
+
+    #[test]
+    fn test_export_state_processing() {
+        assert!(ExportState::Decoding.is_processing());
+        assert!(ExportState::Compositing.is_processing());
+        assert!(ExportState::Encoding.is_processing());
+        assert!(ExportState::Muxing.is_processing());
+        assert!(!ExportState::Pending.is_processing());
+        assert!(!ExportState::Completed.is_processing());
+        assert!(!ExportState::Paused.is_processing());
+    }
+
+    #[test]
+    fn test_export_state_default() {
+        assert_eq!(ExportState::default(), ExportState::Pending);
+    }
+
+    // ---- ExportSettings ----
+
+    #[test]
+    fn test_export_settings_new() {
+        let settings = ExportSettings::new(1920, 1080, 30.0);
+        assert_eq!(settings.width, 1920);
+        assert_eq!(settings.height, 1080);
+        assert_eq!(settings.fps, 30.0);
+    }
+
+    #[test]
+    fn test_export_settings_builder() {
+        let settings = ExportSettings::new(3840, 2160, 60.0)
+            .with_video_codec(VideoCodec::H265)
+            .with_video_bitrate(20_000_000)
+            .with_hw_encoder(HwEncoderType::VideoToolbox)
+            .with_preset(EncoderPreset::Fast)
+            .with_zero_copy(true);
+
+        assert_eq!(settings.video_codec, VideoCodec::H265);
+        assert_eq!(settings.video_bitrate, Some(20_000_000));
+        assert_eq!(settings.hw_encoder, HwEncoderType::VideoToolbox);
+        assert_eq!(settings.preset, EncoderPreset::Fast);
+        assert!(settings.use_zero_copy_gpu);
+    }
+
+    #[test]
+    fn test_export_settings_resolution() {
+        let settings = ExportSettings::new(1920, 1080, 30.0);
+        let res = settings.resolution();
+        assert_eq!(res.width, 1920);
+        assert_eq!(res.height, 1080);
+    }
+
+    #[test]
+    fn test_export_settings_default() {
+        let settings = ExportSettings::default();
+        assert_eq!(settings.width, 1920);
+        assert_eq!(settings.height, 1080);
+        assert_eq!(settings.fps, 30.0);
+        assert_eq!(settings.video_codec, VideoCodec::H264);
+    }
+
+    // ---- ExportProgress ----
+
+    #[test]
+    fn test_export_progress_new() {
+        let progress = ExportProgress::new("job_1", 3000);
+        assert_eq!(progress.job_id, "job_1");
+        assert_eq!(progress.total_frames, 3000);
+        assert_eq!(progress.state, ExportState::Pending);
+        assert_eq!(progress.progress, 0.0);
+        assert_eq!(progress.current_frame, 0);
+    }
+
+    #[test]
+    fn test_export_progress_ratio() {
+        let mut progress = ExportProgress::new("job_1", 100);
+        progress.progress = 50.0;
+        assert!((progress.ratio() - 0.5).abs() < f64::EPSILON);
+
+        progress.progress = 100.0;
+        assert!((progress.ratio() - 1.0).abs() < f64::EPSILON);
+    }
+
+    // ---- Serde ----
+
+    #[test]
+    fn test_export_state_serde() {
+        let json = serde_json::to_string(&ExportState::Encoding).unwrap();
+        assert_eq!(json, "\"encoding\"");
+        let parsed: ExportState = serde_json::from_str("\"completed\"").unwrap();
+        assert_eq!(parsed, ExportState::Completed);
+    }
+}

@@ -5,6 +5,7 @@ use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
 use neko_native_core::domain::{CaptureOptions, ExtractOptions, ExtractType};
+use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{IVideoService, VideoService};
 use neko_types::{ActionResponse, FrameFormat, LoopRegion, ResourceId, StreamId};
 use serde::Deserialize;
@@ -177,6 +178,16 @@ struct ProxyRequestOptions {
     source: Option<String>,
     /// Output file path
     output: Option<String>,
+}
+
+/// Options for videos:diff
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct DiffRequestOptions {
+    /// Source A file path
+    source_a: Option<String>,
+    /// Source B file path
+    source_b: Option<String>,
 }
 
 /// Options for stream control actions (stop/pause/resume/speed/seek/loop)
@@ -564,6 +575,23 @@ impl Controller for VideoController {
                     _ => unreachable!(),
                 }
             }
+            "diff" => {
+                let opts: DiffRequestOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let source_a = opts.source_a.ok_or_else(|| {
+                    ApiError::InvalidRequest("sourceA path required for videos:diff".to_string())
+                })?;
+                let source_b = opts.source_b.ok_or_else(|| {
+                    ApiError::InvalidRequest("sourceB path required for videos:diff".to_string())
+                })?;
+
+                let result = diff_media(&source_a, &source_b, DiffCategory::Video)
+                    .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+
+                let response = serde_json::to_value(&result)?;
+                Ok(ActionResponse::ok("", response))
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "videos".to_string(),
                 action: action.to_string(),
@@ -585,6 +613,7 @@ impl Controller for VideoController {
             "keyframes",
             "waveform",
             "proxy",
+            "diff",
             "stop",
             "pause",
             "resume",

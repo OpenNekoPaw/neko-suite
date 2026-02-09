@@ -17,8 +17,9 @@ export interface StoryboardNodeProps {
   viewport: CanvasViewport;
   isSelected: boolean;
   onSelect?: (nodeId: string, multi: boolean) => void;
+  onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
-  onConnectionStart?: (nodeId: string, anchor: string) => void;
+  onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   onUpdateData?: (nodeId: string, data: Partial<StoryboardCanvasNode['data']>) => void;
 }
 
@@ -42,6 +43,7 @@ export function StoryboardNode({
   viewport,
   isSelected,
   onSelect,
+  onDrag,
   onMove,
   onConnectionStart,
   onUpdateData,
@@ -54,6 +56,7 @@ export function StoryboardNode({
       viewport={viewport}
       isSelected={isSelected}
       onSelect={onSelect}
+      onDrag={onDrag}
       onMove={onMove}
       onConnectionStart={onConnectionStart}
     >

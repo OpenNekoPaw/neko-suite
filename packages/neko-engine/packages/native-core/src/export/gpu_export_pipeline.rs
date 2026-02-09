@@ -18,11 +18,11 @@ use crate::decoder::{Decoder, HwAccelType, HwAccelDecoder};
 use crate::error::{Error, Result};
 use crate::gpu::{
     GpuContext, GpuLayer, GpuLayerBuilder, Nv12OutputBuffers, Nv12RenderCache, Nv12TextureImporter,
-    RgbaToNv12Converter, TextureCompositeResult, TextureCompositor,
+    RgbaToNv12Converter, TextRenderer, TextureCompositeResult, TextureCompositor,
 };
 use crate::telemetry::spans::span;
 
-use super::types::{ElementData, ExportSettings, MediaElementData, TimelineData, TrackType};
+use super::types::{ElementData, ExportSettings, MediaElementData, TextElementData, TimelineData, TrackType};
 
 // =============================================================================
 // GPU Pipeline Timing
@@ -196,6 +196,8 @@ pub struct GpuExportPipeline {
     nv12_output_cache: Option<Nv12OutputBuffers>,
     /// Texture pool for layer textures (reused across frames)
     layer_texture_pool: LayerTexturePool,
+    /// Text renderer for text elements (lazy-initialized)
+    text_renderer: Option<TextRenderer>,
     /// Zero-copy RGBA→NV12 converter (macOS only, outputs to IOSurface)
     #[cfg(target_os = "macos")]
     zerocopy_converter: Option<crate::gpu::RgbaToNv12TextureConverter>,
@@ -231,6 +233,7 @@ impl GpuExportPipeline {
             output_height,
             nv12_output_cache: None,
             layer_texture_pool: LayerTexturePool::new(),
+            text_renderer: None,
             #[cfg(target_os = "macos")]
             zerocopy_converter: None,
         })
@@ -318,8 +321,20 @@ impl GpuExportPipeline {
         let mut gpu_layers: Vec<GpuLayer> = Vec::new();
         {
             let _span = tracing::debug_span!(span::GPU_PIPELINE, layers = media_elements.len()).entered();
-            for (media, z_idx) in media_elements {
-                if let Some(layer) = self.decode_to_gpu_layer_timed(&media, time, z_idx, timing)? {
+            for (media, z_idx) in &media_elements {
+                if let Some(layer) = self.decode_to_gpu_layer_timed(media, time, *z_idx, timing)? {
+                    gpu_layers.push(layer);
+                }
+            }
+        }
+
+        // Render text elements on top of media layers
+        let text_z_start = media_elements.len() as i32;
+        let text_elements = self.collect_visible_text(time, text_z_start);
+        if !text_elements.is_empty() {
+            tracing::debug!("Rendering {} text elements at time {:.2}s", text_elements.len(), time);
+            for (text, z_idx) in &text_elements {
+                if let Some(layer) = self.render_text_to_gpu_layer(text, *z_idx) {
                     gpu_layers.push(layer);
                 }
             }
@@ -530,20 +545,110 @@ impl GpuExportPipeline {
                         result.push((media.clone(), z_index));
                         z_index += 1;
                     }
-                    ElementData::Text(text) => {
-                        // TODO(P1): Implement text rendering to GPU texture
-                        tracing::debug!(
-                            "Text element '{}' at {:.2}s (not implemented)",
-                            text.text,
-                            time
-                        );
-                    }
-                    ElementData::Audio(_) => {}
+                    ElementData::Text(_) | ElementData::Audio(_) => {}
                 }
             }
         }
 
         result
+    }
+
+    /// Collect visible text elements at a given time
+    fn collect_visible_text(&self, time: f64, z_index_start: i32) -> Vec<(TextElementData, i32)> {
+        let mut result = Vec::new();
+        let mut z_index = z_index_start;
+
+        for track in &self.timeline.tracks {
+            if track.muted {
+                continue;
+            }
+
+            for element in &track.elements {
+                if !element.is_visible_at(time) {
+                    continue;
+                }
+
+                if let ElementData::Text(text) = element {
+                    result.push((text.clone(), z_index));
+                    z_index += 1;
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Render a text element to a GpuLayer
+    fn render_text_to_gpu_layer(
+        &mut self,
+        text: &TextElementData,
+        z_index: i32,
+    ) -> Option<GpuLayer> {
+        // Lazy-initialize text renderer
+        if self.text_renderer.is_none() {
+            self.text_renderer = Some(TextRenderer::new(self.ctx.clone()));
+        }
+
+        let renderer = self.text_renderer.as_mut().unwrap();
+
+        // Rasterize text to RGBA buffer
+        let rasterized = renderer.rasterize(
+            &text.text,
+            &text.font_family,
+            text.font_size,
+            &text.color,
+            "normal",  // font_weight not in export TextElementData, use default
+            "normal",  // font_style not in export TextElementData, use default
+            Some(self.output_width as f32),
+        )?;
+
+        let width = rasterized.width;
+        let height = rasterized.height;
+
+        // Upload to GPU texture
+        let texture = renderer.upload_to_texture(&rasterized);
+
+        // Build transform
+        let transform = if let Some(ref t) = text.transform {
+            crate::gpu::Transform2D {
+                x: t.x,
+                y: t.y,
+                scale_x: t.scale_x,
+                scale_y: t.scale_y,
+                rotation: t.rotation,
+                anchor_x: t.anchor_x,
+                anchor_y: t.anchor_y,
+                _padding: 0.0,
+            }
+        } else {
+            // Default: center the text in the output
+            crate::gpu::Transform2D {
+                x: self.output_width as f32 / 2.0,
+                y: self.output_height as f32 / 2.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                rotation: 0.0,
+                anchor_x: 0.5,
+                anchor_y: 0.5,
+                _padding: 0.0,
+            }
+        };
+
+        let layer = GpuLayerBuilder::new()
+            .transform(transform)
+            .opacity(text.opacity)
+            .z_index(z_index)
+            .build_from_rgba(texture, width, height);
+
+        tracing::debug!(
+            "Rendered text '{}' to {}x{} texture (z_index={})",
+            text.text,
+            width,
+            height,
+            z_index
+        );
+
+        Some(layer)
     }
 
     /// Decode a media element to a GPU layer

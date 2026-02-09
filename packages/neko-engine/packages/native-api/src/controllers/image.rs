@@ -5,6 +5,7 @@ use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
 use neko_native_core::domain::CaptureOptions;
+use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{IImageService, ImageService};
 use neko_types::{ActionResponse, FrameFormat, ResourceId};
 use serde::Deserialize;
@@ -98,6 +99,16 @@ struct EncodeRequestOptions {
     /// JPEG quality (1-100, default 85)
     #[serde(default = "default_quality")]
     quality: u32,
+}
+
+/// Options for images:diff
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ImageDiffRequestOptions {
+    /// Source A file path
+    source_a: Option<String>,
+    /// Source B file path
+    source_b: Option<String>,
 }
 
 impl Controller for ImageController {
@@ -210,6 +221,23 @@ impl Controller for ImageController {
 
                 Ok(ActionResponse::ok("", response))
             }
+            "diff" => {
+                let opts: ImageDiffRequestOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let source_a = opts.source_a.ok_or_else(|| {
+                    ApiError::InvalidRequest("sourceA path required for images:diff".to_string())
+                })?;
+                let source_b = opts.source_b.ok_or_else(|| {
+                    ApiError::InvalidRequest("sourceB path required for images:diff".to_string())
+                })?;
+
+                let result = diff_media(&source_a, &source_b, DiffCategory::Image)
+                    .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+
+                let response = serde_json::to_value(&result)?;
+                Ok(ActionResponse::ok("", response))
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "images".to_string(),
                 action: action.to_string(),
@@ -222,7 +250,7 @@ impl Controller for ImageController {
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["probe", "capture", "encode"]
+        &["probe", "capture", "encode", "diff"]
     }
 }
 

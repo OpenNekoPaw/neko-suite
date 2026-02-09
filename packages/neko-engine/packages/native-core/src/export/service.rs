@@ -10,7 +10,8 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::{broadcast, RwLock};
 
-use crate::encoder::{AsyncExportPipeline, CompositedFrame, ContainerFormat, PipelineConfig};
+use crate::audio::{AudioEncoder, AudioEncoderConfig, FfmpegAudioEncoder, SampleFormat};
+use crate::encoder::{AsyncExportPipeline, CompositedFrame, ContainerFormat, EncodedPacket, PipelineConfig};
 use crate::error::{Error, Result};
 use crate::gpu::GpuContext;
 use crate::monitor::SystemMonitor;
@@ -280,10 +281,43 @@ impl ExportService {
         )?;
         gpu_pipeline.initialize()?;
 
-        // Initialize audio mixer
+        // Initialize audio mixer and encoder
         let mut audio_mixer = AudioMixer::new(config.timeline.clone(), &config.settings);
-        if let Err(e) = audio_mixer.initialize() {
-            tracing::warn!("Audio mixer initialization failed (continuing without audio): {}", e);
+        let mut audio_encoder: Option<FfmpegAudioEncoder> = None;
+        let audio_encoder_config: Option<AudioEncoderConfig>;
+
+        match audio_mixer.initialize() {
+            Ok(()) => {
+                // Create audio encoder config
+                let audio_cfg = AudioEncoderConfig::new(
+                    audio_mixer.sample_rate(),
+                    audio_mixer.channels(),
+                    config.settings.audio_codec,
+                )
+                .with_bitrate(config.settings.audio_bitrate.unwrap_or(128_000))
+                .with_sample_format(SampleFormat::F32);
+
+                // Open audio encoder
+                let mut enc = FfmpegAudioEncoder::new();
+                match enc.open(&audio_cfg) {
+                    Ok(()) => {
+                        tracing::info!(
+                            "Audio encoder opened: {:?}, {}Hz, {}ch",
+                            audio_cfg.codec, audio_cfg.sample_rate, audio_cfg.channels
+                        );
+                        audio_encoder = Some(enc);
+                        audio_encoder_config = Some(audio_cfg);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Audio encoder init failed (continuing without audio): {}", e);
+                        audio_encoder_config = None;
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Audio mixer initialization failed (continuing without audio): {}", e);
+                audio_encoder_config = None;
+            }
         }
 
         let total_frames = gpu_pipeline.total_frames();
@@ -319,6 +353,7 @@ impl ExportService {
             encode_buffer_size: 4,
             mux_buffer_size: 8,
             encoder_config: config.settings.to_encoder_config(),
+            audio_encoder_config: audio_encoder_config.clone(),
             container: ContainerFormat::Mp4,
             output_path: config.output_path.clone(),
             total_frames,
@@ -332,9 +367,6 @@ impl ExportService {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(Self::update_job_state(&jobs, &job_id, ExportState::Encoding));
         }
-
-        // Collect audio frames for later muxing
-        let mut audio_frames: Vec<Vec<f32>> = Vec::new();
 
         // Create stats collector for periodic output (every 100ms)
         let mut stats_collector = FrameStatsCollector::new(Duration::from_millis(100));
@@ -386,9 +418,34 @@ impl ExportService {
             timing.decode_ns = gpu_timing.hw_decode_ns;
             timing.gpu_ns = gpu_timing.total_ns();
 
-            // Mix audio for this frame
-            if let Ok(Some(audio_frame)) = audio_mixer.mix_frame(time) {
-                audio_frames.push(audio_frame.data);
+            // Mix and encode audio for this frame (streaming)
+            if let Some(ref mut enc) = audio_encoder {
+                if let Ok(Some(audio_frame)) = audio_mixer.mix_frame(time) {
+                    // Convert F32 samples to bytes for encoder
+                    let audio_bytes: &[u8] = bytemuck::cast_slice(&audio_frame.data);
+                    let samples_per_channel = audio_frame.samples;
+
+                    match enc.encode_frame(audio_bytes, samples_per_channel) {
+                        Ok(packets) => {
+                            for audio_pkt in packets {
+                                let mux_pkt = EncodedPacket {
+                                    data: audio_pkt.data,
+                                    pts: audio_pkt.pts,
+                                    dts: audio_pkt.pts,
+                                    is_keyframe: true,
+                                    duration: audio_pkt.duration,
+                                    stream_index: 1,
+                                };
+                                if let Err(e) = pipeline.submit_audio_packet(mux_pkt) {
+                                    tracing::warn!("Failed to submit audio packet: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Audio encode error (continuing): {}", e);
+                        }
+                    }
+                }
             }
 
             // Update decode time stats (for backward compatibility)
@@ -439,13 +496,40 @@ impl ExportService {
         // Log final stats summary
         stats_collector.log_final_summary();
 
-        // Update state to Muxing (audio)
+        // Flush audio encoder and submit remaining packets
+        if let Some(ref mut enc) = audio_encoder {
+            tracing::info!("Flushing audio encoder");
+            match enc.flush() {
+                Ok(packets) => {
+                    for audio_pkt in packets {
+                        let mux_pkt = EncodedPacket {
+                            data: audio_pkt.data,
+                            pts: audio_pkt.pts,
+                            dts: audio_pkt.pts,
+                            is_keyframe: true,
+                            duration: audio_pkt.duration,
+                            stream_index: 1,
+                        };
+                        if let Err(e) = pipeline.submit_audio_packet(mux_pkt) {
+                            tracing::warn!("Failed to submit flushed audio packet: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Audio encoder flush error: {}", e);
+                }
+            }
+            // Signal audio stream is complete
+            let _ = pipeline.finish_audio();
+        }
+
+        // Update state to Muxing
         {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(Self::update_job_state(&jobs, &job_id, ExportState::Muxing));
         }
 
-        // Wait for video pipeline to complete
+        // Wait for pipeline to complete (video encode + mux)
         pipeline.wait()?;
 
         // Update state to Finalizing
@@ -454,101 +538,7 @@ impl ExportService {
             rt.block_on(Self::update_job_state(&jobs, &job_id, ExportState::Finalizing));
         }
 
-        // Mux audio into the output file if we have audio
-        if !audio_frames.is_empty() {
-            tracing::info!("Muxing {} audio frames into output", audio_frames.len());
-            Self::mux_audio_to_output(
-                &config.output_path,
-                &audio_frames,
-                audio_mixer.sample_rate(),
-                audio_mixer.channels(),
-            )?;
-        }
-
         Ok(())
-    }
-
-    /// Mux audio data into the output video file
-    fn mux_audio_to_output(
-        output_path: &str,
-        audio_frames: &[Vec<f32>],
-        sample_rate: u32,
-        channels: u16,
-    ) -> Result<()> {
-        use std::process::Command;
-        use std::io::Write;
-
-        // Calculate total samples
-        let total_samples: usize = audio_frames.iter().map(|f| f.len()).sum();
-        if total_samples == 0 {
-            return Ok(());
-        }
-
-        // Convert F32 to S16 PCM
-        let mut pcm_data = Vec::with_capacity(total_samples * 2);
-        for frame in audio_frames {
-            for &sample in frame {
-                let s16 = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
-                pcm_data.extend_from_slice(&s16.to_le_bytes());
-            }
-        }
-
-        // Create temp file for raw audio
-        let temp_audio_path = format!("{}.temp_audio.raw", output_path);
-        let temp_output_path = format!("{}.temp_muxed.mp4", output_path);
-
-        // Write raw PCM to temp file
-        {
-            let mut file = std::fs::File::create(&temp_audio_path)
-                .map_err(|e| Error::Other(format!("Failed to create temp audio file: {}", e)))?;
-            file.write_all(&pcm_data)
-                .map_err(|e| Error::Other(format!("Failed to write audio data: {}", e)))?;
-        }
-
-        // Use ffmpeg to mux audio into video
-        // Note: Don't use -shortest as it would truncate the video to audio length
-        let result = Command::new("ffmpeg")
-            .args([
-                "-y",
-                "-i", output_path,
-                "-f", "s16le",
-                "-ar", &sample_rate.to_string(),
-                "-ac", &channels.to_string(),
-                "-i", &temp_audio_path,
-                "-c:v", "copy",
-                "-c:a", "aac",
-                "-b:a", "128k",
-                "-map", "0:v:0",  // Map video from first input
-                "-map", "1:a:0",  // Map audio from second input
-                &temp_output_path,
-            ])
-            .output();
-
-        // Clean up temp audio file
-        let _ = std::fs::remove_file(&temp_audio_path);
-
-        match result {
-            Ok(output) => {
-                if output.status.success() {
-                    // Replace original with muxed version
-                    std::fs::rename(&temp_output_path, output_path)
-                        .map_err(|e| Error::Other(format!("Failed to replace output file: {}", e)))?;
-                    tracing::info!("Audio muxed successfully");
-                    Ok(())
-                } else {
-                    let _ = std::fs::remove_file(&temp_output_path);
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    tracing::warn!("Audio muxing failed: {}", stderr);
-                    // Don't fail the export, just skip audio
-                    Ok(())
-                }
-            }
-            Err(e) => {
-                tracing::warn!("Failed to run ffmpeg for audio muxing: {}", e);
-                // Don't fail the export, just skip audio
-                Ok(())
-            }
-        }
     }
 
     /// Update job state

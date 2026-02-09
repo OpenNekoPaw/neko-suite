@@ -5,7 +5,7 @@
  * message types and helper functions.
  */
 
-// Re-export core VSCode API from shared
+// Re-export core VSCode API from shared (subpath import for browser-only module)
 export {
   getVSCodeAPI,
   isVSCodeContext,
@@ -21,10 +21,10 @@ export {
   type VSCodeResponseMessage,
   type PendingRequest,
   type SendRequestOptions,
-} from '@neko/shared';
+} from '@neko/shared/vscode';
 
 // Import for local use
-import { postMessage } from '@neko/shared';
+import { postMessage } from '@neko/shared/vscode';
 
 // =============================================================================
 // Webview-specific Message Types

@@ -21,10 +21,15 @@ const en: Messages = {
   'toolbar.scene': 'Scene',
   'toolbar.addText': 'Add text annotation',
   'toolbar.addScene': 'Add storyboard scene',
+  'toolbar.addNode': 'Add Node',
+  'toolbar.addMedia': 'Add Media',
+  'toolbar.layers': 'Layers',
+  'toolbar.undo': 'Undo',
+  'toolbar.redo': 'Redo',
   'toolbar.nodes': '{0} nodes',
 
   // Empty state
-  'empty.hint': 'Click Text or Scene to add elements, or right-click for more options',
+  'empty.hint': 'Click + to add elements, or right-click for more options',
   'empty.zoom': 'Scroll to zoom · Middle-click to pan',
 
   // Status bar
@@ -39,6 +44,8 @@ const en: Messages = {
   'menu.addImage': 'Add Image',
   'menu.addVideo': 'Add Video',
   'menu.addAudio': 'Add Audio',
+  'menu.copy': 'Copy',
+  'menu.cut': 'Cut',
   'menu.paste': 'Paste',
   'menu.selectAll': 'Select All',
   'menu.fitContent': 'Fit Content',
@@ -49,6 +56,8 @@ const en: Messages = {
   'menu.unlock': 'Unlock',
   'menu.bringToFront': 'Bring to Front',
   'menu.sendToBack': 'Send to Back',
+  'menu.undo': 'Undo',
+  'menu.redo': 'Redo',
 
   // Nodes
   'node.note': 'Note',
@@ -62,8 +71,26 @@ const en: Messages = {
   'node.clickToView': 'Click to view',
   'node.backToThumbnail': 'Back to thumbnail',
 
+  // Property panel
+  'panel.properties': 'Properties',
+  'panel.noSelection': 'Select a node to view properties',
+  'panel.multiSelected': '{0} nodes selected',
+  'panel.transform': 'Transform',
+  'panel.layer': 'Layer',
+  'panel.content': 'Content',
+  'panel.storyboard': 'Storyboard',
+  'panel.media': 'Media',
+  'panel.actions': 'Actions',
+  'panel.title': 'Title',
+  'panel.description': 'Description',
+  'panel.type': 'Type',
+  'panel.duration': 'Duration',
+
   // Loading
   'loading': 'Loading canvas...',
+
+  // Canvas
+  'canvas.dropHint': 'Drop files here to add to canvas',
 };
 
 const zhCN: Messages = {
@@ -72,10 +99,15 @@ const zhCN: Messages = {
   'toolbar.scene': '场景',
   'toolbar.addText': '添加文本注释',
   'toolbar.addScene': '添加故事板场景',
+  'toolbar.addNode': '添加节点',
+  'toolbar.addMedia': '添加媒体',
+  'toolbar.layers': '图层',
+  'toolbar.undo': '撤销',
+  'toolbar.redo': '重做',
   'toolbar.nodes': '{0} 个节点',
 
   // Empty state
-  'empty.hint': '点击"文本"或"场景"添加元素，或右键查看更多选项',
+  'empty.hint': '点击 + 添加元素，或右键查看更多选项',
   'empty.zoom': '滚轮缩放 · 中键平移',
 
   // Status bar
@@ -90,16 +122,20 @@ const zhCN: Messages = {
   'menu.addImage': '添加图片',
   'menu.addVideo': '添加视频',
   'menu.addAudio': '添加音频',
+  'menu.copy': '复制',
+  'menu.cut': '剪切',
   'menu.paste': '粘贴',
   'menu.selectAll': '全选',
   'menu.fitContent': '适应内容',
   'menu.resetView': '重置视图',
   'menu.delete': '删除',
-  'menu.duplicate': '复制',
+  'menu.duplicate': '创建副本',
   'menu.lock': '锁定',
   'menu.unlock': '解锁',
   'menu.bringToFront': '置于顶层',
   'menu.sendToBack': '置于底层',
+  'menu.undo': '撤销',
+  'menu.redo': '重做',
 
   // Nodes
   'node.note': '注释',
@@ -113,8 +149,26 @@ const zhCN: Messages = {
   'node.clickToView': '点击查看',
   'node.backToThumbnail': '返回缩略图',
 
+  // Property panel
+  'panel.properties': '属性',
+  'panel.noSelection': '选择节点查看属性',
+  'panel.multiSelected': '已选择 {0} 个节点',
+  'panel.transform': '变换',
+  'panel.layer': '图层',
+  'panel.content': '内容',
+  'panel.storyboard': '故事板',
+  'panel.media': '媒体',
+  'panel.actions': '操作',
+  'panel.title': '标题',
+  'panel.description': '描述',
+  'panel.type': '类型',
+  'panel.duration': '时长',
+
   // Loading
   'loading': '加载画布中...',
+
+  // Canvas
+  'canvas.dropHint': '拖放文件到画布中添加',
 };
 
 // =============================================================================
