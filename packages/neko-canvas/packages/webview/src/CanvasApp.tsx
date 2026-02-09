@@ -204,8 +204,8 @@ export function CanvasApp() {
 
   if (!isReady) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-gray-400">Loading canvas...</div>
+      <div className="flex items-center justify-center h-screen" style={{ backgroundColor: 'var(--canvas-bg)' }}>
+        <div style={{ color: 'var(--toolbar-fg-secondary)' }}>Loading canvas...</div>
       </div>
     );
   }
@@ -213,15 +213,18 @@ export function CanvasApp() {
   return (
     <div className="w-full h-full flex flex-col">
       {/* Toolbar */}
-      <div className="h-10 bg-[#252526] border-b border-[#3c3c3c] flex items-center px-4 gap-2">
-        <span className="text-sm text-gray-300">{canvasData?.name || 'Untitled Canvas'}</span>
-        <span className="text-xs text-gray-500">
+      <div
+        className="h-10 flex items-center px-4 gap-2"
+        style={{ backgroundColor: 'var(--toolbar-bg)', borderBottom: '1px solid var(--toolbar-border)' }}
+      >
+        <span className="text-sm" style={{ color: 'var(--toolbar-fg)' }}>{canvasData?.name || 'Untitled Canvas'}</span>
+        <span className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
           {canvasData?.nodes.length || 0} nodes
         </span>
       </div>
 
       {/* Canvas Area */}
-      <div ref={canvasContainerRef} className="flex-1 relative overflow-hidden bg-[#1e1e1e]">
+      <div ref={canvasContainerRef} className="flex-1 relative overflow-hidden" style={{ backgroundColor: 'var(--canvas-bg)' }}>
         <InfiniteCanvas
           nodes={nodes}
           connections={connections}
@@ -260,7 +263,10 @@ export function CanvasApp() {
       </div>
 
       {/* Status Bar */}
-      <div className="h-6 bg-[#007acc] flex items-center px-4 text-xs text-white">
+      <div
+        className="h-6 flex items-center px-4 text-xs"
+        style={{ backgroundColor: 'var(--statusbar-bg)', color: 'var(--statusbar-fg)' }}
+      >
         <span>Zoom: {(viewport.zoom * 100).toFixed(0)}%</span>
         <span className="mx-2">|</span>
         <span>

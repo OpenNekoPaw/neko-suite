@@ -151,14 +151,19 @@ export function MiniMap({
   return (
     <div
       ref={miniMapRef}
-      className="bg-[#1e1e1e] rounded-lg border border-[#3c3c3c] shadow-lg overflow-hidden cursor-pointer"
-      style={{ width, height }}
+      className="rounded-lg shadow-lg overflow-hidden cursor-pointer"
+      style={{
+        width,
+        height,
+        backgroundColor: 'var(--canvas-bg)',
+        border: '1px solid var(--control-border)',
+      }}
       onClick={handleClick}
     >
       {/* Content layer */}
       <svg width={width} height={height}>
         {/* Background */}
-        <rect width={width} height={height} fill="#1e1e1e" />
+        <rect width={width} height={height} fill="var(--canvas-bg)" />
 
         {/* Nodes */}
         <g transform={`translate(10, 10)`}>
@@ -214,7 +219,10 @@ export function MiniMap({
       </svg>
 
       {/* Label */}
-      <div className="absolute bottom-1 left-2 text-[10px] text-gray-500 pointer-events-none">
+      <div
+        className="absolute bottom-1 left-2 text-[10px] pointer-events-none"
+        style={{ color: 'var(--toolbar-fg-secondary)' }}
+      >
         {Math.round(viewport.zoom * 100)}%
       </div>
     </div>

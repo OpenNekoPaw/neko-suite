@@ -199,8 +199,10 @@ export function cubicBezier(
  * @returns Index of the keyframe before the given time, or -1 if before all keyframes
  */
 function findKeyframeIndex(sortedKeyframes: AnimationKeyframe[], time: number): number {
-	if (time <= sortedKeyframes[0].time) return -1;
-	if (time >= sortedKeyframes[sortedKeyframes.length - 1].time) return sortedKeyframes.length - 1;
+	if (sortedKeyframes.length === 0) return -1;
+
+	if (time <= sortedKeyframes[0]!.time) return -1;
+	if (time >= sortedKeyframes[sortedKeyframes.length - 1]!.time) return sortedKeyframes.length - 1;
 
 	let left = 0;
 	let right = sortedKeyframes.length - 1;
@@ -208,12 +210,12 @@ function findKeyframeIndex(sortedKeyframes: AnimationKeyframe[], time: number): 
 	while (left <= right) {
 		const mid = Math.floor((left + right) / 2);
 
-		if (sortedKeyframes[mid].time <= time &&
-			(mid === sortedKeyframes.length - 1 || sortedKeyframes[mid + 1].time > time)) {
+		if (sortedKeyframes[mid]!.time <= time &&
+			(mid === sortedKeyframes.length - 1 || sortedKeyframes[mid + 1]!.time > time)) {
 			return mid;
 		}
 
-		if (sortedKeyframes[mid].time > time) {
+		if (sortedKeyframes[mid]!.time > time) {
 			right = mid - 1;
 		} else {
 			left = mid + 1;
@@ -229,7 +231,7 @@ function findKeyframeIndex(sortedKeyframes: AnimationKeyframe[], time: number): 
  */
 function isSorted(keyframes: AnimationKeyframe[]): boolean {
 	for (let i = 0; i < keyframes.length - 1; i++) {
-		if (keyframes[i].time > keyframes[i + 1].time) {
+		if (keyframes[i]!.time > keyframes[i + 1]!.time) {
 			return false;
 		}
 	}
@@ -266,19 +268,19 @@ export function getAnimatedValue(
 		: [...keyframes].sort((a, b) => a.time - b.time);
 
 	// Before first keyframe
-	if (localTime <= sorted[0].time) {
-		return sorted[0].value;
+	if (localTime <= sorted[0]!.time) {
+		return sorted[0]!.value;
 	}
 
 	// After last keyframe
-	if (localTime >= sorted[sorted.length - 1].time) {
-		return sorted[sorted.length - 1].value;
+	if (localTime >= sorted[sorted.length - 1]!.time) {
+		return sorted[sorted.length - 1]!.value;
 	}
 
 	// Binary search for surrounding keyframes (O(log n) instead of O(n))
 	const prevIndex = findKeyframeIndex(sorted, localTime);
-	const prevFrame = sorted[prevIndex];
-	const nextFrame = sorted[prevIndex + 1];
+	const prevFrame = sorted[prevIndex]!;
+	const nextFrame = sorted[prevIndex + 1]!;
 
 	// Calculate interpolation progress
 	const duration = nextFrame.time - prevFrame.time;

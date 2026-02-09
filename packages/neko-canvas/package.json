@@ -115,7 +115,7 @@
       "explorer/context": [
         {
           "command": "neko.canvas.new",
-          "group": "neko@1",
+          "group": "navigation@10",
           "when": "explorerResourceIsFolder"
         },
         {
@@ -128,7 +128,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "npm run compile:extension && npm run compile:webview && npm run copy:webview",
+    "compile": "npm run compile:extension && npm run compile:webview && npm run copy:extension && npm run copy:webview",
     "compile:extension": "cd packages/extension && npm run build",
     "compile:webview": "cd packages/webview && npm run build",
     "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp packages/webview/dist/*.html dist/webview/ 2>/dev/null || true && cp -R packages/webview/dist/assets/* dist/webview/assets/ 2>/dev/null || true",

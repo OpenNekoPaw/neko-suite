@@ -6,5 +6,10 @@
   "neko.asset.import.title": "Import Asset",
   "neko.addToAssetLibrary.title": "Add to Asset Library",
   "neko.assetDiff.displayName": "Asset Variant Diff",
-  "neko.assetDiff.compareVariants.title": "Compare Asset Variants"
+  "neko.assetDiff.compareVariants.title": "Compare Asset Variants",
+  "neko.canvas.new.noFolder": "No folder selected. Please open a workspace or right-click a folder.",
+  "neko.canvas.new.failed": "Failed to create canvas: {0}",
+  "neko.canvas.addToAssetLibrary.noFile": "No file selected.",
+  "neko.canvas.addToAssetLibrary.success": "Added {0} to asset library.",
+  "neko.canvas.asset.import.success": "Imported {0} asset(s)."
 }

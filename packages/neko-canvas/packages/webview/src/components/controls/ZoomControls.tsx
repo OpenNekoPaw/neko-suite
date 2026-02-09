@@ -52,12 +52,18 @@ export function ZoomControls({
   );
 
   return (
-    <div className="flex items-center gap-1 bg-[#252526] rounded-lg p-1 shadow-lg border border-[#3c3c3c]">
+    <div
+      className="flex items-center gap-1 rounded-lg p-1 shadow-lg"
+      style={{ backgroundColor: 'var(--control-bg)', border: '1px solid var(--control-border)' }}
+    >
       {/* Zoom out button */}
       <button
         onClick={onZoomOut}
         disabled={!canZoomOut}
-        className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#3c3c3c] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="w-7 h-7 flex items-center justify-center rounded disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        style={{ color: 'var(--control-fg)' }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--control-hover)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
         title="Zoom out (Ctrl+-)"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -69,17 +75,18 @@ export function ZoomControls({
       <select
         value={zoom}
         onChange={handlePresetSelect}
-        className="w-16 h-7 bg-transparent text-center text-xs text-gray-300 border-none outline-none cursor-pointer hover:bg-[#3c3c3c] rounded"
+        className="w-16 h-7 bg-transparent text-center text-xs border-none outline-none cursor-pointer rounded"
+        style={{ color: 'var(--control-fg)' }}
         title="Select zoom level"
       >
         {ZOOM_PRESETS.map((preset) => (
-          <option key={preset} value={preset} className="bg-[#252526]">
+          <option key={preset} value={preset} style={{ backgroundColor: 'var(--control-bg)' }}>
             {Math.round(preset * 100)}%
           </option>
         ))}
         {/* Add current zoom if not in presets */}
         {!ZOOM_PRESETS.includes(zoom) && (
-          <option value={zoom} className="bg-[#252526]">
+          <option value={zoom} style={{ backgroundColor: 'var(--control-bg)' }}>
             {zoomPercent}%
           </option>
         )}
@@ -89,7 +96,10 @@ export function ZoomControls({
       <button
         onClick={onZoomIn}
         disabled={!canZoomIn}
-        className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#3c3c3c] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="w-7 h-7 flex items-center justify-center rounded disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        style={{ color: 'var(--control-fg)' }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--control-hover)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
         title="Zoom in (Ctrl++)"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -99,12 +109,15 @@ export function ZoomControls({
       </button>
 
       {/* Divider */}
-      <div className="w-px h-5 bg-[#3c3c3c] mx-1" />
+      <div className="w-px h-5 mx-1" style={{ backgroundColor: 'var(--control-border)' }} />
 
       {/* Fit content button */}
       <button
         onClick={onFitContent}
-        className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#3c3c3c] transition-colors"
+        className="w-7 h-7 flex items-center justify-center rounded transition-colors"
+        style={{ color: 'var(--control-fg)' }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--control-hover)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
         title="Fit content"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -116,7 +129,10 @@ export function ZoomControls({
       {/* Reset viewport button */}
       <button
         onClick={onResetViewport}
-        className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#3c3c3c] transition-colors"
+        className="w-7 h-7 flex items-center justify-center rounded transition-colors"
+        style={{ color: 'var(--control-fg)' }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--control-hover)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
         title="Reset viewport (100%)"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

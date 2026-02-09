@@ -14,6 +14,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   public readonly onDidChangeCanvas = this._onDidChangeCanvas.event;
 
   private activeWebviewPanel: vscode.WebviewPanel | undefined;
+  private activeDocument: vscode.CustomDocument | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -31,6 +32,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     _token: vscode.CancellationToken
   ): Promise<void> {
     this.activeWebviewPanel = webviewPanel;
+    this.activeDocument = document;
 
     webviewPanel.webview.options = {
       enableScripts: true,
@@ -42,7 +44,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document.uri);
 
     webviewPanel.webview.onDidReceiveMessage(
-      (message) => this.handleWebviewMessage(message),
+      (message) => this.handleWebviewMessage(message, webviewPanel, document),
       undefined,
       this.context.subscriptions
     );
@@ -50,6 +52,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     webviewPanel.onDidDispose(() => {
       if (this.activeWebviewPanel === webviewPanel) {
         this.activeWebviewPanel = undefined;
+        this.activeDocument = undefined;
       }
     });
   }
@@ -151,8 +154,38 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return text;
   }
 
-  private handleWebviewMessage(message: { type: string; [key: string]: unknown }): void {
+  private async handleWebviewMessage(
+    message: { type: string; [key: string]: unknown },
+    webviewPanel: vscode.WebviewPanel,
+    document: vscode.CustomDocument
+  ): Promise<void> {
     switch (message.type) {
+      case 'ready': {
+        // Read file content and send to webview
+        try {
+          const fileData = await vscode.workspace.fs.readFile(document.uri);
+          const content = Buffer.from(fileData).toString('utf-8');
+          const data = content.trim() ? JSON.parse(content) : null;
+          webviewPanel.webview.postMessage({ type: 'update', data });
+        } catch {
+          // File is empty or invalid JSON — send null to use defaults
+          webviewPanel.webview.postMessage({ type: 'update', data: null });
+        }
+        break;
+      }
+      case 'save': {
+        // Save canvas data back to file
+        try {
+          const content = JSON.stringify(message.data, null, 2);
+          await vscode.workspace.fs.writeFile(
+            document.uri,
+            Buffer.from(content, 'utf-8')
+          );
+        } catch (error) {
+          console.error('[NekoCanvas] Failed to save:', error);
+        }
+        break;
+      }
       case 'canvasChanged':
         this._onDidChangeCanvas.fire({
           type: message.changeType as 'add' | 'update' | 'delete',

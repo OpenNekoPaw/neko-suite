@@ -6,7 +6,6 @@
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import { CanvasEditorProvider } from './editor';
 import { AssetLibraryProvider } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
@@ -77,47 +76,71 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
 }
 
 /**
+ * Get default canvas data for new files
+ */
+function getCanvasTemplate(name: string): string {
+  const data = {
+    version: '1.0',
+    name,
+    viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
+    nodes: [],
+    connections: [],
+  };
+  return JSON.stringify(data, null, 2);
+}
+
+/**
  * Register extension commands
  */
 function registerCommands(context: vscode.ExtensionContext): void {
-  // New Canvas
+  // New Canvas - create file with inline rename (like neko-story)
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.canvas.new', async (uri?: vscode.Uri) => {
-      let targetFolder: string;
-      if (uri) {
-        targetFolder = uri.fsPath;
-      } else {
-        const folders = vscode.workspace.workspaceFolders;
-        if (!folders || folders.length === 0) {
-          vscode.window.showErrorMessage('Please open a folder first');
-          return;
+      // Determine target folder from context menu uri or workspace root
+      let targetFolder: vscode.Uri | undefined = uri;
+      if (!targetFolder) {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (workspaceFolders && workspaceFolders.length > 0) {
+          targetFolder = workspaceFolders[0]?.uri;
         }
-        targetFolder = folders[0].uri.fsPath;
+      }
+      if (!targetFolder) {
+        vscode.window.showErrorMessage(vscode.l10n.t('neko.canvas.new.noFolder'));
+        return;
       }
 
-      const canvasName = await vscode.window.showInputBox({
-        prompt: 'Enter canvas name',
-        value: 'Untitled',
-      });
-
-      if (!canvasName) return;
-
-      const canvasFile = path.join(targetFolder, `${canvasName}.jvc`);
-      const defaultCanvas = {
-        version: '1.0.0',
-        name: canvasName,
-        width: 1920,
-        height: 1080,
-        backgroundColor: '#ffffff',
-        shapes: [],
-      };
+      // Generate a unique default file name (Untitled.jvc, Untitled-1.jvc, ...)
+      const baseName = 'Untitled';
+      const ext = '.jvc';
+      let fileName = `${baseName}${ext}`;
+      let fileUri = vscode.Uri.joinPath(targetFolder, fileName);
+      let counter = 1;
+      while (true) {
+        try {
+          await vscode.workspace.fs.stat(fileUri);
+          // File exists, try next name
+          fileName = `${baseName}-${counter}${ext}`;
+          fileUri = vscode.Uri.joinPath(targetFolder, fileName);
+          counter++;
+        } catch {
+          // File does not exist — use this name
+          break;
+        }
+      }
 
       try {
-        fs.writeFileSync(canvasFile, JSON.stringify(defaultCanvas, null, 2));
-        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(canvasFile));
-        await vscode.commands.executeCommand('vscode.openWith', doc.uri, 'neko.canvasEditor');
+        // Create file with template content
+        const title = fileName.replace(/\.jvc$/, '');
+        const content = getCanvasTemplate(title);
+        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
+
+        // Reveal in explorer, wait for file tree to refresh, then trigger inline rename
+        await vscode.commands.executeCommand('revealInExplorer', fileUri);
+        // Small delay to ensure the file is selected in the explorer tree
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await vscode.commands.executeCommand('renameFile');
       } catch (error) {
-        vscode.window.showErrorMessage(`Failed to create canvas: ${error}`);
+        vscode.window.showErrorMessage(vscode.l10n.t('neko.canvas.new.failed', String(error)));
       }
     })
   );
@@ -126,12 +149,14 @@ function registerCommands(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.addToAssetLibrary', async (uri?: vscode.Uri) => {
       if (!uri) {
-        vscode.window.showErrorMessage('No file selected');
+        vscode.window.showErrorMessage(vscode.l10n.t('neko.canvas.addToAssetLibrary.noFile'));
         return;
       }
 
       await assetLibraryProvider.importAsset(uri.fsPath);
-      vscode.window.showInformationMessage(`Added ${path.basename(uri.fsPath)} to asset library`);
+      vscode.window.showInformationMessage(
+        vscode.l10n.t('neko.canvas.addToAssetLibrary.success', path.basename(uri.fsPath))
+      );
     })
   );
 
@@ -150,7 +175,9 @@ function registerCommands(context: vscode.ExtensionContext): void {
         for (const uri of uris) {
           await assetLibraryProvider.importAsset(uri.fsPath);
         }
-        vscode.window.showInformationMessage(`Imported ${uris.length} asset(s)`);
+        vscode.window.showInformationMessage(
+          vscode.l10n.t('neko.canvas.asset.import.success', String(uris.length))
+        );
       }
     })
   );
@@ -166,16 +193,11 @@ async function createCanvas(config: CanvasConfig): Promise<string> {
   }
 
   const canvasFile = path.join(folders[0].uri.fsPath, `${config.name}.jvc`);
-  const canvasData = {
-    version: '1.0.0',
-    name: config.name,
-    width: config.width,
-    height: config.height,
-    backgroundColor: config.backgroundColor || '#ffffff',
-    shapes: [],
-  };
-
-  fs.writeFileSync(canvasFile, JSON.stringify(canvasData, null, 2));
+  const content = getCanvasTemplate(config.name);
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(canvasFile),
+    Buffer.from(content, 'utf-8')
+  );
   return canvasFile;
 }
 

@@ -34,8 +34,16 @@
       "name": "Debug neko-canvas",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-canvas"],
-      "outFiles": ["${workspaceFolder}/packages/neko-canvas/dist/**/*.js"],
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-canvas",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/neko-canvas/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-engine/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-tools/dist/**/*.js"
+      ],
       "preLaunchTask": "build:neko-canvas"
     },
     {
@@ -82,8 +90,16 @@
       "name": "Debug neko-story",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-story"],
-      "outFiles": ["${workspaceFolder}/packages/neko-story/dist/**/*.js"],
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-story",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/neko-story/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-engine/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-tools/dist/**/*.js"
+      ],
       "preLaunchTask": "build:neko-story"
     },
     {
