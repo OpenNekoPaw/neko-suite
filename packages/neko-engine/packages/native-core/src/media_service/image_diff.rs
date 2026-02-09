@@ -4,7 +4,7 @@
 //! peak signal-to-noise ratio (PSNR), and generates a difference heatmap.
 
 use crate::error::{Error, Result};
-use image::{DynamicImage, GenericImageView, ImageFormat, Rgba, RgbaImage};
+use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 use serde::Serialize;
 use std::io::Cursor;
 use std::path::Path;

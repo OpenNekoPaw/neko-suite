@@ -14,7 +14,6 @@ import { useRef, useEffect, useCallback, useState, memo } from 'react';
 import { useEditorStore } from '../stores/editor-store';
 import { useTranslation } from '../i18n/I18nContext';
 import { useMediaInfoCache } from '../hooks/useMediaInfoCache';
-import { PreviewOverlay } from './PreviewOverlay';
 import { PREVIEW_QUALITY } from '../constants';
 import { postMessage } from '../utils/vscodeApi';
 import { H264StreamClient } from '../services/H264StreamClient';
@@ -465,14 +464,6 @@ export const PreviewPanel = memo(function PreviewPanel({
                 </div>
               </div>
             </div>
-          )}
-
-          {/* Preview Overlay */}
-          {isInitialized && (
-            <PreviewOverlay
-              canvasRef={canvasRef}
-              enabled={!isPlaying}
-            />
           )}
 
           {/* Loading overlay */}
