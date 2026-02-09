@@ -4,7 +4,6 @@
 import * as vscode from 'vscode';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
-import type { CanvasTimelineProvider, CanvasTimelineEntry } from '../views/canvasTimelineProvider';
 import type { CanvasStatusBar } from '../views/canvasStatusBar';
 
 export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.CustomDocument> {
@@ -21,7 +20,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
   // External providers for VSCode integration
   private outlineProvider: CanvasOutlineProvider | undefined;
-  private timelineProvider: CanvasTimelineProvider | undefined;
   private statusBar: CanvasStatusBar | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
@@ -29,11 +27,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   /** Wire up external providers after construction */
   setProviders(opts: {
     outline?: CanvasOutlineProvider;
-    timeline?: CanvasTimelineProvider;
     statusBar?: CanvasStatusBar;
   }): void {
     this.outlineProvider = opts.outline;
-    this.timelineProvider = opts.timeline;
     this.statusBar = opts.statusBar;
   }
 
@@ -246,14 +242,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         this.syncStatusBar(data);
         break;
       }
-      case 'canvasAction': {
-        // Webview reports a user action for timeline recording
-        const action = message.action as CanvasTimelineEntry['action'];
-        const label = message.label as string;
-        const detail = message.detail as string | undefined;
-        this.recordTimeline({ action, label, detail });
-        break;
-      }
       case 'pickMedia': {
         // Open file picker for media files
         const mediaType = message.mediaType as string;
@@ -430,15 +418,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
   }
 
-  /** Record a timeline entry for the active document */
-  private recordTimeline(entry: Omit<CanvasTimelineEntry, 'timestamp'>): void {
-    if (!this.timelineProvider || !this.activeDocument) return;
-    this.timelineProvider.addEntry(this.activeDocument.uri, {
-      ...entry,
-      timestamp: Date.now(),
-    });
-  }
-
   private sendRequest<T>(type: string, data?: unknown): Promise<T> {
     return new Promise((resolve, reject) => {
       if (!this.activeWebviewPanel) {
@@ -455,7 +434,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       this.activeWebviewPanel.webview.postMessage({
         type,
         _requestId: id,
-        ...data,
+        ...(data as Record<string, unknown>),
       });
 
       setTimeout(() => {

@@ -7,14 +7,13 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { CanvasEditorProvider } from './editor';
-import { AssetLibraryProvider, CanvasOutlineProvider, CanvasTimelineProvider, CanvasStatusBar } from './views';
+import { AssetLibraryProvider, CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
 
 // Extension state
 let canvasEditorProvider: CanvasEditorProvider;
 let assetLibraryProvider: AssetLibraryProvider;
 let canvasOutlineProvider: CanvasOutlineProvider;
-let canvasTimelineProvider: CanvasTimelineProvider;
 let canvasStatusBar: CanvasStatusBar;
 
 /**
@@ -27,13 +26,11 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
   canvasEditorProvider = new CanvasEditorProvider(context);
   assetLibraryProvider = new AssetLibraryProvider(context);
   canvasOutlineProvider = new CanvasOutlineProvider();
-  canvasTimelineProvider = new CanvasTimelineProvider();
   canvasStatusBar = new CanvasStatusBar();
 
   // Wire providers into editor provider for data sync
   canvasEditorProvider.setProviders({
     outline: canvasOutlineProvider,
-    timeline: canvasTimelineProvider,
     statusBar: canvasStatusBar,
   });
 
@@ -67,14 +64,8 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
     })
   );
 
-  // Register timeline provider
-  context.subscriptions.push(
-    vscode.workspace.registerTimelineProvider('file', canvasTimelineProvider)
-  );
-
   // Register disposables
   context.subscriptions.push(canvasOutlineProvider);
-  context.subscriptions.push(canvasTimelineProvider);
   context.subscriptions.push(canvasStatusBar);
 
   // Show/hide status bar based on active editor
