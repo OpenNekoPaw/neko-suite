@@ -81,55 +81,37 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
       if (!targetFolder) {
-        vscode.window.showErrorMessage(vscode.l10n.t('command.newFile.noFolder'));
+        vscode.window.showErrorMessage(vscode.l10n.t('neko.story.newFile.noFolder'));
         return;
       }
 
-      // Prompt user for file name
-      const fileName = await vscode.window.showInputBox({
-        prompt: vscode.l10n.t('command.newFile.prompt'),
-        placeHolder: 'my-story',
-        validateInput: (value) => {
-          if (!value || value.trim().length === 0) {
-            return vscode.l10n.t('command.newFile.validation');
-          }
-          return undefined;
-        },
-      });
-
-      if (!fileName) {
-        return; // User cancelled
-      }
-
-      // Ensure .fountain extension
-      const baseName = fileName.trim();
-      const fullName = baseName.endsWith('.fountain')
-        || baseName.endsWith('.nks')
-        || baseName.endsWith('.story')
-        ? baseName
-        : `${baseName}.fountain`;
-
-      const fileUri = vscode.Uri.joinPath(targetFolder, fullName);
-
-      // Check if file already exists
-      try {
-        await vscode.workspace.fs.stat(fileUri);
-        vscode.window.showErrorMessage(
-          vscode.l10n.t('command.newFile.exists', fullName)
-        );
-        return;
-      } catch {
-        // File does not exist — proceed
+      // Generate a unique default file name (Untitled.fountain, Untitled-1.fountain, ...)
+      const baseName = 'Untitled';
+      const ext = '.fountain';
+      let fileName = `${baseName}${ext}`;
+      let fileUri = vscode.Uri.joinPath(targetFolder, fileName);
+      let counter = 1;
+      while (true) {
+        try {
+          await vscode.workspace.fs.stat(fileUri);
+          // File exists, try next name
+          fileName = `${baseName}-${counter}${ext}`;
+          fileUri = vscode.Uri.joinPath(targetFolder, fileName);
+          counter++;
+        } catch {
+          // File does not exist — use this name
+          break;
+        }
       }
 
       // Create file with template content
-      const title = baseName.replace(/\.(fountain|nks|story)$/, '');
+      const title = fileName.replace(/\.fountain$/, '');
       const content = getStoryTemplate(title);
       await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
 
-      // Open the new file
-      const doc = await vscode.workspace.openTextDocument(fileUri);
-      await vscode.window.showTextDocument(doc);
+      // Reveal in explorer and trigger inline rename
+      await vscode.commands.executeCommand('revealInExplorer', fileUri);
+      await vscode.commands.executeCommand('renameFile');
     })
   );
 }

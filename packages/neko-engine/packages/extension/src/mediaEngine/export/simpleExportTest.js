@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Simple Export Test
+ * Simple Export Test — NativeEngine API
  *
- * Tests the native module export pipeline directly.
+ * Tests the NativeEngine export pipeline via timelines:export.
  * Run with: node packages/extension/src/mediaEngine/export/simpleExportTest.js
  */
 
@@ -16,7 +16,7 @@ const OUTPUT_VIDEO = path.join(PROJECT_DIR, 'output_simple_test.mp4');
 
 async function main() {
 	console.log('='.repeat(60));
-	console.log('Simple Export Test - Native Module');
+	console.log('Simple Export Test — NativeEngine API');
 	console.log('='.repeat(60));
 	console.log();
 
@@ -36,20 +36,22 @@ async function main() {
 		const nativeModule = require('@neko-engine/native-napi');
 		console.log('  ✓ Module loaded');
 
-		// Create media processor
-		console.log('Step 2: Creating MediaProcessor...');
-		const processor = await nativeModule.MediaProcessor.create();
-		console.log('  ✓ MediaProcessor created');
+		// Create NativeEngine
+		console.log('Step 2: Creating NativeEngine...');
+		const engine = await nativeModule.NativeEngine.create();
+		console.log(`  ✓ NativeEngine created (GPU: ${engine.hasGpu() ? 'enabled' : 'disabled'})`);
 
-		// Get GPU info
-		const gpuInfo = processor.getGpuInfo();
-		console.log(`  GPU: ${gpuInfo.name} (${gpuInfo.vendor})`);
-		console.log(`  Backend: ${gpuInfo.backend}`);
-
-		// Create compositor
-		console.log('Step 3: Creating CompositorSession...');
-		const compositor = await nativeModule.CompositorSession.create();
-		console.log('  ✓ CompositorSession created');
+		// Probe video
+		console.log('Step 3: Probing video...');
+		const probeJson = await engine.probeVideo(TEST_VIDEO);
+		const probeResult = JSON.parse(probeJson);
+		if (probeResult.success && probeResult.data) {
+			const info = probeResult.data;
+			console.log(`  Duration: ${info.duration}s`);
+			console.log(`  Resolution: ${info.width}x${info.height}`);
+			console.log(`  FPS: ${info.fps}`);
+			console.log(`  Codec: ${info.codec}`);
+		}
 
 		// Test parameters
 		const width = 1920;
@@ -66,126 +68,88 @@ async function main() {
 		console.log(`  Total frames: ${totalFrames}`);
 		console.log();
 
-		// Create muxer
-		console.log('Step 4: Creating MuxerSession...');
-		const muxer = nativeModule.MuxerSession.create({
+		// Build export job config
+		console.log('Step 4: Dispatching timelines:export...');
+		const jobId = `test_export_${Date.now()}`;
+		const exportConfig = {
+			jobId,
 			outputPath: OUTPUT_VIDEO,
-			format: 'mp4',
-		});
-		console.log('  ✓ MuxerSession created');
-
-		// Add video stream
-		const streamInfo = muxer.addVideoStream({
-			width: width,
-			height: height,
-			fps: fps,
-			bitrate: 5000000,
-			codec: 'h264',
-			preset: 'fast',
-			pixelFormat: 'rgba',
-		});
-		console.log(`  ✓ Video stream added (index: ${streamInfo.index})`);
-
-		// Write header
-		muxer.writeHeader();
-		console.log('  ✓ Header written');
-
-		// Create video encoder
-		console.log('Step 5: Creating VideoEncoder...');
-		const encoder = processor.createVideoEncoder({
-			width: width,
-			height: height,
-			fps: fps,
-			bitrate: 5000000,
-			codec: 'h264',
-			preset: 'fast',
-			pixelFormat: 'rgba',
-		});
-		console.log('  ✓ VideoEncoder created');
-
-		// Export frames
-		console.log();
-		console.log('Step 6: Exporting frames...');
-
-		const startTime = Date.now();
-
-		for (let frame = 0; frame < totalFrames; frame++) {
-			const currentTime = frame / fps;
-
-			// Decode frame from source video
-			const frameData = processor.decodeFrame(
-				{ path: TEST_VIDEO },
-				currentTime
-			);
-
-			// Composite single layer (the decoded frame)
-			const composited = compositor.composite(
-				[{
-					data: frameData.data,
-					width: frameData.width,
-					height: frameData.height,
-					opacity: 1.0,
-					zIndex: 0,
-				}],
+			settings: {
 				width,
 				height,
-				[0, 0, 0, 1] // Black background
-			);
+				fps,
+				videoCodec: 'h264',
+				videoBitrate: 5000000,
+				preset: 'fast',
+				profile: 'high',
+				container: 'mp4',
+				includeAudio: false,
+				backgroundColor: [0, 0, 0, 1],
+			},
+			timeline: {
+				duration,
+				tracks: [
+					{
+						id: 'track_1',
+						type: 'video',
+						startTime: 0,
+						duration,
+						source: TEST_VIDEO,
+						zIndex: 0,
+						opacity: 1.0,
+					},
+				],
+			},
+		};
 
-			// Encode composited frame
-			const packets = encoder.encodeFrame(
-				{
-					width: composited.width,
-					height: composited.height,
-					format: 'rgba',
-					data: composited.data,
-					timestamp: currentTime,
-					isKeyframe: frame === 0,
-				},
-				frame
-			);
+		const startTime = Date.now();
+		const responseJson = await engine.dispatchAction(
+			'timelines', 'export', null,
+			JSON.stringify(exportConfig)
+		);
+		const response = JSON.parse(responseJson);
+		console.log(`  Response: ${response.success ? '✓ Job started' : '✗ Failed: ' + response.error}`);
 
-			// Write packets
-			for (const packet of packets) {
-				muxer.writeVideoPacket({
-					data: packet.data,
-					pts: packet.pts,
-					dts: packet.dts,
-					duration: packet.duration,
-					isKeyframe: packet.isKeyframe,
-				});
+		if (!response.success) {
+			console.error('❌ Export dispatch failed');
+			process.exit(1);
+		}
+
+		const actualJobId = response.data?.jobId || response.data?.job_id || jobId;
+
+		// Poll progress
+		console.log();
+		console.log('Step 5: Polling progress...');
+		let completed = false;
+		while (!completed) {
+			await new Promise(resolve => setTimeout(resolve, 500));
+
+			const progressJson = await engine.getTaskProgress(actualJobId);
+			const progressResult = JSON.parse(progressJson);
+
+			if (!progressResult.success) {
+				console.error(`  ✗ Progress query failed: ${progressResult.error}`);
+				break;
 			}
 
-			// Progress
-			const progress = ((frame + 1) / totalFrames * 100).toFixed(1);
-			process.stdout.write(`\r  Frame ${frame + 1}/${totalFrames} (${progress}%)`);
+			const taskData = progressResult.data;
+			const status = taskData?.status || taskData?.state;
+			const progress = taskData?.progress || 0;
+
+			process.stdout.write(`\r  Progress: ${progress.toFixed(1)}% [${status}]`);
+
+			if (status === 'completed' || status === 'done' || progress >= 100) {
+				completed = true;
+				console.log();
+			} else if (status === 'failed' || status === 'error') {
+				console.log();
+				console.error(`  ✗ Export failed: ${taskData?.error}`);
+				process.exit(1);
+			}
 		}
-
-		console.log();
-
-		// Flush encoder
-		console.log('Step 7: Flushing encoder...');
-		const flushPackets = encoder.flush();
-		for (const packet of flushPackets) {
-			muxer.writeVideoPacket({
-				data: packet.data,
-				pts: packet.pts,
-				dts: packet.dts,
-				duration: packet.duration,
-				isKeyframe: packet.isKeyframe,
-			});
-		}
-		encoder.close();
-		console.log('  ✓ Encoder flushed and closed');
-
-		// Finish muxer
-		console.log('Step 8: Finishing muxer...');
-		muxer.finish();
-		console.log('  ✓ Muxer finished');
 
 		// Report results
 		const totalTime = Date.now() - startTime;
-		const avgFrameTime = totalTime / totalFrames;
 
 		console.log();
 		console.log('='.repeat(60));
@@ -193,19 +157,13 @@ async function main() {
 		console.log('='.repeat(60));
 		console.log(`✅ Export successful!`);
 		console.log(`   Output: ${OUTPUT_VIDEO}`);
-		console.log(`   Frames: ${totalFrames}`);
 		console.log(`   Total time: ${(totalTime / 1000).toFixed(2)}s`);
-		console.log(`   Avg frame time: ${avgFrameTime.toFixed(2)}ms`);
-		console.log(`   FPS: ${(1000 / avgFrameTime).toFixed(1)}`);
 
 		// Verify output
 		if (fs.existsSync(OUTPUT_VIDEO)) {
 			const stats = fs.statSync(OUTPUT_VIDEO);
 			console.log(`   File size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
 		}
-
-		// Cleanup
-		processor.dispose();
 
 		console.log();
 		console.log('Test completed successfully!');

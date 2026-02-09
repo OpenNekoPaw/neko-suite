@@ -93,6 +93,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     };
   }
 
+  // Keyboard action forwarding
+  postKeyboardAction(action: string): void {
+    this.activeWebviewPanel?.webview.postMessage({
+      type: 'keyboardAction',
+      action,
+    });
+  }
+
   // API Methods
   async addShape(shape: ShapeConfig): Promise<string> {
     if (!this.activeWebviewPanel) {
@@ -120,6 +128,18 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   private getHtmlForWebview(webview: vscode.Webview, documentUri: vscode.Uri): string {
+    // Allow loading resources from workspace folders for media files
+    const workspaceFolders = vscode.workspace.workspaceFolders || [];
+    const localResourceRoots = [
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
+      ...workspaceFolders.map(f => f.uri),
+    ];
+
+    webview.options = {
+      enableScripts: true,
+      localResourceRoots,
+    };
+
     const webviewUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')
     );
@@ -131,7 +151,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource};">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: blob: https:; font-src ${webview.cspSource}; media-src ${webview.cspSource} data: blob: https:;">
   <title>Canvas Editor</title>
   <link rel="stylesheet" href="${webviewUri}/assets/index.css">
 </head>
@@ -183,6 +203,42 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           );
         } catch (error) {
           console.error('[NekoCanvas] Failed to save:', error);
+        }
+        break;
+      }
+      case 'pickMedia': {
+        // Open file picker for media files
+        const mediaType = message.mediaType as string;
+        const filters: Record<string, string[]> = {};
+        switch (mediaType) {
+          case 'image':
+            filters['Images'] = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'];
+            break;
+          case 'video':
+            filters['Videos'] = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'];
+            break;
+          case 'audio':
+            filters['Audio'] = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'];
+            break;
+        }
+        filters['All Files'] = ['*'];
+
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters,
+        });
+
+        if (uris && uris.length > 0) {
+          const uri = uris[0];
+          // Convert to webview URI so the webview can access the file
+          const webviewUri = webviewPanel.webview.asWebviewUri(uri);
+          const name = uri.path.split('/').pop() || 'media';
+          webviewPanel.webview.postMessage({
+            type: 'addMedia',
+            mediaType,
+            uri: webviewUri.toString(),
+            name,
+          });
         }
         break;
       }

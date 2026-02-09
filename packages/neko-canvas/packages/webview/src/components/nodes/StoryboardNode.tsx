@@ -1,10 +1,12 @@
 /**
  * StoryboardNode - Storyboard node component
- * Displays storyboard information with title, description, and duration
+ * Displays storyboard information with editable title and description
  */
 
 import type { StoryboardCanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
+import { EditableText } from '../common/EditableText';
+import { t } from '../../i18n';
 
 // =============================================================================
 // Types
@@ -17,6 +19,7 @@ export interface StoryboardNodeProps {
   onSelect?: (nodeId: string, multi: boolean) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
   onConnectionStart?: (nodeId: string, anchor: string) => void;
+  onUpdateData?: (nodeId: string, data: Partial<StoryboardCanvasNode['data']>) => void;
 }
 
 // =============================================================================
@@ -41,6 +44,7 @@ export function StoryboardNode({
   onSelect,
   onMove,
   onConnectionStart,
+  onUpdateData,
 }: StoryboardNodeProps) {
   const { title, description, duration, color } = node.data;
 
@@ -67,36 +71,43 @@ export function StoryboardNode({
                 style={{ backgroundColor: color }}
               />
             )}
-            <div className="text-sm font-medium text-gray-200 truncate flex-1">
-              {title}
+            <div className="flex-1 min-w-0">
+              <EditableText
+                value={title}
+                onChange={(val) => onUpdateData?.(node.id, { title: val })}
+                placeholder={t('node.editPlaceholder')}
+                className="text-sm font-medium truncate"
+                style={{ color: 'var(--toolbar-fg)' }}
+                disabled={node.locked}
+              />
             </div>
             {/* Duration badge */}
             {duration && (
-              <div className="text-xs text-gray-400 flex-shrink-0">
+              <div className="text-xs flex-shrink-0" style={{ color: 'var(--toolbar-fg-secondary)' }}>
                 {formatDuration(duration)}
               </div>
             )}
           </div>
         </div>
 
-        {/* Description area */}
+        {/* Description area - editable */}
         <div className="flex-1 p-3 overflow-hidden">
-          {description ? (
-            <p className="text-xs text-gray-400 line-clamp-4">
-              {description}
-            </p>
-          ) : (
-            <p className="text-xs text-gray-600 italic">
-              No description
-            </p>
-          )}
+          <EditableText
+            value={description || ''}
+            onChange={(val) => onUpdateData?.(node.id, { description: val })}
+            multiline
+            placeholder={t('node.descPlaceholder')}
+            className="text-xs line-clamp-4"
+            style={{ color: 'var(--toolbar-fg-secondary)' }}
+            disabled={node.locked}
+          />
         </div>
 
         {/* Footer */}
         <div className="px-3 py-1.5 border-t border-[var(--node-border)] bg-black/20">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500 uppercase">Storyboard</span>
-            <span className="text-xs text-gray-500">📋</span>
+            <span className="text-xs uppercase" style={{ color: 'var(--toolbar-fg-secondary)' }}>{t('node.storyboard')}</span>
+            <span className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>📋</span>
           </div>
         </div>
       </div>

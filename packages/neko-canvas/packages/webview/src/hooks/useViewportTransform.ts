@@ -32,6 +32,7 @@ export interface ViewportTransformState {
 export interface UseViewportTransformOptions {
   viewport: CanvasViewport;
   onViewportChange: (viewport: Partial<CanvasViewport>) => void;
+  containerRef: React.RefObject<HTMLElement | null>;
   minZoom?: number;
   maxZoom?: number;
 }
@@ -43,7 +44,6 @@ export interface UseViewportTransformReturn {
     onMouseMove: (e: React.MouseEvent) => void;
     onMouseUp: () => void;
     onMouseLeave: () => void;
-    onWheel: (e: React.WheelEvent) => void;
   };
   panTo: (position: { x: number; y: number }) => void;
   zoomTo: (zoom: number, center?: { x: number; y: number }) => void;
@@ -59,6 +59,7 @@ export function useViewportTransform(options: UseViewportTransformOptions): UseV
   const {
     viewport,
     onViewportChange,
+    containerRef,
     minZoom = MIN_ZOOM,
     maxZoom = MAX_ZOOM,
   } = options;
@@ -141,28 +142,41 @@ export function useViewportTransform(options: UseViewportTransformOptions): UseV
     }
   }, [state.isPanning]);
 
-  // Wheel - zoom
-  const onWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
+  // Wheel - zoom (manual binding to avoid passive listener issue)
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+  const onViewportChangeRef = useRef(onViewportChange);
+  onViewportChangeRef.current = onViewportChange;
 
-    // Calculate zoom delta
-    const delta = -e.deltaY * ZOOM_WHEEL_SENSITIVITY;
-    const newZoom = Math.max(minZoom, Math.min(maxZoom, viewport.zoom * (1 + delta)));
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
 
-    // Zoom towards mouse position
-    const zoomRatio = newZoom / viewport.zoom;
-    const newPanX = mouseX - (mouseX - viewport.pan.x) * zoomRatio;
-    const newPanY = mouseY - (mouseY - viewport.pan.y) * zoomRatio;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
 
-    onViewportChange({
-      zoom: newZoom,
-      pan: { x: newPanX, y: newPanY },
-    });
-  }, [viewport, minZoom, maxZoom, onViewportChange]);
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const vp = viewportRef.current;
+      const delta = -e.deltaY * ZOOM_WHEEL_SENSITIVITY;
+      const newZoom = Math.max(minZoom, Math.min(maxZoom, vp.zoom * (1 + delta)));
+
+      const zoomRatio = newZoom / vp.zoom;
+      const newPanX = mouseX - (mouseX - vp.pan.x) * zoomRatio;
+      const newPanY = mouseY - (mouseY - vp.pan.y) * zoomRatio;
+
+      onViewportChangeRef.current({
+        zoom: newZoom,
+        pan: { x: newPanX, y: newPanY },
+      });
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [containerRef, minZoom, maxZoom]);
 
   // Programmatic pan
   const panTo = useCallback((position: { x: number; y: number }) => {
@@ -222,7 +236,6 @@ export function useViewportTransform(options: UseViewportTransformOptions): UseV
       onMouseMove,
       onMouseUp,
       onMouseLeave,
-      onWheel,
     },
     panTo,
     zoomTo,

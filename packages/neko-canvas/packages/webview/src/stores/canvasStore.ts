@@ -22,13 +22,6 @@ export interface CanvasStore {
   isConnecting: boolean;
   pendingConnectionSource: { nodeId: string; anchor: string } | null;
 
-  // ==================== Computed Getters ====================
-  readonly nodes: CanvasNode[];
-  readonly connections: CanvasConnection[];
-  readonly viewport: CanvasViewport;
-  readonly selectedNodeIds: string[];
-  readonly selectedConnectionIds: string[];
-
   // ==================== Data Actions ====================
   setCanvasData: (data: CanvasData) => void;
   updateCanvasData: (updates: Partial<CanvasData>) => void;
@@ -36,6 +29,7 @@ export interface CanvasStore {
   // ==================== Node Actions ====================
   addNode: (node: Omit<CanvasNode, 'id'>) => string;
   updateNode: (id: string, updates: Partial<CanvasNode>) => void;
+  updateNodeData: (id: string, data: Record<string, unknown>) => void;
   removeNode: (id: string) => void;
   moveNode: (id: string, position: { x: number; y: number }) => void;
 
@@ -79,23 +73,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   isConnecting: false,
   pendingConnectionSource: null,
 
-  // ==================== Computed Getters ====================
-  get nodes() {
-    return get().canvasData?.nodes ?? [];
-  },
-  get connections() {
-    return get().canvasData?.connections ?? [];
-  },
-  get viewport() {
-    return get().canvasData?.viewport ?? { pan: { x: 0, y: 0 }, zoom: 1 };
-  },
-  get selectedNodeIds() {
-    return get().selection.nodeIds;
-  },
-  get selectedConnectionIds() {
-    return get().selection.connectionIds;
-  },
-
   // ==================== Data Actions ====================
   setCanvasData: (data) => {
     set({ canvasData: data });
@@ -134,6 +111,22 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ...canvasData,
         nodes: canvasData.nodes.map((node) =>
           node.id === id ? { ...node, ...updates } as CanvasNode : node
+        ),
+      },
+    });
+  },
+
+  updateNodeData: (id, data) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: canvasData.nodes.map((node) =>
+          node.id === id
+            ? { ...node, data: { ...node.data, ...data } } as CanvasNode
+            : node
         ),
       },
     });

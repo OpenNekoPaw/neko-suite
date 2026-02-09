@@ -36,6 +36,6 @@
   },
   "devDependencies": {
     "@vscode/vsce": "^3.7.1",
-    "turbo": "^2.3.0"
+    "turbo": "^2.8.3"
   }
 }

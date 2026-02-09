@@ -32,7 +32,9 @@ export interface InfiniteCanvasProps {
   onViewportChange: (viewport: Partial<ViewportType>) => void;
   onNodeSelect?: (nodeId: string, multi: boolean) => void;
   onNodeMove?: (nodeId: string, position: { x: number; y: number }) => void;
+  onNodeUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
   onConnectionSelect?: (connectionId: string) => void;
+  onConnectionStart?: (nodeId: string, anchor: string) => void;
   onCanvasClick?: () => void;
   /** 是否启用视口裁剪（默认启用） */
   enableCulling?: boolean;
@@ -51,7 +53,9 @@ export function InfiniteCanvas({
   onViewportChange,
   onNodeSelect,
   onNodeMove,
+  onNodeUpdateData,
   onConnectionSelect,
+  onConnectionStart,
   onCanvasClick,
   enableCulling = true,
 }: InfiniteCanvasProps) {
@@ -62,6 +66,7 @@ export function InfiniteCanvas({
   const { state: viewportState, handlers: viewportHandlers } = useViewportTransform({
     viewport,
     onViewportChange,
+    containerRef,
   });
 
   // Viewport culling - 只渲染可见节点
@@ -121,7 +126,6 @@ export function InfiniteCanvas({
       onMouseMove={viewportHandlers.onMouseMove}
       onMouseUp={viewportHandlers.onMouseUp}
       onMouseLeave={viewportHandlers.onMouseLeave}
-      onWheel={viewportHandlers.onWheel}
     >
       {/* Background grid */}
       <CanvasGrid
@@ -144,7 +148,7 @@ export function InfiniteCanvas({
         {visibleNodes.map((node) => {
           const isSelected = selectedNodeIds.includes(node.id);
 
-          return renderNode(node, viewport, isSelected, onNodeSelect, onNodeMove);
+          return renderNode(node, viewport, isSelected, onNodeSelect, onNodeMove, onNodeUpdateData, onConnectionStart);
         })}
       </CanvasViewport>
 
@@ -170,12 +174,16 @@ function renderNode(
   isSelected: boolean,
   onSelect?: (nodeId: string, multi: boolean) => void,
   onMove?: (nodeId: string, position: { x: number; y: number }) => void,
+  onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void,
+  onConnectionStart?: (nodeId: string, anchor: string) => void,
 ): React.ReactNode {
   const commonProps = {
     viewport,
     isSelected,
     onSelect,
     onMove,
+    onConnectionStart,
+    onUpdateData,
   };
 
   switch (node.type) {
@@ -208,16 +216,19 @@ function renderNode(
       return (
         <div
           key={node.id}
-          className="absolute rounded-lg border-2 border-dashed border-gray-600 bg-gray-800/30"
+          className="absolute rounded-lg border-2 border-dashed"
           style={{
             left: node.position.x,
             top: node.position.y,
             width: node.size.width,
             height: node.size.height,
             zIndex: node.zIndex,
+            borderColor: 'var(--node-border)',
+            backgroundColor: 'var(--node-bg)',
+            opacity: 0.3,
           }}
         >
-          <div className="p-2 text-xs text-gray-500">
+          <div className="p-2 text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
             {node.data.label || 'Group'}
           </div>
         </div>

@@ -109,6 +109,66 @@
         "command": "neko.template.save",
         "title": "Save as Template",
         "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.deleteSelected",
+        "title": "Delete Selected",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.escape",
+        "title": "Cancel / Deselect",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.selectAll",
+        "title": "Select All",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.undo",
+        "title": "Undo",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.redo",
+        "title": "Redo",
+        "category": "NekoCanvas"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "neko.canvas.deleteSelected",
+        "key": "delete",
+        "when": "activeCustomEditorId == 'neko.canvasEditor'"
+      },
+      {
+        "command": "neko.canvas.deleteSelected",
+        "key": "backspace",
+        "when": "activeCustomEditorId == 'neko.canvasEditor'"
+      },
+      {
+        "command": "neko.canvas.escape",
+        "key": "escape",
+        "when": "activeCustomEditorId == 'neko.canvasEditor'"
+      },
+      {
+        "command": "neko.canvas.selectAll",
+        "key": "ctrl+a",
+        "mac": "cmd+a",
+        "when": "activeCustomEditorId == 'neko.canvasEditor'"
+      },
+      {
+        "command": "neko.canvas.undo",
+        "key": "ctrl+z",
+        "mac": "cmd+z",
+        "when": "activeCustomEditorId == 'neko.canvasEditor'"
+      },
+      {
+        "command": "neko.canvas.redo",
+        "key": "ctrl+shift+z",
+        "mac": "cmd+shift+z",
+        "when": "activeCustomEditorId == 'neko.canvasEditor'"
       }
     ],
     "menus": {

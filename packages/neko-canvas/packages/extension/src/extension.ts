@@ -181,6 +181,23 @@ function registerCommands(context: vscode.ExtensionContext): void {
       }
     })
   );
+
+  // Canvas keyboard shortcuts - forwarded to webview
+  const keyboardActions = [
+    'neko.canvas.deleteSelected',
+    'neko.canvas.escape',
+    'neko.canvas.selectAll',
+    'neko.canvas.undo',
+    'neko.canvas.redo',
+  ];
+  for (const commandId of keyboardActions) {
+    const action = commandId.replace('neko.canvas.', '');
+    context.subscriptions.push(
+      vscode.commands.registerCommand(commandId, () => {
+        canvasEditorProvider.postKeyboardAction(action);
+      })
+    );
+  }
 }
 
 /**

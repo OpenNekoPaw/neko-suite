@@ -1,28 +1,11 @@
 /**
  * Video Frame Provider
  *
- * Provides frame data for video layers using native FFmpeg decoding.
+ * Provides frame data for video layers using NativeEngine's captureFrame API.
  */
 
 import type { TrackLayer, FrameProvider } from './ExportService';
-
-// Types from native module
-interface MediaProcessorType {
-	decodeFrame(config: { path: string; hwAccel?: string; outputFormat?: string }, timeSeconds: number): {
-		width: number;
-		height: number;
-		format: string;
-		data: Buffer;
-		timestamp: number;
-		isKeyframe: boolean;
-	};
-}
-
-interface MediaProcessorModule {
-	MediaProcessor: {
-		create(): Promise<MediaProcessorType>;
-	};
-}
+import type { NativeEngineType, NativeEngineModule } from '../NativeMediaEngine';
 
 // =============================================================================
 // Frame Cache
@@ -44,7 +27,6 @@ class FrameCache {
 	}
 
 	private _makeKey(source: string, time: number): string {
-		// Round time to nearest frame (assuming 30fps)
 		const roundedTime = Math.round(time * 30) / 30;
 		return `${source}:${roundedTime.toFixed(3)}`;
 	}
@@ -55,7 +37,6 @@ class FrameCache {
 	}
 
 	set(source: string, time: number, frame: CachedFrame): void {
-		// Evict oldest entries if cache is full
 		if (this._cache.size >= this._maxSize) {
 			const firstKey = this._cache.keys().next().value;
 			if (firstKey) {
@@ -77,8 +58,7 @@ class FrameCache {
 // =============================================================================
 
 export class VideoFrameProvider implements FrameProvider {
-	private _processor: MediaProcessorType | null = null;
-	private _nativeModule: MediaProcessorModule | null = null;
+	private _engine: NativeEngineType | null = null;
 	private _cache: FrameCache;
 	private _initialized = false;
 
@@ -87,20 +67,28 @@ export class VideoFrameProvider implements FrameProvider {
 	}
 
 	/**
-	 * Initialize the frame provider by loading the native module
+	 * Initialize by loading NativeEngine
 	 */
 	async initialize(): Promise<void> {
 		if (this._initialized) return;
 
 		try {
-			this._nativeModule = await import('@neko-engine/native-napi') as unknown as MediaProcessorModule;
-			this._processor = await this._nativeModule.MediaProcessor.create();
+			const module = await import('@neko-engine/native-napi') as unknown as NativeEngineModule;
+			this._engine = await module.NativeEngine.create();
 			this._initialized = true;
-			console.log('[VideoFrameProvider] Initialized successfully');
+			console.log('[VideoFrameProvider] Initialized with NativeEngine');
 		} catch (error) {
 			console.error('[VideoFrameProvider] Failed to initialize:', error);
 			throw new Error(`VideoFrameProvider initialization failed: ${error}`);
 		}
+	}
+
+	/**
+	 * Initialize with an existing NativeEngine instance
+	 */
+	initializeWithEngine(engine: NativeEngineType): void {
+		this._engine = engine;
+		this._initialized = true;
 	}
 
 	/**
@@ -110,50 +98,44 @@ export class VideoFrameProvider implements FrameProvider {
 		layer: TrackLayer,
 		localTime: number
 	): Promise<{ data: Buffer; width: number; height: number } | null> {
-		if (!this._processor) {
+		if (!this._engine) {
 			throw new Error('VideoFrameProvider not initialized');
 		}
 
-		// Only handle video and image layers with sources
 		if (!layer.source) {
 			return null;
 		}
 
 		if (layer.type !== 'video' && layer.type !== 'image') {
-			// TODO: Handle text, shape, effect layers
 			return null;
 		}
 
 		// Check cache first
 		const cached = this._cache.get(layer.source, localTime);
 		if (cached) {
-			return {
-				data: cached.data,
-				width: cached.width,
-				height: cached.height,
-			};
+			return { data: cached.data, width: cached.width, height: cached.height };
 		}
 
 		try {
-			// Decode frame at the specified time
-			const frame = this._processor.decodeFrame(
-				{ path: layer.source },
-				localTime
-			);
+			const responseJson = await this._engine.captureFrame(layer.source, localTime, 100, 'rgba');
+			const response = JSON.parse(responseJson);
+
+			if (!response.success || !response.data) {
+				return null;
+			}
+
+			const frameData = response.data;
+			const buffer = Buffer.from(frameData.data, 'base64');
 
 			// Cache the result
 			this._cache.set(layer.source, localTime, {
-				data: frame.data,
-				width: frame.width,
-				height: frame.height,
-				timestamp: frame.timestamp,
+				data: buffer,
+				width: frameData.width,
+				height: frameData.height,
+				timestamp: frameData.timestamp ?? localTime,
 			});
 
-			return {
-				data: frame.data,
-				width: frame.width,
-				height: frame.height,
-			};
+			return { data: buffer, width: frameData.width, height: frameData.height };
 		} catch (error) {
 			console.error(`[VideoFrameProvider] Failed to decode frame for ${layer.source} at ${localTime}:`, error);
 			return null;
@@ -172,8 +154,7 @@ export class VideoFrameProvider implements FrameProvider {
 	 */
 	dispose(): void {
 		this._cache.clear();
-		this._processor = null;
-		this._nativeModule = null;
+		this._engine = null;
 		this._initialized = false;
 	}
 }

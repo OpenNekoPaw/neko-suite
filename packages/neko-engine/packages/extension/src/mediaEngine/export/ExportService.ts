@@ -1,11 +1,11 @@
 /**
  * Export Service
  *
- * Coordinates timeline rendering, GPU compositing, animation evaluation,
- * and video encoding for non-web video export in Compatible Mode.
+ * Delegates timeline export to Rust-side `timelines:export` via NativeEngine.
+ * The Rust ExportService handles GPU compositing, encoding, and muxing internally.
  */
 
-import * as os from 'os';
+import type { NativeEngineType, NativeEngineModule } from '../NativeMediaEngine';
 
 // =============================================================================
 // Coordinate Transform Utility
@@ -36,16 +36,13 @@ interface RustTransform {
  * Web uses 0-1 normalized coords (0.5, 0.5 = center)
  * Rust uses pixel coords (0, 0 = top-left)
  */
-function webTransformToRust(
+export function webTransformToRust(
 	web: WebTransform,
 	canvasWidth: number,
 	canvasHeight: number,
 	layerWidth: number,
 	layerHeight: number
 ): RustTransform {
-	// Convert normalized position to pixel position
-	// In web, (0.5, 0.5) means center of canvas
-	// In Rust, we need top-left corner position
 	const scaledWidth = layerWidth * web.scaleX;
 	const scaledHeight = layerHeight * web.scaleY;
 
@@ -70,89 +67,6 @@ function webTransformToRust(
 		anchorX,
 		anchorY,
 	};
-}
-
-// Types from media-processor-rs
-interface CompositorSessionType {
-	composite(
-		layers: CompositeLayerInput[],
-		outputWidth: number,
-		outputHeight: number,
-		backgroundColor?: number[]
-	): { data: Buffer; width: number; height: number; timeMs: number; layerCount: number };
-	compositeSingle(
-		layer: CompositeLayerInput,
-		outputWidth: number,
-		outputHeight: number
-	): { data: Buffer; width: number; height: number; timeMs: number; layerCount: number };
-}
-
-interface AnimationSessionType {
-	addTrack(track: KeyframeTrackInput): void;
-	evaluate(time: number): { values: Record<string, AnimatableValueOutput> };
-	duration(): number;
-	setDuration(duration: number): void;
-	setLoop(enabled: boolean, count?: number): void;
-	isComplete(time: number): boolean;
-	trackCount(): number;
-	properties(): string[];
-}
-
-interface CompositeLayerInput {
-	data: Buffer;
-	width: number;
-	height: number;
-	transform?: {
-		x: number;
-		y: number;
-		scaleX: number;
-		scaleY: number;
-		rotation: number;
-		anchorX: number;
-		anchorY: number;
-	};
-	opacity?: number;
-	blendMode?: string;
-	zIndex?: number;
-	mask?: Buffer;
-	maskInverted?: boolean;
-}
-
-interface KeyframeTrackInput {
-	property: string;
-	keyframes: Array<{
-		time: number;
-		value: AnimatableValueInput;
-		easing?: string;
-		interpolation?: string;
-	}>;
-	defaultValue?: AnimatableValueInput;
-}
-
-interface AnimatableValueInput {
-	valueType: string;
-	number?: number;
-	x?: number;
-	y?: number;
-	z?: number;
-	r?: number;
-	g?: number;
-	b?: number;
-	a?: number;
-	boolValue?: boolean;
-}
-
-interface AnimatableValueOutput {
-	valueType: string;
-	number?: number;
-	x?: number;
-	y?: number;
-	z?: number;
-	r?: number;
-	g?: number;
-	b?: number;
-	a?: number;
-	boolValue?: boolean;
 }
 
 // =============================================================================
@@ -224,21 +138,13 @@ export interface ExportProgress {
 	phase: 'initializing' | 'rendering' | 'encoding' | 'finalizing';
 	/** Performance statistics (optional) */
 	performanceStats?: {
-		/** Average render time per frame (ms) */
 		avgRenderTime: number;
-		/** Average encode time per frame (ms) */
 		avgEncodeTime: number;
-		/** Average decode time per frame (ms) */
 		avgDecodeTime?: number;
-		/** Current FPS */
 		currentFps: number;
-		/** Memory used (MB) */
 		memoryUsedMB?: number;
-		/** VRAM used (MB) */
 		vramUsedMB?: number;
-		/** CPU usage (0-100%) */
 		cpuUsage?: number;
-		/** GPU usage (0-100%) */
 		gpuUsage?: number;
 	};
 }
@@ -293,7 +199,16 @@ export interface TrackLayer {
 		anchorY: number;
 	};
 	/** Keyframe animations */
-	animations?: KeyframeTrackInput[];
+	animations?: Array<{
+		property: string;
+		keyframes: Array<{
+			time: number;
+			value: { valueType: string; number?: number; x?: number; y?: number };
+			easing?: string;
+			interpolation?: string;
+		}>;
+		defaultValue?: { valueType: string; number?: number; x?: number; y?: number };
+	}>;
 	/** Mask layer ID */
 	maskLayerId?: string;
 	/** Effects to apply */
@@ -304,23 +219,48 @@ export interface TrackLayer {
 }
 
 // =============================================================================
-// Export Service
+// Frame Provider Interface
 // =============================================================================
 
 /**
- * Export Service for rendering and encoding video from timeline
+ * Interface for providing frame data for layers.
+ * Note: In the new architecture, frame data is handled by Rust side.
+ * This interface is kept for backward compatibility.
+ */
+export interface FrameProvider {
+	getFrameData(
+		layer: TrackLayer,
+		localTime: number
+	): Promise<{ data: Buffer; width: number; height: number } | null>;
+}
+
+// =============================================================================
+// Export Service
+// =============================================================================
+
+/** Default progress poll interval in milliseconds */
+const PROGRESS_POLL_INTERVAL_MS = 200;
+
+/**
+ * Export Service — delegates to Rust-side `timelines:export`
+ *
+ * The Rust ExportService handles the full pipeline:
+ * - Frame decoding
+ * - GPU compositing (wgpu)
+ * - Animation evaluation
+ * - Video/audio encoding
+ * - Muxing to output file
  */
 export class ExportService {
-	private _compositorSession: CompositorSessionType | null = null;
-	private _animationSessions: Map<string, AnimationSessionType> = new Map();
-	private _nativeModule: NativeModuleType | null = null;
+	private _engine: NativeEngineType | null = null;
 	private _isInitialized = false;
-	private _cancellationToken: { cancelled: boolean } | null = null;
+	private _currentJobId: string | null = null;
+	private _pollTimer: ReturnType<typeof setInterval> | null = null;
 
 	constructor() {}
 
 	/**
-	 * Initialize the export service
+	 * Initialize the export service by loading NativeEngine
 	 */
 	async initialize(): Promise<void> {
 		if (this._isInitialized) {
@@ -328,14 +268,10 @@ export class ExportService {
 		}
 
 		try {
-			// Load native module
-			this._nativeModule = await import('@neko-engine/native-napi') as unknown as NativeModuleType;
-
-			// Create compositor session
-			this._compositorSession = await this._nativeModule.CompositorSession.create();
-
+			const module = await import('@neko-engine/native-napi') as unknown as NativeEngineModule;
+			this._engine = await module.NativeEngine.create();
 			this._isInitialized = true;
-			console.log('[ExportService] Initialized successfully');
+			console.log('[ExportService] Initialized with NativeEngine');
 		} catch (error) {
 			console.error('[ExportService] Failed to initialize:', error);
 			throw new Error(`Export service initialization failed: ${error}`);
@@ -343,25 +279,32 @@ export class ExportService {
 	}
 
 	/**
+	 * Initialize with an existing NativeEngine instance (avoids creating a second one)
+	 */
+	initializeWithEngine(engine: NativeEngineType): void {
+		this._engine = engine;
+		this._isInitialized = true;
+		console.log('[ExportService] Initialized with existing NativeEngine');
+	}
+
+	/**
 	 * Export timeline to video file
+	 *
+	 * Constructs an ExportJobConfig and dispatches `timelines:export` to Rust side.
+	 * Progress is polled via `tasks:probe`.
 	 */
 	async export(
 		config: ExportConfig,
 		layers: TrackLayer[],
-		frameProvider: FrameProvider,
+		_frameProvider: FrameProvider,
 		progressCallback?: ExportProgressCallback
 	): Promise<ExportResult> {
-		if (!this._isInitialized || !this._nativeModule || !this._compositorSession) {
+		if (!this._isInitialized || !this._engine) {
 			throw new Error('Export service not initialized');
 		}
 
 		const startTime = Date.now();
 		const totalFrames = Math.ceil(config.duration * config.fps);
-		let framesRendered = 0;
-		let totalFrameTime = 0;
-
-		// Setup cancellation
-		this._cancellationToken = { cancelled: false };
 
 		try {
 			// Phase: Initializing
@@ -374,253 +317,73 @@ export class ExportService {
 				phase: 'initializing',
 			});
 
-			// Setup animation sessions for each layer
-			this._setupAnimations(layers);
+			// Build ExportJobConfig for Rust side
+			const jobId = `export_${Date.now()}`;
+			const exportJobConfig = this._buildExportJobConfig(jobId, config, layers);
 
-			// Create muxer session
-			const muxer = this._nativeModule.MuxerSession.create({
-				outputPath: config.outputPath,
-				format: config.container || 'mp4',
-			});
+			// Dispatch timelines:export
+			const responseJson = await this._engine.dispatchAction(
+				'timelines', 'export', null,
+				JSON.stringify(exportJobConfig)
+			);
+			const response = JSON.parse(responseJson);
 
-			// Add video stream with high profile for better quality
-			muxer.addVideoStream({
-				width: config.width,
-				height: config.height,
-				fps: config.fps,
-				bitrate: config.videoBitrate,
-				codec: config.videoCodec || 'h264',
-				preset: config.preset || 'medium',
-				profile: config.profile || 'high',
-				pixelFormat: 'rgba',
-			});
-
-			// Add audio stream if needed
-			if (config.includeAudio) {
-				muxer.addAudioStream({
-					sampleRate: config.audioSampleRate || 48000,
-					channels: config.audioChannels || 2,
-					bitrate: config.audioBitrate,
-					codec: config.audioCodec || 'aac',
-					sampleFormat: 'f32',
-				});
+			if (!response.success) {
+				return {
+					success: false,
+					error: response.error || 'Export dispatch failed',
+				};
 			}
 
-			// Create video encoder with high profile for better quality
-			const videoEncoder = this._nativeModule.MediaProcessor.prototype.createVideoEncoder({
-				width: config.width,
-				height: config.height,
-				fps: config.fps,
-				bitrate: config.videoBitrate,
-				codec: config.videoCodec || 'h264',
-				preset: config.preset || 'medium',
-				profile: config.profile || 'high',
-				pixelFormat: 'rgba',
-			});
+			// Extract job ID from response (Rust may assign its own)
+			this._currentJobId = response.data?.jobId ?? response.data?.job_id ?? jobId;
 
-			// Write muxer header
-			muxer.writeHeader();
-
-			const frameInterval = 1 / config.fps;
-			const backgroundColor = config.backgroundColor || [0, 0, 0, 1];
-
-			// CPU usage tracking
-			let lastCpuInfo = os.cpus();
-			const getCpuUsage = (): number => {
-				const currentCpuInfo = os.cpus();
-				let totalIdle = 0;
-				let totalTick = 0;
-
-				for (let i = 0; i < currentCpuInfo.length; i++) {
-					const cpu = currentCpuInfo[i];
-					const lastCpu = lastCpuInfo[i];
-					if (!cpu || !lastCpu) continue;
-
-					const idleDiff = cpu.times.idle - lastCpu.times.idle;
-					const totalDiff =
-						(cpu.times.user - lastCpu.times.user) +
-						(cpu.times.nice - lastCpu.times.nice) +
-						(cpu.times.sys - lastCpu.times.sys) +
-						(cpu.times.idle - lastCpu.times.idle) +
-						(cpu.times.irq - lastCpu.times.irq);
-
-					totalIdle += idleDiff;
-					totalTick += totalDiff;
-				}
-
-				lastCpuInfo = currentCpuInfo;
-				return totalTick > 0 ? Math.round((1 - totalIdle / totalTick) * 100) : 0;
-			};
-
-			// Memory usage helper
-			const getMemoryUsage = (): number => {
-				const used = process.memoryUsage();
-				return Math.round(used.heapUsed / (1024 * 1024));
-			};
-
-			// Phase: Rendering
-			let totalRenderTime = 0;
-			let totalEncodeTime = 0;
-			let totalDecodeTime = 0;
-			for (let frame = 0; frame < totalFrames; frame++) {
-				// Check cancellation
-				if (this._cancellationToken.cancelled) {
-					throw new Error('Export cancelled');
-				}
-
-				const frameStartTime = Date.now();
-				const currentTime = frame * frameInterval;
-
-				// Get frame data for each layer at current time (includes decode time)
-				const decodeStart = Date.now();
-				const compositeLayers = await this._renderFrame(
-					layers,
-					currentTime,
-					config.width,
-					config.height,
-					frameProvider
-				);
-				const decodeTime = Date.now() - decodeStart;
-				totalDecodeTime += decodeTime;
-
-				// Composite layers using GPU
-				const renderStart = Date.now();
-				const compositeResult = this._compositorSession.composite(
-					compositeLayers,
-					config.width,
-					config.height,
-					backgroundColor
-				);
-				const renderTime = Date.now() - renderStart;
-				totalRenderTime += renderTime;
-
-				// Encode frame
-				const encodeStart = Date.now();
-				const packets = videoEncoder.encodeFrame(
-					{
-						width: config.width,
-						height: config.height,
-						format: 'rgba',
-						data: compositeResult.data,
-						timestamp: currentTime,
-						isKeyframe: frame === 0,
-					},
-					frame
-				);
-
-				// Write packets to muxer
-				for (const packet of packets) {
-					muxer.writeVideoPacket({
-						data: packet.data,
-						pts: packet.pts,
-						dts: packet.dts,
-						duration: packet.duration,
-						isKeyframe: packet.isKeyframe,
-					});
-				}
-				const encodeTime = Date.now() - encodeStart;
-				totalEncodeTime += encodeTime;
-
-				// Update progress
-				framesRendered++;
-				const frameTime = Date.now() - frameStartTime;
-				totalFrameTime += frameTime;
-				const avgFrameTime = totalFrameTime / framesRendered;
-				const elapsedMs = Date.now() - startTime;
-				const estimatedRemainingMs = avgFrameTime * (totalFrames - framesRendered);
-				const currentFps = framesRendered / (elapsedMs / 1000);
-
-				// Get CPU usage (sample every 10 frames to reduce overhead)
-				const cpuUsage = frame % 10 === 0 ? getCpuUsage() : undefined;
-
-				progressCallback?.({
-					currentFrame: framesRendered,
-					totalFrames,
-					percentage: (framesRendered / totalFrames) * 100,
-					elapsedMs,
-					estimatedRemainingMs,
-					phase: framesRendered < totalFrames ? 'rendering' : 'encoding',
-					performanceStats: {
-						avgRenderTime: totalRenderTime / framesRendered,
-						avgEncodeTime: totalEncodeTime / framesRendered,
-						avgDecodeTime: totalDecodeTime / framesRendered,
-						currentFps,
-						memoryUsedMB: getMemoryUsage(),
-						cpuUsage,
-					},
-				});
-			}
-
-			// Phase: Finalizing
-			progressCallback?.({
-				currentFrame: framesRendered,
+			// Start progress polling
+			const result = await this._pollProgress(
+				this._currentJobId!,
 				totalFrames,
-				percentage: 99,
-				elapsedMs: Date.now() - startTime,
-				estimatedRemainingMs: 0,
-				phase: 'finalizing',
-			});
+				startTime,
+				progressCallback
+			);
 
-			// Flush video encoder
-			const flushPackets = videoEncoder.flush();
-			for (const packet of flushPackets) {
-				muxer.writeVideoPacket({
-					data: packet.data,
-					pts: packet.pts,
-					dts: packet.dts,
-					duration: packet.duration,
-					isKeyframe: packet.isKeyframe,
-				});
-			}
-			videoEncoder.close();
-
-			// Process audio if enabled
-			if (config.includeAudio && config.audioSources && config.audioSources.length > 0) {
-				await this._processAudio(config, muxer);
-			}
-
-			// Finish muxer
-			muxer.finish();
-
-			const totalTimeMs = Date.now() - startTime;
-
-			return {
-				success: true,
-				outputPath: config.outputPath,
-				totalTimeMs,
-				framesRendered,
-				avgFrameTimeMs: totalFrameTime / framesRendered,
-			};
+			return result;
 		} catch (error) {
 			return {
 				success: false,
 				error: error instanceof Error ? error.message : String(error),
-				framesRendered,
 			};
 		} finally {
-			// Cleanup animation sessions
-			this._animationSessions.clear();
-			this._cancellationToken = null;
+			this._stopPolling();
+			this._currentJobId = null;
 		}
 	}
 
 	/**
 	 * Cancel ongoing export
 	 */
-	cancel(): void {
-		if (this._cancellationToken) {
-			this._cancellationToken.cancelled = true;
+	async cancel(): Promise<void> {
+		this._stopPolling();
+
+		if (this._currentJobId && this._engine) {
+			try {
+				await this._engine.cancelTask(this._currentJobId);
+				console.log(`[ExportService] Cancelled job ${this._currentJobId}`);
+			} catch (error) {
+				console.warn('[ExportService] Failed to cancel:', error);
+			}
 		}
+
+		this._currentJobId = null;
 	}
 
 	/**
 	 * Dispose resources
 	 */
 	dispose(): void {
-		this._animationSessions.clear();
-		this._compositorSession = null;
-		this._nativeModule = null;
+		this._stopPolling();
+		this._engine = null;
 		this._isInitialized = false;
+		this._currentJobId = null;
 	}
 
 	// =========================================================================
@@ -628,380 +391,164 @@ export class ExportService {
 	// =========================================================================
 
 	/**
-	 * Process and encode audio from sources
+	 * Build ExportJobConfig JSON matching Rust `ExportJobConfig` struct
 	 */
-	private async _processAudio(
+	private _buildExportJobConfig(
+		jobId: string,
 		config: ExportConfig,
-		muxer: MuxerSessionType
-	): Promise<void> {
-		if (!this._nativeModule || !config.audioSources || config.audioSources.length === 0) {
-			return;
-		}
+		layers: TrackLayer[]
+	): Record<string, unknown> {
+		// Build timeline tracks from layers
+		const tracks = layers.map((layer) => ({
+			id: layer.id,
+			type: layer.type,
+			startTime: layer.startTime,
+			duration: layer.duration,
+			source: layer.source,
+			width: layer.width,
+			height: layer.height,
+			zIndex: layer.zIndex,
+			blendMode: layer.blendMode,
+			opacity: layer.opacity ?? 1.0,
+			transform: layer.transform,
+			animations: layer.animations,
+			effects: layer.effects,
+		}));
 
-		console.log('[ExportService] Processing audio...');
+		// Build audio tracks from audioSources
+		const audioTracks = config.audioSources?.map((src) => ({
+			source: src.path,
+			startTime: src.startTime,
+			duration: src.duration,
+			trimStart: src.trimStart,
+			volume: src.volume,
+		}));
 
-		const sampleRate = config.audioSampleRate || 48000;
-		const channels = config.audioChannels || 2;
-
-		// Create audio encoder
-		const mediaProcessor = await this._nativeModule.MediaProcessor.create();
-		const audioEncoder = mediaProcessor.createAudioEncoder({
-			sampleRate,
-			channels,
-			bitrate: config.audioBitrate,
-			codec: config.audioCodec || 'aac',
-			sampleFormat: 'f32',
-		});
-
-		// Process each audio source
-		for (const source of config.audioSources) {
-			try {
-				// Create audio decoder for this source
-				const audioDecoder = mediaProcessor.createAudioDecoder(source.path);
-				const audioInfo = audioDecoder.getInfo();
-
-				console.log(`[ExportService] Decoding audio from ${source.path}`);
-				console.log(`  Source: ${audioInfo.sampleRate}Hz, ${audioInfo.channels}ch`);
-
-				// Seek to trim start position
-				if (source.trimStart > 0) {
-					audioDecoder.seek(source.trimStart);
-				}
-
-				// Calculate end time
-				const endTime = source.trimStart + source.duration;
-				let currentPosition = source.trimStart;
-
-				// Decode and encode audio frames
-				while (currentPosition < endTime) {
-					const frame = audioDecoder.decodeNext();
-					if (!frame) break;
-
-					currentPosition = frame.timestamp;
-					if (currentPosition >= endTime) break;
-
-					// Apply volume if not 1.0
-					let audioData = frame.data;
-					if (source.volume !== 1.0) {
-						audioData = this._applyVolume(frame.data, source.volume);
-					}
-
-					// Resample if needed (simple case: same sample rate)
-					// TODO: Add proper resampling for different sample rates
-
-					// Encode audio frame
-					const packets = audioEncoder.encodeFrame(audioData, frame.samples);
-
-					// Calculate PTS based on timeline position
-					const timelinePosition = source.startTime + (frame.timestamp - source.trimStart);
-					const basePts = Math.floor(timelinePosition * sampleRate);
-
-					// Write packets to muxer
-					for (const packet of packets) {
-						muxer.writeAudioPacket({
-							data: packet.data,
-							pts: basePts + packet.pts,
-							dts: basePts + packet.pts,
-							duration: packet.duration,
-							isKeyframe: true,
-						});
-					}
-				}
-
-				audioDecoder.close();
-			} catch (error) {
-				console.error(`[ExportService] Failed to process audio from ${source.path}:`, error);
-				// Continue with other sources
-			}
-		}
-
-		// Flush audio encoder
-		const flushPackets = audioEncoder.flush();
-		for (const packet of flushPackets) {
-			muxer.writeAudioPacket({
-				data: packet.data,
-				pts: packet.pts,
-				dts: packet.pts,
-				duration: packet.duration,
-				isKeyframe: true,
-			});
-		}
-		audioEncoder.close();
-
-		console.log('[ExportService] Audio processing complete');
-	}
-
-	/**
-	 * Apply volume to audio data (f32 format)
-	 */
-	private _applyVolume(data: Buffer, volume: number): Buffer {
-		const floatArray = new Float32Array(data.buffer, data.byteOffset, data.length / 4);
-		const result = new Float32Array(floatArray.length);
-
-		for (let i = 0; i < floatArray.length; i++) {
-			result[i] = (floatArray[i] ?? 0) * volume;
-		}
-
-		return Buffer.from(result.buffer);
-	}
-
-	private _setupAnimations(layers: TrackLayer[]): void {
-		if (!this._nativeModule) return;
-
-		for (const layer of layers) {
-			if (layer.animations && layer.animations.length > 0) {
-				const animSession = this._nativeModule.AnimationSession.create(
-					`anim_${layer.id}`,
-					layer.id
-				);
-
-				for (const track of layer.animations) {
-					animSession.addTrack(track);
-				}
-
-				this._animationSessions.set(layer.id, animSession);
-			}
-		}
-	}
-
-	private async _renderFrame(
-		layers: TrackLayer[],
-		currentTime: number,
-		outputWidth: number,
-		outputHeight: number,
-		frameProvider: FrameProvider
-	): Promise<CompositeLayerInput[]> {
-		const compositeLayers: CompositeLayerInput[] = [];
-
-		// Sort layers by z-index
-		const sortedLayers = [...layers].sort((a, b) => a.zIndex - b.zIndex);
-
-		for (const layer of sortedLayers) {
-			// Check if layer is active at current time
-			if (currentTime < layer.startTime || currentTime >= layer.startTime + layer.duration) {
-				continue;
-			}
-
-			// Get layer frame data
-			const localTime = currentTime - layer.startTime;
-			const frameData = await frameProvider.getFrameData(layer, localTime);
-
-			if (!frameData) {
-				continue;
-			}
-
-			// Evaluate animations
-			let transform = layer.transform;
-			let opacity = layer.opacity ?? 1.0;
-
-			const animSession = this._animationSessions.get(layer.id);
-			if (animSession) {
-				const evaluated = animSession.evaluate(localTime);
-
-				// Apply animated values
-				if (evaluated.values) {
-					if (evaluated.values['opacity']?.number !== undefined) {
-						opacity = evaluated.values['opacity'].number;
-					}
-					if (evaluated.values['positionX']?.number !== undefined) {
-						transform = { ...transform!, x: evaluated.values['positionX'].number };
-					}
-					if (evaluated.values['positionY']?.number !== undefined) {
-						transform = { ...transform!, y: evaluated.values['positionY'].number };
-					}
-					if (evaluated.values['scaleX']?.number !== undefined) {
-						transform = { ...transform!, scaleX: evaluated.values['scaleX'].number };
-					}
-					if (evaluated.values['scaleY']?.number !== undefined) {
-						transform = { ...transform!, scaleY: evaluated.values['scaleY'].number };
-					}
-					if (evaluated.values['rotation']?.number !== undefined) {
-						transform = { ...transform!, rotation: evaluated.values['rotation'].number };
-					}
-					if (evaluated.values['position']?.x !== undefined) {
-						transform = {
-							...transform!,
-							x: evaluated.values['position'].x!,
-							y: evaluated.values['position'].y!,
-						};
-					}
-					if (evaluated.values['scale']?.x !== undefined) {
-						transform = {
-							...transform!,
-							scaleX: evaluated.values['scale'].x!,
-							scaleY: evaluated.values['scale'].y!,
-						};
-					}
-				}
-			}
-
-			// Convert Web normalized coordinates to Rust pixel coordinates
-			// Web uses 0-1 normalized coords (0.5, 0.5 = center)
-			// Rust uses pixel coords (0, 0 = top-left)
-			let rustTransform: CompositeLayerInput['transform'];
-			if (transform) {
-				const converted = webTransformToRust(
-					{
-						x: transform.x || 0.5,
-						y: transform.y || 0.5,
-						scaleX: transform.scaleX || 1,
-						scaleY: transform.scaleY || 1,
-						rotation: transform.rotation || 0,
-						anchorX: transform.anchorX || 0.5,
-						anchorY: transform.anchorY || 0.5,
-					},
-					outputWidth,
-					outputHeight,
-					frameData.width,
-					frameData.height
-				);
-				rustTransform = {
-					x: converted.x,
-					y: converted.y,
-					scaleX: converted.scaleX,
-					scaleY: converted.scaleY,
-					rotation: converted.rotation,
-					anchorX: converted.anchorX,
-					anchorY: converted.anchorY,
-				};
-			}
-
-			compositeLayers.push({
-				data: frameData.data,
-				width: frameData.width,
-				height: frameData.height,
-				transform: rustTransform,
-				opacity,
-				blendMode: layer.blendMode,
-				zIndex: layer.zIndex,
-			});
-		}
-
-		return compositeLayers;
-	}
-}
-
-// =============================================================================
-// Frame Provider Interface
-// =============================================================================
-
-/**
- * Interface for providing frame data for layers
- */
-export interface FrameProvider {
-	/**
-	 * Get frame data for a layer at a specific time
-	 */
-	getFrameData(
-		layer: TrackLayer,
-		localTime: number
-	): Promise<{ data: Buffer; width: number; height: number } | null>;
-}
-
-// =============================================================================
-// Native Module Type
-// =============================================================================
-
-interface NativeModuleType {
-	MediaProcessor: {
-		create(): Promise<{
-			createVideoEncoder(config: {
-				width: number;
-				height: number;
-				fps: number;
-				bitrate?: number;
-				codec: string;
-				preset?: string;
-				profile?: string;
-				pixelFormat?: string;
-			}): VideoEncoderSessionType;
-			createAudioEncoder(config: {
-				sampleRate: number;
-				channels: number;
-				bitrate?: number;
-				codec?: string;
-				sampleFormat?: string;
-			}): AudioEncoderSessionType;
-			createAudioDecoder(path: string): AudioDecoderSessionType;
-			decodeFrame(config: { path: string }, time: number): {
-				width: number;
-				height: number;
-				format: string;
-				data: Buffer;
-				timestamp: number;
-				isKeyframe: boolean;
-			};
-		}>;
-		prototype: {
-			createVideoEncoder(config: {
-				width: number;
-				height: number;
-				fps: number;
-				bitrate?: number;
-				codec: string;
-				preset?: string;
-				profile?: string;
-				pixelFormat?: string;
-			}): VideoEncoderSessionType;
+		return {
+			jobId,
+			outputPath: config.outputPath,
+			settings: {
+				width: config.width,
+				height: config.height,
+				fps: config.fps,
+				videoCodec: config.videoCodec || 'h264',
+				videoBitrate: config.videoBitrate,
+				preset: config.preset || 'medium',
+				profile: config.profile || 'high',
+				container: config.container || 'mp4',
+				includeAudio: config.includeAudio ?? false,
+				audioCodec: config.audioCodec || 'aac',
+				audioBitrate: config.audioBitrate,
+				audioSampleRate: config.audioSampleRate || 48000,
+				audioChannels: config.audioChannels || 2,
+				backgroundColor: config.backgroundColor || [0, 0, 0, 1],
+			},
+			timeline: {
+				duration: config.duration,
+				tracks,
+				audioTracks,
+			},
 		};
-	};
-	MuxerSession: {
-		create(config: { outputPath: string; format: string }): MuxerSessionType;
-	};
-	CompositorSession: {
-		create(): Promise<CompositorSessionType>;
-	};
-	AnimationSession: {
-		create(id: string, targetId: string): AnimationSessionType;
-	};
-}
+	}
 
-interface VideoEncoderSessionType {
-	encodeFrame(
-		frame: { width: number; height: number; format: string; data: Buffer; timestamp: number; isKeyframe: boolean },
-		pts: number
-	): Array<{ data: Buffer; pts: number; dts: number; isKeyframe: boolean; duration: number }>;
-	flush(): Array<{ data: Buffer; pts: number; dts: number; isKeyframe: boolean; duration: number }>;
-	close(): void;
-}
+	/**
+	 * Poll task progress until completion or cancellation
+	 */
+	private _pollProgress(
+		jobId: string,
+		totalFrames: number,
+		startTime: number,
+		progressCallback?: ExportProgressCallback
+	): Promise<ExportResult> {
+		return new Promise((resolve) => {
+			this._pollTimer = setInterval(async () => {
+				if (!this._engine || !this._currentJobId) {
+					this._stopPolling();
+					resolve({ success: false, error: 'Export cancelled' });
+					return;
+				}
 
-interface AudioEncoderSessionType {
-	encodeFrame(data: Buffer, samples: number): Array<{ data: Buffer; pts: number; duration: number }>;
-	flush(): Array<{ data: Buffer; pts: number; duration: number }>;
-	close(): void;
-}
+				try {
+					const responseJson = await this._engine.getTaskProgress(jobId);
+					const response = JSON.parse(responseJson);
 
-interface AudioDecoderSessionType {
-	getInfo(): { sampleRate: number; channels: number; duration: number; codec: string; bitrate: number; totalSamples: number };
-	seek(timeSeconds: number): void;
-	decodeNext(): { data: Buffer; samples: number; timestamp: number; sampleRate: number; channels: number } | null;
-	position(): number;
-	close(): void;
-}
+					if (!response.success) {
+						this._stopPolling();
+						resolve({ success: false, error: response.error || 'Progress query failed' });
+						return;
+					}
 
-interface MuxerSessionType {
-	addVideoStream(config: {
-		width: number;
-		height: number;
-		fps: number;
-		bitrate?: number;
-		codec: string;
-		preset?: string;
-		profile?: string;
-		pixelFormat?: string;
-	}): { index: number; timeBaseNum: number; timeBaseDen: number };
-	addAudioStream(config: {
-		sampleRate: number;
-		channels: number;
-		bitrate?: number;
-		codec?: string;
-		sampleFormat?: string;
-	}): { index: number; timeBaseNum: number; timeBaseDen: number };
-	writeHeader(): void;
-	writeVideoPacket(packet: { data: Buffer; pts: number; dts: number; duration: number; isKeyframe: boolean }): void;
-	writeAudioPacket(packet: { data: Buffer; pts: number; dts: number; duration: number; isKeyframe: boolean }): void;
-	finish(): void;
-	isOpen(): boolean;
+					const taskData = response.data;
+					const status = taskData?.status ?? taskData?.state;
+					const progress = taskData?.progress ?? 0;
+					const currentFrame = Math.round((progress / 100) * totalFrames);
+					const elapsedMs = Date.now() - startTime;
+					const estimatedRemainingMs = progress > 0
+						? (elapsedMs / progress) * (100 - progress)
+						: 0;
+
+					// Determine phase
+					let phase: ExportProgress['phase'] = 'rendering';
+					if (progress === 0) phase = 'initializing';
+					else if (progress >= 99) phase = 'finalizing';
+
+					progressCallback?.({
+						currentFrame,
+						totalFrames,
+						percentage: progress,
+						elapsedMs,
+						estimatedRemainingMs,
+						phase,
+						performanceStats: taskData?.performanceStats,
+					});
+
+					// Check completion
+					if (status === 'completed' || status === 'done' || progress >= 100) {
+						this._stopPolling();
+						const totalTimeMs = Date.now() - startTime;
+						resolve({
+							success: true,
+							outputPath: taskData?.outputPath ?? undefined,
+							totalTimeMs,
+							framesRendered: totalFrames,
+							avgFrameTimeMs: totalTimeMs / totalFrames,
+						});
+						return;
+					}
+
+					// Check failure
+					if (status === 'failed' || status === 'error') {
+						this._stopPolling();
+						resolve({
+							success: false,
+							error: taskData?.error || 'Export failed',
+						});
+						return;
+					}
+
+					// Check cancellation
+					if (status === 'cancelled') {
+						this._stopPolling();
+						resolve({ success: false, error: 'Export cancelled' });
+						return;
+					}
+				} catch (error) {
+					// Transient error — keep polling
+					console.warn('[ExportService] Progress poll error:', error);
+				}
+			}, PROGRESS_POLL_INTERVAL_MS);
+		});
+	}
+
+	/**
+	 * Stop the progress polling timer
+	 */
+	private _stopPolling(): void {
+		if (this._pollTimer) {
+			clearInterval(this._pollTimer);
+			this._pollTimer = null;
+		}
+	}
 }
 
 // =============================================================================

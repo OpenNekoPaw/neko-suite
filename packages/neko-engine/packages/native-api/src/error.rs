@@ -62,8 +62,8 @@ impl ApiError {
     }
 }
 
-impl From<neko_native_core::Error> for ApiError {
-    fn from(e: neko_native_core::Error) -> Self {
+impl From<neko_native_core::error::Error> for ApiError {
+    fn from(e: neko_native_core::error::Error) -> Self {
         ApiError::ServiceError(e.to_string())
     }
 }

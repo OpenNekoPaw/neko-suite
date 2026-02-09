@@ -1,10 +1,12 @@
 /**
  * AnnotationNode - Annotation/note node component
- * Displays text annotations with customizable styling
+ * Displays text annotations with inline editing support
  */
 
 import type { AnnotationCanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
+import { EditableText } from '../common/EditableText';
+import { t } from '../../i18n';
 
 // =============================================================================
 // Types
@@ -17,6 +19,7 @@ export interface AnnotationNodeProps {
   onSelect?: (nodeId: string, multi: boolean) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
   onConnectionStart?: (nodeId: string, anchor: string) => void;
+  onUpdateData?: (nodeId: string, data: Partial<AnnotationCanvasNode['data']>) => void;
 }
 
 // =============================================================================
@@ -30,10 +33,11 @@ export function AnnotationNode({
   onSelect,
   onMove,
   onConnectionStart,
+  onUpdateData,
 }: AnnotationNodeProps) {
   const { content, style } = node.data;
   const fontSize = style?.fontSize || 14;
-  const color = style?.color || '#cccccc';
+  const color = style?.color || 'var(--control-fg)';
 
   return (
     <BaseNode
@@ -50,23 +54,22 @@ export function AnnotationNode({
           <div className="flex items-center gap-2">
             <span className="text-sm">📝</span>
             <span className="text-xs text-yellow-500/80 uppercase font-medium">
-              Note
+              {t('node.note')}
             </span>
           </div>
         </div>
 
-        {/* Content area */}
+        {/* Content area - editable */}
         <div className="flex-1 p-3 overflow-auto">
-          <p
+          <EditableText
+            value={content || ''}
+            onChange={(val) => onUpdateData?.(node.id, { content: val })}
+            multiline
+            placeholder={t('node.editPlaceholder')}
             className="whitespace-pre-wrap break-words"
-            style={{
-              fontSize: `${fontSize}px`,
-              color,
-              lineHeight: 1.5,
-            }}
-          >
-            {content || 'Empty note'}
-          </p>
+            style={{ fontSize: `${fontSize}px`, color, lineHeight: 1.5 }}
+            disabled={node.locked}
+          />
         </div>
       </div>
     </BaseNode>

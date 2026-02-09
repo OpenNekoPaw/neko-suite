@@ -67,7 +67,7 @@ pub trait IVideoService: Send + Sync {
     ) -> Result<()>;
 
     /// Get keyframe information
-    async fn get_keyframes(&self, resource_id: &ResourceId) -> Result<Vec<crate::KeyframeInfo>>;
+    async fn get_keyframes(&self, resource_id: &ResourceId) -> Result<Vec<crate::keyframe_cache::KeyframeInfo>>;
 
     /// Generate audio waveform from video
     async fn generate_waveform(

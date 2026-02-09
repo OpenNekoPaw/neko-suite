@@ -68,7 +68,7 @@
       },
       {
         "command": "neko.story.newFile",
-        "title": "%command.newFile%",
+        "title": "%neko.story.newFile.title%",
         "category": "Neko Story"
       }
     ],

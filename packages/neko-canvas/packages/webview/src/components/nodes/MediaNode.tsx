@@ -9,6 +9,7 @@ import { BaseNode } from './BaseNode';
 import { VideoPlayer } from '../media/VideoPlayer';
 import { AudioPlayer } from '../media/AudioPlayer';
 import { ImageViewer } from '../media/ImageViewer';
+import { t } from '../../i18n';
 
 // =============================================================================
 // Types
@@ -117,7 +118,7 @@ export function MediaNode({
               <button
                 className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-black/80 rounded text-xs text-white z-10"
                 onClick={switchToThumbnail}
-                title="返回缩略图"
+                title={t('node.backToThumbnail')}
               >
                 ✕
               </button>
@@ -136,7 +137,7 @@ export function MediaNode({
               <button
                 className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-black/80 rounded text-xs text-white z-10"
                 onClick={switchToThumbnail}
-                title="返回缩略图"
+                title={t('node.backToThumbnail')}
               >
                 ✕
               </button>
@@ -157,7 +158,7 @@ export function MediaNode({
               <button
                 className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-black/80 rounded text-xs text-white z-10 opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={switchToThumbnail}
-                title="返回缩略图"
+                title={t('node.backToThumbnail')}
               >
                 ✕
               </button>
@@ -198,7 +199,7 @@ export function MediaNode({
         {mediaType === 'image' && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="px-2 py-1 bg-black/60 rounded text-xs text-white">
-              点击查看
+              {t('node.clickToView')}
             </div>
           </div>
         )}
