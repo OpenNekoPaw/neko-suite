@@ -13,7 +13,7 @@
 | **neko-agent** | Alpha | 50% | Agent Skills 架构重构中 |
 | **neko-canvas** | WIP | 30% | 基础渲染已实现 |
 | **neko-types** | Stable | 90% | 类型定义基本完整 |
-| **neko-story** | Planned | 10% | LSP 框架搭建中 |
+| **neko-story** | Alpha | 75% | Fountain 解析、LSP、预览已完成，集成开发中 |
 | **neko-sketch** | Planned | 5% | 待开发 |
 | **neko-audio** | Planned | 5% | 待开发 |
 | **neko-live** | Planned | 0% | 待开发 |
@@ -97,14 +97,18 @@
 
 ### neko-story (剧本编辑器)
 
-- [ ] LSP 服务
-  - [ ] 语法高亮
-  - [ ] 自动补全
+- [x] LSP 服务
+  - [x] 语法高亮
+  - [x] 自动补全
   - [ ] 错误诊断
-- [ ] 剧本解析
-  - [ ] 场景识别
-  - [ ] 角色提取
+- [x] 剧本解析
+  - [x] 场景识别
+  - [x] 角色提取
   - [ ] 时间线生成
+- [x] 预览系统
+  - [x] Webview 实时预览
+  - [x] 编辑器↔预览双向同步
+  - [ ] 导出 PDF
 
 ---
 
@@ -283,4 +287,4 @@
 
 ---
 
-*最后更新: 2025-02*
+*最后更新: 2026-02*
