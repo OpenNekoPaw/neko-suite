@@ -1,10 +1,12 @@
 /**
  * AudioPlayer - Compact audio preview card
- * Matches ToolCallDisplay style with collapsible content
- * Supports click-to-open for local files
+ *
+ * Displays audio metadata with file info.
+ * Clicking "Open" opens the file in neko-preview
+ * (hardware-accelerated audio preview with waveform via customEditor).
  */
 
-import { useState, useRef, useCallback, useEffect, memo } from 'react';
+import { useState, useRef, useCallback, memo } from 'react';
 
 // Get vscode API for postMessage
 const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
@@ -13,7 +15,7 @@ interface AudioPlayerProps {
   src: string;
   title?: string;
   className?: string;
-  /** Local file path for opening in VSCode */
+  /** Local file path for opening in neko-preview */
   localPath?: string;
 }
 
@@ -43,8 +45,6 @@ function formatTime(time: number): string {
 function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isExpanded, setIsExpanded] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [hasError, setHasError] = useState(false);
 
@@ -54,25 +54,6 @@ function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerP
     setIsExpanded(prev => !prev);
   }, []);
 
-  const togglePlay = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (isPlaying) {
-      audio.pause();
-    } else {
-      audio.play();
-    }
-    setIsPlaying(!isPlaying);
-  }, [isPlaying]);
-
-  const handleTimeUpdate = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      setCurrentTime(audio.currentTime);
-    }
-  }, []);
-
   const handleLoadedMetadata = useCallback(() => {
     const audio = audioRef.current;
     if (audio) {
@@ -80,28 +61,14 @@ function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerP
     }
   }, []);
 
-  const handleEnded = useCallback(() => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-  }, []);
-
   const handleError = useCallback(() => {
     setHasError(true);
   }, []);
 
-  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const audio = audioRef.current;
-    if (audio) {
-      const newTime = parseFloat(e.target.value);
-      audio.currentTime = newTime;
-      setCurrentTime(newTime);
-    }
-  }, []);
-
-  // Open file in VSCode or system default
-  const handleOpenFile = useCallback(() => {
+  // Open file in neko-preview (hardware-accelerated preview with waveform)
+  const handleOpenPreview = useCallback(() => {
     const pathToOpen = localPath || src;
-    // Check if it's a local file path
+    // Check if it's a local file path → open with neko-preview
     if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
       vscode?.postMessage({ type: 'openFile', filePath: pathToOpen });
     } else {
@@ -110,26 +77,17 @@ function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerP
     }
   }, [localPath, src]);
 
-  // Pause on collapse
-  useEffect(() => {
-    if (!isExpanded && isPlaying) {
-      audioRef.current?.pause();
-      setIsPlaying(false);
-    }
-  }, [isExpanded, isPlaying]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    const audio = audioRef.current;
-    return () => {
-      if (audio) {
-        audio.pause();
-      }
-    };
-  }, []);
-
   return (
     <div className={`my-1 ${className || ''}`}>
+      {/* Hidden audio element for metadata extraction */}
+      <audio
+        ref={audioRef}
+        src={src}
+        onLoadedMetadata={handleLoadedMetadata}
+        onError={handleError}
+        preload="metadata"
+      />
+
       {/* Compact header - matches ToolCallDisplay style */}
       <div
         className={`flex items-center gap-1.5 px-2 py-1 rounded-t text-[11px] cursor-pointer transition-colors
@@ -163,18 +121,18 @@ function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerP
         {/* Spacer */}
         <span className="flex-1" />
 
-        {/* Open button */}
+        {/* Open in Preview button */}
         {!hasError && (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              handleOpenFile();
+              handleOpenPreview();
             }}
             className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] transition-colors flex items-center gap-1 shrink-0"
-            title="Open file"
+            title="Open in Neko Preview"
           >
             <OpenIcon className="w-3 h-3" />
-            <span>Open</span>
+            <span>Preview</span>
           </button>
         )}
 
@@ -182,51 +140,37 @@ function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerP
         <ChevronIcon className={`w-3 h-3 text-[var(--vscode-descriptionForeground)] transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
       </div>
 
-      {/* Expanded content */}
+      {/* Expanded content — audio info card with click-to-open */}
       {isExpanded && (
-        <div className="border border-t-0 border-[var(--vscode-panel-border)] rounded-b bg-[var(--vscode-editor-background)] p-2">
+        <div className="border border-t-0 border-[var(--vscode-panel-border)] rounded-b bg-[var(--vscode-editor-background)] overflow-hidden">
           {hasError ? (
             <div className="flex items-center justify-center py-4 text-[var(--vscode-errorForeground)] text-[11px]">
               <ErrorIcon className="w-4 h-4 mr-2" />
               <span>Failed to load audio</span>
             </div>
           ) : (
-            <>
-              <audio
-                ref={audioRef}
-                src={src}
-                onTimeUpdate={handleTimeUpdate}
-                onLoadedMetadata={handleLoadedMetadata}
-                onEnded={handleEnded}
-                onError={handleError}
-                preload="metadata"
-              />
-              <div className="flex items-center gap-2">
-                {/* Play/Pause button */}
-                <button
-                  onClick={togglePlay}
-                  className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] text-[var(--vscode-button-foreground)] transition-colors"
-                  title={isPlaying ? 'Pause' : 'Play'}
-                >
-                  {isPlaying ? <PauseIcon className="w-3.5 h-3.5" /> : <PlayIcon className="w-3.5 h-3.5" />}
-                </button>
-
-                {/* Progress bar */}
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  value={currentTime}
-                  onChange={handleSeek}
-                  className="flex-1 h-1 bg-[var(--vscode-scrollbarSlider-background)] rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--vscode-button-background)]"
-                />
-
-                {/* Time display */}
-                <span className="text-[10px] text-[var(--vscode-descriptionForeground)] tabular-nums min-w-[60px] text-right">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </span>
+            <div
+              className="flex items-center gap-3 p-3 cursor-pointer group hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
+              onClick={handleOpenPreview}
+            >
+              {/* Play button icon */}
+              <div className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[var(--vscode-button-background)] group-hover:bg-[var(--vscode-button-hoverBackground)] text-[var(--vscode-button-foreground)] transition-colors">
+                <PlayIcon className="w-4 h-4 ml-0.5" />
               </div>
-            </>
+
+              {/* Audio info */}
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-medium text-[var(--vscode-foreground)] truncate">
+                  {fileName}
+                </div>
+                <div className="text-[10px] text-[var(--vscode-descriptionForeground)]">
+                  {duration > 0 ? formatTime(duration) : 'Loading...'} · Click to open in Neko Preview
+                </div>
+              </div>
+
+              {/* Open icon */}
+              <OpenIcon className="w-4 h-4 text-[var(--vscode-descriptionForeground)] group-hover:text-[var(--vscode-foreground)] transition-colors shrink-0" />
+            </div>
           )}
         </div>
       )}
@@ -273,14 +217,6 @@ function PlayIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="currentColor" viewBox="0 0 24 24">
       <path d="M8 5v14l11-7z" />
-    </svg>
-  );
-}
-
-function PauseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
-      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
     </svg>
   );
 }

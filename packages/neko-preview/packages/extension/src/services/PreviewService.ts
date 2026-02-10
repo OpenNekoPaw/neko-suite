@@ -173,7 +173,7 @@ export class PreviewService implements vscode.Disposable {
 			tracks: [
 				{
 					id: 'video-track',
-					trackType: 'video',
+					type: 'video',
 					elements: [
 						{
 							id: 'video-0',

@@ -74,6 +74,7 @@ export const PreviewPanel = memo(function PreviewPanel({
   // H.264 stream client
   const h264ClientRef = useRef<H264StreamClient | null>(null);
   const [frameServerPort, setFrameServerPort] = useState<number | null>(null);
+  const [streamWsUrl, setStreamWsUrl] = useState<string | null>(null);
 
   // State
   const [isInitialized, setIsInitialized] = useState(false);
@@ -88,7 +89,7 @@ export const PreviewPanel = memo(function PreviewPanel({
   currentTimeRef.current = currentTime;
 
   // ==========================================================================
-  // Frame Server Port Configuration
+  // Frame Server Port & Stream Configuration
   // ==========================================================================
 
   useEffect(() => {
@@ -97,6 +98,14 @@ export const PreviewPanel = memo(function PreviewPanel({
       if (message.type === 'frameServer:config' && typeof message.port === 'number') {
         console.log(`[PreviewPanel] Received frame server config, port: ${message.port}`);
         setFrameServerPort(message.port);
+      }
+      if (message.type === 'frameServer:streamCreated' && typeof message.wsUrl === 'string') {
+        console.log(`[PreviewPanel] Stream created: ${message.streamId}, wsUrl: ${message.wsUrl}`);
+        setStreamWsUrl(message.wsUrl);
+      }
+      if (message.type === 'frameServer:streamStopped') {
+        console.log(`[PreviewPanel] Stream stopped: ${message.streamId}`);
+        setStreamWsUrl(null);
       }
     };
 
@@ -109,7 +118,7 @@ export const PreviewPanel = memo(function PreviewPanel({
   // ==========================================================================
 
   useEffect(() => {
-    if (!frameServerPort || !project || !canvasRef.current) {
+    if (!streamWsUrl || !project || !canvasRef.current) {
       return;
     }
 
@@ -120,9 +129,9 @@ export const PreviewPanel = memo(function PreviewPanel({
       return;
     }
 
-    // Create H.264 stream client
+    // Create H.264 stream client connected to the per-stream WebSocket endpoint
     const client = new H264StreamClient({
-      websocketUrl: `ws://127.0.0.1:${frameServerPort}/ws/h264`,
+      websocketUrl: streamWsUrl,
       width: project.resolution.width,
       height: project.resolution.height,
       onFrame: (frame: VideoFrame) => {
@@ -133,6 +142,9 @@ export const PreviewPanel = memo(function PreviewPanel({
       onConnectionChange: (connected: boolean) => {
         console.log(`[PreviewPanel] H.264 stream ${connected ? 'connected' : 'disconnected'}`);
         setIsInitialized(connected);
+        if (connected) {
+          setInitError(null); // Clear previous errors on successful connection
+        }
       },
       onError: (error: Error) => {
         console.error('[PreviewPanel] H.264 stream error:', error);
@@ -147,15 +159,16 @@ export const PreviewPanel = memo(function PreviewPanel({
     return () => {
       client.disconnect();
       h264ClientRef.current = null;
+      setIsInitialized(false);
     };
-  }, [frameServerPort, project?.resolution.width, project?.resolution.height]);
+  }, [streamWsUrl, project?.resolution.width, project?.resolution.height]);
 
   // ==========================================================================
   // Playback Control
   // ==========================================================================
 
   useEffect(() => {
-    if (!isInitialized || !project || !isPlaying) {
+    if (!frameServerPort || !project || !isPlaying) {
       // Stop H264 push when paused
       postMessage({
         type: 'media:frameServer:projectPlayback:stop',
@@ -171,6 +184,8 @@ export const PreviewPanel = memo(function PreviewPanel({
     }
 
     // Start H264 push for playback
+    // Extension will create a stream and send back frameServer:streamCreated
+    // which triggers the H264StreamClient connection
     console.log('[PreviewPanel] Starting H264 push for playback');
     postMessage({
       type: 'media:frameServer:projectPlayback:start',
@@ -186,7 +201,7 @@ export const PreviewPanel = memo(function PreviewPanel({
         type: 'media:frameServer:projectPlayback:stop',
       });
     };
-  }, [isInitialized, project, isPlaying]);
+  }, [frameServerPort, project, isPlaying]);
 
   // ==========================================================================
   // Scrubbing (Seek when paused)
@@ -195,7 +210,7 @@ export const PreviewPanel = memo(function PreviewPanel({
   const lastRenderedTimeRef = useRef<number>(-1);
 
   useEffect(() => {
-    if (!isInitialized || !project || isPlaying) return;
+    if (!frameServerPort || !project || isPlaying) return;
 
     const TIME_TOLERANCE = 0.001;
     if (Math.abs(currentTime - lastRenderedTimeRef.current) < TIME_TOLERANCE) return;

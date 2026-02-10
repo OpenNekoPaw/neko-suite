@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-use crate::export::TimelineData;
+use crate::domain::Timeline;
 use crate::gpu::ColorSpace;
 
 /// Unique key for cached keyframes
@@ -135,7 +135,7 @@ impl CachedKeyframe {
 #[serde(rename_all = "camelCase")]
 pub struct CacheRequest {
     /// Timeline data containing video elements
-    pub timeline: TimelineData,
+    pub timeline: Timeline,
     /// Current playhead position in seconds
     pub playhead: f64,
     /// Maximum number of frames to cache (default: 80)

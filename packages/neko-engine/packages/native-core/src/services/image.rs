@@ -2,7 +2,7 @@
 
 use crate::domain::{CaptureOptions, FrameData};
 use crate::error::Result;
-use neko_types::{MediaInfo, ResourceId};
+use neko_types::MediaInfo;
 use std::path::Path;
 
 /// Image service interface
@@ -16,7 +16,7 @@ pub trait IImageService: Send + Sync {
     /// Capture/load image with optional transformations
     async fn capture(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         options: CaptureOptions,
     ) -> Result<FrameData>;
 }

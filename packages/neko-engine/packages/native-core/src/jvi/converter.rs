@@ -1,19 +1,22 @@
-//! ProjectData to TimelineData converter
+//! ProjectData to Timeline converter
 //!
-//! Converts JVI ProjectData to internal TimelineData format with path resolution.
+//! Converts JVI ProjectData to unified domain Timeline model with path resolution.
 
 use std::path::PathBuf;
 
+use crate::domain::{
+    AudioElementData, AudioProperties, Element, ElementType, MediaElementData,
+    TextElementData, Timeline, Track, Transform,
+};
 use crate::error::{Error, Result};
 use crate::export::{
-    AudioElementData, ElementData, ElementTransform, ExportAudioCodec, ExportHwEncoder,
-    ExportPreset, ExportSettings, ExportVideoCodec, MediaElementData, TextElementData,
-    TimelineData, TrackData, TrackType,
+    ExportAudioCodec, ExportHwEncoder, ExportPreset, ExportSettings, ExportVideoCodec,
 };
+use neko_types::{BlendMode, Resolution, TrackType};
 
 use super::types::{JviElement, JviTrack, ProjectData};
 
-/// Converter from ProjectData to TimelineData
+/// Converter from ProjectData to Timeline
 pub struct ProjectConverter {
     /// Base directory for resolving relative paths
     base_dir: PathBuf,
@@ -25,8 +28,8 @@ impl ProjectConverter {
         Self { base_dir }
     }
 
-    /// Convert ProjectData to TimelineData and ExportSettings
-    pub fn convert(&self, project: ProjectData) -> Result<(TimelineData, ExportSettings)> {
+    /// Convert ProjectData to Timeline and ExportSettings
+    pub fn convert(&self, project: ProjectData) -> Result<(Timeline, ExportSettings)> {
         // Calculate timeline duration from tracks
         let duration = self.calculate_duration(&project.tracks);
 
@@ -37,7 +40,14 @@ impl ProjectConverter {
             .map(|track| self.convert_track(track))
             .collect::<Result<Vec<_>>>()?;
 
-        let timeline = TimelineData { duration, tracks };
+        let resolution = Resolution {
+            width: project.resolution.width,
+            height: project.resolution.height,
+        };
+
+        let mut timeline = Timeline::new(resolution, project.fps);
+        timeline.duration = duration;
+        timeline.tracks = tracks;
 
         // Create export settings from project
         let settings = ExportSettings {
@@ -51,7 +61,7 @@ impl ProjectConverter {
             hw_encoder: ExportHwEncoder::Auto,
             time_range: None,
             preset: ExportPreset::Medium,
-            use_zero_copy_gpu: false, // Disabled: direct IOSurface mapping is faster than CVPixelBuffer wrapping
+            use_zero_copy_gpu: false,
         };
 
         Ok((timeline, settings))
@@ -80,8 +90,8 @@ impl ProjectConverter {
         max_end_time
     }
 
-    /// Convert a JVI track to internal TrackData
-    fn convert_track(&self, track: JviTrack) -> Result<TrackData> {
+    /// Convert a JVI track to domain Track
+    fn convert_track(&self, track: JviTrack) -> Result<Track> {
         let track_type = match track.track_type.as_str() {
             "media" => TrackType::Video,
             "audio" => TrackType::Audio,
@@ -96,75 +106,135 @@ impl ProjectConverter {
             .filter_map(|element| self.convert_element(element).ok())
             .collect();
 
-        Ok(TrackData {
-            id: track.id,
-            track_type,
-            elements,
-            muted: track.muted,
-        })
+        let mut t = Track::new(track.id, track_type);
+        t.name = track.name;
+        t.elements = elements;
+        t.muted = track.muted;
+        t.locked = track.locked;
+        t.hidden = track.hidden;
+        t.is_main = track.is_main;
+
+        Ok(t)
     }
 
-    /// Convert a JVI element to internal ElementData
-    fn convert_element(&self, element: JviElement) -> Result<ElementData> {
-        match element {
+    /// Convert a JVI element to domain Element
+    fn convert_element(&self, jvi_element: JviElement) -> Result<Element> {
+        match jvi_element {
             JviElement::Media(media) => {
                 let src = self.resolve_path(&media.src);
 
-                let transform = media.transform.map(|t| ElementTransform {
-                    x: t.x,
-                    y: t.y,
-                    scale_x: t.scale_x,
-                    scale_y: t.scale_y,
-                    rotation: t.rotation,
-                    anchor_x: t.anchor_x,
-                    anchor_y: t.anchor_y,
-                });
+                let transform = media
+                    .transform
+                    .map(|t| Transform {
+                        x: t.x,
+                        y: t.y,
+                        scale_x: t.scale_x,
+                        scale_y: t.scale_y,
+                        rotation: t.rotation,
+                        anchor_x: t.anchor_x,
+                        anchor_y: t.anchor_y,
+                    })
+                    .unwrap_or_default();
 
-                let (volume, muted) = if let Some(audio) = &media.audio {
-                    (audio.volume, media.muted)
+                let volume = if let Some(ref audio) = media.audio {
+                    audio.volume as f32
                 } else {
-                    (1.0, media.muted)
+                    1.0
                 };
 
-                Ok(ElementData::Media(MediaElementData {
+                let blend_mode = media
+                    .blend_mode
+                    .as_deref()
+                    .map(|s| match s.to_lowercase().as_str() {
+                        "multiply" => BlendMode::Multiply,
+                        "screen" => BlendMode::Screen,
+                        "overlay" => BlendMode::Overlay,
+                        "darken" => BlendMode::Darken,
+                        "lighten" => BlendMode::Lighten,
+                        "colordodge" | "color_dodge" => BlendMode::ColorDodge,
+                        "colorburn" | "color_burn" => BlendMode::ColorBurn,
+                        "hardlight" | "hard_light" => BlendMode::HardLight,
+                        "softlight" | "soft_light" => BlendMode::SoftLight,
+                        "difference" => BlendMode::Difference,
+                        "exclusion" => BlendMode::Exclusion,
+                        "hue" => BlendMode::Hue,
+                        "saturation" => BlendMode::Saturation,
+                        "color" => BlendMode::Color,
+                        "luminosity" => BlendMode::Luminosity,
+                        _ => BlendMode::Normal,
+                    })
+                    .unwrap_or(BlendMode::Normal);
+
+                let audio_props = media.audio.map(|a| AudioProperties {
+                    volume: a.volume as f64,
+                    pan: a.pan as f64,
+                    muted: media.muted,
+                    fade_in: a.fade_in,
+                    fade_out: a.fade_out,
+                });
+
+                Ok(Element {
                     id: media.id,
-                    src,
+                    name: media.name,
+                    element_type: ElementType::Media(MediaElementData {
+                        src,
+                        resource_id: None,
+                        audio: audio_props,
+                        media_type: media.media_type,
+                        linked_audio_id: media.linked_audio_id,
+                        volume,
+                    }),
                     start_time: media.start_time,
                     duration: media.duration,
                     trim_start: media.trim_start,
                     trim_end: media.trim_end,
                     transform,
-                    opacity: media.opacity,
-                    blend_mode: media.blend_mode,
-                    muted,
-                    volume,
-                }))
+                    opacity: media.opacity as f64,
+                    blend_mode,
+                    effects: Vec::new(),
+                    muted: media.muted,
+                    hidden: media.hidden,
+                    locked: media.locked,
+                })
             }
             JviElement::Audio(audio) => {
                 let src = self.resolve_path(&audio.src);
 
-                let (volume, pan, fade_in, fade_out) = if let Some(props) = &audio.audio {
-                    (props.volume, props.pan, props.fade_in, props.fade_out)
+                let (volume, pan, fade_in, fade_out) = if let Some(ref props) = audio.audio {
+                    (props.volume as f32, props.pan as f32, props.fade_in, props.fade_out)
                 } else {
                     (1.0, 0.0, 0.0, 0.0)
                 };
 
-                Ok(ElementData::Audio(AudioElementData {
+                Ok(Element {
                     id: audio.id,
-                    src,
+                    name: audio.name,
+                    element_type: ElementType::Audio(AudioElementData {
+                        src,
+                        resource_id: None,
+                        audio: None,
+                        audio_settings: None,
+                        linked_video_id: audio.linked_video_id,
+                        volume,
+                        pan,
+                        fade_in,
+                        fade_out,
+                    }),
                     start_time: audio.start_time,
                     duration: audio.duration,
                     trim_start: audio.trim_start,
                     trim_end: audio.trim_end,
-                    audio: None, // Already extracted volume/pan above
-                    volume,
-                    pan,
-                    fade_in,
-                    fade_out,
-                }))
+                    transform: Transform::default(),
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Normal,
+                    effects: Vec::new(),
+                    muted: audio.muted,
+                    hidden: false,
+                    locked: false,
+                })
             }
             JviElement::Text(text) => {
-                let transform = Some(ElementTransform {
+                let transform = Transform {
                     x: text.x,
                     y: text.y,
                     scale_x: 1.0,
@@ -172,22 +242,35 @@ impl ProjectConverter {
                     rotation: text.rotation,
                     anchor_x: 0.5,
                     anchor_y: 0.5,
-                });
+                };
 
-                Ok(ElementData::Text(TextElementData {
+                Ok(Element {
                     id: text.id,
-                    text: text.content,
+                    name: text.name,
+                    element_type: ElementType::Text(TextElementData {
+                        content: text.content,
+                        font_family: text.font_family,
+                        font_size: text.font_size,
+                        color: text.color,
+                        background_color: "transparent".to_string(),
+                        text_align: "center".to_string(),
+                        font_weight: "normal".to_string(),
+                        font_style: "normal".to_string(),
+                    }),
                     start_time: text.start_time,
                     duration: text.duration,
-                    font_family: text.font_family,
-                    font_size: text.font_size,
-                    color: text.color,
+                    trim_start: 0.0,
+                    trim_end: 0.0,
                     transform,
-                    opacity: text.opacity,
-                }))
+                    opacity: text.opacity as f64,
+                    blend_mode: BlendMode::Normal,
+                    effects: Vec::new(),
+                    muted: false,
+                    hidden: false,
+                    locked: false,
+                })
             }
             JviElement::Shape(_) | JviElement::Subtitle(_) => {
-                // Shape and subtitle elements are not fully supported yet
                 Err(Error::Other("Shape and subtitle elements not yet supported".to_string()))
             }
         }
@@ -209,14 +292,14 @@ impl ProjectConverter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jvi::types::{JviMediaElement, Resolution};
+    use crate::jvi::types::{JviMediaElement, Resolution as JviResolution};
 
     #[test]
     fn test_convert_project() {
         let project = ProjectData {
             version: "1.0".to_string(),
             name: "test".to_string(),
-            resolution: Resolution {
+            resolution: JviResolution {
                 width: 1920,
                 height: 1080,
             },
@@ -260,6 +343,7 @@ mod tests {
 
         assert_eq!(timeline.duration, 10.0);
         assert_eq!(timeline.tracks.len(), 1);
+        assert_eq!(timeline.tracks[0].elements.len(), 1);
         assert_eq!(settings.width, 1920);
         assert_eq!(settings.height, 1080);
         assert_eq!(settings.fps, 30.0);

@@ -19,9 +19,9 @@
 
 /**
  * H.264 packet header size
- * Format: [pts: i64 LE][dts: i64 LE][is_keyframe: u8]
+ * Format: [pts: i64 LE][dts: i64 LE][is_keyframe: u8][duration: i64 LE]
  */
-const H264_HEADER_SIZE = 8 + 8 + 1;
+const H264_HEADER_SIZE = 8 + 8 + 1 + 8;
 
 /**
  * Parse H.264 packet message
@@ -53,7 +53,10 @@ function parseH264Packet(data: ArrayBuffer): {
 	// is_keyframe: u8
 	const isKeyframe = view.getUint8(16) === 1;
 
-	// NAL unit data
+	// duration: i64 (skip, not needed for decoding)
+	// bytes 17-24
+
+	// NAL unit data (after header)
 	const nalData = new Uint8Array(data, H264_HEADER_SIZE);
 
 	return { pts, dts, isKeyframe, nalData };

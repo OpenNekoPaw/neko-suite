@@ -1,7 +1,7 @@
 {
   "name": "neko-suite-monorepo",
   "private": true,
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@10.29.2",
   "workspaces": [
     "packages/*",
     "packages/*/packages/*"

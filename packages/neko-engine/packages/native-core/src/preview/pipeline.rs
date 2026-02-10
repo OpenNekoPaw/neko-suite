@@ -12,7 +12,8 @@ use std::sync::Arc;
 
 use crate::encoder::{EncodedPacket, Encoder, EncoderConfig, HwAccelEncoder, VideoCodec};
 use crate::error::Result;
-use crate::export::{ExportSettings, GpuExportPipeline, TimelineData};
+use crate::domain::Timeline;
+use crate::export::{ExportSettings, GpuExportPipeline};
 use crate::gpu::GpuContext;
 
 /// Preview pipeline configuration
@@ -90,7 +91,7 @@ pub struct PreviewPipeline {
 impl PreviewPipeline {
     /// Create a new preview pipeline from timeline
     pub fn new(
-        timeline: TimelineData,
+        timeline: Timeline,
         ctx: Arc<GpuContext>,
         config: PreviewPipelineConfig,
     ) -> Result<Self> {
@@ -99,13 +100,13 @@ impl PreviewPipeline {
             width: config.width,
             height: config.height,
             fps: config.fps,
-            video_codec: crate::export::ExportVideoCodec::H264,
+            video_codec: neko_types::VideoCodec::H264,
             video_bitrate: Some(config.bitrate),
-            audio_codec: crate::export::ExportAudioCodec::Aac,
+            audio_codec: neko_types::AudioCodec::Aac,
             audio_bitrate: None,
-            hw_encoder: crate::export::ExportHwEncoder::Auto,
+            hw_encoder: neko_types::HwEncoderType::Auto,
             time_range: None,
-            preset: crate::export::ExportPreset::default(),
+            preset: neko_types::EncoderPreset::default(),
             use_zero_copy_gpu: true, // Enable zero-copy for preview
         };
 

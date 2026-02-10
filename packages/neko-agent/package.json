@@ -29,7 +29,8 @@
   ],
   "extensionDependencies": [
     "neko.neko-engine",
-    "neko.neko-tools"
+    "neko.neko-tools",
+    "neko.neko-preview"
   ],
   "activationEvents": [],
   "main": "./dist/extension.js",

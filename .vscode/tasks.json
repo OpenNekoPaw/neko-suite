@@ -88,6 +88,14 @@
       "problemMatcher": ["$tsc"]
     },
     {
+      "label": "build:neko-preview",
+      "type": "shell",
+      "command": "pnpm build:neko-preview",
+      "group": "build",
+      "dependsOn": ["build:core"],
+      "problemMatcher": ["$tsc"]
+    },
+    {
       "label": "build:all",
       "type": "shell",
       "command": "pnpm build:extensions",

@@ -487,11 +487,24 @@ export class MediaService implements vscode.Disposable {
 				});
 			}
 
+			// Notify Webview of the stream ID and WebSocket URL
+			if (this._activeStreamId) {
+				const port = this.frameServer.getPort();
+				this.sendResponse({
+					type: 'frameServer:streamCreated',
+					streamId: this._activeStreamId,
+					wsUrl: port
+						? `ws://127.0.0.1:${port}/v1/streams/${this._activeStreamId}`
+						: null,
+				});
+			}
+
 			console.log(
 				`[MediaService] Stream started: ${this._activeStreamId}`
 			);
 		} else if (type === 'media:frameServer:projectPlayback:stop') {
 			if (this._activeStreamId) {
+				const stoppedStreamId = this._activeStreamId;
 				await this.dispatch({
 					group: 'timelines',
 					action: 'stop',
@@ -501,6 +514,12 @@ export class MediaService implements vscode.Disposable {
 					`[MediaService] Stream stopped: ${this._activeStreamId}`
 				);
 				this._activeStreamId = null;
+
+				// Notify Webview that stream was stopped
+				this.sendResponse({
+					type: 'frameServer:streamStopped',
+					streamId: stoppedStreamId,
+				});
 			}
 		} else if (type === 'media:frameServer:projectPlayback:seek') {
 			const payload = msg.payload as {

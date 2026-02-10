@@ -1,10 +1,12 @@
 /**
  * VideoPlayer - Compact video preview card
- * Matches ToolCallDisplay style with collapsible content
- * Supports click-to-open for local files
+ *
+ * Displays video metadata with a thumbnail preview.
+ * Clicking "Open" or the thumbnail opens the file in neko-preview
+ * (hardware-accelerated H.264 preview via customEditor).
  */
 
-import { useState, useRef, useCallback, useEffect, memo } from 'react';
+import { useState, useRef, useCallback, memo } from 'react';
 
 // Get vscode API for postMessage
 const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
@@ -14,9 +16,9 @@ interface VideoPlayerProps {
   poster?: string;
   title?: string;
   className?: string;
-  /** Local file path for opening in VSCode */
+  /** Local file path for opening in neko-preview */
   localPath?: string;
-  /** Inline mode: show only video without header (for use inside cards like TaskCard) */
+  /** Inline mode: compact card without header (for use inside TaskCard) */
   inline?: boolean;
 }
 
@@ -46,8 +48,6 @@ function formatTime(time: number): string {
 function VideoPlayerComponent({ src, poster, title, className, localPath, inline = false }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isExpanded, setIsExpanded] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [hasError, setHasError] = useState(false);
 
@@ -57,25 +57,6 @@ function VideoPlayerComponent({ src, poster, title, className, localPath, inline
     setIsExpanded(prev => !prev);
   }, []);
 
-  const togglePlay = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (isPlaying) {
-      video.pause();
-    } else {
-      video.play();
-    }
-    setIsPlaying(!isPlaying);
-  }, [isPlaying]);
-
-  const handleTimeUpdate = useCallback(() => {
-    const video = videoRef.current;
-    if (video) {
-      setCurrentTime(video.currentTime);
-    }
-  }, []);
-
   const handleLoadedMetadata = useCallback(() => {
     const video = videoRef.current;
     if (video) {
@@ -83,28 +64,14 @@ function VideoPlayerComponent({ src, poster, title, className, localPath, inline
     }
   }, []);
 
-  const handleEnded = useCallback(() => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-  }, []);
-
   const handleError = useCallback(() => {
     setHasError(true);
   }, []);
 
-  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const video = videoRef.current;
-    if (video) {
-      const newTime = parseFloat(e.target.value);
-      video.currentTime = newTime;
-      setCurrentTime(newTime);
-    }
-  }, []);
-
-  // Open file in VSCode or system default
-  const handleOpenFile = useCallback(() => {
+  // Open file in neko-preview (hardware-accelerated preview)
+  const handleOpenPreview = useCallback(() => {
     const pathToOpen = localPath || src;
-    // Check if it's a local file path
+    // Check if it's a local file path → open with neko-preview
     if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
       vscode?.postMessage({ type: 'openFile', filePath: pathToOpen });
     } else {
@@ -113,25 +80,7 @@ function VideoPlayerComponent({ src, poster, title, className, localPath, inline
     }
   }, [localPath, src]);
 
-  // Pause on collapse
-  useEffect(() => {
-    if (!isExpanded && isPlaying) {
-      videoRef.current?.pause();
-      setIsPlaying(false);
-    }
-  }, [isExpanded, isPlaying]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    const video = videoRef.current;
-    return () => {
-      if (video) {
-        video.pause();
-      }
-    };
-  }, []);
-
-  // Inline mode: show only the video without header
+  // Inline mode: compact thumbnail card with click-to-open
   if (inline) {
     return (
       <div className={`rounded overflow-hidden bg-black ${className || ''}`}>
@@ -141,61 +90,35 @@ function VideoPlayerComponent({ src, poster, title, className, localPath, inline
             <span>Failed to load video</span>
           </div>
         ) : (
-          <div className="relative">
+          <div className="relative cursor-pointer group" onClick={handleOpenPreview}>
+            {/* Hidden video element for metadata extraction */}
             <video
               ref={videoRef}
               src={src}
               poster={poster}
-              onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
-              onEnded={handleEnded}
               onError={handleError}
-              onClick={togglePlay}
-              className="w-full max-h-[200px] object-contain cursor-pointer"
+              className="w-full max-h-[200px] object-contain"
               preload="metadata"
             />
 
-            {/* Play overlay (when paused) */}
-            {!isPlaying && (
-              <div
-                className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer"
-                onClick={togglePlay}
-              >
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                  <PlayIcon className="w-5 h-5 text-white ml-0.5" />
-                </div>
+            {/* Play overlay — click to open in neko-preview */}
+            <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/50 transition-colors">
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-white/20 backdrop-blur-sm group-hover:bg-white/30 transition-colors">
+                <PlayIcon className="w-5 h-5 text-white ml-0.5" />
+              </div>
+            </div>
+
+            {/* Duration badge */}
+            {duration > 0 && (
+              <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 bg-black/70 rounded text-[9px] text-white/90 tabular-nums">
+                {formatTime(duration)}
               </div>
             )}
 
-            {/* Simple progress bar */}
-            <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/80 to-transparent">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    togglePlay();
-                  }}
-                  className="p-0.5 hover:bg-white/20 rounded transition-colors"
-                >
-                  {isPlaying ? (
-                    <PauseIcon className="w-3.5 h-3.5 text-white" />
-                  ) : (
-                    <PlayIcon className="w-3.5 h-3.5 text-white" />
-                  )}
-                </button>
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  value={currentTime}
-                  onChange={handleSeek}
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex-1 h-1 bg-white/30 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
-                />
-                <span className="text-[9px] text-white/80 tabular-nums min-w-[60px] text-right">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </span>
-              </div>
+            {/* "Open in Preview" hint */}
+            <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 bg-black/70 rounded text-[9px] text-white/70 opacity-0 group-hover:opacity-100 transition-opacity">
+              Open in Preview
             </div>
           </div>
         )}
@@ -238,18 +161,18 @@ function VideoPlayerComponent({ src, poster, title, className, localPath, inline
         {/* Spacer */}
         <span className="flex-1" />
 
-        {/* Open button */}
+        {/* Open in Preview button */}
         {!hasError && (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              handleOpenFile();
+              handleOpenPreview();
             }}
             className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] transition-colors flex items-center gap-1 shrink-0"
-            title="Open file"
+            title="Open in Neko Preview"
           >
             <OpenIcon className="w-3 h-3" />
-            <span>Open</span>
+            <span>Preview</span>
           </button>
         )}
 
@@ -257,7 +180,7 @@ function VideoPlayerComponent({ src, poster, title, className, localPath, inline
         <ChevronIcon className={`w-3 h-3 text-[var(--vscode-descriptionForeground)] transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
       </div>
 
-      {/* Expanded content */}
+      {/* Expanded content — thumbnail with click-to-open */}
       {isExpanded && (
         <div className="border border-t-0 border-[var(--vscode-panel-border)] rounded-b bg-black overflow-hidden">
           {hasError ? (
@@ -266,60 +189,36 @@ function VideoPlayerComponent({ src, poster, title, className, localPath, inline
               <span>Failed to load video</span>
             </div>
           ) : (
-            <div className="relative">
+            <div className="relative cursor-pointer group" onClick={handleOpenPreview}>
+              {/* Video element for poster/thumbnail — no playback controls */}
               <video
                 ref={videoRef}
                 src={src}
                 poster={poster}
-                onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
-                onEnded={handleEnded}
                 onError={handleError}
-                onClick={togglePlay}
-                className="w-full max-h-[200px] object-contain cursor-pointer"
+                className="w-full max-h-[200px] object-contain"
                 preload="metadata"
               />
 
-              {/* Play overlay (when paused) */}
-              {!isPlaying && (
-                <div
-                  className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer"
-                  onClick={togglePlay}
-                >
-                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                    <PlayIcon className="w-5 h-5 text-white ml-0.5" />
-                  </div>
+              {/* Play overlay — click to open in neko-preview */}
+              <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/50 transition-colors">
+                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-white/20 backdrop-blur-sm group-hover:bg-white/30 transition-colors">
+                  <PlayIcon className="w-5 h-5 text-white ml-0.5" />
                 </div>
-              )}
+              </div>
 
-              {/* Simple progress bar */}
+              {/* "Click to open in Preview" hint */}
               <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/80 to-transparent">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      togglePlay();
-                    }}
-                    className="p-0.5 hover:bg-white/20 rounded transition-colors"
-                  >
-                    {isPlaying ? (
-                      <PauseIcon className="w-3.5 h-3.5 text-white" />
-                    ) : (
-                      <PlayIcon className="w-3.5 h-3.5 text-white" />
-                    )}
-                  </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={duration || 100}
-                    value={currentTime}
-                    onChange={handleSeek}
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex-1 h-1 bg-white/30 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
-                  />
-                  <span className="text-[9px] text-white/80 tabular-nums min-w-[60px] text-right">
-                    {formatTime(currentTime)} / {formatTime(duration)}
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] text-white/70 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Click to open in Neko Preview
                   </span>
+                  {duration > 0 && (
+                    <span className="text-[9px] text-white/80 tabular-nums">
+                      {formatTime(duration)}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -369,14 +268,6 @@ function PlayIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="currentColor" viewBox="0 0 24 24">
       <path d="M8 5v14l11-7z" />
-    </svg>
-  );
-}
-
-function PauseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
-      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
     </svg>
   );
 }

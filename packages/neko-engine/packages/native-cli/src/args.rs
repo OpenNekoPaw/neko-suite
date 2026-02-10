@@ -228,6 +228,8 @@ define_actions!(VideoAction {
     Waveform => "waveform",
     /// Generate proxy file
     Proxy => "proxy",
+    /// Compare two video files (metadata + content SSIM/PSNR)
+    Diff => "diff",
     /// Stop video stream
     Stop => "stop",
     /// Pause video stream

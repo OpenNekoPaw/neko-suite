@@ -2,7 +2,7 @@
 
 use crate::domain::{CaptureOptions, ExtractOptions, FrameData, TaskHandle, TranscodeOptions};
 use crate::error::Result;
-use neko_types::{LoopRegion, MediaInfo, ResourceId, StreamId};
+use neko_types::{LoopRegion, MediaInfo, StreamId};
 use std::path::Path;
 use tokio::sync::broadcast;
 
@@ -19,7 +19,7 @@ pub trait IVideoService: Send + Sync {
     /// Capture a single frame at specified time
     async fn capture(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         time_seconds: f64,
         options: CaptureOptions,
     ) -> Result<FrameData>;
@@ -27,7 +27,7 @@ pub trait IVideoService: Send + Sync {
     /// Extract multiple frames
     async fn extract(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         options: ExtractOptions,
         task_handle: Option<TaskHandle>,
     ) -> Result<Vec<FrameData>>;
@@ -35,7 +35,7 @@ pub trait IVideoService: Send + Sync {
     /// Start a video stream
     async fn start_stream(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         session_id: &str,
     ) -> Result<(StreamId, broadcast::Receiver<FrameData>)>;
 
@@ -60,26 +60,26 @@ pub trait IVideoService: Send + Sync {
     /// Transcode video to different format
     async fn transcode(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         output_path: &Path,
         options: TranscodeOptions,
         task_handle: Option<TaskHandle>,
     ) -> Result<()>;
 
     /// Get keyframe information
-    async fn get_keyframes(&self, resource_id: &ResourceId) -> Result<Vec<crate::keyframe_cache::KeyframeInfo>>;
+    async fn get_keyframes(&self, source: &Path) -> Result<Vec<crate::keyframe_cache::KeyframeInfo>>;
 
     /// Generate audio waveform from video
     async fn generate_waveform(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         task_handle: Option<TaskHandle>,
     ) -> Result<neko_types::WaveformData>;
 
     /// Generate proxy (lower resolution) version
     async fn generate_proxy(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         output_path: &Path,
         task_handle: Option<TaskHandle>,
     ) -> Result<()>;

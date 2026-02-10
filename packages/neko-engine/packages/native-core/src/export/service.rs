@@ -171,7 +171,7 @@ impl ExportService {
     /// Start an export job
     pub async fn start_export(&self, config: ExportJobConfig) -> Result<ExportStartResponse> {
         let job_id = config.job_id.clone();
-        let total_frames = config.timeline.total_frames(config.settings.fps);
+        let total_frames = config.timeline.total_frames();
 
         // Create job
         let job = ExportJob::new(config.clone(), total_frames);
@@ -647,8 +647,13 @@ mod tests {
     fn test_export_job_progress() {
         use crate::export::types::{
             ExportAudioCodec, ExportHwEncoder, ExportPreset, ExportSettings,
-            ExportVideoCodec, TimelineData,
+            ExportVideoCodec,
         };
+        use crate::domain::Timeline;
+        use neko_types::Resolution;
+
+        let mut timeline = Timeline::new(Resolution::full_hd(), 30.0);
+        timeline.duration = 10.0;
 
         let config = ExportJobConfig {
             job_id: "test-job".to_string(),
@@ -666,10 +671,7 @@ mod tests {
                 preset: ExportPreset::Medium,
                 use_zero_copy_gpu: false,
             },
-            timeline: TimelineData {
-                duration: 10.0,
-                tracks: vec![],
-            },
+            timeline,
         };
 
         let mut job = ExportJob::new(config, 300);

@@ -64,6 +64,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Register commands
   registerCommands(context, bootstrapResult.outlineProvider, videoEditorProvider);
 
+  // Register media preview command (opens in neko-preview's customEditor)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.cut.previewMedia', async (uri?: vscode.Uri) => {
+      if (!uri) return;
+
+      const ext = uri.fsPath.split('.').pop()?.toLowerCase() ?? '';
+      const videoExts = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'ts', 'flv', 'wmv'];
+      const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'];
+
+      try {
+        if (videoExts.includes(ext)) {
+          await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.videoPreview');
+        } else if (audioExts.includes(ext)) {
+          await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
+        }
+      } catch (error) {
+        console.error('[NekoCut] Failed to open media preview:', error);
+      }
+    })
+  );
+
   // Connect property panel to element selection
   videoEditorProvider.onElementSelected((event) => {
     propertyPanelProvider.updateSelectedElement(

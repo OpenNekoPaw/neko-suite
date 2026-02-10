@@ -1,13 +1,13 @@
 //! VideoController - handles videos:* actions
 
-use crate::controllers::utils::base64_encode;
+use crate::controllers::utils::{base64_encode, resolve_resource};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
 use neko_native_core::domain::{CaptureOptions, ExtractOptions, ExtractType};
-use neko_native_core::media_service::{diff_media, DiffCategory};
+use neko_native_core::media_service::{diff_media, diff_video_content, DiffCategory, VideoDiffOptions};
 use neko_native_core::services::{IVideoService, VideoService};
-use neko_types::{ActionResponse, FrameFormat, LoopRegion, ResourceId, StreamId};
+use neko_types::{ActionResponse, FrameFormat, LoopRegion, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -29,28 +29,6 @@ impl VideoController {
             video_service,
             resource_registry,
         }
-    }
-
-    /// Resolve resource: either by ID or by source path (self-healing)
-    async fn resolve_resource(&self, id: Option<&str>, source: Option<&str>) -> ApiResult<ResourceId> {
-        if let Some(id_str) = id {
-            // Try to resolve by ID first
-            let resource_id = ResourceId::from_string(id_str.to_string());
-            if self.resource_registry.resolve(&resource_id).await.is_some() {
-                return Ok(resource_id);
-            }
-        }
-
-        // Fall back to source path (self-healing)
-        if let Some(source_path) = source {
-            let path = Path::new(source_path);
-            let resource_id = self.resource_registry.register(path).await;
-            return Ok(resource_id);
-        }
-
-        Err(ApiError::InvalidRequest(
-            "Either resource_id or source path required".to_string(),
-        ))
     }
 }
 
@@ -188,6 +166,15 @@ struct DiffRequestOptions {
     source_a: Option<String>,
     /// Source B file path
     source_b: Option<String>,
+    /// SSIM threshold for diff frames (default 0.95)
+    ssim_threshold: Option<f64>,
+    /// Whether to generate a visual difference video
+    #[serde(default)]
+    generate_diff_video: bool,
+    /// Output path for the difference video
+    diff_video_output: Option<String>,
+    /// Whether to include audio comparison (default true)
+    include_audio: Option<bool>,
 }
 
 /// Options for stream control actions (stop/pause/resume/speed/seek/loop)
@@ -244,7 +231,7 @@ impl Controller for VideoController {
                 let opts: CaptureRequestOptions = serde_json::from_value(options).unwrap_or_default();
 
                 // Resolve resource (by ID or source path)
-                let res_id = self.resolve_resource(resource_id, opts.source.as_deref()).await?;
+                let (res_id, file_path) = resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref()).await?;
 
                 // Parse format
                 let format = match opts.format.to_lowercase().as_str() {
@@ -263,7 +250,7 @@ impl Controller for VideoController {
                 };
 
                 // Capture frame
-                let frame_data = self.video_service.capture(&res_id, opts.time, capture_opts).await?;
+                let frame_data = self.video_service.capture(&file_path, opts.time, capture_opts).await?;
 
                 // Build response
                 let response = serde_json::json!({
@@ -283,8 +270,9 @@ impl Controller for VideoController {
                 let opts: ExtractRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let res_id = self
-                    .resolve_resource(resource_id, opts.source.as_deref())
+                let (res_id, file_path) = resolve_resource(
+                    &self.resource_registry, resource_id, opts.source.as_deref(),
+                )
                     .await?;
 
                 let extract_type = match opts.extract_type.to_lowercase().as_str() {
@@ -305,7 +293,7 @@ impl Controller for VideoController {
 
                 let frames = self
                     .video_service
-                    .extract(&res_id, extract_options, None)
+                    .extract(&file_path, extract_options, None)
                     .await?;
 
                 // Build response based on extract type
@@ -355,15 +343,16 @@ impl Controller for VideoController {
                 let opts: StreamRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let res_id = self
-                    .resolve_resource(resource_id, opts.source.as_deref())
+                let (res_id, file_path) = resolve_resource(
+                    &self.resource_registry, resource_id, opts.source.as_deref(),
+                )
                     .await?;
 
                 let session_id = opts.session_id.unwrap_or_else(|| "default".to_string());
 
                 let (stream_id, _rx) = self
                     .video_service
-                    .start_stream(&res_id, &session_id)
+                    .start_stream(&file_path, &session_id)
                     .await?;
 
                 let response = serde_json::json!({
@@ -378,8 +367,9 @@ impl Controller for VideoController {
                 let opts: TranscodeRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let res_id = self
-                    .resolve_resource(resource_id, opts.source.as_deref())
+                let (res_id, file_path) = resolve_resource(
+                    &self.resource_registry, resource_id, opts.source.as_deref(),
+                )
                     .await?;
 
                 let resolution = opts.resolution();
@@ -401,7 +391,7 @@ impl Controller for VideoController {
                 };
 
                 self.video_service
-                    .transcode(&res_id, Path::new(&output), transcode_opts, None)
+                    .transcode(&file_path, Path::new(&output), transcode_opts, None)
                     .await?;
 
                 let response = serde_json::json!({
@@ -416,11 +406,12 @@ impl Controller for VideoController {
                 let opts: KeyframesRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let res_id = self
-                    .resolve_resource(resource_id, opts.source.as_deref())
+                let (res_id, file_path) = resolve_resource(
+                    &self.resource_registry, resource_id, opts.source.as_deref(),
+                )
                     .await?;
 
-                let keyframes = self.video_service.get_keyframes(&res_id).await?;
+                let keyframes = self.video_service.get_keyframes(&file_path).await?;
 
                 // Convert internal KeyframeInfo to neko_types for serialization
                 let typed_keyframes: Vec<neko_types::KeyframeInfo> = keyframes
@@ -448,13 +439,14 @@ impl Controller for VideoController {
                 let opts: WaveformRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let res_id = self
-                    .resolve_resource(resource_id, opts.source.as_deref())
+                let (res_id, file_path) = resolve_resource(
+                    &self.resource_registry, resource_id, opts.source.as_deref(),
+                )
                     .await?;
 
                 let waveform = self
                     .video_service
-                    .generate_waveform(&res_id, None)
+                    .generate_waveform(&file_path, None)
                     .await?;
 
                 let response = serde_json::json!({
@@ -468,8 +460,9 @@ impl Controller for VideoController {
                 let opts: ProxyRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let res_id = self
-                    .resolve_resource(resource_id, opts.source.as_deref())
+                let (res_id, file_path) = resolve_resource(
+                    &self.resource_registry, resource_id, opts.source.as_deref(),
+                )
                     .await?;
 
                 let output = opts.output.ok_or_else(|| {
@@ -477,7 +470,7 @@ impl Controller for VideoController {
                 })?;
 
                 self.video_service
-                    .generate_proxy(&res_id, Path::new(&output), None)
+                    .generate_proxy(&file_path, Path::new(&output), None)
                     .await?;
 
                 let response = serde_json::json!({
@@ -586,8 +579,28 @@ impl Controller for VideoController {
                     ApiError::InvalidRequest("sourceB path required for videos:diff".to_string())
                 })?;
 
-                let result = diff_media(&source_a, &source_b, DiffCategory::Video)
+                // Metadata diff (always)
+                let mut result = diff_media(&source_a, &source_b, DiffCategory::Video)
                     .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+
+                // Content-level diff with custom options
+                let video_opts = VideoDiffOptions {
+                    ssim_threshold: opts.ssim_threshold.unwrap_or(0.95),
+                    generate_diff_video: opts.generate_diff_video,
+                    diff_video_output: opts.diff_video_output,
+                    include_audio: opts.include_audio.unwrap_or(true),
+                };
+
+                match diff_video_content(&source_a, &source_b, &video_opts) {
+                    Ok(video_diff) => {
+                        result.content =
+                            Some(neko_native_core::media_service::ContentDiff::Video(video_diff));
+                    }
+                    Err(e) => {
+                        tracing::warn!("Video content diff failed: {}", e);
+                        // result.content remains as set by diff_media (None or default)
+                    }
+                }
 
                 let response = serde_json::to_value(&result)?;
                 Ok(ActionResponse::ok("", response))

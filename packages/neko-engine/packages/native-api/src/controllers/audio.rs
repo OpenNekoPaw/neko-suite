@@ -1,11 +1,12 @@
 //! AudioController - handles audios:* actions
 
+use crate::controllers::utils::resolve_resource;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
 use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{AudioService, IAudioService};
-use neko_types::{ActionResponse, ResourceId, StreamId};
+use neko_types::{ActionResponse, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -27,30 +28,6 @@ impl AudioController {
             audio_service,
             resource_registry,
         }
-    }
-
-    /// Resolve resource: either by ID or by source path (self-healing)
-    async fn resolve_resource(
-        &self,
-        id: Option<&str>,
-        source: Option<&str>,
-    ) -> ApiResult<ResourceId> {
-        if let Some(id_str) = id {
-            let resource_id = ResourceId::from_string(id_str.to_string());
-            if self.resource_registry.resolve(&resource_id).await.is_some() {
-                return Ok(resource_id);
-            }
-        }
-
-        if let Some(source_path) = source {
-            let path = Path::new(source_path);
-            let resource_id = self.resource_registry.register(path).await;
-            return Ok(resource_id);
-        }
-
-        Err(ApiError::InvalidRequest(
-            "Either resource_id or source path required".to_string(),
-        ))
     }
 }
 
@@ -150,8 +127,9 @@ impl Controller for AudioController {
                 let opts: TranscodeRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let res_id = self
-                    .resolve_resource(resource_id, opts.source.as_deref())
+                let (res_id, file_path) = resolve_resource(
+                    &self.resource_registry, resource_id, opts.source.as_deref(),
+                )
                     .await?;
 
                 let output_path = opts.output.ok_or_else(|| {
@@ -181,7 +159,7 @@ impl Controller for AudioController {
                 };
 
                 self.audio_service
-                    .transcode(&res_id, Path::new(&output_path), transcode_opts)
+                    .transcode(&file_path, Path::new(&output_path), transcode_opts)
                     .await?;
 
                 let response = serde_json::json!({
@@ -196,15 +174,16 @@ impl Controller for AudioController {
                 let opts: StreamRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let res_id = self
-                    .resolve_resource(resource_id, opts.source.as_deref())
+                let (res_id, file_path) = resolve_resource(
+                    &self.resource_registry, resource_id, opts.source.as_deref(),
+                )
                     .await?;
 
                 let session_id = opts.session_id.unwrap_or_else(|| "default".to_string());
 
                 let (stream_id, _rx) = self
                     .audio_service
-                    .start_stream(&res_id, &session_id)
+                    .start_stream(&file_path, &session_id)
                     .await?;
 
                 let response = serde_json::json!({
@@ -219,13 +198,14 @@ impl Controller for AudioController {
                 let opts: WaveformRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let res_id = self
-                    .resolve_resource(resource_id, opts.source.as_deref())
+                let (res_id, file_path) = resolve_resource(
+                    &self.resource_registry, resource_id, opts.source.as_deref(),
+                )
                     .await?;
 
                 let waveform = self
                     .audio_service
-                    .generate_waveform(&res_id)
+                    .generate_waveform(&file_path)
                     .await?;
 
                 let response = serde_json::json!({

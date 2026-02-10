@@ -2,7 +2,7 @@
 
 use crate::domain::AudioTranscodeOptions;
 use crate::error::Result;
-use neko_types::{MediaInfo, ResourceId, StreamId, WaveformData};
+use neko_types::{MediaInfo, StreamId, WaveformData};
 use std::path::Path;
 use tokio::sync::broadcast;
 
@@ -20,7 +20,7 @@ pub trait IAudioService: Send + Sync {
     /// Transcode audio file to a different format/codec/bitrate
     async fn transcode(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         output_path: &Path,
         options: AudioTranscodeOptions,
     ) -> Result<()>;
@@ -28,7 +28,7 @@ pub trait IAudioService: Send + Sync {
     /// Start an audio stream
     async fn start_stream(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         session_id: &str,
     ) -> Result<(StreamId, broadcast::Receiver<FrameData>)>;
 
@@ -47,6 +47,6 @@ pub trait IAudioService: Send + Sync {
     /// Generate waveform visualization data
     async fn generate_waveform(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
     ) -> Result<WaveformData>;
 }

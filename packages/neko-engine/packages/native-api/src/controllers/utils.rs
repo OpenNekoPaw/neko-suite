@@ -1,6 +1,10 @@
 //! Shared utilities for controllers
 
+use crate::error::{ApiError, ApiResult};
+use crate::registry::ResourceRegistry;
+use neko_types::ResourceId;
 use std::io::Write;
+use std::path::PathBuf;
 
 /// Simple base64 encoding (no external dependency)
 pub fn base64_encode(data: &[u8]) -> String {
@@ -106,6 +110,41 @@ pub fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     }
 
     Ok(output)
+}
+
+/// Resolve resource: either by ID or by source path (self-healing)
+///
+/// Returns (ResourceId, file_path) — the ResourceId for API responses,
+/// and the real file path for passing to Service layer.
+///
+/// Resolution strategy:
+/// 1. If `id` is provided, try to resolve from registry → returns (id, path)
+/// 2. If `source` is provided, register it → returns (new_id, path)
+/// 3. Otherwise, return error
+pub async fn resolve_resource(
+    registry: &ResourceRegistry,
+    id: Option<&str>,
+    source: Option<&str>,
+) -> ApiResult<(ResourceId, PathBuf)> {
+    // Step 1: Try to resolve by ID
+    if let Some(id_str) = id {
+        let resource_id = ResourceId::from_string(id_str.to_string());
+        if let Some(handle) = registry.resolve(&resource_id).await {
+            return Ok((resource_id, handle.source_path));
+        }
+    }
+
+    // Step 2: Fall back to source path (self-healing)
+    if let Some(source_path) = source {
+        let path = PathBuf::from(source_path);
+        let resource_id = registry.register(&path).await;
+        return Ok((resource_id, path));
+    }
+
+    // Step 3: Neither ID nor source
+    Err(ApiError::InvalidRequest(
+        "Either resource_id or source path required".to_string(),
+    ))
 }
 
 #[cfg(test)]

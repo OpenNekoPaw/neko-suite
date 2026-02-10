@@ -6,7 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
-use crate::export::{ExportSettings, TimelineData};
+use crate::domain::Timeline;
+use crate::export::ExportSettings;
 
 use super::converter::ProjectConverter;
 use super::types::ProjectData;
@@ -23,14 +24,14 @@ impl JviLoader {
         Self { _base_dir: None }
     }
 
-    /// Load a .jvi file and convert to TimelineData + ExportSettings
+    /// Load a .jvi file and convert to Timeline + ExportSettings
     ///
     /// # Arguments
     /// * `path` - Path to the .jvi file
     ///
     /// # Returns
-    /// A tuple of (TimelineData, ExportSettings) ready for export
-    pub fn load(&self, path: &Path) -> Result<(TimelineData, ExportSettings)> {
+    /// A tuple of (Timeline, ExportSettings) ready for export
+    pub fn load(&self, path: &Path) -> Result<(Timeline, ExportSettings)> {
         // Read file content
         let content = fs::read_to_string(path)
             .map_err(|e| Error::Other(format!("Failed to read JVI file '{}': {}", path.display(), e)))?;
@@ -57,8 +58,8 @@ impl JviLoader {
     /// * `base_dir` - Base directory for resolving relative paths
     ///
     /// # Returns
-    /// A tuple of (TimelineData, ExportSettings) ready for export
-    pub fn load_from_json(&self, json: &str, base_dir: PathBuf) -> Result<(TimelineData, ExportSettings)> {
+    /// A tuple of (Timeline, ExportSettings) ready for export
+    pub fn load_from_json(&self, json: &str, base_dir: PathBuf) -> Result<(Timeline, ExportSettings)> {
         let project: ProjectData = serde_json::from_str(json)
             .map_err(|e| Error::Other(format!("Failed to parse JVI JSON: {}", e)))?;
 

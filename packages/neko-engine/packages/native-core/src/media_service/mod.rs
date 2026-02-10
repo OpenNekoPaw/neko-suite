@@ -3,7 +3,7 @@
 //! Provides high-level media operations for Node.js integration:
 //! - Media file probing (metadata extraction)
 //! - Media file diff (compare two files)
-//! - Content-level diff (pixel/waveform comparison)
+//! - Content-level diff (pixel/waveform/frame comparison)
 //! - Subtitle extraction
 //! - JPEG encoding (RGBA to JPEG)
 //!
@@ -11,10 +11,12 @@
 
 mod audio_diff;
 mod diff;
+mod ffmpeg_parser;
 mod image_diff;
 mod jpeg_encoder;
 mod probe;
 mod subtitle;
+mod video_diff;
 
 pub use audio_diff::{AudioContentDiff, AudioDiffRegion, diff_audio_content};
 pub use diff::{ContentDiff, DiffCategory, DiffResult, FieldDiff, diff_media};
@@ -22,3 +24,6 @@ pub use image_diff::{ImageContentDiff, diff_image_content};
 pub use jpeg_encoder::encode_rgba_to_jpeg;
 pub use probe::{MediaInfo, SubtitleStream, probe_media_info};
 pub use subtitle::{ExtractedSubtitleTrack, SubtitleCue, extract_subtitles};
+pub use video_diff::{
+    FrameMetric, VideoContentDiff, VideoDiffOptions, VideoDiffRegion, diff_video_content,
+};

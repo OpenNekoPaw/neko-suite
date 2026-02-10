@@ -144,7 +144,7 @@ impl Runner {
             timeline,
         };
 
-        let total_frames = config.timeline.total_frames(config.settings.fps);
+        let total_frames = config.timeline.total_frames_at_fps(config.settings.fps);
         let fps = config.settings.fps;
 
         // Create progress bar

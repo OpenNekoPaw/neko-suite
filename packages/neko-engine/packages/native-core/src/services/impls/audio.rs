@@ -15,7 +15,7 @@ use crate::services::impls::stream_loop::{
     ActiveStreams, create_stream_channels, FramePacer, StreamLoopHandle,
 };
 use crate::services::{IAudioService, ITaskService};
-use neko_types::{FrameFormat, MediaInfo, ResourceId, StreamId, WaveformData};
+use neko_types::{FrameFormat, MediaInfo, StreamId, WaveformData};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -108,11 +108,11 @@ impl IAudioService for AudioService {
 
     async fn transcode(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         output_path: &Path,
         options: AudioTranscodeOptions,
     ) -> Result<()> {
-        let input_path = resource_id.as_str().to_string();
+        let input_path = source.to_string_lossy().to_string();
         let output_path = output_path.to_path_buf();
 
         tokio::task::spawn_blocking(move || {
@@ -201,10 +201,10 @@ impl IAudioService for AudioService {
 
     async fn start_stream(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         session_id: &str,
     ) -> Result<(StreamId, broadcast::Receiver<FrameData>)> {
-        let path = resource_id.as_str().to_string();
+        let path = source.to_string_lossy().to_string();
 
         // Create stream channels
         let (stream_id, tx, rx, cancel, _state_tx, state_rx) =
@@ -342,9 +342,9 @@ impl IAudioService for AudioService {
 
     async fn generate_waveform(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
     ) -> Result<WaveformData> {
-        let path = resource_id.as_str().to_string();
+        let path = source.to_string_lossy().to_string();
 
         tokio::task::spawn_blocking(move || generate_waveform_blocking(&path))
             .await
@@ -372,18 +372,16 @@ mod tests {
     #[tokio::test]
     async fn test_audio_service_generate_waveform_nonexistent() {
         let service = create_test_service();
-        let resource_id = ResourceId::from_string("/nonexistent/file.mp3".to_string());
-        let result = service.generate_waveform(&resource_id).await;
+        let result = service.generate_waveform(Path::new("/nonexistent/file.mp3")).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_audio_service_transcode_nonexistent() {
         let service = create_test_service();
-        let resource_id = ResourceId::from_string("/nonexistent/file.mp3".to_string());
         let result = service
             .transcode(
-                &resource_id,
+                Path::new("/nonexistent/file.mp3"),
                 Path::new("/tmp/out.aac"),
                 AudioTranscodeOptions::default(),
             )
@@ -394,8 +392,7 @@ mod tests {
     #[tokio::test]
     async fn test_audio_service_start_stream_nonexistent() {
         let service = create_test_service();
-        let resource_id = ResourceId::from_string("/nonexistent/file.mp3".to_string());
-        let result = service.start_stream(&resource_id, "session1").await;
+        let result = service.start_stream(Path::new("/nonexistent/file.mp3"), "session1").await;
         // Stream creation succeeds (async), but the decode loop will fail internally
         // The stream_id is returned immediately
         assert!(result.is_ok());

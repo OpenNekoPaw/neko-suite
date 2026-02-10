@@ -1,13 +1,13 @@
 //! ImageController - handles images:* actions
 
-use crate::controllers::utils::{base64_decode, base64_encode};
+use crate::controllers::utils::{base64_decode, base64_encode, resolve_resource};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
 use neko_native_core::domain::CaptureOptions;
 use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{IImageService, ImageService};
-use neko_types::{ActionResponse, FrameFormat, ResourceId};
+use neko_types::{ActionResponse, FrameFormat};
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -29,30 +29,6 @@ impl ImageController {
             image_service,
             resource_registry,
         }
-    }
-
-    /// Resolve resource: either by ID or by source path (self-healing)
-    async fn resolve_resource(
-        &self,
-        id: Option<&str>,
-        source: Option<&str>,
-    ) -> ApiResult<ResourceId> {
-        if let Some(id_str) = id {
-            let resource_id = ResourceId::from_string(id_str.to_string());
-            if self.resource_registry.resolve(&resource_id).await.is_some() {
-                return Ok(resource_id);
-            }
-        }
-
-        if let Some(source_path) = source {
-            let path = Path::new(source_path);
-            let resource_id = self.resource_registry.register(path).await;
-            return Ok(resource_id);
-        }
-
-        Err(ApiError::InvalidRequest(
-            "Either resource_id or source path required".to_string(),
-        ))
     }
 }
 
@@ -149,8 +125,9 @@ impl Controller for ImageController {
                     serde_json::from_value(options).unwrap_or_default();
 
                 // Resolve resource (by ID or source path)
-                let res_id = self
-                    .resolve_resource(resource_id, opts.source.as_deref())
+                let (res_id, file_path) = resolve_resource(
+                    &self.resource_registry, resource_id, opts.source.as_deref(),
+                )
                     .await?;
 
                 // Parse format
@@ -170,7 +147,7 @@ impl Controller for ImageController {
                 };
 
                 // Capture image
-                let frame_data = self.image_service.capture(&res_id, capture_opts).await?;
+                let frame_data = self.image_service.capture(&file_path, capture_opts).await?;
 
                 // Build response
                 let response = serde_json::json!({

@@ -521,7 +521,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   // ============================================================================
 
   /**
-   * Open a file in VSCode editor
+   * Open a file in VSCode editor.
+   * Media files (video/audio) are opened with neko-preview's customEditor
+   * for hardware-accelerated playback.
    */
   private async _handleOpenFile(filePath: string): Promise<void> {
     if (!filePath) return;
@@ -543,8 +545,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
       }
 
-      // Open the file
-      await vscode.commands.executeCommand('vscode.open', uri);
+      // Route media files to neko-preview's customEditor
+      const ext = cleanPath.split('.').pop()?.toLowerCase() ?? '';
+      const videoExts = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'ts', 'flv', 'wmv'];
+      const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'];
+
+      if (videoExts.includes(ext)) {
+        await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.videoPreview');
+      } else if (audioExts.includes(ext)) {
+        await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
+      } else {
+        // Non-media files: open with default editor
+        await vscode.commands.executeCommand('vscode.open', uri);
+      }
     } catch (error) {
       console.error('[Neko Suite] Failed to open file:', error);
       vscode.window.showErrorMessage(`Failed to open file: ${filePath}`);

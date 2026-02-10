@@ -18,7 +18,7 @@ use crate::services::impls::stream_loop::{
     StreamLoopHandle,
 };
 use crate::services::{ITaskService, IVideoService};
-use neko_types::{FrameFormat, LoopRegion, MediaInfo, ResourceId, StreamId, WaveformData};
+use neko_types::{FrameFormat, LoopRegion, MediaInfo, StreamId, WaveformData};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -201,12 +201,11 @@ impl IVideoService for VideoService {
 
     async fn capture(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         time_seconds: f64,
         options: CaptureOptions,
     ) -> Result<FrameData> {
-        // Get the path from resource_id (for now, resource_id contains the path)
-        let path = resource_id.as_str().to_string();
+        let path = source.to_string_lossy().to_string();
         let gpu_ctx = self.gpu_ctx.clone();
         let quality = options.quality;
         let format = options.format;
@@ -276,13 +275,13 @@ impl IVideoService for VideoService {
 
     async fn extract(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         options: ExtractOptions,
         _task_handle: Option<TaskHandle>,
     ) -> Result<Vec<FrameData>> {
         match options.extract_type {
             ExtractType::Subtitles => {
-                let path = resource_id.as_str().to_string();
+                let path = source.to_string_lossy().to_string();
                 let tracks = tokio::task::spawn_blocking(move || extract_subtitles(&path))
                     .await
                     .map_err(|e| Error::Other(format!("Subtitle extraction task failed: {}", e)))??;
@@ -318,7 +317,7 @@ impl IVideoService for VideoService {
             }
             ExtractType::Frame { time } => {
                 let frame = self
-                    .capture(resource_id, time, CaptureOptions::default())
+                    .capture(source, time, CaptureOptions::default())
                     .await?;
                 Ok(vec![frame])
             }
@@ -328,7 +327,7 @@ impl IVideoService for VideoService {
                 let mut time = start;
                 while time <= end {
                     let frame = self
-                        .capture(resource_id, time, CaptureOptions::default())
+                        .capture(source, time, CaptureOptions::default())
                         .await?;
                     frames.push(frame);
                     time += frame_interval;
@@ -340,14 +339,14 @@ impl IVideoService for VideoService {
 
     async fn start_stream(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         session_id: &str,
     ) -> Result<(StreamId, broadcast::Receiver<FrameData>)> {
         let gpu_ctx = self.gpu_ctx.clone().ok_or_else(|| {
             Error::Other("GPU context required for video streaming".to_string())
         })?;
 
-        let path = resource_id.as_str().to_string();
+        let path = source.to_string_lossy().to_string();
 
         // Probe to get video info
         let media_info = tokio::task::spawn_blocking({
@@ -370,6 +369,7 @@ impl IVideoService for VideoService {
         let join_handle = tokio::spawn(async move {
             let mut pacer = FramePacer::new(fps, 1.0);
             let mut current_speed = 1.0;
+            let mut last_seek: Option<f64> = None;
 
             // Initialize decoder and encoder in blocking context
             let init_result = tokio::task::spawn_blocking({
@@ -409,15 +409,18 @@ impl IVideoService for VideoService {
                     _ = pacer.tick() => {
                         let state = state_rx.borrow().clone();
 
-                        // Handle seek request
+                        // Handle seek request (deduplicate by comparing with last_seek)
                         if let Some(time) = state.seek_to {
-                            let dec = decoder.clone();
-                            let _ = tokio::task::spawn_blocking(move || {
-                                let mut d = dec.lock().unwrap();
-                                d.seek(time)
-                            }).await;
-                            // Note: seek_to is not cleared here since VideoService
-                            // doesn't expose pause/seek controls (Timeline does)
+                            if last_seek != Some(time) {
+                                last_seek = Some(time);
+                                let dec = decoder.clone();
+                                let _ = tokio::task::spawn_blocking(move || {
+                                    let mut d = dec.lock().unwrap();
+                                    d.seek(time)
+                                }).await;
+                            }
+                        } else {
+                            last_seek = None;
                         }
 
                         if state.paused { continue; }
@@ -551,12 +554,12 @@ impl IVideoService for VideoService {
 
     async fn transcode(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         output_path: &Path,
         options: TranscodeOptions,
         _task_handle: Option<TaskHandle>,
     ) -> Result<()> {
-        let path = resource_id.as_str().to_string();
+        let path = source.to_string_lossy().to_string();
         let output = output_path.to_path_buf();
 
         tokio::task::spawn_blocking(move || -> Result<()> {
@@ -623,8 +626,8 @@ impl IVideoService for VideoService {
         .map_err(|e| Error::Other(format!("Transcode task failed: {}", e)))?
     }
 
-    async fn get_keyframes(&self, resource_id: &ResourceId) -> Result<Vec<KeyframeInfo>> {
-        let path = resource_id.as_str().to_string();
+    async fn get_keyframes(&self, source: &Path) -> Result<Vec<KeyframeInfo>> {
+        let path = source.to_string_lossy().to_string();
         tokio::task::spawn_blocking(move || {
             let scanner = IdrScanner::new(&path)?;
             scanner.scan_idr_frames()
@@ -635,10 +638,10 @@ impl IVideoService for VideoService {
 
     async fn generate_waveform(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         _task_handle: Option<TaskHandle>,
     ) -> Result<WaveformData> {
-        let path = resource_id.as_str().to_string();
+        let path = source.to_string_lossy().to_string();
 
         tokio::task::spawn_blocking(move || generate_waveform_blocking(&path))
             .await
@@ -647,12 +650,12 @@ impl IVideoService for VideoService {
 
     async fn generate_proxy(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         output_path: &Path,
         task_handle: Option<TaskHandle>,
     ) -> Result<()> {
         // Probe to get original resolution
-        let path = resource_id.as_str().to_string();
+        let path = source.to_string_lossy().to_string();
         let media_info = tokio::task::spawn_blocking({
             let path = path.clone();
             move || probe_media_info(Path::new(&path))
@@ -681,7 +684,7 @@ impl IVideoService for VideoService {
             preset: neko_types::EncoderPreset::Fast,
         };
 
-        self.transcode(resource_id, output_path, proxy_options, task_handle)
+        self.transcode(source, output_path, proxy_options, task_handle)
             .await
     }
 }
@@ -706,40 +709,36 @@ mod tests {
     #[tokio::test]
     async fn test_video_service_get_keyframes_nonexistent() {
         let service = create_test_service();
-        let resource_id = ResourceId::from_string("/nonexistent/file.mp4".to_string());
-        let result = service.get_keyframes(&resource_id).await;
+        let result = service.get_keyframes(Path::new("/nonexistent/file.mp4")).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_video_service_generate_waveform_nonexistent() {
         let service = create_test_service();
-        let resource_id = ResourceId::from_string("/nonexistent/file.mp4".to_string());
-        let result = service.generate_waveform(&resource_id, None).await;
+        let result = service.generate_waveform(Path::new("/nonexistent/file.mp4"), None).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_video_service_extract_subtitles_nonexistent() {
         let service = create_test_service();
-        let resource_id = ResourceId::from_string("/nonexistent/file.mp4".to_string());
         let options = ExtractOptions {
             extract_type: ExtractType::Subtitles,
             time_range: None,
         };
-        let result = service.extract(&resource_id, options, None).await;
+        let result = service.extract(Path::new("/nonexistent/file.mp4"), options, None).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_video_service_extract_frame_no_gpu() {
         let service = create_test_service();
-        let resource_id = ResourceId::from_string("/nonexistent/file.mp4".to_string());
         let options = ExtractOptions {
             extract_type: ExtractType::Frame { time: 1.0 },
             time_range: None,
         };
-        let result = service.extract(&resource_id, options, None).await;
+        let result = service.extract(Path::new("/nonexistent/file.mp4"), options, None).await;
         // Should fail because no GPU context or file doesn't exist
         assert!(result.is_err());
     }
@@ -747,7 +746,6 @@ mod tests {
     #[tokio::test]
     async fn test_video_service_extract_frame_range_no_gpu() {
         let service = create_test_service();
-        let resource_id = ResourceId::from_string("/nonexistent/file.mp4".to_string());
         let options = ExtractOptions {
             extract_type: ExtractType::FrameRange {
                 start: 0.0,
@@ -756,7 +754,7 @@ mod tests {
             },
             time_range: None,
         };
-        let result = service.extract(&resource_id, options, None).await;
+        let result = service.extract(Path::new("/nonexistent/file.mp4"), options, None).await;
         // Should fail because no GPU context or file doesn't exist
         assert!(result.is_err());
     }
@@ -764,8 +762,7 @@ mod tests {
     #[tokio::test]
     async fn test_video_service_start_stream_no_gpu() {
         let service = create_test_service();
-        let resource_id = ResourceId::from_string("test".to_string());
-        let result = service.start_stream(&resource_id, "session1").await;
+        let result = service.start_stream(Path::new("test"), "session1").await;
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -788,10 +785,9 @@ mod tests {
     #[tokio::test]
     async fn test_video_service_transcode_nonexistent() {
         let service = create_test_service();
-        let resource_id = ResourceId::from_string("/nonexistent/file.mp4".to_string());
         let result = service
             .transcode(
-                &resource_id,
+                Path::new("/nonexistent/file.mp4"),
                 Path::new("/tmp/out.mp4"),
                 TranscodeOptions::default(),
                 None,
@@ -803,9 +799,8 @@ mod tests {
     #[tokio::test]
     async fn test_video_service_generate_proxy_nonexistent() {
         let service = create_test_service();
-        let resource_id = ResourceId::from_string("/nonexistent/file.mp4".to_string());
         let result = service
-            .generate_proxy(&resource_id, Path::new("/tmp/proxy.mp4"), None)
+            .generate_proxy(Path::new("/nonexistent/file.mp4"), Path::new("/tmp/proxy.mp4"), None)
             .await;
         assert!(result.is_err());
     }

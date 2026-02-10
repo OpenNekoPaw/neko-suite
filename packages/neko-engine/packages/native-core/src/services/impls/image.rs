@@ -8,7 +8,7 @@ use crate::error::{Error, Result};
 use crate::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
 use crate::media_service::{encode_rgba_to_jpeg, probe_media_info};
 use crate::services::IImageService;
-use neko_types::{FrameFormat, MediaInfo, ResourceId};
+use neko_types::{FrameFormat, MediaInfo};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -165,10 +165,10 @@ impl IImageService for ImageService {
 
     async fn capture(
         &self,
-        resource_id: &ResourceId,
+        source: &Path,
         options: CaptureOptions,
     ) -> Result<FrameData> {
-        let path = resource_id.as_str().to_string();
+        let path = source.to_string_lossy().to_string();
         let gpu_ctx = self.gpu_ctx.clone();
         let quality = options.quality;
         let format = options.format;
@@ -248,9 +248,8 @@ mod tests {
     #[tokio::test]
     async fn test_image_service_capture_no_gpu() {
         let service = create_test_service();
-        let resource_id = ResourceId::from_string("/nonexistent/file.png".to_string());
         let options = CaptureOptions::default();
-        let result = service.capture(&resource_id, options).await;
+        let result = service.capture(Path::new("/nonexistent/file.png"), options).await;
         assert!(result.is_err());
     }
 

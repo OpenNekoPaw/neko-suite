@@ -28,7 +28,8 @@
   ],
   "extensionDependencies": [
     "neko.neko-engine",
-    "neko.neko-tools"
+    "neko.neko-tools",
+    "neko.neko-preview"
   ],
   "activationEvents": [],
   "main": "./dist/extension.js",
@@ -298,6 +299,11 @@
         "command": "neko.export.getProgress",
         "title": "Get Export Progress",
         "category": "NekoCut: Export"
+      },
+      {
+        "command": "neko.cut.previewMedia",
+        "title": "Preview Media",
+        "category": "NekoCut"
       }
     ],
     "menus": {
@@ -311,6 +317,11 @@
           "command": "neko.addToTimeline",
           "group": "neko@2",
           "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|mp3|wav|ogg|m4a|aac|flac|png|jpg|jpeg|gif|webp|bmp|svg)$/i"
+        },
+        {
+          "command": "neko.cut.previewMedia",
+          "group": "neko@2",
+          "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|ts|flv|wmv|mp3|wav|ogg|flac|aac|m4a|wma|opus)$/i"
         },
         {
           "command": "neko.openInEditor",

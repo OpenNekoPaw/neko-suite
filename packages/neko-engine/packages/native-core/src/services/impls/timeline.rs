@@ -171,7 +171,7 @@ impl ITimelineService for TimelineService {
                 .tracks
                 .iter()
                 .flat_map(|t| t.elements.iter())
-                .map(|e| e.start_time() + e.duration())
+                .map(|e| e.start_time + e.duration)
                 .fold(0.0_f64, f64::max);
 
             // Collect media references and check file existence
@@ -180,15 +180,18 @@ impl ITimelineService for TimelineService {
 
             for track in &timeline_data.tracks {
                 for element in &track.elements {
-                    let (element_id, src, media_type) = match element {
-                        crate::export::ElementData::Media(m) => {
-                            (m.id.clone(), m.src.clone(), "video".to_string())
+                    let (element_id, src, media_type) = match &element.element_type {
+                        crate::domain::ElementType::Media(m) => {
+                            (element.id.clone(), m.src.clone(), "video".to_string())
                         }
-                        crate::export::ElementData::Audio(a) => {
-                            (a.id.clone(), a.src.clone(), "audio".to_string())
+                        crate::domain::ElementType::Audio(a) => {
+                            (element.id.clone(), a.src.clone(), "audio".to_string())
                         }
-                        crate::export::ElementData::Text(t) => {
-                            (t.id.clone(), String::new(), "text".to_string())
+                        crate::domain::ElementType::Text(_) => {
+                            (element.id.clone(), String::new(), "text".to_string())
+                        }
+                        _ => {
+                            (element.id.clone(), String::new(), "other".to_string())
                         }
                     };
 
@@ -212,7 +215,7 @@ impl ITimelineService for TimelineService {
             }
 
             // Read project name and version from raw JSON
-            // (JviLoader converts to TimelineData which doesn't preserve these)
+            // (JviLoader converts to Timeline which doesn't preserve these)
             let raw_content = std::fs::read_to_string(&path)
                 .map_err(|e| Error::Other(format!("Failed to re-read JVI file: {}", e)))?;
             let raw_json: serde_json::Value = serde_json::from_str(&raw_content)
@@ -376,6 +379,7 @@ impl ITimelineService for TimelineService {
             let mut pacer = FramePacer::new(fps, 1.0);
             let mut current_speed = 1.0;
             let mut frame_number: u64 = (config.start_time * fps) as u64;
+            let mut last_seek: Option<f64> = None;
 
             // Initialize encoder in blocking context
             let init_result = tokio::task::spawn_blocking({
@@ -410,9 +414,14 @@ impl ITimelineService for TimelineService {
                     _ = pacer.tick() => {
                         let state = state_rx.borrow().clone();
 
-                        // Handle seek request
+                        // Handle seek request (deduplicate by comparing with last_seek)
                         if let Some(time) = state.seek_to {
-                            frame_number = (time * fps) as u64;
+                            if last_seek != Some(time) {
+                                last_seek = Some(time);
+                                frame_number = (time * fps) as u64;
+                            }
+                        } else {
+                            last_seek = None;
                         }
 
                         if state.paused { continue; }

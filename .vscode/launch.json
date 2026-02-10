@@ -8,12 +8,14 @@
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-cut",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools"
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview"
       ],
       "outFiles": [
         "${workspaceFolder}/packages/neko-cut/dist/**/*.js",
         "${workspaceFolder}/packages/neko-engine/dist/**/*.js",
-        "${workspaceFolder}/packages/neko-tools/dist/**/*.js"
+        "${workspaceFolder}/packages/neko-tools/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-preview/dist/**/*.js"
       ],
       "preLaunchTask": "build:neko-cut"
     },
@@ -26,7 +28,8 @@
         "--remote-debugging-port=9222",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-cut",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools"
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview"
       ],
       "preLaunchTask": "build:neko-cut"
     },
@@ -37,12 +40,14 @@
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-canvas",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools"
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview"
       ],
       "outFiles": [
         "${workspaceFolder}/packages/neko-canvas/dist/**/*.js",
         "${workspaceFolder}/packages/neko-engine/dist/**/*.js",
-        "${workspaceFolder}/packages/neko-tools/dist/**/*.js"
+        "${workspaceFolder}/packages/neko-tools/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-preview/dist/**/*.js"
       ],
       "preLaunchTask": "build:neko-canvas"
     },
@@ -50,8 +55,14 @@
       "name": "Debug neko-agent",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-agent"],
-      "outFiles": ["${workspaceFolder}/packages/neko-agent/dist/**/*.js"],
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-agent",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/neko-agent/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-preview/dist/**/*.js"
+      ],
       "preLaunchTask": "build:neko-agent"
     },
     {
@@ -71,11 +82,31 @@
       "preLaunchTask": "build:neko-tools"
     },
     {
+      "name": "Debug neko-preview",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/neko-preview/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-engine/dist/**/*.js"
+      ],
+      "preLaunchTask": "build:neko-preview"
+    },
+    {
       "name": "Debug neko-assets",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-assets"],
-      "outFiles": ["${workspaceFolder}/packages/neko-assets/dist/**/*.js"],
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-assets",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/neko-assets/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-preview/dist/**/*.js"
+      ],
       "preLaunchTask": "build:neko-assets"
     },
     {

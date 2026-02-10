@@ -29,7 +29,8 @@
   ],
   "extensionDependencies": [
     "neko.neko-engine",
-    "neko.neko-tools"
+    "neko.neko-tools",
+    "neko.neko-preview"
   ],
   "activationEvents": [],
   "main": "./dist/extension.js",
@@ -97,8 +98,22 @@
         "command": "neko.assets.viewHistory",
         "title": "View Asset History",
         "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.previewMedia",
+        "title": "Preview Media",
+        "category": "Neko Assets"
       }
     ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "neko.assets.previewMedia",
+          "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|ts|flv|wmv|mp3|wav|ogg|flac|aac|m4a|wma|opus)$/i",
+          "group": "neko@1"
+        }
+      ]
+    },
     "configuration": {
       "title": "Neko Assets",
       "properties": {

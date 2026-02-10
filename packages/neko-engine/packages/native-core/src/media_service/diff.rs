@@ -9,6 +9,7 @@ use std::path::Path;
 use super::audio_diff::{diff_audio_content, AudioContentDiff};
 use super::image_diff::{diff_image_content, ImageContentDiff};
 use super::probe::{probe_media_info, MediaInfo};
+use super::video_diff::{diff_video_content, VideoContentDiff, VideoDiffOptions};
 use crate::error::{Error, Result};
 
 /// Category of media being compared
@@ -61,7 +62,7 @@ impl FieldDiff {
     }
 }
 
-/// Content-level diff result (pixel/waveform comparison)
+/// Content-level diff result (pixel/waveform/frame comparison)
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum ContentDiff {
@@ -69,6 +70,8 @@ pub enum ContentDiff {
     Image(ImageContentDiff),
     /// Audio waveform comparison
     Audio(AudioContentDiff),
+    /// Video frame-level comparison (SSIM/PSNR via FFmpeg)
+    Video(VideoContentDiff),
 }
 
 /// Result of comparing two media files
@@ -131,7 +134,7 @@ pub fn diff_media<P: AsRef<Path>>(
     let diff_count = fields.iter().filter(|f| f.changed).count();
     let total_fields = fields.len();
 
-    // Content-level diff for image and audio
+    // Content-level diff for image, audio, and video
     let content = match category {
         DiffCategory::Image => {
             match diff_image_content(path_a, path_b) {
@@ -149,6 +152,15 @@ pub fn diff_media<P: AsRef<Path>>(
                 Ok(audio_diff) => Some(ContentDiff::Audio(audio_diff)),
                 Err(e) => {
                     tracing::warn!("Audio content diff failed: {}", e);
+                    None
+                }
+            }
+        }
+        DiffCategory::Video => {
+            match diff_video_content(path_a, path_b, &VideoDiffOptions::default()) {
+                Ok(video_diff) => Some(ContentDiff::Video(video_diff)),
+                Err(e) => {
+                    tracing::warn!("Video content diff failed: {}", e);
                     None
                 }
             }

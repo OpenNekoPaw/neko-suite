@@ -6,9 +6,10 @@
 use std::collections::HashMap;
 
 use crate::audio::{AudioDecoder, DecodedAudioFrame, FfmpegAudioDecoder, SampleFormat};
+use crate::domain::{Element, ElementType, Timeline};
 use crate::error::Result;
 
-use super::types::{ElementData, ExportSettings, TimelineData};
+use super::types::ExportSettings;
 
 /// Audio source with decoder and metadata
 #[allow(dead_code)]
@@ -64,7 +65,7 @@ pub struct MixedAudioFrame {
 /// Audio mixer for multi-track audio mixing
 pub struct AudioMixer {
     sources: HashMap<String, AudioSource>,
-    timeline: TimelineData,
+    timeline: Timeline,
     output_sample_rate: u32,
     output_channels: u16,
     samples_per_frame: usize,
@@ -72,7 +73,7 @@ pub struct AudioMixer {
 }
 
 impl AudioMixer {
-    pub fn new(timeline: TimelineData, settings: &ExportSettings) -> Self {
+    pub fn new(timeline: Timeline, settings: &ExportSettings) -> Self {
         let output_sample_rate = 48000;
         let samples_per_frame = (settings.fps.recip() * output_sample_rate as f64) as usize;
         Self {
@@ -119,18 +120,15 @@ impl AudioMixer {
         for track in &self.timeline.tracks {
             if track.muted { continue; }
             for element in &track.elements {
-                match element {
-                    ElementData::Audio(audio) => {
-                        if !sources.contains(&audio.src) {
-                            sources.push(audio.src.clone());
-                        }
+                if let Some(src) = element.source_path() {
+                    let dominated = match &element.element_type {
+                        ElementType::Audio(_) => true,
+                        ElementType::Media(_) if !element.is_audio_muted() => true,
+                        _ => false,
+                    };
+                    if dominated && !sources.contains(&src) {
+                        sources.push(src);
                     }
-                    ElementData::Media(media) if !media.muted => {
-                        if !sources.contains(&media.src) {
-                            sources.push(media.src.clone());
-                        }
-                    }
-                    _ => {}
                 }
             }
         }
@@ -143,31 +141,30 @@ impl AudioMixer {
             if track.muted { continue; }
             for element in &track.elements {
                 if !element.is_visible_at(time) { continue; }
-                match element {
-                    ElementData::Audio(audio) => {
-                        // Skip muted audio elements
-                        if audio.is_muted() { continue; }
+                match &element.element_type {
+                    ElementType::Audio(audio) => {
+                        if element.is_audio_muted() { continue; }
                         active.push(ActiveAudioElement {
                             src: audio.src.clone(),
-                            volume: audio.effective_volume(),
-                            pan: audio.effective_pan(),
+                            volume: element.effective_volume(),
+                            pan: element.effective_pan(),
                             fade_in: audio.fade_in,
                             fade_out: audio.fade_out,
-                            start_time: audio.start_time,
-                            duration: audio.duration,
-                            trim_start: audio.trim_start,
+                            start_time: element.start_time,
+                            duration: element.duration,
+                            trim_start: element.trim_start,
                         });
                     }
-                    ElementData::Media(media) if !media.muted => {
+                    ElementType::Media(media) if !element.is_audio_muted() => {
                         active.push(ActiveAudioElement {
                             src: media.src.clone(),
-                            volume: media.volume,
+                            volume: element.effective_volume(),
                             pan: 0.0,
                             fade_in: 0.0,
                             fade_out: 0.0,
-                            start_time: media.start_time,
-                            duration: media.duration,
-                            trim_start: media.trim_start,
+                            start_time: element.start_time,
+                            duration: element.duration,
+                            trim_start: element.trim_start,
                         });
                     }
                     _ => {}

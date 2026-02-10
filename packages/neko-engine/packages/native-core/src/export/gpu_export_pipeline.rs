@@ -15,14 +15,16 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::decoder::{Decoder, HwAccelType, HwAccelDecoder};
+use crate::domain::{Element, ElementType, Timeline};
 use crate::error::{Error, Result};
 use crate::gpu::{
     GpuContext, GpuLayer, GpuLayerBuilder, Nv12OutputBuffers, Nv12RenderCache, Nv12TextureImporter,
     RgbaToNv12Converter, TextRenderer, TextureCompositeResult, TextureCompositor,
 };
 use crate::telemetry::spans::span;
+use neko_types::TrackType;
 
-use super::types::{ElementData, ExportSettings, MediaElementData, TextElementData, TimelineData, TrackType};
+use super::types::ExportSettings;
 
 // =============================================================================
 // GPU Pipeline Timing
@@ -182,7 +184,7 @@ pub struct GpuExportPipeline {
     /// RGBA → NV12 converter for encoder output
     rgba_to_nv12: RgbaToNv12Converter,
     /// Timeline data
-    timeline: TimelineData,
+    timeline: Timeline,
     /// Export settings
     #[allow(dead_code)]
     settings: ExportSettings,
@@ -206,11 +208,11 @@ pub struct GpuExportPipeline {
 impl GpuExportPipeline {
     /// Create a new GPU export pipeline
     pub fn new(
-        timeline: TimelineData,
+        timeline: Timeline,
         settings: ExportSettings,
         ctx: Arc<GpuContext>,
     ) -> Result<Self> {
-        let total_frames = timeline.total_frames(settings.fps);
+        let total_frames = timeline.total_frames_at_fps(settings.fps);
         let output_width = settings.width;
         let output_height = settings.height;
 
@@ -525,7 +527,7 @@ impl GpuExportPipeline {
     // =========================================================================
 
     /// Collect visible media elements at a given time
-    fn collect_visible_media(&self, time: f64) -> Vec<(MediaElementData, i32)> {
+    fn collect_visible_media(&self, time: f64) -> Vec<(Element, i32)> {
         let mut result = Vec::new();
         let mut z_index = 0i32;
 
@@ -540,12 +542,9 @@ impl GpuExportPipeline {
                     continue;
                 }
 
-                match element {
-                    ElementData::Media(media) => {
-                        result.push((media.clone(), z_index));
-                        z_index += 1;
-                    }
-                    ElementData::Text(_) | ElementData::Audio(_) => {}
+                if element.is_media() {
+                    result.push((element.clone(), z_index));
+                    z_index += 1;
                 }
             }
         }
@@ -554,7 +553,7 @@ impl GpuExportPipeline {
     }
 
     /// Collect visible text elements at a given time
-    fn collect_visible_text(&self, time: f64, z_index_start: i32) -> Vec<(TextElementData, i32)> {
+    fn collect_visible_text(&self, time: f64, z_index_start: i32) -> Vec<(Element, i32)> {
         let mut result = Vec::new();
         let mut z_index = z_index_start;
 
@@ -568,8 +567,8 @@ impl GpuExportPipeline {
                     continue;
                 }
 
-                if let ElementData::Text(text) = element {
-                    result.push((text.clone(), z_index));
+                if element.is_text() {
+                    result.push((element.clone(), z_index));
                     z_index += 1;
                 }
             }
@@ -581,9 +580,14 @@ impl GpuExportPipeline {
     /// Render a text element to a GpuLayer
     fn render_text_to_gpu_layer(
         &mut self,
-        text: &TextElementData,
+        element: &Element,
         z_index: i32,
     ) -> Option<GpuLayer> {
+        let text_data = match &element.element_type {
+            ElementType::Text(t) => t,
+            _ => return None,
+        };
+
         // Lazy-initialize text renderer
         if self.text_renderer.is_none() {
             self.text_renderer = Some(TextRenderer::new(self.ctx.clone()));
@@ -593,12 +597,12 @@ impl GpuExportPipeline {
 
         // Rasterize text to RGBA buffer
         let rasterized = renderer.rasterize(
-            &text.text,
-            &text.font_family,
-            text.font_size,
-            &text.color,
-            "normal",  // font_weight not in export TextElementData, use default
-            "normal",  // font_style not in export TextElementData, use default
+            &text_data.content,
+            &text_data.font_family,
+            text_data.font_size,
+            &text_data.color,
+            &text_data.font_weight,
+            &text_data.font_style,
             Some(self.output_width as f32),
         )?;
 
@@ -608,18 +612,9 @@ impl GpuExportPipeline {
         // Upload to GPU texture
         let texture = renderer.upload_to_texture(&rasterized);
 
-        // Build transform
-        let transform = if let Some(ref t) = text.transform {
-            crate::gpu::Transform2D {
-                x: t.x,
-                y: t.y,
-                scale_x: t.scale_x,
-                scale_y: t.scale_y,
-                rotation: t.rotation,
-                anchor_x: t.anchor_x,
-                anchor_y: t.anchor_y,
-                _padding: 0.0,
-            }
+        // Build transform: use element transform, or center text in output
+        let transform = if !element.transform.is_identity() {
+            element.to_transform_2d()
         } else {
             // Default: center the text in the output
             crate::gpu::Transform2D {
@@ -636,13 +631,13 @@ impl GpuExportPipeline {
 
         let layer = GpuLayerBuilder::new()
             .transform(transform)
-            .opacity(text.opacity)
+            .opacity(element.opacity as f32)
             .z_index(z_index)
             .build_from_rgba(texture, width, height);
 
         tracing::debug!(
             "Rendered text '{}' to {}x{} texture (z_index={})",
-            text.text,
+            text_data.content,
             width,
             height,
             z_index
@@ -655,35 +650,39 @@ impl GpuExportPipeline {
     ///
     /// Pipeline: HwAccelDecoder → Nv12GpuTexture → ImportedNv12Texture → RGBA → GpuLayer
     #[tracing::instrument(
-        skip(self, media),
+        skip(self, element),
         fields(
-            src = %media.src,
+            src = %element.source_path().unwrap_or_default(),
             z_index = z_index,
         )
     )]
     fn decode_to_gpu_layer(
         &mut self,
-        media: &MediaElementData,
+        element: &Element,
         timeline_time: f64,
         z_index: i32,
     ) -> Result<Option<GpuLayer>> {
         let mut timing = GpuPipelineTiming::default();
-        self.decode_to_gpu_layer_timed(media, timeline_time, z_index, &mut timing)
+        self.decode_to_gpu_layer_timed(element, timeline_time, z_index, &mut timing)
     }
 
     /// Decode a media element to a GPU layer with timing breakdown
     fn decode_to_gpu_layer_timed(
         &mut self,
-        media: &MediaElementData,
+        element: &Element,
         timeline_time: f64,
         z_index: i32,
         timing: &mut GpuPipelineTiming,
     ) -> Result<Option<GpuLayer>> {
-        let decoder = self.decoders.get_mut(&media.src).ok_or_else(|| {
-            Error::Other(format!("No decoder found for source: {}", media.src))
+        let src = element.source_path().ok_or_else(|| {
+            Error::Other("Element has no source path".to_string())
         })?;
 
-        let source_time = media.get_source_time(timeline_time);
+        let decoder = self.decoders.get_mut(&src).ok_or_else(|| {
+            Error::Other(format!("No decoder found for source: {}", src))
+        })?;
+
+        let source_time = element.get_source_time(timeline_time);
 
         // Debug: Log seek time
         if timeline_time < 0.2 || (timeline_time > 30.0 && timeline_time < 30.2) {
@@ -700,7 +699,7 @@ impl GpuExportPipeline {
                     tracing::warn!(
                         "No frame at source time {:.2}s for {}",
                         source_time,
-                        media.src
+                        src
                     );
                     return Ok(None);
                 }
@@ -765,9 +764,9 @@ impl GpuExportPipeline {
         // Step 5: Build GpuLayer using the pooled texture
         let owned_texture = self.layer_texture_pool.in_use.pop().unwrap();
 
-        // Calculate transform: if no transform is specified, scale to fit output
-        let mut transform = media.to_transform_2d();
-        if media.transform.is_none() {
+        // Calculate transform: if identity (no transform specified), scale to fit output
+        let mut transform = element.to_transform_2d();
+        if element.transform.is_identity() {
             // Auto-scale to fit output while maintaining aspect ratio
             let scale_x = self.output_width as f32 / width as f32;
             let scale_y = self.output_height as f32 / height as f32;
@@ -786,8 +785,8 @@ impl GpuExportPipeline {
             let _span = tracing::trace_span!(span::LAYER_RENDER).entered();
             GpuLayerBuilder::new()
                 .transform(transform)
-                .opacity(media.opacity)
-                .blend_mode(media.get_blend_mode())
+                .opacity(element.opacity as f32)
+                .blend_mode(element.to_gpu_blend_mode())
                 .z_index(z_index)
                 .build_from_rgba(owned_texture, width, height)
         };
@@ -806,6 +805,7 @@ impl Drop for GpuExportPipeline {
 mod tests {
     use super::*;
     use crate::export::types::{ExportAudioCodec, ExportHwEncoder, ExportPreset, ExportVideoCodec};
+    use neko_types::Resolution;
 
     fn create_test_settings() -> ExportSettings {
         ExportSettings {
@@ -830,10 +830,8 @@ mod tests {
             Err(_) => return, // Skip if no GPU
         };
 
-        let timeline = TimelineData {
-            duration: 10.0,
-            tracks: vec![],
-        };
+        let mut timeline = Timeline::new(Resolution::full_hd(), 30.0);
+        timeline.duration = 10.0;
 
         let pipeline = GpuExportPipeline::new(timeline, create_test_settings(), ctx).unwrap();
         assert_eq!(pipeline.total_frames(), 300);
@@ -847,10 +845,8 @@ mod tests {
             Err(_) => return,
         };
 
-        let timeline = TimelineData {
-            duration: 10.0,
-            tracks: vec![],
-        };
+        let mut timeline = Timeline::new(Resolution::full_hd(), 30.0);
+        timeline.duration = 10.0;
 
         let mut pipeline =
             GpuExportPipeline::new(timeline, create_test_settings(), ctx).unwrap();

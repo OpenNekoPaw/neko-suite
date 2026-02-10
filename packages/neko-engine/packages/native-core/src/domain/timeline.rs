@@ -1,11 +1,13 @@
 //! Unified Timeline model
 //!
-//! Merges JVI and Export data models into a single domain model.
+//! The single source of truth for timeline data structures.
+//! Used by all modules: export, jvi, keyframe_cache, preview, services.
 
 use neko_types::{BlendMode, EffectParams, Resolution, TrackType};
 use serde::{Deserialize, Serialize};
 
 use super::Transform;
+use crate::gpu::{BlendMode as GpuBlendMode, Transform2D};
 
 /// A timeline represents a complete editing project
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -238,6 +240,100 @@ impl Element {
     pub fn is_text(&self) -> bool {
         matches!(self.element_type, ElementType::Text(_))
     }
+
+    /// Convert element transform to GPU Transform2D
+    pub fn to_transform_2d(&self) -> Transform2D {
+        Transform2D {
+            x: self.transform.x,
+            y: self.transform.y,
+            scale_x: self.transform.scale_x,
+            scale_y: self.transform.scale_y,
+            rotation: self.transform.rotation,
+            anchor_x: self.transform.anchor_x,
+            anchor_y: self.transform.anchor_y,
+            _padding: 0.0,
+        }
+    }
+
+    /// Convert element blend mode to GPU BlendMode
+    pub fn to_gpu_blend_mode(&self) -> GpuBlendMode {
+        match self.blend_mode {
+            BlendMode::Normal => GpuBlendMode::Normal,
+            BlendMode::Multiply => GpuBlendMode::Multiply,
+            BlendMode::Screen => GpuBlendMode::Screen,
+            BlendMode::Overlay => GpuBlendMode::Overlay,
+            BlendMode::Darken => GpuBlendMode::Darken,
+            BlendMode::Lighten => GpuBlendMode::Lighten,
+            BlendMode::ColorDodge => GpuBlendMode::ColorDodge,
+            BlendMode::ColorBurn => GpuBlendMode::ColorBurn,
+            BlendMode::HardLight => GpuBlendMode::HardLight,
+            BlendMode::SoftLight => GpuBlendMode::SoftLight,
+            BlendMode::Difference => GpuBlendMode::Difference,
+            BlendMode::Exclusion => GpuBlendMode::Exclusion,
+            BlendMode::Hue => GpuBlendMode::Hue,
+            BlendMode::Saturation => GpuBlendMode::Saturation,
+            BlendMode::Color => GpuBlendMode::Color,
+            BlendMode::Luminosity => GpuBlendMode::Luminosity,
+        }
+    }
+
+    /// Get effective volume for this element
+    pub fn effective_volume(&self) -> f32 {
+        match &self.element_type {
+            ElementType::Media(m) => {
+                if m.audio.as_ref().map(|a| a.muted).unwrap_or(false) {
+                    0.0
+                } else {
+                    m.audio.as_ref().map(|a| a.volume as f32).unwrap_or(1.0)
+                }
+            }
+            ElementType::Audio(a) => {
+                if a.audio_settings.as_ref().map(|s| s.muted).unwrap_or(false) {
+                    return 0.0;
+                }
+                if let Some(ref settings) = a.audio_settings {
+                    settings
+                        .volume
+                        .as_ref()
+                        .map(|v| v.base_value)
+                        .unwrap_or(a.volume)
+                } else {
+                    a.volume
+                }
+            }
+            _ => 1.0,
+        }
+    }
+
+    /// Get effective pan for this element
+    pub fn effective_pan(&self) -> f32 {
+        match &self.element_type {
+            ElementType::Audio(a) => {
+                if let Some(ref settings) = a.audio_settings {
+                    settings
+                        .pan
+                        .as_ref()
+                        .map(|p| p.base_value)
+                        .unwrap_or(a.pan)
+                } else {
+                    a.pan
+                }
+            }
+            _ => 0.0,
+        }
+    }
+
+    /// Check if audio is muted for this element
+    pub fn is_audio_muted(&self) -> bool {
+        self.muted
+            || match &self.element_type {
+                ElementType::Media(m) => m.audio.as_ref().map(|a| a.muted).unwrap_or(false),
+                ElementType::Audio(a) => {
+                    a.audio_settings.as_ref().map(|s| s.muted).unwrap_or(false)
+                }
+                _ => false,
+            }
+    }
 }
 
 /// Element-specific data
@@ -279,6 +375,9 @@ pub struct MediaElementData {
     /// Linked audio element ID
     #[serde(skip_serializing_if = "Option::is_none")]
     pub linked_audio_id: Option<String>,
+    /// Volume (0.0 - 1.0) for video's embedded audio
+    #[serde(default = "default_volume_f32")]
+    pub volume: f32,
 }
 
 /// Audio element data
@@ -290,12 +389,52 @@ pub struct AudioElementData {
     /// Resource ID
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resource_id: Option<String>,
-    /// Audio properties
+    /// Audio properties (legacy nested format)
     #[serde(default)]
     pub audio: Option<AudioProperties>,
+    /// Audio settings (JVI nested format with baseValue)
+    #[serde(default)]
+    pub audio_settings: Option<AudioSettings>,
     /// Linked video element ID
     #[serde(skip_serializing_if = "Option::is_none")]
     pub linked_video_id: Option<String>,
+    /// Volume (0.0 - 1.0) - direct value
+    #[serde(default = "default_volume_f32")]
+    pub volume: f32,
+    /// Pan (-1.0 = left, 0.0 = center, 1.0 = right) - direct value
+    #[serde(default)]
+    pub pan: f32,
+    /// Fade in duration (seconds)
+    #[serde(default)]
+    pub fade_in: f64,
+    /// Fade out duration (seconds)
+    #[serde(default)]
+    pub fade_out: f64,
+}
+
+fn default_volume_f32() -> f32 {
+    1.0
+}
+
+/// Audio settings (JVI nested format with baseValue)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioSettings {
+    /// Volume setting
+    pub volume: Option<AudioValue>,
+    /// Pan setting
+    pub pan: Option<AudioValue>,
+    /// Whether audio is muted
+    #[serde(default)]
+    pub muted: bool,
+}
+
+/// Audio value with baseValue (JVI format)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioValue {
+    /// Base value
+    pub base_value: f32,
 }
 
 /// Text element data
@@ -475,10 +614,6 @@ pub struct AudioDefaults {
     pub fade_out: f64,
 }
 
-fn default_volume_f32() -> f32 {
-    1.0
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -504,6 +639,7 @@ mod tests {
                 audio: None,
                 media_type: None,
                 linked_audio_id: None,
+                volume: 1.0,
             }),
             start_time: 5.0,
             duration: 10.0,
@@ -535,6 +671,7 @@ mod tests {
                 audio: None,
                 media_type: None,
                 linked_audio_id: None,
+                volume: 1.0,
             }),
             start_time: 5.0,
             duration: 10.0,

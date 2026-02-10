@@ -17,7 +17,8 @@ use super::types::{
     SeekResult, WarmupResponse,
 };
 use crate::error::{Error, Result};
-use crate::export::{ElementData, TimelineData, TrackType};
+use crate::domain::{ElementType, Timeline};
+use neko_types::TrackType;
 use crate::gpu::ColorSpace;
 
 use ffmpeg_next as ffmpeg;
@@ -492,7 +493,7 @@ impl KeyframeCacheService {
     }
 
     /// Get video sources from timeline that are visible at playhead
-    fn get_video_sources(&self, timeline: &TimelineData, playhead: f64) -> Vec<(String, f64)> {
+    fn get_video_sources(&self, timeline: &Timeline, playhead: f64) -> Vec<(String, f64)> {
         let mut sources = Vec::new();
 
         for track in &timeline.tracks {
@@ -501,13 +502,13 @@ impl KeyframeCacheService {
             }
 
             for element in &track.elements {
-                if let ElementData::Media(media) = element {
+                if let ElementType::Media(ref media) = element.element_type {
                     // Check if this element is visible at or after playhead
-                    let element_end = media.start_time + media.duration;
+                    let element_end = element.start_time + element.duration;
                     if element_end > playhead {
                         // Check if file exists
                         if Path::new(&media.src).exists() {
-                            sources.push((media.src.clone(), media.start_time));
+                            sources.push((media.src.clone(), element.start_time));
                         }
                     }
                 }

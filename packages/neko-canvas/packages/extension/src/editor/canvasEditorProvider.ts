@@ -242,6 +242,38 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         this.syncStatusBar(data);
         break;
       }
+      case 'openMediaPreview': {
+        // Open video/audio in neko-preview's customEditor
+        const assetPath = message.assetPath as string;
+        const mediaTypeHint = message.mediaType as string | undefined;
+        if (!assetPath) break;
+
+        try {
+          // Resolve asset path against workspace
+          let fileUri: vscode.Uri;
+          if (assetPath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(assetPath)) {
+            fileUri = vscode.Uri.file(assetPath);
+          } else {
+            // Relative path — resolve against document's directory
+            const docDir = vscode.Uri.joinPath(document.uri, '..');
+            fileUri = vscode.Uri.joinPath(docDir, assetPath);
+          }
+
+          const ext = assetPath.split('.').pop()?.toLowerCase() ?? '';
+          const videoExts = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'ts', 'flv', 'wmv'];
+          const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'];
+
+          if (videoExts.includes(ext) || mediaTypeHint === 'video') {
+            await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.videoPreview');
+          } else if (audioExts.includes(ext) || mediaTypeHint === 'audio') {
+            await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.audioPreview');
+          }
+        } catch (error) {
+          console.error('[NekoCanvas] Failed to open media preview:', error);
+          vscode.window.showErrorMessage(`Failed to open media preview: ${assetPath}`);
+        }
+        break;
+      }
       case 'pickMedia': {
         // Open file picker for media files
         const mediaType = message.mediaType as string;

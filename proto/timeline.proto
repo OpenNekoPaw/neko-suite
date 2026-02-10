@@ -255,6 +255,8 @@ message MediaElementData {
   optional string media_type = 4;
   // Linked audio element ID
   optional string linked_audio_id = 5;
+  // Volume (0.0 - 1.0) for video's embedded audio
+  float volume = 6;  // default: 1.0
 }
 
 message AudioElementData {
@@ -262,10 +264,36 @@ message AudioElementData {
   string src = 1;
   // Resource ID
   optional string resource_id = 2;
-  // Audio properties
+  // Audio properties (legacy nested format)
   optional AudioProperties audio = 3;
   // Linked video element ID
   optional string linked_video_id = 4;
+  // Audio settings (JVI nested format with baseValue)
+  optional AudioSettings audio_settings = 5;
+  // Volume (0.0 - 1.0) - direct value
+  float volume = 6;  // default: 1.0
+  // Pan (-1.0 = left, 0.0 = center, 1.0 = right) - direct value
+  float pan = 7;     // default: 0.0
+  // Fade in duration (seconds)
+  double fade_in = 8;  // default: 0.0
+  // Fade out duration (seconds)
+  double fade_out = 9; // default: 0.0
+}
+
+// Audio settings (JVI nested format with baseValue)
+message AudioSettings {
+  // Volume setting
+  optional AudioValue volume = 1;
+  // Pan setting
+  optional AudioValue pan = 2;
+  // Whether audio is muted
+  bool muted = 3;  // default: false
+}
+
+// Audio value with baseValue (JVI format)
+message AudioValue {
+  // Base value
+  float base_value = 1;
 }
 
 message TextElementData {

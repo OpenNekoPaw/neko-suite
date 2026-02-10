@@ -251,6 +251,27 @@ function registerCommands(context: vscode.ExtensionContext): void {
       canvasEditorProvider.postKeyboardAction('resetZoom');
     })
   );
+
+  // Preview media files with neko-preview (hardware-accelerated customEditor)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.canvas.previewMedia', async (uri?: vscode.Uri) => {
+      if (!uri) return;
+
+      const ext = uri.fsPath.split('.').pop()?.toLowerCase() ?? '';
+      const videoExts = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'ts', 'flv', 'wmv'];
+      const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'];
+
+      try {
+        if (videoExts.includes(ext)) {
+          await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.videoPreview');
+        } else if (audioExts.includes(ext)) {
+          await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
+        }
+      } catch (error) {
+        console.error('[NekoCanvas] Failed to open media preview:', error);
+      }
+    })
+  );
 }
 
 /**
