@@ -121,6 +121,97 @@ impl StreamRegistry {
         tokens.insert(stream_id.as_str().to_string(), token);
     }
 
+    /// Register an externally-created stream into the registry
+    ///
+    /// Used when a stream is created outside the registry (e.g., by TimelineService)
+    /// but needs to be discoverable via WebSocket subscription.
+    ///
+    /// Spawns a forwarding task that reads frames from the external broadcast channel
+    /// and pushes them into the registry's own broadcast channel.
+    pub async fn register_external_stream(
+        &self,
+        stream_id: StreamId,
+        session_id: &str,
+        resource_id: &str,
+        config: StreamConfig,
+        mut external_rx: broadcast::Receiver<FrameData>,
+        cancel_token: CancellationToken,
+    ) -> broadcast::Receiver<FrameData> {
+        let (entry, rx) = StreamEntry::with_id(
+            stream_id.clone(),
+            session_id,
+            resource_id,
+            config,
+        );
+        let registry_tx = entry.tx.clone();
+        let id_str = stream_id.as_str().to_string();
+
+        {
+            let mut streams = self.streams.write().await;
+            let mut session_map = self.session_streams.write().await;
+            let mut resource_map = self.resource_streams.write().await;
+
+            streams.insert(id_str.clone(), entry);
+
+            session_map
+                .entry(session_id.to_string())
+                .or_default()
+                .push(id_str.clone());
+
+            resource_map
+                .entry(resource_id.to_string())
+                .or_default()
+                .push(id_str.clone());
+        }
+
+        // Auto-activate so WebSocket subscribers can receive frames immediately
+        let _ = self.activate(&stream_id).await;
+
+        // Register cancel token for cleanup
+        self.set_cancel_token(&stream_id, cancel_token.clone()).await;
+
+        // Spawn forwarding task: external_rx → registry_tx
+        let forward_id = id_str.clone();
+        tokio::spawn(async move {
+            tracing::info!("Forwarding task started for stream {}", forward_id);
+            let mut frame_count = 0u64;
+            loop {
+                tokio::select! {
+                    _ = cancel_token.cancelled() => {
+                        tracing::debug!("External stream {} forwarding stopped (cancelled), forwarded {} frames", forward_id, frame_count);
+                        break;
+                    }
+                    result = external_rx.recv() => {
+                        match result {
+                            Ok(frame) => {
+                                frame_count += 1;
+                                if frame_count <= 3 || frame_count % 100 == 0 {
+                                    tracing::debug!("Forwarding frame {} for stream {} ({} bytes)", frame_count, forward_id, frame.data.len());
+                                }
+                                let _ = registry_tx.send(frame);
+                            }
+                            Err(broadcast::error::RecvError::Lagged(n)) => {
+                                tracing::warn!("External stream {} lagged by {} frames", forward_id, n);
+                            }
+                            Err(broadcast::error::RecvError::Closed) => {
+                                tracing::info!("External stream {} source closed after {} frames", forward_id, frame_count);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        tracing::debug!(
+            "Registered external stream {} for session {}",
+            stream_id.as_str(),
+            session_id
+        );
+
+        rx
+    }
+
     /// Get the broadcast sender for a stream (for Service-layer frame pushing)
     ///
     /// Returns a clone of the broadcast::Sender so the Service decode loop

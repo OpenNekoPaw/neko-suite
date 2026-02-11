@@ -44,6 +44,9 @@ pub trait IAudioService: Send + Sync {
     /// Set audio stream playback speed
     async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()>;
 
+    /// Seek audio stream to a specific time
+    async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()>;
+
     /// Generate waveform visualization data
     async fn generate_waveform(
         &self,

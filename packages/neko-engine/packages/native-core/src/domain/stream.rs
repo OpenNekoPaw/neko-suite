@@ -51,6 +51,31 @@ impl StreamEntry {
         (entry, rx)
     }
 
+    /// Create a new stream entry with a specific StreamId
+    ///
+    /// Used when registering an externally-created stream (e.g., from TimelineService)
+    /// into the StreamRegistry.
+    pub fn with_id(
+        stream_id: StreamId,
+        session_id: impl Into<String>,
+        resource_id: impl Into<String>,
+        config: StreamConfig,
+    ) -> (Self, broadcast::Receiver<FrameData>) {
+        let (tx, rx) = broadcast::channel(64);
+
+        let entry = Self {
+            id: stream_id,
+            session_id: session_id.into(),
+            resource_id: resource_id.into(),
+            state: StreamState::Created,
+            tx,
+            created_at: Instant::now(),
+            config,
+        };
+
+        (entry, rx)
+    }
+
     /// Check if stream can transition to target state
     pub fn can_transition_to(&self, target: StreamState) -> bool {
         self.state.can_transition_to(target)

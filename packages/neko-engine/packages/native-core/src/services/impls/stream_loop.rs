@@ -126,10 +126,61 @@ impl Default for ActiveStreams {
     }
 }
 
+/// Wall-clock based frame pacer for blocking threads
+///
+/// Uses `Instant` + `std::thread::sleep` for frame pacing inside `spawn_blocking`.
+/// When a frame takes longer than expected, the next frame is produced immediately
+/// (no skip, natural catch-up). This avoids the cumulative delay issue of
+/// `MissedTickBehavior::Delay` in tokio intervals.
+pub struct WallClockPacer {
+    start_time: std::time::Instant,
+    frame_number: u64,
+    fps: f64,
+    speed: f64,
+}
+
+impl WallClockPacer {
+    /// Create a new wall-clock pacer
+    pub fn new(fps: f64, speed: f64) -> Self {
+        Self {
+            start_time: std::time::Instant::now(),
+            frame_number: 0,
+            fps,
+            speed: speed.max(0.1),
+        }
+    }
+
+    /// Wait until the next frame should be produced.
+    /// If behind schedule, returns immediately (no frame skip).
+    pub fn wait_for_next_frame(&mut self) {
+        self.frame_number += 1;
+        let expected = self.start_time
+            + Duration::from_secs_f64(self.frame_number as f64 / (self.fps * self.speed));
+        let now = std::time::Instant::now();
+        if now < expected {
+            std::thread::sleep(expected - now);
+        }
+    }
+
+    /// Update playback speed, resetting the time base to avoid jumps
+    pub fn update_speed(&mut self, speed: f64) {
+        self.speed = speed.max(0.1);
+        self.start_time = std::time::Instant::now();
+        self.frame_number = 0;
+    }
+
+    /// Reset the pacer (e.g. after seek)
+    pub fn reset(&mut self) {
+        self.start_time = std::time::Instant::now();
+        self.frame_number = 0;
+    }
+}
+
 /// Frame pacer - controls decoding loop production rate
 ///
-/// Uses tokio::time::interval with MissedTickBehavior::Skip
-/// to maintain real-time frame pacing without burst compensation.
+/// Uses tokio::time::interval with MissedTickBehavior::Delay
+/// to maintain smooth frame pacing. When a tick is missed (e.g. slow decode),
+/// the next tick is delayed rather than skipped, preventing frame drops.
 pub struct FramePacer {
     interval: tokio::time::Interval,
     fps: f64,
@@ -142,7 +193,7 @@ impl FramePacer {
         let effective_speed = speed.max(0.1); // Prevent division by zero
         let duration = Duration::from_secs_f64(1.0 / (fps * effective_speed));
         let mut interval = tokio::time::interval(duration);
-        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         Self {
             interval,
             fps,
@@ -159,7 +210,7 @@ impl FramePacer {
         self.speed = effective_speed;
         let duration = Duration::from_secs_f64(1.0 / (self.fps * effective_speed));
         self.interval = tokio::time::interval(duration);
-        self.interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        self.interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
     }
 
     /// Wait for next tick
@@ -186,6 +237,26 @@ pub fn pack_h264_frame(packet: &EncodedPacket, width: u32, height: u32) -> Frame
         height,
         format: FrameFormat::H264,
         timestamp: packet.pts as f64 / 1_000_000.0, // pts in time_base units → approximate seconds
+    }
+}
+
+/// Pack PCM F32 audio data into FrameData for broadcast transport
+///
+/// Wire format: [pts_seconds:f64 LE (8B)][sample_rate:u32 LE (4B)][channels:u32 LE (4B)][PCM F32 data...]
+pub fn pack_pcm_frame(pcm_data: &[u8], timestamp: f64, sample_rate: u32, channels: u32) -> FrameData {
+    let header_size = 8 + 4 + 4; // pts_seconds + sample_rate + channels
+    let mut data = Vec::with_capacity(header_size + pcm_data.len());
+    data.extend_from_slice(&timestamp.to_le_bytes());
+    data.extend_from_slice(&sample_rate.to_le_bytes());
+    data.extend_from_slice(&channels.to_le_bytes());
+    data.extend_from_slice(pcm_data);
+
+    FrameData {
+        data,
+        width: sample_rate,
+        height: channels,
+        format: FrameFormat::PcmF32,
+        timestamp,
     }
 }
 
@@ -349,5 +420,68 @@ mod tests {
             create_stream_channels("test_session", 64);
 
         assert!(stream_id.as_str().starts_with("strm_"));
+    }
+
+    #[test]
+    fn test_wall_clock_pacer_creation() {
+        let pacer = WallClockPacer::new(30.0, 1.0);
+        assert!((pacer.fps - 30.0).abs() < f64::EPSILON);
+        assert!((pacer.speed - 1.0).abs() < f64::EPSILON);
+        assert_eq!(pacer.frame_number, 0);
+    }
+
+    #[test]
+    fn test_wall_clock_pacer_min_speed() {
+        let pacer = WallClockPacer::new(30.0, 0.0);
+        assert!((pacer.speed - 0.1).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_wall_clock_pacer_speed_update() {
+        let mut pacer = WallClockPacer::new(30.0, 1.0);
+        pacer.wait_for_next_frame();
+        assert_eq!(pacer.frame_number, 1);
+
+        pacer.update_speed(2.0);
+        assert!((pacer.speed - 2.0).abs() < f64::EPSILON);
+        assert_eq!(pacer.frame_number, 0); // Reset on speed change
+    }
+
+    #[test]
+    fn test_wall_clock_pacer_reset() {
+        let mut pacer = WallClockPacer::new(30.0, 1.0);
+        pacer.wait_for_next_frame();
+        pacer.wait_for_next_frame();
+        assert_eq!(pacer.frame_number, 2);
+
+        pacer.reset();
+        assert_eq!(pacer.frame_number, 0);
+    }
+
+    #[test]
+    fn test_pack_pcm_frame() {
+        let pcm_data: Vec<u8> = vec![0u8; 4 * 1024]; // 1024 f32 samples
+        let frame = pack_pcm_frame(&pcm_data, 1.5, 48000, 2);
+
+        assert_eq!(frame.format, FrameFormat::PcmF32);
+        assert_eq!(frame.width, 48000);
+        assert_eq!(frame.height, 2);
+        assert!((frame.timestamp - 1.5).abs() < f64::EPSILON);
+
+        // Verify header
+        let header_size = 8 + 4 + 4; // pts + sample_rate + channels
+        assert_eq!(frame.data.len(), header_size + pcm_data.len());
+
+        // Verify pts
+        let pts = f64::from_le_bytes(frame.data[0..8].try_into().unwrap());
+        assert!((pts - 1.5).abs() < f64::EPSILON);
+
+        // Verify sample_rate
+        let sr = u32::from_le_bytes(frame.data[8..12].try_into().unwrap());
+        assert_eq!(sr, 48000);
+
+        // Verify channels
+        let ch = u32::from_le_bytes(frame.data[12..16].try_into().unwrap());
+        assert_eq!(ch, 2);
     }
 }

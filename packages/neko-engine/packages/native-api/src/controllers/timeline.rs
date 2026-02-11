@@ -3,6 +3,7 @@
 use crate::controllers::utils::base64_encode;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
+use crate::registry::StreamRegistry;
 use neko_native_core::domain::{StreamConfig, Timeline};
 use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{ExportService, IExportService, ITimelineService, TimelineService};
@@ -11,11 +12,13 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 /// Controller for timeline-related actions
 pub struct TimelineController {
     timeline_service: Arc<TimelineService>,
     export_service: Option<Arc<ExportService>>,
+    stream_registry: Arc<StreamRegistry>,
 }
 
 impl TimelineController {
@@ -23,10 +26,12 @@ impl TimelineController {
     pub fn new(
         timeline_service: Arc<TimelineService>,
         export_service: Option<Arc<ExportService>>,
+        stream_registry: Arc<StreamRegistry>,
     ) -> Self {
         Self {
             timeline_service,
             export_service,
+            stream_registry,
         }
     }
 }
@@ -174,10 +179,23 @@ impl Controller for TimelineController {
                     ..Default::default()
                 };
 
-                let (stream_id, _rx) = self
+                let (stream_id, rx) = self
                     .timeline_service
-                    .start_stream(&timeline, &session_id, config)
+                    .start_stream(&timeline, &session_id, config.clone())
                     .await?;
+
+                // Register the stream into StreamRegistry so WebSocket subscribers can find it
+                let cancel_token = CancellationToken::new();
+                self.stream_registry
+                    .register_external_stream(
+                        stream_id.clone(),
+                        &session_id,
+                        "",  // no specific resource_id for timeline streams
+                        config,
+                        rx,
+                        cancel_token,
+                    )
+                    .await;
 
                 let response = serde_json::json!({
                     "streamId": stream_id.as_str(),
@@ -446,12 +464,14 @@ impl Controller for TimelineController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::registry::StreamRegistry;
     use neko_native_core::services::TaskService;
 
     fn create_test_controller() -> TimelineController {
         let task_service = Arc::new(TaskService::new());
         let timeline_service = Arc::new(TimelineService::new(None, task_service));
-        TimelineController::new(timeline_service, None)
+        let stream_registry = Arc::new(StreamRegistry::new());
+        TimelineController::new(timeline_service, None, stream_registry)
     }
 
     #[tokio::test]

@@ -1,11 +1,12 @@
 /**
  * AudioPlayer - Main audio preview component
  *
- * Requests PCM audio segments from neko-engine via postMessage,
- * plays them through Web Audio API, and visualizes waveform.
+ * Connects to neko-engine's PCM audio stream via WebSocket,
+ * plays through Web Audio API (AudioStreamClient), and visualizes waveform.
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { AudioStreamClient } from '../shared/AudioStreamClient';
 import { useExtensionMessage, useVscodeReady } from '../shared/useVscodeMessage';
 import { WaveformCanvas } from './WaveformCanvas';
 import { AudioControls } from './AudioControls';
@@ -13,42 +14,7 @@ import type {
 	MediaInfo,
 	PreviewInitMessage,
 	PreviewWaveformMessage,
-	PreviewAudioDataMessage,
 } from '../shared/types';
-
-/** Decode base64 PCM Float32 data to AudioBuffer */
-function decodeAudioData(
-	base64: string,
-	sampleRate: number,
-	channels: number,
-	samples: number
-): AudioBuffer {
-	const binary = atob(base64);
-	const bytes = new Uint8Array(binary.length);
-	for (let i = 0; i < binary.length; i++) {
-		bytes[i] = binary.charCodeAt(i);
-	}
-
-	const float32 = new Float32Array(bytes.buffer);
-	const audioBuffer = new AudioBuffer({
-		length: samples,
-		numberOfChannels: channels,
-		sampleRate,
-	});
-
-	// Deinterleave channels
-	for (let ch = 0; ch < channels; ch++) {
-		const channelData = audioBuffer.getChannelData(ch);
-		for (let i = 0; i < samples; i++) {
-			channelData[i] = float32[i * channels + ch] ?? 0;
-		}
-	}
-
-	return audioBuffer;
-}
-
-// Segment size for audio buffering (seconds)
-const SEGMENT_DURATION = 30;
 
 export function AudioPlayer() {
 	const { postMessage } = useVscodeReady();
@@ -66,76 +32,50 @@ export function AudioPlayer() {
 	const [error, setError] = useState<string | null>(null);
 
 	// Refs
-	const audioCtxRef = useRef<AudioContext | null>(null);
-	const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
-	const gainNodeRef = useRef<GainNode | null>(null);
+	const audioClientRef = useRef<AudioStreamClient | null>(null);
 	const playStartTimeRef = useRef(0);
-	const playCtxTimeRef = useRef(0);
+	const playWallTimeRef = useRef(0);
 	const animFrameRef = useRef(0);
-	const pendingRequestsRef = useRef<Map<string, (data: PreviewAudioDataMessage) => void>>(new Map());
-	const requestIdCounterRef = useRef(0);
 
 	// =========================================================================
-	// Audio Context
+	// Time tracking during playback
 	// =========================================================================
 
-	const getAudioContext = useCallback(() => {
-		if (!audioCtxRef.current) {
-			audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
-			gainNodeRef.current = audioCtxRef.current.createGain();
-			gainNodeRef.current.connect(audioCtxRef.current.destination);
-		}
-		return audioCtxRef.current;
-	}, []);
-
-	// Update gain when volume changes
-	useEffect(() => {
-		if (gainNodeRef.current) {
-			gainNodeRef.current.gain.value = volume;
-		}
-	}, [volume]);
-
-	// Cleanup
-	useEffect(() => {
-		return () => {
-			sourceNodeRef.current?.stop();
-			audioCtxRef.current?.close();
-		};
-	}, []);
-
-	// =========================================================================
-	// Time tracking
-	// =========================================================================
-
-	const updateTime = useCallback(() => {
+	const updatePlaybackTime = useCallback(() => {
 		if (!isPlaying || !mediaInfo) return;
 
-		const ctx = audioCtxRef.current;
-		if (!ctx) return;
-
-		const elapsed = ctx.currentTime - playCtxTimeRef.current;
-		const newTime = playStartTimeRef.current + elapsed;
+		let newTime: number;
+		const audioClient = audioClientRef.current;
+		if (audioClient && audioClient.isClockReady) {
+			newTime = audioClient.getCurrentTime();
+		} else {
+			const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
+			newTime = playStartTimeRef.current + elapsed;
+		}
 
 		if (newTime >= mediaInfo.duration) {
 			setCurrentTime(mediaInfo.duration);
 			setIsPlaying(false);
+			audioClientRef.current?.dispose();
+			audioClientRef.current = null;
+			postMessage({ type: 'preview:stop' });
 			return;
 		}
 
 		setCurrentTime(newTime);
-		animFrameRef.current = requestAnimationFrame(updateTime);
-	}, [isPlaying, mediaInfo]);
+		animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
+	}, [isPlaying, mediaInfo, postMessage]);
 
 	useEffect(() => {
 		if (isPlaying) {
-			animFrameRef.current = requestAnimationFrame(updateTime);
+			animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
 		}
 		return () => {
 			if (animFrameRef.current) {
 				cancelAnimationFrame(animFrameRef.current);
 			}
 		};
-	}, [isPlaying, updateTime]);
+	}, [isPlaying, updatePlaybackTime]);
 
 	// =========================================================================
 	// Extension message handling
@@ -159,12 +99,31 @@ export function AudioPlayer() {
 				break;
 			}
 
-			case 'preview:audioData': {
-				const audioMsg = msg as PreviewAudioDataMessage;
-				const resolver = pendingRequestsRef.current.get(audioMsg.requestId);
-				if (resolver) {
-					resolver(audioMsg);
-					pendingRequestsRef.current.delete(audioMsg.requestId);
+			case 'preview:streamReady': {
+				const { audioStreamUrl } = msg.payload as {
+					streamId: string;
+					streamUrl: string;
+					audioStreamId?: string;
+					audioStreamUrl?: string;
+				};
+
+				// Dispose previous client
+				audioClientRef.current?.dispose();
+
+				const streamUrl = audioStreamUrl;
+				if (streamUrl) {
+					const audioClient = new AudioStreamClient({
+						websocketUrl: streamUrl,
+						volume,
+						onConnectionChange: (connected) => {
+							console.log('[AudioPlayer] Stream connected:', connected);
+						},
+						onError: (err) => {
+							console.warn('[AudioPlayer] Stream error:', err);
+						},
+					});
+					audioClientRef.current = audioClient;
+					audioClient.connect();
 				}
 				break;
 			}
@@ -174,139 +133,68 @@ export function AudioPlayer() {
 		}
 	});
 
-	// =========================================================================
-	// Audio segment request
-	// =========================================================================
-
-	const requestAudioSegment = useCallback(
-		(startTime: number, duration: number): Promise<AudioBuffer | null> => {
-			return new Promise((resolve) => {
-				const requestId = `audio_${++requestIdCounterRef.current}`;
-
-				pendingRequestsRef.current.set(requestId, (response) => {
-					if (response.error || !response.payload) {
-						console.error('[AudioPlayer] Decode error:', response.error);
-						resolve(null);
-						return;
-					}
-
-					try {
-						const { buffer, sampleRate, channels, samples } = response.payload;
-						const audioBuffer = decodeAudioData(buffer, sampleRate, channels, samples);
-						resolve(audioBuffer);
-					} catch (err) {
-						console.error('[AudioPlayer] AudioBuffer creation failed:', err);
-						resolve(null);
-					}
-				});
-
-				postMessage({
-					type: 'preview:decodeSegment',
-					requestId,
-					startTime,
-					duration,
-				});
-			});
-		},
-		[postMessage]
-	);
+	// Cleanup on unmount
+	useEffect(() => {
+		return () => {
+			audioClientRef.current?.dispose();
+		};
+	}, []);
 
 	// =========================================================================
 	// Playback controls
 	// =========================================================================
 
-	const handlePlay = useCallback(async () => {
+	const handlePlay = useCallback(() => {
 		if (!mediaInfo) return;
 
 		const startTime = currentTime >= mediaInfo.duration ? 0 : currentTime;
-		setIsPlaying(true);
-
-		const ctx = getAudioContext();
-		if (ctx.state === 'suspended') {
-			await ctx.resume();
-		}
-
-		// Request audio segment
-		const segmentStart = startTime;
-		const segmentDuration = Math.min(SEGMENT_DURATION, mediaInfo.duration - segmentStart);
-
-		const audioBuffer = await requestAudioSegment(segmentStart, segmentDuration);
-		if (!audioBuffer) {
-			setError('Failed to decode audio');
-			setIsPlaying(false);
-			return;
-		}
-
-		// Stop previous source
-		try {
-			sourceNodeRef.current?.stop();
-		} catch {
-			// Ignore
-		}
-
-		// Create and play new source
-		const source = ctx.createBufferSource();
-		source.buffer = audioBuffer;
-		source.connect(gainNodeRef.current!);
-
-		source.onended = () => {
-			// Check if we need to load next segment
-			const endTime = segmentStart + segmentDuration;
-			if (endTime < mediaInfo.duration && isPlaying) {
-				// TODO(P1): implement continuous segment loading for long files
-				setIsPlaying(false);
-				setCurrentTime(endTime);
-			} else {
-				setIsPlaying(false);
-			}
-		};
-
-		playStartTimeRef.current = startTime;
-		playCtxTimeRef.current = ctx.currentTime;
-		source.start(0);
-		sourceNodeRef.current = source;
 		setCurrentTime(startTime);
-	}, [mediaInfo, currentTime, getAudioContext, requestAudioSegment, isPlaying]);
+		setIsPlaying(true);
+		playStartTimeRef.current = startTime;
+		playWallTimeRef.current = performance.now();
+
+		postMessage({ type: 'preview:play', startTime });
+	}, [mediaInfo, currentTime, postMessage]);
 
 	const handlePause = useCallback(() => {
 		setIsPlaying(false);
-		try {
-			sourceNodeRef.current?.stop();
-		} catch {
-			// Ignore
-		}
-	}, []);
+		postMessage({ type: 'preview:pause' });
+	}, [postMessage]);
+
+	const handleResume = useCallback(() => {
+		setIsPlaying(true);
+		playStartTimeRef.current = currentTime;
+		playWallTimeRef.current = performance.now();
+		postMessage({ type: 'preview:resume' });
+	}, [currentTime, postMessage]);
 
 	const handleTogglePlay = useCallback(() => {
 		if (isPlaying) {
 			handlePause();
+		} else if (audioClientRef.current) {
+			handleResume();
 		} else {
 			handlePlay();
 		}
-	}, [isPlaying, handlePlay, handlePause]);
+	}, [isPlaying, handlePlay, handlePause, handleResume]);
 
 	const handleSeek = useCallback(
 		(time: number) => {
 			setCurrentTime(time);
 			if (isPlaying) {
-				// Restart playback from new position
-				try {
-					sourceNodeRef.current?.stop();
-				} catch {
-					// Ignore
-				}
-				// Will trigger re-play from new position
-				setIsPlaying(false);
-				setTimeout(() => {
-					handlePlay();
-				}, 50);
+				playStartTimeRef.current = time;
+				playWallTimeRef.current = performance.now();
 			}
+			// Reset audio clock so it re-syncs after seek
+			audioClientRef.current?.resetClock();
+			postMessage({ type: 'preview:seek', time });
 		},
-		[isPlaying, handlePlay]
+		[isPlaying, postMessage]
 	);
 
 	const handleVolumeChange = useCallback((newVolume: number) => {
 		setVolume(newVolume);
+		audioClientRef.current?.setVolume(newVolume);
 	}, []);
 
 	// =========================================================================

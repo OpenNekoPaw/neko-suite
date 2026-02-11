@@ -3,7 +3,8 @@
 use crate::controllers::utils::resolve_resource;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use crate::registry::ResourceRegistry;
+use crate::registry::{ResourceRegistry, StreamRegistry};
+use neko_native_core::domain::StreamConfig;
 use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{AudioService, IAudioService};
 use neko_types::{ActionResponse, StreamId};
@@ -11,11 +12,13 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 /// Controller for audio-related actions
 pub struct AudioController {
     audio_service: Arc<AudioService>,
     resource_registry: Arc<ResourceRegistry>,
+    stream_registry: Arc<StreamRegistry>,
 }
 
 impl AudioController {
@@ -23,10 +26,12 @@ impl AudioController {
     pub fn new(
         audio_service: Arc<AudioService>,
         resource_registry: Arc<ResourceRegistry>,
+        stream_registry: Arc<StreamRegistry>,
     ) -> Self {
         Self {
             audio_service,
             resource_registry,
+            stream_registry,
         }
     }
 }
@@ -70,7 +75,7 @@ struct StreamRequestOptions {
     session_id: Option<String>,
 }
 
-/// Options for stream control actions (stop/pause/resume/speed)
+/// Options for stream control actions (stop/pause/resume/speed/seek)
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct AudioStreamControlOptions {
@@ -78,6 +83,8 @@ struct AudioStreamControlOptions {
     stream_id: Option<String>,
     /// Playback speed multiplier (for speed action)
     speed: Option<f64>,
+    /// Seek time in seconds (for seek action)
+    time: Option<f64>,
 }
 
 /// Options for audios:diff
@@ -181,10 +188,23 @@ impl Controller for AudioController {
 
                 let session_id = opts.session_id.unwrap_or_else(|| "default".to_string());
 
-                let (stream_id, _rx) = self
+                let (stream_id, rx) = self
                     .audio_service
                     .start_stream(&file_path, &session_id)
                     .await?;
+
+                // Register the stream into StreamRegistry so WebSocket subscribers can find it
+                let cancel_token = CancellationToken::new();
+                self.stream_registry
+                    .register_external_stream(
+                        stream_id.clone(),
+                        &session_id,
+                        res_id.as_str(),
+                        StreamConfig::default(),
+                        rx,
+                        cancel_token,
+                    )
+                    .await;
 
                 let response = serde_json::json!({
                     "streamId": stream_id.as_str(),
@@ -215,7 +235,7 @@ impl Controller for AudioController {
 
                 Ok(ActionResponse::ok("", response))
             }
-            "stop" | "pause" | "resume" | "speed" => {
+            "stop" | "pause" | "resume" | "speed" | "seek" => {
                 let opts: AudioStreamControlOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
@@ -261,6 +281,19 @@ impl Controller for AudioController {
                         });
                         Ok(ActionResponse::ok("", response))
                     }
+                    "seek" => {
+                        let time = opts.time.ok_or_else(|| {
+                            ApiError::InvalidRequest(
+                                "time required for audios:seek".to_string(),
+                            )
+                        })?;
+                        self.audio_service.seek(&stream_id, time).await?;
+                        let response = serde_json::json!({
+                            "streamId": stream_id.as_str(),
+                            "time": time,
+                        });
+                        Ok(ActionResponse::ok("", response))
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -293,7 +326,7 @@ impl Controller for AudioController {
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["probe", "transcode", "stream", "waveform", "diff", "stop", "pause", "resume", "speed"]
+        &["probe", "transcode", "stream", "waveform", "diff", "stop", "pause", "resume", "speed", "seek"]
     }
 }
 
@@ -306,7 +339,8 @@ mod tests {
         let task_service = Arc::new(TaskService::new());
         let audio_service = Arc::new(AudioService::new(None, task_service));
         let resource_registry = Arc::new(ResourceRegistry::new());
-        AudioController::new(audio_service, resource_registry)
+        let stream_registry = Arc::new(StreamRegistry::new());
+        AudioController::new(audio_service, resource_registry, stream_registry)
     }
 
     #[tokio::test]
@@ -380,6 +414,7 @@ mod tests {
         assert!(actions.contains(&"pause"));
         assert!(actions.contains(&"resume"));
         assert!(actions.contains(&"speed"));
-        assert_eq!(actions.len(), 9);
+        assert!(actions.contains(&"seek"));
+        assert_eq!(actions.len(), 10);
     }
 }

@@ -103,6 +103,8 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 	// Message Handling
 	// =========================================================================
 
+	private _activeAudioStreamId: string | null = null;
+
 	private async handleMessage(
 		msg: Record<string, unknown>,
 		panel: vscode.WebviewPanel,
@@ -134,28 +136,113 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 				}
 				break;
 
-			case 'preview:decodeSegment': {
-				const startTime = (msg.startTime as number) ?? 0;
-				const duration = (msg.duration as number) ?? 10;
-				const requestId = msg.requestId as string;
-
+			case 'preview:play': {
+				// Start audio stream via stream interface
 				try {
-					const audioData = await this._previewService?.decodeAudioSegment(
-						filePath,
-						startTime,
-						duration
-					);
-					await panel.webview.postMessage({
-						type: 'preview:audioData',
-						requestId,
-						payload: audioData,
+					// Stop existing stream first
+					if (this._activeAudioStreamId) {
+						await this._previewService?.dispatch({
+							group: 'audios',
+							action: 'stop',
+							options: { streamId: this._activeAudioStreamId },
+						});
+						this._activeAudioStreamId = null;
+					}
+
+					const result = await this._previewService?.dispatch({
+						group: 'audios',
+						action: 'stream',
+						options: {
+							source: filePath,
+							session_id: 'audio-preview',
+						},
 					});
+
+					if (result?.status === 'ok') {
+						const data = result.data as Record<string, unknown> | undefined;
+						const streamId = data?.streamId as string;
+						this._activeAudioStreamId = streamId;
+						const streamUrl = this._previewService?.getStreamWebSocketUrl(streamId);
+
+						// Seek to startTime if provided
+						const startTime = (msg.startTime as number) ?? 0;
+						if (startTime > 0 && streamId) {
+							await this._previewService?.dispatch({
+								group: 'audios',
+								action: 'seek',
+								options: { streamId, time: startTime },
+							});
+						}
+
+						await panel.webview.postMessage({
+							type: 'preview:streamReady',
+							payload: {
+								streamId,
+								streamUrl,
+								audioStreamId: streamId,
+								audioStreamUrl: streamUrl,
+							},
+						});
+					}
 				} catch (error) {
-					const errorMsg = error instanceof Error ? error.message : String(error);
-					await panel.webview.postMessage({
-						type: 'preview:audioData',
-						requestId,
-						error: errorMsg,
+					console.error('[AudioPreview] Failed to start audio stream:', error);
+				}
+				break;
+			}
+
+			case 'preview:pause': {
+				if (this._activeAudioStreamId) {
+					await this._previewService?.dispatch({
+						group: 'audios',
+						action: 'pause',
+						options: { streamId: this._activeAudioStreamId },
+					});
+				}
+				break;
+			}
+
+			case 'preview:resume': {
+				if (this._activeAudioStreamId) {
+					await this._previewService?.dispatch({
+						group: 'audios',
+						action: 'resume',
+						options: { streamId: this._activeAudioStreamId },
+					});
+				}
+				break;
+			}
+
+			case 'preview:stop': {
+				if (this._activeAudioStreamId) {
+					await this._previewService?.dispatch({
+						group: 'audios',
+						action: 'stop',
+						options: { streamId: this._activeAudioStreamId },
+					});
+					this._activeAudioStreamId = null;
+				}
+				break;
+			}
+
+			case 'preview:speed': {
+				const speed = (msg.speed as number) ?? 1.0;
+				if (this._activeAudioStreamId) {
+					await this._previewService?.dispatch({
+						group: 'audios',
+						action: 'speed',
+						options: { streamId: this._activeAudioStreamId, speed },
+					});
+				}
+				break;
+			}
+
+			case 'preview:seek': {
+				const time = msg.time as number;
+				if (typeof time === 'number' && this._activeAudioStreamId) {
+					await this._previewService?.dispatch({
+						group: 'audios',
+						action: 'seek',
+						options: { streamId: this._activeAudioStreamId, time },
 					});
 				}
 				break;

@@ -7,6 +7,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { H264StreamClient } from '../shared/H264StreamClient';
+import { AudioStreamClient } from '../shared/AudioStreamClient';
 import { useExtensionMessage, useVscodeReady } from '../shared/useVscodeMessage';
 import { VideoControls } from './VideoControls';
 import type { MediaInfo, PreviewInitMessage } from '../shared/types';
@@ -28,6 +29,7 @@ export function VideoPlayer() {
 	// Refs
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const clientRef = useRef<H264StreamClient | null>(null);
+	const audioClientRef = useRef<AudioStreamClient | null>(null);
 	const playStartTimeRef = useRef<number>(0);
 	const playWallTimeRef = useRef<number>(0);
 	const animFrameRef = useRef<number>(0);
@@ -66,13 +68,24 @@ export function VideoPlayer() {
 	const updatePlaybackTime = useCallback(() => {
 		if (!isPlaying || !mediaInfo) return;
 
-		const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
-		const newTime = playStartTimeRef.current + elapsed * speed;
+		// Use audio master clock if available, otherwise fall back to wall clock
+		let newTime: number;
+		const audioClient = audioClientRef.current;
+		if (audioClient && audioClient.isClockReady) {
+			newTime = audioClient.getCurrentTime();
+		} else {
+			const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
+			newTime = playStartTimeRef.current + elapsed * speed;
+		}
 
 		if (newTime >= mediaInfo.duration) {
-			// Reached end
+			// Reached end — stop stream and clean up clients
 			setCurrentTime(mediaInfo.duration);
 			setIsPlaying(false);
+			clientRef.current?.dispose();
+			clientRef.current = null;
+			audioClientRef.current?.dispose();
+			audioClientRef.current = null;
 			postMessage({ type: 'preview:stop' });
 			return;
 		}
@@ -99,29 +112,56 @@ export function VideoPlayer() {
 	useExtensionMessage((msg) => {
 		switch (msg.type) {
 			case 'preview:init': {
-				const { mediaInfo: info, h264Url } = (msg as PreviewInitMessage).payload;
+				const { mediaInfo: info } = (msg as PreviewInitMessage).payload;
 				setMediaInfo(info);
 				setIsLoading(false);
 
-				// Connect H264 stream client
-				if (h264Url) {
-					const client = new H264StreamClient({
-						websocketUrl: h264Url,
-						width: info.width || 1920,
-						height: info.height || 1080,
-						onFrame,
-						onConnectionChange: setIsConnected,
-						onError: (err) => {
-							console.error('[VideoPlayer] Stream error:', err);
-							setError(err.message);
-						},
-					});
-					clientRef.current = client;
-					client.connect();
-				}
-
 				// Request first frame as poster
 				postMessage({ type: 'preview:captureFrame', time: 0 });
+				break;
+			}
+
+			case 'preview:streamReady': {
+				const { streamUrl, audioStreamUrl } = msg.payload as {
+					streamId: string;
+					streamUrl: string;
+					audioStreamId?: string;
+					audioStreamUrl?: string;
+				};
+				// Dispose previous clients if any
+				clientRef.current?.dispose();
+				audioClientRef.current?.dispose();
+
+				const info = mediaInfo;
+				const client = new H264StreamClient({
+					websocketUrl: streamUrl,
+					width: info?.width || 1920,
+					height: info?.height || 1080,
+					onFrame,
+					onConnectionChange: setIsConnected,
+					onError: (err) => {
+						console.error('[VideoPlayer] Stream error:', err);
+						setError(err.message);
+					},
+				});
+				clientRef.current = client;
+				client.connect();
+
+				// Start audio stream if available
+				if (audioStreamUrl) {
+					const audioClient = new AudioStreamClient({
+						websocketUrl: audioStreamUrl,
+						volume,
+						onConnectionChange: (connected) => {
+							console.log('[VideoPlayer] Audio stream connected:', connected);
+						},
+						onError: (err) => {
+							console.warn('[VideoPlayer] Audio stream error:', err);
+						},
+					});
+					audioClientRef.current = audioClient;
+					audioClient.connect();
+				}
 				break;
 			}
 
@@ -140,6 +180,7 @@ export function VideoPlayer() {
 	useEffect(() => {
 		return () => {
 			clientRef.current?.dispose();
+			audioClientRef.current?.dispose();
 		};
 	}, []);
 
@@ -164,13 +205,24 @@ export function VideoPlayer() {
 		postMessage({ type: 'preview:pause' });
 	}, [postMessage]);
 
+	const handleResume = useCallback(() => {
+		setIsPlaying(true);
+		playStartTimeRef.current = currentTime;
+		playWallTimeRef.current = performance.now();
+		postMessage({ type: 'preview:resume' });
+	}, [currentTime, postMessage]);
+
 	const handleTogglePlay = useCallback(() => {
 		if (isPlaying) {
 			handlePause();
+		} else if (clientRef.current) {
+			// Stream already exists — resume instead of creating a new one
+			handleResume();
 		} else {
+			// No stream yet — start fresh
 			handlePlay();
 		}
-	}, [isPlaying, handlePlay, handlePause]);
+	}, [isPlaying, handlePlay, handlePause, handleResume]);
 
 	const handleSeek = useCallback((time: number) => {
 		setCurrentTime(time);
@@ -178,6 +230,8 @@ export function VideoPlayer() {
 			playStartTimeRef.current = time;
 			playWallTimeRef.current = performance.now();
 		}
+		// Reset audio clock so it re-syncs after seek
+		audioClientRef.current?.resetClock();
 		postMessage({ type: 'preview:seek', time });
 	}, [isPlaying, postMessage]);
 
@@ -192,6 +246,7 @@ export function VideoPlayer() {
 
 	const handleVolumeChange = useCallback((newVolume: number) => {
 		setVolume(newVolume);
+		audioClientRef.current?.setVolume(newVolume);
 	}, []);
 
 	// =========================================================================

@@ -73,7 +73,7 @@ impl TimelineService {
         }
     }
 
-    /// Read texture data back to CPU buffer
+    /// Read texture data back to CPU buffer (assumes RGBA8 / 4 bytes per pixel)
     fn read_texture_to_buffer(
         ctx: &GpuContext,
         texture: &wgpu::Texture,
@@ -83,7 +83,8 @@ impl TimelineService {
         let device = ctx.device();
         let queue = ctx.queue();
 
-        let bytes_per_row = width * 4;
+        let bytes_per_pixel = texture.format().block_copy_size(None).unwrap_or(4);
+        let bytes_per_row = width * bytes_per_pixel;
         let padded_bytes_per_row = (bytes_per_row + 255) & !255;
 
         let buffer_size = (padded_bytes_per_row * height) as u64;
@@ -135,13 +136,15 @@ impl TimelineService {
 
         let data = buffer_slice.get_mapped_range();
 
+        // Unpad rows: copy only the valid bytes_per_row from each padded row
+        let unpadded_row_size = bytes_per_row as usize;
         let result = if padded_bytes_per_row == bytes_per_row {
             data.to_vec()
         } else {
-            let mut result = Vec::with_capacity((width * height * 4) as usize);
+            let mut result = Vec::with_capacity(unpadded_row_size * height as usize);
             for row in 0..height {
                 let start = (row * padded_bytes_per_row) as usize;
-                let end = start + bytes_per_row as usize;
+                let end = start + unpadded_row_size;
                 result.extend_from_slice(&data[start..end]);
             }
             result

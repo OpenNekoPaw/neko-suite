@@ -114,14 +114,13 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
 
 		switch (type) {
 			case 'ready':
-				// Webview loaded — send initial config
+				// Webview loaded — send initial config (no stream URL yet)
 				await panel.webview.postMessage({
 					type: 'preview:init',
 					payload: {
 						filePath,
 						mediaInfo,
 						port: this._previewService?.port ?? null,
-						h264Url: this._previewService?.h264WebSocketUrl ?? null,
 					},
 				});
 				break;
@@ -129,12 +128,30 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
 			case 'preview:play': {
 				const startTime = (msg.startTime as number) ?? 0;
 				const speed = (msg.speed as number) ?? 1.0;
-				await this._previewService?.startVideoPlayback(
+				const result = await this._previewService?.startVideoPlayback(
 					filePath,
 					mediaInfo,
 					startTime,
 					speed
 				);
+				if (result?.videoStreamId) {
+					const streamUrl = this._previewService?.getStreamWebSocketUrl(result.videoStreamId);
+					let audioStreamUrl: string | null = null;
+					if (result.audioStreamId) {
+						audioStreamUrl = this._previewService?.getStreamWebSocketUrl(result.audioStreamId) ?? null;
+					}
+					if (streamUrl) {
+						await panel.webview.postMessage({
+							type: 'preview:streamReady',
+							payload: {
+								streamId: result.videoStreamId,
+								streamUrl,
+								audioStreamId: result.audioStreamId,
+								audioStreamUrl,
+							},
+						});
+					}
+				}
 				break;
 			}
 

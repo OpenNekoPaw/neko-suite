@@ -66,6 +66,7 @@ export class PreviewService implements vscode.Disposable {
 	private _port: number | null = null;
 	private _disposed = false;
 	private _activeStreamId: string | null = null;
+	private _activeAudioStreamId: string | null = null;
 
 	/**
 	 * Try to create a PreviewService instance.
@@ -119,9 +120,12 @@ export class PreviewService implements vscode.Disposable {
 		return this._port;
 	}
 
-	get h264WebSocketUrl(): string | null {
+	/**
+	 * Build WebSocket URL for a specific stream
+	 */
+	getStreamWebSocketUrl(streamId: string): string | null {
 		if (!this._port) return null;
-		return `ws://127.0.0.1:${this._port}/ws/h264`;
+		return `ws://127.0.0.1:${this._port}/v1/streams/${streamId}`;
 	}
 
 	// =========================================================================
@@ -142,7 +146,25 @@ export class PreviewService implements vscode.Disposable {
 			throw new Error(result.error?.message ?? 'Probe failed');
 		}
 
-		return result.data as unknown as MediaInfo;
+		const data = result.data as Record<string, unknown>;
+		const videoStreams = (data.videoStreams as Array<Record<string, unknown>>) ?? [];
+		const audioStreams = (data.audioStreams as Array<Record<string, unknown>>) ?? [];
+		const video = videoStreams[0] ?? {};
+		const audio = audioStreams[0];
+
+		return {
+			duration: (data.duration as number) ?? 0,
+			width: (video.width as number) ?? 0,
+			height: (video.height as number) ?? 0,
+			fps: (video.fps as number) ?? 0,
+			codec: (video.codec as string) ?? '',
+			format: (data.format as string) ?? '',
+			bitrate: video.bitrate as number | undefined,
+			hasAudio: audioStreams.length > 0,
+			audioCodec: audio?.codec as string | undefined,
+			audioSampleRate: audio?.sampleRate as number | undefined,
+			audioChannels: audio?.channels as number | undefined,
+		};
 	}
 
 	// =========================================================================
@@ -151,86 +173,104 @@ export class PreviewService implements vscode.Disposable {
 
 	/**
 	 * Start video playback via H.264 stream.
-	 * Builds a single-track timeline and dispatches to NativeEngine.
+	 * Uses direct video transcoding (decode → encode) for efficient single-file preview.
+	 * Also starts audio stream if the media has audio tracks.
 	 */
 	async startVideoPlayback(
 		filePath: string,
 		mediaInfo: MediaInfo,
 		startTime: number = 0,
 		speed: number = 1.0
-	): Promise<string | null> {
+	): Promise<{ videoStreamId: string | null; audioStreamId: string | null }> {
 		// Stop any existing stream first
 		await this.stopPlayback();
 
-		const timeline = {
-			id: 'preview-playback',
-			duration: mediaInfo.duration,
-			fps: mediaInfo.fps || 30,
-			resolution: {
-				width: mediaInfo.width || 1920,
-				height: mediaInfo.height || 1080,
-			},
-			tracks: [
-				{
-					id: 'video-track',
-					type: 'video',
-					elements: [
-						{
-							id: 'video-0',
-							type: 'media',
-							src: filePath,
-							startTime: 0,
-							duration: mediaInfo.duration,
-							trimStart: 0,
-						},
-					],
-				},
-			],
-		};
-
-		const result = await this.dispatch({
-			group: 'timelines',
+		// Start video stream
+		const videoResult = await this.dispatch({
+			group: 'videos',
 			action: 'stream',
 			options: {
-				sessionId: 'preview-playback',
-				fps: mediaInfo.fps || 30,
-				startTime,
+				source: filePath,
+				session_id: 'preview-playback',
 			},
-			body: timeline,
 		});
 
-		if (result.status === 'error') {
-			console.error('[PreviewService] Failed to start playback:', result.error);
-			return null;
+		if (videoResult.status === 'error') {
+			console.error('[PreviewService] Failed to start video playback:', videoResult.error);
+			return { videoStreamId: null, audioStreamId: null };
 		}
 
-		const data = result.data as Record<string, unknown> | undefined;
-		this._activeStreamId = (data?.streamId as string) ?? null;
+		const videoData = videoResult.data as Record<string, unknown> | undefined;
+		this._activeStreamId = (videoData?.streamId as string) ?? null;
+
+		// Start audio stream if media has audio
+		let audioStreamId: string | null = null;
+		if (mediaInfo.hasAudio) {
+			const audioResult = await this.dispatch({
+				group: 'audios',
+				action: 'stream',
+				options: {
+					source: filePath,
+					session_id: 'preview-audio',
+				},
+			});
+
+			if (audioResult.status === 'error') {
+				console.warn('[PreviewService] Failed to start audio stream:', audioResult.error);
+			} else {
+				const audioData = audioResult.data as Record<string, unknown> | undefined;
+				audioStreamId = (audioData?.streamId as string) ?? null;
+				this._activeAudioStreamId = audioStreamId;
+			}
+		}
 
 		// Set playback speed if not 1.0
 		if (this._activeStreamId && speed !== 1.0) {
 			await this.dispatch({
-				group: 'timelines',
+				group: 'videos',
 				action: 'speed',
 				options: {
 					streamId: this._activeStreamId,
 					speed,
 				},
 			});
+			if (this._activeAudioStreamId) {
+				await this.dispatch({
+					group: 'audios',
+					action: 'speed',
+					options: {
+						streamId: this._activeAudioStreamId,
+						speed,
+					},
+				});
+			}
 		}
 
-		return this._activeStreamId;
+		return { videoStreamId: this._activeStreamId, audioStreamId };
 	}
 
 	/**
-	 * Stop current playback
+	 * Stop current playback (video + audio)
 	 */
 	async stopPlayback(): Promise<void> {
+		if (this._activeAudioStreamId) {
+			try {
+				await this.dispatch({
+					group: 'audios',
+					action: 'stop',
+					options: { streamId: this._activeAudioStreamId },
+				});
+			} catch {
+				// Ignore stop errors
+			}
+			this._activeAudioStreamId = null;
+		}
+
 		if (!this._activeStreamId) return;
 
 		try {
 			await this.dispatch({
-				group: 'timelines',
+				group: 'videos',
 				action: 'stop',
 				options: { streamId: this._activeStreamId },
 			});
@@ -241,61 +281,99 @@ export class PreviewService implements vscode.Disposable {
 	}
 
 	/**
-	 * Seek to a specific time
+	 * Seek to a specific time (video + audio)
 	 */
 	async seekTo(time: number): Promise<void> {
 		if (!this._activeStreamId) return;
 
 		await this.dispatch({
-			group: 'timelines',
+			group: 'videos',
 			action: 'seek',
 			options: {
 				streamId: this._activeStreamId,
 				time,
 			},
 		});
+
+		if (this._activeAudioStreamId) {
+			await this.dispatch({
+				group: 'audios',
+				action: 'seek',
+				options: {
+					streamId: this._activeAudioStreamId,
+					time,
+				},
+			});
+		}
 	}
 
 	/**
-	 * Set playback speed
+	 * Set playback speed (video + audio)
 	 */
 	async setSpeed(speed: number): Promise<void> {
 		if (!this._activeStreamId) return;
 
 		await this.dispatch({
-			group: 'timelines',
+			group: 'videos',
 			action: 'speed',
 			options: {
 				streamId: this._activeStreamId,
 				speed,
 			},
 		});
+
+		if (this._activeAudioStreamId) {
+			await this.dispatch({
+				group: 'audios',
+				action: 'speed',
+				options: {
+					streamId: this._activeAudioStreamId,
+					speed,
+				},
+			});
+		}
 	}
 
 	/**
-	 * Pause playback
+	 * Pause playback (video + audio)
 	 */
 	async pausePlayback(): Promise<void> {
 		if (!this._activeStreamId) return;
 
 		await this.dispatch({
-			group: 'timelines',
+			group: 'videos',
 			action: 'pause',
 			options: { streamId: this._activeStreamId },
 		});
+
+		if (this._activeAudioStreamId) {
+			await this.dispatch({
+				group: 'audios',
+				action: 'pause',
+				options: { streamId: this._activeAudioStreamId },
+			});
+		}
 	}
 
 	/**
-	 * Resume playback
+	 * Resume playback (video + audio)
 	 */
 	async resumePlayback(): Promise<void> {
 		if (!this._activeStreamId) return;
 
 		await this.dispatch({
-			group: 'timelines',
+			group: 'videos',
 			action: 'resume',
 			options: { streamId: this._activeStreamId },
 		});
+
+		if (this._activeAudioStreamId) {
+			await this.dispatch({
+				group: 'audios',
+				action: 'resume',
+				options: { streamId: this._activeAudioStreamId },
+			});
+		}
 	}
 
 	// =========================================================================
@@ -395,7 +473,7 @@ export class PreviewService implements vscode.Disposable {
 	// Dispatch
 	// =========================================================================
 
-	private async dispatch(request: ActionRequest): Promise<ActionResponse> {
+	async dispatch(request: ActionRequest): Promise<ActionResponse> {
 		if (!this._engine || this._disposed) {
 			throw new Error('PreviewService not available');
 		}

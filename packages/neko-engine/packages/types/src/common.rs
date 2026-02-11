@@ -45,6 +45,8 @@ pub enum FrameFormat {
     Webp,
     /// H.264 encoded NAL units (for streaming)
     H264,
+    /// PCM F32 audio data (for streaming)
+    PcmF32,
 }
 
 impl Default for FrameFormat {

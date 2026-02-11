@@ -33,8 +33,16 @@ export interface PreviewInitMessage {
 		mediaInfo: MediaInfo;
 		/** Frame server port (video only) */
 		port?: number | null;
-		/** H.264 WebSocket URL (video only) */
-		h264Url?: string | null;
+	};
+}
+
+export interface PreviewStreamReadyMessage {
+	type: 'preview:streamReady';
+	payload: {
+		streamId: string;
+		streamUrl: string;
+		audioStreamId?: string | null;
+		audioStreamUrl?: string | null;
 	};
 }
 
@@ -68,6 +76,7 @@ export interface PreviewAudioDataMessage {
 
 export type ExtensionMessage =
 	| PreviewInitMessage
+	| PreviewStreamReadyMessage
 	| PreviewFrameDataMessage
 	| PreviewWaveformMessage
 	| PreviewAudioDataMessage;

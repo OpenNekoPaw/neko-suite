@@ -3,8 +3,8 @@
 use crate::controllers::utils::{base64_encode, resolve_resource};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use crate::registry::ResourceRegistry;
-use neko_native_core::domain::{CaptureOptions, ExtractOptions, ExtractType};
+use crate::registry::{ResourceRegistry, StreamRegistry};
+use neko_native_core::domain::{CaptureOptions, ExtractOptions, ExtractType, StreamConfig};
 use neko_native_core::media_service::{diff_media, diff_video_content, DiffCategory, VideoDiffOptions};
 use neko_native_core::services::{IVideoService, VideoService};
 use neko_types::{ActionResponse, FrameFormat, LoopRegion, StreamId};
@@ -12,11 +12,13 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 /// Controller for video-related actions
 pub struct VideoController {
     video_service: Arc<VideoService>,
     resource_registry: Arc<ResourceRegistry>,
+    stream_registry: Arc<StreamRegistry>,
 }
 
 impl VideoController {
@@ -24,10 +26,12 @@ impl VideoController {
     pub fn new(
         video_service: Arc<VideoService>,
         resource_registry: Arc<ResourceRegistry>,
+        stream_registry: Arc<StreamRegistry>,
     ) -> Self {
         Self {
             video_service,
             resource_registry,
+            stream_registry,
         }
     }
 }
@@ -350,10 +354,23 @@ impl Controller for VideoController {
 
                 let session_id = opts.session_id.unwrap_or_else(|| "default".to_string());
 
-                let (stream_id, _rx) = self
+                let (stream_id, rx) = self
                     .video_service
                     .start_stream(&file_path, &session_id)
                     .await?;
+
+                // Register the stream into StreamRegistry so WebSocket subscribers can find it
+                let cancel_token = CancellationToken::new();
+                self.stream_registry
+                    .register_external_stream(
+                        stream_id.clone(),
+                        &session_id,
+                        res_id.as_str(),
+                        StreamConfig::default(),
+                        rx,
+                        cancel_token,
+                    )
+                    .await;
 
                 let response = serde_json::json!({
                     "streamId": stream_id.as_str(),
@@ -646,7 +663,8 @@ mod tests {
         let task_service = Arc::new(TaskService::new());
         let video_service = Arc::new(VideoService::new(None, task_service));
         let resource_registry = Arc::new(ResourceRegistry::new());
-        VideoController::new(video_service, resource_registry)
+        let stream_registry = Arc::new(StreamRegistry::new());
+        VideoController::new(video_service, resource_registry, stream_registry)
     }
 
     #[tokio::test]

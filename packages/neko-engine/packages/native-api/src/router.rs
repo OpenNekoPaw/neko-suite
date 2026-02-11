@@ -44,10 +44,10 @@ impl ActionRouter {
         Self {
             node_controller: NodeController::new(node_service),
             task_controller: TaskController::new(task_service),
-            video_controller: VideoController::new(video_service, resource_registry.clone()),
-            audio_controller: AudioController::new(audio_service, resource_registry.clone()),
+            video_controller: VideoController::new(video_service, resource_registry.clone(), stream_registry.clone()),
+            audio_controller: AudioController::new(audio_service, resource_registry.clone(), stream_registry.clone()),
             image_controller: ImageController::new(image_service, resource_registry),
-            timeline_controller: TimelineController::new(timeline_service, export_service),
+            timeline_controller: TimelineController::new(timeline_service, export_service, stream_registry.clone()),
             stream_controller: StreamController::new(stream_registry),
             models_controller: ModelsController::new(),
             canvas_controller: CanvasController::new(),

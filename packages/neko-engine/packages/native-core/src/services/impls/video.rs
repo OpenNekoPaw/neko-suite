@@ -14,7 +14,7 @@ use crate::keyframe_cache::{IdrScanner, KeyframeInfo};
 use crate::media_service::{encode_rgba_to_jpeg, extract_subtitles, probe_media_info};
 use crate::services::impls::common::generate_waveform_blocking;
 use crate::services::impls::stream_loop::{
-    pack_h264_frame, ActiveStreams, create_stream_channels, FramePacer, PlaybackState,
+    pack_h264_frame, ActiveStreams, create_stream_channels, WallClockPacer,
     StreamLoopHandle,
 };
 use crate::services::{ITaskService, IVideoService};
@@ -342,7 +342,7 @@ impl IVideoService for VideoService {
         source: &Path,
         session_id: &str,
     ) -> Result<(StreamId, broadcast::Receiver<FrameData>)> {
-        let gpu_ctx = self.gpu_ctx.clone().ok_or_else(|| {
+        let _gpu_ctx = self.gpu_ctx.clone().ok_or_else(|| {
             Error::Other("GPU context required for video streaming".to_string())
         })?;
 
@@ -364,146 +364,126 @@ impl IVideoService for VideoService {
         let (stream_id, tx, rx, cancel, state_tx, state_rx) =
             create_stream_channels(session_id, 64);
 
-        // Spawn decoding loop
+        // Spawn entire decode+encode loop in a single blocking thread
+        // This eliminates per-frame spawn_blocking overhead and Arc<Mutex<>> contention
         let cancel_clone = cancel.clone();
-        let join_handle = tokio::spawn(async move {
-            let mut pacer = FramePacer::new(fps, 1.0);
+        let state_tx_clone = state_tx.clone();
+        let join_handle = tokio::task::spawn_blocking(move || {
+            // Initialize decoder and encoder (owned, no locks needed)
+            let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
+            if let Err(e) = decoder.open(&path) {
+                tracing::error!("Failed to open video decoder: {}", e);
+                return;
+            }
+
+            let mut encoder = HwAccelEncoder::new();
+            let encoder_config = EncoderConfig::new(width, height, fps, crate::encoder::VideoCodec::H264)
+                .with_preset(crate::encoder::EncoderPreset::Fast)
+                .with_hw_encoder(crate::encoder::HwEncoderType::Auto)
+                .with_gop_size(30)
+                .with_max_b_frames(0);
+            if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
+                tracing::error!("Failed to open video encoder: {}", e);
+                return;
+            }
+
+            let mut pacer = WallClockPacer::new(fps, 1.0);
             let mut current_speed = 1.0;
-            let mut last_seek: Option<f64> = None;
-
-            // Initialize decoder and encoder in blocking context
-            let init_result = tokio::task::spawn_blocking({
-                let path = path.clone();
-                move || -> Result<(HwAccelDecoder, HwAccelEncoder)> {
-                    let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
-                    decoder.open(&path)?;
-
-                    let mut encoder = HwAccelEncoder::new();
-                    let encoder_config = EncoderConfig::new(width, height, fps, crate::encoder::VideoCodec::H264)
-                        .with_preset(crate::encoder::EncoderPreset::Fast)
-                        .with_hw_encoder(crate::encoder::HwEncoderType::Auto)
-                        .with_gop_size(30)
-                        .with_max_b_frames(0);
-                    Encoder::open(&mut encoder, &encoder_config)?;
-
-                    Ok((decoder, encoder))
-                }
-            })
-            .await;
-
-            let (decoder, encoder) = match init_result {
-                Ok(Ok((d, e))) => (d, e),
-                _ => {
-                    tracing::error!("Failed to initialize video stream decoder/encoder");
-                    return;
-                }
-            };
-
-            let decoder = std::sync::Arc::new(std::sync::Mutex::new(decoder));
-            let encoder = std::sync::Arc::new(std::sync::Mutex::new(encoder));
 
             loop {
-                tokio::select! {
-                    biased;
-                    _ = cancel_clone.cancelled() => break,
-                    _ = pacer.tick() => {
+                // Check cancellation
+                if cancel_clone.is_cancelled() { break; }
+
+                // Read playback state (watch channel is thread-safe)
+                let state = state_rx.borrow().clone();
+
+                // Handle seek request
+                let mut did_seek = false;
+                if let Some(time) = state.seek_to {
+                    did_seek = true;
+                    let _ = decoder.seek(time);
+                    // Re-open encoder to reset internal state after seek
+                    // (flush sends EOF which terminates the encoder)
+                    Encoder::close(&mut encoder);
+                    if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
+                        tracing::error!("Failed to re-open encoder after seek: {}", e);
+                        break;
+                    }
+                    pacer.reset();
+                    // Clear seek_to so it won't re-trigger
+                    state_tx_clone.send_modify(|s| s.seek_to = None);
+                }
+
+                // When paused, only produce a frame if we just seeked
+                if state.paused && !did_seek {
+                    std::thread::sleep(std::time::Duration::from_millis(16));
+                    continue;
+                }
+
+                // Update speed if changed
+                if (state.speed - current_speed).abs() > 0.001 {
+                    current_speed = state.speed;
+                    pacer.update_speed(current_speed);
+                }
+
+                // Decode next GPU frame
+                let gpu_texture = match decoder.decode_next_gpu() {
+                    Ok(Some(t)) => t,
+                    Ok(None) => {
+                        // Decoder EOF - check loop
                         let state = state_rx.borrow().clone();
-
-                        // Handle seek request (deduplicate by comparing with last_seek)
-                        if let Some(time) = state.seek_to {
-                            if last_seek != Some(time) {
-                                last_seek = Some(time);
-                                let dec = decoder.clone();
-                                let _ = tokio::task::spawn_blocking(move || {
-                                    let mut d = dec.lock().unwrap();
-                                    d.seek(time)
-                                }).await;
-                            }
+                        if let Some(region) = &state.loop_region {
+                            let _ = decoder.seek(region.in_point);
+                            pacer.reset();
+                            continue;
                         } else {
-                            last_seek = None;
-                        }
-
-                        if state.paused { continue; }
-
-                        // Update speed if changed
-                        if (state.speed - current_speed).abs() > 0.001 {
-                            current_speed = state.speed;
-                            pacer.update_speed(current_speed);
-                        }
-
-                        let dec = decoder.clone();
-                        let enc = encoder.clone();
-                        let frame_result = tokio::task::spawn_blocking(move || -> Result<Vec<FrameData>> {
-                            let mut d = dec.lock().unwrap();
-                            let gpu_texture = match d.decode_next_gpu()? {
-                                Some(t) => t,
-                                None => return Ok(vec![]),
-                            };
-
-                            let tex_width = gpu_texture.width;
-                            let tex_height = gpu_texture.height;
-                            let pts = gpu_texture.pts;
-
-                            // Encode GPU texture directly to H.264 (zero-copy on macOS)
-                            let mut e = enc.lock().unwrap();
-                            let gpu_handle = match gpu_texture.handle {
-                                #[cfg(target_os = "macos")]
-                                crate::decoder::GpuTextureHandle::VideoToolbox { io_surface, .. } => io_surface,
-                                _ => return Err(Error::Other("Unsupported GPU texture handle for encoding".to_string())),
-                            };
-                            let packets = Encoder::encode_frame_gpu(&mut *e, gpu_handle, pts)?;
-
-                            let frames: Vec<FrameData> = packets
-                                .iter()
-                                .map(|p| pack_h264_frame(p, tex_width, tex_height))
-                                .collect();
-
-                            Ok(frames)
-                        }).await;
-
-                        match frame_result {
-                            Ok(Ok(frames)) if !frames.is_empty() => {
-                                for frame in frames {
-                                    let _ = tx.send(frame);
-                                }
-                            }
-                            Ok(Ok(_)) => {
-                                // No frame (EOF) - check loop
-                                let state = state_rx.borrow().clone();
-                                if let Some(region) = &state.loop_region {
-                                    let dec = decoder.clone();
-                                    let start = region.in_point;
-                                    let _ = tokio::task::spawn_blocking(move || {
-                                        dec.lock().unwrap().seek(start)
-                                    }).await;
-                                } else {
-                                    break;
-                                }
-                            }
-                            Ok(Err(e)) => {
-                                tracing::warn!("Video stream decode error: {}", e);
-                                break;
-                            }
-                            Err(e) => {
-                                tracing::error!("Video stream task panic: {}", e);
-                                break;
-                            }
+                            break;
                         }
                     }
+                    Err(e) => {
+                        tracing::warn!("Video stream decode error: {}", e);
+                        break;
+                    }
+                };
+
+                let tex_width = gpu_texture.width;
+                let tex_height = gpu_texture.height;
+                let pts = gpu_texture.pts;
+
+                // Encode GPU texture directly to H.264 (zero-copy on macOS)
+                let gpu_handle = match gpu_texture.handle {
+                    #[cfg(target_os = "macos")]
+                    crate::decoder::GpuTextureHandle::VideoToolbox { io_surface, .. } => io_surface,
+                    #[allow(unreachable_patterns)]
+                    _ => {
+                        tracing::warn!("Unsupported GPU texture handle for encoding");
+                        break;
+                    }
+                };
+
+                match Encoder::encode_frame_gpu(&mut encoder, gpu_handle, pts) {
+                    Ok(packets) => {
+                        for p in &packets {
+                            let _ = tx.send(pack_h264_frame(p, tex_width, tex_height));
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Video stream encode error: {}", e);
+                        break;
+                    }
                 }
+
+                // Wall-clock pacing: sleep until next frame time, or proceed immediately if behind
+                pacer.wait_for_next_frame();
             }
 
             // Flush encoder
-            let enc = encoder.clone();
-            let _ = tokio::task::spawn_blocking(move || {
-                let mut e = enc.lock().unwrap();
-                if let Ok(packets) = Encoder::flush(&mut *e) {
-                    for p in &packets {
-                        let _ = tx.send(pack_h264_frame(p, width, height));
-                    }
+            if let Ok(packets) = Encoder::flush(&mut encoder) {
+                for p in &packets {
+                    let _ = tx.send(pack_h264_frame(p, width, height));
                 }
-                Encoder::close(&mut *e);
-            }).await;
+            }
+            Encoder::close(&mut encoder);
         });
 
         // Store handle

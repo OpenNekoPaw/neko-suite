@@ -8,7 +8,7 @@
  * [pts: i64 LE (8B)] [dts: i64 LE (8B)] [is_keyframe: u8 (1B)] [NAL data...]
  */
 
-const H264_HEADER_SIZE = 8 + 8 + 1; // 17 bytes
+const H264_HEADER_SIZE = 8 + 8 + 1 + 8; // pts(8) + dts(8) + is_keyframe(1) + duration(8) = 25 bytes
 
 function parseH264Packet(data: ArrayBuffer): {
 	pts: number;
@@ -29,6 +29,7 @@ function parseH264Packet(data: ArrayBuffer): {
 	const dts = dtsLow + dtsHigh * 0x100000000;
 
 	const isKeyframe = view.getUint8(16) === 1;
+	// Skip duration field (8 bytes at offset 17)
 	const nalData = new Uint8Array(data, H264_HEADER_SIZE);
 
 	return { pts, dts, isKeyframe, nalData };
@@ -39,7 +40,7 @@ function parseH264Packet(data: ArrayBuffer): {
 // =============================================================================
 
 export interface H264StreamClientConfig {
-	/** WebSocket URL (e.g., ws://127.0.0.1:PORT/ws/h264) */
+	/** WebSocket URL (e.g., ws://127.0.0.1:PORT/v1/streams/STREAM_ID) */
 	websocketUrl: string;
 	/** Video width for decoder config */
 	width: number;

@@ -12,10 +12,11 @@ use crate::gpu::GpuContext;
 use crate::media_service::probe_media_info;
 use crate::services::impls::common::generate_waveform_blocking;
 use crate::services::impls::stream_loop::{
-    ActiveStreams, create_stream_channels, FramePacer, StreamLoopHandle,
+    pack_pcm_frame, ActiveStreams, create_stream_channels, WallClockPacer,
+    StreamLoopHandle,
 };
 use crate::services::{IAudioService, ITaskService};
-use neko_types::{FrameFormat, MediaInfo, StreamId, WaveformData};
+use neko_types::{MediaInfo, StreamId, WaveformData};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -207,102 +208,90 @@ impl IAudioService for AudioService {
         let path = source.to_string_lossy().to_string();
 
         // Create stream channels
-        let (stream_id, tx, rx, cancel, _state_tx, state_rx) =
+        let (stream_id, tx, rx, cancel, state_tx, state_rx) =
             create_stream_channels(session_id, 64);
 
-        // Spawn decoding loop
+        // Spawn entire decode loop in a single blocking thread
         let cancel_clone = cancel.clone();
-        let join_handle = tokio::spawn(async move {
-            // Audio doesn't need strict frame pacing, use ~50 packets/sec
-            let mut pacer = FramePacer::new(50.0, 1.0);
-            let mut current_speed = 1.0;
-
-            // Initialize decoder in blocking context
-            let init_result = tokio::task::spawn_blocking({
-                let path = path.clone();
-                move || -> Result<FfmpegAudioDecoder> {
-                    let mut decoder =
-                        FfmpegAudioDecoder::new().with_output_format(SampleFormat::F32);
-                    decoder.open(&path)?;
-                    Ok(decoder)
-                }
-            })
-            .await;
-
-            let decoder = match init_result {
-                Ok(Ok(d)) => d,
-                _ => {
-                    tracing::error!("Failed to initialize audio stream decoder");
+        let state_tx_clone = state_tx.clone();
+        let join_handle = tokio::task::spawn_blocking(move || {
+            // Initialize decoder (owned, no locks needed)
+            let mut decoder =
+                FfmpegAudioDecoder::new().with_output_format(SampleFormat::F32);
+            let audio_info = match decoder.open(&path) {
+                Ok(info) => info,
+                Err(e) => {
+                    tracing::error!("Failed to open audio decoder: {}", e);
                     return;
                 }
             };
 
-            let decoder = std::sync::Arc::new(std::sync::Mutex::new(decoder));
+            let sample_rate = audio_info.sample_rate;
+            let channels = audio_info.channels as u32;
+
+            // Audio packets at ~50 packets/sec
+            let mut pacer = WallClockPacer::new(50.0, 1.0);
+            let mut current_speed = 1.0;
 
             loop {
-                tokio::select! {
-                    biased;
-                    _ = cancel_clone.cancelled() => break,
-                    _ = pacer.tick() => {
+                // Check cancellation
+                if cancel_clone.is_cancelled() { break; }
+
+                // Read playback state
+                let state = state_rx.borrow().clone();
+
+                // Handle seek request
+                if let Some(time) = state.seek_to {
+                    let _ = AudioDecoder::seek(&mut decoder, time);
+                    pacer.reset();
+                    state_tx_clone.send_modify(|s| s.seek_to = None);
+                }
+
+                // When paused, sleep and continue
+                if state.paused {
+                    std::thread::sleep(std::time::Duration::from_millis(16));
+                    continue;
+                }
+
+                // Update speed if changed
+                if (state.speed - current_speed).abs() > 0.001 {
+                    current_speed = state.speed;
+                    pacer.update_speed(current_speed);
+                }
+
+                // Decode next audio frame
+                match AudioDecoder::decode_next(&mut decoder) {
+                    Ok(Some(frame)) => {
+                        let packed = pack_pcm_frame(
+                            &frame.data,
+                            frame.timestamp,
+                            sample_rate,
+                            channels,
+                        );
+                        let _ = tx.send(packed);
+                    }
+                    Ok(None) => {
+                        // EOF - check loop
                         let state = state_rx.borrow().clone();
-
-                        if state.paused { continue; }
-
-                        // Update speed if changed
-                        if (state.speed - current_speed).abs() > 0.001 {
-                            current_speed = state.speed;
-                            pacer.update_speed(current_speed);
-                        }
-
-                        // Decode next audio frame (blocking)
-                        let dec = decoder.clone();
-                        let frame_result = tokio::task::spawn_blocking(move || -> Result<Option<FrameData>> {
-                            let mut d = dec.lock().unwrap();
-                            match AudioDecoder::decode_next(&mut *d)? {
-                                Some(frame) => {
-                                    Ok(Some(FrameData {
-                                        data: frame.data,
-                                        width: frame.sample_rate,   // Repurpose: sample_rate
-                                        height: frame.channels as u32, // Repurpose: channels
-                                        format: FrameFormat::Rgba,  // Marker; actual data is PCM F32
-                                        timestamp: frame.timestamp,
-                                    }))
-                                }
-                                None => Ok(None),
-                            }
-                        }).await;
-
-                        match frame_result {
-                            Ok(Ok(Some(frame))) => {
-                                let _ = tx.send(frame);
-                            }
-                            Ok(Ok(None)) => {
-                                // EOF - check loop
-                                let state = state_rx.borrow().clone();
-                                if state.loop_region.is_some() {
-                                    // Re-open decoder for loop (audio decoder doesn't support seek easily)
-                                    let dec = decoder.clone();
-                                    let p = path.clone();
-                                    let _ = tokio::task::spawn_blocking(move || {
-                                        let mut d = dec.lock().unwrap();
-                                        AudioDecoder::close(&mut *d);
-                                        let _ = d.open(&p);
-                                    }).await;
-                                } else {
-                                    break;
-                                }
-                            }
-                            Ok(Err(e)) => {
-                                tracing::warn!("Audio stream decode error: {}", e);
+                        if state.loop_region.is_some() {
+                            // Re-open decoder for loop
+                            AudioDecoder::close(&mut decoder);
+                            if decoder.open(&path).is_err() {
                                 break;
                             }
-                            Err(e) => {
-                                tracing::error!("Audio stream task panic: {}", e);
-                                break;
-                            }
+                            pacer.reset();
+                        } else {
+                            break;
                         }
                     }
+                    Err(e) => {
+                        tracing::warn!("Audio stream decode error: {}", e);
+                        break;
+                    }
                 }
+
+                // Wall-clock pacing
+                pacer.wait_for_next_frame();
             }
         });
 
@@ -310,7 +299,7 @@ impl IAudioService for AudioService {
         let handle = StreamLoopHandle {
             stream_id: stream_id.clone(),
             cancel,
-            state_tx: _state_tx,
+            state_tx,
             join_handle,
         };
         self.active_streams.insert(handle).await;
@@ -337,6 +326,12 @@ impl IAudioService for AudioService {
     async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()> {
         self.active_streams
             .update_state(stream_id, |s| s.speed = speed)
+            .await
+    }
+
+    async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.seek_to = Some(time_seconds))
             .await
     }
 
@@ -417,5 +412,98 @@ mod tests {
     fn test_audio_service_trait_object() {
         fn _assert_impl<T: IAudioService>() {}
         _assert_impl::<AudioService>();
+    }
+
+    /// Integration test: start audio stream with real mp3 file and verify PCM frames are produced
+    #[tokio::test]
+    async fn test_audio_stream_real_file_mp3() {
+        let test_file = std::path::Path::new("/Users/feng/git/neko-test/cases/test.mp3");
+        if !test_file.exists() {
+            eprintln!("Skipping test: test file not found at {:?}", test_file);
+            return;
+        }
+
+        let service = create_test_service();
+        let result = service.start_stream(test_file, "test-audio").await;
+        assert!(result.is_ok(), "start_stream should succeed");
+
+        let (stream_id, mut rx) = result.unwrap();
+
+        // Receive a few frames and verify they have PCM header
+        let mut frames_received = 0;
+        let timeout = tokio::time::sleep(std::time::Duration::from_secs(3));
+        tokio::pin!(timeout);
+
+        loop {
+            tokio::select! {
+                _ = &mut timeout => break,
+                frame = rx.recv() => {
+                    match frame {
+                        Ok(f) => {
+                            assert_eq!(f.format, neko_types::FrameFormat::PcmF32, "Frame should be PcmF32");
+                            // Verify wire format header: pts(8) + sampleRate(4) + channels(4) = 16 bytes min
+                            assert!(f.data.len() > 16, "Frame data should have header + PCM data");
+
+                            // Parse header
+                            let pts = f64::from_le_bytes(f.data[0..8].try_into().unwrap());
+                            let sample_rate = u32::from_le_bytes(f.data[8..12].try_into().unwrap());
+                            let channels = u32::from_le_bytes(f.data[12..16].try_into().unwrap());
+
+                            assert!(sample_rate > 0, "Sample rate should be > 0, got {}", sample_rate);
+                            assert!(channels > 0, "Channels should be > 0, got {}", channels);
+                            assert!(pts >= 0.0, "PTS should be >= 0, got {}", pts);
+
+                            frames_received += 1;
+                            if frames_received >= 5 { break; }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+
+        assert!(frames_received >= 3, "Should receive at least 3 PCM frames, got {}", frames_received);
+        let _ = service.stop_stream(&stream_id).await;
+    }
+
+    /// Integration test: start audio stream with real aac file
+    #[tokio::test]
+    async fn test_audio_stream_real_file_aac() {
+        let test_file = std::path::Path::new("/Users/feng/git/neko-test/cases/test.aac");
+        if !test_file.exists() {
+            eprintln!("Skipping test: test file not found at {:?}", test_file);
+            return;
+        }
+
+        let service = create_test_service();
+        let result = service.start_stream(test_file, "test-aac").await;
+        assert!(result.is_ok(), "start_stream should succeed for aac");
+
+        let (stream_id, mut rx) = result.unwrap();
+
+        let mut frames_received = 0;
+        let timeout = tokio::time::sleep(std::time::Duration::from_secs(3));
+        tokio::pin!(timeout);
+
+        loop {
+            tokio::select! {
+                _ = &mut timeout => break,
+                frame = rx.recv() => {
+                    match frame {
+                        Ok(f) => {
+                            assert_eq!(f.format, neko_types::FrameFormat::PcmF32);
+                            frames_received += 1;
+                            if frames_received >= 5 { break; }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+
+        assert!(frames_received >= 3, "Should receive at least 3 PCM frames from aac, got {}", frames_received);
+        let _ = service.stop_stream(&stream_id).await;
     }
 }
