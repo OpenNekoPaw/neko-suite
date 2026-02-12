@@ -260,6 +260,29 @@ pub fn pack_pcm_frame(pcm_data: &[u8], timestamp: f64, sample_rate: u32, channel
     }
 }
 
+/// Pack an Opus encoded audio packet into FrameData for broadcast transport
+///
+/// Wire format: [pts:i64 LE (8B)][duration:i64 LE (8B)][sample_rate:u32 LE (4B)][channels:u16 LE (2B)][Opus data...]
+pub fn pack_opus_frame(packet: &crate::audio::EncodedAudioPacket, sample_rate: u32, channels: u16) -> FrameData {
+    let header_size = 8 + 8 + 4 + 2; // pts + duration + sample_rate + channels
+    let mut data = Vec::with_capacity(header_size + packet.data.len());
+    data.extend_from_slice(&packet.pts.to_le_bytes());
+    data.extend_from_slice(&packet.duration.to_le_bytes());
+    data.extend_from_slice(&sample_rate.to_le_bytes());
+    data.extend_from_slice(&channels.to_le_bytes());
+    data.extend_from_slice(&packet.data);
+
+    let timestamp = packet.pts as f64 / sample_rate as f64;
+
+    FrameData {
+        data,
+        width: sample_rate,
+        height: channels as u32,
+        format: FrameFormat::Opus,
+        timestamp,
+    }
+}
+
 /// Create a new stream with broadcast channel and control channels
 ///
 /// Returns (StreamId, broadcast::Receiver, CancellationToken, watch::Receiver<PlaybackState>, watch::Sender<PlaybackState>)

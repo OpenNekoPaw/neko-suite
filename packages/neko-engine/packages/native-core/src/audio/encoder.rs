@@ -11,7 +11,14 @@ use ffmpeg_next::software::resampling::Context as ResamplerContext;
 use ffmpeg_next::util::frame::audio::Audio as AudioFrame;
 use ffmpeg_next::{ChannelLayout, Dictionary, Rational};
 
-/// FFmpeg audio encoder
+/// FFmpeg audio encoder with FIFO buffering
+///
+/// Audio decoders output variable-size frames, but encoders (especially Opus)
+/// require fixed-size frames (e.g. 960 samples at 48kHz = 20ms).
+/// The internal FIFO buffer accumulates decoded samples and feeds the encoder
+/// in exact `frame_size` chunks.
+///
+/// Pipeline: Input PCM → Resampler → FIFO → Encoder → Packets
 pub struct FfmpegAudioEncoder {
     encoder: Option<ffmpeg::encoder::Audio>,
     resampler: Option<ResamplerContext>,
@@ -19,6 +26,12 @@ pub struct FfmpegAudioEncoder {
     pts: i64,
     time_base: Rational,
     frame_size: usize,
+    /// FIFO buffer: accumulates resampled samples until we have frame_size
+    fifo: Vec<u8>,
+    /// Encoder's required sample format (after resampling)
+    encoder_format: Option<Sample>,
+    /// Encoder's channel layout
+    encoder_channel_layout: Option<ChannelLayout>,
 }
 
 impl FfmpegAudioEncoder {
@@ -31,6 +44,9 @@ impl FfmpegAudioEncoder {
             pts: 0,
             time_base: Rational::new(1, 48000),
             frame_size: 1024,
+            fifo: Vec::new(),
+            encoder_format: None,
+            encoder_channel_layout: None,
         }
     }
 
@@ -191,6 +207,9 @@ impl AudioEncoder for FfmpegAudioEncoder {
         self.encoder = Some(encoder);
         self.config = Some(config.clone());
         self.pts = 0;
+        self.fifo.clear();
+        self.encoder_format = Some(encoder_format);
+        self.encoder_channel_layout = Some(channel_layout);
 
         tracing::info!(
             "Audio encoder opened: {:?}, {} Hz, {} channels, {} bps",
@@ -205,14 +224,20 @@ impl AudioEncoder for FfmpegAudioEncoder {
 
     fn encode_frame(&mut self, data: &[u8], samples: usize) -> Result<Vec<EncodedAudioPacket>> {
         let config = self.config.as_ref().ok_or(Error::EncoderNotInitialized)?;
-        let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
+        let encoder_format = self.encoder_format.ok_or(Error::EncoderNotInitialized)?;
+        let channel_layout = self.encoder_channel_layout.ok_or(Error::EncoderNotInitialized)?;
+
+        // Extract values from config to avoid holding the borrow
+        let sample_format = config.sample_format;
+        let sample_rate = config.sample_rate;
+        let channels = config.channels;
 
         // Create input frame
-        let input_format = Self::to_ffmpeg_sample_format_packed(config.sample_format);
-        let channel_layout = Self::channel_layout_for_channels(config.channels);
+        let input_format = Self::to_ffmpeg_sample_format_packed(sample_format);
+        let input_layout = Self::channel_layout_for_channels(channels);
 
-        let mut input_frame = AudioFrame::new(input_format, samples, channel_layout);
-        input_frame.set_rate(config.sample_rate);
+        let mut input_frame = AudioFrame::new(input_format, samples, input_layout);
+        input_frame.set_rate(sample_rate);
 
         // Copy data to frame
         let plane_data = input_frame.data_mut(0);
@@ -220,7 +245,7 @@ impl AudioEncoder for FfmpegAudioEncoder {
         plane_data[..copy_size].copy_from_slice(&data[..copy_size]);
 
         // Resample if needed
-        let frame_to_encode = if let Some(ref mut resampler) = self.resampler {
+        let resampled = if let Some(ref mut resampler) = self.resampler {
             let mut output = AudioFrame::empty();
             resampler.run(&input_frame, &mut output)?;
             output
@@ -228,26 +253,141 @@ impl AudioEncoder for FfmpegAudioEncoder {
             input_frame
         };
 
-        // Set PTS
-        let mut frame = frame_to_encode;
-        frame.set_pts(Some(self.pts));
-        self.pts += samples as i64;
+        // Append resampled data to FIFO
+        let resampled_data = resampled.data(0);
+        self.fifo.extend_from_slice(resampled_data);
 
-        // Send frame to encoder
-        encoder.send_frame(&frame)?;
+        // Calculate bytes per frame_size chunk
+        let bytes_per_sample = match encoder_format {
+            Sample::U8(_) => 1,
+            Sample::I16(_) => 2,
+            Sample::I32(_) | Sample::F32(_) => 4,
+            Sample::F64(_) => 8,
+            _ => 4,
+        };
+        let ch_count = channels as usize;
+        let chunk_bytes = self.frame_size * ch_count * bytes_per_sample;
 
-        // Receive encoded packets
-        self.receive_packets()
+        // Drain FIFO in frame_size chunks and encode each
+        let mut all_packets = Vec::new();
+        while self.fifo.len() >= chunk_bytes {
+            let chunk: Vec<u8> = self.fifo.drain(..chunk_bytes).collect();
+
+            let mut enc_frame = AudioFrame::new(encoder_format, self.frame_size, channel_layout);
+            enc_frame.set_rate(sample_rate);
+            enc_frame.set_pts(Some(self.pts));
+            self.pts += self.frame_size as i64;
+
+            // Copy chunk data into frame planes
+            // For planar formats, we need to deinterleave
+            match encoder_format {
+                Sample::F32(ffmpeg::format::sample::Type::Planar)
+                | Sample::I16(ffmpeg::format::sample::Type::Planar)
+                | Sample::I32(ffmpeg::format::sample::Type::Planar)
+                | Sample::F64(ffmpeg::format::sample::Type::Planar)
+                | Sample::U8(ffmpeg::format::sample::Type::Planar) => {
+                    // Deinterleave: packed input → separate planes
+                    let samples_per_ch = self.frame_size;
+                    for ch in 0..ch_count {
+                        let plane = enc_frame.data_mut(ch);
+                        for s in 0..samples_per_ch {
+                            let src_offset = (s * ch_count + ch) * bytes_per_sample;
+                            let dst_offset = s * bytes_per_sample;
+                            if src_offset + bytes_per_sample <= chunk.len()
+                                && dst_offset + bytes_per_sample <= plane.len()
+                            {
+                                plane[dst_offset..dst_offset + bytes_per_sample]
+                                    .copy_from_slice(&chunk[src_offset..src_offset + bytes_per_sample]);
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    // Packed format: direct copy to plane 0
+                    let plane = enc_frame.data_mut(0);
+                    let copy_len = chunk.len().min(plane.len());
+                    plane[..copy_len].copy_from_slice(&chunk[..copy_len]);
+                }
+            }
+
+            let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
+            encoder.send_frame(&enc_frame)?;
+            let packets = self.receive_packets()?;
+            all_packets.extend(packets);
+        }
+
+        Ok(all_packets)
     }
 
     fn flush(&mut self) -> Result<Vec<EncodedAudioPacket>> {
-        let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
+        let config = self.config.as_ref().ok_or(Error::EncoderNotInitialized)?;
+        let encoder_format = self.encoder_format.ok_or(Error::EncoderNotInitialized)?;
+        let channel_layout = self.encoder_channel_layout.ok_or(Error::EncoderNotInitialized)?;
+
+        // Extract values to avoid holding borrow
+        let sample_rate = config.sample_rate;
+        let channels = config.channels as usize;
+
+        let mut all_packets = Vec::new();
+
+        // Flush remaining FIFO data as a partial frame (zero-padded)
+        if !self.fifo.is_empty() {
+            let bytes_per_sample = match encoder_format {
+                Sample::U8(_) => 1,
+                Sample::I16(_) => 2,
+                Sample::I32(_) | Sample::F32(_) => 4,
+                Sample::F64(_) => 8,
+                _ => 4,
+            };
+            let remaining_samples = self.fifo.len() / (channels * bytes_per_sample);
+
+            if remaining_samples > 0 {
+                let mut enc_frame = AudioFrame::new(encoder_format, remaining_samples, channel_layout);
+                enc_frame.set_rate(sample_rate);
+                enc_frame.set_pts(Some(self.pts));
+
+                // Copy remaining data (same planar/packed logic)
+                let chunk = std::mem::take(&mut self.fifo);
+                match encoder_format {
+                    Sample::F32(ffmpeg::format::sample::Type::Planar)
+                    | Sample::I16(ffmpeg::format::sample::Type::Planar)
+                    | Sample::I32(ffmpeg::format::sample::Type::Planar)
+                    | Sample::F64(ffmpeg::format::sample::Type::Planar)
+                    | Sample::U8(ffmpeg::format::sample::Type::Planar) => {
+                        for ch in 0..channels {
+                            let plane = enc_frame.data_mut(ch);
+                            for s in 0..remaining_samples {
+                                let src_offset = (s * channels + ch) * bytes_per_sample;
+                                let dst_offset = s * bytes_per_sample;
+                                if src_offset + bytes_per_sample <= chunk.len()
+                                    && dst_offset + bytes_per_sample <= plane.len()
+                                {
+                                    plane[dst_offset..dst_offset + bytes_per_sample]
+                                        .copy_from_slice(&chunk[src_offset..src_offset + bytes_per_sample]);
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        let plane = enc_frame.data_mut(0);
+                        let copy_len = chunk.len().min(plane.len());
+                        plane[..copy_len].copy_from_slice(&chunk[..copy_len]);
+                    }
+                }
+
+                let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
+                encoder.send_frame(&enc_frame)?;
+                all_packets.extend(self.receive_packets()?);
+            }
+        }
 
         // Send EOF
+        let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
         encoder.send_eof()?;
 
         // Receive remaining packets
-        self.receive_packets()
+        all_packets.extend(self.receive_packets()?);
+        Ok(all_packets)
     }
 
     fn close(&mut self) {
@@ -255,6 +395,9 @@ impl AudioEncoder for FfmpegAudioEncoder {
         self.resampler = None;
         self.config = None;
         self.pts = 0;
+        self.fifo.clear();
+        self.encoder_format = None;
+        self.encoder_channel_layout = None;
     }
 
     fn config(&self) -> Option<&AudioEncoderConfig> {

@@ -12,7 +12,7 @@ use crate::gpu::GpuContext;
 use crate::media_service::probe_media_info;
 use crate::services::impls::common::generate_waveform_blocking;
 use crate::services::impls::stream_loop::{
-    pack_pcm_frame, ActiveStreams, create_stream_channels, WallClockPacer,
+    pack_opus_frame, pack_pcm_frame, ActiveStreams, create_stream_channels, WallClockPacer,
     StreamLoopHandle,
 };
 use crate::services::{IAudioService, ITaskService};
@@ -211,13 +211,15 @@ impl IAudioService for AudioService {
         let (stream_id, tx, rx, cancel, state_tx, state_rx) =
             create_stream_channels(session_id, 64);
 
-        // Spawn entire decode loop in a single blocking thread
+        // Spawn entire decode→encode loop in a single blocking thread
         let cancel_clone = cancel.clone();
         let state_tx_clone = state_tx.clone();
         let join_handle = tokio::task::spawn_blocking(move || {
-            // Initialize decoder (owned, no locks needed)
-            let mut decoder =
-                FfmpegAudioDecoder::new().with_output_format(SampleFormat::F32);
+            // Initialize decoder: output F32 packed at 48kHz stereo (Opus standard)
+            let mut decoder = FfmpegAudioDecoder::new()
+                .with_output_format(SampleFormat::F32)
+                .with_output_sample_rate(48000)
+                .with_output_channels(2);
             let audio_info = match decoder.open(&path) {
                 Ok(info) => info,
                 Err(e) => {
@@ -226,12 +228,24 @@ impl IAudioService for AudioService {
                 }
             };
 
-            let sample_rate = audio_info.sample_rate;
-            let channels = audio_info.channels as u32;
+            // Initialize Opus encoder: 48kHz / Stereo / 128kbps
+            let opus_config = AudioEncoderConfig::new(48000, 2, InternalAudioCodec::Opus)
+                .with_bitrate(128_000)
+                .with_sample_format(SampleFormat::F32);
+            let mut encoder = FfmpegAudioEncoder::new();
+            if let Err(e) = AudioEncoder::open(&mut encoder, &opus_config) {
+                tracing::error!("Failed to open Opus encoder: {}", e);
+                return;
+            }
 
-            // Audio packets at ~50 packets/sec
+            let sample_rate = 48000u32;
+            let channels = 2u16;
+
+            // Opus outputs ~50 packets/sec (960 samples/frame at 48kHz = 20ms)
             let mut pacer = WallClockPacer::new(50.0, 1.0);
             let mut current_speed = 1.0;
+
+            let mut last_seen_paused = false;
 
             loop {
                 // Check cancellation
@@ -243,9 +257,21 @@ impl IAudioService for AudioService {
                 // Handle seek request
                 if let Some(time) = state.seek_to {
                     let _ = AudioDecoder::seek(&mut decoder, time);
+                    // Reset encoder on seek: close + reopen to flush stale FIFO
+                    AudioEncoder::close(&mut encoder);
+                    if let Err(e) = AudioEncoder::open(&mut encoder, &opus_config) {
+                        tracing::error!("Failed to re-open Opus encoder after seek: {}", e);
+                        break;
+                    }
                     pacer.reset();
                     state_tx_clone.send_modify(|s| s.seek_to = None);
                 }
+
+                // Detect pause→resume transition: reset pacer to avoid time jump
+                if last_seen_paused && !state.paused {
+                    pacer.reset();
+                }
+                last_seen_paused = state.paused;
 
                 // When paused, sleep and continue
                 if state.paused {
@@ -262,21 +288,37 @@ impl IAudioService for AudioService {
                 // Decode next audio frame
                 match AudioDecoder::decode_next(&mut decoder) {
                     Ok(Some(frame)) => {
-                        let packed = pack_pcm_frame(
-                            &frame.data,
-                            frame.timestamp,
-                            sample_rate,
-                            channels,
-                        );
-                        let _ = tx.send(packed);
+                        // Encode PCM → Opus (FIFO handles frame size alignment)
+                        match AudioEncoder::encode_frame(&mut encoder, &frame.data, frame.samples) {
+                            Ok(packets) => {
+                                for p in &packets {
+                                    let packed = pack_opus_frame(p, sample_rate, channels);
+                                    let _ = tx.send(packed);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!("Opus encode error: {}", e);
+                            }
+                        }
                     }
                     Ok(None) => {
-                        // EOF - check loop
+                        // EOF — flush encoder then check loop
+                        if let Ok(packets) = AudioEncoder::flush(&mut encoder) {
+                            for p in &packets {
+                                let packed = pack_opus_frame(p, sample_rate, channels);
+                                let _ = tx.send(packed);
+                            }
+                        }
+
                         let state = state_rx.borrow().clone();
                         if state.loop_region.is_some() {
-                            // Re-open decoder for loop
+                            // Re-open decoder + encoder for loop
                             AudioDecoder::close(&mut decoder);
                             if decoder.open(&path).is_err() {
+                                break;
+                            }
+                            AudioEncoder::close(&mut encoder);
+                            if AudioEncoder::open(&mut encoder, &opus_config).is_err() {
                                 break;
                             }
                             pacer.reset();

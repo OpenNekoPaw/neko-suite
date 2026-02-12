@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Neko Stream Test</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+  h1 { margin-bottom: 16px; font-size: 20px; color: #7ec8e3; }
+  .panel { background: #16213e; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { font-size: 14px; color: #999; margin-bottom: 8px; text-transform: uppercase; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  button { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  button.primary { background: #0f3460; color: #fff; }
+  button.primary:hover { background: #1a4a7a; }
+  button.danger { background: #8b0000; color: #fff; }
+  button.warn { background: #b8860b; color: #fff; }
+  input[type=text] { padding: 6px 10px; border: 1px solid #333; border-radius: 4px; background: #0f3460; color: #eee; font-size: 13px; width: 400px; }
+  canvas { background: #000; border-radius: 4px; max-width: 100%; }
+  #log { background: #0a0a1a; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  .log-info { color: #7ec8e3; }
+  .log-ok { color: #50fa7b; }
+  .log-warn { color: #f1fa8c; }
+  .log-err { color: #ff5555; }
+  .stats { display: flex; gap: 20px; font-size: 13px; color: #aaa; margin-top: 8px; }
+  .stats span { color: #7ec8e3; }
+  .row { display: flex; gap: 16px; }
+  .row > * { flex: 1; }
+</style>
+</head>
+<body>
+
+<h1>🎬 Neko Engine Stream Test</h1>
+
+<div class="panel">
+  <h2>Configuration</h2>
+  <div class="controls">
+    <label>Server: <input type="text" id="serverUrl" value="http://127.0.0.1:8765"></label>
+  </div>
+  <div class="controls">
+    <label>Video: <input type="text" id="videoPath" value="/Users/feng/git/neko-test/cases/RWBY1Red.mp4"></label>
+  </div>
+</div>
+
+<div class="row">
+  <div class="panel">
+    <h2>Video Stream</h2>
+    <div class="controls">
+      <button class="primary" onclick="startVideoStream()">▶ Start Video</button>
+      <button class="warn" onclick="controlStream('videos','pause', videoStreamId)">⏸ Pause</button>
+      <button class="primary" onclick="controlStream('videos','resume', videoStreamId)">⏵ Resume</button>
+      <button class="primary" onclick="seekStream('videos', videoStreamId, 5.0)">⏩ Seek 5s</button>
+      <button class="primary" onclick="seekStream('videos', videoStreamId, 0)">⏪ Seek 0s</button>
+      <button class="danger" onclick="controlStream('videos','stop', videoStreamId)">⏹ Stop</button>
+    </div>
+    <canvas id="videoCanvas" width="960" height="540"></canvas>
+    <div class="stats">
+      Frames: <span id="vFrameCount">0</span> |
+      FPS: <span id="vFps">0</span> |
+      Size: <span id="vFrameSize">0</span> |
+      WS: <span id="vWsState">disconnected</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Audio Stream</h2>
+    <div class="controls">
+      <button class="primary" onclick="startAudioStream()">▶ Start Audio</button>
+      <button class="warn" onclick="controlStream('audios','pause', audioStreamId)">⏸ Pause</button>
+      <button class="primary" onclick="controlStream('audios','resume', audioStreamId)">⏵ Resume</button>
+      <button class="danger" onclick="controlStream('audios','stop', audioStreamId)">⏹ Stop</button>
+    </div>
+    <div class="stats" style="margin-top: 40px;">
+      Chunks: <span id="aChunkCount">0</span> |
+      Sample Rate: <span id="aSampleRate">-</span> |
+      Channels: <span id="aChannels">-</span> |
+      WS: <span id="aWsState">disconnected</span>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Log</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+// ─── State ───
+let videoStreamId = null;
+let audioStreamId = null;
+let videoWs = null;
+let audioWs = null;
+let videoDecoder = null;
+let audioCtx = null;
+let vFrameCount = 0;
+let wsFrameCount = 0;
+let aChunkCount = 0;
+let fpsFrames = 0;
+let lastFpsTime = performance.now();
+
+const canvas = document.getElementById('videoCanvas');
+const ctx2d = canvas.getContext('2d');
+
+// ─── Logging ───
+function log(msg, level = 'info') {
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = `log-${level}`;
+  line.textContent = `[${new Date().toISOString().slice(11,23)}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  console.log(`[${level}]`, msg);
+}
+
+// ─── HTTP helpers ───
+function serverUrl() { return document.getElementById('serverUrl').value.replace(/\/$/, ''); }
+function wsUrl() { return serverUrl().replace('http', 'ws'); }
+
+async function dispatch(group, action, options = {}) {
+  const url = `${serverUrl()}/v1/dispatch`;
+  const body = { group, action, options };
+  log(`→ ${group}:${action} ${JSON.stringify(options).slice(0, 120)}`);
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (data.status === 'ok') {
+    log(`← OK: ${JSON.stringify(data.data).slice(0, 200)}`, 'ok');
+  } else {
+    log(`← ERROR: ${JSON.stringify(data.error || data)}`, 'err');
+  }
+  return data;
+}
+
+// ─── Video Stream ───
+let videoStarting = false;
+async function startVideoStream() {
+  if (videoStarting) return;
+  videoStarting = true;
+
+  // Stop existing stream first
+  if (videoStreamId) {
+    await dispatch('videos', 'stop', { streamId: videoStreamId });
+    if (videoWs) { videoWs.close(); videoWs = null; }
+    if (videoDecoder) { videoDecoder.close(); videoDecoder = null; }
+    videoStreamId = null;
+  }
+
+  const videoPath = document.getElementById('videoPath').value;
+  vFrameCount = 0;
+  wsFrameCount = 0;
+  fpsFrames = 0;
+
+  // 1. Start stream via API
+  const resp = await dispatch('videos', 'stream', { source: videoPath, sessionId: 'test-session' });
+  videoStarting = false;
+  if (resp.status !== 'ok') return;
+
+  videoStreamId = resp.data.streamId;
+  log(`Video stream ID: ${videoStreamId}`, 'ok');
+
+  // 2. Init WebCodecs decoder
+  initVideoDecoder();
+
+  // 3. Connect WebSocket
+  connectVideoWs(videoStreamId);
+}
+
+function initVideoDecoder() {
+  if (videoDecoder) {
+    videoDecoder.close();
+  }
+
+  videoDecoder = new VideoDecoder({
+    output: (frame) => {
+      // Draw frame to canvas
+      ctx2d.drawImage(frame, 0, 0, canvas.width, canvas.height);
+      frame.close();
+
+      vFrameCount++;
+      fpsFrames++;
+      document.getElementById('vFrameCount').textContent = vFrameCount;
+
+      // Calculate FPS every second
+      const now = performance.now();
+      if (now - lastFpsTime >= 1000) {
+        document.getElementById('vFps').textContent = fpsFrames.toFixed(1);
+        fpsFrames = 0;
+        lastFpsTime = now;
+      }
+    },
+    error: (e) => {
+      log(`VideoDecoder error: ${e.message}`, 'err');
+    }
+  });
+
+  videoDecoder.configure({
+    codec: 'avc1.640028', // H.264 High Profile Level 4.0
+    optimizeForLatency: true,
+  });
+
+  log('VideoDecoder configured (avc1.640028)', 'info');
+}
+
+function connectVideoWs(streamId) {
+  const url = `${wsUrl()}/v1/streams/${streamId}`;
+  log(`Connecting video WS: ${url}`);
+
+  videoWs = new WebSocket(url);
+  videoWs.binaryType = 'arraybuffer';
+
+  videoWs.onopen = () => {
+    document.getElementById('vWsState').textContent = 'connected';
+    log('Video WebSocket connected', 'ok');
+  };
+
+  videoWs.onmessage = (event) => {
+    const data = new Uint8Array(event.data);
+    document.getElementById('vFrameSize').textContent = data.byteLength;
+
+    // Parse header: [pts:i64 LE][dts:i64 LE][is_keyframe:u8][duration:i64 LE][NAL data...]
+    if (data.byteLength < 25) {
+      log(`Video frame too small: ${data.byteLength}`, 'warn');
+      return;
+    }
+
+    const view = new DataView(event.data);
+    const pts = Number(view.getBigInt64(0, true));   // microseconds
+    const dts = Number(view.getBigInt64(8, true));
+    const isKeyframe = data[16] === 1;
+    const duration = Number(view.getBigInt64(17, true));
+    const nalData = data.slice(25);
+
+    wsFrameCount++;
+    if (wsFrameCount <= 3 || wsFrameCount % 100 === 0) {
+      log(`WS #${wsFrameCount}: pts=${pts} dts=${dts} key=${isKeyframe} dur=${duration} nal=${nalData.byteLength}B`);
+    }
+
+    try {
+      const chunk = new EncodedVideoChunk({
+        type: isKeyframe ? 'key' : 'delta',
+        timestamp: pts,  // microseconds
+        duration: duration > 0 ? duration : undefined,
+        data: nalData,
+      });
+
+      if (videoDecoder && videoDecoder.state === 'configured') {
+        videoDecoder.decode(chunk);
+      }
+    } catch (e) {
+      log(`Decode error: ${e.message}`, 'err');
+    }
+  };
+
+  videoWs.onclose = (event) => {
+    document.getElementById('vWsState').textContent = `closed (${event.code})`;
+    log(`Video WebSocket closed: code=${event.code} reason=${event.reason}`, 'warn');
+  };
+
+  videoWs.onerror = () => {
+    log('Video WebSocket error', 'err');
+  };
+}
+
+// ─── Audio Stream (Opus via WebCodecs) ───
+let audioStarting = false;
+let audioDecoder = null;
+let audioGainNode = null;
+let audioPlaybackTime = 0;
+let audioPtsOffset = null;
+const OPUS_HEADER_SIZE = 8 + 8 + 4 + 2; // pts(i64) + duration(i64) + sampleRate(u32) + channels(u16) = 22
+
+function parseOpusPacket(data) {
+  if (data.byteLength <= OPUS_HEADER_SIZE) return null;
+  const view = new DataView(data);
+  const ptsLow = view.getUint32(0, true);
+  const ptsHigh = view.getInt32(4, true);
+  const pts = ptsLow + ptsHigh * 0x100000000;
+  const durLow = view.getUint32(8, true);
+  const durHigh = view.getInt32(12, true);
+  const duration = durLow + durHigh * 0x100000000;
+  const sampleRate = view.getUint32(16, true);
+  const channels = view.getUint16(20, true);
+  const opusData = new Uint8Array(data, OPUS_HEADER_SIZE);
+  return { pts, duration, sampleRate, channels, opusData };
+}
+
+function initAudioDecoder() {
+  if (audioDecoder && audioDecoder.state !== 'closed') {
+    audioDecoder.close();
+  }
+
+  audioDecoder = new AudioDecoder({
+    output: (audioData) => {
+      if (!audioCtx || !audioGainNode) { audioData.close(); return; }
+
+      const channels = audioData.numberOfChannels;
+      const frames = audioData.numberOfFrames;
+      const sr = audioData.sampleRate;
+      if (frames <= 0) { audioData.close(); return; }
+
+      const buffer = audioCtx.createBuffer(channels, frames, sr);
+      for (let ch = 0; ch < channels; ch++) {
+        const chData = buffer.getChannelData(ch);
+        audioData.copyTo(chData, { planeIndex: ch, format: 'f32-planar' });
+      }
+
+      // Initialize PTS offset on first decoded frame
+      const ptsSeconds = audioData.timestamp / 1_000_000;
+      if (audioPtsOffset === null) {
+        audioPtsOffset = audioCtx.currentTime - ptsSeconds;
+        audioPlaybackTime = audioCtx.currentTime;
+      }
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioGainNode);
+
+      const now = audioCtx.currentTime;
+      if (audioPlaybackTime < now) audioPlaybackTime = now;
+      source.start(audioPlaybackTime);
+      audioPlaybackTime += buffer.duration;
+
+      audioData.close();
+    },
+    error: (e) => {
+      log(`AudioDecoder error: ${e.message}`, 'err');
+    }
+  });
+
+  audioDecoder.configure({
+    codec: 'opus',
+    sampleRate: 48000,
+    numberOfChannels: 2,
+  });
+
+  log('AudioDecoder configured (Opus 48kHz stereo)', 'info');
+}
+
+async function startAudioStream() {
+  if (audioStarting) return;
+  audioStarting = true;
+
+  // Stop existing stream first
+  if (audioStreamId) {
+    await dispatch('audios', 'stop', { streamId: audioStreamId });
+    if (audioWs) { audioWs.close(); audioWs = null; }
+    if (audioDecoder && audioDecoder.state !== 'closed') { audioDecoder.close(); audioDecoder = null; }
+    audioStreamId = null;
+  }
+
+  const videoPath = document.getElementById('videoPath').value;
+  aChunkCount = 0;
+  audioPtsOffset = null;
+
+  const resp = await dispatch('audios', 'stream', { source: videoPath, sessionId: 'test-session' });
+  audioStarting = false;
+  if (resp.status !== 'ok') return;
+
+  audioStreamId = resp.data.streamId;
+  log(`Audio stream ID: ${audioStreamId}`, 'ok');
+
+  // Init AudioContext + GainNode
+  if (!audioCtx) {
+    audioCtx = new AudioContext({ sampleRate: 48000 });
+    log(`AudioContext created: sampleRate=${audioCtx.sampleRate}`, 'info');
+  }
+  if (!audioGainNode) {
+    audioGainNode = audioCtx.createGain();
+    audioGainNode.connect(audioCtx.destination);
+  }
+  if (audioCtx.state === 'suspended') {
+    await audioCtx.resume().catch(() => {});
+  }
+
+  // Init Opus decoder
+  initAudioDecoder();
+
+  connectAudioWs(audioStreamId);
+}
+
+function connectAudioWs(streamId) {
+  const url = `${wsUrl()}/v1/streams/${streamId}`;
+  log(`Connecting audio WS: ${url}`);
+
+  audioWs = new WebSocket(url);
+  audioWs.binaryType = 'arraybuffer';
+
+  audioWs.onopen = () => {
+    document.getElementById('aWsState').textContent = 'connected';
+    log('Audio WebSocket connected', 'ok');
+  };
+
+  audioWs.onmessage = (event) => {
+    if (!(event.data instanceof ArrayBuffer)) return;
+
+    const packet = parseOpusPacket(event.data);
+    if (!packet || !audioDecoder || audioDecoder.state === 'closed') return;
+
+    aChunkCount++;
+    document.getElementById('aChunkCount').textContent = aChunkCount;
+
+    if (aChunkCount <= 3 || aChunkCount % 200 === 0) {
+      log(`Opus #${aChunkCount}: pts=${packet.pts} dur=${packet.duration} sr=${packet.sampleRate} ch=${packet.channels} size=${packet.opusData.byteLength}B`);
+    }
+
+    document.getElementById('aSampleRate').textContent = packet.sampleRate;
+    document.getElementById('aChannels').textContent = packet.channels;
+
+    const timestampUs = (packet.pts / packet.sampleRate) * 1_000_000;
+    const durationUs = (packet.duration / packet.sampleRate) * 1_000_000;
+
+    try {
+      const chunk = new EncodedAudioChunk({
+        type: 'key',
+        timestamp: timestampUs,
+        duration: durationUs,
+        data: packet.opusData,
+      });
+      audioDecoder.decode(chunk);
+    } catch (e) {
+      log(`Opus decode error: ${e.message}`, 'err');
+    }
+  };
+
+  audioWs.onclose = (event) => {
+    document.getElementById('aWsState').textContent = `closed (${event.code})`;
+    log(`Audio WebSocket closed: code=${event.code}`, 'warn');
+  };
+
+  audioWs.onerror = () => {
+    log('Audio WebSocket error', 'err');
+  };
+}
+
+// ─── Stream Control ───
+async function controlStream(group, action, streamId) {
+  if (!streamId) { log(`No ${group} stream active`, 'warn'); return; }
+  await dispatch(group, action, { streamId });
+}
+
+async function seekStream(group, streamId, time) {
+  if (!streamId) { log(`No ${group} stream active`, 'warn'); return; }
+  await dispatch(group, 'seek', { streamId, time });
+}
+
+// ─── Init ───
+log('Test page loaded. Click "Start Video" or "Start Audio" to begin.', 'info');
+</script>
+</body>
+</html>

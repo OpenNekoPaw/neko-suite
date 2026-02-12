@@ -405,6 +405,8 @@ impl Controller for VideoController {
                     bitrate,
                     hw_encoder,
                     preset,
+                    audio_codec: Some(neko_types::AudioCodec::Opus),
+                    audio_bitrate: None,
                 };
 
                 self.video_service

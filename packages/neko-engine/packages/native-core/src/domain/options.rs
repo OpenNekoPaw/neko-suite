@@ -96,6 +96,10 @@ pub struct TranscodeOptions {
     pub hw_encoder: HwEncoderType,
     /// Encoder preset
     pub preset: EncoderPreset,
+    /// Audio codec (None = no audio, Some = transcode audio)
+    pub audio_codec: Option<AudioCodec>,
+    /// Audio bitrate in bps (None = codec default)
+    pub audio_bitrate: Option<u64>,
 }
 
 impl Default for TranscodeOptions {
@@ -106,6 +110,8 @@ impl Default for TranscodeOptions {
             bitrate: None,
             hw_encoder: HwEncoderType::Auto,
             preset: EncoderPreset::Medium,
+            audio_codec: Some(AudioCodec::Opus),
+            audio_bitrate: None,
         }
     }
 }

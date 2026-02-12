@@ -5,7 +5,7 @@
  * receives H.264 NAL units, and decodes them using WebCodecs.
  *
  * Packet format (from Rust frame server):
- * [pts: i64 LE (8B)] [dts: i64 LE (8B)] [is_keyframe: u8 (1B)] [NAL data...]
+ * [pts: i64 LE (8B)] [dts: i64 LE (8B)] [is_keyframe: u8 (1B)] [duration: i64 LE (8B)] [NAL data...]
  */
 
 const H264_HEADER_SIZE = 8 + 8 + 1 + 8; // pts(8) + dts(8) + is_keyframe(1) + duration(8) = 25 bytes
@@ -80,6 +80,9 @@ export class H264StreamClient {
 		isDecoderReady: false,
 	};
 
+	/** Whether we're waiting for a keyframe after seek/reset */
+	private waitingForKeyframe = false;
+
 	// Reconnection
 	private reconnectAttempts = 0;
 	private readonly maxReconnectAttempts = 5;
@@ -142,22 +145,31 @@ export class H264StreamClient {
 	// WebCodecs Decoder
 	// =========================================================================
 
+	/** Codec string — H.264 High Profile Level 4.0 (matches neko-engine encoder) */
+	private readonly codecString = 'avc1.640028';
+
 	private async initDecoder(): Promise<void> {
 		if (typeof VideoDecoder === 'undefined') {
 			this.config.onError(new Error('WebCodecs VideoDecoder not available'));
 			return;
 		}
 
-		// Check codec support
-		const codecString = 'avc1.42E01E'; // H.264 Baseline Profile Level 3.0
 		const support = await VideoDecoder.isConfigSupported({
-			codec: codecString,
+			codec: this.codecString,
 			hardwareAcceleration: 'prefer-hardware',
 		});
 
 		if (!support.supported) {
-			this.config.onError(new Error(`H.264 codec not supported: ${codecString}`));
+			this.config.onError(new Error(`H.264 codec not supported: ${this.codecString}`));
 			return;
+		}
+
+		this.createDecoder();
+	}
+
+	private createDecoder(): void {
+		if (this.decoder && this.decoder.state !== 'closed') {
+			try { this.decoder.close(); } catch { /* ignore */ }
 		}
 
 		this.decoder = new VideoDecoder({
@@ -173,12 +185,23 @@ export class H264StreamClient {
 		});
 
 		this.decoder.configure({
-			codec: codecString,
+			codec: this.codecString,
 			hardwareAcceleration: 'prefer-hardware',
 			optimizeForLatency: true,
 		});
 
 		this.stats.isDecoderReady = true;
+		this.waitingForKeyframe = true;
+	}
+
+	/**
+	 * Reset decoder state after seek.
+	 * Recreates the decoder so it starts clean from the next keyframe.
+	 */
+	resetDecoder(): void {
+		if (this.disposed) return;
+		console.log('[H264StreamClient] Resetting decoder for seek');
+		this.createDecoder();
 	}
 
 	// =========================================================================
@@ -228,6 +251,15 @@ export class H264StreamClient {
 		if (!this.decoder || this.decoder.state !== 'configured') {
 			this.stats.framesDropped++;
 			return;
+		}
+
+		// After seek/reset, wait for a keyframe before feeding delta frames
+		if (this.waitingForKeyframe) {
+			if (!packet.isKeyframe) {
+				this.stats.framesDropped++;
+				return;
+			}
+			this.waitingForKeyframe = false;
 		}
 
 		try {

@@ -224,6 +224,28 @@ export class PreviewService implements vscode.Disposable {
 			}
 		}
 
+		// Seek to startTime if not 0
+		if (startTime > 0 && this._activeStreamId) {
+			await this.dispatch({
+				group: 'videos',
+				action: 'seek',
+				options: {
+					streamId: this._activeStreamId,
+					time: startTime,
+				},
+			});
+			if (this._activeAudioStreamId) {
+				await this.dispatch({
+					group: 'audios',
+					action: 'seek',
+					options: {
+						streamId: this._activeAudioStreamId,
+						time: startTime,
+					},
+				});
+			}
+		}
+
 		// Set playback speed if not 1.0
 		if (this._activeStreamId && speed !== 1.0) {
 			await this.dispatch({

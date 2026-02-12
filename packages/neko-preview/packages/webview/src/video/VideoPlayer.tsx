@@ -128,6 +128,7 @@ export function VideoPlayer() {
 					audioStreamId?: string;
 					audioStreamUrl?: string;
 				};
+				console.log('[VideoPlayer] streamReady received:', { streamUrl, audioStreamUrl });
 				// Dispose previous clients if any
 				clientRef.current?.dispose();
 				audioClientRef.current?.dispose();
@@ -230,7 +231,8 @@ export function VideoPlayer() {
 			playStartTimeRef.current = time;
 			playWallTimeRef.current = performance.now();
 		}
-		// Reset audio clock so it re-syncs after seek
+		// Reset decoders so they start clean from the next keyframe
+		clientRef.current?.resetDecoder();
 		audioClientRef.current?.resetClock();
 		postMessage({ type: 'preview:seek', time });
 	}, [isPlaying, postMessage]);

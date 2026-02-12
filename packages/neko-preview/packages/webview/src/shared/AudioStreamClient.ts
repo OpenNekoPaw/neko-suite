@@ -1,35 +1,45 @@
 /**
- * AudioStreamClient - PCM F32 audio stream player
+ * AudioStreamClient - Opus audio stream player
  *
  * Connects to neko-engine's audio stream via WebSocket,
- * receives PCM F32 data with PTS headers, and plays via Web Audio API.
+ * receives Opus encoded packets, decodes via WebCodecs AudioDecoder,
+ * and plays via Web Audio API.
  *
  * Provides getCurrentTime() as master clock for A/V sync.
  *
  * Packet format (from Rust frame server):
- * [pts_seconds: f64 LE (8B)] [sample_rate: u32 LE (4B)] [channels: u32 LE (4B)] [PCM F32 data...]
+ * [pts: i64 LE (8B)] [duration: i64 LE (8B)] [sample_rate: u32 LE (4B)] [channels: u16 LE (2B)] [Opus data...]
  */
 
-const PCM_HEADER_SIZE = 8 + 4 + 4; // pts(8) + sampleRate(4) + channels(4) = 16 bytes
+const OPUS_HEADER_SIZE = 8 + 8 + 4 + 2; // pts(8) + duration(8) + sampleRate(4) + channels(2) = 22 bytes
 
-function parsePcmPacket(data: ArrayBuffer): {
+function parseOpusPacket(data: ArrayBuffer): {
 	pts: number;
+	duration: number;
 	sampleRate: number;
 	channels: number;
-	pcmData: Float32Array;
+	opusData: Uint8Array;
 } | null {
-	if (data.byteLength <= PCM_HEADER_SIZE) return null;
+	if (data.byteLength <= OPUS_HEADER_SIZE) return null;
 
 	const view = new DataView(data);
-	const pts = view.getFloat64(0, true);
-	const sampleRate = view.getUint32(8, true);
-	const channels = view.getUint32(12, true);
 
-	// PCM F32 data starts after header
-	const pcmBytes = new Uint8Array(data, PCM_HEADER_SIZE);
-	const pcmData = new Float32Array(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength / 4);
+	// pts: i64 LE (sample units)
+	const ptsLow = view.getUint32(0, true);
+	const ptsHigh = view.getInt32(4, true);
+	const pts = ptsLow + ptsHigh * 0x100000000;
 
-	return { pts, sampleRate, channels, pcmData };
+	// duration: i64 LE (sample units)
+	const durLow = view.getUint32(8, true);
+	const durHigh = view.getInt32(12, true);
+	const duration = durLow + durHigh * 0x100000000;
+
+	const sampleRate = view.getUint32(16, true);
+	const channels = view.getUint16(20, true);
+
+	const opusData = new Uint8Array(data, OPUS_HEADER_SIZE);
+
+	return { pts, duration, sampleRate, channels, opusData };
 }
 
 // =============================================================================
@@ -56,6 +66,7 @@ export class AudioStreamClient {
 	private ws: WebSocket | null = null;
 	private audioCtx: AudioContext | null = null;
 	private gainNode: GainNode | null = null;
+	private decoder: AudioDecoder | null = null;
 	private disposed = false;
 	private isConnected = false;
 
@@ -63,6 +74,8 @@ export class AudioStreamClient {
 	private ptsOffset: number | null = null;
 	/** Next scheduled play time in AudioContext time */
 	private nextPlayTime = 0;
+	/** Sample rate from first packet (for PTS→seconds conversion) */
+	private sampleRate = 48000;
 
 	// Reconnection
 	private reconnectAttempts = 0;
@@ -85,17 +98,21 @@ export class AudioStreamClient {
 	async connect(): Promise<void> {
 		if (this.disposed) return;
 
+		console.log('[AudioStreamClient] Connecting to:', this.config.websocketUrl);
 		this.audioCtx = new AudioContext({ sampleRate: 48000 });
 		this.gainNode = this.audioCtx.createGain();
 		this.gainNode.gain.value = this.config.volume;
 		this.gainNode.connect(this.audioCtx.destination);
 
+		// Initialize WebCodecs AudioDecoder for Opus
+		this.initDecoder();
+
 		// Resume AudioContext immediately (browser autoplay policy)
 		if (this.audioCtx.state === 'suspended') {
 			try {
 				await this.audioCtx.resume();
-			} catch {
-				// Will retry on WebSocket open
+			} catch (e) {
+				console.warn('[AudioStreamClient] AudioContext resume failed:', e);
 			}
 		}
 
@@ -116,6 +133,11 @@ export class AudioStreamClient {
 			this.ws = null;
 		}
 
+		if (this.decoder && this.decoder.state !== 'closed') {
+			this.decoder.close();
+			this.decoder = null;
+		}
+
 		if (this.audioCtx && this.audioCtx.state !== 'closed') {
 			this.audioCtx.close().catch(() => {});
 			this.audioCtx = null;
@@ -124,6 +146,83 @@ export class AudioStreamClient {
 		this.gainNode = null;
 		this.isConnected = false;
 		this.ptsOffset = null;
+	}
+
+	// =========================================================================
+	// WebCodecs AudioDecoder
+	// =========================================================================
+
+	private initDecoder(): void {
+		if (typeof AudioDecoder === 'undefined') {
+			console.error('[AudioStreamClient] WebCodecs AudioDecoder not available');
+			this.config.onError(new Error('WebCodecs AudioDecoder not supported'));
+			return;
+		}
+
+		this.decoder = new AudioDecoder({
+			output: (audioData: AudioData) => {
+				this.handleDecodedAudio(audioData);
+			},
+			error: (e: DOMException) => {
+				console.error('[AudioStreamClient] AudioDecoder error:', e);
+			},
+		});
+
+		this.decoder.configure({
+			codec: 'opus',
+			sampleRate: 48000,
+			numberOfChannels: 2,
+		});
+	}
+
+	private handleDecodedAudio(audioData: AudioData): void {
+		if (!this.audioCtx || !this.gainNode) {
+			audioData.close();
+			return;
+		}
+
+		const channels = audioData.numberOfChannels;
+		const frames = audioData.numberOfFrames;
+		const sr = audioData.sampleRate;
+
+		if (frames <= 0) {
+			audioData.close();
+			return;
+		}
+
+		// Create AudioBuffer from decoded AudioData
+		const audioBuffer = this.audioCtx.createBuffer(channels, frames, sr);
+
+		for (let ch = 0; ch < channels; ch++) {
+			const channelData = audioBuffer.getChannelData(ch);
+			// AudioData.copyTo copies planar f32 data for the given plane
+			audioData.copyTo(channelData, { planeIndex: ch, format: 'f32-planar' });
+		}
+
+		// PTS in seconds (audioData.timestamp is in microseconds)
+		const ptsSeconds = audioData.timestamp / 1_000_000;
+
+		// Initialize PTS offset on first decoded frame
+		if (this.ptsOffset === null) {
+			this.ptsOffset = this.audioCtx.currentTime - ptsSeconds;
+			this.nextPlayTime = this.audioCtx.currentTime;
+		}
+
+		// Schedule playback
+		const source = this.audioCtx.createBufferSource();
+		source.buffer = audioBuffer;
+		source.connect(this.gainNode);
+
+		// If we're behind, catch up
+		const now = this.audioCtx.currentTime;
+		if (this.nextPlayTime < now) {
+			this.nextPlayTime = now;
+		}
+
+		source.start(this.nextPlayTime);
+		this.nextPlayTime += audioBuffer.duration;
+
+		audioData.close();
 	}
 
 	// =========================================================================
@@ -162,12 +261,22 @@ export class AudioStreamClient {
 	// =========================================================================
 
 	/**
-	 * Reset audio clock state after a seek operation.
+	 * Reset audio clock and decoder state after a seek operation.
 	 * Clears the PTS offset so the next packet re-establishes the clock.
 	 */
 	resetClock(): void {
 		this.ptsOffset = null;
 		this.nextPlayTime = 0;
+
+		// Reset decoder to flush stale data
+		if (this.decoder && this.decoder.state !== 'closed') {
+			this.decoder.reset();
+			this.decoder.configure({
+				codec: 'opus',
+				sampleRate: 48000,
+				numberOfChannels: 2,
+			});
+		}
 	}
 
 	// =========================================================================
@@ -185,6 +294,7 @@ export class AudioStreamClient {
 				this.isConnected = true;
 				this.reconnectAttempts = 0;
 				this.config.onConnectionChange(true);
+				console.log('[AudioStreamClient] WebSocket connected');
 
 				// Resume AudioContext if suspended (browser autoplay policy)
 				if (this.audioCtx?.state === 'suspended') {
@@ -213,45 +323,43 @@ export class AudioStreamClient {
 		}
 	}
 
+	private packetCount = 0;
+
 	private handlePacket(data: ArrayBuffer): void {
-		const packet = parsePcmPacket(data);
-		if (!packet || !this.audioCtx || !this.gainNode) return;
-
-		const { pts, sampleRate, channels, pcmData } = packet;
-		const samplesPerChannel = pcmData.length / channels;
-
-		if (samplesPerChannel <= 0) return;
-
-		// Create AudioBuffer
-		const audioBuffer = this.audioCtx.createBuffer(channels, samplesPerChannel, sampleRate);
-
-		// Deinterleave PCM data into separate channel buffers
-		for (let ch = 0; ch < channels; ch++) {
-			const channelData = audioBuffer.getChannelData(ch);
-			for (let i = 0; i < samplesPerChannel; i++) {
-				channelData[i] = pcmData[i * channels + ch] ?? 0;
-			}
+		const packet = parseOpusPacket(data);
+		if (!packet || !this.decoder || this.decoder.state === 'closed') {
+			return;
 		}
 
-		// Initialize PTS offset on first packet
-		if (this.ptsOffset === null) {
-			this.ptsOffset = this.audioCtx.currentTime - pts;
-			this.nextPlayTime = this.audioCtx.currentTime;
+		this.packetCount++;
+		if (this.packetCount <= 3 || this.packetCount % 200 === 0) {
+			console.log(
+				'[AudioStreamClient] Packet #' + this.packetCount,
+				'pts=', packet.pts,
+				'dur=', packet.duration,
+				'sr=', packet.sampleRate,
+				'ch=', packet.channels,
+				'size=', packet.opusData.byteLength,
+			);
 		}
 
-		// Schedule playback
-		const source = this.audioCtx.createBufferSource();
-		source.buffer = audioBuffer;
-		source.connect(this.gainNode);
+		this.sampleRate = packet.sampleRate;
 
-		// If we're behind, catch up
-		const now = this.audioCtx.currentTime;
-		if (this.nextPlayTime < now) {
-			this.nextPlayTime = now;
+		// Convert PTS from sample units to microseconds (WebCodecs convention)
+		const timestampUs = (packet.pts / packet.sampleRate) * 1_000_000;
+		const durationUs = (packet.duration / packet.sampleRate) * 1_000_000;
+
+		try {
+			const chunk = new EncodedAudioChunk({
+				type: 'key', // Opus packets are always independently decodable
+				timestamp: timestampUs,
+				duration: durationUs,
+				data: packet.opusData,
+			});
+			this.decoder.decode(chunk);
+		} catch (e) {
+			console.warn('[AudioStreamClient] Decode error:', e);
 		}
-
-		source.start(this.nextPlayTime);
-		this.nextPlayTime += audioBuffer.duration;
 	}
 
 	private tryReconnect(): void {

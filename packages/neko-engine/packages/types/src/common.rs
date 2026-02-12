@@ -47,6 +47,8 @@ pub enum FrameFormat {
     H264,
     /// PCM F32 audio data (for streaming)
     PcmF32,
+    /// Opus encoded audio packets (for streaming)
+    Opus,
 }
 
 impl Default for FrameFormat {

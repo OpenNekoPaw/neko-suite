@@ -8,6 +8,10 @@ use crate::domain::{CaptureOptions, ExtractOptions, ExtractType, FrameData, Task
 use crate::encoder::{
     ContainerFormat, Encoder, EncoderConfig, FfmpegMuxer, HwAccelEncoder, Muxer,
 };
+use crate::audio::{
+    AudioDecoder, AudioEncoder, AudioEncoderConfig, FfmpegAudioDecoder, FfmpegAudioEncoder,
+    SampleFormat,
+};
 use crate::error::{Error, Result};
 use crate::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
 use crate::keyframe_cache::{IdrScanner, KeyframeInfo};
@@ -364,126 +368,215 @@ impl IVideoService for VideoService {
         let (stream_id, tx, rx, cancel, state_tx, state_rx) =
             create_stream_channels(session_id, 64);
 
-        // Spawn entire decode+encode loop in a single blocking thread
-        // This eliminates per-frame spawn_blocking overhead and Arc<Mutex<>> contention
+        // =====================================================================
+        // Two-thread architecture: Encode Thread + Pacing Thread
+        //
+        // Encode Thread: decode → encode → push to FrameQueue (as fast as possible)
+        // Pacing Thread: pop from FrameQueue → pace → send via broadcast
+        //
+        // The FrameQueue (sync_channel) absorbs encoding time variance
+        // (e.g. keyframe encoding takes ~130ms vs ~3ms for delta frames),
+        // ensuring smooth output regardless of encode cost fluctuations.
+        // =====================================================================
+
+        // FrameQueue: bounded channel between encode and pacing threads
+        // Capacity 8 frames ≈ 267ms at 30fps, enough to absorb keyframe spikes
+        let (queue_tx, queue_rx) = std::sync::mpsc::sync_channel::<crate::domain::FrameData>(8);
+
+        // Seek counter: encode thread increments on seek, pacing thread drains queue when it detects change
+        let seek_counter = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let seek_counter_enc = seek_counter.clone();
+        let seek_counter_pac = seek_counter.clone();
+
         let cancel_clone = cancel.clone();
+        let cancel_clone2 = cancel.clone();
         let state_tx_clone = state_tx.clone();
+        // Create a second watch receiver for the pacing thread
+        let pacing_state_rx = state_tx.subscribe();
+
         let join_handle = tokio::task::spawn_blocking(move || {
-            // Initialize decoder and encoder (owned, no locks needed)
-            let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
-            if let Err(e) = decoder.open(&path) {
-                tracing::error!("Failed to open video decoder: {}", e);
-                return;
-            }
+            // =================================================================
+            // Encode Thread: decode + encode as fast as possible
+            // =================================================================
+            let encode_cancel = cancel_clone.clone();
+            let encode_handle = std::thread::spawn(move || {
+                // Initialize decoder and encoder (owned, no locks needed)
+                let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
+                if let Err(e) = decoder.open(&path) {
+                    tracing::error!("Failed to open video decoder: {}", e);
+                    return;
+                }
 
-            let mut encoder = HwAccelEncoder::new();
-            let encoder_config = EncoderConfig::new(width, height, fps, crate::encoder::VideoCodec::H264)
-                .with_preset(crate::encoder::EncoderPreset::Fast)
-                .with_hw_encoder(crate::encoder::HwEncoderType::Auto)
-                .with_gop_size(30)
-                .with_max_b_frames(0);
-            if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
-                tracing::error!("Failed to open video encoder: {}", e);
-                return;
-            }
+                let mut encoder = HwAccelEncoder::new();
+                let encoder_config = EncoderConfig::new(width, height, fps, crate::encoder::VideoCodec::H264)
+                    .with_preset(crate::encoder::EncoderPreset::Fast)
+                    .with_hw_encoder(crate::encoder::HwEncoderType::Auto)
+                    .with_gop_size(30)
+                    .with_max_b_frames(0);
+                if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
+                    tracing::error!("Failed to open video encoder: {}", e);
+                    return;
+                }
 
-            let mut pacer = WallClockPacer::new(fps, 1.0);
-            let mut current_speed = 1.0;
+                let mut current_speed = 1.0;
 
-            loop {
-                // Check cancellation
-                if cancel_clone.is_cancelled() { break; }
+                loop {
+                    if encode_cancel.is_cancelled() { break; }
 
-                // Read playback state (watch channel is thread-safe)
-                let state = state_rx.borrow().clone();
+                    let state = state_rx.borrow().clone();
 
-                // Handle seek request
-                let mut did_seek = false;
-                if let Some(time) = state.seek_to {
-                    did_seek = true;
-                    let _ = decoder.seek(time);
-                    // Re-open encoder to reset internal state after seek
-                    // (flush sends EOF which terminates the encoder)
-                    Encoder::close(&mut encoder);
-                    if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
-                        tracing::error!("Failed to re-open encoder after seek: {}", e);
-                        break;
+                    // Handle seek: flush decoder + reset encoder
+                    let mut did_seek = false;
+                    if let Some(time) = state.seek_to {
+                        did_seek = true;
+                        let _ = decoder.seek(time);
+                        Encoder::close(&mut encoder);
+                        if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
+                            tracing::error!("Failed to re-open encoder after seek: {}", e);
+                            break;
+                        }
+                        // Signal pacing thread to drain stale frames
+                        seek_counter_enc.fetch_add(1, std::sync::atomic::Ordering::Release);
+                        state_tx_clone.send_modify(|s| s.seek_to = None);
                     }
-                    pacer.reset();
-                    // Clear seek_to so it won't re-trigger
-                    state_tx_clone.send_modify(|s| s.seek_to = None);
-                }
 
-                // When paused, only produce a frame if we just seeked
-                if state.paused && !did_seek {
-                    std::thread::sleep(std::time::Duration::from_millis(16));
-                    continue;
-                }
+                    // Paused: sleep unless we just seeked (produce one frame for preview)
+                    if state.paused && !did_seek {
+                        std::thread::sleep(std::time::Duration::from_millis(16));
+                        continue;
+                    }
 
-                // Update speed if changed
-                if (state.speed - current_speed).abs() > 0.001 {
-                    current_speed = state.speed;
-                    pacer.update_speed(current_speed);
-                }
+                    // Track speed changes (encode thread doesn't pace, but needs
+                    // to know speed for potential future use)
+                    if (state.speed - current_speed).abs() > 0.001 {
+                        current_speed = state.speed;
+                    }
 
-                // Decode next GPU frame
-                let gpu_texture = match decoder.decode_next_gpu() {
-                    Ok(Some(t)) => t,
-                    Ok(None) => {
-                        // Decoder EOF - check loop
-                        let state = state_rx.borrow().clone();
-                        if let Some(region) = &state.loop_region {
-                            let _ = decoder.seek(region.in_point);
-                            pacer.reset();
-                            continue;
-                        } else {
+                    // Decode next GPU frame
+                    let gpu_texture = match decoder.decode_next_gpu() {
+                        Ok(Some(t)) => t,
+                        Ok(None) => {
+                            let state = state_rx.borrow().clone();
+                            if let Some(region) = &state.loop_region {
+                                let _ = decoder.seek(region.in_point);
+                                continue;
+                            } else {
+                                break; // EOF
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Video stream decode error: {}", e);
+                            break;
+                        }
+                    };
+
+                    let tex_width = gpu_texture.width;
+                    let tex_height = gpu_texture.height;
+                    let pts = gpu_texture.pts;
+
+                    let gpu_handle = match gpu_texture.handle {
+                        #[cfg(target_os = "macos")]
+                        crate::decoder::GpuTextureHandle::VideoToolbox { io_surface, .. } => io_surface,
+                        #[allow(unreachable_patterns)]
+                        _ => {
+                            tracing::warn!("Unsupported GPU texture handle for encoding");
+                            break;
+                        }
+                    };
+
+                    match Encoder::encode_frame_gpu(&mut encoder, gpu_handle, pts) {
+                        Ok(packets) => {
+                            for p in &packets {
+                                let frame_data = pack_h264_frame(p, tex_width, tex_height);
+                                // Push to FrameQueue; blocks if queue is full (backpressure)
+                                if queue_tx.send(frame_data).is_err() {
+                                    // Pacing thread exited
+                                    return;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Video stream encode error: {}", e);
                             break;
                         }
                     }
-                    Err(e) => {
-                        tracing::warn!("Video stream decode error: {}", e);
-                        break;
-                    }
-                };
+                }
 
-                let tex_width = gpu_texture.width;
-                let tex_height = gpu_texture.height;
-                let pts = gpu_texture.pts;
-
-                // Encode GPU texture directly to H.264 (zero-copy on macOS)
-                let gpu_handle = match gpu_texture.handle {
-                    #[cfg(target_os = "macos")]
-                    crate::decoder::GpuTextureHandle::VideoToolbox { io_surface, .. } => io_surface,
-                    #[allow(unreachable_patterns)]
-                    _ => {
-                        tracing::warn!("Unsupported GPU texture handle for encoding");
-                        break;
+                // Flush encoder
+                if let Ok(packets) = Encoder::flush(&mut encoder) {
+                    for p in &packets {
+                        let _ = queue_tx.send(pack_h264_frame(p, width, height));
                     }
-                };
+                }
+                Encoder::close(&mut encoder);
+            });
 
-                match Encoder::encode_frame_gpu(&mut encoder, gpu_handle, pts) {
-                    Ok(packets) => {
-                        for p in &packets {
-                            let _ = tx.send(pack_h264_frame(p, tex_width, tex_height));
-                        }
+            // =================================================================
+            // Pacing Thread (runs on the spawn_blocking thread itself):
+            // Pop from FrameQueue → pace by wall clock → send via broadcast
+            // =================================================================
+            let mut pacer = WallClockPacer::new(fps, 1.0);
+            let mut current_speed = 1.0;
+            let mut last_seen_paused = false;
+            let mut last_seek_count = 0u64;
+
+            loop {
+                if cancel_clone2.is_cancelled() { break; }
+
+                // Detect seek: drain stale frames from queue
+                let current_seek = seek_counter_pac.load(std::sync::atomic::Ordering::Acquire);
+                if current_seek != last_seek_count {
+                    last_seek_count = current_seek;
+                    // Drain all stale frames from the queue
+                    while queue_rx.try_recv().is_ok() {}
+                    pacer.reset();
+                }
+
+                // Check for speed/pause changes from state channel
+                {
+                    let state = pacing_state_rx.borrow().clone();
+
+                    // Detect pause→resume transition: reset pacer
+                    if last_seen_paused && !state.paused {
+                        pacer.reset();
                     }
-                    Err(e) => {
-                        tracing::warn!("Video stream encode error: {}", e);
-                        break;
+                    last_seen_paused = state.paused;
+
+                    if (state.speed - current_speed).abs() > 0.001 {
+                        current_speed = state.speed;
+                        pacer.update_speed(current_speed);
+                    }
+
+                    // When paused, don't consume from queue
+                    if state.paused {
+                        std::thread::sleep(std::time::Duration::from_millis(16));
+                        continue;
                     }
                 }
 
-                // Wall-clock pacing: sleep until next frame time, or proceed immediately if behind
+                // Wait for next frame time
                 pacer.wait_for_next_frame();
-            }
 
-            // Flush encoder
-            if let Ok(packets) = Encoder::flush(&mut encoder) {
-                for p in &packets {
-                    let _ = tx.send(pack_h264_frame(p, width, height));
+                // Pop from FrameQueue
+                match queue_rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                    Ok(frame_data) => {
+                        let _ = tx.send(frame_data);
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        // Queue empty — encode thread might be slow or paused
+                        // Reset pacer to avoid accumulating debt
+                        pacer.reset();
+                        continue;
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                        // Encode thread finished
+                        break;
+                    }
                 }
             }
-            Encoder::close(&mut encoder);
+
+            // Wait for encode thread to finish
+            let _ = encode_handle.join();
         });
 
         // Store handle
@@ -543,7 +636,9 @@ impl IVideoService for VideoService {
         let output = output_path.to_path_buf();
 
         tokio::task::spawn_blocking(move || -> Result<()> {
-            // Open decoder
+            // =====================================================
+            // Video decoder + encoder
+            // =====================================================
             let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
             let media_info = decoder.open(&path)?;
 
@@ -551,7 +646,6 @@ impl IVideoService for VideoService {
             let height = options.resolution.map(|r| r.height).unwrap_or(media_info.height);
             let fps = media_info.fps;
 
-            // Configure encoder (neko_types types are now used directly)
             let codec = options.video_codec;
             let mut encoder_config = EncoderConfig::new(width, height, fps, codec);
             if let Some(bitrate) = options.bitrate {
@@ -561,43 +655,192 @@ impl IVideoService for VideoService {
                 .with_preset(options.preset)
                 .with_hw_encoder(options.hw_encoder);
 
-            // Open encoder
-            let mut encoder = HwAccelEncoder::new();
-            Encoder::open(&mut encoder, &encoder_config)?;
+            let mut video_encoder = HwAccelEncoder::new();
+            Encoder::open(&mut video_encoder, &encoder_config)?;
 
-            // Open muxer
+            // =====================================================
+            // Audio decoder + encoder (optional)
+            // =====================================================
+            let mut audio_decoder: Option<FfmpegAudioDecoder> = None;
+            let mut audio_encoder: Option<FfmpegAudioEncoder> = None;
+            let mut audio_config: Option<AudioEncoderConfig> = None;
+
+            if let Some(audio_codec) = options.audio_codec {
+                // Try to open audio decoder
+                let mut adec = FfmpegAudioDecoder::new()
+                    .with_output_format(SampleFormat::F32)
+                    .with_output_sample_rate(48000)
+                    .with_output_channels(2);
+
+                match AudioDecoder::open(&mut adec, &path) {
+                    Ok(_audio_info) => {
+                        // Configure audio encoder
+                        let mut aconfig = AudioEncoderConfig::new(48000, 2, audio_codec);
+                        if let Some(bitrate) = options.audio_bitrate {
+                            aconfig = aconfig.with_bitrate(bitrate);
+                        }
+                        aconfig = aconfig.with_sample_format(SampleFormat::F32);
+
+                        let mut aenc = FfmpegAudioEncoder::new();
+                        if let Err(e) = AudioEncoder::open(&mut aenc, &aconfig) {
+                            tracing::warn!("Failed to open audio encoder, skipping audio: {}", e);
+                        } else {
+                            audio_config = Some(aconfig);
+                            audio_encoder = Some(aenc);
+                            audio_decoder = Some(adec);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::info!("No audio stream in source, skipping audio: {}", e);
+                    }
+                }
+            }
+
+            // =====================================================
+            // Muxer setup
+            // =====================================================
             let mut muxer = FfmpegMuxer::new();
             let container = container_from_path(&output);
             muxer.open(output.to_str().unwrap_or("output.mp4"), container)?;
             muxer.add_video_stream(&encoder_config)?;
+
+            if let Some(ref aconfig) = audio_config {
+                muxer.add_audio_stream(aconfig)?;
+            }
             muxer.write_header()?;
 
-            // Decode → Encode → Mux loop
-            loop {
-                let nv12_texture = match decoder.decode_next_gpu()? {
-                    Some(t) => t,
-                    None => break,
-                };
+            // =====================================================
+            // Interleaved decode → encode → mux loop
+            // =====================================================
+            // Strategy: decode all video first while interleaving audio.
+            // For each video frame decoded, also drain available audio frames
+            // up to the same PTS to maintain interleaving.
+            let time_base = 1.0 / fps;
+            let mut video_done = false;
+            let mut audio_done = audio_decoder.is_none();
 
-                // Use GPU zero-copy encoding path
-                let gpu_handle = match nv12_texture.handle {
-                    #[cfg(target_os = "macos")]
-                    crate::decoder::GpuTextureHandle::VideoToolbox { io_surface, .. } => io_surface,
-                    _ => return Err(Error::Other("Unsupported GPU texture handle for encoding".to_string())),
-                };
-                let packets = encoder.encode_frame_gpu(gpu_handle, nv12_texture.pts)?;
-                for packet in &packets {
-                    muxer.write_video_packet(packet)?;
+            loop {
+                if video_done && audio_done {
+                    break;
+                }
+
+                // Decode + encode video frame
+                if !video_done {
+                    match decoder.decode_next_gpu()? {
+                        Some(nv12_texture) => {
+                            let gpu_handle = match nv12_texture.handle {
+                                #[cfg(target_os = "macos")]
+                                crate::decoder::GpuTextureHandle::VideoToolbox { io_surface, .. } => io_surface,
+                                #[allow(unreachable_patterns)]
+                                _ => return Err(Error::Other("Unsupported GPU texture handle for encoding".to_string())),
+                            };
+                            let packets = video_encoder.encode_frame_gpu(gpu_handle, nv12_texture.pts)?;
+                            for packet in &packets {
+                                muxer.write_video_packet(packet)?;
+                            }
+
+                            // Drain audio up to current video time
+                            let video_time = nv12_texture.pts as f64 * time_base;
+                            if let (Some(ref mut adec), Some(ref mut aenc)) =
+                                (&mut audio_decoder, &mut audio_encoder)
+                            {
+                                while !audio_done {
+                                    match AudioDecoder::decode_next(adec) {
+                                        Ok(Some(frame)) => {
+                                            let apackets = AudioEncoder::encode_frame(
+                                                aenc,
+                                                &frame.data,
+                                                frame.samples,
+                                            )?;
+                                            for ap in &apackets {
+                                                let video_packet = crate::encoder::EncodedPacket {
+                                                    data: ap.data.clone(),
+                                                    pts: ap.pts,
+                                                    dts: ap.pts,
+                                                    is_keyframe: true,
+                                                    duration: ap.duration,
+                                                    stream_index: 1,
+                                                };
+                                                muxer.write_audio_packet(&video_packet)?;
+                                            }
+                                            if frame.timestamp > video_time + 0.5 {
+                                                break; // Don't get too far ahead
+                                            }
+                                        }
+                                        Ok(None) => {
+                                            audio_done = true;
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!("Audio decode error during transcode: {}", e);
+                                            audio_done = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        None => {
+                            video_done = true;
+                        }
+                    }
+                } else if !audio_done {
+                    // Video done, drain remaining audio
+                    if let (Some(ref mut adec), Some(ref mut aenc)) =
+                        (&mut audio_decoder, &mut audio_encoder)
+                    {
+                        match AudioDecoder::decode_next(adec) {
+                            Ok(Some(frame)) => {
+                                let apackets = AudioEncoder::encode_frame(
+                                    aenc,
+                                    &frame.data,
+                                    frame.samples,
+                                )?;
+                                for ap in &apackets {
+                                    let video_packet = crate::encoder::EncodedPacket {
+                                        data: ap.data.clone(),
+                                        pts: ap.pts,
+                                        dts: ap.pts,
+                                        is_keyframe: true,
+                                        duration: ap.duration,
+                                        stream_index: 1,
+                                    };
+                                    muxer.write_audio_packet(&video_packet)?;
+                                }
+                            }
+                            Ok(None) => {
+                                audio_done = true;
+                            }
+                            Err(_) => {
+                                audio_done = true;
+                            }
+                        }
+                    }
                 }
             }
 
-            // Flush encoder
-            let flush_packets = Encoder::flush(&mut encoder)?;
+            // Flush video encoder
+            let flush_packets = Encoder::flush(&mut video_encoder)?;
             for packet in &flush_packets {
                 muxer.write_video_packet(packet)?;
             }
+            Encoder::close(&mut video_encoder);
 
-            Encoder::close(&mut encoder);
+            // Flush audio encoder
+            if let Some(ref mut aenc) = audio_encoder {
+                let flush_packets = AudioEncoder::flush(aenc)?;
+                for ap in &flush_packets {
+                    let video_packet = crate::encoder::EncodedPacket {
+                        data: ap.data.clone(),
+                        pts: ap.pts,
+                        dts: ap.pts,
+                        is_keyframe: true,
+                        duration: ap.duration,
+                        stream_index: 1,
+                    };
+                    muxer.write_audio_packet(&video_packet)?;
+                }
+                AudioEncoder::close(aenc);
+            }
+
             muxer.finish()?;
 
             Ok(())
@@ -662,6 +905,8 @@ impl IVideoService for VideoService {
             bitrate: Some(1_000_000), // 1 Mbps
             hw_encoder: neko_types::HwEncoderType::Auto,
             preset: neko_types::EncoderPreset::Fast,
+            audio_codec: Some(neko_types::AudioCodec::Opus),
+            audio_bitrate: None,
         };
 
         self.transcode(source, output_path, proxy_options, task_handle)
