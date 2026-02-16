@@ -283,6 +283,35 @@ pub fn pack_opus_frame(packet: &crate::audio::EncodedAudioPacket, sample_rate: u
     }
 }
 
+/// fMP4 WebSocket message types
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fmp4MessageType {
+    /// Init segment (ftyp + moov) — sent once at stream start
+    Init = 0x01,
+    /// Media segment (moof + mdat) — sent periodically
+    Segment = 0x02,
+    /// Flush signal — sent after seek to reset client state
+    Flush = 0x03,
+}
+
+/// Pack an fMP4 segment into FrameData for broadcast transport
+///
+/// Wire format: [type: u8][payload...]
+pub fn pack_fmp4_message(msg_type: Fmp4MessageType, payload: &[u8], timestamp: f64) -> FrameData {
+    let mut data = Vec::with_capacity(1 + payload.len());
+    data.push(msg_type as u8);
+    data.extend_from_slice(payload);
+
+    FrameData {
+        data,
+        width: 0,
+        height: 0,
+        format: FrameFormat::Fmp4,
+        timestamp,
+    }
+}
+
 /// Create a new stream with broadcast channel and control channels
 ///
 /// Returns (StreamId, broadcast::Receiver, CancellationToken, watch::Receiver<PlaybackState>, watch::Sender<PlaybackState>)

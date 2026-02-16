@@ -166,6 +166,36 @@ impl HwAccelEncoder {
         }
     }
 
+    /// Get codec extradata (SPS/PPS for H.264) from the encoder context.
+    /// Must be called after `open()`. Returns None if encoder is not open or has no extradata.
+    pub fn get_extradata(&self) -> Option<Vec<u8>> {
+        let encoder = self.encoder.as_ref()?;
+        unsafe {
+            let ctx = encoder.as_ptr();
+            let extradata = (*ctx).extradata;
+            let size = (*ctx).extradata_size as usize;
+            if extradata.is_null() || size == 0 {
+                return None;
+            }
+            let data = std::slice::from_raw_parts(extradata, size).to_vec();
+            tracing::info!(
+                "Encoder extradata: {} bytes, first 8: {:02x?}",
+                size,
+                &data[..std::cmp::min(8, data.len())]
+            );
+            Some(data)
+        }
+    }
+
+    /// Get the raw AVCodecContext pointer for use with avcodec_parameters_from_context().
+    ///
+    /// # Safety
+    /// The returned pointer is only valid while the encoder is open.
+    /// Caller must ensure the encoder is not closed/dropped while the pointer is in use.
+    pub fn codec_context_ptr(&self) -> Option<*const ffmpeg::ffi::AVCodecContext> {
+        self.encoder.as_ref().map(|e| unsafe { e.as_ptr() })
+    }
+
     /// Copy NV12 frame data from buffer to VideoFrame
     ///
     /// Input data must be in NV12 format: Y plane followed by interleaved UV plane.
@@ -375,6 +405,13 @@ impl HwAccelEncoder {
 
         if let Some(ref profile) = config.profile {
             opts.set("profile", profile);
+        }
+
+        // Set GLOBAL_HEADER flag if requested (needed for MP4/fMP4 muxing)
+        if config.global_header {
+            unsafe {
+                (*encoder.as_mut_ptr()).flags |= ffmpeg::ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32;
+            }
         }
 
         // Try to open encoder
@@ -769,6 +806,18 @@ impl Encoder for HwAccelEncoder {
                 let uv_stride = IOSurfaceGetBytesPerRowOfPlane(io_surface, 1);
                 (y_ptr, y_stride, uv_ptr, uv_stride)
             };
+
+            // DEBUG: check if IOSurface has real pixel data
+            if pts < 3 {
+                let height = config.height as usize;
+                let plane_size = y_stride * height;
+                let y_data = unsafe { std::slice::from_raw_parts(y_ptr, std::cmp::min(plane_size, 256)) };
+                let non_zero = y_data.iter().filter(|&&b| b != 0).count();
+                tracing::info!(
+                    "encode_frame_gpu: pts={} y_ptr={:?} y_stride={} first_16={:02x?} non_zero_in_256={}",
+                    pts, y_ptr, y_stride, &y_data[..16.min(y_data.len())], non_zero
+                );
+            }
 
             // Create empty frame and point data directly to IOSurface memory
             let mut frame = VideoFrame::empty();

@@ -3,19 +3,17 @@
 //! This module provides a Node.js-friendly interface to the EngineApi.
 //! It handles JSON serialization/deserialization and async bridging.
 //!
-//! New in P1:
+//! Features:
+//! - `dispatch` / `dispatch_action` — unified ActionRequest/ActionResponse protocol
 //! - `start_frame_server` / `stop_frame_server` — embedded HTTP/WS server lifecycle
-//! - `create_stream` — convenience method for stream creation with WS endpoint info
-//! - `push_stream_frame` — synchronous per-stream frame push (30-60fps optimized)
+//! - Convenience methods for common operations (probe, capture, tasks, etc.)
 
-use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 
 use neko_native_api::EngineApi;
-use neko_native_core::domain::FrameData;
-use neko_types::{ActionRequest, FrameFormat, StreamId};
+use neko_types::ActionRequest;
 
 /// Global engine instance (singleton)
 static ENGINE: OnceCell<Arc<EngineApi>> = OnceCell::const_new();
@@ -314,106 +312,6 @@ impl NativeEngine {
             .and_then(|guard| guard.as_ref().map(|s| s.addr.port()))
     }
 
-    /// Create a stream and return WebSocket endpoint info (JSON)
-    ///
-    /// Convenience method that dispatches `streams:create` and fills in the
-    /// `wsPort` field from the running frame server.
-    #[napi]
-    pub async fn create_stream(
-        &self,
-        session_id: String,
-        resource_id: String,
-        width: Option<u32>,
-        height: Option<u32>,
-        fps: Option<f64>,
-    ) -> napi::Result<String> {
-        let mut options = serde_json::json!({
-            "sessionId": session_id,
-            "resourceId": resource_id,
-        });
-
-        if let Some(w) = width {
-            options["width"] = serde_json::json!(w);
-        }
-        if let Some(h) = height {
-            options["height"] = serde_json::json!(h);
-        }
-        if let Some(f) = fps {
-            options["fps"] = serde_json::json!(f);
-        }
-
-        let request = ActionRequest {
-            group: "streams".to_string(),
-            action: "create".to_string(),
-            id: String::new(),
-            source: None,
-            session_id: Some(session_id),
-            stream_id: None,
-            options,
-            body: None,
-        };
-
-        let mut response = self.engine.dispatch(request).await;
-
-        // Inject wsPort from the running frame server
-        if let Some(ref mut data) = response.data {
-            if let Some(port) = self.get_frame_server_port() {
-                data["wsPort"] = serde_json::json!(port);
-                // Build full wsUrl for convenience
-                if let Some(endpoint) = data["wsEndpoint"].as_str() {
-                    data["wsUrl"] =
-                        serde_json::json!(format!("ws://127.0.0.1:{}{}", port, endpoint));
-                }
-            }
-        }
-
-        serde_json::to_string(&response)
-            .map_err(|e| napi::Error::from_reason(format!("Serialization error: {}", e)))
-    }
-
-    /// Push a frame to a specific stream (per-stream, replaces FrameServerSession.pushFrame)
-    ///
-    /// This is a synchronous method optimized for high-frequency calls (30-60fps).
-    /// It uses `try_read()` on the stream registry to avoid async overhead.
-    #[napi]
-    pub fn push_stream_frame(
-        &self,
-        stream_id: String,
-        data: Buffer,
-        width: u32,
-        height: u32,
-        timestamp: f64,
-        format: Option<String>,
-    ) -> napi::Result<()> {
-        let frame_format = match format.as_deref() {
-            Some("h264") => FrameFormat::H264,
-            Some("jpeg") | Some("jpg") => FrameFormat::Jpeg,
-            Some("nv12") => FrameFormat::Nv12,
-            Some("rgba") | None => FrameFormat::Rgba,
-            Some(other) => {
-                return Err(napi::Error::from_reason(format!(
-                    "Unsupported frame format: {}. Use 'rgba', 'h264', 'jpeg', or 'nv12'.",
-                    other
-                )));
-            }
-        };
-
-        let frame = FrameData {
-            data: data.to_vec(),
-            width,
-            height,
-            format: frame_format,
-            timestamp,
-        };
-
-        let sid = StreamId::from_string(stream_id);
-        self.engine
-            .stream_registry()
-            .try_send_frame(&sid, frame)
-            .map_err(|e| napi::Error::from_reason(format!("Failed to push frame: {}", e)))?;
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]

@@ -27,7 +27,56 @@ use std::path::Path;
 extern "C" {
     fn CVPixelBufferGetIOSurface(pixelBuffer: *const std::ffi::c_void)
         -> *const std::ffi::c_void;
+    fn CVPixelBufferRetain(pixelBuffer: *const std::ffi::c_void) -> *const std::ffi::c_void;
+    fn CVPixelBufferRelease(pixelBuffer: *const std::ffi::c_void);
 }
+
+/// RAII guard that retains a CVPixelBuffer (reference count +1).
+///
+/// When dropped, releases the CVPixelBuffer, allowing VideoToolbox to reclaim it.
+/// This ensures the backing IOSurface data remains valid for the lifetime of this guard.
+///
+/// Without this guard, the CVPixelBuffer returned by VideoToolbox is released when the
+/// AVFrame is unreffed (in `decode_next_gpu`), and VideoToolbox may reclaim the
+/// backing IOSurface and zero its contents — resulting in black frames.
+#[cfg(target_os = "macos")]
+pub(crate) struct RetainedPixelBuffer(usize);
+
+#[cfg(target_os = "macos")]
+impl RetainedPixelBuffer {
+    /// Retain a CVPixelBuffer. The pointer must be a valid CVPixelBufferRef.
+    ///
+    /// # Safety
+    /// `pixel_buffer` must be a valid CVPixelBufferRef cast to usize.
+    unsafe fn retain(pixel_buffer: usize) -> Self {
+        CVPixelBufferRetain(pixel_buffer as *const std::ffi::c_void);
+        Self(pixel_buffer)
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for RetainedPixelBuffer {
+    fn drop(&mut self) {
+        if self.0 != 0 {
+            unsafe {
+                CVPixelBufferRelease(self.0 as *const std::ffi::c_void);
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl std::fmt::Debug for RetainedPixelBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RetainedPixelBuffer({:#x})", self.0)
+    }
+}
+
+// Safety: CVPixelBuffer is reference-counted and thread-safe (CoreFoundation type)
+#[cfg(target_os = "macos")]
+unsafe impl Send for RetainedPixelBuffer {}
+#[cfg(target_os = "macos")]
+unsafe impl Sync for RetainedPixelBuffer {}
 
 /// NV12 GPU texture output from hardware decoder
 #[derive(Debug)]
@@ -44,6 +93,10 @@ pub struct Nv12GpuTexture {
     pub is_keyframe: bool,
     /// Color space (FFmpeg AVColorSpace value)
     pub color_space: i32,
+    /// Keeps the CVPixelBuffer retained so IOSurface data stays valid.
+    /// When this guard is dropped, the CVPixelBuffer is released back to VideoToolbox's pool.
+    #[cfg(target_os = "macos")]
+    _pixel_buffer_guard: RetainedPixelBuffer,
 }
 
 /// Hardware-accelerated decoder configuration
@@ -257,6 +310,17 @@ impl HwAccelDecoder {
         // Extract platform-specific GPU handle
         let handle = self.extract_platform_handle(hw_frame, format)?;
 
+        // Retain CVPixelBuffer so IOSurface data stays valid after hw_frame is dropped.
+        // Without this, VideoToolbox can reclaim the buffer and zero its contents.
+        #[cfg(target_os = "macos")]
+        let _pixel_buffer_guard = {
+            if let GpuTextureHandle::VideoToolbox { pixel_buffer, .. } = &handle {
+                unsafe { RetainedPixelBuffer::retain(*pixel_buffer) }
+            } else {
+                RetainedPixelBuffer(0)
+            }
+        };
+
         Ok(Some(Nv12GpuTexture {
             width,
             height,
@@ -264,6 +328,8 @@ impl HwAccelDecoder {
             pts,
             is_keyframe,
             color_space,
+            #[cfg(target_os = "macos")]
+            _pixel_buffer_guard,
         }))
     }
 

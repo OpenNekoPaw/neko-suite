@@ -1,14 +1,11 @@
 /**
  * FrameServerService - Localhost HTTP/WebSocket frame streaming service
  *
- * Wraps NativeEngine's embedded frame server for high-performance
- * frame delivery to Webview consumers via WebSocket.
+ * Wraps NativeEngine's embedded frame server for frame delivery
+ * to Webview consumers via WebSocket.
  *
- * New architecture (NativeEngine):
- * - Frame server is embedded in NativeEngine (Rust HTTP/WS server)
- * - Frames are pushed per-stream via pushStreamFrame()
- * - Streams are created via createStream() with WebSocket endpoints
- * - ActionRequest dispatch available via HTTP POST
+ * All frame production is handled by Rust side (pull mode).
+ * Streams are created via dispatch("videos:stream" / "timelines:stream").
  *
  * Endpoints:
  * - ws://127.0.0.1:{port}/v1/streams/{stream_id} — per-stream WebSocket
@@ -29,36 +26,12 @@ interface NativeEngineInstance {
 	startFrameServer(port?: number | null): Promise<number>;
 	stopFrameServer(): Promise<void>;
 	getFrameServerPort(): number | null;
-	createStream(
-		sessionId: string,
-		resourceId: string,
-		width?: number | null,
-		height?: number | null,
-		fps?: number | null
-	): Promise<string>;
-	pushStreamFrame(
-		streamId: string,
-		data: Buffer,
-		width: number,
-		height: number,
-		timestamp: number,
-		format?: string | null
-	): void;
 	dispatch(requestJson: string): Promise<string>;
 	hasGpu(): boolean;
 }
 
 interface NativeEngineModule {
 	NativeEngine: { create(): Promise<NativeEngineInstance> };
-}
-
-/**
- * Stream info returned by createStream()
- */
-export interface StreamInfo {
-	streamId: string;
-	wsUrl: string;
-	wsPort: number;
 }
 
 /**
@@ -76,15 +49,12 @@ export interface FrameServerConfig {
  * Frame server service backed by NativeEngine
  *
  * Manages the embedded HTTP/WebSocket server lifecycle and
- * provides per-stream frame pushing for Webview consumers.
+ * provides ActionRequest dispatch for Webview consumers.
  */
 export class FrameServerService implements vscode.Disposable {
 	private _engine: NativeEngineInstance | null = null;
 	private _port: number | null = null;
 	private _disposed = false;
-
-	// Track active streams for cleanup
-	private _activeStreams: Map<string, StreamInfo> = new Map();
 
 	/**
 	 * Try to create a FrameServerService instance
@@ -197,110 +167,6 @@ export class FrameServerService implements vscode.Disposable {
 	}
 
 	// =========================================================================
-	// Stream Management
-	// =========================================================================
-
-	/**
-	 * Create a new stream and return its WebSocket endpoint info
-	 *
-	 * @param sessionId - Unique session identifier (e.g., document URI)
-	 * @param resourceId - Resource identifier (e.g., video path)
-	 * @param width - Optional output width
-	 * @param height - Optional output height
-	 * @param fps - Optional frame rate
-	 * @returns Stream info with WebSocket URL, or null if unavailable
-	 */
-	async createStream(
-		sessionId: string,
-		resourceId: string,
-		width?: number,
-		height?: number,
-		fps?: number
-	): Promise<StreamInfo | null> {
-		if (!this._engine || this._disposed) {
-			return null;
-		}
-
-		try {
-			const responseJson = await this._engine.createStream(
-				sessionId,
-				resourceId,
-				width ?? null,
-				height ?? null,
-				fps ?? null
-			);
-			const response = JSON.parse(responseJson) as {
-				success: boolean;
-				data?: { streamId: string; wsUrl: string; wsPort: number };
-				error?: string;
-			};
-
-			if (!response.success || !response.data) {
-				console.error('[FrameServerService] Failed to create stream:', response.error);
-				return null;
-			}
-
-			const streamInfo: StreamInfo = {
-				streamId: response.data.streamId,
-				wsUrl: response.data.wsUrl,
-				wsPort: response.data.wsPort,
-			};
-
-			this._activeStreams.set(streamInfo.streamId, streamInfo);
-
-			console.log(
-				`[FrameServerService] Stream created: ${streamInfo.streamId} → ${streamInfo.wsUrl}`
-			);
-
-			return streamInfo;
-		} catch (error) {
-			console.error('[FrameServerService] createStream error:', error);
-			return null;
-		}
-	}
-
-	/**
-	 * Push a frame to a specific stream
-	 *
-	 * This is a synchronous, high-frequency method optimized for 30-60fps.
-	 *
-	 * @param streamId - Target stream ID
-	 * @param data - Frame pixel data (RGBA, NV12, or JPEG)
-	 * @param width - Frame width
-	 * @param height - Frame height
-	 * @param timestamp - Frame timestamp in microseconds
-	 * @param format - Pixel format ('rgba' | 'nv12' | 'jpeg'), defaults to 'jpeg'
-	 */
-	pushFrame(
-		streamId: string,
-		data: Buffer,
-		width: number,
-		height: number,
-		timestamp: number,
-		format?: string
-	): void {
-		if (!this._engine || this._disposed) {
-			return;
-		}
-
-		this._engine.pushStreamFrame(streamId, data, width, height, timestamp, format ?? null);
-	}
-
-	/**
-	 * Get list of active stream IDs
-	 */
-	getActiveStreams(): string[] {
-		return Array.from(this._activeStreams.keys());
-	}
-
-	/**
-	 * Get stream info by ID
-	 */
-	getStreamInfo(streamId: string): StreamInfo | undefined {
-		return this._activeStreams.get(streamId);
-	}
-
-	// =========================================================================
 	// Dispatch (ActionRequest proxy)
 	// =========================================================================
 
@@ -329,9 +195,6 @@ export class FrameServerService implements vscode.Disposable {
 		}
 
 		this._disposed = true;
-
-		// Clear active streams
-		this._activeStreams.clear();
 
 		if (this._engine) {
 			try {

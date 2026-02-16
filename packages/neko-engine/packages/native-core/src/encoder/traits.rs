@@ -45,6 +45,9 @@ pub struct EncoderConfig {
     /// and pass CVPixelBuffer directly to VideoToolbox without any CPU involvement.
     /// This provides the best performance but requires IOSurface-backed textures.
     pub use_zero_copy_gpu: bool,
+    /// Request global header (extradata) from encoder.
+    /// Required for muxing into containers like MP4/fMP4 that need SPS/PPS in moov.
+    pub global_header: bool,
 }
 
 impl EncoderConfig {
@@ -66,6 +69,7 @@ impl EncoderConfig {
             max_b_frames: None,
             hw_encoder: HwEncoderType::default(),
             use_zero_copy_gpu: false, // Disabled by default for compatibility
+            global_header: false,
         }
     }
 
@@ -118,6 +122,12 @@ impl EncoderConfig {
     /// This eliminates all CPU-GPU data transfers for maximum performance.
     pub fn with_zero_copy_gpu(mut self, enabled: bool) -> Self {
         self.use_zero_copy_gpu = enabled;
+        self
+    }
+
+    /// Enable global header mode (extradata in codec context, required for MP4/fMP4 muxing)
+    pub fn with_global_header(mut self, enabled: bool) -> Self {
+        self.global_header = enabled;
         self
     }
 }

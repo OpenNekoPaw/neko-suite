@@ -411,7 +411,7 @@ impl IVideoService for VideoService {
                 let encoder_config = EncoderConfig::new(width, height, fps, crate::encoder::VideoCodec::H264)
                     .with_preset(crate::encoder::EncoderPreset::Fast)
                     .with_hw_encoder(crate::encoder::HwEncoderType::Auto)
-                    .with_gop_size(30)
+                    .with_gop_size(1)       // All-Intra: every frame is a keyframe (uniform encode cost)
                     .with_max_b_frames(0);
                 if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
                     tracing::error!("Failed to open video encoder: {}", e);

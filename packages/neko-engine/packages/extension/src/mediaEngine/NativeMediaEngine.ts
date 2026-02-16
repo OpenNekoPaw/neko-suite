@@ -51,8 +51,6 @@ export interface NativeEngineType {
 	startFrameServer(port?: number): Promise<number>;
 	stopFrameServer(): Promise<void>;
 	getFrameServerPort(): number | null;
-	createStream(sessionId: string, resourceId: string, width?: number, height?: number, fps?: number): Promise<string>;
-	pushStreamFrame(streamId: string, data: Buffer, width: number, height: number, timestamp: number, format?: string): void;
 }
 
 /**
