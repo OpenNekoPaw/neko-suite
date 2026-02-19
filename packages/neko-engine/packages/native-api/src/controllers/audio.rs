@@ -7,6 +7,7 @@ use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_native_core::domain::StreamConfig;
 use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{AudioService, IAudioService};
+use neko_types::registry;
 use neko_types::{ActionResponse, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
@@ -68,6 +69,7 @@ struct TranscodeRequestOptions {
 
 /// Options for audios:stream
 #[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct StreamRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
@@ -322,11 +324,11 @@ impl Controller for AudioController {
     }
 
     fn group(&self) -> &'static str {
-        "audios"
+        registry::groups::AUDIOS
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["probe", "transcode", "stream", "waveform", "diff", "stop", "pause", "resume", "speed", "seek"]
+        registry::actions::AUDIOS
     }
 }
 

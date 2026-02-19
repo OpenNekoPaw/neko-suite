@@ -94,6 +94,7 @@ impl NativeEngine {
     /// Dispatch an action request with typed parameters
     ///
     /// Convenience method that takes individual parameters instead of JSON.
+    /// All ActionRequest fields are supported for full parity with `dispatch()`.
     #[napi]
     pub async fn dispatch_action(
         &self,
@@ -101,20 +102,27 @@ impl NativeEngine {
         action: String,
         id: Option<String>,
         options: Option<String>,
+        source: Option<String>,
+        session_id: Option<String>,
+        stream_id: Option<String>,
+        body: Option<String>,
     ) -> napi::Result<String> {
         let options_value: serde_json::Value = options
             .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
             .unwrap_or(serde_json::Value::Null);
 
+        let body_value: Option<serde_json::Value> = body
+            .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null));
+
         let request = ActionRequest {
             group,
             action,
             id: id.unwrap_or_default(),
-            source: None,
-            session_id: None,
-            stream_id: None,
+            source,
+            session_id,
+            stream_id,
             options: options_value,
-            body: None,
+            body: body_value,
         };
 
         let response = self.engine.dispatch(request).await;
@@ -147,21 +155,21 @@ impl NativeEngine {
     /// Get system health status
     #[napi]
     pub async fn health(&self) -> napi::Result<String> {
-        self.dispatch_action("nodes".to_string(), "health".to_string(), None, None)
+        self.dispatch_action("nodes".to_string(), "health".to_string(), None, None, None, None, None, None)
             .await
     }
 
     /// Get system metrics (CPU, memory, GPU usage)
     #[napi]
     pub async fn metrics(&self) -> napi::Result<String> {
-        self.dispatch_action("nodes".to_string(), "metric".to_string(), None, None)
+        self.dispatch_action("nodes".to_string(), "metric".to_string(), None, None, None, None, None, None)
             .await
     }
 
     /// Get GPU information
     #[napi]
     pub async fn gpu_info(&self) -> napi::Result<String> {
-        self.dispatch_action("nodes".to_string(), "gpu".to_string(), None, None)
+        self.dispatch_action("nodes".to_string(), "gpu".to_string(), None, None, None, None, None, None)
             .await
     }
 
@@ -174,6 +182,7 @@ impl NativeEngine {
             "probe".to_string(),
             None,
             Some(options.to_string()),
+            None, None, None, None,
         )
         .await
     }
@@ -181,21 +190,21 @@ impl NativeEngine {
     /// List all active tasks
     #[napi]
     pub async fn list_tasks(&self) -> napi::Result<String> {
-        self.dispatch_action("tasks".to_string(), "list".to_string(), None, None)
+        self.dispatch_action("tasks".to_string(), "list".to_string(), None, None, None, None, None, None)
             .await
     }
 
     /// Get task progress
     #[napi]
     pub async fn get_task_progress(&self, task_id: String) -> napi::Result<String> {
-        self.dispatch_action("tasks".to_string(), "probe".to_string(), Some(task_id), None)
+        self.dispatch_action("tasks".to_string(), "probe".to_string(), Some(task_id), None, None, None, None, None)
             .await
     }
 
     /// Cancel a task
     #[napi]
     pub async fn cancel_task(&self, task_id: String) -> napi::Result<String> {
-        self.dispatch_action("tasks".to_string(), "cancel".to_string(), Some(task_id), None)
+        self.dispatch_action("tasks".to_string(), "cancel".to_string(), Some(task_id), None, None, None, None, None)
             .await
     }
 
@@ -221,6 +230,7 @@ impl NativeEngine {
             "capture".to_string(),
             None,
             Some(options.to_string()),
+            None, None, None, None,
         )
         .await
     }

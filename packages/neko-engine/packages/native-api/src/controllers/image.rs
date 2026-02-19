@@ -7,6 +7,7 @@ use crate::registry::ResourceRegistry;
 use neko_native_core::domain::CaptureOptions;
 use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{IImageService, ImageService};
+use neko_types::registry;
 use neko_types::{ActionResponse, FrameFormat};
 use serde::Deserialize;
 use serde_json::Value;
@@ -223,11 +224,11 @@ impl Controller for ImageController {
     }
 
     fn group(&self) -> &'static str {
-        "images"
+        registry::groups::IMAGES
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["probe", "capture", "encode", "diff"]
+        registry::actions::IMAGES
     }
 }
 

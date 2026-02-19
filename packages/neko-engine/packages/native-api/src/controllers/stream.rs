@@ -12,6 +12,7 @@ use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::StreamRegistry;
 use neko_native_core::domain::{StreamCodec, StreamConfig};
+use neko_types::registry;
 use neko_types::{ActionResponse, Resolution, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
@@ -234,11 +235,11 @@ impl Controller for StreamController {
     }
 
     fn group(&self) -> &'static str {
-        "streams"
+        registry::groups::STREAMS
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["create", "activate", "pause", "resume", "destroy", "list"]
+        registry::actions::STREAMS
     }
 }
 

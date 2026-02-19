@@ -99,6 +99,11 @@ macro_rules! define_actions {
                     $( $enum_name::$variant { opts, .. } => opts, )+
                 }
             }
+
+            /// Return all action name strings (for registry alignment tests)
+            pub fn all_action_names() -> &'static [&'static str] {
+                &[$( $action_str, )+]
+            }
         }
     };
 }
@@ -142,19 +147,19 @@ pub enum Command {
         action: VideoAction,
     },
 
-    /// Audio processing: probe, transcode, stream, waveform, stop, pause, resume, speed
+    /// Audio processing: probe, transcode, stream, waveform, diff, stop, pause, resume, speed, seek
     Audios {
         #[command(subcommand)]
         action: AudioAction,
     },
 
-    /// Image processing: probe, capture, encode
+    /// Image processing: probe, capture, encode, diff
     Images {
         #[command(subcommand)]
         action: ImageAction,
     },
 
-    /// Timeline editing & export: probe, composite, stream, stop, pause, resume, speed, loop, seek, export, export_progress, export_cancel
+    /// Timeline editing & export: probe, composite, stream, stop, pause, resume, speed, loop, seek, diff, export, export_progress, export_cancel
     Timelines {
         #[command(subcommand)]
         action: TimelineAction,
@@ -253,6 +258,8 @@ define_actions!(AudioAction {
     Stream => "stream",
     /// Generate audio waveform
     Waveform => "waveform",
+    /// Compare two audio files (metadata + content)
+    Diff => "diff",
     /// Stop audio stream
     Stop => "stop",
     /// Pause audio stream
@@ -261,6 +268,8 @@ define_actions!(AudioAction {
     Resume => "resume",
     /// Set playback speed
     Speed => "speed",
+    /// Seek to time position
+    Seek => "seek",
 });
 
 define_actions!(ImageAction {
@@ -270,6 +279,8 @@ define_actions!(ImageAction {
     Capture => "capture",
     /// Encode RGBA data to image format
     Encode => "encode",
+    /// Compare two image files (metadata + content)
+    Diff => "diff",
 });
 
 define_actions!(StreamAction {
@@ -294,6 +305,8 @@ define_actions!(ModelAction {
     Capture => "capture",
     /// Stream model rendering
     Stream => "stream",
+    /// Compare two 3D model files (metadata + content)
+    Diff => "diff",
 });
 
 define_actions!(CanvasAction {
@@ -303,6 +316,8 @@ define_actions!(CanvasAction {
     Capture => "capture",
     /// Export canvas
     Export => "export",
+    /// Compare two canvas outputs (metadata + content)
+    Diff => "diff",
 });
 
 define_actions!(SceneAction {
@@ -374,6 +389,12 @@ pub enum TimelineAction {
         opts: ActionOpts,
     },
 
+    /// Compare two timeline files (metadata + content)
+    Diff {
+        #[command(flatten)]
+        opts: ActionOpts,
+    },
+
     /// Export a .jvi project file with progress display
     Export {
         /// Path to .jvi project file
@@ -416,4 +437,121 @@ pub enum TimelineAction {
         #[command(flatten)]
         opts: ActionOpts,
     },
+}
+
+impl TimelineAction {
+    /// Return all action name strings (for registry alignment tests)
+    pub fn all_action_names() -> &'static [&'static str] {
+        &[
+            "probe",
+            "composite",
+            "stream",
+            "stop",
+            "pause",
+            "resume",
+            "speed",
+            "loop",
+            "seek",
+            "diff",
+            "export",
+            "export_progress",
+            "export_cancel",
+        ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use neko_types::registry;
+
+    #[test]
+    fn test_node_actions_align_with_registry() {
+        assert_eq!(
+            NodeAction::all_action_names(),
+            registry::actions::NODES,
+            "NodeAction variants do not match registry::actions::NODES"
+        );
+    }
+
+    #[test]
+    fn test_task_actions_align_with_registry() {
+        assert_eq!(
+            TaskAction::all_action_names(),
+            registry::actions::TASKS,
+            "TaskAction variants do not match registry::actions::TASKS"
+        );
+    }
+
+    #[test]
+    fn test_video_actions_align_with_registry() {
+        assert_eq!(
+            VideoAction::all_action_names(),
+            registry::actions::VIDEOS,
+            "VideoAction variants do not match registry::actions::VIDEOS"
+        );
+    }
+
+    #[test]
+    fn test_audio_actions_align_with_registry() {
+        assert_eq!(
+            AudioAction::all_action_names(),
+            registry::actions::AUDIOS,
+            "AudioAction variants do not match registry::actions::AUDIOS"
+        );
+    }
+
+    #[test]
+    fn test_image_actions_align_with_registry() {
+        assert_eq!(
+            ImageAction::all_action_names(),
+            registry::actions::IMAGES,
+            "ImageAction variants do not match registry::actions::IMAGES"
+        );
+    }
+
+    #[test]
+    fn test_timeline_actions_align_with_registry() {
+        assert_eq!(
+            TimelineAction::all_action_names(),
+            registry::actions::TIMELINES,
+            "TimelineAction variants do not match registry::actions::TIMELINES"
+        );
+    }
+
+    #[test]
+    fn test_stream_actions_align_with_registry() {
+        assert_eq!(
+            StreamAction::all_action_names(),
+            registry::actions::STREAMS,
+            "StreamAction variants do not match registry::actions::STREAMS"
+        );
+    }
+
+    #[test]
+    fn test_model_actions_align_with_registry() {
+        assert_eq!(
+            ModelAction::all_action_names(),
+            registry::actions::MODELS,
+            "ModelAction variants do not match registry::actions::MODELS"
+        );
+    }
+
+    #[test]
+    fn test_canvas_actions_align_with_registry() {
+        assert_eq!(
+            CanvasAction::all_action_names(),
+            registry::actions::CANVAS,
+            "CanvasAction variants do not match registry::actions::CANVAS"
+        );
+    }
+
+    #[test]
+    fn test_scene_actions_align_with_registry() {
+        assert_eq!(
+            SceneAction::all_action_names(),
+            registry::actions::SCENES,
+            "SceneAction variants do not match registry::actions::SCENES"
+        );
+    }
 }

@@ -2,6 +2,7 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
+use neko_types::registry;
 use neko_types::ActionResponse;
 use serde_json::Value;
 
@@ -36,11 +37,11 @@ impl Controller for ScenesController {
     }
 
     fn group(&self) -> &'static str {
-        "scenes"
+        registry::groups::SCENES
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["composite", "capture", "stream"]
+        registry::actions::SCENES
     }
 }
 

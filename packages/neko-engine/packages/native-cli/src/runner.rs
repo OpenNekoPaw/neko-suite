@@ -435,6 +435,7 @@ fn timeline_action_name_from_opts(action: &TimelineAction) -> &'static str {
         TimelineAction::Speed { .. } => "speed",
         TimelineAction::Loop { .. } => "loop",
         TimelineAction::Seek { .. } => "seek",
+        TimelineAction::Diff { .. } => "diff",
         TimelineAction::Export { .. } => "export",
         TimelineAction::ExportProgress { .. } => "export_progress",
         TimelineAction::ExportCancel { .. } => "export_cancel",
@@ -453,6 +454,7 @@ fn timeline_action_opts(action: &TimelineAction) -> &ActionOpts {
         | TimelineAction::Speed { opts }
         | TimelineAction::Loop { opts }
         | TimelineAction::Seek { opts }
+        | TimelineAction::Diff { opts }
         | TimelineAction::ExportProgress { opts }
         | TimelineAction::ExportCancel { opts } => opts,
         TimelineAction::Export { .. } => unreachable!("Export handled separately"),

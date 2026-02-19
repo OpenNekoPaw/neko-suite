@@ -3,6 +3,7 @@
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use neko_native_core::services::{INodeService, NodeService};
+use neko_types::registry;
 use neko_types::ActionResponse;
 use serde_json::Value;
 use std::sync::Arc;
@@ -48,11 +49,11 @@ impl Controller for NodeController {
     }
 
     fn group(&self) -> &'static str {
-        "nodes"
+        registry::groups::NODES
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["health", "metric", "gpu"]
+        registry::actions::NODES
     }
 }
 

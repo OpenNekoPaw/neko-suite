@@ -19,6 +19,7 @@ pub mod health;
 pub mod id;
 pub mod keyframe;
 pub mod media;
+pub mod registry;
 pub mod request;
 pub mod stream;
 pub mod task;

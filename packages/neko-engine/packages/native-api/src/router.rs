@@ -11,6 +11,7 @@ use neko_native_core::services::{
     AudioService, ExportService, ImageService, NodeService, TaskService,
     TimelineService, VideoService,
 };
+use neko_types::registry::{self, groups};
 use neko_types::{ActionRequest, ActionResponse};
 use std::sync::Arc;
 
@@ -70,52 +71,52 @@ impl ActionRouter {
         );
 
         match request.group.as_str() {
-            "nodes" => {
+            groups::NODES => {
                 self.node_controller
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
-            "tasks" => {
+            groups::TASKS => {
                 self.task_controller
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
-            "videos" => {
+            groups::VIDEOS => {
                 self.video_controller
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
-            "audios" => {
+            groups::AUDIOS => {
                 self.audio_controller
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
-            "images" => {
+            groups::IMAGES => {
                 self.image_controller
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
-            "timelines" => {
+            groups::TIMELINES => {
                 self.timeline_controller
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
-            "models" => {
+            groups::MODELS => {
                 self.models_controller
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
-            "canvas" => {
+            groups::CANVAS => {
                 self.canvas_controller
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
-            "scenes" => {
+            groups::SCENES => {
                 self.scenes_controller
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
-            "streams" => {
+            groups::STREAMS => {
                 self.stream_controller
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
@@ -129,25 +130,22 @@ impl ActionRouter {
 
     /// Get list of supported groups
     pub fn groups(&self) -> Vec<&str> {
-        vec![
-            "nodes", "tasks", "videos", "audios", "images", "timelines",
-            "streams", "models", "canvas", "scenes",
-        ]
+        registry::groups::ALL.to_vec()
     }
 
     /// Get list of supported actions for a group
     pub fn actions(&self, group: &str) -> Option<&'static [&'static str]> {
         match group {
-            "nodes" => Some(self.node_controller.actions()),
-            "tasks" => Some(self.task_controller.actions()),
-            "videos" => Some(self.video_controller.actions()),
-            "audios" => Some(self.audio_controller.actions()),
-            "images" => Some(self.image_controller.actions()),
-            "timelines" => Some(self.timeline_controller.actions()),
-            "models" => Some(self.models_controller.actions()),
-            "canvas" => Some(self.canvas_controller.actions()),
-            "scenes" => Some(self.scenes_controller.actions()),
-            "streams" => Some(self.stream_controller.actions()),
+            groups::NODES => Some(self.node_controller.actions()),
+            groups::TASKS => Some(self.task_controller.actions()),
+            groups::VIDEOS => Some(self.video_controller.actions()),
+            groups::AUDIOS => Some(self.audio_controller.actions()),
+            groups::IMAGES => Some(self.image_controller.actions()),
+            groups::TIMELINES => Some(self.timeline_controller.actions()),
+            groups::MODELS => Some(self.models_controller.actions()),
+            groups::CANVAS => Some(self.canvas_controller.actions()),
+            groups::SCENES => Some(self.scenes_controller.actions()),
+            groups::STREAMS => Some(self.stream_controller.actions()),
             _ => None,
         }
     }

@@ -3,6 +3,7 @@
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use neko_native_core::media_service::{diff_media, DiffCategory};
+use neko_types::registry;
 use neko_types::ActionResponse;
 use serde::Deserialize;
 use serde_json::Value;
@@ -67,11 +68,11 @@ impl Controller for CanvasController {
     }
 
     fn group(&self) -> &'static str {
-        "canvas"
+        registry::groups::CANVAS
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["composite", "capture", "export", "diff"]
+        registry::actions::CANVAS
     }
 }
 

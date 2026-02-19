@@ -168,8 +168,9 @@ export declare class NativeEngine {
    * Dispatch an action request with typed parameters
    *
    * Convenience method that takes individual parameters instead of JSON.
+   * All ActionRequest fields are supported for full parity with `dispatch()`.
    */
-  dispatchAction(group: string, action: string, id?: string | undefined | null, options?: string | undefined | null): Promise<string>
+  dispatchAction(group: string, action: string, id?: string | undefined | null, options?: string | undefined | null, source?: string | undefined | null, sessionId?: string | undefined | null, streamId?: string | undefined | null, body?: string | undefined | null): Promise<string>
   /** Check if GPU is available */
   hasGpu(): boolean
   /** Get list of supported action groups */

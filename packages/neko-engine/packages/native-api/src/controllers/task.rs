@@ -3,6 +3,7 @@
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use neko_native_core::services::{ITaskService, TaskService};
+use neko_types::registry;
 use neko_types::ActionResponse;
 use serde_json::Value;
 use std::sync::Arc;
@@ -72,11 +73,11 @@ impl Controller for TaskController {
     }
 
     fn group(&self) -> &'static str {
-        "tasks"
+        registry::groups::TASKS
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &["probe", "pause", "resume", "cancel", "list"]
+        registry::actions::TASKS
     }
 }
 

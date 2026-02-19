@@ -7,6 +7,7 @@ use crate::registry::StreamRegistry;
 use neko_native_core::domain::{StreamConfig, Timeline};
 use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{ExportService, IExportService, ITimelineService, TimelineService};
+use neko_types::registry;
 use neko_types::{ActionResponse, LoopRegion, Resolution, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
@@ -439,25 +440,11 @@ impl Controller for TimelineController {
     }
 
     fn group(&self) -> &'static str {
-        "timelines"
+        registry::groups::TIMELINES
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &[
-            "probe",
-            "composite",
-            "stream",
-            "stop",
-            "pause",
-            "resume",
-            "speed",
-            "loop",
-            "seek",
-            "diff",
-            "export",
-            "export_progress",
-            "export_cancel",
-        ]
+        registry::actions::TIMELINES
     }
 }
 

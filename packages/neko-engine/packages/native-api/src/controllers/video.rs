@@ -7,6 +7,7 @@ use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_native_core::domain::{CaptureOptions, ExtractOptions, ExtractType, StreamConfig};
 use neko_native_core::media_service::{diff_media, diff_video_content, DiffCategory, VideoDiffOptions};
 use neko_native_core::services::{IVideoService, VideoService};
+use neko_types::registry;
 use neko_types::{ActionResponse, FrameFormat, LoopRegion, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
@@ -86,6 +87,7 @@ struct WaveformRequestOptions {
 
 /// Options for videos:extract
 #[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct ExtractRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
@@ -116,6 +118,7 @@ fn default_extract_fps() -> f64 {
 
 /// Options for videos:stream
 #[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct StreamRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
@@ -125,6 +128,7 @@ struct StreamRequestOptions {
 
 /// Options for videos:transcode
 #[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct TranscodeRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
@@ -632,27 +636,11 @@ impl Controller for VideoController {
     }
 
     fn group(&self) -> &'static str {
-        "videos"
+        registry::groups::VIDEOS
     }
 
     fn actions(&self) -> &'static [&'static str] {
-        &[
-            "probe",
-            "capture",
-            "extract",
-            "stream",
-            "transcode",
-            "keyframes",
-            "waveform",
-            "proxy",
-            "diff",
-            "stop",
-            "pause",
-            "resume",
-            "speed",
-            "seek",
-            "loop",
-        ]
+        registry::actions::VIDEOS
     }
 }
 
