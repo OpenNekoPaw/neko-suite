@@ -60,48 +60,49 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 		// Pin the editor tab so it won't be replaced when opening other files
 		vscode.commands.executeCommand('workbench.action.pinEditor');
 
-		// Initialize preview service (lazy)
-		if (!this._previewService) {
-			this._previewService = await PreviewService.tryCreate();
-		}
-
-		if (!this._previewService?.isAvailable) {
-			webviewPanel.webview.html = this.getErrorHtml(
-				'Failed to initialize media engine. Please ensure neko-engine is installed.'
-			);
-			return;
-		}
-
-		// Probe media file
+		// Immediately show status bar with file name (placeholder before probe completes)
 		const filePath = document.uri.fsPath;
-		let mediaInfo: MediaInfo;
+		const fileName = filePath.split('/').pop() ?? filePath;
+		this._statusBar.show({ fileName, duration: 0 });
 
-		try {
-			mediaInfo = await this._previewService.probeMedia(filePath);
-		} catch (error) {
-			const msg = error instanceof Error ? error.message : String(error);
-			webviewPanel.webview.html = this.getErrorHtml(
-				`Failed to probe audio file: ${msg}`
-			);
-			return;
-		}
-
-		// Set webview HTML
+		// Set webview HTML early so it can start loading while we probe
 		webviewPanel.webview.html = getWebviewHtml({
 			webview: webviewPanel.webview,
 			extensionUri: this._extensionUri,
 			entry: 'audio',
 		});
 
-		// Show status bar with media info
-		const fileName = filePath.split('/').pop() ?? filePath;
-		this._statusBar.show({
-			fileName,
-			audioCodec: mediaInfo.audioCodec,
-			audioSampleRate: mediaInfo.audioSampleRate,
-			audioChannels: mediaInfo.audioChannels,
-			duration: mediaInfo.duration,
-		});
+		// Probe media in background — message handler awaits this before responding
+		const mediaInfoPromise = (async (): Promise<MediaInfo | null> => {
+			if (!this._previewService) {
+				this._previewService = await PreviewService.tryCreate();
+			}
+			if (!this._previewService?.isAvailable) {
+				webviewPanel.webview.html = this.getErrorHtml(
+					'Failed to initialize media engine. Please ensure neko-engine is installed.'
+				);
+				this._statusBar.hide();
+				return null;
+			}
+			try {
+				const info = await this._previewService.probeMedia(filePath);
+				this._statusBar.show({
+					fileName,
+					audioCodec: info.audioCodec,
+					audioSampleRate: info.audioSampleRate,
+					audioChannels: info.audioChannels,
+					duration: info.duration,
+				});
+				return info;
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : String(error);
+				webviewPanel.webview.html = this.getErrorHtml(
+					`Failed to probe audio file: ${msg}`
+				);
+				this._statusBar.hide();
+				return null;
+			}
+		})();
 
 		// Per-panel stream state
 		let activeAudioStreamId: string | null = null;
@@ -113,13 +114,15 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 			}
 		};
 
-		// Handle messages from webview
+		// Handle messages from webview — registered early so no messages are lost
 		const messageDisposable = webviewPanel.webview.onDidReceiveMessage(
 			async (msg: Record<string, unknown>) => {
 				const type = msg.type as string;
 
 				switch (type) {
-					case 'ready':
+					case 'ready': {
+						const mediaInfo = await mediaInfoPromise;
+						if (!mediaInfo) return;
 						await webviewPanel.webview.postMessage({
 							type: 'preview:init',
 							payload: { filePath, mediaInfo },
@@ -136,6 +139,7 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 							console.error('[AudioPreview] Waveform generation failed:', error);
 						}
 						break;
+					}
 
 					case 'preview:play': {
 						try {
@@ -224,17 +228,22 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 		);
 
 		// Manage status bar visibility with panel lifecycle
-		const visibilityDisposable = webviewPanel.onDidChangeViewState(() => {
+		const visibilityDisposable = webviewPanel.onDidChangeViewState(async () => {
 			if (!webviewPanel.visible) {
 				this._statusBar.hide();
 			} else {
-				this._statusBar.show({
-					fileName,
-					audioCodec: mediaInfo.audioCodec,
-					audioSampleRate: mediaInfo.audioSampleRate,
-					audioChannels: mediaInfo.audioChannels,
-					duration: mediaInfo.duration,
-				});
+				const mediaInfo = await mediaInfoPromise;
+				if (mediaInfo) {
+					this._statusBar.show({
+						fileName,
+						audioCodec: mediaInfo.audioCodec,
+						audioSampleRate: mediaInfo.audioSampleRate,
+						audioChannels: mediaInfo.audioChannels,
+						duration: mediaInfo.duration,
+					});
+				} else {
+					this._statusBar.show({ fileName, duration: 0 });
+				}
 			}
 		});
 
