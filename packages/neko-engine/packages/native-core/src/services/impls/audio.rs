@@ -12,7 +12,7 @@ use crate::gpu::GpuContext;
 use crate::media_service::probe_media_info;
 use crate::services::impls::common::generate_waveform_blocking;
 use crate::services::impls::stream_loop::{
-    pack_opus_frame, pack_pcm_frame, ActiveStreams, create_stream_channels, WallClockPacer,
+    pack_pcm_f32le_stream_frame, ActiveStreams, create_stream_channels, WallClockPacer,
     StreamLoopHandle,
 };
 use crate::services::{IAudioService, ITaskService};
@@ -211,16 +211,17 @@ impl IAudioService for AudioService {
         let (stream_id, tx, rx, cancel, state_tx, state_rx) =
             create_stream_channels(session_id, 64);
 
-        // Spawn entire decode→encode loop in a single blocking thread
+        // Spawn decode loop in a single blocking thread
+        // No Opus encoding — send raw PCM f32le directly (WebView doesn't support WebCodecs AudioDecoder)
         let cancel_clone = cancel.clone();
         let state_tx_clone = state_tx.clone();
         let join_handle = tokio::task::spawn_blocking(move || {
-            // Initialize decoder: output F32 packed at 48kHz stereo (Opus standard)
+            // Initialize decoder: output F32 interleaved at 48kHz stereo
             let mut decoder = FfmpegAudioDecoder::new()
                 .with_output_format(SampleFormat::F32)
                 .with_output_sample_rate(48000)
                 .with_output_channels(2);
-            let audio_info = match decoder.open(&path) {
+            let _audio_info = match decoder.open(&path) {
                 Ok(info) => info,
                 Err(e) => {
                     tracing::error!("Failed to open audio decoder: {}", e);
@@ -228,28 +229,13 @@ impl IAudioService for AudioService {
                 }
             };
 
-            // Initialize Opus encoder: 48kHz / Stereo / 128kbps
-            let opus_config = AudioEncoderConfig::new(48000, 2, InternalAudioCodec::Opus)
-                .with_bitrate(128_000)
-                .with_sample_format(SampleFormat::F32);
-            let mut encoder = FfmpegAudioEncoder::new();
-            if let Err(e) = AudioEncoder::open(&mut encoder, &opus_config) {
-                tracing::error!("Failed to open Opus encoder: {}", e);
-                return;
-            }
-
             let sample_rate = 48000u32;
             let channels = 2u16;
 
-            // Opus outputs ~50 packets/sec (960 samples/frame at 48kHz = 20ms)
+            // Typical decoded frame ~1024 samples at 48kHz ≈ 21ms; 50fps pacer is a safe upper bound
             let mut pacer = WallClockPacer::new(50.0, 1.0);
             let mut current_speed = 1.0;
-
             let mut last_seen_paused = false;
-
-            // PTS offset in samples: after seek, encoder resets PTS to 0.
-            // We add this offset to restore absolute timeline.
-            let mut pts_offset_samples: i64 = 0;
 
             loop {
                 // Check cancellation
@@ -261,16 +247,8 @@ impl IAudioService for AudioService {
                 // Handle seek request
                 if let Some(time) = state.seek_to {
                     let _ = AudioDecoder::seek(&mut decoder, time);
-                    // Reset encoder on seek: close + reopen to flush stale FIFO
-                    AudioEncoder::close(&mut encoder);
-                    if let Err(e) = AudioEncoder::open(&mut encoder, &opus_config) {
-                        tracing::error!("Failed to re-open Opus encoder after seek: {}", e);
-                        break;
-                    }
                     pacer.reset();
                     state_tx_clone.send_modify(|s| s.seek_to = None);
-                    // Record PTS offset: seek target time → samples
-                    pts_offset_samples = (time * sample_rate as f64) as i64;
                 }
 
                 // Detect pause→resume transition: reset pacer to avoid time jump
@@ -291,43 +269,25 @@ impl IAudioService for AudioService {
                     pacer.update_speed(current_speed);
                 }
 
-                // Decode next audio frame
+                // Decode next audio frame and send raw PCM
                 match AudioDecoder::decode_next(&mut decoder) {
                     Ok(Some(frame)) => {
-                        // Encode PCM → Opus (FIFO handles frame size alignment)
-                        match AudioEncoder::encode_frame(&mut encoder, &frame.data, frame.samples) {
-                            Ok(mut packets) => {
-                                for p in &mut packets {
-                                    // Restore absolute PTS by adding offset from seek
-                                    p.pts += pts_offset_samples;
-                                    let packed = pack_opus_frame(p, sample_rate, channels);
-                                    let _ = tx.send(packed);
-                                }
-                            }
-                            Err(e) => {
-                                tracing::warn!("Opus encode error: {}", e);
-                            }
-                        }
+                        let duration = frame.duration();
+                        let packed = pack_pcm_f32le_stream_frame(
+                            &frame.data,
+                            frame.timestamp,
+                            duration,
+                            sample_rate,
+                            channels,
+                        );
+                        let _ = tx.send(packed);
                     }
                     Ok(None) => {
-                        // EOF — flush encoder then check loop
-                        if let Ok(mut packets) = AudioEncoder::flush(&mut encoder) {
-                            for p in &mut packets {
-                                p.pts += pts_offset_samples;
-                                let packed = pack_opus_frame(p, sample_rate, channels);
-                                let _ = tx.send(packed);
-                            }
-                        }
-
+                        // EOF — check loop
                         let state = state_rx.borrow().clone();
                         if state.loop_region.is_some() {
-                            // Re-open decoder + encoder for loop
                             AudioDecoder::close(&mut decoder);
                             if decoder.open(&path).is_err() {
-                                break;
-                            }
-                            AudioEncoder::close(&mut encoder);
-                            if AudioEncoder::open(&mut encoder, &opus_config).is_err() {
                                 break;
                             }
                             pacer.reset();
@@ -465,7 +425,7 @@ mod tests {
         _assert_impl::<AudioService>();
     }
 
-    /// Integration test: start audio stream with real mp3 file and verify PCM frames are produced
+    /// Integration test: start audio stream with real mp3 file and verify PCM f32le frames
     #[tokio::test]
     async fn test_audio_stream_real_file_mp3() {
         let test_file = std::path::Path::new("/Users/feng/git/neko-test/cases/test.mp3");
@@ -480,7 +440,7 @@ mod tests {
 
         let (stream_id, mut rx) = result.unwrap();
 
-        // Receive a few frames and verify they have PCM header
+        // Receive a few frames and verify they have the 22-byte PCM header
         let mut frames_received = 0;
         let timeout = tokio::time::sleep(std::time::Duration::from_secs(3));
         tokio::pin!(timeout);
@@ -492,17 +452,23 @@ mod tests {
                     match frame {
                         Ok(f) => {
                             assert_eq!(f.format, neko_types::FrameFormat::PcmF32, "Frame should be PcmF32");
-                            // Verify wire format header: pts(8) + sampleRate(4) + channels(4) = 16 bytes min
-                            assert!(f.data.len() > 16, "Frame data should have header + PCM data");
+                            // Wire format: pts_us(8) + duration_us(8) + sample_rate(4) + channels(2) = 22 bytes
+                            assert!(f.data.len() > 22, "Frame data should have 22-byte header + PCM data");
 
                             // Parse header
-                            let pts = f64::from_le_bytes(f.data[0..8].try_into().unwrap());
-                            let sample_rate = u32::from_le_bytes(f.data[8..12].try_into().unwrap());
-                            let channels = u32::from_le_bytes(f.data[12..16].try_into().unwrap());
+                            let pts_us = i64::from_le_bytes(f.data[0..8].try_into().unwrap());
+                            let duration_us = i64::from_le_bytes(f.data[8..16].try_into().unwrap());
+                            let sample_rate = u32::from_le_bytes(f.data[16..20].try_into().unwrap());
+                            let channels = u16::from_le_bytes(f.data[20..22].try_into().unwrap());
 
                             assert!(sample_rate > 0, "Sample rate should be > 0, got {}", sample_rate);
                             assert!(channels > 0, "Channels should be > 0, got {}", channels);
-                            assert!(pts >= 0.0, "PTS should be >= 0, got {}", pts);
+                            assert!(pts_us >= 0, "PTS should be >= 0, got {}", pts_us);
+                            assert!(duration_us > 0, "Duration should be > 0, got {}", duration_us);
+
+                            // Verify PCM payload is aligned to f32 (4 bytes)
+                            let pcm_len = f.data.len() - 22;
+                            assert_eq!(pcm_len % 4, 0, "PCM data should be aligned to f32 (4 bytes)");
 
                             frames_received += 1;
                             if frames_received >= 5 { break; }
@@ -544,6 +510,7 @@ mod tests {
                     match frame {
                         Ok(f) => {
                             assert_eq!(f.format, neko_types::FrameFormat::PcmF32);
+                            assert!(f.data.len() > 22, "Frame should have 22-byte header + PCM data");
                             frames_received += 1;
                             if frames_received >= 5 { break; }
                         }

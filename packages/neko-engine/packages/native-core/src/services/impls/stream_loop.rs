@@ -265,29 +265,34 @@ pub fn pack_pcm_frame(pcm_data: &[u8], timestamp: f64, sample_rate: u32, channel
     }
 }
 
-/// Pack an Opus encoded audio packet into FrameData for broadcast transport
+/// Pack decoded PCM f32le audio into FrameData for audio stream broadcast
 ///
-/// Wire format: [pts_us:i64 LE (8B)][duration_us:i64 LE (8B)][sample_rate:u32 LE (4B)][channels:u16 LE (2B)][Opus data...]
-/// PTS and duration are in microseconds (converted from sample units).
-pub fn pack_opus_frame(packet: &crate::audio::EncodedAudioPacket, sample_rate: u32, channels: u16) -> FrameData {
-    let header_size = 8 + 8 + 4 + 2; // pts_us + duration_us + sample_rate + channels
-    let pts_us = (packet.pts as f64 / sample_rate as f64 * 1_000_000.0) as i64;
-    let duration_us = (packet.duration as f64 / sample_rate as f64 * 1_000_000.0) as i64;
-    let mut data = Vec::with_capacity(header_size + packet.data.len());
+/// Wire format (matches AudioStreamClient frontend):
+/// [pts_us:i64 LE (8B)][duration_us:i64 LE (8B)][sample_rate:u32 LE (4B)][channels:u16 LE (2B)][interleaved f32le PCM...]
+/// PTS and duration are in microseconds (converted from seconds).
+pub fn pack_pcm_f32le_stream_frame(
+    pcm_data: &[u8],
+    pts_seconds: f64,
+    duration_seconds: f64,
+    sample_rate: u32,
+    channels: u16,
+) -> FrameData {
+    let header_size = 8 + 8 + 4 + 2; // pts_us + duration_us + sample_rate + channels = 22
+    let pts_us = (pts_seconds * 1_000_000.0) as i64;
+    let duration_us = (duration_seconds * 1_000_000.0) as i64;
+    let mut data = Vec::with_capacity(header_size + pcm_data.len());
     data.extend_from_slice(&pts_us.to_le_bytes());
     data.extend_from_slice(&duration_us.to_le_bytes());
     data.extend_from_slice(&sample_rate.to_le_bytes());
     data.extend_from_slice(&channels.to_le_bytes());
-    data.extend_from_slice(&packet.data);
-
-    let timestamp = pts_us as f64 / 1_000_000.0;
+    data.extend_from_slice(pcm_data);
 
     FrameData {
         data,
         width: sample_rate,
         height: channels as u32,
-        format: FrameFormat::Opus,
-        timestamp,
+        format: FrameFormat::PcmF32,
+        timestamp: pts_seconds,
     }
 }
 

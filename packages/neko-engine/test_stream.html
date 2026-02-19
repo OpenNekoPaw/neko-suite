@@ -452,16 +452,15 @@ function connectVideoWs(streamId) {
   };
 }
 
-// ─── Audio Stream (Opus via WebCodecs) ───
+// ─── Audio Stream (PCM f32le direct playback) ───
 let audioStarting = false;
-let audioDecoder = null;
 let audioGainNode = null;
 let audioPlaybackTime = 0;
 let audioPtsOffset = null;
-const OPUS_HEADER_SIZE = 8 + 8 + 4 + 2; // pts(i64) + duration(i64) + sampleRate(u32) + channels(u16) = 22
+const PCM_HEADER_SIZE = 8 + 8 + 4 + 2; // pts_us(i64) + duration_us(i64) + sampleRate(u32) + channels(u16) = 22
 
-function parseOpusPacket(data) {
-  if (data.byteLength <= OPUS_HEADER_SIZE) return null;
+function parsePcmPacket(data) {
+  if (data.byteLength <= PCM_HEADER_SIZE) return null;
   const view = new DataView(data);
   const ptsLow = view.getUint32(0, true);
   const ptsHigh = view.getInt32(4, true);
@@ -471,60 +470,9 @@ function parseOpusPacket(data) {
   const duration = durLow + durHigh * 0x100000000;
   const sampleRate = view.getUint32(16, true);
   const channels = view.getUint16(20, true);
-  const opusData = new Uint8Array(data, OPUS_HEADER_SIZE);
-  return { pts, duration, sampleRate, channels, opusData };
-}
-
-function initAudioDecoder() {
-  if (audioDecoder && audioDecoder.state !== 'closed') {
-    audioDecoder.close();
-  }
-
-  audioDecoder = new AudioDecoder({
-    output: (audioData) => {
-      if (!audioCtx || !audioGainNode) { audioData.close(); return; }
-
-      const channels = audioData.numberOfChannels;
-      const frames = audioData.numberOfFrames;
-      const sr = audioData.sampleRate;
-      if (frames <= 0) { audioData.close(); return; }
-
-      const buffer = audioCtx.createBuffer(channels, frames, sr);
-      for (let ch = 0; ch < channels; ch++) {
-        const chData = buffer.getChannelData(ch);
-        audioData.copyTo(chData, { planeIndex: ch, format: 'f32-planar' });
-      }
-
-      // Initialize PTS offset on first decoded frame
-      const ptsSeconds = audioData.timestamp / 1_000_000;
-      if (audioPtsOffset === null) {
-        audioPtsOffset = audioCtx.currentTime - ptsSeconds;
-        audioPlaybackTime = audioCtx.currentTime;
-      }
-
-      const source = audioCtx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioGainNode);
-
-      const now = audioCtx.currentTime;
-      if (audioPlaybackTime < now) audioPlaybackTime = now;
-      source.start(audioPlaybackTime);
-      audioPlaybackTime += buffer.duration;
-
-      audioData.close();
-    },
-    error: (e) => {
-      log(`AudioDecoder error: ${e.message}`, 'err');
-    }
-  });
-
-  audioDecoder.configure({
-    codec: 'opus',
-    sampleRate: 48000,
-    numberOfChannels: 2,
-  });
-
-  log('AudioDecoder configured (Opus 48kHz stereo)', 'info');
+  // slice() creates a new ArrayBuffer starting at offset 0 (4-byte aligned for Float32Array)
+  const pcmData = new Uint8Array(data.slice(PCM_HEADER_SIZE));
+  return { pts, duration, sampleRate, channels, pcmData };
 }
 
 async function startAudioStream() {
@@ -535,7 +483,6 @@ async function startAudioStream() {
   if (audioStreamId) {
     await dispatch('audios', 'stop', { streamId: audioStreamId });
     if (audioWs) { audioWs.close(); audioWs = null; }
-    if (audioDecoder && audioDecoder.state !== 'closed') { audioDecoder.close(); audioDecoder = null; }
     audioStreamId = null;
   }
 
@@ -575,9 +522,7 @@ async function startAudioStream() {
     await audioCtx.resume().catch(() => {});
   }
 
-  // Init Opus decoder
-  initAudioDecoder();
-
+  log('PCM f32le direct playback mode (no AudioDecoder needed)', 'info');
   connectAudioWs(audioStreamId);
 }
 
@@ -595,9 +540,10 @@ function connectAudioWs(streamId) {
 
   audioWs.onmessage = (event) => {
     if (!(event.data instanceof ArrayBuffer)) return;
+    if (!audioCtx || !audioGainNode) return;
 
-    const packet = parseOpusPacket(event.data);
-    if (!packet || !audioDecoder || audioDecoder.state === 'closed') return;
+    const packet = parsePcmPacket(event.data);
+    if (!packet) return;
 
     aChunkCount++;
     document.getElementById('aChunkCount').textContent = aChunkCount;
@@ -605,22 +551,50 @@ function connectAudioWs(streamId) {
     updateProgress('aProgress', 'aTime', audioPts / 1_000_000, audioDuration);
 
     if (aChunkCount <= 3 || aChunkCount % 200 === 0) {
-      log(`Opus #${aChunkCount}: pts=${packet.pts} dur=${packet.duration} sr=${packet.sampleRate} ch=${packet.channels} size=${packet.opusData.byteLength}B`);
+      log(`PCM #${aChunkCount}: pts=${packet.pts} dur=${packet.duration} sr=${packet.sampleRate} ch=${packet.channels} pcmBytes=${packet.pcmData.byteLength}`);
     }
 
     document.getElementById('aSampleRate').textContent = packet.sampleRate;
     document.getElementById('aChannels').textContent = packet.channels;
 
     try {
-      const chunk = new EncodedAudioChunk({
-        type: 'key',
-        timestamp: packet.pts,      // already in microseconds from backend
-        duration: packet.duration,   // already in microseconds from backend
-        data: packet.opusData,
-      });
-      audioDecoder.decode(chunk);
+      // Interpret payload as interleaved f32le samples
+      const floats = new Float32Array(
+        packet.pcmData.buffer,
+        packet.pcmData.byteOffset,
+        packet.pcmData.byteLength / 4,
+      );
+      const channels = packet.channels || 2;
+      const samplesPerChannel = floats.length / channels;
+      if (samplesPerChannel <= 0) return;
+
+      // Create AudioBuffer and de-interleave
+      const audioBuffer = audioCtx.createBuffer(channels, samplesPerChannel, packet.sampleRate);
+      for (let ch = 0; ch < channels; ch++) {
+        const channelData = audioBuffer.getChannelData(ch);
+        for (let i = 0; i < samplesPerChannel; i++) {
+          channelData[i] = floats[i * channels + ch];
+        }
+      }
+
+      // Initialize PTS offset on first frame
+      const ptsSeconds = packet.pts / 1_000_000;
+      if (audioPtsOffset === null) {
+        audioPtsOffset = audioCtx.currentTime - ptsSeconds;
+        audioPlaybackTime = audioCtx.currentTime;
+      }
+
+      // Schedule buffer for sequential playback
+      const now = audioCtx.currentTime;
+      if (audioPlaybackTime < now) audioPlaybackTime = now;
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(audioGainNode);
+      source.start(audioPlaybackTime);
+      audioPlaybackTime += audioBuffer.duration;
     } catch (e) {
-      log(`Opus decode error: ${e.message}`, 'err');
+      log(`PCM playback error: ${e.message}`, 'err');
     }
   };
 
