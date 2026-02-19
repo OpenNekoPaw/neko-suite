@@ -7,6 +7,7 @@
 use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType};
 use crate::domain::{FrameData, MediaReference, StreamConfig, Timeline, TimelineProjectInfo};
 use crate::encoder::{Encoder, EncoderConfig, HwAccelEncoder};
+use crate::export::{AudioMixer, ExportSettings};
 use crate::jvi::JviLoader;
 use crate::error::{Error, Result};
 use crate::gpu::{
@@ -16,13 +17,15 @@ use crate::gpu::{
 };
 use crate::keyframe_cache::IdrScanner;
 use crate::services::impls::stream_loop::{
-    pack_h264_frame, ActiveStreams, create_stream_channels, FramePacer, StreamLoopHandle,
+    pack_h264_frame, pack_pcm_f32le_stream_frame, ActiveStreams, create_stream_channels,
+    FramePacer, PlaybackState, StreamLoopHandle, WallClockPacer,
 };
-use crate::services::{ITaskService, ITimelineService};
+use crate::services::{ITaskService, ITimelineService, TimelineStreamResult};
 use neko_types::{BlendMode, FrameFormat, LoopRegion, StreamId};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
+use tokio_util::sync::CancellationToken;
 
 /// TimelineService implementation
 ///
@@ -360,7 +363,7 @@ impl ITimelineService for TimelineService {
         timeline: &Timeline,
         session_id: &str,
         config: StreamConfig,
-    ) -> Result<(StreamId, broadcast::Receiver<FrameData>)> {
+    ) -> Result<TimelineStreamResult> {
         let gpu_ctx = self
             .gpu_ctx
             .as_ref()
@@ -372,13 +375,23 @@ impl ITimelineService for TimelineService {
         let height = config.resolution.height;
         let timeline = timeline.clone();
 
-        // Create stream channels
-        let (stream_id, tx, rx, cancel, state_tx, state_rx) =
-            create_stream_channels(session_id, 64);
+        // === Shared infrastructure for both loops ===
+        let cancel = CancellationToken::new();
+        let (state_tx, state_rx) = watch::channel(PlaybackState::default());
 
-        // Spawn composite + encode loop
-        let cancel_clone = cancel.clone();
-        let join_handle = tokio::spawn(async move {
+        // Video broadcast channel
+        let (video_tx, video_rx) = broadcast::channel::<FrameData>(64);
+        let video_stream_id = StreamId::new(&format!("{}-video", session_id));
+
+        // Audio broadcast channel
+        let (audio_tx, audio_rx) = broadcast::channel::<FrameData>(64);
+        let audio_stream_id = StreamId::new(&format!("{}-audio", session_id));
+
+        // === Video composite + encode loop (existing logic, uses shared state) ===
+        let video_cancel = cancel.clone();
+        let video_state_rx = state_rx.clone();
+        let video_timeline = timeline.clone();
+        let video_join = tokio::spawn(async move {
             let mut pacer = FramePacer::new(fps, 1.0);
             let mut current_speed = 1.0;
             let mut frame_number: u64 = (config.start_time * fps) as u64;
@@ -409,13 +422,15 @@ impl ITimelineService for TimelineService {
             };
 
             let encoder = std::sync::Arc::new(std::sync::Mutex::new(encoder));
+            let timeline = video_timeline;
+            let tx = video_tx;
 
             loop {
                 tokio::select! {
                     biased;
-                    _ = cancel_clone.cancelled() => break,
+                    _ = video_cancel.cancelled() => break,
                     _ = pacer.tick() => {
-                        let state = state_rx.borrow().clone();
+                        let state = video_state_rx.borrow().clone();
 
                         // Handle seek request (deduplicate by comparing with last_seek)
                         if let Some(time) = state.seek_to {
@@ -627,16 +642,145 @@ impl ITimelineService for TimelineService {
             }).await;
         });
 
-        // Store handle
-        let handle = StreamLoopHandle {
-            stream_id: stream_id.clone(),
+        // === Audio mixing loop (new, uses shared state) ===
+        let audio_cancel = cancel.clone();
+        let audio_state_rx = state_rx.clone();
+        let audio_timeline = timeline.clone();
+        let audio_fps = fps;
+        let audio_start_time = config.start_time;
+        let audio_join = tokio::task::spawn_blocking(move || {
+            // Build minimal ExportSettings (only fps is needed by AudioMixer)
+            let settings = ExportSettings {
+                width: 0,
+                height: 0,
+                fps: audio_fps,
+                video_codec: Default::default(),
+                video_bitrate: None,
+                audio_codec: Default::default(),
+                audio_bitrate: None,
+                hw_encoder: Default::default(),
+                time_range: None,
+                preset: Default::default(),
+                use_zero_copy_gpu: false,
+            };
+
+            let mut mixer = AudioMixer::new(audio_timeline.clone(), &settings);
+            if let Err(e) = mixer.initialize() {
+                tracing::error!("Failed to initialize AudioMixer: {}", e);
+                return;
+            }
+
+            let mut pacer = WallClockPacer::new(audio_fps, 1.0);
+            let mut current_speed = 1.0;
+            let frame_duration = 1.0 / audio_fps;
+            let mut current_time = audio_start_time;
+            let mut last_seek: Option<f64> = None;
+            let sample_rate = mixer.sample_rate();
+            let channels = mixer.channels();
+
+            loop {
+                // Check cancellation
+                if audio_cancel.is_cancelled() {
+                    break;
+                }
+
+                // Read playback state
+                let state = audio_state_rx.borrow().clone();
+
+                // Handle seek (dedup)
+                if let Some(time) = state.seek_to {
+                    if last_seek != Some(time) {
+                        last_seek = Some(time);
+                        current_time = time;
+                        pacer.reset();
+                    }
+                } else {
+                    last_seek = None;
+                }
+
+                // Handle pause
+                if state.paused {
+                    std::thread::sleep(std::time::Duration::from_millis(16));
+                    pacer.reset();
+                    continue;
+                }
+
+                // Handle speed change
+                if (state.speed - current_speed).abs() > 0.001 {
+                    current_speed = state.speed;
+                    pacer.update_speed(current_speed);
+                }
+
+                // Handle loop region
+                if let Some(region) = &state.loop_region {
+                    if current_time >= region.out_point {
+                        current_time = region.in_point;
+                        pacer.reset();
+                    }
+                }
+
+                // Check timeline duration
+                if current_time > audio_timeline.duration && audio_timeline.duration > 0.0 {
+                    if let Some(region) = &state.loop_region {
+                        current_time = region.in_point;
+                        pacer.reset();
+                    } else {
+                        break; // End of timeline
+                    }
+                }
+
+                // Mix one frame of audio
+                match mixer.mix_frame(current_time) {
+                    Ok(Some(mixed)) => {
+                        // Cast f32 data to raw bytes
+                        let pcm_bytes: &[u8] = bytemuck::cast_slice(&mixed.data);
+                        let frame = pack_pcm_f32le_stream_frame(
+                            pcm_bytes,
+                            current_time,
+                            frame_duration,
+                            sample_rate,
+                            channels,
+                        );
+                        let _ = audio_tx.send(frame);
+                    }
+                    Ok(None) => {
+                        // No audio data at this time, send silence
+                    }
+                    Err(e) => {
+                        tracing::warn!("Audio mix error at {:.3}s: {}", current_time, e);
+                    }
+                }
+
+                current_time += frame_duration;
+                pacer.wait_for_next_frame();
+            }
+
+            mixer.close();
+        });
+
+        // Store paired handles
+        let video_handle = StreamLoopHandle {
+            stream_id: video_stream_id.clone(),
+            cancel: cancel.clone(),
+            state_tx: state_tx.clone(),
+            join_handle: video_join,
+            linked_stream_id: None,
+        };
+        let audio_handle = StreamLoopHandle {
+            stream_id: audio_stream_id.clone(),
             cancel,
             state_tx,
-            join_handle,
+            join_handle: audio_join,
+            linked_stream_id: None,
         };
-        self.active_streams.insert(handle).await;
+        self.active_streams.insert_paired(video_handle, audio_handle).await;
 
-        Ok((stream_id, rx))
+        Ok(TimelineStreamResult {
+            video_stream_id,
+            video_rx,
+            audio_stream_id,
+            audio_rx,
+        })
     }
 
     async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {

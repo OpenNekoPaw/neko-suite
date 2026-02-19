@@ -312,6 +312,7 @@ impl IAudioService for AudioService {
             cancel,
             state_tx,
             join_handle,
+            linked_stream_id: None,
         };
         self.active_streams.insert(handle).await;
 

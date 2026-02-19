@@ -42,6 +42,8 @@ pub struct StreamLoopHandle {
     pub cancel: CancellationToken,
     pub state_tx: watch::Sender<PlaybackState>,
     pub join_handle: JoinHandle<()>,
+    /// Linked stream ID for paired streams (e.g. video↔audio in timeline)
+    pub linked_stream_id: Option<String>,
 }
 
 /// Manages active stream loops (held by Service)
@@ -81,17 +83,36 @@ impl ActiveStreams {
         Ok(())
     }
 
-    /// Stop a stream by cancelling its loop and removing it
+    /// Insert a paired video+audio stream (sets linked_stream_id on both handles)
+    pub async fn insert_paired(&self, mut video: StreamLoopHandle, mut audio: StreamLoopHandle) {
+        let video_id = video.stream_id.as_str().to_string();
+        let audio_id = audio.stream_id.as_str().to_string();
+        video.linked_stream_id = Some(audio_id.clone());
+        audio.linked_stream_id = Some(video_id.clone());
+        let mut loops = self.loops.write().await;
+        loops.insert(video_id, video);
+        loops.insert(audio_id, audio);
+    }
+
+    /// Stop a stream by cancelling its loop and removing it.
+    /// If the stream has a linked partner, the partner is also stopped.
     pub async fn stop(&self, stream_id: &StreamId) -> Result<()> {
-        let handle = {
+        let (handle, linked_handle) = {
             let mut loops = self.loops.write().await;
-            loops.remove(stream_id.as_str())
+            let handle = loops.remove(stream_id.as_str());
+            let linked_handle = handle.as_ref()
+                .and_then(|h| h.linked_stream_id.as_ref())
+                .and_then(|linked_id| loops.remove(linked_id));
+            (handle, linked_handle)
         };
 
         if let Some(handle) = handle {
             handle.cancel.cancel();
-            // Wait for the loop to finish (with timeout)
             let _ = tokio::time::timeout(Duration::from_secs(5), handle.join_handle).await;
+            // Linked handle shares the same CancellationToken, just await its join
+            if let Some(linked) = linked_handle {
+                let _ = tokio::time::timeout(Duration::from_secs(5), linked.join_handle).await;
+            }
             Ok(())
         } else {
             Err(Error::Other(format!(
@@ -369,6 +390,7 @@ mod tests {
             cancel,
             state_tx,
             join_handle,
+            linked_stream_id: None,
         };
 
         streams.insert(handle).await;
@@ -395,6 +417,7 @@ mod tests {
             cancel: cancel.clone(),
             state_tx,
             join_handle,
+            linked_stream_id: None,
         };
 
         streams.insert(handle).await;

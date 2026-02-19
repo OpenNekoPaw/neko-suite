@@ -180,26 +180,37 @@ impl Controller for TimelineController {
                     ..Default::default()
                 };
 
-                let (stream_id, rx) = self
+                let result = self
                     .timeline_service
                     .start_stream(&timeline, &session_id, config.clone())
                     .await?;
 
-                // Register the stream into StreamRegistry so WebSocket subscribers can find it
+                // Register both video and audio streams into StreamRegistry
                 let cancel_token = CancellationToken::new();
                 self.stream_registry
                     .register_external_stream(
-                        stream_id.clone(),
+                        result.video_stream_id.clone(),
                         &session_id,
-                        "",  // no specific resource_id for timeline streams
+                        "",
+                        config.clone(),
+                        result.video_rx,
+                        cancel_token.clone(),
+                    )
+                    .await;
+                self.stream_registry
+                    .register_external_stream(
+                        result.audio_stream_id.clone(),
+                        &session_id,
+                        "",
                         config,
-                        rx,
+                        result.audio_rx,
                         cancel_token,
                     )
                     .await;
 
                 let response = serde_json::json!({
-                    "streamId": stream_id.as_str(),
+                    "videoStreamId": result.video_stream_id.as_str(),
+                    "audioStreamId": result.audio_stream_id.as_str(),
                     "status": "active",
                 });
 

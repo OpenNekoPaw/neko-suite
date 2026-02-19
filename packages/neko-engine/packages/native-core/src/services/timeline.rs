@@ -6,6 +6,23 @@ use neko_types::{LoopRegion, StreamId};
 use std::path::Path;
 use tokio::sync::broadcast;
 
+/// Result of starting a timeline stream (video + audio paired streams)
+pub struct TimelineStreamResult {
+    pub video_stream_id: StreamId,
+    pub video_rx: broadcast::Receiver<FrameData>,
+    pub audio_stream_id: StreamId,
+    pub audio_rx: broadcast::Receiver<FrameData>,
+}
+
+impl std::fmt::Debug for TimelineStreamResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TimelineStreamResult")
+            .field("video_stream_id", &self.video_stream_id)
+            .field("audio_stream_id", &self.audio_stream_id)
+            .finish()
+    }
+}
+
 /// Timeline service interface
 ///
 /// Handles timeline composition and playback: compositing frames,
@@ -22,13 +39,13 @@ pub trait ITimelineService: Send + Sync {
         frame_number: u64,
     ) -> Result<FrameData>;
 
-    /// Start a timeline stream for preview
+    /// Start a timeline stream for preview (returns paired video + audio streams)
     async fn start_stream(
         &self,
         timeline: &Timeline,
         session_id: &str,
         config: StreamConfig,
-    ) -> Result<(StreamId, broadcast::Receiver<FrameData>)>;
+    ) -> Result<TimelineStreamResult>;
 
     /// Stop a timeline stream
     async fn stop_stream(&self, stream_id: &StreamId) -> Result<()>;

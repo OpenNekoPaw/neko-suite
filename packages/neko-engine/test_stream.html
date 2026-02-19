@@ -321,6 +321,9 @@ async function seekByClick(group, streamId, container, event) {
   if (group === 'audios') {
     audioPtsOffset = null;
   }
+  if (group === 'timelines') {
+    tlAudioPtsOffset = null;
+  }
   await dispatch(group, 'seek', { streamId, time });
 }
 
@@ -689,11 +692,379 @@ async function seekStream(group, streamId, time) {
   if (group === 'audios') {
     audioPtsOffset = null;
   }
+  if (group === 'timelines') {
+    tlAudioPtsOffset = null;
+  }
   await dispatch(group, 'seek', { streamId, time });
 }
 
+// ─── Tab Switching ───
+function switchTab(tabName) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-bar button').forEach(el => el.classList.remove('active'));
+  document.getElementById(`tab-${tabName}`).classList.add('active');
+  // Activate the clicked button
+  event.target.classList.add('active');
+}
+
+// ─── JVI File Loading ───
+function loadJviFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('jviContent').value = e.target.result;
+    log(`Loaded JVI file: ${file.name} (${e.target.result.length} bytes)`, 'ok');
+  };
+  reader.readAsText(file);
+}
+
+// ─── Timeline Probe ───
+async function probeTimeline() {
+  const jviPath = document.getElementById('jviPath').value;
+  if (!jviPath) { log('No JVI path specified', 'warn'); return; }
+
+  const resp = await dispatch('timelines', 'probe', { source: jviPath });
+  if (resp.status === 'ok' && resp.data) {
+    const d = resp.data;
+    tlDuration = d.duration || 0;
+    document.getElementById('jviInfo').innerHTML =
+      `<strong>${d.name || 'Untitled'}</strong> v${d.version || '?'} | ` +
+      `<span>${d.width}x${d.height}</span> @ <span>${d.fps}fps</span> | ` +
+      `Duration: <span>${formatTime(tlDuration)}</span> | ` +
+      `Tracks: <span>${d.trackCount}</span> | ` +
+      `Elements: <span>${d.elementCount}</span>`;
+    document.getElementById('tlTime').textContent = `00:00 / ${formatTime(tlDuration)}`;
+
+    // Check media references
+    if (d.mediaReferences && d.mediaReferences.length > 0) {
+      const missing = d.mediaReferences.filter(r => !r.exists);
+      if (missing.length > 0) {
+        log(`Warning: ${missing.length} media file(s) missing: ${missing.map(r => r.path).join(', ')}`, 'warn');
+      } else {
+        log(`All ${d.mediaReferences.length} media reference(s) found`, 'ok');
+      }
+    }
+  }
+}
+
+// ─── Timeline Stream ───
+let tlStreamId = null;       // video stream id (used for playback control)
+let tlAudioStreamId = null;  // audio stream id
+let tlDuration = 0;
+let tlWs = null;
+let tlAudioWs = null;
+let tlDecoder = null;
+let tlFrameCount = 0;
+let tlWsFrameCount = 0;
+let tlFpsFrames = 0;
+let tlLastFpsTime = performance.now();
+let tlStarting = false;
+let tlAudioCtx = null;
+let tlAudioGainNode = null;
+let tlAudioPlaybackTime = 0;
+let tlAudioPtsOffset = null;
+let tlAudioChunkCount = 0;
+
+const tlCanvas = document.getElementById('tlCanvas');
+const tlCtx2d = tlCanvas.getContext('2d');
+
+async function startTimelineStream() {
+  if (tlStarting) return;
+  tlStarting = true;
+
+  // Stop existing stream first
+  if (tlStreamId) {
+    await dispatch('timelines', 'stop', { streamId: tlStreamId });
+    if (tlWs) { tlWs.close(); tlWs = null; }
+    if (tlAudioWs) { tlAudioWs.close(); tlAudioWs = null; }
+    if (tlDecoder) { tlDecoder.close(); tlDecoder = null; }
+    tlStreamId = null;
+    tlAudioStreamId = null;
+  }
+
+  // Get timeline JSON from textarea
+  let timelineJson;
+  const jviContent = document.getElementById('jviContent').value.trim();
+  if (!jviContent) {
+    log('No timeline JSON loaded. Use Browse to load a .jvi file or paste JSON.', 'warn');
+    tlStarting = false;
+    return;
+  }
+  try {
+    timelineJson = JSON.parse(jviContent);
+  } catch (e) {
+    log(`Invalid JSON: ${e.message}`, 'err');
+    tlStarting = false;
+    return;
+  }
+
+  // Reset state
+  tlFrameCount = 0;
+  tlWsFrameCount = 0;
+  tlFpsFrames = 0;
+  tlLastFpsTime = performance.now();
+  tlAudioChunkCount = 0;
+  tlAudioPtsOffset = null;
+  document.getElementById('tlProgress').style.width = '0%';
+  document.getElementById('tlFrameCount').textContent = '0';
+  document.getElementById('tlFps').textContent = '0';
+  document.getElementById('tlFrameSize').textContent = '0';
+
+  // Get timeline metadata for duration
+  const width = timelineJson.resolution?.width || 1920;
+  const height = timelineJson.resolution?.height || 1080;
+  const fps = timelineJson.fps || 30;
+
+  // Calculate duration from elements if not probed
+  if (tlDuration <= 0) {
+    let maxEnd = 0;
+    for (const track of (timelineJson.tracks || [])) {
+      for (const elem of (track.elements || [])) {
+        const end = (elem.startTime || 0) + (elem.duration || 0);
+        if (end > maxEnd) maxEnd = end;
+      }
+    }
+    tlDuration = maxEnd;
+  }
+  document.getElementById('tlTime').textContent = `00:00 / ${formatTime(tlDuration)}`;
+
+  // Build stream options
+  const options = {
+    sessionId: 'test-timeline',
+    width,
+    height,
+    fps,
+  };
+
+  // Start stream — timeline JSON goes in body
+  const resp = await dispatch('timelines', 'stream', options, timelineJson);
+  tlStarting = false;
+  if (resp.status !== 'ok') return;
+
+  // Parse paired stream IDs
+  tlStreamId = resp.data.videoStreamId;
+  tlAudioStreamId = resp.data.audioStreamId;
+  log(`Timeline video stream: ${tlStreamId}`, 'ok');
+  log(`Timeline audio stream: ${tlAudioStreamId}`, 'ok');
+
+  // Resize canvas to match aspect ratio
+  const aspectRatio = width / height;
+  tlCanvas.width = 960;
+  tlCanvas.height = Math.round(960 / aspectRatio);
+
+  // Init WebCodecs decoder
+  initTimelineDecoder();
+
+  // Connect video WebSocket
+  connectTimelineWs(tlStreamId);
+
+  // Init audio context and connect audio WebSocket
+  if (!tlAudioCtx) {
+    tlAudioCtx = new AudioContext({ sampleRate: 48000 });
+    log(`Timeline AudioContext created: sampleRate=${tlAudioCtx.sampleRate}`, 'info');
+  }
+  if (!tlAudioGainNode) {
+    tlAudioGainNode = tlAudioCtx.createGain();
+    tlAudioGainNode.connect(tlAudioCtx.destination);
+  }
+  if (tlAudioCtx.state === 'suspended') {
+    await tlAudioCtx.resume().catch(() => {});
+  }
+  connectTimelineAudioWs(tlAudioStreamId);
+}
+
+function initTimelineDecoder() {
+  if (tlDecoder) {
+    tlDecoder.close();
+  }
+
+  tlDecoder = new VideoDecoder({
+    output: (frame) => {
+      tlCtx2d.drawImage(frame, 0, 0, tlCanvas.width, tlCanvas.height);
+      frame.close();
+
+      tlFrameCount++;
+      tlFpsFrames++;
+      document.getElementById('tlFrameCount').textContent = tlFrameCount;
+
+      const now = performance.now();
+      if (now - tlLastFpsTime >= 1000) {
+        document.getElementById('tlFps').textContent = tlFpsFrames.toFixed(1);
+        tlFpsFrames = 0;
+        tlLastFpsTime = now;
+      }
+    },
+    error: (e) => {
+      log(`Timeline VideoDecoder error: ${e.message}`, 'err');
+    }
+  });
+
+  tlDecoder.configure({
+    codec: 'avc1.640028',
+    optimizeForLatency: true,
+  });
+
+  log('Timeline VideoDecoder configured (avc1.640028)', 'info');
+}
+
+function connectTimelineWs(streamId) {
+  const url = `${wsUrl()}/v1/streams/${streamId}`;
+  log(`Connecting timeline WS: ${url}`);
+
+  tlWs = new WebSocket(url);
+  tlWs.binaryType = 'arraybuffer';
+
+  tlWs.onopen = () => {
+    document.getElementById('tlWsState').textContent = 'connected';
+    log('Timeline WebSocket connected', 'ok');
+  };
+
+  tlWs.onmessage = (event) => {
+    const data = new Uint8Array(event.data);
+    document.getElementById('tlFrameSize').textContent = data.byteLength;
+
+    // Same H.264 wire format: [pts:i64 LE][dts:i64 LE][is_keyframe:u8][duration:i64 LE][NAL data...]
+    if (data.byteLength < 25) {
+      log(`Timeline frame too small: ${data.byteLength}`, 'warn');
+      return;
+    }
+
+    const view = new DataView(event.data);
+    const pts = Number(view.getBigInt64(0, true));
+    const dts = Number(view.getBigInt64(8, true));
+    const isKeyframe = data[16] === 1;
+    const duration = Number(view.getBigInt64(17, true));
+    const nalData = data.slice(25);
+
+    tlWsFrameCount++;
+
+    // Update progress
+    updateProgress('tlProgress', 'tlTime', pts / 1_000_000, tlDuration);
+
+    if (tlWsFrameCount <= 3 || tlWsFrameCount % 100 === 0) {
+      log(`TL WS #${tlWsFrameCount}: pts=${pts} dts=${dts} key=${isKeyframe} dur=${duration} nal=${nalData.byteLength}B`);
+    }
+
+    try {
+      const chunk = new EncodedVideoChunk({
+        type: isKeyframe ? 'key' : 'delta',
+        timestamp: pts,
+        duration: duration > 0 ? duration : undefined,
+        data: nalData,
+      });
+
+      if (tlDecoder && tlDecoder.state === 'configured') {
+        tlDecoder.decode(chunk);
+      }
+    } catch (e) {
+      log(`Timeline decode error: ${e.message}`, 'err');
+    }
+  };
+
+  tlWs.onclose = (event) => {
+    document.getElementById('tlWsState').textContent = `closed (${event.code})`;
+    log(`Timeline WebSocket closed: code=${event.code} reason=${event.reason}`, 'warn');
+  };
+
+  tlWs.onerror = () => {
+    log('Timeline WebSocket error', 'err');
+  };
+}
+
+function connectTimelineAudioWs(streamId) {
+  const url = `${wsUrl()}/v1/streams/${streamId}`;
+  log(`Connecting timeline audio WS: ${url}`);
+
+  tlAudioWs = new WebSocket(url);
+  tlAudioWs.binaryType = 'arraybuffer';
+
+  tlAudioWs.onopen = () => {
+    log('Timeline audio WebSocket connected', 'ok');
+  };
+
+  tlAudioWs.onmessage = (event) => {
+    if (!(event.data instanceof ArrayBuffer)) return;
+    if (!tlAudioCtx || !tlAudioGainNode) return;
+
+    const packet = parsePcmPacket(event.data);
+    if (!packet) return;
+
+    tlAudioChunkCount++;
+
+    if (tlAudioChunkCount <= 3 || tlAudioChunkCount % 200 === 0) {
+      log(`TL Audio #${tlAudioChunkCount}: pts=${packet.pts} dur=${packet.duration} sr=${packet.sampleRate} ch=${packet.channels} pcmBytes=${packet.pcmData.byteLength}`);
+    }
+
+    try {
+      const floats = new Float32Array(
+        packet.pcmData.buffer,
+        packet.pcmData.byteOffset,
+        packet.pcmData.byteLength / 4,
+      );
+      const channels = packet.channels || 2;
+      const samplesPerChannel = floats.length / channels;
+      if (samplesPerChannel <= 0) return;
+
+      const audioBuffer = tlAudioCtx.createBuffer(channels, samplesPerChannel, packet.sampleRate);
+      for (let ch = 0; ch < channels; ch++) {
+        const channelData = audioBuffer.getChannelData(ch);
+        for (let i = 0; i < samplesPerChannel; i++) {
+          channelData[i] = floats[i * channels + ch];
+        }
+      }
+
+      // Initialize PTS offset on first frame
+      const ptsSeconds = packet.pts / 1_000_000;
+      if (tlAudioPtsOffset === null) {
+        tlAudioPtsOffset = tlAudioCtx.currentTime - ptsSeconds;
+        tlAudioPlaybackTime = tlAudioCtx.currentTime;
+      }
+
+      // Schedule buffer for sequential playback
+      const now = tlAudioCtx.currentTime;
+      if (tlAudioPlaybackTime < now) tlAudioPlaybackTime = now;
+
+      const source = tlAudioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(tlAudioGainNode);
+      source.start(tlAudioPlaybackTime);
+      tlAudioPlaybackTime += audioBuffer.duration;
+    } catch (e) {
+      log(`TL audio playback error: ${e.message}`, 'err');
+    }
+  };
+
+  tlAudioWs.onclose = (event) => {
+    log(`Timeline audio WebSocket closed: code=${event.code}`, 'warn');
+  };
+
+  tlAudioWs.onerror = () => {
+    log('Timeline audio WebSocket error', 'err');
+  };
+}
+
+// ─── Timeline Playback Controls ───
+async function setTimelineSpeed() {
+  if (!tlStreamId) { log('No timeline stream active', 'warn'); return; }
+  const speed = parseFloat(document.getElementById('tlSpeed').value) || 1.0;
+  await dispatch('timelines', 'speed', { streamId: tlStreamId, speed });
+}
+
+async function setTimelineLoop() {
+  if (!tlStreamId) { log('No timeline stream active', 'warn'); return; }
+  const inPoint = parseFloat(document.getElementById('tlLoopIn').value) || 0;
+  const outPoint = parseFloat(document.getElementById('tlLoopOut').value) || 10;
+  await dispatch('timelines', 'loop', { streamId: tlStreamId, inPoint, outPoint });
+}
+
+async function clearTimelineLoop() {
+  if (!tlStreamId) { log('No timeline stream active', 'warn'); return; }
+  await dispatch('timelines', 'loop', { streamId: tlStreamId, clear: true });
+}
+
 // ─── Init ───
-log('Test page loaded. Click "Start Video" or "Start Audio" to begin.', 'info');
+log('Test page loaded. Click "Start Video", "Start Audio", or switch to Timeline tab.', 'info');
 </script>
 </body>
 </html>
