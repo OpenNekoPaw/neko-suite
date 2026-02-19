@@ -375,16 +375,25 @@ export class AudioStreamClient {
 
 	/**
 	 * Reset audio clock state after a seek operation.
-	 * Applies a brief mute to avoid audible glitches, then clears
-	 * the PTS offset so the next packet re-establishes the clock
+	 *
+	 * Disconnects the old GainNode (silencing all previously scheduled
+	 * AudioBufferSourceNodes that are still playing from the pre-seek
+	 * position) and creates a fresh GainNode for post-seek audio.
+	 * Clears the PTS offset so the next packet re-establishes the clock
 	 * (and triggers a fresh fade-in via prebuffer).
 	 */
 	resetClock(): void {
-		// Immediately mute to prevent stale-buffer glitches during seek
-		if (this.gainNode && this.audioCtx) {
-			const now = this.audioCtx.currentTime;
-			this.gainNode.gain.cancelScheduledValues(now);
-			this.gainNode.gain.setValueAtTime(0, now);
+		if (this.audioCtx) {
+			// Disconnect old gain node — all previously scheduled sources
+			// still reference it but now play into a disconnected graph (silent).
+			if (this.gainNode) {
+				this.gainNode.disconnect();
+			}
+
+			// Create a fresh gain node for post-seek audio
+			this.gainNode = this.audioCtx.createGain();
+			this.gainNode.gain.value = 0; // start muted; fade-in happens on prebuffer complete
+			this.gainNode.connect(this.audioCtx.destination);
 		}
 
 		this.ptsOffset = null;

@@ -165,23 +165,39 @@ export class FrameScheduler {
 
 		const offset = this.avOffsetUs ?? 0;
 
-		// Skip all frames that are too late
+		// Walk the queue: skip old frames, but always keep the latest
+		// behind frame as a candidate to render. This ensures we show
+		// the most recent available frame even when video delivery lags
+		// behind the audio master clock.
+		let lastBehind: VideoFrame | null = null;
+
 		while (this.queue.length > 0) {
 			const head = this.queue[0];
 			const adjustedPts = head.timestamp + offset;
 			const delta = adjustedPts - masterClockUs;
 
 			if (delta < -this.syncThresholdUs) {
-				// Frame is behind — skip it
+				// Frame is behind the clock
 				this.queue.shift();
-				head.close();
-				skipped++;
-				this.stats.skipped++;
+
+				// Close the previous behind-frame (truly stale), keep this one
+				if (lastBehind) {
+					lastBehind.close();
+					skipped++;
+					this.stats.skipped++;
+				}
+				lastBehind = head;
 				continue;
 			}
 
 			if (delta <= this.syncThresholdUs) {
 				// Frame is within tolerance — render it
+				// Discard the behind candidate (superseded by this on-time frame)
+				if (lastBehind) {
+					lastBehind.close();
+					skipped++;
+					this.stats.skipped++;
+				}
 				this.queue.shift();
 				this.stats.rendered++;
 				this.stats.lastSyncDelta = delta;
@@ -190,12 +206,30 @@ export class FrameScheduler {
 			}
 
 			// Frame is in the future — wait
+			// But if we have a behind candidate, render it (best effort)
+			if (lastBehind) {
+				const behindDelta = (lastBehind.timestamp + offset) - masterClockUs;
+				this.stats.rendered++;
+				this.stats.lastSyncDelta = behindDelta;
+				this.stats.queueLength = this.queue.length;
+				return { action: 'render', frame: lastBehind, skipped, deltaUs: behindDelta };
+			}
+
 			this.stats.lastSyncDelta = delta;
 			this.stats.queueLength = this.queue.length;
 			return { action: 'wait', skipped, deltaUs: delta };
 		}
 
-		// Queue empty
+		// Queue exhausted — if we held a behind frame, render it (best available)
+		if (lastBehind) {
+			const behindDelta = (lastBehind.timestamp + offset) - masterClockUs;
+			this.stats.rendered++;
+			this.stats.lastSyncDelta = behindDelta;
+			this.stats.queueLength = 0;
+			return { action: 'render', frame: lastBehind, skipped, deltaUs: behindDelta };
+		}
+
+		// Queue truly empty
 		this.stats.queueLength = 0;
 		return { action: 'wait', skipped, deltaUs: 0 };
 	}
