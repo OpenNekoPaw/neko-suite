@@ -51,7 +51,7 @@ impl FrameData {
         match self.format {
             FrameFormat::Rgba => pixels * 4,
             FrameFormat::Nv12 => pixels * 3 / 2,
-            FrameFormat::Jpeg | FrameFormat::Png | FrameFormat::Webp | FrameFormat::H264 | FrameFormat::PcmF32 | FrameFormat::Opus | FrameFormat::Fmp4 => self.data.len(), // Compressed/packed
+            FrameFormat::Jpeg | FrameFormat::Png | FrameFormat::Webp | FrameFormat::H264 | FrameFormat::PcmF32 | FrameFormat::Opus => self.data.len(), // Compressed/packed
         }
     }
 }

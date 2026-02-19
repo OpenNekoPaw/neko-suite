@@ -460,6 +460,7 @@ impl ITimelineService for TimelineService {
                         let enc = encoder.clone();
                         let tl_width = width;
                         let tl_height = height;
+                        let tl_fps = fps;
                         let tl_clone = timeline.clone();
                         let current_frame = frame_number;
 
@@ -586,7 +587,7 @@ impl ITimelineService for TimelineService {
 
                             let frames: Vec<FrameData> = packets
                                 .iter()
-                                .map(|p| pack_h264_frame(p, tl_width, tl_height))
+                                .map(|p| pack_h264_frame(p, tl_width, tl_height, 1.0 / tl_fps as f64))
                                 .collect();
 
                             Ok(frames)
@@ -619,7 +620,7 @@ impl ITimelineService for TimelineService {
                 let mut e = enc.lock().unwrap();
                 if let Ok(packets) = Encoder::flush(&mut *e) {
                     for p in &packets {
-                        let _ = tx.send(pack_h264_frame(p, width, height));
+                        let _ = tx.send(pack_h264_frame(p, width, height, 1.0 / fps));
                     }
                 }
                 Encoder::close(&mut *e);

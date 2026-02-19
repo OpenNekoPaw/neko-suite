@@ -255,8 +255,8 @@ impl AudioDecoder for FfmpegAudioDecoder {
             return Err(Error::InvalidSeek(time_seconds));
         }
 
-        // Convert time to timestamp
-        let timestamp = (time_seconds / self.time_base) as i64;
+        // avformat_seek_file uses AV_TIME_BASE (microseconds) by default
+        let timestamp = (time_seconds * ffmpeg::ffi::AV_TIME_BASE as f64) as i64;
 
         // Seek
         input_ctx.seek(timestamp, ..timestamp)?;

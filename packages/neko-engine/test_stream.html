@@ -17,6 +17,7 @@
   button.warn { background: #b8860b; color: #fff; }
   input[type=text] { padding: 6px 10px; border: 1px solid #333; border-radius: 4px; background: #0f3460; color: #eee; font-size: 13px; width: 400px; }
   canvas { background: #000; border-radius: 4px; max-width: 100%; }
+  video { background: #000; border-radius: 4px; max-width: 100%; }
   #log { background: #0a0a1a; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
   .log-info { color: #7ec8e3; }
   .log-ok { color: #50fa7b; }
@@ -24,6 +25,9 @@
   .log-err { color: #ff5555; }
   .stats { display: flex; gap: 20px; font-size: 13px; color: #aaa; margin-top: 8px; }
   .stats span { color: #7ec8e3; }
+  .progress-container { position: relative; height: 24px; background: #0a0a1a; border-radius: 4px; cursor: pointer; margin-top: 8px; }
+  .progress-fill { height: 100%; background: #0f3460; border-radius: 4px; transition: width 0.1s linear; }
+  .progress-time { position: absolute; top: 0; right: 8px; line-height: 24px; font-size: 12px; color: #aaa; }
   .row { display: flex; gap: 16px; }
   .row > * { flex: 1; }
 </style>
@@ -54,6 +58,10 @@
       <button class="danger" onclick="controlStream('videos','stop', videoStreamId)">⏹ Stop</button>
     </div>
     <canvas id="videoCanvas" width="960" height="540"></canvas>
+    <div class="progress-container" onclick="seekByClick('videos', videoStreamId, this, event)">
+      <div class="progress-fill" id="vProgress" style="width:0%"></div>
+      <span class="progress-time" id="vTime">00:00 / 00:00</span>
+    </div>
     <div class="stats">
       Frames: <span id="vFrameCount">0</span> |
       FPS: <span id="vFps">0</span> |
@@ -68,9 +76,15 @@
       <button class="primary" onclick="startAudioStream()">▶ Start Audio</button>
       <button class="warn" onclick="controlStream('audios','pause', audioStreamId)">⏸ Pause</button>
       <button class="primary" onclick="controlStream('audios','resume', audioStreamId)">⏵ Resume</button>
+      <button class="primary" onclick="seekStream('audios', audioStreamId, 5.0)">⏩ Seek 5s</button>
+      <button class="primary" onclick="seekStream('audios', audioStreamId, 0)">⏪ Seek 0s</button>
       <button class="danger" onclick="controlStream('audios','stop', audioStreamId)">⏹ Stop</button>
     </div>
-    <div class="stats" style="margin-top: 40px;">
+    <div class="progress-container" onclick="seekByClick('audios', audioStreamId, this, event)">
+      <div class="progress-fill" id="aProgress" style="width:0%"></div>
+      <span class="progress-time" id="aTime">00:00 / 00:00</span>
+    </div>
+    <div class="stats" style="margin-top: 8px;">
       Chunks: <span id="aChunkCount">0</span> |
       Sample Rate: <span id="aSampleRate">-</span> |
       Channels: <span id="aChannels">-</span> |
@@ -80,14 +94,111 @@
 </div>
 
 <div class="panel">
+  <h2>API Capability Detection</h2>
+  <div id="apiResults" style="font-family: monospace; font-size: 12px; line-height: 1.8;"></div>
+  <button class="primary" onclick="runApiDetection()" style="margin-top: 8px;">🔍 Re-run Detection</button>
+</div>
+
+<div class="panel">
   <h2>Log</h2>
   <div id="log"></div>
 </div>
 
 <script>
+// ─── API Capability Detection ───
+async function runApiDetection() {
+  const el = document.getElementById('apiResults');
+  const results = [];
+
+  function check(name, value) {
+    const icon = value ? '✅' : '❌';
+    const color = value ? '#50fa7b' : '#ff5555';
+    results.push(`<span style="color:${color}">${icon} ${name}</span>: ${typeof value === 'string' ? value : (value ? 'supported' : 'NOT supported')}`);
+  }
+
+  // 1. WebCodecs
+  check('VideoDecoder (WebCodecs)', typeof VideoDecoder !== 'undefined');
+  check('AudioDecoder (WebCodecs)', typeof AudioDecoder !== 'undefined');
+  check('EncodedVideoChunk', typeof EncodedVideoChunk !== 'undefined');
+  check('EncodedAudioChunk', typeof EncodedAudioChunk !== 'undefined');
+
+  // 2. MediaSource
+  check('MediaSource', typeof MediaSource !== 'undefined');
+  check('ManagedMediaSource', typeof ManagedMediaSource !== 'undefined');
+
+  // 3. MediaSource.isTypeSupported — fMP4 codec combos
+  if (typeof MediaSource !== 'undefined') {
+    const types = [
+      'video/mp4; codecs="avc1.640028"',
+      'video/mp4; codecs="avc1.42E01E"',
+      'video/mp4; codecs="avc1.640028, opus"',
+      'video/mp4; codecs="avc1.640028, mp4a.40.2"',
+      'video/mp4; codecs="hev1.1.6.L93.B0"',
+      'video/mp4; codecs="vp09.00.10.08"',
+      'video/webm; codecs="vp8, opus"',
+      'video/webm; codecs="vp9, opus"',
+      'audio/mp4; codecs="opus"',
+      'audio/mp4; codecs="mp4a.40.2"',
+      'audio/webm; codecs="opus"',
+    ];
+    for (const t of types) {
+      check(`MSE: ${t}`, MediaSource.isTypeSupported(t));
+    }
+  } else {
+    results.push('<span style="color:#ff5555">❌ MediaSource not available — skipping isTypeSupported checks</span>');
+  }
+
+  // 4. WebCodecs codec support (async)
+  if (typeof VideoDecoder !== 'undefined') {
+    try {
+      const h264 = await VideoDecoder.isConfigSupported({ codec: 'avc1.640028', optimizeForLatency: true });
+      check('WebCodecs VideoDecoder H.264 High', h264.supported);
+    } catch { check('WebCodecs VideoDecoder H.264 High', false); }
+    try {
+      const h264b = await VideoDecoder.isConfigSupported({ codec: 'avc1.42E01E' });
+      check('WebCodecs VideoDecoder H.264 Baseline', h264b.supported);
+    } catch { check('WebCodecs VideoDecoder H.264 Baseline', false); }
+    try {
+      const vp9 = await VideoDecoder.isConfigSupported({ codec: 'vp09.00.10.08' });
+      check('WebCodecs VideoDecoder VP9', vp9.supported);
+    } catch { check('WebCodecs VideoDecoder VP9', false); }
+  }
+
+  if (typeof AudioDecoder !== 'undefined') {
+    try {
+      const opus = await AudioDecoder.isConfigSupported({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2 });
+      check('WebCodecs AudioDecoder Opus', opus.supported);
+    } catch { check('WebCodecs AudioDecoder Opus', false); }
+    try {
+      const aac = await AudioDecoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: 44100, numberOfChannels: 2 });
+      check('WebCodecs AudioDecoder AAC', aac.supported);
+    } catch { check('WebCodecs AudioDecoder AAC', false); }
+  }
+
+  // 5. Other APIs
+  check('Web Audio API (AudioContext)', typeof AudioContext !== 'undefined');
+  check('WebSocket', typeof WebSocket !== 'undefined');
+  check('Canvas 2D', !!document.createElement('canvas').getContext('2d'));
+  check('OffscreenCanvas', typeof OffscreenCanvas !== 'undefined');
+  check('requestVideoFrameCallback', 'requestVideoFrameCallback' in HTMLVideoElement.prototype);
+
+  // 6. Environment info
+  results.push(`<br><span style="color:#999">User-Agent: ${navigator.userAgent}</span>`);
+
+  el.innerHTML = results.join('<br>');
+}
+
+// Run on load
+runApiDetection();
+
 // ─── State ───
 let videoStreamId = null;
 let audioStreamId = null;
+let videoDuration = 0;   // total duration in seconds (from probe)
+let audioDuration = 0;
+let videoPts = 0;        // current PTS in microseconds (from WS)
+let audioPts = 0;        // current PTS in microseconds (from WS)
+let videoFps = 0;        // fps from probe
 let videoWs = null;
 let audioWs = null;
 let videoDecoder = null;
@@ -97,6 +208,11 @@ let wsFrameCount = 0;
 let aChunkCount = 0;
 let fpsFrames = 0;
 let lastFpsTime = performance.now();
+
+// Stutter detection
+let lastWsTime = 0;       // last WS message arrival time
+let lastDecodeTime = 0;   // last decoded frame output time
+let stutterThreshold = 50; // ms — log if gap exceeds this
 
 const canvas = document.getElementById('videoCanvas');
 const ctx2d = canvas.getContext('2d');
@@ -110,6 +226,35 @@ function log(msg, level = 'info') {
   el.appendChild(line);
   el.scrollTop = el.scrollHeight;
   console.log(`[${level}]`, msg);
+}
+
+// ─── Progress Bar ───
+function formatTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function updateProgress(fillId, timeId, currentSec, durationSec) {
+  if (durationSec <= 0 || currentSec < 0) return;
+  const pct = Math.min(100, (currentSec / durationSec) * 100);
+  document.getElementById(fillId).style.width = pct + '%';
+  document.getElementById(timeId).textContent =
+    `${formatTime(currentSec)} / ${formatTime(durationSec)}`;
+}
+
+async function seekByClick(group, streamId, container, event) {
+  if (!streamId) { log(`No ${group} stream active`, 'warn'); return; }
+  const duration = group === 'videos' ? videoDuration : audioDuration;
+  if (duration <= 0) { log(`No duration info for ${group}`, 'warn'); return; }
+  const rect = container.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  const time = pct * duration;
+  log(`Seek ${group} to ${formatTime(time)} (${(pct * 100).toFixed(1)}%)`, 'info');
+  if (group === 'audios') {
+    audioPtsOffset = null;
+  }
+  await dispatch(group, 'seek', { streamId, time });
 }
 
 // ─── HTTP helpers ───
@@ -152,6 +297,25 @@ async function startVideoStream() {
   vFrameCount = 0;
   wsFrameCount = 0;
   fpsFrames = 0;
+  videoDuration = 0;
+  videoPts = 0;
+  videoFps = 0;
+  document.getElementById('vProgress').style.width = '0%';
+  document.getElementById('vTime').textContent = '00:00 / 00:00';
+
+  // 0. Probe to get duration and fps
+  const probeResp = await dispatch('videos', 'probe', { source: videoPath });
+  if (probeResp.status === 'ok' && probeResp.data) {
+    if (probeResp.data.duration) {
+      videoDuration = probeResp.data.duration;
+      log(`Video duration: ${formatTime(videoDuration)} (${videoDuration.toFixed(2)}s)`, 'ok');
+      document.getElementById('vTime').textContent = `00:00 / ${formatTime(videoDuration)}`;
+    }
+    if (probeResp.data.videoStreams && probeResp.data.videoStreams.length > 0) {
+      videoFps = probeResp.data.videoStreams[0].fps || 0;
+      log(`Video fps: ${videoFps}`, 'ok');
+    }
+  }
 
   // 1. Start stream via API
   const resp = await dispatch('videos', 'stream', { source: videoPath, sessionId: 'test-session' });
@@ -183,8 +347,17 @@ function initVideoDecoder() {
       fpsFrames++;
       document.getElementById('vFrameCount').textContent = vFrameCount;
 
-      // Calculate FPS every second
+      // Stutter detection: decoded frame interval
       const now = performance.now();
+      if (lastDecodeTime > 0) {
+        const gap = now - lastDecodeTime;
+        if (gap > stutterThreshold) {
+          log(`⚠ DECODE gap ${gap.toFixed(1)}ms (frame #${vFrameCount})`, 'warn');
+        }
+      }
+      lastDecodeTime = now;
+
+      // Calculate FPS every second
       if (now - lastFpsTime >= 1000) {
         document.getElementById('vFps').textContent = fpsFrames.toFixed(1);
         fpsFrames = 0;
@@ -220,6 +393,16 @@ function connectVideoWs(streamId) {
     const data = new Uint8Array(event.data);
     document.getElementById('vFrameSize').textContent = data.byteLength;
 
+    // Stutter detection: WS arrival interval
+    const wsNow = performance.now();
+    if (lastWsTime > 0) {
+      const wsGap = wsNow - lastWsTime;
+      if (wsGap > stutterThreshold) {
+        log(`⚠ WS gap ${wsGap.toFixed(1)}ms (ws #${wsFrameCount + 1}, size=${data.byteLength}B)`, 'warn');
+      }
+    }
+    lastWsTime = wsNow;
+
     // Parse header: [pts:i64 LE][dts:i64 LE][is_keyframe:u8][duration:i64 LE][NAL data...]
     if (data.byteLength < 25) {
       log(`Video frame too small: ${data.byteLength}`, 'warn');
@@ -234,6 +417,11 @@ function connectVideoWs(streamId) {
     const nalData = data.slice(25);
 
     wsFrameCount++;
+    videoPts = pts;
+
+    // PTS is now in microseconds from backend — update progress directly
+    updateProgress('vProgress', 'vTime', pts / 1_000_000, videoDuration);
+
     if (wsFrameCount <= 3 || wsFrameCount % 100 === 0) {
       log(`WS #${wsFrameCount}: pts=${pts} dts=${dts} key=${isKeyframe} dur=${duration} nal=${nalData.byteLength}B`);
     }
@@ -354,6 +542,18 @@ async function startAudioStream() {
   const videoPath = document.getElementById('videoPath').value;
   aChunkCount = 0;
   audioPtsOffset = null;
+  audioDuration = 0;
+  audioPts = 0;
+  document.getElementById('aProgress').style.width = '0%';
+  document.getElementById('aTime').textContent = '00:00 / 00:00';
+
+  // 0. Probe to get duration
+  const probeResp = await dispatch('audios', 'probe', { source: videoPath });
+  if (probeResp.status === 'ok' && probeResp.data && probeResp.data.duration) {
+    audioDuration = probeResp.data.duration;
+    log(`Audio duration: ${formatTime(audioDuration)} (${audioDuration.toFixed(2)}s)`, 'ok');
+    document.getElementById('aTime').textContent = `00:00 / ${formatTime(audioDuration)}`;
+  }
 
   const resp = await dispatch('audios', 'stream', { source: videoPath, sessionId: 'test-session' });
   audioStarting = false;
@@ -401,6 +601,8 @@ function connectAudioWs(streamId) {
 
     aChunkCount++;
     document.getElementById('aChunkCount').textContent = aChunkCount;
+    audioPts = packet.pts;
+    updateProgress('aProgress', 'aTime', audioPts / 1_000_000, audioDuration);
 
     if (aChunkCount <= 3 || aChunkCount % 200 === 0) {
       log(`Opus #${aChunkCount}: pts=${packet.pts} dur=${packet.duration} sr=${packet.sampleRate} ch=${packet.channels} size=${packet.opusData.byteLength}B`);
@@ -409,14 +611,11 @@ function connectAudioWs(streamId) {
     document.getElementById('aSampleRate').textContent = packet.sampleRate;
     document.getElementById('aChannels').textContent = packet.channels;
 
-    const timestampUs = (packet.pts / packet.sampleRate) * 1_000_000;
-    const durationUs = (packet.duration / packet.sampleRate) * 1_000_000;
-
     try {
       const chunk = new EncodedAudioChunk({
         type: 'key',
-        timestamp: timestampUs,
-        duration: durationUs,
+        timestamp: packet.pts,      // already in microseconds from backend
+        duration: packet.duration,   // already in microseconds from backend
         data: packet.opusData,
       });
       audioDecoder.decode(chunk);
@@ -443,6 +642,9 @@ async function controlStream(group, action, streamId) {
 
 async function seekStream(group, streamId, time) {
   if (!streamId) { log(`No ${group} stream active`, 'warn'); return; }
+  if (group === 'audios') {
+    audioPtsOffset = null;
+  }
   await dispatch(group, 'seek', { streamId, time });
 }
 

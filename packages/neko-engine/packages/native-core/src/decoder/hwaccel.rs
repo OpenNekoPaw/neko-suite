@@ -177,6 +177,12 @@ impl HwAccelDecoder {
         self.active_hw_type
     }
 
+    /// Get the stream time_base in seconds per PTS unit.
+    /// Only valid after `open()` has been called.
+    pub fn time_base(&self) -> f64 {
+        self.time_base
+    }
+
     /// Decode next frame as NV12 GPU texture
     ///
     /// Returns the raw hardware frame without CPU transfer.
@@ -565,7 +571,8 @@ impl Decoder for HwAccelDecoder {
             return Err(Error::InvalidSeek(time_seconds));
         }
 
-        let timestamp = (time_seconds / self.time_base) as i64;
+        // avformat_seek_file uses AV_TIME_BASE (microseconds) by default
+        let timestamp = (time_seconds * ffmpeg::ffi::AV_TIME_BASE as f64) as i64;
         input_ctx.seek(timestamp, ..timestamp)?;
         decoder.flush();
         self.current_position = time_seconds;

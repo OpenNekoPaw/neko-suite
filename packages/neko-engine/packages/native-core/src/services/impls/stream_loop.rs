@@ -221,14 +221,19 @@ impl FramePacer {
 
 /// Pack an H.264 EncodedPacket into FrameData for broadcast transport
 ///
-/// Wire format: [pts:i64 LE][dts:i64 LE][is_keyframe:u8][duration:i64 LE][H.264 NAL data...]
-pub fn pack_h264_frame(packet: &EncodedPacket, width: u32, height: u32) -> FrameData {
+/// Wire format: [pts_us:i64 LE][dts_us:i64 LE][is_keyframe:u8][duration_us:i64 LE][H.264 NAL data...]
+/// PTS, DTS, and duration are converted from stream time_base units to microseconds.
+pub fn pack_h264_frame(packet: &EncodedPacket, width: u32, height: u32, time_base: f64) -> FrameData {
     let header_size = 8 + 8 + 1 + 8; // pts + dts + is_keyframe + duration
+    // Convert from stream time_base units to microseconds
+    let pts_us = (packet.pts as f64 * time_base * 1_000_000.0) as i64;
+    let dts_us = (packet.dts as f64 * time_base * 1_000_000.0) as i64;
+    let duration_us = (packet.duration as f64 * time_base * 1_000_000.0) as i64;
     let mut data = Vec::with_capacity(header_size + packet.data.len());
-    data.extend_from_slice(&packet.pts.to_le_bytes());
-    data.extend_from_slice(&packet.dts.to_le_bytes());
+    data.extend_from_slice(&pts_us.to_le_bytes());
+    data.extend_from_slice(&dts_us.to_le_bytes());
     data.push(if packet.is_keyframe { 1 } else { 0 });
-    data.extend_from_slice(&packet.duration.to_le_bytes());
+    data.extend_from_slice(&duration_us.to_le_bytes());
     data.extend_from_slice(&packet.data);
 
     FrameData {
@@ -236,7 +241,7 @@ pub fn pack_h264_frame(packet: &EncodedPacket, width: u32, height: u32) -> Frame
         width,
         height,
         format: FrameFormat::H264,
-        timestamp: packet.pts as f64 / 1_000_000.0, // pts in time_base units → approximate seconds
+        timestamp: pts_us as f64 / 1_000_000.0,
     }
 }
 
@@ -262,52 +267,26 @@ pub fn pack_pcm_frame(pcm_data: &[u8], timestamp: f64, sample_rate: u32, channel
 
 /// Pack an Opus encoded audio packet into FrameData for broadcast transport
 ///
-/// Wire format: [pts:i64 LE (8B)][duration:i64 LE (8B)][sample_rate:u32 LE (4B)][channels:u16 LE (2B)][Opus data...]
+/// Wire format: [pts_us:i64 LE (8B)][duration_us:i64 LE (8B)][sample_rate:u32 LE (4B)][channels:u16 LE (2B)][Opus data...]
+/// PTS and duration are in microseconds (converted from sample units).
 pub fn pack_opus_frame(packet: &crate::audio::EncodedAudioPacket, sample_rate: u32, channels: u16) -> FrameData {
-    let header_size = 8 + 8 + 4 + 2; // pts + duration + sample_rate + channels
+    let header_size = 8 + 8 + 4 + 2; // pts_us + duration_us + sample_rate + channels
+    let pts_us = (packet.pts as f64 / sample_rate as f64 * 1_000_000.0) as i64;
+    let duration_us = (packet.duration as f64 / sample_rate as f64 * 1_000_000.0) as i64;
     let mut data = Vec::with_capacity(header_size + packet.data.len());
-    data.extend_from_slice(&packet.pts.to_le_bytes());
-    data.extend_from_slice(&packet.duration.to_le_bytes());
+    data.extend_from_slice(&pts_us.to_le_bytes());
+    data.extend_from_slice(&duration_us.to_le_bytes());
     data.extend_from_slice(&sample_rate.to_le_bytes());
     data.extend_from_slice(&channels.to_le_bytes());
     data.extend_from_slice(&packet.data);
 
-    let timestamp = packet.pts as f64 / sample_rate as f64;
+    let timestamp = pts_us as f64 / 1_000_000.0;
 
     FrameData {
         data,
         width: sample_rate,
         height: channels as u32,
         format: FrameFormat::Opus,
-        timestamp,
-    }
-}
-
-/// fMP4 WebSocket message types
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Fmp4MessageType {
-    /// Init segment (ftyp + moov) — sent once at stream start
-    Init = 0x01,
-    /// Media segment (moof + mdat) — sent periodically
-    Segment = 0x02,
-    /// Flush signal — sent after seek to reset client state
-    Flush = 0x03,
-}
-
-/// Pack an fMP4 segment into FrameData for broadcast transport
-///
-/// Wire format: [type: u8][payload...]
-pub fn pack_fmp4_message(msg_type: Fmp4MessageType, payload: &[u8], timestamp: f64) -> FrameData {
-    let mut data = Vec::with_capacity(1 + payload.len());
-    data.push(msg_type as u8);
-    data.extend_from_slice(payload);
-
-    FrameData {
-        data,
-        width: 0,
-        height: 0,
-        format: FrameFormat::Fmp4,
         timestamp,
     }
 }
@@ -449,7 +428,9 @@ mod tests {
             stream_index: 0,
         };
 
-        let frame = pack_h264_frame(&packet, 1920, 1080);
+        // time_base = 1/30 fps → each PTS unit = 1/30 second
+        let time_base = 1.0 / 30.0;
+        let frame = pack_h264_frame(&packet, 1920, 1080, time_base);
         assert_eq!(frame.width, 1920);
         assert_eq!(frame.height, 1080);
         assert_eq!(frame.format, FrameFormat::H264);
@@ -458,9 +439,9 @@ mod tests {
         let header_size = 8 + 8 + 1 + 8;
         assert_eq!(frame.data.len(), header_size + packet.data.len());
 
-        // Verify pts
+        // Verify pts is in microseconds: 1000 * (1/30) * 1_000_000 = 33_333_333
         let pts = i64::from_le_bytes(frame.data[0..8].try_into().unwrap());
-        assert_eq!(pts, 1000);
+        assert_eq!(pts, 33_333_333);
 
         // Verify is_keyframe
         assert_eq!(frame.data[16], 1);

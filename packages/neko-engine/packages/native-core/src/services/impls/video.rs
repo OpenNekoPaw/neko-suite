@@ -407,6 +407,9 @@ impl IVideoService for VideoService {
                     return;
                 }
 
+                // Get stream time_base for PTS→microseconds conversion
+                let time_base = decoder.time_base();
+
                 let mut encoder = HwAccelEncoder::new();
                 let encoder_config = EncoderConfig::new(width, height, fps, crate::encoder::VideoCodec::H264)
                     .with_preset(crate::encoder::EncoderPreset::Fast)
@@ -487,7 +490,7 @@ impl IVideoService for VideoService {
                     match Encoder::encode_frame_gpu(&mut encoder, gpu_handle, pts) {
                         Ok(packets) => {
                             for p in &packets {
-                                let frame_data = pack_h264_frame(p, tex_width, tex_height);
+                                let frame_data = pack_h264_frame(p, tex_width, tex_height, time_base);
                                 // Push to FrameQueue; blocks if queue is full (backpressure)
                                 if queue_tx.send(frame_data).is_err() {
                                     // Pacing thread exited
@@ -505,7 +508,7 @@ impl IVideoService for VideoService {
                 // Flush encoder
                 if let Ok(packets) = Encoder::flush(&mut encoder) {
                     for p in &packets {
-                        let _ = queue_tx.send(pack_h264_frame(p, width, height));
+                        let _ = queue_tx.send(pack_h264_frame(p, width, height, time_base));
                     }
                 }
                 Encoder::close(&mut encoder);

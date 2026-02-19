@@ -247,6 +247,10 @@ impl IAudioService for AudioService {
 
             let mut last_seen_paused = false;
 
+            // PTS offset in samples: after seek, encoder resets PTS to 0.
+            // We add this offset to restore absolute timeline.
+            let mut pts_offset_samples: i64 = 0;
+
             loop {
                 // Check cancellation
                 if cancel_clone.is_cancelled() { break; }
@@ -265,6 +269,8 @@ impl IAudioService for AudioService {
                     }
                     pacer.reset();
                     state_tx_clone.send_modify(|s| s.seek_to = None);
+                    // Record PTS offset: seek target time → samples
+                    pts_offset_samples = (time * sample_rate as f64) as i64;
                 }
 
                 // Detect pause→resume transition: reset pacer to avoid time jump
@@ -290,8 +296,10 @@ impl IAudioService for AudioService {
                     Ok(Some(frame)) => {
                         // Encode PCM → Opus (FIFO handles frame size alignment)
                         match AudioEncoder::encode_frame(&mut encoder, &frame.data, frame.samples) {
-                            Ok(packets) => {
-                                for p in &packets {
+                            Ok(mut packets) => {
+                                for p in &mut packets {
+                                    // Restore absolute PTS by adding offset from seek
+                                    p.pts += pts_offset_samples;
                                     let packed = pack_opus_frame(p, sample_rate, channels);
                                     let _ = tx.send(packed);
                                 }
@@ -303,8 +311,9 @@ impl IAudioService for AudioService {
                     }
                     Ok(None) => {
                         // EOF — flush encoder then check loop
-                        if let Ok(packets) = AudioEncoder::flush(&mut encoder) {
-                            for p in &packets {
+                        if let Ok(mut packets) = AudioEncoder::flush(&mut encoder) {
+                            for p in &mut packets {
+                                p.pts += pts_offset_samples;
                                 let packed = pack_opus_frame(p, sample_rate, channels);
                                 let _ = tx.send(packed);
                             }

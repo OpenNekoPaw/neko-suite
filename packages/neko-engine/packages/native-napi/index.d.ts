@@ -211,18 +211,4 @@ export declare class NativeEngine {
   stopFrameServer(): Promise<void>
   /** Get the frame server port, or null if not running */
   getFrameServerPort(): number | null
-  /**
-   * Create a stream and return WebSocket endpoint info (JSON)
-   *
-   * Convenience method that dispatches `streams:create` and fills in the
-   * `wsPort` field from the running frame server.
-   */
-  createStream(sessionId: string, resourceId: string, width?: number | undefined | null, height?: number | undefined | null, fps?: number | undefined | null): Promise<string>
-  /**
-   * Push a frame to a specific stream (per-stream, replaces FrameServerSession.pushFrame)
-   *
-   * This is a synchronous method optimized for high-frequency calls (30-60fps).
-   * It uses `try_read()` on the stream registry to avoid async overhead.
-   */
-  pushStreamFrame(streamId: string, data: Buffer, width: number, height: number, timestamp: number, format?: string | undefined | null): void
 }

@@ -49,8 +49,6 @@ pub enum FrameFormat {
     PcmF32,
     /// Opus encoded audio packets (for streaming)
     Opus,
-    /// fMP4 segment data (init or media segment, for MSE streaming)
-    Fmp4,
 }
 
 impl Default for FrameFormat {

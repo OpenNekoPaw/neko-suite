@@ -6,7 +6,7 @@ use crate::router::ActionRouter;
 use crate::session::SessionManager;
 use neko_native_core::gpu::GpuContext;
 use neko_native_core::services::{
-    AudioService, ExportService, ImageService, MediaStreamService, NodeService, TaskService,
+    AudioService, ExportService, ImageService, NodeService, TaskService,
     TimelineService, VideoService,
 };
 use neko_types::{ActionRequest, ActionResponse};
@@ -61,11 +61,6 @@ impl EngineApi {
             Arc::new(ExportService::new(Arc::clone(ctx)))
         });
 
-        // Media stream service requires GPU
-        let media_service = gpu_ctx.as_ref().map(|ctx| {
-            Arc::new(MediaStreamService::new(Some(Arc::clone(ctx))))
-        });
-
         // Create registries
         let resource_registry = Arc::new(ResourceRegistry::new());
         let stream_registry = Arc::new(StreamRegistry::new());
@@ -94,7 +89,6 @@ impl EngineApi {
             image_service,
             timeline_service,
             export_service,
-            media_service,
             resource_registry.clone(),
             stream_registry.clone(),
         );

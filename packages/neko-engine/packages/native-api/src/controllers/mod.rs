@@ -15,7 +15,6 @@
 mod audio;
 mod canvas;
 mod image;
-mod media;
 mod models;
 mod node;
 mod scenes;
@@ -28,7 +27,6 @@ mod video;
 pub use audio::AudioController;
 pub use canvas::CanvasController;
 pub use image::ImageController;
-pub use media::MediaController;
 pub use models::ModelsController;
 pub use node::NodeController;
 pub use scenes::ScenesController;
