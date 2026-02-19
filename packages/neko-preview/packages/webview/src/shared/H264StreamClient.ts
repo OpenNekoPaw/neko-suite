@@ -5,7 +5,8 @@
  * receives H.264 NAL units, and decodes them using WebCodecs.
  *
  * Packet format (from Rust frame server):
- * [pts: i64 LE (8B)] [dts: i64 LE (8B)] [is_keyframe: u8 (1B)] [duration: i64 LE (8B)] [NAL data...]
+ * [pts_us: i64 LE (8B)] [dts_us: i64 LE (8B)] [is_keyframe: u8 (1B)] [duration_us: i64 LE (8B)] [NAL data...]
+ * PTS, DTS, and duration are in microseconds.
  */
 
 const H264_HEADER_SIZE = 8 + 8 + 1 + 8; // pts(8) + dts(8) + is_keyframe(1) + duration(8) = 25 bytes
@@ -253,6 +254,17 @@ export class H264StreamClient {
 			return;
 		}
 
+		// Log first few packets and keyframes
+		if (this.stats.packetsReceived <= 3 || packet.isKeyframe) {
+			console.log(
+				'[H264StreamClient] Packet #' + this.stats.packetsReceived,
+				'key=', packet.isKeyframe,
+				'pts=', packet.pts,
+				'nalBytes=', packet.nalData.byteLength,
+				'decQueue=', this.decoder.decodeQueueSize,
+			);
+		}
+
 		// After seek/reset, wait for a keyframe before feeding delta frames
 		if (this.waitingForKeyframe) {
 			if (!packet.isKeyframe) {
@@ -260,6 +272,7 @@ export class H264StreamClient {
 				return;
 			}
 			this.waitingForKeyframe = false;
+			console.log('[H264StreamClient] Keyframe received, decoding resumed');
 		}
 
 		try {

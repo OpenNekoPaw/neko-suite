@@ -13,6 +13,7 @@
 import * as vscode from 'vscode';
 import { VideoPreviewProvider } from './providers/VideoPreviewProvider';
 import { AudioPreviewProvider } from './providers/AudioPreviewProvider';
+import { StatusBarManager } from './ui/StatusBarManager';
 
 // =============================================================================
 // Extension State
@@ -20,6 +21,7 @@ import { AudioPreviewProvider } from './providers/AudioPreviewProvider';
 
 let videoProvider: VideoPreviewProvider | null = null;
 let audioProvider: AudioPreviewProvider | null = null;
+let statusBarManager: StatusBarManager | null = null;
 
 // =============================================================================
 // Activation
@@ -28,9 +30,13 @@ let audioProvider: AudioPreviewProvider | null = null;
 export function activate(context: vscode.ExtensionContext): void {
 	console.log('[NekoPreview] Activating extension...');
 
+	// Create shared status bar
+	statusBarManager = new StatusBarManager();
+	context.subscriptions.push(statusBarManager);
+
 	// Create providers
-	videoProvider = new VideoPreviewProvider(context.extensionUri);
-	audioProvider = new AudioPreviewProvider(context.extensionUri);
+	videoProvider = new VideoPreviewProvider(context.extensionUri, statusBarManager);
+	audioProvider = new AudioPreviewProvider(context.extensionUri, statusBarManager);
 
 	// Register custom editors
 	context.subscriptions.push(
@@ -117,6 +123,9 @@ export function deactivate(): void {
 
 	audioProvider?.dispose();
 	audioProvider = null;
+
+	statusBarManager?.dispose();
+	statusBarManager = null;
 
 	console.log('[NekoPreview] Extension deactivated');
 }

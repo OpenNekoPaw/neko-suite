@@ -15,6 +15,7 @@
 import * as vscode from 'vscode';
 import { PreviewService, type MediaInfo } from '../services/PreviewService';
 import { getWebviewHtml } from '../utils/html';
+import type { StatusBarManager } from '../ui/StatusBarManager';
 
 // =============================================================================
 // VideoPreviewProvider
@@ -26,7 +27,10 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
 	private readonly _disposables: vscode.Disposable[] = [];
 	private _previewService: PreviewService | null = null;
 
-	constructor(private readonly _extensionUri: vscode.Uri) {}
+	constructor(
+		private readonly _extensionUri: vscode.Uri,
+		private readonly _statusBar: StatusBarManager,
+	) {}
 
 	// =========================================================================
 	// CustomReadonlyEditorProvider
@@ -86,124 +90,168 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
 			entry: 'video',
 		});
 
+		// Show status bar with media info
+		const fileName = filePath.split('/').pop() ?? filePath;
+		this._statusBar.show({
+			fileName,
+			codec: mediaInfo.codec,
+			width: mediaInfo.width,
+			height: mediaInfo.height,
+			fps: mediaInfo.fps,
+			audioCodec: mediaInfo.audioCodec,
+			audioSampleRate: mediaInfo.audioSampleRate,
+			audioChannels: mediaInfo.audioChannels,
+			duration: mediaInfo.duration,
+		});
+
+		// Per-panel stream state (independent of other panels)
+		let activeVideoStreamId: string | null = null;
+		let activeAudioStreamId: string | null = null;
+
+		const stopPanelStreams = async () => {
+			if (activeVideoStreamId || activeAudioStreamId) {
+				await this._previewService?.stopStreams(activeVideoStreamId, activeAudioStreamId);
+				activeVideoStreamId = null;
+				activeAudioStreamId = null;
+			}
+		};
+
 		// Handle messages from webview
 		const messageDisposable = webviewPanel.webview.onDidReceiveMessage(
-			(msg) => this.handleMessage(msg, webviewPanel, filePath, mediaInfo),
+			async (msg: Record<string, unknown>) => {
+				const type = msg.type as string;
+
+				switch (type) {
+					case 'ready':
+						await webviewPanel.webview.postMessage({
+							type: 'preview:init',
+							payload: {
+								filePath,
+								mediaInfo,
+								port: this._previewService?.port ?? null,
+							},
+						});
+						break;
+
+					case 'preview:play': {
+						// Stop previous streams for this panel
+						await stopPanelStreams();
+
+						const startTime = (msg.startTime as number) ?? 0;
+						const speed = (msg.speed as number) ?? 1.0;
+						const result = await this._previewService?.startVideoPlayback(
+							filePath,
+							mediaInfo,
+							startTime,
+							speed
+						);
+						if (result?.videoStreamId) {
+							activeVideoStreamId = result.videoStreamId;
+							activeAudioStreamId = result.audioStreamId;
+
+							const streamUrl = this._previewService?.getStreamWebSocketUrl(result.videoStreamId);
+							let audioStreamUrl: string | null = null;
+							if (result.audioStreamId) {
+								audioStreamUrl = this._previewService?.getStreamWebSocketUrl(result.audioStreamId) ?? null;
+							}
+							if (streamUrl) {
+								await webviewPanel.webview.postMessage({
+									type: 'preview:streamReady',
+									payload: {
+										streamId: result.videoStreamId,
+										streamUrl,
+										audioStreamId: result.audioStreamId,
+										audioStreamUrl,
+									},
+								});
+							}
+						}
+						break;
+					}
+
+					case 'preview:pause':
+						await this._previewService?.pauseStreams(activeVideoStreamId, activeAudioStreamId);
+						break;
+
+					case 'preview:resume':
+						await this._previewService?.resumeStreams(activeVideoStreamId, activeAudioStreamId);
+						break;
+
+					case 'preview:stop':
+						await stopPanelStreams();
+						break;
+
+					case 'preview:seek': {
+						const time = msg.time as number;
+						if (typeof time === 'number') {
+							await this._previewService?.seekStreams(activeVideoStreamId, activeAudioStreamId, time);
+						}
+						break;
+					}
+
+					case 'preview:speed': {
+						const speed = msg.speed as number;
+						if (typeof speed === 'number') {
+							await this._previewService?.setStreamSpeed(activeVideoStreamId, activeAudioStreamId, speed);
+						}
+						break;
+					}
+
+					case 'preview:captureFrame': {
+						const time = (msg.time as number) ?? 0;
+						try {
+							const frameData = await this._previewService?.captureFrame(filePath, time);
+							await webviewPanel.webview.postMessage({
+								type: 'preview:frameData',
+								payload: { imageDataUrl: `data:image/jpeg;base64,${frameData}` },
+							});
+						} catch (error) {
+							console.error('[VideoPreview] Frame capture failed:', error);
+						}
+						break;
+					}
+
+					case 'preview:statusUpdate': {
+						const state = msg.playbackState as 'playing' | 'paused' | 'stopped';
+						const time = (msg.currentTime as number) ?? 0;
+						this._statusBar.updatePlayback(state, time);
+						break;
+					}
+
+					default:
+						break;
+				}
+			},
 			undefined,
 			this._disposables
 		);
 
-		// Cleanup on dispose
-		webviewPanel.onDidDispose(() => {
-			messageDisposable.dispose();
-			this._previewService?.stopPlayback();
-		});
-	}
-
-	// =========================================================================
-	// Message Handling
-	// =========================================================================
-
-	private async handleMessage(
-		msg: Record<string, unknown>,
-		panel: vscode.WebviewPanel,
-		filePath: string,
-		mediaInfo: MediaInfo
-	): Promise<void> {
-		const type = msg.type as string;
-
-		switch (type) {
-			case 'ready':
-				// Webview loaded — send initial config (no stream URL yet)
-				await panel.webview.postMessage({
-					type: 'preview:init',
-					payload: {
-						filePath,
-						mediaInfo,
-						port: this._previewService?.port ?? null,
-					},
+		// Manage status bar visibility with panel lifecycle
+		const visibilityDisposable = webviewPanel.onDidChangeViewState(() => {
+			if (!webviewPanel.visible) {
+				this._statusBar.hide();
+			} else {
+				this._statusBar.show({
+					fileName,
+					codec: mediaInfo.codec,
+					width: mediaInfo.width,
+					height: mediaInfo.height,
+					fps: mediaInfo.fps,
+					audioCodec: mediaInfo.audioCodec,
+					audioSampleRate: mediaInfo.audioSampleRate,
+					audioChannels: mediaInfo.audioChannels,
+					duration: mediaInfo.duration,
 				});
-				break;
-
-			case 'preview:play': {
-				const startTime = (msg.startTime as number) ?? 0;
-				const speed = (msg.speed as number) ?? 1.0;
-				const result = await this._previewService?.startVideoPlayback(
-					filePath,
-					mediaInfo,
-					startTime,
-					speed
-				);
-				if (result?.videoStreamId) {
-					const streamUrl = this._previewService?.getStreamWebSocketUrl(result.videoStreamId);
-					let audioStreamUrl: string | null = null;
-					if (result.audioStreamId) {
-						audioStreamUrl = this._previewService?.getStreamWebSocketUrl(result.audioStreamId) ?? null;
-					}
-					if (streamUrl) {
-						await panel.webview.postMessage({
-							type: 'preview:streamReady',
-							payload: {
-								streamId: result.videoStreamId,
-								streamUrl,
-								audioStreamId: result.audioStreamId,
-								audioStreamUrl,
-							},
-						});
-					}
-				}
-				break;
 			}
+		});
 
-			case 'preview:pause':
-				await this._previewService?.pausePlayback();
-				break;
-
-			case 'preview:resume':
-				await this._previewService?.resumePlayback();
-				break;
-
-			case 'preview:stop':
-				await this._previewService?.stopPlayback();
-				break;
-
-			case 'preview:seek': {
-				const time = msg.time as number;
-				if (typeof time === 'number') {
-					await this._previewService?.seekTo(time);
-				}
-				break;
-			}
-
-			case 'preview:speed': {
-				const speed = msg.speed as number;
-				if (typeof speed === 'number') {
-					await this._previewService?.setSpeed(speed);
-				}
-				break;
-			}
-
-			case 'preview:captureFrame': {
-				const time = (msg.time as number) ?? 0;
-				try {
-					const frameData = await this._previewService?.captureFrame(
-						filePath,
-						time
-					);
-					await panel.webview.postMessage({
-						type: 'preview:frameData',
-						payload: { imageDataUrl: `data:image/jpeg;base64,${frameData}` },
-					});
-				} catch (error) {
-					console.error('[VideoPreview] Frame capture failed:', error);
-				}
-				break;
-			}
-
-			default:
-				// Unknown message type
-				break;
-		}
+		// Cleanup on dispose — stop this panel's streams only
+		webviewPanel.onDidDispose(async () => {
+			messageDisposable.dispose();
+			visibilityDisposable.dispose();
+			this._statusBar.hide();
+			await stopPanelStreams();
+		});
 	}
 
 	// =========================================================================

@@ -15,6 +15,7 @@
 import * as vscode from 'vscode';
 import { PreviewService, type MediaInfo } from '../services/PreviewService';
 import { getWebviewHtml } from '../utils/html';
+import type { StatusBarManager } from '../ui/StatusBarManager';
 
 // =============================================================================
 // AudioPreviewProvider
@@ -26,7 +27,10 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 	private readonly _disposables: vscode.Disposable[] = [];
 	private _previewService: PreviewService | null = null;
 
-	constructor(private readonly _extensionUri: vscode.Uri) {}
+	constructor(
+		private readonly _extensionUri: vscode.Uri,
+		private readonly _statusBar: StatusBarManager,
+	) {}
 
 	// =========================================================================
 	// CustomReadonlyEditorProvider
@@ -86,171 +90,158 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 			entry: 'audio',
 		});
 
+		// Show status bar with media info
+		const fileName = filePath.split('/').pop() ?? filePath;
+		this._statusBar.show({
+			fileName,
+			audioCodec: mediaInfo.audioCodec,
+			audioSampleRate: mediaInfo.audioSampleRate,
+			audioChannels: mediaInfo.audioChannels,
+			duration: mediaInfo.duration,
+		});
+
+		// Per-panel stream state
+		let activeAudioStreamId: string | null = null;
+
+		const stopPanelStream = async () => {
+			if (activeAudioStreamId) {
+				await this._previewService?.stopStreams(null, activeAudioStreamId);
+				activeAudioStreamId = null;
+			}
+		};
+
 		// Handle messages from webview
 		const messageDisposable = webviewPanel.webview.onDidReceiveMessage(
-			(msg) => this.handleMessage(msg, webviewPanel, filePath, mediaInfo),
+			async (msg: Record<string, unknown>) => {
+				const type = msg.type as string;
+
+				switch (type) {
+					case 'ready':
+						await webviewPanel.webview.postMessage({
+							type: 'preview:init',
+							payload: { filePath, mediaInfo },
+						});
+
+						// Generate and send waveform data
+						try {
+							const waveform = await this._previewService?.getWaveform(filePath);
+							await webviewPanel.webview.postMessage({
+								type: 'preview:waveform',
+								payload: waveform,
+							});
+						} catch (error) {
+							console.error('[AudioPreview] Waveform generation failed:', error);
+						}
+						break;
+
+					case 'preview:play': {
+						try {
+							// Stop previous stream for this panel
+							await stopPanelStream();
+
+							const result = await this._previewService?.dispatch({
+								group: 'audios',
+								action: 'stream',
+								options: {
+									source: filePath,
+									sessionId: `audio-preview-${Date.now()}`,
+								},
+							});
+
+							if (result?.status === 'ok') {
+								const data = result.data as Record<string, unknown> | undefined;
+								const streamId = data?.streamId as string;
+								activeAudioStreamId = streamId;
+								const streamUrl = this._previewService?.getStreamWebSocketUrl(streamId);
+
+								const startTime = (msg.startTime as number) ?? 0;
+								if (startTime > 0 && streamId) {
+									await this._previewService?.dispatch({
+										group: 'audios',
+										action: 'seek',
+										options: { streamId, time: startTime },
+									});
+								}
+
+								await webviewPanel.webview.postMessage({
+									type: 'preview:streamReady',
+									payload: {
+										streamId,
+										streamUrl,
+										audioStreamId: streamId,
+										audioStreamUrl: streamUrl,
+									},
+								});
+							}
+						} catch (error) {
+							console.error('[AudioPreview] Failed to start audio stream:', error);
+						}
+						break;
+					}
+
+					case 'preview:pause':
+						await this._previewService?.pauseStreams(null, activeAudioStreamId);
+						break;
+
+					case 'preview:resume':
+						await this._previewService?.resumeStreams(null, activeAudioStreamId);
+						break;
+
+					case 'preview:stop':
+						await stopPanelStream();
+						break;
+
+					case 'preview:speed': {
+						const speed = (msg.speed as number) ?? 1.0;
+						await this._previewService?.setStreamSpeed(null, activeAudioStreamId, speed);
+						break;
+					}
+
+					case 'preview:seek': {
+						const time = msg.time as number;
+						if (typeof time === 'number') {
+							await this._previewService?.seekStreams(null, activeAudioStreamId, time);
+						}
+						break;
+					}
+
+					case 'preview:statusUpdate': {
+						const state = msg.playbackState as 'playing' | 'paused' | 'stopped';
+						const time = (msg.currentTime as number) ?? 0;
+						this._statusBar.updatePlayback(state, time);
+						break;
+					}
+
+					default:
+						break;
+				}
+			},
 			undefined,
 			this._disposables
 		);
 
-		// Cleanup on dispose
-		webviewPanel.onDidDispose(() => {
-			messageDisposable.dispose();
-		});
-	}
-
-	// =========================================================================
-	// Message Handling
-	// =========================================================================
-
-	private _activeAudioStreamId: string | null = null;
-
-	private async handleMessage(
-		msg: Record<string, unknown>,
-		panel: vscode.WebviewPanel,
-		filePath: string,
-		mediaInfo: MediaInfo
-	): Promise<void> {
-		const type = msg.type as string;
-
-		switch (type) {
-			case 'ready':
-				// Webview loaded — send initial config with media info
-				await panel.webview.postMessage({
-					type: 'preview:init',
-					payload: {
-						filePath,
-						mediaInfo,
-					},
+		// Manage status bar visibility with panel lifecycle
+		const visibilityDisposable = webviewPanel.onDidChangeViewState(() => {
+			if (!webviewPanel.visible) {
+				this._statusBar.hide();
+			} else {
+				this._statusBar.show({
+					fileName,
+					audioCodec: mediaInfo.audioCodec,
+					audioSampleRate: mediaInfo.audioSampleRate,
+					audioChannels: mediaInfo.audioChannels,
+					duration: mediaInfo.duration,
 				});
-
-				// Generate and send waveform data
-				try {
-					const waveform = await this._previewService?.getWaveform(filePath);
-					await panel.webview.postMessage({
-						type: 'preview:waveform',
-						payload: waveform,
-					});
-				} catch (error) {
-					console.error('[AudioPreview] Waveform generation failed:', error);
-				}
-				break;
-
-			case 'preview:play': {
-				// Start audio stream via stream interface
-				try {
-					// Stop existing stream first
-					if (this._activeAudioStreamId) {
-						await this._previewService?.dispatch({
-							group: 'audios',
-							action: 'stop',
-							options: { streamId: this._activeAudioStreamId },
-						});
-						this._activeAudioStreamId = null;
-					}
-
-					const result = await this._previewService?.dispatch({
-						group: 'audios',
-						action: 'stream',
-						options: {
-							source: filePath,
-							session_id: 'audio-preview',
-						},
-					});
-
-					if (result?.status === 'ok') {
-						const data = result.data as Record<string, unknown> | undefined;
-						const streamId = data?.streamId as string;
-						this._activeAudioStreamId = streamId;
-						const streamUrl = this._previewService?.getStreamWebSocketUrl(streamId);
-
-						// Seek to startTime if provided
-						const startTime = (msg.startTime as number) ?? 0;
-						if (startTime > 0 && streamId) {
-							await this._previewService?.dispatch({
-								group: 'audios',
-								action: 'seek',
-								options: { streamId, time: startTime },
-							});
-						}
-
-						await panel.webview.postMessage({
-							type: 'preview:streamReady',
-							payload: {
-								streamId,
-								streamUrl,
-								audioStreamId: streamId,
-								audioStreamUrl: streamUrl,
-							},
-						});
-					}
-				} catch (error) {
-					console.error('[AudioPreview] Failed to start audio stream:', error);
-				}
-				break;
 			}
+		});
 
-			case 'preview:pause': {
-				if (this._activeAudioStreamId) {
-					await this._previewService?.dispatch({
-						group: 'audios',
-						action: 'pause',
-						options: { streamId: this._activeAudioStreamId },
-					});
-				}
-				break;
-			}
-
-			case 'preview:resume': {
-				if (this._activeAudioStreamId) {
-					await this._previewService?.dispatch({
-						group: 'audios',
-						action: 'resume',
-						options: { streamId: this._activeAudioStreamId },
-					});
-				}
-				break;
-			}
-
-			case 'preview:stop': {
-				if (this._activeAudioStreamId) {
-					await this._previewService?.dispatch({
-						group: 'audios',
-						action: 'stop',
-						options: { streamId: this._activeAudioStreamId },
-					});
-					this._activeAudioStreamId = null;
-				}
-				break;
-			}
-
-			case 'preview:speed': {
-				const speed = (msg.speed as number) ?? 1.0;
-				if (this._activeAudioStreamId) {
-					await this._previewService?.dispatch({
-						group: 'audios',
-						action: 'speed',
-						options: { streamId: this._activeAudioStreamId, speed },
-					});
-				}
-				break;
-			}
-
-			case 'preview:seek': {
-				const time = msg.time as number;
-				if (typeof time === 'number' && this._activeAudioStreamId) {
-					await this._previewService?.dispatch({
-						group: 'audios',
-						action: 'seek',
-						options: { streamId: this._activeAudioStreamId, time },
-					});
-				}
-				break;
-			}
-
-			default:
-				break;
-		}
+		// Cleanup on dispose — stop this panel's stream only
+		webviewPanel.onDidDispose(async () => {
+			messageDisposable.dispose();
+			visibilityDisposable.dispose();
+			this._statusBar.hide();
+			await stopPanelStream();
+		});
 	}
 
 	// =========================================================================

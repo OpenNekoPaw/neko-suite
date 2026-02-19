@@ -91,8 +91,12 @@ export function WaveformCanvas({
 		}
 	}, [peaks, duration, currentTime]);
 
+	// Hold latest draw in a ref so ResizeObserver doesn't need to re-subscribe
+	const drawRef = useRef(draw);
+	drawRef.current = draw;
+
 	// =========================================================================
-	// Resize handling
+	// Resize handling — observer created once, calls draw via ref
 	// =========================================================================
 
 	useEffect(() => {
@@ -114,13 +118,14 @@ export function WaveformCanvas({
 					ctx.scale(dpr, dpr);
 				}
 
-				draw();
+				drawRef.current();
 			}
 		});
 
 		observer.observe(container);
 		return () => observer.disconnect();
-	}, [draw]);
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	// Redraw when data or time changes
 	useEffect(() => {
@@ -173,12 +178,13 @@ export function WaveformCanvas({
 	return (
 		<div
 			ref={containerRef}
-			style={{ width: '100%', height: '100%', position: 'relative' }}
+			style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}
 			onMouseDown={handleMouseDown}
 		>
 			<canvas
 				ref={canvasRef}
 				className="audio-player__waveform"
+				style={{ position: 'absolute', top: 0, left: 0 }}
 			/>
 		</div>
 	);

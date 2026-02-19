@@ -36,6 +36,7 @@ export function AudioPlayer() {
 	const playStartTimeRef = useRef(0);
 	const playWallTimeRef = useRef(0);
 	const animFrameRef = useRef(0);
+	const statusThrottleRef = useRef(0);
 
 	// =========================================================================
 	// Time tracking during playback
@@ -56,13 +57,28 @@ export function AudioPlayer() {
 		if (newTime >= mediaInfo.duration) {
 			setCurrentTime(mediaInfo.duration);
 			setIsPlaying(false);
-			audioClientRef.current?.dispose();
-			audioClientRef.current = null;
+			// Fade out before disposing
+			const client = audioClientRef.current;
+			if (client) {
+				client.fadeOut().then(() => {
+					client.dispose();
+				});
+				audioClientRef.current = null;
+			}
 			postMessage({ type: 'preview:stop' });
+			postMessage({ type: 'preview:statusUpdate', playbackState: 'stopped', currentTime: mediaInfo.duration });
 			return;
 		}
 
 		setCurrentTime(newTime);
+
+		// Throttle status updates to ~1/sec
+		const now = performance.now();
+		if (now - statusThrottleRef.current > 1000) {
+			statusThrottleRef.current = now;
+			postMessage({ type: 'preview:statusUpdate', playbackState: 'playing', currentTime: newTime });
+		}
+
 		animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
 	}, [isPlaying, mediaInfo, postMessage]);
 
@@ -136,7 +152,11 @@ export function AudioPlayer() {
 	// Cleanup on unmount
 	useEffect(() => {
 		return () => {
-			audioClientRef.current?.dispose();
+			const ac = audioClientRef.current;
+			if (ac) {
+				ac.setVolume(0);
+				ac.dispose();
+			}
 		};
 	}, []);
 
@@ -154,18 +174,21 @@ export function AudioPlayer() {
 		playWallTimeRef.current = performance.now();
 
 		postMessage({ type: 'preview:play', startTime });
+		postMessage({ type: 'preview:statusUpdate', playbackState: 'playing', currentTime: startTime });
 	}, [mediaInfo, currentTime, postMessage]);
 
 	const handlePause = useCallback(() => {
 		setIsPlaying(false);
 		postMessage({ type: 'preview:pause' });
-	}, [postMessage]);
+		postMessage({ type: 'preview:statusUpdate', playbackState: 'paused', currentTime });
+	}, [postMessage, currentTime]);
 
 	const handleResume = useCallback(() => {
 		setIsPlaying(true);
 		playStartTimeRef.current = currentTime;
 		playWallTimeRef.current = performance.now();
 		postMessage({ type: 'preview:resume' });
+		postMessage({ type: 'preview:statusUpdate', playbackState: 'playing', currentTime });
 	}, [currentTime, postMessage]);
 
 	const handleTogglePlay = useCallback(() => {
@@ -178,6 +201,12 @@ export function AudioPlayer() {
 		}
 	}, [isPlaying, handlePlay, handlePause, handleResume]);
 
+	/** Scrub: drag-preview only — updates UI time without backend seek */
+	const handleScrub = useCallback((time: number) => {
+		setCurrentTime(time);
+	}, []);
+
+	/** Seek: commits to backend on mouseup */
 	const handleSeek = useCallback(
 		(time: number) => {
 			setCurrentTime(time);
@@ -211,11 +240,11 @@ export function AudioPlayer() {
 	}
 
 	if (error) {
-		return <div className="error">⚠️ {error}</div>;
+		return <div className="error">Error: {error}</div>;
 	}
 
 	if (!mediaInfo) {
-		return <div className="error">⚠️ No media info available</div>;
+		return <div className="error">No media info available</div>;
 	}
 
 	// Extract filename from path
@@ -259,6 +288,7 @@ export function AudioPlayer() {
 				volume={volume}
 				onTogglePlay={handleTogglePlay}
 				onSeek={handleSeek}
+				onScrub={handleScrub}
 				onVolumeChange={handleVolumeChange}
 			/>
 		</div>

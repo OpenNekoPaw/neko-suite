@@ -4,7 +4,6 @@
  * Wraps NativeEngine NAPI for media preview operations:
  * - Media probing (metadata extraction)
  * - Video playback control (start/stop/seek via H.264 stream)
- * - Audio segment decoding (PCM extraction)
  * - Waveform data generation
  *
  * Architecture:
@@ -22,6 +21,16 @@ interface NativeEngineInstance {
 	stopFrameServer(): Promise<void>;
 	getFrameServerPort(): number | null;
 	dispatch(requestJson: string): Promise<string>;
+	dispatchAction(
+		group: string,
+		action: string,
+		id: string | null,
+		options: string | null,
+		source: string | null,
+		sessionId: string | null,
+		streamId: string | null,
+		body: string | null,
+	): Promise<string>;
 	hasGpu(): boolean;
 }
 
@@ -33,6 +42,9 @@ interface ActionRequest {
 	group: string;
 	action: string;
 	id?: string;
+	source?: string;
+	sessionId?: string;
+	streamId?: string;
 	options?: Record<string, unknown>;
 	body?: unknown;
 }
@@ -65,8 +77,6 @@ export class PreviewService implements vscode.Disposable {
 	private _engine: NativeEngineInstance | null = null;
 	private _port: number | null = null;
 	private _disposed = false;
-	private _activeStreamId: string | null = null;
-	private _activeAudioStreamId: string | null = null;
 
 	/**
 	 * Try to create a PreviewService instance.
@@ -173,8 +183,8 @@ export class PreviewService implements vscode.Disposable {
 
 	/**
 	 * Start video playback via H.264 stream.
-	 * Uses direct video transcoding (decode → encode) for efficient single-file preview.
 	 * Also starts audio stream if the media has audio tracks.
+	 * Does NOT track stream IDs internally — caller is responsible for lifecycle.
 	 */
 	async startVideoPlayback(
 		filePath: string,
@@ -182,16 +192,13 @@ export class PreviewService implements vscode.Disposable {
 		startTime: number = 0,
 		speed: number = 1.0
 	): Promise<{ videoStreamId: string | null; audioStreamId: string | null }> {
-		// Stop any existing stream first
-		await this.stopPlayback();
-
 		// Start video stream
 		const videoResult = await this.dispatch({
 			group: 'videos',
 			action: 'stream',
 			options: {
 				source: filePath,
-				session_id: 'preview-playback',
+				sessionId: `preview-${Date.now()}`,
 			},
 		});
 
@@ -201,7 +208,7 @@ export class PreviewService implements vscode.Disposable {
 		}
 
 		const videoData = videoResult.data as Record<string, unknown> | undefined;
-		this._activeStreamId = (videoData?.streamId as string) ?? null;
+		const videoStreamId = (videoData?.streamId as string) ?? null;
 
 		// Start audio stream if media has audio
 		let audioStreamId: string | null = null;
@@ -211,7 +218,7 @@ export class PreviewService implements vscode.Disposable {
 				action: 'stream',
 				options: {
 					source: filePath,
-					session_id: 'preview-audio',
+					sessionId: `preview-audio-${Date.now()}`,
 				},
 			});
 
@@ -220,180 +227,149 @@ export class PreviewService implements vscode.Disposable {
 			} else {
 				const audioData = audioResult.data as Record<string, unknown> | undefined;
 				audioStreamId = (audioData?.streamId as string) ?? null;
-				this._activeAudioStreamId = audioStreamId;
 			}
 		}
 
 		// Seek to startTime if not 0
-		if (startTime > 0 && this._activeStreamId) {
+		if (startTime > 0 && videoStreamId) {
 			await this.dispatch({
 				group: 'videos',
 				action: 'seek',
-				options: {
-					streamId: this._activeStreamId,
-					time: startTime,
-				},
+				options: { streamId: videoStreamId, time: startTime },
 			});
-			if (this._activeAudioStreamId) {
+			if (audioStreamId) {
 				await this.dispatch({
 					group: 'audios',
 					action: 'seek',
-					options: {
-						streamId: this._activeAudioStreamId,
-						time: startTime,
-					},
+					options: { streamId: audioStreamId, time: startTime },
 				});
 			}
 		}
 
 		// Set playback speed if not 1.0
-		if (this._activeStreamId && speed !== 1.0) {
+		if (videoStreamId && speed !== 1.0) {
 			await this.dispatch({
 				group: 'videos',
 				action: 'speed',
-				options: {
-					streamId: this._activeStreamId,
-					speed,
-				},
+				options: { streamId: videoStreamId, speed },
 			});
-			if (this._activeAudioStreamId) {
+			if (audioStreamId) {
 				await this.dispatch({
 					group: 'audios',
 					action: 'speed',
-					options: {
-						streamId: this._activeAudioStreamId,
-						speed,
-					},
+					options: { streamId: audioStreamId, speed },
 				});
 			}
 		}
 
-		return { videoStreamId: this._activeStreamId, audioStreamId };
+		return { videoStreamId, audioStreamId };
 	}
 
 	/**
-	 * Stop current playback (video + audio)
+	 * Stop specific streams by their IDs.
 	 */
-	async stopPlayback(): Promise<void> {
-		if (this._activeAudioStreamId) {
+	async stopStreams(videoStreamId: string | null, audioStreamId: string | null): Promise<void> {
+		if (audioStreamId) {
 			try {
 				await this.dispatch({
 					group: 'audios',
 					action: 'stop',
-					options: { streamId: this._activeAudioStreamId },
+					options: { streamId: audioStreamId },
 				});
 			} catch {
 				// Ignore stop errors
 			}
-			this._activeAudioStreamId = null;
 		}
 
-		if (!this._activeStreamId) return;
-
-		try {
-			await this.dispatch({
-				group: 'videos',
-				action: 'stop',
-				options: { streamId: this._activeStreamId },
-			});
-		} catch {
-			// Ignore stop errors
+		if (videoStreamId) {
+			try {
+				await this.dispatch({
+					group: 'videos',
+					action: 'stop',
+					options: { streamId: videoStreamId },
+				});
+			} catch {
+				// Ignore stop errors
+			}
 		}
-		this._activeStreamId = null;
 	}
 
 	/**
-	 * Seek to a specific time (video + audio)
+	 * Seek specific streams to a time.
 	 */
-	async seekTo(time: number): Promise<void> {
-		if (!this._activeStreamId) return;
-
-		await this.dispatch({
-			group: 'videos',
-			action: 'seek',
-			options: {
-				streamId: this._activeStreamId,
-				time,
-			},
-		});
-
-		if (this._activeAudioStreamId) {
+	async seekStreams(videoStreamId: string | null, audioStreamId: string | null, time: number): Promise<void> {
+		if (videoStreamId) {
+			await this.dispatch({
+				group: 'videos',
+				action: 'seek',
+				options: { streamId: videoStreamId, time },
+			});
+		}
+		if (audioStreamId) {
 			await this.dispatch({
 				group: 'audios',
 				action: 'seek',
-				options: {
-					streamId: this._activeAudioStreamId,
-					time,
-				},
+				options: { streamId: audioStreamId, time },
 			});
 		}
 	}
 
 	/**
-	 * Set playback speed (video + audio)
+	 * Set speed on specific streams.
 	 */
-	async setSpeed(speed: number): Promise<void> {
-		if (!this._activeStreamId) return;
-
-		await this.dispatch({
-			group: 'videos',
-			action: 'speed',
-			options: {
-				streamId: this._activeStreamId,
-				speed,
-			},
-		});
-
-		if (this._activeAudioStreamId) {
+	async setStreamSpeed(videoStreamId: string | null, audioStreamId: string | null, speed: number): Promise<void> {
+		if (videoStreamId) {
+			await this.dispatch({
+				group: 'videos',
+				action: 'speed',
+				options: { streamId: videoStreamId, speed },
+			});
+		}
+		if (audioStreamId) {
 			await this.dispatch({
 				group: 'audios',
 				action: 'speed',
-				options: {
-					streamId: this._activeAudioStreamId,
-					speed,
-				},
+				options: { streamId: audioStreamId, speed },
 			});
 		}
 	}
 
 	/**
-	 * Pause playback (video + audio)
+	 * Pause specific streams.
 	 */
-	async pausePlayback(): Promise<void> {
-		if (!this._activeStreamId) return;
-
-		await this.dispatch({
-			group: 'videos',
-			action: 'pause',
-			options: { streamId: this._activeStreamId },
-		});
-
-		if (this._activeAudioStreamId) {
+	async pauseStreams(videoStreamId: string | null, audioStreamId: string | null): Promise<void> {
+		if (videoStreamId) {
+			await this.dispatch({
+				group: 'videos',
+				action: 'pause',
+				options: { streamId: videoStreamId },
+			});
+		}
+		if (audioStreamId) {
 			await this.dispatch({
 				group: 'audios',
 				action: 'pause',
-				options: { streamId: this._activeAudioStreamId },
+				options: { streamId: audioStreamId },
 			});
 		}
 	}
 
 	/**
-	 * Resume playback (video + audio)
+	 * Resume specific streams.
 	 */
-	async resumePlayback(): Promise<void> {
-		if (!this._activeStreamId) return;
-
-		await this.dispatch({
-			group: 'videos',
-			action: 'resume',
-			options: { streamId: this._activeStreamId },
-		});
-
-		if (this._activeAudioStreamId) {
+	async resumeStreams(videoStreamId: string | null, audioStreamId: string | null): Promise<void> {
+		if (videoStreamId) {
+			await this.dispatch({
+				group: 'videos',
+				action: 'resume',
+				options: { streamId: videoStreamId },
+			});
+		}
+		if (audioStreamId) {
 			await this.dispatch({
 				group: 'audios',
 				action: 'resume',
-				options: { streamId: this._activeAudioStreamId },
+				options: { streamId: audioStreamId },
 			});
 		}
 	}
@@ -403,64 +379,58 @@ export class PreviewService implements vscode.Disposable {
 	// =========================================================================
 
 	/**
-	 * Decode an audio segment and return PCM data as base64
-	 */
-	async decodeAudioSegment(
-		filePath: string,
-		startTime: number,
-		duration: number,
-		sampleRate: number = 48000,
-		channels: number = 2
-	): Promise<{ buffer: string; sampleRate: number; channels: number; samples: number }> {
-		const result = await this.dispatch({
-			group: 'audios',
-			action: 'extract',
-			options: {
-				source: filePath,
-				startTime,
-				duration,
-				sampleRate,
-				channels,
-				format: 'f32le',
-			},
-		});
-
-		if (result.status === 'error') {
-			throw new Error(result.error?.message ?? 'Audio decode failed');
-		}
-
-		return result.data as unknown as {
-			buffer: string;
-			sampleRate: number;
-			channels: number;
-			samples: number;
-		};
-	}
-
-	/**
-	 * Get waveform data for visualization
+	 * Get waveform data for visualization.
+	 *
+	 * Engine returns multi-channel peaks at a fixed 100 peaks/sec resolution.
+	 * This method mixes all channels down to a single mono peaks array.
 	 */
 	async getWaveform(
 		filePath: string,
-		samplesPerPixel: number = 256
 	): Promise<{ peaks: number[]; duration: number; sampleRate: number }> {
 		const result = await this.dispatch({
 			group: 'audios',
 			action: 'waveform',
-			options: {
-				source: filePath,
-				samplesPerPixel,
-			},
+			options: { source: filePath },
 		});
 
 		if (result.status === 'error') {
 			throw new Error(result.error?.message ?? 'Waveform generation failed');
 		}
 
-		return result.data as unknown as {
-			peaks: number[];
-			duration: number;
+		// Engine response: { resourceId, waveform: WaveformData }
+		// WaveformData: { sampleRate, channels, peaksPerSecond, duration, peaks: number[][] }
+		const data = result.data as Record<string, unknown>;
+		const waveform = data.waveform as {
 			sampleRate: number;
+			channels: number;
+			peaksPerSecond: number;
+			duration: number;
+			peaks: number[][];
+		};
+
+		// Mix multi-channel peaks down to mono (take max across channels)
+		let monoPeaks: number[];
+		if (waveform.peaks.length === 0) {
+			monoPeaks = [];
+		} else if (waveform.peaks.length === 1) {
+			monoPeaks = waveform.peaks[0] ?? [];
+		} else {
+			const len = waveform.peaks[0]?.length ?? 0;
+			monoPeaks = new Array<number>(len);
+			for (let i = 0; i < len; i++) {
+				let max = 0;
+				for (const ch of waveform.peaks) {
+					const v = Math.abs(ch[i] ?? 0);
+					if (v > max) max = v;
+				}
+				monoPeaks[i] = max;
+			}
+		}
+
+		return {
+			peaks: monoPeaks,
+			duration: waveform.duration,
+			sampleRate: waveform.sampleRate,
 		};
 	}
 
@@ -500,8 +470,16 @@ export class PreviewService implements vscode.Disposable {
 			throw new Error('PreviewService not available');
 		}
 
-		const json = JSON.stringify(request);
-		const responseJson = await this._engine.dispatch(json);
+		const responseJson = await this._engine.dispatchAction(
+			request.group,
+			request.action,
+			request.id ?? null,
+			request.options ? JSON.stringify(request.options) : null,
+			request.source ?? null,
+			request.sessionId ?? null,
+			request.streamId ?? null,
+			request.body ? JSON.stringify(request.body) : null,
+		);
 		return JSON.parse(responseJson) as ActionResponse;
 	}
 
@@ -512,8 +490,6 @@ export class PreviewService implements vscode.Disposable {
 	async dispose(): Promise<void> {
 		if (this._disposed) return;
 		this._disposed = true;
-
-		await this.stopPlayback();
 
 		if (this._engine) {
 			try {

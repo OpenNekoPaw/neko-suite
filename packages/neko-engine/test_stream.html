@@ -30,6 +30,15 @@
   .progress-time { position: absolute; top: 0; right: 8px; line-height: 24px; font-size: 12px; color: #aaa; }
   .row { display: flex; gap: 16px; }
   .row > * { flex: 1; }
+  textarea { padding: 6px 10px; border: 1px solid #333; border-radius: 4px; background: #0f3460; color: #eee; font-family: monospace; font-size: 11px; width: 100%; resize: vertical; }
+  input[type=number] { padding: 6px 10px; border: 1px solid #333; border-radius: 4px; background: #0f3460; color: #eee; font-size: 13px; width: 80px; }
+  .jvi-info { font-size: 12px; color: #aaa; margin-top: 4px; }
+  .jvi-info span { color: #7ec8e3; }
+  .tab-bar { display: flex; gap: 4px; margin-bottom: 16px; }
+  .tab-bar button { padding: 8px 20px; border: none; border-radius: 4px 4px 0 0; cursor: pointer; font-size: 14px; background: #0f3460; color: #aaa; }
+  .tab-bar button.active { background: #16213e; color: #7ec8e3; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
 </style>
 </head>
 <body>
@@ -44,7 +53,21 @@
   <div class="controls">
     <label>Video: <input type="text" id="videoPath" value="/Users/feng/git/neko-test/cases/RWBY1Red.mp4"></label>
   </div>
+  <div class="controls">
+    <label>JVI: <input type="text" id="jviPath" value="/Users/feng/git/neko-test/test.jvi"></label>
+    <input type="file" id="jviFileInput" accept=".jvi,.json" style="display:none" onchange="loadJviFile(this)">
+    <button class="primary" onclick="document.getElementById('jviFileInput').click()">Browse</button>
+    <button class="primary" onclick="probeTimeline()">Probe</button>
+  </div>
+  <div class="jvi-info" id="jviInfo"></div>
 </div>
+
+<div class="tab-bar">
+  <button class="active" onclick="switchTab('media')">Media Streams</button>
+  <button onclick="switchTab('timeline')">Timeline Stream</button>
+</div>
+
+<div id="tab-media" class="tab-content active">
 
 <div class="row">
   <div class="panel">
@@ -92,6 +115,46 @@
     </div>
   </div>
 </div>
+
+</div><!-- end tab-media -->
+
+<div id="tab-timeline" class="tab-content">
+  <div class="panel">
+    <h2>Timeline Stream (H.264 Composited Video)</h2>
+    <div class="controls">
+      <button class="primary" onclick="startTimelineStream()">&#9654; Start Timeline</button>
+      <button class="warn" onclick="controlStream('timelines','pause', tlStreamId)">&#9198; Pause</button>
+      <button class="primary" onclick="controlStream('timelines','resume', tlStreamId)">&#9205; Resume</button>
+      <button class="primary" onclick="seekStream('timelines', tlStreamId, 5.0)">&#9193; Seek 5s</button>
+      <button class="primary" onclick="seekStream('timelines', tlStreamId, 0)">&#9194; Seek 0s</button>
+      <button class="danger" onclick="controlStream('timelines','stop', tlStreamId)">&#9209; Stop</button>
+    </div>
+    <div class="controls">
+      <label>Speed: <input type="number" id="tlSpeed" value="1.0" step="0.25" min="0.25" max="4.0"></label>
+      <button class="primary" onclick="setTimelineSpeed()">Set Speed</button>
+      <label style="margin-left: 12px;">Loop In: <input type="number" id="tlLoopIn" value="0" step="0.5" min="0" style="width:60px"></label>
+      <label>Out: <input type="number" id="tlLoopOut" value="10" step="0.5" min="0" style="width:60px"></label>
+      <button class="primary" onclick="setTimelineLoop()">Set Loop</button>
+      <button class="warn" onclick="clearTimelineLoop()">Clear Loop</button>
+    </div>
+    <canvas id="tlCanvas" width="960" height="540"></canvas>
+    <div class="progress-container" onclick="seekByClick('timelines', tlStreamId, this, event)">
+      <div class="progress-fill" id="tlProgress" style="width:0%"></div>
+      <span class="progress-time" id="tlTime">00:00 / 00:00</span>
+    </div>
+    <div class="stats">
+      Frames: <span id="tlFrameCount">0</span> |
+      FPS: <span id="tlFps">0</span> |
+      Size: <span id="tlFrameSize">0</span> |
+      WS: <span id="tlWsState">disconnected</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Timeline JSON</h2>
+    <textarea id="jviContent" rows="12" placeholder="Load a .jvi file or paste timeline JSON here..."></textarea>
+  </div>
+</div><!-- end tab-timeline -->
 
 <div class="panel">
   <h2>API Capability Detection</h2>
@@ -245,7 +308,11 @@ function updateProgress(fillId, timeId, currentSec, durationSec) {
 
 async function seekByClick(group, streamId, container, event) {
   if (!streamId) { log(`No ${group} stream active`, 'warn'); return; }
-  const duration = group === 'videos' ? videoDuration : audioDuration;
+  let duration;
+  if (group === 'videos') duration = videoDuration;
+  else if (group === 'audios') duration = audioDuration;
+  else if (group === 'timelines') duration = tlDuration;
+  else duration = 0;
   if (duration <= 0) { log(`No duration info for ${group}`, 'warn'); return; }
   const rect = container.getBoundingClientRect();
   const pct = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
@@ -261,14 +328,17 @@ async function seekByClick(group, streamId, container, event) {
 function serverUrl() { return document.getElementById('serverUrl').value.replace(/\/$/, ''); }
 function wsUrl() { return serverUrl().replace('http', 'ws'); }
 
-async function dispatch(group, action, options = {}) {
+async function dispatch(group, action, options = {}, bodyPayload = undefined) {
   const url = `${serverUrl()}/v1/dispatch`;
-  const body = { group, action, options };
+  const reqBody = { group, action, options };
+  if (bodyPayload !== undefined) {
+    reqBody.body = bodyPayload;
+  }
   log(`→ ${group}:${action} ${JSON.stringify(options).slice(0, 120)}`);
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(reqBody),
   });
   const data = await resp.json();
   if (data.status === 'ok') {

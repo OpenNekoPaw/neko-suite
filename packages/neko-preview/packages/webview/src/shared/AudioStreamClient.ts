@@ -1,35 +1,36 @@
 /**
- * AudioStreamClient - Opus audio stream player
+ * AudioStreamClient - PCM f32le audio stream player
  *
  * Connects to neko-engine's audio stream via WebSocket,
- * receives Opus encoded packets, decodes via WebCodecs AudioDecoder,
- * and plays via Web Audio API.
+ * receives raw PCM f32le samples, and plays via Web Audio API.
+ * No decoding step needed — samples are directly written to AudioBuffers.
  *
  * Provides getCurrentTime() as master clock for A/V sync.
  *
  * Packet format (from Rust frame server):
- * [pts: i64 LE (8B)] [duration: i64 LE (8B)] [sample_rate: u32 LE (4B)] [channels: u16 LE (2B)] [Opus data...]
+ * [pts_us: i64 LE (8B)] [duration_us: i64 LE (8B)] [sample_rate: u32 LE (4B)] [channels: u16 LE (2B)] [interleaved f32le PCM...]
+ * PTS and duration are in microseconds.
  */
 
-const OPUS_HEADER_SIZE = 8 + 8 + 4 + 2; // pts(8) + duration(8) + sampleRate(4) + channels(2) = 22 bytes
+const PCM_HEADER_SIZE = 8 + 8 + 4 + 2; // pts(8) + duration(8) + sampleRate(4) + channels(2) = 22 bytes
 
-function parseOpusPacket(data: ArrayBuffer): {
+function parsePcmPacket(data: ArrayBuffer): {
 	pts: number;
 	duration: number;
 	sampleRate: number;
 	channels: number;
-	opusData: Uint8Array;
+	pcmData: Uint8Array;
 } | null {
-	if (data.byteLength <= OPUS_HEADER_SIZE) return null;
+	if (data.byteLength <= PCM_HEADER_SIZE) return null;
 
 	const view = new DataView(data);
 
-	// pts: i64 LE (sample units)
+	// pts: i64 LE (microseconds)
 	const ptsLow = view.getUint32(0, true);
 	const ptsHigh = view.getInt32(4, true);
 	const pts = ptsLow + ptsHigh * 0x100000000;
 
-	// duration: i64 LE (sample units)
+	// duration: i64 LE (microseconds)
 	const durLow = view.getUint32(8, true);
 	const durHigh = view.getInt32(12, true);
 	const duration = durLow + durHigh * 0x100000000;
@@ -37,9 +38,10 @@ function parseOpusPacket(data: ArrayBuffer): {
 	const sampleRate = view.getUint32(16, true);
 	const channels = view.getUint16(20, true);
 
-	const opusData = new Uint8Array(data, OPUS_HEADER_SIZE);
+	// slice() creates a new ArrayBuffer starting at offset 0 (4-byte aligned for Float32Array)
+	const pcmData = new Uint8Array(data.slice(PCM_HEADER_SIZE));
 
-	return { pts, duration, sampleRate, channels, opusData };
+	return { pts, duration, sampleRate, channels, pcmData };
 }
 
 // =============================================================================
@@ -51,10 +53,22 @@ export interface AudioStreamClientConfig {
 	websocketUrl: string;
 	/** Initial volume (0.0 - 1.0) */
 	volume?: number;
+	/** Fade-in duration in seconds (0 to disable) */
+	fadeInDuration?: number;
+	/** Fade-out duration in seconds (0 to disable) */
+	fadeOutDuration?: number;
 	/** Callback on connection state change */
 	onConnectionChange?: (connected: boolean) => void;
 	/** Callback on error */
 	onError?: (error: Error) => void;
+}
+
+export interface AudioStreamStats {
+	packetsReceived: number;
+	isClockReady: boolean;
+	currentPtsSeconds: number;
+	prebuffering: boolean;
+	driftMs: number;
 }
 
 // =============================================================================
@@ -66,7 +80,6 @@ export class AudioStreamClient {
 	private ws: WebSocket | null = null;
 	private audioCtx: AudioContext | null = null;
 	private gainNode: GainNode | null = null;
-	private decoder: AudioDecoder | null = null;
 	private disposed = false;
 	private isConnected = false;
 
@@ -74,18 +87,40 @@ export class AudioStreamClient {
 	private ptsOffset: number | null = null;
 	/** Next scheduled play time in AudioContext time */
 	private nextPlayTime = 0;
-	/** Sample rate from first packet (for PTS→seconds conversion) */
+	/** Sample rate from first packet */
 	private sampleRate = 48000;
+
+	/** Last time (audioCtx.currentTime) drift calibration was performed */
+	private lastCalibrationTime = 0;
+
+	// --- Prebuffer ---
+	/** Duration (seconds) of audio to accumulate before starting playback */
+	private static readonly PREBUFFER_DURATION = 0.5;
+	/** Queue of decoded buffers waiting during prebuffer phase */
+	private prebufferQueue: Array<{ audioBuffer: AudioBuffer; ptsSeconds: number }> = [];
+	/** Accumulated duration (seconds) in the prebuffer queue */
+	private prebufferAccum = 0;
+	/** Whether we are in the prebuffer phase (waiting for enough data) */
+	private isPrebuffering = true;
+
+	/** Last measured drift in milliseconds (for stats) */
+	private lastDriftMs = 0;
 
 	// Reconnection
 	private reconnectAttempts = 0;
 	private readonly maxReconnectAttempts = 5;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+	/** Default fade durations (seconds) */
+	private static readonly DEFAULT_FADE_IN = 0.15;
+	private static readonly DEFAULT_FADE_OUT = 0.15;
+
 	constructor(config: AudioStreamClientConfig) {
 		this.config = {
 			websocketUrl: config.websocketUrl,
 			volume: config.volume ?? 1.0,
+			fadeInDuration: config.fadeInDuration ?? AudioStreamClient.DEFAULT_FADE_IN,
+			fadeOutDuration: config.fadeOutDuration ?? AudioStreamClient.DEFAULT_FADE_OUT,
 			onConnectionChange: config.onConnectionChange ?? (() => {}),
 			onError: config.onError ?? (() => {}),
 		};
@@ -95,17 +130,25 @@ export class AudioStreamClient {
 	// Lifecycle
 	// =========================================================================
 
-	async connect(): Promise<void> {
+	/**
+	 * Connect to the audio stream.
+	 * @param existingAudioCtx Optional pre-created AudioContext (e.g. from a user gesture)
+	 *                         to satisfy browser autoplay policy.
+	 */
+	async connect(existingAudioCtx?: AudioContext): Promise<void> {
 		if (this.disposed) return;
 
 		console.log('[AudioStreamClient] Connecting to:', this.config.websocketUrl);
-		this.audioCtx = new AudioContext({ sampleRate: 48000 });
+
+		if (existingAudioCtx) {
+			this.audioCtx = existingAudioCtx;
+		} else {
+			this.audioCtx = new AudioContext({ sampleRate: 48000 });
+		}
+
 		this.gainNode = this.audioCtx.createGain();
 		this.gainNode.gain.value = this.config.volume;
 		this.gainNode.connect(this.audioCtx.destination);
-
-		// Initialize WebCodecs AudioDecoder for Opus
-		this.initDecoder();
 
 		// Resume AudioContext immediately (browser autoplay policy)
 		if (this.audioCtx.state === 'suspended') {
@@ -133,11 +176,6 @@ export class AudioStreamClient {
 			this.ws = null;
 		}
 
-		if (this.decoder && this.decoder.state !== 'closed') {
-			this.decoder.close();
-			this.decoder = null;
-		}
-
 		if (this.audioCtx && this.audioCtx.state !== 'closed') {
 			this.audioCtx.close().catch(() => {});
 			this.audioCtx = null;
@@ -149,80 +187,107 @@ export class AudioStreamClient {
 	}
 
 	// =========================================================================
-	// WebCodecs AudioDecoder
+	// Scheduling logic
 	// =========================================================================
 
-	private initDecoder(): void {
-		if (typeof AudioDecoder === 'undefined') {
-			console.error('[AudioStreamClient] WebCodecs AudioDecoder not available');
-			this.config.onError(new Error('WebCodecs AudioDecoder not supported'));
+	/** Drift calibration interval in seconds of AudioContext time */
+	private static readonly CALIBRATION_INTERVAL = 5;
+	/** Minimum drift (seconds) worth correcting */
+	private static readonly DRIFT_MIN = 0.005;
+	/** Maximum drift (seconds) before we consider it a discontinuity */
+	private static readonly DRIFT_MAX = 1.0;
+	/** Correction factor per calibration (smooth, not instant) */
+	private static readonly DRIFT_CORRECTION = 0.5;
+
+	private scheduleBuffer(audioBuffer: AudioBuffer, ptsSeconds: number): void {
+		if (!this.audioCtx || !this.gainNode) return;
+
+		// --- Prebuffer phase: accumulate data before starting playback ---
+		if (this.isPrebuffering) {
+			this.prebufferQueue.push({ audioBuffer, ptsSeconds });
+			this.prebufferAccum += audioBuffer.duration;
+
+			if (this.prebufferAccum < AudioStreamClient.PREBUFFER_DURATION) {
+				return; // Keep accumulating
+			}
+
+			// Prebuffer complete — establish clock and flush queue
+			const now = this.audioCtx.currentTime;
+			const firstPts = this.prebufferQueue[0]!.ptsSeconds;
+			this.ptsOffset = now - firstPts;
+			this.nextPlayTime = now;
+			this.lastCalibrationTime = now;
+			this.isPrebuffering = false;
+
+			// Fade-in: start from silence and ramp to target volume
+			if (this.gainNode && this.config.fadeInDuration > 0) {
+				this.gainNode.gain.setValueAtTime(0, now);
+				this.gainNode.gain.linearRampToValueAtTime(this.config.volume, now + this.config.fadeInDuration);
+			}
+
+			console.log(
+				'[AudioStreamClient] Prebuffer complete:',
+				'accumulated=', this.prebufferAccum.toFixed(3), 's',
+				'packets=', this.prebufferQueue.length,
+			);
+
+			// Schedule all queued buffers
+			for (const queued of this.prebufferQueue) {
+				this.scheduleImmediate(queued.audioBuffer);
+			}
+			this.prebufferQueue = [];
+			this.prebufferAccum = 0;
 			return;
 		}
 
-		this.decoder = new AudioDecoder({
-			output: (audioData: AudioData) => {
-				this.handleDecodedAudio(audioData);
-			},
-			error: (e: DOMException) => {
-				console.error('[AudioStreamClient] AudioDecoder error:', e);
-			},
-		});
+		const now = this.audioCtx.currentTime;
 
-		this.decoder.configure({
-			codec: 'opus',
-			sampleRate: 48000,
-			numberOfChannels: 2,
-		});
+		// Initialize PTS offset on first frame (fallback, should not hit after prebuffer)
+		if (this.ptsOffset === null) {
+			this.ptsOffset = now - ptsSeconds;
+			this.nextPlayTime = now;
+			this.lastCalibrationTime = now;
+		}
+
+		// --- Drift calibration (every CALIBRATION_INTERVAL seconds) ---
+		if (now - this.lastCalibrationTime >= AudioStreamClient.CALIBRATION_INTERVAL) {
+			this.lastCalibrationTime = now;
+			const expectedPts = now - this.ptsOffset;
+			const drift = ptsSeconds - expectedPts;
+			const absDrift = Math.abs(drift);
+			this.lastDriftMs = drift * 1000;
+
+			if (absDrift >= AudioStreamClient.DRIFT_MIN && absDrift <= AudioStreamClient.DRIFT_MAX) {
+				const correction = drift * AudioStreamClient.DRIFT_CORRECTION;
+				this.ptsOffset -= correction;
+				console.log(
+					'[AudioStreamClient] Drift calibration:',
+					'drift=', (drift * 1000).toFixed(2), 'ms',
+					'correction=', (correction * 1000).toFixed(2), 'ms',
+				);
+			}
+		}
+
+		this.scheduleImmediate(audioBuffer);
 	}
 
-	private handleDecodedAudio(audioData: AudioData): void {
-		if (!this.audioCtx || !this.gainNode) {
-			audioData.close();
-			return;
-		}
+	/** Schedule a single AudioBuffer for immediate/sequential playback */
+	private scheduleImmediate(audioBuffer: AudioBuffer): void {
+		if (!this.audioCtx || !this.gainNode) return;
 
-		const channels = audioData.numberOfChannels;
-		const frames = audioData.numberOfFrames;
-		const sr = audioData.sampleRate;
-
-		if (frames <= 0) {
-			audioData.close();
-			return;
-		}
-
-		// Create AudioBuffer from decoded AudioData
-		const audioBuffer = this.audioCtx.createBuffer(channels, frames, sr);
-
-		for (let ch = 0; ch < channels; ch++) {
-			const channelData = audioBuffer.getChannelData(ch);
-			// AudioData.copyTo copies planar f32 data for the given plane
-			audioData.copyTo(channelData, { planeIndex: ch, format: 'f32-planar' });
-		}
-
-		// PTS in seconds (audioData.timestamp is in microseconds)
-		const ptsSeconds = audioData.timestamp / 1_000_000;
-
-		// Initialize PTS offset on first decoded frame
-		if (this.ptsOffset === null) {
-			this.ptsOffset = this.audioCtx.currentTime - ptsSeconds;
-			this.nextPlayTime = this.audioCtx.currentTime;
-		}
-
-		// Schedule playback
 		const source = this.audioCtx.createBufferSource();
 		source.buffer = audioBuffer;
 		source.connect(this.gainNode);
 
-		// If we're behind, catch up
 		const now = this.audioCtx.currentTime;
+
+		// If we're behind, catch up
 		if (this.nextPlayTime < now) {
 			this.nextPlayTime = now;
 		}
 
 		source.start(this.nextPlayTime);
 		this.nextPlayTime += audioBuffer.duration;
-
-		audioData.close();
 	}
 
 	// =========================================================================
@@ -232,28 +297,76 @@ export class AudioStreamClient {
 	/**
 	 * Get current playback time in media PTS seconds.
 	 * Used as master clock for A/V sync.
+	 *
+	 * Prefers `getOutputTimestamp().contextTime` which compensates for
+	 * audio output latency (sound-card buffer), falling back to
+	 * `audioCtx.currentTime` if unavailable.
 	 */
 	getCurrentTime(): number {
 		if (!this.audioCtx || this.ptsOffset === null) return 0;
-		return this.audioCtx.currentTime - this.ptsOffset;
+
+		let ctxTime = this.audioCtx.currentTime;
+		try {
+			const ts = this.audioCtx.getOutputTimestamp();
+			if (ts.contextTime !== undefined && ts.contextTime > 0) {
+				ctxTime = ts.contextTime;
+			}
+		} catch {
+			// getOutputTimestamp not supported — use currentTime
+		}
+
+		return ctxTime - this.ptsOffset;
 	}
 
 	/**
-	 * Whether the audio clock is ready (has received at least one packet)
+	 * Whether the audio clock is ready (prebuffer done and offset established)
 	 */
 	get isClockReady(): boolean {
-		return this.ptsOffset !== null;
+		return this.ptsOffset !== null && !this.isPrebuffering;
 	}
 
 	// =========================================================================
-	// Volume
+	// Volume & Fading
 	// =========================================================================
 
 	setVolume(volume: number): void {
 		this.config.volume = Math.max(0, Math.min(1, volume));
-		if (this.gainNode) {
-			this.gainNode.gain.value = this.config.volume;
+		if (this.gainNode && this.audioCtx) {
+			this.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
+			this.gainNode.gain.setValueAtTime(this.config.volume, this.audioCtx.currentTime);
 		}
+	}
+
+	/**
+	 * Fade out audio over the configured duration.
+	 * Returns a Promise that resolves when the fade completes.
+	 */
+	fadeOut(duration?: number): Promise<void> {
+		const dur = duration ?? this.config.fadeOutDuration;
+		if (!this.gainNode || !this.audioCtx || dur <= 0) {
+			return Promise.resolve();
+		}
+
+		const now = this.audioCtx.currentTime;
+		this.gainNode.gain.cancelScheduledValues(now);
+		this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+		this.gainNode.gain.linearRampToValueAtTime(0, now + dur);
+
+		return new Promise((resolve) => setTimeout(resolve, dur * 1000));
+	}
+
+	// =========================================================================
+	// Stats
+	// =========================================================================
+
+	getStats(): AudioStreamStats {
+		return {
+			packetsReceived: this.packetCount,
+			isClockReady: this.isClockReady,
+			currentPtsSeconds: this.getCurrentTime(),
+			prebuffering: this.isPrebuffering,
+			driftMs: this.lastDriftMs,
+		};
 	}
 
 	// =========================================================================
@@ -261,22 +374,28 @@ export class AudioStreamClient {
 	// =========================================================================
 
 	/**
-	 * Reset audio clock and decoder state after a seek operation.
-	 * Clears the PTS offset so the next packet re-establishes the clock.
+	 * Reset audio clock state after a seek operation.
+	 * Applies a brief mute to avoid audible glitches, then clears
+	 * the PTS offset so the next packet re-establishes the clock
+	 * (and triggers a fresh fade-in via prebuffer).
 	 */
 	resetClock(): void {
+		// Immediately mute to prevent stale-buffer glitches during seek
+		if (this.gainNode && this.audioCtx) {
+			const now = this.audioCtx.currentTime;
+			this.gainNode.gain.cancelScheduledValues(now);
+			this.gainNode.gain.setValueAtTime(0, now);
+		}
+
 		this.ptsOffset = null;
 		this.nextPlayTime = 0;
+		this.lastCalibrationTime = 0;
 
-		// Reset decoder to flush stale data
-		if (this.decoder && this.decoder.state !== 'closed') {
-			this.decoder.reset();
-			this.decoder.configure({
-				codec: 'opus',
-				sampleRate: 48000,
-				numberOfChannels: 2,
-			});
-		}
+		// Reset prebuffer state — next prebuffer completion will fade-in
+		this.isPrebuffering = true;
+		this.prebufferQueue = [];
+		this.prebufferAccum = 0;
+		this.lastDriftMs = 0;
 	}
 
 	// =========================================================================
@@ -326,10 +445,10 @@ export class AudioStreamClient {
 	private packetCount = 0;
 
 	private handlePacket(data: ArrayBuffer): void {
-		const packet = parseOpusPacket(data);
-		if (!packet || !this.decoder || this.decoder.state === 'closed') {
-			return;
-		}
+		if (!this.audioCtx || !this.gainNode) return;
+
+		const packet = parsePcmPacket(data);
+		if (!packet) return;
 
 		this.packetCount++;
 		if (this.packetCount <= 3 || this.packetCount % 200 === 0) {
@@ -339,27 +458,34 @@ export class AudioStreamClient {
 				'dur=', packet.duration,
 				'sr=', packet.sampleRate,
 				'ch=', packet.channels,
-				'size=', packet.opusData.byteLength,
+				'pcmBytes=', packet.pcmData.byteLength,
 			);
 		}
 
 		this.sampleRate = packet.sampleRate;
 
-		// Convert PTS from sample units to microseconds (WebCodecs convention)
-		const timestampUs = (packet.pts / packet.sampleRate) * 1_000_000;
-		const durationUs = (packet.duration / packet.sampleRate) * 1_000_000;
+		// Interpret payload as interleaved f32le samples
+		const floats = new Float32Array(
+			packet.pcmData.buffer,
+			packet.pcmData.byteOffset,
+			packet.pcmData.byteLength / 4,
+		);
+		const channels = packet.channels || 2;
+		const samplesPerChannel = floats.length / channels;
 
-		try {
-			const chunk = new EncodedAudioChunk({
-				type: 'key', // Opus packets are always independently decodable
-				timestamp: timestampUs,
-				duration: durationUs,
-				data: packet.opusData,
-			});
-			this.decoder.decode(chunk);
-		} catch (e) {
-			console.warn('[AudioStreamClient] Decode error:', e);
+		if (samplesPerChannel <= 0) return;
+
+		// Create AudioBuffer and de-interleave into per-channel arrays
+		const audioBuffer = this.audioCtx.createBuffer(channels, samplesPerChannel, packet.sampleRate);
+		for (let ch = 0; ch < channels; ch++) {
+			const channelData = audioBuffer.getChannelData(ch);
+			for (let i = 0; i < samplesPerChannel; i++) {
+				channelData[i] = floats[i * channels + ch];
+			}
 		}
+
+		const ptsSeconds = packet.pts / 1_000_000;
+		this.scheduleBuffer(audioBuffer, ptsSeconds);
 	}
 
 	private tryReconnect(): void {

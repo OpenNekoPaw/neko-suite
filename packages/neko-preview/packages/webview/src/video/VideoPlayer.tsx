@@ -8,9 +8,61 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { H264StreamClient } from '../shared/H264StreamClient';
 import { AudioStreamClient } from '../shared/AudioStreamClient';
+import { FrameScheduler, type FrameSchedulerStats } from '../shared/FrameScheduler';
+import type { AudioStreamStats } from '../shared/AudioStreamClient';
+import type { H264StreamStats } from '../shared/H264StreamClient';
 import { useExtensionMessage, useVscodeReady } from '../shared/useVscodeMessage';
 import { VideoControls } from './VideoControls';
 import type { MediaInfo, PreviewInitMessage } from '../shared/types';
+
+/** Auto-hide delay for controls overlay (ms) */
+const CONTROLS_HIDE_DELAY = 3000;
+
+interface SyncStats {
+	scheduler: FrameSchedulerStats | null;
+	h264: H264StreamStats | null;
+	audio: AudioStreamStats | null;
+}
+
+function formatSyncStats(stats: SyncStats): string {
+	const { scheduler, h264, audio } = stats;
+
+	const lines: string[] = ['=== Sync Stats ==='];
+
+	if (scheduler) {
+		lines.push(`Video Queue: ${scheduler.queueLength} frames`);
+		lines.push(
+			`Rendered: ${scheduler.rendered} | Skipped: ${scheduler.skipped} | Backpressure: ${scheduler.backpressure}`,
+		);
+		const deltaMs = (scheduler.lastSyncDelta / 1000).toFixed(1);
+		const threshMs = (scheduler.syncThresholdUs / 1000).toFixed(1);
+		const avOffMs = (scheduler.avOffsetUs / 1000).toFixed(1);
+		lines.push(`Sync Δ: ${deltaMs}ms | Threshold: ±${threshMs}ms | A/V Offset: ${avOffMs}ms`);
+	} else {
+		lines.push('Video: no scheduler');
+	}
+
+	lines.push('--- H.264 ---');
+	if (h264) {
+		lines.push(
+			`Packets: ${h264.packetsReceived} | Decoded: ${h264.framesDecoded} | Dropped: ${h264.framesDropped}`,
+		);
+	} else {
+		lines.push('H.264: not connected');
+	}
+
+	lines.push('--- Audio ---');
+	if (audio) {
+		const clockStatus = audio.isClockReady ? 'ready' : 'waiting';
+		const prebufStatus = audio.prebuffering ? 'buffering' : 'done';
+		lines.push(`Packets: ${audio.packetsReceived} | Clock: ${clockStatus} | Prebuffer: ${prebufStatus}`);
+		lines.push(`Drift: ${audio.driftMs >= 0 ? '+' : ''}${audio.driftMs.toFixed(1)}ms`);
+	} else {
+		lines.push('Audio: not connected');
+	}
+
+	return lines.join('\n');
+}
 
 export function VideoPlayer() {
 	const { postMessage } = useVscodeReady();
@@ -25,20 +77,75 @@ export function VideoPlayer() {
 	const [volume, setVolume] = useState(1.0);
 	const [posterUrl, setPosterUrl] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [controlsVisible, setControlsVisible] = useState(true);
+	const [showStats, setShowStats] = useState(false);
+	const [syncStats, setSyncStats] = useState<SyncStats>({ scheduler: null, h264: null, audio: null });
 
 	// Refs
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const clientRef = useRef<H264StreamClient | null>(null);
 	const audioClientRef = useRef<AudioStreamClient | null>(null);
+	const schedulerRef = useRef<FrameScheduler | null>(null);
+	const audioCtxRef = useRef<AudioContext | null>(null);
 	const playStartTimeRef = useRef<number>(0);
 	const playWallTimeRef = useRef<number>(0);
 	const animFrameRef = useRef<number>(0);
+	const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const statusThrottleRef = useRef<number>(0);
+	const statsThrottleRef = useRef<number>(0);
+	/** Track clock source to detect wall→audio transition */
+	const clockSourceRef = useRef<'wall' | 'audio'>('wall');
 
 	// =========================================================================
-	// Frame rendering callback
+	// Keyboard shortcut: 'D' toggles stats overlay
 	// =========================================================================
 
-	const onFrame = useCallback((frame: VideoFrame) => {
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === 'd' || e.key === 'D') {
+				// Ignore if typing in an input
+				if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+				setShowStats((prev) => !prev);
+			}
+		};
+		window.addEventListener('keydown', handleKeyDown);
+		return () => window.removeEventListener('keydown', handleKeyDown);
+	}, []);
+
+	// =========================================================================
+	// Controls auto-hide
+	// =========================================================================
+
+	const showControls = useCallback(() => {
+		setControlsVisible(true);
+		if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+		if (isPlaying) {
+			hideTimerRef.current = setTimeout(() => {
+				setControlsVisible(false);
+			}, CONTROLS_HIDE_DELAY);
+		}
+	}, [isPlaying]);
+
+	useEffect(() => {
+		if (!isPlaying) {
+			setControlsVisible(true);
+			if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+		} else {
+			hideTimerRef.current = setTimeout(() => {
+				setControlsVisible(false);
+			}, CONTROLS_HIDE_DELAY);
+		}
+		return () => {
+			if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+		};
+	}, [isPlaying]);
+
+	// =========================================================================
+	// Frame rendering
+	// =========================================================================
+
+	/** Render a single VideoFrame to the canvas, then close it. */
+	const renderFrame = useCallback((frame: VideoFrame) => {
 		const canvas = canvasRef.current;
 		if (!canvas) {
 			frame.close();
@@ -61,6 +168,21 @@ export function VideoPlayer() {
 		frame.close();
 	}, []);
 
+	/**
+	 * onFrame callback passed to H264StreamClient.
+	 * Instead of rendering directly, enqueue to FrameScheduler for
+	 * clock-based scheduling.
+	 */
+	const onFrame = useCallback((frame: VideoFrame) => {
+		const scheduler = schedulerRef.current;
+		if (scheduler) {
+			scheduler.enqueue(frame);
+		} else {
+			// No scheduler yet — render immediately (shouldn't happen)
+			renderFrame(frame);
+		}
+	}, [renderFrame]);
+
 	// =========================================================================
 	// Time tracking during playback
 	// =========================================================================
@@ -72,27 +194,102 @@ export function VideoPlayer() {
 		let newTime: number;
 		const audioClient = audioClientRef.current;
 		if (audioClient && audioClient.isClockReady) {
+			// Detect wall→audio clock transition: reset scheduler's A/V offset
+			// because the master clock domain has changed.
+			if (clockSourceRef.current === 'wall') {
+				clockSourceRef.current = 'audio';
+				schedulerRef.current?.flush();
+				console.log('[VideoPlayer] Clock source switched: wall → audio, scheduler flushed');
+			}
 			newTime = audioClient.getCurrentTime();
 		} else {
-			const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
-			newTime = playStartTimeRef.current + elapsed * speed;
+			// Wall-clock fallback: don't advance until the first video frame arrives,
+			// so the clock doesn't run ahead while the stream is still connecting.
+			const h264Stats = clientRef.current?.getStats();
+			if (!h264Stats || h264Stats.framesDecoded === 0) {
+				// No frames yet — keep resetting the wall-clock base
+				playWallTimeRef.current = performance.now();
+				newTime = playStartTimeRef.current;
+			} else {
+				const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
+				newTime = playStartTimeRef.current + elapsed * speed;
+			}
 		}
 
 		if (newTime >= mediaInfo.duration) {
 			// Reached end — stop stream and clean up clients
 			setCurrentTime(mediaInfo.duration);
 			setIsPlaying(false);
+			schedulerRef.current?.flush();
 			clientRef.current?.dispose();
 			clientRef.current = null;
-			audioClientRef.current?.dispose();
-			audioClientRef.current = null;
+			// Fade out audio before disposing
+			const audioClient = audioClientRef.current;
+			if (audioClient) {
+				audioClient.fadeOut().then(() => {
+					audioClient.dispose();
+				});
+				audioClientRef.current = null;
+			}
 			postMessage({ type: 'preview:stop' });
+			postMessage({ type: 'preview:statusUpdate', playbackState: 'stopped', currentTime: mediaInfo.duration });
 			return;
 		}
 
+		// --- Frame scheduling: render/skip/wait based on master clock ---
+		const scheduler = schedulerRef.current;
+		if (scheduler) {
+			const masterClockUs = newTime * 1_000_000;
+			const result = scheduler.schedule(masterClockUs);
+			if (result.action === 'render' && result.frame) {
+				renderFrame(result.frame);
+			}
+			// Log scheduling decisions periodically or when frames are skipped
+			if (result.skipped > 0) {
+				console.log(
+					'[VideoPlayer] Schedule: skipped=', result.skipped,
+					'action=', result.action,
+					'delta=', (result.deltaUs / 1000).toFixed(1), 'ms',
+					'queue=', scheduler.getStats().queueLength,
+				);
+			}
+		}
+
 		setCurrentTime(newTime);
+
+		// Throttle status updates to ~1/sec
+		const now = performance.now();
+		if (now - statusThrottleRef.current > 1000) {
+			statusThrottleRef.current = now;
+			postMessage({ type: 'preview:statusUpdate', playbackState: 'playing', currentTime: newTime });
+
+			// Periodic diagnostic log
+			const h264 = clientRef.current?.getStats();
+			const sched = schedulerRef.current?.getStats();
+			const audio = audioClientRef.current?.getStats();
+			const clockSrc = (audioClient && audioClient.isClockReady) ? 'audio' : 'wall';
+			console.log(
+				'[VideoPlayer] Tick:',
+				'time=', newTime.toFixed(2), 's',
+				'clock=', clockSrc,
+				'h264=[recv=', h264?.packetsReceived, 'dec=', h264?.framesDecoded, 'drop=', h264?.framesDropped, ']',
+				'sched=[q=', sched?.queueLength, 'rend=', sched?.rendered, 'skip=', sched?.skipped, 'bp=', sched?.backpressure, ']',
+				audio ? `audio=[prebuf=${audio.prebuffering} drift=${audio.driftMs.toFixed(1)}ms]` : 'audio=none',
+			);
+		}
+
+		// Collect stats for debug overlay (~2/sec)
+		if (showStats && now - statsThrottleRef.current > 500) {
+			statsThrottleRef.current = now;
+			setSyncStats({
+				scheduler: schedulerRef.current?.getStats() ?? null,
+				h264: clientRef.current?.getStats() ?? null,
+				audio: audioClientRef.current?.getStats() ?? null,
+			});
+		}
+
 		animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
-	}, [isPlaying, mediaInfo, speed, postMessage]);
+	}, [isPlaying, mediaInfo, speed, showStats, renderFrame, postMessage]);
 
 	useEffect(() => {
 		if (isPlaying) {
@@ -132,6 +329,10 @@ export function VideoPlayer() {
 				// Dispose previous clients if any
 				clientRef.current?.dispose();
 				audioClientRef.current?.dispose();
+				schedulerRef.current?.dispose();
+
+				// Create frame scheduler for A/V sync (adaptive threshold based on fps)
+				schedulerRef.current = new FrameScheduler(mediaInfo?.fps || 25);
 
 				const info = mediaInfo;
 				const client = new H264StreamClient({
@@ -148,7 +349,7 @@ export function VideoPlayer() {
 				clientRef.current = client;
 				client.connect();
 
-				// Start audio stream if available
+				// Start audio stream if available, passing pre-created AudioContext
 				if (audioStreamUrl) {
 					const audioClient = new AudioStreamClient({
 						websocketUrl: audioStreamUrl,
@@ -161,7 +362,7 @@ export function VideoPlayer() {
 						},
 					});
 					audioClientRef.current = audioClient;
-					audioClient.connect();
+					audioClient.connect(audioCtxRef.current ?? undefined);
 				}
 				break;
 			}
@@ -180,8 +381,17 @@ export function VideoPlayer() {
 	// Cleanup on unmount
 	useEffect(() => {
 		return () => {
+			schedulerRef.current?.dispose();
 			clientRef.current?.dispose();
-			audioClientRef.current?.dispose();
+			// Mute immediately to prevent audio pop, then dispose
+			const ac = audioClientRef.current;
+			if (ac) {
+				ac.setVolume(0);
+				ac.dispose();
+			}
+			if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+				audioCtxRef.current.close().catch(() => {});
+			}
 		};
 	}, []);
 
@@ -192,25 +402,42 @@ export function VideoPlayer() {
 	const handlePlay = useCallback(() => {
 		if (!mediaInfo) return;
 
+		// Create / resume AudioContext in user gesture for autoplay policy
+		if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+			audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
+		}
+		if (audioCtxRef.current.state === 'suspended') {
+			audioCtxRef.current.resume().catch(() => {});
+		}
+
 		const startTime = currentTime >= mediaInfo.duration ? 0 : currentTime;
 		setCurrentTime(startTime);
 		setIsPlaying(true);
 		playStartTimeRef.current = startTime;
 		playWallTimeRef.current = performance.now();
+		clockSourceRef.current = 'wall';
 
 		postMessage({ type: 'preview:play', startTime, speed });
+		postMessage({ type: 'preview:statusUpdate', playbackState: 'playing', currentTime: startTime });
 	}, [mediaInfo, currentTime, speed, postMessage]);
 
 	const handlePause = useCallback(() => {
 		setIsPlaying(false);
 		postMessage({ type: 'preview:pause' });
-	}, [postMessage]);
+		postMessage({ type: 'preview:statusUpdate', playbackState: 'paused', currentTime });
+	}, [postMessage, currentTime]);
 
 	const handleResume = useCallback(() => {
+		// Resume AudioContext in user gesture
+		if (audioCtxRef.current?.state === 'suspended') {
+			audioCtxRef.current.resume().catch(() => {});
+		}
+
 		setIsPlaying(true);
 		playStartTimeRef.current = currentTime;
 		playWallTimeRef.current = performance.now();
 		postMessage({ type: 'preview:resume' });
+		postMessage({ type: 'preview:statusUpdate', playbackState: 'playing', currentTime });
 	}, [currentTime, postMessage]);
 
 	const handleTogglePlay = useCallback(() => {
@@ -225,15 +452,25 @@ export function VideoPlayer() {
 		}
 	}, [isPlaying, handlePlay, handlePause, handleResume]);
 
+	/** Scrub: drag-preview only — updates UI time without backend seek */
+	const handleScrub = useCallback((time: number) => {
+		setCurrentTime(time);
+	}, []);
+
+	/** Seek: commits to backend on mouseup */
 	const handleSeek = useCallback((time: number) => {
 		setCurrentTime(time);
 		if (isPlaying) {
 			playStartTimeRef.current = time;
 			playWallTimeRef.current = performance.now();
 		}
+		// Flush queued frames so stale pre-seek frames aren't rendered
+		schedulerRef.current?.flush();
 		// Reset decoders so they start clean from the next keyframe
 		clientRef.current?.resetDecoder();
 		audioClientRef.current?.resetClock();
+		// Audio clock is re-prebuffering, so clock source returns to wall
+		clockSourceRef.current = 'wall';
 		postMessage({ type: 'preview:seek', time });
 	}, [isPlaying, postMessage]);
 
@@ -265,15 +502,15 @@ export function VideoPlayer() {
 	}
 
 	if (error) {
-		return <div className="error">⚠️ {error}</div>;
+		return <div className="error">Error: {error}</div>;
 	}
 
 	if (!mediaInfo) {
-		return <div className="error">⚠️ No media info available</div>;
+		return <div className="error">No media info available</div>;
 	}
 
 	return (
-		<div className="video-player">
+		<div className="video-player" onMouseMove={showControls}>
 			<div className="video-player__canvas-container">
 				{/* Canvas for H.264 decoded frames */}
 				<canvas
@@ -291,6 +528,13 @@ export function VideoPlayer() {
 					/>
 				)}
 
+				{/* Stats debug overlay (toggle with 'D' key) */}
+				{showStats && (
+					<div className="video-player__stats-overlay">
+						{formatSyncStats(syncStats)}
+					</div>
+				)}
+
 				{/* Play overlay when paused */}
 				{!isPlaying && (
 					<div className="video-player__overlay" onClick={handleTogglePlay}>
@@ -303,18 +547,23 @@ export function VideoPlayer() {
 				)}
 			</div>
 
-			<VideoControls
-				isPlaying={isPlaying}
-				currentTime={currentTime}
-				duration={mediaInfo.duration}
-				speed={speed}
-				volume={volume}
-				isConnected={isConnected}
-				onTogglePlay={handleTogglePlay}
-				onSeek={handleSeek}
-				onSpeedChange={handleSpeedChange}
-				onVolumeChange={handleVolumeChange}
-			/>
+			{/* Controls overlay at bottom */}
+			<div className={`video-player__controls-overlay ${controlsVisible ? '' : 'is-hidden'}`}>
+				<VideoControls
+					isPlaying={isPlaying}
+					currentTime={currentTime}
+					duration={mediaInfo.duration}
+					speed={speed}
+					volume={volume}
+					isConnected={isConnected}
+					onTogglePlay={handleTogglePlay}
+					onSeek={handleSeek}
+					onScrub={handleScrub}
+					onSpeedChange={handleSpeedChange}
+					onVolumeChange={handleVolumeChange}
+					visible={controlsVisible}
+				/>
+			</div>
 		</div>
 	);
 }

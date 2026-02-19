@@ -62,24 +62,11 @@ export interface PreviewWaveformMessage {
 	};
 }
 
-export interface PreviewAudioDataMessage {
-	type: 'preview:audioData';
-	requestId: string;
-	payload?: {
-		buffer: string;
-		sampleRate: number;
-		channels: number;
-		samples: number;
-	};
-	error?: string;
-}
-
 export type ExtensionMessage =
 	| PreviewInitMessage
 	| PreviewStreamReadyMessage
 	| PreviewFrameDataMessage
-	| PreviewWaveformMessage
-	| PreviewAudioDataMessage;
+	| PreviewWaveformMessage;
 
 // =============================================================================
 // Webview → Extension Messages
@@ -122,11 +109,10 @@ export interface CaptureFrameMessage {
 	time: number;
 }
 
-export interface DecodeSegmentMessage {
-	type: 'preview:decodeSegment';
-	requestId: string;
-	startTime: number;
-	duration: number;
+export interface StatusUpdateMessage {
+	type: 'preview:statusUpdate';
+	playbackState: 'playing' | 'paused' | 'stopped';
+	currentTime: number;
 }
 
 export type WebviewMessage =
@@ -138,4 +124,4 @@ export type WebviewMessage =
 	| SeekMessage
 	| SpeedMessage
 	| CaptureFrameMessage
-	| DecodeSegmentMessage;
+	| StatusUpdateMessage;
