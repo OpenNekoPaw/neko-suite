@@ -86,6 +86,7 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
+        "--remote-debugging-port=9222",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine"
       ],
