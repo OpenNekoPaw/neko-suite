@@ -57,6 +57,9 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
 			],
 		};
 
+		// Pin the editor tab so it won't be replaced when opening other files
+		vscode.commands.executeCommand('workbench.action.pinEditor');
+
 		// Initialize preview service (lazy)
 		if (!this._previewService) {
 			this._previewService = await PreviewService.tryCreate();

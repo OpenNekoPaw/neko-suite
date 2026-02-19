@@ -19,11 +19,15 @@ interface VideoControlsProps {
 	speed: number;
 	volume: number;
 	isConnected: boolean;
+	isPiPActive?: boolean;
+	showStats?: boolean;
 	onTogglePlay: () => void;
 	onSeek: (time: number) => void;
 	onScrub?: (time: number) => void;
 	onSpeedChange: (speed: number) => void;
 	onVolumeChange: (volume: number) => void;
+	onTogglePiP?: () => void;
+	onToggleStats?: () => void;
 	visible?: boolean;
 }
 
@@ -34,11 +38,15 @@ export function VideoControls({
 	speed,
 	volume,
 	isConnected,
+	isPiPActive = false,
+	showStats = false,
 	onTogglePlay,
 	onSeek,
 	onScrub,
 	onSpeedChange,
 	onVolumeChange,
+	onTogglePiP,
+	onToggleStats,
 	visible = true,
 }: VideoControlsProps) {
 	// =========================================================================
@@ -174,6 +182,32 @@ export function VideoControls({
 					>
 						{speed}x
 					</button>
+
+					{/* Stats toggle */}
+					{onToggleStats && (
+						<button
+							className={`controls__btn ${showStats ? 'controls__btn--active' : ''}`}
+							onClick={onToggleStats}
+							title={showStats ? 'Hide Stats (D)' : 'Show Stats (D)'}
+						>
+							<svg viewBox="0 0 24 24">
+								<path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H5v-2h7v2zm5-4H5v-2h12v2zm0-4H5V7h12v2z" />
+							</svg>
+						</button>
+					)}
+
+					{/* Picture-in-Picture */}
+					{onTogglePiP && (
+						<button
+							className={`controls__btn ${isPiPActive ? 'controls__btn--active' : ''}`}
+							onClick={onTogglePiP}
+							title={isPiPActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture'}
+						>
+							<svg viewBox="0 0 24 24">
+								<path d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z" />
+							</svg>
+						</button>
+					)}
 
 					{/* Connection indicator */}
 					{!isConnected && (

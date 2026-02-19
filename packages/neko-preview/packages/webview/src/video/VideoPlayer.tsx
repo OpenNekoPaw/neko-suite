@@ -81,8 +81,12 @@ export function VideoPlayer() {
 	const [showStats, setShowStats] = useState(false);
 	const [syncStats, setSyncStats] = useState<SyncStats>({ scheduler: null, h264: null, audio: null });
 
+	// PiP state
+	const [isPiPActive, setIsPiPActive] = useState(false);
+
 	// Refs
 	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const pipVideoRef = useRef<HTMLVideoElement>(null);
 	const clientRef = useRef<H264StreamClient | null>(null);
 	const audioClientRef = useRef<AudioStreamClient | null>(null);
 	const schedulerRef = useRef<FrameScheduler | null>(null);
@@ -489,6 +493,58 @@ export function VideoPlayer() {
 	}, []);
 
 	// =========================================================================
+	// Picture-in-Picture
+	// =========================================================================
+
+	const handleTogglePiP = useCallback(async () => {
+		if (!canvasRef.current) return;
+
+		// If PiP is active, exit
+		if (document.pictureInPictureElement) {
+			await document.exitPictureInPicture();
+			return;
+		}
+
+		const video = pipVideoRef.current;
+		if (!video) return;
+
+		// Lazy-init: capture canvas stream and set as video source
+		if (!video.srcObject) {
+			// No argument = auto-capture on every canvas repaint
+			const stream = canvasRef.current.captureStream();
+			video.srcObject = stream;
+			video.muted = true;
+			await video.play();
+		}
+
+		await video.requestPictureInPicture();
+	}, []);
+
+	// PiP event listeners
+	useEffect(() => {
+		const video = pipVideoRef.current;
+		if (!video) return;
+
+		const handleEnterPiP = () => setIsPiPActive(true);
+		const handleLeavePiP = () => {
+			setIsPiPActive(false);
+			// Clean up stream tracks
+			const stream = video.srcObject as MediaStream | null;
+			if (stream) {
+				stream.getTracks().forEach((track) => track.stop());
+				video.srcObject = null;
+			}
+		};
+
+		video.addEventListener('enterpictureinpicture', handleEnterPiP);
+		video.addEventListener('leavepictureinpicture', handleLeavePiP);
+		return () => {
+			video.removeEventListener('enterpictureinpicture', handleEnterPiP);
+			video.removeEventListener('leavepictureinpicture', handleLeavePiP);
+		};
+	}, []);
+
+	// =========================================================================
 	// Render
 	// =========================================================================
 
@@ -512,6 +568,9 @@ export function VideoPlayer() {
 	return (
 		<div className="video-player" onMouseMove={showControls}>
 			<div className="video-player__canvas-container">
+				{/* Hidden video element for PiP */}
+				<video ref={pipVideoRef} style={{ display: 'none' }} playsInline muted />
+
 				{/* Canvas for H.264 decoded frames */}
 				<canvas
 					ref={canvasRef}
@@ -556,11 +615,15 @@ export function VideoPlayer() {
 					speed={speed}
 					volume={volume}
 					isConnected={isConnected}
+					isPiPActive={isPiPActive}
+					showStats={showStats}
 					onTogglePlay={handleTogglePlay}
 					onSeek={handleSeek}
 					onScrub={handleScrub}
 					onSpeedChange={handleSpeedChange}
 					onVolumeChange={handleVolumeChange}
+					onTogglePiP={handleTogglePiP}
+					onToggleStats={() => setShowStats((prev) => !prev)}
 					visible={controlsVisible}
 				/>
 			</div>
