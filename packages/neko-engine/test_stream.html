@@ -1106,6 +1106,25 @@ function connectTimelineWs(streamId) {
     const nalData = data.slice(25);
 
     tlWsFrameCount++;
+    tlTotalBytes += data.byteLength;
+    tlBitrateBytes += data.byteLength;
+    if (isKeyframe) tlKeyframeCount++;
+    tlLastVideoPts = pts;
+
+    // Update bitrate every second
+    const now = performance.now();
+    if (now - tlBitrateLastTime >= 1000) {
+      const elapsed = (now - tlBitrateLastTime) / 1000;
+      const bitrate = (tlBitrateBytes * 8) / elapsed;
+      document.getElementById('tlBitrate').textContent =
+        bitrate > 1_000_000 ? (bitrate / 1_000_000).toFixed(1) + ' Mbps' :
+        (bitrate / 1000).toFixed(0) + ' kbps';
+      document.getElementById('tlAvgSize').textContent =
+        tlFrameCount > 0 ? (tlTotalBytes / tlFrameCount / 1024).toFixed(1) + ' KB' : '-';
+      document.getElementById('tlKeyframes').textContent = tlKeyframeCount;
+      tlBitrateBytes = 0;
+      tlBitrateLastTime = now;
+    }
 
     // Update progress
     updateProgress('tlProgress', 'tlTime', pts / 1_000_000, tlDuration);
