@@ -119,40 +119,79 @@
 </div><!-- end tab-media -->
 
 <div id="tab-timeline" class="tab-content">
-  <div class="panel">
-    <h2>Timeline Stream (H.264 Composited Video)</h2>
-    <div class="controls">
-      <button class="primary" onclick="startTimelineStream()">&#9654; Start Timeline</button>
-      <button class="warn" onclick="controlStream('timelines','pause', tlStreamId)">&#9198; Pause</button>
-      <button class="primary" onclick="controlStream('timelines','resume', tlStreamId)">&#9205; Resume</button>
-      <button class="primary" onclick="seekStream('timelines', tlStreamId, 5.0)">&#9193; Seek 5s</button>
-      <button class="primary" onclick="seekStream('timelines', tlStreamId, 0)">&#9194; Seek 0s</button>
-      <button class="danger" onclick="controlStream('timelines','stop', tlStreamId)">&#9209; Stop</button>
-    </div>
-    <div class="controls">
-      <label>Speed: <input type="number" id="tlSpeed" value="1.0" step="0.25" min="0.25" max="4.0"></label>
-      <button class="primary" onclick="setTimelineSpeed()">Set Speed</button>
-      <label style="margin-left: 12px;">Loop In: <input type="number" id="tlLoopIn" value="0" step="0.5" min="0" style="width:60px"></label>
-      <label>Out: <input type="number" id="tlLoopOut" value="10" step="0.5" min="0" style="width:60px"></label>
-      <button class="primary" onclick="setTimelineLoop()">Set Loop</button>
-      <button class="warn" onclick="clearTimelineLoop()">Clear Loop</button>
-    </div>
-    <canvas id="tlCanvas" width="960" height="540"></canvas>
-    <div class="progress-container" onclick="seekByClick('timelines', tlStreamId, this, event)">
-      <div class="progress-fill" id="tlProgress" style="width:0%"></div>
-      <span class="progress-time" id="tlTime">00:00 / 00:00</span>
-    </div>
-    <div class="stats">
-      Frames: <span id="tlFrameCount">0</span> |
-      FPS: <span id="tlFps">0</span> |
-      Size: <span id="tlFrameSize">0</span> |
-      WS: <span id="tlWsState">disconnected</span>
+  <div class="panel" style="margin-bottom:12px">
+    <h2>Timeline JSON</h2>
+    <textarea id="jviContent" rows="8" placeholder="Load a .jvi file or paste timeline JSON here..."></textarea>
+    <div class="controls" style="margin-top:8px">
+      <button class="primary" onclick="startTimelineStream()">&#9654; Start Both</button>
+      <button class="primary" onclick="startTimelineVideoOnly()">&#127909; Video Only</button>
+      <button class="primary" onclick="startTimelineAudioOnly()">&#127925; Audio Only</button>
+      <button class="danger" onclick="stopTimelineAll()">&#9209; Stop All</button>
     </div>
   </div>
 
-  <div class="panel">
-    <h2>Timeline JSON</h2>
-    <textarea id="jviContent" rows="12" placeholder="Load a .jvi file or paste timeline JSON here..."></textarea>
+  <div class="row">
+    <div class="panel">
+      <h2>Timeline Video Stream</h2>
+      <div class="controls">
+        <button class="warn" onclick="controlStream('timelines','pause', tlStreamId)">&#9198; Pause</button>
+        <button class="primary" onclick="controlStream('timelines','resume', tlStreamId)">&#9205; Resume</button>
+        <button class="primary" onclick="seekStream('timelines', tlStreamId, 5.0)">&#9193; Seek 5s</button>
+        <button class="primary" onclick="seekStream('timelines', tlStreamId, 0)">&#9194; Seek 0s</button>
+        <button class="danger" onclick="stopTimelineVideo()">&#9209; Stop</button>
+      </div>
+      <div class="controls">
+        <label>Speed: <input type="number" id="tlSpeed" value="1.0" step="0.25" min="0.25" max="4.0"></label>
+        <button class="primary" onclick="setTimelineSpeed()">Set Speed</button>
+        <label style="margin-left: 12px;">Loop In: <input type="number" id="tlLoopIn" value="0" step="0.5" min="0" style="width:60px"></label>
+        <label>Out: <input type="number" id="tlLoopOut" value="10" step="0.5" min="0" style="width:60px"></label>
+        <button class="primary" onclick="setTimelineLoop()">Set Loop</button>
+        <button class="warn" onclick="clearTimelineLoop()">Clear Loop</button>
+      </div>
+      <canvas id="tlCanvas" width="960" height="540"></canvas>
+      <div class="progress-container" onclick="seekByClick('timelines', tlStreamId, this, event)">
+        <div class="progress-fill" id="tlProgress" style="width:0%"></div>
+        <span class="progress-time" id="tlTime">00:00 / 00:00</span>
+      </div>
+      <div class="stats">
+        Frames: <span id="tlFrameCount">0</span> |
+        FPS: <span id="tlFps">0</span> |
+        Size: <span id="tlFrameSize">0</span> |
+        WS: <span id="tlWsState">disconnected</span>
+      </div>
+      <div class="stats" style="margin-top:4px; font-size:11px; color:#aaa;">
+        Bitrate: <span id="tlBitrate">-</span> |
+        Avg Size: <span id="tlAvgSize">-</span> |
+        Keyframes: <span id="tlKeyframes">0</span> |
+        Latency: <span id="tlLatency">-</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Timeline Audio Stream</h2>
+      <div class="controls">
+        <button class="warn" onclick="controlStream('timelines','pause', tlAudioStreamId)">&#9198; Pause</button>
+        <button class="primary" onclick="controlStream('timelines','resume', tlAudioStreamId)">&#9205; Resume</button>
+        <button class="primary" onclick="seekStream('timelines', tlAudioStreamId, 5.0)">&#9193; Seek 5s</button>
+        <button class="primary" onclick="seekStream('timelines', tlAudioStreamId, 0)">&#9194; Seek 0s</button>
+        <button class="danger" onclick="stopTimelineAudio()">&#9209; Stop</button>
+      </div>
+      <div class="progress-container" onclick="seekByClick('timelines', tlAudioStreamId, this, event)">
+        <div class="progress-fill" id="tlAudioProgress" style="width:0%"></div>
+        <span class="progress-time" id="tlAudioTime">00:00 / 00:00</span>
+      </div>
+      <div class="stats" style="margin-top: 8px;">
+        Chunks: <span id="tlAudioChunks">0</span> |
+        Sample Rate: <span id="tlAudioSR">-</span> |
+        Channels: <span id="tlAudioCh">-</span> |
+        WS: <span id="tlAudioWsState">disconnected</span>
+      </div>
+      <div class="stats" style="margin-top:4px; font-size:11px; color:#aaa;">
+        Audio Bitrate: <span id="tlAudioBitrate">-</span> |
+        Buffer: <span id="tlAudioBuffer">-</span> |
+        A/V Sync: <span id="tlAvSync">-</span>
+      </div>
+    </div>
   </div>
 </div><!-- end tab-timeline -->
 
@@ -749,7 +788,7 @@ async function probeTimeline() {
 }
 
 // ─── Timeline Stream ───
-let tlStreamId = null;       // video stream id (used for playback control)
+let tlStreamId = null;       // video stream id
 let tlAudioStreamId = null;  // audio stream id
 let tlDuration = 0;
 let tlWs = null;
@@ -766,100 +805,195 @@ let tlAudioPlaybackTime = 0;
 let tlAudioPtsOffset = null;
 let tlAudioChunkCount = 0;
 
+// Performance tracking
+let tlTotalBytes = 0;
+let tlKeyframeCount = 0;
+let tlBitrateBytes = 0;
+let tlBitrateLastTime = performance.now();
+let tlAudioTotalBytes = 0;
+let tlAudioBitrateBytes = 0;
+let tlAudioBitrateLastTime = performance.now();
+let tlLastVideoPts = 0;
+let tlLastAudioPts = 0;
+let tlStatsInterval = null;
+
 const tlCanvas = document.getElementById('tlCanvas');
 const tlCtx2d = tlCanvas.getContext('2d');
 
-async function startTimelineStream() {
-  if (tlStarting) return;
-  tlStarting = true;
-
-  // Stop existing stream first
-  if (tlStreamId) {
-    await dispatch('timelines', 'stop', { streamId: tlStreamId });
-    if (tlWs) { tlWs.close(); tlWs = null; }
-    if (tlAudioWs) { tlAudioWs.close(); tlAudioWs = null; }
-    if (tlDecoder) { tlDecoder.close(); tlDecoder = null; }
-    tlStreamId = null;
-    tlAudioStreamId = null;
-  }
-
-  // Get timeline JSON from textarea
-  let timelineJson;
+// Parse timeline JSON from textarea, returns null on error
+function parseTimelineJson() {
   const jviContent = document.getElementById('jviContent').value.trim();
   if (!jviContent) {
     log('No timeline JSON loaded. Use Browse to load a .jvi file or paste JSON.', 'warn');
-    tlStarting = false;
-    return;
+    return null;
   }
   try {
-    timelineJson = JSON.parse(jviContent);
+    return JSON.parse(jviContent);
   } catch (e) {
     log(`Invalid JSON: ${e.message}`, 'err');
-    tlStarting = false;
-    return;
+    return null;
   }
+}
 
-  // Reset state
-  tlFrameCount = 0;
-  tlWsFrameCount = 0;
-  tlFpsFrames = 0;
-  tlLastFpsTime = performance.now();
-  tlAudioChunkCount = 0;
-  tlAudioPtsOffset = null;
-  document.getElementById('tlProgress').style.width = '0%';
-  document.getElementById('tlFrameCount').textContent = '0';
-  document.getElementById('tlFps').textContent = '0';
-  document.getElementById('tlFrameSize').textContent = '0';
+// Compute timeline duration from elements
+function computeTlDuration(timelineJson) {
+  if (tlDuration > 0) return;
+  let maxEnd = 0;
+  for (const track of (timelineJson.tracks || [])) {
+    for (const elem of (track.elements || [])) {
+      const end = (elem.startTime || 0) + (elem.duration || 0);
+      if (end > maxEnd) maxEnd = end;
+    }
+  }
+  tlDuration = maxEnd;
+}
 
-  // Get timeline metadata for duration
+// Call timelines:stream API, returns { videoStreamId, audioStreamId } or null
+async function requestTimelineStream(timelineJson) {
   const width = timelineJson.resolution?.width || 1920;
   const height = timelineJson.resolution?.height || 1080;
   const fps = timelineJson.fps || 30;
+  computeTlDuration(timelineJson);
 
-  // Calculate duration from elements if not probed
-  if (tlDuration <= 0) {
-    let maxEnd = 0;
-    for (const track of (timelineJson.tracks || [])) {
-      for (const elem of (track.elements || [])) {
-        const end = (elem.startTime || 0) + (elem.duration || 0);
-        if (end > maxEnd) maxEnd = end;
-      }
-    }
-    tlDuration = maxEnd;
-  }
-  document.getElementById('tlTime').textContent = `00:00 / ${formatTime(tlDuration)}`;
+  // Derive baseDir from JVI path for resolving relative media paths
+  const jviPath = document.getElementById('jviPath').value;
+  const baseDir = jviPath ? jviPath.substring(0, jviPath.lastIndexOf('/')) || '.' : '.';
 
-  // Build stream options
-  const options = {
-    sessionId: 'test-timeline',
-    width,
-    height,
-    fps,
-  };
-
-  // Start stream — timeline JSON goes in body
+  const options = { sessionId: 'test-timeline', width, height, fps, baseDir };
   const resp = await dispatch('timelines', 'stream', options, timelineJson);
-  tlStarting = false;
-  if (resp.status !== 'ok') return;
+  if (resp.status !== 'ok') return null;
 
-  // Parse paired stream IDs
-  tlStreamId = resp.data.videoStreamId;
-  tlAudioStreamId = resp.data.audioStreamId;
-  log(`Timeline video stream: ${tlStreamId}`, 'ok');
-  log(`Timeline audio stream: ${tlAudioStreamId}`, 'ok');
-
-  // Resize canvas to match aspect ratio
+  // Resize canvas
   const aspectRatio = width / height;
   tlCanvas.width = 960;
   tlCanvas.height = Math.round(960 / aspectRatio);
 
-  // Init WebCodecs decoder
+  return resp.data;
+}
+
+// Start both video + audio
+async function startTimelineStream() {
+  if (tlStarting) return;
+  tlStarting = true;
+  await stopTimelineAll();
+
+  const timelineJson = parseTimelineJson();
+  if (!timelineJson) { tlStarting = false; return; }
+
+  resetTimelineVideoState();
+  resetTimelineAudioState();
+
+  const data = await requestTimelineStream(timelineJson);
+  tlStarting = false;
+  if (!data) return;
+
+  tlStreamId = data.videoStreamId;
+  tlAudioStreamId = data.audioStreamId;
+  log(`Timeline video stream: ${tlStreamId}`, 'ok');
+  log(`Timeline audio stream: ${tlAudioStreamId}`, 'ok');
+
+  document.getElementById('tlTime').textContent = `00:00 / ${formatTime(tlDuration)}`;
+  document.getElementById('tlAudioTime').textContent = `00:00 / ${formatTime(tlDuration)}`;
+
   initTimelineDecoder();
-
-  // Connect video WebSocket
   connectTimelineWs(tlStreamId);
+  await initTimelineAudioCtx();
+  connectTimelineAudioWs(tlAudioStreamId);
+}
 
-  // Init audio context and connect audio WebSocket
+// Start video only
+async function startTimelineVideoOnly() {
+  if (tlStarting) return;
+  tlStarting = true;
+  await stopTimelineAll();
+
+  const timelineJson = parseTimelineJson();
+  if (!timelineJson) { tlStarting = false; return; }
+
+  resetTimelineVideoState();
+
+  const data = await requestTimelineStream(timelineJson);
+  tlStarting = false;
+  if (!data) return;
+
+  tlStreamId = data.videoStreamId;
+  tlAudioStreamId = data.audioStreamId; // keep ref for cleanup
+  log(`Timeline video stream: ${tlStreamId}`, 'ok');
+
+  document.getElementById('tlTime').textContent = `00:00 / ${formatTime(tlDuration)}`;
+
+  initTimelineDecoder();
+  connectTimelineWs(tlStreamId);
+  // Audio stream exists but we don't connect WebSocket — no audio playback
+}
+
+// Start audio only
+async function startTimelineAudioOnly() {
+  if (tlStarting) return;
+  tlStarting = true;
+  await stopTimelineAll();
+
+  const timelineJson = parseTimelineJson();
+  if (!timelineJson) { tlStarting = false; return; }
+
+  resetTimelineAudioState();
+
+  const data = await requestTimelineStream(timelineJson);
+  tlStarting = false;
+  if (!data) return;
+
+  tlStreamId = data.videoStreamId; // keep ref for cleanup
+  tlAudioStreamId = data.audioStreamId;
+  log(`Timeline audio stream: ${tlAudioStreamId}`, 'ok');
+
+  document.getElementById('tlAudioTime').textContent = `00:00 / ${formatTime(tlDuration)}`;
+
+  await initTimelineAudioCtx();
+  connectTimelineAudioWs(tlAudioStreamId);
+  // Video stream exists but we don't connect WebSocket — no video playback
+}
+
+function resetTimelineVideoState() {
+  tlFrameCount = 0;
+  tlWsFrameCount = 0;
+  tlFpsFrames = 0;
+  tlLastFpsTime = performance.now();
+  tlTotalBytes = 0;
+  tlKeyframeCount = 0;
+  tlBitrateBytes = 0;
+  tlBitrateLastTime = performance.now();
+  tlLastVideoPts = 0;
+  document.getElementById('tlProgress').style.width = '0%';
+  document.getElementById('tlFrameCount').textContent = '0';
+  document.getElementById('tlFps').textContent = '0';
+  document.getElementById('tlFrameSize').textContent = '0';
+  document.getElementById('tlWsState').textContent = 'disconnected';
+  document.getElementById('tlBitrate').textContent = '-';
+  document.getElementById('tlAvgSize').textContent = '-';
+  document.getElementById('tlKeyframes').textContent = '0';
+  document.getElementById('tlLatency').textContent = '-';
+  if (tlStatsInterval) { clearInterval(tlStatsInterval); tlStatsInterval = null; }
+}
+
+function resetTimelineAudioState() {
+  tlAudioChunkCount = 0;
+  tlAudioPtsOffset = null;
+  tlAudioPlaybackTime = 0;
+  tlAudioTotalBytes = 0;
+  tlAudioBitrateBytes = 0;
+  tlAudioBitrateLastTime = performance.now();
+  tlLastAudioPts = 0;
+  document.getElementById('tlAudioProgress').style.width = '0%';
+  document.getElementById('tlAudioChunks').textContent = '0';
+  document.getElementById('tlAudioSR').textContent = '-';
+  document.getElementById('tlAudioCh').textContent = '-';
+  document.getElementById('tlAudioWsState').textContent = 'disconnected';
+  document.getElementById('tlAudioBitrate').textContent = '-';
+  document.getElementById('tlAudioBuffer').textContent = '-';
+  document.getElementById('tlAvSync').textContent = '-';
+}
+
+async function initTimelineAudioCtx() {
   if (!tlAudioCtx) {
     tlAudioCtx = new AudioContext({ sampleRate: 48000 });
     log(`Timeline AudioContext created: sampleRate=${tlAudioCtx.sampleRate}`, 'info');
@@ -871,7 +1005,41 @@ async function startTimelineStream() {
   if (tlAudioCtx.state === 'suspended') {
     await tlAudioCtx.resume().catch(() => {});
   }
-  connectTimelineAudioWs(tlAudioStreamId);
+}
+
+async function stopTimelineVideo() {
+  if (tlWs) { tlWs.close(); tlWs = null; }
+  if (tlDecoder) { tlDecoder.close(); tlDecoder = null; }
+  if (tlStreamId) {
+    await dispatch('timelines', 'stop', { streamId: tlStreamId }).catch(() => {});
+    tlStreamId = null;
+  }
+  document.getElementById('tlWsState').textContent = 'disconnected';
+}
+
+async function stopTimelineAudio() {
+  if (tlAudioWs) { tlAudioWs.close(); tlAudioWs = null; }
+  if (tlAudioStreamId) {
+    await dispatch('timelines', 'stop', { streamId: tlAudioStreamId }).catch(() => {});
+    tlAudioStreamId = null;
+  }
+  tlAudioPtsOffset = null;
+  document.getElementById('tlAudioWsState').textContent = 'disconnected';
+}
+
+async function stopTimelineAll() {
+  // Stop via video stream (linked pair will cascade)
+  if (tlStreamId) {
+    await dispatch('timelines', 'stop', { streamId: tlStreamId }).catch(() => {});
+  }
+  if (tlWs) { tlWs.close(); tlWs = null; }
+  if (tlAudioWs) { tlAudioWs.close(); tlAudioWs = null; }
+  if (tlDecoder) { tlDecoder.close(); tlDecoder = null; }
+  tlStreamId = null;
+  tlAudioStreamId = null;
+  tlAudioPtsOffset = null;
+  document.getElementById('tlWsState').textContent = 'disconnected';
+  document.getElementById('tlAudioWsState').textContent = 'disconnected';
 }
 
 function initTimelineDecoder() {
@@ -980,6 +1148,7 @@ function connectTimelineAudioWs(streamId) {
   tlAudioWs.binaryType = 'arraybuffer';
 
   tlAudioWs.onopen = () => {
+    document.getElementById('tlAudioWsState').textContent = 'connected';
     log('Timeline audio WebSocket connected', 'ok');
   };
 
@@ -991,6 +1160,13 @@ function connectTimelineAudioWs(streamId) {
     if (!packet) return;
 
     tlAudioChunkCount++;
+    document.getElementById('tlAudioChunks').textContent = tlAudioChunkCount;
+    document.getElementById('tlAudioSR').textContent = packet.sampleRate;
+    document.getElementById('tlAudioCh').textContent = packet.channels;
+
+    // Update audio progress bar
+    const ptsSeconds = packet.pts / 1_000_000;
+    updateProgress('tlAudioProgress', 'tlAudioTime', ptsSeconds, tlDuration);
 
     if (tlAudioChunkCount <= 3 || tlAudioChunkCount % 200 === 0) {
       log(`TL Audio #${tlAudioChunkCount}: pts=${packet.pts} dur=${packet.duration} sr=${packet.sampleRate} ch=${packet.channels} pcmBytes=${packet.pcmData.byteLength}`);
@@ -1015,7 +1191,6 @@ function connectTimelineAudioWs(streamId) {
       }
 
       // Initialize PTS offset on first frame
-      const ptsSeconds = packet.pts / 1_000_000;
       if (tlAudioPtsOffset === null) {
         tlAudioPtsOffset = tlAudioCtx.currentTime - ptsSeconds;
         tlAudioPlaybackTime = tlAudioCtx.currentTime;
@@ -1036,6 +1211,7 @@ function connectTimelineAudioWs(streamId) {
   };
 
   tlAudioWs.onclose = (event) => {
+    document.getElementById('tlAudioWsState').textContent = `closed (${event.code})`;
     log(`Timeline audio WebSocket closed: code=${event.code}`, 'warn');
   };
 

@@ -38,7 +38,7 @@ mod service;
 mod types;
 
 pub use audio_mixer::{AudioMixer, MixedAudioFrame};
-pub use gpu_export_pipeline::GpuExportPipeline;
+pub use gpu_export_pipeline::{GpuExportPipeline, GpuPipelineTiming};
 pub use routes::export_routes;
 pub use service::ExportService;
 pub use types::*;

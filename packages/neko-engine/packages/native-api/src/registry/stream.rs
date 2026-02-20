@@ -171,9 +171,37 @@ impl StreamRegistry {
         self.set_cancel_token(&stream_id, cancel_token.clone()).await;
 
         // Spawn forwarding task: external_rx → registry_tx
+        // Waits for at least one WebSocket subscriber before forwarding,
+        // so frames aren't lost into an empty broadcast channel.
         let forward_id = id_str.clone();
         tokio::spawn(async move {
-            tracing::info!("Forwarding task started for stream {}", forward_id);
+            tracing::info!("Forwarding task started for stream {}, waiting for subscriber...", forward_id);
+
+            // Wait until at least one WebSocket client subscribes to the registry channel.
+            // Frames accumulate in the external broadcast channel (capacity 64) during this wait.
+            let wait_start = tokio::time::Instant::now();
+            loop {
+                if cancel_token.is_cancelled() {
+                    tracing::debug!("External stream {} cancelled while waiting for subscriber", forward_id);
+                    return;
+                }
+                // receiver_count() returns the number of active Receivers on this Sender
+                if registry_tx.receiver_count() > 0 {
+                    tracing::info!(
+                        "Stream {} got subscriber after {:.0}ms, starting forwarding",
+                        forward_id,
+                        wait_start.elapsed().as_millis()
+                    );
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                // Safety timeout: don't wait forever (5 seconds)
+                if wait_start.elapsed() > std::time::Duration::from_secs(5) {
+                    tracing::warn!("Stream {} timed out waiting for subscriber, starting anyway", forward_id);
+                    break;
+                }
+            }
+
             let mut frame_count = 0u64;
             loop {
                 tokio::select! {

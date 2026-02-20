@@ -5,19 +5,19 @@
 
 use std::collections::HashMap;
 
-use crate::audio::{AudioDecoder, DecodedAudioFrame, FfmpegAudioDecoder, SampleFormat};
-use crate::domain::{Element, ElementType, Timeline};
+use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
+use crate::domain::{ElementType, Timeline};
 use crate::error::Result;
 
 use super::types::ExportSettings;
 
 /// Audio source with decoder and metadata
-#[allow(dead_code)]
 struct AudioSource {
     decoder: FfmpegAudioDecoder,
-    src: String,
-    sample_rate: u32,
-    channels: u16,
+    /// Current decode position in seconds (tracked to avoid unnecessary seeks)
+    current_position: f64,
+    /// Residual samples from previous decode (interleaved f32)
+    residual: Vec<f32>,
 }
 
 /// Active audio element at a specific time
@@ -101,9 +101,8 @@ impl AudioMixer {
                     );
                     self.sources.insert(src.clone(), AudioSource {
                         decoder,
-                        src,
-                        sample_rate: info.sample_rate,
-                        channels: info.channels,
+                        current_position: -1.0,
+                        residual: Vec::new(),
                     });
                 }
                 Err(e) => {
@@ -156,6 +155,8 @@ impl AudioMixer {
                         });
                     }
                     ElementType::Media(media) if !element.is_audio_muted() => {
+                        // Skip if audio is handled by a linked audio element in audio track
+                        if media.linked_audio_id.is_some() { continue; }
                         active.push(ActiveAudioElement {
                             src: media.src.clone(),
                             volume: element.effective_volume(),
@@ -189,19 +190,79 @@ impl AudioMixer {
         }
 
         let mut output = vec![0.0f32; buffer_size];
+        let frame_duration = self.samples_per_frame as f64 / self.output_sample_rate as f64;
+
         for element in &active_elements {
             let source = match self.sources.get_mut(&element.src) {
                 Some(s) => s,
                 None => continue,
             };
             let source_time = element.get_source_time(time);
-            if source.decoder.seek(source_time).is_err() { continue; }
-            let frame = match source.decoder.decode_next()? {
-                Some(f) => f,
-                None => continue,
-            };
+
+            // Determine if seek is needed: only seek when time is non-sequential
+            // (first call, or time jumped by more than 1.5x frame duration)
+            let need_seek = source.current_position < 0.0
+                || (source_time - source.current_position).abs() > frame_duration * 1.5;
+
+            if need_seek {
+                if source.decoder.seek(source_time).is_err() {
+                    continue;
+                }
+                source.residual.clear();
+                source.current_position = source_time;
+                // After seek, decode a few frames to skip AAC priming silence
+                for _ in 0..3 {
+                    match source.decoder.decode_next() {
+                        Ok(Some(f)) => {
+                            let samples: &[f32] = bytemuck::cast_slice(&f.data);
+                            let max_abs = samples.iter().fold(0.0f32, |a, &b| a.max(b.abs()));
+                            if max_abs > 0.0 {
+                                // Found non-silent frame, use it as start of residual
+                                source.residual.extend_from_slice(samples);
+                                source.current_position = f.timestamp;
+                                break;
+                            }
+                        }
+                        _ => break,
+                    }
+                }
+            }
+
+            // Collect enough samples for this frame by continuous decoding
+            let needed = self.samples_per_frame * self.output_channels as usize;
+            while source.residual.len() < needed {
+                match source.decoder.decode_next() {
+                    Ok(Some(f)) => {
+                        let samples: &[f32] = bytemuck::cast_slice(&f.data);
+                        source.residual.extend_from_slice(samples);
+                    }
+                    _ => {
+                        // EOF or error — pad with silence
+                        source.residual.resize(needed, 0.0);
+                        break;
+                    }
+                }
+            }
+
+            // Take exactly `needed` samples from the residual buffer
+            let frame_samples: Vec<f32> = source.residual.drain(..needed).collect();
+
+            // Advance current_position by the actual consumed duration
+            source.current_position += frame_duration;
             let volume = element.effective_volume(time);
-            self.mix_samples(&frame, &mut output, volume, element.pan);
+
+            // Mix into output with volume and pan
+            let pan_angle = (element.pan + 1.0) * std::f32::consts::FRAC_PI_4;
+            let left_gain = pan_angle.cos() * volume;
+            let right_gain = pan_angle.sin() * volume;
+            let channels = self.output_channels as usize;
+            for i in 0..self.samples_per_frame {
+                let idx = i * channels;
+                if idx + 1 < frame_samples.len() && idx + 1 < output.len() {
+                    output[idx] += frame_samples[idx] * left_gain;
+                    output[idx + 1] += frame_samples[idx + 1] * right_gain;
+                }
+            }
         }
 
         // Apply soft limiter to prevent clipping distortion
@@ -214,31 +275,6 @@ impl AudioMixer {
             sample_rate: self.output_sample_rate,
             channels: self.output_channels,
         }))
-    }
-
-    fn mix_samples(&self, frame: &DecodedAudioFrame, output: &mut [f32], volume: f32, pan: f32) {
-        let input_samples: &[f32] = bytemuck::cast_slice(&frame.data);
-        let pan_angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
-        let left_gain = pan_angle.cos() * volume;
-        let right_gain = pan_angle.sin() * volume;
-
-        if frame.channels == 2 {
-            for i in 0..frame.samples.min(output.len() / 2) {
-                let idx = i * 2;
-                if idx + 1 < input_samples.len() && idx + 1 < output.len() {
-                    output[idx] += input_samples[idx] * left_gain;
-                    output[idx + 1] += input_samples[idx + 1] * right_gain;
-                }
-            }
-        } else if frame.channels == 1 {
-            for i in 0..frame.samples.min(output.len() / 2) {
-                if i < input_samples.len() {
-                    let out_idx = i * 2;
-                    output[out_idx] += input_samples[i] * left_gain;
-                    output[out_idx + 1] += input_samples[i] * right_gain;
-                }
-            }
-        }
     }
 
     pub fn to_s16_bytes(frame: &MixedAudioFrame) -> Vec<u8> {

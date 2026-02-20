@@ -5,6 +5,7 @@ use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::StreamRegistry;
 use neko_native_core::domain::{StreamConfig, Timeline};
+use neko_native_core::jvi::JviLoader;
 use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{ExportService, IExportService, ITimelineService, TimelineService};
 use neko_types::registry;
@@ -67,6 +68,8 @@ struct StreamRequestOptions {
     /// Start time in seconds
     #[serde(default)]
     start_time: f64,
+    /// Base directory for resolving relative media paths (JVI format)
+    base_dir: Option<String>,
 }
 
 /// Options for stream control actions (stop/pause/resume/seek/speed/loop)
@@ -164,9 +167,21 @@ impl Controller for TimelineController {
                     )
                 })?;
 
-                let timeline: Timeline = serde_json::from_value(body).map_err(|e| {
-                    ApiError::InvalidRequest(format!("Invalid timeline data: {}", e))
-                })?;
+                // Try Timeline domain format first, fallback to JVI format
+                let base_dir = opts.base_dir.as_deref()
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                let timeline: Timeline = serde_json::from_value(body.clone())
+                    .or_else(|_| {
+                        let json_str = serde_json::to_string(&body)
+                            .map_err(|e| ApiError::InvalidRequest(format!("Invalid JSON: {}", e)))?;
+                        let loader = JviLoader::new();
+                        let (tl, _) = loader
+                            .load_from_json(&json_str, base_dir)
+                            .map_err(|e| ApiError::InvalidRequest(format!("Invalid timeline/JVI data: {}", e)))?;
+                        Ok::<Timeline, ApiError>(tl)
+                    })
+                    .map_err(|e: ApiError| e)?;
 
                 let session_id = opts.session_id.unwrap_or_else(|| "default".to_string());
 

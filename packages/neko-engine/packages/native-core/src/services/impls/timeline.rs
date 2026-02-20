@@ -6,26 +6,58 @@
 
 use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType};
 use crate::domain::{FrameData, MediaReference, StreamConfig, Timeline, TimelineProjectInfo};
-use crate::encoder::{Encoder, EncoderConfig, HwAccelEncoder};
-use crate::export::{AudioMixer, ExportSettings};
+use crate::export::{AudioMixer, ExportSettings, GpuPipelineTiming};
 use crate::jvi::JviLoader;
 use crate::error::{Error, Result};
 use crate::gpu::{
     BlendMode as GpuBlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext,
-    LayerPixelFormat, Nv12OutputBuffers, Nv12Renderer, Nv12TextureImporter, RgbaToNv12Converter,
-    Transform2D,
+    LayerPixelFormat, Nv12Renderer, Nv12TextureImporter, Transform2D,
 };
-use crate::keyframe_cache::IdrScanner;
+use crate::preview::{PreviewFrame, PreviewPipeline, PreviewPipelineConfig};
 use crate::services::impls::stream_loop::{
-    pack_h264_frame, pack_pcm_f32le_stream_frame, ActiveStreams, create_stream_channels,
-    FramePacer, PlaybackState, StreamLoopHandle, WallClockPacer,
+    pack_pcm_f32le_stream_frame, ActiveStreams, PlaybackState, StreamLoopHandle, WallClockPacer,
 };
 use crate::services::{ITaskService, ITimelineService, TimelineStreamResult};
+use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
 use neko_types::{BlendMode, FrameFormat, LoopRegion, StreamId};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{broadcast, watch};
 use tokio_util::sync::CancellationToken;
+
+/// Convert IEEE 754 half-precision float (f16) to single-precision float (f32)
+fn f16_to_f32(bits: u16) -> f32 {
+    let sign = ((bits >> 15) & 1) as u32;
+    let exponent = ((bits >> 10) & 0x1F) as u32;
+    let mantissa = (bits & 0x3FF) as u32;
+
+    if exponent == 0 {
+        if mantissa == 0 {
+            // Signed zero
+            f32::from_bits(sign << 31)
+        } else {
+            // Subnormal: convert to normalized f32
+            let mut m = mantissa;
+            let mut e = 0i32;
+            while (m & 0x400) == 0 {
+                m <<= 1;
+                e += 1;
+            }
+            let f32_exp = (127 - 15 - e) as u32;
+            let f32_mantissa = (m & 0x3FF) << 13;
+            f32::from_bits((sign << 31) | (f32_exp << 23) | f32_mantissa)
+        }
+    } else if exponent == 31 {
+        // Inf or NaN
+        let f32_mantissa = mantissa << 13;
+        f32::from_bits((sign << 31) | (0xFF << 23) | f32_mantissa)
+    } else {
+        // Normalized: rebias exponent from f16 bias (15) to f32 bias (127)
+        let f32_exp = (exponent + 127 - 15) as u32;
+        let f32_mantissa = mantissa << 13;
+        f32::from_bits((sign << 31) | (f32_exp << 23) | f32_mantissa)
+    }
+}
 
 /// TimelineService implementation
 ///
@@ -76,7 +108,10 @@ impl TimelineService {
         }
     }
 
-    /// Read texture data back to CPU buffer (assumes RGBA8 / 4 bytes per pixel)
+    /// Read texture data back to CPU buffer as RGBA8 (4 bytes per pixel)
+    ///
+    /// Handles Rgba16Float textures (from NV12 renderer) by converting f16→u8.
+    /// Other formats (e.g. Rgba8Unorm) are returned as-is.
     fn read_texture_to_buffer(
         ctx: &GpuContext,
         texture: &wgpu::Texture,
@@ -85,8 +120,9 @@ impl TimelineService {
     ) -> Result<Vec<u8>> {
         let device = ctx.device();
         let queue = ctx.queue();
+        let format = texture.format();
 
-        let bytes_per_pixel = texture.format().block_copy_size(None).unwrap_or(4);
+        let bytes_per_pixel = format.block_copy_size(None).unwrap_or(4);
         let bytes_per_row = width * bytes_per_pixel;
         let padded_bytes_per_row = (bytes_per_row + 255) & !255;
 
@@ -141,7 +177,7 @@ impl TimelineService {
 
         // Unpad rows: copy only the valid bytes_per_row from each padded row
         let unpadded_row_size = bytes_per_row as usize;
-        let result = if padded_bytes_per_row == bytes_per_row {
+        let raw = if padded_bytes_per_row == bytes_per_row {
             data.to_vec()
         } else {
             let mut result = Vec::with_capacity(unpadded_row_size * height as usize);
@@ -156,7 +192,56 @@ impl TimelineService {
         drop(data);
         staging_buffer.unmap();
 
+        // Convert Rgba16Float (8 bytes/pixel) → RGBA8 (4 bytes/pixel) if needed
+        let result = if format == wgpu::TextureFormat::Rgba16Float {
+            Self::rgba16float_to_rgba8(&raw)
+        } else {
+            raw
+        };
+
         Ok(result)
+    }
+
+    /// Convert Rgba16Float pixel data to RGBA8
+    ///
+    /// Each Rgba16Float pixel is 8 bytes (4 × f16), converted to 4 bytes (4 × u8).
+    fn rgba16float_to_rgba8(data: &[u8]) -> Vec<u8> {
+        let pixel_count = data.len() / 8;
+        let mut output = Vec::with_capacity(pixel_count * 4);
+        for chunk in data.chunks_exact(8) {
+            let r = f16_to_f32(u16::from_le_bytes([chunk[0], chunk[1]]));
+            let g = f16_to_f32(u16::from_le_bytes([chunk[2], chunk[3]]));
+            let b = f16_to_f32(u16::from_le_bytes([chunk[4], chunk[5]]));
+            let a = f16_to_f32(u16::from_le_bytes([chunk[6], chunk[7]]));
+            output.push((r.clamp(0.0, 1.0) * 255.0) as u8);
+            output.push((g.clamp(0.0, 1.0) * 255.0) as u8);
+            output.push((b.clamp(0.0, 1.0) * 255.0) as u8);
+            output.push((a.clamp(0.0, 1.0) * 255.0) as u8);
+        }
+        output
+    }
+}
+
+/// Pack a PreviewFrame (H.264 NAL units from PreviewPipeline) into FrameData for broadcast
+///
+/// Wire format: [pts_us:i64 LE][dts_us:i64 LE][is_keyframe:u8][duration_us:i64 LE][H.264 NAL data...]
+/// PTS/DTS are already in microseconds from PreviewPipeline. Duration is calculated from fps.
+fn pack_preview_frame(frame: &PreviewFrame, width: u32, height: u32, fps: f64) -> FrameData {
+    let header_size = 8 + 8 + 1 + 8; // pts + dts + is_keyframe + duration
+    let duration_us = (1_000_000.0 / fps) as i64;
+    let mut data = Vec::with_capacity(header_size + frame.data.len());
+    data.extend_from_slice(&frame.pts.to_le_bytes());
+    data.extend_from_slice(&frame.dts.to_le_bytes());
+    data.push(if frame.is_keyframe { 1 } else { 0 });
+    data.extend_from_slice(&duration_us.to_le_bytes());
+    data.extend_from_slice(&frame.data);
+
+    FrameData {
+        data,
+        width,
+        height,
+        format: FrameFormat::H264,
+        timestamp: frame.pts as f64 / 1_000_000.0,
     }
 }
 
@@ -172,13 +257,8 @@ impl ITimelineService for TimelineService {
             // Count elements across all tracks
             let element_count: usize = timeline_data.tracks.iter().map(|t| t.elements.len()).sum();
 
-            // Calculate duration from elements
-            let duration = timeline_data
-                .tracks
-                .iter()
-                .flat_map(|t| t.elements.iter())
-                .map(|e| e.start_time + e.duration)
-                .fold(0.0_f64, f64::max);
+            // Calculate duration: use explicit duration if set, otherwise from elements
+            let duration = timeline_data.effective_duration();
 
             // Collect media references and check file existence
             let base_dir = path.parent().unwrap_or_else(|| Path::new("."));
@@ -373,7 +453,16 @@ impl ITimelineService for TimelineService {
         let fps = config.fps;
         let width = config.resolution.width;
         let height = config.resolution.height;
-        let timeline = timeline.clone();
+        let mut timeline = timeline.clone();
+
+        // Auto-calculate duration from elements if not explicitly set
+        if timeline.duration <= 0.0 {
+            timeline.duration = timeline.calculated_duration();
+            tracing::info!(
+                "Timeline duration auto-calculated from elements: {:.3}s",
+                timeline.duration
+            );
+        }
 
         // === Shared infrastructure for both loops ===
         let cancel = CancellationToken::new();
@@ -387,259 +476,142 @@ impl ITimelineService for TimelineService {
         let (audio_tx, audio_rx) = broadcast::channel::<FrameData>(64);
         let audio_stream_id = StreamId::new(&format!("{}-audio", session_id));
 
-        // === Video composite + encode loop (existing logic, uses shared state) ===
+        // === Video loop: PreviewPipeline (persistent decoder pool + GPU resources + H.264 encoder) ===
         let video_cancel = cancel.clone();
         let video_state_rx = state_rx.clone();
         let video_timeline = timeline.clone();
-        let video_join = tokio::spawn(async move {
-            let mut pacer = FramePacer::new(fps, 1.0);
-            let mut current_speed = 1.0;
-            let mut frame_number: u64 = (config.start_time * fps) as u64;
-            let mut last_seek: Option<f64> = None;
+        let video_gpu_ctx = gpu_ctx.clone();
+        let video_start_time = config.start_time;
+        let video_join = tokio::task::spawn_blocking(move || {
+            // Create PreviewPipeline (wraps GpuExportPipeline + HwAccelEncoder)
+            let preview_config = PreviewPipelineConfig {
+                width,
+                height,
+                fps,
+                bitrate: 4_000_000, // 4 Mbps for timeline preview
+                gop_size: (fps as u32).max(1), // 1 second GOP
+            };
 
-            // Initialize encoder in blocking context
-            let init_result = tokio::task::spawn_blocking({
-                move || -> Result<HwAccelEncoder> {
-                    let mut encoder = HwAccelEncoder::new();
-                    let encoder_config =
-                        EncoderConfig::new(width, height, fps, crate::encoder::VideoCodec::H264)
-                            .with_preset(crate::encoder::EncoderPreset::Fast)
-                            .with_hw_encoder(crate::encoder::HwEncoderType::Auto)
-                            .with_gop_size(30)
-                            .with_max_b_frames(0);
-                    Encoder::open(&mut encoder, &encoder_config)?;
-                    Ok(encoder)
-                }
-            })
-            .await;
-
-            let encoder = match init_result {
-                Ok(Ok(e)) => e,
-                _ => {
-                    tracing::error!("Failed to initialize timeline stream encoder");
+            let mut pipeline = match PreviewPipeline::new(video_timeline.clone(), video_gpu_ctx, preview_config) {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::error!("Failed to create PreviewPipeline: {}", e);
                     return;
                 }
             };
 
-            let encoder = std::sync::Arc::new(std::sync::Mutex::new(encoder));
-            let timeline = video_timeline;
-            let tx = video_tx;
-
-            loop {
-                tokio::select! {
-                    biased;
-                    _ = video_cancel.cancelled() => break,
-                    _ = pacer.tick() => {
-                        let state = video_state_rx.borrow().clone();
-
-                        // Handle seek request (deduplicate by comparing with last_seek)
-                        if let Some(time) = state.seek_to {
-                            if last_seek != Some(time) {
-                                last_seek = Some(time);
-                                frame_number = (time * fps) as u64;
-                            }
-                        } else {
-                            last_seek = None;
-                        }
-
-                        if state.paused { continue; }
-
-                        // Update speed if changed
-                        if (state.speed - current_speed).abs() > 0.001 {
-                            current_speed = state.speed;
-                            pacer.update_speed(current_speed);
-                        }
-
-                        // Check loop region
-                        let current_time = frame_number as f64 / fps;
-                        if let Some(region) = &state.loop_region {
-                            if current_time >= region.out_point {
-                                frame_number = (region.in_point * fps) as u64;
-                            }
-                        }
-
-                        // Check timeline duration
-                        if current_time > timeline.duration && timeline.duration > 0.0 {
-                            // Check if looping
-                            if let Some(region) = &state.loop_region {
-                                frame_number = (region.in_point * fps) as u64;
-                            } else {
-                                break; // End of timeline
-                            }
-                        }
-
-                        // Composite frame
-                        let time = frame_number as f64 / fps;
-
-                        let ctx = gpu_ctx.clone();
-                        let enc = encoder.clone();
-                        let tl_width = width;
-                        let tl_height = height;
-                        let tl_fps = fps;
-                        let tl_clone = timeline.clone();
-                        let current_frame = frame_number;
-
-                        let frame_result = tokio::task::spawn_blocking(move || -> Result<Vec<FrameData>> {
-                            let visible_elements = tl_clone.elements_at_time(time);
-                            let mut layers: Vec<CompositeLayer> = Vec::new();
-
-                            for (z_index, element) in visible_elements.iter().enumerate() {
-                                let source_path = match element.source_path() {
-                                    Some(path) => path,
-                                    None => continue,
-                                };
-
-                                let source_time = element.get_source_time(time);
-
-                                // Decode frame
-                                let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
-                                let media_info = decoder.open(&source_path)?;
-                                let src_width = media_info.width;
-                                let src_height = media_info.height;
-
-                                let gpu_texture = match decoder.decode_gpu_at(source_time)? {
-                                    Some(t) => t,
-                                    None => continue,
-                                };
-
-                                // NV12 → RGBA via GPU
-                                let importer = Nv12TextureImporter::new(Arc::clone(&ctx));
-                                let nv12_texture = importer.import(&gpu_texture)?;
-
-                                let renderer = Nv12Renderer::new(Arc::clone(&ctx))?;
-                                let output_texture = renderer.create_output_texture(src_width, src_height);
-                                let output_view =
-                                    output_texture.create_view(&wgpu::TextureViewDescriptor::default());
-                                renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
-
-                                let rgba_data = Self::read_texture_to_buffer(
-                                    &ctx, &output_texture, src_width, src_height,
-                                )?;
-
-                                let transform = Transform2D {
-                                    x: element.transform.x,
-                                    y: element.transform.y,
-                                    scale_x: element.transform.scale_x,
-                                    scale_y: element.transform.scale_y,
-                                    rotation: element.transform.rotation,
-                                    anchor_x: element.transform.anchor_x,
-                                    anchor_y: element.transform.anchor_y,
-                                    _padding: 0.0,
-                                };
-
-                                layers.push(CompositeLayer {
-                                    data: rgba_data,
-                                    width: src_width,
-                                    height: src_height,
-                                    pixel_format: LayerPixelFormat::Rgba,
-                                    transform,
-                                    opacity: element.opacity as f32,
-                                    blend_mode: Self::convert_blend_mode(&element.blend_mode),
-                                    z_index: z_index as i32,
-                                    mask: None,
-                                    mask_inverted: false,
-                                });
-                            }
-
-                            // Composite all layers
-                            let compositor = GpuCompositor::new(ctx.clone())?;
-                            let result = compositor.composite(&layers, tl_width, tl_height, [0.0, 0.0, 0.0, 1.0])?;
-
-                            // RGBA CPU → upload to texture → NV12 GPU → read back → encode
-                            let device = ctx.device();
-                            let queue = ctx.queue();
-
-                            // Upload RGBA to texture
-                            let rgba_texture = device.create_texture(&wgpu::TextureDescriptor {
-                                label: Some("Timeline RGBA Upload"),
-                                size: wgpu::Extent3d {
-                                    width: tl_width,
-                                    height: tl_height,
-                                    depth_or_array_layers: 1,
-                                },
-                                mip_level_count: 1,
-                                sample_count: 1,
-                                dimension: wgpu::TextureDimension::D2,
-                                format: wgpu::TextureFormat::Rgba8Unorm,
-                                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                                view_formats: &[],
-                            });
-
-                            queue.write_texture(
-                                wgpu::ImageCopyTexture {
-                                    texture: &rgba_texture,
-                                    mip_level: 0,
-                                    origin: wgpu::Origin3d::ZERO,
-                                    aspect: wgpu::TextureAspect::All,
-                                },
-                                &result.data,
-                                wgpu::ImageDataLayout {
-                                    offset: 0,
-                                    bytes_per_row: Some(tl_width * 4),
-                                    rows_per_image: Some(tl_height),
-                                },
-                                wgpu::Extent3d {
-                                    width: tl_width,
-                                    height: tl_height,
-                                    depth_or_array_layers: 1,
-                                },
-                            );
-
-                            let rgba_view = rgba_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-                            // Convert RGBA → NV12 on GPU
-                            let mut converter = RgbaToNv12Converter::new(ctx.clone())?;
-                            let nv12_buffers = converter.create_output_buffers(tl_width, tl_height);
-                            converter.convert_sync(&rgba_view, &nv12_buffers, 1)?; // 1 = BT.709
-
-                            // Read NV12 data back to CPU
-                            let nv12_data = converter.read_nv12_data_blocking(&nv12_buffers)?;
-
-                            // Encode NV12 → H.264
-                            let mut e = enc.lock().unwrap();
-                            let pts = current_frame as i64;
-                            let packets = Encoder::encode_frame(&mut *e, &nv12_data, pts)?;
-
-                            let frames: Vec<FrameData> = packets
-                                .iter()
-                                .map(|p| pack_h264_frame(p, tl_width, tl_height, 1.0 / tl_fps as f64))
-                                .collect();
-
-                            Ok(frames)
-                        }).await;
-
-                        match frame_result {
-                            Ok(Ok(frames)) => {
-                                for frame in frames {
-                                    let _ = tx.send(frame);
-                                }
-                            }
-                            Ok(Err(e)) => {
-                                tracing::warn!("Timeline stream composite error: {}", e);
-                                // Continue on error (skip frame)
-                            }
-                            Err(e) => {
-                                tracing::error!("Timeline stream task panic: {}", e);
-                                break;
-                            }
-                        }
-
-                        frame_number += 1;
-                    }
-                }
+            if let Err(e) = pipeline.initialize() {
+                tracing::error!("Failed to initialize PreviewPipeline: {}", e);
+                return;
             }
 
-            // Flush encoder
-            let enc = encoder.clone();
-            let _ = tokio::task::spawn_blocking(move || {
-                let mut e = enc.lock().unwrap();
-                if let Ok(packets) = Encoder::flush(&mut *e) {
-                    for p in &packets {
-                        let _ = tx.send(pack_h264_frame(p, width, height, 1.0 / fps));
+            tracing::info!(
+                "PreviewPipeline initialized: {}x{} @ {}fps, hw={}",
+                width, height, fps, pipeline.is_hw_active()
+            );
+
+            let mut pacer = WallClockPacer::new(fps, 1.0);
+            let mut current_speed = 1.0;
+            let mut current_time = video_start_time;
+            let mut last_seek: Option<f64> = None;
+            let timeline = video_timeline;
+            let tx = video_tx;
+            let background_color = [0.0_f32, 0.0, 0.0, 1.0];
+            let mut stats = FrameStatsCollector::new(std::time::Duration::from_secs(10));
+
+            loop {
+                // Check cancellation
+                if video_cancel.is_cancelled() { break; }
+
+                // Read playback state
+                let state = video_state_rx.borrow().clone();
+
+                // Handle seek (dedup)
+                if let Some(time) = state.seek_to {
+                    if last_seek != Some(time) {
+                        last_seek = Some(time);
+                        current_time = time;
+                        pipeline.reset_frame_counter();
+                        pacer.reset();
+                    }
+                } else {
+                    last_seek = None;
+                }
+
+                // Handle pause
+                if state.paused {
+                    std::thread::sleep(std::time::Duration::from_millis(16));
+                    pacer.reset();
+                    continue;
+                }
+
+                // Handle speed change
+                if (state.speed - current_speed).abs() > 0.001 {
+                    current_speed = state.speed;
+                    pacer.update_speed(current_speed);
+                }
+
+                // Handle loop region
+                if let Some(region) = &state.loop_region {
+                    if current_time >= region.out_point {
+                        current_time = region.in_point;
+                        pacer.reset();
                     }
                 }
-                Encoder::close(&mut *e);
-            }).await;
+
+                // Check timeline duration
+                if current_time > timeline.duration && timeline.duration > 0.0 {
+                    if let Some(region) = &state.loop_region {
+                        current_time = region.in_point;
+                        pacer.reset();
+                    } else {
+                        break; // End of timeline
+                    }
+                }
+
+                // Render frame via PreviewPipeline with timing
+                let frame_start = std::time::Instant::now();
+                match pipeline.render_frame_timed(current_time, background_color) {
+                    Ok((preview_frames, gpu_timing)) => {
+                        let encode_ns = frame_start.elapsed().as_nanos() as u64
+                            - gpu_timing.total_ns();
+                        for pf in &preview_frames {
+                            let frame = pack_preview_frame(pf, width, height, fps);
+                            let _ = tx.send(frame);
+                        }
+                        let mut timing = FrameTiming::default();
+                        timing.hw_decode_ns = gpu_timing.hw_decode_ns;
+                        timing.nv12_import_ns = gpu_timing.nv12_import_ns;
+                        timing.nv12_to_rgba_ns = gpu_timing.nv12_to_rgba_ns;
+                        timing.composite_ns = gpu_timing.composite_ns;
+                        timing.rgba_to_nv12_ns = gpu_timing.rgba_to_nv12_ns;
+                        timing.cpu_readback_ns = gpu_timing.cpu_readback_ns;
+                        timing.decode_ns = gpu_timing.hw_decode_ns;
+                        timing.gpu_ns = gpu_timing.total_ns();
+                        timing.encode_submit_ns = encode_ns;
+                        timing.encode_ns = encode_ns;
+                        timing.total_ns = frame_start.elapsed().as_nanos() as u64;
+                        stats.record_frame(timing);
+                    }
+                    Err(e) => {
+                        tracing::warn!("PreviewPipeline render error at {:.3}s: {}", current_time, e);
+                    }
+                }
+
+                current_time += 1.0 / fps;
+                pacer.wait_for_next_frame();
+            }
+
+            // Log final performance summary
+            stats.log_final_summary();
+            // Flush encoder
+            if let Ok(flush_frames) = pipeline.flush() {
+                for pf in &flush_frames {
+                    let frame = pack_preview_frame(pf, width, height, fps);
+                    let _ = tx.send(frame);
+                }
+            }
+            pipeline.close();
         });
 
         // === Audio mixing loop (new, uses shared state) ===
@@ -670,6 +642,23 @@ impl ITimelineService for TimelineService {
                 return;
             }
 
+            // Wait for WebSocket subscriber to connect before producing frames.
+            // Without this delay, frames are sent into an empty broadcast channel
+            // and lost before the client can subscribe.
+            let wait_start = std::time::Instant::now();
+            while audio_tx.receiver_count() == 0 {
+                if audio_cancel.is_cancelled() { return; }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                if wait_start.elapsed() > std::time::Duration::from_secs(5) {
+                    tracing::warn!("Audio loop: timed out waiting for subscriber, starting anyway");
+                    break;
+                }
+            }
+            tracing::info!(
+                "Audio loop: subscriber ready after {:.0}ms",
+                wait_start.elapsed().as_millis()
+            );
+
             let mut pacer = WallClockPacer::new(audio_fps, 1.0);
             let mut current_speed = 1.0;
             let frame_duration = 1.0 / audio_fps;
@@ -677,6 +666,9 @@ impl ITimelineService for TimelineService {
             let mut last_seek: Option<f64> = None;
             let sample_rate = mixer.sample_rate();
             let channels = mixer.channels();
+            let mut audio_frames: u64 = 0;
+            let mut audio_mix_total_ns: u64 = 0;
+            let audio_start = std::time::Instant::now();
 
             loop {
                 // Check cancellation
@@ -730,8 +722,11 @@ impl ITimelineService for TimelineService {
                 }
 
                 // Mix one frame of audio
+                let mix_start = std::time::Instant::now();
                 match mixer.mix_frame(current_time) {
                     Ok(Some(mixed)) => {
+                        audio_mix_total_ns += mix_start.elapsed().as_nanos() as u64;
+                        audio_frames += 1;
                         // Cast f32 data to raw bytes
                         let pcm_bytes: &[u8] = bytemuck::cast_slice(&mixed.data);
                         let frame = pack_pcm_f32le_stream_frame(
@@ -744,7 +739,7 @@ impl ITimelineService for TimelineService {
                         let _ = audio_tx.send(frame);
                     }
                     Ok(None) => {
-                        // No audio data at this time, send silence
+                        tracing::warn!("Audio mix returned None at {:.3}s", current_time);
                     }
                     Err(e) => {
                         tracing::warn!("Audio mix error at {:.3}s: {}", current_time, e);
@@ -753,6 +748,22 @@ impl ITimelineService for TimelineService {
 
                 current_time += frame_duration;
                 pacer.wait_for_next_frame();
+            }
+
+            // Log audio performance summary
+            if audio_frames > 0 {
+                let elapsed = audio_start.elapsed().as_secs_f64();
+                let avg_mix_ms = audio_mix_total_ns as f64 / audio_frames as f64 / 1_000_000.0;
+                tracing::info!(
+                    "=== Audio Stream Complete ===\n\
+                     Total frames: {}\n\
+                     Total time: {:.2}s\n\
+                     Average FPS: {:.1}\n\
+                     Average mix time: {:.2}ms",
+                    audio_frames, elapsed,
+                    audio_frames as f64 / elapsed,
+                    avg_mix_ms,
+                );
             }
 
             mixer.close();

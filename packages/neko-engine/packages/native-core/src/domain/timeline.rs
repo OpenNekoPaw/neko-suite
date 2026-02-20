@@ -38,6 +38,24 @@ impl Timeline {
         }
     }
 
+    /// Calculate duration from elements (max end time across all tracks)
+    pub fn calculated_duration(&self) -> f64 {
+        self.tracks
+            .iter()
+            .flat_map(|t| t.elements.iter())
+            .map(|e| e.end_time())
+            .fold(0.0_f64, f64::max)
+    }
+
+    /// Return effective duration: use `self.duration` if set, otherwise calculate from elements
+    pub fn effective_duration(&self) -> f64 {
+        if self.duration > 0.0 {
+            self.duration
+        } else {
+            self.calculated_duration()
+        }
+    }
+
     /// Calculate total frames based on fps
     pub fn total_frames(&self) -> u64 {
         (self.duration * self.fps).ceil() as u64

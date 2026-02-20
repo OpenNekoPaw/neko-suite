@@ -13,7 +13,7 @@ use std::sync::Arc;
 use crate::encoder::{EncodedPacket, Encoder, EncoderConfig, HwAccelEncoder, VideoCodec};
 use crate::error::Result;
 use crate::domain::Timeline;
-use crate::export::{ExportSettings, GpuExportPipeline};
+use crate::export::{ExportSettings, GpuExportPipeline, GpuPipelineTiming};
 use crate::gpu::GpuContext;
 
 /// Preview pipeline configuration
@@ -215,6 +215,55 @@ impl PreviewPipeline {
         self.frame_count += 1;
 
         Ok(packets.iter().map(PreviewFrame::from).collect())
+    }
+
+    /// Render frame with detailed timing breakdown (macOS zero-copy)
+    #[cfg(target_os = "macos")]
+    pub fn render_frame_timed(
+        &mut self,
+        time: f64,
+        background_color: [f32; 4],
+    ) -> Result<(Vec<PreviewFrame>, GpuPipelineTiming)> {
+        self.ensure_encoder_initialized()?;
+
+        let iosurface_result = self
+            .gpu_pipeline
+            .process_frame_to_iosurface_timed(time, background_color)?;
+
+        let timing = iosurface_result.timing;
+
+        let pts = (self.frame_count as f64 * 1_000_000.0 / self.config.fps) as i64;
+        let packets = self.encoder.encode_frame_gpu(
+            iosurface_result.gpu_handle.unwrap(),
+            pts,
+        )?;
+
+        self.frame_count += 1;
+
+        Ok((packets.iter().map(PreviewFrame::from).collect(), timing))
+    }
+
+    /// Render frame with detailed timing breakdown (non-macOS fallback)
+    #[cfg(not(target_os = "macos"))]
+    pub fn render_frame_timed(
+        &mut self,
+        time: f64,
+        background_color: [f32; 4],
+    ) -> Result<(Vec<PreviewFrame>, GpuPipelineTiming)> {
+        self.ensure_encoder_initialized()?;
+
+        let result = self
+            .gpu_pipeline
+            .process_frame_to_nv12_timed(time, background_color)?;
+
+        let timing = result.timing;
+
+        let pts = (self.frame_count as f64 * 1_000_000.0 / self.config.fps) as i64;
+        let packets = self.encoder.encode_frame(&result.data, pts)?;
+
+        self.frame_count += 1;
+
+        Ok((packets.iter().map(PreviewFrame::from).collect(), timing))
     }
 
     /// Flush encoder and get remaining packets

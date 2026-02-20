@@ -195,6 +195,16 @@ impl WallClockPacer {
         self.start_time = std::time::Instant::now();
         self.frame_number = 0;
     }
+
+    /// Get current frame count
+    pub fn frame_count(&self) -> u64 {
+        self.frame_number
+    }
+
+    /// Get elapsed seconds since pacer start
+    pub fn elapsed_secs(&self) -> f64 {
+        self.start_time.elapsed().as_secs_f64()
+    }
 }
 
 /// Frame pacer - controls decoding loop production rate
