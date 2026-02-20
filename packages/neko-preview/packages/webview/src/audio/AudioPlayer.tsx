@@ -179,6 +179,7 @@ export function AudioPlayer() {
 
 	const handlePause = useCallback(() => {
 		setIsPlaying(false);
+		audioClientRef.current?.pause();
 		postMessage({ type: 'preview:pause' });
 		postMessage({ type: 'preview:statusUpdate', playbackState: 'paused', currentTime });
 	}, [postMessage, currentTime]);
@@ -187,6 +188,7 @@ export function AudioPlayer() {
 		setIsPlaying(true);
 		playStartTimeRef.current = currentTime;
 		playWallTimeRef.current = performance.now();
+		audioClientRef.current?.resume();
 		postMessage({ type: 'preview:resume' });
 		postMessage({ type: 'preview:statusUpdate', playbackState: 'playing', currentTime });
 	}, [currentTime, postMessage]);

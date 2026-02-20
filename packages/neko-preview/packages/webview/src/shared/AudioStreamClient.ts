@@ -106,6 +106,19 @@ export class AudioStreamClient {
 	/** Last measured drift in milliseconds (for stats) */
 	private lastDriftMs = 0;
 
+	/** Whether audio output is paused (gain muted, new packets discarded) */
+	private isPaused = false;
+
+	/**
+	 * Seek generation counter. Incremented on resetClock().
+	 * Packets arriving during prebuffer whose generation is stale are discarded,
+	 * preventing pre-seek PCM data from leaking into the post-seek buffer.
+	 */
+	private seekGeneration = 0;
+
+	/** Shorter prebuffer after seek (WebSocket already connected, low latency) */
+	private static readonly SEEK_PREBUFFER_DURATION = 0.15;
+
 	// Reconnection
 	private reconnectAttempts = 0;
 	private readonly maxReconnectAttempts = 5;
@@ -207,7 +220,12 @@ export class AudioStreamClient {
 			this.prebufferQueue.push({ audioBuffer, ptsSeconds });
 			this.prebufferAccum += audioBuffer.duration;
 
-			if (this.prebufferAccum < AudioStreamClient.PREBUFFER_DURATION) {
+			// Use shorter prebuffer after seek (WebSocket already connected)
+			const threshold = this.seekGeneration > 0
+				? AudioStreamClient.SEEK_PREBUFFER_DURATION
+				: AudioStreamClient.PREBUFFER_DURATION;
+
+			if (this.prebufferAccum < threshold) {
 				return; // Keep accumulating
 			}
 
@@ -331,6 +349,36 @@ export class AudioStreamClient {
 
 	setVolume(volume: number): void {
 		this.config.volume = Math.max(0, Math.min(1, volume));
+		if (this.gainNode && this.audioCtx && !this.isPaused) {
+			this.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
+			this.gainNode.gain.setValueAtTime(this.config.volume, this.audioCtx.currentTime);
+		}
+	}
+
+	/**
+	 * Immediately mute audio output and stop scheduling new buffers.
+	 * Already-scheduled AudioBufferSourceNodes are silenced via gain = 0.
+	 * New PCM packets arriving from WebSocket are discarded while paused.
+	 */
+	pause(): void {
+		if (this.isPaused) return;
+		this.isPaused = true;
+
+		if (this.gainNode && this.audioCtx) {
+			this.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
+			this.gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
+		}
+	}
+
+	/**
+	 * Resume audio output after pause.
+	 * Restores gain to configured volume. Playback continues from where
+	 * the pre-scheduled buffers left off (seamless if pause was short).
+	 */
+	resume(): void {
+		if (!this.isPaused) return;
+		this.isPaused = false;
+
 		if (this.gainNode && this.audioCtx) {
 			this.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
 			this.gainNode.gain.setValueAtTime(this.config.volume, this.audioCtx.currentTime);
@@ -381,8 +429,14 @@ export class AudioStreamClient {
 	 * position) and creates a fresh GainNode for post-seek audio.
 	 * Clears the PTS offset so the next packet re-establishes the clock
 	 * (and triggers a fresh fade-in via prebuffer).
+	 *
+	 * Increments seekGeneration so that stale PCM packets still in-flight
+	 * from the pre-seek position are discarded by handlePacket().
 	 */
 	resetClock(): void {
+		// Invalidate in-flight packets from pre-seek position
+		this.seekGeneration++;
+
 		if (this.audioCtx) {
 			// Disconnect old gain node — all previously scheduled sources
 			// still reference it but now play into a disconnected graph (silent).
@@ -399,6 +453,7 @@ export class AudioStreamClient {
 		this.ptsOffset = null;
 		this.nextPlayTime = 0;
 		this.lastCalibrationTime = 0;
+		this.isPaused = false;
 
 		// Reset prebuffer state — next prebuffer completion will fade-in
 		this.isPrebuffering = true;
@@ -456,8 +511,14 @@ export class AudioStreamClient {
 	private handlePacket(data: ArrayBuffer): void {
 		if (!this.audioCtx || !this.gainNode) return;
 
+		// Discard packets while paused — no point scheduling audio nobody hears
+		if (this.isPaused) return;
+
 		const packet = parsePcmPacket(data);
 		if (!packet) return;
+
+		// Capture seek generation before any async-ish work
+		const gen = this.seekGeneration;
 
 		this.packetCount++;
 		if (this.packetCount <= 3 || this.packetCount % 200 === 0) {
@@ -470,6 +531,9 @@ export class AudioStreamClient {
 				'pcmBytes=', packet.pcmData.byteLength,
 			);
 		}
+
+		// Stale packet from pre-seek position — discard
+		if (gen !== this.seekGeneration) return;
 
 		this.sampleRate = packet.sampleRate;
 
