@@ -2,17 +2,18 @@
 
 use crate::domain::{CaptureOptions, ExtractOptions, FrameData, TaskHandle, TranscodeOptions};
 use crate::error::Result;
-use neko_types::{LoopRegion, MediaInfo, StreamId};
+use crate::services::IStreamPlayback;
+use neko_types::{MediaInfo, StreamId};
 use std::path::Path;
 use tokio::sync::broadcast;
 
 /// Video service interface
 ///
-/// Handles all video-related operations: probing, capture, extraction,
-/// streaming, playback control, transcoding, keyframe analysis,
-/// waveform generation, and proxy creation.
+/// Handles video-specific operations: probing, capture, extraction,
+/// streaming, transcoding, keyframe analysis, waveform generation, and proxy creation.
+/// Stream playback control (stop/pause/resume/speed/seek/loop) is inherited from `IStreamPlayback`.
 #[allow(async_fn_in_trait)]
-pub trait IVideoService: Send + Sync {
+pub trait IVideoService: IStreamPlayback {
     /// Probe video file metadata
     async fn probe(&self, path: &Path) -> Result<MediaInfo>;
 
@@ -38,24 +39,6 @@ pub trait IVideoService: Send + Sync {
         source: &Path,
         session_id: &str,
     ) -> Result<(StreamId, broadcast::Receiver<FrameData>)>;
-
-    /// Stop a video stream
-    async fn stop_stream(&self, stream_id: &StreamId) -> Result<()>;
-
-    /// Pause video stream playback
-    async fn pause(&self, stream_id: &StreamId) -> Result<()>;
-
-    /// Resume video stream playback
-    async fn resume(&self, stream_id: &StreamId) -> Result<()>;
-
-    /// Set video stream playback speed
-    async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()>;
-
-    /// Seek video stream to exact time
-    async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()>;
-
-    /// Set loop region for video stream playback
-    async fn set_loop(&self, stream_id: &StreamId, region: Option<LoopRegion>) -> Result<()>;
 
     /// Transcode video to different format
     async fn transcode(

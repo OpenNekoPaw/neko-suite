@@ -1,6 +1,6 @@
 //! VideoController - handles videos:* actions
 
-use crate::controllers::utils::{base64_encode, resolve_resource};
+use crate::controllers::utils::{base64_encode, handle_stream_control, resolve_resource};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
@@ -8,7 +8,7 @@ use neko_native_core::domain::{CaptureOptions, ExtractOptions, ExtractType, Stre
 use neko_native_core::media_service::{diff_media, diff_video_content, DiffCategory, VideoDiffOptions};
 use neko_native_core::services::{IVideoService, VideoService};
 use neko_types::registry;
-use neko_types::{ActionResponse, FrameFormat, LoopRegion, StreamId};
+use neko_types::{ActionResponse, FrameFormat};
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -183,25 +183,6 @@ struct DiffRequestOptions {
     diff_video_output: Option<String>,
     /// Whether to include audio comparison (default true)
     include_audio: Option<bool>,
-}
-
-/// Options for stream control actions (stop/pause/resume/speed/seek/loop)
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct VideoStreamControlOptions {
-    /// Stream ID (required for all control actions)
-    stream_id: Option<String>,
-    /// Playback speed multiplier (for speed action)
-    speed: Option<f64>,
-    /// Seek time in seconds (for seek action)
-    time: Option<f64>,
-    /// Loop in-point in seconds (for loop action)
-    in_point: Option<f64>,
-    /// Loop out-point in seconds (for loop action)
-    out_point: Option<f64>,
-    /// Clear loop region (for loop action)
-    #[serde(default)]
-    clear: bool,
 }
 
 impl Controller for VideoController {
@@ -505,91 +486,13 @@ impl Controller for VideoController {
                 Ok(ActionResponse::ok("", response))
             }
             "stop" | "pause" | "resume" | "speed" | "seek" | "loop" => {
-                let opts: VideoStreamControlOptions =
-                    serde_json::from_value(options).unwrap_or_default();
-
-                let stream_id_str = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest(format!(
-                        "stream_id required for videos:{}",
-                        action
-                    ))
-                })?;
-                let stream_id = StreamId::from_string(stream_id_str);
-
-                match action {
-                    "stop" => {
-                        self.video_service.stop_stream(&stream_id).await?;
-                        let response = serde_json::json!({
-                            "streamId": stream_id.as_str(),
-                            "status": "stopped",
-                        });
-                        Ok(ActionResponse::ok("", response))
-                    }
-                    "pause" => {
-                        self.video_service.pause(&stream_id).await?;
-                        let response = serde_json::json!({
-                            "streamId": stream_id.as_str(),
-                            "status": "paused",
-                        });
-                        Ok(ActionResponse::ok("", response))
-                    }
-                    "resume" => {
-                        self.video_service.resume(&stream_id).await?;
-                        let response = serde_json::json!({
-                            "streamId": stream_id.as_str(),
-                            "status": "active",
-                        });
-                        Ok(ActionResponse::ok("", response))
-                    }
-                    "speed" => {
-                        let speed = opts.speed.unwrap_or(1.0);
-                        self.video_service.set_speed(&stream_id, speed).await?;
-                        let response = serde_json::json!({
-                            "streamId": stream_id.as_str(),
-                            "speed": speed,
-                        });
-                        Ok(ActionResponse::ok("", response))
-                    }
-                    "seek" => {
-                        let time = opts.time.ok_or_else(|| {
-                            ApiError::InvalidRequest(
-                                "time required for videos:seek".to_string(),
-                            )
-                        })?;
-                        self.video_service.seek(&stream_id, time).await?;
-                        let response = serde_json::json!({
-                            "streamId": stream_id.as_str(),
-                            "time": time,
-                        });
-                        Ok(ActionResponse::ok("", response))
-                    }
-                    "loop" => {
-                        let region = if opts.clear {
-                            None
-                        } else {
-                            match (opts.in_point, opts.out_point) {
-                                (Some(in_pt), Some(out_pt)) => {
-                                    Some(LoopRegion::new(in_pt, out_pt))
-                                }
-                                _ => {
-                                    return Err(ApiError::InvalidRequest(
-                                        "in_point and out_point required for videos:loop (or set clear=true)".to_string(),
-                                    ));
-                                }
-                            }
-                        };
-                        self.video_service.set_loop(&stream_id, region.clone()).await?;
-                        let response = serde_json::json!({
-                            "streamId": stream_id.as_str(),
-                            "loop": region.map(|r| serde_json::json!({
-                                "inPoint": r.in_point,
-                                "outPoint": r.out_point,
-                            })),
-                        });
-                        Ok(ActionResponse::ok("", response))
-                    }
-                    _ => unreachable!(),
-                }
+                handle_stream_control(
+                    self.video_service.as_ref(),
+                    action,
+                    options,
+                    "videos",
+                )
+                .await
             }
             "diff" => {
                 let opts: DiffRequestOptions =

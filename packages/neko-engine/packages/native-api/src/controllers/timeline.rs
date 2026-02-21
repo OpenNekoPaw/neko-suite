@@ -1,6 +1,6 @@
 //! TimelineController - handles timelines:* actions
 
-use crate::controllers::utils::base64_encode;
+use crate::controllers::utils::{base64_encode, handle_stream_control};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::StreamRegistry;
@@ -9,7 +9,7 @@ use neko_native_core::jvi::JviLoader;
 use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{ExportService, IExportService, ITimelineService, TimelineService};
 use neko_types::registry;
-use neko_types::{ActionResponse, LoopRegion, Resolution, StreamId};
+use neko_types::{ActionResponse, Resolution, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -70,25 +70,6 @@ struct StreamRequestOptions {
     start_time: f64,
     /// Base directory for resolving relative media paths (JVI format)
     base_dir: Option<String>,
-}
-
-/// Options for stream control actions (stop/pause/resume/seek/speed/loop)
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct StreamControlOptions {
-    /// Stream ID
-    stream_id: Option<String>,
-    /// Speed value (for speed action)
-    speed: Option<f64>,
-    /// Time in seconds (for seek action)
-    time: Option<f64>,
-    /// Loop in point (for loop action)
-    in_point: Option<f64>,
-    /// Loop out point (for loop action)
-    out_point: Option<f64>,
-    /// Whether to clear loop (for loop action)
-    #[serde(default)]
-    clear: bool,
 }
 
 /// Options for timelines:diff
@@ -235,140 +216,17 @@ impl Controller for TimelineController {
 
                 Ok(ActionResponse::ok("", response))
             }
-            "stop" => {
-                let opts: StreamControlOptions =
-                    serde_json::from_value(options).unwrap_or_default();
-
-                let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest("stream_id required for timelines:stop".to_string())
-                })?;
-                let stream_id = StreamId::from_string(stream_id);
-
-                self.timeline_service.stop_stream(&stream_id).await?;
-
-                let response = serde_json::json!({
-                    "streamId": stream_id.as_str(),
-                    "status": "stopped",
-                });
-
-                Ok(ActionResponse::ok("", response))
-            }
-            "pause" => {
-                let opts: StreamControlOptions =
-                    serde_json::from_value(options).unwrap_or_default();
-
-                let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest("stream_id required for timelines:pause".to_string())
-                })?;
-                let stream_id = StreamId::from_string(stream_id);
-
-                self.timeline_service.pause(&stream_id).await?;
-
-                let response = serde_json::json!({
-                    "streamId": stream_id.as_str(),
-                    "status": "paused",
-                });
-
-                Ok(ActionResponse::ok("", response))
-            }
-            "resume" => {
-                let opts: StreamControlOptions =
-                    serde_json::from_value(options).unwrap_or_default();
-
-                let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest("stream_id required for timelines:resume".to_string())
-                })?;
-                let stream_id = StreamId::from_string(stream_id);
-
-                self.timeline_service.resume(&stream_id).await?;
-
-                let response = serde_json::json!({
-                    "streamId": stream_id.as_str(),
-                    "status": "active",
-                });
-
-                Ok(ActionResponse::ok("", response))
-            }
-            "speed" => {
-                let opts: StreamControlOptions =
-                    serde_json::from_value(options).unwrap_or_default();
-
-                let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest("stream_id required for timelines:speed".to_string())
-                })?;
-                let stream_id = StreamId::from_string(stream_id);
-
-                let speed = opts.speed.ok_or_else(|| {
-                    ApiError::InvalidRequest("speed value required for timelines:speed".to_string())
-                })?;
-
-                self.timeline_service.set_speed(&stream_id, speed).await?;
-
-                let response = serde_json::json!({
-                    "streamId": stream_id.as_str(),
-                    "speed": speed,
-                });
-
-                Ok(ActionResponse::ok("", response))
-            }
-            "loop" => {
-                let opts: StreamControlOptions =
-                    serde_json::from_value(options).unwrap_or_default();
-
-                let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest("stream_id required for timelines:loop".to_string())
-                })?;
-                let stream_id = StreamId::from_string(stream_id);
-
-                let region = if opts.clear {
-                    None
-                } else {
-                    match (opts.in_point, opts.out_point) {
-                        (Some(in_pt), Some(out_pt)) => Some(LoopRegion::new(in_pt, out_pt)),
-                        _ => {
-                            return Err(ApiError::InvalidRequest(
-                                "in_point and out_point required for timelines:loop (or set clear=true)".to_string(),
-                            ));
-                        }
-                    }
-                };
-
-                self.timeline_service.set_loop(&stream_id, region.clone()).await?;
-
-                let response = serde_json::json!({
-                    "streamId": stream_id.as_str(),
-                    "loop": region.map(|r| serde_json::json!({
-                        "inPoint": r.in_point,
-                        "outPoint": r.out_point,
-                    })),
-                });
-
-                Ok(ActionResponse::ok("", response))
-            }
-            "seek" => {
-                let opts: StreamControlOptions =
-                    serde_json::from_value(options).unwrap_or_default();
-
-                let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest("stream_id required for timelines:seek".to_string())
-                })?;
-                let stream_id = StreamId::from_string(stream_id);
-
-                let time = opts.time.ok_or_else(|| {
-                    ApiError::InvalidRequest("time required for timelines:seek".to_string())
-                })?;
-
-                self.timeline_service.seek(&stream_id, time).await?;
-
-                let response = serde_json::json!({
-                    "streamId": stream_id.as_str(),
-                    "time": time,
-                });
-
-                Ok(ActionResponse::ok("", response))
+            "stop" | "pause" | "resume" | "speed" | "seek" | "loop" => {
+                handle_stream_control(
+                    self.timeline_service.as_ref(),
+                    action,
+                    options,
+                    "timelines",
+                )
+                .await
             }
             "stream_stats" => {
-                let opts: StreamControlOptions =
+                let opts: crate::controllers::utils::StreamControlOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
                 let stream_id = opts.stream_id.ok_or_else(|| {

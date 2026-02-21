@@ -1,6 +1,6 @@
 //! AudioController - handles audios:* actions
 
-use crate::controllers::utils::resolve_resource;
+use crate::controllers::utils::{handle_stream_control, resolve_resource};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
@@ -8,7 +8,7 @@ use neko_native_core::domain::StreamConfig;
 use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{AudioService, IAudioService};
 use neko_types::registry;
-use neko_types::{ActionResponse, LoopRegion, StreamId};
+use neko_types::ActionResponse;
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -75,25 +75,6 @@ struct StreamRequestOptions {
     source: Option<String>,
     /// Session ID for the stream
     session_id: Option<String>,
-}
-
-/// Options for stream control actions (stop/pause/resume/speed/seek/loop)
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct AudioStreamControlOptions {
-    /// Stream ID (required for all control actions)
-    stream_id: Option<String>,
-    /// Playback speed multiplier (for speed action)
-    speed: Option<f64>,
-    /// Seek time in seconds (for seek action)
-    time: Option<f64>,
-    /// Loop in-point in seconds (for loop action)
-    in_point: Option<f64>,
-    /// Loop out-point in seconds (for loop action)
-    out_point: Option<f64>,
-    /// Clear loop region (for loop action)
-    #[serde(default)]
-    clear: bool,
 }
 
 /// Options for audios:diff
@@ -245,91 +226,13 @@ impl Controller for AudioController {
                 Ok(ActionResponse::ok("", response))
             }
             "stop" | "pause" | "resume" | "speed" | "seek" | "loop" => {
-                let opts: AudioStreamControlOptions =
-                    serde_json::from_value(options).unwrap_or_default();
-
-                let stream_id_str = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest(format!(
-                        "stream_id required for audios:{}",
-                        action
-                    ))
-                })?;
-                let stream_id = StreamId::from_string(stream_id_str);
-
-                match action {
-                    "stop" => {
-                        self.audio_service.stop_stream(&stream_id).await?;
-                        let response = serde_json::json!({
-                            "streamId": stream_id.as_str(),
-                            "status": "stopped",
-                        });
-                        Ok(ActionResponse::ok("", response))
-                    }
-                    "pause" => {
-                        self.audio_service.pause(&stream_id).await?;
-                        let response = serde_json::json!({
-                            "streamId": stream_id.as_str(),
-                            "status": "paused",
-                        });
-                        Ok(ActionResponse::ok("", response))
-                    }
-                    "resume" => {
-                        self.audio_service.resume(&stream_id).await?;
-                        let response = serde_json::json!({
-                            "streamId": stream_id.as_str(),
-                            "status": "active",
-                        });
-                        Ok(ActionResponse::ok("", response))
-                    }
-                    "speed" => {
-                        let speed = opts.speed.unwrap_or(1.0);
-                        self.audio_service.set_speed(&stream_id, speed).await?;
-                        let response = serde_json::json!({
-                            "streamId": stream_id.as_str(),
-                            "speed": speed,
-                        });
-                        Ok(ActionResponse::ok("", response))
-                    }
-                    "seek" => {
-                        let time = opts.time.ok_or_else(|| {
-                            ApiError::InvalidRequest(
-                                "time required for audios:seek".to_string(),
-                            )
-                        })?;
-                        self.audio_service.seek(&stream_id, time).await?;
-                        let response = serde_json::json!({
-                            "streamId": stream_id.as_str(),
-                            "time": time,
-                        });
-                        Ok(ActionResponse::ok("", response))
-                    }
-                    "loop" => {
-                        let region = if opts.clear {
-                            None
-                        } else {
-                            match (opts.in_point, opts.out_point) {
-                                (Some(in_pt), Some(out_pt)) => {
-                                    Some(LoopRegion::new(in_pt, out_pt))
-                                }
-                                _ => {
-                                    return Err(ApiError::InvalidRequest(
-                                        "in_point and out_point required for audios:loop (or set clear=true)".to_string(),
-                                    ));
-                                }
-                            }
-                        };
-                        self.audio_service.set_loop(&stream_id, region.clone()).await?;
-                        let response = serde_json::json!({
-                            "streamId": stream_id.as_str(),
-                            "loop": region.map(|r| serde_json::json!({
-                                "inPoint": r.in_point,
-                                "outPoint": r.out_point,
-                            })),
-                        });
-                        Ok(ActionResponse::ok("", response))
-                    }
-                    _ => unreachable!(),
-                }
+                handle_stream_control(
+                    self.audio_service.as_ref(),
+                    action,
+                    options,
+                    "audios",
+                )
+                .await
             }
             "diff" => {
                 let opts: AudioDiffRequestOptions =

@@ -15,10 +15,11 @@ use crate::gpu::{
 };
 use crate::preview::{PreviewFrame, PreviewPipeline, PreviewPipelineConfig};
 use crate::services::impls::stream_loop::{
-    pack_pcm_f32le_stream_frame, ActiveStreams, PlaybackState, StreamLoopHandle, WallClockPacer,
+    pack_pcm_f32le_stream_frame, ActiveStreams, PlaybackState, StreamLoopHandle,
+    StreamPlaybackDelegate, WallClockPacer,
     EOF_IDLE_TIMEOUT, eof_idle_wait,
 };
-use crate::services::{ITaskService, ITimelineService, StreamStats, TimelineStreamResult};
+use crate::services::{IStreamPlayback, ITaskService, ITimelineService, StreamStats, TimelineStreamResult};
 use crate::monitor::SystemMonitor;
 use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
 use neko_types::{BlendMode, FrameFormat, LoopRegion, StreamId};
@@ -74,6 +75,8 @@ pub struct TimelineService {
     task_service: Arc<dyn ITaskService + Send + Sync>,
     /// Active stream loops
     active_streams: Arc<ActiveStreams>,
+    /// Delegate for stream playback control (stop/pause/resume/speed/seek/loop)
+    playback: StreamPlaybackDelegate,
     /// Stats watch receivers keyed by video stream_id
     stats_receivers: Arc<RwLock<HashMap<String, watch::Receiver<StreamStats>>>>,
 }
@@ -84,10 +87,13 @@ impl TimelineService {
         gpu_ctx: Option<Arc<GpuContext>>,
         task_service: Arc<dyn ITaskService + Send + Sync>,
     ) -> Self {
+        let active_streams = Arc::new(ActiveStreams::new());
+        let playback = StreamPlaybackDelegate::new(active_streams.clone());
         Self {
             gpu_ctx,
             task_service,
-            active_streams: Arc::new(ActiveStreams::new()),
+            active_streams,
+            playback,
             stats_receivers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -173,6 +179,37 @@ fn pack_preview_frame(frame: &PreviewFrame, width: u32, height: u32, fps: f64) -
         height,
         format: FrameFormat::H264,
         timestamp: frame.pts as f64 / 1_000_000.0,
+    }
+}
+
+impl IStreamPlayback for TimelineService {
+    async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {
+        // Clean up stats receiver before stopping
+        {
+            let mut receivers = self.stats_receivers.write().await;
+            receivers.remove(stream_id.as_str());
+        }
+        self.playback.stop_stream(stream_id).await
+    }
+
+    async fn pause(&self, stream_id: &StreamId) -> Result<()> {
+        self.playback.pause(stream_id).await
+    }
+
+    async fn resume(&self, stream_id: &StreamId) -> Result<()> {
+        self.playback.resume(stream_id).await
+    }
+
+    async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()> {
+        self.playback.set_speed(stream_id, speed).await
+    }
+
+    async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()> {
+        self.playback.seek(stream_id, time_seconds).await
+    }
+
+    async fn set_loop(&self, stream_id: &StreamId, region: Option<LoopRegion>) -> Result<()> {
+        self.playback.set_loop(stream_id, region).await
     }
 }
 
@@ -839,52 +876,6 @@ impl ITimelineService for TimelineService {
             audio_rx,
             stats_rx,
         })
-    }
-
-    async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {
-        // Clean up stats receiver
-        {
-            let mut receivers = self.stats_receivers.write().await;
-            receivers.remove(stream_id.as_str());
-        }
-        self.active_streams.stop(stream_id).await
-    }
-
-    async fn pause(&self, stream_id: &StreamId) -> Result<()> {
-        self.active_streams
-            .update_state(stream_id, |s| s.paused = true)
-            .await
-    }
-
-    async fn resume(&self, stream_id: &StreamId) -> Result<()> {
-        self.active_streams
-            .update_state(stream_id, |s| s.paused = false)
-            .await
-    }
-
-    async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()> {
-        self.active_streams
-            .update_state(stream_id, |s| s.speed = speed)
-            .await
-    }
-
-    async fn set_loop(
-        &self,
-        stream_id: &StreamId,
-        region: Option<LoopRegion>,
-    ) -> Result<()> {
-        self.active_streams
-            .update_state(stream_id, |s| s.loop_region = region)
-            .await
-    }
-
-    async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()> {
-        self.active_streams
-            .update_state(stream_id, |s| {
-                s.seek_to = Some(time_seconds);
-                s.seek_seq += 1;
-            })
-            .await
     }
 
     async fn get_stream_stats(&self, stream_id: &StreamId) -> Option<StreamStats> {

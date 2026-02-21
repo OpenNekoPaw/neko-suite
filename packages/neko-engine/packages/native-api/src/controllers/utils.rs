@@ -2,7 +2,10 @@
 
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
-use neko_types::ResourceId;
+use neko_native_core::services::IStreamPlayback;
+use neko_types::{ActionResponse, LoopRegion, ResourceId, StreamId};
+use serde::Deserialize;
+use serde_json::Value;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -145,6 +148,132 @@ pub async fn resolve_resource(
     Err(ApiError::InvalidRequest(
         "Either resource_id or source path required".to_string(),
     ))
+}
+
+/// Shared options for stream control actions (stop/pause/resume/speed/seek/loop)
+///
+/// Used by VideoController, AudioController, and TimelineController to avoid
+/// duplicating the same struct definition in each controller.
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct StreamControlOptions {
+    /// Stream ID (required for all control actions)
+    pub stream_id: Option<String>,
+    /// Playback speed multiplier (for speed action)
+    pub speed: Option<f64>,
+    /// Seek time in seconds (for seek action)
+    pub time: Option<f64>,
+    /// Loop in-point in seconds (for loop action)
+    pub in_point: Option<f64>,
+    /// Loop out-point in seconds (for loop action)
+    pub out_point: Option<f64>,
+    /// Clear loop region (for loop action)
+    #[serde(default)]
+    pub clear: bool,
+}
+
+/// Handle stream control actions (stop/pause/resume/speed/seek/loop) for any service
+/// that implements `IStreamPlayback`.
+///
+/// This eliminates duplicated stream control handler logic across
+/// VideoController, AudioController, and TimelineController.
+pub async fn handle_stream_control<S: IStreamPlayback>(
+    playback: &S,
+    action: &str,
+    options: Value,
+    group_name: &str,
+) -> ApiResult<ActionResponse> {
+    let opts: StreamControlOptions = serde_json::from_value(options).unwrap_or_default();
+
+    let stream_id_str = opts.stream_id.ok_or_else(|| {
+        ApiError::InvalidRequest(format!(
+            "stream_id required for {}:{}",
+            group_name, action
+        ))
+    })?;
+    let stream_id = StreamId::from_string(stream_id_str);
+
+    match action {
+        "stop" => {
+            playback.stop_stream(&stream_id).await?;
+            let response = serde_json::json!({
+                "streamId": stream_id.as_str(),
+                "status": "stopped",
+            });
+            Ok(ActionResponse::ok("", response))
+        }
+        "pause" => {
+            playback.pause(&stream_id).await?;
+            let response = serde_json::json!({
+                "streamId": stream_id.as_str(),
+                "status": "paused",
+            });
+            Ok(ActionResponse::ok("", response))
+        }
+        "resume" => {
+            playback.resume(&stream_id).await?;
+            let response = serde_json::json!({
+                "streamId": stream_id.as_str(),
+                "status": "active",
+            });
+            Ok(ActionResponse::ok("", response))
+        }
+        "speed" => {
+            let speed = opts.speed.unwrap_or(1.0);
+            playback.set_speed(&stream_id, speed).await?;
+            let response = serde_json::json!({
+                "streamId": stream_id.as_str(),
+                "speed": speed,
+            });
+            Ok(ActionResponse::ok("", response))
+        }
+        "seek" => {
+            let time = opts.time.ok_or_else(|| {
+                ApiError::InvalidRequest(format!(
+                    "time required for {}:seek",
+                    group_name
+                ))
+            })?;
+            playback.seek(&stream_id, time).await?;
+            let response = serde_json::json!({
+                "streamId": stream_id.as_str(),
+                "time": time,
+            });
+            Ok(ActionResponse::ok("", response))
+        }
+        "loop" => {
+            let region = if opts.clear {
+                None
+            } else {
+                match (opts.in_point, opts.out_point) {
+                    (Some(in_pt), Some(out_pt)) => {
+                        Some(LoopRegion::new(in_pt, out_pt))
+                    }
+                    _ => {
+                        return Err(ApiError::InvalidRequest(
+                            format!(
+                                "in_point and out_point required for {}:loop (or set clear=true)",
+                                group_name
+                            ),
+                        ));
+                    }
+                }
+            };
+            playback.set_loop(&stream_id, region.clone()).await?;
+            let response = serde_json::json!({
+                "streamId": stream_id.as_str(),
+                "loop": region.map(|r| serde_json::json!({
+                    "inPoint": r.in_point,
+                    "outPoint": r.out_point,
+                })),
+            });
+            Ok(ActionResponse::ok("", response))
+        }
+        _ => Err(ApiError::UnknownAction {
+            group: group_name.to_string(),
+            action: action.to_string(),
+        }),
+    }
 }
 
 #[cfg(test)]

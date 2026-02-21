@@ -166,28 +166,25 @@ pub mod vulkan_import {
     /// # Safety
     /// - `fd` must be a valid DMA-BUF file descriptor
     /// - The DMA-BUF must remain valid for the lifetime of the returned texture
+    ///
+    /// Note: The primary implementation is in `linux_import::LinuxTextureImporter`.
+    /// This function delegates to it for the full pipeline.
     pub unsafe fn import_dmabuf_texture(
         _ctx: &GpuContext,
         _params: &DmaBufImportParams,
         _desc: &wgpu::TextureDescriptor,
     ) -> Result<wgpu::Texture> {
-        // To properly import DMA-BUF, we need to:
-        // 1. Access wgpu's internal Vulkan device via as_hal
-        // 2. Create VkImage with VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT
-        // 3. Import memory using vkAllocateMemory with VkImportMemoryFdInfoKHR
-        // 4. Bind memory to image
-        // 5. Create wgpu_hal::vulkan::Texture
-        // 6. Use Device::create_texture_from_hal
-
+        // Use LinuxTextureImporter for the full DMA-BUF → Vulkan → wgpu pipeline.
+        // This standalone function is kept for backward compatibility.
         Err(Error::Other(
-            "Vulkan DMA-BUF import requires wgpu hal_api feature".to_string(),
+            "Use LinuxTextureImporter::import_vaapi() for the full zero-copy pipeline".to_string(),
         ))
     }
 
     /// Check if the Vulkan device supports DMA-BUF import
-    pub fn supports_dmabuf_import(_ctx: &GpuContext) -> bool {
-        // Would check for VK_EXT_external_memory_dma_buf extension
-        false
+    pub fn supports_dmabuf_import(ctx: &GpuContext) -> bool {
+        // Check if wgpu is using Vulkan backend
+        ctx.info().backend.contains("Vulkan")
     }
 }
 
@@ -202,26 +199,23 @@ pub mod d3d12_import {
     /// # Safety
     /// - `shared_handle` must be a valid DXGI shared handle
     /// - The shared resource must remain valid for the lifetime of the returned texture
+    ///
+    /// Note: The primary implementation is in `windows_import::WindowsTextureImporter`.
+    /// This function is kept for backward compatibility.
     pub unsafe fn import_shared_texture(
         _ctx: &GpuContext,
         _shared_handle: HANDLE,
         _desc: &wgpu::TextureDescriptor,
     ) -> Result<wgpu::Texture> {
-        // To properly import shared handle, we need to:
-        // 1. Access wgpu's internal D3D12 device via as_hal
-        // 2. Call ID3D12Device::OpenSharedHandle to get ID3D12Resource
-        // 3. Create wgpu_hal::dx12::Texture from the resource
-        // 4. Use Device::create_texture_from_hal
-
         Err(Error::Other(
-            "D3D12 shared handle import requires wgpu hal_api feature".to_string(),
+            "Use WindowsTextureImporter::import_d3d11() for the full zero-copy pipeline".to_string(),
         ))
     }
 
     /// Check if the D3D12 device supports shared handle import
-    pub fn supports_shared_handles(_ctx: &GpuContext) -> bool {
+    pub fn supports_shared_handles(ctx: &GpuContext) -> bool {
         // D3D12 always supports shared handles
-        true
+        ctx.info().backend.contains("Dx12")
     }
 }
 

@@ -3,7 +3,8 @@
 use crate::domain::{FrameData, StreamConfig, Timeline, TimelineProjectInfo};
 use crate::error::Result;
 use crate::export::ExportStats;
-use neko_types::{LoopRegion, StreamId};
+use crate::services::IStreamPlayback;
+use neko_types::StreamId;
 use serde::Serialize;
 use std::path::Path;
 use tokio::sync::{broadcast, watch};
@@ -63,10 +64,11 @@ impl std::fmt::Debug for TimelineStreamResult {
 
 /// Timeline service interface
 ///
-/// Handles timeline composition and playback: compositing frames,
-/// stream management, playback control, and project probing.
+/// Handles timeline-specific operations: compositing frames,
+/// stream management, and project probing.
+/// Stream playback control (stop/pause/resume/speed/seek/loop) is inherited from `IStreamPlayback`.
 #[allow(async_fn_in_trait)]
-pub trait ITimelineService: Send + Sync {
+pub trait ITimelineService: IStreamPlayback {
     /// Probe a .jvi project file and return metadata without rendering
     async fn probe(&self, jvi_path: &Path) -> Result<TimelineProjectInfo>;
 
@@ -84,24 +86,6 @@ pub trait ITimelineService: Send + Sync {
         session_id: &str,
         config: StreamConfig,
     ) -> Result<TimelineStreamResult>;
-
-    /// Stop a timeline stream
-    async fn stop_stream(&self, stream_id: &StreamId) -> Result<()>;
-
-    /// Pause stream playback
-    async fn pause(&self, stream_id: &StreamId) -> Result<()>;
-
-    /// Resume stream playback
-    async fn resume(&self, stream_id: &StreamId) -> Result<()>;
-
-    /// Set playback speed
-    async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()>;
-
-    /// Set loop region for playback
-    async fn set_loop(&self, stream_id: &StreamId, region: Option<LoopRegion>) -> Result<()>;
-
-    /// Seek to exact time
-    async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()>;
 
     /// Get stream performance statistics
     async fn get_stream_stats(&self, stream_id: &StreamId) -> Option<StreamStats>;

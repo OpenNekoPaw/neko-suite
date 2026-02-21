@@ -165,6 +165,64 @@ impl Default for ActiveStreams {
     }
 }
 
+/// Delegate for stream playback control operations.
+///
+/// Provides a single, correct implementation of stop/pause/resume/speed/seek/loop
+/// that all services (Video, Audio, Timeline) share via composition.
+/// This eliminates copy-paste duplication and ensures consistency (e.g. seek_seq increment).
+pub struct StreamPlaybackDelegate {
+    active_streams: Arc<ActiveStreams>,
+}
+
+impl StreamPlaybackDelegate {
+    /// Create a new delegate wrapping the given ActiveStreams
+    pub fn new(active_streams: Arc<ActiveStreams>) -> Self {
+        Self { active_streams }
+    }
+
+    /// Get a reference to the underlying ActiveStreams
+    pub fn active_streams(&self) -> &Arc<ActiveStreams> {
+        &self.active_streams
+    }
+
+    pub async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {
+        self.active_streams.stop(stream_id).await
+    }
+
+    pub async fn pause(&self, stream_id: &StreamId) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.paused = true)
+            .await
+    }
+
+    pub async fn resume(&self, stream_id: &StreamId) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.paused = false)
+            .await
+    }
+
+    pub async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.speed = speed)
+            .await
+    }
+
+    pub async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| {
+                s.seek_to = Some(time_seconds);
+                s.seek_seq += 1;
+            })
+            .await
+    }
+
+    pub async fn set_loop(&self, stream_id: &StreamId, region: Option<LoopRegion>) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.loop_region = region)
+            .await
+    }
+}
+
 /// Wall-clock based frame pacer for blocking threads
 ///
 /// Uses `Instant` + `std::thread::sleep` for frame pacing inside `spawn_blocking`.

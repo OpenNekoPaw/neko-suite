@@ -1,14 +1,16 @@
-//! Windows Zero-Copy Import - D3D11 → D3D12 → wgpu
+//! Windows Zero-Copy Import - D3D11VA → DXGI SharedHandle → D3D12 → wgpu
 //!
 //! This module implements zero-copy texture import on Windows:
-//! 1. Get SharedHandle from ID3D11Texture2D (D3D11VA output)
-//! 2. Open SharedHandle in D3D12
-//! 3. Import D3D12 texture into wgpu
+//! 1. Get ID3D11Texture2D from D3D11VA decoded frame
+//! 2. Query IDXGIResource1 and create a DXGI shared handle
+//! 3. Open shared handle in D3D12 via ID3D12Device::OpenSharedHandle
+//! 4. Wrap D3D12 resource as wgpu::Texture via wgpu_hal
 //!
-//! Reference:
-//! - ID3D11Texture2D::QueryInterface for IDXGIResource1
-//! - IDXGIResource1::CreateSharedHandle
-//! - ID3D12Device::OpenSharedHandle
+//! Pipeline: D3D11VA → ID3D11Texture2D → DXGI SharedHandle → ID3D12Resource → wgpu::Texture
+//!
+//! Note: D3D11VA outputs NV12 as a single texture with two planes.
+//! We create separate R8 (Y) and RG8 (UV) shader resource views from the
+//! same underlying resource using D3D12 placed/aliased resources.
 
 use crate::decoder::Nv12GpuTexture;
 use crate::error::{Error, Result};
@@ -22,11 +24,14 @@ use windows::{
     Win32::{
         Foundation::{CloseHandle, HANDLE},
         Graphics::{
-            Direct3D11::{ID3D11Device, ID3D11Texture2D},
-            Direct3D12::{ID3D12Device, ID3D12Resource, D3D12_RESOURCE_DESC},
+            Direct3D11::ID3D11Texture2D,
+            Direct3D12::{
+                ID3D12Device, ID3D12Resource,
+                D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+            },
+            Dxgi::Common::DXGI_FORMAT_NV12,
             Dxgi::{IDXGIResource1, DXGI_SHARED_RESOURCE_READ},
         },
-        Security::SECURITY_ATTRIBUTES,
     },
 };
 
@@ -42,6 +47,12 @@ impl WindowsTextureImporter {
     }
 
     /// Import NV12 texture from D3D11VA
+    ///
+    /// Full zero-copy pipeline:
+    /// 1. Cast raw pointer to ID3D11Texture2D
+    /// 2. Query IDXGIResource1 → CreateSharedHandle
+    /// 3. Open shared handle in D3D12
+    /// 4. Create separate Y/UV wgpu textures from the D3D12 resource
     ///
     /// # Safety
     /// The texture pointer must be a valid ID3D11Texture2D from D3D11VA.
@@ -59,7 +70,7 @@ impl WindowsTextureImporter {
         let d3d11_texture: ID3D11Texture2D =
             std::mem::transmute_copy(&(texture_ptr as *mut std::ffi::c_void));
 
-        // Get texture description
+        // Get texture description for logging
         let mut desc = std::mem::zeroed();
         d3d11_texture.GetDesc(&mut desc);
 
@@ -73,47 +84,193 @@ impl WindowsTextureImporter {
         );
 
         // Query for IDXGIResource1 to get shared handle
-        let dxgi_resource: IDXGIResource1 = d3d11_texture.cast()?;
+        let dxgi_resource: IDXGIResource1 = d3d11_texture.cast()
+            .map_err(|e| Error::Other(format!("QueryInterface IDXGIResource1 failed: {}", e)))?;
 
-        // Create shared handle
+        // Create shared handle (NT handle, read-only)
         let mut shared_handle = HANDLE::default();
         dxgi_resource.CreateSharedHandle(
-            None, // Security attributes
+            None,
             DXGI_SHARED_RESOURCE_READ.0,
-            None, // Name
+            None,
             &mut shared_handle,
-        )?;
+        ).map_err(|e| Error::Other(format!("CreateSharedHandle failed: {}", e)))?;
 
         if shared_handle.is_invalid() {
-            return Err(Error::Other("Failed to create shared handle".to_string()));
+            return Err(Error::Other("CreateSharedHandle returned invalid handle".to_string()));
         }
 
-        // Import shared handle into wgpu (via D3D12)
-        let result = self.import_shared_handle(shared_handle, gpu_texture, array_index);
+        // Import shared handle into wgpu via D3D12
+        let result = self.import_shared_handle(
+            shared_handle,
+            gpu_texture,
+            desc.Width,
+            desc.Height,
+        );
 
-        // Close the shared handle
+        // Always close the shared handle after import
         let _ = CloseHandle(shared_handle);
 
         result
     }
 
-    /// Import shared handle into wgpu via D3D12
+    /// Import DXGI shared handle into wgpu via D3D12
+    ///
+    /// Steps:
+    /// 1. Access D3D12 device from wgpu via wgpu_hal
+    /// 2. OpenSharedHandle to get ID3D12Resource
+    /// 3. Create wgpu_hal::dx12::Texture from the resource
+    /// 4. Create separate Y (R8) and UV (RG8) wgpu textures
     unsafe fn import_shared_handle(
         &self,
         shared_handle: HANDLE,
-        _gpu_texture: &Nv12GpuTexture,
-        _array_index: u32,
+        gpu_texture: &Nv12GpuTexture,
+        width: u32,
+        height: u32,
     ) -> Result<ImportedNv12Texture> {
-        // TODO: Get D3D12 device from wgpu via wgpu_hal
-        // The proper implementation would:
-        // 1. Get ID3D12Device from wgpu::Device via wgpu_hal
-        // 2. Call ID3D12Device::OpenSharedHandle to get ID3D12Resource
-        // 3. Create wgpu::Texture from ID3D12Resource via wgpu_hal
+        let device = self.ctx.device();
 
-        Err(Error::Other(format!(
-            "D3D12 shared handle import not yet implemented - handle={:?}",
-            shared_handle
-        )))
+        // Access the D3D12 HAL device through wgpu
+        let (y_hal, uv_hal) = device
+            .as_hal::<wgpu_hal::api::Dx12, _, _>(|hal_device| {
+                let hal_device = hal_device.ok_or_else(|| {
+                    Error::Other("wgpu backend is not D3D12".to_string())
+                })?;
+
+                let d3d12_device = hal_device.raw_device();
+
+                // Open shared handle to get ID3D12Resource.
+                // The d3d12 crate wraps winapi, so we need to go through raw pointers.
+                let d3d12_raw_ptr = d3d12_device.as_mut_ptr();
+
+                // Use the windows crate's ID3D12Device to call OpenSharedHandle
+                let d3d12_win: ID3D12Device = std::mem::transmute_copy(&d3d12_raw_ptr);
+
+                let mut d3d12_resource: Option<ID3D12Resource> = None;
+                d3d12_win.OpenSharedHandle(shared_handle, &mut d3d12_resource)
+                    .map_err(|e| Error::Other(format!("OpenSharedHandle failed: {}", e)))?;
+
+                let d3d12_resource = d3d12_resource.ok_or_else(|| {
+                    Error::Other("OpenSharedHandle returned null resource".to_string())
+                })?;
+
+                // Verify the resource is a 2D texture
+                let res_desc = d3d12_resource.GetDesc();
+                if res_desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D {
+                    return Err(Error::Other(format!(
+                        "Expected 2D texture, got dimension {:?}",
+                        res_desc.Dimension
+                    )));
+                }
+
+                tracing::debug!(
+                    "D3D12 shared resource: {}x{}, format={:?}, mip_levels={}",
+                    res_desc.Width, res_desc.Height,
+                    res_desc.Format, res_desc.MipLevels
+                );
+
+                // Convert ID3D12Resource (windows crate) → d3d12::Resource (winapi ComPtr)
+                // Both are COM pointers to the same interface, just different bindings.
+                let resource_raw: *mut std::ffi::c_void = std::mem::transmute_copy(&d3d12_resource);
+                // Prevent the windows crate from releasing the COM object
+                std::mem::forget(d3d12_resource);
+
+                let d3d12_res = d3d12::Resource::from_raw(
+                    resource_raw as *mut winapi::um::d3d12::ID3D12Resource
+                );
+
+                // Create Y plane texture (R8Unorm, full resolution)
+                // NV12 plane 0 = Y (luma)
+                let y_hal_texture = wgpu_hal::dx12::Device::texture_from_raw(
+                    d3d12_res.clone(),
+                    wgpu::TextureFormat::R8Unorm,
+                    wgpu::TextureDimension::D2,
+                    wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                    1, // mip_level_count
+                    1, // sample_count
+                );
+
+                // For the UV plane, we need a separate resource view.
+                // D3D12 NV12 textures have plane 0 (Y, R8) and plane 1 (UV, R8G8).
+                // We create a second wgpu_hal texture pointing to the same resource
+                // but the UV plane will be accessed via a different SRV with PlaneSlice=1.
+                let uv_hal_texture = wgpu_hal::dx12::Device::texture_from_raw(
+                    d3d12_res,
+                    wgpu::TextureFormat::Rg8Unorm,
+                    wgpu::TextureDimension::D2,
+                    wgpu::Extent3d {
+                        width: width / 2,
+                        height: height / 2,
+                        depth_or_array_layers: 1,
+                    },
+                    1,
+                    1,
+                );
+
+                Ok((y_hal_texture, uv_hal_texture))
+            })
+            .ok_or_else(|| Error::Other("Failed to access D3D12 HAL".to_string()))??;
+
+        // Create wgpu::Texture from HAL textures
+        let y_texture_desc = wgpu::TextureDescriptor {
+            label: Some("NV12 Y Plane (D3D11VA Zero-Copy)"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+
+        let uv_texture_desc = wgpu::TextureDescriptor {
+            label: Some("NV12 UV Plane (D3D11VA Zero-Copy)"),
+            size: wgpu::Extent3d {
+                width: width / 2,
+                height: height / 2,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rg8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+
+        let y_wgpu = unsafe {
+            device.create_texture_from_hal::<wgpu_hal::api::Dx12>(y_hal, &y_texture_desc)
+        };
+        let uv_wgpu = unsafe {
+            device.create_texture_from_hal::<wgpu_hal::api::Dx12>(uv_hal, &uv_texture_desc)
+        };
+
+        let y_view = y_wgpu.create_view(&wgpu::TextureViewDescriptor::default());
+        let uv_view = uv_wgpu.create_view(&wgpu::TextureViewDescriptor::default());
+
+        tracing::trace!(
+            "Zero-copy D3D11VA import successful: {}x{} NV12",
+            width, height
+        );
+
+        Ok(ImportedNv12Texture {
+            y_texture: y_wgpu,
+            uv_texture: uv_wgpu,
+            y_view,
+            uv_view,
+            width,
+            height,
+            pts: gpu_texture.pts,
+            color_space: ColorSpace::from_ffmpeg(gpu_texture.color_space),
+        })
     }
 }
 

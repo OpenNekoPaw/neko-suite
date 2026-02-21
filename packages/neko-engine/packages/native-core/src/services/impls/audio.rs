@@ -12,11 +12,11 @@ use crate::gpu::GpuContext;
 use crate::media_service::probe_media_info;
 use crate::services::impls::common::{convert_media_info, generate_waveform_blocking};
 use crate::services::impls::stream_loop::{
-    pack_pcm_f32le_stream_frame, ActiveStreams, create_stream_channels, WallClockPacer,
-    EOF_IDLE_TIMEOUT, eof_idle_wait,
+    pack_pcm_f32le_stream_frame, ActiveStreams, create_stream_channels, StreamPlaybackDelegate,
+    WallClockPacer, EOF_IDLE_TIMEOUT, eof_idle_wait,
     StreamLoopHandle,
 };
-use crate::services::{IAudioService, ITaskService};
+use crate::services::{IAudioService, IStreamPlayback, ITaskService};
 use neko_types::{LoopRegion, MediaInfo, StreamId, WaveformData};
 use std::fs::File;
 use std::io::Write;
@@ -37,6 +37,8 @@ pub struct AudioService {
     task_service: Arc<dyn ITaskService + Send + Sync>,
     /// Active stream loops
     active_streams: Arc<ActiveStreams>,
+    /// Delegate for stream playback control (stop/pause/resume/speed/seek/loop)
+    playback: StreamPlaybackDelegate,
 }
 
 impl AudioService {
@@ -45,13 +47,42 @@ impl AudioService {
         gpu_ctx: Option<Arc<GpuContext>>,
         task_service: Arc<dyn ITaskService + Send + Sync>,
     ) -> Self {
+        let active_streams = Arc::new(ActiveStreams::new());
+        let playback = StreamPlaybackDelegate::new(active_streams.clone());
         Self {
             gpu_ctx,
             task_service,
-            active_streams: Arc::new(ActiveStreams::new()),
+            active_streams,
+            playback,
         }
     }
 
+}
+
+impl IStreamPlayback for AudioService {
+    async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {
+        self.playback.stop_stream(stream_id).await
+    }
+
+    async fn pause(&self, stream_id: &StreamId) -> Result<()> {
+        self.playback.pause(stream_id).await
+    }
+
+    async fn resume(&self, stream_id: &StreamId) -> Result<()> {
+        self.playback.resume(stream_id).await
+    }
+
+    async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()> {
+        self.playback.set_speed(stream_id, speed).await
+    }
+
+    async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()> {
+        self.playback.seek(stream_id, time_seconds).await
+    }
+
+    async fn set_loop(&self, stream_id: &StreamId, region: Option<LoopRegion>) -> Result<()> {
+        self.playback.set_loop(stream_id, region).await
+    }
 }
 
 impl IAudioService for AudioService {
@@ -311,43 +342,6 @@ impl IAudioService for AudioService {
         self.active_streams.insert(handle).await;
 
         Ok((stream_id, rx))
-    }
-
-    async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {
-        self.active_streams.stop(stream_id).await
-    }
-
-    async fn pause(&self, stream_id: &StreamId) -> Result<()> {
-        self.active_streams
-            .update_state(stream_id, |s| s.paused = true)
-            .await
-    }
-
-    async fn resume(&self, stream_id: &StreamId) -> Result<()> {
-        self.active_streams
-            .update_state(stream_id, |s| s.paused = false)
-            .await
-    }
-
-    async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()> {
-        self.active_streams
-            .update_state(stream_id, |s| s.speed = speed)
-            .await
-    }
-
-    async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()> {
-        self.active_streams
-            .update_state(stream_id, |s| {
-                s.seek_to = Some(time_seconds);
-                s.seek_seq += 1;
-            })
-            .await
-    }
-
-    async fn set_loop(&self, stream_id: &StreamId, region: Option<LoopRegion>) -> Result<()> {
-        self.active_streams
-            .update_state(stream_id, |s| s.loop_region = region.clone())
-            .await
     }
 
     async fn generate_waveform(

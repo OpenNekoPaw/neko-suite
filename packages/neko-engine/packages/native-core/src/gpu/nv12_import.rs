@@ -15,6 +15,10 @@ use crate::gpu::GpuContext;
 
 #[cfg(target_os = "macos")]
 use super::macos_import::MacOsTextureImporter;
+#[cfg(target_os = "linux")]
+use super::linux_import::LinuxTextureImporter;
+#[cfg(target_os = "windows")]
+use super::windows_import::WindowsTextureImporter;
 
 use std::sync::Arc;
 
@@ -224,17 +228,9 @@ impl Nv12TextureImporter {
         display: usize,
         gpu_texture: &Nv12GpuTexture,
     ) -> Result<ImportedNv12Texture> {
-        // TODO(P1): Implement Vulkan texture import from VAAPI via DMA-BUF
-        // 1. vaExportSurfaceHandle() to get DMA-BUF fd
-        // 2. vkGetMemoryFdPropertiesKHR() to get memory type
-        // 3. vkAllocateMemory() with VkImportMemoryFdInfoKHR
-        // 4. vkBindImageMemory() to bind to VkImage
-        // 5. Import into wgpu using wgpu_hal::vulkan::Device
-        //
-        // Reference: VK_EXT_external_memory_dma_buf
-        Err(Error::Other(
-            "VAAPI zero-copy import not yet implemented".to_string(),
-        ))
+        let importer = LinuxTextureImporter::new(self.ctx.clone())?;
+        // Safety: surface_id and display are valid VAAPI handles from HwAccelDecoder
+        unsafe { importer.import_vaapi(surface_id, display, gpu_texture) }
     }
 
     /// Import from CUDA (Linux/Windows)
@@ -266,16 +262,9 @@ impl Nv12TextureImporter {
         array_index: u32,
         gpu_texture: &Nv12GpuTexture,
     ) -> Result<ImportedNv12Texture> {
-        // TODO(P1): Implement D3D11 → D3D12 texture sharing
-        // 1. ID3D11Texture2D::QueryInterface for IDXGIResource1
-        // 2. IDXGIResource1::CreateSharedHandle()
-        // 3. ID3D12Device::OpenSharedHandle()
-        // 4. Import D3D12 texture into wgpu using wgpu_hal::dx12::Device
-        //
-        // Note: D3D11VA outputs NV12 in a single texture with two planes
-        Err(Error::Other(
-            "D3D11 zero-copy import not yet implemented".to_string(),
-        ))
+        let importer = WindowsTextureImporter::new(self.ctx.clone())?;
+        // Safety: texture is a valid ID3D11Texture2D* from HwAccelDecoder
+        unsafe { importer.import_d3d11(texture, array_index, gpu_texture) }
     }
 
     /// Upload NV12 data with linesize handling

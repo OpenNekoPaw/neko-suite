@@ -75,6 +75,7 @@ block = "0.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ash = "0.37"
+libc = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.52", features = [

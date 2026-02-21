@@ -37,7 +37,7 @@ pub mod prelude {
     pub use crate::error::{Error, Result};
     pub use crate::services::{
         IAudioService, IExportService, IImageService, INodeService,
-        ITaskService, ITimelineService, IVideoService,
+        IStreamPlayback, ITaskService, ITimelineService, IVideoService,
         AudioService, ExportService as CoreExportService, ImageService,
         NodeService, ServiceContainer, TaskService, TimelineService, VideoService,
     };

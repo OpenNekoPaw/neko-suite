@@ -1553,6 +1553,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "image",
+ "libc",
  "metal",
  "neko-types",
  "objc",
