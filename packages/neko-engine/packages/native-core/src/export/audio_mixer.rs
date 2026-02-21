@@ -209,7 +209,7 @@ impl AudioMixer {
                     continue;
                 }
                 source.residual.clear();
-                source.current_position = source_time;
+                source.current_position = source_time; // Align to requested time, not decoder timestamp
                 // After seek, decode a few frames to skip AAC priming silence
                 for _ in 0..3 {
                     match source.decoder.decode_next() {
@@ -219,7 +219,6 @@ impl AudioMixer {
                             if max_abs > 0.0 {
                                 // Found non-silent frame, use it as start of residual
                                 source.residual.extend_from_slice(samples);
-                                source.current_position = f.timestamp;
                                 break;
                             }
                         }

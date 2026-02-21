@@ -195,6 +195,9 @@ impl IAudioService for AudioService {
             let mut current_speed = 1.0;
             let mut last_seen_paused = false;
             let mut last_seek_seq: u64 = 0;
+            // Fade-in ramp after seek: 5ms at 48kHz = 240 samples
+            let fade_in_samples_total = (sample_rate as f64 * 0.005) as usize;
+            let mut fade_in_remaining: usize = 0;
 
             loop {
                 // Check cancellation
@@ -209,6 +212,7 @@ impl IAudioService for AudioService {
                         last_seek_seq = state.seek_seq;
                         let _ = AudioDecoder::seek(&mut decoder, time);
                         pacer.reset();
+                        fade_in_remaining = fade_in_samples_total;
                     }
                 }
 
@@ -234,8 +238,28 @@ impl IAudioService for AudioService {
                 match AudioDecoder::decode_next(&mut decoder) {
                     Ok(Some(frame)) => {
                         let duration = frame.duration();
+                        let mut pcm_data = frame.data.clone();
+
+                        // Apply fade-in ramp after seek to eliminate click/pop
+                        if fade_in_remaining > 0 {
+                            let ch = channels as usize;
+                            let total = fade_in_samples_total;
+                            // PCM data is raw bytes of f32le samples
+                            let samples: &mut [f32] = bytemuck::cast_slice_mut(&mut pcm_data);
+                            let num_samples = samples.len() / ch;
+                            for i in 0..num_samples {
+                                if fade_in_remaining == 0 { break; }
+                                let progress = 1.0 - (fade_in_remaining as f32 / total as f32);
+                                let gain = progress * progress; // quadratic ease-in
+                                for c in 0..ch {
+                                    samples[i * ch + c] *= gain;
+                                }
+                                fade_in_remaining -= 1;
+                            }
+                        }
+
                         let packed = pack_pcm_f32le_stream_frame(
-                            &frame.data,
+                            &pcm_data,
                             frame.timestamp,
                             duration,
                             sample_rate,
@@ -313,7 +337,10 @@ impl IAudioService for AudioService {
 
     async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()> {
         self.active_streams
-            .update_state(stream_id, |s| s.seek_to = Some(time_seconds))
+            .update_state(stream_id, |s| {
+                s.seek_to = Some(time_seconds);
+                s.seek_seq += 1;
+            })
             .await
     }
 

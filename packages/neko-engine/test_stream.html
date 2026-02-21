@@ -378,9 +378,30 @@ async function seekByClick(group, streamId, container, event) {
   log(`Seek ${group} to ${formatTime(time)} (${(pct * 100).toFixed(1)}%)`, 'info');
   if (group === 'audios') {
     audioPtsOffset = null;
+    audioSeekTarget = time;
+    audioSeekDropCount = 3;
+    if (audioGainNode && audioCtx) {
+      audioGainNode.disconnect();
+      audioGainNode = audioCtx.createGain();
+      audioGainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+      audioGainNode.gain.linearRampToValueAtTime(1.0, audioCtx.currentTime + 0.02);
+      audioGainNode.connect(audioCtx.destination);
+      audioPlaybackTime = audioCtx.currentTime;
+    }
   }
   if (group === 'timelines') {
     tlAudioPtsOffset = null;
+    tlAudioSeekTarget = time;
+    tlAudioSeekDropCount = 5;
+    // Rebuild GainNode to silence any scheduled buffers from before seek
+    if (tlAudioGainNode && tlAudioCtx) {
+      tlAudioGainNode.disconnect();
+      tlAudioGainNode = tlAudioCtx.createGain();
+      tlAudioGainNode.gain.setValueAtTime(0, tlAudioCtx.currentTime);
+      tlAudioGainNode.gain.linearRampToValueAtTime(1.0, tlAudioCtx.currentTime + 0.02);
+      tlAudioGainNode.connect(tlAudioCtx.destination);
+      tlAudioPlaybackTime = tlAudioCtx.currentTime;
+    }
   }
   await dispatch(group, 'seek', { streamId, time });
 }
@@ -588,6 +609,8 @@ let audioStarting = false;
 let audioGainNode = null;
 let audioPlaybackTime = 0;
 let audioPtsOffset = null;
+let audioSeekTarget = null; // set on seek, cleared when PTS matches
+let audioSeekDropCount = 0; // drop first N frames after seek to skip stale buffer
 const PCM_HEADER_SIZE = 8 + 8 + 4 + 2; // pts_us(i64) + duration_us(i64) + sampleRate(u32) + channels(u16) = 22
 
 function parsePcmPacket(data) {
@@ -681,6 +704,20 @@ function connectAudioWs(streamId) {
     audioPts = packet.pts;
     updateProgress('aProgress', 'aTime', audioPts / 1_000_000, audioDuration);
 
+    // Drop stale frames from before seek target
+    if (audioSeekTarget !== null) {
+      const ptsS = audioPts / 1_000_000;
+      if (Math.abs(ptsS - audioSeekTarget) > 2.0) {
+        return;
+      }
+      // PTS is near seek target — drop a few more frames to skip stale buffer
+      if (audioSeekDropCount > 0) {
+        audioSeekDropCount--;
+        return;
+      }
+      audioSeekTarget = null;
+    }
+
     if (aChunkCount <= 3 || aChunkCount % 200 === 0) {
       log(`PCM #${aChunkCount}: pts=${packet.pts} dur=${packet.duration} sr=${packet.sampleRate} ch=${packet.channels} pcmBytes=${packet.pcmData.byteLength}`);
     }
@@ -708,9 +745,20 @@ function connectAudioWs(streamId) {
         }
       }
 
-      // Initialize PTS offset on first frame
+      // Initialize PTS offset on first frame or reset on PTS jump (seek)
       const ptsSeconds = packet.pts / 1_000_000;
-      if (audioPtsOffset === null) {
+      const ptsJumpThreshold = 1.0; // seconds
+      if (audioPtsOffset === null ||
+          Math.abs(ptsSeconds - (audioPlaybackTime - audioPtsOffset)) > ptsJumpThreshold) {
+        // Disconnect old GainNode to silence any scheduled buffers from before seek
+        if (audioGainNode) {
+          audioGainNode.disconnect();
+        }
+        audioGainNode = audioCtx.createGain();
+        // Fade-in ramp to smooth seek transition
+        audioGainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        audioGainNode.gain.linearRampToValueAtTime(1.0, audioCtx.currentTime + 0.02);
+        audioGainNode.connect(audioCtx.destination);
         audioPtsOffset = audioCtx.currentTime - ptsSeconds;
         audioPlaybackTime = audioCtx.currentTime;
       }
@@ -749,9 +797,32 @@ async function seekStream(group, streamId, time) {
   if (!streamId) { log(`No ${group} stream active`, 'warn'); return; }
   if (group === 'audios') {
     audioPtsOffset = null;
+    audioSeekTarget = time;
+    audioSeekDropCount = 3; // drop first 3 frames to skip stale broadcast buffer
+    // Rebuild GainNode to silence old scheduled buffers
+    if (audioGainNode && audioCtx) {
+      audioGainNode.disconnect();
+      audioGainNode = audioCtx.createGain();
+      // Fade-in ramp: start silent, ramp to full volume over 20ms
+      audioGainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+      audioGainNode.gain.linearRampToValueAtTime(1.0, audioCtx.currentTime + 0.02);
+      audioGainNode.connect(audioCtx.destination);
+      audioPlaybackTime = audioCtx.currentTime;
+    }
   }
   if (group === 'timelines') {
     tlAudioPtsOffset = null;
+    tlAudioSeekTarget = time;
+    tlAudioSeekDropCount = 5;
+    // Rebuild GainNode to silence any scheduled buffers from before seek
+    if (tlAudioGainNode && tlAudioCtx) {
+      tlAudioGainNode.disconnect();
+      tlAudioGainNode = tlAudioCtx.createGain();
+      tlAudioGainNode.gain.setValueAtTime(0, tlAudioCtx.currentTime);
+      tlAudioGainNode.gain.linearRampToValueAtTime(1.0, tlAudioCtx.currentTime + 0.02);
+      tlAudioGainNode.connect(tlAudioCtx.destination);
+      tlAudioPlaybackTime = tlAudioCtx.currentTime;
+    }
   }
   await dispatch(group, 'seek', { streamId, time });
 }
@@ -823,6 +894,8 @@ let tlAudioGainNode = null;
 let tlAudioPlaybackTime = 0;
 let tlAudioPtsOffset = null;
 let tlAudioChunkCount = 0;
+let tlAudioSeekTarget = null; // set on seek, cleared when PTS matches
+let tlAudioSeekDropCount = 0; // drop first N frames after seek to skip stale broadcast buffer
 
 // Performance tracking
 let tlTotalBytes = 0;
@@ -1050,6 +1123,8 @@ function resetTimelineAudioState() {
   tlAudioBitrateBytes = 0;
   tlAudioBitrateLastTime = performance.now();
   tlLastAudioPts = 0;
+  tlAudioSeekTarget = null;
+  tlAudioSeekDropCount = 0;
   document.getElementById('tlAudioProgress').style.width = '0%';
   document.getElementById('tlAudioChunks').textContent = '0';
   document.getElementById('tlAudioSR').textContent = '-';
@@ -1286,6 +1361,18 @@ function connectTimelineAudioWs(streamId) {
     const ptsSeconds = packet.pts / 1_000_000;
     updateProgress('tlAudioProgress', 'tlAudioTime', ptsSeconds, tlDuration);
 
+    // Drop stale frames from before seek target
+    if (tlAudioSeekTarget !== null) {
+      if (Math.abs(ptsSeconds - tlAudioSeekTarget) > 0.5) {
+        return;
+      }
+      if (tlAudioSeekDropCount > 0) {
+        tlAudioSeekDropCount--;
+        return;
+      }
+      tlAudioSeekTarget = null;
+    }
+
     if (tlAudioChunkCount <= 3 || tlAudioChunkCount % 200 === 0) {
       log(`TL Audio #${tlAudioChunkCount}: pts=${packet.pts} dur=${packet.duration} sr=${packet.sampleRate} ch=${packet.channels} pcmBytes=${packet.pcmData.byteLength}`);
     }
@@ -1308,8 +1395,19 @@ function connectTimelineAudioWs(streamId) {
         }
       }
 
-      // Initialize PTS offset on first frame
-      if (tlAudioPtsOffset === null) {
+      // Initialize PTS offset on first frame or reset on PTS jump (seek)
+      const ptsJumpThreshold = 1.0;
+      if (tlAudioPtsOffset === null ||
+          Math.abs(ptsSeconds - (tlAudioPlaybackTime - tlAudioPtsOffset)) > ptsJumpThreshold) {
+        // Disconnect old GainNode to silence any scheduled buffers from before seek
+        if (tlAudioGainNode) {
+          tlAudioGainNode.disconnect();
+        }
+        tlAudioGainNode = tlAudioCtx.createGain();
+        // Fade-in ramp to smooth seek transition
+        tlAudioGainNode.gain.setValueAtTime(0, tlAudioCtx.currentTime);
+        tlAudioGainNode.gain.linearRampToValueAtTime(1.0, tlAudioCtx.currentTime + 0.02);
+        tlAudioGainNode.connect(tlAudioCtx.destination);
         tlAudioPtsOffset = tlAudioCtx.currentTime - ptsSeconds;
         tlAudioPlaybackTime = tlAudioCtx.currentTime;
       }

@@ -679,6 +679,10 @@ impl ITimelineService for TimelineService {
             let mut total_frames: u64 = 0;
             let mut total_mix_ns: u64 = 0;
             let loop_start = std::time::Instant::now();
+            // Fade-in ramp after seek: number of samples remaining for linear ramp
+            // 5ms at 48kHz = 240 samples — eliminates click/pop at seek boundary
+            let fade_in_samples_total = (sample_rate as f64 * 0.005) as usize; // 5ms
+            let mut fade_in_remaining: usize = 0;
 
             loop {
                 // Check cancellation
@@ -695,6 +699,8 @@ impl ITimelineService for TimelineService {
                         last_seek_seq = state.seek_seq;
                         current_time = time;
                         pacer.reset();
+                        // Apply fade-in ramp to smooth seek transition
+                        fade_in_remaining = fade_in_samples_total;
                     }
                 }
 
@@ -740,9 +746,27 @@ impl ITimelineService for TimelineService {
                 // Mix one frame of audio
                 let mix_start = std::time::Instant::now();
                 match mixer.mix_frame(current_time) {
-                    Ok(Some(mixed)) => {
+                    Ok(Some(mut mixed)) => {
                         total_mix_ns += mix_start.elapsed().as_nanos() as u64;
                         total_frames += 1;
+
+                        // Apply fade-in ramp after seek to eliminate click/pop
+                        if fade_in_remaining > 0 {
+                            let ch = channels as usize;
+                            let total = fade_in_samples_total;
+                            for i in 0..mixed.samples {
+                                if fade_in_remaining == 0 { break; }
+                                let progress = 1.0 - (fade_in_remaining as f32 / total as f32);
+                                let gain = progress * progress; // quadratic ease-in
+                                for c in 0..ch {
+                                    let idx = i * ch + c;
+                                    if idx < mixed.data.len() {
+                                        mixed.data[idx] *= gain;
+                                    }
+                                }
+                                fade_in_remaining -= 1;
+                            }
+                        }
 
                         // Cast f32 data to raw bytes
                         let pcm_bytes: &[u8] = bytemuck::cast_slice(&mixed.data);

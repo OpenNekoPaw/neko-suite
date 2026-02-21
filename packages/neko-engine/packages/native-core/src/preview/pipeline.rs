@@ -232,7 +232,8 @@ impl PreviewPipeline {
 
         let timing = iosurface_result.timing;
 
-        let pts = (self.frame_count as f64 * 1_000_000.0 / self.config.fps) as i64;
+        // PTS based on actual timeline time, not frame_count
+        let pts = (time * 1_000_000.0) as i64;
         let packets = self.encoder.encode_frame_gpu(
             iosurface_result.gpu_handle.unwrap(),
             pts,
@@ -258,7 +259,8 @@ impl PreviewPipeline {
 
         let timing = result.timing;
 
-        let pts = (self.frame_count as f64 * 1_000_000.0 / self.config.fps) as i64;
+        // PTS based on actual timeline time, not frame_count
+        let pts = (time * 1_000_000.0) as i64;
         let packets = self.encoder.encode_frame(&result.data, pts)?;
 
         self.frame_count += 1;
