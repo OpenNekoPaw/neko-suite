@@ -102,4 +102,7 @@ pub trait ITimelineService: Send + Sync {
 
     /// Seek to exact time
     async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()>;
+
+    /// Get stream performance statistics
+    async fn get_stream_stats(&self, stream_id: &StreamId) -> Option<StreamStats>;
 }

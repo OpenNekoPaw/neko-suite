@@ -1,8 +1,63 @@
 //! Shared utilities for service implementations
 
 use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
-use crate::error::{Error, Result};
-use neko_types::WaveformData;
+use crate::error::Result;
+use crate::media_service::MediaInfo as InternalMediaInfo;
+use neko_types::{MediaInfo, WaveformData};
+
+/// Convert internal probe MediaInfo to neko_types::MediaInfo
+///
+/// Correctly handles audio-only files by returning empty video_streams
+/// when the probe reports no video dimensions.
+pub fn convert_media_info(info: InternalMediaInfo) -> MediaInfo {
+    let video_streams = if info.width > 0 && info.height > 0 {
+        vec![neko_types::VideoStreamInfo {
+            index: 0,
+            codec: info.codec,
+            width: info.width,
+            height: info.height,
+            fps: info.fps,
+            bitrate: info.bitrate,
+            pixel_format: "yuv420p".to_string(),
+            hw_accel: None,
+            frame_count: None,
+            color_space: None,
+            color_range: None,
+        }]
+    } else {
+        vec![]
+    };
+
+    MediaInfo {
+        duration: info.duration,
+        format: info.format,
+        file_size: 0,
+        video_streams,
+        audio_streams: if info.has_audio {
+            vec![neko_types::AudioStreamInfo {
+                index: 0,
+                codec: info.audio_codec.unwrap_or_default(),
+                sample_rate: info.audio_sample_rate.unwrap_or(0),
+                channels: info.audio_channels.unwrap_or(0) as u16,
+                bitrate: info.audio_bitrate,
+                channel_layout: None,
+                language: None,
+            }]
+        } else {
+            vec![]
+        },
+        subtitle_streams: info
+            .subtitle_streams
+            .into_iter()
+            .map(|s| neko_types::SubtitleStreamInfo {
+                index: s.index,
+                codec: s.codec,
+                language: s.language,
+                title: s.title,
+            })
+            .collect(),
+    }
+}
 
 /// Default peaks per second for waveform generation
 const PEAKS_PER_SECOND: u32 = 100;

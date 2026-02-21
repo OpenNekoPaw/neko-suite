@@ -282,7 +282,7 @@ async fn extract_frame_impl(state: &ExtractState, query: &ExtractQuery) -> Resul
     renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
 
     // Read RGBA data from GPU
-    let rgba_data = read_texture_to_buffer(&state.gpu_ctx, &output_texture, width, height)?;
+    let rgba_data = state.gpu_ctx.read_texture_sync(&output_texture, width, height)?;
 
     // Encode to JPEG
     // Convert quality from 1-100 to FFmpeg scale (2-31, lower is better)
@@ -320,7 +320,7 @@ async fn composite_frame_impl(state: &ExtractState, request: &CompositeRequest) 
         renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
 
         // Read RGBA data
-        let rgba_data = read_texture_to_buffer(&state.gpu_ctx, &output_texture, width, height)?;
+        let rgba_data = state.gpu_ctx.read_texture_sync(&output_texture, width, height)?;
 
         // Create composite layer
         let layer = CompositeLayer {
@@ -369,87 +369,6 @@ async fn composite_frame_impl(state: &ExtractState, request: &CompositeRequest) 
     Ok(jpeg_data)
 }
 
-/// Read texture data back to CPU buffer
-fn read_texture_to_buffer(
-    ctx: &GpuContext,
-    texture: &wgpu::Texture,
-    width: u32,
-    height: u32,
-) -> Result<Vec<u8>> {
-    let device = ctx.device();
-    let queue = ctx.queue();
-
-    let bytes_per_row = width * 4;
-    let padded_bytes_per_row = (bytes_per_row + 255) & !255; // Align to 256
-
-    let buffer_size = (padded_bytes_per_row * height) as u64;
-    let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Texture Readback Buffer"),
-        size: buffer_size,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Texture Readback Encoder"),
-    });
-
-    encoder.copy_texture_to_buffer(
-        wgpu::ImageCopyTexture {
-            texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::ImageCopyBuffer {
-            buffer: &staging_buffer,
-            layout: wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(padded_bytes_per_row),
-                rows_per_image: Some(height),
-            },
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-
-    queue.submit(std::iter::once(encoder.finish()));
-
-    // Map buffer and read data
-    let buffer_slice = staging_buffer.slice(..);
-    let (tx, rx) = std::sync::mpsc::channel();
-    buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-        tx.send(result).unwrap();
-    });
-
-    device.poll(wgpu::Maintain::Wait);
-    rx.recv()
-        .map_err(|_| crate::error::Error::GpuError("Buffer map failed".to_string()))?
-        .map_err(|e| crate::error::Error::GpuError(format!("Buffer map error: {:?}", e)))?;
-
-    let data = buffer_slice.get_mapped_range();
-
-    // Remove padding if necessary
-    let result = if padded_bytes_per_row == bytes_per_row {
-        data.to_vec()
-    } else {
-        let mut result = Vec::with_capacity((width * height * 4) as usize);
-        for row in 0..height {
-            let start = (row * padded_bytes_per_row) as usize;
-            let end = start + bytes_per_row as usize;
-            result.extend_from_slice(&data[start..end]);
-        }
-        result
-    };
-
-    drop(data);
-    staging_buffer.unmap();
-
-    Ok(result)
-}
 
 #[cfg(test)]
 mod tests {

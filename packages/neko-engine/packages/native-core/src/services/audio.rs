@@ -2,7 +2,7 @@
 
 use crate::domain::AudioTranscodeOptions;
 use crate::error::Result;
-use neko_types::{MediaInfo, StreamId, WaveformData};
+use neko_types::{LoopRegion, MediaInfo, StreamId, WaveformData};
 use std::path::Path;
 use tokio::sync::broadcast;
 
@@ -46,6 +46,9 @@ pub trait IAudioService: Send + Sync {
 
     /// Seek audio stream to a specific time
     async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()>;
+
+    /// Set loop region for audio stream playback
+    async fn set_loop(&self, stream_id: &StreamId, region: Option<LoopRegion>) -> Result<()>;
 
     /// Generate waveform visualization data
     async fn generate_waveform(

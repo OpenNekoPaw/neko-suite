@@ -12,7 +12,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, watch, RwLock};
 use tokio::task::JoinHandle;
-use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 
 /// Playback state (controlled externally via watch channel)
@@ -23,6 +22,10 @@ pub struct PlaybackState {
     pub loop_region: Option<LoopRegion>,
     /// One-shot seek request, cleared after processing
     pub seek_to: Option<f64>,
+    /// Monotonically increasing seek sequence counter.
+    /// Used by paired streams (e.g., timeline video+audio) to dedup seeks
+    /// without comparing f64 values, allowing repeated seeks to the same time.
+    pub seek_seq: u64,
 }
 
 impl Default for PlaybackState {
@@ -32,6 +35,7 @@ impl Default for PlaybackState {
             speed: 1.0,
             loop_region: None,
             seek_to: None,
+            seek_seq: 0,
         }
     }
 }
@@ -45,6 +49,9 @@ pub struct StreamLoopHandle {
     /// Linked stream ID for paired streams (e.g. video↔audio in timeline)
     pub linked_stream_id: Option<String>,
 }
+
+/// Default EOF idle timeout: stream auto-cleans after this duration without seek
+pub const EOF_IDLE_TIMEOUT: Duration = Duration::from_secs(300); // 5 minutes
 
 /// Manages active stream loops (held by Service)
 pub struct ActiveStreams {
@@ -135,6 +142,17 @@ impl ActiveStreams {
         }
     }
 
+    /// Remove a stream handle without cancelling (used by self-cleanup on EOF timeout).
+    /// Also removes linked partner if present.
+    pub async fn remove(&self, stream_id: &str) {
+        let mut loops = self.loops.write().await;
+        if let Some(handle) = loops.remove(stream_id) {
+            if let Some(linked_id) = &handle.linked_stream_id {
+                loops.remove(linked_id);
+            }
+        }
+    }
+
     /// Get count of active streams
     pub async fn count(&self) -> usize {
         self.loops.read().await.len()
@@ -207,49 +225,6 @@ impl WallClockPacer {
     }
 }
 
-/// Frame pacer - controls decoding loop production rate
-///
-/// Uses tokio::time::interval with MissedTickBehavior::Delay
-/// to maintain smooth frame pacing. When a tick is missed (e.g. slow decode),
-/// the next tick is delayed rather than skipped, preventing frame drops.
-pub struct FramePacer {
-    interval: tokio::time::Interval,
-    fps: f64,
-    speed: f64,
-}
-
-impl FramePacer {
-    /// Create a new frame pacer
-    pub fn new(fps: f64, speed: f64) -> Self {
-        let effective_speed = speed.max(0.1); // Prevent division by zero
-        let duration = Duration::from_secs_f64(1.0 / (fps * effective_speed));
-        let mut interval = tokio::time::interval(duration);
-        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-        Self {
-            interval,
-            fps,
-            speed: effective_speed,
-        }
-    }
-
-    /// Update playback speed (recalculates interval)
-    pub fn update_speed(&mut self, speed: f64) {
-        let effective_speed = speed.max(0.1);
-        if (effective_speed - self.speed).abs() < 0.001 {
-            return; // No significant change
-        }
-        self.speed = effective_speed;
-        let duration = Duration::from_secs_f64(1.0 / (self.fps * effective_speed));
-        self.interval = tokio::time::interval(duration);
-        self.interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    }
-
-    /// Wait for next tick
-    pub async fn tick(&mut self) {
-        self.interval.tick().await;
-    }
-}
-
 /// Pack an H.264 EncodedPacket into FrameData for broadcast transport
 ///
 /// Wire format: [pts_us:i64 LE][dts_us:i64 LE][is_keyframe:u8][duration_us:i64 LE][H.264 NAL data...]
@@ -273,26 +248,6 @@ pub fn pack_h264_frame(packet: &EncodedPacket, width: u32, height: u32, time_bas
         height,
         format: FrameFormat::H264,
         timestamp: pts_us as f64 / 1_000_000.0,
-    }
-}
-
-/// Pack PCM F32 audio data into FrameData for broadcast transport
-///
-/// Wire format: [pts_seconds:f64 LE (8B)][sample_rate:u32 LE (4B)][channels:u32 LE (4B)][PCM F32 data...]
-pub fn pack_pcm_frame(pcm_data: &[u8], timestamp: f64, sample_rate: u32, channels: u32) -> FrameData {
-    let header_size = 8 + 4 + 4; // pts_seconds + sample_rate + channels
-    let mut data = Vec::with_capacity(header_size + pcm_data.len());
-    data.extend_from_slice(&timestamp.to_le_bytes());
-    data.extend_from_slice(&sample_rate.to_le_bytes());
-    data.extend_from_slice(&channels.to_le_bytes());
-    data.extend_from_slice(pcm_data);
-
-    FrameData {
-        data,
-        width: sample_rate,
-        height: channels,
-        format: FrameFormat::PcmF32,
-        timestamp,
     }
 }
 
@@ -324,6 +279,48 @@ pub fn pack_pcm_f32le_stream_frame(
         height: channels as u32,
         format: FrameFormat::PcmF32,
         timestamp: pts_seconds,
+    }
+}
+
+/// EOF idle wait loop for blocking threads.
+///
+/// After EOF, the decode loop calls this instead of `break`. It sleeps in a loop
+/// checking for seek requests or cancellation. If a seek arrives, returns `Some(time)`.
+/// If cancelled or idle timeout expires, returns `None` (caller should break).
+///
+/// The `state_tx` is used to clear the seek_to field after consuming it.
+pub fn eof_idle_wait(
+    cancel: &CancellationToken,
+    state_rx: &watch::Receiver<PlaybackState>,
+    state_tx: &watch::Sender<PlaybackState>,
+    timeout: Duration,
+) -> Option<f64> {
+    let eof_start = std::time::Instant::now();
+    tracing::info!("Stream reached EOF, waiting for seek (timeout: {:?})", timeout);
+
+    loop {
+        // Check cancellation
+        if cancel.is_cancelled() {
+            return None;
+        }
+
+        // Check idle timeout
+        if eof_start.elapsed() > timeout {
+            tracing::info!("EOF idle timeout expired, auto-cleaning stream");
+            return None;
+        }
+
+        // Check for seek request
+        let state = state_rx.borrow().clone();
+        if let Some(time) = state.seek_to {
+            // Clear the seek request
+            state_tx.send_modify(|s| s.seek_to = None);
+            tracing::info!("EOF idle: received seek to {:.3}s, resuming stream", time);
+            return Some(time);
+        }
+
+        // Sleep to avoid busy-waiting
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
 }
 
@@ -360,26 +357,6 @@ mod tests {
         assert!((state.speed - 1.0).abs() < f64::EPSILON);
         assert!(state.loop_region.is_none());
         assert!(state.seek_to.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_frame_pacer_creation() {
-        let pacer = FramePacer::new(30.0, 1.0);
-        assert!((pacer.fps - 30.0).abs() < f64::EPSILON);
-        assert!((pacer.speed - 1.0).abs() < f64::EPSILON);
-    }
-
-    #[tokio::test]
-    async fn test_frame_pacer_speed_update() {
-        let mut pacer = FramePacer::new(30.0, 1.0);
-        pacer.update_speed(2.0);
-        assert!((pacer.speed - 2.0).abs() < f64::EPSILON);
-    }
-
-    #[tokio::test]
-    async fn test_frame_pacer_min_speed() {
-        let pacer = FramePacer::new(30.0, 0.0);
-        assert!((pacer.speed - 0.1).abs() < f64::EPSILON);
     }
 
     #[tokio::test]
@@ -529,30 +506,4 @@ mod tests {
         assert_eq!(pacer.frame_number, 0);
     }
 
-    #[test]
-    fn test_pack_pcm_frame() {
-        let pcm_data: Vec<u8> = vec![0u8; 4 * 1024]; // 1024 f32 samples
-        let frame = pack_pcm_frame(&pcm_data, 1.5, 48000, 2);
-
-        assert_eq!(frame.format, FrameFormat::PcmF32);
-        assert_eq!(frame.width, 48000);
-        assert_eq!(frame.height, 2);
-        assert!((frame.timestamp - 1.5).abs() < f64::EPSILON);
-
-        // Verify header
-        let header_size = 8 + 4 + 4; // pts + sample_rate + channels
-        assert_eq!(frame.data.len(), header_size + pcm_data.len());
-
-        // Verify pts
-        let pts = f64::from_le_bytes(frame.data[0..8].try_into().unwrap());
-        assert!((pts - 1.5).abs() < f64::EPSILON);
-
-        // Verify sample_rate
-        let sr = u32::from_le_bytes(frame.data[8..12].try_into().unwrap());
-        assert_eq!(sr, 48000);
-
-        // Verify channels
-        let ch = u32::from_le_bytes(frame.data[12..16].try_into().unwrap());
-        assert_eq!(ch, 2);
-    }
 }

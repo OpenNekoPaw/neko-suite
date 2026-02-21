@@ -16,6 +16,7 @@ use crate::gpu::{
 use crate::preview::{PreviewFrame, PreviewPipeline, PreviewPipelineConfig};
 use crate::services::impls::stream_loop::{
     pack_pcm_f32le_stream_frame, ActiveStreams, PlaybackState, StreamLoopHandle, WallClockPacer,
+    EOF_IDLE_TIMEOUT, eof_idle_wait,
 };
 use crate::services::{ITaskService, ITimelineService, StreamStats, TimelineStreamResult};
 use crate::monitor::SystemMonitor;
@@ -91,12 +92,6 @@ impl TimelineService {
         }
     }
 
-    /// Get latest stream stats snapshot for a given video stream_id
-    pub async fn get_stream_stats(&self, stream_id: &StreamId) -> Option<StreamStats> {
-        let receivers = self.stats_receivers.read().await;
-        receivers.get(stream_id.as_str()).map(|rx| rx.borrow().clone())
-    }
-
     /// Convert domain BlendMode to GPU BlendMode
     fn convert_blend_mode(mode: &BlendMode) -> GpuBlendMode {
         match mode {
@@ -121,96 +116,21 @@ impl TimelineService {
 
     /// Read texture data back to CPU buffer as RGBA8 (4 bytes per pixel)
     ///
-    /// Handles Rgba16Float textures (from NV12 renderer) by converting f16→u8.
-    /// Other formats (e.g. Rgba8Unorm) are returned as-is.
-    fn read_texture_to_buffer(
+    /// Delegates to GpuContext::read_texture_sync for the raw readback,
+    /// then converts Rgba16Float (8 bytes/pixel) to RGBA8 (4 bytes/pixel) if needed.
+    fn read_texture_to_rgba8(
         ctx: &GpuContext,
         texture: &wgpu::Texture,
         width: u32,
         height: u32,
     ) -> Result<Vec<u8>> {
-        let device = ctx.device();
-        let queue = ctx.queue();
-        let format = texture.format();
+        let raw = ctx.read_texture_sync(texture, width, height)?;
 
-        let bytes_per_pixel = format.block_copy_size(None).unwrap_or(4);
-        let bytes_per_row = width * bytes_per_pixel;
-        let padded_bytes_per_row = (bytes_per_row + 255) & !255;
-
-        let buffer_size = (padded_bytes_per_row * height) as u64;
-        let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Timeline Readback Buffer"),
-            size: buffer_size,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Timeline Readback Encoder"),
-        });
-
-        encoder.copy_texture_to_buffer(
-            wgpu::ImageCopyTexture {
-                texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::ImageCopyBuffer {
-                buffer: &staging_buffer,
-                layout: wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded_bytes_per_row),
-                    rows_per_image: Some(height),
-                },
-            },
-            wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        queue.submit(std::iter::once(encoder.finish()));
-
-        let buffer_slice = staging_buffer.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-            tx.send(result).unwrap();
-        });
-
-        device.poll(wgpu::Maintain::Wait);
-        rx.recv()
-            .map_err(|_| Error::Other("Buffer map channel closed".to_string()))?
-            .map_err(|e| Error::Other(format!("Buffer map error: {:?}", e)))?;
-
-        let data = buffer_slice.get_mapped_range();
-
-        // Unpad rows: copy only the valid bytes_per_row from each padded row
-        let unpadded_row_size = bytes_per_row as usize;
-        let raw = if padded_bytes_per_row == bytes_per_row {
-            data.to_vec()
+        if texture.format() == wgpu::TextureFormat::Rgba16Float {
+            Ok(Self::rgba16float_to_rgba8(&raw))
         } else {
-            let mut result = Vec::with_capacity(unpadded_row_size * height as usize);
-            for row in 0..height {
-                let start = (row * padded_bytes_per_row) as usize;
-                let end = start + unpadded_row_size;
-                result.extend_from_slice(&data[start..end]);
-            }
-            result
-        };
-
-        drop(data);
-        staging_buffer.unmap();
-
-        // Convert Rgba16Float (8 bytes/pixel) → RGBA8 (4 bytes/pixel) if needed
-        let result = if format == wgpu::TextureFormat::Rgba16Float {
-            Self::rgba16float_to_rgba8(&raw)
-        } else {
-            raw
-        };
-
-        Ok(result)
+            Ok(raw)
+        }
     }
 
     /// Convert Rgba16Float pixel data to RGBA8
@@ -401,7 +321,7 @@ impl ITimelineService for TimelineService {
                 renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
 
                 let rgba_data =
-                    Self::read_texture_to_buffer(&ctx, &output_texture, src_width, src_height)?;
+                    Self::read_texture_to_rgba8(&ctx, &output_texture, src_width, src_height)?;
 
                 Ok((rgba_data, src_width, src_height))
             })
@@ -493,11 +413,14 @@ impl ITimelineService for TimelineService {
         // === Video loop: PreviewPipeline (persistent decoder pool + GPU resources + H.264 encoder) ===
         let video_cancel = cancel.clone();
         let video_state_rx = state_rx.clone();
+        let video_state_tx = state_tx.clone();
         let video_timeline = timeline.clone();
         let video_gpu_ctx = gpu_ctx.clone();
         let video_start_time = config.start_time;
         let video_stats_tx = stats_tx.clone();
         let video_duration = timeline.duration;
+        let video_streams_clone = self.active_streams.clone();
+        let video_stream_id_clone = video_stream_id.clone();
         let video_join = tokio::task::spawn_blocking(move || {
             // Create PreviewPipeline (wraps GpuExportPipeline + HwAccelEncoder)
             let preview_config = PreviewPipelineConfig {
@@ -529,7 +452,7 @@ impl ITimelineService for TimelineService {
             let mut pacer = WallClockPacer::new(fps, 1.0);
             let mut current_speed = 1.0;
             let mut current_time = video_start_time;
-            let mut last_seek: Option<f64> = None;
+            let mut last_seek_seq: u64 = 0;
             let timeline = video_timeline;
             let tx = video_tx;
             let background_color = [0.0_f32, 0.0, 0.0, 1.0];
@@ -544,16 +467,14 @@ impl ITimelineService for TimelineService {
                 // Read playback state
                 let state = video_state_rx.borrow().clone();
 
-                // Handle seek (dedup)
+                // Handle seek (dedup via monotonic sequence counter)
                 if let Some(time) = state.seek_to {
-                    if last_seek != Some(time) {
-                        last_seek = Some(time);
+                    if state.seek_seq != last_seek_seq {
+                        last_seek_seq = state.seek_seq;
                         current_time = time;
                         pipeline.reset_frame_counter();
                         pacer.reset();
                     }
-                } else {
-                    last_seek = None;
                 }
 
                 // Handle pause
@@ -583,7 +504,15 @@ impl ITimelineService for TimelineService {
                         current_time = region.in_point;
                         pacer.reset();
                     } else {
-                        break; // End of timeline
+                        // No loop: enter EOF idle wait for seek
+                        match eof_idle_wait(&video_cancel, &video_state_rx, &video_state_tx, EOF_IDLE_TIMEOUT) {
+                            Some(time) => {
+                                current_time = time;
+                                pacer.reset();
+                                continue;
+                            }
+                            None => break, // Cancelled or timeout
+                        }
                     }
                 }
 
@@ -690,11 +619,16 @@ impl ITimelineService for TimelineService {
                 }
             }
             pipeline.close();
+
+            // Self-cleanup: remove handle (and linked audio) from ActiveStreams
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(video_streams_clone.remove(video_stream_id_clone.as_str()));
         });
 
         // === Audio mixing loop (new, uses shared state) ===
         let audio_cancel = cancel.clone();
         let audio_state_rx = state_rx.clone();
+        let audio_state_tx = state_tx.clone();
         let audio_timeline = timeline.clone();
         let audio_fps = fps;
         let audio_start_time = config.start_time;
@@ -741,7 +675,7 @@ impl ITimelineService for TimelineService {
             let mut current_speed = 1.0;
             let frame_duration = 1.0 / audio_fps;
             let mut current_time = audio_start_time;
-            let mut last_seek: Option<f64> = None;
+            let mut last_seek_seq: u64 = 0;
             let sample_rate = mixer.sample_rate();
             let channels = mixer.channels();
             let mut total_frames: u64 = 0;
@@ -757,15 +691,13 @@ impl ITimelineService for TimelineService {
                 // Read playback state
                 let state = audio_state_rx.borrow().clone();
 
-                // Handle seek (dedup)
+                // Handle seek (dedup via monotonic sequence counter)
                 if let Some(time) = state.seek_to {
-                    if last_seek != Some(time) {
-                        last_seek = Some(time);
+                    if state.seek_seq != last_seek_seq {
+                        last_seek_seq = state.seek_seq;
                         current_time = time;
                         pacer.reset();
                     }
-                } else {
-                    last_seek = None;
                 }
 
                 // Handle pause
@@ -795,7 +727,15 @@ impl ITimelineService for TimelineService {
                         current_time = region.in_point;
                         pacer.reset();
                     } else {
-                        break; // End of timeline
+                        // No loop: enter EOF idle wait for seek
+                        match eof_idle_wait(&audio_cancel, &audio_state_rx, &audio_state_tx, EOF_IDLE_TIMEOUT) {
+                            Some(time) => {
+                                current_time = time;
+                                pacer.reset();
+                                continue;
+                            }
+                            None => break, // Cancelled or timeout
+                        }
                     }
                 }
 
@@ -918,8 +858,16 @@ impl ITimelineService for TimelineService {
 
     async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()> {
         self.active_streams
-            .update_state(stream_id, |s| s.seek_to = Some(time_seconds))
+            .update_state(stream_id, |s| {
+                s.seek_to = Some(time_seconds);
+                s.seek_seq += 1;
+            })
             .await
+    }
+
+    async fn get_stream_stats(&self, stream_id: &StreamId) -> Option<StreamStats> {
+        let receivers = self.stats_receivers.read().await;
+        receivers.get(stream_id.as_str()).map(|rx| rx.borrow().clone())
     }
 }
 

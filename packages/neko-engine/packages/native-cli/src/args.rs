@@ -270,6 +270,8 @@ define_actions!(AudioAction {
     Speed => "speed",
     /// Seek to time position
     Seek => "seek",
+    /// Set loop region for audio stream
+    Loop => "loop",
 });
 
 define_actions!(ImageAction {

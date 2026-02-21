@@ -16,10 +16,10 @@ use crate::error::{Error, Result};
 use crate::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
 use crate::keyframe_cache::{IdrScanner, KeyframeInfo};
 use crate::media_service::{encode_rgba_to_jpeg, extract_subtitles, probe_media_info};
-use crate::services::impls::common::generate_waveform_blocking;
+use crate::services::impls::common::{convert_media_info, generate_waveform_blocking};
 use crate::services::impls::stream_loop::{
     pack_h264_frame, ActiveStreams, create_stream_channels, WallClockPacer,
-    StreamLoopHandle,
+    StreamLoopHandle, EOF_IDLE_TIMEOUT, eof_idle_wait,
 };
 use crate::services::{ITaskService, IVideoService};
 use neko_types::{FrameFormat, LoopRegion, MediaInfo, StreamId, WaveformData};
@@ -64,132 +64,6 @@ impl VideoService {
         }
     }
 
-    /// Convert internal MediaInfo to neko_types::MediaInfo
-    fn convert_media_info(info: crate::media_service::MediaInfo) -> MediaInfo {
-        MediaInfo {
-            duration: info.duration,
-            format: info.format,
-            file_size: 0, // Not available from probe
-            video_streams: vec![neko_types::VideoStreamInfo {
-                index: 0,
-                codec: info.codec,
-                width: info.width,
-                height: info.height,
-                fps: info.fps,
-                bitrate: info.bitrate,
-                pixel_format: "yuv420p".to_string(), // Default, not available from probe
-                hw_accel: None,
-                frame_count: None,
-                color_space: None,
-                color_range: None,
-            }],
-            audio_streams: if info.has_audio {
-                vec![neko_types::AudioStreamInfo {
-                    index: 0,
-                    codec: info.audio_codec.unwrap_or_default(),
-                    sample_rate: info.audio_sample_rate.unwrap_or(0),
-                    channels: info.audio_channels.unwrap_or(0) as u16,
-                    bitrate: info.audio_bitrate,
-                    channel_layout: None,
-                    language: None,
-                }]
-            } else {
-                vec![]
-            },
-            subtitle_streams: info
-                .subtitle_streams
-                .into_iter()
-                .map(|s| neko_types::SubtitleStreamInfo {
-                    index: s.index,
-                    codec: s.codec,
-                    language: s.language,
-                    title: s.title,
-                })
-                .collect(),
-        }
-    }
-
-    /// Read texture data back to CPU buffer
-    fn read_texture_to_buffer(
-        ctx: &GpuContext,
-        texture: &wgpu::Texture,
-        width: u32,
-        height: u32,
-    ) -> Result<Vec<u8>> {
-        let device = ctx.device();
-        let queue = ctx.queue();
-
-        let bytes_per_row = width * 4;
-        let padded_bytes_per_row = (bytes_per_row + 255) & !255; // Align to 256
-
-        let buffer_size = (padded_bytes_per_row * height) as u64;
-        let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Texture Readback Buffer"),
-            size: buffer_size,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Texture Readback Encoder"),
-        });
-
-        encoder.copy_texture_to_buffer(
-            wgpu::ImageCopyTexture {
-                texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::ImageCopyBuffer {
-                buffer: &staging_buffer,
-                layout: wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded_bytes_per_row),
-                    rows_per_image: Some(height),
-                },
-            },
-            wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        queue.submit(std::iter::once(encoder.finish()));
-
-        // Map buffer and read data
-        let buffer_slice = staging_buffer.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-            tx.send(result).unwrap();
-        });
-
-        device.poll(wgpu::Maintain::Wait);
-        rx.recv()
-            .map_err(|_| Error::Other("Buffer map channel closed".to_string()))?
-            .map_err(|e| Error::Other(format!("Buffer map error: {:?}", e)))?;
-
-        let data = buffer_slice.get_mapped_range();
-
-        // Remove padding if necessary
-        let result = if padded_bytes_per_row == bytes_per_row {
-            data.to_vec()
-        } else {
-            let mut result = Vec::with_capacity((width * height * 4) as usize);
-            for row in 0..height {
-                let start = (row * padded_bytes_per_row) as usize;
-                let end = start + bytes_per_row as usize;
-                result.extend_from_slice(&data[start..end]);
-            }
-            result
-        };
-
-        drop(data);
-        staging_buffer.unmap();
-
-        Ok(result)
-    }
 }
 
 impl IVideoService for VideoService {
@@ -200,7 +74,7 @@ impl IVideoService for VideoService {
             .await
             .map_err(|e| Error::Other(format!("Probe task failed: {}", e)))??;
 
-        Ok(Self::convert_media_info(info))
+        Ok(convert_media_info(info))
     }
 
     async fn capture(
@@ -242,7 +116,7 @@ impl IVideoService for VideoService {
                 renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
 
                 // Read RGBA data from GPU
-                let rgba_data = Self::read_texture_to_buffer(&ctx, &output_texture, width, height)?;
+                let rgba_data = ctx.read_texture_sync(&output_texture, width, height)?;
 
                 // Encode based on format
                 let (data, output_format) = match format {
@@ -393,6 +267,8 @@ impl IVideoService for VideoService {
         let state_tx_clone = state_tx.clone();
         // Create a second watch receiver for the pacing thread
         let pacing_state_rx = state_tx.subscribe();
+        let streams_clone = self.active_streams.clone();
+        let stream_id_clone = stream_id.clone();
 
         let join_handle = tokio::task::spawn_blocking(move || {
             // =================================================================
@@ -464,7 +340,20 @@ impl IVideoService for VideoService {
                                 let _ = decoder.seek(region.in_point);
                                 continue;
                             } else {
-                                break; // EOF
+                                // No loop: enter EOF idle wait for seek
+                                match eof_idle_wait(&encode_cancel, &state_rx, &state_tx_clone, EOF_IDLE_TIMEOUT) {
+                                    Some(time) => {
+                                        let _ = decoder.seek(time);
+                                        Encoder::close(&mut encoder);
+                                        if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
+                                            tracing::error!("Failed to re-open encoder after EOF seek: {}", e);
+                                            break;
+                                        }
+                                        seek_counter_enc.fetch_add(1, std::sync::atomic::Ordering::Release);
+                                        continue;
+                                    }
+                                    None => break, // Cancelled or timeout
+                                }
                             }
                         }
                         Err(e) => {
@@ -580,6 +469,10 @@ impl IVideoService for VideoService {
 
             // Wait for encode thread to finish
             let _ = encode_handle.join();
+
+            // Self-cleanup: remove handle from ActiveStreams when loop exits
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(streams_clone.remove(stream_id_clone.as_str()));
         });
 
         // Store handle

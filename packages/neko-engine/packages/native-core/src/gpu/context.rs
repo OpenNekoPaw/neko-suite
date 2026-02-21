@@ -183,13 +183,17 @@ impl GpuContext {
     }
 
     /// Read texture contents back to CPU synchronously
+    ///
+    /// Automatically detects the texture format and uses the correct bytes-per-pixel.
+    /// For Rgba8Unorm: 4 bytes/pixel. For Rgba16Float: 8 bytes/pixel. Etc.
     pub fn read_texture_sync(
         &self,
         texture: &wgpu::Texture,
         width: u32,
         height: u32,
     ) -> Result<Vec<u8>> {
-        let bytes_per_row = width * 4; // RGBA8
+        let bytes_per_pixel = texture.format().block_copy_size(None).unwrap_or(4);
+        let bytes_per_row = width * bytes_per_pixel;
         // wgpu requires rows to be aligned to 256 bytes
         let padded_bytes_per_row = (bytes_per_row + 255) & !255;
         let buffer_size = (padded_bytes_per_row * height) as u64;

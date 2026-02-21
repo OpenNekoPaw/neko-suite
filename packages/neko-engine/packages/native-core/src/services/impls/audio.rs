@@ -10,13 +10,14 @@ use crate::domain::{AudioTranscodeOptions, FrameData};
 use crate::error::{Error, Result};
 use crate::gpu::GpuContext;
 use crate::media_service::probe_media_info;
-use crate::services::impls::common::generate_waveform_blocking;
+use crate::services::impls::common::{convert_media_info, generate_waveform_blocking};
 use crate::services::impls::stream_loop::{
     pack_pcm_f32le_stream_frame, ActiveStreams, create_stream_channels, WallClockPacer,
+    EOF_IDLE_TIMEOUT, eof_idle_wait,
     StreamLoopHandle,
 };
 use crate::services::{IAudioService, ITaskService};
-use neko_types::{MediaInfo, StreamId, WaveformData};
+use neko_types::{LoopRegion, MediaInfo, StreamId, WaveformData};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -51,50 +52,6 @@ impl AudioService {
         }
     }
 
-    /// Convert internal MediaInfo to neko_types::MediaInfo
-    fn convert_media_info(info: crate::media_service::MediaInfo) -> MediaInfo {
-        MediaInfo {
-            duration: info.duration,
-            format: info.format,
-            file_size: 0,
-            video_streams: vec![neko_types::VideoStreamInfo {
-                index: 0,
-                codec: info.codec,
-                width: info.width,
-                height: info.height,
-                fps: info.fps,
-                bitrate: info.bitrate,
-                pixel_format: "yuv420p".to_string(),
-                hw_accel: None,
-                frame_count: None,
-                color_space: None,
-                color_range: None,
-            }],
-            audio_streams: if info.has_audio {
-                vec![neko_types::AudioStreamInfo {
-                    index: 0,
-                    codec: info.audio_codec.unwrap_or_default(),
-                    sample_rate: info.audio_sample_rate.unwrap_or(0),
-                    channels: info.audio_channels.unwrap_or(0) as u16,
-                    bitrate: info.audio_bitrate,
-                    channel_layout: None,
-                    language: None,
-                }]
-            } else {
-                vec![]
-            },
-            subtitle_streams: info
-                .subtitle_streams
-                .into_iter()
-                .map(|s| neko_types::SubtitleStreamInfo {
-                    index: s.index,
-                    codec: s.codec,
-                    language: s.language,
-                    title: s.title,
-                })
-                .collect(),
-        }
-    }
 }
 
 impl IAudioService for AudioService {
@@ -104,7 +61,7 @@ impl IAudioService for AudioService {
             .await
             .map_err(|e| Error::Other(format!("Probe task failed: {}", e)))??;
 
-        Ok(Self::convert_media_info(info))
+        Ok(convert_media_info(info))
     }
 
     async fn transcode(
@@ -215,6 +172,8 @@ impl IAudioService for AudioService {
         // No Opus encoding — send raw PCM f32le directly (WebView doesn't support WebCodecs AudioDecoder)
         let cancel_clone = cancel.clone();
         let state_tx_clone = state_tx.clone();
+        let streams_clone = self.active_streams.clone();
+        let stream_id_clone = stream_id.clone();
         let join_handle = tokio::task::spawn_blocking(move || {
             // Initialize decoder: output F32 interleaved at 48kHz stereo
             let mut decoder = FfmpegAudioDecoder::new()
@@ -283,16 +242,21 @@ impl IAudioService for AudioService {
                         let _ = tx.send(packed);
                     }
                     Ok(None) => {
-                        // EOF — check loop
+                        // EOF — check loop region first
                         let state = state_rx.borrow().clone();
-                        if state.loop_region.is_some() {
-                            AudioDecoder::close(&mut decoder);
-                            if decoder.open(&path).is_err() {
-                                break;
-                            }
+                        if let Some(ref region) = state.loop_region {
+                            let seek_time = region.in_point;
+                            let _ = AudioDecoder::seek(&mut decoder, seek_time);
                             pacer.reset();
                         } else {
-                            break;
+                            // No loop: enter EOF idle wait for seek
+                            match eof_idle_wait(&cancel_clone, &state_rx, &state_tx_clone, EOF_IDLE_TIMEOUT) {
+                                Some(time) => {
+                                    let _ = AudioDecoder::seek(&mut decoder, time);
+                                    pacer.reset();
+                                }
+                                None => break, // Cancelled or timeout
+                            }
                         }
                     }
                     Err(e) => {
@@ -304,6 +268,10 @@ impl IAudioService for AudioService {
                 // Wall-clock pacing
                 pacer.wait_for_next_frame();
             }
+
+            // Self-cleanup: remove handle from ActiveStreams when loop exits
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(streams_clone.remove(stream_id_clone.as_str()));
         });
 
         // Store handle
@@ -344,6 +312,12 @@ impl IAudioService for AudioService {
     async fn seek(&self, stream_id: &StreamId, time_seconds: f64) -> Result<()> {
         self.active_streams
             .update_state(stream_id, |s| s.seek_to = Some(time_seconds))
+            .await
+    }
+
+    async fn set_loop(&self, stream_id: &StreamId, region: Option<LoopRegion>) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| s.loop_region = region.clone())
             .await
     }
 

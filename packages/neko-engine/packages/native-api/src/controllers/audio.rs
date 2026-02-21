@@ -8,7 +8,7 @@ use neko_native_core::domain::StreamConfig;
 use neko_native_core::media_service::{diff_media, DiffCategory};
 use neko_native_core::services::{AudioService, IAudioService};
 use neko_types::registry;
-use neko_types::{ActionResponse, StreamId};
+use neko_types::{ActionResponse, LoopRegion, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -77,7 +77,7 @@ struct StreamRequestOptions {
     session_id: Option<String>,
 }
 
-/// Options for stream control actions (stop/pause/resume/speed/seek)
+/// Options for stream control actions (stop/pause/resume/speed/seek/loop)
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct AudioStreamControlOptions {
@@ -87,6 +87,13 @@ struct AudioStreamControlOptions {
     speed: Option<f64>,
     /// Seek time in seconds (for seek action)
     time: Option<f64>,
+    /// Loop in-point in seconds (for loop action)
+    in_point: Option<f64>,
+    /// Loop out-point in seconds (for loop action)
+    out_point: Option<f64>,
+    /// Clear loop region (for loop action)
+    #[serde(default)]
+    clear: bool,
 }
 
 /// Options for audios:diff
@@ -237,7 +244,7 @@ impl Controller for AudioController {
 
                 Ok(ActionResponse::ok("", response))
             }
-            "stop" | "pause" | "resume" | "speed" | "seek" => {
+            "stop" | "pause" | "resume" | "speed" | "seek" | "loop" => {
                 let opts: AudioStreamControlOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
@@ -293,6 +300,31 @@ impl Controller for AudioController {
                         let response = serde_json::json!({
                             "streamId": stream_id.as_str(),
                             "time": time,
+                        });
+                        Ok(ActionResponse::ok("", response))
+                    }
+                    "loop" => {
+                        let region = if opts.clear {
+                            None
+                        } else {
+                            match (opts.in_point, opts.out_point) {
+                                (Some(in_pt), Some(out_pt)) => {
+                                    Some(LoopRegion::new(in_pt, out_pt))
+                                }
+                                _ => {
+                                    return Err(ApiError::InvalidRequest(
+                                        "in_point and out_point required for audios:loop (or set clear=true)".to_string(),
+                                    ));
+                                }
+                            }
+                        };
+                        self.audio_service.set_loop(&stream_id, region.clone()).await?;
+                        let response = serde_json::json!({
+                            "streamId": stream_id.as_str(),
+                            "loop": region.map(|r| serde_json::json!({
+                                "inPoint": r.in_point,
+                                "outPoint": r.out_point,
+                            })),
                         });
                         Ok(ActionResponse::ok("", response))
                     }
@@ -417,6 +449,7 @@ mod tests {
         assert!(actions.contains(&"resume"));
         assert!(actions.contains(&"speed"));
         assert!(actions.contains(&"seek"));
-        assert_eq!(actions.len(), 10);
+        assert!(actions.contains(&"loop"));
+        assert_eq!(actions.len(), 11);
     }
 }
