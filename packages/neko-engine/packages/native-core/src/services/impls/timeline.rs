@@ -744,9 +744,9 @@ impl ITimelineService for TimelineService {
             let mut last_seek: Option<f64> = None;
             let sample_rate = mixer.sample_rate();
             let channels = mixer.channels();
-            let mut audio_stats = FrameStatsCollector::new(std::time::Duration::from_secs(10));
-            let mut audio_monitor = SystemMonitor::new();
-            let mut audio_frame_idx: u64 = 0;
+            let mut total_frames: u64 = 0;
+            let mut total_mix_ns: u64 = 0;
+            let loop_start = std::time::Instant::now();
 
             loop {
                 // Check cancellation
@@ -799,11 +799,12 @@ impl ITimelineService for TimelineService {
                     }
                 }
 
-                // Mix one frame of audio with timing
+                // Mix one frame of audio
                 let mix_start = std::time::Instant::now();
                 match mixer.mix_frame(current_time) {
                     Ok(Some(mixed)) => {
-                        let mix_ns = mix_start.elapsed().as_nanos() as u64;
+                        total_mix_ns += mix_start.elapsed().as_nanos() as u64;
+                        total_frames += 1;
 
                         // Cast f32 data to raw bytes
                         let pcm_bytes: &[u8] = bytemuck::cast_slice(&mixed.data);
@@ -815,13 +816,6 @@ impl ITimelineService for TimelineService {
                             channels,
                         );
                         let _ = audio_tx.send(frame);
-
-                        // Record timing: mix_frame covers decode + resample
-                        let mut timing = FrameTiming::default();
-                        timing.hw_decode_ns = mix_ns;
-                        timing.decode_ns = mix_ns;
-                        timing.total_ns = mix_start.elapsed().as_nanos() as u64;
-                        audio_stats.record_frame(timing);
                     }
                     Ok(None) => {
                         tracing::warn!("Audio mix returned None at {:.3}s", current_time);
@@ -831,40 +825,20 @@ impl ITimelineService for TimelineService {
                     }
                 }
 
-                // Sample system resources periodically (every 10 frames)
-                audio_frame_idx += 1;
-                if audio_frame_idx % 10 == 0 {
-                    audio_monitor.sample();
-                }
-
                 current_time += frame_duration;
                 pacer.wait_for_next_frame();
             }
 
-            // Log audio performance summary
-            audio_stats.log_final_summary();
-            let avg_timing = audio_stats.avg_timing();
-            let audio_export_stats = ExportStats {
-                hw_decode_ms: avg_timing.hw_decode_ns as f64 / 1_000_000.0,
-                nv12_import_ms: 0.0,
-                nv12_to_rgba_ms: 0.0,
-                composite_ms: 0.0,
-                rgba_to_nv12_ms: 0.0,
-                cpu_readback_ms: 0.0,
-                encode_submit_ms: 0.0,
-                decode_time_ms: avg_timing.decode_ns / 1_000_000,
-                composite_time_ms: 0,
-                encode_time_ms: 0,
-                mux_time_ms: 0,
-                avg_fps: audio_stats.current_fps(),
-                peak_memory_bytes: audio_monitor.peak_memory(),
-                cpu_usage_percent: audio_monitor.avg_cpu_usage(),
-                gpu_usage_percent: audio_monitor.avg_gpu_usage(),
-                vram_usage_bytes: audio_monitor.peak_vram(),
+            // Log minimal audio summary
+            let elapsed = loop_start.elapsed().as_secs_f64();
+            let avg_mix_ms = if total_frames > 0 {
+                total_mix_ns as f64 / total_frames as f64 / 1_000_000.0
+            } else {
+                0.0
             };
             tracing::info!(
-                "=== Audio Stream ExportStats ===\n{}",
-                serde_json::to_string_pretty(&audio_export_stats).unwrap_or_default()
+                "Audio stream ended: {} frames in {:.1}s, avg mix {:.2}ms/frame",
+                total_frames, elapsed, avg_mix_ms
             );
 
             mixer.close();
