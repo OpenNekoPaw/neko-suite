@@ -413,7 +413,6 @@ impl ITimelineService for TimelineService {
         // === Video loop: PreviewPipeline (persistent decoder pool + GPU resources + H.264 encoder) ===
         let video_cancel = cancel.clone();
         let video_state_rx = state_rx.clone();
-        let video_state_tx = state_tx.clone();
         let video_timeline = timeline.clone();
         let video_gpu_ctx = gpu_ctx.clone();
         let video_start_time = config.start_time;
@@ -505,7 +504,7 @@ impl ITimelineService for TimelineService {
                         pacer.reset();
                     } else {
                         // No loop: enter EOF idle wait for seek
-                        match eof_idle_wait(&video_cancel, &video_state_rx, &video_state_tx, EOF_IDLE_TIMEOUT) {
+                        match eof_idle_wait(&video_cancel, &video_state_rx, last_seek_seq, EOF_IDLE_TIMEOUT) {
                             Some(time) => {
                                 current_time = time;
                                 pacer.reset();
@@ -628,7 +627,6 @@ impl ITimelineService for TimelineService {
         // === Audio mixing loop (new, uses shared state) ===
         let audio_cancel = cancel.clone();
         let audio_state_rx = state_rx.clone();
-        let audio_state_tx = state_tx.clone();
         let audio_timeline = timeline.clone();
         let audio_fps = fps;
         let audio_start_time = config.start_time;
@@ -728,7 +726,7 @@ impl ITimelineService for TimelineService {
                         pacer.reset();
                     } else {
                         // No loop: enter EOF idle wait for seek
-                        match eof_idle_wait(&audio_cancel, &audio_state_rx, &audio_state_tx, EOF_IDLE_TIMEOUT) {
+                        match eof_idle_wait(&audio_cancel, &audio_state_rx, last_seek_seq, EOF_IDLE_TIMEOUT) {
                             Some(time) => {
                                 current_time = time;
                                 pacer.reset();

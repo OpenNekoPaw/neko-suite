@@ -264,7 +264,6 @@ impl IVideoService for VideoService {
 
         let cancel_clone = cancel.clone();
         let cancel_clone2 = cancel.clone();
-        let state_tx_clone = state_tx.clone();
         // Create a second watch receiver for the pacing thread
         let pacing_state_rx = state_tx.subscribe();
         let streams_clone = self.active_streams.clone();
@@ -298,25 +297,28 @@ impl IVideoService for VideoService {
                 }
 
                 let mut current_speed = 1.0;
+                let mut last_seek_seq: u64 = 0;
 
                 loop {
                     if encode_cancel.is_cancelled() { break; }
 
                     let state = state_rx.borrow().clone();
 
-                    // Handle seek: flush decoder + reset encoder
+                    // Handle seek: flush decoder + reset encoder (dedup via seek_seq)
                     let mut did_seek = false;
                     if let Some(time) = state.seek_to {
-                        did_seek = true;
-                        let _ = decoder.seek(time);
-                        Encoder::close(&mut encoder);
-                        if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
-                            tracing::error!("Failed to re-open encoder after seek: {}", e);
-                            break;
+                        if state.seek_seq != last_seek_seq {
+                            last_seek_seq = state.seek_seq;
+                            did_seek = true;
+                            let _ = decoder.seek(time);
+                            Encoder::close(&mut encoder);
+                            if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
+                                tracing::error!("Failed to re-open encoder after seek: {}", e);
+                                break;
+                            }
+                            // Signal pacing thread to drain stale frames
+                            seek_counter_enc.fetch_add(1, std::sync::atomic::Ordering::Release);
                         }
-                        // Signal pacing thread to drain stale frames
-                        seek_counter_enc.fetch_add(1, std::sync::atomic::Ordering::Release);
-                        state_tx_clone.send_modify(|s| s.seek_to = None);
                     }
 
                     // Paused: sleep unless we just seeked (produce one frame for preview)
@@ -341,7 +343,7 @@ impl IVideoService for VideoService {
                                 continue;
                             } else {
                                 // No loop: enter EOF idle wait for seek
-                                match eof_idle_wait(&encode_cancel, &state_rx, &state_tx_clone, EOF_IDLE_TIMEOUT) {
+                                match eof_idle_wait(&encode_cancel, &state_rx, last_seek_seq, EOF_IDLE_TIMEOUT) {
                                     Some(time) => {
                                         let _ = decoder.seek(time);
                                         Encoder::close(&mut encoder);

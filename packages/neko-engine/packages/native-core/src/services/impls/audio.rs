@@ -171,7 +171,6 @@ impl IAudioService for AudioService {
         // Spawn decode loop in a single blocking thread
         // No Opus encoding — send raw PCM f32le directly (WebView doesn't support WebCodecs AudioDecoder)
         let cancel_clone = cancel.clone();
-        let state_tx_clone = state_tx.clone();
         let streams_clone = self.active_streams.clone();
         let stream_id_clone = stream_id.clone();
         let join_handle = tokio::task::spawn_blocking(move || {
@@ -195,6 +194,7 @@ impl IAudioService for AudioService {
             let mut pacer = WallClockPacer::new(50.0, 1.0);
             let mut current_speed = 1.0;
             let mut last_seen_paused = false;
+            let mut last_seek_seq: u64 = 0;
 
             loop {
                 // Check cancellation
@@ -203,11 +203,13 @@ impl IAudioService for AudioService {
                 // Read playback state
                 let state = state_rx.borrow().clone();
 
-                // Handle seek request
+                // Handle seek request (dedup via seek_seq)
                 if let Some(time) = state.seek_to {
-                    let _ = AudioDecoder::seek(&mut decoder, time);
-                    pacer.reset();
-                    state_tx_clone.send_modify(|s| s.seek_to = None);
+                    if state.seek_seq != last_seek_seq {
+                        last_seek_seq = state.seek_seq;
+                        let _ = AudioDecoder::seek(&mut decoder, time);
+                        pacer.reset();
+                    }
                 }
 
                 // Detect pause→resume transition: reset pacer to avoid time jump
@@ -250,7 +252,7 @@ impl IAudioService for AudioService {
                             pacer.reset();
                         } else {
                             // No loop: enter EOF idle wait for seek
-                            match eof_idle_wait(&cancel_clone, &state_rx, &state_tx_clone, EOF_IDLE_TIMEOUT) {
+                            match eof_idle_wait(&cancel_clone, &state_rx, last_seek_seq, EOF_IDLE_TIMEOUT) {
                                 Some(time) => {
                                     let _ = AudioDecoder::seek(&mut decoder, time);
                                     pacer.reset();

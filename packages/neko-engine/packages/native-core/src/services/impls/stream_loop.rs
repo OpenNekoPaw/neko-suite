@@ -288,11 +288,13 @@ pub fn pack_pcm_f32le_stream_frame(
 /// checking for seek requests or cancellation. If a seek arrives, returns `Some(time)`.
 /// If cancelled or idle timeout expires, returns `None` (caller should break).
 ///
-/// The `state_tx` is used to clear the seek_to field after consuming it.
+/// Uses `last_seek_seq` to detect new seek requests without clearing `seek_to`,
+/// so paired streams (e.g., timeline video+audio) sharing the same watch channel
+/// can both observe the same seek request.
 pub fn eof_idle_wait(
     cancel: &CancellationToken,
     state_rx: &watch::Receiver<PlaybackState>,
-    state_tx: &watch::Sender<PlaybackState>,
+    last_seek_seq: u64,
     timeout: Duration,
 ) -> Option<f64> {
     let eof_start = std::time::Instant::now();
@@ -310,13 +312,13 @@ pub fn eof_idle_wait(
             return None;
         }
 
-        // Check for seek request
+        // Check for new seek request via sequence counter
         let state = state_rx.borrow().clone();
-        if let Some(time) = state.seek_to {
-            // Clear the seek request
-            state_tx.send_modify(|s| s.seek_to = None);
-            tracing::info!("EOF idle: received seek to {:.3}s, resuming stream", time);
-            return Some(time);
+        if state.seek_seq != last_seek_seq {
+            if let Some(time) = state.seek_to {
+                tracing::info!("EOF idle: received seek to {:.3}s, resuming stream", time);
+                return Some(time);
+            }
         }
 
         // Sleep to avoid busy-waiting
