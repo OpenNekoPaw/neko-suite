@@ -18,7 +18,7 @@ pub use export::IExportService;
 pub use image::IImageService;
 pub use node::{GpuInfo, INodeService};
 pub use task::ITaskService;
-pub use timeline::{ITimelineService, TimelineStreamResult};
+pub use timeline::{ITimelineService, StreamStats, TimelineStreamResult};
 pub use video::IVideoService;
 
 // Re-export implementations

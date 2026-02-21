@@ -192,6 +192,25 @@
         A/V Sync: <span id="tlAvSync">-</span>
       </div>
     </div>
+
+    <div class="panel">
+      <h2>Server Pipeline Stats</h2>
+      <div class="stats" style="font-size:11px;">
+        Decode: <span id="tlsHwDecode">-</span> |
+        NV12 Import: <span id="tlsNv12Import">-</span> |
+        NV12→RGBA: <span id="tlsNv12Rgba">-</span> |
+        Composite: <span id="tlsComposite">-</span> |
+        RGBA→NV12: <span id="tlsRgbaNv12">-</span> |
+        Readback: <span id="tlsReadback">-</span> |
+        Encode: <span id="tlsEncode">-</span>
+      </div>
+      <div class="stats" style="margin-top:4px; font-size:11px;">
+        Server FPS: <span id="tlsAvgFps">-</span> |
+        CPU: <span id="tlsCpu">-</span> |
+        Memory: <span id="tlsMemory">-</span> |
+        Position: <span id="tlsPosition">-</span>
+      </div>
+    </div>
   </div>
 </div><!-- end tab-timeline -->
 
@@ -816,6 +835,7 @@ let tlAudioBitrateLastTime = performance.now();
 let tlLastVideoPts = 0;
 let tlLastAudioPts = 0;
 let tlStatsInterval = null;
+let tlServerStatsInterval = null;
 
 const tlCanvas = document.getElementById('tlCanvas');
 const tlCtx2d = tlCanvas.getContext('2d');
@@ -872,6 +892,49 @@ async function requestTimelineStream(timelineJson) {
 }
 
 // Start both video + audio
+// Poll server-side pipeline stats every 2 seconds
+function startServerStatsPolling(videoStreamId) {
+  stopServerStatsPolling();
+  tlServerStatsInterval = setInterval(async () => {
+    if (!videoStreamId) return;
+    try {
+      const resp = await dispatch('timelines', 'stream_stats', { streamId: videoStreamId });
+      if (!resp || !resp.data) return;
+      const s = resp.data;
+      const v = s.video || {};
+      document.getElementById('tlsHwDecode').textContent = (v.hwDecodeMs || 0).toFixed(2) + 'ms';
+      document.getElementById('tlsNv12Import').textContent = (v.nv12ImportMs || 0).toFixed(2) + 'ms';
+      document.getElementById('tlsNv12Rgba').textContent = (v.nv12ToRgbaMs || 0).toFixed(2) + 'ms';
+      document.getElementById('tlsComposite').textContent = (v.compositeMs || 0).toFixed(2) + 'ms';
+      document.getElementById('tlsRgbaNv12').textContent = (v.rgbaToNv12Ms || 0).toFixed(2) + 'ms';
+      document.getElementById('tlsReadback').textContent = (v.cpuReadbackMs || 0).toFixed(2) + 'ms';
+      document.getElementById('tlsEncode').textContent = (v.encodeSubmitMs || 0).toFixed(2) + 'ms';
+      document.getElementById('tlsAvgFps').textContent = (v.avgFps || 0).toFixed(1);
+      document.getElementById('tlsCpu').textContent = (s.cpuUsagePercent || 0).toFixed(1) + '%';
+      const memMb = (s.peakMemoryBytes || 0) / (1024 * 1024);
+      document.getElementById('tlsMemory').textContent = memMb.toFixed(0) + ' MB';
+      document.getElementById('tlsPosition').textContent =
+        formatTime(s.currentTime || 0) + ' / ' + formatTime(s.totalDuration || 0);
+    } catch (e) {
+      // Stream may have ended
+    }
+  }, 2000);
+}
+
+function stopServerStatsPolling() {
+  if (tlServerStatsInterval) {
+    clearInterval(tlServerStatsInterval);
+    tlServerStatsInterval = null;
+  }
+}
+
+function resetServerStats() {
+  stopServerStatsPolling();
+  ['tlsHwDecode','tlsNv12Import','tlsNv12Rgba','tlsComposite','tlsRgbaNv12',
+   'tlsReadback','tlsEncode','tlsAvgFps','tlsCpu','tlsMemory','tlsPosition'
+  ].forEach(id => document.getElementById(id).textContent = '-');
+}
+
 async function startTimelineStream() {
   if (tlStarting) return;
   tlStarting = true;
@@ -899,6 +962,7 @@ async function startTimelineStream() {
   connectTimelineWs(tlStreamId);
   await initTimelineAudioCtx();
   connectTimelineAudioWs(tlAudioStreamId);
+  startServerStatsPolling(tlStreamId);
 }
 
 // Start video only
@@ -925,6 +989,7 @@ async function startTimelineVideoOnly() {
   initTimelineDecoder();
   connectTimelineWs(tlStreamId);
   // Audio stream exists but we don't connect WebSocket — no audio playback
+  startServerStatsPolling(tlStreamId);
 }
 
 // Start audio only
@@ -951,6 +1016,7 @@ async function startTimelineAudioOnly() {
   await initTimelineAudioCtx();
   connectTimelineAudioWs(tlAudioStreamId);
   // Video stream exists but we don't connect WebSocket — no video playback
+  startServerStatsPolling(tlStreamId);
 }
 
 function resetTimelineVideoState() {
@@ -973,6 +1039,7 @@ function resetTimelineVideoState() {
   document.getElementById('tlKeyframes').textContent = '0';
   document.getElementById('tlLatency').textContent = '-';
   if (tlStatsInterval) { clearInterval(tlStatsInterval); tlStatsInterval = null; }
+  resetServerStats();
 }
 
 function resetTimelineAudioState() {
@@ -1038,6 +1105,7 @@ async function stopTimelineAll() {
   tlStreamId = null;
   tlAudioStreamId = null;
   tlAudioPtsOffset = null;
+  stopServerStatsPolling();
   document.getElementById('tlWsState').textContent = 'disconnected';
   document.getElementById('tlAudioWsState').textContent = 'disconnected';
 }
@@ -1122,6 +1190,11 @@ function connectTimelineWs(streamId) {
       document.getElementById('tlAvgSize').textContent =
         tlFrameCount > 0 ? (tlTotalBytes / tlFrameCount / 1024).toFixed(1) + ' KB' : '-';
       document.getElementById('tlKeyframes').textContent = tlKeyframeCount;
+      // Decode queue depth as latency indicator
+      if (tlDecoder && tlDecoder.state === 'configured') {
+        document.getElementById('tlLatency').textContent =
+          tlDecoder.decodeQueueSize + ' frames';
+      }
       tlBitrateBytes = 0;
       tlBitrateLastTime = now;
     }
@@ -1179,9 +1252,35 @@ function connectTimelineAudioWs(streamId) {
     if (!packet) return;
 
     tlAudioChunkCount++;
+    tlAudioTotalBytes += event.data.byteLength;
+    tlAudioBitrateBytes += event.data.byteLength;
+    tlLastAudioPts = packet.pts;
     document.getElementById('tlAudioChunks').textContent = tlAudioChunkCount;
     document.getElementById('tlAudioSR').textContent = packet.sampleRate;
     document.getElementById('tlAudioCh').textContent = packet.channels;
+
+    // Update audio bitrate every second
+    const aNow = performance.now();
+    if (aNow - tlAudioBitrateLastTime >= 1000) {
+      const elapsed = (aNow - tlAudioBitrateLastTime) / 1000;
+      const abitrate = (tlAudioBitrateBytes * 8) / elapsed;
+      document.getElementById('tlAudioBitrate').textContent =
+        (abitrate / 1000).toFixed(0) + ' kbps';
+      // Audio buffer health
+      if (tlAudioCtx) {
+        const bufAhead = tlAudioPlaybackTime - tlAudioCtx.currentTime;
+        document.getElementById('tlAudioBuffer').textContent =
+          bufAhead.toFixed(2) + 's';
+      }
+      // A/V sync
+      const vSec = tlLastVideoPts / 1_000_000;
+      const aSec = tlLastAudioPts / 1_000_000;
+      const drift = (vSec - aSec).toFixed(2);
+      document.getElementById('tlAvSync').textContent =
+        `${drift > 0 ? '+' : ''}${drift}s`;
+      tlAudioBitrateBytes = 0;
+      tlAudioBitrateLastTime = aNow;
+    }
 
     // Update audio progress bar
     const ptsSeconds = packet.pts / 1_000_000;

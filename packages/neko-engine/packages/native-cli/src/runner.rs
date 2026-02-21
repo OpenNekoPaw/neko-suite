@@ -429,6 +429,7 @@ fn timeline_action_name_from_opts(action: &TimelineAction) -> &'static str {
         TimelineAction::Probe { .. } => "probe",
         TimelineAction::Composite { .. } => "composite",
         TimelineAction::Stream { .. } => "stream",
+        TimelineAction::StreamStats { .. } => "stream_stats",
         TimelineAction::Stop { .. } => "stop",
         TimelineAction::Pause { .. } => "pause",
         TimelineAction::Resume { .. } => "resume",
@@ -448,6 +449,7 @@ fn timeline_action_opts(action: &TimelineAction) -> &ActionOpts {
         TimelineAction::Probe { opts }
         | TimelineAction::Composite { opts }
         | TimelineAction::Stream { opts }
+        | TimelineAction::StreamStats { opts }
         | TimelineAction::Stop { opts }
         | TimelineAction::Pause { opts }
         | TimelineAction::Resume { opts }

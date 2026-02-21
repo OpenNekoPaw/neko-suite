@@ -44,7 +44,7 @@ pub mod actions {
     pub const IMAGES: &[&str] = &["probe", "capture", "encode", "diff"];
 
     pub const TIMELINES: &[&str] = &[
-        "probe", "composite", "stream", "stop", "pause", "resume", "speed",
+        "probe", "composite", "stream", "stream_stats", "stop", "pause", "resume", "speed",
         "loop", "seek", "diff", "export", "export_progress", "export_cancel",
     ];
 

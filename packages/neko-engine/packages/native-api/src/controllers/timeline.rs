@@ -223,6 +223,10 @@ impl Controller for TimelineController {
                     )
                     .await;
 
+                // Store stats_rx is not needed — TimelineService stores it internally.
+                // Clients poll via timelines:stream_stats action.
+                drop(result.stats_rx);
+
                 let response = serde_json::json!({
                     "videoStreamId": result.video_stream_id.as_str(),
                     "audioStreamId": result.audio_stream_id.as_str(),
@@ -362,6 +366,28 @@ impl Controller for TimelineController {
                 });
 
                 Ok(ActionResponse::ok("", response))
+            }
+            "stream_stats" => {
+                let opts: StreamControlOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let stream_id = opts.stream_id.ok_or_else(|| {
+                    ApiError::InvalidRequest("stream_id required for timelines:stream_stats".to_string())
+                })?;
+                let stream_id = StreamId::from_string(stream_id);
+
+                match self.timeline_service.get_stream_stats(&stream_id).await {
+                    Some(stats) => {
+                        Ok(ActionResponse::ok(
+                            stream_id.as_str(),
+                            serde_json::to_value(stats)?,
+                        ))
+                    }
+                    None => Err(ApiError::NotFound(format!(
+                        "No stats for stream '{}'",
+                        stream_id.as_str()
+                    ))),
+                }
             }
             "export" => {
                 let export_service = self.export_service.as_ref().ok_or_else(|| {
@@ -562,7 +588,8 @@ mod tests {
         assert!(actions.contains(&"export"));
         assert!(actions.contains(&"export_progress"));
         assert!(actions.contains(&"export_cancel"));
-        assert_eq!(actions.len(), 13);
+        assert!(actions.contains(&"stream_stats"));
+        assert_eq!(actions.len(), 14);
     }
 
     #[tokio::test]

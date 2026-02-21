@@ -353,6 +353,12 @@ pub enum TimelineAction {
         opts: ActionOpts,
     },
 
+    /// Get stream performance stats
+    StreamStats {
+        #[command(flatten)]
+        opts: ActionOpts,
+    },
+
     /// Stop timeline stream
     Stop {
         #[command(flatten)]
@@ -446,6 +452,7 @@ impl TimelineAction {
             "probe",
             "composite",
             "stream",
+            "stream_stats",
             "stop",
             "pause",
             "resume",

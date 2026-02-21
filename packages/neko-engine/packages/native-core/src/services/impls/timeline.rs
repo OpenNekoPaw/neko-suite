@@ -6,7 +6,7 @@
 
 use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType};
 use crate::domain::{FrameData, MediaReference, StreamConfig, Timeline, TimelineProjectInfo};
-use crate::export::{AudioMixer, ExportSettings, GpuPipelineTiming};
+use crate::export::{AudioMixer, ExportSettings, ExportStats};
 use crate::jvi::JviLoader;
 use crate::error::{Error, Result};
 use crate::gpu::{
@@ -17,12 +17,14 @@ use crate::preview::{PreviewFrame, PreviewPipeline, PreviewPipelineConfig};
 use crate::services::impls::stream_loop::{
     pack_pcm_f32le_stream_frame, ActiveStreams, PlaybackState, StreamLoopHandle, WallClockPacer,
 };
-use crate::services::{ITaskService, ITimelineService, TimelineStreamResult};
+use crate::services::{ITaskService, ITimelineService, StreamStats, TimelineStreamResult};
+use crate::monitor::SystemMonitor;
 use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
 use neko_types::{BlendMode, FrameFormat, LoopRegion, StreamId};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::{broadcast, watch};
+use tokio::sync::{broadcast, watch, RwLock};
 use tokio_util::sync::CancellationToken;
 
 /// Convert IEEE 754 half-precision float (f16) to single-precision float (f32)
@@ -71,6 +73,8 @@ pub struct TimelineService {
     task_service: Arc<dyn ITaskService + Send + Sync>,
     /// Active stream loops
     active_streams: Arc<ActiveStreams>,
+    /// Stats watch receivers keyed by video stream_id
+    stats_receivers: Arc<RwLock<HashMap<String, watch::Receiver<StreamStats>>>>,
 }
 
 impl TimelineService {
@@ -83,7 +87,14 @@ impl TimelineService {
             gpu_ctx,
             task_service,
             active_streams: Arc::new(ActiveStreams::new()),
+            stats_receivers: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Get latest stream stats snapshot for a given video stream_id
+    pub async fn get_stream_stats(&self, stream_id: &StreamId) -> Option<StreamStats> {
+        let receivers = self.stats_receivers.read().await;
+        receivers.get(stream_id.as_str()).map(|rx| rx.borrow().clone())
     }
 
     /// Convert domain BlendMode to GPU BlendMode
@@ -476,12 +487,17 @@ impl ITimelineService for TimelineService {
         let (audio_tx, audio_rx) = broadcast::channel::<FrameData>(64);
         let audio_stream_id = StreamId::new(&format!("{}-audio", session_id));
 
+        // Stats watch channel (latest snapshot, polled on demand)
+        let (stats_tx, stats_rx) = watch::channel(StreamStats::default());
+
         // === Video loop: PreviewPipeline (persistent decoder pool + GPU resources + H.264 encoder) ===
         let video_cancel = cancel.clone();
         let video_state_rx = state_rx.clone();
         let video_timeline = timeline.clone();
         let video_gpu_ctx = gpu_ctx.clone();
         let video_start_time = config.start_time;
+        let video_stats_tx = stats_tx.clone();
+        let video_duration = timeline.duration;
         let video_join = tokio::task::spawn_blocking(move || {
             // Create PreviewPipeline (wraps GpuExportPipeline + HwAccelEncoder)
             let preview_config = PreviewPipelineConfig {
@@ -518,6 +534,8 @@ impl ITimelineService for TimelineService {
             let tx = video_tx;
             let background_color = [0.0_f32, 0.0, 0.0, 1.0];
             let mut stats = FrameStatsCollector::new(std::time::Duration::from_secs(10));
+            let mut system_monitor = SystemMonitor::new();
+            let mut video_frame_idx: u64 = 0;
 
             loop {
                 // Check cancellation
@@ -573,12 +591,14 @@ impl ITimelineService for TimelineService {
                 let frame_start = std::time::Instant::now();
                 match pipeline.render_frame_timed(current_time, background_color) {
                     Ok((preview_frames, gpu_timing)) => {
-                        let encode_ns = frame_start.elapsed().as_nanos() as u64
-                            - gpu_timing.total_ns();
+                        // Precise encode timing: measure send separately
+                        let encode_start = std::time::Instant::now();
                         for pf in &preview_frames {
                             let frame = pack_preview_frame(pf, width, height, fps);
                             let _ = tx.send(frame);
                         }
+                        let encode_submit_ns = encode_start.elapsed().as_nanos() as u64;
+
                         let mut timing = FrameTiming::default();
                         timing.hw_decode_ns = gpu_timing.hw_decode_ns;
                         timing.nv12_import_ns = gpu_timing.nv12_import_ns;
@@ -588,8 +608,8 @@ impl ITimelineService for TimelineService {
                         timing.cpu_readback_ns = gpu_timing.cpu_readback_ns;
                         timing.decode_ns = gpu_timing.hw_decode_ns;
                         timing.gpu_ns = gpu_timing.total_ns();
-                        timing.encode_submit_ns = encode_ns;
-                        timing.encode_ns = encode_ns;
+                        timing.encode_submit_ns = encode_submit_ns;
+                        timing.encode_ns = encode_submit_ns;
                         timing.total_ns = frame_start.elapsed().as_nanos() as u64;
                         stats.record_frame(timing);
                     }
@@ -598,12 +618,70 @@ impl ITimelineService for TimelineService {
                     }
                 }
 
+                // Sample system resources and push stats periodically (every 30 frames ≈ 1s at 30fps)
+                video_frame_idx += 1;
+                if video_frame_idx % 30 == 0 {
+                    system_monitor.sample();
+
+                    let avg_timing = stats.avg_timing();
+                    let stream_stats = StreamStats {
+                        video: ExportStats {
+                            hw_decode_ms: avg_timing.hw_decode_ns as f64 / 1_000_000.0,
+                            nv12_import_ms: avg_timing.nv12_import_ns as f64 / 1_000_000.0,
+                            nv12_to_rgba_ms: avg_timing.nv12_to_rgba_ns as f64 / 1_000_000.0,
+                            composite_ms: avg_timing.composite_ns as f64 / 1_000_000.0,
+                            rgba_to_nv12_ms: avg_timing.rgba_to_nv12_ns as f64 / 1_000_000.0,
+                            cpu_readback_ms: avg_timing.cpu_readback_ns as f64 / 1_000_000.0,
+                            encode_submit_ms: avg_timing.encode_submit_ns as f64 / 1_000_000.0,
+                            decode_time_ms: avg_timing.decode_ns / 1_000_000,
+                            composite_time_ms: avg_timing.gpu_ns / 1_000_000,
+                            encode_time_ms: avg_timing.encode_ns / 1_000_000,
+                            mux_time_ms: 0,
+                            avg_fps: stats.current_fps(),
+                            peak_memory_bytes: system_monitor.peak_memory(),
+                            cpu_usage_percent: system_monitor.avg_cpu_usage(),
+                            gpu_usage_percent: system_monitor.avg_gpu_usage(),
+                            vram_usage_bytes: system_monitor.peak_vram(),
+                        },
+                        audio_mix_ms: 0.0,
+                        audio_fps: 0.0,
+                        current_time,
+                        total_duration: video_duration,
+                        peak_memory_bytes: system_monitor.peak_memory(),
+                        cpu_usage_percent: system_monitor.avg_cpu_usage(),
+                    };
+                    let _ = video_stats_tx.send_replace(stream_stats);
+                }
+
                 current_time += 1.0 / fps;
                 pacer.wait_for_next_frame();
             }
 
-            // Log final performance summary
+            // Log final performance summary with system resource stats
             stats.log_final_summary();
+            let avg_timing = stats.avg_timing();
+            let video_stats = ExportStats {
+                hw_decode_ms: avg_timing.hw_decode_ns as f64 / 1_000_000.0,
+                nv12_import_ms: avg_timing.nv12_import_ns as f64 / 1_000_000.0,
+                nv12_to_rgba_ms: avg_timing.nv12_to_rgba_ns as f64 / 1_000_000.0,
+                composite_ms: avg_timing.composite_ns as f64 / 1_000_000.0,
+                rgba_to_nv12_ms: avg_timing.rgba_to_nv12_ns as f64 / 1_000_000.0,
+                cpu_readback_ms: avg_timing.cpu_readback_ns as f64 / 1_000_000.0,
+                encode_submit_ms: avg_timing.encode_submit_ns as f64 / 1_000_000.0,
+                decode_time_ms: avg_timing.decode_ns / 1_000_000,
+                composite_time_ms: avg_timing.gpu_ns / 1_000_000,
+                encode_time_ms: avg_timing.encode_ns / 1_000_000,
+                mux_time_ms: 0,
+                avg_fps: stats.current_fps(),
+                peak_memory_bytes: system_monitor.peak_memory(),
+                cpu_usage_percent: system_monitor.avg_cpu_usage(),
+                gpu_usage_percent: system_monitor.avg_gpu_usage(),
+                vram_usage_bytes: system_monitor.peak_vram(),
+            };
+            tracing::info!(
+                "=== Video Stream ExportStats ===\n{}",
+                serde_json::to_string_pretty(&video_stats).unwrap_or_default()
+            );
             // Flush encoder
             if let Ok(flush_frames) = pipeline.flush() {
                 for pf in &flush_frames {
@@ -666,9 +744,9 @@ impl ITimelineService for TimelineService {
             let mut last_seek: Option<f64> = None;
             let sample_rate = mixer.sample_rate();
             let channels = mixer.channels();
-            let mut audio_frames: u64 = 0;
-            let mut audio_mix_total_ns: u64 = 0;
-            let audio_start = std::time::Instant::now();
+            let mut audio_stats = FrameStatsCollector::new(std::time::Duration::from_secs(10));
+            let mut audio_monitor = SystemMonitor::new();
+            let mut audio_frame_idx: u64 = 0;
 
             loop {
                 // Check cancellation
@@ -721,12 +799,12 @@ impl ITimelineService for TimelineService {
                     }
                 }
 
-                // Mix one frame of audio
+                // Mix one frame of audio with timing
                 let mix_start = std::time::Instant::now();
                 match mixer.mix_frame(current_time) {
                     Ok(Some(mixed)) => {
-                        audio_mix_total_ns += mix_start.elapsed().as_nanos() as u64;
-                        audio_frames += 1;
+                        let mix_ns = mix_start.elapsed().as_nanos() as u64;
+
                         // Cast f32 data to raw bytes
                         let pcm_bytes: &[u8] = bytemuck::cast_slice(&mixed.data);
                         let frame = pack_pcm_f32le_stream_frame(
@@ -737,6 +815,13 @@ impl ITimelineService for TimelineService {
                             channels,
                         );
                         let _ = audio_tx.send(frame);
+
+                        // Record timing: mix_frame covers decode + resample
+                        let mut timing = FrameTiming::default();
+                        timing.hw_decode_ns = mix_ns;
+                        timing.decode_ns = mix_ns;
+                        timing.total_ns = mix_start.elapsed().as_nanos() as u64;
+                        audio_stats.record_frame(timing);
                     }
                     Ok(None) => {
                         tracing::warn!("Audio mix returned None at {:.3}s", current_time);
@@ -746,25 +831,41 @@ impl ITimelineService for TimelineService {
                     }
                 }
 
+                // Sample system resources periodically (every 10 frames)
+                audio_frame_idx += 1;
+                if audio_frame_idx % 10 == 0 {
+                    audio_monitor.sample();
+                }
+
                 current_time += frame_duration;
                 pacer.wait_for_next_frame();
             }
 
             // Log audio performance summary
-            if audio_frames > 0 {
-                let elapsed = audio_start.elapsed().as_secs_f64();
-                let avg_mix_ms = audio_mix_total_ns as f64 / audio_frames as f64 / 1_000_000.0;
-                tracing::info!(
-                    "=== Audio Stream Complete ===\n\
-                     Total frames: {}\n\
-                     Total time: {:.2}s\n\
-                     Average FPS: {:.1}\n\
-                     Average mix time: {:.2}ms",
-                    audio_frames, elapsed,
-                    audio_frames as f64 / elapsed,
-                    avg_mix_ms,
-                );
-            }
+            audio_stats.log_final_summary();
+            let avg_timing = audio_stats.avg_timing();
+            let audio_export_stats = ExportStats {
+                hw_decode_ms: avg_timing.hw_decode_ns as f64 / 1_000_000.0,
+                nv12_import_ms: 0.0,
+                nv12_to_rgba_ms: 0.0,
+                composite_ms: 0.0,
+                rgba_to_nv12_ms: 0.0,
+                cpu_readback_ms: 0.0,
+                encode_submit_ms: 0.0,
+                decode_time_ms: avg_timing.decode_ns / 1_000_000,
+                composite_time_ms: 0,
+                encode_time_ms: 0,
+                mux_time_ms: 0,
+                avg_fps: audio_stats.current_fps(),
+                peak_memory_bytes: audio_monitor.peak_memory(),
+                cpu_usage_percent: audio_monitor.avg_cpu_usage(),
+                gpu_usage_percent: audio_monitor.avg_gpu_usage(),
+                vram_usage_bytes: audio_monitor.peak_vram(),
+            };
+            tracing::info!(
+                "=== Audio Stream ExportStats ===\n{}",
+                serde_json::to_string_pretty(&audio_export_stats).unwrap_or_default()
+            );
 
             mixer.close();
         });
@@ -786,15 +887,30 @@ impl ITimelineService for TimelineService {
         };
         self.active_streams.insert_paired(video_handle, audio_handle).await;
 
+        // Store stats receiver for polling via get_stream_stats()
+        {
+            let mut receivers = self.stats_receivers.write().await;
+            receivers.insert(
+                video_stream_id.as_str().to_string(),
+                stats_rx.clone(),
+            );
+        }
+
         Ok(TimelineStreamResult {
             video_stream_id,
             video_rx,
             audio_stream_id,
             audio_rx,
+            stats_rx,
         })
     }
 
     async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {
+        // Clean up stats receiver
+        {
+            let mut receivers = self.stats_receivers.write().await;
+            receivers.remove(stream_id.as_str());
+        }
         self.active_streams.stop(stream_id).await
     }
 

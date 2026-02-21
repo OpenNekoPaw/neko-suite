@@ -2,9 +2,45 @@
 
 use crate::domain::{FrameData, StreamConfig, Timeline, TimelineProjectInfo};
 use crate::error::Result;
+use crate::export::ExportStats;
 use neko_types::{LoopRegion, StreamId};
+use serde::Serialize;
 use std::path::Path;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
+
+/// Stream performance statistics (updated periodically, polled on demand)
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StreamStats {
+    /// Video pipeline performance metrics
+    pub video: ExportStats,
+    /// Audio mix average time in milliseconds
+    pub audio_mix_ms: f64,
+    /// Audio average FPS
+    pub audio_fps: f64,
+    /// Current playback position in seconds
+    pub current_time: f64,
+    /// Total timeline duration in seconds
+    pub total_duration: f64,
+    /// System resource: peak memory bytes
+    pub peak_memory_bytes: u64,
+    /// System resource: average CPU usage percent
+    pub cpu_usage_percent: f64,
+}
+
+impl Default for StreamStats {
+    fn default() -> Self {
+        Self {
+            video: ExportStats::default(),
+            audio_mix_ms: 0.0,
+            audio_fps: 0.0,
+            current_time: 0.0,
+            total_duration: 0.0,
+            peak_memory_bytes: 0,
+            cpu_usage_percent: 0.0,
+        }
+    }
+}
 
 /// Result of starting a timeline stream (video + audio paired streams)
 pub struct TimelineStreamResult {
@@ -12,6 +48,8 @@ pub struct TimelineStreamResult {
     pub video_rx: broadcast::Receiver<FrameData>,
     pub audio_stream_id: StreamId,
     pub audio_rx: broadcast::Receiver<FrameData>,
+    /// Watch receiver for latest stats snapshot (poll on demand)
+    pub stats_rx: watch::Receiver<StreamStats>,
 }
 
 impl std::fmt::Debug for TimelineStreamResult {
