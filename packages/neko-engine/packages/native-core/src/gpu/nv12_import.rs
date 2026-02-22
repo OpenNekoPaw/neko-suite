@@ -16,7 +16,7 @@ use crate::gpu::GpuContext;
 #[cfg(target_os = "macos")]
 use super::macos_import::MacOsTextureImporter;
 #[cfg(target_os = "linux")]
-use super::linux_import::LinuxTextureImporter;
+use super::linux_import::{LinuxTextureImporter, CudaTextureImporter};
 #[cfg(target_os = "windows")]
 use super::windows_import::WindowsTextureImporter;
 
@@ -233,25 +233,34 @@ impl Nv12TextureImporter {
         unsafe { importer.import_vaapi(surface_id, display, gpu_texture) }
     }
 
-    /// Import from CUDA (Linux/Windows)
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    /// Import from CUDA (Linux — GPU-to-GPU via CUDA-Vulkan interop)
+    #[cfg(target_os = "linux")]
     fn import_cuda(
         &self,
         device_ptr: usize,
         pitch: usize,
         gpu_texture: &Nv12GpuTexture,
     ) -> Result<ImportedNv12Texture> {
-        // TODO(P1): Implement CUDA-Vulkan interop
-        // 1. cuMemExportToShareableHandle() to get external handle
-        // 2. vkAllocateMemory() with VkImportMemoryWin32HandleInfoKHR (Windows)
-        //    or VkImportMemoryFdInfoKHR (Linux)
-        // 3. vkBindImageMemory()
-        // 4. Import into wgpu
-        //
-        // Reference: VK_KHR_external_memory
-        Err(Error::Other(
-            "CUDA zero-copy import not yet implemented".to_string(),
-        ))
+        let importer = CudaTextureImporter::new(self.ctx.clone())?;
+        // Safety: device_ptr is a valid CUdeviceptr from HwAccelDecoder (NVDEC)
+        unsafe { importer.import_cuda(device_ptr, pitch, gpu_texture) }
+    }
+
+    /// Import from CUDA (Windows — not yet implemented)
+    #[cfg(target_os = "windows")]
+    fn import_cuda(
+        &self,
+        device_ptr: usize,
+        pitch: usize,
+        _gpu_texture: &Nv12GpuTexture,
+    ) -> Result<ImportedNv12Texture> {
+        // Windows CUDA interop would use cuImportExternalMemory with
+        // CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32 + D3D12 shared handle.
+        // For now, NVIDIA on Windows should prefer D3D11VA path instead.
+        Err(Error::Other(format!(
+            "CUDA zero-copy on Windows not yet implemented (use D3D11VA instead) - ptr={:#x}, pitch={}",
+            device_ptr, pitch
+        )))
     }
 
     /// Import from D3D11 (Windows)

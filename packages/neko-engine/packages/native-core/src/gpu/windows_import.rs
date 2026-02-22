@@ -10,17 +10,18 @@
 //!
 //! Note: D3D11VA outputs NV12 as a single texture with two planes.
 //! We create separate R8 (Y) and RG8 (UV) shader resource views from the
-//! same underlying resource using D3D12 placed/aliased resources.
+//! same underlying resource using D3D12 plane slicing.
 
 use crate::decoder::Nv12GpuTexture;
 use crate::error::{Error, Result};
 use crate::gpu::nv12_import::{ColorSpace, ImportedNv12Texture};
 use crate::gpu::GpuContext;
 
+use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
 use windows::{
-    core::Interface,
+    core::{Interface, PCWSTR},
     Win32::{
         Foundation::{CloseHandle, HANDLE},
         Graphics::{
@@ -29,7 +30,6 @@ use windows::{
                 ID3D12Device, ID3D12Resource,
                 D3D12_RESOURCE_DIMENSION_TEXTURE2D,
             },
-            Dxgi::Common::DXGI_FORMAT_NV12,
             Dxgi::{IDXGIResource1, DXGI_SHARED_RESOURCE_READ},
         },
     },
@@ -66,9 +66,12 @@ impl WindowsTextureImporter {
             return Err(Error::Other("Null D3D11 texture pointer".to_string()));
         }
 
-        // Cast to ID3D11Texture2D
-        let d3d11_texture: ID3D11Texture2D =
-            std::mem::transmute_copy(&(texture_ptr as *mut std::ffi::c_void));
+        // Wrap the raw COM pointer as ID3D11Texture2D WITHOUT taking ownership.
+        // ManuallyDrop prevents the windows crate from calling Release when dropped,
+        // since we don't own this reference (D3D11VA/FFmpeg owns it).
+        let d3d11_texture: ManuallyDrop<ID3D11Texture2D> = ManuallyDrop::new(
+            std::mem::transmute_copy(&(texture_ptr as *mut std::ffi::c_void))
+        );
 
         // Get texture description for logging
         let mut desc = std::mem::zeroed();
@@ -83,17 +86,17 @@ impl WindowsTextureImporter {
             array_index
         );
 
-        // Query for IDXGIResource1 to get shared handle
+        // Query for IDXGIResource1 to get shared handle.
+        // cast() calls QueryInterface which does AddRef, so dxgi_resource is a new owned ref.
         let dxgi_resource: IDXGIResource1 = d3d11_texture.cast()
             .map_err(|e| Error::Other(format!("QueryInterface IDXGIResource1 failed: {}", e)))?;
 
-        // Create shared handle (NT handle, read-only)
-        let mut shared_handle = HANDLE::default();
-        dxgi_resource.CreateSharedHandle(
-            None,
-            DXGI_SHARED_RESOURCE_READ.0,
-            None,
-            &mut shared_handle,
+        // Create shared handle (NT handle, read-only).
+        // IDXGIResource1::CreateSharedHandle returns Result<HANDLE>.
+        let shared_handle = dxgi_resource.CreateSharedHandle(
+            None,                        // pattributes: Option<*const SECURITY_ATTRIBUTES>
+            DXGI_SHARED_RESOURCE_READ,   // dwaccess: u32
+            PCWSTR::null(),              // lpname: IntoParam<PCWSTR>
         ).map_err(|e| Error::Other(format!("CreateSharedHandle failed: {}", e)))?;
 
         if shared_handle.is_invalid() {
@@ -119,8 +122,8 @@ impl WindowsTextureImporter {
     /// Steps:
     /// 1. Access D3D12 device from wgpu via wgpu_hal
     /// 2. OpenSharedHandle to get ID3D12Resource
-    /// 3. Create wgpu_hal::dx12::Texture from the resource
-    /// 4. Create separate Y (R8) and UV (RG8) wgpu textures
+    /// 3. Convert windows crate COM ptr → d3d12 crate ComPtr
+    /// 4. Create wgpu_hal::dx12::Texture and wrap as wgpu::Texture
     unsafe fn import_shared_handle(
         &self,
         shared_handle: HANDLE,
@@ -139,13 +142,15 @@ impl WindowsTextureImporter {
 
                 let d3d12_device = hal_device.raw_device();
 
-                // Open shared handle to get ID3D12Resource.
-                // The d3d12 crate wraps winapi, so we need to go through raw pointers.
+                // Wrap the wgpu-internal d3d12::Device (winapi ComPtr) as a windows crate
+                // ID3D12Device for calling OpenSharedHandle.
+                // ManuallyDrop prevents Release — wgpu owns this device.
                 let d3d12_raw_ptr = d3d12_device.as_mut_ptr();
+                let d3d12_win: ManuallyDrop<ID3D12Device> = ManuallyDrop::new(
+                    std::mem::transmute_copy(&d3d12_raw_ptr)
+                );
 
-                // Use the windows crate's ID3D12Device to call OpenSharedHandle
-                let d3d12_win: ID3D12Device = std::mem::transmute_copy(&d3d12_raw_ptr);
-
+                // OpenSharedHandle: get ID3D12Resource from the shared handle
                 let mut d3d12_resource: Option<ID3D12Resource> = None;
                 d3d12_win.OpenSharedHandle(shared_handle, &mut d3d12_resource)
                     .map_err(|e| Error::Other(format!("OpenSharedHandle failed: {}", e)))?;
@@ -169,20 +174,30 @@ impl WindowsTextureImporter {
                     res_desc.Format, res_desc.MipLevels
                 );
 
-                // Convert ID3D12Resource (windows crate) → d3d12::Resource (winapi ComPtr)
-                // Both are COM pointers to the same interface, just different bindings.
-                let resource_raw: *mut std::ffi::c_void = std::mem::transmute_copy(&d3d12_resource);
-                // Prevent the windows crate from releasing the COM object
-                std::mem::forget(d3d12_resource);
+                // Convert ID3D12Resource (windows crate) → d3d12::Resource (winapi ComPtr).
+                // Both are COM pointers to the same vtable, just different Rust bindings.
+                //
+                // Strategy:
+                // 1. Get raw pointer from windows crate's ID3D12Resource
+                // 2. Forget the windows crate wrapper (prevents its Drop from calling Release)
+                // 3. Construct d3d12::ComPtr directly without AddRef
+                //
+                // d3d12::ComPtr::from_raw does AddRef, so we use a direct construction
+                // to transfer ownership without changing the refcount.
+                let resource_raw = Interface::as_raw(&d3d12_resource) as *mut winapi::um::d3d12::ID3D12Resource;
+                std::mem::forget(d3d12_resource); // Transfer ownership, skip Release
 
-                let d3d12_res = d3d12::Resource::from_raw(
-                    resource_raw as *mut winapi::um::d3d12::ID3D12Resource
-                );
+                // Construct d3d12::Resource (ComPtr) by writing the raw pointer directly.
+                // Safety: d3d12::ComPtr<T> is a newtype wrapper over *mut T (single field),
+                // so transmute from *mut T is layout-compatible. This is verified by
+                // d3d12-0.19.0/src/com.rs: `pub struct ComPtr<T: Interface>(*mut T)`.
+                // If the d3d12 crate changes ComPtr's layout, this will need updating.
+                let d3d12_res: d3d12::Resource = std::mem::transmute(resource_raw);
 
                 // Create Y plane texture (R8Unorm, full resolution)
                 // NV12 plane 0 = Y (luma)
                 let y_hal_texture = wgpu_hal::dx12::Device::texture_from_raw(
-                    d3d12_res.clone(),
+                    d3d12_res.clone(), // clone calls AddRef
                     wgpu::TextureFormat::R8Unorm,
                     wgpu::TextureDimension::D2,
                     wgpu::Extent3d {
@@ -194,12 +209,11 @@ impl WindowsTextureImporter {
                     1, // sample_count
                 );
 
-                // For the UV plane, we need a separate resource view.
-                // D3D12 NV12 textures have plane 0 (Y, R8) and plane 1 (UV, R8G8).
-                // We create a second wgpu_hal texture pointing to the same resource
-                // but the UV plane will be accessed via a different SRV with PlaneSlice=1.
+                // UV plane (R8G8Unorm, half resolution)
+                // D3D12 NV12 textures: plane 0 = Y (R8), plane 1 = UV (R8G8)
+                // The UV plane SRV uses PlaneSlice=1 in the shader resource view.
                 let uv_hal_texture = wgpu_hal::dx12::Device::texture_from_raw(
-                    d3d12_res,
+                    d3d12_res, // moves ownership, no extra AddRef
                     wgpu::TextureFormat::Rg8Unorm,
                     wgpu::TextureDimension::D2,
                     wgpu::Extent3d {
