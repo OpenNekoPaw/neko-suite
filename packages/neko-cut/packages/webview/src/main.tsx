@@ -7,38 +7,6 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { detectLocale } from '@/i18n';
 import '@/index.css';
 
-// Export file range read utilities for testing on-demand loading
-import { readFileRange } from '@/hooks/useVSCodeMessaging';
-
-// Expose to window for console testing
-declare global {
-  interface Window {
-    // File range read test utilities
-    readFileRange: typeof readFileRange;
-    testFileRangeRead: (path: string, start: number, end: number) => Promise<void>;
-  }
-}
-
-// Expose file range read utilities
-window.readFileRange = readFileRange;
-window.testFileRangeRead = async (path: string, start: number, end: number): Promise<void> => {
-  console.log(`[TEST] Reading file range: path=${path}, range=${start}-${end}`);
-  const startTime = performance.now();
-
-  try {
-    const data = await readFileRange(path, start, end);
-    const elapsed = performance.now() - startTime;
-    console.log(`[TEST] Success! Received ${data.byteLength} bytes in ${elapsed.toFixed(2)}ms`);
-
-    // Show first 32 bytes as hex
-    const view = new Uint8Array(data);
-    const hex = Array.from(view.slice(0, 32)).map(b => b.toString(16).padStart(2, '0')).join(' ');
-    console.log(`[TEST] First 32 bytes: ${hex}`);
-  } catch (error) {
-    console.error('[TEST] Failed:', error);
-  }
-};
-
 try {
   const rootElement = document.getElementById('root');
 
