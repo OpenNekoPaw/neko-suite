@@ -99,6 +99,35 @@ body {
 	margin-left: 4px;
 }
 
+/* PiP active overlay — indicates video is playing in Picture-in-Picture */
+.video-player__pip-overlay {
+	flex-direction: column;
+	gap: 12px;
+	background: rgba(0, 0, 0, 0.7);
+	cursor: default;
+}
+
+.video-player__pip-overlay:hover {
+	background: rgba(0, 0, 0, 0.7);
+}
+
+.video-player__pip-icon {
+	width: 48px;
+	height: 48px;
+	opacity: 0.7;
+}
+
+.video-player__pip-icon svg {
+	width: 48px;
+	height: 48px;
+	fill: rgba(255, 255, 255, 0.7);
+}
+
+.video-player__pip-text {
+	font-size: 14px;
+	color: rgba(255, 255, 255, 0.7);
+}
+
 /* Controls overlay — positioned at bottom of video */
 .video-player__controls-overlay {
 	position: absolute;

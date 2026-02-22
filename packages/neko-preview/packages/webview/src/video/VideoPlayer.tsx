@@ -573,11 +573,14 @@ export function VideoPlayer() {
 				{/* Hidden video element for PiP */}
 				<video ref={pipVideoRef} style={{ display: 'none' }} playsInline muted />
 
-				{/* Canvas for H.264 decoded frames */}
+				{/* Canvas for H.264 decoded frames — keep rendering but visually hide during PiP */}
 				<canvas
 					ref={canvasRef}
 					className="video-player__canvas"
-					style={{ display: isPlaying || !posterUrl ? 'block' : 'none' }}
+					style={{
+						display: isPlaying || !posterUrl ? 'block' : 'none',
+						visibility: isPiPActive ? 'hidden' : 'visible',
+					}}
 				/>
 
 				{/* Poster image when paused */}
@@ -593,6 +596,18 @@ export function VideoPlayer() {
 				{showStats && (
 					<div className="video-player__stats-overlay">
 						{formatSyncStats(syncStats)}
+					</div>
+				)}
+
+				{/* PiP active overlay — shown when video is in Picture-in-Picture */}
+				{isPiPActive && isPlaying && (
+					<div className="video-player__overlay video-player__pip-overlay">
+						<div className="video-player__pip-icon">
+							<svg viewBox="0 0 24 24">
+								<path d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z" />
+							</svg>
+						</div>
+						<span className="video-player__pip-text">Playing in Picture-in-Picture</span>
 					</div>
 				)}
 
