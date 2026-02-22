@@ -6,11 +6,8 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { H264StreamClient } from '../shared/H264StreamClient';
-import { AudioStreamClient } from '../shared/AudioStreamClient';
-import { FrameScheduler, type FrameSchedulerStats } from '../shared/FrameScheduler';
-import type { AudioStreamStats } from '../shared/AudioStreamClient';
-import type { H264StreamStats } from '../shared/H264StreamClient';
+import { H264StreamClient, AudioStreamClient, FrameScheduler } from '@neko/neko-client';
+import type { FrameSchedulerStats, AudioStreamStats, H264StreamStats } from '@neko/neko-client';
 import { useExtensionMessage, useVscodeReady } from '../shared/useVscodeMessage';
 import { VideoControls } from './VideoControls';
 import type { MediaInfo, PreviewInitMessage } from '../shared/types';

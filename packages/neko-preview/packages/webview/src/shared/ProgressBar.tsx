@@ -8,7 +8,7 @@
  */
 
 import { useState, useRef, useCallback } from 'react';
-import { formatTime } from './formatTime';
+import { formatTime } from '@neko/neko-client';
 
 interface ProgressBarProps {
 	/** Current playback time in seconds */

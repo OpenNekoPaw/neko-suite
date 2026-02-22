@@ -1,8 +1,14 @@
 /**
- * H264StreamClient - Lightweight H.264 stream decoder for preview
+ * H264StreamClient - H.264 stream decoder using WebCodecs
  *
  * Connects to neko-engine's frame server via WebSocket,
  * receives H.264 NAL units, and decodes them using WebCodecs.
+ *
+ * Features:
+ * - Hardware-accelerated H.264 decoding (WebCodecs)
+ * - Performance statistics (decode time, latency, bitrate monitoring)
+ * - Automatic reconnection with exponential backoff
+ * - Keyframe-aware seek support
  *
  * Packet format (from Rust frame server):
  * [pts_us: i64 LE (8B)] [dts_us: i64 LE (8B)] [is_keyframe: u8 (1B)] [duration_us: i64 LE (8B)] [NAL data...]
@@ -53,15 +59,23 @@ export interface H264StreamClientConfig {
 	onConnectionChange?: (connected: boolean) => void;
 	/** Callback on error */
 	onError?: (error: Error) => void;
+	/** Callback when a packet is received (for bitrate monitoring) */
+	onPacketReceived?: (sizeBytes: number) => void;
 }
 
-export interface H264StreamStats {
+export interface H264StreamClientStats {
 	packetsReceived: number;
 	framesDecoded: number;
 	framesDropped: number;
 	isConnected: boolean;
 	isDecoderReady: boolean;
+	avgDecodeTimeMs: number;
+	avgLatencyMs: number;
+	hardwareAcceleration: boolean;
 }
+
+/** @deprecated Use H264StreamClientStats instead */
+export type H264StreamStats = H264StreamClientStats;
 
 // =============================================================================
 // H264StreamClient
@@ -73,16 +87,26 @@ export class H264StreamClient {
 	private decoder: VideoDecoder | null = null;
 	private disposed = false;
 
-	private stats: H264StreamStats = {
+	private stats: H264StreamClientStats = {
 		packetsReceived: 0,
 		framesDecoded: 0,
 		framesDropped: 0,
 		isConnected: false,
 		isDecoderReady: false,
+		avgDecodeTimeMs: 0,
+		avgLatencyMs: 0,
+		hardwareAcceleration: false,
 	};
 
 	/** Whether we're waiting for a keyframe after seek/reset */
 	private waitingForKeyframe = false;
+
+	// Performance tracking (sliding window)
+	private readonly maxSamples = 60;
+	private decodeStartTimes: Map<number, number> = new Map(); // pts -> submitTime
+	private decodeTimeSamples: number[] = [];
+	private latencySamples: number[] = [];
+	private pendingFrames: Map<number, number> = new Map(); // pts -> receiveTime
 
 	// Reconnection
 	private reconnectAttempts = 0;
@@ -97,6 +121,7 @@ export class H264StreamClient {
 			onFrame: config.onFrame ?? (() => {}),
 			onConnectionChange: config.onConnectionChange ?? (() => {}),
 			onError: config.onError ?? (() => {}),
+			onPacketReceived: config.onPacketReceived ?? (() => {}),
 		};
 	}
 
@@ -134,11 +159,15 @@ export class H264StreamClient {
 			this.decoder = null;
 		}
 
+		this.pendingFrames.clear();
+		this.decodeStartTimes.clear();
+		this.decodeTimeSamples = [];
+		this.latencySamples = [];
 		this.stats.isConnected = false;
 		this.stats.isDecoderReady = false;
 	}
 
-	getStats(): H264StreamStats {
+	getStats(): H264StreamClientStats {
 		return { ...this.stats };
 	}
 
@@ -165,6 +194,7 @@ export class H264StreamClient {
 			return;
 		}
 
+		this.stats.hardwareAcceleration = true;
 		this.createDecoder();
 	}
 
@@ -174,10 +204,7 @@ export class H264StreamClient {
 		}
 
 		this.decoder = new VideoDecoder({
-			output: (frame) => {
-				this.stats.framesDecoded++;
-				this.config.onFrame(frame);
-			},
+			output: (frame) => this.handleDecodedFrame(frame),
 			error: (error) => {
 				console.error('[H264StreamClient] Decoder error:', error);
 				this.stats.isDecoderReady = false;
@@ -245,6 +272,10 @@ export class H264StreamClient {
 
 	private handlePacket(data: ArrayBuffer): void {
 		this.stats.packetsReceived++;
+		const receiveTime = performance.now();
+
+		// Notify packet size for bitrate monitoring
+		this.config.onPacketReceived(data.byteLength);
 
 		const packet = parseH264Packet(data);
 		if (!packet) return;
@@ -252,17 +283,6 @@ export class H264StreamClient {
 		if (!this.decoder || this.decoder.state !== 'configured') {
 			this.stats.framesDropped++;
 			return;
-		}
-
-		// Log first few packets and keyframes
-		if (this.stats.packetsReceived <= 3 || packet.isKeyframe) {
-			console.log(
-				'[H264StreamClient] Packet #' + this.stats.packetsReceived,
-				'key=', packet.isKeyframe,
-				'pts=', packet.pts,
-				'nalBytes=', packet.nalData.byteLength,
-				'decQueue=', this.decoder.decodeQueueSize,
-			);
 		}
 
 		// After seek/reset, wait for a keyframe before feeding delta frames
@@ -275,6 +295,10 @@ export class H264StreamClient {
 			console.log('[H264StreamClient] Keyframe received, decoding resumed');
 		}
 
+		// Track timing for performance stats
+		this.pendingFrames.set(packet.pts, receiveTime);
+		this.decodeStartTimes.set(packet.pts, performance.now());
+
 		try {
 			const chunk = new EncodedVideoChunk({
 				type: packet.isKeyframe ? 'key' : 'delta',
@@ -286,6 +310,55 @@ export class H264StreamClient {
 			this.stats.framesDropped++;
 			console.warn('[H264StreamClient] Decode error:', error);
 		}
+	}
+
+	private handleDecodedFrame(frame: VideoFrame): void {
+		if (this.disposed) {
+			frame.close();
+			return;
+		}
+
+		this.stats.framesDecoded++;
+
+		// Calculate decode time (submit -> output)
+		const decodeStart = this.decodeStartTimes.get(frame.timestamp);
+		if (decodeStart !== undefined) {
+			this.decodeStartTimes.delete(frame.timestamp);
+			const decodeTime = performance.now() - decodeStart;
+			this.decodeTimeSamples.push(decodeTime);
+			if (this.decodeTimeSamples.length > this.maxSamples) {
+				this.decodeTimeSamples.shift();
+			}
+			this.stats.avgDecodeTimeMs =
+				this.decodeTimeSamples.reduce((a, b) => a + b, 0) / this.decodeTimeSamples.length;
+		}
+
+		// Prevent memory leak in tracking maps
+		if (this.decodeStartTimes.size > 100) {
+			const oldest = Math.min(...this.decodeStartTimes.keys());
+			this.decodeStartTimes.delete(oldest);
+		}
+
+		// Calculate latency
+		const receiveTime = this.pendingFrames.get(frame.timestamp);
+		if (receiveTime !== undefined) {
+			this.pendingFrames.delete(frame.timestamp);
+			const latency = performance.now() - receiveTime;
+			this.latencySamples.push(latency);
+			if (this.latencySamples.length > this.maxSamples) {
+				this.latencySamples.shift();
+			}
+			this.stats.avgLatencyMs =
+				this.latencySamples.reduce((a, b) => a + b, 0) / this.latencySamples.length;
+		}
+
+		if (this.pendingFrames.size > 100) {
+			const oldest = Math.min(...this.pendingFrames.keys());
+			this.pendingFrames.delete(oldest);
+		}
+
+		// Pass frame to scheduler (caller is responsible for closing)
+		this.config.onFrame(frame);
 	}
 
 	private tryReconnect(): void {

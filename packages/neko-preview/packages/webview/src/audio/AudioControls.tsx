@@ -7,7 +7,7 @@
  */
 
 import { useCallback } from 'react';
-import { formatTime } from '../shared/formatTime';
+import { formatTime } from '@neko/neko-client';
 import { ProgressBar } from '../shared/ProgressBar';
 
 interface AudioControlsProps {

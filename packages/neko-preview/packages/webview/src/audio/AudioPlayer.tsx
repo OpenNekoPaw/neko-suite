@@ -6,7 +6,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { AudioStreamClient } from '../shared/AudioStreamClient';
+import { AudioStreamClient } from '@neko/neko-client';
 import { useExtensionMessage, useVscodeReady } from '../shared/useVscodeMessage';
 import { WaveformCanvas } from './WaveformCanvas';
 import { AudioControls } from './AudioControls';

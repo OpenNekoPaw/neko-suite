@@ -65,6 +65,7 @@ export interface AudioStreamClientConfig {
 
 export interface AudioStreamStats {
 	packetsReceived: number;
+	isConnected: boolean;
 	isClockReady: boolean;
 	currentPtsSeconds: number;
 	prebuffering: boolean;
@@ -87,8 +88,6 @@ export class AudioStreamClient {
 	private ptsOffset: number | null = null;
 	/** Next scheduled play time in AudioContext time */
 	private nextPlayTime = 0;
-	/** Sample rate from first packet */
-	private sampleRate = 48000;
 
 	/** Last time (audioCtx.currentTime) drift calibration was performed */
 	private lastCalibrationTime = 0;
@@ -410,6 +409,7 @@ export class AudioStreamClient {
 	getStats(): AudioStreamStats {
 		return {
 			packetsReceived: this.packetCount,
+			isConnected: this.isConnected,
 			isClockReady: this.isClockReady,
 			currentPtsSeconds: this.getCurrentTime(),
 			prebuffering: this.isPrebuffering,
@@ -534,8 +534,6 @@ export class AudioStreamClient {
 
 		// Stale packet from pre-seek position — discard
 		if (gen !== this.seekGeneration) return;
-
-		this.sampleRate = packet.sampleRate;
 
 		// Interpret payload as interleaved f32le samples
 		const floats = new Float32Array(

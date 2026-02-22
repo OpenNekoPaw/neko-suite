@@ -7,7 +7,7 @@
  */
 
 import { useCallback } from 'react';
-import { formatTime } from '../shared/formatTime';
+import { formatTime } from '@neko/neko-client';
 import { ProgressBar } from '../shared/ProgressBar';
 
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];

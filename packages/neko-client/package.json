@@ -1,0 +1,11 @@
+{
+  "name": "@neko/neko-client",
+  "description": "Media streaming clients for Neko Suite (H.264, PCM, fMP4)",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  }
+}
