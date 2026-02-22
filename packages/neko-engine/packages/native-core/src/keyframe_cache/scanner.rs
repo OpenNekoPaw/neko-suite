@@ -20,7 +20,7 @@ use ffmpeg_next as ffmpeg;
 use ffmpeg_next::format::input;
 use ffmpeg_next::media::Type;
 
-use super::types::KeyframeInfo;
+use crate::decoder::KeyframeInfo;
 use crate::error::{Error, Result};
 
 /// Video codec type for NAL parsing

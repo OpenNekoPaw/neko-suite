@@ -6,6 +6,9 @@ use std::time::Instant;
 use crate::domain::Timeline;
 use crate::gpu::ColorSpace;
 
+// Re-export KeyframeInfo from decoder (single source of truth)
+pub use crate::decoder::KeyframeInfo;
+
 /// Unique key for cached keyframes
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct CacheKey {
@@ -22,27 +25,6 @@ impl CacheKey {
             frame_index,
         }
     }
-}
-
-/// Information about a keyframe in the source video
-#[derive(Debug, Clone)]
-pub struct KeyframeInfo {
-    /// Source file path
-    pub source_path: String,
-    /// Timestamp in seconds
-    pub timestamp: f64,
-    /// Frame index in the source video
-    pub frame_index: u64,
-    /// Frame width
-    pub width: u32,
-    /// Frame height
-    pub height: u32,
-    /// Whether this is a true IDR frame
-    pub is_idr: bool,
-    /// NAL unit type (for debugging)
-    pub nal_type: u8,
-    /// Presentation timestamp (pts)
-    pub pts: i64,
 }
 
 /// NV12 frame buffer stored in CPU memory

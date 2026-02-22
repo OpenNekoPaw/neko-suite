@@ -36,6 +36,7 @@
 //! ```
 
 pub mod common;
+pub mod idr_scanner;
 pub mod pool;
 mod traits;
 pub mod hwaccel;
@@ -48,6 +49,9 @@ pub use traits::{DecodedFrame, Decoder, FrameData, GpuTextureHandle, MediaInfo, 
 
 // Re-export hardware-accelerated decoder
 pub use hwaccel::{HwAccelDecoder, HwAccelDecoderConfig, Nv12GpuTexture};
+
+// Re-export IDR scanner
+pub use idr_scanner::{IdrScanner, KeyframeInfo, VideoCodecType};
 
 // Re-export decoder pool
 pub use pool::{

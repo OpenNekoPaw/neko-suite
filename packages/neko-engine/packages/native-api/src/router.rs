@@ -189,7 +189,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "TaskService uses blocking_read which panics in async context"]
     async fn test_route_tasks_list() {
         let router = create_test_router();
 

@@ -14,7 +14,7 @@ use crate::audio::{
 };
 use crate::error::{Error, Result};
 use crate::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
-use crate::keyframe_cache::{IdrScanner, KeyframeInfo};
+use crate::decoder::{IdrScanner, KeyframeInfo};
 use crate::media_service::{encode_rgba_to_jpeg, extract_subtitles, probe_media_info};
 use crate::services::impls::common::{convert_media_info, generate_waveform_blocking};
 use crate::services::impls::stream_loop::{
@@ -40,7 +40,7 @@ fn container_from_path(path: &Path) -> ContainerFormat {
 
 /// VideoService implementation
 ///
-/// Wraps decoder, encoder, keyframe_cache, and media_service modules.
+/// Wraps decoder, encoder, and media_service modules.
 pub struct VideoService {
     /// GPU context for hardware acceleration
     gpu_ctx: Option<Arc<GpuContext>>,

@@ -86,7 +86,6 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore = "TaskService uses blocking_read which panics in async context"]
     async fn test_task_controller_list() {
         let task_service = Arc::new(TaskService::new());
         let controller = TaskController::new(task_service);

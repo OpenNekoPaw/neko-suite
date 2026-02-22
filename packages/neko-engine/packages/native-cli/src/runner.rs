@@ -106,10 +106,10 @@ impl Runner {
         port: u16,
         _config: Option<PathBuf>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        tracing::info!("Starting Neko Suite Export Server on port {}", port);
+        tracing::info!("Starting Neko Suite Server on port {}", port);
 
         let engine = self.get_engine().await?;
-        neko_native_http::start_server_with_frame_server(engine, port).await?;
+        neko_native_http::start_server(engine, port).await?;
 
         Ok(())
     }

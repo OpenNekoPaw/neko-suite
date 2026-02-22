@@ -24,7 +24,6 @@
 
 #![deny(clippy::all)]
 
-pub mod frame_server;
 mod middleware;
 pub mod routes;
 
@@ -76,41 +75,4 @@ pub async fn start_server_with_shutdown(
     });
 
     Ok((local_addr, shutdown_tx))
-}
-
-/// Start HTTP server with frame server routes (export, keyframe cache, extract, probe)
-///
-/// This combines the EngineApi dispatch routes with frame_server routes,
-/// providing a full-featured server for both API dispatch and media processing.
-/// Used by native-cli's `serve` command.
-///
-/// The server blocks until interrupted (e.g. Ctrl+C).
-pub async fn start_server_with_frame_server(
-    engine: Arc<EngineApi>,
-    port: u16,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let engine_routes = routes::build_router(engine);
-    let frame_routes = frame_server::build_frame_server_routes().await?;
-
-    let app = axum::Router::new()
-        .merge(engine_routes)
-        .merge(frame_routes);
-    let app = middleware::apply_middleware(app);
-
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-
-    tracing::info!(
-        "Neko server (with frame server) started on http://{}",
-        addr
-    );
-
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-            tracing::info!("Shutting down...");
-        })
-        .await?;
-
-    Ok(())
 }
