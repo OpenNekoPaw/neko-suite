@@ -113,6 +113,33 @@ export interface IMediaRequestProxy {
 	 */
 	getKeyframeTimes(videoPath: string): Promise<number[]>;
 
+	/**
+	 * Get engine-side stream pipeline stats (timelines:stream_stats)
+	 * Returns null if no active stream or stats unavailable
+	 */
+	getStreamStats(): Promise<{
+		video: {
+			hwDecodeMs: number;
+			nv12ImportMs: number;
+			nv12ToRgbaMs: number;
+			compositeMs: number;
+			rgbaToNv12Ms: number;
+			cpuReadbackMs: number;
+			encodeSubmitMs: number;
+			avgFps: number;
+			cpuUsagePercent: number;
+			gpuUsagePercent: number | null;
+			peakMemoryBytes: number;
+			vramUsageBytes: number | null;
+		};
+		audioMixMs: number;
+		audioFps: number;
+		currentTime: number;
+		totalDuration: number;
+		peakMemoryBytes: number;
+		cpuUsagePercent: number;
+	} | null>;
+
 	// =========================================================================
 	// Compatible Mode Methods (Extension-side decoding for preview)
 	// =========================================================================
@@ -141,28 +168,6 @@ export interface IMediaRequestProxy {
 		backgroundColor?: [number, number, number, number],
 		options?: MediaRequestOptions
 	): Promise<ImageBitmap>;
-
-	// =========================================================================
-	// Performance Stats Methods (Compat Mode Monitoring)
-	// =========================================================================
-
-	/**
-	 * Get performance stats from Extension (compat mode)
-	 * @returns Performance statistics including CPU, memory, cache stats
-	 */
-	getPerformanceStats(): Promise<{
-		cpuUsage: number;
-		memoryUsedMB: number;
-		memoryTotalMB: number;
-		cachedFrames: number;
-		cacheHitCount: number;
-		cacheMissCount: number;
-		cacheHitRate: number;
-		droppedFrames: number;
-		decodeErrors: number;
-		avgDecodeTimeMs: number;
-		avgRenderTimeMs: number;
-	}>;
 
 	/**
 	 * Get media bitrate info from Extension
@@ -882,8 +887,8 @@ class MediaRequestProxy implements IMediaRequestProxy {
 	private handleMessage = (event: MessageEvent): void => {
 		const message = event.data;
 
-		// Check for performance stats response
-		if (this.isPerformanceStatsResponse(message)) {
+		// Check for stream stats response
+		if (this.isStreamStatsResponse(message)) {
 			const response = message as { requestId: string; payload?: unknown; error?: string };
 			const pending = this.performanceStatsRequests.get(response.requestId);
 			if (pending) {
@@ -912,14 +917,14 @@ class MediaRequestProxy implements IMediaRequestProxy {
 	};
 
 	/**
-	 * Type guard for performance stats response
+	 * Type guard for stream stats response
 	 */
-	private isPerformanceStatsResponse(message: unknown): boolean {
+	private isStreamStatsResponse(message: unknown): boolean {
 		if (typeof message !== 'object' || message === null) {
 			return false;
 		}
 		const msg = message as Record<string, unknown>;
-		return msg.type === 'media:response:getPerformanceStats' && typeof msg.requestId === 'string';
+		return msg.type === 'media:response:getStreamStats' && typeof msg.requestId === 'string';
 	}
 
 	/**
@@ -1044,79 +1049,15 @@ class MediaRequestProxy implements IMediaRequestProxy {
 	}
 
 	// ===========================================================================
-	// Performance Stats Methods (Compat Mode Monitoring)
+	// Stats & Bitrate Methods
 	// ===========================================================================
 
-	// Separate map for performance stats requests (different structure from media requests)
+	// Separate map for stats/bitrate requests (different structure from media requests)
 	private performanceStatsRequests = new Map<string, {
 		resolve: (value: unknown) => void;
 		reject: (error: Error) => void;
 		timeoutId: ReturnType<typeof setTimeout>;
 	}>();
-
-	/**
-	 * Get performance stats from Extension (compat mode)
-	 */
-	async getPerformanceStats(): Promise<{
-		cpuUsage: number;
-		memoryUsedMB: number;
-		memoryTotalMB: number;
-		cachedFrames: number;
-		cacheHitCount: number;
-		cacheMissCount: number;
-		cacheHitRate: number;
-		droppedFrames: number;
-		decodeErrors: number;
-		avgDecodeTimeMs: number;
-		avgRenderTimeMs: number;
-	}> {
-		const requestId = this.generateRequestId();
-		const vscode = getVSCodeAPI();
-
-		return new Promise((resolve, reject) => {
-			const timeoutId = setTimeout(() => {
-				this.performanceStatsRequests.delete(requestId);
-				reject(new Error('Performance stats request timeout'));
-			}, 5000);
-
-			this.performanceStatsRequests.set(requestId, {
-				resolve: (response: unknown) => {
-					clearTimeout(timeoutId);
-					this.performanceStatsRequests.delete(requestId);
-					const resp = response as { payload?: unknown; error?: string };
-					if (resp.error) {
-						reject(new Error(resp.error));
-					} else {
-						resolve(resp.payload as {
-							cpuUsage: number;
-							memoryUsedMB: number;
-							memoryTotalMB: number;
-							cachedFrames: number;
-							cacheHitCount: number;
-							cacheMissCount: number;
-							cacheHitRate: number;
-							droppedFrames: number;
-							decodeErrors: number;
-							avgDecodeTimeMs: number;
-							avgRenderTimeMs: number;
-						});
-					}
-				},
-				reject: (error: Error) => {
-					clearTimeout(timeoutId);
-					this.performanceStatsRequests.delete(requestId);
-					reject(error);
-				},
-				timeoutId,
-			});
-
-			vscode?.postMessage({
-				type: 'media:getPerformanceStats',
-				requestId,
-				timestamp: Date.now(),
-			});
-		});
-	}
 
 	/**
 	 * Get media bitrate info from Extension
@@ -1167,6 +1108,87 @@ class MediaRequestProxy implements IMediaRequestProxy {
 				requestId,
 				timestamp: Date.now(),
 				payload: { mediaPath },
+			});
+		});
+	}
+	/**
+	 * Get engine-side stream pipeline stats (timelines:stream_stats)
+	 */
+	async getStreamStats(): Promise<{
+		video: {
+			hwDecodeMs: number;
+			nv12ImportMs: number;
+			nv12ToRgbaMs: number;
+			compositeMs: number;
+			rgbaToNv12Ms: number;
+			cpuReadbackMs: number;
+			encodeSubmitMs: number;
+			avgFps: number;
+			cpuUsagePercent: number;
+			gpuUsagePercent: number | null;
+			peakMemoryBytes: number;
+			vramUsageBytes: number | null;
+		};
+		audioMixMs: number;
+		audioFps: number;
+		currentTime: number;
+		totalDuration: number;
+		peakMemoryBytes: number;
+		cpuUsagePercent: number;
+	} | null> {
+		const requestId = this.generateRequestId();
+		const vscode = getVSCodeAPI();
+
+		return new Promise((resolve, reject) => {
+			const timeoutId = setTimeout(() => {
+				this.performanceStatsRequests.delete(requestId);
+				resolve(null); // Graceful fallback — don't reject on timeout
+			}, 5000);
+
+			this.performanceStatsRequests.set(requestId, {
+				resolve: (response: unknown) => {
+					clearTimeout(timeoutId);
+					this.performanceStatsRequests.delete(requestId);
+					const resp = response as { payload?: unknown; error?: string };
+					if (resp.error || !resp.payload) {
+						resolve(null);
+					} else {
+						resolve(resp.payload as {
+							video: {
+								hwDecodeMs: number;
+								nv12ImportMs: number;
+								nv12ToRgbaMs: number;
+								compositeMs: number;
+								rgbaToNv12Ms: number;
+								cpuReadbackMs: number;
+								encodeSubmitMs: number;
+								avgFps: number;
+								cpuUsagePercent: number;
+								gpuUsagePercent: number | null;
+								peakMemoryBytes: number;
+								vramUsageBytes: number | null;
+							};
+							audioMixMs: number;
+							audioFps: number;
+							currentTime: number;
+							totalDuration: number;
+							peakMemoryBytes: number;
+							cpuUsagePercent: number;
+						});
+					}
+				},
+				reject: (error: Error) => {
+					clearTimeout(timeoutId);
+					this.performanceStatsRequests.delete(requestId);
+					reject(error);
+				},
+				timeoutId,
+			});
+
+			vscode?.postMessage({
+				type: 'media:getStreamStats',
+				requestId,
+				timestamp: Date.now(),
 			});
 		});
 	}

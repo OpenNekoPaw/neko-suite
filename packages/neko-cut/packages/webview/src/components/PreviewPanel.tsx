@@ -14,6 +14,7 @@ import { useTranslation } from '../i18n/I18nContext';
 import { useMediaInfoCache } from '../hooks/useMediaInfoCache';
 import { PREVIEW_QUALITY } from '../constants';
 import { postMessage } from '../utils/vscodeApi';
+import { getMediaProxy } from '../services/mediaProxyFactory';
 import { H264StreamClient, AudioStreamClient, FrameScheduler, PlaybackPerformanceMonitor } from '@neko/neko-client';
 import type { ProjectData, MediaElement } from '@neko/shared';
 
@@ -597,11 +598,34 @@ export const PreviewPanel = memo(function PreviewPanel({
         droppedFrames: stats.framesDropped + (schedStats?.skipped ?? 0),
         renderErrors: 0,
       });
+
+      // Fetch engine-side pipeline stats (async, non-blocking)
+      getMediaProxy().getStreamStats().then((engineStats) => {
+        if (engineStats) {
+          setPerformanceStats({
+            engineHwDecodeMs: engineStats.video.hwDecodeMs,
+            engineNv12ImportMs: engineStats.video.nv12ImportMs,
+            engineNv12ToRgbaMs: engineStats.video.nv12ToRgbaMs,
+            engineCompositeMs: engineStats.video.compositeMs,
+            engineRgbaToNv12Ms: engineStats.video.rgbaToNv12Ms,
+            engineCpuReadbackMs: engineStats.video.cpuReadbackMs,
+            engineEncodeSubmitMs: engineStats.video.encodeSubmitMs,
+            engineAvgFps: engineStats.video.avgFps,
+            engineAudioMixMs: engineStats.audioMixMs,
+            engineCpuUsagePercent: engineStats.cpuUsagePercent,
+            enginePeakMemoryBytes: engineStats.peakMemoryBytes,
+          });
+        }
+      }).catch(() => {
+        // Ignore — engine stats are best-effort
+      });
     };
 
+    // Run first fetch immediately, then every 1s
+    fetchStats();
     const intervalId = setInterval(fetchStats, 1000);
     return () => clearInterval(intervalId);
-  }, [isPlaying, project, setCurrentFps, setPerformanceStats]);
+  }, [isPlaying, streamWsUrl, project, setCurrentFps, setPerformanceStats]);
 
   // ==========================================================================
   // Cleanup on unmount
@@ -764,6 +788,44 @@ export const PreviewPanel = memo(function PreviewPanel({
                     </div>
                   )}
                 </div>
+
+                {/* Engine Pipeline Stats (from timelines:stream_stats) */}
+                {performanceStats.engineAvgFps > 0 && (
+                  <>
+                    <div className="border-t border-gray-600 my-0.5" />
+                    <div className="text-[10px] leading-tight">
+                      <div className="text-center text-gray-500 mb-0.5">Engine Pipeline</div>
+                      <div className="space-y-0.5">
+                        <div className="flex justify-between gap-2">
+                          <span className="text-gray-500">HW Decode</span>
+                          <span className="text-gray-300">{performanceStats.engineHwDecodeMs.toFixed(1)}ms</span>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-gray-500">Composite</span>
+                          <span className="text-gray-300">{performanceStats.engineCompositeMs.toFixed(1)}ms</span>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-gray-500">Encode</span>
+                          <span className="text-gray-300">{performanceStats.engineEncodeSubmitMs.toFixed(1)}ms</span>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-gray-500">Engine FPS</span>
+                          <span className="text-gray-300">{performanceStats.engineAvgFps.toFixed(1)}</span>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-gray-500">CPU</span>
+                          <span className="text-gray-300">{performanceStats.engineCpuUsagePercent.toFixed(1)}%</span>
+                        </div>
+                        {performanceStats.enginePeakMemoryBytes > 0 && (
+                          <div className="flex justify-between gap-2">
+                            <span className="text-gray-500">Peak Mem</span>
+                            <span className="text-gray-300">{(performanceStats.enginePeakMemoryBytes / 1024 / 1024).toFixed(0)} MB</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}

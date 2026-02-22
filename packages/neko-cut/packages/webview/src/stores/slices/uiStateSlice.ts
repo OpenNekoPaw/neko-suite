@@ -59,6 +59,18 @@ export interface UIStateSlice {
     // Error stats
     droppedFrames: number;
     renderErrors: number;
+    // Engine-side pipeline stats (from timelines:stream_stats)
+    engineHwDecodeMs: number;
+    engineNv12ImportMs: number;
+    engineNv12ToRgbaMs: number;
+    engineCompositeMs: number;
+    engineRgbaToNv12Ms: number;
+    engineCpuReadbackMs: number;
+    engineEncodeSubmitMs: number;
+    engineAvgFps: number;
+    engineAudioMixMs: number;
+    engineCpuUsagePercent: number;
+    enginePeakMemoryBytes: number;
   };
   toggleFpsCounter: () => void;
   setCurrentFps: (fps: number) => void;
@@ -88,6 +100,17 @@ export interface UIStateSlice {
     cacheHitRate: number;
     droppedFrames: number;
     renderErrors: number;
+    engineHwDecodeMs: number;
+    engineNv12ImportMs: number;
+    engineNv12ToRgbaMs: number;
+    engineCompositeMs: number;
+    engineRgbaToNv12Ms: number;
+    engineCpuReadbackMs: number;
+    engineEncodeSubmitMs: number;
+    engineAvgFps: number;
+    engineAudioMixMs: number;
+    engineCpuUsagePercent: number;
+    enginePeakMemoryBytes: number;
   }>) => void;
 
   // Editing modes
@@ -156,6 +179,17 @@ export const createUIStateSlice: StateCreator<
     cacheHitRate: 0,
     droppedFrames: 0,
     renderErrors: 0,
+    engineHwDecodeMs: 0,
+    engineNv12ImportMs: 0,
+    engineNv12ToRgbaMs: 0,
+    engineCompositeMs: 0,
+    engineRgbaToNv12Ms: 0,
+    engineCpuReadbackMs: 0,
+    engineEncodeSubmitMs: 0,
+    engineAvgFps: 0,
+    engineAudioMixMs: 0,
+    engineCpuUsagePercent: 0,
+    enginePeakMemoryBytes: 0,
   },
   snappingEnabled: true,
   rippleEditingEnabled: false,

@@ -120,15 +120,15 @@ export class MediaService implements vscode.Disposable {
 				return true;
 			}
 
-			// Performance stats
-			if (type === 'media:getPerformanceStats') {
-				await this.handlePerformanceStats(msg);
-				return true;
-			}
-
 			// Media bitrate
 			if (type === 'media:getMediaBitrate') {
 				await this.handleMediaBitrate(msg);
+				return true;
+			}
+
+			// Engine-side stream stats
+			if (type === 'media:getStreamStats') {
+				await this.handleStreamStats(msg);
 				return true;
 			}
 		} catch (error) {
@@ -665,48 +665,42 @@ export class MediaService implements vscode.Disposable {
 	}
 
 	// =========================================================================
-	// Performance Stats / Media Bitrate
+	// Stream Stats / Media Bitrate
 	// =========================================================================
 
-	private async handlePerformanceStats(
+	private async handleStreamStats(
 		msg: Record<string, unknown>
 	): Promise<void> {
 		const requestId = msg.requestId as string;
+		const streamId = this._activeVideoStreamId;
+
+		if (!streamId) {
+			this.sendResponse({
+				type: 'media:response:getStreamStats',
+				requestId,
+				payload: null,
+			});
+			return;
+		}
 
 		try {
 			const resultJson = await this.frameServer.dispatch(
 				buildActionJson({
-					group: 'nodes',
-					action: 'metric',
+					group: 'timelines',
+					action: 'stream_stats',
+					options: { streamId },
 				})
 			);
 			const result = JSON.parse(resultJson) as ActionResponse;
 
-			const metrics = (result.data ?? {}) as Record<string, unknown>;
-			const memUsage = process.memoryUsage();
-
 			this.sendResponse({
-				type: 'media:response:getPerformanceStats',
+				type: 'media:response:getStreamStats',
 				requestId,
-				payload: {
-					cpuUsage: (metrics.cpuUsage as number) ?? 0,
-					memoryUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
-					memoryTotalMB: Math.round(
-						memUsage.heapTotal / 1024 / 1024
-					),
-					cachedFrames: 0,
-					cacheHitCount: 0,
-					cacheMissCount: 0,
-					cacheHitRate: 0,
-					droppedFrames: 0,
-					decodeErrors: 0,
-					avgDecodeTimeMs: 0,
-					avgRenderTimeMs: 0,
-				},
+				payload: result.data ?? null,
 			});
 		} catch (error) {
 			this.sendResponse({
-				type: 'media:response:getPerformanceStats',
+				type: 'media:response:getStreamStats',
 				requestId,
 				error:
 					error instanceof Error
