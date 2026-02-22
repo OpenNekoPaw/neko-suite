@@ -41,8 +41,12 @@ mod macos_import;
 mod macos_export;
 #[cfg(target_os = "linux")]
 mod linux_import;
+#[cfg(target_os = "linux")]
+mod linux_export;
 #[cfg(target_os = "windows")]
 mod windows_import;
+#[cfg(target_os = "windows")]
+mod windows_export;
 
 pub use blur_processor::{BlurParams, BlurType, GpuBlurProcessor, SharpenParams};
 pub use compositor::{
@@ -75,8 +79,12 @@ pub use macos_import::MacOsTextureImporter;
 pub use rgba_to_nv12_texture::RgbaToNv12TextureConverter;
 #[cfg(target_os = "linux")]
 pub use linux_import::{CudaTextureImporter, DmaBufFrame, DmaBufPlane, LinuxTextureImporter};
+#[cfg(target_os = "linux")]
+pub use linux_export::{LinuxTextureExporter, LinuxExportBackingStore, ExportedNv12Frame, CudaExportInfo};
 #[cfg(target_os = "windows")]
 pub use windows_import::WindowsTextureImporter;
+#[cfg(target_os = "windows")]
+pub use windows_export::{WindowsTextureExporter, WindowsExportBackingStore, ExportedNv12Handles};
 
 pub use gpu_layer::{GpuLayer, GpuLayerBuilder};
 pub use texture_compositor::{TextureCompositeResult, TextureCompositor};

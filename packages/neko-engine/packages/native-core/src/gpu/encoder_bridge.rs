@@ -12,6 +12,13 @@ use crate::error::{Error, Result};
 use crate::gpu::rgba_to_nv12::{Nv12OutputBuffers, RgbaToNv12Converter};
 use crate::gpu::GpuContext;
 
+#[cfg(target_os = "macos")]
+use crate::gpu::macos_export::{MacOsTextureExporter, IOSurfaceBackingStore};
+#[cfg(target_os = "linux")]
+use crate::gpu::linux_export::{LinuxTextureExporter, LinuxExportBackingStore};
+#[cfg(target_os = "windows")]
+use crate::gpu::windows_export::{WindowsTextureExporter, WindowsExportBackingStore};
+
 use std::sync::Arc;
 
 /// GPU frame ready for encoding (always GPU texture)
@@ -73,6 +80,13 @@ pub struct GpuEncoderBridge {
     output_buffers: Option<Nv12OutputBuffers>,
     width: u32,
     height: u32,
+    /// Platform-specific exporter and backing store
+    #[cfg(target_os = "macos")]
+    macos_backing: Option<IOSurfaceBackingStore>,
+    #[cfg(target_os = "linux")]
+    linux_backing: Option<LinuxExportBackingStore>,
+    #[cfg(target_os = "windows")]
+    windows_backing: Option<WindowsExportBackingStore>,
 }
 
 impl GpuEncoderBridge {
@@ -89,6 +103,12 @@ impl GpuEncoderBridge {
             output_buffers,
             width,
             height,
+            #[cfg(target_os = "macos")]
+            macos_backing: None,
+            #[cfg(target_os = "linux")]
+            linux_backing: None,
+            #[cfg(target_os = "windows")]
+            windows_backing: None,
         })
     }
 
@@ -151,43 +171,75 @@ impl GpuEncoderBridge {
     /// Export handles on macOS (IOSurface)
     #[cfg(target_os = "macos")]
     fn export_macos_handles(&self, _output: &Nv12OutputBuffers) -> Result<GpuBufferHandles> {
-        // TODO: Export wgpu buffer as IOSurface for VideoToolbox
-        // This requires:
-        // 1. Get MTLBuffer from wgpu via wgpu_hal
-        // 2. Create IOSurface from MTLBuffer
-        // 3. Return IOSurface handle
+        // Use MacOsTextureExporter to create IOSurface backing store
+        // and export the IOSurface handle for VideoToolbox
+        let exporter = MacOsTextureExporter::new(self.ctx.clone())?;
+        let backing = exporter.create_backing_store(self.width, self.height)?;
+        let surface = backing.io_surface_handle();
 
-        Err(Error::Other(
-            "macOS zero-copy export not yet implemented".to_string(),
-        ))
+        Ok(GpuBufferHandles {
+            y_handle: GpuBufferHandle::IOSurface {
+                surface,
+                plane: 0,
+            },
+            uv_handle: GpuBufferHandle::IOSurface {
+                surface,
+                plane: 1,
+            },
+        })
     }
 
     /// Export handles on Linux (DMA-BUF)
     #[cfg(target_os = "linux")]
     fn export_linux_handles(&self, _output: &Nv12OutputBuffers) -> Result<GpuBufferHandles> {
-        // TODO: Export wgpu buffer as DMA-BUF for VAAPI/NVENC
-        // This requires:
-        // 1. Get VkBuffer from wgpu via wgpu_hal
-        // 2. Export as DMA-BUF using VK_KHR_external_memory_fd
-        // 3. Return DMA-BUF file descriptor
+        let exporter = LinuxTextureExporter::new(self.ctx.clone())?;
+        let backing = exporter.create_backing_store(self.width, self.height)?;
+        let exported = backing.export_as_dmabuf()?;
 
-        Err(Error::Other(
-            "Linux zero-copy export not yet implemented".to_string(),
-        ))
+        // Transfer fd ownership to GpuBufferHandle.
+        // Prevent ExportedNv12Frame::drop from closing fds by extracting them.
+        let y_fd = exported.y_plane.fd;
+        let y_stride = exported.y_plane.stride;
+        let uv_fd = exported.uv_plane.fd;
+        let uv_stride = exported.uv_plane.stride;
+        std::mem::forget(exported); // fds now owned by GpuBufferHandle
+
+        Ok(GpuBufferHandles {
+            y_handle: GpuBufferHandle::DmaBuf {
+                fd: y_fd,
+                offset: 0,
+                stride: y_stride,
+            },
+            uv_handle: GpuBufferHandle::DmaBuf {
+                fd: uv_fd,
+                offset: 0,
+                stride: uv_stride,
+            },
+        })
     }
 
     /// Export handles on Windows (D3D11 shared)
     #[cfg(target_os = "windows")]
     fn export_windows_handles(&self, _output: &Nv12OutputBuffers) -> Result<GpuBufferHandles> {
-        // TODO: Export wgpu buffer as D3D11 shared handle
-        // This requires:
-        // 1. Get ID3D12Resource from wgpu via wgpu_hal
-        // 2. Create shared handle using CreateSharedHandle
-        // 3. Return shared handle
+        let exporter = WindowsTextureExporter::new(self.ctx.clone())?;
+        let backing = exporter.create_backing_store(self.width, self.height)?;
+        let exported = backing.export_as_shared_handles()?;
 
-        Err(Error::Other(
-            "Windows zero-copy export not yet implemented".to_string(),
-        ))
+        // Transfer handle ownership to GpuBufferHandle
+        let y_handle_raw = exported.y_plane.handle.0 as usize;
+        let uv_handle_raw = exported.uv_plane.handle.0 as usize;
+        std::mem::forget(exported); // handles now owned by GpuBufferHandle
+
+        Ok(GpuBufferHandles {
+            y_handle: GpuBufferHandle::D3d11Shared {
+                handle: y_handle_raw,
+                array_index: 0,
+            },
+            uv_handle: GpuBufferHandle::D3d11Shared {
+                handle: uv_handle_raw,
+                array_index: 0,
+            },
+        })
     }
 
     /// Get the NV12 output buffers for direct access
@@ -201,6 +253,13 @@ impl GpuEncoderBridge {
             self.width = width;
             self.height = height;
             self.output_buffers = Some(self.converter.create_output_buffers(width, height));
+            // Clear platform backing stores — they'll be recreated on next export
+            #[cfg(target_os = "macos")]
+            { self.macos_backing = None; }
+            #[cfg(target_os = "linux")]
+            { self.linux_backing = None; }
+            #[cfg(target_os = "windows")]
+            { self.windows_backing = None; }
             tracing::debug!("GPU encoder bridge resized to {}x{}", width, height);
         }
     }
