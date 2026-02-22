@@ -69,7 +69,7 @@ pub use rgba_to_nv12::{
     Nv12OutputBuffers, RgbaToNv12Converter, RgbaToNv12Uniforms, RGBA_TO_NV12_SHADER,
 };
 pub use encoder_bridge::{
-    GpuEncoderBridge, GpuEncoderFrame, GpuHwEncoder,
+    GpuBufferHandle, GpuBufferHandles, GpuEncoderFrame,
 };
 
 // Platform-specific exports

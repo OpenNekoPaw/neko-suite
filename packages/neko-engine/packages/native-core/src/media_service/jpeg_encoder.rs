@@ -44,18 +44,22 @@ pub fn encode_rgba_to_jpeg(
     height: u32,
     quality: u32,
 ) -> Result<Vec<u8>> {
-    let expected_size = (width as usize) * (height as usize) * 4;
+    let pixel_count = (width as usize) * (height as usize);
+    let expected_rgba8 = pixel_count * 4;
+    let expected_rgba16f = pixel_count * 8; // Rgba16Float = 4 channels × 2 bytes (f16)
 
-    if rgba_data.len() != expected_size {
+    let rgb_data = if rgba_data.len() == expected_rgba8 {
+        // RGBA8: 4 bytes per pixel
+        rgba8_to_rgb(rgba_data)
+    } else if rgba_data.len() == expected_rgba16f {
+        // Rgba16Float: 8 bytes per pixel (4 × f16)
+        rgba16f_to_rgb(rgba_data)
+    } else {
         return Err(Error::InvalidParameter(format!(
-            "RGBA data size mismatch: expected {} bytes, got {} bytes",
-            expected_size,
-            rgba_data.len()
+            "RGBA data size mismatch: expected {} (RGBA8) or {} (Rgba16Float) bytes, got {} bytes",
+            expected_rgba8, expected_rgba16f, rgba_data.len()
         )));
-    }
-
-    // Convert RGBA to RGB (JPEG doesn't support alpha channel)
-    let rgb_data = rgba_to_rgb(rgba_data);
+    };
 
     // Encode to JPEG
     let mut jpeg_buffer = Cursor::new(Vec::new());
@@ -75,9 +79,9 @@ pub fn encode_rgba_to_jpeg(
     Ok(jpeg_data)
 }
 
-/// Convert RGBA to RGB by dropping alpha channel
+/// Convert RGBA8 to RGB by dropping alpha channel
 #[inline]
-fn rgba_to_rgb(rgba: &[u8]) -> Vec<u8> {
+fn rgba8_to_rgb(rgba: &[u8]) -> Vec<u8> {
     let pixel_count = rgba.len() / 4;
     let mut rgb = Vec::with_capacity(pixel_count * 3);
 
@@ -85,10 +89,73 @@ fn rgba_to_rgb(rgba: &[u8]) -> Vec<u8> {
         rgb.push(chunk[0]); // R
         rgb.push(chunk[1]); // G
         rgb.push(chunk[2]); // B
-        // Skip alpha (chunk[3])
     }
 
     rgb
+}
+
+/// Convert Rgba16Float (f16) to RGB8 by converting each channel from f16 to u8
+#[inline]
+fn rgba16f_to_rgb(data: &[u8]) -> Vec<u8> {
+    let pixel_count = data.len() / 8;
+    let mut rgb = Vec::with_capacity(pixel_count * 3);
+
+    for chunk in data.chunks_exact(8) {
+        // Each channel is a 16-bit IEEE 754 half-precision float
+        let r = f16_to_u8(u16::from_le_bytes([chunk[0], chunk[1]]));
+        let g = f16_to_u8(u16::from_le_bytes([chunk[2], chunk[3]]));
+        let b = f16_to_u8(u16::from_le_bytes([chunk[4], chunk[5]]));
+        // Skip alpha (chunk[6..8])
+        rgb.push(r);
+        rgb.push(g);
+        rgb.push(b);
+    }
+
+    rgb
+}
+
+/// Convert IEEE 754 half-precision float (f16) to u8 [0..255]
+#[inline]
+fn f16_to_u8(bits: u16) -> u8 {
+    let f = f16_to_f32(bits);
+    (f.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
+}
+
+/// Convert IEEE 754 half-precision float to f32
+#[inline]
+fn f16_to_f32(bits: u16) -> f32 {
+    let sign = ((bits >> 15) & 1) as u32;
+    let exponent = ((bits >> 10) & 0x1F) as u32;
+    let mantissa = (bits & 0x3FF) as u32;
+
+    if exponent == 0 {
+        if mantissa == 0 {
+            // Zero
+            f32::from_bits(sign << 31)
+        } else {
+            // Subnormal: convert to normalized f32
+            let mut m = mantissa;
+            let mut e: i32 = -14;
+            while (m & 0x400) == 0 {
+                m <<= 1;
+                e -= 1;
+            }
+            m &= 0x3FF;
+            let f32_exp = ((e + 127) as u32) & 0xFF;
+            f32::from_bits((sign << 31) | (f32_exp << 23) | (m << 13))
+        }
+    } else if exponent == 31 {
+        // Inf or NaN
+        if mantissa == 0 {
+            f32::from_bits((sign << 31) | (0xFF << 23))
+        } else {
+            f32::from_bits((sign << 31) | (0xFF << 23) | (mantissa << 13))
+        }
+    } else {
+        // Normalized
+        let f32_exp = (exponent as i32 - 15 + 127) as u32;
+        f32::from_bits((sign << 31) | (f32_exp << 23) | (mantissa << 13))
+    }
 }
 
 /// Quality presets for common use cases
@@ -147,10 +214,54 @@ mod tests {
     }
 
     #[test]
-    fn test_rgba_to_rgb() {
+    fn test_rgba8_to_rgb() {
         let rgba = vec![255, 128, 64, 255, 0, 0, 0, 128];
-        let rgb = rgba_to_rgb(&rgba);
+        let rgb = rgba8_to_rgb(&rgba);
         assert_eq!(rgb, vec![255, 128, 64, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_f16_to_u8() {
+        // f16 1.0 = 0x3C00
+        assert_eq!(f16_to_u8(0x3C00), 255);
+        // f16 0.0 = 0x0000
+        assert_eq!(f16_to_u8(0x0000), 0);
+        // f16 0.5 = 0x3800
+        assert_eq!(f16_to_u8(0x3800), 128);
+    }
+
+    #[test]
+    fn test_rgba16f_to_rgb() {
+        // One pixel: R=1.0, G=0.5, B=0.0, A=1.0 in f16
+        let data: Vec<u8> = vec![
+            0x00, 0x3C, // R = 1.0
+            0x00, 0x38, // G = 0.5
+            0x00, 0x00, // B = 0.0
+            0x00, 0x3C, // A = 1.0
+        ];
+        let rgb = rgba16f_to_rgb(&data);
+        assert_eq!(rgb, vec![255, 128, 0]);
+    }
+
+    #[test]
+    fn test_encode_rgba16f() {
+        // 2x2 image in Rgba16Float (8 bytes/pixel)
+        let width = 2u32;
+        let height = 2u32;
+        let f16_one: [u8; 2] = 0x3C00u16.to_le_bytes();
+        let f16_zero: [u8; 2] = 0x0000u16.to_le_bytes();
+        let mut data = Vec::with_capacity(32);
+        for _ in 0..4 {
+            data.extend_from_slice(&f16_one);  // R
+            data.extend_from_slice(&f16_zero); // G
+            data.extend_from_slice(&f16_zero); // B
+            data.extend_from_slice(&f16_one);  // A
+        }
+        let result = encode_rgba_to_jpeg(&data, width, height, 85);
+        assert!(result.is_ok(), "Encoding Rgba16Float failed: {:?}", result.err());
+        let jpeg = result.unwrap();
+        assert_eq!(jpeg[0], 0xFF);
+        assert_eq!(jpeg[1], 0xD8);
     }
 
     #[test]

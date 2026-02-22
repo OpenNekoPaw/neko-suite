@@ -84,7 +84,8 @@ impl ITaskService for TaskService {
     }
 
     fn probe(&self, task_id: &str) -> Result<TaskProgress> {
-        let tasks = self.tasks.blocking_read();
+        let tasks = self.tasks.try_read()
+            .map_err(|_| Error::Other("Task lock busy".to_string()))?;
         match tasks.get(task_id) {
             Some(handle) => Ok(handle.current_progress()),
             None => Err(Error::NotFound(format!("Task not found: {}", task_id))),
@@ -92,7 +93,8 @@ impl ITaskService for TaskService {
     }
 
     fn pause(&self, task_id: &str) -> Result<()> {
-        let tasks = self.tasks.blocking_read();
+        let tasks = self.tasks.try_read()
+            .map_err(|_| Error::Other("Task lock busy".to_string()))?;
         match tasks.get(task_id) {
             Some(handle) => {
                 handle.pause();
@@ -103,7 +105,8 @@ impl ITaskService for TaskService {
     }
 
     fn resume(&self, task_id: &str) -> Result<()> {
-        let tasks = self.tasks.blocking_read();
+        let tasks = self.tasks.try_read()
+            .map_err(|_| Error::Other("Task lock busy".to_string()))?;
         match tasks.get(task_id) {
             Some(handle) => {
                 handle.resume();
@@ -114,7 +117,8 @@ impl ITaskService for TaskService {
     }
 
     fn cancel(&self, task_id: &str) -> Result<()> {
-        let tasks = self.tasks.blocking_read();
+        let tasks = self.tasks.try_read()
+            .map_err(|_| Error::Other("Task lock busy".to_string()))?;
         match tasks.get(task_id) {
             Some(handle) => {
                 handle.cancel();
@@ -125,12 +129,15 @@ impl ITaskService for TaskService {
     }
 
     fn list(&self) -> Vec<TaskProgress> {
-        let tasks = self.tasks.blocking_read();
-        tasks.values().map(|h| h.current_progress()).collect()
+        match self.tasks.try_read() {
+            Ok(tasks) => tasks.values().map(|h| h.current_progress()).collect(),
+            Err(_) => vec![],
+        }
     }
 
     fn subscribe(&self, task_id: &str) -> Result<broadcast::Receiver<TaskProgress>> {
-        let tasks = self.tasks.blocking_read();
+        let tasks = self.tasks.try_read()
+            .map_err(|_| Error::Other("Task lock busy".to_string()))?;
         match tasks.get(task_id) {
             Some(handle) => Ok(handle.subscribe()),
             None => Err(Error::NotFound(format!("Task not found: {}", task_id))),

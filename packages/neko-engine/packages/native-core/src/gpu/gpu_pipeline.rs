@@ -13,7 +13,7 @@
 use crate::decoder::{Decoder, HwAccelType, MediaInfo, HwAccelDecoder};
 use crate::error::{Error, Result};
 use crate::gpu::{
-    ColorSpace, GpuContext, GpuEncoderBridge,
+    ColorSpace, GpuContext,
     Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter,
 };
 
@@ -122,8 +122,6 @@ pub struct GpuPipeline {
     nv12_renderer: Nv12RenderCache,
     /// RGBA to NV12 converter
     converter: RgbaToNv12Converter,
-    /// Encoder bridge
-    encoder_bridge: Option<GpuEncoderBridge>,
     /// Pipeline statistics
     stats: PipelineStats,
     /// Input media info
@@ -149,7 +147,6 @@ impl GpuPipeline {
             importer,
             nv12_renderer,
             converter,
-            encoder_bridge: None,
             stats: PipelineStats::default(),
             input_info: None,
         })
@@ -207,13 +204,6 @@ impl GpuPipeline {
         // Determine output dimensions
         let output_width = self.config.output_width.unwrap_or(info.width);
         let output_height = self.config.output_height.unwrap_or(info.height);
-
-        // Create encoder bridge
-        self.encoder_bridge = Some(GpuEncoderBridge::new(
-            self.ctx.clone(),
-            output_width,
-            output_height,
-        )?);
 
         self.input_info = Some(info.clone());
 
