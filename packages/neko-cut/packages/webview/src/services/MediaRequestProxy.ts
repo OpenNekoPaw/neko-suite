@@ -23,6 +23,7 @@ import type {
 	ProbeMediaInfoResponse,
 	ExtractSubtitlesResponse,
 	ExtractedSubtitleTrack,
+	GetWaveformResponse,
 	RenderCompositeFrameRequest,
 	RenderCompositeFrameResponse,
 	CompatibleGetVideoFrameRequest,
@@ -88,6 +89,22 @@ export interface IMediaRequestProxy {
 		videoPath: string,
 		options?: MediaRequestOptions
 	): Promise<ExtractedSubtitleTrack[]>;
+
+	/**
+	 * Generate waveform data via neko-engine (Rust/FFmpeg)
+	 * Bypasses CSP restrictions - file reading happens on native side
+	 * @returns Waveform peak data with multi-channel support
+	 */
+	getWaveform(
+		filePath: string,
+		options?: MediaRequestOptions
+	): Promise<{
+		sampleRate: number;
+		channels: number;
+		peaksPerSecond: number;
+		duration: number;
+		peaks: number[][];
+	}>;
 
 	/**
 	 * Get all keyframe times in the video
@@ -457,6 +474,38 @@ class MediaRequestProxy implements IMediaRequestProxy {
 		}
 
 		return response.payload?.tracks ?? [];
+	}
+
+	async getWaveform(
+		filePath: string,
+		options?: MediaRequestOptions
+	): Promise<{
+		sampleRate: number;
+		channels: number;
+		peaksPerSecond: number;
+		duration: number;
+		peaks: number[][];
+	}> {
+		const requestId = this.generateRequestId();
+
+		const request: MediaRequest = {
+			type: 'media:getWaveform',
+			requestId,
+			timestamp: Date.now(),
+			payload: { filePath },
+		};
+
+		const response = await this.sendRequest<GetWaveformResponse>(request, options);
+
+		if (response.error) {
+			throw new Error(response.error);
+		}
+
+		if (!response.payload) {
+			throw new Error('No payload in waveform response');
+		}
+
+		return response.payload;
 	}
 
 	/**

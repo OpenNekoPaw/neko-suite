@@ -129,6 +129,19 @@ export interface ExtractSubtitlesRequest extends BaseMediaRequest {
 }
 
 /**
+ * 波形数据请求 - 通过 neko-engine 生成音频波形
+ * 使用 Rust/FFmpeg 端解码，不受 CSP 限制
+ */
+export interface GetWaveformRequest extends BaseMediaRequest {
+	type: 'media:getWaveform';
+	payload: {
+		/** 音频/视频文件路径（相对或绝对路径） */
+		filePath: string;
+	};
+}
+
+
+/**
  * Phase 2.5: 合成轨道定义
  */
 export interface CompositeTrack {
@@ -228,7 +241,8 @@ export type MediaRequest =
 	| GetVideoFrameRangeRequest
 	| DecodeAudioSegmentRequest
 	| ProbeMediaInfoRequest
-	| ExtractSubtitlesRequest;
+	| ExtractSubtitlesRequest
+	| GetWaveformRequest;
 
 // =============================================================================
 // Media Response Types
@@ -347,6 +361,25 @@ export interface ExtractSubtitlesResponse extends BaseMediaResponse {
 }
 
 /**
+ * 波形数据响应 - 从 neko-engine 返回的波形峰值数据
+ */
+export interface GetWaveformResponse extends BaseMediaResponse {
+	type: 'media:response:getWaveform';
+	payload?: {
+		/** 采样率 (Hz) */
+		sampleRate: number;
+		/** 声道数 */
+		channels: number;
+		/** 每秒峰值数（分辨率） */
+		peaksPerSecond: number;
+		/** 时长（秒） */
+		duration: number;
+		/** 多声道峰值数组 peaks[channel][sampleIndex]，值范围 0-1 */
+		peaks: number[][];
+	};
+}
+
+/**
  * Phase 2.5: 合成帧响应
  */
 export interface GetCompositeFrameResponse extends BaseMediaResponse {
@@ -388,7 +421,8 @@ export type MediaResponse =
 	| GetVideoFrameRangeResponse
 	| DecodeAudioSegmentResponse
 	| ProbeMediaInfoResponse
-	| ExtractSubtitlesResponse;
+	| ExtractSubtitlesResponse
+	| GetWaveformResponse;
 
 // =============================================================================
 // Media Info Types

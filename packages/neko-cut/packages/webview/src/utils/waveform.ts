@@ -1,311 +1,90 @@
 /**
  * Audio waveform generation utilities
  *
- * Uses Web Audio API with ffmpeg fallback for compat mode.
- * - Loads first 10MB for large files
- * - Falls back to ffmpeg for unsupported formats
+ * Delegates to neko-engine (Rust/FFmpeg) via MediaRequestProxy IPC.
+ * - No CSP restrictions: file reading happens on native side
+ * - Full format support: FFmpeg handles all audio/video codecs
+ * - No file size limitations: native side streams the file
+ * - Multi-channel support: engine returns per-channel peaks
  */
 
-import { getCachedFileUri, decodeAudioViaExtension, readFileRangeCached } from '../hooks/useVSCodeMessaging';
+import { getMediaProxy } from '../services/mediaProxyFactory';
 
 export interface WaveformData {
-  peaks: number[]; // Normalized peak values (0-1)
+  peaks: number[]; // Normalized peak values (0-1), mono-mixed
   duration: number;
   sampleRate: number;
 }
 
-// Cache for generated waveforms
-const waveformCache = new Map<string, WaveformData>();
+/**
+ * Raw waveform data from neko-engine (multi-channel)
+ */
+interface EngineWaveformData {
+  sampleRate: number;
+  channels: number;
+  peaksPerSecond: number;
+  duration: number;
+  peaks: number[][]; // peaks[channel][sampleIndex]
+}
 
-// Pending requests to avoid duplicate fetches
-const pendingRequests = new Map<string, Promise<WaveformData>>();
+// Cache for generated waveforms (keyed by file path)
+const waveformCache = new Map<string, EngineWaveformData>();
 
-// 波形生成的最大加载大小 (10MB) - 对于更大的文件只分析前 10MB
-const MAX_WAVEFORM_LOAD_SIZE = 10 * 1024 * 1024;
-
-// 完全跳过的文件大小阈值 (500MB) - 超大文件使用占位波形
-const SKIP_WAVEFORM_SIZE = 500 * 1024 * 1024;
+// Pending requests to avoid duplicate IPC calls
+const pendingRequests = new Map<string, Promise<EngineWaveformData>>();
 
 /**
- * Generate waveform data from an audio/video source
- *
- * @param src Original file path
- * @param options Generation options
- * @param options.samples Number of peaks to generate
- * @param options.channel Audio channel to analyze (0 = left, 1 = right)
+ * Fetch raw waveform data from neko-engine (cached, deduplicated)
  */
-export async function generateWaveform(
-  src: string,
-  options: {
-    samples?: number; // Number of peaks to generate
-    channel?: number; // Audio channel to analyze (0 = left, 1 = right)
-  } = {}
-): Promise<WaveformData> {
-  const { samples = 200, channel = 0 } = options;
+async function fetchEngineWaveform(src: string): Promise<EngineWaveformData> {
+  const cached = waveformCache.get(src);
+  if (cached) return cached;
 
-  // Check cache
-  const cacheKey = `${src}-${samples}-${channel}`;
-  const cached = waveformCache.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
+  const pending = pendingRequests.get(src);
+  if (pending) return pending;
 
-  // Check if there's already a pending request
-  const pending = pendingRequests.get(cacheKey);
-  if (pending) {
-    return pending;
-  }
+  const promise = (async () => {
+    try {
+      const result = await getMediaProxy().getWaveform(src);
+      waveformCache.set(src, result);
+      return result;
+    } finally {
+      pendingRequests.delete(src);
+    }
+  })();
 
-  // Get webview URI for the source
-  const webviewUri = getCachedFileUri(src);
-  if (!webviewUri) {
-    console.warn('[Waveform] No webview URI available for:', src);
-    return {
-      peaks: generatePlaceholderPeaks(samples),
-      duration: 0,
-      sampleRate: 44100,
-    };
-  }
-
-  const requestPromise = generateWaveformInternal(src, webviewUri, cacheKey, samples, channel);
-  pendingRequests.set(cacheKey, requestPromise);
-
-  try {
-    const result = await requestPromise;
-    return result;
-  } finally {
-    pendingRequests.delete(cacheKey);
-  }
+  pendingRequests.set(src, promise);
+  return promise;
 }
 
 /**
- * Internal waveform generation logic
- * Optimized to avoid loading large files entirely:
- * - Files > 500MB: Use placeholder waveform
- * - Files > 10MB: Use Range request to load only first 10MB
- * - AAC and other unsupported formats: Fallback to ffmpeg via Extension Host
+ * Mix multi-channel peaks to mono by taking max across channels
  */
-async function generateWaveformInternal(
-  originalPath: string,
-  uri: string,
-  cacheKey: string,
-  samples: number,
-  channel: number
-): Promise<WaveformData> {
-  try {
-    // Step 1: Check file size with HEAD request
-    let fileSize: number | null = null;
-    try {
-      const headResponse = await fetch(uri, { method: 'HEAD' });
-      if (headResponse.ok) {
-        const contentLength = headResponse.headers.get('content-length');
-        if (contentLength) {
-          fileSize = parseInt(contentLength, 10);
-        }
-      }
-    } catch {
-      // HEAD request failed, continue without size info
-      console.warn('[Waveform] HEAD request failed, proceeding without size check');
-    }
+function mixToMono(peaks: number[][]): number[] {
+  if (peaks.length === 0) return [];
+  if (peaks.length === 1) return peaks[0];
 
-    // Step 2: For very large files (> 500MB), use placeholder
-    if (fileSize && fileSize > SKIP_WAVEFORM_SIZE) {
-      console.warn(`[Waveform] File too large (${(fileSize / 1024 / 1024).toFixed(1)}MB), using placeholder`);
-      return {
-        peaks: generatePlaceholderPeaks(samples),
-        duration: 0,
-        sampleRate: 44100,
-      };
-    }
+  const length = peaks[0].length;
+  const mono = new Array<number>(length);
 
-    // Step 3: Fetch audio data using Extension Host for Range support
-    // VSCode webview URIs don't support HTTP Range requests, so we use
-    // readFileRangeCached() which reads via Extension Host's Node.js fs API
-    let arrayBuffer: ArrayBuffer;
-    let isPartialLoad = false;
-
-    try {
-      if (fileSize && fileSize > MAX_WAVEFORM_LOAD_SIZE) {
-        // Large file: load only first 10MB via Extension Host
-        console.log(`[Waveform] Large file (${(fileSize / 1024 / 1024).toFixed(1)}MB), loading first ${MAX_WAVEFORM_LOAD_SIZE / 1024 / 1024}MB via Extension Host`);
-        arrayBuffer = await readFileRangeCached(originalPath, 0, MAX_WAVEFORM_LOAD_SIZE - 1);
-        isPartialLoad = true;
-      } else {
-        // Small file or unknown size: load entirely via Extension Host
-        // Use a reasonable max size (100MB) if size is unknown
-        const loadSize = fileSize || 100 * 1024 * 1024;
-        console.log(`[Waveform] Loading file via Extension Host: ${originalPath}, size=${loadSize}`);
-        arrayBuffer = await readFileRangeCached(originalPath, 0, loadSize - 1);
-      }
-    } catch (loadError) {
-      console.warn('[Waveform] Extension Host load failed, falling back to fetch:', loadError);
-      // Fallback to fetch (may not support Range, but try anyway)
-      if (fileSize && fileSize > MAX_WAVEFORM_LOAD_SIZE) {
-        const rangeResponse = await fetch(uri, {
-          headers: { 'Range': `bytes=0-${MAX_WAVEFORM_LOAD_SIZE - 1}` },
-        });
-        if (!rangeResponse.ok && rangeResponse.status !== 206) {
-          throw new Error(`Failed to fetch audio with Range: ${rangeResponse.status}`);
-        }
-        arrayBuffer = await rangeResponse.arrayBuffer();
-        isPartialLoad = true;
-      } else {
-        const response = await fetch(uri);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch audio: ${response.status}`);
-        }
-        arrayBuffer = await response.arrayBuffer();
-      }
-    }
-
-    // Step 4: Decode audio data
-    const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-
-    let audioBuffer: AudioBuffer;
-    try {
-      audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-    } catch (decodeError) {
-      // Partial load or video file may fail to decode
-      // Try ffmpeg fallback to extract audio track directly
-      console.warn('[Waveform] Web Audio decode failed, trying ffmpeg fallback:', decodeError);
-
-      try {
-        // Request Extension Host to extract audio using ffmpeg
-        // For large files, only extract first 30 seconds for waveform preview
-        const extractDuration = isPartialLoad ? 30 : 0; // 0 = full file
-        const wavBuffer = await decodeAudioViaExtension(originalPath, extractDuration);
-
-        // Decode the WAV data (WAV/PCM is always supported)
-        audioBuffer = await audioContext.decodeAudioData(wavBuffer);
-      } catch (fallbackError) {
-        console.error('[Waveform] FFmpeg fallback failed:', fallbackError);
-        await audioContext.close();
-        return {
-          peaks: generatePlaceholderPeaks(samples),
-          duration: 0,
-          sampleRate: 44100,
-        };
-      }
-    }
-
-    // Get channel data
-    const channelData = audioBuffer.getChannelData(Math.min(channel, audioBuffer.numberOfChannels - 1));
-
-    // Calculate peaks
-    const peaks = calculatePeaks(channelData, samples);
-
-    // For partial loads, estimate total duration based on file size ratio
-    let estimatedDuration = audioBuffer.duration;
-    if (isPartialLoad && fileSize) {
-      const loadedRatio = MAX_WAVEFORM_LOAD_SIZE / fileSize;
-      estimatedDuration = audioBuffer.duration / loadedRatio;
-    }
-
-    const waveformData: WaveformData = {
-      peaks,
-      duration: estimatedDuration,
-      sampleRate: audioBuffer.sampleRate,
-    };
-
-    // Cache the result
-    waveformCache.set(cacheKey, waveformData);
-
-    // Clean up
-    await audioContext.close();
-
-    return waveformData;
-  } catch (error) {
-    console.error('[Waveform] Failed to generate waveform:', error);
-    // Return placeholder data
-    return {
-      peaks: generatePlaceholderPeaks(samples),
-      duration: 0,
-      sampleRate: 44100,
-    };
-  }
-}
-
-/**
- * Calculate peak values from audio samples
- */
-function calculatePeaks(channelData: Float32Array, numPeaks: number): number[] {
-  const blockSize = Math.floor(channelData.length / numPeaks);
-  const peaks: number[] = [];
-
-  for (let i = 0; i < numPeaks; i++) {
-    const start = i * blockSize;
-    const end = Math.min(start + blockSize, channelData.length);
-
+  for (let i = 0; i < length; i++) {
     let max = 0;
-    for (let j = start; j < end; j++) {
-      const abs = Math.abs(channelData[j]);
-      if (abs > max) {
-        max = abs;
-      }
+    for (let ch = 0; ch < peaks.length; ch++) {
+      const val = peaks[ch][i];
+      if (val > max) max = val;
     }
-
-    peaks.push(max);
+    mono[i] = max;
   }
 
-  // Normalize peaks to 0-1 range
-  const maxPeak = Math.max(...peaks, 0.001);
-  return peaks.map(p => p / maxPeak);
+  return mono;
 }
 
 /**
- * Generate placeholder peaks for when audio can't be loaded
- */
-function generatePlaceholderPeaks(count: number): number[] {
-  return Array.from({ length: count }, (_, i) => {
-    // Generate a pseudo-random but smooth wave pattern
-    const t = i / count;
-    const wave1 = Math.sin(t * Math.PI * 4) * 0.3;
-    const wave2 = Math.sin(t * Math.PI * 8) * 0.2;
-    const wave3 = Math.sin(t * Math.PI * 16) * 0.1;
-    return Math.max(0.1, Math.min(1, 0.5 + wave1 + wave2 + wave3));
-  });
-}
-
-/**
- * Generate waveform for a specific time range
- */
-export async function generateWaveformRange(
-  src: string,
-  startTime: number,
-  endTime: number,
-  samples: number = 100
-): Promise<number[]> {
-  const fullWaveform = await generateWaveform(src, { samples: 1000 });
-
-  if (fullWaveform.duration === 0) {
-    return generatePlaceholderPeaks(samples);
-  }
-
-  // Calculate which portion of the full waveform to extract
-  const startRatio = startTime / fullWaveform.duration;
-  const endRatio = endTime / fullWaveform.duration;
-
-  const startIndex = Math.floor(startRatio * fullWaveform.peaks.length);
-  const endIndex = Math.ceil(endRatio * fullWaveform.peaks.length);
-
-  // Extract and resample
-  const extracted = fullWaveform.peaks.slice(startIndex, endIndex);
-
-  if (extracted.length === 0) {
-    return generatePlaceholderPeaks(samples);
-  }
-
-  // Resample to desired number of samples
-  return resamplePeaks(extracted, samples);
-}
-
-/**
- * Resample peaks array to a different size
+ * Resample peaks array to a different size using linear interpolation
  */
 function resamplePeaks(peaks: number[], targetSize: number): number[] {
-  if (peaks.length === targetSize) {
-    return peaks;
-  }
+  if (peaks.length === 0) return generatePlaceholderPeaks(targetSize);
+  if (peaks.length === targetSize) return peaks;
 
   const result: number[] = [];
   const ratio = peaks.length / targetSize;
@@ -324,6 +103,118 @@ function resamplePeaks(peaks: number[], targetSize: number): number[] {
 }
 
 /**
+ * Normalize peaks to 0-1 range
+ */
+function normalizePeaks(peaks: number[]): number[] {
+  const maxPeak = Math.max(...peaks, 0.001);
+  if (maxPeak <= 1.0) return peaks;
+  return peaks.map(p => p / maxPeak);
+}
+
+/**
+ * Generate placeholder peaks for when audio can't be loaded
+ */
+function generatePlaceholderPeaks(count: number): number[] {
+  return Array.from({ length: count }, (_, i) => {
+    const t = i / count;
+    const wave1 = Math.sin(t * Math.PI * 4) * 0.3;
+    const wave2 = Math.sin(t * Math.PI * 8) * 0.2;
+    const wave3 = Math.sin(t * Math.PI * 16) * 0.1;
+    return Math.max(0.1, Math.min(1, 0.5 + wave1 + wave2 + wave3));
+  });
+}
+
+/**
+ * Generate waveform data from an audio/video source
+ *
+ * Uses neko-engine's audios:waveform for full-quality analysis.
+ * The engine returns peaks at 100 peaks/second, which are then
+ * resampled to the requested number of samples.
+ *
+ * @param src Original file path
+ * @param options Generation options
+ * @param options.samples Number of peaks to generate
+ * @param options.channel Audio channel to analyze (0 = left, 1 = right, undefined = mono mix)
+ */
+export async function generateWaveform(
+  src: string,
+  options: {
+    samples?: number;
+    channel?: number;
+  } = {}
+): Promise<WaveformData> {
+  const { samples = 200, channel } = options;
+
+  try {
+    const engineData = await fetchEngineWaveform(src);
+
+    let monoPeaks: number[];
+    if (channel !== undefined && channel < engineData.peaks.length) {
+      // Use specific channel
+      monoPeaks = engineData.peaks[channel];
+    } else {
+      // Mix all channels to mono
+      monoPeaks = mixToMono(engineData.peaks);
+    }
+
+    // Resample to requested number of samples and normalize
+    const resampled = resamplePeaks(monoPeaks, samples);
+    const normalized = normalizePeaks(resampled);
+
+    return {
+      peaks: normalized,
+      duration: engineData.duration,
+      sampleRate: engineData.sampleRate,
+    };
+  } catch (error) {
+    console.error('[Waveform] Failed to generate waveform via engine:', error);
+    return {
+      peaks: generatePlaceholderPeaks(samples),
+      duration: 0,
+      sampleRate: 44100,
+    };
+  }
+}
+
+/**
+ * Generate waveform for a specific time range
+ */
+export async function generateWaveformRange(
+  src: string,
+  startTime: number,
+  endTime: number,
+  samples: number = 100
+): Promise<number[]> {
+  try {
+    const engineData = await fetchEngineWaveform(src);
+
+    if (engineData.duration === 0) {
+      return generatePlaceholderPeaks(samples);
+    }
+
+    const monoPeaks = mixToMono(engineData.peaks);
+
+    // Extract the time range from the full peaks array
+    const startIndex = Math.floor((startTime / engineData.duration) * monoPeaks.length);
+    const endIndex = Math.ceil((endTime / engineData.duration) * monoPeaks.length);
+
+    const extracted = monoPeaks.slice(
+      Math.max(0, startIndex),
+      Math.min(monoPeaks.length, endIndex)
+    );
+
+    if (extracted.length === 0) {
+      return generatePlaceholderPeaks(samples);
+    }
+
+    return normalizePeaks(resamplePeaks(extracted, samples));
+  } catch (error) {
+    console.error('[Waveform] Failed to generate waveform range:', error);
+    return generatePlaceholderPeaks(samples);
+  }
+}
+
+/**
  * Clear waveform cache
  */
 export function clearWaveformCache(): void {
@@ -334,12 +225,7 @@ export function clearWaveformCache(): void {
  * Clear waveform cache for a specific file
  */
 export function clearWaveformCacheForFile(src: string): void {
-  // Clear from waveform cache
-  for (const key of waveformCache.keys()) {
-    if (key.startsWith(src)) {
-      waveformCache.delete(key);
-    }
-  }
+  waveformCache.delete(src);
 }
 
 /**
@@ -376,12 +262,11 @@ export async function generateWaveformForViewport(
   const viewportWidth = duration * pixelsPerSecond;
   const samples = Math.max(50, Math.min(500, Math.floor(viewportWidth / 4)));
 
-  // Use generateWaveformRange for the specific time range
   const peaks = await generateWaveformRange(src, startTime, endTime, samples);
 
   return {
     peaks,
     duration,
-    sampleRate: 44100, // Default sample rate
+    sampleRate: 44100,
   };
 }

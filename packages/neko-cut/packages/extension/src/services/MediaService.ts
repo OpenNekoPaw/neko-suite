@@ -23,6 +23,7 @@ import type {
 	GetVideoFrameRangeRequest,
 	ProbeMediaInfoRequest,
 	ExtractSubtitlesRequest,
+	GetWaveformRequest,
 	CompatibleGetVideoFrameRequest,
 	CompatibleGetVideoFrameResponse,
 	RenderCompositeFrameRequest,
@@ -44,16 +45,17 @@ interface ActionRequest {
 }
 
 interface ActionResponse {
-	success: boolean;
+	id: string;
+	status: 'ok' | 'error' | 'pending' | 'progress';
 	data?: unknown;
-	error?: string;
+	error?: { code: string; message: string } | null;
 }
 
 function buildActionJson(req: ActionRequest): string {
 	return JSON.stringify({
 		group: req.group,
 		action: req.action,
-		id: req.id ?? null,
+		id: req.id ?? '',
 		options: req.options ?? {},
 		body: req.body ?? null,
 	});
@@ -67,8 +69,9 @@ export class MediaService implements vscode.Disposable {
 	private readonly documentDir: string | undefined;
 	private disposed = false;
 
-	// Active timeline stream ID (for playback control)
-	private _activeStreamId: string | null = null;
+	// Active timeline stream IDs (for playback control)
+	private _activeVideoStreamId: string | null = null;
+	private _activeAudioStreamId: string | null = null;
 
 	constructor(
 		private readonly webviewPanel: vscode.WebviewPanel,
@@ -131,7 +134,7 @@ export class MediaService implements vscode.Disposable {
 		} catch (error) {
 			console.error(
 				'[MediaService] handleMessage error:',
-				error instanceof Error ? error.message : error
+				error instanceof Error ? error.message : JSON.stringify(error)
 			);
 		}
 
@@ -167,6 +170,11 @@ export class MediaService implements vscode.Disposable {
 				case 'media:extractSubtitles':
 					response = await this.handleExtractSubtitles(
 						request as ExtractSubtitlesRequest
+					);
+					break;
+				case 'media:getWaveform':
+					response = await this.handleGetWaveform(
+						request as GetWaveformRequest
 					);
 					break;
 				default:
@@ -303,6 +311,37 @@ export class MediaService implements vscode.Disposable {
 			requestId: request.requestId,
 			type: 'media:response:extractSubtitles' as never,
 			payload: result.data as never,
+		};
+	}
+
+	/**
+	 * media:getWaveform → audios:waveform
+	 */
+	private async handleGetWaveform(
+		request: GetWaveformRequest
+	): Promise<MediaResponse> {
+		const { filePath } = request.payload;
+		const absolutePath = this.resolveMediaPath(filePath);
+
+		const result = await this.dispatch({
+			group: 'audios',
+			action: 'waveform',
+			options: { source: absolutePath },
+		});
+
+		const data = result.data as Record<string, unknown>;
+		const waveform = data.waveform as Record<string, unknown>;
+
+		return {
+			requestId: request.requestId,
+			type: 'media:response:getWaveform' as never,
+			payload: {
+				sampleRate: waveform.sampleRate as number,
+				channels: waveform.channels as number,
+				peaksPerSecond: waveform.peaksPerSecond as number,
+				duration: waveform.duration as number,
+				peaks: waveform.peaks as number[][],
+			} as never,
 		};
 	}
 
@@ -454,7 +493,10 @@ export class MediaService implements vscode.Disposable {
 				speed?: number;
 			};
 
+			console.log('[MediaService] Starting timelines:stream, baseDir:', this.documentDir);
+
 			// Start timeline stream via timelines:stream
+			// Engine now returns independent video and audio stream IDs
 			const result = await this.dispatch({
 				group: 'timelines',
 				action: 'stream',
@@ -464,16 +506,18 @@ export class MediaService implements vscode.Disposable {
 					height: payload.projectData.resolution.height,
 					fps: payload.projectData.fps,
 					startTime: payload.startTime,
+					baseDir: this.documentDir ?? undefined,
 				},
 				body: payload.projectData,
 			});
 
 			const data = result.data as Record<string, unknown>;
-			this._activeStreamId = (data.streamId as string) ?? null;
+			this._activeVideoStreamId = (data.videoStreamId as string) ?? (data.streamId as string) ?? null;
+			this._activeAudioStreamId = (data.audioStreamId as string) ?? null;
 
 			// Set speed if not 1.0
 			if (
-				this._activeStreamId &&
+				this._activeVideoStreamId &&
 				payload.speed &&
 				payload.speed !== 1.0
 			) {
@@ -481,44 +525,50 @@ export class MediaService implements vscode.Disposable {
 					group: 'timelines',
 					action: 'speed',
 					options: {
-						streamId: this._activeStreamId,
+						streamId: this._activeVideoStreamId,
 						speed: payload.speed,
 					},
 				});
 			}
 
-			// Notify Webview of the stream ID and WebSocket URL
-			if (this._activeStreamId) {
+			// Notify Webview of the stream IDs and WebSocket URLs
+			if (this._activeVideoStreamId) {
 				const port = this.frameServer.getPort();
+				const baseUrl = port ? `ws://127.0.0.1:${port}/v1/streams` : null;
 				this.sendResponse({
 					type: 'frameServer:streamCreated',
-					streamId: this._activeStreamId,
-					wsUrl: port
-						? `ws://127.0.0.1:${port}/v1/streams/${this._activeStreamId}`
+					streamId: this._activeVideoStreamId,
+					wsUrl: baseUrl
+						? `${baseUrl}/${this._activeVideoStreamId}`
+						: null,
+					audioStreamId: this._activeAudioStreamId,
+					audioWsUrl: baseUrl && this._activeAudioStreamId
+						? `${baseUrl}/${this._activeAudioStreamId}`
 						: null,
 				});
 			}
 
 			console.log(
-				`[MediaService] Stream started: ${this._activeStreamId}`
+				`[MediaService] Stream started: video=${this._activeVideoStreamId}, audio=${this._activeAudioStreamId}`
 			);
 		} else if (type === 'media:frameServer:projectPlayback:stop') {
-			if (this._activeStreamId) {
-				const stoppedStreamId = this._activeStreamId;
+			if (this._activeVideoStreamId) {
+				const stoppedVideoStreamId = this._activeVideoStreamId;
 				await this.dispatch({
 					group: 'timelines',
 					action: 'stop',
-					options: { streamId: this._activeStreamId },
+					options: { streamId: this._activeVideoStreamId },
 				});
 				console.log(
-					`[MediaService] Stream stopped: ${this._activeStreamId}`
+					`[MediaService] Stream stopped: video=${this._activeVideoStreamId}`
 				);
-				this._activeStreamId = null;
+				this._activeVideoStreamId = null;
+				this._activeAudioStreamId = null;
 
 				// Notify Webview that stream was stopped
 				this.sendResponse({
 					type: 'frameServer:streamStopped',
-					streamId: stoppedStreamId,
+					streamId: stoppedVideoStreamId,
 				});
 			}
 		} else if (type === 'media:frameServer:projectPlayback:seek') {
@@ -527,12 +577,12 @@ export class MediaService implements vscode.Disposable {
 				seekTime: number;
 			};
 
-			if (this._activeStreamId) {
+			if (this._activeVideoStreamId) {
 				await this.dispatch({
 					group: 'timelines',
 					action: 'seek',
 					options: {
-						streamId: this._activeStreamId,
+						streamId: this._activeVideoStreamId,
 						time: payload.seekTime,
 					},
 				});
@@ -584,10 +634,11 @@ export class MediaService implements vscode.Disposable {
 			});
 
 			const data = result.data as Record<string, unknown>;
-			this._activeStreamId = (data.streamId as string) ?? null;
+			this._activeVideoStreamId = (data.videoStreamId as string) ?? (data.streamId as string) ?? null;
+			this._activeAudioStreamId = (data.audioStreamId as string) ?? null;
 
 			if (
-				this._activeStreamId &&
+				this._activeVideoStreamId &&
 				payload.speed &&
 				payload.speed !== 1.0
 			) {
@@ -595,19 +646,20 @@ export class MediaService implements vscode.Disposable {
 					group: 'timelines',
 					action: 'speed',
 					options: {
-						streamId: this._activeStreamId,
+						streamId: this._activeVideoStreamId,
 						speed: payload.speed,
 					},
 				});
 			}
 		} else if (type === 'media:frameServer:playback:stop') {
-			if (this._activeStreamId) {
+			if (this._activeVideoStreamId) {
 				await this.dispatch({
 					group: 'timelines',
 					action: 'stop',
-					options: { streamId: this._activeStreamId },
+					options: { streamId: this._activeVideoStreamId },
 				});
-				this._activeStreamId = null;
+				this._activeVideoStreamId = null;
+				this._activeAudioStreamId = null;
 			}
 		}
 	}
@@ -625,7 +677,7 @@ export class MediaService implements vscode.Disposable {
 			const resultJson = await this.frameServer.dispatch(
 				buildActionJson({
 					group: 'nodes',
-					action: 'metrics',
+					action: 'metric',
 				})
 			);
 			const result = JSON.parse(resultJson) as ActionResponse;
@@ -726,11 +778,10 @@ export class MediaService implements vscode.Disposable {
 		const responseJson = await this.frameServer.dispatch(json);
 		const response = JSON.parse(responseJson) as ActionResponse;
 
-		if (!response.success) {
-			throw new Error(
-				response.error ??
-					`${req.group}:${req.action} failed`
-			);
+		if (response.status === 'error') {
+			const errMsg = response.error?.message
+				?? `${req.group}:${req.action} failed`;
+			throw new Error(errMsg);
 		}
 
 		return response;
@@ -860,15 +911,16 @@ export class MediaService implements vscode.Disposable {
 		this.disposed = true;
 
 		// Stop active stream if any
-		if (this._activeStreamId) {
+		if (this._activeVideoStreamId) {
 			this.dispatch({
 				group: 'timelines',
 				action: 'stop',
-				options: { streamId: this._activeStreamId },
+				options: { streamId: this._activeVideoStreamId },
 			}).catch(() => {
 				// Ignore errors during disposal
 			});
-			this._activeStreamId = null;
+			this._activeVideoStreamId = null;
+			this._activeAudioStreamId = null;
 		}
 	}
 }

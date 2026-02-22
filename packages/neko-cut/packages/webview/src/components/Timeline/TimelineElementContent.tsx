@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo, memo, useRef } from 'react';
 import type { TimelineElement, MediaElement, TextElement, AudioElement, TrackType, ShapeElement, AllTimelineElement } from '../../types';
 import type { SubtitleElement } from '@neko/shared';
 import { generateWaveform } from '../../utils/waveform';
-import { getCachedFileUri, subscribeToUriCacheUpdates } from '../../hooks/useVSCodeMessaging';
 import { ShapeElementContent } from '../ShapeElementContent';
 import { getThumbnailService, type ThumbnailData } from '../../services';
 import type { ThumbnailViewport } from '../../utils/pyramidThumbnail';
@@ -319,15 +318,7 @@ const AudioElementContent = memo(function AudioElementContent({
 }) {
   const [waveformPeaks, setWaveformPeaks] = useState<number[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [uriCacheVersion, setUriCacheVersion] = useState(0);
   const lastViewportRef = useRef<string>('');
-
-  // Subscribe to URI cache updates to trigger re-render
-  useEffect(() => {
-    return subscribeToUriCacheUpdates(() => {
-      setUriCacheVersion(v => v + 1);
-    });
-  }, []);
 
   // Calculate element's time range
   const elementStartTime = element.startTime;
@@ -393,18 +384,10 @@ const AudioElementContent = memo(function AudioElementContent({
     });
   }, [element.src, barCount]);
 
-  // Load real waveform data with viewport awareness
+  // Load real waveform data via neko-engine IPC (no webview URI needed)
   useEffect(() => {
     if (!element.src) {
       setIsLoading(false);
-      return;
-    }
-
-    // Check if webview URI is available
-    const uri = getCachedFileUri(element.src);
-    if (!uri) {
-      // URI not cached yet, keep loading state - will retry when cache updates
-      setIsLoading(true);
       return;
     }
 
@@ -419,13 +402,11 @@ const AudioElementContent = memo(function AudioElementContent({
 
     const loadWaveform = async () => {
       try {
-        // Use simple waveform generation
         const waveformData = await generateWaveform(element.src, {
           samples: barCount,
         });
 
         if (!cancelled) {
-          // Resample to bar count for rendering
           const resampledPeaks = resampleWaveformPeaks(waveformData.peaks, barCount);
           setWaveformPeaks(resampledPeaks);
           setIsLoading(false);
@@ -443,7 +424,7 @@ const AudioElementContent = memo(function AudioElementContent({
     return () => {
       cancelled = true;
     };
-  }, [cacheKey, element.src, viewportInfo, barCount, uriCacheVersion]);
+  }, [cacheKey, element.src, viewportInfo, barCount]);
 
   // Use real waveform if available, otherwise placeholder
   const bars = waveformPeaks || placeholderBars;
