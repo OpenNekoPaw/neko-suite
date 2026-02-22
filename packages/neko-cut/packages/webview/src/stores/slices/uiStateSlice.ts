@@ -36,6 +36,14 @@ export interface UIStateSlice {
     decodeTime: number;
     renderTime: number;
     compositeTime: number;
+    // Frame time percentiles (ms)
+    frameTimeP50: number;
+    frameTimeP95: number;
+    frameTimeP99: number;
+    // Measured FPS (actual, distinct from targetFps)
+    measuredFps: number;
+    // Real-time bitrate (kbps)
+    bitrateKbps: number;
     // System metrics
     memoryUsedMB: number;
     memoryTotalMB: number;
@@ -64,6 +72,11 @@ export interface UIStateSlice {
     decodeTime: number;
     renderTime: number;
     compositeTime: number;
+    frameTimeP50: number;
+    frameTimeP95: number;
+    frameTimeP99: number;
+    measuredFps: number;
+    bitrateKbps: number;
     memoryUsedMB: number;
     memoryTotalMB: number;
     cpuLoad: number;
@@ -95,6 +108,10 @@ export interface UIStateSlice {
   frameAlignEnabled: boolean;
   toggleFrameAlign: () => void;
 
+  // Picture-in-Picture
+  isPiPActive: boolean;
+  setIsPiPActive: (active: boolean) => void;
+
   // Visual indicators
   snapIndicatorTime: number | null;
   setSnapIndicatorTime: (time: number | null) => void;
@@ -123,6 +140,11 @@ export const createUIStateSlice: StateCreator<
     decodeTime: 0,
     renderTime: 0,
     compositeTime: 0,
+    frameTimeP50: 0,
+    frameTimeP95: 0,
+    frameTimeP99: 0,
+    measuredFps: 0,
+    bitrateKbps: 0,
     memoryUsedMB: 0,
     memoryTotalMB: 0,
     cpuLoad: 0,
@@ -140,6 +162,7 @@ export const createUIStateSlice: StateCreator<
   showClipThumbnails: true,
   showMinimap: true,
   frameAlignEnabled: false,
+  isPiPActive: false,
   snapIndicatorTime: null,
   dragTargetTrackId: null,
 
@@ -168,6 +191,8 @@ export const createUIStateSlice: StateCreator<
   toggleMinimap: () => set((state) => ({ showMinimap: !state.showMinimap })),
 
   toggleFrameAlign: () => set((state) => ({ frameAlignEnabled: !state.frameAlignEnabled })),
+
+  setIsPiPActive: (active) => set({ isPiPActive: active }),
 
   setSnapIndicatorTime: (time) => set({ snapIndicatorTime: time }),
 

@@ -1,13 +1,11 @@
 /**
- * PreviewPanel - H.264 流预览面板
- * H.264 Stream Preview Panel
- *
- * 使用 neko-engine 的 H.264 流进行预览渲染
- * Uses neko-engine H.264 stream for preview rendering
+ * PreviewPanel - H.264 流预览面板（音视频同步）
  *
  * 架构：
- * - Extension 通过 WebSocket 推送 H.264 流
- * - Webview 使用 WebCodecs 解码并渲染到 Canvas
+ * - Extension 通过 WebSocket 推送 H.264 视频流和 PCM 音频流
+ * - Webview 使用 WebCodecs 解码视频，Web Audio API 播放音频
+ * - FrameScheduler 基于音频主时钟进行帧调度（render/skip/wait）
+ * - 无音频时降级到墙钟驱动
  */
 
 import { useRef, useEffect, useCallback, useState, memo } from 'react';
@@ -16,7 +14,7 @@ import { useTranslation } from '../i18n/I18nContext';
 import { useMediaInfoCache } from '../hooks/useMediaInfoCache';
 import { PREVIEW_QUALITY } from '../constants';
 import { postMessage } from '../utils/vscodeApi';
-import { H264StreamClient } from '../services/H264StreamClient';
+import { H264StreamClient, AudioStreamClient, FrameScheduler, PlaybackPerformanceMonitor } from '@neko/neko-client';
 import type { ProjectData, MediaElement } from '@neko/shared';
 
 // =============================================================================
@@ -67,14 +65,33 @@ export const PreviewPanel = memo(function PreviewPanel({
   const performanceStats = useEditorStore((state) => state.performanceStats);
   const setCurrentFps = useEditorStore((state) => state.setCurrentFps);
   const setPerformanceStats = useEditorStore((state) => state.setPerformanceStats);
+  const setIsPiPActive = useEditorStore((state) => state.setIsPiPActive);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pipVideoRef = useRef<HTMLVideoElement>(null);
   const mediaInfoRef = useRef({ bitrate: '', codec: '', resolution: '' });
 
   // H.264 stream client
   const h264ClientRef = useRef<H264StreamClient | null>(null);
+  // Audio stream client (master clock)
+  const audioClientRef = useRef<AudioStreamClient | null>(null);
+  // Frame scheduler (A/V sync)
+  const schedulerRef = useRef<FrameScheduler | null>(null);
+  // Shared AudioContext (created on user gesture)
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  // rAF handle for playback loop
+  const animFrameRef = useRef<number>(0);
+  // Wall-clock fallback refs
+  const playStartTimeRef = useRef<number>(0);
+  const playWallTimeRef = useRef<number>(0);
+  // Track clock source to detect wall→audio transition
+  const clockSourceRef = useRef<'wall' | 'audio'>('wall');
+
+  // Performance monitor
+  const perfMonitorRef = useRef<PlaybackPerformanceMonitor>(new PlaybackPerformanceMonitor());
   const [frameServerPort, setFrameServerPort] = useState<number | null>(null);
   const [streamWsUrl, setStreamWsUrl] = useState<string | null>(null);
+  const [audioWsUrl, setAudioWsUrl] = useState<string | null>(null);
 
   // State
   const [isInitialized, setIsInitialized] = useState(false);
@@ -88,6 +105,10 @@ export const PreviewPanel = memo(function PreviewPanel({
   const currentTimeRef = useRef(currentTime);
   currentTimeRef.current = currentTime;
 
+  // isPlaying ref for rAF closure
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+
   // ==========================================================================
   // Frame Server Port & Stream Configuration
   // ==========================================================================
@@ -99,13 +120,15 @@ export const PreviewPanel = memo(function PreviewPanel({
         console.log(`[PreviewPanel] Received frame server config, port: ${message.port}`);
         setFrameServerPort(message.port);
       }
-      if (message.type === 'frameServer:streamCreated' && typeof message.wsUrl === 'string') {
-        console.log(`[PreviewPanel] Stream created: ${message.streamId}, wsUrl: ${message.wsUrl}`);
-        setStreamWsUrl(message.wsUrl);
+      if (message.type === 'frameServer:streamCreated') {
+        console.log(`[PreviewPanel] Stream created: video=${message.streamId}, audio=${message.audioStreamId ?? 'none'}`);
+        setStreamWsUrl(typeof message.wsUrl === 'string' ? message.wsUrl : null);
+        setAudioWsUrl(typeof message.audioWsUrl === 'string' ? message.audioWsUrl : null);
       }
       if (message.type === 'frameServer:streamStopped') {
         console.log(`[PreviewPanel] Stream stopped: ${message.streamId}`);
         setStreamWsUrl(null);
+        setAudioWsUrl(null);
       }
     };
 
@@ -114,7 +137,30 @@ export const PreviewPanel = memo(function PreviewPanel({
   }, []);
 
   // ==========================================================================
-  // H.264 Stream Client Setup
+  // Frame Rendering
+  // ==========================================================================
+
+  const renderFrame = useCallback((frame: VideoFrame) => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      frame.close();
+      return;
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      frame.close();
+      return;
+    }
+
+    perfMonitorRef.current.recordFrame();
+    const renderStart = performance.now();
+    ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+    perfMonitorRef.current.recordRenderTime(performance.now() - renderStart);
+    frame.close();
+  }, []);
+
+  // ==========================================================================
+  // H.264 + Audio Stream Client Setup
   // ==========================================================================
 
   useEffect(() => {
@@ -122,46 +168,145 @@ export const PreviewPanel = memo(function PreviewPanel({
       return;
     }
 
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      setInitError('Failed to get canvas context');
-      return;
-    }
+    // Reset performance monitor for new stream
+    const monitor = perfMonitorRef.current;
+    monitor.reset();
 
-    // Create H.264 stream client connected to the per-stream WebSocket endpoint
+    // Create frame scheduler for A/V sync
+    schedulerRef.current = new FrameScheduler(project.fps || 25);
+
+    // Create H.264 stream client — frames go to scheduler, not directly to canvas
     const client = new H264StreamClient({
       websocketUrl: streamWsUrl,
       width: project.resolution.width,
       height: project.resolution.height,
       onFrame: (frame: VideoFrame) => {
-        // Draw frame to canvas
-        ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
-        frame.close();
+        const scheduler = schedulerRef.current;
+        if (scheduler) {
+          scheduler.enqueue(frame);
+        } else {
+          renderFrame(frame);
+        }
       },
       onConnectionChange: (connected: boolean) => {
         console.log(`[PreviewPanel] H.264 stream ${connected ? 'connected' : 'disconnected'}`);
         setIsInitialized(connected);
         if (connected) {
-          setInitError(null); // Clear previous errors on successful connection
+          setInitError(null);
         }
       },
       onError: (error: Error) => {
         console.error('[PreviewPanel] H.264 stream error:', error);
         setInitError(error.message);
       },
-      preferHardware: true,
+      onPacketReceived: (sizeBytes: number) => {
+        monitor.recordPacketSize(sizeBytes);
+      },
     });
 
     h264ClientRef.current = client;
     client.connect();
 
+    // Create audio stream client if audio URL is available
+    let audioClient: AudioStreamClient | null = null;
+    if (audioWsUrl) {
+      // Create / resume AudioContext (may already exist from user gesture)
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
+      }
+      if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+
+      audioClient = new AudioStreamClient({
+        websocketUrl: audioWsUrl,
+        volume: 1.0,
+        onConnectionChange: (connected) => {
+          console.log(`[PreviewPanel] Audio stream ${connected ? 'connected' : 'disconnected'}`);
+        },
+        onError: (err) => {
+          console.warn('[PreviewPanel] Audio stream error:', err);
+        },
+      });
+      audioClientRef.current = audioClient;
+      audioClient.connect(audioCtxRef.current ?? undefined);
+    }
+
+    // Reset clock source for new stream
+    clockSourceRef.current = 'wall';
+    playWallTimeRef.current = performance.now();
+    playStartTimeRef.current = currentTimeRef.current;
+
     return () => {
-      client.disconnect();
+      client.dispose();
       h264ClientRef.current = null;
+      schedulerRef.current?.dispose();
+      schedulerRef.current = null;
+      if (audioClient) {
+        audioClient.setVolume(0);
+        audioClient.dispose();
+        audioClientRef.current = null;
+      }
+      monitor.reset();
       setIsInitialized(false);
     };
-  }, [streamWsUrl, project?.resolution.width, project?.resolution.height]);
+  }, [streamWsUrl, audioWsUrl, project?.resolution.width, project?.resolution.height, project?.fps, renderFrame]);
+
+  // ==========================================================================
+  // rAF Playback Loop (A/V sync)
+  // ==========================================================================
+
+  const updatePlaybackTime = useCallback(() => {
+    if (!isPlayingRef.current || !project) return;
+
+    // Determine master clock time
+    let newTime: number;
+    const audioClient = audioClientRef.current;
+
+    if (audioClient && audioClient.isClockReady) {
+      // Detect wall→audio clock transition: flush scheduler to reset A/V offset
+      if (clockSourceRef.current === 'wall') {
+        clockSourceRef.current = 'audio';
+        schedulerRef.current?.flush();
+        console.log('[PreviewPanel] Clock source switched: wall → audio');
+      }
+      newTime = audioClient.getCurrentTime();
+    } else {
+      // Wall-clock fallback: don't advance until first video frame arrives
+      const h264Stats = h264ClientRef.current?.getStats();
+      if (!h264Stats || h264Stats.framesDecoded === 0) {
+        playWallTimeRef.current = performance.now();
+        newTime = playStartTimeRef.current;
+      } else {
+        const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
+        newTime = playStartTimeRef.current + elapsed;
+      }
+    }
+
+    // Frame scheduling: render/skip/wait based on master clock
+    const scheduler = schedulerRef.current;
+    if (scheduler) {
+      const masterClockUs = newTime * 1_000_000;
+      const result = scheduler.schedule(masterClockUs);
+      if (result.action === 'render' && result.frame) {
+        renderFrame(result.frame);
+      }
+    }
+
+    animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
+  }, [project, renderFrame]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
+    }
+    return () => {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = 0;
+      }
+    };
+  }, [isPlaying, updatePlaybackTime]);
 
   // ==========================================================================
   // Playback Control
@@ -169,7 +314,6 @@ export const PreviewPanel = memo(function PreviewPanel({
 
   useEffect(() => {
     if (!frameServerPort || !project || !isPlaying) {
-      // Stop H264 push when paused
       postMessage({
         type: 'media:frameServer:projectPlayback:stop',
       });
@@ -183,9 +327,19 @@ export const PreviewPanel = memo(function PreviewPanel({
       return;
     }
 
-    // Start H264 push for playback
-    // Extension will create a stream and send back frameServer:streamCreated
-    // which triggers the H264StreamClient connection
+    // Create / resume AudioContext in user-gesture context (play button click)
+    if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+      audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => {});
+    }
+
+    // Initialize wall-clock refs
+    playStartTimeRef.current = currentPlayheadTime;
+    playWallTimeRef.current = performance.now();
+    clockSourceRef.current = 'wall';
+
     console.log('[PreviewPanel] Starting H264 push for playback');
     postMessage({
       type: 'media:frameServer:projectPlayback:start',
@@ -215,7 +369,12 @@ export const PreviewPanel = memo(function PreviewPanel({
     const TIME_TOLERANCE = 0.001;
     if (Math.abs(currentTime - lastRenderedTimeRef.current) < TIME_TOLERANCE) return;
 
-    // Send seek message for H264 frame (scrubbing)
+    // Flush stale frames and reset decoders on seek
+    schedulerRef.current?.flush();
+    h264ClientRef.current?.resetDecoder();
+    audioClientRef.current?.resetClock();
+    clockSourceRef.current = 'wall';
+
     postMessage({
       type: 'media:frameServer:projectPlayback:seek',
       payload: {
@@ -295,7 +454,6 @@ export const PreviewPanel = memo(function PreviewPanel({
     try {
       const canvas = canvasRef.current;
 
-      // Request full quality frame from Extension
       postMessage({
         type: 'media:frameServer:projectPlayback:seek',
         payload: {
@@ -304,10 +462,8 @@ export const PreviewPanel = memo(function PreviewPanel({
         },
       });
 
-      // Wait a bit for frame to render
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Export to blob
       const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob((b) => resolve(b), 'image/png', 0.95);
       });
@@ -334,12 +490,65 @@ export const PreviewPanel = memo(function PreviewPanel({
     }
   }, [isInitialized, project, currentTime]);
 
-  // Expose captureScreenshot via callback
   useEffect(() => {
     if (onCaptureScreenshot) {
       (window as unknown as { __previewPanelCaptureScreenshot: typeof captureScreenshot }).__previewPanelCaptureScreenshot = captureScreenshot;
     }
   }, [onCaptureScreenshot, captureScreenshot]);
+
+  // ==========================================================================
+  // Picture-in-Picture
+  // ==========================================================================
+
+  const togglePiP = useCallback(async () => {
+    if (!canvasRef.current) return;
+
+    if (document.pictureInPictureElement) {
+      await document.exitPictureInPicture();
+      return;
+    }
+
+    const video = pipVideoRef.current;
+    if (!video) return;
+
+    if (!video.srcObject) {
+      const stream = canvasRef.current.captureStream();
+      video.srcObject = stream;
+      video.muted = true;
+      await video.play();
+    }
+
+    await video.requestPictureInPicture();
+  }, []);
+
+  useEffect(() => {
+    const video = pipVideoRef.current;
+    if (!video) return;
+
+    const handleEnterPiP = () => setIsPiPActive(true);
+    const handleLeavePiP = () => {
+      setIsPiPActive(false);
+      const stream = video.srcObject as MediaStream | null;
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+        video.srcObject = null;
+      }
+    };
+
+    video.addEventListener('enterpictureinpicture', handleEnterPiP);
+    video.addEventListener('leavepictureinpicture', handleLeavePiP);
+    return () => {
+      video.removeEventListener('enterpictureinpicture', handleEnterPiP);
+      video.removeEventListener('leavepictureinpicture', handleLeavePiP);
+    };
+  }, [setIsPiPActive]);
+
+  useEffect(() => {
+    (window as unknown as { __previewPanelTogglePiP: typeof togglePiP }).__previewPanelTogglePiP = togglePiP;
+    return () => {
+      delete (window as unknown as { __previewPanelTogglePiP?: typeof togglePiP }).__previewPanelTogglePiP;
+    };
+  }, [togglePiP]);
 
   // ==========================================================================
   // Performance Stats
@@ -355,7 +564,14 @@ export const PreviewPanel = memo(function PreviewPanel({
       if (!client) return;
 
       const stats = client.getStats();
-      setCurrentFps(stats.framesDecoded > 0 ? project?.fps || 30 : 0);
+      const snapshot = perfMonitorRef.current.getSnapshot();
+      const schedStats = schedulerRef.current?.getStats();
+
+      perfMonitorRef.current.recordDroppedFrames(
+        stats.framesDropped - snapshot.droppedFrames
+      );
+
+      setCurrentFps(snapshot.measuredFps);
       setPerformanceStats({
         currentTime: currentTimeRef.current,
         frameIndex: Math.floor(currentTimeRef.current * (project?.fps || 30)),
@@ -364,16 +580,21 @@ export const PreviewPanel = memo(function PreviewPanel({
         bitrate: mediaInfoRef.current.bitrate,
         mode: 'compatible',
         decodeTime: stats.avgDecodeTimeMs,
-        renderTime: 0,
+        renderTime: snapshot.avgRenderTimeMs,
         compositeTime: stats.avgLatencyMs,
-        memoryUsedMB: 0,
+        frameTimeP50: snapshot.frameTimeP50,
+        frameTimeP95: snapshot.frameTimeP95,
+        frameTimeP99: snapshot.frameTimeP99,
+        measuredFps: snapshot.measuredFps,
+        bitrateKbps: snapshot.bitrateKbps,
+        memoryUsedMB: snapshot.memoryUsedMB,
         memoryTotalMB: 0,
         cpuLoad: 0,
         gpuBackend: stats.hardwareAcceleration ? 'HW' : 'SW',
         gpuLoad: 0,
-        cachedFrames: 0,
+        cachedFrames: schedStats?.queueLength ?? 0,
         cacheHitRate: 0,
-        droppedFrames: stats.framesDropped,
+        droppedFrames: stats.framesDropped + (schedStats?.skipped ?? 0),
         renderErrors: 0,
       });
     };
@@ -381,6 +602,25 @@ export const PreviewPanel = memo(function PreviewPanel({
     const intervalId = setInterval(fetchStats, 1000);
     return () => clearInterval(intervalId);
   }, [isPlaying, project, setCurrentFps, setPerformanceStats]);
+
+  // ==========================================================================
+  // Cleanup on unmount
+  // ==========================================================================
+
+  useEffect(() => {
+    return () => {
+      schedulerRef.current?.dispose();
+      h264ClientRef.current?.dispose();
+      const ac = audioClientRef.current;
+      if (ac) {
+        ac.setVolume(0);
+        ac.dispose();
+      }
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close().catch(() => {});
+      }
+    };
+  }, []);
 
   // ==========================================================================
   // Render
@@ -426,6 +666,7 @@ export const PreviewPanel = memo(function PreviewPanel({
               title="Performance Stats"
             >
               <div className="flex flex-col gap-1">
+                {/* Header: time / frame / target fps */}
                 <div className="text-[10px] leading-tight text-center text-gray-400 border-b border-gray-600 pb-1">
                   <span>{performanceStats.currentTime.toFixed(2)}s</span>
                   <span className="mx-1">|</span>
@@ -434,6 +675,7 @@ export const PreviewPanel = memo(function PreviewPanel({
                   <span>{performanceStats.targetFps}fps</span>
                 </div>
 
+                {/* Stream info */}
                 <div className="text-[10px] leading-tight space-y-0.5">
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500">Resolution</span>
@@ -447,10 +689,15 @@ export const PreviewPanel = memo(function PreviewPanel({
                     <span className="text-gray-500">Decoder</span>
                     <span className="text-cyan-400">{performanceStats.gpuBackend}</span>
                   </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500">Clock</span>
+                    <span className="text-cyan-400">{clockSourceRef.current}</span>
+                  </div>
                 </div>
 
                 <div className="border-t border-gray-600 my-0.5" />
 
+                {/* FPS & Bitrate */}
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-gray-400">FPS</span>
                   <span style={{
@@ -460,15 +707,45 @@ export const PreviewPanel = memo(function PreviewPanel({
                     {currentFps.toFixed(1)}
                   </span>
                 </div>
+                <div className="text-[10px] leading-tight">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500">Bitrate</span>
+                    <span className="text-gray-300">
+                      {performanceStats.bitrateKbps >= 1000
+                        ? `${(performanceStats.bitrateKbps / 1000).toFixed(1)} Mbps`
+                        : `${performanceStats.bitrateKbps.toFixed(0)} kbps`}
+                    </span>
+                  </div>
+                </div>
 
+                <div className="border-t border-gray-600 my-0.5" />
+
+                {/* Timing stats */}
                 <div className="text-[10px] leading-tight space-y-0.5">
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500">Decode</span>
                     <span className="text-gray-300">{performanceStats.decodeTime.toFixed(1)}ms</span>
                   </div>
                   <div className="flex justify-between gap-2">
+                    <span className="text-gray-500">Render</span>
+                    <span className="text-gray-300">{performanceStats.renderTime.toFixed(1)}ms</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
                     <span className="text-gray-500">Latency</span>
                     <span className="text-gray-300">{performanceStats.compositeTime.toFixed(1)}ms</span>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-600 my-0.5" />
+
+                {/* Frame time percentiles & system */}
+                <div className="text-[10px] leading-tight space-y-0.5">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500">P50</span>
+                    <span className="text-gray-300">{performanceStats.frameTimeP50.toFixed(1)}ms</span>
+                    <span className="text-gray-600 mx-0.5">|</span>
+                    <span className="text-gray-500">P95</span>
+                    <span className="text-gray-300">{performanceStats.frameTimeP95.toFixed(1)}ms</span>
                   </div>
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500">Dropped</span>
@@ -476,20 +753,36 @@ export const PreviewPanel = memo(function PreviewPanel({
                       {performanceStats.droppedFrames}
                     </span>
                   </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500">Queue</span>
+                    <span className="text-gray-300">{performanceStats.cachedFrames}</span>
+                  </div>
+                  {performanceStats.memoryUsedMB > 0 && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-500">Memory</span>
+                      <span className="text-gray-300">{performanceStats.memoryUsedMB.toFixed(0)} MB</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
+          {/* Hidden video element for PiP */}
+          <video
+            ref={pipVideoRef}
+            style={{ display: 'none' }}
+            playsInline
+            muted
+          />
+
           {/* Loading overlay */}
           {!isInitialized && (
             <div
-              className="flex items-center justify-center bg-black border border-vscode-panel-border"
+              className="flex items-center justify-center bg-black border border-vscode-panel-border max-w-full max-h-full"
               style={{
-                width: project.resolution.width,
-                height: project.resolution.height,
-                maxWidth: '100%',
-                maxHeight: '100%',
+                aspectRatio: `${project.resolution.width} / ${project.resolution.height}`,
+                width: Math.min(project.resolution.width, 800),
               }}
             >
               <div className="flex flex-col items-center gap-2 text-vscode-description">

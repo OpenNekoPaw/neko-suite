@@ -738,6 +738,9 @@ export const en = {
     exitFullscreen: 'Exit Fullscreen',
     // FPS Counter
     toggleFps: 'Toggle FPS Counter',
+    // Picture-in-Picture
+    pictureInPicture: 'Picture-in-Picture',
+    exitPictureInPicture: 'Exit Picture-in-Picture',
     // Preview Overlay
     aiQuickActions: 'AI Quick Actions',
     aiOperations: 'AI Operations',

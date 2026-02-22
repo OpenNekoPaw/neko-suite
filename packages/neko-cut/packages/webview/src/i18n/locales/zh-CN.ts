@@ -740,6 +740,9 @@ export const zhCN: Translations = {
     exitFullscreen: '退出全屏',
     // FPS Counter
     toggleFps: '切换 FPS 显示',
+    // Picture-in-Picture
+    pictureInPicture: '画中画',
+    exitPictureInPicture: '退出画中画',
     // Preview Overlay
     aiQuickActions: 'AI 快捷操作',
     aiOperations: 'AI 操作',

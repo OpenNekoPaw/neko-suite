@@ -148,6 +148,9 @@ export const PreviewControls = memo(function PreviewControls({
   const showFpsCounter = useEditorStore((state) => state.showFpsCounter);
   const toggleFpsCounter = useEditorStore((state) => state.toggleFpsCounter);
 
+  // PiP state from store
+  const isPiPActive = useEditorStore((state) => state.isPiPActive);
+
   // Quality options - display quality name with scale ratio
   const qualityOptions: { value: 'full' | 'high' | 'medium' | 'low'; label: string }[] = [
     { value: 'full', label: `${t('preview.qualityOptions.full')}: 1` },
@@ -319,6 +322,22 @@ export const PreviewControls = memo(function PreviewControls({
             </button>
           </>
         )}
+
+        {/* PiP Button */}
+        <div className="w-px h-4 bg-vscode-panel-border mx-1" />
+        <button
+          onClick={() => (window as unknown as { __previewPanelTogglePiP?: () => void }).__previewPanelTogglePiP?.()}
+          className={`p-1.5 rounded transition-colors ${
+            isPiPActive
+              ? 'bg-vscode-button text-vscode-button-fg'
+              : 'hover:bg-vscode-toolbar-hover'
+          }`}
+          title={isPiPActive ? t('preview.exitPictureInPicture') : t('preview.pictureInPicture')}
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z" />
+          </svg>
+        </button>
 
         {/* Fullscreen Button */}
         {onFullscreenToggle && (
