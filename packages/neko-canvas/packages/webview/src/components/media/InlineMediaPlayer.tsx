@@ -53,7 +53,7 @@ export function InlineMediaPlayer({
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
 
   // =========================================================================
   // Frame rendering
@@ -157,7 +157,7 @@ export function InlineMediaPlayer({
     if (audioStreamUrl) {
       const audioClient = new AudioStreamClient({
         websocketUrl: audioStreamUrl,
-        volume: 0, // muted by default
+        volume: 0.8,
         onError: (err) => console.warn('[InlineMediaPlayer] Audio error:', err),
       });
       audioClientRef.current = audioClient;

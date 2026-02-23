@@ -133,7 +133,7 @@ export function MediaNode({
           return;
         }
         // Probe succeeded, request playback
-        vscode?.postMessage({
+        getVscode()?.postMessage({
           type: 'media:play',
           nodeId: node.id,
           assetPath,
@@ -172,7 +172,7 @@ export function MediaNode({
     setError(null);
     setViewMode('probing');
     setActivePlayingNode(node.id);
-    vscode?.postMessage({
+    getVscode()?.postMessage({
       type: 'media:probe',
       nodeId: node.id,
       assetPath,
@@ -186,13 +186,13 @@ export function MediaNode({
     if (activePlayingNodeId === node.id) {
       setActivePlayingNode(null);
     }
-    vscode?.postMessage({ type: 'media:stop', nodeId: node.id });
+    getVscode()?.postMessage({ type: 'media:stop', nodeId: node.id });
   }, [node.id, activePlayingNodeId, setActivePlayingNode]);
 
   // Open in neko-preview (full editor)
   const openInPreview = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    vscode?.postMessage({
+    getVscode()?.postMessage({
       type: 'openMediaPreview',
       assetPath,
       mediaType,

@@ -13,7 +13,7 @@
 //! No CPU-based format conversion is performed (zero-copy design).
 
 use super::codec_ext::HwEncoderTypeExt;
-use super::traits::{EncodedPacket, Encoder, EncoderConfig, HwEncoderType};
+use super::traits::{EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwEncoderType};
 #[cfg(test)]
 use super::traits::VideoCodec;
 use crate::error::{Error, Result};
@@ -376,7 +376,16 @@ impl HwAccelEncoder {
             HwEncoderType::VideoToolbox => {
                 // VideoToolbox specific options
                 opts.set("allow_sw", "0"); // Disable software fallback within VT
-                opts.set("realtime", "0"); // Prioritize quality over realtime
+                // realtime mode: Ultrafast/Fast → prioritize speed (preview),
+                // Medium/Slow/Veryslow → prioritize quality (export)
+                match config.preset {
+                    EncoderPreset::Ultrafast | EncoderPreset::Fast => {
+                        opts.set("realtime", "1");
+                    }
+                    _ => {
+                        opts.set("realtime", "0");
+                    }
+                }
                 // Use "main" profile for better compatibility (avoid "baseline")
                 if config.profile.is_none() {
                     opts.set("profile", "main");

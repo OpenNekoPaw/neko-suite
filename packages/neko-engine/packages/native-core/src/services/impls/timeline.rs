@@ -473,9 +473,9 @@ impl ITimelineService for TimelineService {
             .ok_or_else(|| Error::Other("GPU context required for timeline streaming".to_string()))?
             .clone();
 
-        let fps = config.fps;
-        let width = config.resolution.width;
-        let height = config.resolution.height;
+        let mut fps = config.fps;
+        let mut width = config.resolution.width;
+        let mut height = config.resolution.height;
         let mut timeline = timeline.clone();
 
         // Auto-calculate duration from elements if not explicitly set
@@ -583,8 +583,22 @@ impl ITimelineService for TimelineService {
                             "Video loop: hot-updating config (seq={}): {}x{} @ {}kbps",
                             state.config_seq, new_config.width, new_config.height, new_config.bitrate / 1000
                         );
-                        if let Err(e) = pipeline.update_config(new_config.clone()) {
-                            tracing::error!("Video loop: failed to update config: {}", e);
+                        match pipeline.update_config(new_config.clone()) {
+                            Ok(flushed_frames) => {
+                                // Deliver flushed frames from old encoder (at old resolution)
+                                for pf in &flushed_frames {
+                                    let frame = pack_preview_frame(pf, width, height, fps);
+                                    let _ = tx.send(frame);
+                                }
+                                // Update local dimensions for subsequent frames
+                                width = new_config.width;
+                                height = new_config.height;
+                                fps = new_config.fps;
+                                pacer.reset();
+                            }
+                            Err(e) => {
+                                tracing::error!("Video loop: failed to update config: {}", e);
+                            }
                         }
                     }
                 }

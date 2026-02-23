@@ -772,7 +772,7 @@ export const PreviewPanel = memo(function PreviewPanel({
     fetchStats();
     const intervalId = setInterval(fetchStats, 1000);
     return () => clearInterval(intervalId);
-  }, [isPlaying, streamWsUrl, project, setCurrentFps, setPerformanceStats]);
+  }, [isPlaying, streamWsUrl, project, setCurrentFps, setPerformanceStats, previewQuality]);
 
   // ==========================================================================
   // Cleanup on unmount

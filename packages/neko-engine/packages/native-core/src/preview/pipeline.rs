@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use crate::encoder::{EncodedPacket, Encoder, EncoderConfig, HwAccelEncoder, VideoCodec};
+use crate::encoder::{EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwAccelEncoder, VideoCodec};
 use crate::error::Result;
 use crate::domain::Timeline;
 use crate::export::{ExportSettings, GpuExportPipeline, GpuPipelineTiming};
@@ -129,19 +129,38 @@ impl PreviewPipeline {
         Ok(())
     }
 
-    /// Update configuration (e.g., resolution change)
-    pub fn update_config(&mut self, config: PreviewPipelineConfig) -> Result<()> {
+    /// Update configuration (e.g., resolution change).
+    /// Flushes the old encoder and returns any remaining frames before resetting.
+    pub fn update_config(&mut self, config: PreviewPipelineConfig) -> Result<Vec<PreviewFrame>> {
+        let mut flushed = Vec::new();
         if self.config.width != config.width || self.config.height != config.height {
             tracing::info!(
-                "PreviewPipeline: resolution change {}x{} -> {}x{}, resetting encoder",
+                "PreviewPipeline: resolution change {}x{} -> {}x{}, flushing & resetting encoder",
                 self.config.width, self.config.height, config.width, config.height
             );
+            // Flush old encoder to retrieve any buffered frames (e.g. B-frames)
+            if self.encoder_initialized {
+                match self.encoder.flush() {
+                    Ok(packets) => {
+                        flushed = packets.iter().map(PreviewFrame::from).collect();
+                        if !flushed.is_empty() {
+                            tracing::info!(
+                                "PreviewPipeline: flushed {} frames from old encoder",
+                                flushed.len()
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("PreviewPipeline: encoder flush failed: {}", e);
+                    }
+                }
+            }
             self.encoder_initialized = false;
             self.frame_count = 0;
             self.gpu_pipeline.update_resolution(config.width, config.height);
         }
         self.config = config;
-        Ok(())
+        Ok(flushed)
     }
 
     /// Hot-update timeline data without recreating the pipeline.
@@ -165,6 +184,11 @@ impl PreviewPipeline {
         encoder_config.bitrate = self.config.bitrate;
         encoder_config.gop_size = Some(self.config.gop_size);
         encoder_config.use_zero_copy_gpu = true; // Enable zero-copy for preview
+        // Preview-optimized: disable B-frames to eliminate pipeline delay,
+        // use baseline profile (no B-frames support), and fastest preset
+        encoder_config.max_b_frames = Some(0);
+        encoder_config.profile = Some("baseline".to_string());
+        encoder_config.preset = EncoderPreset::Ultrafast;
 
         self.encoder.open(&encoder_config)?;
         self.encoder_initialized = true;

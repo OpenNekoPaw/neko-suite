@@ -250,7 +250,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     webviewPanel: vscode.WebviewPanel,
     document: vscode.CustomDocument
   ): Promise<void> {
-    console.log('[NekoCanvas] handleWebviewMessage:', message.type);
     switch (message.type) {
       case 'ready': {
         // Read file content and send to webview
@@ -300,15 +299,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (!assetPath) break;
 
         try {
-          // Resolve asset path against workspace
-          let fileUri: vscode.Uri;
-          if (assetPath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(assetPath)) {
-            fileUri = vscode.Uri.file(assetPath);
-          } else {
-            // Relative path — resolve against document's directory
-            const docDir = vscode.Uri.joinPath(document.uri, '..');
-            fileUri = vscode.Uri.joinPath(docDir, assetPath);
-          }
+          // Resolve to filesystem path (handles webview URIs, absolute, and relative paths)
+          const fsPath = this.resolveAssetPath(assetPath, document.uri);
+          const fileUri = vscode.Uri.file(fsPath);
 
           const ext = assetPath.split('.').pop()?.toLowerCase() ?? '';
           const videoExts = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'ts', 'flv', 'wmv'];
@@ -527,6 +520,12 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
   /** Resolve asset path to absolute filesystem path */
   private resolveAssetPath(assetPath: string, documentUri: vscode.Uri): string {
+    // Handle webview URIs (https:/file+.vscode-resource.vscode-cdn.net/path/to/file)
+    const vscodeResourceMatch = assetPath.match(/vscode-resource\.vscode-cdn\.net(\/.*)/);
+    if (vscodeResourceMatch) {
+      return decodeURIComponent(vscodeResourceMatch[1]!);
+    }
+    // Absolute filesystem path
     if (assetPath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(assetPath)) {
       return assetPath;
     }
