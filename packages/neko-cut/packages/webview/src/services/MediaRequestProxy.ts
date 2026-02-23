@@ -583,10 +583,19 @@ class MediaRequestProxy implements IMediaRequestProxy {
 
 		// Prefer binary data (more efficient), fallback to base64
 		if (response.payload.imageData) {
-			return this.arrayBufferToImageBitmap(
-				response.payload.imageData.buffer as ArrayBuffer,
-				'image/jpeg'
-			);
+			const buffer = response.payload.imageData.buffer as ArrayBuffer;
+			const imgWidth = response.payload.width;
+			const imgHeight = response.payload.height;
+
+			// Check if this is raw RGBA data (width * height * 4 === bufferSize)
+			if (imgWidth && imgHeight && buffer.byteLength === imgWidth * imgHeight * 4) {
+				const clamped = new Uint8ClampedArray(buffer);
+				const imageData = new ImageData(clamped, imgWidth, imgHeight);
+				return createImageBitmap(imageData);
+			}
+
+			// Otherwise treat as encoded image (JPEG)
+			return this.arrayBufferToImageBitmap(buffer, 'image/jpeg');
 		}
 		return this.dataUrlToImageBitmap(response.payload.imageDataUrl!);
 	}

@@ -16,7 +16,8 @@ import { PREVIEW_QUALITY } from '../constants';
 import { postMessage } from '../utils/vscodeApi';
 import { getMediaProxy } from '../services/mediaProxyFactory';
 import { H264StreamClient, AudioStreamClient, FrameScheduler, PlaybackPerformanceMonitor } from '@neko/neko-client';
-import type { ProjectData, MediaElement, CompositeLayerConfig } from '@neko/shared';
+import type { ProjectData, MediaElement, CompositeLayerConfig, ElementTransform } from '@neko/shared';
+import { getComputedTransform } from '../utils/animation';
 
 // =============================================================================
 // Helper Functions
@@ -25,6 +26,10 @@ import type { ProjectData, MediaElement, CompositeLayerConfig } from '@neko/shar
 /**
  * 从 ProjectData 构建 CompositeLayerConfig[]
  * 提取指定时间点的所有可见 media 元素
+ *
+ * 优先使用 animTransform（关键帧动画插值），
+ * 回退到 element.transform（引擎静态变换），
+ * 最后使用居中默认值。
  */
 function buildCompositeLayers(
   project: ProjectData,
@@ -44,19 +49,51 @@ function buildCompositeLayers(
       const mediaElement = element as MediaElement;
       const sourceTime = element.trimStart + (time - element.startTime);
 
+      // EditorElement 可能携带 animTransform（UI 关键帧动画层）
+      const animTransform = (element as { animTransform?: ElementTransform }).animTransform;
+
+      let x: number, y: number, scaleX: number, scaleY: number;
+      let rotation: number, anchorX: number, anchorY: number, opacity: number;
+
+      if (animTransform) {
+        // 有动画变换 → 计算关键帧插值
+        const localTime = sourceTime;
+        const computed = getComputedTransform(animTransform, localTime);
+        x = computed.x;
+        y = computed.y;
+        scaleX = computed.scaleX;
+        scaleY = computed.scaleY;
+        rotation = computed.rotation;
+        anchorX = computed.anchorX;
+        anchorY = computed.anchorY;
+        opacity = computed.opacity;
+      } else if (element.transform) {
+        // 无动画 → 使用引擎静态变换
+        x = element.transform.x;
+        y = element.transform.y;
+        scaleX = element.transform.scaleX;
+        scaleY = element.transform.scaleY;
+        rotation = element.transform.rotation;
+        anchorX = element.transform.anchorX;
+        anchorY = element.transform.anchorY;
+        opacity = element.opacity;
+      } else {
+        // transform 缺失 → 使用居中默认值
+        x = 0.5;
+        y = 0.5;
+        scaleX = 1;
+        scaleY = 1;
+        rotation = 0;
+        anchorX = 0.5;
+        anchorY = 0.5;
+        opacity = element.opacity ?? 1;
+      }
+
       layers.push({
         source: mediaElement.src,
         sourceTime,
-        transform: {
-          x: element.transform.x,
-          y: element.transform.y,
-          scaleX: element.transform.scaleX,
-          scaleY: element.transform.scaleY,
-          rotation: element.transform.rotation,
-          anchorX: element.transform.anchorX,
-          anchorY: element.transform.anchorY,
-        },
-        opacity: element.opacity,
+        transform: { x, y, scaleX, scaleY, rotation, anchorX, anchorY },
+        opacity,
         zIndex: zIndex++,
       });
     }

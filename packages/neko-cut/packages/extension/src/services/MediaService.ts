@@ -682,7 +682,10 @@ export class MediaService implements vscode.Disposable {
 			await this.dispatch({
 				group: 'streams',
 				action: 'update',
-				options: { streamId: this._activeVideoStreamId },
+				options: {
+					streamId: this._activeVideoStreamId,
+					baseDir: this.documentDir ?? undefined,
+				},
 				body: payload.projectData,
 			});
 
@@ -887,7 +890,7 @@ export class MediaService implements vscode.Disposable {
 			tracks: [
 				{
 					id: 'composite-track',
-					trackType: 'video',
+					type: 'video',
 					elements: layers.map((layer, index) => ({
 						id: `layer-${index}`,
 						type: 'media',

@@ -337,7 +337,7 @@ impl Controller for StreamController {
             // Hot-update timeline data without recreating stream
             "update" => {
                 let opts: crate::controllers::utils::StreamControlOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                    serde_json::from_value(options.clone()).unwrap_or_default();
 
                 let stream_id_str = opts.stream_id.ok_or_else(|| {
                     ApiError::InvalidRequest(
@@ -352,15 +352,27 @@ impl Controller for StreamController {
                     )
                 })?;
 
+                // Resolve baseDir from options (same as timelines:stream)
+                let base_dir = options.get("baseDir")
+                    .and_then(|v| v.as_str())
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+
                 // Parse timeline (try domain format first, fallback to JVI)
                 let timeline: Timeline = serde_json::from_value(body.clone())
-                    .or_else(|_| {
+                    .or_else(|domain_err| {
                         let json_str = serde_json::to_string(&body)
                             .map_err(|e| ApiError::InvalidRequest(format!("Invalid JSON: {}", e)))?;
                         let loader = JviLoader::new();
                         let (tl, _) = loader
-                            .load_from_json(&json_str, std::path::PathBuf::from("."))
-                            .map_err(|e| ApiError::InvalidRequest(format!("Invalid timeline/JVI data: {}", e)))?;
+                            .load_from_json(&json_str, base_dir)
+                            .map_err(|e| {
+                                tracing::warn!(
+                                    "streams:update timeline parse failed - domain: {}, JVI: {}",
+                                    domain_err, e
+                                );
+                                ApiError::InvalidRequest(format!("Invalid timeline data: {}", e))
+                            })?;
                         Ok::<Timeline, ApiError>(tl)
                     })
                     .map_err(|e: ApiError| e)?;

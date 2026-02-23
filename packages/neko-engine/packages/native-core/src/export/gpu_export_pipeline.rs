@@ -811,21 +811,37 @@ impl GpuExportPipeline {
         // Step 5: Build GpuLayer using the pooled texture
         let owned_texture = self.layer_texture_pool.in_use.pop().unwrap();
 
-        // Calculate transform: if identity (no transform specified), scale to fit output
+        // Calculate transform: always apply fit-to-canvas base scaling
+        // JVI transform semantics:
+        //   x/y: normalized position (0-1), where 0.5 = center
+        //   scaleX/scaleY: relative to fit-to-canvas size (1.0 = 100% fit)
+        //   anchorX/anchorY: normalized anchor point (0-1)
         let mut transform = element.to_transform_2d();
         if element.transform.is_identity() {
-            // Auto-scale to fit output while maintaining aspect ratio
+            // No transform specified: auto-scale to fit output (letterbox + center)
             let scale_x = self.output_width as f32 / width as f32;
             let scale_y = self.output_height as f32 / height as f32;
-            // Use the smaller scale to fit within output (letterbox)
             let scale = scale_x.min(scale_y);
             transform.scale_x = scale;
             transform.scale_y = scale;
-            // Center the video in the output
             transform.x = self.output_width as f32 / 2.0;
             transform.y = self.output_height as f32 / 2.0;
             transform.anchor_x = 0.5;
             transform.anchor_y = 0.5;
+        } else {
+            // JVI transform: convert normalized coords to pixel coords
+            // and apply fit-to-canvas base scaling to scaleX/scaleY
+            let fit_scale_x = self.output_width as f32 / width as f32;
+            let fit_scale_y = self.output_height as f32 / height as f32;
+            let fit_scale = fit_scale_x.min(fit_scale_y);
+
+            // scaleX: 1.0 means "fit to canvas", user scale is relative to that
+            transform.scale_x *= fit_scale;
+            transform.scale_y *= fit_scale;
+
+            // x/y: normalized (0-1) → pixel coordinates
+            transform.x *= self.output_width as f32;
+            transform.y *= self.output_height as f32;
         }
 
         let layer = {
