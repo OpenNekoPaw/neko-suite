@@ -405,17 +405,34 @@ impl ITimelineService for TimelineService {
 
             let (rgba_data, src_width, src_height) = decoded_rgba;
 
-            // Build transform
-            let transform = Transform2D {
-                x: element.transform.x,
-                y: element.transform.y,
-                scale_x: element.transform.scale_x,
-                scale_y: element.transform.scale_y,
-                rotation: element.transform.rotation,
-                anchor_x: element.transform.anchor_x,
-                anchor_y: element.transform.anchor_y,
-                _padding: 0.0,
-            };
+            // Build transform — apply same coordinate conversion as GpuExportPipeline
+            let mut transform = element.to_transform_2d();
+            if element.transform.is_identity() {
+                // No transform specified: auto-scale to fit output (letterbox + center)
+                let scale_x = width as f32 / src_width as f32;
+                let scale_y = height as f32 / src_height as f32;
+                let scale = scale_x.min(scale_y);
+                transform.scale_x = scale;
+                transform.scale_y = scale;
+                transform.x = width as f32 / 2.0;
+                transform.y = height as f32 / 2.0;
+                transform.anchor_x = 0.5;
+                transform.anchor_y = 0.5;
+            } else {
+                // JVI transform: convert normalized coords to pixel coords
+                // and apply fit-to-canvas base scaling to scaleX/scaleY
+                let fit_scale_x = width as f32 / src_width as f32;
+                let fit_scale_y = height as f32 / src_height as f32;
+                let fit_scale = fit_scale_x.min(fit_scale_y);
+
+                // scaleX: 1.0 means "fit to canvas", user scale is relative to that
+                transform.scale_x *= fit_scale;
+                transform.scale_y *= fit_scale;
+
+                // x/y: normalized (0-1) → pixel coordinates
+                transform.x *= width as f32;
+                transform.y *= height as f32;
+            }
 
             layers.push(CompositeLayer {
                 data: rgba_data,
