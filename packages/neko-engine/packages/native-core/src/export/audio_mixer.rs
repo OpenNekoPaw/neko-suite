@@ -114,6 +114,37 @@ impl AudioMixer {
         Ok(())
     }
 
+    /// Hot-update timeline data without recreating the mixer.
+    /// Opens decoders for any new audio sources, keeps existing decoders intact.
+    pub fn update_timeline(&mut self, timeline: Timeline) {
+        self.timeline = timeline;
+        let new_sources = self.get_audio_sources();
+        for src in &new_sources {
+            if !self.sources.contains_key(src) {
+                let mut decoder = FfmpegAudioDecoder::new()
+                    .with_output_format(SampleFormat::F32)
+                    .with_output_sample_rate(self.output_sample_rate)
+                    .with_output_channels(self.output_channels);
+                match decoder.open(src) {
+                    Ok(info) => {
+                        tracing::info!(
+                            "Hot-update: opened audio decoder for {}: {} Hz, {} ch",
+                            src, info.sample_rate, info.channels
+                        );
+                        self.sources.insert(src.clone(), AudioSource {
+                            decoder,
+                            current_position: -1.0,
+                            residual: Vec::new(),
+                        });
+                    }
+                    Err(e) => {
+                        tracing::error!("Hot-update: failed to open audio decoder for {}: {}", src, e);
+                    }
+                }
+            }
+        }
+    }
+
     fn get_audio_sources(&self) -> Vec<String> {
         let mut sources = Vec::new();
         for track in &self.timeline.tracks {

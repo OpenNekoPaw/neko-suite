@@ -50,7 +50,7 @@ pub mod actions {
 
     pub const STREAMS: &[&str] = &[
         "create", "activate", "pause", "resume", "destroy", "list",
-        "stop", "seek", "speed", "loop", "stats", "update",
+        "stop", "seek", "speed", "loop", "stats", "update", "quality",
     ];
 
     pub const MODELS: &[&str] = &["probe", "capture", "stream", "diff"];

@@ -30,6 +30,11 @@ declare const acquireVsCodeApi: () => {
 // Get VSCode API if available (in webview context)
 const vscode = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCodeApi() : null;
 
+// Expose on window so child components (e.g. MediaNode) can postMessage
+if (vscode) {
+  (window as unknown as Record<string, unknown>).vscode = vscode;
+}
+
 // Initialize locale
 setLocale(detectLocale());
 

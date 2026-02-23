@@ -270,9 +270,56 @@ impl GpuExportPipeline {
         Ok(())
     }
 
+    /// Hot-update timeline data for an active pipeline.
+    /// Opens decoders for any new media sources, keeps existing decoders intact.
+    pub fn update_timeline(&mut self, timeline: Timeline) {
+        // Open decoders for new sources that don't exist yet
+        let new_sources = timeline.get_media_sources();
+        for src in &new_sources {
+            if !self.decoders.contains_key(src) {
+                let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
+                match decoder.open(src) {
+                    Ok(info) => {
+                        tracing::info!(
+                            "Hot-update: opened decoder for new source {}: {}x{} @ {:.2}fps",
+                            src, info.width, info.height, info.fps
+                        );
+                        self.decoders.insert(src.clone(), decoder);
+                    }
+                    Err(e) => {
+                        tracing::error!("Hot-update: failed to open decoder for {}: {}", src, e);
+                    }
+                }
+            }
+        }
+
+        // Update timeline and recalculate duration
+        self.total_frames = timeline.total_frames_at_fps(self.settings.fps);
+        self.timeline = timeline;
+    }
+
     /// Get total frames to export
     pub fn total_frames(&self) -> u64 {
         self.total_frames
+    }
+
+    /// Hot-update output resolution (for preview quality changes).
+    /// Invalidates NV12 output cache and texture pool so they are
+    /// re-allocated at the new size on the next frame.
+    pub fn update_resolution(&mut self, width: u32, height: u32) {
+        if self.output_width == width && self.output_height == height {
+            return;
+        }
+        tracing::info!(
+            "GpuExportPipeline: resolution {}x{} -> {}x{}",
+            self.output_width, self.output_height, width, height
+        );
+        self.output_width = width;
+        self.output_height = height;
+        self.settings.width = width;
+        self.settings.height = height;
+        // Invalidate cached buffers sized for the old resolution
+        self.nv12_output_cache = None;
     }
 
     /// Get output dimensions

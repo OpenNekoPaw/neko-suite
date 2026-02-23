@@ -8,12 +8,17 @@
  * extension.ts → VideoPreviewProvider / AudioPreviewProvider
  *   → PreviewService → NativeEngine (NAPI) → Rust EngineApi
  *   → Webview (H264StreamClient / Web Audio API)
+ *
+ * Exports NekoPreviewAPI for other extensions (e.g. neko-canvas)
+ * to share the same NativeEngine instance and frame server.
  */
 
 import * as vscode from 'vscode';
 import { VideoPreviewProvider } from './providers/VideoPreviewProvider';
 import { AudioPreviewProvider } from './providers/AudioPreviewProvider';
+import { PreviewService } from './services/PreviewService';
 import { StatusBarManager } from './ui/StatusBarManager';
+import type { NekoPreviewAPI } from './types/api';
 
 // =============================================================================
 // Extension State
@@ -22,21 +27,36 @@ import { StatusBarManager } from './ui/StatusBarManager';
 let videoProvider: VideoPreviewProvider | null = null;
 let audioProvider: AudioPreviewProvider | null = null;
 let statusBarManager: StatusBarManager | null = null;
+let sharedPreviewService: PreviewService | null = null;
 
 // =============================================================================
 // Activation
 // =============================================================================
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<NekoPreviewAPI> {
 	console.log('[NekoPreview] Activating extension...');
+
+	// Create shared PreviewService singleton (NativeEngine + frame server)
+	sharedPreviewService = await PreviewService.tryCreate();
+	if (sharedPreviewService) {
+		context.subscriptions.push(sharedPreviewService);
+		console.log(`[NekoPreview] Shared PreviewService ready (port: ${sharedPreviewService.port})`);
+	} else {
+		console.warn('[NekoPreview] Failed to create PreviewService — native engine unavailable');
+	}
 
 	// Create shared status bar
 	statusBarManager = new StatusBarManager();
 	context.subscriptions.push(statusBarManager);
 
-	// Create providers
+	// Create providers and inject shared PreviewService
 	videoProvider = new VideoPreviewProvider(context.extensionUri, statusBarManager);
 	audioProvider = new AudioPreviewProvider(context.extensionUri, statusBarManager);
+
+	if (sharedPreviewService) {
+		videoProvider.setPreviewService(sharedPreviewService);
+		audioProvider.setPreviewService(sharedPreviewService);
+	}
 
 	// Register custom editors
 	context.subscriptions.push(
@@ -109,6 +129,69 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(audioProvider);
 
 	console.log('[NekoPreview] Extension activated');
+
+	// Build and return public API for other extensions
+	const api: NekoPreviewAPI = {
+		get isAvailable() {
+			return sharedPreviewService?.isAvailable ?? false;
+		},
+		get port() {
+			return sharedPreviewService?.port ?? null;
+		},
+		getStreamWebSocketUrl(streamId: string) {
+			return sharedPreviewService?.getStreamWebSocketUrl(streamId) ?? null;
+		},
+		probeMedia(filePath: string) {
+			if (!sharedPreviewService?.isAvailable) {
+				return Promise.reject(new Error('PreviewService not available'));
+			}
+			return sharedPreviewService.probeMedia(filePath);
+		},
+		startPlayback(filePath, mediaInfo, startTime = 0, speed = 1.0) {
+			if (!sharedPreviewService?.isAvailable) {
+				return Promise.reject(new Error('PreviewService not available'));
+			}
+			return sharedPreviewService.startVideoPlayback(filePath, mediaInfo, startTime, speed);
+		},
+		stopStreams(videoStreamId, audioStreamId) {
+			if (!sharedPreviewService?.isAvailable) {
+				return Promise.resolve();
+			}
+			return sharedPreviewService.stopStreams(videoStreamId, audioStreamId);
+		},
+		seekStreams(videoStreamId, audioStreamId, time) {
+			if (!sharedPreviewService?.isAvailable) {
+				return Promise.resolve();
+			}
+			return sharedPreviewService.seekStreams(videoStreamId, audioStreamId, time);
+		},
+		pauseStreams(videoStreamId, audioStreamId) {
+			if (!sharedPreviewService?.isAvailable) {
+				return Promise.resolve();
+			}
+			return sharedPreviewService.pauseStreams(videoStreamId, audioStreamId);
+		},
+		resumeStreams(videoStreamId, audioStreamId) {
+			if (!sharedPreviewService?.isAvailable) {
+				return Promise.resolve();
+			}
+			return sharedPreviewService.resumeStreams(videoStreamId, audioStreamId);
+		},
+		setStreamSpeed(videoStreamId, audioStreamId, speed) {
+			if (!sharedPreviewService?.isAvailable) {
+				return Promise.resolve();
+			}
+			return sharedPreviewService.setStreamSpeed(videoStreamId, audioStreamId, speed);
+		},
+		captureFrame(filePath, time, quality = 80) {
+			if (!sharedPreviewService?.isAvailable) {
+				return Promise.reject(new Error('PreviewService not available'));
+			}
+			return sharedPreviewService.captureFrame(filePath, time, quality);
+		},
+	};
+
+	return api;
 }
 
 // =============================================================================
@@ -126,6 +209,9 @@ export function deactivate(): void {
 
 	statusBarManager?.dispose();
 	statusBarManager = null;
+
+	// sharedPreviewService is disposed via context.subscriptions
+	sharedPreviewService = null;
 
 	console.log('[NekoPreview] Extension deactivated');
 }

@@ -4,7 +4,6 @@ import type { SubtitleElement } from '@neko/shared';
 import { generateWaveform } from '../../utils/waveform';
 import { ShapeElementContent } from '../ShapeElementContent';
 import { getThumbnailService, type ThumbnailData } from '../../services';
-import type { ThumbnailViewport } from '../../utils/pyramidThumbnail';
 
 interface VisibleRange {
   startTime: number;
@@ -45,8 +44,48 @@ function resampleWaveformPeaks(peaks: number[], targetCount: number): number[] {
   return result;
 }
 
+// Helper: compute buffered generation range for thumbnails
+function computeGenRange(
+  visibleRange: VisibleRange | undefined,
+  elementStartTime: number,
+  elementEndTime: number,
+  minTime: number,
+  maxTime: number,
+  elementDuration: number,
+  interval: number,
+): { start: number; end: number } {
+  const visDuration = visibleRange
+    ? visibleRange.endTime - visibleRange.startTime
+    : elementDuration;
+  const buffer = visDuration * 0.5;
+
+  let start: number;
+  let end: number;
+
+  if (visibleRange) {
+    const visStart = Math.max(visibleRange.startTime, elementStartTime);
+    const visEnd = Math.min(visibleRange.endTime, elementEndTime);
+    start = visStart - elementStartTime + minTime - buffer;
+    end = visEnd - elementStartTime + minTime + buffer;
+  } else {
+    start = minTime;
+    end = maxTime;
+  }
+
+  // Align to interval grid and clamp
+  start = Math.max(minTime, Math.floor(start / interval) * interval);
+  end = Math.min(maxTime, Math.ceil(end / interval) * interval);
+
+  // Round to avoid floating point jitter
+  return {
+    start: Math.round(start * 100) / 100,
+    end: Math.round(end * 100) / 100,
+  };
+}
+
 // MediaElementContent - memoized for performance
-// Uses ThumbnailService for memory-efficient thumbnail generation with viewport awareness
+// Virtual scrolling: generates thumbnails for visible range + buffer.
+// Incremental: on scroll only requests thumbnails for newly exposed edges.
 const MediaElementContent = memo(function MediaElementContent({
   element,
   height,
@@ -61,133 +100,116 @@ const MediaElementContent = memo(function MediaElementContent({
   zoomLevel?: number;
   visibleRange?: VisibleRange;
 }) {
+  // Accumulated thumbnails keyed by time — never cleared on scroll
+  const thumbnailMapRef = useRef<Map<number, ThumbnailData>>(new Map());
   const [thumbnails, setThumbnails] = useState<ThumbnailData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const lastViewportRef = useRef<string>('');
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const generatedRangeRef = useRef<{ start: number; end: number } | null>(null);
+  const structureKeyRef = useRef('');
 
-  // Calculate element's time range
-  const elementStartTime = element.startTime;
-  const elementDuration = element.duration - element.trimStart - element.trimEnd;
-  const elementEndTime = elementStartTime + elementDuration;
-
-  // Calculate thumbnail dimensions
-  const thumbHeight = height - 8; // Account for padding
-
-  // Calculate effective pixels per second (with zoom)
+  const thumbHeight = Math.max(1, height - 8);
   const effectivePPS = (pixelsPerSecond ?? 50) * (zoomLevel ?? 1);
 
-  // Calculate viewport intersection with element
-  const viewportInfo = useMemo(() => {
-    if (!visibleRange) {
-      // Fallback: use element's full range
-      return {
-        startTime: element.trimStart,
-        endTime: element.duration - element.trimEnd,
-        pixelsPerSecond: effectivePPS,
-        height: thumbHeight,
-      };
-    }
+  // Element's valid time range (in source-local time) — guard against NaN
+  const minTime = element.trimStart || 0;
+  const maxTime = (element.duration || 0) - (element.trimEnd || 0);
+  const elementDuration = Math.max(0, maxTime - minTime);
+  const elementStartTime = element.startTime || 0;
+  const elementEndTime = elementStartTime + elementDuration;
 
-    // Calculate intersection between visible range and element
-    const visibleStart = Math.max(visibleRange.startTime, elementStartTime);
-    const visibleEnd = Math.min(visibleRange.endTime, elementEndTime);
+  // Dynamically compute thumbnail interval so each thumbnail is ~80px wide on screen.
+  // Clamp to [0.5, 60] seconds to avoid too many or too few frames.
+  const TARGET_THUMB_WIDTH_PX = 80;
+  const rawInterval = effectivePPS > 0 ? TARGET_THUMB_WIDTH_PX / effectivePPS : 30;
+  const interval = Math.max(0.5, Math.min(60, Math.round(rawInterval * 2) / 2)); // snap to 0.5s steps
 
-    // Convert to element-local time (relative to trimStart)
-    const localStart = Math.max(0, visibleStart - elementStartTime + element.trimStart);
-    const localEnd = Math.min(
-      element.duration - element.trimEnd,
-      visibleEnd - elementStartTime + element.trimStart
-    );
+  // structureKey: changes when src, trim, zoom, or height changes → full reset
+  const structureKey = `${element.src}-${minTime}-${maxTime}-${interval}-${thumbHeight}`;
 
-    return {
-      startTime: localStart,
-      endTime: localEnd,
-      pixelsPerSecond: effectivePPS,
-      height: thumbHeight,
-    };
-  }, [
-    visibleRange?.startTime,
-    visibleRange?.endTime,
-    elementStartTime,
-    elementEndTime,
-    element.trimStart,
-    element.trimEnd,
-    element.duration,
-    effectivePPS,
-    thumbHeight,
-  ]);
+  // Compute generation range
+  const { start: genStart, end: genEnd } = computeGenRange(
+    visibleRange, elementStartTime, elementEndTime, minTime, maxTime, elementDuration, interval
+  );
 
-  // Generate cache key with coarse time quantization to avoid excessive re-renders.
-  // Quantize time to 1-second steps — sub-second scrolling should NOT trigger re-generation.
-  const cacheKey = useMemo(() => {
-    const quantizedStart = Math.floor(viewportInfo.startTime);
-    const quantizedEnd = Math.ceil(viewportInfo.endTime);
-    return `${element.src}-${quantizedStart}-${quantizedEnd}-${viewportInfo.pixelsPerSecond.toFixed(0)}-${thumbHeight}`;
-  }, [element.src, viewportInfo.startTime, viewportInfo.endTime, viewportInfo.pixelsPerSecond, thumbHeight]);
-
+  // Single effect handles both reset and incremental loading
   useEffect(() => {
-    // Skip if viewport hasn't changed
-    if (lastViewportRef.current === cacheKey) {
-      return;
-    }
-    lastViewportRef.current = cacheKey;
+    // Guard: skip if element has no valid duration
+    if (elementDuration <= 0 || !element.src) return;
 
-    // Clear previous debounce timer
+    // Reset on structure change
+    if (structureKeyRef.current !== structureKey) {
+      structureKeyRef.current = structureKey;
+      thumbnailMapRef.current.clear();
+      generatedRangeRef.current = null;
+    }
+
+    // Determine which sub-ranges are missing
+    const existing = generatedRangeRef.current;
+    const ranges: Array<{ start: number; end: number }> = [];
+
+    if (!existing) {
+      ranges.push({ start: genStart, end: genEnd });
+    } else {
+      if (genStart < existing.start - 0.01) {
+        ranges.push({ start: genStart, end: Math.min(genEnd, existing.start) });
+      }
+      if (genEnd > existing.end + 0.01) {
+        ranges.push({ start: Math.max(genStart, existing.end), end: genEnd });
+      }
+    }
+
+    if (ranges.length === 0) return;
+
+    // Clear previous debounce
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
     }
 
-    // Abort previous in-flight request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    const delay = !existing ? 0 : 100;
 
-    // Debounce: wait 300ms after last viewport change before requesting
-    // Keep existing thumbnails visible during scrolling (no setIsLoading(true) here)
     debounceTimerRef.current = setTimeout(() => {
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
-
-      // Only show loading spinner on first load (no existing thumbnails)
-      if (thumbnails.length === 0) {
-        setIsLoading(true);
-      }
+      if (!generatedRangeRef.current) setIsLoading(true);
 
       const service = getThumbnailService();
-      const viewport: ThumbnailViewport = {
-        startTime: viewportInfo.startTime,
-        endTime: viewportInfo.endTime,
-        pixelsPerSecond: viewportInfo.pixelsPerSecond,
-        height: viewportInfo.height,
-      };
+      const promises = ranges.map(r =>
+        service.getThumbnailsForViewport(element.src, {
+          startTime: r.start,
+          endTime: r.end,
+          pixelsPerSecond: effectivePPS,
+          height: thumbHeight,
+        })
+      );
 
-      service
-        .getThumbnailsForViewport(element.src, viewport, { signal: abortController.signal })
-        .then((result) => {
-          if (!abortController.signal.aborted) {
-            setThumbnails(result);
-            setIsLoading(false);
+      Promise.all(promises)
+        .then((results) => {
+          const map = thumbnailMapRef.current;
+          for (const batch of results) {
+            for (const t of batch) map.set(t.time, t);
           }
+          const prev = generatedRangeRef.current;
+          generatedRangeRef.current = prev
+            ? { start: Math.min(prev.start, genStart), end: Math.max(prev.end, genEnd) }
+            : { start: genStart, end: genEnd };
+
+          setThumbnails(Array.from(map.values()).sort((a, b) => a.time - b.time));
+          setIsLoading(false);
         })
         .catch((error) => {
-          if (abortController.signal.aborted) return;
           console.warn('[MediaElementContent] Failed to generate thumbnails:', error);
-          // Keep existing thumbnails on error instead of clearing
           setIsLoading(false);
         });
-    }, 300);
+    }, delay);
 
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+        debounceTimerRef.current = null;
       }
     };
-  }, [cacheKey, element.src, viewportInfo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genStart, genEnd, structureKey]);
 
   // If no thumbnails yet, show element name
   if (isLoading || thumbnails.length === 0) {
@@ -205,33 +227,36 @@ const MediaElementContent = memo(function MediaElementContent({
     );
   }
 
-  // Calculate thumbnail positions based on time
-  // Each thumbnail has a time property, we need to position it correctly within the element
-  const elementLocalDuration = element.duration - element.trimStart - element.trimEnd;
+  // Derive actual interval from thumbnail data
+  let actualInterval = interval;
+  if (thumbnails.length >= 2) {
+    const intervals: number[] = [];
+    for (let i = 1; i < Math.min(thumbnails.length, 10); i++) {
+      intervals.push(thumbnails[i].time - thumbnails[i - 1].time);
+    }
+    intervals.sort((a, b) => a - b);
+    actualInterval = intervals[Math.floor(intervals.length / 2)];
+  }
+
+  const thumbWidthPercent = elementDuration > 0
+    ? (actualInterval / elementDuration) * 100
+    : 100;
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {thumbnails.map((thumb, index) => {
-        // Calculate position based on thumbnail time relative to element
-        const localTime = thumb.time - element.trimStart;
-        const positionPercent = (localTime / elementLocalDuration) * 100;
-
-        // Calculate width based on interval between thumbnails
-        const nextThumb = thumbnails[index + 1];
-        const interval = nextThumb
-          ? nextThumb.time - thumb.time
-          : thumbnails.length > 1
-            ? thumb.time - (thumbnails[index - 1]?.time ?? 0)
-            : elementLocalDuration;
-        const widthPercent = (interval / elementLocalDuration) * 100;
+      {thumbnails.map((thumb) => {
+        const localTime = thumb.time - minTime;
+        const positionPercent = elementDuration > 0
+          ? (localTime / elementDuration) * 100
+          : 0;
 
         return (
           <div
-            key={`${thumb.time}-${index}`}
+            key={thumb.time}
             className="absolute h-full"
             style={{
               left: `${Math.max(0, positionPercent)}%`,
-              width: `${Math.min(100 - positionPercent, widthPercent)}%`,
+              width: `${Math.min(100 - Math.max(0, positionPercent), thumbWidthPercent)}%`,
             }}
           >
             <img

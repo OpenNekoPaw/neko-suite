@@ -121,7 +121,7 @@ export class FrameScheduler {
 
 		// Fast path: monotonic PTS → append
 		const len = this.queue.length;
-		if (len === 0 || frame.timestamp >= this.queue[len - 1].timestamp) {
+		if (len === 0 || frame.timestamp >= this.queue[len - 1]!.timestamp) {
 			this.queue.push(frame);
 		} else {
 			// Out-of-order: binary search insert position
@@ -153,13 +153,13 @@ export class FrameScheduler {
 		// This aligns the video PTS timeline to the audio master clock timeline,
 		// compensating for different PTS epoch bases between audio and video streams.
 		if (this.avOffsetUs === null && this.queue.length > 0) {
-			this.avOffsetUs = masterClockUs - this.queue[0].timestamp;
+			this.avOffsetUs = masterClockUs - this.queue[0]!.timestamp;
 			this.stats.avOffsetUs = this.avOffsetUs;
 			console.log(
 				'[FrameScheduler] A/V offset established:',
 				(this.avOffsetUs / 1000).toFixed(1), 'ms',
 				'(masterClock=', (masterClockUs / 1_000_000).toFixed(3), 's',
-				'firstFramePTS=', (this.queue[0].timestamp / 1_000_000).toFixed(3), 's)',
+				'firstFramePTS=', (this.queue[0]!.timestamp / 1_000_000).toFixed(3), 's)',
 			);
 		}
 
@@ -172,7 +172,7 @@ export class FrameScheduler {
 		let lastBehind: VideoFrame | null = null;
 
 		while (this.queue.length > 0) {
-			const head = this.queue[0];
+			const head = this.queue[0]!;
 			const adjustedPts = head.timestamp + offset;
 			const delta = adjustedPts - masterClockUs;
 
@@ -278,7 +278,7 @@ export class FrameScheduler {
 		let hi = this.queue.length;
 		while (lo < hi) {
 			const mid = (lo + hi) >>> 1;
-			if (this.queue[mid].timestamp <= pts) {
+			if (this.queue[mid]!.timestamp <= pts) {
 				lo = mid + 1;
 			} else {
 				hi = mid;

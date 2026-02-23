@@ -24,6 +24,8 @@ export interface CanvasStore {
   selection: CanvasSelection;
   isConnecting: boolean;
   pendingConnectionSource: { nodeId: string; anchor: string } | null;
+  /** Currently playing media node ID (only one at a time) */
+  activePlayingNodeId: string | null;
 
   // ==================== Data Actions ====================
   setCanvasData: (data: CanvasData) => void;
@@ -58,6 +60,10 @@ export interface CanvasStore {
   clearSelection: () => void;
   deleteSelected: () => void;
 
+  // ==================== Media Playback ====================
+  /** Set the currently playing media node (null to clear) */
+  setActivePlayingNode: (nodeId: string | null) => void;
+
   // ==================== History Actions ====================
   undo: () => void;
   redo: () => void;
@@ -87,6 +93,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   selection: { nodeIds: [], connectionIds: [] },
   isConnecting: false,
   pendingConnectionSource: null,
+  activePlayingNodeId: null,
 
   // ==================== Data Actions ====================
   setCanvasData: (data) => {
@@ -474,6 +481,11 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       },
       selection: { nodeIds: [], connectionIds: [] },
     });
+  },
+
+  // ==================== Media Playback ====================
+  setActivePlayingNode: (nodeId) => {
+    set({ activePlayingNodeId: nodeId });
   },
 
   // ==================== History Actions ====================

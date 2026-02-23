@@ -505,6 +505,22 @@ export const PreviewPanel = memo(function PreviewPanel({
     }
   }, [project?.resolution, previewQuality]);
 
+  // Notify engine of quality change (resolution/bitrate hot-update)
+  // Also fires after stream creation (streamWsUrl change) to apply initial quality
+  useEffect(() => {
+    if (!project || !frameServerPort || !streamWsUrl) return;
+
+    const scale = PREVIEW_QUALITY[previewQuality];
+    const width = Math.round(project.resolution.width * scale);
+    const height = Math.round(project.resolution.height * scale);
+
+    console.log(`[PreviewPanel] Sending quality update: ${width}x${height} (scale=${scale}, quality=${previewQuality})`);
+    postMessage({
+      type: 'media:frameServer:projectPlayback:quality',
+      payload: { width, height },
+    });
+  }, [previewQuality, project?.resolution, frameServerPort, streamWsUrl]);
+
   // ==========================================================================
   // Screenshot Capture
   // ==========================================================================
@@ -640,7 +656,12 @@ export const PreviewPanel = memo(function PreviewPanel({
         currentTime: currentTimeRef.current,
         frameIndex: Math.floor(currentTimeRef.current * (project?.fps || 30)),
         targetFps: project?.fps || 30,
-        resolution: `${project?.resolution.width}x${project?.resolution.height}`,
+        resolution: (() => {
+          const scale = PREVIEW_QUALITY[previewQuality];
+          const w = Math.round((project?.resolution.width ?? 0) * scale);
+          const h = Math.round((project?.resolution.height ?? 0) * scale);
+          return `${w}x${h}`;
+        })(),
         bitrate: mediaInfoRef.current.bitrate,
         mode: 'compatible',
         decodeTime: stats.avgDecodeTimeMs,

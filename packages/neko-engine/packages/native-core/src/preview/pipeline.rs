@@ -132,10 +132,22 @@ impl PreviewPipeline {
     /// Update configuration (e.g., resolution change)
     pub fn update_config(&mut self, config: PreviewPipelineConfig) -> Result<()> {
         if self.config.width != config.width || self.config.height != config.height {
+            tracing::info!(
+                "PreviewPipeline: resolution change {}x{} -> {}x{}, resetting encoder",
+                self.config.width, self.config.height, config.width, config.height
+            );
             self.encoder_initialized = false;
+            self.frame_count = 0;
+            self.gpu_pipeline.update_resolution(config.width, config.height);
         }
         self.config = config;
         Ok(())
+    }
+
+    /// Hot-update timeline data without recreating the pipeline.
+    /// Delegates to GpuExportPipeline which opens decoders for new sources.
+    pub fn update_timeline(&mut self, timeline: Timeline) {
+        self.gpu_pipeline.update_timeline(timeline);
     }
 
     /// Initialize encoder with current config

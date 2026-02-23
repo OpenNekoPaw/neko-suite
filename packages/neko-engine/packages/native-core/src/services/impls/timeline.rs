@@ -98,6 +98,44 @@ impl TimelineService {
         }
     }
 
+    /// Hot-update preview quality (resolution/bitrate) for a running stream.
+    /// The video loop picks up the new config on the next frame iteration.
+    pub async fn set_quality(
+        &self,
+        stream_id: &StreamId,
+        width: u32,
+        height: u32,
+        bitrate: Option<u64>,
+        fps: Option<f64>,
+    ) -> Result<()> {
+        if !self.active_streams.contains(stream_id).await {
+            return Err(Error::Other(format!(
+                "Stream '{}' not found for set_quality",
+                stream_id.as_str()
+            )));
+        }
+
+        // Auto-calculate bitrate from resolution if not specified: ~4 bits/pixel
+        let bitrate = bitrate.unwrap_or_else(|| (width as u64) * (height as u64) * 4);
+        let fps = fps.unwrap_or(30.0);
+        let gop_size = (fps as u32).max(1);
+
+        let config = PreviewPipelineConfig {
+            width,
+            height,
+            fps,
+            bitrate,
+            gop_size,
+        };
+
+        tracing::info!(
+            "Setting quality for stream '{}': {}x{} @ {}kbps",
+            stream_id.as_str(), width, height, bitrate / 1000
+        );
+
+        self.playback.update_config(stream_id, config).await
+    }
+
     /// Convert domain BlendMode to GPU BlendMode
     fn convert_blend_mode(mode: &BlendMode) -> GpuBlendMode {
         match mode {
@@ -458,7 +496,7 @@ impl ITimelineService for TimelineService {
         let video_gpu_ctx = gpu_ctx.clone();
         let video_start_time = config.start_time;
         let video_stats_tx = stats_tx.clone();
-        let video_duration = timeline.duration;
+        let mut video_duration = timeline.duration;
         let video_streams_clone = self.active_streams.clone();
         let video_stream_id_clone = video_stream_id.clone();
         let video_join = tokio::task::spawn_blocking(move || {
@@ -499,6 +537,8 @@ impl ITimelineService for TimelineService {
             let mut stats = FrameStatsCollector::new(std::time::Duration::from_secs(10));
             let mut system_monitor = SystemMonitor::new();
             let mut video_frame_idx: u64 = 0;
+            let mut last_timeline_seq: u64 = 0;
+            let mut last_config_seq: u64 = 0;
 
             loop {
                 // Check cancellation
@@ -506,6 +546,31 @@ impl ITimelineService for TimelineService {
 
                 // Read playback state
                 let state = video_state_rx.borrow().clone();
+
+                // Handle timeline hot-update (dedup via sequence counter)
+                if state.timeline_seq != last_timeline_seq {
+                    last_timeline_seq = state.timeline_seq;
+                    if let Some(new_tl) = &state.timeline_update {
+                        let new_timeline = (**new_tl).clone();
+                        tracing::info!("Video loop: hot-updating timeline (seq={})", state.timeline_seq);
+                        pipeline.update_timeline(new_timeline.clone());
+                        video_duration = new_timeline.duration;
+                    }
+                }
+
+                // Handle config hot-update (resolution/bitrate change)
+                if state.config_seq != last_config_seq {
+                    last_config_seq = state.config_seq;
+                    if let Some(new_config) = &state.config_update {
+                        tracing::info!(
+                            "Video loop: hot-updating config (seq={}): {}x{} @ {}kbps",
+                            state.config_seq, new_config.width, new_config.height, new_config.bitrate / 1000
+                        );
+                        if let Err(e) = pipeline.update_config(new_config.clone()) {
+                            tracing::error!("Video loop: failed to update config: {}", e);
+                        }
+                    }
+                }
 
                 // Handle seek (dedup via monotonic sequence counter)
                 if let Some(time) = state.seek_to {
@@ -715,6 +780,7 @@ impl ITimelineService for TimelineService {
             let frame_duration = 1.0 / audio_fps;
             let mut current_time = audio_start_time;
             let mut last_seek_seq: u64 = 0;
+            let mut last_timeline_seq: u64 = 0;
             let sample_rate = mixer.sample_rate();
             let channels = mixer.channels();
             let mut total_frames: u64 = 0;
@@ -733,6 +799,15 @@ impl ITimelineService for TimelineService {
 
                 // Read playback state
                 let state = audio_state_rx.borrow().clone();
+
+                // Handle timeline hot-update (dedup via sequence counter)
+                if state.timeline_seq != last_timeline_seq {
+                    last_timeline_seq = state.timeline_seq;
+                    if let Some(new_tl) = &state.timeline_update {
+                        tracing::info!("Audio loop: hot-updating timeline (seq={})", state.timeline_seq);
+                        mixer.update_timeline((**new_tl).clone());
+                    }
+                }
 
                 // Handle seek (dedup via monotonic sequence counter)
                 if let Some(time) = state.seek_to {
@@ -888,35 +963,26 @@ impl ITimelineService for TimelineService {
     }
 
     async fn update_stream(&self, stream_id: &StreamId, timeline: &Timeline) -> Result<()> {
-        // Initial implementation: stop the existing stream loops and restart with new timeline.
-        // The stream IDs and WebSocket connections are managed by StreamRegistry (external),
-        // so they remain intact. Only the internal playback loops are recycled.
-        //
-        // Future optimization: diff old/new timeline and only rebuild affected decoder pipelines.
+        // Hot-update timeline data via PlaybackState watch channel.
+        // Video/audio loops detect timeline_seq change and call update_timeline()
+        // on their respective pipelines (PreviewPipeline / AudioMixer).
 
-        // Check if stream exists
-        let exists = {
-            let receivers = self.stats_receivers.read().await;
-            receivers.contains_key(stream_id.as_str())
-        };
-
-        if !exists {
+        // Verify stream exists in ActiveStreams
+        if !self.active_streams.contains(stream_id).await {
             return Err(Error::Other(format!(
                 "Stream '{}' not found for update",
                 stream_id.as_str()
             )));
         }
 
+        let timeline_arc = std::sync::Arc::new(timeline.clone());
+
         tracing::info!(
-            "Updating stream '{}' with new timeline data (full rebuild)",
+            "Hot-updating stream '{}' timeline via PlaybackState",
             stream_id.as_str()
         );
 
-        // For now, this is a no-op placeholder that logs the intent.
-        // Full implementation requires decoupling the video/audio loop lifecycle
-        // from the stream creation flow, which is a larger refactor.
-        // The Extension side will handle this by doing stop + re-create when needed.
-        Ok(())
+        self.playback.update_timeline(stream_id, timeline_arc).await
     }
 }
 

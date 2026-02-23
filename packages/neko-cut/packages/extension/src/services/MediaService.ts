@@ -698,6 +698,22 @@ export class MediaService implements vscode.Disposable {
 					speed: payload.speed,
 				},
 			});
+
+		} else if (type === 'media:frameServer:projectPlayback:quality') {
+			if (!this._activeVideoStreamId) return;
+			const payload = msg.payload as { width: number; height: number; bitrate?: number; fps?: number };
+
+			await this.dispatch({
+				group: 'streams',
+				action: 'quality',
+				options: {
+					streamId: this._activeVideoStreamId,
+					width: payload.width,
+					height: payload.height,
+					...(payload.bitrate !== undefined && { bitrate: payload.bitrate }),
+					...(payload.fps !== undefined && { fps: payload.fps }),
+				},
+			});
 		}
 	}
 

@@ -32,6 +32,11 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
 		private readonly _statusBar: StatusBarManager,
 	) {}
 
+	/** Inject a shared PreviewService instance (avoids duplicate NativeEngine) */
+	setPreviewService(service: PreviewService): void {
+		this._previewService = service;
+	}
+
 	// =========================================================================
 	// CustomReadonlyEditorProvider
 	// =========================================================================
@@ -308,7 +313,8 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
 	// =========================================================================
 
 	dispose(): void {
-		this._previewService?.dispose();
+		// Note: do NOT dispose _previewService here — it may be a shared singleton
+		// injected via setPreviewService(). The owner (extension.ts) manages its lifecycle.
 		this._disposables.forEach((d) => d.dispose());
 	}
 }

@@ -34,5 +34,5 @@ export { ZoomControls, MiniMap, LayerPanel } from './controls';
 export type { ZoomControlsProps, MiniMapProps, LayerPanelProps } from './controls';
 
 // Media components
-export { ImageViewer } from './media';
-export type { ImageViewerProps } from './media';
+export { ImageViewer, InlineMediaPlayer } from './media';
+export type { ImageViewerProps, InlineMediaPlayerProps } from './media';

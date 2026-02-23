@@ -13,6 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@neko/neko-client": "workspace:*",
     "@neko/shared": "workspace:*",
     "clsx": "^2.1.1",
     "react": "^18.2.0",

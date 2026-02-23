@@ -272,6 +272,33 @@ impl Controller for StreamController {
                 Ok(ActionResponse::ok("", response))
             }
 
+            // Hot-update preview quality (resolution/bitrate) without recreating stream
+            "quality" => {
+                let stream_id_str = resolve_stream_id(&options, resource_id, "streams:quality")?;
+                let stream_id = StreamId::from_string(stream_id_str.clone());
+
+                let width = options.get("width").and_then(|v| v.as_u64()).map(|v| v as u32)
+                    .ok_or_else(|| ApiError::InvalidRequest("width required for streams:quality".to_string()))?;
+                let height = options.get("height").and_then(|v| v.as_u64()).map(|v| v as u32)
+                    .ok_or_else(|| ApiError::InvalidRequest("height required for streams:quality".to_string()))?;
+                let bitrate = options.get("bitrate").and_then(|v| v.as_u64());
+                let fps = options.get("fps").and_then(|v| v.as_f64());
+
+                self.timeline_service
+                    .set_quality(&stream_id, width, height, bitrate, fps)
+                    .await
+                    .map_err(|e| ApiError::StreamError(format!("Failed to set quality: {}", e)))?;
+
+                let response = serde_json::json!({
+                    "streamId": stream_id_str,
+                    "width": width,
+                    "height": height,
+                    "status": "updated",
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+
             // Playback control actions — delegated to TimelineService via handle_stream_control
             "stop" | "seek" | "speed" | "loop" => {
                 handle_stream_control(

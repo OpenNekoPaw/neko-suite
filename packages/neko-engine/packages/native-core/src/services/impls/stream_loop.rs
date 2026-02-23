@@ -3,9 +3,10 @@
 //! Provides frame pacing + playback state control + cancellation mechanism.
 //! Video/Audio/Timeline start_stream all reuse this abstraction.
 
-use crate::domain::FrameData;
+use crate::domain::{FrameData, Timeline};
 use crate::encoder::EncodedPacket;
 use crate::error::{Error, Result};
+use crate::preview::PreviewPipelineConfig;
 use neko_types::{FrameFormat, LoopRegion, StreamId};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,6 +27,15 @@ pub struct PlaybackState {
     /// Used by paired streams (e.g., timeline video+audio) to dedup seeks
     /// without comparing f64 values, allowing repeated seeks to the same time.
     pub seek_seq: u64,
+    /// Hot-update: new timeline data to apply without recreating the stream.
+    /// Wrapped in Arc to avoid cloning large timeline data through watch channel.
+    pub timeline_update: Option<Arc<Timeline>>,
+    /// Monotonically increasing timeline update sequence counter.
+    pub timeline_seq: u64,
+    /// Hot-update: new preview config (resolution/bitrate) to apply.
+    pub config_update: Option<PreviewPipelineConfig>,
+    /// Monotonically increasing config update sequence counter.
+    pub config_seq: u64,
 }
 
 impl Default for PlaybackState {
@@ -36,6 +46,10 @@ impl Default for PlaybackState {
             loop_region: None,
             seek_to: None,
             seek_seq: 0,
+            timeline_update: None,
+            timeline_seq: 0,
+            config_update: None,
+            config_seq: 0,
         }
     }
 }
@@ -219,6 +233,29 @@ impl StreamPlaybackDelegate {
     pub async fn set_loop(&self, stream_id: &StreamId, region: Option<LoopRegion>) -> Result<()> {
         self.active_streams
             .update_state(stream_id, |s| s.loop_region = region)
+            .await
+    }
+
+    /// Hot-update timeline data for a running stream.
+    /// The video/audio loops will pick up the new timeline on the next frame iteration.
+    pub async fn update_timeline(&self, stream_id: &StreamId, timeline: Arc<Timeline>) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| {
+                s.timeline_update = Some(timeline);
+                s.timeline_seq += 1;
+            })
+            .await
+    }
+
+    /// Hot-update preview config (resolution/bitrate) for a running stream.
+    /// The video loop will pick up the new config on the next frame iteration
+    /// and call pipeline.update_config().
+    pub async fn update_config(&self, stream_id: &StreamId, config: PreviewPipelineConfig) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| {
+                s.config_update = Some(config);
+                s.config_seq += 1;
+            })
             .await
     }
 }

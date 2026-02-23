@@ -1,19 +1,18 @@
 /**
- * PyramidThumbnailGenerator - Multi-resolution thumbnail for large video files
+ * PyramidThumbnailGenerator - Dynamic-interval thumbnail for video timeline
  *
  * Architecture:
- *   L1 (Overview):   1 frame per 60 seconds - for 4GB video full-length display
- *   L2 (Navigation): 1 frame per 10 seconds - for normal editing operations
- *   L3 (Detail):     1 frame per 2 seconds  - on-demand decode for viewport
+ *   Single dynamic level: interval = TARGET_THUMB_WIDTH_PX / pixelsPerSecond
+ *   Clamped to [0.5s, 60s], snapped to 0.5s steps
  *
  * Data flow:
  *   MediaRequestProxy → videos:capture (Rust) → ImageBitmap → dataUrl
  *
  * Key features:
+ * - Dynamic interval: thumbnail density adapts to zoom level (~80px per thumb)
  * - On-demand loading: only loads thumbnails needed for current viewport
- * - Progressive refinement: starts with L1, refines to L2/L3 as user zooms
  * - Memory efficient: uses LRU cache with size limit
- * - Rust engine handles keyframe seek internally via FFmpeg
+ * - Concurrent requests: bounded parallelism (4 concurrent) to Rust backend
  */
 
 import { getMediaProxy } from '../services/mediaProxyFactory';
@@ -87,15 +86,6 @@ export type ThumbnailProgressCallback = (progress: {
 // Constants
 // =============================================================================
 
-/** L1: 1 frame per 60 seconds (overview for 4GB+ videos) */
-const L1_INTERVAL_SECONDS = 60;
-
-/** L2: 1 frame per 10 seconds (navigation level) */
-const L2_INTERVAL_SECONDS = 10;
-
-/** L3: 1 frame per 2 seconds (detail level) */
-const L3_INTERVAL_SECONDS = 2;
-
 /** Default thumbnail height */
 const DEFAULT_THUMBNAIL_HEIGHT = 60;
 
@@ -103,7 +93,20 @@ const DEFAULT_THUMBNAIL_HEIGHT = 60;
 const THUMBNAIL_QUALITY = 0.6;
 
 /** Maximum cached frames per level */
-const MAX_CACHED_FRAMES = 200;
+const MAX_CACHED_FRAMES = 500;
+
+/** Max concurrent thumbnail requests to Rust */
+const MAX_CONCURRENT_REQUESTS = 4;
+
+/** Target thumbnail width in pixels — used to compute dynamic interval */
+const TARGET_THUMB_WIDTH_PX = 80;
+
+/** Compute dynamic interval (seconds) from pixelsPerSecond, clamped to [0.5, 60] */
+function computeInterval(pixelsPerSecond: number): number {
+  if (pixelsPerSecond <= 0) return 30;
+  const raw = TARGET_THUMB_WIDTH_PX / pixelsPerSecond;
+  return Math.max(0.5, Math.min(60, Math.round(raw * 2) / 2)); // snap to 0.5s steps
+}
 
 // =============================================================================
 // PyramidThumbnailGenerator
@@ -117,9 +120,7 @@ export class PyramidThumbnailGenerator {
   private _disposed = false;
 
   // Cached thumbnail data
-  private _l1Data: LevelThumbnailData | null = null;
-  private _l2Cache: Map<number, ThumbnailFrame> = new Map(); // time -> frame
-  private _l3Cache: Map<number, ThumbnailFrame> = new Map(); // time -> frame
+  private _cache: Map<number, ThumbnailFrame> = new Map(); // time -> frame
 
   constructor() {}
 
@@ -147,188 +148,27 @@ export class PyramidThumbnailGenerator {
   }
 
   /**
-   * Generate L1 overview thumbnails (fast, for initial display)
-   */
-  async generateL1(
-    height = DEFAULT_THUMBNAIL_HEIGHT,
-    onProgress?: ThumbnailProgressCallback
-  ): Promise<LevelThumbnailData> {
-    if (!this._videoPath) {
-      throw new Error('Generator not initialized');
-    }
-
-    const frameCount = Math.ceil(this._duration / L1_INTERVAL_SECONDS);
-    const frames: ThumbnailFrame[] = [];
-
-    for (let i = 0; i < frameCount; i++) {
-      const targetTime = i * L1_INTERVAL_SECONDS;
-      const alignedTime = targetTime;
-
-      try {
-        const dataUrl = await this._generateThumbnail(alignedTime, height);
-        frames.push({ time: alignedTime, dataUrl });
-      } catch {
-        frames.push(this._createPlaceholder(alignedTime, height));
-      }
-
-      onProgress?.({
-        level: 'L1',
-        percent: ((i + 1) / frameCount) * 100,
-        message: `Generating overview: ${i + 1}/${frameCount}`,
-      });
-    }
-
-    this._l1Data = {
-      level: 'L1',
-      framesPerSecond: 1 / L1_INTERVAL_SECONDS,
-      frames,
-      startTime: 0,
-      endTime: this._duration,
-      isComplete: true,
-    };
-
-    return this._l1Data;
-  }
-
-  /**
-   * Generate L2 navigation thumbnails for a time range
-   */
-  async generateL2Range(
-    startTime: number,
-    endTime: number,
-    height = DEFAULT_THUMBNAIL_HEIGHT,
-    onProgress?: ThumbnailProgressCallback
-  ): Promise<LevelThumbnailData> {
-    if (!this._videoPath) {
-      throw new Error('Generator not initialized');
-    }
-
-    // Clamp to valid range
-    startTime = Math.max(0, startTime);
-    endTime = Math.min(this._duration, endTime);
-
-    const duration = endTime - startTime;
-    const frameCount = Math.ceil(duration / L2_INTERVAL_SECONDS);
-    const frames: ThumbnailFrame[] = [];
-
-    for (let i = 0; i < frameCount; i++) {
-      const targetTime = startTime + i * L2_INTERVAL_SECONDS;
-      const alignedTime = targetTime;
-
-      // Check cache
-      const cached = this._l2Cache.get(alignedTime);
-      if (cached) {
-        frames.push(cached);
-        continue;
-      }
-
-      try {
-        const dataUrl = await this._generateThumbnail(alignedTime, height);
-        const frame: ThumbnailFrame = { time: alignedTime, dataUrl };
-        frames.push(frame);
-
-        // Cache with LRU eviction
-        this._cacheFrame(this._l2Cache, alignedTime, frame);
-      } catch {
-        frames.push(this._createPlaceholder(alignedTime, height));
-      }
-
-      onProgress?.({
-        level: 'L2',
-        percent: ((i + 1) / frameCount) * 100,
-        message: `Generating navigation: ${i + 1}/${frameCount}`,
-      });
-    }
-
-    return {
-      level: 'L2',
-      framesPerSecond: 1 / L2_INTERVAL_SECONDS,
-      frames,
-      startTime,
-      endTime,
-      isComplete: true,
-    };
-  }
-
-  /**
-   * Generate L3 detail thumbnails for viewport (on-demand)
-   */
-  async generateL3ForViewport(
-    viewport: ThumbnailViewport
-  ): Promise<LevelThumbnailData> {
-    if (!this._videoPath) {
-      throw new Error('Generator not initialized');
-    }
-
-    const { startTime, endTime, height } = viewport;
-    const duration = endTime - startTime;
-
-    // Only generate L3 if viewport is small enough (< 30 seconds)
-    if (duration > 30) {
-      return this.generateL2Range(startTime, endTime, height);
-    }
-
-    const frameCount = Math.ceil(duration / L3_INTERVAL_SECONDS);
-    const frames: ThumbnailFrame[] = [];
-
-    for (let i = 0; i < frameCount; i++) {
-      const targetTime = startTime + i * L3_INTERVAL_SECONDS;
-      const alignedTime = targetTime;
-
-      // Check cache
-      const cached = this._l3Cache.get(alignedTime);
-      if (cached) {
-        frames.push(cached);
-        continue;
-      }
-
-      try {
-        const dataUrl = await this._generateThumbnail(alignedTime, height);
-        const frame: ThumbnailFrame = { time: alignedTime, dataUrl };
-        frames.push(frame);
-
-        // Cache with LRU eviction
-        this._cacheFrame(this._l3Cache, alignedTime, frame);
-      } catch {
-        frames.push(this._createPlaceholder(alignedTime, height));
-      }
-    }
-
-    return {
-      level: 'L3',
-      framesPerSecond: 1 / L3_INTERVAL_SECONDS,
-      frames,
-      startTime,
-      endTime,
-      isComplete: true,
-    };
-  }
-
-  /**
-   * Get thumbnails for a viewport, automatically selecting appropriate level
+   * Get thumbnails for a viewport with dynamic interval based on zoom level.
+   * Interval is computed so each thumbnail is ~80px wide on screen.
    */
   async getThumbnailsForViewport(
     viewport: ThumbnailViewport
   ): Promise<LevelThumbnailData> {
     const { startTime, endTime, pixelsPerSecond, height } = viewport;
-    const duration = endTime - startTime;
+    const interval = computeInterval(pixelsPerSecond);
 
-    // Determine appropriate level based on zoom
-    // If we have more than 50 pixels per second, use L3
-    // If we have more than 10 pixels per second, use L2
-    // Otherwise use L1
+    const frames = await this._generateFramesConcurrent(
+      startTime, endTime, interval, height || DEFAULT_THUMBNAIL_HEIGHT, this._cache, 'L2'
+    );
 
-    if (pixelsPerSecond >= 50 && duration <= 30) {
-      return this.generateL3ForViewport(viewport);
-    } else if (pixelsPerSecond >= 10) {
-      return this.generateL2Range(startTime, endTime, height);
-    } else {
-      // Use L1 if available, otherwise generate it
-      if (!this._l1Data) {
-        await this.generateL1(height);
-      }
-      return this._l1Data!;
-    }
+    return {
+      level: 'L2',
+      framesPerSecond: 1 / interval,
+      frames,
+      startTime,
+      endTime,
+      isComplete: true,
+    };
   }
 
   /**
@@ -342,8 +182,7 @@ export class PyramidThumbnailGenerator {
    * Clear cached data
    */
   clearCache(): void {
-    this._l2Cache.clear();
-    this._l3Cache.clear();
+    this._cache.clear();
   }
 
   /**
@@ -351,9 +190,7 @@ export class PyramidThumbnailGenerator {
    */
   dispose(): void {
     this._disposed = true;
-    this._l1Data = null;
-    this._l2Cache.clear();
-    this._l3Cache.clear();
+    this._cache.clear();
   }
 
   // ===========================================================================
@@ -368,10 +205,78 @@ export class PyramidThumbnailGenerator {
       duration: this._duration,
       width: this._width,
       height: this._height,
-      l1: this._l1Data,
-      l2: null, // L2 is loaded progressively
-      l3: null, // L3 is loaded on-demand
+      l1: null,
+      l2: null,
+      l3: null,
     };
+  }
+
+  /**
+   * Generate frames concurrently with bounded parallelism.
+   * Cached frames are returned immediately; only missing frames hit Rust.
+   */
+  private async _generateFramesConcurrent(
+    startTime: number,
+    endTime: number,
+    interval: number,
+    height: number,
+    cache: Map<number, ThumbnailFrame>,
+    level: ThumbnailLevel,
+    onProgress?: ThumbnailProgressCallback
+  ): Promise<ThumbnailFrame[]> {
+    const duration = endTime - startTime;
+    const frameCount = Math.ceil(duration / interval);
+
+    // Build list of times and separate cached vs uncached
+    const times: number[] = [];
+    const cachedFrames = new Map<number, ThumbnailFrame>();
+    const uncachedTimes: number[] = [];
+
+    for (let i = 0; i < frameCount; i++) {
+      const t = startTime + i * interval;
+      times.push(t);
+      const cached = cache.get(t);
+      if (cached) {
+        cachedFrames.set(t, cached);
+      } else {
+        uncachedTimes.push(t);
+      }
+    }
+
+    // Generate uncached frames with bounded concurrency
+    let completed = cachedFrames.size;
+    const newFrames = new Map<number, ThumbnailFrame>();
+
+    // Process in batches of MAX_CONCURRENT_REQUESTS
+    for (let i = 0; i < uncachedTimes.length; i += MAX_CONCURRENT_REQUESTS) {
+      const batch = uncachedTimes.slice(i, i + MAX_CONCURRENT_REQUESTS);
+      const results = await Promise.allSettled(
+        batch.map(async (t) => {
+          const dataUrl = await this._generateThumbnail(t, height);
+          return { time: t, dataUrl } as ThumbnailFrame;
+        })
+      );
+
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j];
+        const t = batch[j];
+        if (result.status === 'fulfilled') {
+          newFrames.set(t, result.value);
+          this._cacheFrame(cache, t, result.value);
+        } else {
+          newFrames.set(t, this._createPlaceholder(t, height));
+        }
+        completed++;
+        onProgress?.({
+          level,
+          percent: (completed / frameCount) * 100,
+          message: `Generating ${level}: ${completed}/${frameCount}`,
+        });
+      }
+    }
+
+    // Assemble in order
+    return times.map(t => cachedFrames.get(t) ?? newFrames.get(t)!);
   }
 
   /**

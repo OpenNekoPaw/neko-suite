@@ -2,14 +2,17 @@
  * MediaNode - Media asset node component
  *
  * Displays video, image, or audio assets on the canvas.
- * Video/Audio: click to open in neko-preview (hardware-accelerated customEditor).
- * Image: inline viewer with zoom (unchanged).
+ * Video/Audio: click to play inline via H.264+PCM stream (neko-preview API).
+ * Image: inline viewer with zoom.
+ * "Open in Preview" button still available for full-featured playback.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { MediaCanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import { ImageViewer } from '../media/ImageViewer';
+import { InlineMediaPlayer } from '../media/InlineMediaPlayer';
+import { useCanvasStore } from '../../stores/canvasStore';
 import { t } from '../../i18n';
 
 // Get vscode API for postMessage
@@ -31,7 +34,18 @@ export interface MediaNodeProps {
   mediaBaseUrl?: string;
 }
 
-type ViewMode = 'thumbnail' | 'player';
+type ViewMode = 'thumbnail' | 'image-viewer' | 'probing' | 'playing';
+
+interface StreamInfo {
+  videoStreamUrl: string | null;
+  audioStreamUrl: string | null;
+  mediaInfo: {
+    width: number;
+    height: number;
+    fps: number;
+    duration: number;
+  };
+}
 
 // =============================================================================
 // Helpers
@@ -68,7 +82,6 @@ function getMediaUrl(assetPath: string, baseUrl?: string): string {
   if (baseUrl) {
     return `${baseUrl}/${assetPath}`;
   }
-  // VSCode webview 需要特殊处理
   return assetPath;
 }
 
@@ -88,29 +101,106 @@ export function MediaNode({
 }: MediaNodeProps) {
   const { assetPath, thumbnailPath, mediaType, duration } = node.data;
   const fileName = getFileName(assetPath);
-  // Image still uses thumbnail/player toggle; video/audio always open in neko-preview
   const [viewMode, setViewMode] = useState<ViewMode>('thumbnail');
+  const [streamInfo, setStreamInfo] = useState<StreamInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const activePlayingNodeId = useCanvasStore((s) => s.activePlayingNodeId);
+  const setActivePlayingNode = useCanvasStore((s) => s.setActivePlayingNode);
 
   const mediaUrl = getMediaUrl(assetPath, mediaBaseUrl);
   const posterUrl = thumbnailPath ? getMediaUrl(thumbnailPath, mediaBaseUrl) : undefined;
 
-  // Open video/audio in neko-preview via postMessage
+  // If another node starts playing, stop this one
+  useEffect(() => {
+    if (activePlayingNodeId && activePlayingNodeId !== node.id && (viewMode === 'playing' || viewMode === 'probing')) {
+      handleStop();
+    }
+  }, [activePlayingNodeId, node.id, viewMode]);
+
+  // Listen for extension messages
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const msg = event.data;
+      if (msg.nodeId !== node.id) return;
+
+      if (msg.type === 'media:probeResult') {
+        if (msg.error) {
+          setError(msg.error);
+          setViewMode('thumbnail');
+          return;
+        }
+        // Probe succeeded, request playback
+        vscode?.postMessage({
+          type: 'media:play',
+          nodeId: node.id,
+          assetPath,
+          mediaInfo: msg.mediaInfo,
+        });
+      }
+
+      if (msg.type === 'media:streamReady') {
+        if (msg.error) {
+          setError(msg.error);
+          setViewMode('thumbnail');
+          return;
+        }
+        setStreamInfo({
+          videoStreamUrl: msg.videoStreamUrl,
+          audioStreamUrl: msg.audioStreamUrl,
+          mediaInfo: {
+            width: msg.mediaInfo?.width ?? 1920,
+            height: msg.mediaInfo?.height ?? 1080,
+            fps: msg.mediaInfo?.fps ?? 25,
+            duration: msg.mediaInfo?.duration ?? duration ?? 0,
+          },
+        });
+        setViewMode('playing');
+      }
+    };
+
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [node.id, assetPath, duration]);
+
+  // Start inline playback
+  const handlePlay = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (mediaType !== 'video' && mediaType !== 'audio') return;
+    setError(null);
+    setViewMode('probing');
+    setActivePlayingNode(node.id);
+    vscode?.postMessage({
+      type: 'media:probe',
+      nodeId: node.id,
+      assetPath,
+    });
+  }, [assetPath, mediaType, node.id, setActivePlayingNode]);
+
+  // Stop playback
+  const handleStop = useCallback(() => {
+    setViewMode('thumbnail');
+    setStreamInfo(null);
+    if (activePlayingNodeId === node.id) {
+      setActivePlayingNode(null);
+    }
+    vscode?.postMessage({ type: 'media:stop', nodeId: node.id });
+  }, [node.id, activePlayingNodeId, setActivePlayingNode]);
+
+  // Open in neko-preview (full editor)
   const openInPreview = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    // Send assetPath to extension for opening with neko-preview
     vscode?.postMessage({
       type: 'openMediaPreview',
-      assetPath: assetPath,
-      mediaType: mediaType,
+      assetPath,
+      mediaType,
     });
   }, [assetPath, mediaType]);
 
   // Image: switch to inline viewer
   const switchToImageViewer = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (mediaType === 'image') {
-      setViewMode('player');
-    }
+    if (mediaType === 'image') setViewMode('image-viewer');
   }, [mediaType]);
 
   // Image: switch back to thumbnail
@@ -119,10 +209,37 @@ export function MediaNode({
     setViewMode('thumbnail');
   }, []);
 
-  // 渲染媒体内容
+  // =========================================================================
+  // Render media content
+  // =========================================================================
+
   const renderMediaContent = () => {
-    // Image player mode (inline viewer — kept as-is)
-    if (viewMode === 'player' && mediaType === 'image') {
+    // Playing mode: inline H.264+PCM stream player
+    if (viewMode === 'playing' && streamInfo) {
+      return (
+        <InlineMediaPlayer
+          videoStreamUrl={streamInfo.videoStreamUrl}
+          audioStreamUrl={streamInfo.audioStreamUrl}
+          width={streamInfo.mediaInfo.width}
+          height={streamInfo.mediaInfo.height}
+          fps={streamInfo.mediaInfo.fps}
+          duration={streamInfo.mediaInfo.duration}
+          onStop={handleStop}
+        />
+      );
+    }
+
+    // Probing mode: loading indicator
+    if (viewMode === 'probing') {
+      return (
+        <div className="flex-1 relative bg-black/30 flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        </div>
+      );
+    }
+
+    // Image viewer mode
+    if (viewMode === 'image-viewer' && mediaType === 'image') {
       return (
         <div className="flex-1 relative group">
           <ImageViewer
@@ -132,7 +249,6 @@ export function MediaNode({
             objectFit="contain"
             enableZoom={true}
           />
-          {/* 返回缩略图按钮 */}
           <button
             className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-black/80 rounded text-xs text-white z-10 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={switchToThumbnail}
@@ -144,10 +260,10 @@ export function MediaNode({
       );
     }
 
-    // 缩略图模式 (default for all types)
+    // Thumbnail mode (default)
     const handleClick = (mediaType === 'video' || mediaType === 'audio')
-      ? openInPreview       // video/audio → open in neko-preview
-      : switchToImageViewer; // image → inline viewer
+      ? handlePlay
+      : switchToImageViewer;
 
     return (
       <div
@@ -167,20 +283,11 @@ export function MediaNode({
           </div>
         )}
 
-        {/* Video/Audio: play overlay → opens in neko-preview */}
+        {/* Video/Audio: play overlay */}
         {(mediaType === 'video' || mediaType === 'audio') && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
               <span className="text-2xl ml-1">▶</span>
-            </div>
-          </div>
-        )}
-
-        {/* Video/Audio: "Open in Preview" hint */}
-        {(mediaType === 'video' || mediaType === 'audio') && (
-          <div className="absolute bottom-6 left-0 right-0 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="px-2 py-1 bg-black/60 rounded text-xs text-white">
-              Open in Neko Preview
             </div>
           </div>
         )}
@@ -191,6 +298,13 @@ export function MediaNode({
             <div className="px-2 py-1 bg-black/60 rounded text-xs text-white">
               {t('node.clickToView')}
             </div>
+          </div>
+        )}
+
+        {/* Error indicator */}
+        {error && (
+          <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-red-600/80 rounded text-[10px] text-white">
+            ⚠
           </div>
         )}
 

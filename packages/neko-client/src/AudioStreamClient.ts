@@ -551,7 +551,7 @@ export class AudioStreamClient {
 		for (let ch = 0; ch < channels; ch++) {
 			const channelData = audioBuffer.getChannelData(ch);
 			for (let i = 0; i < samplesPerChannel; i++) {
-				channelData[i] = floats[i * channels + ch];
+				channelData[i] = floats[i * channels + ch]!;
 			}
 		}
 

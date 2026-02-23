@@ -100,7 +100,7 @@ export class PlaybackPerformanceMonitor {
 
 		// 清理过期的帧时间戳（保留窗口内的）
 		const cutoff = now - FPS_WINDOW_MS;
-		while (this.frameTimestamps.length > 0 && this.frameTimestamps[0] < cutoff) {
+		while (this.frameTimestamps.length > 0 && this.frameTimestamps[0]! < cutoff) {
 			this.frameTimestamps.shift();
 		}
 	}
@@ -125,7 +125,7 @@ export class PlaybackPerformanceMonitor {
 
 		// 清理过期记录
 		const cutoff = performance.now() - BITRATE_WINDOW_MS;
-		while (this.packetRecords.length > 0 && this.packetRecords[0].timestamp < cutoff) {
+		while (this.packetRecords.length > 0 && this.packetRecords[0]!.timestamp < cutoff) {
 			this.packetRecords.shift();
 		}
 	}
@@ -178,7 +178,7 @@ export class PlaybackPerformanceMonitor {
 		}
 		// 滑动窗口内的帧数 / 窗口时间跨度
 		const windowSpan =
-			this.frameTimestamps[this.frameTimestamps.length - 1] - this.frameTimestamps[0];
+			this.frameTimestamps[this.frameTimestamps.length - 1]! - this.frameTimestamps[0]!;
 		if (windowSpan <= 0) {
 			return 0;
 		}
@@ -191,7 +191,7 @@ export class PlaybackPerformanceMonitor {
 		}
 		const sorted = [...samples].sort((a, b) => a - b);
 		const index = Math.ceil(sorted.length * percentile) - 1;
-		return sorted[Math.max(0, index)];
+		return sorted[Math.max(0, index)]!;
 	}
 
 	private calculateAverage(samples: number[]): number {
