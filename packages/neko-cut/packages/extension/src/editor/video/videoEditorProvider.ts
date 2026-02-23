@@ -289,6 +289,15 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		if (frameServerService) {
 			const mediaService = new MediaService(webviewPanel, frameServerService, document.uri);
 			this.mediaServices.set(docUri, mediaService);
+
+			// Create editor-level stream (paused state) immediately
+			try {
+				const projectData = JSON.parse(document.getText());
+				await mediaService.createEditorStream(projectData);
+			} catch (err) {
+				console.error('[VideoEditorProvider] Failed to create editor stream:', err);
+				// Non-fatal: Webview will show "初始化 GPU..." until stream becomes available
+			}
 		}
 
 		// Create message handler
@@ -484,6 +493,18 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		// Listen for model changes (来自 VideoEditorModel 的事件)
 		const modelChangeSubscription = model.onDidChange(() => {
 			updateWebview();
+
+			// Hot-update timeline data in the active stream
+			const mediaService = this.mediaServices.get(docUri);
+			if (mediaService) {
+				const content = model!.getProjectData();
+				mediaService.handleMessage({
+					type: 'media:frameServer:projectPlayback:update',
+					payload: { projectData: content },
+				}).catch((err: unknown) => {
+					console.warn('[VideoEditorProvider] Timeline update failed:', err);
+				});
+			}
 		});
 
 		// Listen for document changes (来自 VSCode TextDocument 的事件，用于外部修改)
@@ -517,9 +538,10 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 			this.activeWebviews.delete(docUri);
 			this.activeWebviewPanels.delete(docUri);
 
-			// Dispose MediaService
+			// Destroy editor stream, then dispose MediaService
 			const mediaService = this.mediaServices.get(docUri);
 			if (mediaService) {
+				await mediaService.destroyEditorStream();
 				mediaService.dispose();
 				this.mediaServices.delete(docUri);
 			}

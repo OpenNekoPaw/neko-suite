@@ -69,7 +69,8 @@ export class MediaService implements vscode.Disposable {
 	private readonly documentDir: string | undefined;
 	private disposed = false;
 
-	// Active timeline stream IDs (for playback control)
+	// Stream state (editor-level lifecycle)
+	private _streamState: 'idle' | 'active' | 'paused' = 'idle';
 	private _activeVideoStreamId: string | null = null;
 	private _activeAudioStreamId: string | null = null;
 
@@ -200,18 +201,39 @@ export class MediaService implements vscode.Disposable {
 	private async handleVideoCapture(
 		request: GetVideoFrameRequest
 	): Promise<MediaResponse> {
-		const { videoPath, timeInSeconds, quality } = request.payload;
+		const { videoPath, timeInSeconds, quality, scale } = request.payload;
 		const absolutePath = this.resolveMediaPath(videoPath);
+
+		// Build capture options, converting scale (0-1) to pixel dimensions if provided
+		const captureOptions: Record<string, unknown> = {
+			source: absolutePath,
+			time: timeInSeconds,
+			quality: quality ?? 85,
+			format: 'jpeg',
+		};
+
+		// If scale is provided, we need the video dimensions to compute target size.
+		// Probe is cheap (cached in Rust), so the overhead is negligible.
+		if (scale && scale > 0 && scale < 1) {
+			const probeResult = await this.dispatch({
+				group: 'videos',
+				action: 'probe',
+				id: absolutePath,
+			});
+			const probeData = probeResult.data as Record<string, unknown>;
+			const srcWidth = probeData.width as number;
+			const srcHeight = probeData.height as number;
+			if (srcWidth && srcHeight) {
+				captureOptions.width = Math.round(srcWidth * scale);
+				captureOptions.height = Math.round(srcHeight * scale);
+			}
+		}
 
 		const result = await this.dispatch({
 			group: 'videos',
 			action: 'capture',
 			id: absolutePath,
-			options: {
-				time: timeInSeconds,
-				quality: quality ?? 85,
-				format: 'jpeg',
-			},
+			options: captureOptions,
 		});
 
 		// result.data should contain { data (base64), width, height, format }
@@ -250,6 +272,7 @@ export class MediaService implements vscode.Disposable {
 				action: 'capture',
 				id: absolutePath,
 				options: {
+					source: absolutePath,
 					time,
 					quality: request.payload.quality ?? 85,
 					format: 'jpeg',
@@ -304,7 +327,7 @@ export class MediaService implements vscode.Disposable {
 			group: 'videos',
 			action: 'extract',
 			id: absolutePath,
-			options: { type: 'subtitles' },
+			options: { source: absolutePath, type: 'subtitles' },
 		});
 
 		return {
@@ -410,6 +433,7 @@ export class MediaService implements vscode.Disposable {
 			action: 'capture',
 			id: absolutePath,
 			options: {
+				source: absolutePath,
 				time: timeInSeconds,
 				quality: 85,
 				format: 'jpeg',
@@ -473,7 +497,102 @@ export class MediaService implements vscode.Disposable {
 	}
 
 	// =========================================================================
-	// Playback Control → timelines:stream / stop / seek
+	// Editor-Level Stream Lifecycle
+	// =========================================================================
+
+	/**
+	 * Create editor-level stream (paused state).
+	 * Called by VideoEditorProvider when editor opens.
+	 */
+	async createEditorStream(projectData: {
+		tracks: unknown[];
+		resolution: { width: number; height: number };
+		fps: number;
+		duration: number;
+	}): Promise<void> {
+		if (this._activeVideoStreamId) {
+			console.warn('[MediaService] Stream already exists, skipping create');
+			return;
+		}
+
+		console.log('[MediaService] Creating editor-level stream, baseDir:', this.documentDir);
+
+		const result = await this.dispatch({
+			group: 'timelines',
+			action: 'stream',
+			options: {
+				sessionId: 'editor',
+				width: projectData.resolution.width,
+				height: projectData.resolution.height,
+				fps: projectData.fps,
+				startTime: 0,
+				paused: true,
+				baseDir: this.documentDir ?? undefined,
+			},
+			body: projectData,
+		});
+
+		const data = result.data as Record<string, unknown>;
+		this._activeVideoStreamId = (data.videoStreamId as string) ?? (data.streamId as string) ?? null;
+		this._activeAudioStreamId = (data.audioStreamId as string) ?? null;
+		this._streamState = 'paused';
+
+		this.notifyStreamCreated();
+		console.log(
+			`[MediaService] Editor stream created (paused): video=${this._activeVideoStreamId}, audio=${this._activeAudioStreamId}`
+		);
+	}
+
+	/**
+	 * Destroy editor-level stream.
+	 * Called by VideoEditorProvider when editor closes.
+	 */
+	async destroyEditorStream(): Promise<void> {
+		if (!this._activeVideoStreamId) return;
+
+		const stoppedId = this._activeVideoStreamId;
+		try {
+			await this.dispatch({
+				group: 'streams',
+				action: 'stop',
+				options: { streamId: this._activeVideoStreamId },
+			});
+		} catch {
+			// Ignore errors during disposal
+		}
+
+		this._activeVideoStreamId = null;
+		this._activeAudioStreamId = null;
+		this._streamState = 'idle';
+
+		this.sendResponse({
+			type: 'frameServer:streamStopped',
+			streamId: stoppedId,
+		});
+		console.log(`[MediaService] Editor stream destroyed: ${stoppedId}`);
+	}
+
+	/** Notify Webview that stream was created (with WebSocket URLs) */
+	private notifyStreamCreated(): void {
+		if (!this._activeVideoStreamId) return;
+
+		const port = this.frameServer.getPort();
+		const baseUrl = port ? `ws://127.0.0.1:${port}/v1/streams` : null;
+		this.sendResponse({
+			type: 'frameServer:streamCreated',
+			streamId: this._activeVideoStreamId,
+			wsUrl: baseUrl
+				? `${baseUrl}/${this._activeVideoStreamId}`
+				: null,
+			audioStreamId: this._activeAudioStreamId,
+			audioWsUrl: baseUrl && this._activeAudioStreamId
+				? `${baseUrl}/${this._activeAudioStreamId}`
+				: null,
+		});
+	}
+
+	// =========================================================================
+	// Playback Control → streams:*
 	// =========================================================================
 
 	private async handlePlaybackControl(
@@ -481,186 +600,67 @@ export class MediaService implements vscode.Disposable {
 	): Promise<void> {
 		const type = msg.type as string;
 
-		if (type === 'media:frameServer:projectPlayback:start') {
-			const payload = msg.payload as {
-				projectData: {
-					tracks: unknown[];
-					resolution: { width: number; height: number };
-					fps: number;
-					duration: number;
-				};
-				startTime: number;
-				speed?: number;
-			};
+		if (type === 'media:frameServer:projectPlayback:resume') {
+			if (!this._activeVideoStreamId) return;
+			const payload = msg.payload as { startTime: number; speed?: number };
 
-			console.log('[MediaService] Starting timelines:stream, baseDir:', this.documentDir);
-
-			// Start timeline stream via timelines:stream
-			// Engine now returns independent video and audio stream IDs
-			const result = await this.dispatch({
-				group: 'timelines',
-				action: 'stream',
+			await this.dispatch({
+				group: 'streams',
+				action: 'resume',
 				options: {
-					sessionId: 'playback',
-					width: payload.projectData.resolution.width,
-					height: payload.projectData.resolution.height,
-					fps: payload.projectData.fps,
-					startTime: payload.startTime,
-					baseDir: this.documentDir ?? undefined,
+					streamId: this._activeVideoStreamId,
+					time: payload.startTime,
+					speed: payload.speed ?? 1.0,
 				},
+			});
+			this._streamState = 'active';
+
+		} else if (type === 'media:frameServer:projectPlayback:pause') {
+			if (!this._activeVideoStreamId) return;
+
+			await this.dispatch({
+				group: 'streams',
+				action: 'pause',
+				options: { streamId: this._activeVideoStreamId },
+			});
+			this._streamState = 'paused';
+
+		} else if (type === 'media:frameServer:projectPlayback:seek') {
+			if (!this._activeVideoStreamId) return;
+			const payload = msg.payload as { seekTime: number };
+
+			await this.dispatch({
+				group: 'streams',
+				action: 'seek',
+				options: {
+					streamId: this._activeVideoStreamId,
+					time: payload.seekTime,
+				},
+			});
+
+		} else if (type === 'media:frameServer:projectPlayback:update') {
+			if (!this._activeVideoStreamId) return;
+			const payload = msg.payload as { projectData: unknown };
+
+			await this.dispatch({
+				group: 'streams',
+				action: 'update',
+				options: { streamId: this._activeVideoStreamId },
 				body: payload.projectData,
 			});
 
-			const data = result.data as Record<string, unknown>;
-			this._activeVideoStreamId = (data.videoStreamId as string) ?? (data.streamId as string) ?? null;
-			this._activeAudioStreamId = (data.audioStreamId as string) ?? null;
+		} else if (type === 'media:frameServer:projectPlayback:speed') {
+			if (!this._activeVideoStreamId) return;
+			const payload = msg.payload as { speed: number };
 
-			// Set speed if not 1.0
-			if (
-				this._activeVideoStreamId &&
-				payload.speed &&
-				payload.speed !== 1.0
-			) {
-				await this.dispatch({
-					group: 'timelines',
-					action: 'speed',
-					options: {
-						streamId: this._activeVideoStreamId,
-						speed: payload.speed,
-					},
-				});
-			}
-
-			// Notify Webview of the stream IDs and WebSocket URLs
-			if (this._activeVideoStreamId) {
-				const port = this.frameServer.getPort();
-				const baseUrl = port ? `ws://127.0.0.1:${port}/v1/streams` : null;
-				this.sendResponse({
-					type: 'frameServer:streamCreated',
-					streamId: this._activeVideoStreamId,
-					wsUrl: baseUrl
-						? `${baseUrl}/${this._activeVideoStreamId}`
-						: null,
-					audioStreamId: this._activeAudioStreamId,
-					audioWsUrl: baseUrl && this._activeAudioStreamId
-						? `${baseUrl}/${this._activeAudioStreamId}`
-						: null,
-				});
-			}
-
-			console.log(
-				`[MediaService] Stream started: video=${this._activeVideoStreamId}, audio=${this._activeAudioStreamId}`
-			);
-		} else if (type === 'media:frameServer:projectPlayback:stop') {
-			if (this._activeVideoStreamId) {
-				const stoppedVideoStreamId = this._activeVideoStreamId;
-				await this.dispatch({
-					group: 'timelines',
-					action: 'stop',
-					options: { streamId: this._activeVideoStreamId },
-				});
-				console.log(
-					`[MediaService] Stream stopped: video=${this._activeVideoStreamId}`
-				);
-				this._activeVideoStreamId = null;
-				this._activeAudioStreamId = null;
-
-				// Notify Webview that stream was stopped
-				this.sendResponse({
-					type: 'frameServer:streamStopped',
-					streamId: stoppedVideoStreamId,
-				});
-			}
-		} else if (type === 'media:frameServer:projectPlayback:seek') {
-			const payload = msg.payload as {
-				projectData?: unknown;
-				seekTime: number;
-			};
-
-			if (this._activeVideoStreamId) {
-				await this.dispatch({
-					group: 'timelines',
-					action: 'seek',
-					options: {
-						streamId: this._activeVideoStreamId,
-						time: payload.seekTime,
-					},
-				});
-			}
-		} else if (type === 'media:frameServer:playback:start') {
-			// Single video playback — also use timelines:stream
-			const payload = msg.payload as {
-				videoPath: string;
-				startTime?: number;
-				fps?: number;
-				speed?: number;
-			};
-
-			const absolutePath = this.resolveMediaPath(payload.videoPath);
-
-			// Build a simple single-track timeline
-			const timeline = {
-				id: 'single-playback',
-				duration: 3600, // Will be bounded by actual video duration
-				fps: payload.fps ?? 30,
-				resolution: { width: 1920, height: 1080 },
-				tracks: [
-					{
-						id: 'video-track',
-						trackType: 'video',
-						elements: [
-							{
-								id: 'video-0',
-								type: 'media',
-								src: absolutePath,
-								startTime: 0,
-								duration: 3600,
-								trimStart: payload.startTime ?? 0,
-							},
-						],
-					},
-				],
-			};
-
-			const result = await this.dispatch({
-				group: 'timelines',
-				action: 'stream',
+			await this.dispatch({
+				group: 'streams',
+				action: 'speed',
 				options: {
-					sessionId: 'single-playback',
-					fps: payload.fps ?? 30,
-					startTime: payload.startTime ?? 0,
+					streamId: this._activeVideoStreamId,
+					speed: payload.speed,
 				},
-				body: timeline,
 			});
-
-			const data = result.data as Record<string, unknown>;
-			this._activeVideoStreamId = (data.videoStreamId as string) ?? (data.streamId as string) ?? null;
-			this._activeAudioStreamId = (data.audioStreamId as string) ?? null;
-
-			if (
-				this._activeVideoStreamId &&
-				payload.speed &&
-				payload.speed !== 1.0
-			) {
-				await this.dispatch({
-					group: 'timelines',
-					action: 'speed',
-					options: {
-						streamId: this._activeVideoStreamId,
-						speed: payload.speed,
-					},
-				});
-			}
-		} else if (type === 'media:frameServer:playback:stop') {
-			if (this._activeVideoStreamId) {
-				await this.dispatch({
-					group: 'timelines',
-					action: 'stop',
-					options: { streamId: this._activeVideoStreamId },
-				});
-				this._activeVideoStreamId = null;
-				this._activeAudioStreamId = null;
-			}
 		}
 	}
 
@@ -686,8 +686,8 @@ export class MediaService implements vscode.Disposable {
 		try {
 			const resultJson = await this.frameServer.dispatch(
 				buildActionJson({
-					group: 'timelines',
-					action: 'stream_stats',
+					group: 'streams',
+					action: 'stats',
 					options: { streamId },
 				})
 			);
@@ -903,18 +903,7 @@ export class MediaService implements vscode.Disposable {
 
 	dispose(): void {
 		this.disposed = true;
-
-		// Stop active stream if any
-		if (this._activeVideoStreamId) {
-			this.dispatch({
-				group: 'timelines',
-				action: 'stop',
-				options: { streamId: this._activeVideoStreamId },
-			}).catch(() => {
-				// Ignore errors during disposal
-			});
-			this._activeVideoStreamId = null;
-			this._activeAudioStreamId = null;
-		}
+		// destroyEditorStream is async — fire-and-forget during disposal
+		this.destroyEditorStream().catch(() => {});
 	}
 }

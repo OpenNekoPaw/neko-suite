@@ -64,6 +64,8 @@ const MediaElementContent = memo(function MediaElementContent({
   const [thumbnails, setThumbnails] = useState<ThumbnailData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const lastViewportRef = useRef<string>('');
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Calculate element's time range
   const elementStartTime = element.startTime;
@@ -117,51 +119,73 @@ const MediaElementContent = memo(function MediaElementContent({
     thumbHeight,
   ]);
 
-  // Generate cache key for dependency tracking
+  // Generate cache key with coarse time quantization to avoid excessive re-renders.
+  // Quantize time to 1-second steps — sub-second scrolling should NOT trigger re-generation.
   const cacheKey = useMemo(() => {
-    return `${element.src}-${viewportInfo.startTime.toFixed(2)}-${viewportInfo.endTime.toFixed(2)}-${viewportInfo.pixelsPerSecond.toFixed(0)}-${thumbHeight}`;
+    const quantizedStart = Math.floor(viewportInfo.startTime);
+    const quantizedEnd = Math.ceil(viewportInfo.endTime);
+    return `${element.src}-${quantizedStart}-${quantizedEnd}-${viewportInfo.pixelsPerSecond.toFixed(0)}-${thumbHeight}`;
   }, [element.src, viewportInfo.startTime, viewportInfo.endTime, viewportInfo.pixelsPerSecond, thumbHeight]);
 
   useEffect(() => {
-    // Skip if viewport hasn't changed significantly (debounce)
+    // Skip if viewport hasn't changed
     if (lastViewportRef.current === cacheKey) {
       return;
     }
     lastViewportRef.current = cacheKey;
 
-    // Use AbortController for proper cancellation
-    const abortController = new AbortController();
-    setIsLoading(true);
+    // Clear previous debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
 
-    // Use ThumbnailService for efficient thumbnail generation
-    const service = getThumbnailService();
+    // Abort previous in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
 
-    // Use viewport-aware loading for pyramid thumbnails
-    const viewport: ThumbnailViewport = {
-      startTime: viewportInfo.startTime,
-      endTime: viewportInfo.endTime,
-      pixelsPerSecond: viewportInfo.pixelsPerSecond,
-      height: viewportInfo.height,
-    };
+    // Debounce: wait 300ms after last viewport change before requesting
+    // Keep existing thumbnails visible during scrolling (no setIsLoading(true) here)
+    debounceTimerRef.current = setTimeout(() => {
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
 
-    service
-      .getThumbnailsForViewport(element.src, viewport, { signal: abortController.signal })
-      .then((result) => {
-        if (!abortController.signal.aborted) {
-          setThumbnails(result);
+      // Only show loading spinner on first load (no existing thumbnails)
+      if (thumbnails.length === 0) {
+        setIsLoading(true);
+      }
+
+      const service = getThumbnailService();
+      const viewport: ThumbnailViewport = {
+        startTime: viewportInfo.startTime,
+        endTime: viewportInfo.endTime,
+        pixelsPerSecond: viewportInfo.pixelsPerSecond,
+        height: viewportInfo.height,
+      };
+
+      service
+        .getThumbnailsForViewport(element.src, viewport, { signal: abortController.signal })
+        .then((result) => {
+          if (!abortController.signal.aborted) {
+            setThumbnails(result);
+            setIsLoading(false);
+          }
+        })
+        .catch((error) => {
+          if (abortController.signal.aborted) return;
+          console.warn('[MediaElementContent] Failed to generate thumbnails:', error);
+          // Keep existing thumbnails on error instead of clearing
           setIsLoading(false);
-        }
-      })
-      .catch((error) => {
-        // Ignore abort errors
-        if (abortController.signal.aborted) return;
-        console.warn('[MediaElementContent] Failed to generate thumbnails:', error);
-        setThumbnails([]);
-        setIsLoading(false);
-      });
+        });
+    }, 300);
 
     return () => {
-      abortController.abort();
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
   }, [cacheKey, element.src, viewportInfo]);
 

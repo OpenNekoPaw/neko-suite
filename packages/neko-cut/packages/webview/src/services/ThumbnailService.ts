@@ -499,12 +499,9 @@ export class ThumbnailService implements IThumbnailService {
       // Calculate scale factor for thumbnail-sized output
       const scale = mediaInfo.height > 0 ? height / mediaInfo.height : 1;
 
-      // Try to get keyframe times for efficient thumbnail generation
-      const keyframeTimes = await getMediaProxy().getKeyframeTimes(filePath);
-
-      // Select thumbnail times (keyframe-aligned if available)
+      // Select evenly distributed thumbnail times
+      // Rust capture API handles keyframe seek internally via FFmpeg
       const thumbnailTimes = this._selectThumbnailTimes(
-        keyframeTimes,
         count,
         trimStart,
         trimEnd,
@@ -582,77 +579,22 @@ export class ThumbnailService implements IThumbnailService {
   }
 
   /**
-   * Select thumbnail times, preferring keyframe-aligned times when available
-   * For Open GOP videos, always use IDR frame times to ensure decodability
+   * Select evenly distributed thumbnail times within the effective range.
+   * Rust capture API handles keyframe seek internally via FFmpeg's avformat_seek_file.
    */
   private _selectThumbnailTimes(
-    keyframeTimes: number[],
     count: number,
     trimStart: number,
-    trimEnd: number,
+    _trimEnd: number,
     effectiveDuration: number,
     totalDuration: number
   ): number[] {
-    // Filter keyframes within the effective range
-    const validKeyframes = keyframeTimes.filter(
-      t => t >= trimStart && t <= totalDuration - trimEnd - 0.1
-    );
-
-    // If we have enough keyframes, select evenly distributed ones
-    if (validKeyframes.length >= count) {
-      const selectedTimes: number[] = [];
-      const step = (validKeyframes.length - 1) / (count - 1 || 1);
-
-      for (let i = 0; i < count; i++) {
-        const index = Math.round(i * step);
-        const keyframeTime = validKeyframes[Math.min(index, validKeyframes.length - 1)];
-        if (keyframeTime !== undefined) {
-          selectedTimes.push(keyframeTime);
-        }
-      }
-
-      return selectedTimes;
-    }
-
-    // If we have some keyframes but not enough, always use nearest keyframe
-    // (never use linear times for Open GOP videos)
-    if (validKeyframes.length > 0) {
-      const selectedTimes: number[] = [];
-
-      for (let i = 0; i < count; i++) {
-        const progress = count > 1 ? i / (count - 1) : 0;
-        const targetTime = trimStart + progress * effectiveDuration;
-
-        // Find nearest keyframe (always use it, regardless of distance)
-        let nearestKeyframe = validKeyframes[0]!;
-        let nearestDist = Math.abs(nearestKeyframe - targetTime);
-
-        for (const kf of validKeyframes) {
-          const dist = Math.abs(kf - targetTime);
-          if (dist < nearestDist) {
-            nearestDist = dist;
-            nearestKeyframe = kf;
-          }
-        }
-
-        // Always use nearest keyframe (required for Open GOP videos)
-        selectedTimes.push(nearestKeyframe);
-      }
-
-      // Remove duplicates while preserving order
-      const uniqueTimes = [...new Set(selectedTimes)];
-      return uniqueTimes;
-    }
-
-    // Fallback: use evenly distributed times (only when no keyframes available)
-    // This may fail for Open GOP videos
     const selectedTimes: number[] = [];
     for (let i = 0; i < count; i++) {
       const progress = count > 1 ? i / (count - 1) : 0;
       const rawTargetTime = trimStart + progress * effectiveDuration;
       selectedTimes.push(Math.min(rawTargetTime, totalDuration - 0.1));
     }
-
     return selectedTimes;
   }
 

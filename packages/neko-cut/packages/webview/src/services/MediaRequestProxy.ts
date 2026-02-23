@@ -107,13 +107,6 @@ export interface IMediaRequestProxy {
 	}>;
 
 	/**
-	 * Get all keyframe times in the video
-	 * Useful for thumbnail generation - thumbnails should be at keyframe positions
-	 * @returns Array of keyframe times in seconds, sorted ascending
-	 */
-	getKeyframeTimes(videoPath: string): Promise<number[]>;
-
-	/**
 	 * Get engine-side stream pipeline stats (timelines:stream_stats)
 	 * Returns null if no active stream or stats unavailable
 	 */
@@ -511,17 +504,6 @@ class MediaRequestProxy implements IMediaRequestProxy {
 		}
 
 		return response.payload;
-	}
-
-	/**
-	 * Get all keyframe times in the video
-	 * Note: Not implemented for compatible mode (FFmpeg-based)
-	 * Returns empty array - use LocalMediaProcessor for keyframe info
-	 */
-	async getKeyframeTimes(_videoPath: string): Promise<number[]> {
-		// Compatible mode doesn't support keyframe time extraction
-		// This would require FFmpeg to parse the video container
-		return [];
 	}
 
 	// =========================================================================

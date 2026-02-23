@@ -7,13 +7,13 @@
  *   L3 (Detail):     1 frame per 2 seconds  - on-demand decode for viewport
  *
  * Data flow:
- *   MP4Demuxer → getKeyframeTimes() → WebviewVideoDecoder → ImageBitmap → dataUrl
+ *   MediaRequestProxy → videos:capture (Rust) → ImageBitmap → dataUrl
  *
  * Key features:
  * - On-demand loading: only loads thumbnails needed for current viewport
  * - Progressive refinement: starts with L1, refines to L2/L3 as user zooms
  * - Memory efficient: uses LRU cache with size limit
- * - Keyframe-aligned: always uses nearest keyframe for fast decoding
+ * - Rust engine handles keyframe seek internally via FFmpeg
  */
 
 import { getMediaProxy } from '../services/mediaProxyFactory';
@@ -114,7 +114,6 @@ export class PyramidThumbnailGenerator {
   private _duration = 0;
   private _width = 0;
   private _height = 0;
-  private _keyframeTimes: number[] = [];
   private _disposed = false;
 
   // Cached thumbnail data
@@ -144,9 +143,6 @@ export class PyramidThumbnailGenerator {
     this._width = mediaInfo.width;
     this._height = mediaInfo.height;
 
-    // Get keyframe times for efficient thumbnail generation
-    this._keyframeTimes = await getMediaProxy().getKeyframeTimes(videoPath);
-
     return this._buildPyramidData();
   }
 
@@ -166,7 +162,7 @@ export class PyramidThumbnailGenerator {
 
     for (let i = 0; i < frameCount; i++) {
       const targetTime = i * L1_INTERVAL_SECONDS;
-      const alignedTime = this._findNearestKeyframe(targetTime);
+      const alignedTime = targetTime;
 
       try {
         const dataUrl = await this._generateThumbnail(alignedTime, height);
@@ -217,7 +213,7 @@ export class PyramidThumbnailGenerator {
 
     for (let i = 0; i < frameCount; i++) {
       const targetTime = startTime + i * L2_INTERVAL_SECONDS;
-      const alignedTime = this._findNearestKeyframe(targetTime);
+      const alignedTime = targetTime;
 
       // Check cache
       const cached = this._l2Cache.get(alignedTime);
@@ -277,7 +273,7 @@ export class PyramidThumbnailGenerator {
 
     for (let i = 0; i < frameCount; i++) {
       const targetTime = startTime + i * L3_INTERVAL_SECONDS;
-      const alignedTime = this._findNearestKeyframe(targetTime);
+      const alignedTime = targetTime;
 
       // Check cache
       const cached = this._l3Cache.get(alignedTime);
@@ -376,28 +372,6 @@ export class PyramidThumbnailGenerator {
       l2: null, // L2 is loaded progressively
       l3: null, // L3 is loaded on-demand
     };
-  }
-
-  /**
-   * Find nearest keyframe to target time
-   */
-  private _findNearestKeyframe(targetTime: number): number {
-    if (this._keyframeTimes.length === 0) {
-      return targetTime;
-    }
-
-    let nearest = this._keyframeTimes[0]!;
-    let nearestDist = Math.abs(nearest - targetTime);
-
-    for (const kf of this._keyframeTimes) {
-      const dist = Math.abs(kf - targetTime);
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearest = kf;
-      }
-    }
-
-    return nearest;
   }
 
   /**

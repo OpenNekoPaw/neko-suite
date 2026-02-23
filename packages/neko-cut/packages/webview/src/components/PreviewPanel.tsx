@@ -16,30 +16,53 @@ import { PREVIEW_QUALITY } from '../constants';
 import { postMessage } from '../utils/vscodeApi';
 import { getMediaProxy } from '../services/mediaProxyFactory';
 import { H264StreamClient, AudioStreamClient, FrameScheduler, PlaybackPerformanceMonitor } from '@neko/neko-client';
-import type { ProjectData, MediaElement } from '@neko/shared';
+import type { ProjectData, MediaElement, CompositeLayerConfig } from '@neko/shared';
 
 // =============================================================================
 // Helper Functions
 // =============================================================================
 
 /**
- * 获取指定时间点的活跃视频元素
+ * 从 ProjectData 构建 CompositeLayerConfig[]
+ * 提取指定时间点的所有可见 media 元素
  */
-function getActiveVideoElements(project: ProjectData, time: number): MediaElement[] {
-  const videos: MediaElement[] = [];
+function buildCompositeLayers(
+  project: ProjectData,
+  time: number
+): CompositeLayerConfig[] {
+  const layers: CompositeLayerConfig[] = [];
+  let zIndex = 0;
+
   for (const track of project.tracks) {
     for (const element of track.elements) {
       if (element.type !== 'media') continue;
-      const mediaElement = element as MediaElement;
-      if (mediaElement.mediaType === 'image') continue;
       if (element.hidden) continue;
+
       const elementEnd = element.startTime + element.duration;
-      if (time >= element.startTime && time < elementEnd) {
-        videos.push(mediaElement);
-      }
+      if (time < element.startTime || time >= elementEnd) continue;
+
+      const mediaElement = element as MediaElement;
+      const sourceTime = element.trimStart + (time - element.startTime);
+
+      layers.push({
+        source: mediaElement.src,
+        sourceTime,
+        transform: {
+          x: element.transform.x,
+          y: element.transform.y,
+          scaleX: element.transform.scaleX,
+          scaleY: element.transform.scaleY,
+          rotation: element.transform.rotation,
+          anchorX: element.transform.anchorX,
+          anchorY: element.transform.anchorY,
+        },
+        opacity: element.opacity,
+        zIndex: zIndex++,
+      });
     }
   }
-  return videos;
+
+  return layers;
 }
 
 // =============================================================================
@@ -314,21 +337,15 @@ export const PreviewPanel = memo(function PreviewPanel({
   // ==========================================================================
 
   useEffect(() => {
-    if (!frameServerPort || !project || !isPlaying) {
-      postMessage({
-        type: 'media:frameServer:projectPlayback:stop',
-      });
+    if (!frameServerPort || !project) return;
+
+    if (!isPlaying) {
+      // Pause: engine stops encoding loop, stream stays alive
+      postMessage({ type: 'media:frameServer:projectPlayback:pause' });
       return;
     }
 
-    const currentPlayheadTime = currentTimeRef.current;
-    const activeVideos = getActiveVideoElements(project, currentPlayheadTime);
-
-    if (activeVideos.length === 0) {
-      return;
-    }
-
-    // Create / resume AudioContext in user-gesture context (play button click)
+    // Resume playback (stream already created at editor open)
     if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
       audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
     }
@@ -337,24 +354,21 @@ export const PreviewPanel = memo(function PreviewPanel({
     }
 
     // Initialize wall-clock refs
-    playStartTimeRef.current = currentPlayheadTime;
+    playStartTimeRef.current = currentTimeRef.current;
     playWallTimeRef.current = performance.now();
     clockSourceRef.current = 'wall';
 
-    console.log('[PreviewPanel] Starting H264 push for playback');
+    console.log('[PreviewPanel] Resuming H264 push for playback');
     postMessage({
-      type: 'media:frameServer:projectPlayback:start',
+      type: 'media:frameServer:projectPlayback:resume',
       payload: {
-        projectData: project,
-        startTime: currentPlayheadTime,
+        startTime: currentTimeRef.current,
         speed: 1.0,
       },
     });
 
     return () => {
-      postMessage({
-        type: 'media:frameServer:projectPlayback:stop',
-      });
+      postMessage({ type: 'media:frameServer:projectPlayback:pause' });
     };
   }, [frameServerPort, project, isPlaying]);
 
@@ -385,6 +399,55 @@ export const PreviewPanel = memo(function PreviewPanel({
     });
 
     lastRenderedTimeRef.current = currentTime;
+  }, [currentTime, isPlaying, isInitialized, project]);
+
+  // ==========================================================================
+  // Composite High-Quality Frame (when paused)
+  // ==========================================================================
+
+  useEffect(() => {
+    if (!project || isPlaying || !isInitialized) return;
+
+    const abortController = new AbortController();
+
+    const fetchCompositeFrame = async () => {
+      try {
+        const layers = buildCompositeLayers(project, currentTime);
+        if (layers.length === 0) return;
+
+        const bitmap = await getMediaProxy().renderCompositeFrame(
+          layers,
+          currentTime,
+          project.resolution.width,
+          project.resolution.height,
+          [0, 0, 0, 255],
+          { signal: abortController.signal }
+        );
+
+        // Race check: ensure still paused and not aborted
+        if (abortController.signal.aborted) {
+          bitmap.close();
+          return;
+        }
+
+        // Render composite frame to Canvas
+        const canvas = canvasRef.current;
+        if (!canvas) { bitmap.close(); return; }
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { bitmap.close(); return; }
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close();
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+        console.warn('[PreviewPanel] Composite frame failed:', err);
+      }
+    };
+
+    fetchCompositeFrame();
+
+    return () => {
+      abortController.abort();
+    };
   }, [currentTime, isPlaying, isInitialized, project]);
 
   // ==========================================================================
