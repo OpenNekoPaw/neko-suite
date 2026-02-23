@@ -229,6 +229,25 @@ export class H264StreamClient {
 	resetDecoder(): void {
 		if (this.disposed) return;
 		console.log('[H264StreamClient] Resetting decoder for seek');
+
+		// Fast path: reset() + reconfigure avoids tearing down the HW context
+		if (this.decoder && this.decoder.state === 'configured') {
+			try {
+				this.decoder.reset();
+				this.decoder.configure({
+					codec: this.codecString,
+					hardwareAcceleration: 'prefer-hardware',
+					optimizeForLatency: true,
+				});
+				this.waitingForKeyframe = true;
+				this.stats.isDecoderReady = true;
+				console.log('[H264StreamClient] Decoder reset via fast path');
+				return;
+			} catch {
+				console.warn('[H264StreamClient] Fast reset failed, falling back to createDecoder');
+			}
+		}
+
 		this.createDecoder();
 	}
 

@@ -325,10 +325,11 @@ export const PreviewPanel = memo(function PreviewPanel({
     const audioClient = audioClientRef.current;
 
     if (audioClient && audioClient.isClockReady) {
-      // Detect wall→audio clock transition: flush scheduler to reset A/V offset
+      // Detect wall→audio clock transition: re-align scheduler offset without flushing
       if (clockSourceRef.current === 'wall') {
         clockSourceRef.current = 'audio';
-        schedulerRef.current?.flush();
+        const audioTimeUs = audioClient.getCurrentTime() * 1_000_000;
+        schedulerRef.current?.switchClock(audioTimeUs);
         console.log('[PreviewPanel] Clock source switched: wall → audio');
       }
       newTime = audioClient.getCurrentTime();
@@ -742,7 +743,7 @@ export const PreviewPanel = memo(function PreviewPanel({
         gpuLoad: 0,
         cachedFrames: schedStats?.queueLength ?? 0,
         cacheHitRate: 0,
-        droppedFrames: stats.framesDropped + (schedStats?.skipped ?? 0),
+        droppedFrames: stats.framesDropped + (schedStats?.skipped ?? 0) + (schedStats?.backpressure ?? 0),
         renderErrors: 0,
       });
 

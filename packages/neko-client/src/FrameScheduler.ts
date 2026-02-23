@@ -78,8 +78,12 @@ export class FrameScheduler {
 	 * Offset between audio master clock PTS and video frame PTS (microseconds).
 	 * Computed on first schedule() call: avOffsetUs = masterClockUs - firstFrame.timestamp.
 	 * Applied to video PTS before comparison: adjustedPTS = frame.timestamp + avOffsetUs.
+	 * Continuously refined via EMA to track clock drift between engine and client.
 	 */
 	private avOffsetUs: number | null = null;
+
+	/** EMA smoothing factor for offset drift correction (0 = no update, 1 = instant) */
+	private static readonly OFFSET_EMA_ALPHA = 0.05;
 
 	/**
 	 * @param fps Frame rate of the video. Used to compute an adaptive sync
@@ -89,8 +93,10 @@ export class FrameScheduler {
 	 *            that gives the decode pipeline a jitter buffer. Default: 3 frames.
 	 */
 	constructor(fps: number = 25, warmupFrames: number = 3) {
-		const halfFrameUs = Math.round(1_000_000 / fps / 2);
-		this.syncThresholdUs = Math.max(MIN_SYNC_THRESHOLD_US, Math.min(MAX_SYNC_THRESHOLD_US, halfFrameUs));
+		// Use full frame duration (not half) as sync threshold to absorb
+		// decode-time jitter on loopback / low-latency paths.
+		const fullFrameUs = Math.round(1_000_000 / fps);
+		this.syncThresholdUs = Math.max(MIN_SYNC_THRESHOLD_US, Math.min(MAX_SYNC_THRESHOLD_US, fullFrameUs));
 		this.warmupFrames = warmupFrames;
 		this.stats = {
 			enqueued: 0,
@@ -212,13 +218,19 @@ export class FrameScheduler {
 			}
 
 			if (delta <= this.syncThresholdUs) {
-				// Frame is within tolerance — render it
-				// Discard the behind candidate (superseded by this on-time frame)
+				// Frame is within tolerance
 				if (lastBehind) {
-					lastBehind.close();
-					skipped++;
-					this.stats.skipped++;
+					// Render the behind frame first; leave this on-time frame
+					// in the queue for the next rAF tick. This avoids dropping
+					// frames when the decoder outputs a small burst.
+					this.refineOffset(masterClockUs, lastBehind.timestamp);
+					const behindDelta = (lastBehind.timestamp + this.avOffsetUs!) - masterClockUs;
+					this.stats.rendered++;
+					this.stats.lastSyncDelta = behindDelta;
+					this.stats.queueLength = this.queue.length;
+					return { action: 'render', frame: lastBehind, skipped, deltaUs: behindDelta };
 				}
+				this.refineOffset(masterClockUs, head.timestamp);
 				this.queue.shift();
 				this.stats.rendered++;
 				this.stats.lastSyncDelta = delta;
@@ -229,7 +241,8 @@ export class FrameScheduler {
 			// Frame is in the future — wait
 			// But if we have a behind candidate, render it (best effort)
 			if (lastBehind) {
-				const behindDelta = (lastBehind.timestamp + offset) - masterClockUs;
+				this.refineOffset(masterClockUs, lastBehind.timestamp);
+				const behindDelta = (lastBehind.timestamp + this.avOffsetUs!) - masterClockUs;
 				this.stats.rendered++;
 				this.stats.lastSyncDelta = behindDelta;
 				this.stats.queueLength = this.queue.length;
@@ -243,7 +256,8 @@ export class FrameScheduler {
 
 		// Queue exhausted — if we held a behind frame, render it (best available)
 		if (lastBehind) {
-			const behindDelta = (lastBehind.timestamp + offset) - masterClockUs;
+			this.refineOffset(masterClockUs, lastBehind.timestamp);
+			const behindDelta = (lastBehind.timestamp + this.avOffsetUs!) - masterClockUs;
 			this.stats.rendered++;
 			this.stats.lastSyncDelta = behindDelta;
 			this.stats.queueLength = 0;
@@ -268,6 +282,28 @@ export class FrameScheduler {
 		// Reset A/V offset and warmup so they get recalculated from next frame after seek
 		this.avOffsetUs = null;
 		this.warmupComplete = false;
+	}
+
+	/**
+	 * Re-align A/V offset to a new master clock value without flushing the queue.
+	 *
+	 * Use this when the clock source changes (e.g. wall → audio) so that
+	 * already-queued frames are not discarded. The offset is recalculated
+	 * from the head frame's PTS and the supplied clock value.
+	 */
+	switchClock(newMasterClockUs: number): void {
+		if (this.queue.length > 0) {
+			this.avOffsetUs = newMasterClockUs - this.queue[0]!.timestamp;
+			this.stats.avOffsetUs = this.avOffsetUs;
+			console.log(
+				'[FrameScheduler] switchClock: A/V offset recalculated:',
+				(this.avOffsetUs / 1000).toFixed(1), 'ms',
+			);
+		} else {
+			this.avOffsetUs = null;
+			this.stats.avOffsetUs = 0;
+			console.log('[FrameScheduler] switchClock: queue empty, offset reset');
+		}
 	}
 
 	/**
@@ -307,5 +343,17 @@ export class FrameScheduler {
 			}
 		}
 		return lo;
+	}
+
+	/**
+	 * Refine avOffsetUs via EMA to track slow clock drift between
+	 * engine wall-clock (PTS) and client master clock.
+	 * Called each time a frame is rendered.
+	 */
+	private refineOffset(masterClockUs: number, framePts: number): void {
+		if (this.avOffsetUs === null) return;
+		const instantOffset = masterClockUs - framePts;
+		this.avOffsetUs += FrameScheduler.OFFSET_EMA_ALPHA * (instantOffset - this.avOffsetUs);
+		this.stats.avOffsetUs = this.avOffsetUs;
 	}
 }

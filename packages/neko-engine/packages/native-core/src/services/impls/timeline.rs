@@ -655,10 +655,16 @@ impl ITimelineService for TimelineService {
                 // Render frame via PreviewPipeline with timing
                 let frame_start = std::time::Instant::now();
                 match pipeline.render_frame_timed(current_time, background_color) {
-                    Ok((preview_frames, gpu_timing, encode_ns)) => {
+                    Ok((mut preview_frames, gpu_timing, encode_ns)) => {
                         // Measure pack+send time separately
                         let send_start = std::time::Instant::now();
-                        for pf in &preview_frames {
+                        // Override PTS/DTS with wall-clock time so client-side
+                        // frame scheduling stays in sync with actual delivery rate
+                        // (avoids ~6 drops/sec from ideal-vs-real PTS drift).
+                        let wall_pts_us = (pacer.elapsed_secs() * 1_000_000.0) as i64;
+                        for pf in &mut preview_frames {
+                            pf.pts = wall_pts_us;
+                            pf.dts = wall_pts_us;
                             let frame = pack_preview_frame(pf, width, height, fps);
                             let _ = tx.send(frame);
                         }
