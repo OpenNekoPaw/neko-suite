@@ -15,8 +15,10 @@ import { InlineMediaPlayer } from '../media/InlineMediaPlayer';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { t } from '../../i18n';
 
-// Get vscode API for postMessage
-const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
+// Get vscode API for postMessage (lazy — window.vscode is set by CanvasApp at runtime)
+function getVscode(): { postMessage: (msg: unknown) => void } | undefined {
+  return (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
+}
 
 // =============================================================================
 // Types

@@ -120,7 +120,7 @@ export const PreviewPanel = memo(function PreviewPanel({
   isCapturingScreenshot: _isCapturingScreenshot,
 }: PreviewPanelProps = {}) {
   const { t } = useTranslation();
-  const { project, currentTime, isPlaying, previewQuality } = useEditorStore();
+  const { project, currentTime, isPlaying, previewQuality, previewVolume, previewMuted } = useEditorStore();
   const showFpsCounter = useEditorStore((state) => state.showFpsCounter);
   const currentFps = useEditorStore((state) => state.currentFps);
   const performanceStats = useEditorStore((state) => state.performanceStats);
@@ -373,8 +373,12 @@ export const PreviewPanel = memo(function PreviewPanel({
   // Playback Control
   // ==========================================================================
 
+  // Project ref for non-reactive checks in effects that should not re-trigger on project changes
+  const projectRef = useRef(project);
+  projectRef.current = project;
+
   useEffect(() => {
-    if (!frameServerPort || !project) return;
+    if (!frameServerPort || !projectRef.current) return;
 
     if (!isPlaying) {
       // Pause: engine stops encoding loop, stream stays alive
@@ -407,7 +411,7 @@ export const PreviewPanel = memo(function PreviewPanel({
     return () => {
       postMessage({ type: 'media:frameServer:projectPlayback:pause' });
     };
-  }, [frameServerPort, project, isPlaying]);
+  }, [frameServerPort, isPlaying]);
 
   // ==========================================================================
   // Scrubbing (Seek when paused)
@@ -557,6 +561,28 @@ export const PreviewPanel = memo(function PreviewPanel({
       payload: { width, height },
     });
   }, [previewQuality, project?.resolution, frameServerPort, streamWsUrl]);
+
+  // ==========================================================================
+  // Preview Volume Sync — apply previewVolume/previewMuted to AudioStreamClient
+  // ==========================================================================
+
+  useEffect(() => {
+    const audioClient = audioClientRef.current;
+    if (!audioClient) return;
+    audioClient.setVolume(previewMuted ? 0 : previewVolume);
+  }, [previewVolume, previewMuted]);
+
+  // ==========================================================================
+  // Timeline Hot-Update — send project changes to engine during playback
+  // ==========================================================================
+
+  useEffect(() => {
+    if (!frameServerPort || !project || !isPlaying) return;
+    postMessage({
+      type: 'media:frameServer:projectPlayback:update',
+      payload: { projectData: project },
+    });
+  }, [project, isPlaying, frameServerPort]);
 
   // ==========================================================================
   // Screenshot Capture

@@ -250,6 +250,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     webviewPanel: vscode.WebviewPanel,
     document: vscode.CustomDocument
   ): Promise<void> {
+    console.log('[NekoCanvas] handleWebviewMessage:', message.type);
     switch (message.type) {
       case 'ready': {
         // Read file content and send to webview
