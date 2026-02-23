@@ -214,6 +214,8 @@ impl StreamState {
             (StreamState::Created, StreamState::Active)
                 | (StreamState::Active, StreamState::Paused)
                 | (StreamState::Paused, StreamState::Active)
+                | (StreamState::Active, StreamState::Active)   // idempotent resume
+                | (StreamState::Paused, StreamState::Paused)   // idempotent pause
                 | (_, StreamState::Destroyed) // any state can be destroyed
         )
     }

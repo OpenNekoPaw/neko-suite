@@ -215,17 +215,22 @@ export class MediaService implements vscode.Disposable {
 		// If scale is provided, we need the video dimensions to compute target size.
 		// Probe is cheap (cached in Rust), so the overhead is negligible.
 		if (scale && scale > 0 && scale < 1) {
-			const probeResult = await this.dispatch({
-				group: 'videos',
-				action: 'probe',
-				id: absolutePath,
-			});
-			const probeData = probeResult.data as Record<string, unknown>;
-			const srcWidth = probeData.width as number;
-			const srcHeight = probeData.height as number;
-			if (srcWidth && srcHeight) {
-				captureOptions.width = Math.round(srcWidth * scale);
-				captureOptions.height = Math.round(srcHeight * scale);
+			try {
+				const probeResult = await this.dispatch({
+					group: 'videos',
+					action: 'probe',
+					id: absolutePath,
+				});
+				const probeData = probeResult.data as Record<string, unknown>;
+				const srcWidth = probeData.width as number;
+				const srcHeight = probeData.height as number;
+				if (srcWidth && srcHeight) {
+					captureOptions.width = Math.round(srcWidth * scale);
+					captureOptions.height = Math.round(srcHeight * scale);
+				}
+			} catch (probeError) {
+				console.warn(`[MediaService] probe failed, using full resolution:`, probeError);
+				// Continue without scale — full resolution fallback
 			}
 		}
 
@@ -307,10 +312,41 @@ export class MediaService implements vscode.Disposable {
 			id: absolutePath,
 		});
 
+		// Rust MediaInfo has nested videoStreams/audioStreams/subtitleStreams.
+		// Webview expects a flat structure with top-level width/height/fps/codec.
+		const raw = result.data as Record<string, unknown>;
+		const videoStreams = (raw.videoStreams ?? []) as Array<Record<string, unknown>>;
+		const audioStreams = (raw.audioStreams ?? []) as Array<Record<string, unknown>>;
+		const subtitleStreams = (raw.subtitleStreams ?? []) as Array<Record<string, unknown>>;
+		const primaryVideo = videoStreams[0];
+		const primaryAudio = audioStreams[0];
+
+		const payload = {
+			duration: raw.duration as number,
+			width: (primaryVideo?.width as number) ?? 0,
+			height: (primaryVideo?.height as number) ?? 0,
+			fps: (primaryVideo?.fps as number) ?? 0,
+			codec: (primaryVideo?.codec as string) ?? '',
+			format: raw.format as string,
+			bitrate: primaryVideo?.bitrate as number | undefined,
+			hasAudio: audioStreams.length > 0,
+			audioCodec: primaryAudio?.codec as string | undefined,
+			audioSampleRate: primaryAudio?.sampleRate as number | undefined,
+			audioChannels: primaryAudio?.channels as number | undefined,
+			audioBitrate: primaryAudio?.bitrate as number | undefined,
+			hasSubtitles: subtitleStreams.length > 0,
+			subtitleStreams: subtitleStreams.map(s => ({
+				index: s.index as number,
+				codec: s.codec as string,
+				language: s.language as string | undefined,
+				title: s.title as string | undefined,
+			})),
+		};
+
 		return {
 			requestId: request.requestId,
 			type: 'media:response:probeMediaInfo' as never,
-			payload: result.data as never,
+			payload: payload as never,
 		};
 	}
 
@@ -573,7 +609,8 @@ export class MediaService implements vscode.Disposable {
 	}
 
 	/** Notify Webview that stream was created (with WebSocket URLs) */
-	private notifyStreamCreated(): void {
+	/** Re-send stream info to Webview (e.g. after webview ready) */
+	notifyStreamCreated(): void {
 		if (!this._activeVideoStreamId) return;
 
 		const port = this.frameServer.getPort();

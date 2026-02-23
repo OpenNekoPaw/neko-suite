@@ -135,6 +135,8 @@ pub struct StreamConfig {
     pub start_time: f64,
     /// Stream codec
     pub codec: StreamCodec,
+    /// If true, start the stream in paused state (no frames produced until resume)
+    pub initial_paused: bool,
 }
 
 impl Default for StreamConfig {
@@ -144,6 +146,7 @@ impl Default for StreamConfig {
             fps: 30.0,
             start_time: 0.0,
             codec: StreamCodec::H264,
+            initial_paused: false,
         }
     }
 }

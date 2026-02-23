@@ -137,6 +137,7 @@ impl Controller for StreamController {
                     fps,
                     start_time: 0.0,
                     codec,
+                    initial_paused: false,
                 };
 
                 // Create the stream
@@ -207,7 +208,17 @@ impl Controller for StreamController {
                     .await
                     .map_err(|e| ApiError::StreamError(e.to_string()))?;
 
-                // Also resume playback (restarts encoding loop)
+                // Apply seek position if provided (before resuming so first frame is correct)
+                if let Some(time) = options.get("time").and_then(|v| v.as_f64()) {
+                    let _ = self.timeline_service.seek(&sid, time).await;
+                }
+
+                // Apply speed if provided
+                if let Some(speed) = options.get("speed").and_then(|v| v.as_f64()) {
+                    let _ = self.timeline_service.set_speed(&sid, speed).await;
+                }
+
+                // Resume playback (restarts encoding loop)
                 let _ = self.timeline_service.resume(&sid).await;
 
                 let response = serde_json::json!({

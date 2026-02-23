@@ -434,6 +434,11 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 							port: frameServerPort,
 						});
 					}
+					// Re-notify stream info (stream was created before webview loaded)
+					const ms = this.mediaServices.get(docUri);
+					if (ms) {
+						ms.notifyStreamCreated();
+					}
 					return;
 				}
 

@@ -434,7 +434,11 @@ impl ITimelineService for TimelineService {
 
         // === Shared infrastructure for both loops ===
         let cancel = CancellationToken::new();
-        let (state_tx, state_rx) = watch::channel(PlaybackState::default());
+        let initial_state = PlaybackState {
+            paused: config.initial_paused,
+            ..PlaybackState::default()
+        };
+        let (state_tx, state_rx) = watch::channel(initial_state);
 
         // Video broadcast channel
         let (video_tx, video_rx) = broadcast::channel::<FrameData>(64);
