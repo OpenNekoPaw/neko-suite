@@ -655,14 +655,14 @@ impl ITimelineService for TimelineService {
                 // Render frame via PreviewPipeline with timing
                 let frame_start = std::time::Instant::now();
                 match pipeline.render_frame_timed(current_time, background_color) {
-                    Ok((preview_frames, gpu_timing)) => {
-                        // Precise encode timing: measure send separately
-                        let encode_start = std::time::Instant::now();
+                    Ok((preview_frames, gpu_timing, encode_ns)) => {
+                        // Measure pack+send time separately
+                        let send_start = std::time::Instant::now();
                         for pf in &preview_frames {
                             let frame = pack_preview_frame(pf, width, height, fps);
                             let _ = tx.send(frame);
                         }
-                        let encode_submit_ns = encode_start.elapsed().as_nanos() as u64;
+                        let send_ns = send_start.elapsed().as_nanos() as u64;
 
                         let mut timing = FrameTiming::default();
                         timing.hw_decode_ns = gpu_timing.hw_decode_ns;
@@ -673,8 +673,8 @@ impl ITimelineService for TimelineService {
                         timing.cpu_readback_ns = gpu_timing.cpu_readback_ns;
                         timing.decode_ns = gpu_timing.hw_decode_ns;
                         timing.gpu_ns = gpu_timing.total_ns();
-                        timing.encode_submit_ns = encode_submit_ns;
-                        timing.encode_ns = encode_submit_ns;
+                        timing.encode_submit_ns = send_ns;
+                        timing.encode_ns = encode_ns;
                         timing.total_ns = frame_start.elapsed().as_nanos() as u64;
                         stats.record_frame(timing);
                     }
@@ -700,7 +700,7 @@ impl ITimelineService for TimelineService {
                             encode_submit_ms: avg_timing.encode_submit_ns as f64 / 1_000_000.0,
                             decode_time_ms: avg_timing.decode_ns / 1_000_000,
                             composite_time_ms: avg_timing.gpu_ns / 1_000_000,
-                            encode_time_ms: avg_timing.encode_ns / 1_000_000,
+                            encode_time_ms: avg_timing.encode_ns as f64 / 1_000_000.0,
                             mux_time_ms: 0,
                             avg_fps: stats.current_fps(),
                             peak_memory_bytes: system_monitor.peak_memory(),
@@ -735,7 +735,7 @@ impl ITimelineService for TimelineService {
                 encode_submit_ms: avg_timing.encode_submit_ns as f64 / 1_000_000.0,
                 decode_time_ms: avg_timing.decode_ns / 1_000_000,
                 composite_time_ms: avg_timing.gpu_ns / 1_000_000,
-                encode_time_ms: avg_timing.encode_ns / 1_000_000,
+                encode_time_ms: avg_timing.encode_ns as f64 / 1_000_000.0,
                 mux_time_ms: 0,
                 avg_fps: stats.current_fps(),
                 peak_memory_bytes: system_monitor.peak_memory(),

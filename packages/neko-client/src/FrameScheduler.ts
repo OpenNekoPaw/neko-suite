@@ -69,6 +69,8 @@ const MAX_SYNC_THRESHOLD_US = 40_000;
 export class FrameScheduler {
 	private queue: VideoFrame[] = [];
 	private readonly syncThresholdUs: number;
+	private readonly warmupFrames: number;
+	private warmupComplete = false;
 	private stats: FrameSchedulerStats;
 	private disposed = false;
 
@@ -82,10 +84,14 @@ export class FrameScheduler {
 	/**
 	 * @param fps Frame rate of the video. Used to compute an adaptive sync
 	 *            threshold of half a frame duration, clamped to [5ms, 40ms].
+	 * @param warmupFrames Minimum frames to buffer before first render.
+	 *            Audio keeps playing during warmup, creating a natural A/V offset
+	 *            that gives the decode pipeline a jitter buffer. Default: 3 frames.
 	 */
-	constructor(fps: number = 25) {
+	constructor(fps: number = 25, warmupFrames: number = 3) {
 		const halfFrameUs = Math.round(1_000_000 / fps / 2);
 		this.syncThresholdUs = Math.max(MIN_SYNC_THRESHOLD_US, Math.min(MAX_SYNC_THRESHOLD_US, halfFrameUs));
+		this.warmupFrames = warmupFrames;
 		this.stats = {
 			enqueued: 0,
 			rendered: 0,
@@ -148,6 +154,21 @@ export class FrameScheduler {
 	 */
 	schedule(masterClockUs: number): ScheduleResult {
 		let skipped = 0;
+
+		// Warmup phase: wait until we have enough frames buffered before rendering.
+		// During warmup the audio master clock keeps advancing, creating a natural
+		// time offset. When warmup completes and A/V offset is established,
+		// the queued frames become a jitter buffer that absorbs decode timing variations.
+		if (!this.warmupComplete) {
+			if (this.queue.length < this.warmupFrames) {
+				this.stats.queueLength = this.queue.length;
+				return { action: 'wait', skipped: 0, deltaUs: 0 };
+			}
+			this.warmupComplete = true;
+			console.log(
+				'[FrameScheduler] Warmup complete: buffered', this.queue.length, 'frames',
+			);
+		}
 
 		// Establish A/V PTS offset on first call with a queued frame.
 		// This aligns the video PTS timeline to the audio master clock timeline,
@@ -244,8 +265,9 @@ export class FrameScheduler {
 		}
 		this.queue.length = 0;
 		this.stats.queueLength = 0;
-		// Reset A/V offset so it gets recalculated from next frame after seek
+		// Reset A/V offset and warmup so they get recalculated from next frame after seek
 		this.avOffsetUs = null;
+		this.warmupComplete = false;
 	}
 
 	/**

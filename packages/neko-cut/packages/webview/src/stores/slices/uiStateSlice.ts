@@ -67,6 +67,7 @@ export interface UIStateSlice {
     engineRgbaToNv12Ms: number;
     engineCpuReadbackMs: number;
     engineEncodeSubmitMs: number;
+    engineEncodeTimeMs: number;
     engineAvgFps: number;
     engineAudioMixMs: number;
     engineCpuUsagePercent: number;
@@ -107,6 +108,7 @@ export interface UIStateSlice {
     engineRgbaToNv12Ms: number;
     engineCpuReadbackMs: number;
     engineEncodeSubmitMs: number;
+    engineEncodeTimeMs: number;
     engineAvgFps: number;
     engineAudioMixMs: number;
     engineCpuUsagePercent: number;
@@ -186,6 +188,7 @@ export const createUIStateSlice: StateCreator<
     engineRgbaToNv12Ms: 0,
     engineCpuReadbackMs: 0,
     engineEncodeSubmitMs: 0,
+    engineEncodeTimeMs: 0,
     engineAvgFps: 0,
     engineAudioMixMs: 0,
     engineCpuUsagePercent: 0,

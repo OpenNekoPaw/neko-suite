@@ -223,7 +223,7 @@ pub struct ExportStats {
     // Aggregate timing (milliseconds)
     pub decode_time_ms: u64,
     pub composite_time_ms: u64,
-    pub encode_time_ms: u64,
+    pub encode_time_ms: f64,
     pub mux_time_ms: u64,
 
     // Performance metrics

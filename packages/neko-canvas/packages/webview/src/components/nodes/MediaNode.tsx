@@ -7,7 +7,7 @@
  * "Open in Preview" button still available for full-featured playback.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { MediaCanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import { ImageViewer } from '../media/ImageViewer';
@@ -31,6 +31,8 @@ export interface MediaNodeProps {
   onSelect?: (nodeId: string, multi: boolean) => void;
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
+  onResize?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  onResizeEnd?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   /** 媒体文件的基础 URL（用于构建完整路径） */
   mediaBaseUrl?: string;
@@ -98,6 +100,8 @@ export function MediaNode({
   onSelect,
   onDrag,
   onMove,
+  onResize,
+  onResizeEnd,
   onConnectionStart,
   mediaBaseUrl,
 }: MediaNodeProps) {
@@ -106,6 +110,9 @@ export function MediaNode({
   const [viewMode, setViewMode] = useState<ViewMode>('thumbnail');
   const [streamInfo, setStreamInfo] = useState<StreamInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [capturedThumbnail, setCapturedThumbnail] = useState<string | null>(null);
+  const lastPlaybackTimeRef = useRef(0);
+  const cachedMediaInfoRef = useRef<Record<string, unknown> | null>(null);
 
   const activePlayingNodeId = useCanvasStore((s) => s.activePlayingNodeId);
   const setActivePlayingNode = useCanvasStore((s) => s.setActivePlayingNode);
@@ -120,11 +127,30 @@ export function MediaNode({
     }
   }, [activePlayingNodeId, node.id, viewMode]);
 
+  // Request thumbnail capture for video/audio nodes without a thumbnail
+  useEffect(() => {
+    if (mediaType === 'video' && !thumbnailPath && assetPath) {
+      getVscode()?.postMessage({
+        type: 'media:captureFrame',
+        nodeId: node.id,
+        assetPath,
+        time: 0,
+      });
+    }
+  }, [mediaType, thumbnailPath, assetPath, node.id]);
+
   // Listen for extension messages
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const msg = event.data;
       if (msg.nodeId !== node.id) return;
+
+      if (msg.type === 'media:captureFrameResult') {
+        if (!msg.error && msg.dataUrl) {
+          setCapturedThumbnail(msg.dataUrl as string);
+        }
+        return;
+      }
 
       if (msg.type === 'media:probeResult') {
         if (msg.error) {
@@ -132,12 +158,15 @@ export function MediaNode({
           setViewMode('thumbnail');
           return;
         }
-        // Probe succeeded, request playback
+        // Cache mediaInfo for resume
+        cachedMediaInfoRef.current = msg.mediaInfo as Record<string, unknown>;
+        // Probe succeeded, request playback from last position
         getVscode()?.postMessage({
           type: 'media:play',
           nodeId: node.id,
           assetPath,
           mediaInfo: msg.mediaInfo,
+          startTime: lastPlaybackTimeRef.current,
         });
       }
 
@@ -172,22 +201,38 @@ export function MediaNode({
     setError(null);
     setViewMode('probing');
     setActivePlayingNode(node.id);
-    getVscode()?.postMessage({
-      type: 'media:probe',
-      nodeId: node.id,
-      assetPath,
-    });
+
+    // If we have cached mediaInfo from a previous probe, skip probe and go straight to play
+    if (cachedMediaInfoRef.current) {
+      getVscode()?.postMessage({
+        type: 'media:play',
+        nodeId: node.id,
+        assetPath,
+        mediaInfo: cachedMediaInfoRef.current,
+        startTime: lastPlaybackTimeRef.current,
+      });
+    } else {
+      getVscode()?.postMessage({
+        type: 'media:probe',
+        nodeId: node.id,
+        assetPath,
+      });
+    }
   }, [assetPath, mediaType, node.id, setActivePlayingNode]);
 
   // Stop playback
-  const handleStop = useCallback(() => {
+  const handleStop = useCallback((stoppedTime?: number) => {
+    if (typeof stoppedTime === 'number') {
+      // If playback reached the end, reset to beginning
+      lastPlaybackTimeRef.current = stoppedTime >= (duration ?? 0) ? 0 : stoppedTime;
+    }
     setViewMode('thumbnail');
     setStreamInfo(null);
     if (activePlayingNodeId === node.id) {
       setActivePlayingNode(null);
     }
     getVscode()?.postMessage({ type: 'media:stop', nodeId: node.id });
-  }, [node.id, activePlayingNodeId, setActivePlayingNode]);
+  }, [node.id, activePlayingNodeId, setActivePlayingNode, duration]);
 
   // Open in neko-preview (full editor)
   const openInPreview = useCallback((e: React.MouseEvent) => {
@@ -226,6 +271,7 @@ export function MediaNode({
           height={streamInfo.mediaInfo.height}
           fps={streamInfo.mediaInfo.fps}
           duration={streamInfo.mediaInfo.duration}
+          startTime={lastPlaybackTimeRef.current}
           onStop={handleStop}
         />
       );
@@ -272,9 +318,9 @@ export function MediaNode({
         className="flex-1 relative bg-black/30 overflow-hidden cursor-pointer group"
         onClick={handleClick}
       >
-        {thumbnailPath || mediaType === 'image' ? (
+        {thumbnailPath || capturedThumbnail || mediaType === 'image' ? (
           <img
-            src={mediaType === 'image' ? mediaUrl : (posterUrl || mediaUrl)}
+            src={mediaType === 'image' ? mediaUrl : (posterUrl || capturedThumbnail || mediaUrl)}
             alt={fileName}
             className="w-full h-full object-cover"
             draggable={false}
@@ -333,6 +379,8 @@ export function MediaNode({
       onSelect={onSelect}
       onDrag={onDrag}
       onMove={onMove}
+      onResize={onResize}
+      onResizeEnd={onResizeEnd}
       onConnectionStart={onConnectionStart}
     >
       <div className="flex flex-col h-full">

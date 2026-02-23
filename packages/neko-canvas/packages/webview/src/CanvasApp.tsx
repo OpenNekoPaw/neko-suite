@@ -91,6 +91,8 @@ export function CanvasApp() {
     undo,
     redo,
     moveNodeEnd,
+    resizeNode,
+    resizeNodeEnd,
   } = useCanvasStore();
 
   // Derive computed values from canvasData
@@ -263,6 +265,16 @@ export function CanvasApp() {
   const handleNodeMove = useCallback((nodeId: string, position: { x: number; y: number }) => {
     moveNodeEnd(nodeId, position);
   }, [moveNodeEnd]);
+
+  // Real-time resize update during resize (no history recording)
+  const handleNodeResize = useCallback((nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => {
+    resizeNode(nodeId, size, position);
+  }, [resizeNode]);
+
+  // Final resize update on resize end (records history for undo)
+  const handleNodeResizeEnd = useCallback((nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => {
+    resizeNodeEnd(nodeId, size, position);
+  }, [resizeNodeEnd]);
 
   const handleConnectionSelect = useCallback((connectionId: string) => {
     selectConnection(connectionId);
@@ -827,6 +839,8 @@ export function CanvasApp() {
             onNodeSelect={handleNodeSelect}
             onNodeDrag={handleNodeDrag}
             onNodeMove={handleNodeMove}
+            onNodeResize={handleNodeResize}
+            onNodeResizeEnd={handleNodeResizeEnd}
             onNodeUpdateData={handleNodeUpdateData}
             onConnectionSelect={handleConnectionSelect}
             onConnectionStart={handleConnectionStart}

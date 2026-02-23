@@ -286,13 +286,25 @@ impl WallClockPacer {
 
     /// Wait until the next frame should be produced.
     /// If behind schedule, returns immediately (no frame skip).
+    /// Uses hybrid sleep+spin to achieve sub-millisecond accuracy
+    /// (std::thread::sleep has ~2ms granularity on macOS).
     pub fn wait_for_next_frame(&mut self) {
         self.frame_number += 1;
         let expected = self.start_time
             + Duration::from_secs_f64(self.frame_number as f64 / (self.fps * self.speed));
         let now = std::time::Instant::now();
-        if now < expected {
-            std::thread::sleep(expected - now);
+        if now >= expected {
+            return;
+        }
+        let remaining = expected - now;
+        // Sleep most of the time, then spin-wait the last 2ms for precision
+        const SPIN_THRESHOLD: Duration = Duration::from_millis(2);
+        if remaining > SPIN_THRESHOLD {
+            std::thread::sleep(remaining - SPIN_THRESHOLD);
+        }
+        // Spin-wait for the remaining time
+        while std::time::Instant::now() < expected {
+            std::hint::spin_loop();
         }
     }
 

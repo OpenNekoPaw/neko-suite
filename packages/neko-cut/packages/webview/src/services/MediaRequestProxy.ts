@@ -119,6 +119,7 @@ export interface IMediaRequestProxy {
 			rgbaToNv12Ms: number;
 			cpuReadbackMs: number;
 			encodeSubmitMs: number;
+			encodeTimeMs: number;
 			avgFps: number;
 			cpuUsagePercent: number;
 			gpuUsagePercent: number | null;
@@ -1114,6 +1115,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
 			rgbaToNv12Ms: number;
 			cpuReadbackMs: number;
 			encodeSubmitMs: number;
+			encodeTimeMs: number;
 			avgFps: number;
 			cpuUsagePercent: number;
 			gpuUsagePercent: number | null;
@@ -1153,6 +1155,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
 								rgbaToNv12Ms: number;
 								cpuReadbackMs: number;
 								encodeSubmitMs: number;
+								encodeTimeMs: number;
 								avgFps: number;
 								cpuUsagePercent: number;
 								gpuUsagePercent: number | null;

@@ -469,6 +469,35 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         break;
       }
 
+      case 'media:captureFrame': {
+        const assetPath = message.assetPath as string;
+        const time = (message.time as number) ?? 0;
+        if (!assetPath) break;
+        try {
+          const filePath = this.resolveAssetPath(assetPath, document.uri);
+          const api = await this.getPreviewApi();
+          if (!api) {
+            webviewPanel.webview.postMessage({ type: 'media:captureFrameResult', nodeId: message.nodeId, error: 'Preview engine not available' });
+            break;
+          }
+          const base64 = await api.captureFrame(filePath, time);
+          // Ensure it's a proper data URL
+          const dataUrl = base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
+          webviewPanel.webview.postMessage({
+            type: 'media:captureFrameResult',
+            nodeId: message.nodeId,
+            dataUrl,
+          });
+        } catch (error) {
+          webviewPanel.webview.postMessage({
+            type: 'media:captureFrameResult',
+            nodeId: message.nodeId,
+            error: error instanceof Error ? error.message : 'Capture failed',
+          });
+        }
+        break;
+      }
+
       case 'resolveDroppedFiles': {
         // Webview dropped files from VSCode explorer - resolve URIs and detect media types
         const droppedUris = message.uris as string[];

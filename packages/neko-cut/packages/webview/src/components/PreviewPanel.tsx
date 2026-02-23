@@ -757,6 +757,7 @@ export const PreviewPanel = memo(function PreviewPanel({
             engineRgbaToNv12Ms: engineStats.video.rgbaToNv12Ms,
             engineCpuReadbackMs: engineStats.video.cpuReadbackMs,
             engineEncodeSubmitMs: engineStats.video.encodeSubmitMs,
+            engineEncodeTimeMs: engineStats.video.encodeTimeMs ?? 0,
             engineAvgFps: engineStats.video.avgFps,
             engineAudioMixMs: engineStats.audioMixMs,
             engineCpuUsagePercent: engineStats.cpuUsagePercent,
@@ -953,7 +954,7 @@ export const PreviewPanel = memo(function PreviewPanel({
                         </div>
                         <div className="flex justify-between gap-2">
                           <span className="text-gray-500">Encode</span>
-                          <span className="text-gray-300">{performanceStats.engineEncodeSubmitMs.toFixed(1)}ms</span>
+                          <span className="text-gray-300">{performanceStats.engineEncodeTimeMs.toFixed(1)}ms</span>
                         </div>
                         <div className="flex justify-between gap-2">
                           <span className="text-gray-500">Engine FPS</span>

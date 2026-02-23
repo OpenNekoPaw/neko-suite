@@ -259,7 +259,7 @@ impl PreviewPipeline {
         &mut self,
         time: f64,
         background_color: [f32; 4],
-    ) -> Result<(Vec<PreviewFrame>, GpuPipelineTiming)> {
+    ) -> Result<(Vec<PreviewFrame>, GpuPipelineTiming, u64)> {
         self.ensure_encoder_initialized()?;
 
         let iosurface_result = self
@@ -270,14 +270,16 @@ impl PreviewPipeline {
 
         // PTS based on actual timeline time, not frame_count
         let pts = (time * 1_000_000.0) as i64;
+        let encode_start = std::time::Instant::now();
         let packets = self.encoder.encode_frame_gpu(
             iosurface_result.gpu_handle.unwrap(),
             pts,
         )?;
+        let encode_ns = encode_start.elapsed().as_nanos() as u64;
 
         self.frame_count += 1;
 
-        Ok((packets.iter().map(PreviewFrame::from).collect(), timing))
+        Ok((packets.iter().map(PreviewFrame::from).collect(), timing, encode_ns))
     }
 
     /// Render frame with detailed timing breakdown (non-macOS fallback)
@@ -286,7 +288,7 @@ impl PreviewPipeline {
         &mut self,
         time: f64,
         background_color: [f32; 4],
-    ) -> Result<(Vec<PreviewFrame>, GpuPipelineTiming)> {
+    ) -> Result<(Vec<PreviewFrame>, GpuPipelineTiming, u64)> {
         self.ensure_encoder_initialized()?;
 
         let result = self
@@ -297,11 +299,13 @@ impl PreviewPipeline {
 
         // PTS based on actual timeline time, not frame_count
         let pts = (time * 1_000_000.0) as i64;
+        let encode_start = std::time::Instant::now();
         let packets = self.encoder.encode_frame(&result.data, pts)?;
+        let encode_ns = encode_start.elapsed().as_nanos() as u64;
 
         self.frame_count += 1;
 
-        Ok((packets.iter().map(PreviewFrame::from).collect(), timing))
+        Ok((packets.iter().map(PreviewFrame::from).collect(), timing, encode_ns))
     }
 
     /// Flush encoder and get remaining packets

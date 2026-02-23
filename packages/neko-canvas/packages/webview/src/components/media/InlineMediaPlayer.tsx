@@ -26,7 +26,8 @@ export interface InlineMediaPlayerProps {
   height: number;
   fps: number;
   duration: number;
-  onStop: () => void;
+  startTime?: number;
+  onStop: (currentTime: number) => void;
 }
 
 // =============================================================================
@@ -40,6 +41,7 @@ export function InlineMediaPlayer({
   height,
   fps,
   duration,
+  startTime = 0,
   onStop,
 }: InlineMediaPlayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -110,6 +112,7 @@ export function InlineMediaPlayer({
 
     if (newTime >= duration) {
       handleStop();
+      // Signal natural end — parent should reset position to 0
       return;
     }
 
@@ -165,7 +168,8 @@ export function InlineMediaPlayer({
     }
 
     setIsPlaying(true);
-    playStartTimeRef.current = 0;
+    setCurrentTime(startTime);
+    playStartTimeRef.current = startTime;
     playWallTimeRef.current = performance.now();
     clockSourceRef.current = 'wall';
 
@@ -184,6 +188,10 @@ export function InlineMediaPlayer({
   // Controls
   // =========================================================================
 
+  const currentTimeRef = useRef(startTime);
+  // Keep ref in sync with state
+  useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
+
   const handleStop = useCallback(() => {
     setIsPlaying(false);
     schedulerRef.current?.flush();
@@ -192,7 +200,7 @@ export function InlineMediaPlayer({
     const ac = audioClientRef.current;
     if (ac) { ac.setVolume(0); ac.dispose(); }
     audioClientRef.current = null;
-    onStop();
+    onStop(currentTimeRef.current);
   }, [onStop]);
 
   const handleToggleMute = useCallback((e: React.MouseEvent) => {

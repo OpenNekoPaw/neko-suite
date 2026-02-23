@@ -36,6 +36,10 @@ export interface InfiniteCanvasProps {
   onNodeDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   /** Called on mouseup when node drag ends (final position + history) */
   onNodeMove?: (nodeId: string, position: { x: number; y: number }) => void;
+  /** Called on every mousemove during node resize */
+  onNodeResize?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  /** Called on mouseup when node resize ends */
+  onNodeResizeEnd?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
   onNodeUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
   onConnectionSelect?: (connectionId: string) => void;
   onConnectionStart?: (nodeId: string, anchor: string) => void;
@@ -60,6 +64,8 @@ export function InfiniteCanvas({
   onNodeSelect,
   onNodeDrag,
   onNodeMove,
+  onNodeResize,
+  onNodeResizeEnd,
   onNodeUpdateData,
   onConnectionSelect,
   onConnectionStart,
@@ -172,7 +178,7 @@ export function InfiniteCanvas({
         {visibleNodes.map((node) => {
           const isSelected = selectedNodeIds.includes(node.id);
 
-          return renderNode(node, viewport, isSelected, onNodeSelect, onNodeDrag, onNodeMove, onNodeUpdateData, startDragConnection);
+          return renderNode(node, viewport, isSelected, onNodeSelect, onNodeDrag, onNodeMove, onNodeResize, onNodeResizeEnd, onNodeUpdateData, startDragConnection);
         })}
       </CanvasViewport>
 
@@ -199,6 +205,8 @@ function renderNode(
   onSelect?: (nodeId: string, multi: boolean) => void,
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void,
   onMove?: (nodeId: string, position: { x: number; y: number }) => void,
+  onResize?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void,
+  onResizeEnd?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void,
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void,
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void,
 ): React.ReactNode {
@@ -208,6 +216,8 @@ function renderNode(
     onSelect,
     onDrag,
     onMove,
+    onResize,
+    onResizeEnd,
     onConnectionStart,
     onUpdateData,
   };

@@ -39,6 +39,10 @@ export interface CanvasStore {
   moveNode: (id: string, position: { x: number; y: number }) => void;
   /** Record history + update position (call on drag end) */
   moveNodeEnd: (id: string, position: { x: number; y: number }) => void;
+  /** Real-time resize update (no history) */
+  resizeNode: (id: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  /** Record history + final resize (call on resize end) */
+  resizeNodeEnd: (id: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
 
   // ==================== Connection Actions ====================
   addConnection: (connection: Omit<CanvasConnection, 'id'>) => string;
@@ -210,6 +214,37 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ...canvasData,
         nodes: canvasData.nodes.map((node) =>
           node.id === id ? { ...node, position } : node
+        ),
+      },
+    });
+  },
+
+  resizeNode: (id, size, position) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    // No history recording – called on every mousemove during resize
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: canvasData.nodes.map((node) =>
+          node.id === id ? { ...node, size, position } : node
+        ),
+      },
+    });
+  },
+
+  resizeNodeEnd: (id, size, position) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    recordHistory(canvasData);
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: canvasData.nodes.map((node) =>
+          node.id === id ? { ...node, size, position } : node
         ),
       },
     });

@@ -11,6 +11,7 @@ import { useCallback, type ReactNode } from 'react';
 import type { CanvasNode, CanvasViewport, PortDefinition } from '@neko/shared';
 import { getDefaultPorts } from '@neko/shared';
 import { useNodeDrag } from '../../hooks/useNodeDrag';
+import { useNodeResize, type ResizeHandle } from '../../hooks/useNodeResize';
 import clsx from 'clsx';
 
 // =============================================================================
@@ -26,6 +27,10 @@ export interface BaseNodeProps {
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   /** Called on mouseup when drag ends (final position + history) */
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
+  /** Called on every mousemove during resize */
+  onResize?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  /** Called on mouseup when resize ends */
+  onResizeEnd?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   children: ReactNode;
   className?: string;
@@ -53,6 +58,21 @@ const PORT_DATA_COLORS: Record<string, string> = {
 };
 
 // =============================================================================
+// Resize handle config
+// =============================================================================
+
+const RESIZE_HANDLES: { handle: ResizeHandle; cursor: string; style: React.CSSProperties }[] = [
+  { handle: 'n',  cursor: 'ns-resize',   style: { top: -4, left: 8, right: 8, height: 8 } },
+  { handle: 's',  cursor: 'ns-resize',   style: { bottom: -4, left: 8, right: 8, height: 8 } },
+  { handle: 'e',  cursor: 'ew-resize',   style: { right: -4, top: 8, bottom: 8, width: 8 } },
+  { handle: 'w',  cursor: 'ew-resize',   style: { left: -4, top: 8, bottom: 8, width: 8 } },
+  { handle: 'ne', cursor: 'nesw-resize', style: { top: -4, right: -4, width: 10, height: 10 } },
+  { handle: 'nw', cursor: 'nesw-resize', style: { top: -4, left: -4, width: 10, height: 10 } },
+  { handle: 'se', cursor: 'nwse-resize', style: { bottom: -4, right: -4, width: 10, height: 10 } },
+  { handle: 'sw', cursor: 'nwse-resize', style: { bottom: -4, left: -4, width: 10, height: 10 } },
+];
+
+// =============================================================================
 // Component
 // =============================================================================
 
@@ -63,12 +83,14 @@ export function BaseNode({
   onSelect,
   onDrag,
   onMove,
+  onResize,
+  onResizeEnd,
   onConnectionStart,
   children,
   className,
 }: BaseNodeProps) {
   // Node dragging
-  const { position, isDragging, handlers: dragHandlers } = useNodeDrag({
+  const { position: dragPosition, isDragging, handlers: dragHandlers } = useNodeDrag({
     nodeId: node.id,
     initialPosition: node.position,
     viewport,
@@ -76,6 +98,21 @@ export function BaseNode({
     onDragEnd: onMove,
     disabled: node.locked,
   });
+
+  // Node resizing
+  const { size, position: resizePosition, isResizing, startResize } = useNodeResize({
+    nodeId: node.id,
+    initialSize: node.size,
+    initialPosition: node.position,
+    viewport,
+    onResize,
+    onResizeEnd,
+    disabled: node.locked,
+  });
+
+  // Use resize position/size when resizing, otherwise drag position + node size
+  const currentPosition = isResizing ? resizePosition : dragPosition;
+  const currentSize = isResizing ? size : node.size;
 
   // Resolve ports: explicit node.ports > default ports for type > empty
   const ports = node.ports ?? getDefaultPorts(node.type);
@@ -164,17 +201,18 @@ export function BaseNode({
     <div
       className={clsx(
         'absolute select-none',
+        isResizing && 'pointer-events-auto',
         isDragging && 'cursor-grabbing',
-        !isDragging && !node.locked && 'cursor-grab',
+        !isDragging && !isResizing && !node.locked && 'cursor-grab',
         node.locked && 'cursor-not-allowed opacity-80',
         className
       )}
       style={{
-        left: position.x,
-        top: position.y,
-        width: node.size.width,
-        height: node.size.height,
-        zIndex: isDragging ? 1000 : node.zIndex,
+        left: currentPosition.x,
+        top: currentPosition.y,
+        width: currentSize.width,
+        height: currentSize.height,
+        zIndex: (isDragging || isResizing) ? 1000 : node.zIndex,
       }}
       onMouseDown={dragHandlers.onMouseDown}
       onClick={handleClick}
@@ -185,11 +223,21 @@ export function BaseNode({
           'w-full h-full rounded-lg border-2 shadow-lg overflow-hidden',
           'bg-[var(--node-bg)] transition-colors duration-150',
           isSelected ? 'border-[var(--node-selected)]' : 'border-[var(--node-border)]',
-          isDragging && 'shadow-2xl'
+          (isDragging || isResizing) && 'shadow-2xl'
         )}
       >
         {children}
       </div>
+
+      {/* Resize handles (visible when selected) */}
+      {isSelected && !node.locked && RESIZE_HANDLES.map(({ handle, cursor, style }) => (
+        <div
+          key={handle}
+          className="absolute z-20"
+          style={{ ...style, cursor, position: 'absolute' }}
+          onMouseDown={(e) => startResize(handle, e)}
+        />
+      ))}
 
       {/* Port-based connections (always visible for data flow clarity) */}
       {hasPorts && Array.from(portsBySide.entries()).map(([_side, portsOnSide]) =>

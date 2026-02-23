@@ -12,6 +12,9 @@ export type { UseCanvasCoordinatesOptions, CanvasCoordinateMapper } from './useC
 export { useNodeDrag } from './useNodeDrag';
 export type { UseNodeDragOptions, UseNodeDragReturn } from './useNodeDrag';
 
+export { useNodeResize } from './useNodeResize';
+export type { UseNodeResizeOptions, UseNodeResizeReturn, ResizeHandle } from './useNodeResize';
+
 export { useConnectionDrag } from './useConnectionDrag';
 export type { UseConnectionDragOptions, UseConnectionDragReturn, PendingConnection } from './useConnectionDrag';
 

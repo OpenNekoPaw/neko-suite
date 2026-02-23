@@ -181,7 +181,7 @@ pub struct ExportStats {
     /// Total GPU pipeline time (import + nv12→rgba + composite + rgba→nv12 + readback)
     pub composite_time_ms: u64,
     /// Total encode time
-    pub encode_time_ms: u64,
+    pub encode_time_ms: f64,
     /// Mux time
     pub mux_time_ms: u64,
 

@@ -617,7 +617,7 @@ impl ExportService {
                 // Aggregate timing (backward compatible)
                 decode_time_ms: (avg_timing.decode_ns / 1_000_000) as u64,
                 composite_time_ms: (avg_timing.gpu_ns / 1_000_000) as u64,
-                encode_time_ms: (avg_timing.encode_ns / 1_000_000) as u64,
+                encode_time_ms: avg_timing.encode_ns as f64 / 1_000_000.0,
                 mux_time_ms: (avg_timing.mux_ns / 1_000_000) as u64,
                 // Performance metrics from SystemMonitor
                 avg_fps: stats_collector.current_fps(),

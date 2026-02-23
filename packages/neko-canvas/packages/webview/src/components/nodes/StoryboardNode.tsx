@@ -19,6 +19,8 @@ export interface StoryboardNodeProps {
   onSelect?: (nodeId: string, multi: boolean) => void;
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
+  onResize?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  onResizeEnd?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   onUpdateData?: (nodeId: string, data: Partial<StoryboardCanvasNode['data']>) => void;
 }
@@ -45,6 +47,8 @@ export function StoryboardNode({
   onSelect,
   onDrag,
   onMove,
+  onResize,
+  onResizeEnd,
   onConnectionStart,
   onUpdateData,
 }: StoryboardNodeProps) {
@@ -58,6 +62,8 @@ export function StoryboardNode({
       onSelect={onSelect}
       onDrag={onDrag}
       onMove={onMove}
+      onResize={onResize}
+      onResizeEnd={onResizeEnd}
       onConnectionStart={onConnectionStart}
     >
       <div className="flex flex-col h-full">

@@ -175,8 +175,8 @@ export class H264StreamClient {
 	// WebCodecs Decoder
 	// =========================================================================
 
-	/** Codec string — H.264 High Profile Level 4.0 (matches neko-engine encoder) */
-	private readonly codecString = 'avc1.640028';
+	/** Codec string — H.264 Baseline Profile Level 3.1 (matches neko-engine preview encoder) */
+	private readonly codecString = 'avc1.42001f';
 
 	private async initDecoder(): Promise<void> {
 		if (typeof VideoDecoder === 'undefined') {
