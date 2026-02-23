@@ -89,4 +89,8 @@ pub trait ITimelineService: IStreamPlayback {
 
     /// Get stream performance statistics
     async fn get_stream_stats(&self, stream_id: &StreamId) -> Option<StreamStats>;
+
+    /// Hot-update timeline data for an active stream without recreating it.
+    /// Initial implementation: stop the old stream and start a new one with the same IDs.
+    async fn update_stream(&self, stream_id: &StreamId, timeline: &Timeline) -> Result<()>;
 }

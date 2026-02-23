@@ -7,7 +7,7 @@ use crate::registry::StreamRegistry;
 use neko_native_core::domain::{StreamConfig, Timeline};
 use neko_native_core::jvi::JviLoader;
 use neko_native_core::media_service::{diff_media, DiffCategory};
-use neko_native_core::services::{ExportService, IExportService, ITimelineService, TimelineService};
+use neko_native_core::services::{ExportService, IExportService, IStreamPlayback, ITimelineService, TimelineService};
 use neko_types::registry;
 use neko_types::{ActionResponse, Resolution, StreamId};
 use serde::Deserialize;
@@ -70,6 +70,9 @@ struct StreamRequestOptions {
     start_time: f64,
     /// Base directory for resolving relative media paths (JVI format)
     base_dir: Option<String>,
+    /// If true, create stream in paused state (don't start pushing frames)
+    #[serde(default)]
+    paused: bool,
 }
 
 /// Options for timelines:diff
@@ -211,8 +214,17 @@ impl Controller for TimelineController {
                 let response = serde_json::json!({
                     "videoStreamId": result.video_stream_id.as_str(),
                     "audioStreamId": result.audio_stream_id.as_str(),
-                    "status": "active",
+                    "status": if opts.paused { "paused" } else { "active" },
                 });
+
+                // If paused=true, immediately pause the stream after creation
+                if opts.paused {
+                    // Pause via IStreamPlayback (sets PlaybackState.paused = true)
+                    let _ = self.timeline_service.pause(&result.video_stream_id).await;
+                    // Also update StreamRegistry state
+                    let _ = self.stream_registry.pause(&result.video_stream_id).await;
+                    let _ = self.stream_registry.pause(&result.audio_stream_id).await;
+                }
 
                 Ok(ActionResponse::ok("", response))
             }

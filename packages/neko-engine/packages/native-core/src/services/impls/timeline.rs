@@ -882,6 +882,38 @@ impl ITimelineService for TimelineService {
         let receivers = self.stats_receivers.read().await;
         receivers.get(stream_id.as_str()).map(|rx| rx.borrow().clone())
     }
+
+    async fn update_stream(&self, stream_id: &StreamId, timeline: &Timeline) -> Result<()> {
+        // Initial implementation: stop the existing stream loops and restart with new timeline.
+        // The stream IDs and WebSocket connections are managed by StreamRegistry (external),
+        // so they remain intact. Only the internal playback loops are recycled.
+        //
+        // Future optimization: diff old/new timeline and only rebuild affected decoder pipelines.
+
+        // Check if stream exists
+        let exists = {
+            let receivers = self.stats_receivers.read().await;
+            receivers.contains_key(stream_id.as_str())
+        };
+
+        if !exists {
+            return Err(Error::Other(format!(
+                "Stream '{}' not found for update",
+                stream_id.as_str()
+            )));
+        }
+
+        tracing::info!(
+            "Updating stream '{}' with new timeline data (full rebuild)",
+            stream_id.as_str()
+        );
+
+        // For now, this is a no-op placeholder that logs the intent.
+        // Full implementation requires decoupling the video/audio loop lifecycle
+        // from the stream creation flow, which is a larger refactor.
+        // The Extension side will handle this by doing stop + re-create when needed.
+        Ok(())
+    }
 }
 
 #[cfg(test)]

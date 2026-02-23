@@ -48,8 +48,8 @@ impl ActionRouter {
             video_controller: VideoController::new(video_service, resource_registry.clone(), stream_registry.clone()),
             audio_controller: AudioController::new(audio_service, resource_registry.clone(), stream_registry.clone()),
             image_controller: ImageController::new(image_service, resource_registry),
-            timeline_controller: TimelineController::new(timeline_service, export_service, stream_registry.clone()),
-            stream_controller: StreamController::new(stream_registry),
+            timeline_controller: TimelineController::new(timeline_service.clone(), export_service, stream_registry.clone()),
+            stream_controller: StreamController::new(stream_registry, timeline_service),
             models_controller: ModelsController::new(),
             canvas_controller: CanvasController::new(),
             scenes_controller: ScenesController::new(),
@@ -296,7 +296,8 @@ mod tests {
         let actions = router.actions("streams").unwrap();
         assert_eq!(
             actions,
-            &["create", "activate", "pause", "resume", "destroy", "list"]
+            &["create", "activate", "pause", "resume", "destroy", "list",
+              "stop", "seek", "speed", "loop", "stats", "update"]
         );
     }
 }
