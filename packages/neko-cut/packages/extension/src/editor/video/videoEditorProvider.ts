@@ -443,6 +443,46 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 				}
 
 				messageHandler.handleMessage(message);
+
+				// Update FrameServer and outline on incremental sync
+				if (message.type === 'operationApplied') {
+					const mediaService = this.mediaServices.get(docUri);
+					if (mediaService) {
+						const operation = message.operation;
+						const isIncremental = ['element.update', 'track.toggle', 'element.toggle']
+							.includes(operation.type);
+
+						if (isIncremental) {
+							// Fast path: send just the operation to Rust (~100 bytes)
+							mediaService.handleMessage({
+								type: 'media:frameServer:projectPlayback:applyOperation',
+								payload: { operation },
+							}).catch(() => {
+								// Fallback to full update on failure
+								const content = model!.getProjectData();
+								mediaService.handleMessage({
+									type: 'media:frameServer:projectPlayback:update',
+									payload: { projectData: content },
+								}).catch((err: unknown) => {
+									console.warn('[VideoEditorProvider] Stream fallback update failed:', err);
+								});
+							});
+						} else {
+							// Slow path: send full ProjectData for complex operations
+							const content = model!.getProjectData();
+							mediaService.handleMessage({
+								type: 'media:frameServer:projectPlayback:update',
+								payload: { projectData: content },
+							}).catch((err: unknown) => {
+								console.warn('[VideoEditorProvider] Stream update from operation failed:', err);
+							});
+						}
+					}
+
+					if (webviewPanel.visible) {
+						outlineProvider?.updateProject(model!.getProjectData());
+					}
+				}
 			},
 			undefined,
 			this.context.subscriptions

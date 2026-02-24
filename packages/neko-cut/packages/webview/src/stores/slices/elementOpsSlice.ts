@@ -2,7 +2,13 @@
  * Element Operations Slice
  * 管理元素的基础增删改操作
  *
- * 重构后职责:
+ * 已迁移到 EditOperation 系统：通过 dispatch 提交操作，
+ * 不再直接 pushHistory + set()。
+ *
+ * 注意：updateElement 保持 raw set()（无历史记录），
+ * 用于实时拖拽等高频操作场景。
+ *
+ * 职责:
  * - 基础 CRUD 操作 (add, update, remove, move)
  * - 元素属性切换 (hidden, muted)
  * - 视频音频分离操作
@@ -11,10 +17,12 @@
  */
 
 import { StateCreator } from 'zustand';
-import type { ProjectData, TimelineElement, TrackType, MediaElement, AudioElement } from '../../types';
+import type { ProjectData, TimelineElement, TrackType, TimelineTrack, MediaElement, AudioElement } from '../../types';
+import type { EditOperation } from '@neko/shared';
 import { generateId } from '../../utils';
 import { getMediaProxy } from '../../services/mediaProxyFactory';
 import { CENTERED_TRANSFORM } from '@neko/shared';
+import { createMeta } from '../utils/operation-helpers';
 
 /**
  * Detect if video file has audio track via Extension FFmpeg probe
@@ -37,8 +45,9 @@ interface ProjectDependency {
   project: ProjectData | null;
 }
 
-interface HistoryDependency {
-  pushHistory: (project: ProjectData) => void;
+interface DispatchDependency {
+  dispatch: (op: EditOperation) => void;
+  dispatchBatch: (ops: EditOperation[]) => void;
 }
 
 interface UIStateDependency {
@@ -88,41 +97,21 @@ export interface LinkedAudioElement extends AudioElement {
 // =============================================================================
 
 /**
- * 计算涟纹删除后的元素列表
- * 纯函数：删除指定元素并调整后续元素的开始时间
+ * 收集涟纹删除影响的元素信息（用于构建 before）
  */
-function calculateRippleDelete(
+function collectRippleAffected(
   elements: TimelineElement[],
-  elementId: string
-): TimelineElement[] {
+  elementId: string,
+): Array<{ elementId: string; startTime: number }> {
   const elementToRemove = elements.find(e => e.id === elementId);
-  if (!elementToRemove) {
-    return elements.filter(e => e.id !== elementId);
-  }
+  if (!elementToRemove) return [];
 
-  // 计算被删除元素的有效时长
   const removedDuration = elementToRemove.duration - elementToRemove.trimStart - elementToRemove.trimEnd;
   const removedEnd = elementToRemove.startTime + removedDuration;
 
   return elements
-    .filter(e => e.id !== elementId)
-    .map(e => {
-      // 将开始时间在被删除元素结束时间之后的元素向前移动
-      if (e.startTime >= removedEnd) {
-        return { ...e, startTime: e.startTime - removedDuration };
-      }
-      return e;
-    });
-}
-
-/**
- * 普通删除：直接过滤掉指定元素
- */
-function calculateNormalDelete(
-  elements: TimelineElement[],
-  elementId: string
-): TimelineElement[] {
-  return elements.filter(e => e.id !== elementId);
+    .filter(e => e.id !== elementId && e.startTime >= removedEnd)
+    .map(e => ({ elementId: e.id, startTime: e.startTime }));
 }
 
 // =============================================================================
@@ -143,9 +132,9 @@ export interface AddMediaWithAudioResult {
 
 export interface ElementOpsSlice {
   // 基础 CRUD 操作
-  /** 添加元素到轨道（不记录历史） */
+  /** 添加元素到轨道 */
   addElement: (trackId: string, element: Omit<TimelineElement, 'id'>) => string;
-  /** 添加媒体元素（记录历史，自动创建轨道） */
+  /** 添加媒体元素（自动创建轨道） */
   addMediaElement: (trackId: string | null, src: string, name: string, duration: number, startTime?: number) => string;
   /** 添加媒体元素并自动检测音频（视频文件专用） */
   addMediaElementWithAudio: (
@@ -157,7 +146,7 @@ export interface ElementOpsSlice {
   ) => Promise<AddMediaWithAudioResult>;
   /** 删除元素（支持涟纹编辑） */
   removeElement: (trackId: string, elementId: string) => void;
-  /** 更新元素属性（不记录历史） */
+  /** 更新元素属性（不记录历史，用于实时拖拽等高频操作） */
   updateElement: (trackId: string, elementId: string, updates: Partial<TimelineElement>) => void;
   /** 移动元素到另一轨道 */
   moveElement: (fromTrackId: string, toTrackId: string, elementId: string) => void;
@@ -180,50 +169,64 @@ export interface ElementOpsSlice {
 // =============================================================================
 
 export const createElementOpsSlice: StateCreator<
-  ElementOpsSlice & ProjectDependency & HistoryDependency & UIStateDependency & TrackOpsDependency,
+  ElementOpsSlice & ProjectDependency & DispatchDependency & UIStateDependency & TrackOpsDependency,
   [],
   [],
   ElementOpsSlice
 > = (set, get) => ({
   addElement: (trackId, elementData) => {
-    const { project } = get();
+    const { project, dispatch } = get();
     if (!project) return '';
 
     const elementId = generateId();
     const newElement = { ...elementData, id: elementId } as TimelineElement;
 
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === trackId
-            ? { ...t, elements: [...t.elements, newElement] }
-            : t
-        ),
-      },
+    dispatch({
+      type: 'element.add',
+      meta: createMeta('user', `Add ${newElement.name || 'element'}`),
+      payload: { trackId, element: newElement },
     });
 
     return elementId;
   },
 
   addMediaElement: (trackId, src, name, duration, startTime = 0) => {
-    const { project, pushHistory, addElement, addTrack } = get();
+    const { project, dispatch, dispatchBatch } = get();
     if (!project) return '';
 
-    pushHistory(project);
+    const ops: EditOperation[] = [];
 
-    // 查找或创建目标轨道
+    // Resolve target track
     let targetTrackId = trackId;
     if (!targetTrackId) {
       const mediaTrack = project.tracks.find((t) => t.type === 'media');
       if (mediaTrack) {
         targetTrackId = mediaTrack.id;
       } else {
-        targetTrackId = addTrack('media');
+        // Create new media track
+        targetTrackId = generateId();
+        const newTrack: TimelineTrack = {
+          id: targetTrackId,
+          name: 'Media Track',
+          type: 'media',
+          elements: [],
+          muted: false,
+          locked: false,
+          hidden: false,
+          isMain: false,
+        };
+        ops.push({
+          type: 'track.add',
+          meta: createMeta('user', 'Add Media Track'),
+          payload: { track: newTrack as any },
+        });
       }
     }
 
-    return addElement(targetTrackId, {
+    // Create element
+    const elementId = generateId();
+    const newElement = {
+      id: elementId,
       type: 'media',
       src,
       name,
@@ -238,16 +241,30 @@ export const createElementOpsSlice: StateCreator<
       muted: false,
       hidden: false,
       locked: false,
-    } as Omit<TimelineElement, 'id'>);
+    } as TimelineElement;
+
+    ops.push({
+      type: 'element.add',
+      meta: createMeta('user', `Add ${name}`),
+      payload: { trackId: targetTrackId, element: newElement },
+    });
+
+    if (ops.length === 1) {
+      dispatch(ops[0]!);
+    } else {
+      dispatchBatch(ops);
+    }
+
+    return elementId;
   },
 
   addMediaElementWithAudio: async (trackId, src, name, duration, startTime = 0) => {
-    const { project, pushHistory, addElement, addTrack, updateElement } = get();
+    const { project, dispatch, dispatchBatch } = get();
     if (!project) return { videoElementId: '' };
 
-    pushHistory(project);
+    const syncOps: EditOperation[] = [];
 
-    // 1. 查找或创建视频轨道
+    // 1. Resolve or create video track
     let videoTrackId = trackId;
     let videoTrackIndex = -1;
     if (!videoTrackId) {
@@ -256,16 +273,32 @@ export const createElementOpsSlice: StateCreator<
         videoTrackId = mediaTrack.id;
         videoTrackIndex = project.tracks.findIndex(t => t.id === mediaTrack.id);
       } else {
-        videoTrackId = addTrack('media');
-        // 新创建的轨道在末尾
-        videoTrackIndex = get().project!.tracks.length - 1;
+        videoTrackId = generateId();
+        const newTrack: TimelineTrack = {
+          id: videoTrackId,
+          name: 'Media Track',
+          type: 'media',
+          elements: [],
+          muted: false,
+          locked: false,
+          hidden: false,
+          isMain: false,
+        };
+        syncOps.push({
+          type: 'track.add',
+          meta: createMeta('user', 'Add Media Track'),
+          payload: { track: newTrack as any },
+        });
+        videoTrackIndex = project.tracks.length;
       }
     } else {
       videoTrackIndex = project.tracks.findIndex(t => t.id === videoTrackId);
     }
 
-    // 2. 立即创建视频元素（不等待音频检测）
-    const videoElementId = addElement(videoTrackId, {
+    // 2. Create video element
+    const videoElementId = generateId();
+    const videoElement = {
+      id: videoElementId,
       type: 'media',
       src,
       name,
@@ -280,30 +313,40 @@ export const createElementOpsSlice: StateCreator<
       muted: false,
       hidden: false,
       locked: false,
-    } as Omit<TimelineElement, 'id'>);
+    } as TimelineElement;
 
-    // 3. 异步检测音频并创建音频元素（完全不阻塞主流程）
+    syncOps.push({
+      type: 'element.add',
+      meta: createMeta('user', `Add ${name}`),
+      payload: { trackId: videoTrackId, element: videoElement },
+    });
+
+    // Dispatch sync operations immediately
+    if (syncOps.length === 1) {
+      dispatch(syncOps[0]!);
+    } else {
+      dispatchBatch(syncOps);
+    }
+
+    // 3. Async: detect audio and create linked audio element
     const detectAndCreateAudio = async (): Promise<void> => {
       try {
-        // 使用 FFmpeg probe 检测是否有音轨
         const hasAudio = await detectVideoHasAudio(src);
-        if (!hasAudio) {
-          return;
-        }
+        if (!hasAudio) return;
 
-        // 查找或创建音频轨道
         const currentProject = get().project;
         if (!currentProject) return;
 
+        // Find or prepare audio track
         let audioTrackId: string | null = null;
+        let audioTrack: TimelineTrack | undefined;
         let currentVideoTrackIndex = currentProject.tracks.findIndex(t => t.id === videoTrackId);
         if (currentVideoTrackIndex === -1) currentVideoTrackIndex = videoTrackIndex;
 
-        // 查找视频轨道正下方的音频轨道
+        // Look for existing audio track below video track
         for (let i = currentVideoTrackIndex + 1; i < currentProject.tracks.length; i++) {
           const candidateTrack = currentProject.tracks[i];
           if (candidateTrack?.type === 'audio') {
-            // 检查该位置是否有冲突的元素
             const hasConflict = candidateTrack.elements.some(e => {
               const eStart = e.startTime;
               const eEnd = e.startTime + e.duration - e.trimStart - e.trimEnd;
@@ -318,18 +361,29 @@ export const createElementOpsSlice: StateCreator<
           }
         }
 
-        // 如果没有找到合适的轨道，创建新轨道
+        // Create new audio track if needed
         if (!audioTrackId) {
           const videoTrack = currentProject.tracks[currentVideoTrackIndex];
           const videoTrackName = videoTrack?.name || 'V1';
           const trackNumber = videoTrackName.match(/\d+/)?.[0] || '1';
-          const audioTrackName = `A${trackNumber}`;
 
-          audioTrackId = addTrack('audio', audioTrackName);
+          audioTrackId = generateId();
+          audioTrack = {
+            id: audioTrackId,
+            name: `A${trackNumber}`,
+            type: 'audio',
+            elements: [],
+            muted: false,
+            locked: false,
+            hidden: false,
+            isMain: false,
+          };
         }
 
-        // 创建音频元素
-        const audioElementId = addElement(audioTrackId, {
+        // Create audio element
+        const audioElementId = generateId();
+        const audioElement = {
+          id: audioElementId,
           type: 'audio',
           name: name,
           src: src,
@@ -343,12 +397,21 @@ export const createElementOpsSlice: StateCreator<
             muted: false,
           },
           linkedVideoId: videoElementId,
-        } as Partial<LinkedAudioElement> as Omit<TimelineElement, 'id'>);
+        } as TimelineElement;
 
-        // 建立双向关联
-        updateElement(videoTrackId, videoElementId, {
-          linkedAudioId: audioElementId,
-        } as Partial<LinkedMediaElement>);
+        // Dispatch linkAudio operation
+        const { dispatch: currentDispatch } = get();
+        currentDispatch({
+          type: 'element.linkAudio',
+          meta: createMeta('system', `Link audio for ${name}`),
+          payload: {
+            videoTrackId: videoTrackId!,
+            videoElementId,
+            audioTrackId,
+            audioElement,
+            audioTrack: audioTrack as any,
+          },
+        });
 
         console.log('[addMediaElementWithAudio] Audio element created asynchronously:', audioElementId);
       } catch (error) {
@@ -356,53 +419,76 @@ export const createElementOpsSlice: StateCreator<
       }
     };
 
-    // 4. 异步检测字幕（不阻塞主流程）
+    // 4. Async: detect subtitles
     const detectAndCreateSubtitles = async (): Promise<void> => {
       try {
-        // 提取字幕轨道
         const subtitleTracks = await getMediaProxy().extractSubtitles(src);
-        if (!subtitleTracks || subtitleTracks.length === 0) {
-          return;
-        }
+        if (!subtitleTracks || subtitleTracks.length === 0) return;
 
         console.log(`[addMediaElementWithAudio] Detected ${subtitleTracks.length} subtitle tracks`);
 
-        const currentProject = get().project;
-        if (!currentProject) return;
-
-        // 为每个字幕轨道创建时间线轨道
         for (const extractedTrack of subtitleTracks) {
           const trackName = extractedTrack.title || `Subtitle ${extractedTrack.language || 'Unknown'}`;
-          const subtitleTrackId = addTrack('subtitle', trackName);
 
-          // Add each cue as a subtitle element
+          // Build batch: track.add + all element.add
+          const batchOps: EditOperation[] = [];
+
+          const subtitleTrackId = generateId();
+          const newTrack: TimelineTrack = {
+            id: subtitleTrackId,
+            name: trackName,
+            type: 'subtitle',
+            elements: [],
+            muted: false,
+            locked: false,
+            hidden: false,
+            isMain: false,
+          };
+          batchOps.push({
+            type: 'track.add',
+            meta: createMeta('system', `Add ${trackName}`),
+            payload: { track: newTrack as any },
+          });
+
           for (const cue of extractedTrack.cues) {
-            addElement(subtitleTrackId, {
-              type: 'subtitle',
-              name: `${cue.text.substring(0, 30)}${cue.text.length > 30 ? '...' : ''}`,
-              text: cue.text,
-              duration: cue.endTime - cue.startTime,
-              startTime: cue.startTime,
-              trimStart: 0,
-              trimEnd: 0,
-              transform: CENTERED_TRANSFORM,
-              opacity: 1,
-              blendMode: 'normal',
-              effects: [],
-              muted: false,
-              hidden: false,
-              locked: false,
-              language: extractedTrack.language || 'unknown',
-              isDefault: extractedTrack.isDefault,
-            } as Omit<TimelineElement, 'id'>);
+            const elementId = generateId();
+            batchOps.push({
+              type: 'element.add',
+              meta: createMeta('system'),
+              payload: {
+                trackId: subtitleTrackId,
+                element: {
+                  id: elementId,
+                  type: 'subtitle',
+                  name: `${cue.text.substring(0, 30)}${cue.text.length > 30 ? '...' : ''}`,
+                  text: cue.text,
+                  duration: cue.endTime - cue.startTime,
+                  startTime: cue.startTime,
+                  trimStart: 0,
+                  trimEnd: 0,
+                  transform: CENTERED_TRANSFORM,
+                  opacity: 1,
+                  blendMode: 'normal',
+                  effects: [],
+                  muted: false,
+                  hidden: false,
+                  locked: false,
+                  language: extractedTrack.language || 'unknown',
+                  isDefault: extractedTrack.isDefault,
+                } as TimelineElement,
+              },
+            });
           }
+
+          const { dispatchBatch: batchDispatch } = get();
+          batchDispatch(batchOps);
         }
       } catch (error) {
         console.error('[addMediaElementWithAudio] Subtitle detection failed:', error);
       }
     };
 
-    // 异步执行音频和字幕检测（不等待，立即返回）
+    // Fire-and-forget async operations
     detectAndCreateAudio().catch(err => {
       console.error('[addMediaElementWithAudio] Audio detection error:', err);
     });
@@ -411,38 +497,44 @@ export const createElementOpsSlice: StateCreator<
       console.error('[addMediaElementWithAudio] Subtitle detection error:', err);
     });
 
-    // 立即返回视频元素 ID，不等待音频/字幕检测
-    return {
-      videoElementId,
-    };
+    return { videoElementId };
   },
 
   removeElement: (trackId, elementId) => {
-    const { project, rippleEditingEnabled, pushHistory } = get();
+    const { project, rippleEditingEnabled, dispatch } = get();
     if (!project) return;
 
-    pushHistory(project);
+    const track = project.tracks.find(t => t.id === trackId);
+    if (!track) return;
 
-    // 使用工具函数计算删除后的元素列表
-    const deleteFunction = rippleEditingEnabled ? calculateRippleDelete : calculateNormalDelete;
+    const elementIndex = track.elements.findIndex(e => e.id === elementId);
+    if (elementIndex === -1) return;
+    const element = track.elements[elementIndex]!;
 
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === trackId
-            ? { ...t, elements: deleteFunction(t.elements, elementId) }
-            : t
-        ),
+    // Collect before data
+    const rippleAffected = rippleEditingEnabled
+      ? collectRippleAffected(track.elements, elementId)
+      : undefined;
+
+    dispatch({
+      type: 'element.remove',
+      meta: createMeta('user', `Remove ${element.name || 'element'}`),
+      payload: { trackId, elementId },
+      before: {
+        element: element as any,
+        index: elementIndex,
+        rippleAffected,
       },
     });
   },
 
   updateElement: (trackId, elementId, updates) => {
+    // Raw set() — no history recording.
+    // Used for real-time dragging, property panel slider changes, etc.
     const { project } = get();
     if (!project) return;
 
-    // 如果更新 duration，确保 trimStart 和 trimEnd 有效
+    // Validate duration vs trim
     if (updates.duration !== undefined) {
       const track = project.tracks.find(t => t.id === trackId);
       const element = track?.elements.find(e => e.id === elementId);
@@ -450,10 +542,9 @@ export const createElementOpsSlice: StateCreator<
         const newDuration = updates.duration;
         const minEffectiveDuration = 0.1;
 
-        let trimStart = updates.trimStart ?? element.trimStart;
-        let trimEnd = updates.trimEnd ?? element.trimEnd;
+        const trimStart = updates.trimStart ?? element.trimStart;
+        const trimEnd = updates.trimEnd ?? element.trimEnd;
 
-        // 如果 trimStart + trimEnd >= newDuration，重置它们
         if (trimStart + trimEnd >= newDuration - minEffectiveDuration) {
           updates.trimStart = 0;
           updates.trimEnd = 0;
@@ -479,72 +570,68 @@ export const createElementOpsSlice: StateCreator<
   },
 
   moveElement: (fromTrackId, toTrackId, elementId) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
-    pushHistory(project);
-
     const fromTrack = project.tracks.find((t) => t.id === fromTrackId);
-    const element = fromTrack?.elements.find((e) => e.id === elementId);
-    if (!element) return;
+    if (!fromTrack) return;
 
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) => {
-          if (t.id === fromTrackId) {
-            return { ...t, elements: t.elements.filter((e) => e.id !== elementId) };
-          }
-          if (t.id === toTrackId) {
-            return { ...t, elements: [...t.elements, element] };
-          }
-          return t;
-        }),
-      },
+    const elementIndex = fromTrack.elements.findIndex((e) => e.id === elementId);
+    if (elementIndex === -1) return;
+
+    dispatch({
+      type: 'element.move',
+      meta: createMeta('user'),
+      payload: { fromTrackId, toTrackId, elementId },
+      before: { fromIndex: elementIndex },
     });
   },
 
   toggleElementHidden: (trackId, elementId) => {
-    const { project, updateElement, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
     const element = track?.elements.find(e => e.id === elementId);
     if (!element) return;
 
-    pushHistory(project);
-    updateElement(trackId, elementId, {
-      hidden: !element.hidden,
+    dispatch({
+      type: 'element.toggle',
+      meta: createMeta('user'),
+      payload: { trackId, elementId, field: 'hidden' },
+      before: { value: element.hidden },
     });
   },
 
   toggleElementMuted: (trackId, elementId) => {
-    const { project, updateElement, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
     const track = project.tracks.find(t => t.id === trackId);
     const element = track?.elements.find(e => e.id === elementId);
     if (!element) return;
 
-    pushHistory(project);
-    updateElement(trackId, elementId, {
-      muted: !element.muted,
+    dispatch({
+      type: 'element.toggle',
+      meta: createMeta('user'),
+      payload: { trackId, elementId, field: 'muted' },
+      before: { value: element.muted },
     });
   },
 
   separateVideoAudio: async (trackId, elementId) => {
-    const { project, addTrack, addElement, updateElement, pushHistory } = get();
+    const { project } = get();
     if (!project) {
       return { success: false, error: 'No project loaded' };
     }
 
-    // 1. 查找视频元素
+    // 1. Find video element
     const trackIndex = project.tracks.findIndex(t => t.id === trackId);
     if (trackIndex === -1) {
       return { success: false, error: 'Invalid track' };
     }
 
-    const track = project.tracks[trackIndex];
+    const track = project.tracks[trackIndex]!;
     if (track.type !== 'media') {
       return { success: false, error: 'Track is not a media track' };
     }
@@ -556,14 +643,13 @@ export const createElementOpsSlice: StateCreator<
 
     const mediaElement = element as LinkedMediaElement;
 
-    // 2. 检测是否已经分离
+    // 2. Check if already separated
     if (mediaElement.linkedAudioId) {
       return { success: false, error: 'Audio already separated' };
     }
 
-    // 3. 检测视频是否有音轨
+    // 3. Detect audio track
     try {
-      // 使用 FFmpeg probe 检测是否有音轨（直接使用文件路径）
       const hasAudio = await detectVideoHasAudio(mediaElement.src);
       if (!hasAudio) {
         return { success: false, error: 'Video has no audio track' };
@@ -573,35 +659,48 @@ export const createElementOpsSlice: StateCreator<
       return { success: false, error: 'Failed to detect audio' };
     }
 
-    // 4. 查找或创建音频轨道
+    // 4. Re-read project (may have changed during async)
+    const currentProject = get().project;
+    if (!currentProject) {
+      return { success: false, error: 'Project unavailable' };
+    }
+
+    // 5. Find or prepare audio track
     let audioTrackId: string | null = null;
+    let audioTrack: TimelineTrack | undefined;
     let createdNewTrack = false;
 
-    // 查找正下方的音频轨道
-    for (let i = trackIndex + 1; i < project.tracks.length; i++) {
-      const candidateTrack = project.tracks[i];
-      if (candidateTrack.type === 'audio') {
-        // 检查是否有元素（避免冲突）
-        if (candidateTrack.elements.length === 0) {
-          audioTrackId = candidateTrack.id;
-          break;
-        }
+    const currentTrackIndex = currentProject.tracks.findIndex(t => t.id === trackId);
+    for (let i = currentTrackIndex + 1; i < currentProject.tracks.length; i++) {
+      const candidateTrack = currentProject.tracks[i];
+      if (candidateTrack?.type === 'audio' && candidateTrack.elements.length === 0) {
+        audioTrackId = candidateTrack.id;
+        break;
       }
     }
 
-    // 如果没有找到合适的轨道，创建新轨道
     if (!audioTrackId) {
-      // 生成轨道名称（匹配视频轨道编号）
-      const videoTrackName = track.name; // e.g., "V2"
+      const videoTrackName = track.name;
       const trackNumber = videoTrackName.match(/\d+/)?.[0] || '1';
-      const audioTrackName = `A${trackNumber}`;
 
-      audioTrackId = addTrack('audio', audioTrackName);
+      audioTrackId = generateId();
+      audioTrack = {
+        id: audioTrackId,
+        name: `A${trackNumber}`,
+        type: 'audio',
+        elements: [],
+        muted: false,
+        locked: false,
+        hidden: false,
+        isMain: false,
+      };
       createdNewTrack = true;
     }
 
-    // 5. 创建音频元素
-    const audioElementId = addElement(audioTrackId, {
+    // 6. Create audio element
+    const audioElementId = generateId();
+    const audioElement = {
+      id: audioElementId,
       type: 'audio',
       name: `${mediaElement.name}`,
       src: mediaElement.src,
@@ -614,16 +713,22 @@ export const createElementOpsSlice: StateCreator<
         pan: { baseValue: 0 },
         muted: false,
       },
-      linkedVideoId: elementId, // 建立反向关联
-    } as Partial<LinkedAudioElement> as Omit<TimelineElement, 'id'>);
+      linkedVideoId: elementId,
+    } as TimelineElement;
 
-    // 6. 建立正向关联
-    updateElement(trackId, elementId, {
-      linkedAudioId: audioElementId,
-    } as Partial<LinkedMediaElement>);
-
-    // 7. 记录历史
-    pushHistory(get().project!);
+    // 7. Dispatch single linkAudio operation
+    const { dispatch } = get();
+    dispatch({
+      type: 'element.linkAudio',
+      meta: createMeta('user', `Separate audio from ${mediaElement.name}`),
+      payload: {
+        videoTrackId: trackId,
+        videoElementId: elementId,
+        audioTrackId,
+        audioElement,
+        audioTrack: audioTrack as any,
+      },
+    });
 
     return {
       success: true,
@@ -634,10 +739,10 @@ export const createElementOpsSlice: StateCreator<
   },
 
   unseparateVideoAudio: (trackId, elementId) => {
-    const { project, removeElement, updateElement, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
-    // 查找视频元素
+    // Find video element
     const track = project.tracks.find(t => t.id === trackId);
     const element = track?.elements.find(e => e.id === elementId);
     if (!element || element.type !== 'media') return;
@@ -650,31 +755,44 @@ export const createElementOpsSlice: StateCreator<
       return;
     }
 
-    // 查找关联的音频元素
+    // Find linked audio element and its track
     let audioTrackId: string | null = null;
+    let audioElement: TimelineElement | null = null;
+    let audioTrack: TimelineTrack | undefined;
+
     for (const t of project.tracks) {
       if (t.type === 'audio') {
-        const audioElement = t.elements.find(e => e.id === linkedAudioId);
-        if (audioElement) {
+        const found = t.elements.find(e => e.id === linkedAudioId);
+        if (found) {
           audioTrackId = t.id;
+          audioElement = found;
+          // If track only has this element, it was likely created for this link
+          if (t.elements.length === 1) {
+            audioTrack = t;
+          }
           break;
         }
       }
     }
 
-    if (!audioTrackId) {
-      console.warn('[unseparateVideoAudio] Linked audio track not found');
+    if (!audioTrackId || !audioElement) {
+      console.warn('[unseparateVideoAudio] Linked audio track/element not found');
       return;
     }
 
-    pushHistory(project);
-
-    // 删除音频元素
-    removeElement(audioTrackId, linkedAudioId);
-
-    // 移除关联
-    updateElement(trackId, elementId, {
-      linkedAudioId: undefined,
-    } as Partial<LinkedMediaElement>);
+    dispatch({
+      type: 'element.unlinkAudio',
+      meta: createMeta('user', `Unseparate audio from ${mediaElement.name}`),
+      payload: {
+        videoTrackId: trackId,
+        videoElementId: elementId,
+      },
+      before: {
+        linkedAudioId,
+        audioTrackId,
+        audioElement: audioElement as any,
+        audioTrack: audioTrack as any,
+      },
+    });
   },
 });

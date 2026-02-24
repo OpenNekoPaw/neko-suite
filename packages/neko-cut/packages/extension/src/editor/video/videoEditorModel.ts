@@ -138,6 +138,14 @@ export class VideoEditorModel extends BaseEditorModel {
   }
 
   /**
+   * Update in-memory content without writing to document.
+   * Used for incremental sync from Webview operations.
+   */
+  applyIncrementalUpdate(newContent: ProjectData): void {
+    this._content = newContent;
+  }
+
+  /**
    * 重新加载文档内容
    */
   reload(): void {

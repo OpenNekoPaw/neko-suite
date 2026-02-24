@@ -10,6 +10,7 @@ import {
   PromptPresetConfig,
   ProviderConfig,
 } from './config';
+import type { EditOperation } from '../operations';
 
 // =============================================================================
 // Attachment Types (Chat UI DTO)
@@ -288,4 +289,6 @@ export type MessageFromWebview =
   | { type: 'planStepReject'; planId: string; stepId: string; conversationId: string }
   | { type: 'planStepModify'; planId: string; stepId: string; newDescription: string; conversationId: string }
   // File range read request (WebView -> Extension) - for testing on-demand loading
-  | { type: 'readFileRange'; requestId: string; path: string; start: number; end: number };
+  | { type: 'readFileRange'; requestId: string; path: string; start: number; end: number }
+  // Incremental sync: send EditOperation to Extension (WebView -> Extension)
+  | { type: 'operationApplied'; operation: EditOperation };

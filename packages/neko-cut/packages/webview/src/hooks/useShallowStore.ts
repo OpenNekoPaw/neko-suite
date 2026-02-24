@@ -98,13 +98,12 @@ export const selectors = {
     setZoomLevel: state.setZoomLevel,
   }),
 
-  // History state
+  // History state (operation-based)
   history: (state: EditorStore) => ({
-    history: state.history,
-    redoStack: state.redoStack,
-    pushHistory: state.pushHistory,
-    undo: state.undo,
-    redo: state.redo,
+    opUndoStack: state.opUndoStack,
+    opRedoStack: state.opRedoStack,
+    opUndo: state.opUndo,
+    opRedo: state.opRedo,
   }),
 
   // Project data

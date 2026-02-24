@@ -9,6 +9,7 @@
 //! - Models are consumed by the Service layer
 
 pub mod frame;
+pub mod operations;
 pub mod options;
 pub mod resource;
 pub mod stream;

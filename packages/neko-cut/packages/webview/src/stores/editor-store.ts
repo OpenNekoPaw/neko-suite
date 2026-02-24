@@ -10,7 +10,6 @@ import { ProjectSlice, createProjectSlice } from './slices/projectSlice';
 import { SelectionSlice, createSelectionSlice } from './slices/selectionSlice';
 import { PlaybackSlice, createPlaybackSlice } from './slices/playbackSlice';
 import { UIStateSlice, createUIStateSlice } from './slices/uiStateSlice';
-import { HistorySlice, createHistorySlice } from './slices/historySlice';
 import { OperationHistorySlice, createOperationHistorySlice } from './slices/operationHistorySlice';
 import { DispatchSlice, createDispatchSlice } from './slices/dispatchSlice';
 import { KeyframeSlice, createKeyframeSlice } from './slices/keyframeSlice';
@@ -27,7 +26,6 @@ export type EditorStore =
   & SelectionSlice
   & PlaybackSlice
   & UIStateSlice
-  & HistorySlice
   & OperationHistorySlice
   & DispatchSlice
   & KeyframeSlice
@@ -44,7 +42,7 @@ export type EditorStore =
  * 使用 Zustand 的 Slices 模式组合所有状态管理模块
  * 依赖顺序:
  * 1. 独立 Slices (无依赖): Project, Selection, Playback, UIState
- * 2. 历史管理 Slices: History (旧快照式), OperationHistory (新操作式), Dispatch
+ * 2. 历史管理 Slices: OperationHistory (操作式 undo/redo), Dispatch
  * 3. 简单依赖 Slices: Keyframe
  * 4. 复杂依赖 Slices: TrackOps, ElementOps, ElementSplit, Clipboard
  */
@@ -56,12 +54,11 @@ export const useEditorStore = create<EditorStore>()((set, get, store) => ({
   ...createUIStateSlice(set, get, store),
 
   // Phase 2: 历史管理 Slices
-  ...createHistorySlice(set, get, store),
   ...createOperationHistorySlice(set, get, store),
   ...createDispatchSlice(set, get, store),
   ...createKeyframeSlice(set, get, store),
 
-  // Phase 3: 复杂依赖 Slices (TrackOps, ElementSplit 已迁移到 dispatch)
+  // Phase 3: 复杂依赖 Slices
   ...createTrackOpsSlice(set, get, store),
   ...createElementOpsSlice(set, get, store),
   ...createElementSplitSlice(set, get, store),
@@ -76,7 +73,6 @@ export type {
   SelectionSlice,
   PlaybackSlice,
   UIStateSlice,
-  HistorySlice,
   OperationHistorySlice,
   DispatchSlice,
   KeyframeSlice,

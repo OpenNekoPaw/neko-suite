@@ -24,6 +24,7 @@ use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::StreamRegistry;
 use neko_native_core::domain::{StreamCodec, StreamConfig, Timeline};
+use neko_native_core::domain::operations::EditOperationEnvelope;
 use neko_native_core::jvi::JviLoader;
 use neko_native_core::services::{IStreamPlayback, ITimelineService, TimelineService};
 use neko_types::registry;
@@ -384,6 +385,45 @@ impl Controller for StreamController {
                 let response = serde_json::json!({
                     "streamId": stream_id.as_str(),
                     "status": "updated",
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+
+            // Incremental operation apply (avoids full JSON parse + JVI conversion)
+            "applyOperation" => {
+                let opts: crate::controllers::utils::StreamControlOptions =
+                    serde_json::from_value(options.clone()).unwrap_or_default();
+
+                let stream_id_str = opts.stream_id.ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "streamId required for streams:applyOperation".to_string(),
+                    )
+                })?;
+                let stream_id = StreamId::from_string(stream_id_str);
+
+                let body = body.ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "Operation data required in body for streams:applyOperation".to_string(),
+                    )
+                })?;
+
+                let operation: EditOperationEnvelope = serde_json::from_value(body)
+                    .map_err(|e| {
+                        ApiError::InvalidRequest(format!("Invalid operation: {}", e))
+                    })?;
+
+                let applied = self
+                    .timeline_service
+                    .apply_operation_to_stream(&stream_id, &operation)
+                    .await
+                    .map_err(|e| {
+                        ApiError::StreamError(format!("Apply operation failed: {}", e))
+                    })?;
+
+                let response = serde_json::json!({
+                    "streamId": stream_id.as_str(),
+                    "applied": applied,
                 });
 
                 Ok(ActionResponse::ok("", response))

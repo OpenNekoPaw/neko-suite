@@ -2,6 +2,8 @@
  * Shape Operations Slice
  * 管理形状图层的增删改操作
  *
+ * 已迁移到 EditOperation 系统：所有操作通过 dispatch shape.* 操作提交。
+ *
  * 职责:
  * - 形状实例 CRUD (add, update, remove, duplicate)
  * - 形状属性操作 (style, visibility, locking)
@@ -18,6 +20,7 @@ import type {
   ShapeStyle,
   ShapeType,
 } from '../../types/shape';
+import type { EditOperation } from '@neko/shared';
 import {
   createShapeInstance,
   cloneShapeInstance,
@@ -31,14 +34,10 @@ import {
 } from '../../types/shape';
 import { generateId } from '../../utils';
 import { CENTERED_TRANSFORM } from '@neko/shared';
+import { createMeta } from '../utils/operation-helpers';
 
 // =============================================================================
 // UI-extended ShapeElement (engine ShapeElement + multi-shape layers)
-//
-// The engine's ShapeElement has simple fields (shapeType, fill, stroke, strokeWidth).
-// The webview UI supports multiple shape layers per element via `shapes` array.
-// This extended type is used only in the Store; shapes are stripped before
-// sending to the engine.
 // =============================================================================
 
 /**
@@ -57,8 +56,8 @@ interface ProjectDependency {
   project: ProjectData | null;
 }
 
-interface HistoryDependency {
-  pushHistory: (project: ProjectData) => void;
+interface DispatchDependency {
+  dispatch: (op: EditOperation) => void;
 }
 
 // =============================================================================
@@ -226,16 +225,14 @@ export interface ShapeOpsSlice {
 // =============================================================================
 
 export const createShapeOpsSlice: StateCreator<
-  ShapeOpsSlice & ProjectDependency & HistoryDependency,
+  ShapeOpsSlice & ProjectDependency & DispatchDependency,
   [],
   [],
   ShapeOpsSlice
-> = (set, get) => ({
+> = (_set, get) => ({
   addShapeElement: (trackId, startTime = 0, duration = 5) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return '';
-
-    pushHistory(project);
 
     const elementId = generateId();
     const shapeElement: WebviewShapeElement = {
@@ -260,17 +257,12 @@ export const createShapeOpsSlice: StateCreator<
       shapes: [],
     };
 
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === trackId
-            ? {
-                ...t,
-                elements: [...t.elements, shapeElement as unknown as TimelineTrack['elements'][0]],
-              }
-            : t
-        ),
+    dispatch({
+      type: 'shape.addElement',
+      meta: createMeta('user', 'Add Shape Layer'),
+      payload: {
+        trackId,
+        element: shapeElement as unknown as any,
       },
     });
 
@@ -278,13 +270,11 @@ export const createShapeOpsSlice: StateCreator<
   },
 
   addShape: (trackId, elementId, shapeType, name) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return '';
 
     const shapeElement = findShapeElement(project, trackId, elementId);
     if (!shapeElement) return '';
-
-    pushHistory(project);
 
     const shape = createShapeByType(shapeType);
     const shapeInstance = createShapeInstance(
@@ -293,31 +283,20 @@ export const createShapeOpsSlice: StateCreator<
       createDefaultShapeStyle()
     );
 
-    // 设置 zIndex 为当前最高层级 + 1
+    // Set zIndex to current max + 1
     const maxZIndex = shapeElement.shapes.reduce(
       (max, s) => Math.max(max, s.zIndex),
       -1
     );
     shapeInstance.zIndex = maxZIndex + 1;
 
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === trackId
-            ? {
-                ...t,
-                elements: t.elements.map((e) =>
-                  e.id === elementId && 'shapes' in e
-                    ? {
-                        ...e,
-                        shapes: [...(e as unknown as WebviewShapeElement).shapes, shapeInstance],
-                      }
-                    : e
-                ),
-              }
-            : t
-        ),
+    dispatch({
+      type: 'shape.add',
+      meta: createMeta('user', `Add ${shapeType}`),
+      payload: {
+        trackId,
+        elementId,
+        shape: shapeInstance as any,
       },
     });
 
@@ -325,40 +304,29 @@ export const createShapeOpsSlice: StateCreator<
   },
 
   removeShape: (trackId, elementId, shapeId) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
     const shapeElement = findShapeElement(project, trackId, elementId);
     if (!shapeElement) return;
 
-    pushHistory(project);
+    const shapeIndex = shapeElement.shapes.findIndex(s => s.id === shapeId);
+    if (shapeIndex === -1) return;
+    const shape = shapeElement.shapes[shapeIndex]!;
 
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === trackId
-            ? {
-                ...t,
-                elements: t.elements.map((e) =>
-                  e.id === elementId && 'shapes' in e
-                    ? {
-                        ...e,
-                        shapes: (e as unknown as WebviewShapeElement).shapes.filter(
-                          (s) => s.id !== shapeId
-                        ),
-                      }
-                    : e
-                ),
-              }
-            : t
-        ),
+    dispatch({
+      type: 'shape.remove',
+      meta: createMeta('user'),
+      payload: { trackId, elementId, shapeId },
+      before: {
+        shape: shape as any,
+        index: shapeIndex,
       },
     });
   },
 
   duplicateShape: (trackId, elementId, shapeId) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return null;
 
     const shapeElement = findShapeElement(project, trackId, elementId);
@@ -366,8 +334,6 @@ export const createShapeOpsSlice: StateCreator<
 
     const originalShape = shapeElement.shapes.find((s) => s.id === shapeId);
     if (!originalShape) return null;
-
-    pushHistory(project);
 
     const clonedShape = cloneShapeInstance(originalShape);
     clonedShape.name = `${originalShape.name} (Copy)`;
@@ -377,24 +343,13 @@ export const createShapeOpsSlice: StateCreator<
       (clonedShape.shape as { centerY: number }).centerY += 5;
     }
 
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === trackId
-            ? {
-                ...t,
-                elements: t.elements.map((e) =>
-                  e.id === elementId && 'shapes' in e
-                    ? {
-                        ...e,
-                        shapes: [...(e as unknown as WebviewShapeElement).shapes, clonedShape],
-                      }
-                    : e
-                ),
-              }
-            : t
-        ),
+    dispatch({
+      type: 'shape.duplicate',
+      meta: createMeta('user', `Duplicate ${originalShape.name}`),
+      payload: {
+        trackId,
+        elementId,
+        newShape: clonedShape as any,
       },
     });
 
@@ -402,116 +357,79 @@ export const createShapeOpsSlice: StateCreator<
   },
 
   updateShape: (trackId, elementId, shapeId, updates) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
-    pushHistory(project);
+    const shapeElement = findShapeElement(project, trackId, elementId);
+    if (!shapeElement) return;
 
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === trackId
-            ? {
-                ...t,
-                elements: t.elements.map((e) =>
-                  e.id === elementId && 'shapes' in e
-                    ? {
-                        ...e,
-                        shapes: (e as unknown as WebviewShapeElement).shapes.map((s) =>
-                          s.id === shapeId ? { ...s, ...updates } : s
-                        ),
-                      }
-                    : e
-                ),
-              }
-            : t
-        ),
-      },
+    const shape = shapeElement.shapes.find(s => s.id === shapeId);
+    if (!shape) return;
+
+    // Build before from existing shape
+    const beforeUpdates: Record<string, unknown> = {};
+    for (const key of Object.keys(updates)) {
+      beforeUpdates[key] = (shape as any)[key];
+    }
+
+    dispatch({
+      type: 'shape.update',
+      meta: createMeta('user'),
+      payload: { trackId, elementId, shapeId, updates: updates as any },
+      before: { updates: beforeUpdates as any },
     });
   },
 
   updateShapeGeometry: (trackId, elementId, shapeId, shapeUpdates) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
-    pushHistory(project);
+    const shapeElement = findShapeElement(project, trackId, elementId);
+    if (!shapeElement) return;
 
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === trackId
-            ? {
-                ...t,
-                elements: t.elements.map((e) =>
-                  e.id === elementId && 'shapes' in e
-                    ? {
-                        ...e,
-                        shapes: (e as unknown as WebviewShapeElement).shapes.map((s) =>
-                          s.id === shapeId
-                            ? { ...s, shape: { ...s.shape, ...shapeUpdates } as Shape }
-                            : s
-                        ),
-                      }
-                    : e
-                ),
-              }
-            : t
-        ),
-      },
+    const shape = shapeElement.shapes.find(s => s.id === shapeId);
+    if (!shape) return;
+
+    // Build before from existing shape geometry
+    const beforeShape: Record<string, unknown> = {};
+    for (const key of Object.keys(shapeUpdates)) {
+      beforeShape[key] = (shape.shape as any)[key];
+    }
+
+    dispatch({
+      type: 'shape.updateGeometry',
+      meta: createMeta('user'),
+      payload: { trackId, elementId, shapeId, shape: shapeUpdates as any },
+      before: { shape: beforeShape as any },
     });
   },
 
   updateShapeStyle: (trackId, elementId, shapeId, styleUpdates) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
-    pushHistory(project);
+    const shapeElement = findShapeElement(project, trackId, elementId);
+    if (!shapeElement) return;
 
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === trackId
-            ? {
-                ...t,
-                elements: t.elements.map((e) =>
-                  e.id === elementId && 'shapes' in e
-                    ? {
-                        ...e,
-                        shapes: (e as unknown as WebviewShapeElement).shapes.map((s) =>
-                          s.id === shapeId
-                            ? {
-                                ...s,
-                                style: {
-                                  ...s.style,
-                                  ...styleUpdates,
-                                  fill: styleUpdates.fill
-                                    ? { ...s.style.fill, ...styleUpdates.fill }
-                                    : s.style.fill,
-                                  stroke: styleUpdates.stroke
-                                    ? { ...s.style.stroke, ...styleUpdates.stroke }
-                                    : s.style.stroke,
-                                  shadow: styleUpdates.shadow
-                                    ? { ...s.style.shadow, ...styleUpdates.shadow }
-                                    : s.style.shadow,
-                                },
-                              }
-                            : s
-                        ),
-                      }
-                    : e
-                ),
-              }
-            : t
-        ),
-      },
+    const shape = shapeElement.shapes.find(s => s.id === shapeId);
+    if (!shape) return;
+
+    // Build before from existing style
+    const beforeStyle: Partial<ShapeStyle> = {};
+    if (styleUpdates.fill) beforeStyle.fill = shape.style.fill;
+    if (styleUpdates.stroke) beforeStyle.stroke = shape.style.stroke;
+    if (styleUpdates.shadow) beforeStyle.shadow = shape.style.shadow;
+
+    dispatch({
+      type: 'shape.updateStyle',
+      meta: createMeta('user'),
+      payload: { trackId, elementId, shapeId, style: styleUpdates as any },
+      before: { style: beforeStyle as any },
     });
   },
 
   toggleShapeVisibility: (trackId, elementId, shapeId) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
     const shapeElement = findShapeElement(project, trackId, elementId);
@@ -520,34 +438,16 @@ export const createShapeOpsSlice: StateCreator<
     const shape = shapeElement.shapes.find((s) => s.id === shapeId);
     if (!shape) return;
 
-    pushHistory(project);
-
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === trackId
-            ? {
-                ...t,
-                elements: t.elements.map((e) =>
-                  e.id === elementId && 'shapes' in e
-                    ? {
-                        ...e,
-                        shapes: (e as unknown as WebviewShapeElement).shapes.map((s) =>
-                          s.id === shapeId ? { ...s, visible: !s.visible } : s
-                        ),
-                      }
-                    : e
-                ),
-              }
-            : t
-        ),
-      },
+    dispatch({
+      type: 'shape.toggle',
+      meta: createMeta('user'),
+      payload: { trackId, elementId, shapeId, field: 'visible' },
+      before: { value: shape.visible },
     });
   },
 
   toggleShapeLocked: (trackId, elementId, shapeId) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
     const shapeElement = findShapeElement(project, trackId, elementId);
@@ -556,34 +456,16 @@ export const createShapeOpsSlice: StateCreator<
     const shape = shapeElement.shapes.find((s) => s.id === shapeId);
     if (!shape) return;
 
-    pushHistory(project);
-
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === trackId
-            ? {
-                ...t,
-                elements: t.elements.map((e) =>
-                  e.id === elementId && 'shapes' in e
-                    ? {
-                        ...e,
-                        shapes: (e as unknown as WebviewShapeElement).shapes.map((s) =>
-                          s.id === shapeId ? { ...s, locked: !s.locked } : s
-                        ),
-                      }
-                    : e
-                ),
-              }
-            : t
-        ),
-      },
+    dispatch({
+      type: 'shape.toggle',
+      meta: createMeta('user'),
+      payload: { trackId, elementId, shapeId, field: 'locked' },
+      before: { value: shape.locked },
     });
   },
 
   moveShapeToIndex: (trackId, elementId, shapeId, newIndex) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
     const shapeElement = findShapeElement(project, trackId, elementId);
@@ -592,30 +474,15 @@ export const createShapeOpsSlice: StateCreator<
     const currentIndex = shapeElement.shapes.findIndex((s) => s.id === shapeId);
     if (currentIndex === -1 || currentIndex === newIndex) return;
 
-    pushHistory(project);
-
-    const shapes = [...shapeElement.shapes];
-    const [movedShape] = shapes.splice(currentIndex, 1);
-    shapes.splice(newIndex, 0, movedShape);
-
-    // 更新所有形状的 zIndex
-    const updatedShapes = shapes.map((s, i) => ({ ...s, zIndex: i }));
-
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === trackId
-            ? {
-                ...t,
-                elements: t.elements.map((e) =>
-                  e.id === elementId && 'shapes' in e
-                    ? { ...e, shapes: updatedShapes }
-                    : e
-                ),
-              }
-            : t
-        ),
+    dispatch({
+      type: 'shape.reorder',
+      meta: createMeta('user'),
+      payload: {
+        trackId,
+        elementId,
+        shapeId,
+        fromIndex: currentIndex,
+        toIndex: newIndex,
       },
     });
   },
@@ -666,67 +533,51 @@ export const createShapeOpsSlice: StateCreator<
   },
 
   updateShapeById: (shapeId, updates) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
     const location = findShapeLocation(project, shapeId);
     if (!location) return;
 
-    pushHistory(project);
+    const shape = location.element.shapes[location.shapeIndex]!;
+    const beforeUpdates: Record<string, unknown> = {};
+    for (const key of Object.keys(updates)) {
+      beforeUpdates[key] = (shape as any)[key];
+    }
 
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === location.track.id
-            ? {
-                ...t,
-                elements: t.elements.map((e) =>
-                  e.id === location.element.id && 'shapes' in e
-                    ? {
-                        ...e,
-                        shapes: (e as unknown as WebviewShapeElement).shapes.map((s) =>
-                          s.id === shapeId ? { ...s, ...updates } : s
-                        ),
-                      }
-                    : e
-                ),
-              }
-            : t
-        ),
+    dispatch({
+      type: 'shape.update',
+      meta: createMeta('user'),
+      payload: {
+        trackId: location.track.id,
+        elementId: location.element.id,
+        shapeId,
+        updates: updates as any,
       },
+      before: { updates: beforeUpdates as any },
     });
   },
 
   removeShapeById: (shapeId) => {
-    const { project, pushHistory } = get();
+    const { project, dispatch } = get();
     if (!project) return;
 
     const location = findShapeLocation(project, shapeId);
     if (!location) return;
 
-    pushHistory(project);
+    const shape = location.element.shapes[location.shapeIndex]!;
 
-    set({
-      project: {
-        ...project,
-        tracks: project.tracks.map((t) =>
-          t.id === location.track.id
-            ? {
-                ...t,
-                elements: t.elements.map((e) =>
-                  e.id === location.element.id && 'shapes' in e
-                    ? {
-                        ...e,
-                        shapes: (e as unknown as WebviewShapeElement).shapes.filter(
-                          (s) => s.id !== shapeId
-                        ),
-                      }
-                    : e
-                ),
-              }
-            : t
-        ),
+    dispatch({
+      type: 'shape.remove',
+      meta: createMeta('user'),
+      payload: {
+        trackId: location.track.id,
+        elementId: location.element.id,
+        shapeId,
+      },
+      before: {
+        shape: shape as any,
+        index: location.shapeIndex,
       },
     });
   },

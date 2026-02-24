@@ -11,12 +11,8 @@ export function useKeyboardShortcuts() {
     togglePlayback,
     pause,
     seek,
-    undo,
-    redo,
     opUndo,
     opRedo,
-    opUndoStack,
-    opRedoStack,
     toggleSnapping,
     toggleRippleEditing,
     toggleFrameAlign,
@@ -25,7 +21,6 @@ export function useKeyboardShortcuts() {
     removeElement,
     clearSelectedElements,
     getTotalDuration,
-    pushHistory,
     splitAtPlayhead,
     splitAndKeepLeft,
     splitAndKeepRight,
@@ -103,10 +98,9 @@ export function useKeyboardShortcuts() {
         if (isMeta) {
           e.preventDefault();
           if (e.shiftKey) {
-            // 优先操作式 redo，fallback 到快照式
-            opRedoStack.length > 0 ? opRedo() : redo();
+            opRedo();
           } else {
-            opUndoStack.length > 0 ? opUndo() : undo();
+            opUndo();
           }
         }
         break;
@@ -129,7 +123,6 @@ export function useKeyboardShortcuts() {
       case 'backspace':
         e.preventDefault();
         if (selectedElements.length > 0 && project) {
-          pushHistory(project);
           for (const { trackId, elementId } of selectedElements) {
             removeElement(trackId, elementId);
           }
@@ -250,12 +243,8 @@ export function useKeyboardShortcuts() {
     togglePlayback,
     pause,
     seek,
-    undo,
-    redo,
     opUndo,
     opRedo,
-    opUndoStack,
-    opRedoStack,
     toggleSnapping,
     toggleRippleEditing,
     toggleFrameAlign,
@@ -264,7 +253,6 @@ export function useKeyboardShortcuts() {
     removeElement,
     clearSelectedElements,
     getTotalDuration,
-    pushHistory,
     splitAtPlayhead,
     splitAndKeepLeft,
     splitAndKeepRight,

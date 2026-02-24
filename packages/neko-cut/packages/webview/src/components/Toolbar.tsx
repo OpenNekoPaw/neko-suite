@@ -18,10 +18,10 @@ export function Toolbar() {
     zoomLevel,
     setZoomLevel,
     getTotalDuration,
-    undo,
-    redo,
-    history,
-    redoStack,
+    opUndo,
+    opRedo,
+    opUndoStack,
+    opRedoStack,
   } = useEditorStore();
 
   const [showExportPanel, setShowExportPanel] = useState(false);
@@ -96,8 +96,8 @@ export function Toolbar() {
       {/* Center: Edit tools */}
       <div className="flex items-center gap-2">
         <button
-          onClick={undo}
-          disabled={history.length === 0}
+          onClick={opUndo}
+          disabled={opUndoStack.length === 0}
           className="p-1.5 hover:bg-vscode-list-hover rounded disabled:opacity-30 text-vscode-fg"
           title="Undo (Cmd+Z)"
         >
@@ -107,8 +107,8 @@ export function Toolbar() {
         </button>
 
         <button
-          onClick={redo}
-          disabled={redoStack.length === 0}
+          onClick={opRedo}
+          disabled={opRedoStack.length === 0}
           className="p-1.5 hover:bg-vscode-list-hover rounded disabled:opacity-30 text-vscode-fg"
           title="Redo (Cmd+Shift+Z)"
         >

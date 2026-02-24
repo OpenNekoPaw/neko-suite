@@ -551,7 +551,7 @@ export function invertOperation(op: EditOperation): EditOperation {
 
       // 逆序删除
       for (let i = pasteOp.payload.items.length - 1; i >= 0; i--) {
-        const item = pasteOp.payload.items[i];
+        const item = pasteOp.payload.items[i]!;
         ops.push({
           type: 'element.remove',
           meta,

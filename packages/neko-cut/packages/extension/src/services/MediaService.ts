@@ -675,6 +675,25 @@ export class MediaService implements vscode.Disposable {
 				},
 			});
 
+		} else if (type === 'media:frameServer:projectPlayback:applyOperation') {
+			if (!this._activeVideoStreamId) return;
+			const payload = msg.payload as { operation: unknown };
+
+			const result = await this.dispatch({
+				group: 'streams',
+				action: 'applyOperation',
+				options: {
+					streamId: this._activeVideoStreamId,
+				},
+				body: payload.operation,
+			});
+
+			// If Rust returned applied: false, signal caller to fall back to full update
+			const applied = (result.data as Record<string, unknown>)?.applied;
+			if (!applied) {
+				throw new Error('UNSUPPORTED_OPERATION');
+			}
+
 		} else if (type === 'media:frameServer:projectPlayback:update') {
 			if (!this._activeVideoStreamId) return;
 			const payload = msg.payload as { projectData: unknown };

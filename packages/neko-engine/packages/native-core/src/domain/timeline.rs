@@ -113,6 +113,162 @@ impl Timeline {
             .map(|e| e.end_time())
             .fold(0.0, f64::max);
     }
+
+    // =========================================================================
+    // Incremental operation apply (used by streams:applyOperation)
+    // =========================================================================
+
+    /// Try to apply an EditOperation incrementally.
+    /// Returns `Unsupported` for operation types not handled here;
+    /// the caller should fall back to full `streams:update`.
+    pub fn try_apply_operation(
+        &mut self,
+        op: &super::operations::EditOperationEnvelope,
+    ) -> crate::error::Result<super::operations::ApplyResult> {
+        use super::operations::*;
+
+        match op.op_type.as_str() {
+            "element.update" => {
+                let payload: ElementUpdatePayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid element.update payload: {}",
+                            e
+                        ))
+                    })?;
+                self.apply_element_update(&payload)?;
+                Ok(ApplyResult::Applied)
+            }
+            "track.toggle" => {
+                let payload: TrackTogglePayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid track.toggle payload: {}",
+                            e
+                        ))
+                    })?;
+                self.apply_track_toggle(&payload)?;
+                Ok(ApplyResult::Applied)
+            }
+            "element.toggle" => {
+                let payload: ElementTogglePayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid element.toggle payload: {}",
+                            e
+                        ))
+                    })?;
+                self.apply_element_toggle(&payload)?;
+                Ok(ApplyResult::Applied)
+            }
+            _ => Ok(ApplyResult::Unsupported),
+        }
+    }
+
+    fn apply_element_update(
+        &mut self,
+        payload: &super::operations::ElementUpdatePayload,
+    ) -> crate::error::Result<()> {
+        let element = self
+            .tracks
+            .iter_mut()
+            .find(|t| t.id == payload.track_id)
+            .and_then(|t| t.elements.iter_mut().find(|e| e.id == payload.element_id))
+            .ok_or_else(|| {
+                crate::error::Error::Other(format!(
+                    "Element not found: track={}, element={}",
+                    payload.track_id, payload.element_id
+                ))
+            })?;
+
+        let u = &payload.updates;
+        if let Some(v) = u.start_time {
+            element.start_time = v;
+        }
+        if let Some(v) = u.duration {
+            element.duration = v;
+        }
+        if let Some(v) = u.trim_start {
+            element.trim_start = v;
+        }
+        if let Some(v) = u.trim_end {
+            element.trim_end = v;
+        }
+        if let Some(v) = u.opacity {
+            element.opacity = v;
+        }
+        if let Some(v) = u.muted {
+            element.muted = v;
+        }
+        if let Some(v) = u.hidden {
+            element.hidden = v;
+        }
+        if let Some(v) = u.locked {
+            element.locked = v;
+        }
+        if let Some(ref v) = u.name {
+            element.name = v.clone();
+        }
+
+        self.recalculate_duration();
+        Ok(())
+    }
+
+    fn apply_track_toggle(
+        &mut self,
+        payload: &super::operations::TrackTogglePayload,
+    ) -> crate::error::Result<()> {
+        let track = self
+            .tracks
+            .iter_mut()
+            .find(|t| t.id == payload.track_id)
+            .ok_or_else(|| {
+                crate::error::Error::Other(format!("Track not found: {}", payload.track_id))
+            })?;
+
+        match payload.field.as_str() {
+            "muted" => track.muted = !track.muted,
+            "locked" => track.locked = !track.locked,
+            "hidden" => track.hidden = !track.hidden,
+            other => {
+                return Err(crate::error::Error::Other(format!(
+                    "Unknown toggle field: {}",
+                    other
+                )))
+            }
+        }
+        Ok(())
+    }
+
+    fn apply_element_toggle(
+        &mut self,
+        payload: &super::operations::ElementTogglePayload,
+    ) -> crate::error::Result<()> {
+        let element = self
+            .tracks
+            .iter_mut()
+            .find(|t| t.id == payload.track_id)
+            .and_then(|t| t.elements.iter_mut().find(|e| e.id == payload.element_id))
+            .ok_or_else(|| {
+                crate::error::Error::Other(format!(
+                    "Element not found: track={}, element={}",
+                    payload.track_id, payload.element_id
+                ))
+            })?;
+
+        match payload.field.as_str() {
+            "muted" => element.muted = !element.muted,
+            "hidden" => element.hidden = !element.hidden,
+            "locked" => element.locked = !element.locked,
+            other => {
+                return Err(crate::error::Error::Other(format!(
+                    "Unknown toggle field: {}",
+                    other
+                )))
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Default for Timeline {

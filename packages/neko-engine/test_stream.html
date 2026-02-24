@@ -51,10 +51,10 @@
     <label>Server: <input type="text" id="serverUrl" value="http://127.0.0.1:8765"></label>
   </div>
   <div class="controls">
-    <label>Video: <input type="text" id="videoPath" value="/Users/feng/git/neko-test/cases/RWBY1Red.mp4"></label>
+    <label>Video: <input type="text" id="videoPath" value="/Users/zhangfeng144/git/neko-test/cases/720P.mp4"></label>
   </div>
   <div class="controls">
-    <label>JVI: <input type="text" id="jviPath" value="/Users/feng/git/neko-test/test.jvi"></label>
+    <label>JVI: <input type="text" id="jviPath" value="/Users/zhangfeng144/git/neko-test/test.jvi"></label>
     <input type="file" id="jviFileInput" accept=".jvi,.json" style="display:none" onchange="loadJviFile(this)">
     <button class="primary" onclick="document.getElementById('jviFileInput').click()">Browse</button>
     <button class="primary" onclick="probeTimeline()">Probe</button>
@@ -127,6 +127,19 @@
       <button class="primary" onclick="startTimelineVideoOnly()">&#127909; Video Only</button>
       <button class="primary" onclick="startTimelineAudioOnly()">&#127925; Audio Only</button>
       <button class="danger" onclick="stopTimelineAll()">&#9209; Stop All</button>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:12px; border: 1px solid #0f3460;">
+    <h2>Apply Operation (Incremental Patch Test)</h2>
+    <div class="controls">
+      <button class="primary" onclick="testApplyElementUpdate()">Test element.update</button>
+      <button class="primary" onclick="testApplyTrackToggle()">Test track.toggle (muted)</button>
+      <button class="primary" onclick="testApplyElementToggle()">Test element.toggle (hidden)</button>
+      <button class="warn" onclick="testApplyUnsupported()">Test unsupported op</button>
+    </div>
+    <div class="controls" style="font-size: 11px; color: #aaa;">
+      Requires an active timeline stream. Tests streams:applyOperation action.
     </div>
   </div>
 
@@ -1453,6 +1466,81 @@ async function setTimelineLoop() {
 async function clearTimelineLoop() {
   if (!tlStreamId) { log('No timeline stream active', 'warn'); return; }
   await dispatch('timelines', 'loop', { streamId: tlStreamId, clear: true });
+}
+
+// ─── Apply Operation Tests ───
+async function testApplyElementUpdate() {
+  if (!tlStreamId) { log('No timeline stream active — start a timeline first', 'warn'); return; }
+  // Parse JVI to get first track/element IDs dynamically
+  const jvi = parseTimelineJson();
+  if (!jvi || !jvi.tracks || !jvi.tracks[0] || !jvi.tracks[0].elements || !jvi.tracks[0].elements[0]) {
+    log('Cannot find track/element in JVI', 'err'); return;
+  }
+  const trackId = jvi.tracks[0].id;
+  const elementId = jvi.tracks[0].elements[0].id;
+  const operation = {
+    type: 'element.update',
+    payload: {
+      trackId,
+      elementId,
+      updates: { startTime: 2.0 }
+    }
+  };
+  log(`Testing applyOperation: element.update (startTime → 2.0)`, 'info');
+  const result = await dispatch('streams', 'applyOperation', { streamId: tlStreamId }, operation);
+  if (result.status === 'ok') {
+    log(`applyOperation result: applied=${result.data?.applied}`, result.data?.applied ? 'ok' : 'warn');
+  }
+}
+
+async function testApplyTrackToggle() {
+  if (!tlStreamId) { log('No timeline stream active — start a timeline first', 'warn'); return; }
+  const jvi = parseTimelineJson();
+  if (!jvi || !jvi.tracks || !jvi.tracks[0]) {
+    log('Cannot find track in JVI', 'err'); return;
+  }
+  const trackId = jvi.tracks[0].id;
+  const operation = {
+    type: 'track.toggle',
+    payload: { trackId, field: 'muted' }
+  };
+  log(`Testing applyOperation: track.toggle (muted) on track ${trackId}`, 'info');
+  const result = await dispatch('streams', 'applyOperation', { streamId: tlStreamId }, operation);
+  if (result.status === 'ok') {
+    log(`applyOperation result: applied=${result.data?.applied}`, result.data?.applied ? 'ok' : 'warn');
+  }
+}
+
+async function testApplyElementToggle() {
+  if (!tlStreamId) { log('No timeline stream active — start a timeline first', 'warn'); return; }
+  const jvi = parseTimelineJson();
+  if (!jvi || !jvi.tracks || !jvi.tracks[0] || !jvi.tracks[0].elements || !jvi.tracks[0].elements[0]) {
+    log('Cannot find track/element in JVI', 'err'); return;
+  }
+  const trackId = jvi.tracks[0].id;
+  const elementId = jvi.tracks[0].elements[0].id;
+  const operation = {
+    type: 'element.toggle',
+    payload: { trackId, elementId, field: 'hidden' }
+  };
+  log(`Testing applyOperation: element.toggle (hidden) on element ${elementId}`, 'info');
+  const result = await dispatch('streams', 'applyOperation', { streamId: tlStreamId }, operation);
+  if (result.status === 'ok') {
+    log(`applyOperation result: applied=${result.data?.applied}`, result.data?.applied ? 'ok' : 'warn');
+  }
+}
+
+async function testApplyUnsupported() {
+  if (!tlStreamId) { log('No timeline stream active — start a timeline first', 'warn'); return; }
+  const operation = {
+    type: 'track.add',
+    payload: { track: { id: 'test', name: 'Test', type: 'media', elements: [] } }
+  };
+  log(`Testing applyOperation: track.add (should return applied=false)`, 'info');
+  const result = await dispatch('streams', 'applyOperation', { streamId: tlStreamId }, operation);
+  if (result.status === 'ok') {
+    log(`applyOperation result: applied=${result.data?.applied} (expected: false)`, !result.data?.applied ? 'ok' : 'warn');
+  }
 }
 
 // ─── Init ───

@@ -79,6 +79,8 @@ pub struct TimelineService {
     playback: StreamPlaybackDelegate,
     /// Stats watch receivers keyed by video stream_id
     stats_receivers: Arc<RwLock<HashMap<String, watch::Receiver<StreamStats>>>>,
+    /// Current timeline per stream (for incremental operations)
+    current_timelines: Arc<RwLock<HashMap<String, Timeline>>>,
 }
 
 impl TimelineService {
@@ -95,6 +97,7 @@ impl TimelineService {
             active_streams,
             playback,
             stats_receivers: Arc::new(RwLock::new(HashMap::new())),
+            current_timelines: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -227,6 +230,11 @@ impl IStreamPlayback for TimelineService {
             let mut receivers = self.stats_receivers.write().await;
             receivers.remove(stream_id.as_str());
         }
+        // Clean up stored timeline
+        self.current_timelines
+            .write()
+            .await
+            .remove(stream_id.as_str());
         self.playback.stop_stream(stream_id).await
     }
 
@@ -985,6 +993,12 @@ impl ITimelineService for TimelineService {
             );
         }
 
+        // Store initial timeline for incremental operations
+        self.current_timelines
+            .write()
+            .await
+            .insert(video_stream_id.as_str().to_string(), timeline.clone());
+
         Ok(TimelineStreamResult {
             video_stream_id,
             video_rx,
@@ -1019,7 +1033,48 @@ impl ITimelineService for TimelineService {
             stream_id.as_str()
         );
 
-        self.playback.update_timeline(stream_id, timeline_arc).await
+        self.playback.update_timeline(stream_id, timeline_arc).await?;
+
+        // Store current timeline for incremental operations
+        self.current_timelines
+            .write()
+            .await
+            .insert(stream_id.as_str().to_string(), timeline.clone());
+
+        Ok(())
+    }
+
+    async fn apply_operation_to_stream(
+        &self,
+        stream_id: &StreamId,
+        operation: &crate::domain::operations::EditOperationEnvelope,
+    ) -> Result<bool> {
+        use crate::domain::operations::ApplyResult;
+
+        let mut timelines = self.current_timelines.write().await;
+        let timeline = match timelines.get_mut(stream_id.as_str()) {
+            Some(tl) => tl,
+            None => {
+                tracing::warn!(
+                    "No stored timeline for stream '{}', cannot apply operation incrementally",
+                    stream_id.as_str()
+                );
+                return Ok(false);
+            }
+        };
+
+        match timeline.try_apply_operation(operation)? {
+            ApplyResult::Applied => {
+                let timeline_arc = Arc::new(timeline.clone());
+                // Release lock before async call
+                drop(timelines);
+                self.playback
+                    .update_timeline(stream_id, timeline_arc)
+                    .await?;
+                Ok(true)
+            }
+            ApplyResult::Unsupported => Ok(false),
+        }
     }
 }
 

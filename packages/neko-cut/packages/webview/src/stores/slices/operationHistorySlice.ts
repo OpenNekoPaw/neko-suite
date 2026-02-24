@@ -1,14 +1,14 @@
 /**
  * Operation History Slice — 操作式 undo/redo
  *
- * 与旧的 historySlice（快照式）并行运行。
- * 已迁移的 slice 通过 dispatch → pushOperation 进入此栈。
- * 未迁移的 slice 仍使用旧的 pushHistory → history[] 栈。
+ * 所有 slice 通过 dispatch → pushOperation 进入此栈。
+ * 拖拽等高频操作通过 pushOperation 直接记录（不经过 dispatch）。
  */
 
 import { StateCreator } from 'zustand';
 import type { ProjectData } from '../../types';
 import { applyOperation, invertOperation, type EditOperation } from '@neko/shared';
+import { syncOperationToExtension } from '../utils/extension-sync';
 
 const MAX_OP_HISTORY_SIZE = 200;
 
@@ -48,6 +48,7 @@ export const createOperationHistorySlice: StateCreator<
       opUndoStack: [...opUndoStack.slice(-(MAX_OP_HISTORY_SIZE - 1)), op],
       opRedoStack: [],
     });
+    syncOperationToExtension(op);
   },
 
   opUndo: () => {
@@ -65,6 +66,7 @@ export const createOperationHistorySlice: StateCreator<
         opUndoStack: opUndoStack.slice(0, -1),
         opRedoStack: [...opRedoStack, op],
       });
+      syncOperationToExtension(inv);
     } catch (e) {
       console.error('[OperationHistory] opUndo failed:', e);
     }
@@ -84,6 +86,7 @@ export const createOperationHistorySlice: StateCreator<
         opUndoStack: [...opUndoStack, op],
         opRedoStack: opRedoStack.slice(0, -1),
       });
+      syncOperationToExtension(op);
     } catch (e) {
       console.error('[OperationHistory] opRedo failed:', e);
     }

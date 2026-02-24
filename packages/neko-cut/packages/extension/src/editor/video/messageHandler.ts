@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { VideoEditorModel } from './videoEditorModel';
-import { MessageFromWebview, ProjectData, ContextMenuItem } from '@neko/shared';
+import { MessageFromWebview, ProjectData, ContextMenuItem, applyOperation, type EditOperation } from '@neko/shared';
 
 /**
  * Handles messages between Extension Host and WebView
@@ -87,6 +87,10 @@ export class MessageHandler {
 				);
 				break;
 
+			case 'operationApplied':
+				this.handleOperationApplied(message.operation);
+				break;
+
 			default:
 				console.warn('Unknown message type:', (message as { type: string }).type);
 		}
@@ -110,6 +114,25 @@ export class MessageHandler {
 			type: 'error',
 			message,
 		});
+	}
+
+	// ==========================================================================
+	// 增量同步处理
+	// ==========================================================================
+
+	/**
+	 * Handle incremental operation sync from Webview.
+	 * Applies the operation to in-memory model without writing to document.
+	 */
+	private handleOperationApplied(operation: EditOperation): void {
+		try {
+			const currentData = this.model.getProjectData();
+			const newData = applyOperation(currentData as any, operation) as ProjectData;
+			this.model.applyIncrementalUpdate(newData);
+		} catch (e) {
+			console.error('[MessageHandler] Incremental sync failed:', e);
+			// Non-fatal: full save on Cmd+S will resync
+		}
 	}
 
 	// ==========================================================================

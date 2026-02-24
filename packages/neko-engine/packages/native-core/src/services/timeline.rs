@@ -1,6 +1,7 @@
 //! Timeline service trait
 
 use crate::domain::{FrameData, StreamConfig, Timeline, TimelineProjectInfo};
+use crate::domain::operations::EditOperationEnvelope;
 use crate::error::Result;
 use crate::export::ExportStats;
 use crate::services::IStreamPlayback;
@@ -93,4 +94,13 @@ pub trait ITimelineService: IStreamPlayback {
     /// Hot-update timeline data for an active stream without recreating it.
     /// Initial implementation: stop the old stream and start a new one with the same IDs.
     async fn update_stream(&self, stream_id: &StreamId, timeline: &Timeline) -> Result<()>;
+
+    /// Apply an incremental operation to the stored stream timeline.
+    /// Returns `Ok(true)` if applied, `Ok(false)` if the operation type is unsupported
+    /// (caller should fall back to full `update_stream`).
+    async fn apply_operation_to_stream(
+        &self,
+        stream_id: &StreamId,
+        operation: &EditOperationEnvelope,
+    ) -> Result<bool>;
 }

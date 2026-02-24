@@ -30,7 +30,7 @@ export function applyTrackOperation(project: ProjectData, op: TrackOperation): P
       const { trackId, updates } = op.payload;
       const { index } = findTrack(project, trackId);
       const newTracks = [...project.tracks];
-      newTracks[index] = { ...newTracks[index], ...updates };
+      newTracks[index] = { ...newTracks[index]!, ...updates };
       return { ...project, tracks: newTracks };
     }
 
@@ -50,7 +50,7 @@ export function applyTrackOperation(project: ProjectData, op: TrackOperation): P
       const { trackId, field } = op.payload;
       const { index } = findTrack(project, trackId);
       const newTracks = [...project.tracks];
-      newTracks[index] = { ...newTracks[index], [field]: !newTracks[index][field] };
+      newTracks[index] = { ...newTracks[index]!, [field]: !newTracks[index]![field] };
       return { ...project, tracks: newTracks };
     }
   }

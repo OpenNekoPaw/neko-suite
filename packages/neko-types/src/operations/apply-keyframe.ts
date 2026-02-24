@@ -19,10 +19,10 @@ import { OperationError } from './errors';
 function parsePropertyPath(property: string): { rootKey: string; propKey: string } {
   const parts = property.split('.');
   if (parts.length === 2) {
-    return { rootKey: parts[0], propKey: parts[1] };
+    return { rootKey: parts[0]!, propKey: parts[1]! };
   }
   // 默认归属 transform
-  return { rootKey: 'transform', propKey: parts[0] };
+  return { rootKey: 'transform', propKey: parts[0]! };
 }
 
 export function applyKeyframeOperation(project: ProjectData, op: KeyframeOperation): ProjectData {

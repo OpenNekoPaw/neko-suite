@@ -14,7 +14,7 @@ import { OperationError } from './errors';
 export function findTrack(project: ProjectData, trackId: string): { track: TimelineTrack; index: number } {
   const index = project.tracks.findIndex(t => t.id === trackId);
   if (index === -1) throw OperationError.trackNotFound(trackId);
-  return { track: project.tracks[index], index };
+  return { track: project.tracks[index]!, index };
 }
 
 /**
@@ -26,7 +26,7 @@ export function findElement(
 ): { element: TimelineElement; index: number } {
   const index = track.elements.findIndex(e => e.id === elementId);
   if (index === -1) throw OperationError.elementNotFound(elementId, track.id);
-  return { element: track.elements[index], index };
+  return { element: track.elements[index]!, index };
 }
 
 /**
@@ -38,7 +38,7 @@ export function findShape(
 ): { shape: ShapeInstance; index: number } {
   const index = shapes.findIndex(s => s.id === shapeId);
   if (index === -1) throw OperationError.shapeNotFound(shapeId);
-  return { shape: shapes[index], index };
+  return { shape: shapes[index]!, index };
 }
 
 /**
@@ -51,7 +51,7 @@ export function updateTrackInProject(
 ): ProjectData {
   const { index } = findTrack(project, trackId);
   const newTracks = [...project.tracks];
-  newTracks[index] = updater(newTracks[index]);
+  newTracks[index] = updater(newTracks[index]!);
   return { ...project, tracks: newTracks };
 }
 
@@ -67,7 +67,7 @@ export function updateElementInProject(
   return updateTrackInProject(project, trackId, track => {
     const { index } = findElement(track, elementId);
     const newElements = [...track.elements];
-    newElements[index] = updater(newElements[index]);
+    newElements[index] = updater(newElements[index]!);
     return { ...track, elements: newElements };
   });
 }
@@ -87,7 +87,7 @@ export function updateShapeInProject(
     const shapes: ShapeInstance[] = (element as any).shapes ?? [];
     const { index } = findShape(shapes, shapeId);
     const newShapes = [...shapes];
-    newShapes[index] = updater(newShapes[index]);
+    newShapes[index] = updater(newShapes[index]!);
     return { ...element, shapes: newShapes } as any;
   });
 }
@@ -128,6 +128,6 @@ export function pickKeys<T extends Record<string, any>>(
 export function arrayMove<T>(arr: readonly T[], fromIndex: number, toIndex: number): T[] {
   const result = [...arr];
   const [item] = result.splice(fromIndex, 1);
-  result.splice(toIndex, 0, item);
+  result.splice(toIndex, 0, item!);
   return result;
 }

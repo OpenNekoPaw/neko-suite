@@ -2,16 +2,21 @@
  * Clipboard Slice
  * 管理剪贴板操作(复制/粘贴)
  *
+ * 已迁移到 EditOperation 系统：pasteAtTime 通过 dispatch clipboard.paste 操作。
+ *
  * 使用 timelineUtils 提供的工具函数进行碰撞检测
  */
 
 import { StateCreator } from 'zustand';
-import type { ProjectData, TimelineElement, TrackType } from '../../types';
+import type { ProjectData, TimelineElement, TimelineTrack, TrackType } from '../../types';
+import type { EditOperation } from '@neko/shared';
 import {
   rangesOverlap,
   calculateEffectiveDuration,
   type TimeRange,
 } from '../../utils/timelineUtils';
+import { generateId } from '../../utils';
+import { createMeta } from '../utils/operation-helpers';
 
 // =============================================================================
 // 依赖接口
@@ -25,16 +30,8 @@ interface SelectionDependency {
   selectedElements: Array<{ trackId: string; elementId: string }>;
 }
 
-interface HistoryDependency {
-  pushHistory: (project: ProjectData) => void;
-}
-
-interface ElementOpsDependency {
-  addElement: (trackId: string, element: Omit<TimelineElement, 'id'>) => string;
-}
-
-interface TrackOpsDependency {
-  addTrack: (type: TrackType, name?: string) => string;
+interface DispatchDependency {
+  dispatch: (op: EditOperation) => void;
 }
 
 // =============================================================================
@@ -106,7 +103,7 @@ function elementToTimeRange(element: TimelineElement): TimeRange {
 // =============================================================================
 
 export const createClipboardSlice: StateCreator<
-  ClipboardSlice & ProjectDependency & SelectionDependency & HistoryDependency & ElementOpsDependency & TrackOpsDependency,
+  ClipboardSlice & ProjectDependency & SelectionDependency & DispatchDependency,
   [],
   [],
   ClipboardSlice
@@ -132,26 +129,49 @@ export const createClipboardSlice: StateCreator<
   },
 
   pasteAtTime: (time) => {
-    const { clipboard, project, addElement, addTrack, pushHistory } = get();
+    const { clipboard, project, dispatch } = get();
     if (!clipboard || clipboard.items.length === 0 || !project) return;
-
-    pushHistory(project);
 
     const minStart = Math.min(...clipboard.items.map((x) => x.element.startTime));
 
-    // 追踪将要添加的元素（避免与已添加的元素重叠）
-    const pendingElements: Map<string, TimeRange[]> = new Map();
+    // Pre-compute all paste items with collision detection
+    const pasteItems: Array<{
+      trackId: string;
+      element: TimelineElement;
+      newTrack?: TimelineTrack;
+    }> = [];
+
+    // Track new tracks we'll create (for finding existing vs new)
+    const newTracks = new Map<TrackType, TimelineTrack>();
+
+    // Track pending elements per track (for collision detection across paste items)
+    const pendingElements = new Map<string, TimeRange[]>();
 
     for (const item of clipboard.items) {
-      let targetTrack = project.tracks.find((t) => t.type === item.trackType);
       let trackId: string;
+      let targetTrack = project.tracks.find((t) => t.type === item.trackType);
+      let newTrack: TimelineTrack | undefined;
 
       if (!targetTrack) {
-        trackId = addTrack(item.trackType);
-        // 重新获取项目数据
-        const updatedProject = get().project;
-        if (updatedProject) {
-          targetTrack = updatedProject.tracks.find((t) => t.id === trackId);
+        // Check if we already created a track for this type
+        const existing = newTracks.get(item.trackType);
+        if (existing) {
+          trackId = existing.id;
+          targetTrack = undefined; // no existing elements
+        } else {
+          // Create new track as part of the operation
+          trackId = generateId();
+          newTrack = {
+            id: trackId,
+            name: `${item.trackType.charAt(0).toUpperCase() + item.trackType.slice(1)} Track`,
+            type: item.trackType,
+            elements: [],
+            muted: false,
+            locked: false,
+            hidden: false,
+            isMain: false,
+          };
+          newTracks.set(item.trackType, newTrack);
         }
       } else {
         trackId = targetTrack.id;
@@ -165,15 +185,15 @@ export const createClipboardSlice: StateCreator<
         item.element.trimEnd
       );
 
-      // 获取轨道上已有的元素
+      // Get existing elements on the target track
       const existingElements: TimeRange[] = targetTrack
         ? targetTrack.elements.map(elementToTimeRange)
         : [];
 
-      // 获取待添加的元素
+      // Get pending elements already computed for this track
       const pending = pendingElements.get(trackId) || [];
 
-      // 找到不重叠的位置
+      // Find non-overlapping position
       const actualStartTime = findNonOverlappingPositionOnTrack(
         existingElements,
         pending,
@@ -181,7 +201,7 @@ export const createClipboardSlice: StateCreator<
         elementDuration
       );
 
-      // 记录待添加的元素
+      // Record pending element for future collision checks
       if (!pendingElements.has(trackId)) {
         pendingElements.set(trackId, []);
       }
@@ -190,11 +210,25 @@ export const createClipboardSlice: StateCreator<
         duration: elementDuration,
       });
 
-      addElement(trackId, {
-        ...item.element,
-        startTime: actualStartTime,
+      // Build element with new ID
+      const elementId = generateId();
+      pasteItems.push({
+        trackId,
+        element: {
+          ...item.element,
+          id: elementId,
+          startTime: actualStartTime,
+        } as TimelineElement,
+        newTrack,
       });
     }
+
+    // Dispatch single clipboard.paste operation
+    dispatch({
+      type: 'clipboard.paste',
+      meta: createMeta('user', `Paste ${pasteItems.length} element(s)`),
+      payload: { items: pasteItems },
+    });
   },
 
   clearClipboard: () => set({ clipboard: null }),

@@ -7,6 +7,8 @@ import { useTranslation } from '../../i18n/I18nContext';
 import { isImageFile } from '../../utils';
 import { getActionsForElementType, mapElementTypeToAIType } from '../../types';
 import type { TimelineTrack as TrackType, TimelineElement, AIQuickAction } from '../../types';
+import type { EditOperation } from '@neko/shared';
+import { createMeta } from '../../stores/utils/operation-helpers';
 
 interface TimelineTrackProps {
   track: TrackType;
@@ -52,7 +54,7 @@ export const TimelineTrack = memo(function TimelineTrack({
   const {
     selectElement,
     updateElement,
-    pushHistory,
+    pushOperation,
     showClipThumbnails,
     project,
     setSnapIndicatorTime,
@@ -211,10 +213,8 @@ export const TimelineTrack = memo(function TimelineTrack({
       const left = element.startTime * pixelsPerSecond * zoomLevel;
       const width = effectiveDuration * pixelsPerSecond * zoomLevel;
 
-      // Push history before starting drag
-      if (project) {
-        pushHistory(project, true); // immediate: bypass debounce
-      }
+      // Record original state for undo (will be committed as operation on drag end)
+      const originalElement = { startTime: element.startTime, trimStart: element.trimStart, trimEnd: element.trimEnd, duration: element.duration };
 
       setDragState({
         isDragging: !resizeDir,
@@ -437,6 +437,58 @@ export const TimelineTrack = memo(function TimelineTrack({
         // Clear drag target
         setDragTargetTrackId(null);
 
+        // Commit drag operation to history for undo/redo
+        // (updateElement uses raw set() during drag, so we record the operation here)
+        if (project) {
+          const currentElement = project.tracks
+            .find(t => t.id === track.id)?.elements
+            .find(e => e.id === element.id);
+
+          if (currentElement) {
+            const hasChanged =
+              currentElement.startTime !== originalElement.startTime ||
+              currentElement.trimStart !== originalElement.trimStart ||
+              currentElement.trimEnd !== originalElement.trimEnd ||
+              currentElement.duration !== originalElement.duration;
+
+            if (hasChanged) {
+              // Build update/before diff for changed properties
+              const updates: Record<string, unknown> = {};
+              const beforeUpdates: Record<string, unknown> = {};
+
+              if (currentElement.startTime !== originalElement.startTime) {
+                updates.startTime = currentElement.startTime;
+                beforeUpdates.startTime = originalElement.startTime;
+              }
+              if (currentElement.trimStart !== originalElement.trimStart) {
+                updates.trimStart = currentElement.trimStart;
+                beforeUpdates.trimStart = originalElement.trimStart;
+              }
+              if (currentElement.trimEnd !== originalElement.trimEnd) {
+                updates.trimEnd = currentElement.trimEnd;
+                beforeUpdates.trimEnd = originalElement.trimEnd;
+              }
+              if (currentElement.duration !== originalElement.duration) {
+                updates.duration = currentElement.duration;
+                beforeUpdates.duration = originalElement.duration;
+              }
+
+              const op: EditOperation = {
+                type: 'element.update',
+                meta: createMeta('user', 'Drag element'),
+                payload: {
+                  trackId: track.id,
+                  elementId: element.id,
+                  updates,
+                },
+                before: { updates: beforeUpdates },
+              };
+
+              pushOperation(op);
+            }
+          }
+        }
+
         setDragState({
           isDragging: false,
           isResizing: false,
@@ -457,7 +509,7 @@ export const TimelineTrack = memo(function TimelineTrack({
       target.addEventListener('pointerup', handlePointerUp);
       target.addEventListener('pointercancel', handlePointerUp);
     },
-    [track.id, pixelsPerSecond, zoomLevel, trackHeight, updateElement, pushHistory, selectElement, selectedElements, findSnapPoint, setSnapIndicatorTime, setDragTargetTrackId, moveElement, tracksContainerRef, sortedTracks, project]
+    [track.id, pixelsPerSecond, zoomLevel, trackHeight, updateElement, pushOperation, selectElement, selectedElements, findSnapPoint, setSnapIndicatorTime, setDragTargetTrackId, moveElement, tracksContainerRef, sortedTracks, project]
   );
 
   // Handle element right-click
