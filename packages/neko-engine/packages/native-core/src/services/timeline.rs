@@ -98,9 +98,11 @@ pub trait ITimelineService: IStreamPlayback {
     /// Apply an incremental operation to the stored stream timeline.
     /// Returns `Ok(true)` if applied, `Ok(false)` if the operation type is unsupported
     /// (caller should fall back to full `update_stream`).
+    /// `base_dir` is used for resolving relative media paths in structural operations.
     async fn apply_operation_to_stream(
         &self,
         stream_id: &StreamId,
         operation: &EditOperationEnvelope,
+        base_dir: Option<&std::path::Path>,
     ) -> Result<bool>;
 }

@@ -1048,6 +1048,7 @@ impl ITimelineService for TimelineService {
         &self,
         stream_id: &StreamId,
         operation: &crate::domain::operations::EditOperationEnvelope,
+        base_dir: Option<&std::path::Path>,
     ) -> Result<bool> {
         use crate::domain::operations::ApplyResult;
 
@@ -1063,7 +1064,7 @@ impl ITimelineService for TimelineService {
             }
         };
 
-        match timeline.try_apply_operation(operation)? {
+        match timeline.try_apply_operation_with_base_dir(operation, base_dir)? {
             ApplyResult::Applied => {
                 let timeline_arc = Arc::new(timeline.clone());
                 // Release lock before async call

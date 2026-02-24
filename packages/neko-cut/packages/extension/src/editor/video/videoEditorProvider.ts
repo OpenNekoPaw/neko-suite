@@ -449,9 +449,19 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 					const mediaService = this.mediaServices.get(docUri);
 					if (mediaService) {
 						const operation = message.operation;
-						const isIncremental = ['element.update', 'track.toggle', 'element.toggle']
-							.includes(operation.type);
-
+						// Operations that Rust engine can apply incrementally
+						const RUST_FAST_PATH_OPS = new Set([
+							// P0: field patches
+							'element.update', 'track.toggle', 'element.toggle',
+							// P1: simple mutations
+							'track.update', 'element.splitKeepLeft', 'element.splitKeepRight', 'project.update',
+							// P2: structural operations
+							'element.add', 'element.remove', 'element.move',
+							'track.add', 'track.remove', 'track.reorder',
+							'element.splitAt', 'element.linkAudio', 'element.unlinkAudio',
+							'batch',
+						]);
+						const isIncremental = RUST_FAST_PATH_OPS.has(operation.type);
 						if (isIncremental) {
 							// Fast path: send just the operation to Rust (~100 bytes)
 							mediaService.handleMessage({

@@ -684,6 +684,7 @@ export class MediaService implements vscode.Disposable {
 				action: 'applyOperation',
 				options: {
 					streamId: this._activeVideoStreamId,
+					baseDir: this.documentDir ?? undefined,
 				},
 				body: payload.operation,
 			});

@@ -125,9 +125,19 @@ impl Timeline {
         &mut self,
         op: &super::operations::EditOperationEnvelope,
     ) -> crate::error::Result<super::operations::ApplyResult> {
+        self.try_apply_operation_with_base_dir(op, None)
+    }
+
+    /// Try to apply with optional base_dir for resolving relative paths (P2 ops)
+    pub fn try_apply_operation_with_base_dir(
+        &mut self,
+        op: &super::operations::EditOperationEnvelope,
+        base_dir: Option<&std::path::Path>,
+    ) -> crate::error::Result<super::operations::ApplyResult> {
         use super::operations::*;
 
         match op.op_type.as_str() {
+            // ---- P0: element.update, track.toggle, element.toggle ----
             "element.update" => {
                 let payload: ElementUpdatePayload =
                     serde_json::from_value(op.payload.clone()).map_err(|e| {
@@ -161,9 +171,156 @@ impl Timeline {
                 self.apply_element_toggle(&payload)?;
                 Ok(ApplyResult::Applied)
             }
+
+            // ---- P1: track.update, element.splitKeepLeft/Right, project.update ----
+            "track.update" => {
+                let payload: TrackUpdatePayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid track.update payload: {}", e
+                        ))
+                    })?;
+                self.apply_track_update(&payload)?;
+                Ok(ApplyResult::Applied)
+            }
+            "element.splitKeepLeft" => {
+                let payload: ElementSplitKeepLeftPayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid element.splitKeepLeft payload: {}", e
+                        ))
+                    })?;
+                self.apply_element_split_keep_left(&payload)?;
+                Ok(ApplyResult::Applied)
+            }
+            "element.splitKeepRight" => {
+                let payload: ElementSplitKeepRightPayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid element.splitKeepRight payload: {}", e
+                        ))
+                    })?;
+                self.apply_element_split_keep_right(&payload)?;
+                Ok(ApplyResult::Applied)
+            }
+            "project.update" => {
+                let payload: ProjectUpdatePayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid project.update payload: {}", e
+                        ))
+                    })?;
+                self.apply_project_update(&payload)?;
+                Ok(ApplyResult::Applied)
+            }
+
+            // ---- P2: structural operations ----
+            "element.add" => {
+                let payload: ElementAddPayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid element.add payload: {}", e
+                        ))
+                    })?;
+                self.apply_element_add(&payload, base_dir)?;
+                Ok(ApplyResult::Applied)
+            }
+            "element.remove" => {
+                let payload: ElementRemovePayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid element.remove payload: {}", e
+                        ))
+                    })?;
+                self.apply_element_remove(&payload)?;
+                Ok(ApplyResult::Applied)
+            }
+            "element.move" => {
+                let payload: ElementMovePayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid element.move payload: {}", e
+                        ))
+                    })?;
+                self.apply_element_move(&payload)?;
+                Ok(ApplyResult::Applied)
+            }
+            "element.splitAt" => {
+                let payload: ElementSplitAtPayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid element.splitAt payload: {}", e
+                        ))
+                    })?;
+                self.apply_element_split_at(&payload, base_dir)?;
+                Ok(ApplyResult::Applied)
+            }
+            "element.linkAudio" => {
+                let payload: ElementLinkAudioPayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid element.linkAudio payload: {}", e
+                        ))
+                    })?;
+                self.apply_element_link_audio(&payload, base_dir)?;
+                Ok(ApplyResult::Applied)
+            }
+            "element.unlinkAudio" => {
+                let payload: ElementUnlinkAudioPayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid element.unlinkAudio payload: {}", e
+                        ))
+                    })?;
+                self.apply_element_unlink_audio(&payload)?;
+                Ok(ApplyResult::Applied)
+            }
+            "track.add" => {
+                let payload: TrackAddPayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid track.add payload: {}", e
+                        ))
+                    })?;
+                self.apply_track_add(&payload, base_dir)?;
+                Ok(ApplyResult::Applied)
+            }
+            "track.remove" => {
+                let payload: TrackRemovePayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid track.remove payload: {}", e
+                        ))
+                    })?;
+                self.apply_track_remove(&payload)?;
+                Ok(ApplyResult::Applied)
+            }
+            "track.reorder" => {
+                let payload: TrackReorderPayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid track.reorder payload: {}", e
+                        ))
+                    })?;
+                self.apply_track_reorder(&payload)?;
+                Ok(ApplyResult::Applied)
+            }
+            "batch" => {
+                let payload: BatchPayload =
+                    serde_json::from_value(op.payload.clone()).map_err(|e| {
+                        crate::error::Error::Other(format!(
+                            "Invalid batch payload: {}", e
+                        ))
+                    })?;
+                self.apply_batch(&payload, base_dir)?;
+                Ok(ApplyResult::Applied)
+            }
+
             _ => Ok(ApplyResult::Unsupported),
         }
     }
+
+    // ---- P0: apply methods ----
 
     fn apply_element_update(
         &mut self,
@@ -208,6 +365,13 @@ impl Timeline {
         }
         if let Some(ref v) = u.name {
             element.name = v.clone();
+        }
+        // P0: rendering-critical fields
+        if let Some(ref t) = u.transform {
+            element.transform = t.clone();
+        }
+        if let Some(ref bm) = u.blend_mode {
+            element.blend_mode = super::operations::parse_blend_mode(bm);
         }
 
         self.recalculate_duration();
@@ -268,6 +432,409 @@ impl Timeline {
             }
         }
         Ok(())
+    }
+
+    // ---- P1: apply methods ----
+
+    fn apply_track_update(
+        &mut self,
+        payload: &super::operations::TrackUpdatePayload,
+    ) -> crate::error::Result<()> {
+        let track = self
+            .tracks
+            .iter_mut()
+            .find(|t| t.id == payload.track_id)
+            .ok_or_else(|| {
+                crate::error::Error::Other(format!("Track not found: {}", payload.track_id))
+            })?;
+
+        let u = &payload.updates;
+        if let Some(ref v) = u.name {
+            track.name = v.clone();
+        }
+        if let Some(v) = u.muted {
+            track.muted = v;
+        }
+        if let Some(v) = u.locked {
+            track.locked = v;
+        }
+        if let Some(v) = u.hidden {
+            track.hidden = v;
+        }
+        if let Some(v) = u.is_main {
+            track.is_main = v;
+        }
+        Ok(())
+    }
+
+    fn apply_element_split_keep_left(
+        &mut self,
+        payload: &super::operations::ElementSplitKeepLeftPayload,
+    ) -> crate::error::Result<()> {
+        let element = Self::find_element_mut(&mut self.tracks, &payload.track_id, &payload.element_id)?;
+        // Trim right side: set new duration up to split point
+        if let Some(new_dur) = payload.new_duration {
+            element.duration = new_dur;
+        } else {
+            element.duration = payload.split_point - element.trim_start;
+        }
+        self.recalculate_duration();
+        Ok(())
+    }
+
+    fn apply_element_split_keep_right(
+        &mut self,
+        payload: &super::operations::ElementSplitKeepRightPayload,
+    ) -> crate::error::Result<()> {
+        let element = Self::find_element_mut(&mut self.tracks, &payload.track_id, &payload.element_id)?;
+        element.start_time = payload.new_start_time;
+        element.trim_start = payload.split_point;
+        if let Some(new_dur) = payload.new_duration {
+            element.duration = new_dur;
+        }
+        self.recalculate_duration();
+        Ok(())
+    }
+
+    fn apply_project_update(
+        &mut self,
+        payload: &super::operations::ProjectUpdatePayload,
+    ) -> crate::error::Result<()> {
+        if let Some(v) = payload.updates.fps {
+            self.fps = v;
+        }
+        if let Some(ref r) = payload.updates.resolution {
+            self.resolution = r.clone();
+        }
+        Ok(())
+    }
+
+    // ---- P2: apply methods ----
+
+    fn apply_element_add(
+        &mut self,
+        payload: &super::operations::ElementAddPayload,
+        base_dir: Option<&std::path::Path>,
+    ) -> crate::error::Result<()> {
+        let mut element: Element = serde_json::from_value(payload.element.clone())
+            .map_err(|e| crate::error::Error::Other(format!("Invalid element JSON: {}", e)))?;
+
+        Self::resolve_element_paths(&mut element, base_dir);
+
+        let track = self
+            .tracks
+            .iter_mut()
+            .find(|t| t.id == payload.track_id)
+            .ok_or_else(|| {
+                crate::error::Error::Other(format!("Track not found: {}", payload.track_id))
+            })?;
+
+        if let Some(idx) = payload.index {
+            let insert_at = idx.min(track.elements.len());
+            track.elements.insert(insert_at, element);
+        } else {
+            track.elements.push(element);
+        }
+
+        self.recalculate_duration();
+        Ok(())
+    }
+
+    fn apply_element_remove(
+        &mut self,
+        payload: &super::operations::ElementRemovePayload,
+    ) -> crate::error::Result<()> {
+        let track = self
+            .tracks
+            .iter_mut()
+            .find(|t| t.id == payload.track_id)
+            .ok_or_else(|| {
+                crate::error::Error::Other(format!("Track not found: {}", payload.track_id))
+            })?;
+
+        let len_before = track.elements.len();
+        track.elements.retain(|e| e.id != payload.element_id);
+
+        if track.elements.len() == len_before {
+            return Err(crate::error::Error::Other(format!(
+                "Element not found: {}", payload.element_id
+            )));
+        }
+
+        self.recalculate_duration();
+        Ok(())
+    }
+
+    fn apply_element_move(
+        &mut self,
+        payload: &super::operations::ElementMovePayload,
+    ) -> crate::error::Result<()> {
+        // Remove from source track
+        let element = {
+            let from_track = self
+                .tracks
+                .iter_mut()
+                .find(|t| t.id == payload.from_track_id)
+                .ok_or_else(|| {
+                    crate::error::Error::Other(format!(
+                        "Source track not found: {}", payload.from_track_id
+                    ))
+                })?;
+
+            let pos = from_track
+                .elements
+                .iter()
+                .position(|e| e.id == payload.element_id)
+                .ok_or_else(|| {
+                    crate::error::Error::Other(format!(
+                        "Element not found: {}", payload.element_id
+                    ))
+                })?;
+
+            from_track.elements.remove(pos)
+        };
+
+        // Add to target track
+        let to_track = self
+            .tracks
+            .iter_mut()
+            .find(|t| t.id == payload.to_track_id)
+            .ok_or_else(|| {
+                crate::error::Error::Other(format!(
+                    "Target track not found: {}", payload.to_track_id
+                ))
+            })?;
+
+        to_track.elements.push(element);
+        self.recalculate_duration();
+        Ok(())
+    }
+
+    fn apply_element_split_at(
+        &mut self,
+        payload: &super::operations::ElementSplitAtPayload,
+        base_dir: Option<&std::path::Path>,
+    ) -> crate::error::Result<()> {
+        // Trim left part
+        let element = Self::find_element_mut(&mut self.tracks, &payload.track_id, &payload.element_id)?;
+        element.duration = payload.split_point - element.trim_start;
+
+        // Add right element
+        let mut right_element: Element = serde_json::from_value(payload.right_element.clone())
+            .map_err(|e| crate::error::Error::Other(format!("Invalid right element JSON: {}", e)))?;
+        Self::resolve_element_paths(&mut right_element, base_dir);
+
+        let track = self
+            .tracks
+            .iter_mut()
+            .find(|t| t.id == payload.track_id)
+            .ok_or_else(|| {
+                crate::error::Error::Other(format!("Track not found: {}", payload.track_id))
+            })?;
+
+        // Insert right element after the left one
+        let insert_pos = track
+            .elements
+            .iter()
+            .position(|e| e.id == payload.element_id)
+            .map(|p| p + 1)
+            .unwrap_or(track.elements.len());
+        track.elements.insert(insert_pos, right_element);
+
+        self.recalculate_duration();
+        Ok(())
+    }
+
+    fn apply_element_link_audio(
+        &mut self,
+        payload: &super::operations::ElementLinkAudioPayload,
+        base_dir: Option<&std::path::Path>,
+    ) -> crate::error::Result<()> {
+        let mut audio_element: Element = serde_json::from_value(payload.audio_element.clone())
+            .map_err(|e| crate::error::Error::Other(format!("Invalid audio element JSON: {}", e)))?;
+        Self::resolve_element_paths(&mut audio_element, base_dir);
+
+        let audio_id = audio_element.id.clone();
+
+        // Set linkedAudioId on the video element
+        let video_el = Self::find_element_mut(
+            &mut self.tracks,
+            &payload.video_track_id,
+            &payload.video_element_id,
+        )?;
+        if let ElementType::Media(ref mut m) = video_el.element_type {
+            m.linked_audio_id = Some(audio_id);
+        }
+
+        // Create audio track if provided
+        if let Some(ref track_json) = payload.audio_track {
+            let mut new_track: Track = serde_json::from_value(track_json.clone())
+                .map_err(|e| crate::error::Error::Other(format!("Invalid audio track JSON: {}", e)))?;
+            new_track.elements.push(audio_element);
+            self.tracks.push(new_track);
+        } else {
+            // Add to existing audio track
+            let audio_track = self
+                .tracks
+                .iter_mut()
+                .find(|t| t.id == payload.audio_track_id)
+                .ok_or_else(|| {
+                    crate::error::Error::Other(format!(
+                        "Audio track not found: {}", payload.audio_track_id
+                    ))
+                })?;
+            audio_track.elements.push(audio_element);
+        }
+
+        self.recalculate_duration();
+        Ok(())
+    }
+
+    fn apply_element_unlink_audio(
+        &mut self,
+        payload: &super::operations::ElementUnlinkAudioPayload,
+    ) -> crate::error::Result<()> {
+        // Find the video element and get linked audio id
+        let linked_audio_id = {
+            let video_el = Self::find_element_mut(
+                &mut self.tracks,
+                &payload.video_track_id,
+                &payload.video_element_id,
+            )?;
+            let audio_id = match &video_el.element_type {
+                ElementType::Media(m) => m.linked_audio_id.clone(),
+                _ => None,
+            };
+            // Clear the link
+            if let ElementType::Media(ref mut m) = video_el.element_type {
+                m.linked_audio_id = None;
+            }
+            audio_id
+        };
+
+        // Remove the linked audio element from all tracks
+        if let Some(audio_id) = linked_audio_id {
+            for track in &mut self.tracks {
+                track.elements.retain(|e| e.id != audio_id);
+            }
+        }
+
+        self.recalculate_duration();
+        Ok(())
+    }
+
+    fn apply_track_add(
+        &mut self,
+        payload: &super::operations::TrackAddPayload,
+        base_dir: Option<&std::path::Path>,
+    ) -> crate::error::Result<()> {
+        let mut track: Track = serde_json::from_value(payload.track.clone())
+            .map_err(|e| crate::error::Error::Other(format!("Invalid track JSON: {}", e)))?;
+
+        // Resolve paths for all elements in the track
+        for element in &mut track.elements {
+            Self::resolve_element_paths(element, base_dir);
+        }
+
+        if let Some(idx) = payload.index {
+            let insert_at = idx.min(self.tracks.len());
+            self.tracks.insert(insert_at, track);
+        } else {
+            self.tracks.push(track);
+        }
+
+        self.recalculate_duration();
+        Ok(())
+    }
+
+    fn apply_track_remove(
+        &mut self,
+        payload: &super::operations::TrackRemovePayload,
+    ) -> crate::error::Result<()> {
+        let len_before = self.tracks.len();
+        self.tracks.retain(|t| t.id != payload.track_id);
+
+        if self.tracks.len() == len_before {
+            return Err(crate::error::Error::Other(format!(
+                "Track not found: {}", payload.track_id
+            )));
+        }
+
+        self.recalculate_duration();
+        Ok(())
+    }
+
+    fn apply_track_reorder(
+        &mut self,
+        payload: &super::operations::TrackReorderPayload,
+    ) -> crate::error::Result<()> {
+        if payload.from_index >= self.tracks.len() || payload.to_index >= self.tracks.len() {
+            return Err(crate::error::Error::Other(format!(
+                "Track reorder index out of bounds: from={}, to={}, len={}",
+                payload.from_index, payload.to_index, self.tracks.len()
+            )));
+        }
+
+        let track = self.tracks.remove(payload.from_index);
+        self.tracks.insert(payload.to_index, track);
+        Ok(())
+    }
+
+    fn apply_batch(
+        &mut self,
+        payload: &super::operations::BatchPayload,
+        base_dir: Option<&std::path::Path>,
+    ) -> crate::error::Result<()> {
+        for sub_op in &payload.operations {
+            let result = self.try_apply_operation_with_base_dir(sub_op, base_dir)?;
+            if matches!(result, super::operations::ApplyResult::Unsupported) {
+                return Err(crate::error::Error::Other(format!(
+                    "Unsupported sub-operation in batch: {}", sub_op.op_type
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    // ---- Helpers ----
+
+    fn find_element_mut<'a>(
+        tracks: &'a mut [Track],
+        track_id: &str,
+        element_id: &str,
+    ) -> crate::error::Result<&'a mut Element> {
+        tracks
+            .iter_mut()
+            .find(|t| t.id == track_id)
+            .and_then(|t| t.elements.iter_mut().find(|e| e.id == element_id))
+            .ok_or_else(|| {
+                crate::error::Error::Other(format!(
+                    "Element not found: track={}, element={}",
+                    track_id, element_id
+                ))
+            })
+    }
+
+    /// Resolve relative paths in element src fields to absolute paths
+    fn resolve_element_paths(element: &mut Element, base_dir: Option<&std::path::Path>) {
+        let base = match base_dir {
+            Some(d) => d,
+            None => return,
+        };
+
+        match &mut element.element_type {
+            ElementType::Media(ref mut m) => {
+                if !std::path::Path::new(&m.src).is_absolute() {
+                    m.src = base.join(&m.src).to_string_lossy().to_string();
+                }
+            }
+            ElementType::Audio(ref mut a) => {
+                if !std::path::Path::new(&a.src).is_absolute() {
+                    a.src = base.join(&a.src).to_string_lossy().to_string();
+                }
+            }
+            _ => {}
+        }
     }
 }
 

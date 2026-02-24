@@ -402,6 +402,8 @@ impl Controller for StreamController {
                 })?;
                 let stream_id = StreamId::from_string(stream_id_str);
 
+                let base_dir = opts.base_dir.map(std::path::PathBuf::from);
+
                 let body = body.ok_or_else(|| {
                     ApiError::InvalidRequest(
                         "Operation data required in body for streams:applyOperation".to_string(),
@@ -415,7 +417,11 @@ impl Controller for StreamController {
 
                 let applied = self
                     .timeline_service
-                    .apply_operation_to_stream(&stream_id, &operation)
+                    .apply_operation_to_stream(
+                        &stream_id,
+                        &operation,
+                        base_dir.as_deref(),
+                    )
                     .await
                     .map_err(|e| {
                         ApiError::StreamError(format!("Apply operation failed: {}", e))

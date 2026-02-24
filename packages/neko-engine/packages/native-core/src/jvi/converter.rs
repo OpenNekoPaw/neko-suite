@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use crate::domain::{
     AudioElementData, AudioProperties, Element, ElementType, MediaElementData,
-    TextElementData, Timeline, Track, Transform,
+    ShapeElementData, SubtitleElementData, TextElementData, Timeline, Track, Transform,
 };
 use crate::error::{Error, Result};
 use crate::export::{
@@ -270,8 +270,41 @@ impl ProjectConverter {
                     locked: false,
                 })
             }
-            JviElement::Shape(_) | JviElement::Subtitle(_) => {
-                Err(Error::Other("Shape and subtitle elements not yet supported".to_string()))
+            JviElement::Shape(shape) => {
+                Ok(Element {
+                    id: shape.id,
+                    name: shape.name,
+                    element_type: ElementType::Shape(ShapeElementData::default()),
+                    start_time: shape.start_time,
+                    duration: shape.duration,
+                    trim_start: shape.trim_start,
+                    trim_end: shape.trim_end,
+                    transform: Transform::default(),
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Normal,
+                    effects: Vec::new(),
+                    muted: false,
+                    hidden: false,
+                    locked: false,
+                })
+            }
+            JviElement::Subtitle(sub) => {
+                Ok(Element {
+                    id: sub.id,
+                    name: sub.name,
+                    element_type: ElementType::Subtitle(SubtitleElementData::default()),
+                    start_time: sub.start_time,
+                    duration: sub.duration,
+                    trim_start: sub.trim_start,
+                    trim_end: sub.trim_end,
+                    transform: Transform::default(),
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Normal,
+                    effects: Vec::new(),
+                    muted: false,
+                    hidden: false,
+                    locked: false,
+                })
             }
         }
     }

@@ -170,6 +170,8 @@ pub struct StreamControlOptions {
     /// Clear loop region (for loop action)
     #[serde(default)]
     pub clear: bool,
+    /// Base directory for resolving relative media paths (for applyOperation)
+    pub base_dir: Option<String>,
 }
 
 /// Handle stream control actions (stop/pause/resume/speed/seek/loop) for any service
