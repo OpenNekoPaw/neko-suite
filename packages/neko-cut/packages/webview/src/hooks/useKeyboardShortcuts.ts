@@ -13,6 +13,10 @@ export function useKeyboardShortcuts() {
     seek,
     undo,
     redo,
+    opUndo,
+    opRedo,
+    opUndoStack,
+    opRedoStack,
     toggleSnapping,
     toggleRippleEditing,
     toggleFrameAlign,
@@ -22,7 +26,7 @@ export function useKeyboardShortcuts() {
     clearSelectedElements,
     getTotalDuration,
     pushHistory,
-    updateElement,
+    splitAtPlayhead,
     splitAndKeepLeft,
     splitAndKeepRight,
     toggleElementHidden,
@@ -99,9 +103,10 @@ export function useKeyboardShortcuts() {
         if (isMeta) {
           e.preventDefault();
           if (e.shiftKey) {
-            redo();
+            // 优先操作式 redo，fallback 到快照式
+            opRedoStack.length > 0 ? opRedo() : redo();
           } else {
-            undo();
+            opUndoStack.length > 0 ? opUndo() : undo();
           }
         }
         break;
@@ -178,37 +183,10 @@ export function useKeyboardShortcuts() {
           e.preventDefault();
           saveProject();
         } else if (selectedElements.length > 0 && project) {
-          // S: Split at playhead
+          // S: Split at playhead (委托给 elementSplitSlice)
           e.preventDefault();
-          pushHistory(project);
-
           for (const { trackId, elementId } of selectedElements) {
-            const track = project.tracks.find(t => t.id === trackId);
-            const element = track?.elements.find(e => e.id === elementId);
-
-            if (element) {
-              const effectiveDuration = element.duration - element.trimStart - element.trimEnd;
-              const elementEnd = element.startTime + effectiveDuration;
-
-              // Check if playhead is within the element
-              if (currentTime > element.startTime && currentTime < elementEnd) {
-                const splitPoint = currentTime - element.startTime + element.trimStart;
-
-                // Update original element to end at split point
-                updateElement(trackId, elementId, {
-                  trimEnd: element.duration - splitPoint,
-                });
-
-                // Add new element starting at split point
-                useEditorStore.getState().addElement(trackId, {
-                  ...element,
-                  startTime: currentTime,
-                  trimStart: splitPoint,
-                  trimEnd: element.trimEnd,
-                  name: `${element.name} (split)`,
-                });
-              }
-            }
+            splitAtPlayhead(trackId, elementId);
           }
         }
         break;
@@ -274,6 +252,10 @@ export function useKeyboardShortcuts() {
     seek,
     undo,
     redo,
+    opUndo,
+    opRedo,
+    opUndoStack,
+    opRedoStack,
     toggleSnapping,
     toggleRippleEditing,
     toggleFrameAlign,
@@ -283,7 +265,7 @@ export function useKeyboardShortcuts() {
     clearSelectedElements,
     getTotalDuration,
     pushHistory,
-    updateElement,
+    splitAtPlayhead,
     splitAndKeepLeft,
     splitAndKeepRight,
     toggleElementHidden,

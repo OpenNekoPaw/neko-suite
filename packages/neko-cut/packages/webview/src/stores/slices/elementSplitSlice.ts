@@ -2,12 +2,17 @@
  * Element Split Slice
  * 管理元素分割操作
  *
- * 从 ElementOpsSlice 拆分出来，专注于分割相关操作
- * 依赖: Project, History, Playback, ElementOps
+ * 已迁移到 EditOperation 系统：通过 dispatch 提交操作，
+ * 不再调用 ElementOps.updateElement/addElement。
+ *
+ * 依赖: Project, Playback, Dispatch
  */
 
 import { StateCreator } from 'zustand';
 import type { ProjectData, TimelineElement } from '../../types';
+import type { EditOperation } from '@neko/shared';
+import { generateId } from '../../utils';
+import { createMeta } from '../utils/operation-helpers';
 
 // =============================================================================
 // 依赖接口
@@ -17,17 +22,12 @@ interface ProjectDependency {
   project: ProjectData | null;
 }
 
-interface HistoryDependency {
-  pushHistory: (project: ProjectData) => void;
-}
-
 interface PlaybackDependency {
   currentTime: number;
 }
 
-interface ElementOpsDependency {
-  updateElement: (trackId: string, elementId: string, updates: Partial<TimelineElement>) => void;
-  addElement: (trackId: string, element: Omit<TimelineElement, 'id'>) => string;
+interface DispatchDependency {
+  dispatch: (op: EditOperation) => void;
 }
 
 // =============================================================================
@@ -92,13 +92,13 @@ function calculateSplitPoint(
 // =============================================================================
 
 export const createElementSplitSlice: StateCreator<
-  ElementSplitSlice & ProjectDependency & HistoryDependency & PlaybackDependency & ElementOpsDependency,
+  ElementSplitSlice & ProjectDependency & PlaybackDependency & DispatchDependency,
   [],
   [],
   ElementSplitSlice
 > = (_set, get) => ({
   splitAtPlayhead: (trackId, elementId) => {
-    const { project, currentTime, updateElement, addElement, pushHistory } = get();
+    const { project, currentTime, dispatch } = get();
     if (!project) return;
 
     const result = findElementWithDuration(project, trackId, elementId);
@@ -106,31 +106,37 @@ export const createElementSplitSlice: StateCreator<
 
     const { element, elementEnd } = result;
 
-    // 检查播放头是否在元素范围内
     if (!isPlayheadInElement(currentTime, element.startTime, elementEnd)) {
       return;
     }
 
-    pushHistory(project);
     const splitPoint = calculateSplitPoint(currentTime, element.startTime, element.trimStart);
 
-    // 更新原元素（左半部分）：设置新的 trimEnd
-    updateElement(trackId, elementId, {
-      trimEnd: element.duration - splitPoint,
-    });
-
-    // 创建新元素（右半部分）：从分割点开始
-    addElement(trackId, {
+    // 构建右半部分新元素（含新 ID）
+    const rightElement: TimelineElement = {
       ...element,
+      id: generateId(),
       startTime: currentTime,
       trimStart: splitPoint,
       trimEnd: element.trimEnd,
       name: `${element.name} (split)`,
-    } as Omit<TimelineElement, 'id'>);
+    };
+
+    dispatch({
+      type: 'element.splitAt',
+      meta: createMeta('user', `Split ${element.name}`),
+      payload: {
+        trackId,
+        elementId,
+        splitPoint,
+        rightElement: rightElement as any,
+      },
+      before: { trimEnd: element.trimEnd },
+    });
   },
 
   splitAndKeepLeft: (trackId, elementId) => {
-    const { project, currentTime, updateElement, pushHistory } = get();
+    const { project, currentTime, dispatch } = get();
     if (!project) return;
 
     const result = findElementWithDuration(project, trackId, elementId);
@@ -138,23 +144,23 @@ export const createElementSplitSlice: StateCreator<
 
     const { element, elementEnd } = result;
 
-    // 检查播放头是否在元素范围内
     if (!isPlayheadInElement(currentTime, element.startTime, elementEnd)) {
       return;
     }
 
-    pushHistory(project);
     const splitPoint = calculateSplitPoint(currentTime, element.startTime, element.trimStart);
+    const newName = `${element.name} (left)`;
 
-    // 更新元素：只保留左半部分
-    updateElement(trackId, elementId, {
-      trimEnd: element.duration - splitPoint,
-      name: `${element.name} (left)`,
+    dispatch({
+      type: 'element.splitKeepLeft',
+      meta: createMeta('user', `Keep left of ${element.name}`),
+      payload: { trackId, elementId, splitPoint, newName },
+      before: { trimEnd: element.trimEnd, name: element.name },
     });
   },
 
   splitAndKeepRight: (trackId, elementId) => {
-    const { project, currentTime, updateElement, pushHistory } = get();
+    const { project, currentTime, dispatch } = get();
     if (!project) return;
 
     const result = findElementWithDuration(project, trackId, elementId);
@@ -162,19 +168,28 @@ export const createElementSplitSlice: StateCreator<
 
     const { element, elementEnd } = result;
 
-    // 检查播放头是否在元素范围内
     if (!isPlayheadInElement(currentTime, element.startTime, elementEnd)) {
       return;
     }
 
-    pushHistory(project);
     const splitPoint = calculateSplitPoint(currentTime, element.startTime, element.trimStart);
+    const newName = `${element.name} (right)`;
 
-    // 更新元素：只保留右半部分
-    updateElement(trackId, elementId, {
-      startTime: currentTime,
-      trimStart: splitPoint,
-      name: `${element.name} (right)`,
+    dispatch({
+      type: 'element.splitKeepRight',
+      meta: createMeta('user', `Keep right of ${element.name}`),
+      payload: {
+        trackId,
+        elementId,
+        splitPoint,
+        newStartTime: currentTime,
+        newName,
+      },
+      before: {
+        startTime: element.startTime,
+        trimStart: element.trimStart,
+        name: element.name,
+      },
     });
   },
 });

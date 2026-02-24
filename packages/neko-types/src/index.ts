@@ -15,6 +15,9 @@ export * from './tools/index';
 // Core utilities
 export * from './core/index';
 
+// Operations (EditOperation 指令序列系统)
+export * from './operations';
+
 // VSCode Webview API is NOT exported from main entry to avoid
 // requiring DOM types in Node.js consumers.
 // Use subpath import instead: import { ... } from '@neko/shared/vscode';
