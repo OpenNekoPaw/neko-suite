@@ -18,6 +18,8 @@
 1. **neko-types 混入 UI 字段**：TextElement、SubtitleElement、AudioProperties 中包含引擎不认识的字段
 2. **部分引擎级字段缺失**：TS 定义了影响渲染输出的功能（变速、转场、文字描边等），但 Proto/Rust 未支持
 3. **序列化边界模糊**：`toEngineElement()` 使用黑名单（展开排除）而非白名单，UI 字段会泄漏到引擎
+4. **Proto 层存在冗余定义**：`AudioElementData` 同时拥有 `AudioProperties audio` 和独立的 `volume/pan/fade_in/fade_out` 字段（字段 6-9），语义重叠，消费端无法确定以谁为准
+5. **三层手动同步无保障**：Proto → Rust → TS 全靠人工对齐，缺乏自动化生成管道，是当前不一致问题的根因
 
 ---
 
@@ -147,6 +149,8 @@ pub struct AudioProperties {
 
 ### A3. SubtitleElementData — 字幕渲染增强
 
+> **注意**：新增 6 字段后 SubtitleElementData 与 TextElementData 高度重叠（font_family、background_color、text_align、stroke_color、stroke_width、shadow 完全相同）。未来可考虑提取公共 `TextStyleProperties` message 供两者复用，减少 Proto 维护成本。
+
 | 字段 | TS 类型 | 理由 | 优先级 |
 |---|---|---|---|
 | `fontFamily` | `string` | 字幕字体是渲染属性 | P1 |
@@ -176,6 +180,8 @@ message SubtitleElementData {
 ### A4. Element — 变速播放 (P0)
 
 当前 TS 将 `speed` 放在 `ElementEditState`（UI 层），但变速直接影响视频解码帧率、音频重采样、导出时长计算，必须由引擎处理。
+
+> **语义约定**：当 `speed != 1.0` 时，`element.duration` 始终表示**时间轴时长**（即观众看到的时长），源素材实际播放范围通过 `duration * speed` 推导。此约定需在 Proto 注释中明确。
 
 **Proto 变更：**
 
@@ -207,7 +213,11 @@ message TimeRemapKeyframe {
 
 ### A5. Element — 转场效果 (P1)
 
-引擎 `transition_processor.rs` 已有 18 种 GPU 转场实现，但 Element 模型中无转场字段，导致无法使用。
+引擎 `transition_processor.rs` 已有 18 种 GPU 转场实现（文件头 `#![allow(dead_code)]` 表明尚未被调用），但 Element 模型中无转场字段，导致无法使用。
+
+> **设计备注**：转场本质是两个相邻元素之间的关系，放在 Element 上需要两侧协调（A 的 transition_out 与 B 的 transition_in）。另一种方案是在 Track 级别维护 `transitions` 列表，每个 transition 引用 from/to element_id。当前方案（放在 Element 上）是业界惯例（Premiere/DaVinci 均如此），可以接受。
+>
+> **注意**：TS 侧 `TransitionType` 枚举（18 种含 wipe-left/right/up/down、iris-in/out 等复合命名）与 Rust 侧 `TransitionType` enum（使用 direction 参数区分方向）并非一一对应，接入时需建立映射表。
 
 **Proto 变更：**
 
@@ -280,6 +290,7 @@ export interface ElementEditState {
 ### Step 3: 清理 AudioProperties
 
 ```typescript
+// 引擎层：纯值类型，严格对齐 Proto
 export interface AudioProperties {
   volume: number;       // 纯 number，不再支持 AnimatableProperty
   pan: number;
@@ -291,10 +302,12 @@ export interface AudioProperties {
   gain: number;
 }
 
-// 可动画版本独立定义，用于 UI 层
-export interface AnimatableAudioProperties extends AudioProperties {
-  volume: number | AnimatableProperty;
-  pan: number | AnimatableProperty;
+// UI 层：独立接口，不继承 AudioProperties
+// 注意：不使用 extends，因为将 volume 从 number 变为 number | AnimatableProperty
+// 会违反里氏替换原则（消费端无法安全地将 AnimatableAudioState 当作 AudioProperties 使用）
+export interface AnimatableAudioState {
+  volume: AnimatableProperty;
+  pan: AnimatableProperty;
   eq?: { lowGain: number; midGain: number; highGain: number };
 }
 ```
@@ -380,30 +393,41 @@ export function toEngineElement(element: EditorElement): TimelineElement {
 ## 5. 实施路线图
 
 ```
+Phase 0 (前置): 建立 Proto → TS 自动生成管道
+  ├─ 引入 buf 或 protobuf-ts 工具链
+  ├─ 从 timeline.proto 自动生成 TS 类型定义
+  ├─ 替换 neko-types 中手写的引擎类型为生成类型
+  ├─ toEngineElement 改为基于生成类型的白名单
+  └─ 清理 Proto 层冗余：AudioElementData 的 volume/pan/fade_in/fade_out (字段 6-9)
+      与 AudioProperties 语义重叠，需明确唯一权威字段并移除冗余
+
 Phase 1 (P0): speed 变速 → Proto + Rust + TS 全链路
   ├─ 修改 Proto: 新增 SpeedProperties
   ├─ 修改 Rust: Element 新增 speed 字段
   ├─ 修改 TS: speed 从 ElementEditState 迁移到 TimelineElement
-  └─ 引擎实现: 解码器时间映射 + 音频变速
+  ├─ 引擎实现: 解码器时间映射 + 音频变速
+  └─ 明确 duration 语义约定（时间轴时长 vs 源素材时长）
 
 Phase 2 (P1): 文本/字幕增强 + 转场接入
   ├─ Proto + Rust: TextElementData 新增 6 字段
   ├─ Proto + Rust: SubtitleElementData 新增 6 字段
   ├─ Proto + Rust: Element 新增 transition_in/out
+  ├─ 建立 TS TransitionType ↔ Rust TransitionType + direction 映射表
   ├─ 引擎: text_renderer.rs 接入新字段
-  └─ 引擎: 转场系统接入 export pipeline
+  └─ 引擎: 转场系统接入 export pipeline（移除 transition_processor.rs 的 dead_code 标记）
 
 Phase 3 (P1): 音频增强
   ├─ Proto + Rust: AudioProperties 新增 fade curve + gain
-  ├─ 引擎: audio_mixer.rs 支持 easing 淡入淡出
+  ├─ 引擎: audio_mixer.rs 从线性插值改为 easing 函数淡入淡出
   └─ 引擎: gain (dB→linear) 转换
 
 Phase 4 (P2): TS 层清理
-  ├─ neko-types: 清理 AudioProperties（移除 AnimatableProperty）
+  ├─ neko-types: 清理 AudioProperties（移除 AnimatableProperty，独立为 AnimatableAudioState）
   ├─ neko-types: 清理 ProjectDefaults（对齐 Proto）
   ├─ neko-types: SubtitleElement 移除 language/isDefault
   ├─ neko-types: TextElement 移除 deprecated x/y/rotation
-  └─ neko-cut: toEngineElement() 改为白名单模式
+  ├─ neko-types: SubtitleElement 补全 fontSize/color（当前 TS 缺失但 Proto/Rust 已有）
+  └─ neko-cut: toEngineElement() 改为白名单模式（若 Phase 0 已完成则基于生成类型）
 ```
 
 ---
@@ -522,6 +546,8 @@ Phase 4 (P2): TS 层清理
 
 ### AudioElement
 
+> **Proto 设计问题**：`AudioElementData` 同时拥有 `optional AudioProperties audio = 3`（嵌套消息）和独立的 `volume = 6 / pan = 7 / fade_in = 8 / fade_out = 9` 字段，两者语义完全重叠。Phase 0 中应明确以 `AudioProperties` 为唯一权威，移除冗余的顶层字段。
+
 | 字段 | Proto | Rust | TS | 状态 |
 |---|---|---|---|---|
 | `src` | ✅ | ✅ | ✅ | 同步 |
@@ -562,3 +588,33 @@ Phase 4 (P2): TS 层清理
 | Effects (blur, color, etc.) | ✅ | ✅ | ✗ (未实现) |
 | Keyframes/Animation | ✅ | ✅ | ✗ (未 evaluate) |
 | Blend Modes | ✅ | ✅ | ✅ |
+
+---
+
+## 8. 架构评审备注
+
+> 以下内容基于 2026-02-24 对实际代码库的验证结果。
+
+### 代码验证结果
+
+| 文档描述 | 验证文件 | 结论 |
+|---|---|---|
+| Proto TextElementData 8 字段 | `timeline.proto:299-316` | 准确 |
+| Proto SubtitleElementData 3 字段 | `timeline.proto:329-336` | 准确 |
+| Proto AudioProperties 无 fade curve/gain | `timeline.proto:230-241` | 准确 |
+| Proto Element 无 speed/transition | `timeline.proto:342-377`（最大字段号 18） | 准确 |
+| Rust 完全对齐 Proto | `native-core/src/domain/timeline.rs` | 准确 |
+| TS TextElement 有 deprecated x/y/rotation | `neko-types/src/types/element.ts` | 准确 |
+| TS AudioProperties 有 AnimatableProperty | `neko-types/src/types/audio.ts` | 准确 |
+| audio_mixer.rs 仅线性淡入淡出 | `effective_volume()` 使用 `relative_time / fade_in` | 准确 |
+| transition_processor.rs 未接入 pipeline | 文件头 `#![allow(dead_code)]` | 准确 |
+
+### 关键设计决策记录
+
+1. **AnimatableAudioState 独立定义而非 extends AudioProperties**：`extends` 后将 `volume: number` 扩展为 `number | AnimatableProperty` 违反里氏替换原则，消费端代码无法安全地将子类型当作父类型使用。改为独立接口更安全。
+
+2. **Phase 0 的必要性**：当前三层手动同步（Proto → Rust → TS）是所有不一致问题的根因。引入代码生成管道（buf / protobuf-ts）可在编译期保证对齐，后续 Phase 1-4 每次修改 Proto 都能自动同步到 TS 层。
+
+3. **SubtitleElementData 与 TextElementData 的复用**：两者在新增字段后高度重叠（6 个相同字段）。当前阶段保持独立定义，避免过早抽象。当字段进一步趋同时再提取公共 `TextStyleProperties`。
+
+4. **转场放在 Element 而非 Track 上**：虽然转场是元素间关系，但 Element 级别的 `transition_in/out` 是业界惯例，且与现有 `ElementEditState` 中的设计一致，迁移成本最低。
