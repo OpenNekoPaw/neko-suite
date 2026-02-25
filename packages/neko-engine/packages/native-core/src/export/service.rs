@@ -578,6 +578,7 @@ impl ExportService {
     }
 
     /// Update job progress
+    #[allow(dead_code)] // Phase 2: granular progress tracking
     async fn update_job_progress(
         jobs: &Arc<RwLock<HashMap<String, ExportJob>>>,
         job_id: &str,

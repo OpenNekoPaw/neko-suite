@@ -120,6 +120,7 @@ impl IOSurfaceBackingStore {
     }
 
     /// Get the raw IOSurface reference
+    #[allow(dead_code)] // Phase 2: used by zero-copy export pipeline
     pub fn io_surface_ref(&self) -> IOSurfaceRef {
         self.io_surface
     }
@@ -133,19 +134,18 @@ impl IOSurfaceBackingStore {
     ///
     /// This must be called after wgpu render pass writes to the textures
     /// and before the IOSurface is used by VideoToolbox encoder.
+    #[allow(dead_code)] // Phase 2: used by zero-copy export pipeline
     pub fn synchronize(&self, metal_device: &MTLDevice) {
-        unsafe {
-            let command_queue = metal_device.new_command_queue();
-            let command_buffer = command_queue.new_command_buffer();
-            let blit_encoder = command_buffer.new_blit_command_encoder();
+        let command_queue = metal_device.new_command_queue();
+        let command_buffer = command_queue.new_command_buffer();
+        let blit_encoder = command_buffer.new_blit_command_encoder();
 
-            blit_encoder.synchronize_resource(&self.y_metal_texture);
-            blit_encoder.synchronize_resource(&self.uv_metal_texture);
-            blit_encoder.end_encoding();
+        blit_encoder.synchronize_resource(&self.y_metal_texture);
+        blit_encoder.synchronize_resource(&self.uv_metal_texture);
+        blit_encoder.end_encoding();
 
-            command_buffer.commit();
-            command_buffer.wait_until_completed();
-        }
+        command_buffer.commit();
+        command_buffer.wait_until_completed();
     }
 
     /// Copy Y and UV plane data from CPU buffers to IOSurface
@@ -324,6 +324,7 @@ impl Drop for IOSurfaceBackingStore {
 ///
 /// IMPORTANT: Do NOT cache this across frames. Create fresh each frame to avoid
 /// wgpu internal cache conflicts with IOSurface lifecycle.
+#[allow(dead_code)] // Phase 2: used by zero-copy export pipeline
 pub struct FrameNv12Textures {
     /// Y plane wgpu texture (temporary, per-frame)
     pub y_texture: wgpu::Texture,
@@ -337,6 +338,7 @@ pub struct FrameNv12Textures {
 
 impl FrameNv12Textures {
     /// Create texture views for shader binding
+    #[allow(dead_code)] // Phase 2: used by zero-copy export pipeline
     pub fn create_views(&self) -> (wgpu::TextureView, wgpu::TextureView) {
         let y_view = self.y_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let uv_view = self.uv_texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -348,7 +350,7 @@ impl FrameNv12Textures {
 #[allow(dead_code)]
 pub type IOSurfaceNv12Texture = IOSurfaceBackingStore;
 
-/// macOS zero-copy texture exporter
+/// Phase 2: macOS zero-copy texture exporter
 ///
 /// Creates IOSurface-backed textures that can be shared with VideoToolbox
 /// for zero-copy hardware encoding.
@@ -366,6 +368,7 @@ pub type IOSurfaceNv12Texture = IOSurfaceBackingStore;
 /// backing.synchronize(&metal_device);
 /// // ... pass backing.io_surface_handle() to VideoToolbox ...
 /// ```
+#[allow(dead_code)] // Phase 2: zero-copy export pipeline
 pub struct MacOsTextureExporter {
     ctx: Arc<GpuContext>,
     metal_device: MTLDevice,
@@ -423,6 +426,7 @@ impl MacOsTextureExporter {
     ///
     /// This is a lightweight operation (just pointer wrapping) and should
     /// be called fresh each frame.
+    #[allow(dead_code)] // Phase 2: zero-copy export pipeline
     pub fn import_frame_textures(&self, backing: &IOSurfaceBackingStore) -> Result<FrameNv12Textures> {
         let (y_metal, uv_metal) = backing.metal_textures();
 
@@ -439,16 +443,8 @@ impl MacOsTextureExporter {
         })
     }
 
-    /// Legacy method for backward compatibility
-    ///
-    /// DEPRECATED: Use `create_backing_store()` + `import_frame_textures()` instead.
-    /// This method creates wgpu textures that may become invalid across frames.
-    #[deprecated(note = "Use create_backing_store() + import_frame_textures() for per-frame pattern")]
-    pub fn create_nv12_texture(&self, width: u32, height: u32) -> Result<IOSurfaceBackingStore> {
-        self.create_backing_store(width, height)
-    }
-
     /// Get the Metal device
+    #[allow(dead_code)] // Phase 2: zero-copy export pipeline
     pub fn metal_device(&self) -> &MTLDevice {
         &self.metal_device
     }
@@ -755,6 +751,7 @@ impl MacOsTextureExporter {
     }
 
     /// Import Metal textures into wgpu
+    #[allow(dead_code)] // Phase 2: zero-copy export pipeline
     unsafe fn import_metal_textures_to_wgpu(
         &self,
         y_metal: &metal::Texture,

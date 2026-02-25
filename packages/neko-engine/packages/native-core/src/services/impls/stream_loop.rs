@@ -144,6 +144,7 @@ impl ActiveStreams {
     }
 
     /// Stop all active streams
+    #[allow(dead_code)] // Phase 2: batch stream management
     pub async fn stop_all(&self) {
         let handles: Vec<StreamLoopHandle> = {
             let mut loops = self.loops.write().await;
@@ -168,6 +169,7 @@ impl ActiveStreams {
     }
 
     /// Get count of active streams
+    #[allow(dead_code)] // Phase 2: batch stream management
     pub async fn count(&self) -> usize {
         self.loops.read().await.len()
     }
@@ -195,6 +197,7 @@ impl StreamPlaybackDelegate {
     }
 
     /// Get a reference to the underlying ActiveStreams
+    #[allow(dead_code)] // Phase 2: stream introspection API
     pub fn active_streams(&self) -> &Arc<ActiveStreams> {
         &self.active_streams
     }
@@ -322,6 +325,7 @@ impl WallClockPacer {
     }
 
     /// Get current frame count
+    #[allow(dead_code)] // Phase 2: pacer diagnostics
     pub fn frame_count(&self) -> u64 {
         self.frame_number
     }

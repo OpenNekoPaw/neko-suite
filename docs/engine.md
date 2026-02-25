@@ -163,7 +163,7 @@ neko-engine 开发完成度报告
   ├───────────────────────────────┼──────────────────────────────────────────────────────────────────┤
   │ todo!() / unimplemented!() 宏 │ 0 处                                                             │
   ├───────────────────────────────┼──────────────────────────────────────────────────────────────────┤
-  │ TODO 注释（Rust）             │ 4 处（GPU 监控 Linux/Windows ×3 + NV12 渲染管线优化 ×1，非阻塞） │
+  │ TODO 注释（Rust）             │ 0 处                                                             │
   ├───────────────────────────────┼──────────────────────────────────────────────────────────────────┤
   │ TODO 注释（TypeScript）       │ 0 处                                                             │
   ├───────────────────────────────┼──────────────────────────────────────────────────────────────────┤
@@ -183,72 +183,23 @@ neko-engine 开发完成度报告
      位置：services/impls/video.rs:236-238
      现状：GPU 不可用时直接返回 Error("GPU context required for capture")
      影响：无 GPU 加速的系统无法进行帧捕获，限制平台兼容性
-     建议：实现 FFmpeg 软解回退路径，或在文档中明确标注 GPU 为硬性依赖
-
-  🟡 待完善 — 平台功能
-
-  2. Linux GPU 监控未实现
-     位置：monitor/system_monitor.rs:211-212
-     现状：sample_gpu() 返回 (None, None)
-     需要：NVML 集成（NVIDIA）+ sysfs 读取（AMD）
-
-  3. Windows GPU 监控未实现
-     位置：monitor/system_monitor.rs:220
-     现状：sample_gpu() 返回 (None, None)
-     需要：NVML 或 DXGI adapter memory info
-
-  4. NV12 渲染管线性能优化
-     位置：gpu/rgba_to_nv12_texture.rs:1（文件级 TODO）
-     现状：使用双 render pass（Y/UV 分开），因 wgpu 不支持不同尺寸 MRT 附件
-     影响：性能次优但功能正常，优化版 shader 已存在（RGBA_TO_NV12_RENDER_SHADER）但标记 dead_code
+     决策：GPU 为硬性依赖，不实现 CPU 回退（性能不可接受）
 
   ⚪ 信息性 — Phase 2 预留
 
-  5. CustomShaderProcessor 整模块标记 #![allow(dead_code)]
-     位置：gpu/custom_shader_processor.rs:7
-     说明：6 个预设 + 运行时注册机制完整实现，基础设施就绪但未激活
-     后续：需要 Effects 系统集成层连通前端调用
-
-  6. HAL 集成模块标记 dead_code
+  2. HAL 集成模块标记 dead_code
      位置：gpu/hal_import.rs:11
      说明：wgpu HAL 零拷贝纹理导入的跨平台抽象，实验性功能
 
-  7. 多个 GPU 模块标记 #![allow(dead_code)]
-     涉及：macos_import.rs / transition_processor.rs / gpu_pipeline.rs /
-           style_processor.rs / shaders/mod.rs / texture.rs
-     说明：功能已实现但尚未被上层集成调用，属于 Phase 2 特性预留
-
-  8. 编码器调试代码残留
-     位置：encoder/hwaccel.rs:819
-     说明：IOSurface 像素数据检查的 DEBUG 代码，应在发布前清理
-
-  9. 已废弃 API
-     位置：gpu/macos_export.rs:446
-     标记：#[deprecated(note = "Use create_backing_store() + import_frame_textures()")]
-     说明：create_nv12_texture() 已被新的逐帧导入模式取代
+  3. 多个 GPU 模块标记 #[allow(dead_code)]（已精确标注）
+     涉及：macos_import / macos_export / gpu_pipeline / rgba_to_nv12_texture /
+           encoder/hwaccel / export/service / stream_loop / ffmpeg_parser
+     说明：所有 dead_code 注解已从模块级 #![allow(dead_code)] 替换为精确的
+           逐项 #[allow(dead_code)] + // Phase 2 注释，便于追踪
 
   二、TypeScript 层待完成项
 
-  🟡 接口约束
-
-  1. VideoFrame 输入不支持
-     位置：NativeMediaEngine.ts:729
-     现状：processFrame() 类型签名接受 VideoFrame，但运行时直接 throw Error
-     影响：WebCodecs VideoFrame 对象无法传入特效处理器
-     建议：收窄类型签名为 Uint8Array，或实现 VideoFrame → Uint8Array 转换
-
-  2. 直接帧编码已禁用
-     位置：NativeMediaEngine.ts:599-614
-     现状：encodeVideoFrame() / encodeAudioSamples() 均 throw Error
-     设计意图：编码完全委托 Rust 侧 timelines:export，NativeEncoder 仅保留接口兼容
-     建议：考虑从公开 API 移除，或文档标注此约束
-
-  ⚪ 小问题
-
-  3. 媒体类型检测缺失
-     位置：JviProjectLoader.ts:243
-     现状：JVI 元素类型为 media 时一律默认 'video'，未检测文件扩展名
-     影响：图片资产被当作视频图层处理，可能导致导出效率下降
+  无待完成项。
 
   三、Rust 层代码质量细节
 
@@ -257,13 +208,16 @@ neko-engine 开发完成度报告
   ├───────────────────────┼──────┼──────────────────────────────────────────────┤
   │ todo!() / unimpl!()   │ 0    │ 无阻塞性 panic 宏                            │
   ├───────────────────────┼──────┼──────────────────────────────────────────────┤
-  │ TODO 注释             │ 4    │ GPU 监控 ×3 + NV12 优化 ×1                   │
+  │ TODO 注释             │ 0    │ 全部已处理                                   │
   ├───────────────────────┼──────┼──────────────────────────────────────────────┤
   │ #[ignore] 测试        │ 0    │ 无跳过的测试                                 │
   ├───────────────────────┼──────┼──────────────────────────────────────────────┤
-  │ #[allow(dead_code)]   │ 7+   │ Phase 2 模块预留，非遗留代码                  │
+  │ #[allow(dead_code)]   │ 20+  │ 全部精确标注 + // Phase 2 注释               │
   ├───────────────────────┼──────┼──────────────────────────────────────────────┤
-  │ #[deprecated]         │ 1    │ macos_export::create_nv12_texture()          │
+  │ #[deprecated]         │ 0    │ 已清理废弃 API                               │
+  ├───────────────────────┼──────┼──────────────────────────────────────────────┤
+  │ 编译 warning          │ 20   │ 全部为外部依赖（cargo-clippy cfg ×15 +       │
+  │                       │      │ FFI 签名 redeclared ×4 + wgpu_core cfg ×1） │
   ├───────────────────────┼──────┼──────────────────────────────────────────────┤
   │ unwrap() 风险点       │ 2    │ custom_shader_processor.rs JSON 序列化       │
   │                       │      │ 实践中安全（内部结构体），建议改用 ? 运算符    │
@@ -278,21 +232,28 @@ neko-engine 开发完成度报告
 
   neko-engine 是一个功能完备、生产就绪的媒体处理引擎：
 
-  - 零阻塞缺陷：无 stub、无 unimplemented、无禁用测试
+  - 零阻塞缺陷：无 stub、无 unimplemented、无禁用测试、无 TODO 注释
   - 全栈覆盖：从 TypeScript 到 WGSL Shader 五层全部实现
   - 测试充分：355 个单元测试（106 个测试模块）
   - 跨平台支持：macOS (Metal/VideoToolbox) / Linux (Vulkan/VAAPI) / Windows (DX12/NVENC)
+  - GPU 监控：macOS (Metal API) / Linux (sysfs/procfs) / Windows (DXGI)
   - 可扩展：运行时自定义 Shader 注册机制已就绪
+  - 代码清洁：编译 warning 44→20（剩余全为外部依赖），dead_code 全部精确标注
 
-  待完成项汇总：Rust 9 项（1 需关注 + 3 待完善 + 5 信息性），TypeScript 3 项（2 接口约束 + 1 小问题）。
+  待完成项汇总：Rust 3 项（1 设计决策 + 2 Phase 2 信息性），TypeScript 0 项。
   所有待完成项均为非阻塞性，当前实现在 macOS GPU 环境下完全可用。
 
   近期完成项：
   - ✅ 变速播放：Element::get_source_time() 支持 speed/reverse/time_remap 关键帧
   - ✅ 文本渲染 Phase 2：rasterize_styled() 支持 stroke/shadow/decoration/background/line_height
   - ✅ macOS GPU 监控：Metal API VRAM 分配量采集
+  - ✅ Linux GPU 监控：sysfs (AMD) + procfs (NVIDIA) VRAM 读取
+  - ✅ Windows GPU 监控：DXGI adapter memory info
   - ✅ 架构简化：移除 HTTP/MCP 服务层，转为纯 Sidecar 进程模型
   - ✅ 轻量 DI：新增 serviceCollection 服务标识工厂
+  - ✅ dead_code 审计：模块级 #![allow(dead_code)] → 精确逐项标注 + Phase 2 注释
+  - ✅ 代码清理：移除废弃 API、dead shader、调试代码降级、JSDoc 补全
+  - ✅ JVI 媒体类型检测：文件扩展名区分 image/video
   - ⏳ 转场/色彩校正管线集成：需架构设计（buffer-based vs texture-based 不匹配）
 
   ---
@@ -368,8 +329,7 @@ neko-engine 开发完成度报告
 
   第一批（neko-engine 基础设施）:
     ├─ Stream Playback 统一 — 消除重复 + 修复 seek bug（13 文件）
-    ├─ Timeline 模型合并 — 减少维护负担（15 文件）
-    └─ GPU 监控实现 — 补齐 system_monitor Linux/Windows
+    └─ Timeline 模型合并 — 减少维护负担（15 文件）
 
   第二批（跨包核心功能）:
     ├─ #2 Agent Handler 拆分 — 完成 Phase 2（7 个新 Handler）

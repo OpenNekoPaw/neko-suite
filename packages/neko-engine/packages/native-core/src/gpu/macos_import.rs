@@ -9,6 +9,7 @@
 //! - https://developer.apple.com/documentation/metal/mtldevice
 //! - https://developer.apple.com/documentation/iosurface
 
+// Phase 2: macOS zero-copy import — IOSurface → Metal → wgpu
 #![allow(dead_code)]
 
 use crate::decoder::Nv12GpuTexture;

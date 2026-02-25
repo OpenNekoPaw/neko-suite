@@ -8,10 +8,11 @@
 //!
 //! The pipeline requires GPU texture sharing support.
 
+// Phase 2: Zero-copy GPU pipeline — not yet integrated into export path
 #![allow(dead_code)]
 
 use crate::decoder::{Decoder, HwAccelType, MediaInfo, HwAccelDecoder};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::gpu::{
     ColorSpace, GpuContext,
     Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter,

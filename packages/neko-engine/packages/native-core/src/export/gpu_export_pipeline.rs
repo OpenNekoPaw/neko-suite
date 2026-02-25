@@ -719,6 +719,7 @@ impl GpuExportPipeline {
             z_index = z_index,
         )
     )]
+    #[allow(dead_code)] // Phase 2: convenience wrapper over decode_to_gpu_layer_timed
     fn decode_to_gpu_layer(
         &mut self,
         element: &Element,

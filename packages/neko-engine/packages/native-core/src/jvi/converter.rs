@@ -8,7 +8,7 @@ use crate::domain::{
     AudioElementData, AudioProperties, Element, ElementType, MediaElementData,
     ShapeElementData, SubtitleElementData, TextElementData, Timeline, Track, Transform,
 };
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::export::{
     ExportAudioCodec, ExportHwEncoder, ExportPreset, ExportSettings, ExportVideoCodec,
 };

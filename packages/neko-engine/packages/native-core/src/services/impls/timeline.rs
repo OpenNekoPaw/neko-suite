@@ -11,7 +11,7 @@ use crate::jvi::JviLoader;
 use crate::error::{Error, Result};
 use crate::gpu::{
     BlendMode as GpuBlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext,
-    LayerPixelFormat, Nv12Renderer, Nv12TextureImporter, Transform2D,
+    LayerPixelFormat, Nv12Renderer, Nv12TextureImporter,
 };
 use crate::preview::{PreviewFrame, PreviewPipeline, PreviewPipelineConfig};
 use crate::services::impls::stream_loop::{

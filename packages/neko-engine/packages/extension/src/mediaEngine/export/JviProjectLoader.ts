@@ -180,7 +180,7 @@ export class JviProjectLoader {
 		track: JviTrack,
 		zIndex: number
 	): TrackLayer | null {
-		const layerType = this.mapElementType(element.type, track.type);
+		const layerType = this.mapElementType(element, track.type);
 		if (!layerType) return null;
 
 		const defaults = this._project?.defaults?.transform;
@@ -234,21 +234,30 @@ export class JviProjectLoader {
 	/**
 	 * Map element type to track layer type
 	 */
+	private static readonly IMAGE_EXTENSIONS = new Set([
+		'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp',
+	]);
+
 	private mapElementType(
-		elementType: string,
+		element: JviElement,
 		trackType: string
 	): 'video' | 'image' | 'text' | 'shape' | 'effect' | null {
-		if (elementType === 'media') {
-			// Check if it's an image or video based on extension
-			return 'video'; // Default to video, will be determined by source
+		if (element.type === 'media') {
+			if (element.src) {
+				const ext = element.src.toLowerCase().match(/\.[^.]+$/)?.[0];
+				if (ext && JviProjectLoader.IMAGE_EXTENSIONS.has(ext)) {
+					return 'image';
+				}
+			}
+			return 'video';
 		}
-		if (elementType === 'text' || trackType === 'text') {
+		if (element.type === 'text' || trackType === 'text') {
 			return 'text';
 		}
-		if (elementType === 'shape' || trackType === 'shape') {
+		if (element.type === 'shape' || trackType === 'shape') {
 			return 'shape';
 		}
-		if (elementType === 'audio' || trackType === 'audio') {
+		if (element.type === 'audio' || trackType === 'audio') {
 			return null; // Audio handled separately
 		}
 		return null;

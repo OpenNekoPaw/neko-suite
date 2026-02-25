@@ -596,19 +596,18 @@ class NativeEncoder implements IEncoder {
 		this._notifyStateChange();
 	}
 
+	/**
+	 * Encode a video frame.
+	 *
+	 * In the NativeEngine architecture, encoding is handled entirely by the
+	 * Rust side via `timelines:export`. This method satisfies the IEncoder
+	 * interface contract but is not used. Use ExportService.export() instead.
+	 *
+	 * @throws Always — direct frame encoding is not supported.
+	 */
 	async encodeVideoFrame(_frame: Uint8Array | VideoFrame, _timestamp: number): Promise<void> {
-		// In the new architecture, encoding is handled entirely by Rust side
-		// via timelines:export. This method is kept for interface compatibility
-		// but individual frame encoding is not used.
 		throw new Error(
 			'Direct frame encoding is not supported in NativeEngine mode. ' +
-			'Use ExportService.export() which delegates to timelines:export.'
-		);
-	}
-
-	async encodeAudioSamples(_samples: Float32Array, _timestamp: number): Promise<void> {
-		throw new Error(
-			'Direct audio encoding is not supported in NativeEngine mode. ' +
 			'Use ExportService.export() which delegates to timelines:export.'
 		);
 	}
@@ -712,6 +711,14 @@ class NativeEffectProcessor implements IEffectProcessor {
 		}
 	}
 
+	/**
+	 * Apply GPU effects to a frame.
+	 *
+	 * NativeEffectProcessor runs in the Extension Host (Node.js) which does not
+	 * support the browser-only VideoFrame API. Only raw RGBA pixel data as
+	 * Uint8Array is accepted. The union type is inherited from IEffectProcessor
+	 * for interface compatibility with browser-based implementations.
+	 */
 	async processFrame(
 		frame: Uint8Array | VideoFrame,
 		width: number,
@@ -726,7 +733,12 @@ class NativeEffectProcessor implements IEffectProcessor {
 		if (frame instanceof Uint8Array) {
 			currentData = frame;
 		} else {
-			throw new Error('VideoFrame input not supported in NativeEffectProcessor');
+			// VideoFrame is a browser-only Web Codecs API, unavailable in Node.js.
+			// Callers must convert VideoFrame to Uint8Array before invoking.
+			throw new Error(
+				'VideoFrame input is not supported in NativeEffectProcessor (Node.js environment). ' +
+				'Convert VideoFrame to Uint8Array before calling processFrame().'
+			);
 		}
 
 		// Apply each effect sequentially

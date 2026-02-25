@@ -4,8 +4,6 @@
 //! - Preset shader templates (compiled at build time)
 //! - Runtime user-provided WGSL shaders (Phase 2)
 
-#![allow(dead_code)]
-
 use super::buffer_pool::BufferPool;
 use super::context::GpuContext;
 use crate::error::{Error, Result};

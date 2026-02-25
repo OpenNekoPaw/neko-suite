@@ -816,13 +816,13 @@ impl Encoder for HwAccelEncoder {
                 (y_ptr, y_stride, uv_ptr, uv_stride)
             };
 
-            // DEBUG: check if IOSurface has real pixel data
+            // Diagnostic: verify VideoToolbox wrote NV12 data to IOSurface (first 3 frames only)
             if pts < 3 {
                 let height = config.height as usize;
                 let plane_size = y_stride * height;
                 let y_data = unsafe { std::slice::from_raw_parts(y_ptr, std::cmp::min(plane_size, 256)) };
                 let non_zero = y_data.iter().filter(|&&b| b != 0).count();
-                tracing::info!(
+                tracing::debug!(
                     "encode_frame_gpu: pts={} y_ptr={:?} y_stride={} first_16={:02x?} non_zero_in_256={}",
                     pts, y_ptr, y_stride, &y_data[..16.min(y_data.len())], non_zero
                 );
@@ -886,6 +886,7 @@ impl HwAccelEncoder {
     /// Create CVPixelBuffer from IOSurface for zero-copy encoding
     ///
     /// Returns the CVPixelBufferRef as usize. Caller must release with release_cv_pixel_buffer.
+    #[allow(dead_code)] // Phase 2: zero-copy IOSurface encoding path
     unsafe fn create_cv_pixel_buffer_from_iosurface(
         &self,
         io_surface: usize,
@@ -929,6 +930,7 @@ impl HwAccelEncoder {
     }
 
     /// Release CVPixelBuffer
+    #[allow(dead_code)] // Phase 2: zero-copy IOSurface encoding path
     unsafe fn release_cv_pixel_buffer(&self, cv_pixel_buffer: usize) {
         use objc::runtime::Object;
 

@@ -248,70 +248,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec2<f32> {
 }
 "#;
 
-/// Legacy MRT shader (kept for reference, not used due to wgpu limitations)
-#[allow(dead_code)]
-pub const RGBA_TO_NV12_RENDER_SHADER: &str = r#"
-// RGBA to NV12 Full Render Pipeline Shader (MRT version - not used)
-// Single pass with MRT for optimal performance
-// Note: wgpu doesn't support different-sized MRT attachments
-
-struct Uniforms {
-    output_width: f32,
-    output_height: f32,
-    color_space: u32,
-    _padding: u32,
-}
-
-struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-}
-
-@vertex
-fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
-    var out: VertexOutput;
-    let x = f32(i32(vertex_index & 1u) * 2 - 1);
-    let y = f32(i32(vertex_index >> 1u) * 2 - 1);
-    out.position = vec4<f32>(x, -y, 0.0, 1.0);
-    out.uv = vec2<f32>((x + 1.0) * 0.5, (y + 1.0) * 0.5);
-    return out;
-}
-
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-@group(0) @binding(1) var input_texture: texture_2d<f32>;
-@group(0) @binding(2) var input_sampler: sampler;
-
-fn rgb_to_yuv_bt709(rgb: vec3<f32>) -> vec3<f32> {
-    let y = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
-    let u = -0.1146 * rgb.r - 0.3854 * rgb.g + 0.5000 * rgb.b + 0.5;
-    let v = 0.5000 * rgb.r - 0.4542 * rgb.g - 0.0458 * rgb.b + 0.5;
-    return vec3<f32>(y, u, v);
-}
-
-struct FragmentOutput {
-    @location(0) y: f32,
-    @location(1) uv: vec2<f32>,
-}
-
-@fragment
-fn fs_main(in: VertexOutput) -> FragmentOutput {
-    let rgba = textureSample(input_texture, input_sampler, in.uv);
-    let yuv = rgb_to_yuv_bt709(rgba.rgb);
-    var out: FragmentOutput;
-    out.y = yuv.x;
-    out.uv = yuv.yz;
-    return out;
-}
-"#;
-
-/// Legacy compute shader for RGBA to NV12 conversion (Compute + Blit approach)
+/// Compute shader for RGBA to NV12 conversion (Compute + Blit approach)
 ///
-/// This shader is used in the current implementation which uses:
+/// Pipeline:
 /// 1. Compute shader: RGBA → R16Float/RG16Float intermediate textures
 /// 2. Blit render pass: intermediate → staging textures
 /// 3. Metal blit: staging → IOSurface
 ///
-/// TODO: Migrate to full render pipeline (RGBA_TO_NV12_RENDER_SHADER) for optimal performance
+/// Note: A single-pass MRT approach would be more optimal, but wgpu does not
+/// support different-sized MRT attachments (Y=full res, UV=half res), making
+/// the dual render pass the permanent design.
+#[allow(dead_code)] // Phase 2: alternative compute-based NV12 conversion
 pub const RGBA_TO_NV12_TEXTURE_SHADER: &str = r#"
 // RGBA to NV12 Texture Conversion Compute Shader
 // Outputs to texture storage for zero-copy encoding pipeline
@@ -413,6 +360,7 @@ fn convert_rgba_to_nv12(@builtin(global_invocation_id) global_id: vec3<u32>) {
 "#;
 
 /// Blit shader for copying intermediate textures to staging/IOSurface textures
+#[allow(dead_code)] // Phase 2: used with RGBA_TO_NV12_TEXTURE_SHADER compute path
 pub const BLIT_SHADER: &str = r#"
 // Fullscreen triangle vertex shader
 struct VertexOutput {
@@ -463,6 +411,7 @@ pub struct RgbaToNv12RenderUniforms {
 }
 
 // Legacy alias for backward compatibility
+#[allow(dead_code)] // Phase 2: kept for API compatibility
 pub type RgbaToNv12TextureUniforms = RgbaToNv12RenderUniforms;
 
 /// GPU RGBA to NV12 texture converter for zero-copy encoding
@@ -499,7 +448,9 @@ pub struct RgbaToNv12TextureConverter {
     staging_y_metal: Option<metal::Texture>,
     staging_uv_metal: Option<metal::Texture>,
     /// IOSurface-backed wgpu textures for direct rendering (true zero-copy)
+    #[allow(dead_code)] // Phase 2: direct IOSurface rendering
     iosurface_y_wgpu: Option<wgpu::Texture>,
+    #[allow(dead_code)] // Phase 2: direct IOSurface rendering
     iosurface_uv_wgpu: Option<wgpu::Texture>,
     /// Cached texture dimensions
     texture_size: (u32, u32),

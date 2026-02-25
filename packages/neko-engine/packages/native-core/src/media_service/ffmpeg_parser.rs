@@ -19,6 +19,7 @@ use crate::error::{Error, Result};
 
 /// Parsed SSIM entry for a single frame
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Phase 2: quality metrics analysis
 pub struct SsimEntry {
     /// Frame number (1-based)
     pub frame: u64,
@@ -34,6 +35,7 @@ pub struct SsimEntry {
 
 /// Parsed PSNR entry for a single frame
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Phase 2: quality metrics analysis
 pub struct PsnrEntry {
     /// Frame number (1-based)
     pub frame: u64,

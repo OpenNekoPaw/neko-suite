@@ -205,19 +205,78 @@ impl SystemMonitor {
     }
 
     /// Platform-specific GPU sampling for Linux
+    ///
+    /// Reads VRAM usage from sysfs for AMD GPUs and procfs for NVIDIA GPUs.
+    /// GPU utilization percentage is not reliably available without NVML,
+    /// so only VRAM is reported (consistent with macOS behavior).
     #[cfg(target_os = "linux")]
     fn sample_gpu(&self) -> (Option<f64>, Option<u64>) {
-        // Linux: Try NVML for NVIDIA, or sysfs for AMD
-        // TODO: Implement NVML integration for NVIDIA GPUs
-        // TODO: Implement sysfs reading for AMD GPUs
+        // Try AMD via sysfs (mem_info_vram_used is in bytes)
+        for card_idx in 0..4u8 {
+            let path = format!("/sys/class/drm/card{}/device/mem_info_vram_used", card_idx);
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(bytes) = content.trim().parse::<u64>() {
+                    return (None, Some(bytes));
+                }
+            }
+        }
+
+        // Try NVIDIA via procfs (meminfo_proc shows per-process GPU memory)
+        if let Ok(entries) = std::fs::read_dir("/proc/driver/nvidia/gpus/") {
+            for entry in entries.flatten() {
+                let info_path = entry.path().join("information");
+                if let Ok(content) = std::fs::read_to_string(&info_path) {
+                    // Parse "Video Memory: XXXX MiB" line
+                    for line in content.lines() {
+                        if let Some(rest) = line.strip_prefix("Video Memory") {
+                            let rest = rest.trim_start_matches(|c: char| c == ':' || c.is_whitespace());
+                            if let Some(mib_str) = rest.strip_suffix("MiB") {
+                                if let Ok(mib) = mib_str.trim().parse::<u64>() {
+                                    return (None, Some(mib * 1024 * 1024));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         (None, None)
     }
 
     /// Platform-specific GPU sampling for Windows
+    ///
+    /// Uses DXGI to query local video memory usage from the primary adapter.
+    /// Requires Windows 10+ (IDXGIAdapter3). Falls back to None on older systems.
     #[cfg(target_os = "windows")]
     fn sample_gpu(&self) -> (Option<f64>, Option<u64>) {
-        // Windows: Use NVML or DirectX performance counters
-        // TODO: Implement NVML or DXGI adapter memory info
+        use windows::Win32::Graphics::Dxgi::{
+            CreateDXGIFactory1, IDXGIAdapter3, IDXGIFactory1,
+            DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
+        };
+        use windows::core::Interface;
+
+        let factory: IDXGIFactory1 = match unsafe { CreateDXGIFactory1() } {
+            Ok(f) => f,
+            Err(_) => return (None, None),
+        };
+
+        let adapter = match unsafe { factory.EnumAdapters(0) } {
+            Ok(a) => a,
+            Err(_) => return (None, None),
+        };
+
+        if let Ok(adapter3) = adapter.cast::<IDXGIAdapter3>() {
+            let mut mem_info = Default::default();
+            if unsafe {
+                adapter3.QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut mem_info)
+            }
+            .is_ok()
+            {
+                return (None, Some(mem_info.CurrentUsage as u64));
+            }
+        }
+
         (None, None)
     }
 
