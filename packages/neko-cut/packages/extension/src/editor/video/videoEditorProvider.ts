@@ -47,6 +47,8 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 	private mediaServices: Map<string, MediaService> = new Map();
 	private frameServerServices: Map<string, FrameServerService> = new Map();
 	private exportServices: Map<string, ExportService> = new Map();
+	/** Deferred cleanup subscriptions (cancelled when editor is reopened during export) */
+	private deferredCleanupSubs: Map<string, vscode.Disposable[]> = new Map();
 
 	// 事件发射器 - 用于解耦与 PropertyPanel 的通信
 	private readonly _onElementSelected = new vscode.EventEmitter<IElementSelectedEvent>();
@@ -242,6 +244,17 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		return this.exportServices.get(uri);
 	}
 
+	/**
+	 * Get the document URI that has an active background export (if any).
+	 * Used to reopen the editor when user clicks the status bar export item.
+	 */
+	public getExportingDocumentUri(): string | null {
+		for (const [uri, svc] of this.exportServices) {
+			if (svc.isExporting()) return uri;
+		}
+		return null;
+	}
+
 	public async resolveCustomTextEditor(
 		document: vscode.TextDocument,
 		webviewPanel: vscode.WebviewPanel,
@@ -316,19 +329,39 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		// 设置为活动编辑器
 		editorRegistry.setActiveEditor(model);
 
-		// Initialize Frame Server (NativeEngine-backed, required for all media operations)
+		// Cancel deferred cleanup if editor is being reopened during background export
+		const deferSubs = this.deferredCleanupSubs.get(docUri);
+		if (deferSubs) {
+			console.log('[VideoEditorProvider] Cancelling deferred cleanup — editor reopened');
+			for (const s of deferSubs) s.dispose();
+			this.deferredCleanupSubs.delete(docUri);
+		}
+
+		// Initialize Frame Server — reuse existing if still alive (background export)
 		let frameServerPort: number | null = null;
-		const frameServerService = await FrameServerService.tryCreate({ port: 0 });
-		if (!frameServerService) {
-			console.error('[VideoEditorProvider] Frame server not available — media operations will fail');
-		} else {
+		let frameServerService = this.frameServerServices.get(docUri) ?? null;
+		if (frameServerService?.isAvailable()) {
 			frameServerPort = frameServerService.getPort();
-			this.frameServerServices.set(docUri, frameServerService);
-			console.log(`[VideoEditorProvider] Frame server started on port ${frameServerPort}`);
+			console.log(`[VideoEditorProvider] Reusing frame server on port ${frameServerPort}`);
+		} else {
+			frameServerService = await FrameServerService.tryCreate({ port: 0 });
+			if (!frameServerService) {
+				console.error('[VideoEditorProvider] Frame server not available — media operations will fail');
+			} else {
+				frameServerPort = frameServerService.getPort();
+				this.frameServerServices.set(docUri, frameServerService);
+				console.log(`[VideoEditorProvider] Frame server started on port ${frameServerPort}`);
+			}
 		}
 
 		// Create MediaService — routes Webview messages to NativeEngine via FrameServerService
+		// Always create a new one for the new webview (old one holds stale webview ref)
 		if (frameServerService) {
+			const oldMedia = this.mediaServices.get(docUri);
+			if (oldMedia) {
+				// Dispose without destroying editor stream (export may still use frame server)
+				oldMedia.dispose();
+			}
 			const mediaService = new MediaService(webviewPanel, frameServerService, document.uri);
 			this.mediaServices.set(docUri, mediaService);
 
@@ -342,17 +375,32 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 			}
 		}
 
-		// Create ExportService — handles export lifecycle via NativeEngine
-		if (frameServerService) {
+		// Create or reuse ExportService — reuse if there's an active background export
+		let exportService = this.exportServices.get(docUri);
+		const reusingExport = exportService?.isExporting() ?? false;
+		if (frameServerService && !reusingExport) {
+			exportService?.dispose();
 			const jviDir = path.dirname(document.uri.fsPath);
-			const exportService = new ExportService(frameServerService, jviDir);
+			exportService = new ExportService(frameServerService, jviDir);
 			this.exportServices.set(docUri, exportService);
+		}
+		if (reusingExport) {
+			console.log('[VideoEditorProvider] Reusing ExportService with active export');
+		}
+
+		if (frameServerService && exportService) {
 
 			// Forward export events to the Webview
+		// NOTE: postMessage may throw after panel disposal (background export).
+		// We wrap each call in try-catch so status bar updates always execute.
+			const postToWebview = (msg: unknown) => {
+				try { webviewPanel.webview.postMessage(msg); } catch { /* panel disposed */ }
+			};
+
 			const disposables: vscode.Disposable[] = [];
 			disposables.push(exportService.onDidProgress(progress => {
 				// Map Rust ExportProgress to Webview expected format
-				webviewPanel.webview.postMessage({
+				postToWebview({
 					type: 'export:progress',
 					progress: {
 						stage: progress.state,
@@ -374,7 +422,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 					},
 				});
 
-				// Update status bar
+				// Update status bar (always executes, even when webview is disposed)
 				statusBar?.updateExportProgress({
 					isExporting: true,
 					percent: progress.progress,
@@ -387,7 +435,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 			}));
 
 			disposables.push(exportService.onDidComplete(result => {
-				webviewPanel.webview.postMessage({ type: 'export:completed', ...result });
+				postToWebview({ type: 'export:completed', ...result });
 				statusBar?.updateExportProgress({ isExporting: false, percent: 0, message: '' });
 				this.broadcastExportStatus();
 
@@ -406,13 +454,13 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 			}));
 
 			disposables.push(exportService.onDidError(error => {
-				webviewPanel.webview.postMessage({ type: 'export:error', error });
+				postToWebview({ type: 'export:error', error });
 				statusBar?.updateExportProgress({ isExporting: false, percent: 0, message: '' });
 				this.broadcastExportStatus();
 			}));
 
 			disposables.push(exportService.onDidCancel(() => {
-				webviewPanel.webview.postMessage({ type: 'export:cancelled' });
+				postToWebview({ type: 'export:cancelled' });
 				statusBar?.updateExportProgress({ isExporting: false, percent: 0, message: '' });
 				this.broadcastExportStatus();
 			}));
@@ -582,6 +630,28 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 					const ms = this.mediaServices.get(docUri);
 					if (ms) {
 						ms.notifyStreamCreated();
+					}
+					// If there's a background export in progress, tell webview to show progress
+					const activeExport = this.exportServices.get(docUri);
+					if (activeExport?.isExporting()) {
+						// Open the export panel first, then send progress state
+						webviewPanel.webview.postMessage({ type: 'showExportPanel' });
+						activeExport.getProgress().then(progress => {
+							if (progress) {
+								webviewPanel.webview.postMessage({
+									type: 'export:activeExport',
+									progress: {
+										stage: progress.state,
+										percent: progress.progress,
+										currentFrame: progress.currentFrame,
+										totalFrames: progress.totalFrames,
+										elapsedTime: progress.elapsedMs,
+										estimatedTimeRemaining: progress.estimatedRemainingMs,
+										currentFps: progress.stats?.avgFps ?? 0,
+									},
+								});
+							}
+						}).catch(() => {});
 					}
 					return;
 				}
@@ -763,11 +833,14 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 				const subs: vscode.Disposable[] = [];
 				const onDone = () => {
 					for (const s of subs) s.dispose();
+					this.deferredCleanupSubs.delete(docUri);
 					deferCleanup();
 				};
 				subs.push(exportService.onDidComplete(onDone));
 				subs.push(exportService.onDidError(onDone));
 				subs.push(exportService.onDidCancel(onDone));
+				// Store subs so they can be cancelled if editor is reopened
+				this.deferredCleanupSubs.set(docUri, subs);
 			} else {
 				// No active export — clean up immediately
 				if (exportService) {

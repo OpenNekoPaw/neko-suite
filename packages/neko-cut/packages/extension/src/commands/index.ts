@@ -91,6 +91,14 @@ export function registerCommands(
       const webview = videoEditorProvider.getActiveWebview();
 
       if (!webview) {
+        // No active webview — try to reopen the document with active export
+        const exportDocUri = videoEditorProvider.getExportingDocumentUri();
+        if (exportDocUri) {
+          const uri = vscode.Uri.parse(exportDocUri);
+          await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.videoEditor');
+          // The webview ready handler will auto-show the export panel
+          return;
+        }
         vscode.window.showWarningMessage(
           vscode.l10n.t('editor.warning.noProjectOpen')
         );

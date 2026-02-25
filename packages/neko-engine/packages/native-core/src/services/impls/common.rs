@@ -72,18 +72,22 @@ const PEAKS_PER_SECOND: u32 = 100;
 /// # Returns
 /// * `WaveformData` with per-channel peak arrays at 100 peaks/sec resolution
 pub fn generate_waveform_blocking(path: &str) -> Result<WaveformData> {
-    let mut decoder = FfmpegAudioDecoder::new().with_output_format(SampleFormat::F32);
+    // Force stereo downmix to avoid FFmpeg resampler "Input changed" errors
+    // with multi-channel audio (e.g. 5.1 surround AAC)
+    let mut decoder = FfmpegAudioDecoder::new()
+        .with_output_format(SampleFormat::F32)
+        .with_output_channels(2);
     let audio_info = decoder.open(path)?;
 
+    let channels: usize = 2;
     let mut waveform = WaveformData::new(
         audio_info.sample_rate,
-        audio_info.channels,
+        channels as u16,
         PEAKS_PER_SECOND,
         audio_info.duration,
     );
 
     let samples_per_peak = audio_info.sample_rate as f64 / PEAKS_PER_SECOND as f64;
-    let channels = audio_info.channels as usize;
     let num_peaks = waveform.num_peaks();
 
     let mut sample_offset: u64 = 0;

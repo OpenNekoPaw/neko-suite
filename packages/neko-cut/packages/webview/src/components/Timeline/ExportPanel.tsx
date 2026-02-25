@@ -291,6 +291,13 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             showToast(t('export.cancelled'), 'info');
           }
           break;
+
+        case 'export:activeExport':
+          // Resume tracking a background export (editor was reopened during export)
+          exportRef.current.isActive = true;
+          setIsExporting(true);
+          setExportProgress(message.progress);
+          break;
       }
     };
 

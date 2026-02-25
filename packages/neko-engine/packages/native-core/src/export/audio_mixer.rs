@@ -43,8 +43,10 @@ impl ActiveAudioElement {
         let mut vol = self.volume;
 
         // Apply gain (dB → linear): linear = 10^(dB/20)
+        // Clamp to ±60 dB to prevent extreme values (max linear gain = 1000x)
         if self.gain != 0.0 {
-            vol *= (10.0_f64.powf(self.gain / 20.0)) as f32;
+            let clamped_gain = self.gain.clamp(-60.0, 60.0);
+            vol *= (10.0_f64.powf(clamped_gain / 20.0)) as f32;
         }
 
         // Apply fade in with easing curve
@@ -60,7 +62,9 @@ impl ActiveAudioElement {
             vol *= Easing::evaluate(self.fade_out_curve, t) as f32;
         }
 
-        vol.clamp(0.0, 1.0)
+        // Clamp and guard against NaN
+        let result = vol.clamp(0.0, 10.0); // Allow up to 10x for gain boost, limiter handles the rest
+        if result.is_finite() { result } else { 0.0 }
     }
 
     fn get_source_time(&self, timeline_time: f64) -> f64 {
@@ -312,15 +316,19 @@ impl AudioMixer {
             let volume = element.effective_volume(time);
 
             // Mix into output with volume and pan
-            let pan_angle = (element.pan + 1.0) * std::f32::consts::FRAC_PI_4;
+            let pan_clamped = element.pan.clamp(-1.0, 1.0);
+            let pan_angle = (pan_clamped + 1.0) * std::f32::consts::FRAC_PI_4;
             let left_gain = pan_angle.cos() * volume;
             let right_gain = pan_angle.sin() * volume;
             let channels = self.output_channels as usize;
             for i in 0..self.samples_per_frame {
                 let idx = i * channels;
                 if idx + 1 < frame_samples.len() && idx + 1 < output.len() {
-                    output[idx] += frame_samples[idx] * left_gain;
-                    output[idx + 1] += frame_samples[idx + 1] * right_gain;
+                    let l = frame_samples[idx] * left_gain;
+                    let r = frame_samples[idx + 1] * right_gain;
+                    // Guard: skip NaN/Inf samples (e.g. from corrupt audio data)
+                    if l.is_finite() { output[idx] += l; }
+                    if r.is_finite() { output[idx + 1] += r; }
                 }
             }
         }
@@ -370,6 +378,10 @@ struct SoftLimiter {
     envelope: f32,       // Envelope follower state
 }
 
+/// Minimum envelope value to avoid extreme gain when dividing by envelope.
+/// At threshold=0.95, max gain = 0.95 / 0.01 = 95x which is safe.
+const MIN_ENVELOPE: f32 = 0.01;
+
 impl SoftLimiter {
     fn new(threshold: f32, release_ms: f32, sample_rate: u32) -> Self {
         let release_samples = release_ms * 0.001 * sample_rate as f32;
@@ -382,35 +394,44 @@ impl SoftLimiter {
             threshold,
             knee_width: 0.1,
             release_coeff,
-            envelope: 0.0,
+            envelope: MIN_ENVELOPE,
         }
     }
 
     fn process(&mut self, sample: f32) -> f32 {
+        // Guard against NaN/Inf input propagating through the limiter
+        if !sample.is_finite() {
+            return 0.0;
+        }
+
         let abs_sample = sample.abs();
 
-        // Peak envelope follower
+        // Peak envelope follower (never drops below MIN_ENVELOPE)
         if abs_sample > self.envelope {
             self.envelope = abs_sample;
         } else {
-            self.envelope = self.release_coeff * self.envelope
-                          + (1.0 - self.release_coeff) * abs_sample;
+            self.envelope = (self.release_coeff * self.envelope
+                          + (1.0 - self.release_coeff) * abs_sample)
+                          .max(MIN_ENVELOPE);
         }
 
         // Soft knee compression
         let over = self.envelope - self.threshold;
-        if over <= -self.knee_width {
+        let out = if over <= -self.knee_width {
             // Below knee: no compression
             sample
         } else if over >= self.knee_width {
             // Above knee: full compression
-            sample * (self.threshold / self.envelope.max(0.0001))
+            sample * (self.threshold / self.envelope)
         } else {
             // In knee: smooth transition
             let knee_factor = (over + self.knee_width) / (2.0 * self.knee_width);
-            let gain = 1.0 - knee_factor * (1.0 - self.threshold / self.envelope.max(0.0001));
+            let gain = 1.0 - knee_factor * (1.0 - self.threshold / self.envelope);
             sample * gain
-        }
+        };
+
+        // Final safety: clamp output to valid range
+        out.clamp(-1.0, 1.0)
     }
 
     fn process_buffer(&mut self, buffer: &mut [f32]) {
