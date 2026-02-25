@@ -32,8 +32,9 @@ const PRESET_WAVE_DISTORT: &str = include_str!("../../shaders/preset_wave_distor
 
 /// Fixed-layout uniform buffer shared by all custom/preset shaders.
 ///
-/// Shader contract:
-/// - `params[0]..params[15]` are mapped from JSON by `ParamDef` order.
+/// Shader contract (WGSL side):
+/// - `params` is `array<vec4<f32>, 4>` to satisfy uniform alignment (16-byte stride).
+/// - Access param N via `uniforms.params[N / 4][N % 4]` or the `get_param(N)` helper.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct DynamicUniforms {
@@ -41,7 +42,8 @@ pub struct DynamicUniforms {
     pub height: u32,
     pub param_count: u32,
     pub _padding: u32,
-    pub params: [f32; 16],
+    /// 16 float params packed as 4 x vec4<f32> for uniform alignment.
+    pub params: [[f32; 4]; 4],
 }
 
 // ---------------------------------------------------------------------------
@@ -265,12 +267,16 @@ struct Uniforms {
     height: u32,
     param_count: u32,
     _padding: u32,
-    params: array<f32, 16>,
+    params: array<vec4<f32>, 4>,
 }
 
 @group(0) @binding(0) var<storage, read> input: array<u32>;
 @group(0) @binding(1) var<storage, read_write> output: array<u32>;
 @group(0) @binding(2) var<uniform> uniforms: Uniforms;
+
+fn get_param(index: u32) -> f32 {
+    return uniforms.params[index / 4u][index % 4u];
+}
 
 fn unpack_rgba(packed: u32) -> vec4<f32> {
     return vec4<f32>(
@@ -433,7 +439,7 @@ fn sample_at(x: i32, y: i32) -> vec4<f32> {
             height,
             param_count: param_defs.len() as u32,
             _padding: 0,
-            params: [0.0; 16],
+            params: [[0.0; 4]; 4],
         };
 
         for (i, def) in param_defs.iter().enumerate().take(16) {
@@ -443,7 +449,7 @@ fn sample_at(x: i32, y: i32) -> vec4<f32> {
                 .map(|v| v as f32)
                 .unwrap_or(def.default);
 
-            uniforms.params[i] = value.clamp(def.min, def.max);
+            uniforms.params[i / 4][i % 4] = value.clamp(def.min, def.max);
         }
 
         uniforms
@@ -566,7 +572,7 @@ mod tests {
             height: 100,
             param_count: defs.len() as u32,
             _padding: 0,
-            params: [0.0; 16],
+            params: [[0.0; 4]; 4],
         };
 
         for (i, def) in defs.iter().enumerate().take(16) {
@@ -575,11 +581,11 @@ mod tests {
                 .and_then(|v| v.as_f64())
                 .map(|v| v as f32)
                 .unwrap_or(def.default);
-            uniforms.params[i] = value.clamp(def.min, def.max);
+            uniforms.params[i / 4][i % 4] = value.clamp(def.min, def.max);
         }
 
-        assert_eq!(uniforms.params[0], 5.0);
-        assert_eq!(uniforms.params[1], 3.0);
+        assert_eq!(uniforms.params[0][0], 5.0);
+        assert_eq!(uniforms.params[0][1], 3.0);
     }
 
     #[test]
@@ -595,7 +601,7 @@ mod tests {
             height: 100,
             param_count: 1,
             _padding: 0,
-            params: [0.0; 16],
+            params: [[0.0; 4]; 4],
         };
 
         for (i, def) in defs.iter().enumerate().take(16) {
@@ -604,10 +610,10 @@ mod tests {
                 .and_then(|v| v.as_f64())
                 .map(|v| v as f32)
                 .unwrap_or(def.default);
-            uniforms.params[i] = value.clamp(def.min, def.max);
+            uniforms.params[i / 4][i % 4] = value.clamp(def.min, def.max);
         }
 
-        assert_eq!(uniforms.params[0], 7.5);
+        assert_eq!(uniforms.params[0][0], 7.5);
     }
 
     #[test]
@@ -623,7 +629,7 @@ mod tests {
             height: 100,
             param_count: 1,
             _padding: 0,
-            params: [0.0; 16],
+            params: [[0.0; 4]; 4],
         };
 
         for (i, def) in defs.iter().enumerate().take(16) {
@@ -632,10 +638,10 @@ mod tests {
                 .and_then(|v| v.as_f64())
                 .map(|v| v as f32)
                 .unwrap_or(def.default);
-            uniforms.params[i] = value.clamp(def.min, def.max);
+            uniforms.params[i / 4][i % 4] = value.clamp(def.min, def.max);
         }
 
-        assert_eq!(uniforms.params[0], 10.0); // clamped to max
+        assert_eq!(uniforms.params[0][0], 10.0); // clamped to max
     }
 
     #[test]

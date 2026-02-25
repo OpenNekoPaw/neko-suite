@@ -8,12 +8,16 @@ struct Uniforms {
     height: u32,
     param_count: u32,
     _padding: u32,
-    params: array<f32, 16>,
+    params: array<vec4<f32>, 4>,
 }
 
 @group(0) @binding(0) var<storage, read> input: array<u32>;
 @group(0) @binding(1) var<storage, read_write> output: array<u32>;
 @group(0) @binding(2) var<uniform> uniforms: Uniforms;
+
+fn get_param(index: u32) -> f32 {
+    return uniforms.params[index / 4u][index % 4u];
+}
 
 fn unpack_rgba(packed: u32) -> vec4<f32> {
     return vec4<f32>(
@@ -41,7 +45,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let idx = global_id.x + global_id.y * uniforms.width;
     let color = unpack_rgba(input[idx]);
 
-    let levels = max(2.0, uniforms.params[0]);
+    let levels = max(2.0, get_param(0u));
     let factor = levels - 1.0;
 
     let posterized = vec3<f32>(

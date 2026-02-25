@@ -9,12 +9,16 @@ struct Uniforms {
     height: u32,
     param_count: u32,
     _padding: u32,
-    params: array<f32, 16>,
+    params: array<vec4<f32>, 4>,
 }
 
 @group(0) @binding(0) var<storage, read> input: array<u32>;
 @group(0) @binding(1) var<storage, read_write> output: array<u32>;
 @group(0) @binding(2) var<uniform> uniforms: Uniforms;
+
+fn get_param(index: u32) -> f32 {
+    return uniforms.params[index / 4u][index % 4u];
+}
 
 fn unpack_rgba(packed: u32) -> vec4<f32> {
     return vec4<f32>(
@@ -46,8 +50,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
-    let offset = uniforms.params[0];
-    let angle = uniforms.params[1];
+    let offset = get_param(0u);
+    let angle = get_param(1u);
 
     let dir = vec2<f32>(cos(angle), sin(angle));
     let off_x = i32(dir.x * offset);

@@ -11,12 +11,16 @@ struct Uniforms {
     height: u32,
     param_count: u32,
     _padding: u32,
-    params: array<f32, 16>,
+    params: array<vec4<f32>, 4>,
 }
 
 @group(0) @binding(0) var<storage, read> input: array<u32>;
 @group(0) @binding(1) var<storage, read_write> output: array<u32>;
 @group(0) @binding(2) var<uniform> uniforms: Uniforms;
+
+fn get_param(index: u32) -> f32 {
+    return uniforms.params[index / 4u][index % 4u];
+}
 
 fn unpack_rgba(packed: u32) -> vec4<f32> {
     return vec4<f32>(
@@ -48,10 +52,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
-    let amplitude = uniforms.params[0];
-    let frequency = uniforms.params[1];
-    let speed = uniforms.params[2];
-    let time = uniforms.params[3];
+    let amplitude = get_param(0u);
+    let frequency = get_param(1u);
+    let speed = get_param(2u);
+    let time = get_param(3u);
 
     let px = i32(global_id.x);
     let py = i32(global_id.y);

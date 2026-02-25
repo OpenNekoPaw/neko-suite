@@ -86,6 +86,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
+    "build": "npm run compile",
     "compile": "npm run compile:webview && npm run compile:extension && npm run copy:webview",
     "compile:extension": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:@neko-engine/native-napi --format=cjs --platform=node",
     "compile:webview": "cd packages/webview && npx vite build",
