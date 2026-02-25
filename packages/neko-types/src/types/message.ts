@@ -144,6 +144,36 @@ export interface CompatibleExportResult {
   avgFrameTimeMs?: number;
 }
 
+/** Export progress sent from ExportService to Webview */
+export interface ExportProgressToWebview {
+  /** Export stage/state from Rust engine */
+  stage: string;
+  /** Progress percentage (0-100) */
+  percent: number;
+  /** Current frame being processed */
+  currentFrame: number;
+  /** Total frames */
+  totalFrames: number;
+  /** Elapsed time in milliseconds */
+  elapsedTime: number;
+  /** Estimated remaining time in milliseconds */
+  estimatedTimeRemaining: number;
+  /** Current FPS */
+  currentFps: number;
+  /** Status message */
+  message?: string;
+  /** Performance statistics */
+  performanceStats?: {
+    avgDecodeTime: number;
+    avgCompositeTime: number;
+    avgEncodeTime: number;
+    cpuUsage: number;
+    gpuUsage?: number;
+    memoryUsed: number;
+    vramUsed?: number;
+  };
+}
+
 /** Context menu item definition */
 export interface ContextMenuItem {
   id: string;
@@ -215,7 +245,13 @@ export type MessageToWebview =
   // Tool execution request (Extension -> WebView)
   | { type: 'tool.execute'; requestId: string; toolName: string; params: Record<string, unknown> }
   // File range read response (Extension -> WebView) - for testing on-demand loading
-  | { type: 'fileRangeResult'; requestId: string; success: boolean; data?: string; actualStart?: number; actualEnd?: number; fileSize?: number; error?: string };
+  | { type: 'fileRangeResult'; requestId: string; success: boolean; data?: string; actualStart?: number; actualEnd?: number; fileSize?: number; error?: string }
+  // Unified export messages (Extension -> WebView) — via ExportService
+  | { type: 'export:progress'; progress: ExportProgressToWebview }
+  | { type: 'export:completed'; success: boolean; outputPath?: string; totalFrames?: number; elapsedMs?: number }
+  | { type: 'export:error'; error: string }
+  | { type: 'export:cancelled' }
+  | { type: 'export:globalStatus'; hasActiveExport: boolean };
 
 /** Model info returned from provider API */
 export interface ProviderModelInfo {
@@ -236,6 +272,30 @@ export type ProviderModelCapability =
   | 'embedding'
   | 'stream';
 
+/** Video codec types (matching Rust VideoCodec, serde: rename_all = "lowercase") */
+export type VideoCodecType = 'h264' | 'h265' | 'vp9' | 'av1' | 'prores';
+
+/** Audio codec types (matching Rust AudioCodec, serde: rename_all = "lowercase") */
+export type AudioCodecType = 'aac' | 'opus' | 'mp3' | 'flac' | 'vorbis' | 'pcm';
+
+/** Container format types */
+export type ContainerFormatType = 'mp4' | 'webm' | 'mov' | 'mkv';
+
+/** Export configuration from Webview ExportPanel */
+export interface ExportStartConfig {
+  outputPath: string;
+  format: ContainerFormatType;
+  width: number;
+  height: number;
+  fps: number;
+  quality: 'low' | 'medium' | 'high';
+  audioBitrate: number;
+  /** Video codec — if omitted, ExportService picks default for format */
+  videoCodec?: VideoCodecType;
+  /** Audio codec — if omitted, ExportService picks default for format */
+  audioCodec?: AudioCodecType;
+}
+
 export type MessageFromWebview =
   | { type: 'ready' }
   | { type: 'save'; content: ProjectData }
@@ -244,6 +304,12 @@ export type MessageFromWebview =
   | { type: 'saveBlob'; data: string; filename: string; mimeType: string }
   | { type: 'selectExportPath'; filename: string; format: string }
   | { type: 'saveBlobToPath'; data: string; path: string; mimeType: string }
+  // Unified export messages (WebView -> Extension -> NativeEngine)
+  | { type: 'export:start'; project: ProjectData; config: ExportStartConfig }
+  | { type: 'export:cancel' }
+  | { type: 'export:queryGlobalStatus' }
+  // File validation (WebView -> Extension)
+  | { type: 'validateFile'; path: string }
   // Audio decode request (WebView -> Extension)
   | { type: 'decodeAudio'; requestId: string; videoPath: string; startTime: number; duration: number; format?: 'wav' | 'mp3'; sampleRate?: number; channels?: number }
   // Streaming export messages (WebView -> Extension)

@@ -10,6 +10,7 @@ import { VideoEditorModel } from './videoEditorModel';
 import { MessageHandler } from './messageHandler';
 import { MediaService } from '../../services/MediaService';
 import { FrameServerService } from '../../services/FrameServerService';
+import { ExportService } from '../../services/ExportService';
 import { getService } from '../../base';
 import { IStatusBar } from '../../views/statusBar';
 import { IVideoProjectOutlineProvider } from '../../views/outlineProvider';
@@ -45,6 +46,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 	private modelDisposables: Map<string, vscode.Disposable> = new Map();
 	private mediaServices: Map<string, MediaService> = new Map();
 	private frameServerServices: Map<string, FrameServerService> = new Map();
+	private exportServices: Map<string, ExportService> = new Map();
 
 	// 事件发射器 - 用于解耦与 PropertyPanel 的通信
 	private readonly _onElementSelected = new vscode.EventEmitter<IElementSelectedEvent>();
@@ -187,17 +189,57 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 
 	/**
 	 * Broadcast export status to all active webviews
-	 * NOTE: Export is now handled by neko-engine
 	 */
 	private broadcastExportStatus() {
-		// Export status is managed by neko-engine
-		// This method is kept for API compatibility
-		for (const [_uri, webview] of this.activeWebviews) {
+		let hasActiveExport = false;
+		for (const [, svc] of this.exportServices) {
+			if (svc.isExporting()) {
+				hasActiveExport = true;
+				break;
+			}
+		}
+		for (const [, webview] of this.activeWebviews) {
 			webview.postMessage({
 				type: 'export:globalStatus',
-				hasActiveExport: false,
+				hasActiveExport,
 			});
 		}
+	}
+
+	/**
+	 * Get the ExportService for a document URI (for non-Webview callers)
+	 */
+	public getExportService(documentUri: string): ExportService | undefined {
+		return this.exportServices.get(documentUri);
+	}
+
+	/**
+	 * Get the URI of the currently active/visible document
+	 */
+	public getActiveDocumentUri(): string | null {
+		for (const [uri, panel] of this.activeWebviewPanels) {
+			if (panel.visible && panel.active) {
+				return uri;
+			}
+		}
+		for (const [uri, panel] of this.activeWebviewPanels) {
+			if (panel.visible) {
+				return uri;
+			}
+		}
+		for (const [uri] of this.activeWebviewPanels) {
+			return uri;
+		}
+		return null;
+	}
+
+	/**
+	 * Get the active ExportService (for the currently active document)
+	 */
+	public getActiveExportService(): ExportService | undefined {
+		const uri = this.getActiveDocumentUri();
+		if (!uri) return undefined;
+		return this.exportServices.get(uri);
 	}
 
 	public async resolveCustomTextEditor(
@@ -300,6 +342,85 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 			}
 		}
 
+		// Create ExportService — handles export lifecycle via NativeEngine
+		if (frameServerService) {
+			const jviDir = path.dirname(document.uri.fsPath);
+			const exportService = new ExportService(frameServerService, jviDir);
+			this.exportServices.set(docUri, exportService);
+
+			// Forward export events to the Webview
+			const disposables: vscode.Disposable[] = [];
+			disposables.push(exportService.onDidProgress(progress => {
+				// Map Rust ExportProgress to Webview expected format
+				webviewPanel.webview.postMessage({
+					type: 'export:progress',
+					progress: {
+						stage: progress.state,
+						percent: progress.progress,
+						currentFrame: progress.currentFrame,
+						totalFrames: progress.totalFrames,
+						elapsedTime: progress.elapsedMs,
+						estimatedTimeRemaining: progress.estimatedRemainingMs,
+						currentFps: progress.stats?.avgFps ?? 0,
+						performanceStats: progress.stats ? {
+							avgDecodeTime: progress.stats.hwDecodeMs,
+							avgRenderTime: progress.stats.compositeMs,
+							avgEncodeTime: progress.stats.encodeSubmitMs,
+							memoryUsedMB: progress.stats.peakMemoryBytes ? progress.stats.peakMemoryBytes / (1024 * 1024) : undefined,
+							vramUsedMB: progress.stats.vramUsageBytes ? progress.stats.vramUsageBytes / (1024 * 1024) : undefined,
+							cpuUsage: progress.stats.cpuUsagePercent,
+							gpuUsage: progress.stats.gpuUsagePercent,
+						} : undefined,
+					},
+				});
+
+				// Update status bar
+				statusBar?.updateExportProgress({
+					isExporting: true,
+					percent: progress.progress,
+					message: `Exporting ${Math.round(progress.progress)}%`,
+					currentFrame: progress.currentFrame,
+					totalFrames: progress.totalFrames,
+					currentFps: progress.stats?.avgFps ?? 0,
+					estimatedTimeRemaining: progress.estimatedRemainingMs,
+				});
+			}));
+
+			disposables.push(exportService.onDidComplete(result => {
+				webviewPanel.webview.postMessage({ type: 'export:completed', ...result });
+				statusBar?.updateExportProgress({ isExporting: false, percent: 0, message: '' });
+				this.broadcastExportStatus();
+
+				if (result.success && result.outputPath) {
+					vscode.window.showInformationMessage(
+						`Video exported successfully: ${path.basename(result.outputPath)}`,
+						'Open File', 'Open Folder'
+					).then(selection => {
+						if (selection === 'Open File' && result.outputPath) {
+							vscode.env.openExternal(vscode.Uri.file(result.outputPath));
+						} else if (selection === 'Open Folder' && result.outputPath) {
+							vscode.env.openExternal(vscode.Uri.file(path.dirname(result.outputPath)));
+						}
+					});
+				}
+			}));
+
+			disposables.push(exportService.onDidError(error => {
+				webviewPanel.webview.postMessage({ type: 'export:error', error });
+				statusBar?.updateExportProgress({ isExporting: false, percent: 0, message: '' });
+				this.broadcastExportStatus();
+			}));
+
+			disposables.push(exportService.onDidCancel(() => {
+				webviewPanel.webview.postMessage({ type: 'export:cancelled' });
+				statusBar?.updateExportProgress({ isExporting: false, percent: 0, message: '' });
+				this.broadcastExportStatus();
+			}));
+
+			// Store disposables for cleanup
+			this.context.subscriptions.push(...disposables);
+		}
+
 		// Create message handler
 		const messageHandler = new MessageHandler(
 			webviewPanel.webview,
@@ -367,12 +488,50 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 					return;
 				}
 
+				// Handle export start request (Webview → ExportService → NativeEngine)
+				if (message.type === 'export:start') {
+					const exportService = this.exportServices.get(docUri);
+					if (!exportService) {
+						webviewPanel.webview.postMessage({
+							type: 'export:error',
+							error: 'Export service not available (NativeEngine required)',
+						});
+						return;
+					}
+					try {
+						this.pinEditorTab(document.uri);
+						await exportService.startExport(message.project, message.config);
+						this.broadcastExportStatus();
+					} catch (e) {
+						webviewPanel.webview.postMessage({
+							type: 'export:error',
+							error: e instanceof Error ? e.message : String(e),
+						});
+					}
+					return;
+				}
+
+				// Handle export cancel request
+				if (message.type === 'export:cancel') {
+					const exportService = this.exportServices.get(docUri);
+					if (exportService) {
+						await exportService.cancelExport();
+					}
+					return;
+				}
+
 				// Handle export global status query
-				// NOTE: Export is now handled by neko-engine
 				if (message.type === 'export:queryGlobalStatus') {
+					let hasActiveExport = false;
+					for (const [, svc] of this.exportServices) {
+						if (svc.isExporting()) {
+							hasActiveExport = true;
+							break;
+						}
+					}
 					webviewPanel.webview.postMessage({
 						type: 'export:globalStatus',
-						hasActiveExport: false,
+						hasActiveExport,
 					});
 					return;
 				}
@@ -385,23 +544,19 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 
 					try {
 						const fs = await import('fs');
-						const path = await import('path');
 
 						// Resolve relative paths based on .jvi file location
 						if (!path.isAbsolute(filePath)) {
-							// Get .jvi file directory
 							const jviDir = path.dirname(document.uri.fsPath);
 							absolutePath = path.join(jviDir, filePath);
 						}
 
-						// Check if file exists and is accessible
 						exists = fs.existsSync(absolutePath);
 					} catch (error) {
 						console.error('[VideoEditorProvider] File validation error:', error);
 						exists = false;
 					}
 
-					// CRITICAL: Always send response, even if there's an error
 					try {
 						webviewPanel.webview.postMessage({
 							type: 'fileValidation',
@@ -412,17 +567,6 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 						console.error('[VideoEditorProvider] Failed to send validation response:', postError);
 					}
 					return;
-				}
-
-				// Broadcast export status changes to all webviews
-				if (message.type === 'export:streaming:init' ||
-					message.type === 'export:complete' ||
-					message.type === 'export:error' ||
-					message.type === 'export:cancelled') {
-					// Broadcast after a short delay to ensure the export state is updated
-					setTimeout(() => {
-						this.broadcastExportStatus();
-					}, 100);
 				}
 
 				// Handle webview ready message - send frame server config
@@ -583,15 +727,19 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 
 		// Clean up when editor is closed
 		webviewPanel.onDidDispose(async () => {
-			// NOTE: Export is now handled by neko-engine
-			// Export cancellation is managed by neko-engine when connection is lost
-
 			changeDocumentSubscription.dispose();
 			modelChangeSubscription.dispose();
 
 			// Remove from active webviews and panels
 			this.activeWebviews.delete(docUri);
 			this.activeWebviewPanels.delete(docUri);
+
+			// Dispose ExportService (cancels any active export)
+			const exportService = this.exportServices.get(docUri);
+			if (exportService) {
+				exportService.dispose();
+				this.exportServices.delete(docUri);
+			}
 
 			// Destroy editor stream, then dispose MediaService
 			const mediaService = this.mediaServices.get(docUri);

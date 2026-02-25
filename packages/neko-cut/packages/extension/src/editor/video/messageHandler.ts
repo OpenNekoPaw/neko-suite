@@ -91,6 +91,13 @@ export class MessageHandler {
 				this.handleOperationApplied(message.operation);
 				break;
 
+			// These are handled by videoEditorProvider before reaching messageHandler
+			case 'export:start':
+			case 'export:cancel':
+			case 'export:queryGlobalStatus':
+			case 'validateFile':
+				break;
+
 			default:
 				console.warn('Unknown message type:', (message as { type: string }).type);
 		}

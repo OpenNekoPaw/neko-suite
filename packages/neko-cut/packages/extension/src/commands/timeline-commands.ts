@@ -540,17 +540,15 @@ export function registerTimelineCommands(
     })
   );
 
-  // Export Progress Command
+  // Export Progress Command (uses ExportService directly)
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.export.getProgress', async (exportId: string) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
+    vscode.commands.registerCommand('neko.export.getProgress', async () => {
+      const exportService = videoEditorProvider.getActiveExportService();
+      if (!exportService) {
+        return { success: false, error: 'No export service available' };
       }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('GetExportProgress', { exportId });
-      return result;
+      const progress = await exportService.getProgress();
+      return { success: true, data: progress };
     })
   );
 
@@ -712,21 +710,10 @@ export function registerTimelineCommands(
     })
   );
 
-  // Export Command
+  // Export Command (delegates to neko.exportVideo which uses ExportService directly)
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.export.video', async (params?: {
-      format?: 'mp4' | 'webm';
-      quality?: 'low' | 'medium' | 'high' | 'ultra';
-      resolution?: string;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('ExportVideo', params || {});
-      return result;
+    vscode.commands.registerCommand('neko.export.video', async () => {
+      await vscode.commands.executeCommand('neko.exportVideo');
     })
   );
 }

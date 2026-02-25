@@ -107,6 +107,13 @@ export function registerCommands(
     })
   );
 
+  // Command: Export Video (non-Webview, uses ExportService directly)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.exportVideo', async () => {
+      await exportVideoCommand(videoEditorProvider);
+    })
+  );
+
   // Register timeline commands (element, track, effect, transition, animation, render, export)
   registerTimelineCommands(context, videoEditorProvider);
 }
@@ -348,6 +355,148 @@ async function addToAssetLibrary(uri: vscode.Uri, uris?: vscode.Uri[], assetLibr
           });
         }
       }
+    }
+  );
+}
+
+/**
+ * Export video using ExportService (non-Webview path)
+ *
+ * Shows a save dialog, reads project data from the active document,
+ * and runs the export with a VSCode progress notification.
+ */
+async function exportVideoCommand(editorProvider: VideoEditorProvider): Promise<void> {
+  const docUri = editorProvider.getActiveDocumentUri();
+  if (!docUri) {
+    vscode.window.showWarningMessage(
+      vscode.l10n.t('editor.warning.noProjectOpen')
+    );
+    return;
+  }
+
+  const exportService = editorProvider.getExportService(docUri);
+  if (!exportService) {
+    vscode.window.showErrorMessage('Export service not available for this document.');
+    return;
+  }
+
+  if (exportService.isExporting()) {
+    vscode.window.showWarningMessage('An export is already in progress.');
+    return;
+  }
+
+  // Read project data from document
+  const document = vscode.workspace.textDocuments.find(d => d.uri.toString() === docUri);
+  if (!document) {
+    vscode.window.showErrorMessage('Cannot read project data: document not found.');
+    return;
+  }
+
+  let project: import('@neko/shared').ProjectData;
+  try {
+    project = JSON.parse(document.getText()) as import('@neko/shared').ProjectData;
+  } catch {
+    vscode.window.showErrorMessage('Cannot parse project data.');
+    return;
+  }
+
+  // Show save dialog
+  const defaultName = project.name ? `${project.name}.mp4` : 'export.mp4';
+  const saveUri = await vscode.window.showSaveDialog({
+    defaultUri: vscode.Uri.file(path.join(path.dirname(document.uri.fsPath), defaultName)),
+    filters: {
+      'MP4 Video': ['mp4'],
+      'WebM Video': ['webm'],
+      'MOV Video': ['mov'],
+      'MKV Video': ['mkv'],
+    },
+  });
+
+  if (!saveUri) return; // User cancelled
+
+  const ext = path.extname(saveUri.fsPath).toLowerCase().slice(1);
+  const formatMap: Record<string, 'mp4' | 'webm' | 'mov' | 'mkv'> = {
+    mp4: 'mp4', webm: 'webm', mov: 'mov', mkv: 'mkv',
+  };
+  const format = formatMap[ext] ?? 'mp4';
+
+  const config: import('@neko/shared').ExportStartConfig = {
+    outputPath: saveUri.fsPath,
+    format,
+    width: project.resolution?.width ?? 1920,
+    height: project.resolution?.height ?? 1080,
+    fps: project.fps ?? 30,
+    quality: 'medium',
+    audioBitrate: 192000,
+  };
+
+  // Run export with progress notification
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `Exporting ${path.basename(saveUri.fsPath)}`,
+      cancellable: true,
+    },
+    async (progress, token) => {
+      return new Promise<void>((resolve) => {
+        const disposables: vscode.Disposable[] = [];
+
+        // Subscribe to events
+        disposables.push(
+          exportService.onDidProgress(p => {
+            progress.report({
+              message: `${p.progress}% — Frame ${p.currentFrame}/${p.totalFrames}`,
+              increment: undefined,
+            });
+          })
+        );
+
+        disposables.push(
+          exportService.onDidComplete(result => {
+            cleanup();
+            if (result.success) {
+              vscode.window.showInformationMessage(
+                `Export completed: ${path.basename(saveUri.fsPath)}`
+              );
+            }
+            resolve();
+          })
+        );
+
+        disposables.push(
+          exportService.onDidError(error => {
+            cleanup();
+            vscode.window.showErrorMessage(`Export failed: ${error}`);
+            resolve();
+          })
+        );
+
+        disposables.push(
+          exportService.onDidCancel(() => {
+            cleanup();
+            vscode.window.showInformationMessage('Export cancelled.');
+            resolve();
+          })
+        );
+
+        // Handle cancellation from progress notification
+        token.onCancellationRequested(() => {
+          exportService.cancelExport().catch(() => {});
+        });
+
+        function cleanup() {
+          for (const d of disposables) {
+            d.dispose();
+          }
+        }
+
+        // Start the export
+        exportService.startExport(project, config).catch(error => {
+          cleanup();
+          vscode.window.showErrorMessage(`Failed to start export: ${error}`);
+          resolve();
+        });
+      });
     }
   );
 }

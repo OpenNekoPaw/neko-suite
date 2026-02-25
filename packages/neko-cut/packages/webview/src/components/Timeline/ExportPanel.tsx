@@ -10,7 +10,7 @@ import type { ProjectData } from '@neko/shared';
 // Types
 // =============================================================================
 
-type ExportFormat = 'mp4' | 'webm' | 'gif';
+type ExportFormat = 'mp4' | 'webm' | 'mov' | 'mkv';
 
 interface ExportProgress {
   stage: 'initializing' | 'rendering' | 'encoding' | 'muxing' | 'finalizing' | 'completed' | 'error' | 'cancelled';
@@ -171,22 +171,61 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
   const FPS_OPTIONS = [24, 25, 30, 50, 60];
 
   const FORMAT_OPTIONS: Array<{ label: string; value: ExportFormat }> = [
-    { label: 'MP4 (H.264)', value: 'mp4' },
-    { label: 'WebM (VP9)', value: 'webm' },
-    { label: 'GIF', value: 'gif' },
+    { label: 'MP4', value: 'mp4' },
+    { label: 'WebM', value: 'webm' },
+    { label: 'MOV', value: 'mov' },
+    { label: 'MKV', value: 'mkv' },
   ];
 
+  const VIDEO_CODEC_OPTIONS = [
+    { label: 'H.264 (AVC)', value: 'h264' as const },
+    { label: 'H.265 (HEVC)', value: 'h265' as const },
+    { label: 'VP9', value: 'vp9' as const },
+    { label: 'AV1', value: 'av1' as const },
+    { label: 'ProRes', value: 'prores' as const },
+  ];
+
+  const AUDIO_CODEC_OPTIONS = [
+    { label: 'AAC', value: 'aac' as const },
+    { label: 'Opus', value: 'opus' as const },
+    { label: 'MP3', value: 'mp3' as const },
+    { label: 'FLAC', value: 'flac' as const },
+    { label: 'Vorbis', value: 'vorbis' as const },
+    { label: 'PCM', value: 'pcm' as const },
+  ];
+
+  /** Container → compatible video codecs (from Rust codec_ext.rs) */
+  const CONTAINER_VIDEO_CODECS: Record<string, string[]> = {
+    mp4: ['h264', 'h265', 'av1', 'prores'],
+    mov: ['h264', 'h265', 'av1', 'prores'],
+    webm: ['vp9', 'av1'],
+    mkv: ['h264', 'h265', 'vp9', 'av1', 'prores'],
+  };
+
+  /** Container → compatible audio codecs */
+  const CONTAINER_AUDIO_CODECS: Record<string, string[]> = {
+    mp4: ['aac', 'mp3', 'flac'],
+    mov: ['aac', 'mp3', 'flac', 'pcm'],
+    webm: ['opus', 'vorbis'],
+    mkv: ['aac', 'opus', 'mp3', 'flac', 'vorbis', 'pcm'],
+  };
+
+  /** Container → default codecs */
+  const DEFAULT_CODECS: Record<string, { video: string; audio: string }> = {
+    mp4: { video: 'h264', audio: 'aac' },
+    mov: { video: 'h264', audio: 'aac' },
+    webm: { video: 'vp9', audio: 'opus' },
+    mkv: { video: 'h264', audio: 'aac' },
+  };
+
   const [format, setFormat] = useState<ExportFormat>('mp4');
+  const [videoCodec, setVideoCodec] = useState('h264');
+  const [audioCodec, setAudioCodec] = useState('aac');
   const [resolution, setResolution] = useState(RESOLUTIONS[2]); // Default 1080p
   const [quality, setQuality] = useState<'low' | 'medium' | 'high'>('medium');
   const [fps, setFps] = useState(project?.fps || 30);
   const [audioBitrate, setAudioBitrate] = useState(192000);
   const [isExporting, setIsExporting] = useState(false);
-
-  // GIF-specific settings
-  const [gifColors, setGifColors] = useState(256);
-  const [gifDither, setGifDither] = useState(true);
-  const [gifQuality, setGifQuality] = useState(80);
 
   // Progress state
   const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
@@ -274,8 +313,21 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
   // Handlers
   // ---------------------------------------------------------------------------
 
+  const handleFormatChange = useCallback((newFormat: ExportFormat) => {
+    setFormat(newFormat);
+    const defaults = DEFAULT_CODECS[newFormat];
+    const videoOptions = CONTAINER_VIDEO_CODECS[newFormat] ?? [];
+    const audioOptions = CONTAINER_AUDIO_CODECS[newFormat] ?? [];
+    if (!videoOptions.includes(videoCodec)) {
+      setVideoCodec(defaults?.video ?? videoOptions[0] ?? 'h264');
+    }
+    if (!audioOptions.includes(audioCodec)) {
+      setAudioCodec(defaults?.audio ?? audioOptions[0] ?? 'aac');
+    }
+  }, [videoCodec, audioCodec]);
+
   const selectExportPath = useCallback(async (): Promise<string | null> => {
-    const ext = format === 'gif' ? 'gif' : format === 'webm' ? 'webm' : 'mp4';
+    const ext = format;
     const filename = `${project?.name || 'export'}.${ext}`;
 
     return new Promise((resolve) => {
@@ -347,16 +399,13 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
     const exportConfig = {
       outputPath: exportPath,
       format,
+      videoCodec,
+      audioCodec,
       width: resolution.width,
       height: resolution.height,
       fps,
       quality,
       audioBitrate,
-      ...(format === 'gif' && {
-        gifColors,
-        gifDither,
-        gifQuality,
-      }),
     };
 
     vscodePostMessage({
@@ -364,7 +413,7 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
       project,
       config: exportConfig,
     });
-  }, [project, format, resolution, quality, fps, audioBitrate, gifColors, gifDither, gifQuality, t, showToast, selectExportPath]);
+  }, [project, format, videoCodec, audioCodec, resolution, quality, fps, audioBitrate, t, showToast, selectExportPath]);
 
   const handleCancel = useCallback(() => {
     vscodePostMessage({ type: 'export:cancel' });
@@ -532,17 +581,49 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             </div>
           )}
 
-          {/* Format */}
+          {/* Container Format */}
           <div>
-            <label className="block text-sm font-medium text-vscode-foreground mb-2">格式</label>
+            <label className="block text-sm font-medium text-vscode-foreground mb-2">容器格式</label>
             <select
               value={format}
-              onChange={(e) => setFormat(e.target.value as ExportFormat)}
+              onChange={(e) => handleFormatChange(e.target.value as ExportFormat)}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
               {FORMAT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
+            </select>
+          </div>
+
+          {/* Video Codec */}
+          <div>
+            <label className="block text-sm font-medium text-vscode-foreground mb-2">视频编码</label>
+            <select
+              value={videoCodec}
+              onChange={(e) => setVideoCodec(e.target.value)}
+              className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
+            >
+              {VIDEO_CODEC_OPTIONS
+                .filter((opt) => (CONTAINER_VIDEO_CODECS[format] ?? []).includes(opt.value))
+                .map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+            </select>
+          </div>
+
+          {/* Audio Codec */}
+          <div>
+            <label className="block text-sm font-medium text-vscode-foreground mb-2">音频编码</label>
+            <select
+              value={audioCodec}
+              onChange={(e) => setAudioCodec(e.target.value)}
+              className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
+            >
+              {AUDIO_CODEC_OPTIONS
+                .filter((opt) => (CONTAINER_AUDIO_CODECS[format] ?? []).includes(opt.value))
+                .map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
             </select>
           </div>
 
@@ -578,23 +659,21 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             </select>
           </div>
 
-          {/* Audio Bitrate - Only for MP4/WebM */}
-          {(format === 'mp4' || format === 'webm') && (
-            <div>
-              <label className="block text-sm font-medium text-vscode-foreground mb-2">音频比特率</label>
-              <select
-                value={audioBitrate}
-                onChange={(e) => setAudioBitrate(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
-              >
-                <option value={96000}>96 kbps</option>
-                <option value={128000}>128 kbps</option>
-                <option value={192000}>192 kbps</option>
-                <option value={256000}>256 kbps</option>
-                <option value={320000}>320 kbps</option>
-              </select>
-            </div>
-          )}
+          {/* Audio Bitrate */}
+          <div>
+            <label className="block text-sm font-medium text-vscode-foreground mb-2">音频比特率</label>
+            <select
+              value={audioBitrate}
+              onChange={(e) => setAudioBitrate(Number(e.target.value))}
+              className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
+            >
+              <option value={96000}>96 kbps</option>
+              <option value={128000}>128 kbps</option>
+              <option value={192000}>192 kbps</option>
+              <option value={256000}>256 kbps</option>
+              <option value={320000}>320 kbps</option>
+            </select>
+          </div>
 
           {/* FPS */}
           <div>
@@ -610,53 +689,6 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             </select>
           </div>
 
-          {/* GIF-specific settings */}
-          {format === 'gif' && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-vscode-foreground mb-2">
-                  颜色数量: {gifColors}
-                </label>
-                <input
-                  type="range"
-                  min={2}
-                  max={256}
-                  step={1}
-                  value={gifColors}
-                  onChange={(e) => setGifColors(Number(e.target.value))}
-                  className="w-full accent-vscode-focusBorder"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-vscode-foreground mb-2">
-                  GIF 质量: {gifQuality}
-                </label>
-                <input
-                  type="range"
-                  min={1}
-                  max={100}
-                  step={1}
-                  value={gifQuality}
-                  onChange={(e) => setGifQuality(Number(e.target.value))}
-                  className="w-full accent-vscode-focusBorder"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="gif-dither"
-                  checked={gifDither}
-                  onChange={(e) => setGifDither(e.target.checked)}
-                  className="w-4 h-4 accent-vscode-focusBorder"
-                />
-                <label htmlFor="gif-dither" className="text-sm text-vscode-foreground">
-                  抖动处理
-                </label>
-              </div>
-            </>
-          )}
         </div>
 
         {/* Footer */}
