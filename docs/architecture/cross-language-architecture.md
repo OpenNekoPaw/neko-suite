@@ -110,7 +110,7 @@ Proto 的作用不是"协调两端"，而是**从引擎模型自动生成 TS 类
 neko-engine (Rust)          ← 权威来源
     │
     ▼ 提取模型
-proto/timeline.proto        ← 反映引擎的真实模型
+packages/neko-proto/timeline.proto        ← 反映引擎的真实模型
     │
     ├──→ 生成 Rust 代码     ← 引擎直接使用
     └──→ 生成 TS 代码       ← Web 端直接使用，不允许修改

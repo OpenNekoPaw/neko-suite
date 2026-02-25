@@ -1,7 +1,7 @@
 // =============================================================================
 // Transition Types — Aligned with Engine (gpu/transition_processor.rs)
 //
-// Authority: proto/timeline.proto → TransitionType
+// Authority: packages/neko-proto/timeline.proto → TransitionType
 // Engine supports exactly 18 transition types.
 // Unsupported types from the old TS definition have been removed.
 // =============================================================================

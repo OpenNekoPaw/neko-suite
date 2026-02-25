@@ -24,6 +24,7 @@
 | **硬件编解码** | VideoToolbox (macOS) / VAAPI (Linux) / NVENC (Windows) |
 | **零拷贝管线** | GPU 纹理直通，避免 CPU-GPU 数据传输 |
 | **实时特效** | 滤镜、转场、混合模式、色彩校正 |
+| **自定义 Shader** | 6 种预设效果 + 运行时 WGSL 注册 |
 | **帧缓存服务** | 关键帧扫描与智能缓存 |
 | **视频导出** | 异步导出管线，支持音视频混流 |
 
@@ -61,8 +62,8 @@ packages/
 ┌───────────────────────────▼─────────────────────────────────┐
 │                      neko-native-core                        │
 ├─────────────────────────────────────────────────────────────┤
-│  gpu/           │ wgpu 上下文、纹理合成、NV12 渲染            │
-│  shaders/       │ WGSL 着色器（色彩校正、转场、特效、混合）    │
+│  gpu/           │ wgpu 上下文、纹理合成、NV12 渲染、自定义 Shader │
+│  shaders/       │ WGSL 着色器（色彩校正、转场、特效、混合、预设效果）│
 │  decoder/       │ 硬件解码器、零拷贝管线                      │
 │  encoder/       │ 硬件编码器、异步导出管线                    │
 │  animation/     │ 关键帧、缓动、时间轴                        │
@@ -122,6 +123,7 @@ pnpm build
 ```rust
 // GPU 处理
 pub use gpu::{GpuContext, GpuProcessor, TextureCompositor, Nv12Renderer};
+pub use gpu::{CustomShaderProcessor, DynamicUniforms, ParamDef, PresetShaderMeta};
 
 // 编解码
 pub use decoder::{ZeroCopyDecoder, HwAccelType};

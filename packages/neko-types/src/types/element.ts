@@ -1,7 +1,7 @@
 // =============================================================================
 // Timeline Elements — Aligned with Engine (domain/timeline.rs → Element)
 //
-// Authority: proto/timeline.proto → Element
+// Authority: packages/neko-proto/timeline.proto → Element
 // Engine fields on Element: id, name, elementType, startTime, duration,
 //   trimStart, trimEnd, transform, opacity, blendMode, effects, muted,
 //   hidden, locked, speed, transitionIn, transitionOut
@@ -124,12 +124,6 @@ export interface TextElement extends BaseTimelineElement {
   fontStyle: 'normal' | 'italic';
   /** Text decoration (engine field, Phase 2): "none" | "underline" | "line-through" */
   textDecoration?: 'none' | 'underline' | 'line-through';
-  /** @deprecated Use transform.x instead */
-  x?: number;
-  /** @deprecated Use transform.y instead */
-  y?: number;
-  /** @deprecated Use transform.rotation instead */
-  rotation?: number;
   /** Line height multiplier (engine field, Phase 2, default: 1.2) */
   lineHeight?: number;
   /** Letter spacing in pixels (engine field, Phase 2, default: 0) */

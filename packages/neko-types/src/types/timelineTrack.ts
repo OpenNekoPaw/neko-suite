@@ -1,7 +1,7 @@
 // =============================================================================
 // Timeline Track — Aligned with Engine (domain/timeline.rs → Track)
 //
-// Authority: proto/timeline.proto → Track
+// Authority: packages/neko-proto/timeline.proto → Track
 // Engine fields: id, name, type, elements, muted, locked, hidden, isMain
 // UI-only fields (solo, color, height, opacity, blendMode, transitions)
 // have been moved to ui-state.ts → TrackUIState

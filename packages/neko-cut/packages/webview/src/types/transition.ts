@@ -5,7 +5,7 @@
  * Core types are imported from @neko/shared for Single Source of Truth.
  * This file extends with webview-specific utilities (i18n keys, icons, presets).
  *
- * Engine supports exactly 18 transition types (see proto/timeline.proto).
+ * Engine supports exactly 18 transition types (see packages/neko-proto/timeline.proto).
  */
 
 // =============================================================================

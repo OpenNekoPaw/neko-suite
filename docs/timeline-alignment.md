@@ -1,6 +1,6 @@
 # Timeline 工程定义统一方案
 
-> 分析 neko-types、neko-engine (Rust)、proto/timeline.proto、neko-cut 之间 timeline 定义的不一致，并提出修复方案。
+> 分析 neko-types、neko-engine (Rust)、packages/neko-proto/timeline.proto、neko-cut 之间 timeline 定义的不一致，并提出修复方案。
 
 ## 1. 现状概述
 
@@ -8,7 +8,7 @@
 
 | 层 | 包 | 角色 |
 |---|---|---|
-| L0 | `proto/timeline.proto` | IDL 定义（唯一权威源） |
+| L0 | `packages/neko-proto/timeline.proto` | IDL 定义（唯一权威源） |
 | L1 | `neko-engine` (Rust) | 引擎实现，完全对齐 Proto |
 | L2 | `neko-types` (TS) | 共享类型，理论对齐但有偏离 |
 | L3 | `neko-cut` (TS) | 编辑器 UI 扩展 |
@@ -421,12 +421,13 @@ Phase 3 (P1): 音频增强 ✅ 已完成 (2026-02-25)
   ├─ ✅ Rust: audio_mixer.rs 从线性插值改为 Easing::evaluate() 淡入淡出
   └─ ✅ Rust: gain dB→linear 转换 (10^(dB/20))
 
-Phase 4 (P2): TS 层清理
-  ├─ neko-types: 清理 AudioProperties（移除 AnimatableProperty，独立为 AnimatableAudioState）
-  ├─ neko-types: 清理 ProjectDefaults（对齐 Proto）
-  ├─ neko-types: SubtitleElement 移除 language/isDefault
-  ├─ neko-types: TextElement 移除 deprecated x/y/rotation
-  └─ neko-cut: 进一步清理 editor-types.ts
+Phase 4 (P2): TS 层清理 ✅ 部分完成 (2026-02-25)
+  ├─ ✅ neko-types: TextElement 移除 deprecated x/y/rotation
+  ├─ ✅ neko-types: ProjectDefaults 标注 @ui-only 字段（对齐 Proto）
+  ├─ 🔲 neko-types: 清理 AudioProperties（移除 AnimatableProperty，独立为 AnimatableAudioState）
+  │   → 延后：AnimatableProperty 深度集成于 13 个文件的关键帧系统，需随关键帧引擎迁移一并处理
+  └─ 🔲 neko-types: SubtitleElement 移除 language/isDefault
+      → 延后：elementOpsSlice.ts 创建字幕元素时仍在使用这两个字段
 ```
 
 ---
@@ -489,9 +490,9 @@ Phase 4 (P2): TS 层清理
 | `muted` | ✅ | ✅ | ✅ | 同步 |
 | `fadeIn` | ✅ | ✅ | ✅ | 同步 |
 | `fadeOut` | ✅ | ✅ | ✅ | 同步 |
-| `fadeInCurve` | ✗ | ✗ | ✅ | **待提升 (P1)** |
-| `fadeOutCurve` | ✗ | ✗ | ✅ | **待提升 (P1)** |
-| `gain` | ✗ | ✗ | ✅ | **待提升 (P2)** |
+| `fadeInCurve` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 3) |
+| `fadeOutCurve` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 3) |
+| `gain` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 3) |
 | `eq` | ✗ | ✗ | ✅ | 保留 UI 层 |
 
 ### TextElement
@@ -506,12 +507,12 @@ Phase 4 (P2): TS 层清理
 | `textAlign` | ✅ | ✅ | ✅ | 同步（引擎未实现渲染） |
 | `fontWeight` | ✅ | ✅ | ✅ | 同步 |
 | `fontStyle` | ✅ | ✅ | ✅ | 同步 |
-| `textDecoration` | ✗ | ✗ | ✅ | **待提升 (P2)** |
-| `lineHeight` | ✗ | ✗ | ✅ | **待提升 (P1)** |
-| `letterSpacing` | ✗ | ✗ | ✅ | **待提升 (P2)** |
-| `strokeColor` | ✗ | ✗ | ✅ | **待提升 (P1)** |
-| `strokeWidth` | ✗ | ✗ | ✅ | **待提升 (P1)** |
-| `shadow` | ✗ | ✗ | ✅ | **待提升 (P1)** |
+| `textDecoration` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
+| `lineHeight` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
+| `letterSpacing` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
+| `strokeColor` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
+| `strokeWidth` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
+| `shadow` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
 | `x` | ✗ | ✗ | ⚠️ @deprecated | 删除 |
 | `y` | ✗ | ✗ | ⚠️ @deprecated | 删除 |
 | `rotation` | ✗ | ✗ | ⚠️ @deprecated | 删除 |
@@ -521,14 +522,14 @@ Phase 4 (P2): TS 层清理
 | 字段 | Proto | Rust | TS | 状态 |
 |---|---|---|---|---|
 | `text` | ✅ | ✅ | ✅ | 同步 |
-| `fontSize` | ✅ | ✅ | ❌ 缺失 | **TS 需补全** |
-| `color` | ✅ | ✅ | ❌ 缺失 | **TS 需补全** |
-| `fontFamily` | ✗ | ✗ | ✗ | **待提升 (P1)** |
-| `backgroundColor` | ✗ | ✗ | ✗ | **待提升 (P2)** |
-| `textAlign` | ✗ | ✗ | ✗ | **待提升 (P2)** |
-| `strokeColor` | ✗ | ✗ | ✗ | **待提升 (P1)** |
-| `strokeWidth` | ✗ | ✗ | ✗ | **待提升 (P1)** |
-| `shadow` | ✗ | ✗ | ✗ | **待提升 (P2)** |
+| `fontSize` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 0 补全) |
+| `color` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 0 补全) |
+| `fontFamily` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
+| `backgroundColor` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
+| `textAlign` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
+| `strokeColor` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
+| `strokeWidth` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
+| `shadow` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
 | `language` | ✗ | ✗ | ✅ | 保留 UI 层 |
 | `isDefault` | ✗ | ✗ | ✅ | 保留 UI 层 |
 
@@ -576,13 +577,14 @@ Phase 4 (P2): TS 层清理
 |---|---|---|---|
 | Text: content, font, color, weight, style | ✅ | ✅ | ✅ |
 | Text: background_color, text_align | ✅ | ✅ | ✗ (未实现) |
-| Text: decoration, spacing, stroke, shadow | ✗ | ✗ | ✗ |
+| Text: decoration, spacing, stroke, shadow | ✅ | ✅ | ✗ (已定义，待渲染接入) |
 | Audio: volume, pan, fade_in, fade_out | ✅ | ✅ | ✅ |
-| Audio: gain, eq, fade_curve | ✗ | ✗ | ✗ |
-| Subtitles: basic rendering | ✅ | ✅ | ✗ (未实现) |
-| Transitions: 18 types GPU | ✅ | ✅ | ✗ (未接入 pipeline) |
+| Audio: fade_curve (easing), gain (dB) | ✅ | ✅ | ✅ (Phase 3 已接入 audio_mixer) |
+| Audio: eq | ✗ | ✗ | ✗ |
+| Subtitles: basic + enhanced rendering | ✅ | ✅ | ✗ (已定义，待渲染接入) |
+| Transitions: 18 types GPU | ✅ | ✅ | ✗ (已定义，待接入 pipeline) |
 | Media: transform, opacity, blend | ✅ | ✅ | ✅ |
-| Media: speed/variable rate | ✗ | ✗ | ✗ |
+| Media: speed/variable rate | ✅ | ✅ | ✗ (已定义，待解码器接入) |
 | Shapes | ✅ | ✅ | ✗ (未实现) |
 | Effects (blur, color, etc.) | ✅ | ✅ | ✗ (未实现) |
 | Keyframes/Animation | ✅ | ✅ | ✗ (未 evaluate) |
@@ -598,15 +600,15 @@ Phase 4 (P2): TS 层清理
 
 | 文档描述 | 验证文件 | 结论 |
 |---|---|---|
-| Proto TextElementData 8 字段 | `timeline.proto:299-316` | 准确 |
-| Proto SubtitleElementData 3 字段 | `timeline.proto:329-336` | 准确 |
-| Proto AudioProperties 无 fade curve/gain | `timeline.proto:230-241` | 准确 |
-| Proto Element 无 speed/transition | `timeline.proto:342-377`（最大字段号 18） | 准确 |
-| Rust 完全对齐 Proto | `native-core/src/domain/timeline.rs` | 准确 |
-| TS TextElement 有 deprecated x/y/rotation | `neko-types/src/types/element.ts` | 准确 |
-| TS AudioProperties 有 AnimatableProperty | `neko-types/src/types/audio.ts` | 准确 |
-| audio_mixer.rs 仅线性淡入淡出 | `effective_volume()` 使用 `relative_time / fade_in` | 准确 |
-| transition_processor.rs 未接入 pipeline | 文件头 `#![allow(dead_code)]` | 准确 |
+| Proto TextElementData 14 字段 | `timeline.proto` TextElementData | Phase 2 已完成 |
+| Proto SubtitleElementData 9 字段 | `timeline.proto` SubtitleElementData | Phase 2 已完成 |
+| Proto AudioProperties 8 字段 (含 fade curve/gain) | `timeline.proto` AudioProperties | Phase 3 已完成 |
+| Proto Element 含 speed/transition_in/transition_out | `timeline.proto` Element (字段 19-21) | Phase 1-2 已完成 |
+| Rust 完全对齐 Proto | `native-core/src/domain/timeline.rs` | cargo check 通过 |
+| TS 自动生成对齐 Proto | `generated/timeline.engine.ts` | 编译时漂移检测通过 |
+| audio_mixer.rs 使用 easing 淡入淡出 + gain | `effective_volume()` 使用 `Easing::evaluate()` | Phase 3 已完成 |
+| TS speed/transitionIn/Out 已迁移到引擎层 | `element.ts` BaseTimelineElement | Phase 1-2 已完成 |
+| toEngineElement 使用白名单模式 | `editor-types.ts` pickKeys + ENGINE_*_KEYS | Phase 0 已完成 |
 
 ### 关键设计决策记录
 

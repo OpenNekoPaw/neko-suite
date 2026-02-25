@@ -8,35 +8,45 @@ import { TrackType } from './track';
 
 // =============================================================================
 // Project Defaults (Global default values for new elements)
+//
+// Engine fields aligned with EngineProjectDefaults (from proto).
+// UI-only extensions are marked with @ui-only.
 // =============================================================================
 
 export interface ProjectDefaults {
-  // Text element defaults
+  // Text element defaults (engine: fontSize, fontFamily, color)
   text: {
     fontSize: number;
     fontFamily: string;
     color: string;
+    /** @ui-only Not in engine ProjectDefaults */
     backgroundColor: string;
+    /** @ui-only Not in engine ProjectDefaults */
     textAlign: 'left' | 'center' | 'right';
+    /** @ui-only Not in engine ProjectDefaults */
     fontWeight: 'normal' | 'bold';
+    /** @ui-only Not in engine ProjectDefaults */
     fontStyle: 'normal' | 'italic';
+    /** @ui-only Not in engine ProjectDefaults */
     textDecoration: 'none' | 'underline' | 'line-through';
   };
-  // Transform defaults (for media and text)
+  // Transform defaults (engine: x, y, scaleX, scaleY, rotation)
   transform: {
     x: number;
     y: number;
     scaleX: number;
     scaleY: number;
     rotation: number;
+    /** @ui-only Not in engine ProjectDefaults — opacity is on Element, not Transform */
     opacity: number;
   };
-  // Audio defaults (for media and audio)
+  // Audio defaults (engine: volume, pan, fadeIn, fadeOut)
   audio: {
     volume: number;
     pan: number;
     fadeIn: number;
     fadeOut: number;
+    /** @ui-only Not in engine ProjectDefaults */
     gain: number;
   };
 }

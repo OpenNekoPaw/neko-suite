@@ -12,7 +12,7 @@
 │         neko-suite              │     │          neko-hub               │
 │  (VSCode Extension Monorepo)   │     │   (Server + Web Monorepo)      │
 ├─────────────────────────────────┤     ├─────────────────────────────────┤
-│ proto/timeline.proto            │     │ libs/shared-types/proto/        │
+│ packages/neko-proto/timeline.proto            │     │ libs/shared-types/proto/        │
 │   package: neko.timeline        │     │   package: nekohub.v1           │
 │   手动维护, 无 codegen          │     │   Buf 工具链, 自动生成 Go+TS    │
 ├─────────────────────────────────┤     ├─────────────────────────────────┤
@@ -580,7 +580,7 @@ Phase 2: @neko/media-analysis 提取
   └── 编写单元测试
 
 Phase 3: 建立 neko-protocol 仓库
-  ├── 将 neko-suite/proto/timeline.proto 迁入 proto/neko/timeline/v1/
+  ├── 将 neko-suite/packages/neko-proto/timeline.proto 迁入 proto/neko/timeline/v1/
   ├── 将 neko-hub/libs/shared-types/proto/ 迁入 proto/neko/hub/v1/
   ├── 新增 proto/neko/engine/v1/ (从 Rust types 提取)
   ├── 新增 proto/neko/common/v1/ (合并公共类型)

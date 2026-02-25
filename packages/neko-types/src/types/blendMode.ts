@@ -1,7 +1,7 @@
 // =============================================================================
 // Blend Modes — Aligned with Engine (gpu/compositor.rs)
 //
-// Authority: proto/timeline.proto → BlendMode
+// Authority: packages/neko-proto/timeline.proto → BlendMode
 // Engine supports exactly 27 blend modes matching Photoshop/Web standards.
 // =============================================================================
 

@@ -2,7 +2,7 @@
  * Blend Modes Types — Aligned with Engine (gpu/compositor.rs)
  * 混合模式类型定义
  *
- * Authority: proto/timeline.proto → BlendMode
+ * Authority: packages/neko-proto/timeline.proto → BlendMode
  * Core type re-exported from @neko/shared as BlendModeType.
  * This file provides webview-specific metadata (i18n, CSS mapping, categories).
  *

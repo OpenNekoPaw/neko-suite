@@ -1,7 +1,7 @@
 // =============================================================================
 // Transform — Aligned with Engine (domain/transform.rs)
 //
-// Authority: proto/timeline.proto → Transform
+// Authority: packages/neko-proto/timeline.proto → Transform
 // Engine fields: x, y, scaleX, scaleY, rotation, anchorX, anchorY
 // NOTE: opacity is NOT part of Transform in the engine; it's a separate
 //       field on Element. See Element.opacity.

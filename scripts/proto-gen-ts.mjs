@@ -2,7 +2,7 @@
 // =============================================================================
 // Proto → TS Code Generator
 //
-// Parses proto/timeline.proto and generates Engine* types for @neko/shared.
+// Parses packages/neko-proto/timeline.proto and generates Engine* types for @neko/shared.
 // Uses protobufjs parser for AST extraction, custom codegen for TS output.
 //
 // Usage: node scripts/proto-gen-ts.mjs
@@ -16,7 +16,7 @@ import protobuf from 'protobufjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const PROTO_PATH = resolve(ROOT, 'proto/timeline.proto');
+const PROTO_PATH = resolve(ROOT, 'packages/neko-proto/timeline.proto');
 const OUT_PATH = resolve(ROOT, 'packages/neko-types/src/generated/timeline.engine.ts');
 
 // =============================================================================
@@ -235,7 +235,7 @@ async function main() {
   output.push('// =============================================================================');
   output.push('// AUTO-GENERATED — DO NOT EDIT');
   output.push('//');
-  output.push('// Source: proto/timeline.proto');
+  output.push('// Source: packages/neko-proto/timeline.proto');
   output.push(`// Generated: ${new Date().toISOString()}`);
   output.push('// Command: node scripts/proto-gen-ts.mjs');
   output.push('// =============================================================================');

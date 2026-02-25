@@ -1,8 +1,8 @@
 // =============================================================================
 // AUTO-GENERATED — DO NOT EDIT
 //
-// Source: proto/timeline.proto
-// Generated: 2026-02-24T17:15:39.662Z
+// Source: packages/neko-proto/timeline.proto
+// Generated: 2026-02-25T01:40:43.662Z
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 

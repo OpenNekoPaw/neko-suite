@@ -4,7 +4,7 @@
 // This file is never imported at runtime. It exists solely so that `tsc`
 // catches drift between generated Engine* types and hand-written types.
 //
-// If proto/timeline.proto adds a new field and you re-run the generator,
+// If packages/neko-proto/timeline.proto adds a new field and you re-run the generator,
 // but forget to update the hand-written type, `tsc --noEmit` will fail here.
 // =============================================================================
 

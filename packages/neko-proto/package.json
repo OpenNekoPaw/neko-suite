@@ -1,0 +1,6 @@
+{
+  "name": "@neko/proto",
+  "description": "Protocol Buffer IDL definitions — single source of truth for Neko Suite type contracts",
+  "private": true,
+  "version": "0.0.1"
+}

@@ -1,7 +1,7 @@
 // =============================================================================
 // Track Types — Aligned with Engine (types/common.rs → TrackType)
 //
-// Authority: proto/timeline.proto → TrackType
+// Authority: packages/neko-proto/timeline.proto → TrackType
 // Engine supports: Video, Audio, Text, Effect, Subtitle, Shape, Media
 // 'media' is an alias for 'video' (used in JVI files).
 // =============================================================================

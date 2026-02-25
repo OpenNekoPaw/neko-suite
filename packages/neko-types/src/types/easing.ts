@@ -1,7 +1,7 @@
 // =============================================================================
 // Easing Types — Aligned with Engine (animation/easing.rs)
 //
-// Authority: proto/timeline.proto → EasingType
+// Authority: packages/neko-proto/timeline.proto → EasingType
 // Engine supports 30 named easing types + CubicBezier(x1,y1,x2,y2).
 // =============================================================================
 
