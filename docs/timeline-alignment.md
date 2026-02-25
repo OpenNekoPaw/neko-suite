@@ -393,41 +393,40 @@ export function toEngineElement(element: EditorElement): TimelineElement {
 ## 5. 实施路线图
 
 ```
-Phase 0 (前置): 建立 Proto → TS 自动生成管道
-  ├─ 引入 buf 或 protobuf-ts 工具链
-  ├─ 从 timeline.proto 自动生成 TS 类型定义
-  ├─ 替换 neko-types 中手写的引擎类型为生成类型
-  ├─ toEngineElement 改为基于生成类型的白名单
-  └─ 清理 Proto 层冗余：AudioElementData 的 volume/pan/fade_in/fade_out (字段 6-9)
-      与 AudioProperties 语义重叠，需明确唯一权威字段并移除冗余
+Phase 0 (前置): 建立 Proto → TS 自动生成管道 ✅ 已完成 (2026-02-24)
+  ├─ ✅ 自定义 protobufjs parser + codegen 脚本 (scripts/proto-gen-ts.mjs)
+  ├─ ✅ 从 timeline.proto 自动生成 TS 类型定义 (generated/timeline.engine.ts)
+  ├─ ✅ 编译时漂移检测 (__engine-check.ts + element.ts/transform.ts 内联检查)
+  ├─ ✅ toEngineElement/toEngineTrack 改为基于生成 key 常量的白名单模式
+  └─ ✅ Proto 层 AudioElementData 字段 6-9 标记 DEPRECATED
 
-Phase 1 (P0): speed 变速 → Proto + Rust + TS 全链路
-  ├─ 修改 Proto: 新增 SpeedProperties
-  ├─ 修改 Rust: Element 新增 speed 字段
-  ├─ 修改 TS: speed 从 ElementEditState 迁移到 TimelineElement
-  ├─ 引擎实现: 解码器时间映射 + 音频变速
-  └─ 明确 duration 语义约定（时间轴时长 vs 源素材时长）
+Phase 1 (P0): speed 变速 → Proto + Rust + TS 全链路 ✅ 已完成 (2026-02-25)
+  ├─ ✅ Proto: 新增 SpeedProperties / TimeRemapData / TimeRemapKeyframe
+  ├─ ✅ Rust: Element 新增 speed 字段 + SpeedProperties 等 struct
+  ├─ ✅ TS: speed 从 ElementEditState 迁移到 BaseTimelineElement (引擎字段)
+  ├─ 🔲 引擎实现: 解码器时间映射 + 音频变速 (待后续接入)
+  └─ ✅ duration 语义约定已在 Proto 注释中明确
 
-Phase 2 (P1): 文本/字幕增强 + 转场接入
-  ├─ Proto + Rust: TextElementData 新增 6 字段
-  ├─ Proto + Rust: SubtitleElementData 新增 6 字段
-  ├─ Proto + Rust: Element 新增 transition_in/out
-  ├─ 建立 TS TransitionType ↔ Rust TransitionType + direction 映射表
-  ├─ 引擎: text_renderer.rs 接入新字段
-  └─ 引擎: 转场系统接入 export pipeline（移除 transition_processor.rs 的 dead_code 标记）
+Phase 2 (P1): 文本/字幕增强 + 转场接入 ✅ 已完成 (2026-02-25)
+  ├─ ✅ Proto + Rust: TextElementData 新增 6 字段 + TextShadow message
+  ├─ ✅ Proto + Rust: SubtitleElementData 新增 6 字段
+  ├─ ✅ Proto + Rust: Element 新增 transition_in/out + Transition message
+  ├─ ✅ TS: TextElement 字段从 @ui-only 升级为引擎字段
+  ├─ ✅ TS: SubtitleElement 补全 6 个引擎字段
+  ├─ 🔲 引擎: text_renderer.rs 接入新字段 (待后续)
+  └─ 🔲 引擎: 转场系统接入 export pipeline (待后续)
 
-Phase 3 (P1): 音频增强
-  ├─ Proto + Rust: AudioProperties 新增 fade curve + gain
-  ├─ 引擎: audio_mixer.rs 从线性插值改为 easing 函数淡入淡出
-  └─ 引擎: gain (dB→linear) 转换
+Phase 3 (P1): 音频增强 ✅ 已完成 (2026-02-25)
+  ├─ ✅ Proto + Rust: AudioProperties 新增 fade_in_curve / fade_out_curve / gain
+  ├─ ✅ Rust: audio_mixer.rs 从线性插值改为 Easing::evaluate() 淡入淡出
+  └─ ✅ Rust: gain dB→linear 转换 (10^(dB/20))
 
 Phase 4 (P2): TS 层清理
   ├─ neko-types: 清理 AudioProperties（移除 AnimatableProperty，独立为 AnimatableAudioState）
   ├─ neko-types: 清理 ProjectDefaults（对齐 Proto）
   ├─ neko-types: SubtitleElement 移除 language/isDefault
   ├─ neko-types: TextElement 移除 deprecated x/y/rotation
-  ├─ neko-types: SubtitleElement 补全 fontSize/color（当前 TS 缺失但 Proto/Rust 已有）
-  └─ neko-cut: toEngineElement() 改为白名单模式（若 Phase 0 已完成则基于生成类型）
+  └─ neko-cut: 进一步清理 editor-types.ts
 ```
 
 ---
@@ -477,9 +476,9 @@ Phase 4 (P2): TS 层清理
 | `muted` | ✅ | ✅ | ✅ | 同步 |
 | `hidden` | ✅ | ✅ | ✅ | 同步 |
 | `locked` | ✅ | ✅ | ✅ | 同步 |
-| `speed` | ✗ | ✗ | ✅ (UI) | **待提升 (P0)** |
-| `transitionIn` | ✗ | ✗ | ✅ (UI) | **待提升 (P1)** |
-| `transitionOut` | ✗ | ✗ | ✅ (UI) | **待提升 (P1)** |
+| `speed` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 1) |
+| `transitionIn` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
+| `transitionOut` | ✅ | ✅ | ✅ | ✅ 同步 (Phase 2) |
 
 ### AudioProperties
 

@@ -5,8 +5,10 @@
 
 use std::f64::consts::PI;
 
+use serde::{Deserialize, Serialize};
+
 /// Easing function types
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum EasingType {
     // Linear
     #[default]

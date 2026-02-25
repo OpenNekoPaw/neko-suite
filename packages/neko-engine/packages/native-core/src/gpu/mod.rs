@@ -28,6 +28,7 @@ mod rgba_to_nv12;
 mod rgba_to_nv12_texture;
 pub mod shaders;
 mod style_processor;
+pub mod custom_shader_processor;
 mod texture;
 mod transition_processor;
 mod texture_compositor;
@@ -57,6 +58,9 @@ pub use context::{GpuContext, GpuInfo};
 pub use processor::{EffectParams, GpuProcessor};
 pub use style_processor::{
     ChromaticAberrationParams, FilmGrainParams, GlowParams, GpuStyleProcessor, VignetteParams,
+};
+pub use custom_shader_processor::{
+    CustomShaderProcessor, DynamicUniforms, ParamDef, PresetShaderMeta,
 };
 pub use texture::{TextureFormat, TextureHandle, TexturePool};
 pub use transition_processor::{GpuTransitionProcessor, TransitionParams, TransitionType};

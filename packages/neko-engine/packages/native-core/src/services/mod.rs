@@ -4,6 +4,7 @@
 //! Implementations can be swapped for testing or different backends.
 
 mod audio;
+mod effects;
 mod export;
 mod image;
 mod node;
@@ -15,6 +16,7 @@ mod video;
 pub mod impls;
 
 pub use audio::IAudioService;
+pub use effects::IEffectsService;
 pub use export::IExportService;
 pub use image::IImageService;
 pub use node::{GpuInfo, INodeService};
@@ -25,6 +27,6 @@ pub use video::IVideoService;
 
 // Re-export implementations
 pub use impls::{
-    AudioService, ExportService, ImageService, NodeService, ServiceContainer,
+    AudioService, EffectsService, ExportService, ImageService, NodeService, ServiceContainer,
     TaskService, TimelineService, VideoService,
 };

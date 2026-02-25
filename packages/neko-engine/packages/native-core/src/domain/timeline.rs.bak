@@ -7,7 +7,6 @@ use neko_types::{BlendMode, EffectParams, Resolution, TrackType};
 use serde::{Deserialize, Serialize};
 
 use super::Transform;
-use crate::animation::EasingType;
 use crate::gpu::{BlendMode as GpuBlendMode, Transform2D};
 
 /// A timeline represents a complete editing project
@@ -936,15 +935,6 @@ pub struct Element {
     /// Whether element is locked
     #[serde(default)]
     pub locked: bool,
-    /// Speed properties (Phase 1)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub speed: Option<SpeedProperties>,
-    /// Transition from previous element (Phase 2)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub transition_in: Option<TransitionEffect>,
-    /// Transition to next element (Phase 2)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub transition_out: Option<TransitionEffect>,
 }
 
 fn default_opacity() -> f64 {
@@ -1216,24 +1206,6 @@ pub struct TextElementData {
     /// Font style
     #[serde(default = "default_font_style")]
     pub font_style: String,
-    /// Text decoration: "none" | "underline" | "line-through"
-    #[serde(default = "default_text_decoration")]
-    pub text_decoration: String,
-    /// Line height multiplier
-    #[serde(default = "default_line_height")]
-    pub line_height: f32,
-    /// Letter spacing in pixels
-    #[serde(default)]
-    pub letter_spacing: f32,
-    /// Stroke color (hex)
-    #[serde(default = "default_transparent")]
-    pub stroke_color: String,
-    /// Stroke width in pixels
-    #[serde(default)]
-    pub stroke_width: f32,
-    /// Drop shadow
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub shadow: Option<TextShadow>,
 }
 
 fn default_font_family() -> String {
@@ -1256,15 +1228,6 @@ fn default_font_weight() -> String {
 }
 fn default_font_style() -> String {
     "normal".to_string()
-}
-fn default_text_decoration() -> String {
-    "none".to_string()
-}
-fn default_line_height() -> f32 {
-    1.2
-}
-fn default_transparent() -> String {
-    "transparent".to_string()
 }
 
 /// Shape element data
@@ -1298,119 +1261,6 @@ pub struct SubtitleElementData {
     /// Text color
     #[serde(default = "default_color")]
     pub color: String,
-    /// Font family
-    #[serde(default = "default_font_family")]
-    pub font_family: String,
-    /// Background color
-    #[serde(default = "default_background_color")]
-    pub background_color: String,
-    /// Text alignment
-    #[serde(default = "default_text_align")]
-    pub text_align: String,
-    /// Stroke color (hex)
-    #[serde(default = "default_transparent")]
-    pub stroke_color: String,
-    /// Stroke width in pixels
-    #[serde(default)]
-    pub stroke_width: f32,
-    /// Drop shadow
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub shadow: Option<TextShadow>,
-}
-
-/// Text shadow properties (Phase 2)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TextShadow {
-    /// Shadow color
-    #[serde(default = "default_shadow_color")]
-    pub color: String,
-    /// Horizontal offset
-    #[serde(default)]
-    pub offset_x: f32,
-    /// Vertical offset
-    #[serde(default)]
-    pub offset_y: f32,
-    /// Blur radius
-    #[serde(default)]
-    pub blur: f32,
-}
-
-fn default_shadow_color() -> String {
-    "rgba(0,0,0,0.5)".to_string()
-}
-
-/// Speed control properties (Phase 1)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SpeedProperties {
-    /// Playback speed (0.1 - 4.0, default: 1.0)
-    /// When speed != 1.0, element.duration represents timeline duration.
-    /// Source media range = duration * speed.
-    #[serde(default = "default_speed")]
-    pub speed: f64,
-    /// Whether playback is reversed
-    #[serde(default)]
-    pub reverse: bool,
-    /// Whether to preserve audio pitch when changing speed
-    #[serde(default = "default_true")]
-    pub preserve_pitch: bool,
-    /// Time remap data (for complex speed changes)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub time_remap: Option<TimeRemapData>,
-}
-
-fn default_speed() -> f64 {
-    1.0
-}
-
-fn default_true() -> bool {
-    true
-}
-
-/// Time remap data for variable speed
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TimeRemapData {
-    /// Whether time remapping is enabled
-    #[serde(default)]
-    pub enabled: bool,
-    /// Keyframes for time remapping
-    #[serde(default)]
-    pub keyframes: Vec<TimeRemapKeyframe>,
-}
-
-/// Time remap keyframe
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TimeRemapKeyframe {
-    /// Unique identifier
-    pub id: String,
-    /// Output time (position on timeline)
-    pub output_time: f64,
-    /// Input time (position in source media)
-    pub input_time: f64,
-    /// Easing to next keyframe
-    #[serde(default)]
-    pub easing: EasingType,
-}
-
-/// Transition effect (Phase 2)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TransitionEffect {
-    /// Transition type
-    #[serde(default)]
-    pub transition_type: String,
-    /// Duration in seconds
-    #[serde(default)]
-    pub duration: f64,
-    /// Easing function for progress
-    #[serde(default)]
-    pub easing: EasingType,
-    /// Edge feather/softness (0.0 - 1.0)
-    #[serde(default)]
-    pub feather: f32,
 }
 
 /// Audio properties within an element
@@ -1432,15 +1282,6 @@ pub struct AudioProperties {
     /// Fade out duration (seconds)
     #[serde(default)]
     pub fade_out: f64,
-    /// Fade in easing curve
-    #[serde(default)]
-    pub fade_in_curve: EasingType,
-    /// Fade out easing curve
-    #[serde(default)]
-    pub fade_out_curve: EasingType,
-    /// Gain adjustment in dB (-20 to +20)
-    #[serde(default)]
-    pub gain: f64,
 }
 
 fn default_volume() -> f64 {
@@ -1455,9 +1296,6 @@ impl Default for AudioProperties {
             muted: false,
             fade_in: 0.0,
             fade_out: 0.0,
-            fade_in_curve: EasingType::Linear,
-            fade_out_curve: EasingType::Linear,
-            gain: 0.0,
         }
     }
 }
@@ -1555,9 +1393,6 @@ mod tests {
             muted: false,
             hidden: false,
             locked: false,
-            speed: None,
-            transition_in: None,
-            transition_out: None,
         };
 
         assert!(!element.is_visible_at(4.9));
@@ -1590,9 +1425,6 @@ mod tests {
             muted: false,
             hidden: false,
             locked: false,
-            speed: None,
-            transition_in: None,
-            transition_out: None,
         };
 
         assert_eq!(element.get_source_time(5.0), 2.0);

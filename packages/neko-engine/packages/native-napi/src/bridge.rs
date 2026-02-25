@@ -178,6 +178,93 @@ pub async fn bridge_get_keyframes(path: String) -> napi::Result<String> {
 // Phase B: Additional bridge functions
 // ============================================================================
 
+// ============================================================================
+// Phase C: Effects bridge functions
+// ============================================================================
+
+/// List available shader effects via the unified API
+///
+/// Maps to: effects:list
+///
+/// Returns JSON ActionResponse with available preset and custom shaders
+#[napi]
+pub async fn bridge_effects_list() -> napi::Result<String> {
+    let request = ActionRequest::new("effects", "list");
+    dispatch_to_json(request).await
+}
+
+/// Get shader info via the unified API
+///
+/// Maps to: effects:info
+///
+/// Returns JSON ActionResponse with shader parameter definitions
+#[napi]
+pub async fn bridge_effects_info(shader_id: String) -> napi::Result<String> {
+    let request = ActionRequest::new("effects", "info")
+        .with_options(json!({ "shaderId": shader_id }));
+    dispatch_to_json(request).await
+}
+
+/// Apply a shader effect to RGBA frame data via the unified API
+///
+/// Maps to: effects:apply
+///
+/// Returns JSON ActionResponse with processed base64-encoded RGBA data
+#[napi]
+pub async fn bridge_effects_apply(
+    data_base64: String,
+    width: u32,
+    height: u32,
+    shader_id: String,
+    params_json: Option<String>,
+) -> napi::Result<String> {
+    let params: serde_json::Value = params_json
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or(json!({}));
+
+    let request = ActionRequest::new("effects", "apply")
+        .with_options(json!({
+            "data": data_base64,
+            "width": width,
+            "height": height,
+            "shaderId": shader_id,
+            "params": params,
+        }));
+
+    dispatch_to_json(request).await
+}
+
+/// Register a custom WGSL shader via the unified API
+///
+/// Maps to: effects:register
+///
+/// Returns JSON ActionResponse confirming registration
+#[napi]
+pub async fn bridge_effects_register(
+    id: String,
+    code: String,
+    params_json: Option<String>,
+) -> napi::Result<String> {
+    let params: serde_json::Value = params_json
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or(json!([]));
+
+    let request = ActionRequest::new("effects", "register")
+        .with_options(json!({
+            "shaderId": id,
+            "code": code,
+            "params": params,
+        }));
+
+    dispatch_to_json(request).await
+}
+
+// ============================================================================
+// Phase B: Additional bridge functions
+// ============================================================================
+
 /// Encode RGBA pixel data to JPEG via the unified API
 ///
 /// Maps to: images:encode

@@ -17,10 +17,11 @@ pub mod groups {
     pub const MODELS: &str = "models";
     pub const CANVAS: &str = "canvas";
     pub const SCENES: &str = "scenes";
+    pub const EFFECTS: &str = "effects";
 
     pub const ALL: &[&str] = &[
         NODES, TASKS, VIDEOS, AUDIOS, IMAGES, TIMELINES, STREAMS, MODELS,
-        CANVAS, SCENES,
+        CANVAS, SCENES, EFFECTS,
     ];
 }
 
@@ -59,4 +60,6 @@ pub mod actions {
     pub const CANVAS: &[&str] = &["composite", "capture", "export", "diff"];
 
     pub const SCENES: &[&str] = &["composite", "capture", "stream"];
+
+    pub const EFFECTS: &[&str] = &["apply", "list", "info", "register"];
 }

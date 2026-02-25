@@ -171,6 +171,7 @@ impl ProjectConverter {
                     muted: media.muted,
                     fade_in: a.fade_in,
                     fade_out: a.fade_out,
+                    ..Default::default()
                 });
 
                 Ok(Element {
@@ -195,6 +196,9 @@ impl ProjectConverter {
                     muted: media.muted,
                     hidden: media.hidden,
                     locked: media.locked,
+                    speed: None,
+                    transition_in: None,
+                    transition_out: None,
                 })
             }
             JviElement::Audio(audio) => {
@@ -231,6 +235,9 @@ impl ProjectConverter {
                     muted: audio.muted,
                     hidden: false,
                     locked: false,
+                    speed: None,
+                    transition_in: None,
+                    transition_out: None,
                 })
             }
             JviElement::Text(text) => {
@@ -256,6 +263,12 @@ impl ProjectConverter {
                         text_align: "center".to_string(),
                         font_weight: "normal".to_string(),
                         font_style: "normal".to_string(),
+                        text_decoration: "none".to_string(),
+                        line_height: 1.2,
+                        letter_spacing: 0.0,
+                        stroke_color: "transparent".to_string(),
+                        stroke_width: 0.0,
+                        shadow: None,
                     }),
                     start_time: text.start_time,
                     duration: text.duration,
@@ -268,6 +281,9 @@ impl ProjectConverter {
                     muted: false,
                     hidden: false,
                     locked: false,
+                    speed: None,
+                    transition_in: None,
+                    transition_out: None,
                 })
             }
             JviElement::Shape(shape) => {
@@ -286,6 +302,9 @@ impl ProjectConverter {
                     muted: false,
                     hidden: false,
                     locked: false,
+                    speed: None,
+                    transition_in: None,
+                    transition_out: None,
                 })
             }
             JviElement::Subtitle(sub) => {
@@ -304,6 +323,9 @@ impl ProjectConverter {
                     muted: false,
                     hidden: false,
                     locked: false,
+                    speed: None,
+                    transition_in: None,
+                    transition_out: None,
                 })
             }
         }

@@ -22,6 +22,10 @@ import type {
 	EncoderConfig,
 	Event,
 	MediaInfo,
+	EffectProcessorState,
+	EffectProcessorGpuInfo,
+	GpuEffectParams,
+	EffectPipeline,
 } from '@neko/shared';
 import { COMPATIBLE_MODE_CAPABILITIES } from '@neko/shared';
 
@@ -208,10 +212,12 @@ export class NativeMediaEngine implements IMediaEngine {
 	// =========================================================================
 
 	async getEffectProcessor(): Promise<IEffectProcessor> {
-		if (!this.isReady) {
+		if (!this.isReady || !this._engine) {
 			throw new Error('Engine not ready');
 		}
-		throw new Error('Native effect processor not yet implemented. Use basic mode for GPU effects.');
+		const processor = new NativeEffectProcessor(this._engine);
+		await processor.initialize();
+		return processor;
 	}
 
 	// =========================================================================
@@ -665,6 +671,118 @@ class NativeEncoder implements IEncoder {
 			this._errorListeners.add(listener);
 			return { dispose: () => this._errorListeners.delete(listener) };
 		};
+	}
+}
+
+// =============================================================================
+// Native Effect Processor — delegates to effects:* actions via NativeEngine
+// =============================================================================
+
+class NativeEffectProcessor implements IEffectProcessor {
+	private _state: EffectProcessorState = 'uninitialized';
+	private _engine: NativeEngineType;
+	private _gpuInfo: EffectProcessorGpuInfo | null = null;
+
+	constructor(engine: NativeEngineType) {
+		this._engine = engine;
+	}
+
+	get state(): EffectProcessorState { return this._state; }
+	get gpuInfo(): EffectProcessorGpuInfo | null { return this._gpuInfo; }
+	get isReady(): boolean { return this._state === 'ready'; }
+
+	async initialize(): Promise<void> {
+		try {
+			// Fetch GPU info
+			const gpuJson = await this._engine.gpuInfo();
+			const gpuResponse = JSON.parse(gpuJson);
+			if (gpuResponse.success && gpuResponse.data) {
+				this._gpuInfo = {
+					deviceName: gpuResponse.data.name ?? 'Unknown',
+					vendor: gpuResponse.data.vendor ?? 'Unknown',
+					backend: gpuResponse.data.backend ?? 'Unknown',
+					isDiscrete: gpuResponse.data.device_type === 'DiscreteGpu',
+					maxTextureSize: 16384,
+				};
+			}
+			this._state = 'ready';
+		} catch (error) {
+			this._state = 'error';
+			throw error;
+		}
+	}
+
+	async processFrame(
+		frame: Uint8Array | VideoFrame,
+		width: number,
+		height: number,
+		effects: GpuEffectParams[]
+	): Promise<Uint8Array> {
+		if (!this.isReady) {
+			throw new Error('Effect processor not ready');
+		}
+
+		let currentData: Uint8Array;
+		if (frame instanceof Uint8Array) {
+			currentData = frame;
+		} else {
+			throw new Error('VideoFrame input not supported in NativeEffectProcessor');
+		}
+
+		// Apply each effect sequentially
+		for (const effect of effects) {
+			if (effect.type === 'custom') {
+				const params = effect.uniforms ?? {};
+				const responseJson = await this._engine.dispatchAction(
+					'effects', 'apply', null,
+					JSON.stringify({
+						data: Buffer.from(currentData).toString('base64'),
+						width,
+						height,
+						shaderId: effect.shaderId,
+						params,
+					})
+				);
+				const response = JSON.parse(responseJson);
+				if (!response.success || !response.data?.data) {
+					throw new Error(response.error?.message ?? 'Effect apply failed');
+				}
+				currentData = new Uint8Array(Buffer.from(response.data.data, 'base64'));
+			}
+			// Other effect types can be added here as needed
+		}
+
+		return currentData;
+	}
+
+	async processPipeline(
+		frame: Uint8Array | VideoFrame,
+		width: number,
+		height: number,
+		pipeline: EffectPipeline
+	): Promise<Uint8Array> {
+		const enabledEffects = pipeline.effects
+			.filter(e => e.enabled)
+			.sort((a, b) => a.order - b.order)
+			.map(e => e.params);
+
+		return this.processFrame(frame, width, height, enabledEffects);
+	}
+
+	async registerCustomShader(id: string, shaderCode: string): Promise<void> {
+		const responseJson = await this._engine.dispatchAction(
+			'effects', 'register', null,
+			JSON.stringify({ shaderId: id, code: shaderCode, params: [] })
+		);
+		const response = JSON.parse(responseJson);
+		if (!response.success) {
+			throw new Error(response.error?.message ?? `Failed to register shader: ${id}`);
+		}
+	}
+
+	async dispose(): Promise<void> {
+		this._state = 'disposed';
+		this._gpuInfo = null;
 	}
 }
 

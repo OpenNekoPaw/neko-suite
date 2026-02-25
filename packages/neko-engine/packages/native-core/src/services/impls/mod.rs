@@ -6,6 +6,7 @@
 mod audio;
 pub(crate) mod common;
 mod container;
+mod effects;
 mod export;
 mod image;
 mod node;
@@ -16,6 +17,7 @@ mod video;
 
 pub use audio::AudioService;
 pub use container::ServiceContainer;
+pub use effects::EffectsService;
 pub use export::ExportService;
 pub use image::ImageService;
 pub use node::NodeService;

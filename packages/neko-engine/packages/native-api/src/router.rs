@@ -1,14 +1,14 @@
 //! ActionRouter - Routes ActionRequest to appropriate controllers
 
 use crate::controllers::{
-    AudioController, CanvasController, Controller, ImageController,
+    AudioController, CanvasController, Controller, EffectsController, ImageController,
     ModelsController, NodeController, ScenesController, StreamController, TaskController,
     TimelineController, VideoController,
 };
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_native_core::services::{
-    AudioService, ExportService, ImageService, NodeService, TaskService,
+    AudioService, EffectsService, ExportService, ImageService, NodeService, TaskService,
     TimelineService, VideoService,
 };
 use neko_types::registry::{self, groups};
@@ -24,6 +24,7 @@ pub struct ActionRouter {
     image_controller: ImageController,
     timeline_controller: TimelineController,
     stream_controller: StreamController,
+    effects_controller: EffectsController,
     models_controller: ModelsController,
     canvas_controller: CanvasController,
     scenes_controller: ScenesController,
@@ -39,6 +40,7 @@ impl ActionRouter {
         image_service: Arc<ImageService>,
         timeline_service: Arc<TimelineService>,
         export_service: Option<Arc<ExportService>>,
+        effects_service: Option<Arc<EffectsService>>,
         resource_registry: Arc<ResourceRegistry>,
         stream_registry: Arc<StreamRegistry>,
     ) -> Self {
@@ -50,6 +52,7 @@ impl ActionRouter {
             image_controller: ImageController::new(image_service, resource_registry),
             timeline_controller: TimelineController::new(timeline_service.clone(), export_service, stream_registry.clone()),
             stream_controller: StreamController::new(stream_registry, timeline_service),
+            effects_controller: EffectsController::new(effects_service),
             models_controller: ModelsController::new(),
             canvas_controller: CanvasController::new(),
             scenes_controller: ScenesController::new(),
@@ -121,6 +124,11 @@ impl ActionRouter {
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
+            groups::EFFECTS => {
+                self.effects_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
             _ => Err(ApiError::UnknownAction {
                 group: request.group.clone(),
                 action: request.action.clone(),
@@ -146,6 +154,7 @@ impl ActionRouter {
             groups::CANVAS => Some(self.canvas_controller.actions()),
             groups::SCENES => Some(self.scenes_controller.actions()),
             groups::STREAMS => Some(self.stream_controller.actions()),
+            groups::EFFECTS => Some(self.effects_controller.actions()),
             _ => None,
         }
     }
@@ -173,6 +182,7 @@ mod tests {
             image_service,
             timeline_service,
             None, // No GPU = no export service in tests
+            None, // No GPU = no effects service in tests
             resource_registry,
             stream_registry,
         )
@@ -235,6 +245,7 @@ mod tests {
         assert!(groups.contains(&"canvas"));
         assert!(groups.contains(&"scenes"));
         assert!(groups.contains(&"streams"));
+        assert!(groups.contains(&"effects"));
         // "exports" group has been removed; export is now a timelines action
         assert!(!groups.contains(&"exports"));
     }

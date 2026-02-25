@@ -8,12 +8,14 @@
 //! - TaskController: tasks:* actions
 //! - NodeController: nodes:* actions
 //! - StreamController: streams:* actions (lifecycle management)
+//! - EffectsController: effects:* actions (custom shader effects)
 //! - ModelsController: models:* actions (placeholder)
 //! - CanvasController: canvas:* actions (placeholder)
 //! - ScenesController: scenes:* actions (placeholder)
 
 mod audio;
 mod canvas;
+mod effects;
 mod image;
 mod models;
 mod node;
@@ -26,6 +28,7 @@ mod video;
 
 pub use audio::AudioController;
 pub use canvas::CanvasController;
+pub use effects::EffectsController;
 pub use image::ImageController;
 pub use models::ModelsController;
 pub use node::NodeController;

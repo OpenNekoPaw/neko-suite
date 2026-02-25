@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
 use crate::domain::{ElementType, Timeline};
+use crate::animation::{Easing, EasingType};
 use crate::error::Result;
 
 use super::types::ExportSettings;
@@ -28,6 +29,9 @@ struct ActiveAudioElement {
     pan: f32,
     fade_in: f64,
     fade_out: f64,
+    fade_in_curve: EasingType,
+    fade_out_curve: EasingType,
+    gain: f64,
     start_time: f64,
     duration: f64,
     trim_start: f64,
@@ -37,13 +41,25 @@ impl ActiveAudioElement {
     fn effective_volume(&self, timeline_time: f64) -> f32 {
         let relative_time = timeline_time - self.start_time;
         let mut vol = self.volume;
-        if self.fade_in > 0.0 && relative_time < self.fade_in {
-            vol *= (relative_time / self.fade_in) as f32;
+
+        // Apply gain (dB → linear): linear = 10^(dB/20)
+        if self.gain != 0.0 {
+            vol *= (10.0_f64.powf(self.gain / 20.0)) as f32;
         }
+
+        // Apply fade in with easing curve
+        if self.fade_in > 0.0 && relative_time < self.fade_in {
+            let t = (relative_time / self.fade_in).clamp(0.0, 1.0);
+            vol *= Easing::evaluate(self.fade_in_curve, t) as f32;
+        }
+
+        // Apply fade out with easing curve
         let time_to_end = self.duration - relative_time;
         if self.fade_out > 0.0 && time_to_end < self.fade_out {
-            vol *= (time_to_end / self.fade_out) as f32;
+            let t = (time_to_end / self.fade_out).clamp(0.0, 1.0);
+            vol *= Easing::evaluate(self.fade_out_curve, t) as f32;
         }
+
         vol.clamp(0.0, 1.0)
     }
 
@@ -174,12 +190,19 @@ impl AudioMixer {
                 match &element.element_type {
                     ElementType::Audio(audio) => {
                         if element.is_audio_muted() { continue; }
+                        // Get fade curves and gain from AudioProperties if available
+                        let (fade_in_curve, fade_out_curve, gain) = audio.audio.as_ref()
+                            .map(|a| (a.fade_in_curve, a.fade_out_curve, a.gain))
+                            .unwrap_or((EasingType::Linear, EasingType::Linear, 0.0));
                         active.push(ActiveAudioElement {
                             src: audio.src.clone(),
                             volume: element.effective_volume(),
                             pan: element.effective_pan(),
                             fade_in: audio.fade_in,
                             fade_out: audio.fade_out,
+                            fade_in_curve,
+                            fade_out_curve,
+                            gain,
                             start_time: element.start_time,
                             duration: element.duration,
                             trim_start: element.trim_start,
@@ -188,12 +211,19 @@ impl AudioMixer {
                     ElementType::Media(media) if !element.is_audio_muted() => {
                         // Skip if audio is handled by a linked audio element in audio track
                         if media.linked_audio_id.is_some() { continue; }
+                        // Get fade curves and gain from AudioProperties if available
+                        let (fade_in_curve, fade_out_curve, gain) = media.audio.as_ref()
+                            .map(|a| (a.fade_in_curve, a.fade_out_curve, a.gain))
+                            .unwrap_or((EasingType::Linear, EasingType::Linear, 0.0));
                         active.push(ActiveAudioElement {
                             src: media.src.clone(),
                             volume: element.effective_volume(),
                             pan: 0.0,
-                            fade_in: 0.0,
-                            fade_out: 0.0,
+                            fade_in: media.audio.as_ref().map(|a| a.fade_in).unwrap_or(0.0),
+                            fade_out: media.audio.as_ref().map(|a| a.fade_out).unwrap_or(0.0),
+                            fade_in_curve,
+                            fade_out_curve,
+                            gain,
                             start_time: element.start_time,
                             duration: element.duration,
                             trim_start: element.trim_start,
