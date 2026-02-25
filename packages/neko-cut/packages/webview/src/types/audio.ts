@@ -3,17 +3,17 @@
  * 音频相关类型定义
  */
 
-import type { AnimatableProperty, EasingType } from './animation';
+import type { EasingType } from './animation';
 
 /**
- * Audio properties for media and audio elements
- * 媒体和音频元素的音频属性
+ * Audio properties for media and audio elements — engine-aligned, pure scalar values.
+ * 媒体和音频元素的音频属性 — 对齐引擎，纯标量值
  */
 export interface AudioProperties {
   /** Volume (0-2, 1 = 100%) */
-  volume: AnimatableProperty;
+  volume: number;
   /** Stereo pan (-1 = left, 0 = center, 1 = right) */
-  pan: AnimatableProperty;
+  pan: number;
   /** Whether audio is muted */
   muted: boolean;
   /** Fade in duration (seconds) */
@@ -39,8 +39,8 @@ export interface AudioProperties {
  */
 export function createDefaultAudioProperties(): AudioProperties {
   return {
-    volume: { baseValue: 1, keyframes: [] },
-    pan: { baseValue: 0, keyframes: [] },
+    volume: 1,
+    pan: 0,
     muted: false,
     fadeIn: 0,
     fadeOut: 0,

@@ -92,4 +92,4 @@ pub use windows_export::{WindowsTextureExporter, WindowsExportBackingStore, Expo
 
 pub use gpu_layer::{GpuLayer, GpuLayerBuilder};
 pub use texture_compositor::{TextureCompositeResult, TextureCompositor};
-pub use text_renderer::TextRenderer;
+pub use text_renderer::{TextRenderer, TextStyle, TextShadowStyle};

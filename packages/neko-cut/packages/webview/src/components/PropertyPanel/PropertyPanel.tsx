@@ -80,8 +80,8 @@ const TEXT_PROPERTIES: PropertyDefinition[] = [
 ];
 
 const AUDIO_PROPERTIES: PropertyDefinition[] = [
-  { key: 'volume', labelKey: 'propertyPanel.audio.volume', type: 'slider', animatable: true, min: 0, max: 2, step: 0.01 },
-  { key: 'pan', labelKey: 'propertyPanel.audio.pan', type: 'slider', animatable: true, min: -1, max: 1, step: 0.01 },
+  { key: 'volume', labelKey: 'propertyPanel.audio.volume', type: 'slider', animatable: false, min: 0, max: 2, step: 0.01 },
+  { key: 'pan', labelKey: 'propertyPanel.audio.pan', type: 'slider', animatable: false, min: -1, max: 1, step: 0.01 },
   { key: 'muted', labelKey: 'propertyPanel.audio.muted', type: 'boolean', animatable: false },
   { key: 'fadeIn', labelKey: 'propertyPanel.audio.fadeIn', type: 'number', animatable: false, min: 0, max: 10, step: 0.1, unit: 's' },
   { key: 'fadeOut', labelKey: 'propertyPanel.audio.fadeOut', type: 'number', animatable: false, min: 0, max: 10, step: 0.1, unit: 's' },

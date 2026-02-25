@@ -409,7 +409,8 @@ Phase 1 (P0): speed 变速 → Proto + Rust + TS 全链路 ✅ 已完成 (2026-0
   ├─ ✅ Proto: 新增 SpeedProperties / TimeRemapData / TimeRemapKeyframe
   ├─ ✅ Rust: Element 新增 speed 字段 + SpeedProperties 等 struct
   ├─ ✅ TS: speed 从 ElementEditState 迁移到 BaseTimelineElement (引擎字段)
-  ├─ 🔲 引擎实现: 解码器时间映射 + 音频变速 (待后续接入)
+  ├─ ✅ 引擎实现: get_source_time() 支持 constant speed + reverse + time remap 关键帧插值
+  │   音频变速（重采样/pitch-preserving）待后续接入 audio_mixer
   └─ ✅ duration 语义约定已在 Proto 注释中明确
 
 Phase 2 (P1): 文本/字幕增强 + 转场接入 ✅ 已完成 (2026-02-25)
@@ -418,21 +419,27 @@ Phase 2 (P1): 文本/字幕增强 + 转场接入 ✅ 已完成 (2026-02-25)
   ├─ ✅ Proto + Rust: Element 新增 transition_in/out + Transition message
   ├─ ✅ TS: TextElement 字段从 @ui-only 升级为引擎字段
   ├─ ✅ TS: SubtitleElement 补全 6 个引擎字段
-  ├─ 🔲 引擎: text_renderer.rs 接入新字段 (待后续)
-  └─ 🔲 引擎: 转场系统接入 export pipeline (待后续)
+  ├─ ✅ 引擎: text_renderer.rs 接入新字段 — rasterize_styled() 支持 line_height, stroke, shadow, background_color, text_decoration
+  │   gpu_export_pipeline.rs render_text_to_gpu_layer() 已更新为传递 TextStyle
+  └─ 🔲 引擎: 转场系统接入 export pipeline
+      → 需要架构设计：GpuTransitionProcessor 是 buffer-based，export pipeline 是 texture-based
+      → 方案：给 transition processor 添加 texture-based API 或在 compositor 层面集成
 
 Phase 3 (P1): 音频增强 ✅ 已完成 (2026-02-25)
   ├─ ✅ Proto + Rust: AudioProperties 新增 fade_in_curve / fade_out_curve / gain
   ├─ ✅ Rust: audio_mixer.rs 从线性插值改为 Easing::evaluate() 淡入淡出
   └─ ✅ Rust: gain dB→linear 转换 (10^(dB/20))
 
-Phase 4 (P2): TS 层清理 ✅ 部分完成 (2026-02-25)
+Phase 4 (P2): TS 层清理 ✅ 已完成 (2026-02-25)
   ├─ ✅ neko-types: TextElement 移除 deprecated x/y/rotation
   ├─ ✅ neko-types: ProjectDefaults 标注 @ui-only 字段（对齐 Proto）
-  ├─ 🔲 neko-types: 清理 AudioProperties（移除 AnimatableProperty，独立为 AnimatableAudioState）
-  │   → 延后：AnimatableProperty 深度集成于 13 个文件的关键帧系统，需随关键帧引擎迁移一并处理
-  └─ 🔲 neko-types: SubtitleElement 移除 language/isDefault
-      → 延后：elementOpsSlice.ts 创建字幕元素时仍在使用这两个字段
+  ├─ ✅ neko-types: 清理 AudioProperties（移除 AnimatableProperty 联合类型，volume/pan 回归纯 number）
+  │   neko-types/audio.ts: 移除 AnimatableProperty import，Omit 仅保留 fadeInCurve/fadeOutCurve
+  │   webview/types/audio.ts: volume/pan 改为 number，createDefaultAudioProperties 返回纯标量
+  │   keyframeSlice.ts: 移除 audio 分支，仅支持 transform 关键帧
+  │   PropertyPanel.tsx: audio volume/pan 标记 animatable: false
+  └─ ✅ neko-types: SubtitleElement 移除 language/isDefault
+      elementOpsSlice.ts 中对应赋值已同步移除
 
 Phase 5 (P2): UI 类型从 neko-types 迁移到 neko-cut/webview ✅
   ├─ 前置：Phase 4 AudioProperties 清理完成（解除 AnimatableProperty 与引擎类型的耦合）
@@ -597,15 +604,16 @@ Phase 5 (P2): UI 类型从 neko-types 迁移到 neko-cut/webview ✅
 | 功能 | 定义 | 存储 | 实际渲染 |
 |---|---|---|---|
 | Text: content, font, color, weight, style | ✅ | ✅ | ✅ |
-| Text: background_color, text_align | ✅ | ✅ | ✗ (未实现) |
-| Text: decoration, spacing, stroke, shadow | ✅ | ✅ | ✗ (已定义，待渲染接入) |
+| Text: background_color, text_align | ✅ | ✅ | ✅ (rasterize_styled 已接入) |
+| Text: decoration, line_height, stroke, shadow | ✅ | ✅ | ✅ (rasterize_styled 已接入) |
+| Text: letter_spacing | ✅ | ✅ | ✗ (cosmic-text 无直接 API，需手动调整 glyph 位置) |
 | Audio: volume, pan, fade_in, fade_out | ✅ | ✅ | ✅ |
 | Audio: fade_curve (easing), gain (dB) | ✅ | ✅ | ✅ (Phase 3 已接入 audio_mixer) |
 | Audio: eq | ✗ | ✗ | ✗ |
-| Subtitles: basic + enhanced rendering | ✅ | ✅ | ✗ (已定义，待渲染接入) |
-| Transitions: 18 types GPU | ✅ | ✅ | ✗ (已定义，待接入 pipeline) |
+| Subtitles: basic + enhanced rendering | ✅ | ✅ | ✗ (已定义，待渲染接入，可复用 TextRenderer) |
+| Transitions: 18 types GPU | ✅ | ✅ | ✗ (GPU shader 已实现，待 pipeline 集成，需 buffer→texture 架构设计) |
 | Media: transform, opacity, blend | ✅ | ✅ | ✅ |
-| Media: speed/variable rate | ✅ | ✅ | ✗ (已定义，待解码器接入) |
+| Media: speed/variable rate | ✅ | ✅ | ✅ (get_source_time 已支持 constant speed + reverse + time remap) |
 | Shapes | ✅ | ✅ | ✗ (未实现) |
 | Effects (blur, color, etc.) | ✅ | ✅ | ✗ (未实现) |
 | Keyframes/Animation | ✅ | ✅ | ✗ (未 evaluate) |

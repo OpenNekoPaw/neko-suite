@@ -10,7 +10,6 @@ import { StateCreator } from 'zustand';
 import type { ProjectData } from '../../types';
 import type { EditorElement } from '../../types/editor-types';
 import type { AnimatableProperty, AnimationKeyframe, ElementTransform } from '../../types/animation';
-import type { AudioProperties } from '../../types/audio';
 import type { EffectParameterKeyframe } from '../../types/effects';
 import type {
   MaskShape,
@@ -80,7 +79,8 @@ function parsePropertyPath(property: string): { rootKey: string; propKey: string
 }
 
 /**
- * Find the animatable property from an element based on property path
+ * Find the animatable property from an element based on property path.
+ * Only transform properties support keyframe animation.
  */
 function findAnimatableProperty(
   element: EditorElement,
@@ -92,13 +92,6 @@ function findAnimatableProperty(
     const animTransform = element.animTransform;
     if (!animTransform) return null;
     const prop = animTransform[propKey as keyof ElementTransform] as AnimatableProperty;
-    return (prop && typeof prop === 'object' && 'baseValue' in prop) ? prop : null;
-  }
-
-  if (rootKey === 'audio') {
-    const audio = element.audio;
-    if (!audio) return null;
-    const prop = audio[propKey as keyof AudioProperties] as AnimatableProperty;
     return (prop && typeof prop === 'object' && 'baseValue' in prop) ? prop : null;
   }
 
@@ -129,24 +122,17 @@ export const createKeyframeSlice: StateCreator<
     if (!element) return;
 
     const { rootKey, propKey } = parsePropertyPath(property);
-    if (rootKey !== 'transform' && rootKey !== 'audio') {
+    if (rootKey !== 'transform') {
       console.warn(`Keyframes for ${rootKey} properties are not yet supported`);
       return;
     }
 
     // Validate property is animatable
-    if (rootKey === 'transform') {
-      const animTransform = element.animTransform ?? createDefaultElementTransform();
-      const animProp = animTransform[propKey as keyof ElementTransform] as AnimatableProperty;
-      if (!animProp || typeof animProp !== 'object' || !('baseValue' in animProp)) {
-        console.warn(`Property ${property} is not animatable`);
-        return;
-      }
-    } else if (rootKey === 'audio') {
-      if (propKey !== 'volume' && propKey !== 'pan') {
-        console.warn(`Audio property ${propKey} is not animatable`);
-        return;
-      }
+    const animTransform = element.animTransform ?? createDefaultElementTransform();
+    const animProp = animTransform[propKey as keyof ElementTransform] as AnimatableProperty;
+    if (!animProp || typeof animProp !== 'object' || !('baseValue' in animProp)) {
+      console.warn(`Property ${property} is not animatable`);
+      return;
     }
 
     const newKeyframe: AnimationKeyframe = {
@@ -179,7 +165,7 @@ export const createKeyframeSlice: StateCreator<
     if (!element) return;
 
     const { rootKey } = parsePropertyPath(property);
-    if (rootKey !== 'transform' && rootKey !== 'audio') return;
+    if (rootKey !== 'transform') return;
 
     const animProp = findAnimatableProperty(element, property);
     if (!animProp) return;
@@ -214,7 +200,7 @@ export const createKeyframeSlice: StateCreator<
     if (!element) return;
 
     const { rootKey } = parsePropertyPath(property);
-    if (rootKey !== 'transform' && rootKey !== 'audio') return;
+    if (rootKey !== 'transform') return;
 
     const animProp = findAnimatableProperty(element, property);
     if (!animProp) return;

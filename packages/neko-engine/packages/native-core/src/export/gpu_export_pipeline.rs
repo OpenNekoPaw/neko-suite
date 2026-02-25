@@ -642,8 +642,23 @@ impl GpuExportPipeline {
 
         let renderer = self.text_renderer.as_mut().unwrap();
 
-        // Rasterize text to RGBA buffer
-        let rasterized = renderer.rasterize(
+        // Build text style from Phase 2 fields
+        let style_opts = crate::gpu::TextStyle {
+            line_height: Some(text_data.line_height),
+            text_decoration: Some(text_data.text_decoration.clone()),
+            stroke_color: Some(text_data.stroke_color.clone()),
+            stroke_width: Some(text_data.stroke_width),
+            shadow: text_data.shadow.as_ref().map(|s| crate::gpu::TextShadowStyle {
+                color: s.color.clone(),
+                offset_x: s.offset_x,
+                offset_y: s.offset_y,
+                blur: s.blur,
+            }),
+            background_color: Some(text_data.background_color.clone()),
+        };
+
+        // Rasterize text to RGBA buffer with full styling
+        let rasterized = renderer.rasterize_styled(
             &text_data.content,
             &text_data.font_family,
             text_data.font_size,
@@ -651,6 +666,7 @@ impl GpuExportPipeline {
             &text_data.font_weight,
             &text_data.font_style,
             Some(self.output_width as f32),
+            &style_opts,
         )?;
 
         let width = rasterized.width;

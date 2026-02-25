@@ -7,7 +7,7 @@ use neko_types::{BlendMode, EffectParams, Resolution, TrackType};
 use serde::{Deserialize, Serialize};
 
 use super::Transform;
-use crate::animation::EasingType;
+use crate::animation::{Easing, EasingType};
 use crate::gpu::{BlendMode as GpuBlendMode, Transform2D};
 
 /// A timeline represents a complete editing project
@@ -962,9 +962,69 @@ impl Element {
         !self.hidden && time >= self.start_time && time < self.end_time()
     }
 
-    /// Get source time for a given timeline time
+    /// Get source time for a given timeline time.
+    /// Accounts for speed, reverse, and time remap when present.
     pub fn get_source_time(&self, timeline_time: f64) -> f64 {
         let relative_time = timeline_time - self.start_time;
+
+        match &self.speed {
+            Some(speed_props) => {
+                // Time remap takes priority if enabled
+                if let Some(ref remap) = speed_props.time_remap {
+                    if remap.enabled && remap.keyframes.len() >= 2 {
+                        return self.evaluate_time_remap(relative_time, remap);
+                    }
+                }
+
+                // Apply constant speed factor
+                let source_relative = relative_time * speed_props.speed;
+
+                // Handle reverse playback
+                if speed_props.reverse {
+                    let source_duration = self.duration * speed_props.speed;
+                    self.trim_start + (source_duration - source_relative)
+                } else {
+                    self.trim_start + source_relative
+                }
+            }
+            None => self.trim_start + relative_time,
+        }
+    }
+
+    /// Evaluate time remap keyframes to get source time.
+    /// Keyframes map output_time (timeline-relative) to input_time (source-relative).
+    fn evaluate_time_remap(&self, relative_time: f64, remap: &TimeRemapData) -> f64 {
+        let kfs = &remap.keyframes;
+
+        // Before first keyframe
+        if relative_time <= kfs[0].output_time {
+            return self.trim_start + kfs[0].input_time;
+        }
+
+        // After last keyframe
+        let last = &kfs[kfs.len() - 1];
+        if relative_time >= last.output_time {
+            return self.trim_start + last.input_time;
+        }
+
+        // Find surrounding keyframes
+        for i in 0..kfs.len() - 1 {
+            let a = &kfs[i];
+            let b = &kfs[i + 1];
+            if relative_time >= a.output_time && relative_time < b.output_time {
+                let segment_duration = b.output_time - a.output_time;
+                let t = if segment_duration > 0.0 {
+                    (relative_time - a.output_time) / segment_duration
+                } else {
+                    0.0
+                };
+                let eased_t = Easing::evaluate(a.easing, t);
+                let source_time = a.input_time + (b.input_time - a.input_time) * eased_t;
+                return self.trim_start + source_time;
+            }
+        }
+
+        // Fallback
         self.trim_start + relative_time
     }
 

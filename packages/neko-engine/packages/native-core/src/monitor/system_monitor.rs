@@ -187,13 +187,21 @@ impl SystemMonitor {
     }
 
     /// Platform-specific GPU sampling for macOS
+    ///
+    /// Uses Metal API to query VRAM allocation. GPU utilization percentage
+    /// is not available through public macOS APIs (would require IOKit
+    /// private frameworks), so only VRAM is reported.
     #[cfg(target_os = "macos")]
     fn sample_gpu(&self) -> (Option<f64>, Option<u64>) {
-        // macOS: GPU monitoring requires IOKit or Metal performance counters
-        // This is complex to implement and requires additional dependencies
-        // For now, return None (GPU monitoring on macOS requires more complex setup)
-        // TODO: Implement using IOKit or Metal performance shaders
-        (None, None)
+        let device = metal::Device::system_default();
+        match device {
+            Some(dev) => {
+                let allocated = dev.current_allocated_size() as u64;
+                // GPU utilization not available via public Metal API
+                (None, Some(allocated))
+            }
+            None => (None, None),
+        }
     }
 
     /// Platform-specific GPU sampling for Linux

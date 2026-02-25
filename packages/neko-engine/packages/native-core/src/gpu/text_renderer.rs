@@ -69,6 +69,32 @@ impl TextRenderer {
         font_style: &str,
         max_width: Option<f32>,
     ) -> Option<RasterizedText> {
+        self.rasterize_styled(
+            text,
+            font_family,
+            font_size,
+            color_hex,
+            font_weight,
+            font_style,
+            max_width,
+            &TextStyle::default(),
+        )
+    }
+
+    /// Rasterize text with full styling (Phase 2 fields).
+    ///
+    /// Supports line_height, stroke, shadow, background_color, and text_decoration.
+    pub fn rasterize_styled(
+        &mut self,
+        text: &str,
+        font_family: &str,
+        font_size: f32,
+        color_hex: &str,
+        font_weight: &str,
+        font_style: &str,
+        max_width: Option<f32>,
+        style_opts: &TextStyle,
+    ) -> Option<RasterizedText> {
         if text.is_empty() {
             return None;
         }
@@ -107,9 +133,9 @@ impl TextRenderer {
             .weight(weight)
             .style(style);
 
-        // Create text buffer with metrics
-        // Line height = 1.2x font size (standard)
-        let metrics = Metrics::new(font_size, font_size * 1.2);
+        // Create text buffer with metrics — use configurable line_height
+        let line_height = style_opts.line_height.unwrap_or(1.2);
+        let metrics = Metrics::new(font_size, font_size * line_height);
         let mut buffer = CosmicBuffer::new(&mut self.font_system, metrics);
 
         // Set text content
@@ -120,49 +146,148 @@ impl TextRenderer {
         // Shape and layout
         buffer.shape_until_scroll(&mut self.font_system, false);
 
-        // Calculate bounding box
-        let (buf_width, buf_height) = self.measure_buffer(&buffer);
-        if buf_width == 0 || buf_height == 0 {
+        // Calculate bounding box with extra padding for stroke/shadow
+        let (base_width, base_height) = self.measure_buffer(&buffer);
+        if base_width == 0 || base_height == 0 {
             return None;
         }
 
-        // Rasterize to RGBA buffer
+        // Expand buffer for stroke and shadow
+        let stroke_w = style_opts.stroke_width.unwrap_or(0.0).ceil() as u32;
+        let shadow_expand = style_opts.shadow.as_ref().map_or(0u32, |s| {
+            let dx = s.offset_x.abs().ceil() as u32;
+            let dy = s.offset_y.abs().ceil() as u32;
+            let blur = s.blur.ceil() as u32;
+            dx.max(dy) + blur
+        });
+        let expand = stroke_w + shadow_expand;
+        let buf_width = base_width + expand * 2;
+        let buf_height = base_height + expand * 2;
+        let offset_x = expand as i32;
+        let offset_y = expand as i32;
+
         let mut pixels = vec![0u8; (buf_width * buf_height * 4) as usize];
 
+        // Step 1: Fill background color if not transparent
+        if let Some(ref bg) = style_opts.background_color {
+            if bg != "transparent" {
+                let (br, bg_g, bb, ba) = parse_hex_color(bg);
+                if ba > 0 {
+                    for py in 0..buf_height {
+                        for px in 0..buf_width {
+                            let idx = ((py * buf_width + px) * 4) as usize;
+                            pixels[idx] = br;
+                            pixels[idx + 1] = bg_g;
+                            pixels[idx + 2] = bb;
+                            pixels[idx + 3] = ba;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Step 2: Render shadow (offset + color, no blur for now)
+        if let Some(ref shadow) = style_opts.shadow {
+            let (sr, sg, sb, sa) = parse_hex_color(&shadow.color);
+            let shadow_color = CosmicColor::rgba(sr, sg, sb, sa);
+            let sx = offset_x + shadow.offset_x as i32;
+            let sy = offset_y + shadow.offset_y as i32;
+            self.draw_text_to_buffer(&mut buffer, shadow_color, &mut pixels, buf_width, buf_height, sx, sy);
+        }
+
+        // Step 3: Render stroke (draw text at 8 offsets around center)
+        if let (Some(sw), Some(ref sc)) = (style_opts.stroke_width, &style_opts.stroke_color) {
+            if sw > 0.0 && sc != "transparent" {
+                let (sr, sg, sb, sa) = parse_hex_color(sc);
+                let stroke_color = CosmicColor::rgba(sr, sg, sb, sa);
+                let sw_i = sw.ceil() as i32;
+                for dy in -sw_i..=sw_i {
+                    for dx in -sw_i..=sw_i {
+                        if dx == 0 && dy == 0 { continue; }
+                        if (dx * dx + dy * dy) as f32 > sw * sw { continue; }
+                        self.draw_text_to_buffer(
+                            &mut buffer, stroke_color, &mut pixels,
+                            buf_width, buf_height, offset_x + dx, offset_y + dy,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Step 4: Render main text
+        self.draw_text_to_buffer(&mut buffer, text_color, &mut pixels, buf_width, buf_height, offset_x, offset_y);
+
+        // Step 5: Render text decoration (underline / line-through)
+        if let Some(ref decoration) = style_opts.text_decoration {
+            if decoration != "none" {
+                for run in buffer.layout_runs() {
+                    let line_y = match decoration.as_str() {
+                        "underline" => (run.line_y + run.line_height * 0.85) as i32 + offset_y,
+                        "line-through" => (run.line_y + run.line_height * 0.5) as i32 + offset_y,
+                        _ => continue,
+                    };
+                    let line_start_x = offset_x;
+                    let line_end_x = run.glyphs.last().map_or(0, |g| (g.x + g.w).ceil() as i32) + offset_x;
+                    let thickness = (font_size / 20.0).max(1.0).ceil() as i32;
+                    for ty in line_y..line_y + thickness {
+                        for tx in line_start_x..line_end_x {
+                            if tx >= 0 && ty >= 0 && (tx as u32) < buf_width && (ty as u32) < buf_height {
+                                let idx = ((ty as u32 * buf_width + tx as u32) * 4) as usize;
+                                if idx + 3 < pixels.len() {
+                                    pixels[idx] = r;
+                                    pixels[idx + 1] = g;
+                                    pixels[idx + 2] = b;
+                                    pixels[idx + 3] = a;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(RasterizedText {
+            data: pixels,
+            width: buf_width,
+            height: buf_height,
+        })
+    }
+
+    /// Draw text from a cosmic-text buffer into an RGBA pixel buffer at the given offset.
+    fn draw_text_to_buffer(
+        &mut self,
+        buffer: &mut CosmicBuffer,
+        color: CosmicColor,
+        pixels: &mut [u8],
+        buf_width: u32,
+        buf_height: u32,
+        ox: i32,
+        oy: i32,
+    ) {
         buffer.draw(
             &mut self.font_system,
             &mut self.swash_cache,
-            text_color,
+            color,
             |x, y, w, h, color| {
-                // Draw callback: fill rectangle at (x, y) with size (w, h)
                 let cr = color.r();
                 let cg = color.g();
                 let cb = color.b();
                 let ca = color.a();
-
-                if ca == 0 {
-                    return;
-                }
+                if ca == 0 { return; }
 
                 for dy in 0..h as i32 {
                     for dx in 0..w as i32 {
-                        let px = x + dx;
-                        let py = y + dy;
-
+                        let px = x + dx + ox;
+                        let py = y + dy + oy;
                         if px < 0 || py < 0 || px >= buf_width as i32 || py >= buf_height as i32 {
                             continue;
                         }
-
                         let idx = ((py as u32 * buf_width + px as u32) * 4) as usize;
-                        if idx + 3 >= pixels.len() {
-                            continue;
-                        }
+                        if idx + 3 >= pixels.len() { continue; }
 
-                        // Alpha compositing (premultiplied)
                         let src_a = ca as f32 / 255.0;
                         let dst_a = pixels[idx + 3] as f32 / 255.0;
                         let out_a = src_a + dst_a * (1.0 - src_a);
-
                         if out_a > 0.0 {
                             pixels[idx] = ((cr as f32 * src_a + pixels[idx] as f32 * dst_a * (1.0 - src_a)) / out_a) as u8;
                             pixels[idx + 1] = ((cg as f32 * src_a + pixels[idx + 1] as f32 * dst_a * (1.0 - src_a)) / out_a) as u8;
@@ -173,12 +298,6 @@ impl TextRenderer {
                 }
             },
         );
-
-        Some(RasterizedText {
-            data: pixels,
-            width: buf_width,
-            height: buf_height,
-        })
     }
 
     /// Upload rasterized text to a wgpu texture
@@ -251,6 +370,32 @@ impl TextRenderer {
 
         (width, height)
     }
+}
+
+/// Extended text styling options (Phase 2 fields)
+#[derive(Debug, Clone, Default)]
+pub struct TextStyle {
+    /// Line height multiplier (default: 1.2)
+    pub line_height: Option<f32>,
+    /// Text decoration: "none", "underline", "line-through"
+    pub text_decoration: Option<String>,
+    /// Stroke color (hex)
+    pub stroke_color: Option<String>,
+    /// Stroke width in pixels
+    pub stroke_width: Option<f32>,
+    /// Drop shadow
+    pub shadow: Option<TextShadowStyle>,
+    /// Background color (hex or "transparent")
+    pub background_color: Option<String>,
+}
+
+/// Shadow styling for text
+#[derive(Debug, Clone)]
+pub struct TextShadowStyle {
+    pub color: String,
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub blur: f32,
 }
 
 /// Parse a hex color string to (r, g, b, a)
