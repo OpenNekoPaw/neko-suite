@@ -14,8 +14,6 @@ import { ElementTransform } from './animation';
 import { ColorCorrection } from './colorCorrection';
 import { MaskInstance } from './mask';
 import { KeyframeTrack } from './keyframe';
-import { Transition } from './transition';
-import { SpeedProperties } from './speed';
 import { BlendModeType } from './blendMode';
 import { ElementTransition } from './transition';
 
@@ -62,8 +60,10 @@ export const DEFAULT_TRACK_UI_STATE: TrackUIState = {
  * Element edit state — UI extensions the engine doesn't recognize.
  *
  * These properties are needed by the editor but are not part of the
- * engine's Element model. They will be migrated to engine support
- * in future phases.
+ * engine's Element model.
+ *
+ * Note: speed, transitionIn, transitionOut have been migrated to engine
+ * fields on BaseTimelineElement (Phase 1-2).
  *
  * Keyed by element ID in the Store:
  *   Map<elementId, ElementEditState>
@@ -77,12 +77,6 @@ export interface ElementEditState {
   masks?: MaskInstance[];
   /** Legacy keyframe animations — pending migration to engine keyframes */
   keyframes?: KeyframeTrack[];
-  /** Transition from previous element */
-  transitionIn?: Transition;
-  /** Transition to next element */
-  transitionOut?: Transition;
-  /** Speed control properties — pending engine support */
-  speed?: SpeedProperties;
 }
 
 /** Default edit state for a new element */

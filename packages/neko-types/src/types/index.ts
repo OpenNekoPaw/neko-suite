@@ -2,6 +2,9 @@
 // Types Index - Re-export all types from submodules
 // =============================================================================
 
+// Generated engine types (from proto/timeline.proto)
+export * from '../generated/timeline.engine';
+
 // Track types
 export * from './track';
 

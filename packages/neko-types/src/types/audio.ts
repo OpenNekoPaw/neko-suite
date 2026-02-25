@@ -1,29 +1,35 @@
 // =============================================================================
 // Audio Properties (音频属性)
+//
+// Engine fields derived from EngineAudioProperties (generated from proto).
+// UI extensions: volume/pan support AnimatableProperty, eq is UI-only.
+// fadeInCurve/fadeOutCurve/gain are now engine fields (Phase 3).
 // =============================================================================
 
 import { EasingType } from './easing';
 import { AnimatableProperty } from './animation';
+import type { EngineAudioProperties } from '../generated/timeline.engine';
 
-/** Audio properties with animatable volume and pan */
-export interface AudioProperties {
+/**
+ * Audio properties — extends engine fields with UI capabilities.
+ *
+ * Engine fields (from EngineAudioProperties): volume, pan, muted, fadeIn, fadeOut,
+ *   fadeInCurve, fadeOutCurve, gain
+ * UI extensions: volume/pan accept AnimatableProperty, eq
+ *
+ * Note: Omit fadeInCurve/fadeOutCurve because TS EasingType is a superset of
+ * EngineEasingType (includes legacy aliases 'bezier', 'ease-in', etc.)
+ */
+export interface AudioProperties extends Omit<EngineAudioProperties, 'volume' | 'pan' | 'fadeInCurve' | 'fadeOutCurve'> {
   /** Volume (0-2, 1 = 100%) - can be animated */
   volume: number | AnimatableProperty;
   /** Stereo pan (-1 = left, 0 = center, 1 = right) - can be animated */
   pan: number | AnimatableProperty;
-  /** Whether audio is muted */
-  muted?: boolean;
-  /** Fade in duration (seconds) */
-  fadeIn: number;
-  /** Fade out duration (seconds) */
-  fadeOut: number;
-  /** Fade in easing curve */
+  /** Fade in easing curve (engine field, Phase 3) */
   fadeInCurve?: EasingType;
-  /** Fade out easing curve */
+  /** Fade out easing curve (engine field, Phase 3) */
   fadeOutCurve?: EasingType;
-  /** Gain adjustment (dB, -20 to +20) */
-  gain: number;
-  /** Equalizer settings (optional) */
+  /** @ui-only Equalizer settings */
   eq?: {
     lowGain: number;
     midGain: number;

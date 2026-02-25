@@ -27,6 +27,7 @@
     "lint": "turbo run lint",
     "test": "vitest",
     "clean": "turbo run clean && rm -rf .turbo node_modules/.cache",
+    "generate:types": "node scripts/proto-gen-ts.mjs",
     "nekoagent": "pnpm dlx tsx packages/neko-agent/packages/agent-cli/src/cli.ts"
   },
   "dependencies": {
@@ -37,6 +38,7 @@
   },
   "devDependencies": {
     "@vscode/vsce": "^3.7.1",
+    "protobufjs": "^8.0.0",
     "turbo": "^2.8.3"
   }
 }

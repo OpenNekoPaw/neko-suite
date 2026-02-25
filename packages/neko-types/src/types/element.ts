@@ -4,15 +4,38 @@
 // Authority: proto/timeline.proto → Element
 // Engine fields on Element: id, name, elementType, startTime, duration,
 //   trimStart, trimEnd, transform, opacity, blendMode, effects, muted,
-//   hidden, locked
-// UI-only fields (animTransform, colorCorrection, masks, keyframes,
-//   transitionIn/Out, speed) have been moved to ui-state.ts → ElementEditState
+//   hidden, locked, speed, transitionIn, transitionOut
+// UI-only fields (animTransform, colorCorrection, masks, keyframes)
+//   have been moved to ui-state.ts → ElementEditState
 // =============================================================================
 
 import { Transform } from './transform';
 import { BlendModeType } from './blendMode';
 import { AudioProperties } from './audio';
 import { EffectInstance } from './effects';
+import { SpeedProperties } from './speed';
+import { Transition } from './transition';
+import type { EngineElement, EngineSubtitleElementData } from '../generated/timeline.engine';
+
+// =============================================================================
+// Compile-time drift detection
+// =============================================================================
+
+/**
+ * Asserts that all keys of A exist in B.
+ * If EngineElement gains a new field not present in BaseTimelineElement,
+ * this type resolves to an error object and the const assignment below fails.
+ */
+type AssertKeysSubset<A, B> =
+  Exclude<keyof A, keyof B> extends never
+    ? true
+    : { error: 'Engine type has fields missing from hand-written type'; fields: Exclude<keyof A, keyof B> };
+
+type _CheckBaseElement = AssertKeysSubset<EngineElement, BaseTimelineElement>;
+const _checkBaseElement: _CheckBaseElement = true;
+
+type _CheckSubtitle = AssertKeysSubset<EngineSubtitleElementData, SubtitleElement>;
+const _checkSubtitle: _CheckSubtitle = true;
 
 // =============================================================================
 // Base Element — Engine-aligned fields only
@@ -47,6 +70,12 @@ interface BaseTimelineElement {
   locked: boolean;
   /** Audio properties (for media/audio elements) */
   audio?: AudioProperties;
+  /** Speed properties (Phase 1: engine field) */
+  speed?: SpeedProperties;
+  /** Transition from previous element (Phase 2: engine field) */
+  transitionIn?: Transition;
+  /** Transition to next element (Phase 2: engine field) */
+  transitionOut?: Transition;
 }
 
 // =============================================================================
@@ -93,7 +122,7 @@ export interface TextElement extends BaseTimelineElement {
   fontWeight: 'normal' | 'bold';
   /** Font style (engine default: "normal") */
   fontStyle: 'normal' | 'italic';
-  /** Text decoration — UI extension, not in engine */
+  /** Text decoration (engine field, Phase 2): "none" | "underline" | "line-through" */
   textDecoration?: 'none' | 'underline' | 'line-through';
   /** @deprecated Use transform.x instead */
   x?: number;
@@ -101,15 +130,15 @@ export interface TextElement extends BaseTimelineElement {
   y?: number;
   /** @deprecated Use transform.rotation instead */
   rotation?: number;
-  /** Line height multiplier */
+  /** Line height multiplier (engine field, Phase 2, default: 1.2) */
   lineHeight?: number;
-  /** Letter spacing in pixels */
+  /** Letter spacing in pixels (engine field, Phase 2, default: 0) */
   letterSpacing?: number;
-  /** Text stroke color */
+  /** Text stroke color (engine field, Phase 2, default: "transparent") */
   strokeColor?: string;
-  /** Text stroke width */
+  /** Text stroke width (engine field, Phase 2, default: 0) */
   strokeWidth?: number;
-  /** Drop shadow settings */
+  /** Drop shadow (engine field, Phase 2) */
   shadow?: {
     color: string;
     offsetX: number;
@@ -134,9 +163,30 @@ export interface SubtitleElement extends BaseTimelineElement {
   type: 'subtitle';
   /** Subtitle text (engine field) */
   text: string;
-  /** Language code (e.g., 'en', 'zh-CN') — UI extension */
+  /** Font size in pixels (engine field, default: 48) */
+  fontSize: number;
+  /** Text color hex (engine field, default: "#ffffff") */
+  color: string;
+  /** Font family (engine field, Phase 2, default: "Arial") */
+  fontFamily: string;
+  /** Background color (engine field, Phase 2, default: "transparent") */
+  backgroundColor: string;
+  /** Text alignment (engine field, Phase 2, default: "center") */
+  textAlign: string;
+  /** Stroke color hex (engine field, Phase 2, default: "transparent") */
+  strokeColor: string;
+  /** Stroke width in pixels (engine field, Phase 2, default: 0) */
+  strokeWidth: number;
+  /** Drop shadow (engine field, Phase 2) */
+  shadow?: {
+    color: string;
+    offsetX: number;
+    offsetY: number;
+    blur: number;
+  };
+  /** Language code (e.g., 'en', 'zh-CN') — @ui-only */
   language?: string;
-  /** Whether this is the default subtitle track — UI extension */
+  /** Whether this is the default subtitle track — @ui-only */
   isDefault?: boolean;
 }
 

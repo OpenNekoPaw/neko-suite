@@ -28,6 +28,16 @@ import type {
   TrackUIState,
 } from '@neko/shared';
 
+import {
+  ENGINE_BASE_ELEMENT_KEYS,
+  ENGINE_MEDIA_KEYS,
+  ENGINE_AUDIO_KEYS,
+  ENGINE_TEXT_KEYS,
+  ENGINE_SHAPE_KEYS,
+  ENGINE_SUBTITLE_KEYS,
+  ENGINE_TRACK_KEYS,
+} from '@neko/shared';
+
 // =============================================================================
 // Extended Element Types (Engine fields + UI fields)
 // =============================================================================
@@ -74,41 +84,54 @@ export type EditorTrack = TimelineTrack & Partial<TrackUIState>;
 // =============================================================================
 
 /**
+ * Pick only the specified keys from an object.
+ * Used for whitelist-based engine field extraction.
+ */
+function pickKeys(obj: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (key in obj) result[key] = obj[key];
+  }
+  return result;
+}
+
+/**
  * Strip UI-only fields from an editor element, returning engine-compatible data.
- * Used when sending element data to the engine.
+ * Uses whitelist approach: only picks fields defined in the proto schema.
  */
 export function toEngineElement(element: EditorElement): TimelineElement {
-  const {
-    // Strip UI-only fields
-    animTransform: _animTransform,
-    colorCorrection: _colorCorrection,
-    masks: _masks,
-    keyframes: _keyframes,
-    transitionIn: _transitionIn,
-    transitionOut: _transitionOut,
-    speed: _speed,
-    // Keep everything else
-    ...engineFields
-  } = element;
-  return engineFields as TimelineElement;
+  const raw = element as unknown as Record<string, unknown>;
+  const base = pickKeys(raw, ENGINE_BASE_ELEMENT_KEYS);
+
+  const typeKeyMap: Record<string, readonly string[]> = {
+    media: ENGINE_MEDIA_KEYS,
+    audio: ENGINE_AUDIO_KEYS,
+    text: ENGINE_TEXT_KEYS,
+    shape: ENGINE_SHAPE_KEYS,
+    subtitle: ENGINE_SUBTITLE_KEYS,
+  };
+
+  const typeKeys = typeKeyMap[element.type];
+  const typeFields = typeKeys ? pickKeys(raw, typeKeys) : {};
+
+  return { ...base, ...typeFields, type: element.type } as unknown as TimelineElement;
 }
 
 /**
  * Strip UI-only fields from an editor track, returning engine-compatible data.
- * Used when sending track data to the engine.
+ * Uses whitelist approach: only picks fields defined in the proto schema.
  */
 export function toEngineTrack(track: EditorTrack): TimelineTrack {
-  const {
-    // Strip UI-only fields
-    solo: _solo,
-    color: _color,
-    height: _height,
-    collapsed: _collapsed,
-    opacity: _opacity,
-    blendMode: _blendMode,
-    transitions: _transitions,
-    // Keep everything else
-    ...engineFields
-  } = track;
-  return engineFields as TimelineTrack;
+  const raw = track as unknown as Record<string, unknown>;
+  const base = pickKeys(raw, ENGINE_TRACK_KEYS);
+  // Map 'trackType' → 'type' (proto uses trackType, TS uses type)
+  if (!('type' in base) && 'trackType' in base) {
+    base.type = base.trackType;
+    delete base.trackType;
+  }
+  // Recursively convert elements
+  if (Array.isArray(track.elements)) {
+    base.elements = track.elements.map(el => toEngineElement(el as EditorElement));
+  }
+  return base as unknown as TimelineTrack;
 }
