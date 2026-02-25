@@ -19,7 +19,9 @@
     "paths": {
       "@/*": ["src/*"],
       "@neko/shared": ["../../../neko-types/src/index.ts"],
-      "@neko/shared/*": ["../../../neko-types/src/*"]
+      "@neko/shared/*": ["../../../neko-types/src/*"],
+      "@neko/neko-client": ["../../../../packages/neko-client/src/index.ts"],
+      "@neko/neko-client/*": ["../../../../packages/neko-client/src/*"]
     },
     "ignoreDeprecations": "5.0"
   },

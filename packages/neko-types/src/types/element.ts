@@ -32,10 +32,13 @@ type AssertKeysSubset<A, B> =
     : { error: 'Engine type has fields missing from hand-written type'; fields: Exclude<keyof A, keyof B> };
 
 type _CheckBaseElement = AssertKeysSubset<EngineElement, BaseTimelineElement>;
-const _checkBaseElement: _CheckBaseElement = true;
-
 type _CheckSubtitle = AssertKeysSubset<EngineSubtitleElementData, SubtitleElement>;
-const _checkSubtitle: _CheckSubtitle = true;
+
+// Compile-time drift detection: assignment fails if engine type has new fields.
+// void usage prevents TS6133 (noUnusedLocals) without exporting internals.
+const _driftCheckElement: _CheckBaseElement = true;
+const _driftCheckSubtitle: _CheckSubtitle = true;
+void _driftCheckElement; void _driftCheckSubtitle;
 
 // =============================================================================
 // Base Element — Engine-aligned fields only

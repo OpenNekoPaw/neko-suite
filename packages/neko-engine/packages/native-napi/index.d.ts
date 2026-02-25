@@ -60,6 +60,38 @@ export declare function bridgeGenerateWaveform(path: string): Promise<string>
  */
 export declare function bridgeGetKeyframes(path: string): Promise<string>
 /**
+ * List available shader effects via the unified API
+ *
+ * Maps to: effects:list
+ *
+ * Returns JSON ActionResponse with available preset and custom shaders
+ */
+export declare function bridgeEffectsList(): Promise<string>
+/**
+ * Get shader info via the unified API
+ *
+ * Maps to: effects:info
+ *
+ * Returns JSON ActionResponse with shader parameter definitions
+ */
+export declare function bridgeEffectsInfo(shaderId: string): Promise<string>
+/**
+ * Apply a shader effect to RGBA frame data via the unified API
+ *
+ * Maps to: effects:apply
+ *
+ * Returns JSON ActionResponse with processed base64-encoded RGBA data
+ */
+export declare function bridgeEffectsApply(dataBase64: string, width: number, height: number, shaderId: string, paramsJson?: string | undefined | null): Promise<string>
+/**
+ * Register a custom WGSL shader via the unified API
+ *
+ * Maps to: effects:register
+ *
+ * Returns JSON ActionResponse confirming registration
+ */
+export declare function bridgeEffectsRegister(id: string, code: string, paramsJson?: string | undefined | null): Promise<string>
+/**
  * Encode RGBA pixel data to JPEG via the unified API
  *
  * Maps to: images:encode

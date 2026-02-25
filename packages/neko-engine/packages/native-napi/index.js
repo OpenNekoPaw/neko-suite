@@ -310,7 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { bridgeProbeMedia, bridgeExtractSubtitles, bridgeExtractFrame, bridgeGpuInfo, bridgeAudioInfo, bridgeGenerateWaveform, bridgeGetKeyframes, bridgeEncodeJpeg, NativeEngine } = nativeBinding
+const { bridgeProbeMedia, bridgeExtractSubtitles, bridgeExtractFrame, bridgeGpuInfo, bridgeAudioInfo, bridgeGenerateWaveform, bridgeGetKeyframes, bridgeEffectsList, bridgeEffectsInfo, bridgeEffectsApply, bridgeEffectsRegister, bridgeEncodeJpeg, NativeEngine } = nativeBinding
 
 module.exports.bridgeProbeMedia = bridgeProbeMedia
 module.exports.bridgeExtractSubtitles = bridgeExtractSubtitles
@@ -319,5 +319,9 @@ module.exports.bridgeGpuInfo = bridgeGpuInfo
 module.exports.bridgeAudioInfo = bridgeAudioInfo
 module.exports.bridgeGenerateWaveform = bridgeGenerateWaveform
 module.exports.bridgeGetKeyframes = bridgeGetKeyframes
+module.exports.bridgeEffectsList = bridgeEffectsList
+module.exports.bridgeEffectsInfo = bridgeEffectsInfo
+module.exports.bridgeEffectsApply = bridgeEffectsApply
+module.exports.bridgeEffectsRegister = bridgeEffectsRegister
 module.exports.bridgeEncodeJpeg = bridgeEncodeJpeg
 module.exports.NativeEngine = NativeEngine

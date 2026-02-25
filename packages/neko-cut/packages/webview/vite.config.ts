@@ -21,6 +21,7 @@ export default defineConfig(({ command }) => {
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@neko/shared': path.resolve(__dirname, '../../../neko-types/src'),
+      '@neko/neko-client': path.resolve(__dirname, '../../../../packages/neko-client/src'),
       '@neko/effects-core': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src'),
       '@neko/effects-core/shaders/common': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/common.wgsl.ts'),
       '@neko/effects-core/shaders/colorCorrection': path.resolve(__dirname, '../../../neko-engine/packages/effects-core/src/shaders/colorCorrection.wgsl.ts'),

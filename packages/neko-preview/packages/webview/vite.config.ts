@@ -40,7 +40,6 @@ export default defineConfig({
       input: {
         video: path.resolve(__dirname, 'video.html'),
         audio: path.resolve(__dirname, 'audio.html'),
-        test: path.resolve(__dirname, 'test.html'),
       },
       output: {
         entryFileNames: 'assets/[name].js',
