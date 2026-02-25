@@ -517,6 +517,71 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
               )}
             </div>
 
+            {/* Performance Stats */}
+            {exportProgress?.performanceStats && (
+              <div
+                className="grid grid-cols-2 gap-x-4 gap-y-1.5 px-3 py-2.5 rounded-md text-xs"
+                style={{ backgroundColor: 'var(--vscode-editor-inactiveSelectionBackground)' }}
+              >
+                {exportProgress.performanceStats.avgDecodeTime != null && exportProgress.performanceStats.avgDecodeTime >= 0.05 && (
+                  <div className="flex justify-between">
+                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>解码</span>
+                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                      {exportProgress.performanceStats.avgDecodeTime.toFixed(1)} ms
+                    </span>
+                  </div>
+                )}
+                {exportProgress.performanceStats.avgRenderTime != null && exportProgress.performanceStats.avgRenderTime >= 0.05 && (
+                  <div className="flex justify-between">
+                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>合成</span>
+                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                      {exportProgress.performanceStats.avgRenderTime.toFixed(1)} ms
+                    </span>
+                  </div>
+                )}
+                {exportProgress.performanceStats.avgEncodeTime != null && exportProgress.performanceStats.avgEncodeTime >= 0.05 && (
+                  <div className="flex justify-between">
+                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>编码</span>
+                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                      {exportProgress.performanceStats.avgEncodeTime.toFixed(1)} ms
+                    </span>
+                  </div>
+                )}
+                {exportProgress.performanceStats.cpuUsage != null && exportProgress.performanceStats.cpuUsage > 0 && (
+                  <div className="flex justify-between">
+                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>CPU</span>
+                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                      {exportProgress.performanceStats.cpuUsage.toFixed(0)}%
+                    </span>
+                  </div>
+                )}
+                {exportProgress.performanceStats.memoryUsedMB != null && exportProgress.performanceStats.memoryUsedMB > 0 && (
+                  <div className="flex justify-between">
+                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>内存</span>
+                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                      {exportProgress.performanceStats.memoryUsedMB.toFixed(0)} MB
+                    </span>
+                  </div>
+                )}
+                {exportProgress.performanceStats.vramUsedMB != null && exportProgress.performanceStats.vramUsedMB > 0 && (
+                  <div className="flex justify-between">
+                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>显存</span>
+                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                      {exportProgress.performanceStats.vramUsedMB.toFixed(0)} MB
+                    </span>
+                  </div>
+                )}
+                {exportProgress.performanceStats.gpuUsage != null && exportProgress.performanceStats.gpuUsage > 0 && (
+                  <div className="flex justify-between">
+                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>GPU</span>
+                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                      {exportProgress.performanceStats.gpuUsage.toFixed(0)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="text-xs text-center text-vscode-descriptionForeground opacity-60">
               提示：点击右上角可最小化到状态栏继续后台导出
             </div>

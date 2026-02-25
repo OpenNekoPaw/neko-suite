@@ -734,26 +734,61 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 			this.activeWebviews.delete(docUri);
 			this.activeWebviewPanels.delete(docUri);
 
-			// Dispose ExportService (cancels any active export)
+			// If export is running, defer cleanup until export completes
 			const exportService = this.exportServices.get(docUri);
-			if (exportService) {
-				exportService.dispose();
-				this.exportServices.delete(docUri);
-			}
+			if (exportService?.isExporting()) {
+				console.log('[VideoEditorProvider] Export in progress — deferring cleanup until export finishes');
 
-			// Destroy editor stream, then dispose MediaService
-			const mediaService = this.mediaServices.get(docUri);
-			if (mediaService) {
-				await mediaService.destroyEditorStream();
-				mediaService.dispose();
-				this.mediaServices.delete(docUri);
-			}
+				const deferCleanup = () => {
+					// Now safe to dispose everything
+					exportService.dispose();
+					this.exportServices.delete(docUri);
 
-			// Dispose FrameServerService
-			const frameServer = this.frameServerServices.get(docUri);
-			if (frameServer) {
-				await frameServer.dispose();
-				this.frameServerServices.delete(docUri);
+					const ms = this.mediaServices.get(docUri);
+					if (ms) {
+						ms.destroyEditorStream().then(() => ms.dispose()).catch(() => ms.dispose());
+						this.mediaServices.delete(docUri);
+					}
+
+					const fs = this.frameServerServices.get(docUri);
+					if (fs) {
+						fs.dispose();
+						this.frameServerServices.delete(docUri);
+					}
+
+					this.broadcastExportStatus();
+				};
+
+				// Listen for terminal events to trigger deferred cleanup
+				const subs: vscode.Disposable[] = [];
+				const onDone = () => {
+					for (const s of subs) s.dispose();
+					deferCleanup();
+				};
+				subs.push(exportService.onDidComplete(onDone));
+				subs.push(exportService.onDidError(onDone));
+				subs.push(exportService.onDidCancel(onDone));
+			} else {
+				// No active export — clean up immediately
+				if (exportService) {
+					exportService.dispose();
+					this.exportServices.delete(docUri);
+				}
+
+				// Destroy editor stream, then dispose MediaService
+				const mediaService = this.mediaServices.get(docUri);
+				if (mediaService) {
+					await mediaService.destroyEditorStream();
+					mediaService.dispose();
+					this.mediaServices.delete(docUri);
+				}
+
+				// Dispose FrameServerService
+				const frameServer = this.frameServerServices.get(docUri);
+				if (frameServer) {
+					await frameServer.dispose();
+					this.frameServerServices.delete(docUri);
+				}
 			}
 
 			// Clear outline when editor is closed
