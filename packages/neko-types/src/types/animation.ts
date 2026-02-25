@@ -1,3 +1,7 @@
+/**
+ * @deprecated Canonical source moved to neko-cut/webview/src/types/animation.ts.
+ * Retained for internal neko-types consumers. Will be removed in Phase 4 cleanup.
+ */
 // =============================================================================
 // Animatable Property System (关键帧动画系统)
 // =============================================================================

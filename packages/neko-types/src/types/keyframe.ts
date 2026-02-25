@@ -1,3 +1,7 @@
+/**
+ * @deprecated Canonical source moved to neko-cut/webview/src/types/keyframe.ts.
+ * Retained for internal neko-types consumers. Will be removed in Phase 4 cleanup.
+ */
 // =============================================================================
 // Keyframes (关键帧轨道)
 // =============================================================================

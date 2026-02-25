@@ -1,3 +1,7 @@
+/**
+ * @deprecated Canonical source moved to neko-cut/webview/src/types/mask.ts.
+ * Retained for internal neko-types consumers. Will be removed in Phase 4 cleanup.
+ */
 // =============================================================================
 // Masks
 // =============================================================================

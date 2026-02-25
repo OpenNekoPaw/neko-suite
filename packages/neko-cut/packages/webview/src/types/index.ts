@@ -81,5 +81,7 @@ export {
 } from './colorCorrection';
 export * from './effects';
 export * from './mask';
+export * from './keyframe';
+export * from './ui-state';
 export * from './shape';
 export * from './subtitle';

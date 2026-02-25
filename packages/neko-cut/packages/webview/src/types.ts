@@ -21,7 +21,7 @@ export type {
 } from './types/editor-types';
 export { toEngineElement, toEngineTrack } from './types/editor-types';
 
-// Re-export core types from shared package (Single Source of Truth)
+// Re-export core types from shared package (engine-aligned)
 export type {
   // Track types
   TrackType,
@@ -35,30 +35,10 @@ export type {
   ProjectDefaults,
   // Transform
   Transform,
-  ElementTransform,
-  ComputedTransform,
-  AnimatableProperty,
-  AnimationKeyframe,
-  AnimatablePropertyName,
-  BezierHandle,
   // Easing
   EasingType,
   // Blend modes
   BlendModeType,
-  // Color correction
-  ColorCorrection,
-  BasicColorAdjustment,
-  CurvesAdjustment,
-  CurveAdjustment,
-  CurvePoint,
-  CurveChannel,
-  HSLAdjustment,
-  HSLRangeAdjustment,
-  HSLColorRange,
-  LUTAdjustment,
-  VignetteParams,
-  ColorWheelsParams,
-  ColorWheelValue,
   // Transitions
   Transition,
   TransitionType,
@@ -78,15 +58,6 @@ export type {
   // Audio
   AudioProperties,
   SpeedProperties,
-  // Masks
-  MaskShape,
-  MaskShapeType,
-  MaskInstance,
-  MaskAnimationData,
-  MaskEasingType,
-  MaskShapeKeyframe,
-  MaskPropertyKeyframe,
-  AnimatableMaskProperty,
   // Shapes
   ShapeType,
   Shape,
@@ -115,9 +86,6 @@ export type {
   SubtitleCue,
   SubtitleStyle,
   SubtitleFormat,
-  // UI State (separated from engine model)
-  TrackUIState,
-  ElementEditState,
   // Messages
   MessageToWebview,
   MessageFromWebview,
@@ -135,13 +103,47 @@ export {
   mapElementTypeToAIType,
 } from '@neko/shared';
 
-// Re-export constants and functions from shared
+// Re-export constants and functions from shared (engine-aligned)
 export {
   // Transform defaults
   DEFAULT_TRANSFORM,
   CENTERED_TRANSFORM,
   ENGINE_DEFAULT_TRANSFORM,
-  // Color correction defaults
+  // Audio defaults
+  DEFAULT_AUDIO_PROPERTIES,
+  // Shape defaults
+  DEFAULT_SHAPE_FILL,
+  DEFAULT_SHAPE_STROKE,
+  DEFAULT_SHAPE_SHADOW,
+  DEFAULT_SHAPE_STYLE,
+} from '@neko/shared';
+
+// Migrated UI types — canonical source is now local
+export type {
+  BezierHandle,
+  AnimationKeyframe,
+  AnimatableProperty,
+  AnimatablePropertyName,
+  ElementTransform,
+  ComputedTransform,
+} from './types/animation';
+export { createAnimatableProperty, createDefaultElementTransform } from './types/animation';
+export type {
+  ColorCorrection,
+  BasicColorAdjustment,
+  CurvesAdjustment,
+  CurveAdjustment,
+  CurvePoint,
+  CurveChannel,
+  HSLAdjustment,
+  HSLRangeAdjustment,
+  HSLColorRange,
+  LUTAdjustment,
+  VignetteParams,
+  ColorWheelsParams,
+  ColorWheelValue,
+} from './types/colorCorrection';
+export {
   DEFAULT_BASIC_COLOR_ADJUSTMENT,
   DEFAULT_CURVE,
   DEFAULT_CURVES_ADJUSTMENT,
@@ -152,20 +154,20 @@ export {
   DEFAULT_COLOR_WHEEL_VALUE,
   DEFAULT_COLOR_WHEELS_PARAMS,
   DEFAULT_COLOR_CORRECTION,
-  // Audio defaults
-  DEFAULT_AUDIO_PROPERTIES,
-  // Animatable property helpers
-  createAnimatableProperty,
-  createDefaultElementTransform,
-  // Shape defaults
-  DEFAULT_SHAPE_FILL,
-  DEFAULT_SHAPE_STROKE,
-  DEFAULT_SHAPE_SHADOW,
-  DEFAULT_SHAPE_STYLE,
-  // UI state defaults
-  DEFAULT_TRACK_UI_STATE,
-  DEFAULT_ELEMENT_EDIT_STATE,
-} from '@neko/shared';
+} from './types/colorCorrection';
+export type {
+  MaskShape,
+  MaskShapeType,
+  MaskInstance,
+  MaskAnimationData,
+  MaskEasingType,
+  MaskShapeKeyframe,
+  MaskPropertyKeyframe,
+  AnimatableMaskProperty,
+} from './types/mask';
+export type { KeyframeTrack, Keyframe, KeyframeableProperty } from './types/keyframe';
+export type { TrackUIState, ElementEditState } from './types/ui-state';
+export { DEFAULT_TRACK_UI_STATE, DEFAULT_ELEMENT_EDIT_STATE } from './types/ui-state';
 
 // =============================================================================
 // Re-export Types from Local Modules (webview-specific extensions)

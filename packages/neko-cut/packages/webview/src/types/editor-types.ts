@@ -24,9 +24,8 @@ import type {
   ShapeElement,
   SubtitleElement,
   TimelineTrack,
-  ElementEditState,
-  TrackUIState,
 } from '@neko/shared';
+import type { ElementEditState, TrackUIState } from './ui-state';
 
 import {
   ENGINE_BASE_ELEMENT_KEYS,

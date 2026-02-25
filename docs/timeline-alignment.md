@@ -254,15 +254,20 @@ message Transition {
 
 ### 目标架构
 
+> **决策 (2026-02-25)**：UI 类型应从 neko-types 迁移到 neko-cut/webview。
+> 原因见 §8 关键设计决策 #5。
+
 ```
 Layer 1: Engine Types（严格对齐 Proto）
   neko-types/element.ts → 只包含引擎认可的字段
+  neko-types 不再导出任何 UI-only 类型
 
-Layer 2: UI State Types（编辑器扩展）
-  neko-types/ui-state.ts → ElementEditState
+Layer 2: UI State Types（编辑器应用层）
+  neko-cut/webview/src/types/ → ElementEditState, AnimatableProperty,
+    ColorCorrection, MaskInstance, KeyframeTrack 等纯 UI 类型
 
 Layer 3: Editor Combined Types
-  neko-cut/editor-types.ts → EditorElement = TimelineElement & Partial<ElementEditState>
+  neko-cut/webview/src/types/editor-types.ts → EditorElement = TimelineElement & Partial<ElementEditState>
 ```
 
 ### Step 1: 清理 neko-types/element.ts
@@ -428,6 +433,20 @@ Phase 4 (P2): TS 层清理 ✅ 部分完成 (2026-02-25)
   │   → 延后：AnimatableProperty 深度集成于 13 个文件的关键帧系统，需随关键帧引擎迁移一并处理
   └─ 🔲 neko-types: SubtitleElement 移除 language/isDefault
       → 延后：elementOpsSlice.ts 创建字幕元素时仍在使用这两个字段
+
+Phase 5 (P2): UI 类型从 neko-types 迁移到 neko-cut/webview ✅
+  ├─ 前置：Phase 4 AudioProperties 清理完成（解除 AnimatableProperty 与引擎类型的耦合）
+  ├─ ✅ 迁移 ui-state.ts → neko-cut/webview/src/types/
+  ├─ ✅ 迁移 animation.ts (AnimatableProperty, ElementTransform) → neko-cut/webview/src/types/
+  ├─ ✅ 迁移 colorCorrection.ts → neko-cut/webview/src/types/ (与现有扩展文件合并)
+  ├─ ✅ 迁移 mask.ts → neko-cut/webview/src/types/ (与现有扩展文件合并)
+  ├─ ✅ 迁移 keyframe.ts → neko-cut/webview/src/types/
+  ├─ ✅ neko-types 5 个 UI 文件标记 @deprecated（保留供内部消费）
+  ├─ 🔲 迁移关联 utils: animation.ts, colorCorrectionMapping.ts, apply-keyframe.ts
+  ├─ 🔲 neko-cut/extension 2 处 import 改为从 webview types 导入或走消息协议
+  └─ 🔲 清理 neko-types 导出，确保只导出引擎对齐类型
+  依据：这些 UI 类型仅被 neko-cut 消费（28 files/167 occurrences），
+        其他包（neko-agent, neko-canvas 等）零类型引用，详见 §8 #5
 ```
 
 ---
@@ -619,3 +638,23 @@ Phase 4 (P2): TS 层清理 ✅ 部分完成 (2026-02-25)
 3. **SubtitleElementData 与 TextElementData 的复用**：两者在新增字段后高度重叠（6 个相同字段）。当前阶段保持独立定义，避免过早抽象。当字段进一步趋同时再提取公共 `TextStyleProperties`。
 
 4. **转场放在 Element 而非 Track 上**：虽然转场是元素间关系，但 Element 级别的 `transition_in/out` 是业界惯例，且与现有 `ElementEditState` 中的设计一致，迁移成本最低。
+
+5. **UI 类型应从 neko-types 迁移到 neko-cut/webview** (2026-02-25 代码库验证)：
+
+   `neko-types` 的定位是"共享类型，对齐 Proto/引擎"，但当前混入了 5 组纯 UI 类型（`ui-state.ts`、`animation.ts`、`colorCorrection.ts`、`mask.ts`、`keyframe.ts`）。这些类型：
+   - **仅被 neko-cut 消费**：28 个文件、167 次引用全部在 neko-cut/webview 内
+   - **其他包零类型引用**：neko-agent 中 3 处仅为工具名称字符串 `'SetColorCorrection'`，非类型导入；neko-canvas、neko-audio 等完全不使用
+   - **neko-types 自身 57 次引用**均为定义及内部交叉引用
+
+   放在共享层违反两个原则：
+   - **SRP**：共享类型包不应承担应用层 UI 状态定义的职责
+   - **依赖方向**：UI 类型是 L3 应用层概念，定义在 L2 共享层意味着共享层知道了应用层需求
+
+   迁移目标：
+   ```
+   neko-types/src/types/     → 纯引擎对齐（element, transform, audio, speed, transition...）
+   neko-cut/webview/src/types/ → UI 类型归属应用层（已有 editor-types.ts 在此）
+   ```
+
+   连带迁移：`utils/animation.ts`、`utils/colorCorrectionMapping.ts`、`operations/apply-keyframe.ts`。
+   前置条件：Phase 4 AudioProperties 清理（解除 `AnimatableProperty` 与引擎 `AudioProperties` 的耦合）。

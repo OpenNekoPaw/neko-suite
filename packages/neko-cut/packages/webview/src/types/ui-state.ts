@@ -1,25 +1,21 @@
 /**
- * @deprecated Canonical source moved to neko-cut/webview/src/types/ui-state.ts.
- * Retained for internal neko-types consumers. Will be removed in Phase 4 cleanup.
+ * UI State Types — Separated from Engine Model
+ *
+ * Canonical source for UI state types.
+ * These types represent UI-only state that the engine does not recognize.
+ * They exist only in the frontend Store and are never sent to the engine.
+ *
+ * Separation rationale:
+ * - Engine Track has 8 fields; UI needs additional display state
+ * - Engine Element has 12 core fields; editor needs animation/mask/transition state
+ * - Keeping these separate prevents accidental serialization to engine
  */
-// =============================================================================
-// UI State Types — Separated from Engine Model
-//
-// These types represent UI-only state that the engine does not recognize.
-// They exist only in the frontend Store and are never sent to the engine.
-//
-// Separation rationale:
-// - Engine Track has 8 fields; UI needs additional display state
-// - Engine Element has 12 core fields; editor needs animation/mask/transition state
-// - Keeping these separate prevents accidental serialization to engine
-// =============================================================================
 
-import { ElementTransform } from './animation';
-import { ColorCorrection } from './colorCorrection';
-import { MaskInstance } from './mask';
-import { KeyframeTrack } from './keyframe';
-import { BlendModeType } from './blendMode';
-import { ElementTransition } from './transition';
+import type { ElementTransform } from './animation';
+import type { ColorCorrection } from './colorCorrection';
+import type { MaskInstance } from './mask';
+import type { KeyframeTrack } from './keyframe';
+import type { BlendModeType, ElementTransition } from '@neko/shared';
 
 // =============================================================================
 // Track UI State
