@@ -473,8 +473,6 @@ export const createElementOpsSlice: StateCreator<
                   muted: false,
                   hidden: false,
                   locked: false,
-                  language: extractedTrack.language || 'unknown',
-                  isDefault: extractedTrack.isDefault,
                 } as TimelineElement,
               },
             });

@@ -178,10 +178,6 @@ export interface SubtitleElement extends BaseTimelineElement {
     offsetY: number;
     blur: number;
   };
-  /** Language code (e.g., 'en', 'zh-CN') — @ui-only */
-  language?: string;
-  /** Whether this is the default subtitle track — @ui-only */
-  isDefault?: boolean;
 }
 
 export type TimelineElement = MediaElement | TextElement | AudioElement | ShapeElement | SubtitleElement;

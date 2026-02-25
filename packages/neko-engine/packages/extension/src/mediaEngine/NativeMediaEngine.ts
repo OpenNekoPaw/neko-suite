@@ -748,8 +748,12 @@ class NativeEffectProcessor implements IEffectProcessor {
 					throw new Error(response.error?.message ?? 'Effect apply failed');
 				}
 				currentData = new Uint8Array(Buffer.from(response.data.data, 'base64'));
+			} else {
+				throw new Error(
+					`Effect type '${effect.type}' is not supported in NativeEffectProcessor. ` +
+					`Only 'custom' effects are supported through this processor.`
+				);
 			}
-			// Other effect types can be added here as needed
 		}
 
 		return currentData;
@@ -772,7 +776,7 @@ class NativeEffectProcessor implements IEffectProcessor {
 	async registerCustomShader(id: string, shaderCode: string): Promise<void> {
 		const responseJson = await this._engine.dispatchAction(
 			'effects', 'register', null,
-			JSON.stringify({ shaderId: id, code: shaderCode, params: [] })
+			JSON.stringify({ id, code: shaderCode, params: [] })
 		);
 		const response = JSON.parse(responseJson);
 		if (!response.success) {

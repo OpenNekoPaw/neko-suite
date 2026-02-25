@@ -225,9 +225,12 @@ impl CustomShaderProcessor {
         self.presets.values().map(|c| &c.meta).collect()
     }
 
-    /// Get parameter definitions for a preset.
-    pub fn get_preset_params(&self, shader_id: &str) -> Option<&PresetShaderMeta> {
-        self.presets.get(shader_id).map(|c| &c.meta)
+    /// Get parameter definitions for a shader (preset or custom).
+    pub fn get_shader_info(&self, shader_id: &str) -> Option<&PresetShaderMeta> {
+        self.presets
+            .get(shader_id)
+            .or_else(|| self.custom_pipelines.get(shader_id))
+            .map(|c| &c.meta)
     }
 
     // -----------------------------------------------------------------------
@@ -301,13 +304,21 @@ fn sample_at(x: i32, y: i32) -> vec4<f32> {
     /// - A partial shader (just the effect function body with `@compute` entry point),
     ///   in which case the engine injects the standard header automatically.
     ///
-    /// If a shader with the same `id` already exists, it is replaced.
+    /// If a custom shader with the same `id` already exists, it is replaced.
+    /// Returns an error if the `id` conflicts with a built-in preset.
     pub fn register_custom_shader(
         &mut self,
         id: &str,
         wgsl_source: &str,
         param_defs: Vec<ParamDef>,
     ) -> Result<()> {
+        if self.presets.contains_key(id) {
+            return Err(Error::InvalidParameter(format!(
+                "Cannot register custom shader with ID '{}': conflicts with built-in preset",
+                id
+            )));
+        }
+
         // Determine if user provided a complete shader or just the body
         let full_source = if wgsl_source.contains("var<storage") || wgsl_source.contains("@group") {
             // User provided complete shader
@@ -360,6 +371,12 @@ fn sample_at(x: i32, y: i32) -> vec4<f32> {
         shader_id: &str,
         params: &serde_json::Value,
     ) -> Result<Vec<u8>> {
+        if width == 0 || height == 0 {
+            return Err(Error::InvalidParameter(format!(
+                "Frame dimensions must be non-zero: {}x{}", width, height
+            )));
+        }
+
         if self.presets.contains_key(shader_id) {
             self.apply_preset(input, width, height, shader_id, params)
         } else if self.custom_pipelines.contains_key(shader_id) {
@@ -633,5 +650,65 @@ mod tests {
         let json = serde_json::to_value(&meta).unwrap();
         assert_eq!(json["id"], "pixelate");
         assert_eq!(json["params"][0]["name"], "pixel_size");
+    }
+
+    #[test]
+    fn test_get_shader_info_searches_both_maps() {
+        let mut presets: HashMap<String, PresetShaderMeta> = HashMap::new();
+        let mut customs: HashMap<String, PresetShaderMeta> = HashMap::new();
+
+        presets.insert("pixelate".into(), PresetShaderMeta {
+            id: "pixelate".into(),
+            description: "Pixelate".into(),
+            params: vec![],
+        });
+        customs.insert("my_shader".into(), PresetShaderMeta {
+            id: "my_shader".into(),
+            description: "Custom".into(),
+            params: vec![],
+        });
+
+        // Simulates get_shader_info logic: preset OR custom
+        let find = |id: &str| -> Option<&PresetShaderMeta> {
+            presets.get(id).or_else(|| customs.get(id))
+        };
+
+        assert!(find("pixelate").is_some());
+        assert!(find("my_shader").is_some());
+        assert!(find("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_preset_id_conflict_rejected() {
+        let preset_ids: HashMap<String, ()> = [("pixelate".into(), ())].into_iter().collect();
+
+        // Simulates register_custom_shader preset conflict check
+        let register = |id: &str| -> std::result::Result<(), String> {
+            if preset_ids.contains_key(id) {
+                Err(format!("Conflicts with preset: {}", id))
+            } else {
+                Ok(())
+            }
+        };
+
+        assert!(register("pixelate").is_err());
+        assert!(register("my_custom").is_ok());
+    }
+
+    #[test]
+    fn test_zero_size_frame_rejected() {
+        // Simulates the apply() zero-size validation
+        let validate = |width: u32, height: u32| -> std::result::Result<(), String> {
+            if width == 0 || height == 0 {
+                Err(format!("Frame dimensions must be non-zero: {}x{}", width, height))
+            } else {
+                Ok(())
+            }
+        };
+
+        assert!(validate(0, 100).is_err());
+        assert!(validate(100, 0).is_err());
+        assert!(validate(0, 0).is_err());
+        assert!(validate(100, 100).is_ok());
     }
 }

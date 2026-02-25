@@ -2,7 +2,7 @@
  * Shape Animation Utilities
  * 形状动画工具函数
  *
- * Core interpolation is imported from @neko/shared (Single Source of Truth).
+ * Core interpolation is imported from local animation utils.
  * This file provides shape-specific animation computation and path utilities.
  */
 
@@ -15,8 +15,8 @@ import type {
 } from '../types/shapeAnimation';
 import type { AnimatableProperty } from '../types/animation';
 
-// Import core interpolation from shared
-import { getAnimatedValue } from '@neko/shared';
+// Import core interpolation from local animation utils
+import { getAnimatedValue } from './animation';
 
 // =============================================================================
 // Property Interpolation (delegates to @neko/shared)

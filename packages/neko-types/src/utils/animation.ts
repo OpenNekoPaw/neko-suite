@@ -1,8 +1,9 @@
 /**
+ * @deprecated Canonical source moved to neko-cut/webview/src/utils/animation.ts.
+ * Retained for internal neko-types consumers. Will be removed in Phase 4 cleanup.
+ *
  * Animation Calculation Engine (Shared)
  * 动画计算引擎 - 处理关键帧插值和缓动函数
- *
- * 此模块可在 Extension 和 Webview 中共享使用
  */
 
 import type {

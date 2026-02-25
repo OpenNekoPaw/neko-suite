@@ -23,13 +23,23 @@ impl EffectsService {
 
 impl IEffectsService for EffectsService {
     fn list_presets(&self) -> Vec<PresetShaderMeta> {
-        let proc = self.processor.lock().unwrap();
-        proc.list_all().into_iter().cloned().collect()
+        let proc = self.processor.lock().map_err(|e| {
+            Error::GpuError(format!("Failed to acquire processor lock: {}", e))
+        });
+        match proc {
+            Ok(p) => p.list_all().into_iter().cloned().collect(),
+            Err(_) => Vec::new(),
+        }
     }
 
     fn get_shader_info(&self, shader_id: &str) -> Option<PresetShaderMeta> {
-        let proc = self.processor.lock().unwrap();
-        proc.get_preset_params(shader_id).cloned()
+        let proc = self.processor.lock().map_err(|e| {
+            Error::GpuError(format!("Failed to acquire processor lock: {}", e))
+        });
+        match proc {
+            Ok(p) => p.get_shader_info(shader_id).cloned(),
+            Err(_) => None,
+        }
     }
 
     fn apply_effect(
@@ -40,7 +50,9 @@ impl IEffectsService for EffectsService {
         shader_id: &str,
         params: &serde_json::Value,
     ) -> Result<Vec<u8>> {
-        let proc = self.processor.lock().unwrap();
+        let proc = self.processor.lock().map_err(|e| {
+            Error::GpuError(format!("Failed to acquire processor lock: {}", e))
+        })?;
         proc.apply(input, width, height, shader_id, params)
     }
 

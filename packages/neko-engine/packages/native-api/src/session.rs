@@ -337,6 +337,7 @@ mod tests {
             fps: 30.0,
             start_time: 0.0,
             codec: neko_native_core::domain::StreamCodec::H264,
+            initial_paused: false,
         };
         let (_id1, _) = stream_registry
             .create_stream("session1", "vid_abc", config.clone())

@@ -34,6 +34,7 @@ impl EffectsController {
 
 /// Options for effects:apply
 #[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct ApplyOptions {
     /// Base64-encoded RGBA frame data
     data: Option<String>,
@@ -50,6 +51,7 @@ struct ApplyOptions {
 
 /// Options for effects:info
 #[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct InfoOptions {
     shader_id: Option<String>,
 }
@@ -222,5 +224,64 @@ mod tests {
         assert!(actions.contains(&"list"));
         assert!(actions.contains(&"info"));
         assert!(actions.contains(&"register"));
+    }
+
+    #[test]
+    fn test_apply_options_camel_case_deserialization() {
+        let json = serde_json::json!({
+            "data": "AQID",
+            "width": 100,
+            "height": 200,
+            "shaderId": "pixelate",
+            "params": {"pixel_size": 8.0}
+        });
+
+        let opts: ApplyOptions = serde_json::from_value(json).unwrap();
+        assert_eq!(opts.shader_id, Some("pixelate".to_string()));
+        assert_eq!(opts.width, Some(100));
+        assert_eq!(opts.height, Some(200));
+        assert_eq!(opts.data, Some("AQID".to_string()));
+    }
+
+    #[test]
+    fn test_info_options_camel_case_deserialization() {
+        let json = serde_json::json!({ "shaderId": "edge_detect" });
+
+        let opts: InfoOptions = serde_json::from_value(json).unwrap();
+        assert_eq!(opts.shader_id, Some("edge_detect".to_string()));
+    }
+
+    #[test]
+    fn test_register_options_deserialization() {
+        let json = serde_json::json!({
+            "id": "my_shader",
+            "code": "@compute fn main() {}",
+            "params": [{"name": "amount", "default": 0.5, "min": 0.0, "max": 1.0}]
+        });
+
+        let opts: RegisterOptions = serde_json::from_value(json).unwrap();
+        assert_eq!(opts.id, Some("my_shader".to_string()));
+        assert_eq!(opts.code, Some("@compute fn main() {}".to_string()));
+        assert_eq!(opts.params.len(), 1);
+        assert_eq!(opts.params[0].name, "amount");
+    }
+
+    #[tokio::test]
+    async fn test_apply_missing_shader_id() {
+        let controller = create_test_controller();
+        let json = serde_json::json!({
+            "data": "AQID",
+            "width": 100,
+            "height": 200
+        });
+        let result = controller.handle("apply", None, json, None).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_info_missing_shader_id() {
+        let controller = create_test_controller();
+        let result = controller.handle("info", None, serde_json::json!({}), None).await;
+        assert!(result.is_err());
     }
 }

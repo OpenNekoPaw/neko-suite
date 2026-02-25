@@ -442,9 +442,11 @@ Phase 5 (P2): UI 类型从 neko-types 迁移到 neko-cut/webview ✅
   ├─ ✅ 迁移 mask.ts → neko-cut/webview/src/types/ (与现有扩展文件合并)
   ├─ ✅ 迁移 keyframe.ts → neko-cut/webview/src/types/
   ├─ ✅ neko-types 5 个 UI 文件标记 @deprecated（保留供内部消费）
-  ├─ 🔲 迁移关联 utils: animation.ts, colorCorrectionMapping.ts, apply-keyframe.ts
-  ├─ 🔲 neko-cut/extension 2 处 import 改为从 webview types 导入或走消息协议
-  └─ 🔲 清理 neko-types 导出，确保只导出引擎对齐类型
+  ├─ ✅ 迁移 utils/animation.ts → neko-cut/webview/src/utils/（含 shapeAnimation.ts import 更新）
+  ├─ ⏭️ utils/colorCorrectionMapping.ts — 无消费者，跳过
+  ├─ ⏭️ operations/apply-keyframe.ts — Extension 侧逻辑，不属于 webview 迁移范围
+  ├─ ⏳ neko-cut/extension 仅 1 处 DEFAULT_COLOR_CORRECTION，neko-types 未删除前不影响
+  └─ ⏳ 清理 neko-types 导出 — 受 Phase 4 AudioProperties 阻塞（内部仍依赖 UI 类型）
   依据：这些 UI 类型仅被 neko-cut 消费（28 files/167 occurrences），
         其他包（neko-agent, neko-canvas 等）零类型引用，详见 §8 #5
 ```

@@ -308,7 +308,7 @@ mod tests {
         assert_eq!(
             actions,
             &["create", "activate", "pause", "resume", "destroy", "list",
-              "stop", "seek", "speed", "loop", "stats", "update"]
+              "stop", "seek", "speed", "loop", "stats", "update", "quality", "applyOperation"]
         );
     }
 }
