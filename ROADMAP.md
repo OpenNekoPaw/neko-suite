@@ -15,8 +15,8 @@
 | **neko-client** | Alpha | 75% | H264/fMP4/PCM 流客户端，帧调度 + 性能监控 |
 | **neko-preview** | WIP | 60% | 视频/音频预览 Provider + 播放器 UI |
 | **neko-story** | WIP | 55% | Fountain 解析器 + LSP（补全/定义/悬停/符号）+ 预览 |
-| **neko-assets** | WIP | 55% | AssetLibrary + 实体/文件/变体服务 + 规则分类器 |
-| **neko-tools** | WIP | 50% | 媒体 Diff（视频/音频/图片）+ Git 媒体服务 |
+| **neko-assets** | Alpha | 55% | Phase 1-3 ✅（统一注册表 + 缩略图 + Diff 接入），Phase 4-5 待开发 |
+| **neko-tools** | WIP | 50% | 媒体 Diff + EngineMediaService 接入 + 资产变体对比 |
 | **neko-canvas** | WIP | 40% | 节点系统 + 连线 + 视口裁剪 + 画布操作，仍在规划 |
 | **neko-proto** | Early | 30% | timeline.proto 定义，生成类型在 neko-types |
 | **neko-model** | Planned | 0% | 3D 编辑器，架构设计已完成（见 docs/architecture/3d-capability-analysis.md） |
@@ -299,20 +299,63 @@
 
 ---
 
-## Phase 6: 资产与协作
+## Phase 6: 资产管理与协作
 
-> 目标：实现团队协作和资产管理 — **进度 ~40%**
+> 目标：实现统一资产管理、AI 模型资产化、社区分发 — **进度 ~55%**
+>
+> 详见 [资产管理统一架构设计](./docs/architecture/asset-management-design.md)
 
 ### neko-assets (资产管理)
 
-- [x] AssetLibrary 核心
-  - [x] EntityService / FileService / VariantService
-  - [x] AssetDiffService
-  - [x] RuleClassifier
-  - [x] InMemoryStorage / JsonFileStorage
-- [ ] Git 集成 + LFS 支持
-- [ ] 云端同步
-- [ ] CI/CD 自动渲染
+#### Phase 1-3 ✅ 已完成（2026-02-26）
+
+- [x] 统一核心 + 消除重复（Phase 1）
+  - [x] 统一媒体类型检测（5 处重复 → `@neko/shared` `media.ts` 唯一实现）
+  - [x] 统一 MIME 映射（3 处重复 → `getMimeType()` 唯一实现）
+  - [x] EngineMetadataExtractor 接入 `neko.engine.probeInternal`
+  - [x] AssetLibrary 完整初始化（JsonFileStorage + RuleClassifier + MetadataExtractor）
+  - [x] AssetFileDecorationProvider（Explorer badge + tooltip）
+  - [x] 统一右键菜单（添加到时间线/画布/导入/预览）
+- [x] 深度集成 + 拖拽协议（Phase 2）
+  - [x] VscodeGitService 接入 VS Code Git Extension API
+  - [x] AssetDiffService 完善（statFile 注入 + 变更分析）
+  - [x] neko-cut AssetService 瘦身（660 → 445 行，diff/metadata 委托）
+  - [x] neko-canvas 重写为委托 neko-assets（统一 AssetEntity 模型）
+  - [x] AssetDragData 统一拖拽协议（`@neko/shared` `drag.ts`）
+  - [x] Activity Bar Views（AssetManagerTreeProvider + AssetHistoryTreeProvider）
+- [x] 统一注册表 + 缩略图 + Diff 接入（Phase 3）
+  - [x] AssetManifest 类型定义（14 种资产类型 + 4 种来源 + 特化 Metadata）
+  - [x] ThumbnailService + thumbnailPath 关联 variant + importFile 自动生成
+  - [x] neko-tools 集成（initializeMediaDiff + initializeAssetDiff）
+  - [x] EngineMediaService 委托 neko-engine（probeMedia/extractFrame/decodeAudio）
+  - [x] AssetRegistry Facade（IAssetRegistry + IAssetHandler + entityToManifest 桥接）
+
+#### Phase 4：AI 模型资产化 + Handler 实现（待开发）
+
+> 前置条件：Phase 3 ✅ + neko-agent AI 分类能力成熟
+
+- [ ] Handler 实现
+  - [ ] ShaderAssetHandler（编译验证 + 预览 + 热重载）
+  - [ ] PresetAssetHandler（LUT / 转场预设 / 导出预设）
+  - [ ] ModelAssetHandler（下载 + 校验 + 量化选择）
+- [ ] AI 模型存储策略（懒加载 + 缓存 + 磁盘空间管理）
+- [ ] AI 生成结果自动入库（Agent 生成 → AssetRegistry.register → 分类 + 元数据 + 缩略图）
+- [ ] IAIAnalysisService 实现（接入 neko-agent AI 分类能力）
+- [ ] FFmpegService 完整实现（bundled FFmpeg 或 neko-engine native module）
+- [ ] extension.ts 升级为 AssetRegistry 作为顶层 Facade
+
+#### Phase 5：社区分发（待开发）
+
+> 前置条件：Phase 4 完成 + 多种资产类型 Handler 已验证
+
+- [ ] `.neko` 包格式定义（manifest + content）
+- [ ] 远程注册表（类似 npm registry）
+- [ ] push / pull / search / install CLI
+- [ ] 私有化部署支持
+- [ ] 依赖解析（Shader 依赖 common.wgsl 等）
+- [ ] 声明与实体分离落地（project.json / lock.json / .installed/）
+- [ ] Cloud Sync View（`neko.cloudSync`）实现
+- [ ] CI/CD 自动渲染集成
 
 ### neko-tools (媒体工具)
 
@@ -321,7 +364,8 @@
   - [x] 视频 Diff
   - [x] 音频 Diff
   - [x] GitMediaService
-- [x] 资产变体对比（asset-diff）
+- [x] 资产变体对比（asset-diff，委托 neko-assets）
+- [x] EngineMediaService 接入 neko-engine
 - [ ] 批量处理
 
 ---
@@ -351,9 +395,10 @@
 ### M5: 虚拟制片
 - neko-live 动捕 + 虚拟形象 + 直播
 
-### M6: 协作发布
-- neko-assets Git/LFS + 云端同步
-- CI/CD 流水线
+### M6: 资产管理与协作
+- neko-assets Phase 4：AI 模型资产化（Handler 实现 + 自动入库 + IAIAnalysisService）
+- neko-assets Phase 5：社区分发（.neko 包格式 + 远程注册表 + CLI + Cloud Sync）
+- CI/CD 自动渲染流水线
 
 ---
 
@@ -392,4 +437,4 @@
 
 ---
 
-*最后更新: 2026-02-25*
+*最后更新: 2026-02-26*

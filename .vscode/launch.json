@@ -2,6 +2,28 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Debug neko-suite (All Extensions)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-cut",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-canvas",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-agent",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-assets",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-story",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-audio",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-sketch",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/*/dist/**/*.js"
+      ],
+      "preLaunchTask": "build:all"
+    },
+    {
       "name": "Debug neko-cut",
       "type": "extensionHost",
       "request": "launch",

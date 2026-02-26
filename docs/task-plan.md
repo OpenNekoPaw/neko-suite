@@ -54,10 +54,16 @@
 - 文件比较和媒体信息展示未实现
 - 工作量：~3 天
 
-### 8. neko-assets Git Diff 分析
-- `AssetDiffService.ts:241` — git ref 解析未实现
-- `AssetDiffService.ts:274` — 变更分析未实现
-- 工作量：~2 天
+### 8. neko-assets Phase 4：AI 模型资产化 + Handler 实现
+- 前置条件：Phase 3 ✅ 已完成，neko-agent AI 分类能力成熟
+- Handler 实现：ShaderAssetHandler（编译验证 + 预览 + 热重载）、PresetAssetHandler（LUT/转场/导出预设）、ModelAssetHandler（下载 + 校验 + 量化选择）
+- AI 模型存储策略（懒加载 + 缓存 + 磁盘空间管理）
+- AI 生成结果自动入库（Agent 生成 → AssetRegistry.register）
+- IAIAnalysisService 实现（接入 neko-agent AI 分类能力）
+- FFmpegService 完整实现
+- extension.ts 升级为 AssetRegistry 顶层 Facade
+- 详见 [资产管理架构设计](./architecture/asset-management-design.md) Phase 4
+- 工作量：~8 天
 
 ### 9. neko-cut 反向播放
 - 位置：`packages/neko-cut/packages/webview/src/components/Timeline/TimelineTrack.tsx:612`
@@ -106,6 +112,18 @@
 - 详见 [3D 架构设计](./architecture/3d-capability-analysis.md)
 - 工作量：~15 天（Phase 3.1）
 
+### 16. neko-assets Phase 5：社区分发
+- 前置条件：Phase 4 完成，多种资产类型 Handler 已验证
+- `.neko` 包格式定义（manifest + content）
+- 远程注册表（类似 npm registry）+ push/pull/search/install CLI
+- 私有化部署支持
+- 依赖解析（Shader 依赖 common.wgsl 等）
+- 声明与实体分离落地（project.json / lock.json / .installed/）
+- Cloud Sync View（`neko.cloudSync`）实现
+- CI/CD 自动渲染集成
+- 详见 [资产管理架构设计](./architecture/asset-management-design.md) Phase 5
+- 工作量：~12 天
+
 ---
 
 ## 技术债务（持续）
@@ -126,7 +144,8 @@
 | M1 基础剪辑闭环 | P0 #1-2 + P1 #3-6 | 接近完成，补全测试和缺失功能后可达成 |
 | M2 AI 集成 | P2 #11 + P3 #13 | 进行中，Agent 引擎已就绪，Skills 生态待建设 |
 | M3 视觉增强 | P3 #14-15 | 规划阶段，3D 架构设计已完成 |
+| M6 资产管理与协作 | P2 #8（Phase 4）+ P3 #16（Phase 5） | Phase 1-3 ✅ 已完成，Phase 4 待 neko-agent 成熟，Phase 5 待 Phase 4 验证 |
 
 ---
 
-*生成日期：2026-02-25*
+*生成日期：2026-02-25，更新：2026-02-26（资产管理 Phase 4/5 纳入）*
