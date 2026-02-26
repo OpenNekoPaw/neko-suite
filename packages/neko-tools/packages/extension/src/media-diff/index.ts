@@ -42,7 +42,7 @@ import { ImageDiffAnalyzer } from './services/analyzers/ImageDiffAnalyzer';
 import { VideoDiffAnalyzer } from './services/analyzers/VideoDiffAnalyzer';
 import { AudioDiffAnalyzer } from './services/analyzers/AudioDiffAnalyzer';
 import { MediaDiffEditorProvider } from './editor/MediaDiffEditorProvider';
-import { FFmpegService } from '../services/FFmpegService';
+import { EngineMediaService } from '../services/EngineMediaService';
 
 /**
  * Initialize the media diff module
@@ -50,15 +50,15 @@ import { FFmpegService } from '../services/FFmpegService';
  */
 export function initializeMediaDiff(
 	context: vscode.ExtensionContext,
-	ffmpegService?: FFmpegService
+	engineMediaService?: EngineMediaService
 ): MediaDiffEditorProvider {
 	// Get or create the diff service
 	const diffService = getMediaDiffService();
 
 	// Register analyzers
 	const imageDiffAnalyzer = new ImageDiffAnalyzer();
-	const videoDiffAnalyzer = new VideoDiffAnalyzer(ffmpegService, imageDiffAnalyzer);
-	const audioDiffAnalyzer = new AudioDiffAnalyzer(ffmpegService);
+	const videoDiffAnalyzer = new VideoDiffAnalyzer(engineMediaService, imageDiffAnalyzer);
+	const audioDiffAnalyzer = new AudioDiffAnalyzer(engineMediaService);
 
 	diffService.registerAnalyzer(imageDiffAnalyzer);
 	diffService.registerAnalyzer(videoDiffAnalyzer);

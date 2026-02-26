@@ -1,14 +1,13 @@
 /**
- * FFmpegService - Media Processing Adapter
+ * EngineMediaService - neko-engine Media Processing Adapter
  *
  * Adapter layer between diff analyzers and neko-engine's Rust FFmpeg backend.
  * All media operations delegate to neko-engine via vscode commands:
- *   - probeMediaInfo  → neko.engine.probeInternal
- *   - extractVideoFrame → neko.engine.extractFrame
+ *   - probeMediaInfo     → neko.engine.probeInternal
+ *   - extractVideoFrame  → neko.engine.extractFrame
  *   - decodeAudioSegment → neko.engine.decodeAudio
  *
- * Named "FFmpegService" for historical reasons (analyzers were designed
- * before neko-engine existed). The class is kept as an adapter to:
+ * This adapter exists to:
  *   1. Decouple analyzers from vscode command names (testability)
  *   2. Provide graceful degradation when engine is unavailable
  *   3. Adapt neko-engine response shapes to analyzer expectations
@@ -35,12 +34,11 @@ export interface MediaInfo {
 // Service
 // =============================================================================
 
-export class FFmpegService {
+export class EngineMediaService {
 	private initialized = false;
 
 	/**
-	 * Initialize FFmpeg service.
-	 * Attempts to locate FFmpeg binary or connect to neko-engine.
+	 * Initialize the service.
 	 */
 	async initialize(): Promise<void> {
 		if (this.initialized) return;
@@ -49,10 +47,9 @@ export class FFmpegService {
 
 	/**
 	 * Probe media file for metadata.
-	 * Delegates to neko-engine when available.
+	 * Delegates to neko-engine's probeMedia (Rust FFmpeg).
 	 */
 	async probeMediaInfo(filePath: string): Promise<MediaInfo> {
-		// Try neko-engine first
 		try {
 			const result = await vscode.commands.executeCommand<MediaInfo>(
 				'neko.engine.probeInternal',
@@ -63,7 +60,6 @@ export class FFmpegService {
 			// Engine not available
 		}
 
-		// Fallback: return minimal info
 		return {
 			duration: 0,
 			width: 0,
@@ -79,7 +75,6 @@ export class FFmpegService {
 	 * Returns the frame as a Buffer (PNG format).
 	 */
 	async extractVideoFrame(filePath: string, timeSeconds: number): Promise<Buffer> {
-		// Try neko-engine frame extraction
 		try {
 			const result = await vscode.commands.executeCommand<{ data: number[] }>(
 				'neko.engine.extractFrame',
@@ -93,7 +88,6 @@ export class FFmpegService {
 			// Engine not available
 		}
 
-		// Return empty buffer as fallback
 		return Buffer.alloc(0);
 	}
 
@@ -106,7 +100,6 @@ export class FFmpegService {
 		startSeconds: number,
 		durationSeconds: number
 	): Promise<ArrayBuffer> {
-		// Try neko-engine audio decoding
 		try {
 			const result = await vscode.commands.executeCommand<{ data: number[] }>(
 				'neko.engine.decodeAudio',
@@ -122,7 +115,9 @@ export class FFmpegService {
 			// Engine not available
 		}
 
-		// Return empty buffer as fallback
 		return new Float32Array(0).buffer;
 	}
 }
+
+/** @deprecated Use EngineMediaService instead */
+export { EngineMediaService as FFmpegService };

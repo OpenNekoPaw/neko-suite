@@ -6,7 +6,7 @@
  * - Keyframe sampling and comparison
  * - Per-frame similarity calculation
  *
- * Reuses FFmpegService for frame extraction.
+ * Reuses EngineMediaService for frame extraction.
  */
 
 import * as fs from 'fs/promises';
@@ -20,7 +20,7 @@ import type {
 } from '@neko/shared';
 import { DEFAULT_KEYFRAME_SAMPLES } from '@neko/shared';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
-import { FFmpegService } from '../../../services/FFmpegService';
+import { EngineMediaService } from '../../../services/EngineMediaService';
 import { ImageDiffAnalyzer } from './ImageDiffAnalyzer';
 
 // =============================================================================
@@ -38,16 +38,16 @@ const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'];
  */
 export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 	readonly mediaType = 'video' as const;
-	private readonly ffmpegService: FFmpegService;
+	private readonly engineMediaService: EngineMediaService;
 	private readonly imageDiffAnalyzer: ImageDiffAnalyzer;
 	private tempFiles: string[] = [];
 
 	constructor(
-		ffmpegService?: FFmpegService,
+		engineMediaService?: EngineMediaService,
 		imageDiffAnalyzer?: ImageDiffAnalyzer
 	) {
 		super(VIDEO_EXTENSIONS);
-		this.ffmpegService = ffmpegService ?? new FFmpegService();
+		this.engineMediaService = engineMediaService ?? new EngineMediaService();
 		this.imageDiffAnalyzer = imageDiffAnalyzer ?? new ImageDiffAnalyzer();
 	}
 
@@ -69,12 +69,12 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 			this.throwIfAborted();
 
 			// Initialize FFmpeg service
-			await this.ffmpegService.initialize();
+			await this.engineMediaService.initialize();
 
 			// Probe media info
 			const [currentInfo, previousInfo] = await Promise.all([
-				this.ffmpegService.probeMediaInfo(currentPath),
-				this.ffmpegService.probeMediaInfo(previousPath),
+				this.engineMediaService.probeMediaInfo(currentPath),
+				this.engineMediaService.probeMediaInfo(previousPath),
 			]);
 
 			this.throwIfAborted();
@@ -193,8 +193,8 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 			try {
 				// Extract frames at same timestamp
 				const [currentFrame, previousFrame] = await Promise.all([
-					this.ffmpegService.extractVideoFrame(currentPath, time),
-					this.ffmpegService.extractVideoFrame(previousPath, time),
+					this.engineMediaService.extractVideoFrame(currentPath, time),
+					this.engineMediaService.extractVideoFrame(previousPath, time),
 				]);
 
 				this.throwIfAborted();

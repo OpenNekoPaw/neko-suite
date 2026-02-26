@@ -6,7 +6,7 @@
  * - Waveform generation and comparison
  * - Amplitude correlation
  *
- * Reuses FFmpegService for audio decoding.
+ * Reuses EngineMediaService for audio decoding.
  */
 
 import * as fs from 'fs/promises';
@@ -20,7 +20,7 @@ import type {
 } from '@neko/shared';
 import { DEFAULT_WAVEFORM_SAMPLES } from '@neko/shared';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
-import { FFmpegService } from '../../../services/FFmpegService';
+import { EngineMediaService } from '../../../services/EngineMediaService';
 
 // =============================================================================
 // Constants
@@ -43,12 +43,12 @@ const MIN_SILENCE_DURATION = 0.5;
  */
 export class AudioDiffAnalyzer extends BaseMediaDiffAnalyzer {
 	readonly mediaType = 'audio' as const;
-	private readonly ffmpegService: FFmpegService;
+	private readonly engineMediaService: EngineMediaService;
 	private tempFiles: string[] = [];
 
-	constructor(ffmpegService?: FFmpegService) {
+	constructor(engineMediaService?: EngineMediaService) {
 		super(AUDIO_EXTENSIONS);
-		this.ffmpegService = ffmpegService ?? new FFmpegService();
+		this.engineMediaService = engineMediaService ?? new EngineMediaService();
 	}
 
 	async analyze(
@@ -69,24 +69,24 @@ export class AudioDiffAnalyzer extends BaseMediaDiffAnalyzer {
 			this.throwIfAborted();
 
 			// Initialize FFmpeg service
-			await this.ffmpegService.initialize();
+			await this.engineMediaService.initialize();
 
 			// Probe media info
 			const [currentInfo, previousInfo] = await Promise.all([
-				this.ffmpegService.probeMediaInfo(currentPath),
-				this.ffmpegService.probeMediaInfo(previousPath),
+				this.engineMediaService.probeMediaInfo(currentPath),
+				this.engineMediaService.probeMediaInfo(previousPath),
 			]);
 
 			this.throwIfAborted();
 
 			// Decode audio to PCM
 			const [currentPCM, previousPCM] = await Promise.all([
-				this.ffmpegService.decodeAudioSegment(
+				this.engineMediaService.decodeAudioSegment(
 					currentPath,
 					0,
 					currentInfo.duration
 				),
-				this.ffmpegService.decodeAudioSegment(
+				this.engineMediaService.decodeAudioSegment(
 					previousPath,
 					0,
 					previousInfo.duration
