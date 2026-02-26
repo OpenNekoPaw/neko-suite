@@ -4,7 +4,8 @@
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { ModelOption, ShellExecutionMode, PromptMode } from '@/components/types';
+import { ShellExecutionMode, PromptMode } from '@/components/types';
+import type { ChatModelOption } from '@neko/shared';
 import { ModelSelector } from './ModelSelector';
 import { ModeSelector } from './ModeSelector';
 import { PromptModeToggle } from './PromptModeToggle';
@@ -23,7 +24,7 @@ interface InputAreaProps {
   isThinking: boolean;
   messageCount: number;
   selectedModel: string;
-  availableModels: ModelOption[];
+  availableModels: ChatModelOption[];
   projectFiles?: ProjectFile[];
   executionMode: ShellExecutionMode;
   promptMode: PromptMode;

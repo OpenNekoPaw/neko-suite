@@ -96,6 +96,8 @@ export function VideoPlayer() {
 	const statsThrottleRef = useRef<number>(0);
 	/** Track clock source to detect wall→audio transition */
 	const clockSourceRef = useRef<'wall' | 'audio'>('wall');
+	/** Seek target time (seconds). When set, onFrame rejects stale pre-seek frames. */
+	const seekFilterRef = useRef<number | null>(null);
 
 	// =========================================================================
 	// Keyboard shortcut: 'D' toggles stats overlay
@@ -173,8 +175,24 @@ export function VideoPlayer() {
 	 * onFrame callback passed to H264StreamClient.
 	 * Instead of rendering directly, enqueue to FrameScheduler for
 	 * clock-based scheduling.
+	 *
+	 * After seek, stale pre-seek frames may still arrive from the WebSocket
+	 * buffer. These are filtered out by comparing their PTS to the seek target.
 	 */
 	const onFrame = useCallback((frame: VideoFrame) => {
+		// Filter stale pre-seek frames: old keyframes in the WebSocket buffer
+		// can corrupt the scheduler's A/V offset if enqueued after flush.
+		const seekTarget = seekFilterRef.current;
+		if (seekTarget !== null) {
+			const frameSec = frame.timestamp / 1_000_000;
+			if (Math.abs(frameSec - seekTarget) > 2.0) {
+				frame.close();
+				return;
+			}
+			// First valid frame near seek target arrived — disable filter
+			seekFilterRef.current = null;
+		}
+
 		const scheduler = schedulerRef.current;
 		if (scheduler) {
 			scheduler.enqueue(frame);
@@ -467,6 +485,9 @@ export function VideoPlayer() {
 			playStartTimeRef.current = time;
 			playWallTimeRef.current = performance.now();
 		}
+		// Arm seek filter: reject stale WebSocket-buffered frames whose PTS
+		// is far from the target, preventing A/V offset corruption.
+		seekFilterRef.current = time;
 		// Flush queued frames so stale pre-seek frames aren't rendered
 		schedulerRef.current?.flush();
 		// Reset decoders so they start clean from the next keyframe

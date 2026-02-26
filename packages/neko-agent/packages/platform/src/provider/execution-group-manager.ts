@@ -429,7 +429,7 @@ export class ExecutionGroupManager {
       // For now, we just check if workflowManager is available
     }
 
-    // TODO: Check workflow engine health via ConnectionStateManager
+    // TODO(P2): Check workflow engine health via ConnectionStateManager
     // This would require injecting ConnectionStateManager
 
     return { valid: true };

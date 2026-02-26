@@ -6,44 +6,36 @@
 
 ## P0：阻塞性问题（立即处理）
 
-### 1. neko-agent OpenAI streaming 实现
-- 位置：`packages/neko-agent/packages/platform/` OpenAI adapter
-- 问题：2 处 `throw new Error('Not implemented')` 阻塞 OpenAI streaming 功能
-- 工作量：~2 天
-- 影响：OpenAI 用户无法使用流式对话
+### ~~1. neko-agent OpenAI streaming 实现~~ ✅ 已完成（2026-02-26）
+- **结论**：经分析，OpenAI streaming 通过 `AISdkAdapter` 已完整实现。`throw new Error('Not implemented')` 仅存在于私有辅助类 `OpenAIHttpHelper`（用于 DALL-E/模型列表），非阻塞。
+- **已完成**：重构 `OpenAIHttpHelper` 不再继承 `BaseAdapter`，改为直接使用 `HttpClient`，消除误导性代码。
+- **发现的技术债务**：`AISdkAdapter` 抽象层直接依赖 Vercel AI SDK（违反依赖倒置原则），详见技术债务 #TD-1。
 
-### 2. neko-cut 资产拖拽导入
-- 位置：`packages/neko-cut/packages/webview/src/hooks/useAssetLibrary.ts:310`
-- 问题：拖拽导入未实现，影响基础编辑体验
-- 工作量：~1 天
-- 影响：用户无法通过拖拽添加素材到时间线
+### ~~2. neko-cut 资产拖拽导入~~ ✅ 已在 neko-assets 重新实现
+- 拖拽导入功能已在 neko-assets Phase 3 中重新实现，不再阻塞。
 
 ---
 
 ## P1：核心功能补全（当前迭代）
 
-### 3. 零测试包补充测试
-- neko-canvas（10,452 LOC，0 测试）— 画布交互逻辑复杂，回归风险高
-- neko-client（2,179 LOC，0 测试）— 流媒体解码是底层关键路径
-- neko-preview（3,590 LOC，0 测试）— 播放器状态管理需要测试
-- 目标：每个包至少 20 个核心用例
-- 工作量：~5 天
+### ~~3. 零测试包补充测试~~ ✅ 已完成（2026-02-26）
+- neko-canvas：**71 个测试**（snapEngine/viewportCulling/historyStore/clipboardStore）
+- neko-client：**50 个测试**（FrameScheduler/PlaybackPerformanceMonitor/formatTime）
+- neko-preview：**115 个测试**（VideoPreviewProvider/AudioPreviewProvider/StatusBarManager/PreviewService/extension）
+- 总计：**236 个新测试用例**，远超每包 20 个的目标
 
-### 4. neko-cut 测试覆盖提升
-- 现状：55K LOC 仅 104 个测试用例
-- 重点：store slices（13 个）、hooks（13 个）、timeline 操作
-- 目标：测试用例 → 300+
-- 工作量：~5 天
+### ~~4. neko-cut 测试覆盖提升~~ ✅ 已完成（2026-02-26）
+- 新增 **283 个测试**（9 个 slice 测试文件）
+- 覆盖：selectionSlice/playbackSlice/projectSlice/uiStateSlice/trackOpsSlice/elementOpsSlice/clipboardSlice/keyframeSlice/shapeOpsSlice
+- neko-cut 总测试：104 → **387**，超过 300+ 目标
 
-### 5. neko-agent 迁移代码清理
-- 3 处 `TODO: Remove after migration complete` 遗留代码
-- 1 处 `TODO: Check workflow engine health`
-- 工作量：~1 天
+### ~~5. neko-agent 迁移代码清理~~ ✅ 已完成（2026-02-26）
+- 替换遗留类型别名：`ConfiguredAgent` → `PromptPresetConfig`，`ModelOption` → `ChatModelOption`
+- 删除 `types.ts`/`prompts.ts`/`config/index.ts` 中的遗留别名定义
+- Workflow 健康检查 TODO 标记为 `TODO(P2)` 优先级
 
-### 6. neko-cut ffprobe 元数据提取
-- 位置：`packages/neko-cut/packages/extension/src/services/AssetService.ts:684`
-- 通过 neko-engine 的 media probe 服务获取元数据
-- 工作量：~1 天
+### ~~6. neko-cut ffprobe 元数据提取~~ ✅ 已在 neko-assets 重新实现
+- 元数据提取功能已在 neko-assets 中通过 neko-engine media probe 实现。
 
 ---
 
@@ -128,12 +120,13 @@
 
 ## 技术债务（持续）
 
-| 项目 | 优先级 | 说明 |
-|------|--------|------|
-| 统一错误处理 | P1 | 各包错误处理方式不一致 |
-| git commit 规范化 | P2 | 当前全是 "update" 提交 |
-| 文档补全 | P2 | docs/ 已有基础，需要持续更新 |
-| 国际化扩展 | P3 | neko-cut/neko-agent 已有中英双语，其他包待跟进 |
+| ID | 项目 | 优先级 | 说明 |
+|----|------|--------|------|
+| TD-1 | AI SDK 依赖倒置 | P2 | `AISdkAdapter` 抽象层直接依赖 Vercel AI SDK（`import { streamText } from 'ai'`），OpenAI/Anthropic/Google adapter 与具体 SDK 强耦合（DIP 评分 65/100）。HTTP adapter（Azure/Generic/Ollama）通过 `HttpClient` 正确解耦。需引入 `ILanguageModelProvider` 抽象隔离 SDK 依赖。 |
+| TD-2 | 统一错误处理 | P1 | 各包错误处理方式不一致 |
+| TD-3 | git commit 规范化 | P2 | 当前全是 "update" 提交 |
+| TD-4 | 文档补全 | P2 | docs/ 已有基础，需要持续更新 |
+| TD-5 | 国际化扩展 | P3 | neko-cut/neko-agent 已有中英双语，其他包待跟进 |
 
 ---
 
@@ -141,11 +134,23 @@
 
 | 里程碑 | 对应任务 | 预计状态 |
 |--------|----------|----------|
-| M1 基础剪辑闭环 | P0 #1-2 + P1 #3-6 | 接近完成，补全测试和缺失功能后可达成 |
+| M1 基础剪辑闭环 | ~~P0 #1-2~~ + ~~P1 #3-6~~ | ✅ **已达成**（2026-02-26）：所有阻塞项已清除，测试覆盖 519 新用例 |
 | M2 AI 集成 | P2 #11 + P3 #13 | 进行中，Agent 引擎已就绪，Skills 生态待建设 |
 | M3 视觉增强 | P3 #14-15 | 规划阶段，3D 架构设计已完成 |
 | M6 资产管理与协作 | P2 #8（Phase 4）+ P3 #16（Phase 5） | Phase 1-3 ✅ 已完成，Phase 4 待 neko-agent 成熟，Phase 5 待 Phase 4 验证 |
 
 ---
 
-*生成日期：2026-02-25，更新：2026-02-26（资产管理 Phase 4/5 纳入）*
+## 测试覆盖变更记录（2026-02-26）
+
+| 包 | 变更前 | 变更后 | 新增文件 |
+|----|--------|--------|----------|
+| neko-canvas | 0 | 71 | snapEngine/viewportCulling/historyStore/clipboardStore |
+| neko-client | 0 | 50 | FrameScheduler/PlaybackPerformanceMonitor/formatTime |
+| neko-preview | 0 | 115 | VideoPreviewProvider/AudioPreviewProvider/StatusBarManager/PreviewService/extension |
+| neko-cut | 104 | 387 | 9 个 slice 测试（selection/playback/project/uiState/trackOps/elementOps/clipboard/keyframe/shapeOps） |
+| **合计** | **104** | **623** | **+519** |
+
+---
+
+*生成日期：2026-02-25，更新：2026-02-26（P0/P1 全部完成，M1 达成，TD-1 AI SDK 依赖倒置纳入）*

@@ -3,7 +3,7 @@
  */
 
 import { useState, useRef, useMemo } from 'react';
-import { ModelOption, ChatModelOption } from '@/components/types';
+import type { ChatModelOption } from '@neko/shared';
 import { useClickOutsideSingle } from './useClickOutside';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -11,7 +11,7 @@ import type { ModelCategory } from '@neko/shared';
 
 interface ModelSelectorProps {
   selectedModel: string;
-  models: ModelOption[];
+  models: ChatModelOption[];
   onSelect: (modelId: string) => void;
 }
 

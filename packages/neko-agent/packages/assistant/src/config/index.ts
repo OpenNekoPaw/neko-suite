@@ -17,6 +17,3 @@ export * from './workflow-engines';
 // Prompt preset configuration (types and utilities)
 export * from './prompts';
 
-// Legacy re-exports for backward compatibility
-// TODO: Remove after migration complete
-export { getAgentTypeName } from './prompts';

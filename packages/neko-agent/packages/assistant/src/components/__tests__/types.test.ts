@@ -10,8 +10,8 @@ import type {
   ShellExecutionMode,
   SettingsState,
   ConfiguredProvider,
-  ModelOption,
 } from '../types';
+import type { ChatModelOption } from '@neko/shared';
 
 /**
  * Type validation tests
@@ -219,9 +219,9 @@ describe('types validation', () => {
     });
   });
 
-  describe('ModelOption type', () => {
+  describe('ChatModelOption type', () => {
     it('should accept valid model option', () => {
-      const option: ModelOption = {
+      const option: ChatModelOption = {
         id: 'openai:gpt-4',
         label: 'OpenAI / GPT-4',
         providerId: 'openai',
@@ -232,7 +232,7 @@ describe('types validation', () => {
     });
 
     it('should accept auto model option', () => {
-      const option: ModelOption = {
+      const option: ChatModelOption = {
         id: 'auto',
         label: 'Auto',
         providerId: '',

@@ -73,8 +73,3 @@ export function getPromptSource(prompt: PromptPresetConfig): PromptSource {
   return prompt.builtin ? 'builtin' : 'personal';
 }
 
-// Legacy exports for backward compatibility
-// TODO: Remove after migration complete
-export type AgentType = PromptPresetType;
-export type AgentConfig = PromptPresetConfig;
-export const getAgentTypeName = getPromptTypeName;

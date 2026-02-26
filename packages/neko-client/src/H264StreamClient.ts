@@ -230,6 +230,10 @@ export class H264StreamClient {
 		if (this.disposed) return;
 		console.log('[H264StreamClient] Resetting decoder for seek');
 
+		// Reset framesDecoded so the caller can detect when post-seek frames
+		// start arriving (e.g. to freeze wall-clock until first new frame).
+		this.stats.framesDecoded = 0;
+
 		// Fast path: reset() + reconfigure avoids tearing down the HW context
 		if (this.decoder && this.decoder.state === 'configured') {
 			try {

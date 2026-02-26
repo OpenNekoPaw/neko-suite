@@ -3,14 +3,14 @@
  */
 
 import { useState, useRef } from 'react';
-import { ConfiguredAgent } from '@/components/types';
+import type { PromptPresetConfig } from '@neko/shared';
 import { useClickOutsideSingle } from './useClickOutside';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useTranslation } from '@/i18n/I18nContext';
 
 interface AgentSelectorProps {
   selectedAgentId: string | null;
-  agents: ConfiguredAgent[];
+  agents: PromptPresetConfig[];
   onSelect: (agentId: string) => void;
 }
 
@@ -25,7 +25,7 @@ export function AgentSelector({ selectedAgentId, agents, onSelect }: AgentSelect
   const selectedAgent = enabledAgents.find(a => a.id === selectedAgentId) || enabledAgents[0];
 
   // Helper function to get translated agent display name
-  const getAgentDisplayName = (agent: ConfiguredAgent): string => {
+  const getAgentDisplayName = (agent: PromptPresetConfig): string => {
     if (agent.nameKey) {
       return t(`settings.${agent.nameKey}`);
     }
@@ -33,7 +33,7 @@ export function AgentSelector({ selectedAgentId, agents, onSelect }: AgentSelect
   };
 
   // Helper function to get translated agent description
-  const getAgentDisplayDescription = (agent: ConfiguredAgent): string => {
+  const getAgentDisplayDescription = (agent: PromptPresetConfig): string => {
     if (agent.descriptionKey) {
       return t(`settings.${agent.descriptionKey}`);
     }

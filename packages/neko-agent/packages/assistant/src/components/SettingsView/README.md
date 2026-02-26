@@ -55,7 +55,7 @@ interface SettingsViewProps {
 interface Settings {
   configuredProviders: ConfiguredProvider[];
   configuredModels: ModelConfig[];
-  configuredPrompts: ConfiguredAgent[];
+  configuredPrompts: PromptPresetConfig[];
   configuredMCPServers: ConfiguredMCPServer[];
   configuredWorkflows: ConfiguredWorkflow[];
   executionMode: 'auto' | 'ask' | 'plan';

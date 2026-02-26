@@ -241,15 +241,3 @@ export interface ProviderTemplateInfo {
 // Re-export VSCodeAPI from shared (Single Source of Truth)
 export type { VSCodeAPI } from '@neko/shared/vscode';
 
-/**
- * Model option for UI model selector
- * @deprecated Use ChatModelOption from @neko/shared instead
- */
-export type ModelOption = import('@neko/shared').ChatModelOption;
-
-// Legacy type aliases for backward compatibility during migration
-// TODO: Remove these after migration is complete
-/** @deprecated Use ConfiguredPrompt from shared package */
-export type ConfiguredAgent = import('@neko/shared').PromptPresetConfig;
-/** @deprecated Use PromptPresetType from shared package */
-export type AgentType = import('@neko/shared').PromptPresetType;

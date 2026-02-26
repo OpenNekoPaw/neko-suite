@@ -1,0 +1,311 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// ============================================================================
+// Mock vscode module
+// ============================================================================
+
+const mockSubscriptions: { push: ReturnType<typeof vi.fn> } = {
+	push: vi.fn(),
+};
+
+vi.mock('vscode', () => {
+	const Uri = {
+		file: (path: string) => ({
+			scheme: 'file',
+			fsPath: path,
+			path,
+			toString: () => path,
+		}),
+		joinPath: (base: { path: string }, ...segments: string[]) => {
+			const joined = [base.path, ...segments].join('/');
+			return { scheme: 'file', fsPath: joined, path: joined, toString: () => joined };
+		},
+	};
+
+	return {
+		Uri,
+		window: {
+			registerCustomEditorProvider: vi.fn(() => ({ dispose: vi.fn() })),
+			showOpenDialog: vi.fn(),
+			createStatusBarItem: vi.fn(() => ({
+				text: '',
+				tooltip: '',
+				show: vi.fn(),
+				hide: vi.fn(),
+				dispose: vi.fn(),
+			})),
+		},
+		commands: {
+			registerCommand: vi.fn((_id: string, handler: (...args: unknown[]) => unknown) => {
+				return { dispose: vi.fn(), handler };
+			}),
+			executeCommand: vi.fn(),
+		},
+		StatusBarAlignment: { Left: 1, Right: 2 },
+	};
+});
+
+// ============================================================================
+// Mock internal modules
+// ============================================================================
+
+const mockPreviewService = {
+	isAvailable: true,
+	port: 9090,
+	probeMedia: vi.fn(),
+	startVideoPlayback: vi.fn(),
+	stopStreams: vi.fn(),
+	pauseStreams: vi.fn(),
+	resumeStreams: vi.fn(),
+	seekStreams: vi.fn(),
+	setStreamSpeed: vi.fn(),
+	captureFrame: vi.fn(),
+	getStreamWebSocketUrl: vi.fn((id: string) => `ws://127.0.0.1:9090/v1/streams/${id}`),
+	dispose: vi.fn(),
+};
+
+vi.mock('../services/PreviewService', () => ({
+	PreviewService: {
+		tryCreate: vi.fn(() => Promise.resolve(mockPreviewService)),
+	},
+}));
+
+vi.mock('../providers/VideoPreviewProvider', () => {
+	const ctor = vi.fn().mockImplementation(() => ({
+		setPreviewService: vi.fn(),
+		dispose: vi.fn(),
+	}));
+	ctor.viewType = 'neko.videoPreview';
+	return { VideoPreviewProvider: ctor };
+});
+
+vi.mock('../providers/AudioPreviewProvider', () => {
+	const ctor = vi.fn().mockImplementation(() => ({
+		setPreviewService: vi.fn(),
+		dispose: vi.fn(),
+	}));
+	ctor.viewType = 'neko.audioPreview';
+	return { AudioPreviewProvider: ctor };
+});
+
+vi.mock('../ui/StatusBarManager', () => ({
+	StatusBarManager: vi.fn().mockImplementation(() => ({
+		show: vi.fn(),
+		hide: vi.fn(),
+		updatePlayback: vi.fn(),
+		dispose: vi.fn(),
+	})),
+}));
+
+import { activate, deactivate } from '../extension';
+import { PreviewService } from '../services/PreviewService';
+import { VideoPreviewProvider } from '../providers/VideoPreviewProvider';
+import { AudioPreviewProvider } from '../providers/AudioPreviewProvider';
+import * as vscode from 'vscode';
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function createMockContext(): vscode.ExtensionContext {
+	return {
+		subscriptions: [],
+		extensionUri: vscode.Uri.file('/ext/neko-preview'),
+		extensionPath: '/ext/neko-preview',
+		storageUri: vscode.Uri.file('/storage'),
+		globalStorageUri: vscode.Uri.file('/global-storage'),
+		logUri: vscode.Uri.file('/log'),
+		extensionMode: 1,
+		environmentVariableCollection: {} as unknown as vscode.GlobalEnvironmentVariableCollection,
+		secrets: {} as unknown as vscode.SecretStorage,
+		globalState: {} as unknown as vscode.Memento & { setKeysForSync: (keys: readonly string[]) => void },
+		workspaceState: {} as unknown as vscode.Memento,
+		storagePath: '/storage',
+		globalStoragePath: '/global-storage',
+		logPath: '/log',
+		asAbsolutePath: (p: string) => `/ext/neko-preview/${p}`,
+		extension: {} as unknown as vscode.Extension<unknown>,
+		languageModelAccessInformation: {} as unknown as vscode.LanguageModelAccessInformation,
+	} as unknown as vscode.ExtensionContext;
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+describe('extension', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockPreviewService.isAvailable = true;
+		mockPreviewService.port = 9090;
+	});
+
+	describe('activate()', () => {
+		it('should create a shared PreviewService', async () => {
+			const context = createMockContext();
+
+			await activate(context);
+
+			expect(PreviewService.tryCreate).toHaveBeenCalled();
+		});
+
+		it('should register VideoPreviewProvider', async () => {
+			const context = createMockContext();
+
+			await activate(context);
+
+			expect(vscode.window.registerCustomEditorProvider).toHaveBeenCalledWith(
+				'neko.videoPreview',
+				expect.anything(),
+				expect.objectContaining({
+					webviewOptions: { retainContextWhenHidden: true },
+					supportsMultipleEditorsPerDocument: false,
+				}),
+			);
+		});
+
+		it('should register AudioPreviewProvider', async () => {
+			const context = createMockContext();
+
+			await activate(context);
+
+			expect(vscode.window.registerCustomEditorProvider).toHaveBeenCalledWith(
+				'neko.audioPreview',
+				expect.anything(),
+				expect.objectContaining({
+					webviewOptions: { retainContextWhenHidden: true },
+				}),
+			);
+		});
+
+		it('should register openVideo and openAudio commands', async () => {
+			const context = createMockContext();
+
+			await activate(context);
+
+			const registeredCommands = vi.mocked(vscode.commands.registerCommand).mock.calls.map(
+				(call) => call[0],
+			);
+
+			expect(registeredCommands).toContain('neko.preview.openVideo');
+			expect(registeredCommands).toContain('neko.preview.openAudio');
+		});
+
+		it('should inject shared PreviewService into providers', async () => {
+			const context = createMockContext();
+
+			await activate(context);
+
+			const videoInstance = vi.mocked(VideoPreviewProvider).mock.results[0]?.value;
+			const audioInstance = vi.mocked(AudioPreviewProvider).mock.results[0]?.value;
+
+			expect(videoInstance.setPreviewService).toHaveBeenCalledWith(mockPreviewService);
+			expect(audioInstance.setPreviewService).toHaveBeenCalledWith(mockPreviewService);
+		});
+
+		it('should push disposables into context.subscriptions', async () => {
+			const context = createMockContext();
+
+			await activate(context);
+
+			// PreviewService + StatusBarManager + 2 editor registrations + 2 commands + 2 providers = 8
+			expect(context.subscriptions.length).toBeGreaterThanOrEqual(7);
+		});
+
+		it('should return a NekoPreviewAPI object', async () => {
+			const context = createMockContext();
+
+			const api = await activate(context);
+
+			expect(api).toBeDefined();
+			expect(typeof api.isAvailable).toBe('boolean');
+			expect(typeof api.port).toBe('number');
+			expect(typeof api.getStreamWebSocketUrl).toBe('function');
+			expect(typeof api.probeMedia).toBe('function');
+			expect(typeof api.startPlayback).toBe('function');
+			expect(typeof api.stopStreams).toBe('function');
+			expect(typeof api.seekStreams).toBe('function');
+			expect(typeof api.pauseStreams).toBe('function');
+			expect(typeof api.resumeStreams).toBe('function');
+			expect(typeof api.setStreamSpeed).toBe('function');
+			expect(typeof api.captureFrame).toBe('function');
+		});
+
+		it('should return API with correct availability status', async () => {
+			const context = createMockContext();
+
+			const api = await activate(context);
+
+			expect(api.isAvailable).toBe(true);
+			expect(api.port).toBe(9090);
+		});
+
+		it('should handle PreviewService creation failure gracefully', async () => {
+			vi.mocked(PreviewService.tryCreate).mockResolvedValueOnce(null);
+
+			const context = createMockContext();
+			const api = await activate(context);
+
+			// Should still activate and return API, just not available
+			expect(api.isAvailable).toBe(false);
+			expect(api.port).toBeNull();
+		});
+
+		it('should not inject service into providers when creation fails', async () => {
+			vi.mocked(PreviewService.tryCreate).mockResolvedValueOnce(null);
+
+			const context = createMockContext();
+			await activate(context);
+
+			const videoInstance = vi.mocked(VideoPreviewProvider).mock.results[0]?.value;
+			const audioInstance = vi.mocked(AudioPreviewProvider).mock.results[0]?.value;
+
+			expect(videoInstance.setPreviewService).not.toHaveBeenCalled();
+			expect(audioInstance.setPreviewService).not.toHaveBeenCalled();
+		});
+
+		describe('API methods', () => {
+			it('getStreamWebSocketUrl should delegate to PreviewService', async () => {
+				const context = createMockContext();
+				const api = await activate(context);
+
+				const url = api.getStreamWebSocketUrl('stream-abc');
+
+				expect(url).toBe('ws://127.0.0.1:9090/v1/streams/stream-abc');
+			});
+
+			it('probeMedia should reject when service is not available', async () => {
+				vi.mocked(PreviewService.tryCreate).mockResolvedValueOnce(null);
+
+				const context = createMockContext();
+				const api = await activate(context);
+
+				await expect(api.probeMedia('/path/to/file')).rejects.toThrow(
+					'PreviewService not available',
+				);
+			});
+
+			it('stopStreams should resolve even when service is not available', async () => {
+				vi.mocked(PreviewService.tryCreate).mockResolvedValueOnce(null);
+
+				const context = createMockContext();
+				const api = await activate(context);
+
+				await expect(api.stopStreams('v1', 'a1')).resolves.toBeUndefined();
+			});
+		});
+	});
+
+	describe('deactivate()', () => {
+		it('should not throw when called', () => {
+			expect(() => deactivate()).not.toThrow();
+		});
+
+		it('should clean up after activation', async () => {
+			const context = createMockContext();
+			await activate(context);
+
+			expect(() => deactivate()).not.toThrow();
+		});
+	});
+});

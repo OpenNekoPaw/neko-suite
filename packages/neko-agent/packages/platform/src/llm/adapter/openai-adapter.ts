@@ -8,7 +8,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { embed, embedMany, type LanguageModel } from 'ai';
 import { AISdkAdapter } from './ai-sdk-adapter';
-import { BaseAdapter } from './base-adapter';
+import { getHttpClient } from '../../core/http-client';
 import type {
   ChatOptions,
   ImageGenerationOptions,
@@ -137,25 +137,15 @@ export class OpenAIAdapter extends AISdkAdapter {
 
 /**
  * Helper class for OpenAI HTTP operations not supported by AI SDK
+ *
+ * Uses HttpClient directly instead of inheriting BaseAdapter,
+ * since this class only handles image generation and model listing.
  */
-class OpenAIHttpHelper extends BaseAdapter {
-  readonly type = 'openai-helper';
-
+class OpenAIHttpHelper {
   private static readonly DEFAULT_API_URL = 'https://api.openai.com/v1';
   private static readonly ENV_KEY_NAME = 'OPENAI_API_KEY';
 
-  protected getSupportedCapabilities(): string[] {
-    return [];
-  }
-
-  // These are required by BaseAdapter but not used
-  async chat(): Promise<never> {
-    throw new Error('Not implemented');
-  }
-
-  async *chatStream(): AsyncIterable<never> {
-    throw new Error('Not implemented');
-  }
+  private readonly http = getHttpClient();
 
   /**
    * Generate image using OpenAI DALL-E
@@ -166,18 +156,14 @@ class OpenAIHttpHelper extends BaseAdapter {
     model: Model,
     provider: Provider
   ): Promise<ImageGenerationResult> {
-    const { apiKey, apiUrl } = this.getCredentials(
-      provider,
-      OpenAIHttpHelper.ENV_KEY_NAME,
-      OpenAIHttpHelper.DEFAULT_API_URL
-    );
+    const { apiKey, apiUrl } = this.getCredentials(provider);
 
-    const data = await this.httpRequest<{
+    const data = await this.http.request<{
       data: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>;
     }>({
       url: `${apiUrl}/images/generations`,
       method: 'POST',
-      headers: this.buildBearerAuth(apiKey),
+      headers: this.http.buildBearerAuth(apiKey),
       body: {
         model: model.name,
         prompt,
@@ -186,8 +172,7 @@ class OpenAIHttpHelper extends BaseAdapter {
         style: options.style || 'natural',
         n: options.n || 1,
       },
-      errorPrefix: 'OpenAI API error',
-    });
+    }, 'OpenAI API error');
 
     return {
       images: data.data.map((img) => ({
@@ -202,20 +187,26 @@ class OpenAIHttpHelper extends BaseAdapter {
    * List available models with details
    */
   async listModelsDetailed(provider: Provider): Promise<ModelInfo[]> {
-    const { apiKey, apiUrl } = this.getCredentials(
-      provider,
-      OpenAIHttpHelper.ENV_KEY_NAME,
-      OpenAIHttpHelper.DEFAULT_API_URL
-    );
+    const { apiKey, apiUrl } = this.getCredentials(provider);
 
-    const data = await this.httpRequest<{ data: Array<{ id: string; owned_by: string }> }>({
+    const data = await this.http.request<{ data: Array<{ id: string; owned_by: string }> }>({
       url: `${apiUrl}/models`,
       method: 'GET',
-      headers: this.buildBearerAuth(apiKey),
-      errorPrefix: 'OpenAI API error',
-    });
+      headers: this.http.buildBearerAuth(apiKey),
+    }, 'OpenAI API error');
 
     return data.data.map((m) => this.inferModelCapabilities(m.id, m.owned_by));
+  }
+
+  private getCredentials(provider: Provider): { apiKey: string; apiUrl: string } {
+    const apiKey = provider.apiKey || process.env[OpenAIHttpHelper.ENV_KEY_NAME];
+    if (!apiKey) {
+      throw new Error('OpenAI API key not configured');
+    }
+    return {
+      apiKey,
+      apiUrl: provider.apiUrl || OpenAIHttpHelper.DEFAULT_API_URL,
+    };
   }
 
   /**

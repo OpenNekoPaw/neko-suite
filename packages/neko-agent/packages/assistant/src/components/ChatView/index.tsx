@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
-import { Message, ModelOption, ShellExecutionMode, PromptMode, AgentState } from '@/components/types';
+import { Message, ShellExecutionMode, PromptMode, AgentState } from '@/components/types';
+import type { ChatModelOption } from '@neko/shared';
 import { MessageList } from '@/components/ChatView/MessageList';
 import { InputArea, ProjectFile, AttachedFile } from '@/components/ChatView/InputArea';
 import { EmptyState } from '@/components/ChatView/EmptyState';
@@ -21,7 +22,7 @@ interface ChatViewProps {
   isThinking: boolean;
   streamingMessageId: string | null;
   selectedModel: string;
-  availableModels: ModelOption[];
+  availableModels: ChatModelOption[];
   projectFiles?: ProjectFile[];
   executionMode: ShellExecutionMode;
   promptMode: PromptMode;

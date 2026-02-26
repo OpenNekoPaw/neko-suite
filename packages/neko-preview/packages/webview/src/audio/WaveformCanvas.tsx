@@ -32,6 +32,8 @@ export function WaveformCanvas({
 }: WaveformCanvasProps) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
+	/** CSS logical dimensions (independent of DPR) */
+	const logicalSizeRef = useRef({ width: 0, height: 0 });
 
 	// =========================================================================
 	// Drawing
@@ -44,7 +46,9 @@ export function WaveformCanvas({
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
-		const { width, height } = canvas;
+		// Use CSS logical dimensions — the context is already scaled by DPR
+		const { width, height } = logicalSizeRef.current;
+		if (width === 0 || height === 0) return;
 		const centerY = height / 2;
 
 		// Clear
@@ -108,11 +112,17 @@ export function WaveformCanvas({
 			for (const entry of entries) {
 				const { width, height } = entry.contentRect;
 				const dpr = window.devicePixelRatio || 1;
+
+				// Store CSS logical dimensions for draw()
+				logicalSizeRef.current = { width, height };
+
+				// Set physical backing store size
 				canvas.width = width * dpr;
 				canvas.height = height * dpr;
 				canvas.style.width = `${width}px`;
 				canvas.style.height = `${height}px`;
 
+				// Scale context so draw() works in CSS logical coordinates
 				const ctx = canvas.getContext('2d');
 				if (ctx) {
 					ctx.scale(dpr, dpr);
