@@ -1,7 +1,7 @@
 /**
  * Commands Module
  *
- * Unified builtin command system for agent-cli and extension.
+ * Unified builtin command system for cli and extension.
  */
 
 // Types

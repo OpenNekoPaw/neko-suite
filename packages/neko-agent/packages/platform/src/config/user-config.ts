@@ -402,7 +402,7 @@ export class UserConfigManager implements IUserConfigManager {
  * User config manager using file storage (~/.neko/config.json)
  *
  * This implementation reads from and writes to the unified config file,
- * allowing configuration to be shared with agent-cli.
+ * allowing configuration to be shared with cli.
  */
 export class FileUserConfigManager implements IUserConfigManager {
   private stopWatching: (() => void) | null = null;

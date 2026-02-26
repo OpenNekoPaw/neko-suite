@@ -48,8 +48,8 @@ build_ui() {
   echo "🎨 Building canvas..."
   npm -w @neko/canvas run build
 
-  echo "🤖 Building assistant..."
-  npm -w @neko/assistant run build
+  echo "🤖 Building agent webview..."
+  npm -w @neko-agent/webview run build
 }
 
 # Build effects-core

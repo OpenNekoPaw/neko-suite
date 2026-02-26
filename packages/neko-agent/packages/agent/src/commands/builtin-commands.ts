@@ -2,7 +2,7 @@
  * Builtin Commands Definition
  *
  * Defines all builtin slash commands available in the system.
- * These commands are shared between agent-cli and extension.
+ * These commands are shared between cli and extension.
  */
 
 import type { BuiltinCommand } from './types';

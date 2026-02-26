@@ -2,7 +2,7 @@
  * Workspace Configuration Loader
  * Loads configuration from .neko/config.json
  *
- * This is shared with agent-cli for unified configuration.
+ * This is shared with cli for unified configuration.
  * Uses shared configuration module from @neko/shared.
  */
 

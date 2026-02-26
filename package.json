@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "build": "turbo run build",
-    "build:ui": "turbo run build --filter=@neko/webview --filter=@neko/assistant --filter=@neko/canvas --filter=@neko/effects-core",
+    "build:ui": "turbo run build --filter=@neko/webview --filter=@neko-agent/webview --filter=@neko/canvas --filter=@neko/effects-core",
     "build:core": "turbo run compile --filter=neko-engine --filter=neko-tools",
     "build:extensions": "turbo run compile --filter='neko-*'",
     "build:neko-cut": "turbo run compile --filter=neko-cut",
@@ -28,7 +28,7 @@
     "test": "vitest",
     "clean": "turbo run clean && rm -rf .turbo node_modules/.cache",
     "generate:types": "node scripts/proto-gen-ts.mjs",
-    "nekoagent": "pnpm dlx tsx packages/neko-agent/packages/agent-cli/src/cli.ts"
+    "nekoagent": "pnpm dlx tsx packages/neko-agent/packages/cli/src/cli.ts"
   },
   "dependencies": {
     "@img/sharp-wasm32": "^0.34.5",

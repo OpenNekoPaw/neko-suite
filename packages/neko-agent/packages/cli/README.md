@@ -1,4 +1,4 @@
-# @neko/agent-cli
+# @neko/cli
 
 > Neko Suite AI Agent 命令行工具 - 独立运行 AI Agent
 
@@ -21,7 +21,7 @@
 npm install
 
 # 或全局安装（发布后）
-npm install -g @neko/agent-cli
+npm install -g @neko/cli
 ```
 
 ## 使用
@@ -329,7 +329,7 @@ nekoagent config providers         List available providers
 ## Architecture
 
 ```
-agent-cli/
+cli/
 ├── src/
 │   ├── cli.ts            # CLI 入口和命令定义
 │   ├── config.ts         # 配置加载和管理
@@ -344,7 +344,7 @@ agent-cli/
 ## 依赖关系
 
 ```
-agent-cli
+cli
     ├── @neko/agent    # Agent 核心
     └── @neko/shared   # 共享类型
 ```
@@ -353,11 +353,11 @@ agent-cli
 
 ```bash
 # 开发模式运行
-npm -w @neko/agent-cli run dev -- run "test prompt"
+npm -w @neko/cli run dev -- run "test prompt"
 
 # 构建
-npm -w @neko/agent-cli run build
+npm -w @neko/cli run build
 
 # 测试
-npm -w @neko/agent-cli run test
+npm -w @neko/cli run test
 ```

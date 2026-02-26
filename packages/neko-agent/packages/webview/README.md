@@ -1,4 +1,4 @@
-# @neko/assistant
+# @neko-agent/webview
 
 > Neko Suite AI 助手独立 Webview UI，运行在 VSCode 侧边栏 Panel
 
@@ -139,7 +139,7 @@ registry.handle(message, context);
 ## 依赖
 
 ```
-@neko/assistant
+@neko-agent/webview
 ├── @neko/shared      # 共享类型定义
 ├── react / react-dom    # UI 框架
 ├── tailwindcss          # CSS 框架

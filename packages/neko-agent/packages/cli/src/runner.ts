@@ -428,28 +428,18 @@ interface InteractiveSessionState {
   promptBuilder: SystemPromptBuilder;
   inputProcessor: InputProcessor;
   config: CLIConfig;
-}
-
-/** Prompt user for input via readline */
-function askUser(question: string): Promise<string> {
-  const readline = require('node:readline') as typeof import('node:readline');
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stderr, // Use stderr to avoid mixing with agent output
-  });
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim().toLowerCase());
-    });
-  });
+  /** Rebuild LLM service and update session after config change */
+  rebuildService: (newConfig: CLIConfig, service?: IService) => void;
 }
 
 /**
  * Initialize interactive session
+ *
+ * @param rl - Shared readline interface (avoids stdin contention)
  */
 async function initializeInteractiveSession(
   config: CLIConfig,
+  rl: import('node:readline').Interface,
   service?: IService
 ): Promise<InteractiveSessionState> {
   // Track tools the user has approved with "always"
@@ -490,12 +480,24 @@ async function initializeInteractiveSession(
   }
 
   // Create LLM service adapter
-  const llmService = createLLMServiceAdapter(config, service);
+  let llmService = createLLMServiceAdapter(config, service);
 
   // Build system prompt
   const promptBuilder = createSystemPromptBuilder({ locale: 'en' });
   await promptBuilder.loadAgentsFile(config.workDir, getDefaultPersonalPath());
   const systemPrompt = promptBuilder.build();
+
+  // Helper: prompt user for tool confirmation using the shared rl
+  const askToolConfirmation = (question: string): Promise<string> => {
+    return new Promise((resolve) => {
+      process.stderr.write(question);
+      const onLine = (line: string) => {
+        rl.removeListener('line', onLine);
+        resolve(line.trim().toLowerCase());
+      };
+      rl.on('line', onLine);
+    });
+  };
 
   // Create agent session
   const session = createAgentSession({
@@ -512,7 +514,7 @@ async function initializeInteractiveSession(
         return true;
       }
 
-      // Prompt user
+      // Prompt user via shared readline (no stdin contention)
       console.log(`\n[Tool] ${request.toolCall.name}`);
       const argsStr = JSON.stringify(request.toolCall.arguments, null, 2);
       if (argsStr.length < 500) {
@@ -521,7 +523,7 @@ async function initializeInteractiveSession(
         console.log(argsStr.slice(0, 500) + '...');
       }
 
-      const answer = await askUser('Approve? (y)es / (n)o / (a)lways: ');
+      const answer = await askToolConfirmation('Approve? (y)es / (n)o / (a)lways: ');
       if (answer === 'a' || answer === 'always') {
         alwaysAllowedTools.add(request.toolCall.name);
         return true;
@@ -539,6 +541,17 @@ async function initializeInteractiveSession(
     includeLanguageHints: true,
   });
 
+  // Rebuild LLM service and update session config after /model or /config changes
+  const rebuildService = (newConfig: CLIConfig, svc?: IService) => {
+    llmService = createLLMServiceAdapter(newConfig, svc);
+    session.configure({
+      service: llmService,
+      modelId: newConfig.model,
+      temperature: newConfig.temperature,
+      maxTokens: newConfig.maxTokens,
+    });
+  };
+
   return {
     mcpManager,
     toolRegistry,
@@ -547,6 +560,7 @@ async function initializeInteractiveSession(
     promptBuilder,
     inputProcessor,
     config,
+    rebuildService,
   };
 }
 
@@ -570,8 +584,8 @@ export async function runInteractive(
   let state: InteractiveSessionState | null = null;
 
   try {
-    // Initialize session
-    state = await initializeInteractiveSession(sessionConfig, service);
+    // Initialize session (pass shared rl to avoid stdin contention)
+    state = await initializeInteractiveSession(sessionConfig, rl, service);
 
     // Create slash command context
     const slashContext: SlashCommandContext = {
@@ -581,12 +595,13 @@ export async function runInteractive(
       onConfigUpdate: (updates) => {
         sessionConfig = { ...sessionConfig, ...updates };
         slashContext.config = sessionConfig;
+        // Sync config changes to session
+        state!.rebuildService(sessionConfig, service);
       },
     };
 
-    const llmService = createLLMServiceAdapter(sessionConfig, service);
     console.log('NekoAgent CLI - Interactive Mode');
-    console.log(`Provider: ${llmService.getProvider()}, Model: ${llmService.getModel()}`);
+    console.log(`Provider: ${sessionConfig.provider}, Model: ${sessionConfig.model}`);
     console.log('Type /help for commands, /exit to quit.\n');
 
     const prompt = (): void => {
@@ -643,6 +658,8 @@ export async function runInteractive(
             } else {
               sessionConfig = { ...sessionConfig, model: newModel };
               slashContext.config = sessionConfig;
+              // Rebuild LLM service so the model change takes effect
+              state!.rebuildService(sessionConfig, service);
               console.log(`Model switched to: ${newModel}`);
             }
             prompt();

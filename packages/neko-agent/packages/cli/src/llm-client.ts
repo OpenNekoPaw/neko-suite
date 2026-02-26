@@ -265,14 +265,16 @@ class BuiltinLLMClient implements ILLMClient {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       };
+      const systemPrompt = this.extractSystemPrompt(messages);
       body = {
         model,
         max_tokens: maxTokens,
         temperature,
         stream: true,
+        ...(systemPrompt ? { system: systemPrompt } : {}),
         messages: this.formatMessagesForAnthropic(messages),
         ...(options?.tools && options.tools.length > 0
-          ? { tools: this.formatToolsForAnthropic(options.tools) }
+          ? { tools: options.tools }
           : {}),
       };
     } else if (provider === 'openai' || provider === 'deepseek') {
@@ -292,14 +294,14 @@ class BuiltinLLMClient implements ILLMClient {
         stream: true,
         messages: this.formatMessagesForOpenAI(messages),
         ...(options?.tools && options.tools.length > 0
-          ? { tools: this.formatToolsForOpenAI(options.tools) }
+          ? { tools: options.tools }
           : {}),
       };
     } else {
       throw new Error(`Unsupported provider: ${provider}`);
     }
 
-    const response = await fetch(url, {
+    const response = await this.fetchWithRetry(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -527,12 +529,14 @@ class BuiltinLLMClient implements ILLMClient {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       };
+      const systemPrompt = this.extractSystemPrompt(messages);
       body = {
         model,
         max_tokens: maxTokens,
         temperature,
+        ...(systemPrompt ? { system: systemPrompt } : {}),
         messages: this.formatMessagesForAnthropic(messages),
-        ...(tools && tools.length > 0 ? { tools: this.formatToolsForAnthropic(tools) } : {}),
+        ...(tools && tools.length > 0 ? { tools } : {}),
       };
     } else if (provider === 'openai' || provider === 'deepseek') {
       url = baseUrl
@@ -549,7 +553,7 @@ class BuiltinLLMClient implements ILLMClient {
         max_tokens: maxTokens,
         temperature,
         messages: this.formatMessagesForOpenAI(messages),
-        ...(tools && tools.length > 0 ? { tools: this.formatToolsForOpenAI(tools) } : {}),
+        ...(tools && tools.length > 0 ? { tools } : {}),
       };
     } else {
       throw new Error(`Unsupported provider: ${provider}`);
@@ -610,28 +614,85 @@ class BuiltinLLMClient implements ILLMClient {
     throw new Error('Max retries exceeded');
   }
 
+  /**
+   * Extract system prompt from messages (Anthropic uses top-level `system` param)
+   */
+  private extractSystemPrompt(messages: ChatMessage[]): string | undefined {
+    const systemMsgs = messages.filter((m) => m.role === 'system');
+    if (systemMsgs.length === 0) return undefined;
+    return systemMsgs.map((m) => typeof m.content === 'string' ? m.content : '').join('\n\n');
+  }
+
+  /**
+   * Format messages for Anthropic API.
+   * - Strips system messages (handled via top-level `system` param)
+   * - Preserves tool_use / tool_result structure
+   */
   private formatMessagesForAnthropic(messages: ChatMessage[]): unknown[] {
-    return messages.map((m) => ({
-      role: m.role === 'system' ? 'user' : m.role,
-      content: m.content,
-    }));
+    return messages
+      .filter((m) => m.role !== 'system')
+      .map((m) => {
+        if (m.role === 'tool') {
+          // Anthropic expects tool results as role: 'user' with tool_result content block
+          return {
+            role: 'user',
+            content: [{
+              type: 'tool_result',
+              tool_use_id: m.toolCallId ?? '',
+              content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+            }],
+          };
+        }
+        if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
+          // Assistant message with tool calls → content blocks
+          const contentBlocks: unknown[] = [];
+          if (m.content) {
+            contentBlocks.push({ type: 'text', text: m.content });
+          }
+          for (const tc of m.toolCalls) {
+            contentBlocks.push({
+              type: 'tool_use',
+              id: tc.id,
+              name: tc.function.name,
+              input: JSON.parse(tc.function.arguments),
+            });
+          }
+          return { role: 'assistant', content: contentBlocks };
+        }
+        return { role: m.role, content: m.content };
+      });
   }
 
+  /**
+   * Format messages for OpenAI/DeepSeek API.
+   * - Preserves tool_calls on assistant messages
+   * - Preserves tool_call_id on tool messages
+   */
   private formatMessagesForOpenAI(messages: ChatMessage[]): unknown[] {
-    return messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
-  }
-
-  private formatToolsForAnthropic(tools: unknown[]): unknown[] {
-    // Anthropic tool format
-    return tools;
-  }
-
-  private formatToolsForOpenAI(tools: unknown[]): unknown[] {
-    // OpenAI tool format
-    return tools;
+    return messages.map((m) => {
+      if (m.role === 'tool') {
+        return {
+          role: 'tool',
+          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          tool_call_id: m.toolCallId ?? '',
+        };
+      }
+      if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
+        return {
+          role: 'assistant',
+          content: m.content ?? null,
+          tool_calls: m.toolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function',
+            function: {
+              name: tc.function.name,
+              arguments: tc.function.arguments,
+            },
+          })),
+        };
+      }
+      return { role: m.role, content: m.content };
+    });
   }
 
   private parseResponse(
@@ -700,11 +761,15 @@ class BuiltinLLMClient implements ILLMClient {
     };
 
     if (choice?.message?.tool_calls && choice.message.tool_calls.length > 0) {
-      result.toolCalls = choice.message.tool_calls.map((tc) => ({
-        id: tc.id,
-        name: tc.function.name,
-        arguments: JSON.parse(tc.function.arguments) as Record<string, unknown>,
-      }));
+      result.toolCalls = choice.message.tool_calls.map((tc) => {
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
+        } catch {
+          args = { _raw: tc.function.arguments };
+        }
+        return { id: tc.id, name: tc.function.name, arguments: args };
+      });
     }
 
     return result;

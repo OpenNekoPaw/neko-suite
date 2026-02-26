@@ -1,5 +1,5 @@
 /**
- * @neko/agent-cli - CLI for Neko Suite AI Agent
+ * @neko/cli - CLI for Neko Suite AI Agent
  *
  * This package provides a command-line interface for running the Neko Suite AI Agent
  * standalone, without requiring the VSCode extension.
@@ -12,8 +12,8 @@
  * - Multiple LLM provider support (Anthropic, OpenAI, DeepSeek)
  *
  * Usage:
- *   npx @neko/agent-cli run "your prompt"
- *   npx @neko/agent-cli interactive
+ *   npx @neko/cli run "your prompt"
+ *   npx @neko/cli interactive
  */
 
 // Types

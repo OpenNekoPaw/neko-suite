@@ -575,6 +575,23 @@ export function validateConfig(config: CLIConfig): { valid: boolean; errors: str
     );
   }
 
+  if (!config.model) {
+    errors.push('Model is required. Use --model option or configure in config file.');
+  }
+
+  if (config.temperature < 0 || config.temperature > 2) {
+    errors.push(`Temperature must be between 0 and 2, got ${config.temperature}.`);
+  }
+
+  if (!Number.isInteger(config.maxTokens) || config.maxTokens <= 0) {
+    errors.push(`maxTokens must be a positive integer, got ${config.maxTokens}.`);
+  }
+
+  const validFormats = ['text', 'json', 'markdown'];
+  if (!validFormats.includes(config.outputFormat)) {
+    errors.push(`outputFormat must be one of ${validFormats.join(', ')}, got "${config.outputFormat}".`);
+  }
+
   return {
     valid: errors.length === 0,
     errors,

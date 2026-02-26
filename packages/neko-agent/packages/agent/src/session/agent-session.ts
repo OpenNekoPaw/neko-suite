@@ -188,8 +188,12 @@ export class AgentSession implements IAgentSession {
 
   setExecutionMode(mode: ExecutionMode): void {
     this._executionMode = mode;
-    // Reinitialize executor with new mode
-    this._initializeExecutor();
+    // Only update permission hooks mode instead of rebuilding entire executor
+    if (this._permissionHooks) {
+      const permissionMode: PermissionMode = mode === 'plan' ? 'plan'
+        : mode === 'auto' ? 'auto' : 'ask';
+      this._permissionHooks.setMode(permissionMode);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -219,6 +223,9 @@ export class AgentSession implements IAgentSession {
       const maxIterations = this._config.maxIterations ?? DEFAULT_MAX_ITERATIONS;
       let iteration = 0;
 
+      // Add user input to history BEFORE execution (correct ordering)
+      this._history.push({ role: 'user', content: input });
+
       // Execute via AgentExecutor streaming
       for await (const step of this._executor.executeStream(processedInput, {
         messages: [...this._history],
@@ -232,9 +239,6 @@ export class AgentSession implements IAgentSession {
         // Convert step to events
         yield* this._convertStepToEvents(step, ++iteration, maxIterations);
       }
-
-      // Add user input to history (without plan mode reminder)
-      this._history.push({ role: 'user', content: input });
 
       // Emit done event
       const totalTokens = this.getTokenCount();

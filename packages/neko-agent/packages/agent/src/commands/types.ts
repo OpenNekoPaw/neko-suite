@@ -2,7 +2,7 @@
  * Builtin Command Types
  *
  * Defines interfaces for builtin slash commands that are shared
- * between agent-cli and extension.
+ * between cli and extension.
  */
 
 /**

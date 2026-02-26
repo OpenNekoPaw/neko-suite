@@ -143,7 +143,7 @@ interface ConfigSection<T> {
 内置预设（presets/*.json）
 ```
 
-> **注意**：工作区配置目录 `.neko/` 与 agent-cli 共享，实现统一配置管理。
+> **注意**：工作区配置目录 `.neko/` 与 cli 共享，实现统一配置管理。
 
 ## 使用示例
 
