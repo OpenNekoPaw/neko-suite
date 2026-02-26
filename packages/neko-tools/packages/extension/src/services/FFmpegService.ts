@@ -1,12 +1,17 @@
 /**
- * FFmpegService - FFmpeg Integration Service (Stub)
+ * FFmpegService - Media Processing Adapter
  *
- * Provides FFmpeg-based media operations for diff analyzers.
- * Currently delegates to neko-engine's probeMedia when available,
- * with graceful degradation when FFmpeg is not installed.
+ * Adapter layer between diff analyzers and neko-engine's Rust FFmpeg backend.
+ * All media operations delegate to neko-engine via vscode commands:
+ *   - probeMediaInfo  → neko.engine.probeInternal
+ *   - extractVideoFrame → neko.engine.extractFrame
+ *   - decodeAudioSegment → neko.engine.decodeAudio
  *
- * TODO: Full implementation with bundled FFmpeg binary or
- * neko-engine native module integration.
+ * Named "FFmpegService" for historical reasons (analyzers were designed
+ * before neko-engine existed). The class is kept as an adapter to:
+ *   1. Decouple analyzers from vscode command names (testability)
+ *   2. Provide graceful degradation when engine is unavailable
+ *   3. Adapt neko-engine response shapes to analyzer expectations
  */
 
 import * as vscode from 'vscode';
