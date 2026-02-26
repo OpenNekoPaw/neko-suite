@@ -28,7 +28,8 @@ pub use subtitle::{ExtractedSubtitleTrack, SubtitleCue, extract_subtitles};
 pub use timeline_diff::{
     TimelineContentDiff, TimelineChangeType, TimelineDiffSummary,
     TimelineProjectMeta, TrackChange, ElementChange, PropertyChange,
-    diff_timeline_content,
+    TimelineDiffOptions, ElementContentDiff, ElementContentDiffResult,
+    diff_timeline_content, diff_timeline_content_with_options,
 };
 pub use video_diff::{
     FrameMetric, VideoContentDiff, VideoDiffOptions, VideoDiffRegion, diff_video_content,

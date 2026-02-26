@@ -301,6 +301,30 @@ export interface TimelineDiffDetails {
 	};
 	/** Total duration comparison */
 	duration: { current: number; previous: number };
+	/** Per-element content diffs (only when includeContentDiff=true) */
+	elementContentDiffs?: ElementContentDiffDetail[];
+}
+
+/** Content diff result for a single element whose media source changed */
+export interface ElementContentDiffDetail {
+	/** Element ID this diff belongs to */
+	elementId: string;
+	/** Element type (media / audio) */
+	elementType: string;
+	/** Current media source path */
+	currentSrc: string;
+	/** Previous media source path */
+	previousSrc: string;
+	/** Content type: "image" | "audio" | "video" | "error" */
+	contentType: 'image' | 'audio' | 'video' | 'error';
+	/** Image diff (when contentType="image") */
+	imageDiff?: import('../generated/diff.engine').EngineImageContentDiff;
+	/** Audio diff (when contentType="audio") */
+	audioDiff?: import('../generated/diff.engine').EngineAudioContentDiff;
+	/** Video diff (when contentType="video") */
+	videoDiff?: import('../generated/diff.engine').EngineVideoContentDiff;
+	/** Error message (when contentType="error") */
+	errorMessage?: string;
 }
 
 /**

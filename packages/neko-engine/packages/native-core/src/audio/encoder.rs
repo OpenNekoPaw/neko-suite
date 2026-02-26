@@ -108,6 +108,26 @@ impl FfmpegAudioEncoder {
         }
     }
 
+    /// Get codec extradata (e.g. OpusHead for Opus) from the encoder context.
+    /// Must be called after `open()`. Returns None if encoder has no extradata.
+    pub fn get_extradata(&self) -> Option<Vec<u8>> {
+        let encoder = self.encoder.as_ref()?;
+        unsafe {
+            let ctx = encoder.as_ptr();
+            let extradata = (*ctx).extradata;
+            let size = (*ctx).extradata_size as usize;
+            if extradata.is_null() || size == 0 {
+                return None;
+            }
+            let data = std::slice::from_raw_parts(extradata, size).to_vec();
+            tracing::debug!(
+                "Audio encoder extradata: {} bytes",
+                size,
+            );
+            Some(data)
+        }
+    }
+
     /// Receive encoded packets from encoder
     fn receive_packets(&mut self) -> Result<Vec<EncodedAudioPacket>> {
         let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;

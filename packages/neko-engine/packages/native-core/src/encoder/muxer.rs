@@ -92,6 +92,68 @@ impl FfmpegMuxer {
             AudioCodec::Vorbis => ffmpeg::codec::Id::VORBIS,
         }
     }
+
+    /// Set audio stream extradata (e.g. OpusHead for Opus in MP4).
+    /// Must be called after `add_audio_stream()` and before `write_header()`.
+    pub fn set_audio_extradata(&mut self, extradata: &[u8]) -> Result<()> {
+        let output_ctx = self
+            .output_ctx
+            .as_mut()
+            .ok_or(Error::MuxerNotInitialized)?;
+
+        let stream_index = self
+            .audio_stream_index
+            .ok_or_else(|| Error::InvalidParameter("No audio stream added".to_string()))?;
+
+        if self.header_written {
+            return Err(Error::InvalidParameter(
+                "Cannot set extradata after header is written".to_string(),
+            ));
+        }
+
+        unsafe {
+            // Access the stream's codecpar via the raw AVFormatContext pointer
+            let fmt_ctx = output_ctx.as_mut_ptr();
+            if stream_index >= (*fmt_ctx).nb_streams as usize {
+                return Err(Error::InvalidParameter("Audio stream index out of range".to_string()));
+            }
+            let stream_ptr = *(*fmt_ctx).streams.add(stream_index);
+            let params_ptr = (*stream_ptr).codecpar;
+
+            // Free existing extradata if any
+            if !(*params_ptr).extradata.is_null() {
+                ffmpeg::ffi::av_free((*params_ptr).extradata as *mut _);
+                (*params_ptr).extradata = std::ptr::null_mut();
+                (*params_ptr).extradata_size = 0;
+            }
+
+            // Allocate and copy new extradata (av_malloc for FFmpeg-managed memory)
+            let size = extradata.len();
+            let buf = ffmpeg::ffi::av_malloc(size + ffmpeg::ffi::AV_INPUT_BUFFER_PADDING_SIZE as usize)
+                as *mut u8;
+            if buf.is_null() {
+                return Err(Error::Other("Failed to allocate extradata buffer".to_string()));
+            }
+            std::ptr::copy_nonoverlapping(extradata.as_ptr(), buf, size);
+            // Zero padding bytes
+            std::ptr::write_bytes(
+                buf.add(size),
+                0,
+                ffmpeg::ffi::AV_INPUT_BUFFER_PADDING_SIZE as usize,
+            );
+
+            (*params_ptr).extradata = buf;
+            (*params_ptr).extradata_size = size as i32;
+        }
+
+        tracing::info!(
+            "Set audio extradata: {} bytes for stream {}",
+            extradata.len(),
+            stream_index
+        );
+
+        Ok(())
+    }
 }
 
 impl Default for FfmpegMuxer {

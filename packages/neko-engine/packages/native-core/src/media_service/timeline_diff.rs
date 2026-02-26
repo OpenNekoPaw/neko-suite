@@ -1,18 +1,23 @@
-//! Timeline Diff - Structural comparison of two .jvi project files
+//! Timeline Diff - Structural and optional content comparison of two .jvi project files
 //!
 //! Parses two JVI project files and produces a structural diff covering:
 //! - Project metadata (name, resolution, fps)
 //! - Track-level changes (added/removed/modified)
 //! - Element-level changes with property comparison
 //!
-//! This is a pure JSON structural diff — no pixel/waveform content comparison.
+//! When `include_content_diff` is enabled, elements with changed media sources
+//! are additionally compared at the content level (pixel/waveform/frame SSIM).
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
 use crate::error::{Error, Result};
 use crate::jvi::{JviElement, JviTrack, ProjectData};
+
+use super::audio_diff::{diff_audio_content, AudioContentDiff};
+use super::image_diff::{diff_image_content, ImageContentDiff};
+use super::video_diff::{diff_video_content, VideoContentDiff, VideoDiffOptions};
 
 // =============================================================================
 // Types (aligned with diff.proto / EngineTimelineContentDiff)
@@ -95,6 +100,52 @@ pub struct TimelineProjectMeta {
     pub fps: f64,
 }
 
+/// Options for timeline diff
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineDiffOptions {
+    /// When true, run content-level diff (SSIM/PSNR/waveform) on elements
+    /// whose media source changed. Default: false (structural diff only).
+    #[serde(default)]
+    pub include_content_diff: bool,
+
+    /// Base directory for resolving relative media paths in the JVI file.
+    /// If None, paths are resolved relative to the JVI file's parent directory.
+    #[serde(default)]
+    pub base_dir: Option<String>,
+}
+
+/// Content diff result for a single element whose media source changed
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementContentDiff {
+    /// Element ID this diff belongs to
+    pub element_id: String,
+    /// Element type (media / audio)
+    pub element_type: String,
+    /// Current media source path
+    pub current_src: String,
+    /// Previous media source path
+    pub previous_src: String,
+    /// Content diff result (tagged enum)
+    #[serde(flatten)]
+    pub content: ElementContentDiffResult,
+}
+
+/// Tagged content diff result per media type
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase", tag = "contentType")]
+pub enum ElementContentDiffResult {
+    /// Image pixel-level comparison
+    Image { diff: ImageContentDiff },
+    /// Audio waveform comparison
+    Audio { diff: AudioContentDiff },
+    /// Video frame-level comparison
+    Video { diff: VideoContentDiff },
+    /// Content diff failed or source files not found
+    Error { message: String },
+}
+
 /// Timeline content diff result (aligned with EngineTimelineContentDiff)
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -107,14 +158,29 @@ pub struct TimelineContentDiff {
     pub summary: TimelineDiffSummary,
     pub duration_current: f64,
     pub duration_previous: f64,
+    /// Per-element content diffs (only populated when include_content_diff=true)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub element_content_diffs: Vec<ElementContentDiff>,
 }
 
 // =============================================================================
 // Public API
 // =============================================================================
 
-/// Compare two .jvi project files and produce a structural diff.
+/// Compare two .jvi project files and produce a structural diff (no content diff).
 pub fn diff_timeline_content<P: AsRef<Path>>(source_a: P, source_b: P) -> Result<TimelineContentDiff> {
+    diff_timeline_content_with_options(source_a, source_b, &TimelineDiffOptions::default())
+}
+
+/// Compare two .jvi project files with configurable options.
+///
+/// When `options.include_content_diff` is true, elements whose media source
+/// changed will be compared at the content level (SSIM/PSNR/waveform).
+pub fn diff_timeline_content_with_options<P: AsRef<Path>>(
+    source_a: P,
+    source_b: P,
+    options: &TimelineDiffOptions,
+) -> Result<TimelineContentDiff> {
     let path_a = source_a.as_ref();
     let path_b = source_b.as_ref();
 
@@ -128,6 +194,18 @@ pub fn diff_timeline_content<P: AsRef<Path>>(source_a: P, source_b: P) -> Result
 
     let track_changes = diff_tracks(&project_a.tracks, &project_b.tracks);
     let summary = build_summary(&track_changes);
+
+    // Optionally run content-level diffs on elements with changed media sources
+    let element_content_diffs = if options.include_content_diff {
+        let base_dir = options
+            .base_dir
+            .as_deref()
+            .map(Path::new)
+            .or_else(|| path_a.parent());
+        run_element_content_diffs(&track_changes, base_dir)
+    } else {
+        Vec::new()
+    };
 
     Ok(TimelineContentDiff {
         current_project: Some(TimelineProjectMeta {
@@ -146,7 +224,114 @@ pub fn diff_timeline_content<P: AsRef<Path>>(source_a: P, source_b: P) -> Result
         summary,
         duration_current: calc_duration(&project_a.tracks),
         duration_previous: calc_duration(&project_b.tracks),
+        element_content_diffs,
     })
+}
+
+// =============================================================================
+// Element Content Diff (Stage 2: on-demand content comparison)
+// =============================================================================
+
+/// Run content-level diffs on elements whose media source changed.
+fn run_element_content_diffs(
+    track_changes: &[TrackChange],
+    base_dir: Option<&Path>,
+) -> Vec<ElementContentDiff> {
+    let mut results = Vec::new();
+
+    for tc in track_changes {
+        for ec in &tc.element_changes {
+            let (curr_src, prev_src) = match (&ec.src, &ec.previous_src) {
+                (Some(curr), Some(prev)) => (curr.clone(), prev.clone()),
+                _ => continue,
+            };
+
+            // Resolve paths relative to base_dir
+            let curr_path = resolve_media_path(&curr_src, base_dir);
+            let prev_path = resolve_media_path(&prev_src, base_dir);
+
+            let content = if !curr_path.exists() || !prev_path.exists() {
+                let missing = if !curr_path.exists() {
+                    curr_path.display().to_string()
+                } else {
+                    prev_path.display().to_string()
+                };
+                ElementContentDiffResult::Error {
+                    message: format!("Source file not found: {}", missing),
+                }
+            } else {
+                run_single_content_diff(&ec.element_type, &curr_path, &prev_path)
+            };
+
+            results.push(ElementContentDiff {
+                element_id: ec.element_id.clone(),
+                element_type: ec.element_type.clone(),
+                current_src: curr_src,
+                previous_src: prev_src,
+                content,
+            });
+        }
+    }
+
+    results
+}
+
+/// Run content diff for a single element based on its type.
+fn run_single_content_diff(
+    element_type: &str,
+    curr_path: &Path,
+    prev_path: &Path,
+) -> ElementContentDiffResult {
+    match element_type {
+        "audio" => {
+            let sa = curr_path.to_string_lossy();
+            let sb = prev_path.to_string_lossy();
+            match diff_audio_content(&sa, &sb) {
+                Ok(diff) => ElementContentDiffResult::Audio { diff },
+                Err(e) => ElementContentDiffResult::Error {
+                    message: format!("Audio diff failed: {}", e),
+                },
+            }
+        }
+        "media" => {
+            // Determine if image or video by extension
+            let ext = curr_path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tiff") {
+                match diff_image_content(curr_path, prev_path) {
+                    Ok(diff) => ElementContentDiffResult::Image { diff },
+                    Err(e) => ElementContentDiffResult::Error {
+                        message: format!("Image diff failed: {}", e),
+                    },
+                }
+            } else {
+                match diff_video_content(curr_path, prev_path, &VideoDiffOptions::default()) {
+                    Ok(diff) => ElementContentDiffResult::Video { diff },
+                    Err(e) => ElementContentDiffResult::Error {
+                        message: format!("Video diff failed: {}", e),
+                    },
+                }
+            }
+        }
+        _ => ElementContentDiffResult::Error {
+            message: format!("Unsupported element type for content diff: {}", element_type),
+        },
+    }
+}
+
+/// Resolve a media path relative to a base directory.
+fn resolve_media_path(src: &str, base_dir: Option<&Path>) -> std::path::PathBuf {
+    let path = Path::new(src);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else if let Some(base) = base_dir {
+        base.join(path)
+    } else {
+        path.to_path_buf()
+    }
 }
 
 // =============================================================================

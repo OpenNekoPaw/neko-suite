@@ -88,6 +88,7 @@
     <button class="primary" onclick="runDiff('audios')">🔊 Audio Diff</button>
     <button class="primary" onclick="runDiff('videos')">🎬 Video Diff</button>
     <button class="primary" onclick="runDiff('timelines')">🎞️ Timeline Diff</button>
+    <button class="primary" onclick="runDiff('timelines', true)">🎞️+📊 Timeline + Content Diff</button>
     <span style="color:#666">|</span>
     <button class="primary" onclick="runDiff('canvas')">📐 Canvas</button>
     <button class="primary" onclick="runDiff('models')">🧊 Model</button>
@@ -158,7 +159,7 @@ async function dispatch(group, action, options = {}) {
 }
 
 // ─── Diff Runner ───
-async function runDiff(group) {
+async function runDiff(group, includeContentDiff = false) {
   const sourceA = document.getElementById('sourceA').value.trim();
   const sourceB = document.getElementById('sourceB').value.trim();
   if (!sourceA || !sourceB) {
@@ -175,7 +176,12 @@ async function runDiff(group) {
     options.generateDiffVideo = document.getElementById('generateDiffVideo').checked;
   }
 
-  log(`Starting ${group}:diff ...`, 'info');
+  // Timeline content diff option
+  if (group === 'timelines' && includeContentDiff) {
+    options.includeContentDiff = true;
+  }
+
+  log(`Starting ${group}:diff ${includeContentDiff ? '(+content)' : ''}...`, 'info');
   const resp = await dispatch(group, 'diff', options);
 
   if (resp.status !== 'ok' || !resp.data) {
@@ -420,6 +426,44 @@ function renderTimelineDiff(d) {
     }
   } else {
     html += '<div style="color:#50fa7b;margin-top:8px">No structural changes detected.</div>';
+  }
+
+  // Element content diffs (Stage 2)
+  if (d.elementContentDiffs && d.elementContentDiffs.length > 0) {
+    html += '<h3 style="margin-top:16px;color:#f1fa8c">Element Content Diffs</h3>';
+    for (const ecd of d.elementContentDiffs) {
+      html += renderElementContentDiff(ecd);
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function renderElementContentDiff(ecd) {
+  let html = `<div class="track-card" style="border-left:3px solid #f1fa8c">
+    <div style="font-size:13px;margin-bottom:6px">
+      <strong>${escapeHtml(ecd.elementId)}</strong>
+      <span style="color:#666">(${ecd.elementType})</span>
+    </div>
+    <div style="font-size:11px;color:#aaa;margin-bottom:6px">
+      <span style="color:#50fa7b">${escapeHtml(ecd.currentSrc)}</span>
+      ← <span style="color:#ff5555">${escapeHtml(ecd.previousSrc)}</span>
+    </div>`;
+
+  const ct = ecd.contentType;
+  if (ct === 'Image' || ct === 'image') {
+    const d = ecd.diff || ecd.imageDiff;
+    if (d) html += renderImageDiff(d);
+  } else if (ct === 'Audio' || ct === 'audio') {
+    const d = ecd.diff || ecd.audioDiff;
+    if (d) html += renderAudioDiff(d);
+  } else if (ct === 'Video' || ct === 'video') {
+    const d = ecd.diff || ecd.videoDiff;
+    if (d) html += renderVideoDiff(d);
+  } else if (ct === 'Error' || ct === 'error') {
+    const msg = ecd.message || ecd.errorMessage || 'Unknown error';
+    html += `<div style="color:#ff5555;font-size:12px">${escapeHtml(msg)}</div>`;
   }
 
   html += '</div>';

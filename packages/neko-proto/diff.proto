@@ -278,6 +278,22 @@ message TimelineContentDiff {
   // Duration comparison
   double duration_current = 5;
   double duration_previous = 6;
+  // Per-element content diffs (only when includeContentDiff=true)
+  repeated ElementContentDiff element_content_diffs = 7;
+}
+
+// Content diff for a single element whose media source changed
+message ElementContentDiff {
+  string element_id = 1;
+  string element_type = 2;
+  string current_src = 3;
+  string previous_src = 4;
+  // One of the following content diff results
+  string content_type = 5;  // "image" | "audio" | "video" | "error"
+  optional ImageContentDiff image_diff = 6;
+  optional AudioContentDiff audio_diff = 7;
+  optional VideoContentDiff video_diff = 8;
+  optional string error_message = 9;
 }
 
 // =============================================================================

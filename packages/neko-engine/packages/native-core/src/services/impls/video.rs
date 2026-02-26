@@ -664,6 +664,12 @@ impl IVideoService for VideoService {
 
             if let Some(ref aconfig) = audio_config {
                 muxer.add_audio_stream(aconfig)?;
+                // Copy encoder extradata to muxer stream (required for Opus in MP4)
+                if let Some(ref aenc) = audio_encoder {
+                    if let Some(extradata) = aenc.get_extradata() {
+                        muxer.set_audio_extradata(&extradata)?;
+                    }
+                }
             }
             muxer.write_header()?;
 

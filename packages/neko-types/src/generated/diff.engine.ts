@@ -185,6 +185,22 @@ export interface EngineTimelineContentDiff {
   summary?: EngineTimelineDiffSummary;
   durationCurrent: number;
   durationPrevious: number;
+  /** Per-element content diffs (only when includeContentDiff=true) */
+  elementContentDiffs?: EngineElementContentDiff[];
+}
+
+/** Content diff for a single element whose media source changed */
+export interface EngineElementContentDiff {
+  elementId: string;
+  elementType: string;
+  currentSrc: string;
+  previousSrc: string;
+  /** "image" | "audio" | "video" | "error" */
+  contentType: string;
+  imageDiff?: EngineImageContentDiff;
+  audioDiff?: EngineAudioContentDiff;
+  videoDiff?: EngineVideoContentDiff;
+  errorMessage?: string;
 }
 
 export interface EngineDiffResult {

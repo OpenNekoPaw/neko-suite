@@ -6,7 +6,9 @@ use crate::error::{ApiError, ApiResult};
 use crate::registry::StreamRegistry;
 use neko_native_core::domain::{StreamConfig, Timeline};
 use neko_native_core::jvi::JviLoader;
-use neko_native_core::media_service::{diff_media, DiffCategory};
+use neko_native_core::media_service::{
+    diff_media, diff_timeline_content_with_options, DiffCategory, TimelineDiffOptions,
+};
 use neko_native_core::services::{ExportService, IExportService, ITimelineService, TimelineService};
 use neko_types::registry;
 use neko_types::{ActionResponse, Resolution, StreamId};
@@ -83,6 +85,11 @@ struct TimelineDiffRequestOptions {
     source_a: Option<String>,
     /// Source B file path
     source_b: Option<String>,
+    /// Run content-level diff (SSIM/PSNR/waveform) on elements with changed media sources
+    #[serde(default)]
+    include_content_diff: bool,
+    /// Base directory for resolving relative media paths
+    base_dir: Option<String>,
 }
 
 impl Controller for TimelineController {
@@ -347,11 +354,22 @@ impl Controller for TimelineController {
                     ApiError::InvalidRequest("sourceB path required for timelines:diff".to_string())
                 })?;
 
-                let result = diff_media(&source_a, &source_b, DiffCategory::Timeline)
-                    .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
-
-                let response = serde_json::to_value(&result)?;
-                Ok(ActionResponse::ok("", response))
+                // When content diff is requested, use the extended timeline diff directly
+                if opts.include_content_diff {
+                    let tl_opts = TimelineDiffOptions {
+                        include_content_diff: true,
+                        base_dir: opts.base_dir,
+                    };
+                    let result = diff_timeline_content_with_options(&source_a, &source_b, &tl_opts)
+                        .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+                    let response = serde_json::to_value(&result)?;
+                    Ok(ActionResponse::ok("", response))
+                } else {
+                    let result = diff_media(&source_a, &source_b, DiffCategory::Timeline)
+                        .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+                    let response = serde_json::to_value(&result)?;
+                    Ok(ActionResponse::ok("", response))
+                }
             }
             _ => Err(ApiError::UnknownAction {
                 group: "timelines".to_string(),
