@@ -16,6 +16,7 @@ mod image_diff;
 mod jpeg_encoder;
 mod probe;
 mod subtitle;
+mod timeline_diff;
 mod video_diff;
 
 pub use audio_diff::{AudioContentDiff, AudioDiffRegion, diff_audio_content};
@@ -24,6 +25,11 @@ pub use image_diff::{ImageContentDiff, diff_image_content};
 pub use jpeg_encoder::encode_rgba_to_jpeg;
 pub use probe::{MediaInfo, SubtitleStream, probe_media_info};
 pub use subtitle::{ExtractedSubtitleTrack, SubtitleCue, extract_subtitles};
+pub use timeline_diff::{
+    TimelineContentDiff, TimelineChangeType, TimelineDiffSummary,
+    TimelineProjectMeta, TrackChange, ElementChange, PropertyChange,
+    diff_timeline_content,
+};
 pub use video_diff::{
     FrameMetric, VideoContentDiff, VideoDiffOptions, VideoDiffRegion, diff_video_content,
 };

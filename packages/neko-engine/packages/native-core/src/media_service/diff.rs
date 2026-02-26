@@ -9,6 +9,7 @@ use std::path::Path;
 use super::audio_diff::{diff_audio_content, AudioContentDiff};
 use super::image_diff::{diff_image_content, ImageContentDiff};
 use super::probe::{probe_media_info, MediaInfo};
+use super::timeline_diff::{diff_timeline_content, TimelineContentDiff};
 use super::video_diff::{diff_video_content, VideoContentDiff, VideoDiffOptions};
 use crate::error::{Error, Result};
 
@@ -72,6 +73,8 @@ pub enum ContentDiff {
     Audio(AudioContentDiff),
     /// Video frame-level comparison (SSIM/PSNR via FFmpeg)
     Video(VideoContentDiff),
+    /// Timeline structural comparison (JVI project diff)
+    Timeline(TimelineContentDiff),
 }
 
 /// Result of comparing two media files
@@ -118,23 +121,29 @@ pub fn diff_media<P: AsRef<Path>>(
         return Err(Error::FileNotFound(path_b.display().to_string()));
     }
 
-    // Probe both files
-    let info_a = probe_media_info(path_a)?;
-    let info_b = probe_media_info(path_b)?;
+    // Probe both files (skip for non-media categories like Timeline)
+    let (info_a, info_b) = if category == DiffCategory::Timeline {
+        // JVI files are JSON, not media — skip FFmpeg probe
+        (MediaInfo::default(), MediaInfo::default())
+    } else {
+        (probe_media_info(path_a)?, probe_media_info(path_b)?)
+    };
 
     // Build field diffs based on category
     let fields = match category {
         DiffCategory::Video => diff_video_fields(&info_a, &info_b),
         DiffCategory::Audio => diff_audio_fields(&info_a, &info_b),
         DiffCategory::Image => diff_image_fields(&info_a, &info_b),
-        // Timeline, Canvas, Model use full media diff
+        // Timeline uses structural diff, no metadata fields
+        DiffCategory::Timeline => Vec::new(),
+        // Canvas, Model use full media diff
         _ => diff_all_fields(&info_a, &info_b),
     };
 
     let diff_count = fields.iter().filter(|f| f.changed).count();
     let total_fields = fields.len();
 
-    // Content-level diff for image, audio, and video
+    // Content-level diff for image, audio, video, and timeline
     let content = match category {
         DiffCategory::Image => {
             match diff_image_content(path_a, path_b) {
@@ -161,6 +170,15 @@ pub fn diff_media<P: AsRef<Path>>(
                 Ok(video_diff) => Some(ContentDiff::Video(video_diff)),
                 Err(e) => {
                     tracing::warn!("Video content diff failed: {}", e);
+                    None
+                }
+            }
+        }
+        DiffCategory::Timeline => {
+            match diff_timeline_content(path_a, path_b) {
+                Ok(tl_diff) => Some(ContentDiff::Timeline(tl_diff)),
+                Err(e) => {
+                    tracing::warn!("Timeline content diff failed: {}", e);
                     None
                 }
             }
