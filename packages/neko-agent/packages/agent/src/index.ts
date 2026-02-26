@@ -302,6 +302,16 @@ export {
   DeactivateSkillTool,
   GetContextTool,
   createCoreMetaTools,
+  // Core file/system tools
+  ReadTool,
+  WriteTool,
+  BashTool,
+  type BashToolOptions,
+  ListDirectoryTool,
+  GrepTool,
+  type GrepToolOptions,
+  createCoreTools,
+  type CoreToolsOptions,
   // Injection constants
   DEFAULT_INJECTION_CONFIG,
   CORE_TOOLS,

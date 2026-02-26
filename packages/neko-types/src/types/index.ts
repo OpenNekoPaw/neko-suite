@@ -151,5 +151,8 @@ export * from './mediaEngine';
 // Canvas types (infinite canvas editor)
 export * from './canvas';
 
+// Proxy protocol types (video proxy generation and management)
+export * from './proxyProtocol';
+
 // Extension API types (inter-extension communication)
 export * from './extension-api';

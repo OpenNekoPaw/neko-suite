@@ -74,34 +74,43 @@ export class LLMServiceAdapter implements IService {
     messages: ChatMessage[],
     options?: ServiceOptions
   ): AsyncIterable<StreamChunk> {
-    // For now, fall back to non-streaming and emit as single chunk
-    // TODO: Implement proper streaming support
-    const response = await this.chat(messages, options);
-
-    if (response.message.content) {
-      yield {
-        type: 'content',
-        content: typeof response.message.content === 'string'
-          ? response.message.content
-          : '',
-      };
-    }
-
-    if (response.message.toolCalls) {
-      for (const tc of response.message.toolCalls) {
-        yield {
-          type: 'tool_call',
-          toolCall: tc,
-        };
-      }
-    }
-
-    yield {
-      type: 'usage',
-      usage: response.usage,
+    const clientOptions = {
+      maxTokens: options?.maxTokens ?? this._config.maxTokens,
+      temperature: options?.temperature ?? this._config.temperature,
+      tools: options?.tools,
+      signal: options?.signal,
     };
 
-    yield { type: 'done' };
+    for await (const chunk of this._client.chatStream(messages, clientOptions)) {
+      if (chunk.type === 'content') {
+        yield { type: 'content', content: chunk.content };
+      } else if (chunk.type === 'tool_call' && chunk.toolCall) {
+        yield {
+          type: 'tool_call',
+          toolCall: {
+            id: chunk.toolCall.id,
+            type: 'function' as const,
+            function: chunk.toolCall.name
+              ? {
+                  name: chunk.toolCall.name,
+                  arguments: JSON.stringify(chunk.toolCall.arguments ?? {}),
+                }
+              : undefined,
+          },
+        };
+      } else if (chunk.type === 'usage' && chunk.usage) {
+        yield {
+          type: 'usage',
+          usage: {
+            promptTokens: chunk.usage.inputTokens,
+            completionTokens: chunk.usage.outputTokens,
+            totalTokens: chunk.usage.inputTokens + chunk.usage.outputTokens,
+          },
+        };
+      } else if (chunk.type === 'done') {
+        yield { type: 'done' };
+      }
+    }
   }
 
   async embed(_texts: string[]): Promise<{ embeddings: number[][] }> {

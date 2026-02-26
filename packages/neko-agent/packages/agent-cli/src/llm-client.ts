@@ -22,6 +22,14 @@ export interface ILLMClient {
   ): Promise<LLMClientResponse>;
 
   /**
+   * Send chat messages and get streaming response
+   */
+  chatStream(
+    messages: ChatMessage[],
+    options?: LLMClientOptions
+  ): AsyncIterable<LLMClientStreamChunk>;
+
+  /**
    * Get provider name
    */
   getProvider(): string;
@@ -61,6 +69,19 @@ export interface ToolCall {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
+}
+
+/**
+ * Stream chunk from LLM client
+ */
+export interface LLMClientStreamChunk {
+  type: 'content' | 'tool_call' | 'usage' | 'done';
+  content?: string;
+  toolCall?: Partial<ToolCall>;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
 }
 
 /**
@@ -112,6 +133,38 @@ class PlatformLLMClient implements ILLMClient {
 
     const response = await this.service.chat(messages, serviceOptions);
     return this.convertResponse(response);
+  }
+
+  async *chatStream(
+    messages: ChatMessage[],
+    options?: LLMClientOptions
+  ): AsyncIterable<LLMClientStreamChunk> {
+    // Delegate to platform service streaming if available
+    const serviceOptions: ServiceOptions = {
+      model: this.config.model,
+      maxTokens: options?.maxTokens ?? this.config.maxTokens,
+      temperature: options?.temperature ?? this.config.temperature,
+      signal: options?.signal,
+    };
+    if (options?.tools && options.tools.length > 0) {
+      serviceOptions.tools = options.tools as ServiceOptions['tools'];
+    }
+
+    for await (const chunk of this.service.chatStream(messages, serviceOptions)) {
+      yield {
+        type: chunk.type,
+        content: chunk.content,
+        toolCall: chunk.toolCall ? {
+          id: chunk.toolCall.id,
+          name: chunk.toolCall.name,
+          arguments: chunk.toolCall.arguments as Record<string, unknown> | undefined,
+        } : undefined,
+        usage: chunk.usage ? {
+          inputTokens: chunk.usage.promptTokens,
+          outputTokens: chunk.usage.completionTokens,
+        } : undefined,
+      };
+    }
   }
 
   getProvider(): string {
@@ -189,6 +242,265 @@ class BuiltinLLMClient implements ILLMClient {
     return this.config.model;
   }
 
+  async *chatStream(
+    messages: ChatMessage[],
+    options?: LLMClientOptions
+  ): AsyncIterable<LLMClientStreamChunk> {
+    const { provider, model, apiKey, baseUrl } = this.config;
+    const maxTokens = options?.maxTokens ?? this.config.maxTokens;
+    const temperature = options?.temperature ?? this.config.temperature;
+
+    if (!apiKey) {
+      throw new Error('API key is required');
+    }
+
+    let url: string;
+    let headers: Record<string, string>;
+    let body: Record<string, unknown>;
+
+    if (provider === 'anthropic') {
+      url = baseUrl ?? 'https://api.anthropic.com/v1/messages';
+      headers = {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      };
+      body = {
+        model,
+        max_tokens: maxTokens,
+        temperature,
+        stream: true,
+        messages: this.formatMessagesForAnthropic(messages),
+        ...(options?.tools && options.tools.length > 0
+          ? { tools: this.formatToolsForAnthropic(options.tools) }
+          : {}),
+      };
+    } else if (provider === 'openai' || provider === 'deepseek') {
+      url = baseUrl
+        ? `${baseUrl}/v1/chat/completions`
+        : provider === 'deepseek'
+          ? 'https://api.deepseek.com/v1/chat/completions'
+          : 'https://api.openai.com/v1/chat/completions';
+      headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      };
+      body = {
+        model,
+        max_tokens: maxTokens,
+        temperature,
+        stream: true,
+        messages: this.formatMessagesForOpenAI(messages),
+        ...(options?.tools && options.tools.length > 0
+          ? { tools: this.formatToolsForOpenAI(options.tools) }
+          : {}),
+      };
+    } else {
+      throw new Error(`Unsupported provider: ${provider}`);
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: options?.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API error (${response.status}): ${errorText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('No response body for streaming');
+    }
+
+    yield* provider === 'anthropic'
+      ? this.parseAnthropicStream(response.body)
+      : this.parseOpenAIStream(response.body);
+  }
+
+  private async *parseSSELines(
+    body: ReadableStream<Uint8Array>
+  ): AsyncIterable<string> {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            const data = trimmed.slice(6);
+            if (data === '[DONE]') return;
+            yield data;
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  private async *parseAnthropicStream(
+    body: ReadableStream<Uint8Array>
+  ): AsyncIterable<LLMClientStreamChunk> {
+    let inputTokens = 0;
+    let outputTokens = 0;
+    // Track tool use accumulation
+    let currentToolId = '';
+    let currentToolName = '';
+    let currentToolJson = '';
+
+    for await (const data of this.parseSSELines(body)) {
+      let event: Record<string, unknown>;
+      try {
+        event = JSON.parse(data) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+
+      const eventType = event.type as string;
+
+      if (eventType === 'message_start') {
+        const message = event.message as Record<string, unknown> | undefined;
+        const usage = message?.usage as Record<string, number> | undefined;
+        if (usage?.input_tokens) {
+          inputTokens = usage.input_tokens;
+        }
+      } else if (eventType === 'content_block_start') {
+        const block = event.content_block as Record<string, unknown> | undefined;
+        if (block?.type === 'tool_use') {
+          currentToolId = (block.id as string) ?? '';
+          currentToolName = (block.name as string) ?? '';
+          currentToolJson = '';
+        }
+      } else if (eventType === 'content_block_delta') {
+        const delta = event.delta as Record<string, unknown> | undefined;
+        if (delta?.type === 'text_delta') {
+          yield { type: 'content', content: delta.text as string };
+        } else if (delta?.type === 'input_json_delta') {
+          currentToolJson += (delta.partial_json as string) ?? '';
+        }
+      } else if (eventType === 'content_block_stop') {
+        if (currentToolId) {
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(currentToolJson) as Record<string, unknown>;
+          } catch { /* empty */ }
+          yield {
+            type: 'tool_call',
+            toolCall: {
+              id: currentToolId,
+              name: currentToolName,
+              arguments: args,
+            },
+          };
+          currentToolId = '';
+          currentToolName = '';
+          currentToolJson = '';
+        }
+      } else if (eventType === 'message_delta') {
+        const usage = (event.usage as Record<string, number>) ?? {};
+        if (usage.output_tokens) {
+          outputTokens = usage.output_tokens;
+        }
+      } else if (eventType === 'message_stop') {
+        yield {
+          type: 'usage',
+          usage: { inputTokens, outputTokens },
+        };
+        yield { type: 'done' };
+      }
+    }
+  }
+
+  private async *parseOpenAIStream(
+    body: ReadableStream<Uint8Array>
+  ): AsyncIterable<LLMClientStreamChunk> {
+    // Track tool call accumulation
+    const toolCalls = new Map<number, { id: string; name: string; args: string }>();
+
+    for await (const data of this.parseSSELines(body)) {
+      let event: Record<string, unknown>;
+      try {
+        event = JSON.parse(data) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+
+      const choices = event.choices as Array<Record<string, unknown>> | undefined;
+      if (!choices || choices.length === 0) continue;
+
+      const choice = choices[0];
+      if (!choice) continue;
+      const delta = choice.delta as Record<string, unknown> | undefined;
+      if (!delta) continue;
+
+      // Text content
+      if (delta.content) {
+        yield { type: 'content', content: delta.content as string };
+      }
+
+      // Tool calls
+      const tcDeltas = delta.tool_calls as Array<Record<string, unknown>> | undefined;
+      if (tcDeltas) {
+        for (const tc of tcDeltas) {
+          const idx = tc.index as number;
+          const fn = tc.function as Record<string, string> | undefined;
+          if (!toolCalls.has(idx)) {
+            toolCalls.set(idx, {
+              id: (tc.id as string) ?? '',
+              name: fn?.name ?? '',
+              args: '',
+            });
+          }
+          const existing = toolCalls.get(idx)!;
+          if (fn?.arguments) {
+            existing.args += fn.arguments;
+          }
+        }
+      }
+
+      // Finish reason
+      if (choice.finish_reason) {
+        // Emit accumulated tool calls
+        for (const [, tc] of toolCalls) {
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(tc.args) as Record<string, unknown>;
+          } catch { /* empty */ }
+          yield {
+            type: 'tool_call',
+            toolCall: { id: tc.id, name: tc.name, arguments: args },
+          };
+        }
+
+        // Usage from the final chunk
+        const usage = event.usage as Record<string, number> | undefined;
+        if (usage) {
+          yield {
+            type: 'usage',
+            usage: {
+              inputTokens: usage.prompt_tokens ?? 0,
+              outputTokens: usage.completion_tokens ?? 0,
+            },
+          };
+        }
+
+        yield { type: 'done' };
+      }
+    }
+  }
+
   private async callAPI(
     provider: string,
     options: {
@@ -243,7 +555,7 @@ class BuiltinLLMClient implements ILLMClient {
       throw new Error(`Unsupported provider: ${provider}`);
     }
 
-    const response = await fetch(url, {
+    const response = await this.fetchWithRetry(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -257,6 +569,45 @@ class BuiltinLLMClient implements ILLMClient {
 
     const data = (await response.json()) as Record<string, unknown>;
     return this.parseResponse(provider, data);
+  }
+
+  /**
+   * Fetch with exponential backoff retry for transient errors
+   */
+  private async fetchWithRetry(
+    url: string,
+    init: RequestInit,
+    maxRetries = 3
+  ): Promise<Response> {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, init);
+
+        // Retry on rate limit or server errors
+        if (isRetryableStatus(response.status) && attempt < maxRetries) {
+          const delay = Math.min(1000 * 2 ** attempt, 10000);
+          await sleep(delay);
+          continue;
+        }
+
+        return response;
+      } catch (err) {
+        // Retry on network errors, but not on abort
+        if (init.signal?.aborted) throw err;
+        if (attempt === maxRetries) throw err;
+
+        const isNetworkError =
+          err instanceof TypeError || // fetch network error
+          (err instanceof Error && err.message.includes('fetch'));
+        if (!isNetworkError) throw err;
+
+        const delay = Math.min(1000 * 2 ** attempt, 10000);
+        await sleep(delay);
+      }
+    }
+
+    // Should not reach here, but TypeScript needs it
+    throw new Error('Max retries exceeded');
   }
 
   private formatMessagesForAnthropic(messages: ChatMessage[]): unknown[] {
@@ -358,4 +709,14 @@ class BuiltinLLMClient implements ILLMClient {
 
     return result;
   }
+}
+
+/** Check if HTTP status is retryable */
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status === 500 || status === 502 || status === 503;
+}
+
+/** Sleep for given milliseconds */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -37,6 +37,16 @@ export {
   DeactivateSkillTool,
   GetContextTool,
   createCoreMetaTools,
+  // Core file/system tools
+  ReadTool,
+  WriteTool,
+  BashTool,
+  type BashToolOptions,
+  ListDirectoryTool,
+  GrepTool,
+  type GrepToolOptions,
+  createCoreTools,
+  type CoreToolsOptions,
 } from './core';
 
 // Re-export types and constants from shared for convenience

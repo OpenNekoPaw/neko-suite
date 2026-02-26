@@ -9,6 +9,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type {
   AgentResult,
+  AgentStep,
   ExecutorHooks,
   AgentEvent,
 } from '@neko/agent';
@@ -24,12 +25,14 @@ import {
   createSystemPromptBuilder,
   getDefaultPersonalPath,
   createInputProcessor,
+  createCoreTools,
   type ExecutionMode,
   type InputProcessor,
 } from '@neko/agent';
 import type { IService } from '@neko/shared';
 import type { SkillService } from '@neko/agent';
 import type { CLIConfig, RunOptions, CLIResult } from './types';
+import { PROVIDERS } from './types';
 import { createLLMServiceAdapter } from './llm-service-adapter';
 import {
   isSlashCommand,
@@ -89,6 +92,10 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     // Register MCP tools
     const mcpTools = await createAllMCPTools(mcpManager);
     toolRegistry.registerMany(mcpTools);
+
+    // Register core file/system tools
+    const coreTools = createCoreTools({ defaultCwd: config.workDir });
+    toolRegistry.registerMany(coreTools);
 
     // Initialize Skill Service
     if (config.skillsDir) {
@@ -163,18 +170,32 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
 
     // Execute and collect events
     let output = '';
-    let totalTokens = 0;
+    const collector = createEventCollector();
 
-    for await (const event of session.execute(finalPrompt, {
-      workspaceRoot: config.workDir,
-    })) {
-      handleAgentEvent(event, {
-        onOutput,
-        onToolCall,
-        onThinking,
-        onText: (text) => { output += text; },
-        onTokens: (tokens) => { totalTokens += tokens; },
-      });
+    // Wire timeout via AbortController
+    const controller = new AbortController();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    if (runOptions.timeout) {
+      timeoutId = setTimeout(() => controller.abort(), runOptions.timeout);
+    }
+
+    try {
+      for await (const event of session.execute(finalPrompt, {
+        workspaceRoot: config.workDir,
+      })) {
+        if (controller.signal.aborted) {
+          onOutput?.('\n[Timeout] Execution aborted');
+          break;
+        }
+        handleAgentEvent(event, {
+          onOutput,
+          onToolCall,
+          onThinking,
+          onText: (text) => { output += text; },
+        }, collector);
+      }
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
 
     // Cleanup
@@ -184,8 +205,8 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     const result: AgentResult = {
       success: true,
       response: output,
-      steps: [],
-      iterations: 0,
+      steps: collector.steps,
+      iterations: collector.iterations,
       timing: {
         startTime,
         endTime: Date.now(),
@@ -209,6 +230,19 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
 }
 
 /**
+ * Event data collector for building AgentResult
+ */
+interface EventCollector {
+  steps: AgentStep[];
+  iterations: number;
+  totalTokens: number;
+}
+
+function createEventCollector(): EventCollector {
+  return { steps: [], iterations: 0, totalTokens: 0 };
+}
+
+/**
  * Handle agent event
  */
 function handleAgentEvent(
@@ -219,7 +253,8 @@ function handleAgentEvent(
     onThinking?: (thought: string) => void;
     onText?: (text: string) => void;
     onTokens?: (tokens: number) => void;
-  }
+  },
+  collector?: EventCollector
 ): void {
   const { onOutput, onToolCall, onThinking, onText, onTokens } = handlers;
 
@@ -240,12 +275,41 @@ function handleAgentEvent(
     case 'tool_call':
       if (event.toolCall) {
         onToolCall?.(event.toolCall.name, event.toolCall.arguments);
+        collector?.steps.push({
+          type: 'act',
+          content: event.toolCall.name,
+          toolCalls: [{
+            id: event.toolCall.id,
+            name: event.toolCall.name,
+            arguments: event.toolCall.arguments,
+          }],
+        });
+      }
+      break;
+
+    case 'tool_result':
+      if (event.toolResult && collector) {
+        collector.steps.push({
+          type: 'observe',
+          content: event.toolResult.success
+            ? String(event.toolResult.data ?? '')
+            : `Error: ${event.toolResult.error ?? 'unknown'}`,
+        });
+      }
+      break;
+
+    case 'iteration':
+      if (event.iteration && collector) {
+        collector.iterations = event.iteration.current;
       }
       break;
 
     case 'done':
       if (event.usage) {
         onTokens?.(event.usage.totalTokens);
+        if (collector) {
+          collector.totalTokens += event.usage.totalTokens;
+        }
       }
       break;
 
@@ -313,7 +377,7 @@ export async function runAgentWithContext(
 
     // Execute and collect events
     let output = '';
-    let totalTokens = 0;
+    const collector = createEventCollector();
 
     for await (const event of session.execute(finalPrompt, {
       workspaceRoot: config.workDir,
@@ -323,15 +387,14 @@ export async function runAgentWithContext(
         onToolCall,
         onThinking,
         onText: (text) => { output += text; },
-        onTokens: (tokens) => { totalTokens += tokens; },
-      });
+      }, collector);
     }
 
     const result: AgentResult = {
       success: true,
       response: output,
-      steps: [],
-      iterations: 0,
+      steps: collector.steps,
+      iterations: collector.iterations,
       timing: {
         startTime,
         endTime: Date.now(),
@@ -367,6 +430,21 @@ interface InteractiveSessionState {
   config: CLIConfig;
 }
 
+/** Prompt user for input via readline */
+function askUser(question: string): Promise<string> {
+  const readline = require('node:readline') as typeof import('node:readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stderr, // Use stderr to avoid mixing with agent output
+  });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase());
+    });
+  });
+}
+
 /**
  * Initialize interactive session
  */
@@ -374,6 +452,9 @@ async function initializeInteractiveSession(
   config: CLIConfig,
   service?: IService
 ): Promise<InteractiveSessionState> {
+  // Track tools the user has approved with "always"
+  const alwaysAllowedTools = new Set<string>();
+
   // Initialize MCP Manager
   const mcpManager = new MCPManager();
   const toolRegistry = new ToolRegistry();
@@ -390,6 +471,10 @@ async function initializeInteractiveSession(
   // Register MCP tools
   const mcpTools = await createAllMCPTools(mcpManager);
   toolRegistry.registerMany(mcpTools);
+
+  // Register core file/system tools
+  const coreTools = createCoreTools({ defaultCwd: config.workDir });
+  toolRegistry.registerMany(coreTools);
 
   // Initialize Skill Service
   if (config.skillsDir) {
@@ -422,11 +507,26 @@ async function initializeInteractiveSession(
     temperature: config.temperature,
     maxTokens: config.maxTokens,
     onConfirmTool: async (request) => {
-      // In interactive mode, prompt user for confirmation
-      console.log(`\n[Tool Confirmation] ${request.toolCall.name}`);
-      console.log(`Arguments: ${JSON.stringify(request.toolCall.arguments, null, 2)}`);
-      // For now, auto-approve
-      return true;
+      // Check always-allowed set
+      if (alwaysAllowedTools.has(request.toolCall.name)) {
+        return true;
+      }
+
+      // Prompt user
+      console.log(`\n[Tool] ${request.toolCall.name}`);
+      const argsStr = JSON.stringify(request.toolCall.arguments, null, 2);
+      if (argsStr.length < 500) {
+        console.log(argsStr);
+      } else {
+        console.log(argsStr.slice(0, 500) + '...');
+      }
+
+      const answer = await askUser('Approve? (y)es / (n)o / (a)lways: ');
+      if (answer === 'a' || answer === 'always') {
+        alwaysAllowedTools.add(request.toolCall.name);
+        return true;
+      }
+      return answer === 'y' || answer === 'yes';
     },
   });
 
@@ -521,6 +621,30 @@ export async function runInteractive(
             state!.promptBuilder.setMode('default');
             state!.session.setExecutionMode('ask');
             console.log('Switched to ask mode');
+            prompt();
+            return;
+          }
+
+          // Handle /model command
+          if (trimmed.startsWith('/model')) {
+            const newModel = trimmed.slice(6).trim();
+            if (!newModel) {
+              // List available models
+              const provider = PROVIDERS[sessionConfig.provider];
+              if (provider) {
+                console.log(`\nCurrent: ${sessionConfig.model}`);
+                console.log(`Available (${provider.name}):`);
+                for (const m of provider.models) {
+                  console.log(`  ${m === sessionConfig.model ? '* ' : '  '}${m}`);
+                }
+              } else {
+                console.log(`Current model: ${sessionConfig.model}`);
+              }
+            } else {
+              sessionConfig = { ...sessionConfig, model: newModel };
+              slashContext.config = sessionConfig;
+              console.log(`Model switched to: ${newModel}`);
+            }
             prompt();
             return;
           }

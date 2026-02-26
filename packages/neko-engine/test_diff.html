@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Neko Diff Test</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+  h1 { margin-bottom: 16px; font-size: 20px; color: #7ec8e3; }
+  .panel { background: #16213e; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { font-size: 14px; color: #999; margin-bottom: 8px; text-transform: uppercase; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+  button { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  button.primary { background: #0f3460; color: #fff; }
+  button.primary:hover { background: #1a4a7a; }
+  button.danger { background: #8b0000; color: #fff; }
+  button.active { background: #7ec8e3; color: #1a1a2e; }
+  input[type=text] { padding: 6px 10px; border: 1px solid #333; border-radius: 4px; background: #0f3460; color: #eee; font-size: 13px; width: 400px; }
+  input[type=number] { padding: 6px 10px; border: 1px solid #333; border-radius: 4px; background: #0f3460; color: #eee; font-size: 13px; width: 80px; }
+  select { padding: 6px 10px; border: 1px solid #333; border-radius: 4px; background: #0f3460; color: #eee; font-size: 13px; }
+  label { font-size: 13px; color: #aaa; }
+  #log { background: #0a0a1a; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 12px; max-height: 250px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  .log-info { color: #7ec8e3; }
+  .log-ok { color: #50fa7b; }
+  .log-warn { color: #f1fa8c; }
+  .log-err { color: #ff5555; }
+  .result-section { margin-top: 12px; }
+  .result-section h3 { font-size: 13px; color: #7ec8e3; margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 4px 8px; text-align: left; border-bottom: 1px solid #0a0a1a; }
+  th { color: #999; font-weight: normal; }
+  td.changed { color: #ff5555; }
+  td.same { color: #50fa7b; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: bold; }
+  .badge-added { background: #1a4a2e; color: #50fa7b; }
+  .badge-removed { background: #4a1a1a; color: #ff5555; }
+  .badge-modified { background: #4a3a1a; color: #f1fa8c; }
+  .badge-unchanged { background: #1a1a2e; color: #666; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .summary-card { background: #0a0a1a; border-radius: 4px; padding: 8px 12px; text-align: center; }
+  .summary-card .value { font-size: 24px; font-weight: bold; color: #7ec8e3; }
+  .summary-card .label { font-size: 11px; color: #666; margin-top: 2px; }
+  .track-card { background: #0a0a1a; border-radius: 4px; padding: 10px; margin-bottom: 8px; }
+  .track-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .track-name { font-size: 13px; font-weight: bold; }
+  .element-row { display: flex; gap: 8px; align-items: center; padding: 3px 0; font-size: 12px; color: #aaa; border-bottom: 1px solid #16213e; }
+  .element-row:last-child { border-bottom: none; }
+  .prop-change { font-size: 11px; color: #f1fa8c; margin-left: 16px; }
+  .heatmap-container { margin-top: 8px; }
+  .heatmap-container img { max-width: 100%; border-radius: 4px; }
+  .row { display: flex; gap: 16px; }
+  .row > * { flex: 1; }
+  .metric-bar { height: 6px; background: #0a0a1a; border-radius: 3px; margin-top: 4px; overflow: hidden; }
+  .metric-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<h1>🔍 Neko Engine Diff Test</h1>
+
+<!-- Config -->
+<div class="panel">
+  <h2>Configuration</h2>
+  <div class="controls">
+    <label>Server:</label>
+    <input type="text" id="serverUrl" value="http://127.0.0.1:8765">
+  </div>
+  <div class="controls">
+    <label>Source A:</label>
+    <input type="text" id="sourceA" placeholder="/path/to/file_a">
+  </div>
+  <div class="controls">
+    <label>Source B:</label>
+    <input type="text" id="sourceB" placeholder="/path/to/file_b">
+  </div>
+  <div class="controls" style="margin-top:4px">
+    <label style="color:#666">Quick fill:</label>
+    <button class="primary" onclick="fillJviPaths()" style="font-size:11px;padding:3px 8px;">JVI test files</button>
+  </div>
+</div>
+
+<!-- Actions -->
+<div class="panel">
+  <h2>Diff Actions</h2>
+  <div class="controls">
+    <button class="primary" onclick="runDiff('images')">🖼️ Image Diff</button>
+    <button class="primary" onclick="runDiff('audios')">🔊 Audio Diff</button>
+    <button class="primary" onclick="runDiff('videos')">🎬 Video Diff</button>
+    <button class="primary" onclick="runDiff('timelines')">🎞️ Timeline Diff</button>
+    <span style="color:#666">|</span>
+    <button class="primary" onclick="runDiff('canvas')">📐 Canvas</button>
+    <button class="primary" onclick="runDiff('models')">🧊 Model</button>
+  </div>
+  <!-- Video-specific options -->
+  <div id="videoOpts" class="controls hidden">
+    <label>SSIM Threshold:</label>
+    <input type="number" id="ssimThreshold" value="0.95" step="0.01" min="0" max="1">
+    <label><input type="checkbox" id="includeAudio" checked> Include Audio</label>
+    <label><input type="checkbox" id="generateDiffVideo"> Generate Diff Video</label>
+  </div>
+</div>
+
+<!-- Results -->
+<div class="panel" id="resultPanel" style="display:none">
+  <h2>Diff Result</h2>
+  <div id="resultContent"></div>
+</div>
+
+<!-- Log -->
+<div class="panel">
+  <h2>Log <button class="danger" onclick="clearLog()" style="float:right;font-size:11px;padding:2px 8px;">Clear</button></h2>
+  <div id="log"></div>
+</div>
+
+<script>
+// ─── Log ───
+function log(msg, level = 'info') {
+  const el = document.getElementById('log');
+  const ts = new Date().toLocaleTimeString();
+  el.innerHTML += `<span class="log-${level}">[${ts}] ${escapeHtml(msg)}</span>\n`;
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function fillJviPaths() {
+  // Resolve relative to the HTML file location (neko-engine root)
+  const base = '/Users/zhangfeng144/Git/neko-suite/packages/neko-engine/tests/cases';
+  document.getElementById('sourceA').value = `${base}/test.jvi`;
+  document.getElementById('sourceB').value = `${base}/test_modified.jvi`;
+  log('Filled JVI test paths', 'ok');
+}
+
+// ─── HTTP ───
+function serverUrl() { return document.getElementById('serverUrl').value.replace(/\/$/, ''); }
+
+async function dispatch(group, action, options = {}) {
+  const url = `${serverUrl()}/v1/dispatch`;
+  const reqBody = { group, action, options };
+  log(`→ ${group}:${action} ${JSON.stringify(options).slice(0, 200)}`);
+  const t0 = performance.now();
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(reqBody),
+  });
+  const data = await resp.json();
+  const ms = (performance.now() - t0).toFixed(0);
+  if (data.status === 'ok') {
+    log(`← OK (${ms}ms)`, 'ok');
+  } else {
+    log(`← ERROR (${ms}ms): ${JSON.stringify(data.error || data)}`, 'err');
+  }
+  return data;
+}
+
+// ─── Diff Runner ───
+async function runDiff(group) {
+  const sourceA = document.getElementById('sourceA').value.trim();
+  const sourceB = document.getElementById('sourceB').value.trim();
+  if (!sourceA || !sourceB) {
+    log('Please provide both Source A and Source B paths', 'err');
+    return;
+  }
+
+  const options = { sourceA, sourceB };
+
+  // Video-specific options
+  if (group === 'videos') {
+    options.ssimThreshold = parseFloat(document.getElementById('ssimThreshold').value);
+    options.includeAudio = document.getElementById('includeAudio').checked;
+    options.generateDiffVideo = document.getElementById('generateDiffVideo').checked;
+  }
+
+  log(`Starting ${group}:diff ...`, 'info');
+  const resp = await dispatch(group, 'diff', options);
+
+  if (resp.status !== 'ok' || !resp.data) {
+    document.getElementById('resultPanel').style.display = 'none';
+    return;
+  }
+
+  renderResult(resp.data, group);
+}
+
+// Show/hide video options on hover
+document.querySelectorAll('button.primary').forEach(btn => {
+  btn.addEventListener('mouseenter', () => {
+    const isVideo = btn.textContent.includes('Video');
+    document.getElementById('videoOpts').classList.toggle('hidden', !isVideo);
+  });
+});
+
+// ─── Result Rendering ───
+function renderResult(data, group) {
+  const panel = document.getElementById('resultPanel');
+  const content = document.getElementById('resultContent');
+  panel.style.display = 'block';
+
+  let html = '';
+
+  // Overview summary cards
+  html += '<div class="summary-grid">';
+  html += summaryCard(data.category, 'Category');
+  html += summaryCard(data.identical ? '✓ Yes' : '✗ No', 'Identical');
+  html += summaryCard(`${data.diffCount} / ${data.totalFields}`, 'Changed / Total');
+  html += '</div>';
+
+  // Field diffs table
+  if (data.fields && data.fields.length > 0) {
+    html += renderFieldDiffs(data.fields);
+  }
+
+  // Content-level diff
+  if (data.content) {
+    html += renderContentDiff(data.content, group);
+  }
+
+  // Raw JSON toggle
+  html += `<div class="result-section">
+    <h3><button class="primary" onclick="toggleRaw()" style="font-size:11px;padding:2px 8px;">Toggle Raw JSON</button></h3>
+    <pre id="rawJson" style="display:none;background:#0a0a1a;padding:10px;border-radius:4px;font-size:11px;max-height:400px;overflow:auto;">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
+  </div>`;
+
+  content.innerHTML = html;
+}
+
+function summaryCard(value, label) {
+  return `<div class="summary-card"><div class="value">${value}</div><div class="label">${label}</div></div>`;
+}
+
+function toggleRaw() {
+  const el = document.getElementById('rawJson');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+// ─── Field Diffs ───
+function renderFieldDiffs(fields) {
+  let html = '<div class="result-section"><h3>Field Comparison</h3><table>';
+  html += '<tr><th>Field</th><th>Source A</th><th>Source B</th><th>Status</th></tr>';
+  for (const f of fields) {
+    const cls = f.changed ? 'changed' : 'same';
+    const status = f.changed ? '≠' : '=';
+    html += `<tr>
+      <td>${f.field}</td>
+      <td class="${cls}">${formatValue(f.valueA)}</td>
+      <td class="${cls}">${formatValue(f.valueB)}</td>
+      <td class="${cls}">${status}</td>
+    </tr>`;
+  }
+  html += '</table></div>';
+  return html;
+}
+
+function formatValue(v) {
+  if (v === null || v === undefined) return '<span style="color:#666">null</span>';
+  if (typeof v === 'number') return Number.isInteger(v) ? v : v.toFixed(4);
+  return escapeHtml(String(v));
+}
+
+// ─── Content Diff ───
+function renderContentDiff(content, group) {
+  // ContentDiff is tagged enum: { type: "Image"|"Audio"|"Video"|"Timeline", ...fields }
+  const type = content.type;
+  if (type === 'Image') return renderImageDiff(content);
+  if (type === 'Audio') return renderAudioDiff(content);
+  if (type === 'Video') return renderVideoDiff(content);
+  if (type === 'Timeline') return renderTimelineDiff(content);
+  return `<div class="result-section"><h3>Content Diff (${type})</h3><pre>${escapeHtml(JSON.stringify(content, null, 2))}</pre></div>`;
+}
+
+// ─── Image Content Diff ───
+function renderImageDiff(d) {
+  let html = '<div class="result-section"><h3>Image Content Diff</h3>';
+  html += '<div class="summary-grid">';
+  html += summaryCard(d.ssim.toFixed(4), 'SSIM');
+  html += summaryCard(d.psnr.toFixed(2) + ' dB', 'PSNR');
+  html += summaryCard((d.diffPixelPercent * 100).toFixed(2) + '%', 'Diff Pixels');
+  html += summaryCard(`${d.widthA}×${d.heightA}`, 'Size A');
+  html += summaryCard(`${d.widthB}×${d.heightB}`, 'Size B');
+  html += '</div>';
+
+  // SSIM bar
+  html += metricBar('SSIM', d.ssim, ssimColor(d.ssim));
+
+  // Heatmap
+  if (d.heatmap) {
+    html += `<div class="heatmap-container">
+      <h3 style="margin-top:8px">Heatmap (${d.heatmapWidth}×${d.heatmapHeight})</h3>
+      <img src="data:image/png;base64,${d.heatmap}" alt="Diff heatmap">
+    </div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+// ─── Audio Content Diff ───
+function renderAudioDiff(d) {
+  let html = '<div class="result-section"><h3>Audio Content Diff</h3>';
+  html += '<div class="summary-grid">';
+  html += summaryCard(d.snr.toFixed(2) + ' dB', 'SNR');
+  html += summaryCard(d.durationA.toFixed(2) + 's', 'Duration A');
+  html += summaryCard(d.durationB.toFixed(2) + 's', 'Duration B');
+  html += summaryCard((d.diffPercent * 100).toFixed(1) + '%', 'Diff %');
+  html += summaryCard(`${d.diffSegmentCount}/${d.totalSegments}`, 'Diff Segments');
+  html += '</div>';
+
+  // Diff regions
+  if (d.diffRegions && d.diffRegions.length > 0) {
+    html += '<table><tr><th>Start</th><th>End</th><th>SNR</th><th>RMS Diff</th></tr>';
+    for (const r of d.diffRegions) {
+      html += `<tr><td>${r.start.toFixed(2)}s</td><td>${r.end.toFixed(2)}s</td><td>${r.snr.toFixed(2)}</td><td>${r.rmsDiff.toFixed(4)}</td></tr>`;
+    }
+    html += '</table>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// ─── Video Content Diff ───
+function renderVideoDiff(d) {
+  let html = '<div class="result-section"><h3>Video Content Diff</h3>';
+  html += '<div class="summary-grid">';
+  html += summaryCard(d.avgSsim.toFixed(4), 'Avg SSIM');
+  html += summaryCard(d.minSsim.toFixed(4), 'Min SSIM');
+  html += summaryCard(d.avgPsnr.toFixed(2) + ' dB', 'Avg PSNR');
+  html += summaryCard((d.diffFramePercent * 100).toFixed(1) + '%', 'Diff Frames');
+  html += summaryCard(d.totalFramesCompared, 'Total Frames');
+  html += '</div>';
+
+  html += '<div class="row">';
+  html += `<div><strong>Source A:</strong> ${d.widthA}×${d.heightA} @ ${d.fpsA.toFixed(2)}fps, ${d.durationA.toFixed(2)}s</div>`;
+  html += `<div><strong>Source B:</strong> ${d.widthB}×${d.heightB} @ ${d.fpsB.toFixed(2)}fps, ${d.durationB.toFixed(2)}s</div>`;
+  html += '</div>';
+
+  // SSIM bar
+  html += metricBar('Avg SSIM', d.avgSsim, ssimColor(d.avgSsim));
+
+  // Diff regions
+  if (d.diffRegions && d.diffRegions.length > 0) {
+    html += '<div style="margin-top:8px"><h3>Diff Regions</h3>';
+    html += '<table><tr><th>Start</th><th>End</th><th>Avg SSIM</th><th>Min SSIM</th><th>Frames</th></tr>';
+    for (const r of d.diffRegions) {
+      html += `<tr>
+        <td>${r.start.toFixed(2)}s</td><td>${r.end.toFixed(2)}s</td>
+        <td>${r.avgSsim.toFixed(4)}</td><td>${r.minSsim.toFixed(4)}</td>
+        <td>${r.frameCount}</td>
+      </tr>`;
+    }
+    html += '</table></div>';
+  }
+
+  // Frame metrics chart (simple ASCII-style)
+  if (d.frameMetrics && d.frameMetrics.length > 0) {
+    html += renderFrameMetricsChart(d.frameMetrics);
+  }
+
+  // Audio sub-diff
+  if (d.audioDiff) {
+    html += '<div style="margin-top:12px;padding-top:8px;border-top:1px solid #333">';
+    html += renderAudioDiff(d.audioDiff);
+    html += '</div>';
+  }
+
+  if (d.diffVideoPath) {
+    html += `<div style="margin-top:8px;color:#7ec8e3">Diff video: ${escapeHtml(d.diffVideoPath)}</div>`;
+  }
+
+  html += '</div>';
+  return html;
+}
+
+
+// ─── Timeline Content Diff ───
+function renderTimelineDiff(d) {
+  let html = '<div class="result-section"><h3>Timeline Structural Diff</h3>';
+
+  // Project metadata comparison
+  if (d.currentProject && d.previousProject) {
+    const cp = d.currentProject;
+    const pp = d.previousProject;
+    html += '<div class="summary-grid">';
+    html += summaryCard(cp.name || 'Untitled', 'Current');
+    html += summaryCard(pp.name || 'Untitled', 'Previous');
+    html += summaryCard(`${cp.resolutionWidth}×${cp.resolutionHeight}`, 'Res (Current)');
+    html += summaryCard(`${pp.resolutionWidth}×${pp.resolutionHeight}`, 'Res (Previous)');
+    html += summaryCard(cp.fps, 'FPS (Current)');
+    html += summaryCard(pp.fps, 'FPS (Previous)');
+    html += '</div>';
+  }
+
+  // Duration
+  html += `<div style="font-size:13px;color:#aaa;margin-bottom:8px">
+    Duration: <span style="color:#7ec8e3">${d.durationCurrent.toFixed(2)}s</span> (current)
+    vs <span style="color:#7ec8e3">${d.durationPrevious.toFixed(2)}s</span> (previous)
+  </div>`;
+
+  // Summary
+  if (d.summary) {
+    const s = d.summary;
+    html += '<div class="summary-grid">';
+    html += summaryCard(`+${s.tracksAdded}`, 'Tracks Added');
+    html += summaryCard(`-${s.tracksRemoved}`, 'Tracks Removed');
+    html += summaryCard(`~${s.tracksModified}`, 'Tracks Modified');
+    html += summaryCard(`+${s.elementsAdded}`, 'Elements Added');
+    html += summaryCard(`-${s.elementsRemoved}`, 'Elements Removed');
+    html += summaryCard(`~${s.elementsModified}`, 'Elements Modified');
+    html += summaryCard(s.mediaSourceChanges, 'Source Changes');
+    html += '</div>';
+  }
+
+  // Track changes
+  if (d.trackChanges && d.trackChanges.length > 0) {
+    html += '<h3 style="margin-top:12px">Track Changes</h3>';
+    for (const tc of d.trackChanges) {
+      html += renderTrackChange(tc);
+    }
+  } else {
+    html += '<div style="color:#50fa7b;margin-top:8px">No structural changes detected.</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function renderTrackChange(tc) {
+  const badge = changeBadge(tc.changeType);
+  let html = `<div class="track-card">
+    <div class="track-header">
+      <span class="track-name">${escapeHtml(tc.trackName)} <span style="color:#666">(${tc.trackType})</span></span>
+      ${badge}
+    </div>`;
+
+  // Track property changes
+  if (tc.propertyChanges && tc.propertyChanges.length > 0) {
+    for (const pc of tc.propertyChanges) {
+      html += `<div class="prop-change">
+        <strong>${pc.property}:</strong>
+        <span style="color:#ff5555">${formatValue(pc.previous)}</span> →
+        <span style="color:#50fa7b">${formatValue(pc.current)}</span>
+      </div>`;
+    }
+  }
+
+  // Element changes
+  if (tc.elementChanges && tc.elementChanges.length > 0) {
+    for (const ec of tc.elementChanges) {
+      html += renderElementChange(ec);
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function renderElementChange(ec) {
+  const badge = changeBadge(ec.changeType);
+  let html = `<div class="element-row">
+    ${badge}
+    <span>${escapeHtml(ec.elementName)}</span>
+    <span style="color:#666">${ec.elementType}</span>`;
+
+  if (ec.startTime != null) {
+    html += `<span style="color:#666">${ec.startTime.toFixed(2)}s`;
+    if (ec.duration != null) html += ` (${ec.duration.toFixed(2)}s)`;
+    html += '</span>';
+  }
+  if (ec.src) {
+    html += `<span style="color:#7ec8e3;font-size:11px">${escapeHtml(ec.src)}</span>`;
+  }
+  if (ec.previousSrc) {
+    html += `<span style="color:#ff5555;font-size:11px">← ${escapeHtml(ec.previousSrc)}</span>`;
+  }
+  html += '</div>';
+
+  // Element property changes
+  if (ec.propertyChanges && ec.propertyChanges.length > 0) {
+    for (const pc of ec.propertyChanges) {
+      html += `<div class="prop-change">
+        <strong>${pc.property}:</strong>
+        <span style="color:#ff5555">${formatValue(pc.previous)}</span> →
+        <span style="color:#50fa7b">${formatValue(pc.current)}</span>
+      </div>`;
+    }
+  }
+
+  return html;
+}
+
+// ─── Helpers ───
+function changeBadge(type) {
+  const cls = { added: 'badge-added', removed: 'badge-removed', modified: 'badge-modified', moved: 'badge-modified', unchanged: 'badge-unchanged' };
+  return `<span class="badge ${cls[type] || 'badge-unchanged'}">${type}</span>`;
+}
+
+function metricBar(label, value, color) {
+  const pct = Math.max(0, Math.min(100, value * 100));
+  return `<div style="margin-top:6px;font-size:12px;color:#aaa">
+    ${label}: <span style="color:${color}">${value.toFixed(4)}</span>
+    <div class="metric-bar"><div class="metric-fill" style="width:${pct}%;background:${color}"></div></div>
+  </div>`;
+}
+
+function ssimColor(v) {
+  if (v >= 0.95) return '#50fa7b';
+  if (v >= 0.8) return '#f1fa8c';
+  return '#ff5555';
+}
+
+function renderFrameMetricsChart(metrics) {
+  if (metrics.length === 0) return '';
+  const W = 600, H = 80;
+  let html = `<div style="margin-top:12px"><h3>Frame SSIM</h3>
+    <svg width="${W}" height="${H}" style="background:#0a0a1a;border-radius:4px">`;
+
+  const maxFrame = metrics.length;
+  for (let i = 0; i < metrics.length; i++) {
+    const m = metrics[i];
+    const x = (i / maxFrame) * W;
+    const barH = m.ssim * H;
+    const color = ssimColor(m.ssim);
+    html += `<rect x="${x}" y="${H - barH}" width="${Math.max(1, W / maxFrame - 0.5)}" height="${barH}" fill="${color}" opacity="0.7">
+      <title>Frame ${m.frame}: SSIM=${m.ssim.toFixed(4)} PSNR=${m.psnr.toFixed(2)}</title>
+    </rect>`;
+  }
+
+  // Threshold line at 0.95
+  const thY = H - 0.95 * H;
+  html += `<line x1="0" y1="${thY}" x2="${W}" y2="${thY}" stroke="#ff5555" stroke-dasharray="4" opacity="0.5"/>`;
+  html += `<text x="4" y="${thY - 2}" fill="#ff5555" font-size="9">0.95</text>`;
+
+  html += '</svg></div>';
+  return html;
+}
+</script>
+</body>
+</html>

@@ -64,6 +64,8 @@ function createProgram(): Command {
     .option('-m, --model <model>', 'Model ID')
     .option('-k, --api-key <key>', 'API key')
     .option('-v, --verbose', 'Verbose output')
+    .option('--resume [id]', 'Resume a previous session (latest if no id)')
+    .option('--continue', 'Continue the most recent session')
     .action(async (options: Record<string, unknown>) => {
       await handleInteractive(options);
     });

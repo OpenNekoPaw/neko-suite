@@ -9,6 +9,12 @@
  * Performance strategy:
  * - Structure diff is pure JSON comparison (fast, <50ms)
  * - Content diff (pixel-level) is deferred to user interaction (lazy)
+ *
+ * Type alignment:
+ * - Output types (TrackChange, ElementChange, etc.) are Protocol types from mediaDiffProtocol.ts
+ * - Protocol types are aligned with Engine types (EngineTrackChange, etc.) from diff.proto
+ * - Local JVI types mirror Rust jvi::types (JviTrack, JviElement variants)
+ * - Property comparison list matches Rust timeline_diff::diff_element_props
  */
 
 import type {
@@ -23,7 +29,7 @@ import type {
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 
 // =============================================================================
-// JVI Types (minimal, for parsing)
+// JVI Types (aligned with Rust jvi::types)
 // =============================================================================
 
 interface JviProject {
@@ -35,6 +41,7 @@ interface JviProject {
 	defaults?: Record<string, unknown>;
 }
 
+/** Mirrors Rust JviTrack — includes locked/hidden/solo fields */
 interface JviTrack {
 	id: string;
 	name: string;
@@ -42,8 +49,12 @@ interface JviTrack {
 	elements: JviElement[];
 	muted: boolean;
 	isMain?: boolean;
+	locked?: boolean;
+	hidden?: boolean;
+	solo?: boolean;
 }
 
+/** Flat union of all JVI element variants for JSON parsing */
 interface JviElement {
 	id: string;
 	type: string;
@@ -53,11 +64,21 @@ interface JviElement {
 	startTime: number;
 	trimStart?: number;
 	trimEnd?: number;
-	transform?: Record<string, number>;
-	text?: string;
+	// Visual properties (aligned with Rust diff_element_props comparison list)
+	content?: string;
 	fontSize?: number;
 	fontFamily?: string;
 	color?: string;
+	backgroundColor?: string;
+	textAlign?: string;
+	fontWeight?: string;
+	fontStyle?: string;
+	muted?: boolean;
+	hidden?: boolean;
+	locked?: boolean;
+	opacity?: number;
+	blendMode?: string;
+	transform?: Record<string, number>;
 	animations?: unknown[];
 }
 
@@ -245,6 +266,21 @@ export class TimelineDiffAnalyzer extends BaseMediaDiffAnalyzer {
 				current: current.muted,
 			});
 		}
+		// Aligned with Rust diff_track_props
+		if (current.locked !== previous.locked) {
+			changes.push({
+				property: 'locked',
+				previous: previous.locked,
+				current: current.locked,
+			});
+		}
+		if (current.hidden !== previous.hidden) {
+			changes.push({
+				property: 'hidden',
+				previous: previous.hidden,
+				current: current.hidden,
+			});
+		}
 		return changes;
 	}
 
@@ -315,16 +351,26 @@ export class TimelineDiffAnalyzer extends BaseMediaDiffAnalyzer {
 		previous: JviElement
 	): PropertyChange[] {
 		const changes: PropertyChange[] = [];
+		// Property list aligned with Rust timeline_diff::diff_element_props
 		const keys: (keyof JviElement)[] = [
 			'src',
 			'duration',
 			'startTime',
 			'trimStart',
 			'trimEnd',
-			'text',
+			'content',
 			'fontSize',
 			'fontFamily',
 			'color',
+			'backgroundColor',
+			'textAlign',
+			'fontWeight',
+			'fontStyle',
+			'muted',
+			'hidden',
+			'locked',
+			'opacity',
+			'blendMode',
 		];
 
 		for (const key of keys) {

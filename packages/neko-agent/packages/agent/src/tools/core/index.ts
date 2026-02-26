@@ -6,6 +6,9 @@
  * - activateSkill: Activate a skill to gain access to its tools
  * - deactivateSkill: Deactivate a skill to free up context
  * - getContext: Get current context information
+ *
+ * And core file/system tools:
+ * - Read, Write, Bash, ListDirectory, Grep
  */
 
 export {
@@ -15,3 +18,11 @@ export {
   GetContextTool,
   createCoreMetaTools,
 } from './meta-tools';
+
+// Core file/system tools
+export { ReadTool } from './read-tool';
+export { WriteTool } from './write-tool';
+export { BashTool, type BashToolOptions } from './bash-tool';
+export { ListDirectoryTool } from './list-directory-tool';
+export { GrepTool, type GrepToolOptions } from './grep-tool';
+export { createCoreTools, type CoreToolsOptions } from './core-tools';

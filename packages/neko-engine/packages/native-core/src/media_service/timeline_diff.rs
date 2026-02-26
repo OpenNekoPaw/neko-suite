@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::error::{Error, Result};
-use crate::jvi::types::{JviElement, JviTrack, ProjectData};
+use crate::jvi::{JviElement, JviTrack, ProjectData};
 
 // =============================================================================
 // Types (aligned with diff.proto / EngineTimelineContentDiff)
@@ -458,7 +458,7 @@ mod tests {
         ProjectData {
             version: "1.0".to_string(),
             name: name.to_string(),
-            resolution: crate::jvi::types::Resolution { width: 1920, height: 1080 },
+            resolution: crate::jvi::Resolution { width: 1920, height: 1080 },
             fps: 30.0,
             tracks,
             defaults: None,
