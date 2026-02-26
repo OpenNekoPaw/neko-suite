@@ -9,6 +9,7 @@ import type {
   ImageDiffDetails,
   VideoDiffDetails,
   AudioDiffDetails,
+  MediaType,
 } from '@neko/shared';
 
 // =============================================================================
@@ -115,7 +116,7 @@ export interface DiffControlsProps {
   /** Similarity score (0-1) */
   similarity?: number;
   /** Media type being compared */
-  mediaType: 'image' | 'video' | 'audio';
+  mediaType: MediaType;
   /** Whether the diff is loading */
   isLoading?: boolean;
   /** Zoom controls (for image) */

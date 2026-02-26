@@ -92,7 +92,7 @@ export abstract class BaseConfigSection<T extends ConfigItem> {
    * Get enabled items
    */
   getEnabled(): T[] {
-    return this.getAll().filter((item) => item.enabled);
+    return this.getAll().filter((item) => item.enabled !== false);
   }
 
   /**

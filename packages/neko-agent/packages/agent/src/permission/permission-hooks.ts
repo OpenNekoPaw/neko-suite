@@ -165,7 +165,7 @@ export class PermissionHooks implements ExecutorHooks {
   async onToolCall(
     info: ToolCallInfo,
     execute: () => Promise<ToolResult>
-  ): Promise<ToolResultWithMeta> {
+  ): Promise<ToolResultWithMeta | null> {
     // Check permission
     const result = this.matcher.check(info);
 
@@ -189,27 +189,18 @@ export class PermissionHooks implements ExecutorHooks {
         };
 
       case 'allow':
-        // Tool is allowed - execute directly
+        // Tool is allowed - return null to let subsequent hooks (e.g. RetryHooks) handle execution
         this.onToolAllowed?.(info, result.reason);
-        const allowResult = await execute();
-        return {
-          ...allowResult,
-          callId: info.id,
-          name: info.name,
-        };
+        return null;
 
-      case 'ask':
+      case 'ask': {
         // Tool requires confirmation
         const approved = await this.requestConfirmation(info);
 
         if (approved) {
+          // Approved - return null to let subsequent hooks handle execution
           this.onToolAllowed?.(info, 'User approved');
-          const askResult = await execute();
-          return {
-            ...askResult,
-            callId: info.id,
-            name: info.name,
-          };
+          return null;
         } else {
           this.onToolDenied?.(info, 'User denied');
           return {
@@ -219,15 +210,11 @@ export class PermissionHooks implements ExecutorHooks {
             name: info.name,
           };
         }
+      }
 
       default:
-        // Should not reach here
-        const defaultResult = await execute();
-        return {
-          ...defaultResult,
-          callId: info.id,
-          name: info.name,
-        };
+        // Should not reach here - let subsequent hooks handle
+        return null;
     }
   }
 
@@ -274,17 +261,22 @@ export class PermissionHooks implements ExecutorHooks {
     // Otherwise, wait for external confirmation via confirmTool()
     console.log('[PermissionHooks] Waiting for external confirmation via confirmTool()');
     return new Promise<boolean>((resolve) => {
-      this.pendingConfirmations.set(confirmationToken, { resolve, request });
-      console.log('[PermissionHooks] Pending confirmations count:', this.pendingConfirmations.size);
-
       // Timeout after 5 minutes - deny by default
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         if (this.pendingConfirmations.has(confirmationToken)) {
           console.log('[PermissionHooks] Confirmation timeout for:', confirmationToken);
           this.pendingConfirmations.delete(confirmationToken);
           resolve(false);
         }
       }, 5 * 60 * 1000);
+
+      const wrappedResolve = (approved: boolean) => {
+        clearTimeout(timeoutId);
+        resolve(approved);
+      };
+
+      this.pendingConfirmations.set(confirmationToken, { resolve: wrappedResolve, request });
+      console.log('[PermissionHooks] Pending confirmations count:', this.pendingConfirmations.size);
     });
   }
 

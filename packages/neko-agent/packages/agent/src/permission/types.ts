@@ -156,15 +156,11 @@ export const DEFAULT_READ_ONLY_TOOLS = [
   'ExitPlanMode',
   'EnterPlanMode',
   'AskUserQuestion',
-  // Neko Suite internal read-only tools (Claude Code PascalCase naming)
-  'Read',
+  // Neko Suite internal read-only tools
   'ListDirectory',
-  'Glob',
-  'Grep',
   'GitStatus',
   'GitDiff',
   'GitLog',
-  'WebSearch',
 ];
 
 /**

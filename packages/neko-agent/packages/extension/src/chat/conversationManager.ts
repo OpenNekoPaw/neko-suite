@@ -88,7 +88,7 @@ export interface Conversation {
  */
 export interface ConversationStorage {
   get<T>(key: string): T | undefined;
-  update(key: string, value: unknown): void;
+  update(key: string, value: unknown): void | Promise<void>;
 }
 
 /**

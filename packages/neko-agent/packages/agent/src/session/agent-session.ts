@@ -421,6 +421,10 @@ export class AgentSession implements IAgentSession {
     if (this._config.onConfirmTool) {
       this._config.onConfirmTool(request).then(approved => {
         this.confirmTool(toolCallId, approved);
+      }).catch(err => {
+        // Deny on error and clean up pending state
+        this.confirmTool(toolCallId, false);
+        console.error('[AgentSession] Tool confirmation failed:', err);
       });
     }
   }
@@ -445,6 +449,10 @@ export class AgentSession implements IAgentSession {
         // Text content
         if (step.content) {
           yield { type: 'text', content: step.content };
+          // If no tool calls, this is the final response — add to history
+          if (!step.toolCalls || step.toolCalls.length === 0) {
+            this._history.push({ role: 'assistant', content: step.content });
+          }
         }
         // Tool calls
         if (step.toolCalls) {

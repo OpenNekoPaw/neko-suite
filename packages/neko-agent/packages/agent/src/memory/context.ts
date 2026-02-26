@@ -99,20 +99,24 @@ export class SlidingWindowCompressor implements ContextCompressor {
     const remainingTokens = maxTokens - currentTokens - recentTokens;
     const olderMessages = nonSystemMessages.slice(0, -preserveRecent || undefined);
 
+    const keptOlder: ChatMessage[] = [];
     for (let i = olderMessages.length - 1; i >= 0; i--) {
       const msg = olderMessages[i];
       if (!msg) continue;
       const msgTokens = tokenCounter.countMessages([msg]);
       if (currentTokens + msgTokens > remainingTokens) break;
-      result.push(msg);
+      keptOlder.push(msg);
       currentTokens += msgTokens;
     }
+    // Restore chronological order (loop above collects newest-first)
+    keptOlder.reverse();
+    result.push(...keptOlder);
 
     // Add recent messages
     result.push(...recentMessages);
     currentTokens += recentTokens;
 
-    // Sort by original order
+    // Build final message list with system message first
     const finalMessages = systemMessage
       ? [systemMessage, ...result.filter((m) => m.role !== 'system')]
       : result;
@@ -337,7 +341,19 @@ export class ContextManager implements IContextManager {
 
   constructor(config: ContextManagerConfig) {
     this.config = config;
-    this.compressor = new SlidingWindowCompressor();
+    // Use configured strategy instead of hardcoding SlidingWindowCompressor
+    switch (config.strategy) {
+      case 'summarize':
+        this.compressor = new SummarizeCompressor();
+        break;
+      case 'selective':
+        this.compressor = new SelectiveCompressor();
+        break;
+      case 'sliding_window':
+      default:
+        this.compressor = new SlidingWindowCompressor();
+        break;
+    }
   }
 
   add(message: ChatMessage): void {

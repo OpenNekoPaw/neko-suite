@@ -284,11 +284,10 @@ export class ProviderRegistry {
   }
 
   /**
-   * Check if provider has rate limit capacity
+   * Check if provider has rate limit capacity (read-only, does not consume tokens)
    */
   hasRateLimitCapacity(providerId: string): boolean {
-    const result = this.rateLimiter.tryAcquire(providerId);
-    return result.allowed;
+    return this.rateLimiter.getLimiter(providerId).canAcquire();
   }
 
   /**

@@ -125,14 +125,21 @@ export class ToolRegistry implements IToolRegistry {
    * Convert tools to LLM tool definitions
    *
    * Returns tools in the format expected by Claude/OpenAI API.
+   * Supports optional filtering by tool names.
    *
+   * @param filter Optional filter with tool names to include
    * @returns Array of tool definitions
    */
-  toToolDefinitions(): Array<{
+  toToolDefinitions(filter?: { toolNames?: string[] }): Array<{
     type: 'function';
     function: { name: string; description: string; parameters: Record<string, unknown> };
   }> {
-    return this.list().map((tool) => ({
+    let tools = this.list();
+    if (filter?.toolNames && filter.toolNames.length > 0) {
+      const allowedNames = new Set(filter.toolNames);
+      tools = tools.filter((tool) => allowedNames.has(tool.name));
+    }
+    return tools.map((tool) => ({
       type: 'function' as const,
       function: {
         name: tool.name,

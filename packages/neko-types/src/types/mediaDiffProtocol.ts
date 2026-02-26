@@ -5,14 +5,40 @@
  *
  * Responsibilities:
  * - Define request/response message types
- * - Define diff result structures for image/video/audio
+ * - Define diff result structures for image/video/audio/timeline
  * - Ensure type-safe communication
+ *
+ * Engine types (Engine*) from diff.proto are the single source of truth for
+ * diff computation results. Protocol types here are presentation-layer reshaping
+ * for the Webview IPC contract.
  */
 
 import type { MediaType } from './track';
 
 // Re-export MediaType for convenience
 export type { MediaType } from './track';
+
+// Re-export engine diff types for consumers that need raw engine results
+export type {
+	EngineDiffCategory,
+	EngineDiffResult,
+	EngineFieldDiff,
+	EngineMediaInfo,
+	EngineSubtitleStream,
+	EngineImageContentDiff,
+	EngineAudioContentDiff,
+	EngineAudioDiffRegion,
+	EngineVideoContentDiff,
+	EngineVideoDiffRegion,
+	EngineFrameMetric,
+	EngineTimelineContentDiff,
+	EngineTimelineChangeType,
+	EngineTimelineDiffSummary,
+	EngineTimelineProjectMeta,
+	EngineTrackChange,
+	EngineElementChange,
+	EnginePropertyChange,
+} from '../generated/diff.engine';
 
 // =============================================================================
 // Media Type Definitions
@@ -44,6 +70,8 @@ export const MEDIA_EXTENSIONS: Record<string, MediaType> = {
 	'.flac': 'audio',
 	'.aac': 'audio',
 	'.m4a': 'audio',
+	// Timeline projects
+	'.jvi': 'timeline',
 };
 
 /**
@@ -109,7 +137,8 @@ export interface DiffOptions {
 }
 
 /**
- * Image diff details
+ * Image diff details — presentation-layer reshaping of EngineImageContentDiff.
+ * Maps engine fields: ssim → structuralSimilarity, diffPixelPercent → pixelDifference
  */
 export interface ImageDiffDetails {
 	/** Dimensions comparison */
@@ -136,7 +165,8 @@ export interface KeyframeDiff {
 }
 
 /**
- * Video diff details
+ * Video diff details — presentation-layer reshaping of EngineVideoContentDiff.
+ * Maps engine fields: avgSsim/minSsim → keyframeDiffs, durationA/B → duration
  */
 export interface VideoDiffDetails {
 	/** Duration comparison in seconds */
@@ -165,7 +195,8 @@ export interface TimeRange {
 }
 
 /**
- * Audio diff details
+ * Audio diff details — presentation-layer reshaping of EngineAudioContentDiff.
+ * Maps engine fields: snr → waveformSimilarity, diffPercent → spectralDifference
  */
 export interface AudioDiffDetails {
 	/** Duration comparison in seconds */
@@ -180,6 +211,96 @@ export interface AudioDiffDetails {
 	spectralDifference: number;
 	/** Detected silence regions */
 	silenceRegions?: { current: TimeRange[]; previous: TimeRange[] };
+}
+
+// =============================================================================
+// Timeline Diff Types (derived from diff.proto via diff.engine.ts)
+// =============================================================================
+
+import type {
+	EngineTimelineChangeType,
+	EngineTimelineDiffSummary,
+	EngineTimelineProjectMeta,
+} from '../generated/diff.engine';
+
+/** Change type for timeline structural diff — mirrors EngineTimelineChangeType */
+export type TimelineChangeType = EngineTimelineChangeType;
+
+/**
+ * A single property change.
+ * Engine type uses string for previous/current (JSON-encoded).
+ * Protocol type uses unknown for flexibility in the presentation layer.
+ */
+export interface PropertyChange {
+	property: string;
+	previous: unknown;
+	current: unknown;
+}
+
+/** Track-level change — aligned with EngineTrackChange */
+export interface TrackChange {
+	trackId: string;
+	trackName: string;
+	trackType: string;
+	changeType: TimelineChangeType;
+	/** Property changes (for 'modified') */
+	propertyChanges?: PropertyChange[];
+	/** Element changes within this track */
+	elementChanges?: ElementChange[];
+}
+
+/** Element-level change — aligned with EngineElementChange */
+export interface ElementChange {
+	elementId: string;
+	elementName: string;
+	elementType: string;
+	changeType: TimelineChangeType;
+	/** Property changes (for 'modified') */
+	propertyChanges?: PropertyChange[];
+	/** Source media path (for lazy content diff) */
+	src?: string;
+	/** Previous source media path (if src changed) */
+	previousSrc?: string;
+	/** Time position in timeline */
+	startTime?: number;
+	duration?: number;
+}
+
+/** Timeline diff summary — mirrors EngineTimelineDiffSummary */
+export type TimelineDiffSummary = EngineTimelineDiffSummary;
+
+/** Timeline project metadata — mirrors EngineTimelineProjectMeta */
+export type TimelineProjectMeta = EngineTimelineProjectMeta;
+
+/**
+ * Timeline (JVI project) diff details.
+ * Presentation-layer reshaping of EngineTimelineContentDiff for the Webview.
+ */
+export interface TimelineDiffDetails {
+	/** Project metadata comparison */
+	project: {
+		name: { current: string; previous: string };
+		resolution: {
+			current: { width: number; height: number };
+			previous: { width: number; height: number };
+		};
+		fps: { current: number; previous: number };
+	};
+	/** Track-level changes */
+	trackChanges: TrackChange[];
+	/** Summary counts */
+	summary: {
+		tracksAdded: number;
+		tracksRemoved: number;
+		tracksModified: number;
+		elementsAdded: number;
+		elementsRemoved: number;
+		elementsModified: number;
+		/** Number of elements with changed media source (candidates for content diff) */
+		mediaSourceChanges: number;
+	};
+	/** Total duration comparison */
+	duration: { current: number; previous: number };
 }
 
 /**
@@ -207,7 +328,7 @@ export interface DiffResult {
 	/** Overall similarity score (0-1) */
 	similarity: number;
 	/** Type-specific details */
-	details: ImageDiffDetails | VideoDiffDetails | AudioDiffDetails;
+	details: ImageDiffDetails | VideoDiffDetails | AudioDiffDetails | TimelineDiffDetails;
 	/** Visualization data */
 	visualization?: DiffVisualization;
 }

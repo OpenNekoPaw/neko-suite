@@ -158,6 +158,14 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 					);
 					break;
 
+				case 'mediaDiff:inspectElement':
+					// Lazy content diff: extract thumbnail for a media element
+					await this.handleInspectElement(
+						message.payload.src,
+						requestId
+					);
+					break;
+
 				case 'mediaDiff:cancel':
 					this.diffService.cancel();
 					break;
@@ -218,6 +226,10 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 						},
 					});
 				}
+				break;
+
+			case 'timeline':
+				// Timeline diff data is fully contained in the result, no extra visualization needed
 				break;
 		}
 	}
@@ -304,6 +316,10 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 					});
 				}
 				break;
+
+			case 'timeline':
+				// Timeline diff data is fully contained in the result, no extra visualization needed
+				break;
 		}
 	}
 
@@ -333,23 +349,89 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	}
 
 	/**
-	 * Handle seek request for video
+	 * Handle seek request for video — extracts frames for both versions at the given time
 	 */
 	private async handleSeek(time: number, requestId?: string): Promise<void> {
-		// TODO: Implement video frame seeking
-		console.log(`[MediaDiffMessageHandler] Seek to ${time}s`);
+		await Promise.all([
+			this.handleGetFrame(time, 'current', requestId),
+			this.handleGetFrame(time, 'previous', requestId),
+		]);
 	}
 
 	/**
-	 * Handle get frame request for video
+	 * Handle get frame request for video — extracts a single frame via neko-engine
 	 */
 	private async handleGetFrame(
 		time: number,
 		version: 'current' | 'previous',
 		requestId?: string
 	): Promise<void> {
-		// TODO: Implement video frame extraction
-		console.log(`[MediaDiffMessageHandler] Get frame at ${time}s (${version})`);
+		const filePath = version === 'current'
+			? this.fileUri.fsPath
+			: this.previousUri?.fsPath;
+
+		if (!filePath) return;
+
+		try {
+			const result = await vscode.commands.executeCommand<{ data: Buffer } | null>(
+				'neko.engine.extractFrame',
+				filePath,
+				time
+			);
+
+			if (result?.data) {
+				this.sendMessage({
+					requestId,
+					type: 'mediaDiff:frameData',
+					payload: {
+						time,
+						version,
+						imageBuffer: result.data,
+					},
+				});
+			}
+		} catch (error) {
+			console.error(`[MediaDiffMessageHandler] Failed to extract frame at ${time}s (${version}):`, error);
+		}
+	}
+
+	/**
+	 * Handle inspect element request — lazy content diff for timeline media elements.
+	 * Extracts a low-resolution thumbnail frame from the media source.
+	 * Concurrency is limited to avoid overloading the engine.
+	 */
+	private async handleInspectElement(
+		src: string,
+		requestId?: string
+	): Promise<void> {
+		if (!src) return;
+
+		// Resolve src relative to the project file directory
+		const path = await import('path');
+		const projectDir = path.dirname(this.fileUri.fsPath);
+		const absoluteSrc = path.isAbsolute(src) ? src : path.join(projectDir, src);
+
+		try {
+			// Extract a thumbnail frame at t=0 with low resolution
+			const result = await vscode.commands.executeCommand<{ data: Buffer } | null>(
+				'neko.engine.extractFrame',
+				absoluteSrc,
+				0
+			);
+
+			if (result?.data) {
+				this.sendMessage({
+					requestId,
+					type: 'mediaDiff:elementThumbnail',
+					payload: {
+						src,
+						imageBuffer: result.data,
+					},
+				});
+			}
+		} catch (error) {
+			console.error(`[MediaDiffMessageHandler] Failed to inspect element ${src}:`, error);
+		}
 	}
 
 	/**

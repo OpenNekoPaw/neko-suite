@@ -279,9 +279,15 @@ export class HttpClient {
   private async fetch(config: HttpRequestConfig): Promise<Response> {
     const { url, method, headers = {}, body, signal, timeout } = config;
 
-    // Debug log for request
+    // Debug log for request (sanitize headers to avoid leaking API keys)
     console.log(`[HttpClient] ${method} ${url}`);
-    console.log(`[HttpClient] Headers:`, JSON.stringify(headers, null, 2));
+    const sanitizedHeaders = { ...headers };
+    for (const key of Object.keys(sanitizedHeaders)) {
+      if (key.toLowerCase() === 'authorization' || key.toLowerCase() === 'api-key' || key.toLowerCase() === 'x-api-key') {
+        sanitizedHeaders[key] = '***';
+      }
+    }
+    console.log(`[HttpClient] Headers:`, JSON.stringify(sanitizedHeaders, null, 2));
     if (body) {
       console.log(`[HttpClient] Body:`, JSON.stringify(body, null, 2));
     }
@@ -290,10 +296,15 @@ export class HttpClient {
     let fetchSignal = signal;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    if (timeout && !signal) {
+    if (timeout) {
       const controller = new AbortController();
-      fetchSignal = controller.signal;
       timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      if (signal) {
+        // Compose both signals: abort on either timeout or caller's signal
+        signal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+      fetchSignal = controller.signal;
     }
 
     try {

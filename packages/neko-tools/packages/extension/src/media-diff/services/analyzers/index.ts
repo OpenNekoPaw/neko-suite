@@ -10,8 +10,10 @@ export {
 	isImageDiffDetails,
 	isVideoDiffDetails,
 	isAudioDiffDetails,
+	isTimelineDiffDetails,
 } from './IMediaDiffAnalyzer';
 
 export { ImageDiffAnalyzer } from './ImageDiffAnalyzer';
 export { VideoDiffAnalyzer } from './VideoDiffAnalyzer';
 export { AudioDiffAnalyzer } from './AudioDiffAnalyzer';
+export { TimelineDiffAnalyzer } from './TimelineDiffAnalyzer';

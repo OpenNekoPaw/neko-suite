@@ -38,7 +38,7 @@
         "displayName": "Media Diff",
         "selector": [
           {
-            "filenamePattern": "*.{png,jpg,jpeg,gif,webp,bmp,svg,mp4,mov,avi,mkv,webm,m4v,mp3,wav,ogg,flac,aac,m4a}"
+            "filenamePattern": "*.{png,jpg,jpeg,gif,webp,bmp,svg,mp4,mov,avi,mkv,webm,m4v,mp3,wav,ogg,flac,aac,m4a,jvi}"
           }
         ],
         "priority": "option"

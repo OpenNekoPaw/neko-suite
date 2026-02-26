@@ -192,8 +192,8 @@ class VscodeConversationStorage implements ConversationStorage {
     return this.state.get(key);
   }
 
-  update(key: string, value: unknown): void {
-    this.state.update(key, value);
+  update(key: string, value: unknown): Promise<void> {
+    return Promise.resolve(this.state.update(key, value));
   }
 }
 
@@ -290,13 +290,8 @@ export class ConversationHandler {
    * Add message to a specific conversation (for background execution)
    */
   addMessageToConversation(conversationId: string, message: ConversationMessage): void {
-    const conversation = this._conversationManager.get(conversationId);
-    if (!conversation) return;
-
-    this._conversationManager.updateMessages(conversationId, [
-      ...conversation.messages,
-      message,
-    ]);
+    // Use incremental addMessage instead of full array copy via updateMessages
+    this._conversationManager.addMessage(conversationId, message);
   }
 
   /**

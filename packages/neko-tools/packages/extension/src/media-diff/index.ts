@@ -22,9 +22,11 @@ export {
 	isImageDiffDetails,
 	isVideoDiffDetails,
 	isAudioDiffDetails,
+	isTimelineDiffDetails,
 	ImageDiffAnalyzer,
 	VideoDiffAnalyzer,
 	AudioDiffAnalyzer,
+	TimelineDiffAnalyzer,
 } from './services/analyzers';
 
 // Editor
@@ -41,6 +43,7 @@ import { MediaDiffService, getMediaDiffService } from './services/MediaDiffServi
 import { ImageDiffAnalyzer } from './services/analyzers/ImageDiffAnalyzer';
 import { VideoDiffAnalyzer } from './services/analyzers/VideoDiffAnalyzer';
 import { AudioDiffAnalyzer } from './services/analyzers/AudioDiffAnalyzer';
+import { TimelineDiffAnalyzer } from './services/analyzers/TimelineDiffAnalyzer';
 import { MediaDiffEditorProvider } from './editor/MediaDiffEditorProvider';
 import { EngineMediaService } from '../services/EngineMediaService';
 
@@ -59,10 +62,12 @@ export function initializeMediaDiff(
 	const imageDiffAnalyzer = new ImageDiffAnalyzer();
 	const videoDiffAnalyzer = new VideoDiffAnalyzer(engineMediaService, imageDiffAnalyzer);
 	const audioDiffAnalyzer = new AudioDiffAnalyzer(engineMediaService);
+	const timelineDiffAnalyzer = new TimelineDiffAnalyzer();
 
 	diffService.registerAnalyzer(imageDiffAnalyzer);
 	diffService.registerAnalyzer(videoDiffAnalyzer);
 	diffService.registerAnalyzer(audioDiffAnalyzer);
+	diffService.registerAnalyzer(timelineDiffAnalyzer);
 
 	// Create and register the editor provider
 	const editorProvider = new MediaDiffEditorProvider(context, diffService);

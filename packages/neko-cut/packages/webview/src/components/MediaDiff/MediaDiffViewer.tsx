@@ -4,7 +4,7 @@
  */
 
 import { memo, useState, useCallback } from 'react';
-import type { DiffViewMode } from '@neko/shared';
+import type { DiffViewMode, MediaType } from '@neko/shared';
 import type { MediaDiffViewerProps } from './types';
 import { DiffControls } from './DiffControls';
 import { ImageDiffViewer } from './ImageDiffViewer';
@@ -18,7 +18,7 @@ import { AudioDiffViewer } from './AudioDiffViewer';
 interface DiffHeaderProps {
   filePath?: string;
   gitRef?: string;
-  mediaType?: 'image' | 'video' | 'audio';
+  mediaType?: MediaType;
 }
 
 const DiffHeader = memo(function DiffHeader({
@@ -34,6 +34,8 @@ const DiffHeader = memo(function DiffHeader({
         return '🎬';
       case 'audio':
         return '🎵';
+      case 'timeline':
+        return '🎞️';
       default:
         return '📄';
     }

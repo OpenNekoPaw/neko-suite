@@ -111,6 +111,56 @@ function registerCommands(context: vscode.ExtensionContext): void {
 		})
 	);
 
+	// Extract Frame (programmatic API for other extensions)
+	context.subscriptions.push(
+		vscode.commands.registerCommand(
+			'neko.engine.extractFrame',
+			async (filePath: string, timeSeconds: number) => {
+				try {
+					const engine = await getOrStartEngine();
+					if (!engine?.engine) return null;
+					const resultJson = await engine.engine.captureFrame(filePath, timeSeconds);
+					const result = JSON.parse(resultJson);
+					if (result.status === 'ok' && result.data?.data) {
+						return { data: Buffer.from(result.data.data as string, 'base64') };
+					}
+					return null;
+				} catch (error) {
+					log(`extractFrame failed for ${filePath} at ${timeSeconds}s: ${error}`, 'error');
+					return null;
+				}
+			}
+		)
+	);
+
+	// Decode Audio Segment (programmatic API for other extensions)
+	context.subscriptions.push(
+		vscode.commands.registerCommand(
+			'neko.engine.decodeAudio',
+			async (filePath: string, startSeconds: number, durationSeconds: number) => {
+				try {
+					const engine = await getOrStartEngine();
+					if (!engine?.engine) return null;
+					const resultJson = await engine.engine.dispatchAction(
+						'audios',
+						'extract',
+						null,
+						JSON.stringify({ start: startSeconds, duration: durationSeconds }),
+						filePath
+					);
+					const result = JSON.parse(resultJson);
+					if (result.status === 'ok' && result.data?.samples) {
+						return { data: result.data.samples };
+					}
+					return null;
+				} catch (error) {
+					log(`decodeAudio failed for ${filePath}: ${error}`, 'error');
+					return null;
+				}
+			}
+		)
+	);
+
 	// Export JVI Project
 	context.subscriptions.push(
 		vscode.commands.registerCommand('neko.engine.export', cmdExportProject)

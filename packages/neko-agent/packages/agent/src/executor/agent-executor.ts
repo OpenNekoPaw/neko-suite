@@ -104,7 +104,6 @@ export class AgentExecutor implements IAgentExecutor {
     if (this.toolInjectionManager && input) {
       const tools = this.toolInjectionManager.getToolsForTurn(input);
       if (tools.length > 0) {
-        console.log(`[AgentExecutor] Using three-layer injection: ${tools.length} tools`);
         return { include: tools };
       }
     }
@@ -113,7 +112,6 @@ export class AgentExecutor implements IAgentExecutor {
     if (this.toolSkillRegistry) {
       const defaultTools = this.toolSkillRegistry.getDefaultTools();
       if (defaultTools.length > 0) {
-        console.log(`[AgentExecutor] Using default tools: ${defaultTools.length} tools`);
         return { include: defaultTools };
       }
     }
@@ -188,6 +186,8 @@ export class AgentExecutor implements IAgentExecutor {
     input: string,
     context?: Partial<AgentContext>
   ): AsyncIterable<AgentStep> {
+    const startTime = Date.now();
+    const steps: AgentStep[] = [];
     this.abortController = new AbortController();
 
     // Initialize context
@@ -206,11 +206,8 @@ export class AgentExecutor implements IAgentExecutor {
 
     this.setState('think');
 
-    console.log('[AgentExecutor] Starting execution loop, maxIterations:', this.config.maxIterations);
-
     while (agentContext.iteration < this.config.maxIterations) {
       if (this.abortController.signal.aborted) {
-        console.log('[AgentExecutor] Execution aborted');
         yield {
           type: 'respond',
           content: 'Agent execution was aborted',
@@ -220,30 +217,25 @@ export class AgentExecutor implements IAgentExecutor {
       }
 
       agentContext.iteration++;
-      console.log('[AgentExecutor] Iteration:', agentContext.iteration);
 
       try {
         // THINK
         this.setState('think');
-        console.log('[AgentExecutor] Calling think()...');
         const thinkStep = await this.think(agentContext);
-        console.log('[AgentExecutor] think() returned:', {
-          content: thinkStep.content?.slice(0, 100),
-          hasToolCalls: !!(thinkStep.toolCalls && thinkStep.toolCalls.length > 0),
-          toolCallCount: thinkStep.toolCalls?.length || 0,
-        });
+        steps.push(thinkStep);
         yield thinkStep;
 
         if (thinkStep.toolCalls && thinkStep.toolCalls.length > 0) {
           // ACT
           this.setState('act');
-          console.log('[AgentExecutor] Executing tools:', thinkStep.toolCalls.map(tc => tc.name));
           const actStep = await this.act(thinkStep.toolCalls);
+          steps.push(actStep);
           yield actStep;
 
           // OBSERVE
           this.setState('observe');
           const observeStep = this.observe((actStep.toolResults as ToolResultWithMeta[]) || []);
+          steps.push(observeStep);
           yield observeStep;
 
           // Add to context
@@ -258,21 +250,20 @@ export class AgentExecutor implements IAgentExecutor {
               toolCallId: result.callId,
             } as ChatMessage);
           }
-          console.log('[AgentExecutor] Tool results added to context, continuing loop...');
 
           // Hook: onIterationComplete
           await this.runHooks('onIterationComplete', agentContext.iteration, agentContext);
         } else {
           // Final response - thinkStep already contains the response content
-          console.log('[AgentExecutor] No tool calls, final response delivered via thinkStep');
           this.setState('respond');
 
+          const endTime = Date.now();
           const result: AgentResult = {
             success: true,
             response: thinkStep.content,
-            steps: [],
+            steps,
             iterations: agentContext.iteration,
-            timing: { startTime: 0, endTime: 0, duration: 0 },
+            timing: { startTime, endTime, duration: endTime - startTime },
           };
           await this.runHooks('onExecuteEnd', result);
 
@@ -284,7 +275,6 @@ export class AgentExecutor implements IAgentExecutor {
           (error.name === 'AbortError' || error.message.includes('aborted'));
 
         if (isAbortError || this.abortController.signal.aborted) {
-          console.log('[AgentExecutor] Execution aborted via signal');
           yield {
             type: 'respond',
             content: 'Agent execution was aborted',
@@ -299,14 +289,14 @@ export class AgentExecutor implements IAgentExecutor {
     }
 
     // Max iterations
-    console.log('[AgentExecutor] Max iterations reached');
+    const endTime = Date.now();
     const result: AgentResult = {
       success: false,
       response: 'Maximum iterations reached',
-      steps: [],
+      steps,
       iterations: agentContext.iteration,
       error: new Error('Max iterations reached'),
-      timing: { startTime: 0, endTime: 0, duration: 0 },
+      timing: { startTime, endTime, duration: endTime - startTime },
     };
     await this.runHooks('onExecuteEnd', result);
 
@@ -338,7 +328,12 @@ export class AgentExecutor implements IAgentExecutor {
     return {
       id: `checkpoint_${Date.now()}`,
       agentName: this.config.name,
-      context: { ...context },
+      context: {
+        ...context,
+        messages: context.messages.map((m) => ({ ...m })),
+        toolResults: [...(context.toolResults || [])],
+        metadata: { ...context.metadata },
+      },
       timestamp: Date.now(),
     };
   }
@@ -486,35 +481,11 @@ export class AgentExecutor implements IAgentExecutor {
     const toolFilter = this.getToolFilter(userInput);
     const tools = this.toolRegistry.toToolDefinitions(toolFilter);
 
-    // Log context size for debugging
-    const contextSize = modifiedContext.messages.reduce((sum, m) => {
-      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
-      return sum + content.length;
-    }, 0);
-    console.log('[AgentExecutor] think() context:', {
-      messagesCount: modifiedContext.messages.length,
-      contextSizeChars: contextSize,
-      toolsCount: tools.length,
-      activeSkills: this.toolInjectionManager?.getActiveSkills() ?? [],
-      maxTokens: this.config.serviceOptions?.maxTokens,
-    });
-
     const response = await this.service.chat(modifiedContext.messages, {
       ...this.config.serviceOptions,
       tools: tools.length > 0 ? tools : undefined,
       toolChoice: tools.length > 0 ? 'auto' : undefined,
       signal: this.abortController?.signal,
-    });
-
-    // Log response details for debugging
-    console.log('[AgentExecutor] think() response:', {
-      finishReason: response.finishReason,
-      hasContent: !!response.message.content,
-      contentLength: typeof response.message.content === 'string'
-        ? response.message.content.length
-        : Array.isArray(response.message.content) ? response.message.content.length : 0,
-      hasToolCalls: !!(response.message.toolCalls && response.message.toolCalls.length > 0),
-      toolCallCount: response.message.toolCalls?.length || 0,
     });
 
     // Warn if response was truncated
@@ -533,11 +504,20 @@ export class AgentExecutor implements IAgentExecutor {
         : '';
 
     // Preserve the original tool call ID from the API response
-    const toolCalls = response.message.toolCalls?.map((tc) => ({
-      id: tc.id,
-      name: tc.function.name,
-      arguments: JSON.parse(tc.function.arguments),
-    }));
+    const toolCalls = response.message.toolCalls?.map((tc) => {
+      let parsedArgs: Record<string, unknown> = {};
+      try {
+        parsedArgs = JSON.parse(tc.function.arguments);
+      } catch {
+        // LLM returned malformed JSON — pass raw string as fallback
+        parsedArgs = { _raw: tc.function.arguments };
+      }
+      return {
+        id: tc.id,
+        name: tc.function.name,
+        arguments: parsedArgs,
+      };
+    });
 
     // Add assistant message to context
     context.messages.push(response.message);
@@ -578,12 +558,9 @@ export class AgentExecutor implements IAgentExecutor {
 
     const results: ToolResultWithMeta[] = [];
 
-    console.log('[AgentExecutor] act() starting, hooks count:', this.hooks.length);
-
     for (const info of toolCallInfos) {
       // Check abort signal before each tool execution
       if (this.abortController?.signal.aborted) {
-        console.log('[AgentExecutor] Tool execution aborted before:', info.name);
         results.push({
           success: false,
           error: 'Execution aborted',
@@ -599,20 +576,15 @@ export class AgentExecutor implements IAgentExecutor {
       // Check if any hook wants to handle the tool call
       let result: ToolResultWithMeta | null = null;
 
-      console.log('[AgentExecutor] Processing tool:', info.name, 'id:', info.id);
-
       for (const hook of this.hooks) {
         if (hook.onToolCall) {
-          console.log('[AgentExecutor] Calling onToolCall hook:', hook.name);
           result = await hook.onToolCall(info, execute);
-          console.log('[AgentExecutor] onToolCall hook returned:', result?.success);
-          break; // First hook that handles wins
+          if (result !== null) break; // Only break when hook actually handled it
         }
       }
 
       // If no hook handled it, execute directly
       if (!result) {
-        console.log('[AgentExecutor] No hook handled, executing tool directly');
         const toolResult = await execute();
         result = {
           ...toolResult,

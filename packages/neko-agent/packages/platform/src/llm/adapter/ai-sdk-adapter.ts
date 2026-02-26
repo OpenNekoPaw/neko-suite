@@ -136,65 +136,83 @@ export abstract class AISdkAdapter implements Adapter {
 
     const tools = options.tools ? this.transformTools(options.tools) : undefined;
 
-    const result = streamText({
-      model: languageModel,
-      system: systemPrompt,
-      messages: coreMessages,
-      temperature: options.temperature,
-      maxOutputTokens: options.maxTokens,
-      topP: options.topP,
-      frequencyPenalty: options.frequencyPenalty,
-      presencePenalty: options.presencePenalty,
-      stopSequences: options.stop,
-      tools,
-      abortSignal: options.signal,
-      ...this.getProviderOptions(options, provider, model),
-    });
+    try {
+      const result = streamText({
+        model: languageModel,
+        system: systemPrompt,
+        messages: coreMessages,
+        temperature: options.temperature,
+        maxOutputTokens: options.maxTokens,
+        topP: options.topP,
+        frequencyPenalty: options.frequencyPenalty,
+        presencePenalty: options.presencePenalty,
+        stopSequences: options.stop,
+        tools,
+        abortSignal: options.signal,
+        ...this.getProviderOptions(options, provider, model),
+      });
 
-    let chunkId = `chatcmpl-${Date.now()}`;
+      let chunkId = `chatcmpl-${Date.now()}`;
 
-    for await (const part of result.fullStream) {
-      if (part.type === 'text-delta') {
-        yield {
-          id: chunkId,
-          model: model.name,
-          delta: {
-            content: part.text,
-          },
-        };
-      } else if (part.type === 'tool-call') {
-        yield {
-          id: chunkId,
-          model: model.name,
-          delta: {
-            toolCalls: [
-              {
-                id: part.toolCallId,
-                type: 'function',
-                function: {
-                  name: part.toolName,
-                  arguments: JSON.stringify(part.input),
+      for await (const part of result.fullStream) {
+        if (part.type === 'text-delta') {
+          yield {
+            id: chunkId,
+            model: model.name,
+            delta: {
+              content: part.text,
+            },
+          };
+        } else if (part.type === 'tool-call') {
+          yield {
+            id: chunkId,
+            model: model.name,
+            delta: {
+              toolCalls: [
+                {
+                  id: part.toolCallId,
+                  type: 'function',
+                  function: {
+                    name: part.toolName,
+                    arguments: JSON.stringify(part.input),
+                  },
                 },
-              },
-            ],
-          },
-        };
-      } else if (part.type === 'reasoning-delta') {
-        // Extended thinking (Claude)
-        yield {
-          id: chunkId,
-          model: model.name,
-          delta: {},
-          thinking: part.text,
-        };
-      } else if (part.type === 'finish') {
-        yield {
-          id: chunkId,
-          model: model.name,
-          delta: {},
-          finishReason: this.mapFinishReason(part.finishReason),
-        };
+              ],
+            },
+          };
+        } else if (part.type === 'reasoning-delta') {
+          // Extended thinking (Claude)
+          yield {
+            id: chunkId,
+            model: model.name,
+            delta: {},
+            thinking: part.text,
+          };
+        } else if (part.type === 'finish') {
+          yield {
+            id: chunkId,
+            model: model.name,
+            delta: {},
+            finishReason: this.mapFinishReason(part.finishReason),
+          };
+        }
       }
+    } catch (error) {
+      // Log detailed AI SDK error info (consistent with chat() method)
+      console.error('[AISdkAdapter] streamText error:', error);
+      if (error && typeof error === 'object') {
+        const err = error as Record<string, unknown>;
+        console.error('[AISdkAdapter] Stream error details:', {
+          name: err.name,
+          message: err.message,
+          statusCode: err.statusCode,
+          url: err.url,
+          cause: err.cause,
+          responseBody: err.responseBody,
+          isRetryable: err.isRetryable,
+        });
+      }
+      throw error;
     }
   }
 
@@ -345,12 +363,20 @@ export abstract class AISdkAdapter implements Adapter {
               ...(typeof message.content === 'string' && message.content
                 ? [{ type: 'text' as const, text: message.content }]
                 : []),
-              ...message.toolCalls.map((tc) => ({
-                type: 'tool-call' as const,
-                toolCallId: tc.id,
-                toolName: tc.function.name,
-                input: JSON.parse(tc.function.arguments || '{}'),
-              })),
+              ...message.toolCalls.map((tc) => {
+                let input: unknown;
+                try {
+                  input = JSON.parse(tc.function.arguments || '{}');
+                } catch {
+                  input = { _raw: tc.function.arguments };
+                }
+                return {
+                  type: 'tool-call' as const,
+                  toolCallId: tc.id,
+                  toolName: tc.function.name,
+                  input,
+                };
+              }),
             ],
           });
         } else {

@@ -142,7 +142,7 @@ export interface IAgentRunner extends vscode.Disposable {
    * Configure Agent
    * @param config Agent configuration
    */
-  configure(config: IAgentConfig): void;
+  configure(config: IAgentConfig): Promise<void>;
 
   /**
    * Get current configuration
@@ -315,6 +315,7 @@ export class AgentRunner implements IAgentRunner {
     description: string;
     details: Record<string, unknown>;
     confirmationToken?: string;
+    resolve?: (approved: boolean) => void;
   }>();
 
   // VSCode event emitters
@@ -354,7 +355,7 @@ export class AgentRunner implements IAgentRunner {
   // Configuration
   // -------------------------------------------------------------------------
 
-  configure(config: IAgentConfig): void {
+  async configure(config: IAgentConfig): Promise<void> {
     this._config = config;
 
     // Create system prompt builder
@@ -363,12 +364,13 @@ export class AgentRunner implements IAgentRunner {
       mode: config.executionMode === 'plan' ? 'plan' : 'default',
     });
 
-    // Load AGENTS.md if workspace root is provided
+    // Load AGENTS.md if workspace root is provided (await to ensure prompt resolution uses it)
     if (config.workspaceRoot) {
-      this._promptBuilder.loadAgentsFile(config.workspaceRoot, getDefaultPersonalPath())
-        .catch(err => {
-          console.warn('[AgentRunner] Failed to load AGENTS.md:', err);
-        });
+      try {
+        await this._promptBuilder.loadAgentsFile(config.workspaceRoot, getDefaultPersonalPath());
+      } catch (err) {
+        console.warn('[AgentRunner] Failed to load AGENTS.md:', err);
+      }
     }
 
     // Resolve system prompt
@@ -538,6 +540,8 @@ export class AgentRunner implements IAgentRunner {
   confirmTool(toolCallId: string, approved: boolean): void {
     const pending = this._pendingConfirmations.get(toolCallId);
     if (pending) {
+      // Resolve the Promise first so _handleToolConfirmation completes
+      pending.resolve?.(approved);
       this._session?.confirmTool(toolCallId, approved);
       this._pendingConfirmations.delete(toolCallId);
     } else {
@@ -628,7 +632,7 @@ When using tools, always explain what you are doing.`;
   }
 
   private _handleToolConfirmation(request: ToolConfirmationRequest): Promise<boolean> {
-    return new Promise((_resolve) => {
+    return new Promise((resolve) => {
       const toolCallId = request.toolCall.id;
 
       this._pendingConfirmations.set(toolCallId, {
@@ -638,6 +642,7 @@ When using tools, always explain what you are doing.`;
         description: request.description,
         details: request.details,
         confirmationToken: request.confirmationToken,
+        resolve, // Store resolve so confirmTool() can call it
       });
 
       this._onDidRequestConfirmation.fire({
@@ -647,10 +652,6 @@ When using tools, always explain what you are doing.`;
         description: request.description,
         details: request.details,
       });
-
-      // The confirmation will be resolved when confirmTool is called
-      // For now, we need to wait for user input
-      // This is handled by the session's internal confirmation flow
     });
   }
 

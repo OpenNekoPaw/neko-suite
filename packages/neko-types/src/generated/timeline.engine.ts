@@ -2,7 +2,7 @@
 // AUTO-GENERATED — DO NOT EDIT
 //
 // Source: packages/neko-proto/timeline.proto
-// Generated: 2026-02-25T01:40:43.662Z
+// Generated: 2026-02-26T08:16:32.111Z
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 

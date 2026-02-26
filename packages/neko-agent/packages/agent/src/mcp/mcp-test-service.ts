@@ -83,7 +83,6 @@ export class MCPTestService {
         proc = spawn(config.command, config.args || [], {
           env: { ...process.env, ...config.env },
           stdio: ['pipe', 'pipe', 'pipe'],
-          shell: true,
         });
 
         proc.stdout?.on('data', (data: Buffer) => {

@@ -2,8 +2,9 @@
 // Types Index - Re-export all types from submodules
 // =============================================================================
 
-// Generated engine types (from packages/neko-proto/timeline.proto)
+// Generated engine types (from packages/neko-proto/*.proto)
 export * from '../generated/timeline.engine';
+export * from '../generated/diff.engine';
 
 // Track types
 export * from './track';

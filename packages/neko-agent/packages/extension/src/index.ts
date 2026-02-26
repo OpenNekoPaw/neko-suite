@@ -45,10 +45,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Register commands
   registerCommands(context, chatViewProvider);
 
-  // Listen for extension changes to update tools
-  vscode.extensions.onDidChange(() => {
-    registerExtensionTools(bootstrapResult.toolRegistry);
-  });
+  // Listen for extension changes to update tools (register disposable + avoid duplicates)
+  let extensionToolsRegistered = true; // Already registered above
+  context.subscriptions.push(
+    vscode.extensions.onDidChange(() => {
+      if (!extensionToolsRegistered) {
+        registerExtensionTools(bootstrapResult.toolRegistry);
+        extensionToolsRegistered = true;
+      }
+    })
+  );
 
   console.log('[NekoAgent] Extension activated');
 }

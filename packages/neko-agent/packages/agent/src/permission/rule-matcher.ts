@@ -184,8 +184,8 @@ export function isPlanFileWrite(toolCall: ToolCallInfo): boolean {
   }
 
   // Check if the path ends with the plan file path
-  // This handles both absolute and relative paths
-  return filePath.endsWith(PLAN_FILE_PATH) || filePath.endsWith('plan.md');
+  // Only match the canonical .neko/plan.md path, not arbitrary *plan.md files
+  return filePath.endsWith(PLAN_FILE_PATH);
 }
 
 /**
@@ -391,7 +391,11 @@ export class PermissionRuleMatcher {
    * Get all rules
    */
   getRules(): PermissionRules {
-    return { ...this.config.rules };
+    return {
+      deny: this.config.rules.deny ? [...this.config.rules.deny] : undefined,
+      allow: this.config.rules.allow ? [...this.config.rules.allow] : undefined,
+      ask: this.config.rules.ask ? [...this.config.rules.ask] : undefined,
+    };
   }
 }
 

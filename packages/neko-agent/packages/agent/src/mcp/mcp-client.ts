@@ -237,6 +237,13 @@ export class StdioMCPClient extends BaseMCPClient {
 
       this._connected = true;
     } catch (error) {
+      // Kill orphan process on initialization failure
+      if (this.process) {
+        this.process.kill();
+        this.process = null;
+      }
+      this.pendingRequests.clear();
+
       throw new AgentError({
         category: 'network',
         code: 'MCP_CONNECT_FAILED',
@@ -276,8 +283,8 @@ export class StdioMCPClient extends BaseMCPClient {
       const message = JSON.stringify(request) + '\n';
       this.process!.stdin.write(message);
 
-      // Timeout after 30 seconds
-      setTimeout(() => {
+      // Timeout after 30 seconds — store timer for cleanup
+      const timeoutId = setTimeout(() => {
         if (this.pendingRequests.has(request.id)) {
           this.pendingRequests.delete(request.id);
           reject(
@@ -290,6 +297,19 @@ export class StdioMCPClient extends BaseMCPClient {
           );
         }
       }, 30000);
+
+      // Wrap resolve/reject to clear timeout on completion
+      const originalEntry = this.pendingRequests.get(request.id)!;
+      this.pendingRequests.set(request.id, {
+        resolve: (value: unknown) => {
+          clearTimeout(timeoutId);
+          originalEntry.resolve(value);
+        },
+        reject: (error: Error) => {
+          clearTimeout(timeoutId);
+          originalEntry.reject(error);
+        },
+      });
     });
   }
 

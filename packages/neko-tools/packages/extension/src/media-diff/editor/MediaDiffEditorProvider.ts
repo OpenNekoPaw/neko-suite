@@ -530,6 +530,241 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
       width: 200px;
       cursor: pointer;
     }
+    /* Video diff styles */
+    .video-diff-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    .video-frames {
+      flex: 1;
+      display: flex;
+      gap: 16px;
+      overflow: hidden;
+    }
+    .video-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .video-panel-header {
+      padding: 6px 8px;
+      background: var(--vscode-sideBar-background);
+      text-align: center;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .video-panel-content {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #000;
+      overflow: hidden;
+    }
+    .video-panel-content canvas {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .video-panel-content .placeholder {
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+    }
+    .timeline-bar {
+      padding: 8px 16px;
+      background: var(--vscode-sideBar-background);
+      border-top: 1px solid var(--vscode-sideBar-border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .timeline-bar .time-display {
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      min-width: 100px;
+      text-align: center;
+    }
+    .timeline-bar input[type="range"] {
+      flex: 1;
+      cursor: pointer;
+    }
+    .timeline-bar button {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+      border: none;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .timeline-bar button:hover {
+      background: var(--vscode-button-secondaryHoverBackground);
+    }
+    /* Keyboard hints */
+    .keyboard-hints {
+      padding: 4px 16px;
+      font-size: 10px;
+      color: var(--vscode-descriptionForeground);
+      text-align: center;
+      background: var(--vscode-sideBar-background);
+      border-top: 1px solid var(--vscode-sideBar-border);
+    }
+    .keyboard-hints kbd {
+      padding: 1px 4px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 3px;
+      background: var(--vscode-editorWidget-background);
+      font-family: inherit;
+      font-size: 10px;
+    }
+    /* Audio seek cursor */
+    #waveformCanvas { cursor: crosshair; }
+    .audio-time-indicator {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      text-align: center;
+      margin-top: 4px;
+    }
+    /* Heatmap overlay */
+    .heatmap-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+    }
+    .heatmap-toggle input { cursor: pointer; }
+    /* Timeline diff styles */
+    .timeline-diff {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: auto;
+    }
+    .timeline-summary {
+      padding: 12px 16px;
+      background: var(--vscode-sideBar-background);
+      border-bottom: 1px solid var(--vscode-sideBar-border);
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+    .summary-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .summary-count {
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .count-added { background: rgba(40,167,69,0.2); color: #28a745; }
+    .count-removed { background: rgba(220,53,69,0.2); color: #dc3545; }
+    .count-modified { background: rgba(255,193,7,0.2); color: #ffc107; }
+    .timeline-meta-changes {
+      padding: 8px 16px;
+      font-size: 11px;
+    }
+    .meta-change {
+      padding: 2px 0;
+      color: var(--vscode-editorWarning-foreground);
+    }
+    .track-list {
+      flex: 1;
+      overflow: auto;
+      padding: 8px;
+    }
+    .track-change {
+      margin-bottom: 8px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .track-change-header {
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      background: var(--vscode-sideBar-background);
+    }
+    .track-change-header:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .change-badge {
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge-added { background: #28a745; color: white; }
+    .badge-removed { background: #dc3545; color: white; }
+    .badge-modified { background: #ffc107; color: black; }
+    .track-type-badge {
+      padding: 1px 4px;
+      border-radius: 2px;
+      font-size: 10px;
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+    }
+    .track-elements {
+      padding: 4px 12px 8px;
+    }
+    .element-change {
+      padding: 4px 8px;
+      margin: 2px 0;
+      border-radius: 3px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: default;
+    }
+    .element-change.has-media { cursor: pointer; }
+    .element-change.has-media:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .element-added { border-left: 3px solid #28a745; }
+    .element-removed { border-left: 3px solid #dc3545; }
+    .element-modified { border-left: 3px solid #ffc107; }
+    .element-props {
+      font-size: 10px;
+      color: var(--vscode-descriptionForeground);
+      margin-left: 16px;
+      padding: 2px 0;
+    }
+    .prop-change {
+      padding: 1px 0;
+    }
+    .prop-old { color: #dc3545; text-decoration: line-through; }
+    .prop-new { color: #28a745; }
+    .element-thumbnail {
+      width: 48px;
+      height: 36px;
+      object-fit: cover;
+      border-radius: 2px;
+      border: 1px solid var(--vscode-panel-border);
+    }
+    .thumbnail-placeholder {
+      width: 48px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--vscode-editorWidget-background);
+      border-radius: 2px;
+      font-size: 10px;
+      color: var(--vscode-descriptionForeground);
+    }
   </style>
 </head>
 <body>
@@ -542,6 +777,7 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
         <option value="slider">${l10n.viewMode.slider}</option>
         <option value="overlay">${l10n.viewMode.overlay}</option>
         ${mediaType === 'image' ? `<option value="onion-skin">${l10n.viewMode.onionSkin}</option>` : ''}
+        ${mediaType === 'image' ? `<option value="heatmap">Heatmap</option>` : ''}
       </select>
     </div>
     <div class="diff-content" id="content">
@@ -565,6 +801,12 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
     let currentData = null;
     let viewMode = state.viewMode;
 
+    // Video diff state
+    let videoFrames = { current: null, previous: null };
+    let videoDuration = 0;
+    let videoCurrentTime = 0;
+    let videoSeeking = false;
+
     // Handle messages from extension
     window.addEventListener('message', (event) => {
       const message = event.data;
@@ -581,6 +823,12 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
           break;
         case 'mediaDiff:waveformData':
           handleWaveformData(message.payload);
+          break;
+        case 'mediaDiff:frameData':
+          handleFrameData(message.payload);
+          break;
+        case 'mediaDiff:elementThumbnail':
+          handleElementThumbnail(message.payload);
           break;
         case 'mediaDiff:error':
           showError(message.error);
@@ -615,6 +863,10 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
     function handleDiffResult(payload) {
       currentData = payload;
       updateSimilarityBadge(payload.similarity);
+      // Timeline diff has all data in the result, render immediately
+      if (payload.mediaType === 'timeline') {
+        render();
+      }
     }
 
     function handleImageData(payload) {
@@ -627,6 +879,62 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
       if (!currentData) currentData = { mediaType: 'audio', similarity: 0, details: {} };
       currentData.waveforms = payload;
       render();
+    }
+
+    function handleFrameData(payload) {
+      const { time, version, imageBuffer } = payload;
+      if (!currentData) currentData = { mediaType: 'video', similarity: 0, details: {} };
+
+      // Store frame data
+      const blob = new Blob([new Uint8Array(imageBuffer.data || imageBuffer)]);
+      const url = URL.createObjectURL(blob);
+
+      if (version === 'current') {
+        if (videoFrames.current) URL.revokeObjectURL(videoFrames.current);
+        videoFrames.current = url;
+      } else {
+        if (videoFrames.previous) URL.revokeObjectURL(videoFrames.previous);
+        videoFrames.previous = url;
+      }
+
+      videoCurrentTime = time;
+      videoSeeking = false;
+
+      // Update canvas if already rendered, otherwise full render
+      const currentCanvas = document.getElementById('videoCurrentCanvas');
+      const previousCanvas = document.getElementById('videoPreviousCanvas');
+      if (currentCanvas && previousCanvas) {
+        updateVideoCanvases();
+      } else {
+        render();
+      }
+    }
+
+    function handleElementThumbnail(payload) {
+      if (!payload || !payload.src || !payload.imageBuffer) return;
+      var src = payload.src;
+      var buf = payload.imageBuffer;
+      var blob = new Blob([new Uint8Array(buf.data || buf)]);
+      var url = URL.createObjectURL(blob);
+
+      // Find all thumbnail placeholders that match this element src
+      var placeholders = document.querySelectorAll('.thumbnail-placeholder');
+      for (var i = 0; i < placeholders.length; i++) {
+        var el = placeholders[i];
+        // Match by checking the closest element-change container's data-src
+        var container = el.closest('.element-change');
+        if (!container) continue;
+        var srcAttr = container.getAttribute('data-src');
+        if (srcAttr === src) {
+          var img = document.createElement('img');
+          img.src = url;
+          img.className = 'element-thumbnail';
+          img.style.maxWidth = '120px';
+          img.style.maxHeight = '80px';
+          img.style.borderRadius = '4px';
+          el.replaceWith(img);
+        }
+      }
     }
 
     function updateSimilarityBadge(similarity) {
@@ -649,10 +957,18 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
 
       const content = document.getElementById('content');
 
-      if (currentData.images) {
-        renderImageDiff(content, currentData);
+      if (currentData.mediaType === 'timeline') {
+        renderTimelineDiff(content, currentData);
+      } else if (currentData.images) {
+        if (viewMode === 'heatmap') {
+          renderHeatmapDiff(content, currentData);
+        } else {
+          renderImageDiff(content, currentData);
+        }
       } else if (currentData.waveforms) {
         renderAudioDiff(content, currentData);
+      } else if (state.mediaType === 'video' || videoFrames.current || videoFrames.previous) {
+        renderVideoDiff(content, currentData);
       } else {
         content.innerHTML = '<div>' + state.l10n.waitingForData + '</div>';
       }
@@ -861,11 +1177,16 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
 
     function renderAudioDiff(container, data) {
       const { waveforms, details } = data;
+      const dur = details?.duration?.current || details?.duration?.previous || 0;
+      videoDuration = dur;
 
       container.innerHTML = \`
-        <div style="width: 100%; height: 100%;">
-          <canvas id="waveformCanvas" style="width: 100%; height: 200px;"></canvas>
-          <div class="metadata" style="margin-top: 16px;">
+        <div style="width: 100%; height: 100%; display: flex; flex-direction: column;">
+          <div style="flex:1; display:flex; align-items:center; justify-content:center;">
+            <canvas id="waveformCanvas" style="width: 100%; height: 200px;"></canvas>
+          </div>
+          <div class="audio-time-indicator" id="audioTimeIndicator">Click waveform to seek</div>
+          <div class="metadata" style="margin-top: 8px;">
             <div class="metadata-row">
               <span>\${state.l10n.metadata.duration}:</span>
               <span class="\${details?.duration?.current !== details?.duration?.previous ? 'metadata-changed' : ''}">\${details?.duration?.previous?.toFixed(2)}s → \${details?.duration?.current?.toFixed(2)}s</span>
@@ -875,14 +1196,20 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
               <span>\${(details?.waveformSimilarity * 100)?.toFixed(1)}%</span>
             </div>
           </div>
+          <div class="keyboard-hints">
+            <kbd>←</kbd> / <kbd>→</kbd> seek ±0.1s &nbsp;
+            <kbd>Shift+←</kbd> / <kbd>Shift+→</kbd> seek ±1s &nbsp;
+            Click waveform to seek to position
+          </div>
         </div>
       \`;
 
-      // Draw waveforms
+      // Draw waveforms and attach seek handler
       setTimeout(() => {
         const canvas = document.getElementById('waveformCanvas');
         if (canvas) {
           drawWaveforms(canvas, waveforms.currentWaveform, waveforms.previousWaveform);
+          initAudioSeek(canvas, dur);
         }
       }, 0);
     }
@@ -916,6 +1243,447 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
       });
       ctx.stroke();
+
+      // Draw seek cursor line if audio has time info
+      if (typeof videoCurrentTime === 'number' && videoDuration > 0) {
+        const xPos = (videoCurrentTime / videoDuration) * width;
+        ctx.beginPath();
+        ctx.strokeStyle = 'var(--vscode-button-background, #007acc)';
+        ctx.lineWidth = 2;
+        ctx.moveTo(xPos, 0);
+        ctx.lineTo(xPos, height);
+        ctx.stroke();
+      }
+    }
+
+    // =========================================================================
+    // Video Diff Rendering
+    // =========================================================================
+
+    function renderVideoDiff(container, data) {
+      const previousLabel = state.isLocalComparison
+        ? state.previousFileName || state.l10n.panel.previous
+        : state.l10n.panel.previousHead;
+      const currentLabel = state.isLocalComparison
+        ? state.fileName || state.l10n.panel.current
+        : state.l10n.panel.currentWorking;
+
+      const dur = data.details?.duration?.current || 0;
+      videoDuration = dur;
+
+      container.innerHTML = '<div class="video-diff-container">'
+        + '<div class="video-frames">'
+        + '<div class="video-panel">'
+        + '<div class="video-panel-header">' + previousLabel + '</div>'
+        + '<div class="video-panel-content">'
+        + '<canvas id="videoPreviousCanvas"></canvas>'
+        + '<span class="placeholder" id="prevPlaceholder">Waiting for frame...</span>'
+        + '</div></div>'
+        + '<div class="video-panel">'
+        + '<div class="video-panel-header">' + currentLabel + '</div>'
+        + '<div class="video-panel-content">'
+        + '<canvas id="videoCurrentCanvas"></canvas>'
+        + '<span class="placeholder" id="currPlaceholder">Waiting for frame...</span>'
+        + '</div></div></div>'
+        + '<div class="timeline-bar">'
+        + '<button id="btnPrevFrame" title="Previous frame">&#9664;</button>'
+        + '<span class="time-display" id="timeDisplay">' + formatTime(videoCurrentTime) + ' / ' + formatTime(videoDuration) + '</span>'
+        + '<input type="range" id="timelineScrubber" min="0" max="' + Math.floor(dur * 1000) + '" value="' + Math.floor(videoCurrentTime * 1000) + '" step="33">'
+        + '<button id="btnNextFrame" title="Next frame">&#9654;</button>'
+        + '</div>'
+        + '<div class="keyboard-hints">'
+        + '<kbd>&larr;</kbd> / <kbd>&rarr;</kbd> seek &plusmn;1 frame &nbsp;'
+        + '<kbd>Shift+&larr;</kbd> / <kbd>Shift+&rarr;</kbd> seek &plusmn;1s &nbsp;'
+        + '<kbd>Home</kbd> / <kbd>End</kbd> start / end'
+        + '</div></div>';
+
+      setTimeout(() => {
+        updateVideoCanvases();
+        initTimelineControls();
+      }, 0);
+    }
+
+    function updateVideoCanvases() {
+      drawFrameToCanvas('videoCurrentCanvas', videoFrames.current, 'currPlaceholder');
+      drawFrameToCanvas('videoPreviousCanvas', videoFrames.previous, 'prevPlaceholder');
+
+      // Update time display
+      const display = document.getElementById('timeDisplay');
+      if (display) {
+        display.textContent = formatTime(videoCurrentTime) + ' / ' + formatTime(videoDuration);
+      }
+      const scrubber = document.getElementById('timelineScrubber');
+      if (scrubber && !videoSeeking) {
+        scrubber.value = Math.floor(videoCurrentTime * 1000);
+      }
+    }
+
+    function drawFrameToCanvas(canvasId, frameUrl, placeholderId) {
+      const canvas = document.getElementById(canvasId);
+      const placeholder = document.getElementById(placeholderId);
+      if (!canvas) return;
+
+      if (!frameUrl) {
+        canvas.style.display = 'none';
+        if (placeholder) placeholder.style.display = '';
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.style.display = '';
+        if (placeholder) placeholder.style.display = 'none';
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+      };
+      img.src = frameUrl;
+    }
+
+    function initTimelineControls() {
+      const scrubber = document.getElementById('timelineScrubber');
+      const btnPrev = document.getElementById('btnPrevFrame');
+      const btnNext = document.getElementById('btnNextFrame');
+
+      if (scrubber) {
+        scrubber.addEventListener('input', (e) => {
+          videoSeeking = true;
+          const time = parseInt(e.target.value, 10) / 1000;
+          seekToTime(time);
+        });
+      }
+
+      if (btnPrev) {
+        btnPrev.addEventListener('click', () => seekRelative(-1 / 30));
+      }
+      if (btnNext) {
+        btnNext.addEventListener('click', () => seekRelative(1 / 30));
+      }
+    }
+
+    function seekToTime(time) {
+      time = Math.max(0, Math.min(time, videoDuration));
+      videoCurrentTime = time;
+
+      // Update display immediately
+      const display = document.getElementById('timeDisplay');
+      if (display) {
+        display.textContent = formatTime(time) + ' / ' + formatTime(videoDuration);
+      }
+
+      vscode.postMessage({
+        type: 'mediaDiff:seek',
+        requestId: Date.now().toString(),
+        timestamp: Date.now(),
+        payload: { time }
+      });
+    }
+
+    function seekRelative(delta) {
+      seekToTime(videoCurrentTime + delta);
+    }
+
+    function formatTime(seconds) {
+      if (!seconds || isNaN(seconds)) return '0:00.000';
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return m + ':' + s.toFixed(3).padStart(6, '0');
+    }
+
+    // =========================================================================
+    // Heatmap Diff Rendering (image only)
+    // =========================================================================
+
+    function renderHeatmapDiff(container, data) {
+      const { images } = data;
+      const currentUrl = URL.createObjectURL(new Blob([images.currentImage]));
+      const previousUrl = URL.createObjectURL(new Blob([images.previousImage]));
+
+      container.innerHTML = '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;gap:8px;">'
+        + '<canvas id="heatmapCanvas" style="max-width:90%;max-height:80%;object-fit:contain;"></canvas>'
+        + '<div style="font-size:11px;color:var(--vscode-descriptionForeground);">'
+        + 'Red = high difference, Blue = low difference'
+        + '</div></div>';
+
+      setTimeout(() => {
+        generateHeatmap(previousUrl, currentUrl);
+      }, 0);
+    }
+
+    function generateHeatmap(prevUrl, currUrl) {
+      const canvas = document.getElementById('heatmapCanvas');
+      if (!canvas) return;
+
+      const prevImg = new Image();
+      const currImg = new Image();
+      let loaded = 0;
+
+      function onBothLoaded() {
+        loaded++;
+        if (loaded < 2) return;
+
+        const w = Math.max(prevImg.naturalWidth, currImg.naturalWidth);
+        const h = Math.max(prevImg.naturalHeight, currImg.naturalHeight);
+        canvas.width = w;
+        canvas.height = h;
+
+        // Draw both to offscreen canvases
+        const offPrev = new OffscreenCanvas(w, h);
+        const offCurr = new OffscreenCanvas(w, h);
+        offPrev.getContext('2d').drawImage(prevImg, 0, 0, w, h);
+        offCurr.getContext('2d').drawImage(currImg, 0, 0, w, h);
+
+        const prevData = offPrev.getContext('2d').getImageData(0, 0, w, h).data;
+        const currData = offCurr.getContext('2d').getImageData(0, 0, w, h).data;
+
+        // Compute per-pixel difference heatmap
+        const ctx = canvas.getContext('2d');
+        const output = ctx.createImageData(w, h);
+        for (let i = 0; i < prevData.length; i += 4) {
+          const dr = Math.abs(prevData[i] - currData[i]);
+          const dg = Math.abs(prevData[i + 1] - currData[i + 1]);
+          const db = Math.abs(prevData[i + 2] - currData[i + 2]);
+          const diff = (dr + dg + db) / (3 * 255); // 0..1
+
+          // Blue (low diff) → Red (high diff)
+          output.data[i] = Math.floor(diff * 255);
+          output.data[i + 1] = 0;
+          output.data[i + 2] = Math.floor((1 - diff) * 255);
+          output.data[i + 3] = Math.max(40, Math.floor(diff * 255));
+        }
+        ctx.putImageData(output, 0, 0);
+      }
+
+      prevImg.onload = onBothLoaded;
+      currImg.onload = onBothLoaded;
+      prevImg.src = prevUrl;
+      currImg.src = currUrl;
+    }
+
+    // =========================================================================
+    // Audio Seek Interaction
+    // =========================================================================
+
+    function initAudioSeek(canvas, duration) {
+      if (!canvas || !duration) return;
+
+      canvas.addEventListener('click', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const ratio = x / rect.width;
+        const time = ratio * duration;
+
+        videoDuration = duration;
+        videoCurrentTime = time;
+
+        // Redraw waveforms with seek line
+        if (currentData && currentData.waveforms) {
+          drawWaveforms(canvas, currentData.waveforms.currentWaveform, currentData.waveforms.previousWaveform);
+        }
+
+        // Update time indicator
+        const indicator = document.getElementById('audioTimeIndicator');
+        if (indicator) {
+          indicator.textContent = formatTime(time) + ' / ' + formatTime(duration);
+        }
+
+        // Send seek to extension for potential audio playback
+        vscode.postMessage({
+          type: 'mediaDiff:seek',
+          requestId: Date.now().toString(),
+          timestamp: Date.now(),
+          payload: { time }
+        });
+      });
+    }
+
+    // =========================================================================
+    // Keyboard Shortcuts
+    // =========================================================================
+
+    document.addEventListener('keydown', (e) => {
+      // Only handle when we have video/audio content
+      if (state.mediaType !== 'video' && state.mediaType !== 'audio') return;
+
+      const FRAME_STEP = 1 / 30; // ~33ms per frame
+      const SECOND_STEP = 1;
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          seekRelative(e.shiftKey ? -SECOND_STEP : -FRAME_STEP);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          seekRelative(e.shiftKey ? SECOND_STEP : FRAME_STEP);
+          break;
+        case 'Home':
+          e.preventDefault();
+          seekToTime(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          seekToTime(videoDuration);
+          break;
+      }
+    });
+
+    // =========================================================================
+    // Timeline Diff Rendering
+    // =========================================================================
+
+    function renderTimelineDiff(container, data) {
+      const details = data.details;
+      if (!details || !details.trackChanges) {
+        container.innerHTML = '<div>' + state.l10n.waitingForData + '</div>';
+        return;
+      }
+
+      const s = details.summary;
+      const proj = details.project;
+
+      // Build meta changes
+      var metaHtml = '';
+      if (proj.name.current !== proj.name.previous) {
+        metaHtml += '<div class="meta-change">Name: ' + escHtml(proj.name.previous) + ' &rarr; ' + escHtml(proj.name.current) + '</div>';
+      }
+      if (proj.fps.current !== proj.fps.previous) {
+        metaHtml += '<div class="meta-change">FPS: ' + proj.fps.previous + ' &rarr; ' + proj.fps.current + '</div>';
+      }
+      if (proj.resolution.current.width !== proj.resolution.previous.width
+        || proj.resolution.current.height !== proj.resolution.previous.height) {
+        metaHtml += '<div class="meta-change">Resolution: '
+          + proj.resolution.previous.width + 'x' + proj.resolution.previous.height
+          + ' &rarr; '
+          + proj.resolution.current.width + 'x' + proj.resolution.current.height
+          + '</div>';
+      }
+      if (details.duration.current !== details.duration.previous) {
+        metaHtml += '<div class="meta-change">Duration: '
+          + details.duration.previous.toFixed(2) + 's &rarr; '
+          + details.duration.current.toFixed(2) + 's</div>';
+      }
+
+      // Build track changes
+      var tracksHtml = '';
+      for (var ti = 0; ti < details.trackChanges.length; ti++) {
+        var tc = details.trackChanges[ti];
+        var badgeClass = tc.changeType === 'added' ? 'badge-added'
+          : tc.changeType === 'removed' ? 'badge-removed' : 'badge-modified';
+
+        tracksHtml += '<div class="track-change">'
+          + '<div class="track-change-header" onclick="this.parentElement.classList.toggle(\'collapsed\')">'
+          + '<span class="change-badge ' + badgeClass + '">' + tc.changeType + '</span>'
+          + '<span class="track-type-badge">' + escHtml(tc.trackType) + '</span>'
+          + '<span>' + escHtml(tc.trackName) + '</span>'
+          + '</div>';
+
+        // Track property changes
+        if (tc.propertyChanges && tc.propertyChanges.length > 0) {
+          tracksHtml += '<div class="element-props">';
+          for (var pi = 0; pi < tc.propertyChanges.length; pi++) {
+            var pc = tc.propertyChanges[pi];
+            tracksHtml += '<div class="prop-change">'
+              + escHtml(pc.property) + ': '
+              + '<span class="prop-old">' + escHtml(String(pc.previous)) + '</span>'
+              + ' &rarr; '
+              + '<span class="prop-new">' + escHtml(String(pc.current)) + '</span>'
+              + '</div>';
+          }
+          tracksHtml += '</div>';
+        }
+
+        // Element changes
+        if (tc.elementChanges && tc.elementChanges.length > 0) {
+          tracksHtml += '<div class="track-elements">';
+          for (var ei = 0; ei < tc.elementChanges.length; ei++) {
+            var ec = tc.elementChanges[ei];
+            var elClass = ec.changeType === 'added' ? 'element-added'
+              : ec.changeType === 'removed' ? 'element-removed' : 'element-modified';
+            var hasMedia = ec.src || ec.previousSrc;
+            var mediaClass = hasMedia ? ' has-media' : '';
+            var dataAttr = hasMedia ? ' data-src="' + escHtml(ec.src || '') + '"' : '';
+
+            tracksHtml += '<div class="element-change ' + elClass + mediaClass + '"' + dataAttr + '>';
+
+            // Thumbnail placeholder for media elements
+            if (hasMedia) {
+              tracksHtml += '<div class="thumbnail-placeholder" data-element-id="' + escHtml(ec.elementId) + '">&#9654;</div>';
+            }
+
+            tracksHtml += '<span>' + escHtml(ec.elementName) + '</span>'
+              + '<span style="color:var(--vscode-descriptionForeground);font-size:10px;">'
+              + escHtml(ec.elementType)
+              + (ec.startTime !== undefined ? ' @ ' + ec.startTime.toFixed(2) + 's' : '')
+              + (ec.duration !== undefined ? ' (' + ec.duration.toFixed(2) + 's)' : '')
+              + '</span>'
+              + '</div>';
+
+            // Property changes for modified elements
+            if (ec.propertyChanges && ec.propertyChanges.length > 0) {
+              tracksHtml += '<div class="element-props">';
+              for (var epi = 0; epi < ec.propertyChanges.length; epi++) {
+                var epc = ec.propertyChanges[epi];
+                var prevStr = typeof epc.previous === 'object' ? JSON.stringify(epc.previous) : String(epc.previous);
+                var currStr = typeof epc.current === 'object' ? JSON.stringify(epc.current) : String(epc.current);
+                tracksHtml += '<div class="prop-change">'
+                  + escHtml(epc.property) + ': '
+                  + '<span class="prop-old">' + escHtml(prevStr) + '</span>'
+                  + ' &rarr; '
+                  + '<span class="prop-new">' + escHtml(currStr) + '</span>'
+                  + '</div>';
+              }
+              tracksHtml += '</div>';
+            }
+          }
+          tracksHtml += '</div>';
+        }
+
+        tracksHtml += '</div>';
+      }
+
+      // No changes case
+      if (details.trackChanges.length === 0 && !metaHtml) {
+        tracksHtml = '<div style="text-align:center;padding:32px;color:var(--vscode-descriptionForeground);">No structural changes detected</div>';
+      }
+
+      container.innerHTML = '<div class="timeline-diff">'
+        + '<div class="timeline-summary">'
+        + (s.tracksAdded > 0 ? '<div class="summary-item"><span class="summary-count count-added">+' + s.tracksAdded + '</span> tracks added</div>' : '')
+        + (s.tracksRemoved > 0 ? '<div class="summary-item"><span class="summary-count count-removed">-' + s.tracksRemoved + '</span> tracks removed</div>' : '')
+        + (s.tracksModified > 0 ? '<div class="summary-item"><span class="summary-count count-modified">~' + s.tracksModified + '</span> tracks modified</div>' : '')
+        + (s.elementsAdded > 0 ? '<div class="summary-item"><span class="summary-count count-added">+' + s.elementsAdded + '</span> elements added</div>' : '')
+        + (s.elementsRemoved > 0 ? '<div class="summary-item"><span class="summary-count count-removed">-' + s.elementsRemoved + '</span> elements removed</div>' : '')
+        + (s.elementsModified > 0 ? '<div class="summary-item"><span class="summary-count count-modified">~' + s.elementsModified + '</span> elements modified</div>' : '')
+        + (s.mediaSourceChanges > 0 ? '<div class="summary-item"><span class="summary-count count-modified">' + s.mediaSourceChanges + '</span> media sources changed</div>' : '')
+        + '</div>'
+        + (metaHtml ? '<div class="timeline-meta-changes">' + metaHtml + '</div>' : '')
+        + '<div class="track-list">' + tracksHtml + '</div>'
+        + '</div>';
+
+      // Attach click handlers for media elements (lazy content diff)
+      setTimeout(function() {
+        var mediaElements = document.querySelectorAll('.element-change.has-media');
+        mediaElements.forEach(function(el) {
+          el.addEventListener('click', function() {
+            var src = el.getAttribute('data-src');
+            if (src) {
+              vscode.postMessage({
+                type: 'mediaDiff:inspectElement',
+                requestId: Date.now().toString(),
+                timestamp: Date.now(),
+                payload: { src: src }
+              });
+            }
+          });
+        });
+      }, 0);
+    }
+
+    function escHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     // Request initial diff based on comparison mode

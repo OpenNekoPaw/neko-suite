@@ -17,6 +17,7 @@ import type {
 	ImageDiffDetails,
 	VideoDiffDetails,
 	AudioDiffDetails,
+	TimelineDiffDetails,
 } from '@neko/shared';
 
 // =============================================================================
@@ -59,11 +60,13 @@ export interface IMediaDiffAnalyzer {
 // Type Guards
 // =============================================================================
 
+type AnyDiffDetails = ImageDiffDetails | VideoDiffDetails | AudioDiffDetails | TimelineDiffDetails;
+
 /**
  * Type guard for ImageDiffDetails
  */
 export function isImageDiffDetails(
-	details: ImageDiffDetails | VideoDiffDetails | AudioDiffDetails
+	details: AnyDiffDetails
 ): details is ImageDiffDetails {
 	return 'pixelDifference' in details && 'structuralSimilarity' in details;
 }
@@ -72,7 +75,7 @@ export function isImageDiffDetails(
  * Type guard for VideoDiffDetails
  */
 export function isVideoDiffDetails(
-	details: ImageDiffDetails | VideoDiffDetails | AudioDiffDetails
+	details: AnyDiffDetails
 ): details is VideoDiffDetails {
 	return 'keyframeDiffs' in details && 'fps' in details;
 }
@@ -81,9 +84,18 @@ export function isVideoDiffDetails(
  * Type guard for AudioDiffDetails
  */
 export function isAudioDiffDetails(
-	details: ImageDiffDetails | VideoDiffDetails | AudioDiffDetails
+	details: AnyDiffDetails
 ): details is AudioDiffDetails {
 	return 'waveformSimilarity' in details && 'spectralDifference' in details;
+}
+
+/**
+ * Type guard for TimelineDiffDetails
+ */
+export function isTimelineDiffDetails(
+	details: AnyDiffDetails
+): details is TimelineDiffDetails {
+	return 'trackChanges' in details && 'summary' in details;
 }
 
 // =============================================================================

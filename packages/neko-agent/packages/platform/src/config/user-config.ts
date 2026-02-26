@@ -385,7 +385,7 @@ export class UserConfigManager implements IUserConfigManager {
     config.providers = config.providers.filter((p) => {
       if (!p.builtin) return true;
       if (currentBuiltinIds.has(p.id)) return true;
-      return true;
+      return false; // Remove stale builtin providers
     });
 
     if (config.providers.length !== originalCount) {
@@ -643,7 +643,7 @@ export class FileUserConfigManager implements IUserConfigManager {
     config.providers = config.providers.filter((p) => {
       if (!p.builtin) return true;
       if (currentBuiltinIds.has(p.id)) return true;
-      return true;
+      return false; // Remove stale builtin providers
     });
 
     if (config.providers.length !== originalCount) {

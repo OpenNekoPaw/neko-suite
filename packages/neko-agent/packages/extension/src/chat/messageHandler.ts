@@ -270,7 +270,7 @@ export class MessageHandler {
         }
       }
 
-      agentRunner.configure({
+      await agentRunner.configure({
         platform: this._platform,
         groupId: 'default',
         systemPrompt,

@@ -230,19 +230,18 @@ async function connectMCPServers(
     try {
       await mcpManager.connect(server.id);
       connectionStateManager.updateState(server.id, server.name, 'mcp', 'connected');
-
-      // Register MCP tools
-      const tools = await mcpManager.getAllTools();
-      for (const tool of tools) {
-        toolRegistry.register(tool as any);
-      }
-
       console.log(`[NekoAgent] Connected to MCP server: ${server.name}`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       connectionStateManager.updateState(server.id, server.name, 'mcp', 'error', errorMessage);
       console.error(`[NekoAgent] Failed to connect to MCP server ${server.name}:`, error);
     }
+  }
+
+  // Register all MCP tools once after all servers are connected
+  const tools = await mcpManager.getAllTools();
+  for (const tool of tools) {
+    toolRegistry.register(tool as any);
   }
 }
 

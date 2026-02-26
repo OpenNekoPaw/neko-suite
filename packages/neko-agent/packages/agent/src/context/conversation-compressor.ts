@@ -129,9 +129,25 @@ export class ConversationCompressor implements IConversationCompressor {
     const recentTurns = turns.slice(-recentTurnCount);
     const olderTurns = turns.slice(0, -recentTurnCount);
 
+    // Separate system prompt turn (turn 0) from older turns — never compress it
+    const systemTurn = olderTurns.length > 0 && olderTurns[0]!.turnNumber === 0
+      ? olderTurns.shift()
+      : undefined;
+
     const compressedMessages: CompressedMessage[] = [];
     let summariesCreated = 0;
     let messagesRemoved = 0;
+
+    // Always preserve system prompt messages
+    if (systemTurn) {
+      for (const msg of systemTurn.messages) {
+        compressedMessages.push({
+          message: msg,
+          isSummary: false,
+          compressedTokens: estimateMessageTokens(msg),
+        });
+      }
+    }
 
     // Handle older turns
     if (olderTurns.length > 0) {

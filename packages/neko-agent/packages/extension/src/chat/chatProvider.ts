@@ -133,7 +133,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
    * Initialize ToolSkills in ConfigBridge
    * Creates a temporary AgentRunner to get ToolSkills (they are registered during configure)
    */
-  private _initializeToolSkills(): void {
+  private async _initializeToolSkills(): Promise<void> {
     if (!this._agentManager || !this._platform || !this._configBridge) {
       return;
     }
@@ -143,7 +143,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       const tempRunner = this._agentManager.getOrCreate('__toolskill_init__');
 
       // Configure it to initialize ToolSkillRegistry
-      tempRunner.configure({
+      await tempRunner.configure({
         platform: this._platform,
         groupId: 'default',
         systemPrompt: '',
@@ -1280,7 +1280,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const agentRunner = this._agentManager?.get(conversationId);
         if (agentRunner && this._platform) {
           // Temporarily switch to auto mode for plan execution
-          agentRunner.configure({
+          await agentRunner.configure({
             platform: this._platform,
             groupId: 'default',
             systemPrompt: this._settings.customSystemPrompt || this._systemPrompt.getPrompt(),
@@ -1307,7 +1307,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       // No file path - just notify the agent
       const agentRunner = this._agentManager?.get(conversationId);
       if (agentRunner && this._platform) {
-        agentRunner.configure({
+        await agentRunner.configure({
           platform: this._platform,
           groupId: 'default',
           systemPrompt: this._settings.customSystemPrompt || this._systemPrompt.getPrompt(),

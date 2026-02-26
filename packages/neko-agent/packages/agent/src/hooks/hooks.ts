@@ -224,8 +224,8 @@ export class MemoryHooks implements ExecutorHooks {
   }
 
   async onExecuteEnd(result: AgentResult): Promise<void> {
-    // Save to session memory
-    if (this.sessionMemory && this.userInput) {
+    // Save to session memory (only successful responses)
+    if (this.sessionMemory && this.userInput && result.success) {
       await this.sessionMemory.addMessage({ role: 'user', content: this.userInput });
       await this.sessionMemory.addMessage({ role: 'assistant', content: result.response });
     }

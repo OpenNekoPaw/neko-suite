@@ -34,7 +34,8 @@ export class MCPTool implements Tool {
     this.originalName = mcpTool.name;
 
     // Prefix tool name with server ID to avoid conflicts
-    this.name = `mcp_${serverId}_${mcpTool.name}`;
+    // Use double underscore to match permission system's mcp__ prefix convention
+    this.name = `mcp__${serverId}__${mcpTool.name}`;
     this.description = mcpTool.description || `MCP tool from ${serverId}`;
     this.parameters = mcpTool.inputSchema || {};
   }

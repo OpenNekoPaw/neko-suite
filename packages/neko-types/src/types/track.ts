@@ -12,4 +12,4 @@ export type TrackType = 'video' | 'audio' | 'text' | 'effect' | 'subtitle' | 'sh
  * 媒体类型（用于素材分类）
  * Media type for asset classification
  */
-export type MediaType = 'video' | 'audio' | 'image';
+export type MediaType = 'video' | 'audio' | 'image' | 'timeline';

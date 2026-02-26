@@ -399,7 +399,7 @@ export class GetContextTool extends BuiltinTool {
         layer: u.layer,
         used: u.used,
         budget: u.budget,
-        percentage: Math.round((u.used / u.budget) * 100),
+        percentage: u.budget > 0 ? Math.round((u.used / u.budget) * 100) : 0,
       })),
       totalTools,
     };

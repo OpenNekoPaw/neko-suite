@@ -2,11 +2,12 @@
 // =============================================================================
 // Proto → TS Code Generator
 //
-// Parses packages/neko-proto/timeline.proto and generates Engine* types for @neko/shared.
-// Uses protobufjs parser for AST extraction, custom codegen for TS output.
+// Parses .proto files from packages/neko-proto/ and generates Engine* types
+// for @neko/shared. Uses protobufjs parser for AST extraction, custom codegen
+// for TS output.
 //
 // Usage: node scripts/proto-gen-ts.mjs
-// Output: packages/neko-types/src/generated/timeline.engine.ts
+// Output: packages/neko-types/src/generated/*.engine.ts
 // =============================================================================
 
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
@@ -16,36 +17,55 @@ import protobuf from 'protobufjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const PROTO_PATH = resolve(ROOT, 'packages/neko-proto/timeline.proto');
-const OUT_PATH = resolve(ROOT, 'packages/neko-types/src/generated/timeline.engine.ts');
+const PROTO_DIR = resolve(ROOT, 'packages/neko-proto');
+const OUT_DIR = resolve(ROOT, 'packages/neko-types/src/generated');
 
 // =============================================================================
-// Enum value conversion rules (per-enum)
+// Proto file definitions — each entry describes one .proto → one .engine.ts
 // =============================================================================
 
-/** @type {Record<string, { prefix: string, style: 'camelCase' | 'kebab-case' | 'lowerCase' }>} */
-const ENUM_RULES = {
-  BlendMode:         { prefix: 'BLEND_MODE_',         style: 'camelCase' },
-  EasingType:        { prefix: 'EASING_TYPE_',        style: 'kebab-case' },
-  TransitionType:    { prefix: 'TRANSITION_TYPE_',    style: 'kebab-case' },
-  TrackType:         { prefix: 'TRACK_TYPE_',         style: 'lowerCase' },
-  EffectType:        { prefix: 'EFFECT_TYPE_',        style: 'camelCase' },
-  InterpolationMode: { prefix: 'INTERPOLATION_MODE_', style: 'lowerCase' },
-};
-
-// =============================================================================
-// Set of all known enum type names (populated during generation)
-// =============================================================================
-
-/** @type {Set<string>} */
-const knownEnums = new Set();
+/** @type {Array<{ proto: string, package: string, output: string, enumRules: Record<string, { prefix: string, style: string }>, keyConstants?: Array<[string, string]> }>} */
+const PROTO_FILES = [
+  {
+    proto: 'timeline.proto',
+    package: 'neko.timeline',
+    output: 'timeline.engine.ts',
+    enumRules: {
+      BlendMode:         { prefix: 'BLEND_MODE_',         style: 'camelCase' },
+      EasingType:        { prefix: 'EASING_TYPE_',        style: 'kebab-case' },
+      TransitionType:    { prefix: 'TRANSITION_TYPE_',    style: 'kebab-case' },
+      TrackType:         { prefix: 'TRACK_TYPE_',         style: 'lowerCase' },
+      EffectType:        { prefix: 'EFFECT_TYPE_',        style: 'camelCase' },
+      InterpolationMode: { prefix: 'INTERPOLATION_MODE_', style: 'lowerCase' },
+    },
+    keyConstants: [
+      ['Element', 'ENGINE_BASE_ELEMENT_KEYS'],
+      ['MediaElementData', 'ENGINE_MEDIA_KEYS'],
+      ['AudioElementData', 'ENGINE_AUDIO_KEYS'],
+      ['TextElementData', 'ENGINE_TEXT_KEYS'],
+      ['ShapeElementData', 'ENGINE_SHAPE_KEYS'],
+      ['SubtitleElementData', 'ENGINE_SUBTITLE_KEYS'],
+      ['Track', 'ENGINE_TRACK_KEYS'],
+    ],
+  },
+  {
+    proto: 'diff.proto',
+    package: 'neko.diff',
+    output: 'diff.engine.ts',
+    enumRules: {
+      DiffCategory:       { prefix: 'DIFF_CATEGORY_',        style: 'lowerCase' },
+      TimelineChangeType: { prefix: 'TIMELINE_CHANGE_TYPE_', style: 'lowerCase' },
+    },
+    keyConstants: [],
+  },
+];
 
 // =============================================================================
 // Proto type → TS type mapping
 // =============================================================================
 
-/** @param {string} protoType */
-function mapType(protoType) {
+/** @param {string} protoType @param {Set<string>} knownEnums */
+function mapType(protoType, knownEnums) {
   switch (protoType) {
     case 'float': case 'double': case 'int32': case 'int64':
     case 'uint32': case 'uint64': case 'sint32': case 'sint64':
@@ -62,10 +82,7 @@ function mapType(protoType) {
   }
 }
 
-/**
- * Check if a proto type is a scalar (has a default zero-value in proto3).
- * @param {string} protoType
- */
+/** @param {string} protoType */
 function isScalarType(protoType) {
   return ['float', 'double', 'int32', 'int64', 'uint32', 'uint64',
     'sint32', 'sint64', 'fixed32', 'fixed64', 'sfixed32', 'sfixed64',
@@ -111,10 +128,12 @@ function convertEnumValue(value, style) {
 /**
  * Generate TS enum type union from a protobuf Enum.
  * @param {protobuf.Enum} enumObj
+ * @param {Record<string, { prefix: string, style: string }>} enumRules
+ * @param {Set<string>} knownEnums
  * @returns {{ typeDef: string, name: string } | null}
  */
-function generateEnum(enumObj) {
-  const rule = ENUM_RULES[enumObj.name];
+function generateEnum(enumObj, enumRules, knownEnums) {
+  const rule = enumRules[enumObj.name];
   if (!rule) {
     console.warn(`  ⚠ No conversion rule for enum ${enumObj.name}, skipping`);
     return null;
@@ -136,44 +155,31 @@ function generateEnum(enumObj) {
 
 /**
  * Determine if a field should be optional in the generated TS interface.
- *
- * In proto3:
- * - Regular scalar/enum fields always have a default value (not nullable) → required
- * - Fields with explicit `optional` keyword → proto3_optional option → TS optional
- * - Message-typed fields are always nullable in proto3 → TS optional
- * - Repeated fields always have a default (empty array) → required
- *
  * @param {protobuf.Field} field
+ * @param {Set<string>} knownEnums
  * @returns {boolean}
  */
-function isFieldOptional(field) {
-  // Explicitly marked optional in proto
+function isFieldOptional(field, knownEnums) {
   if (field.options?.proto3_optional) return true;
-  // Repeated fields are never optional (default: empty array)
   if (field.repeated) return false;
-  // Message-typed fields (non-scalar, non-enum) are optional in proto3
   if (!isScalarType(field.type) && !knownEnums.has(field.type)) return true;
-  // Regular proto3 scalar/enum fields are required (have default values)
   return false;
 }
 
 /**
  * Generate TS interface from a protobuf Type (message).
  * @param {protobuf.Type} msgType
+ * @param {Set<string>} knownEnums
  * @returns {{ interfaceDef: string, name: string, keys: string[] }}
  */
-function generateMessage(msgType) {
+function generateMessage(msgType, knownEnums) {
   const tsName = `Engine${msgType.name}`;
   const lines = [];
   const keys = [];
 
-  // Collect oneof field names to skip.
-  // protobufjs wraps `optional` keyword fields in synthetic oneofs named `_fieldName`.
-  // Only skip fields from REAL oneofs (no `_` prefix); synthetic oneofs are just optional fields.
   const oneofFields = new Set();
   if (msgType.oneofs) {
     for (const oneofName of Object.keys(msgType.oneofs)) {
-      // Synthetic oneofs from proto3 `optional` keyword start with '_'
       if (oneofName.startsWith('_')) continue;
       const oneof = msgType.oneofs[oneofName];
       for (const f of oneof.fieldsArray) {
@@ -183,13 +189,12 @@ function generateMessage(msgType) {
   }
 
   for (const field of msgType.fieldsArray) {
-    // Skip oneof variant fields (TS side uses discriminated union)
     if (oneofFields.has(field.name)) continue;
 
     const camelName = snakeToCamel(field.name);
-    const optional = isFieldOptional(field);
+    const optional = isFieldOptional(field, knownEnums);
     const isRepeated = field.repeated;
-    const tsType = mapType(field.type);
+    const tsType = mapType(field.type, knownEnums);
     const suffix = isRepeated ? '[]' : '';
     const opt = optional ? '?' : '';
 
@@ -213,35 +218,44 @@ function generateKeyConst(constName, keys) {
 }
 
 // =============================================================================
-// Main
+// Process a single proto file
 // =============================================================================
 
-async function main() {
-  console.log('Proto → TS Generator');
-  console.log(`  Input:  ${PROTO_PATH}`);
-  console.log(`  Output: ${OUT_PATH}`);
+/**
+ * @param {{ proto: string, package: string, output: string, enumRules: Record<string, { prefix: string, style: string }>, keyConstants?: Array<[string, string]> }} config
+ */
+function processProto(config) {
+  const protoPath = resolve(PROTO_DIR, config.proto);
+  const outPath = resolve(OUT_DIR, config.output);
+
+  console.log(`\n--- ${config.proto} ---`);
+  console.log(`  Input:  ${protoPath}`);
+  console.log(`  Output: ${outPath}`);
 
   const root = new protobuf.Root();
-  const protoContent = readFileSync(PROTO_PATH, 'utf-8');
+  const protoContent = readFileSync(protoPath, 'utf-8');
   protobuf.parse(protoContent, root, { keepCase: true });
 
-  const pkg = root.lookup('neko.timeline');
+  const pkg = root.lookup(config.package);
   if (!pkg) {
-    console.error('ERROR: Could not find package neko.timeline');
+    console.error(`ERROR: Could not find package ${config.package}`);
     process.exit(1);
   }
 
+  /** @type {Set<string>} */
+  const knownEnums = new Set();
   const output = [];
+
   output.push('// =============================================================================');
   output.push('// AUTO-GENERATED — DO NOT EDIT');
   output.push('//');
-  output.push('// Source: packages/neko-proto/timeline.proto');
+  output.push(`// Source: packages/neko-proto/${config.proto}`);
   output.push(`// Generated: ${new Date().toISOString()}`);
   output.push('// Command: node scripts/proto-gen-ts.mjs');
   output.push('// =============================================================================');
   output.push('');
 
-  // --- Enums (must come first so knownEnums is populated for message generation) ---
+  // --- Enums ---
   output.push('// =============================================================================');
   output.push('// Enums');
   output.push('// =============================================================================');
@@ -249,7 +263,7 @@ async function main() {
 
   for (const child of pkg.nestedArray) {
     if (child instanceof protobuf.Enum) {
-      const result = generateEnum(child);
+      const result = generateEnum(child, config.enumRules, knownEnums);
       if (result) {
         output.push(result.typeDef);
         console.log(`  ✓ Enum: ${result.name}`);
@@ -268,7 +282,7 @@ async function main() {
 
   for (const child of pkg.nestedArray) {
     if (child instanceof protobuf.Type) {
-      const result = generateMessage(child);
+      const result = generateMessage(child, knownEnums);
       output.push(result.interfaceDef);
       messageKeys.set(child.name, result.keys);
       console.log(`  ✓ Message: ${result.name} (${result.keys.length} fields)`);
@@ -276,40 +290,40 @@ async function main() {
   }
 
   // --- Key constants ---
-  output.push('// =============================================================================');
-  output.push('// Key Constants (for whitelist-based engine field extraction)');
-  output.push('// =============================================================================');
-  output.push('');
+  if (config.keyConstants && config.keyConstants.length > 0) {
+    output.push('// =============================================================================');
+    output.push('// Key Constants (for whitelist-based engine field extraction)');
+    output.push('// =============================================================================');
+    output.push('');
 
-  const elementKeys = messageKeys.get('Element');
-  if (elementKeys) {
-    output.push(generateKeyConst('ENGINE_BASE_ELEMENT_KEYS', elementKeys));
-  }
-
-  const elementDataMessages = [
-    ['MediaElementData', 'ENGINE_MEDIA_KEYS'],
-    ['AudioElementData', 'ENGINE_AUDIO_KEYS'],
-    ['TextElementData', 'ENGINE_TEXT_KEYS'],
-    ['ShapeElementData', 'ENGINE_SHAPE_KEYS'],
-    ['SubtitleElementData', 'ENGINE_SUBTITLE_KEYS'],
-  ];
-
-  for (const [msgName, constName] of elementDataMessages) {
-    const keys = messageKeys.get(msgName);
-    if (keys) {
-      output.push(generateKeyConst(constName, keys));
+    for (const [msgName, constName] of config.keyConstants) {
+      const keys = messageKeys.get(msgName);
+      if (keys) {
+        output.push(generateKeyConst(constName, keys));
+      }
     }
   }
 
-  const trackKeys = messageKeys.get('Track');
-  if (trackKeys) {
-    output.push(generateKeyConst('ENGINE_TRACK_KEYS', trackKeys));
+  // --- Write ---
+  mkdirSync(dirname(outPath), { recursive: true });
+  writeFileSync(outPath, output.join('\n') + '\n', 'utf-8');
+  console.log(`  ✓ Generated ${outPath}`);
+}
+
+// =============================================================================
+// Main
+// =============================================================================
+
+async function main() {
+  console.log('Proto → TS Generator');
+  console.log(`  Proto dir: ${PROTO_DIR}`);
+  console.log(`  Output dir: ${OUT_DIR}`);
+
+  for (const config of PROTO_FILES) {
+    processProto(config);
   }
 
-  // --- Write ---
-  mkdirSync(dirname(OUT_PATH), { recursive: true });
-  writeFileSync(OUT_PATH, output.join('\n') + '\n', 'utf-8');
-  console.log(`\n✓ Generated ${OUT_PATH}`);
+  console.log(`\n✓ All ${PROTO_FILES.length} proto files processed`);
 }
 
 main().catch(err => {

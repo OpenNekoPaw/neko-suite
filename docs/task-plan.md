@@ -41,10 +41,15 @@
 
 ## P2：功能增强（下一迭代）
 
-### 7. neko-tools 媒体 Diff 核心功能
-- 视频帧 seeking 和 extraction 未实现
-- 文件比较和媒体信息展示未实现
-- 工作量：~3 天
+### 7. neko-tools 媒体 Diff 核心功能 — 进行中（65% → 85%）
+- ~~视频帧 seeking 和 extraction 未实现~~ ✅ 已完成（2026-02-26）
+  - neko-engine 新增 `neko.engine.extractFrame` + `neko.engine.decodeAudio` 命令
+  - neko-tools `handleSeek` + `handleGetFrame` 已实现，通过 engine 命令提取帧
+- **剩余工作**：
+  - Git 版本视频帧对比（previous 版本需通过 GitMediaService 写入临时文件后提取）
+  - Webview 专用 Diff 可视化 UI（当前复用 neko-cut webview）
+  - VideoDiffAnalyzer / AudioDiffAnalyzer 单元测试
+- 工作量：~1.5 天
 
 ### 8. neko-assets Phase 4：AI 模型资产化 + Handler 实现
 - 前置条件：Phase 3 ✅ 已完成，neko-agent AI 分类能力成熟

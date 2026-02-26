@@ -12,7 +12,7 @@ import type {
   ChatChunk,
   ContentPart,
 } from '../../types/adapter';
-import type { Model } from '../../types/provider';
+import type { Model, Provider } from '../../types/provider';
 
 interface AzureMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -59,7 +59,8 @@ export class AzureAdapter extends BaseAdapter {
   async chat(
     messages: ChatMessage[],
     options: ChatOptions,
-    model: Model
+    model: Model,
+    _provider?: Provider
   ): Promise<ChatResponse> {
     const url = this.buildUrl(model, 'chat/completions');
     const headers = this.buildHeaders(model);
@@ -79,7 +80,8 @@ export class AzureAdapter extends BaseAdapter {
   async *chatStream(
     messages: ChatMessage[],
     options: ChatOptions,
-    model: Model
+    model: Model,
+    _provider?: Provider
   ): AsyncIterable<ChatChunk> {
     const url = this.buildUrl(model, 'chat/completions');
     const headers = this.buildHeaders(model);
@@ -99,7 +101,11 @@ export class AzureAdapter extends BaseAdapter {
         const choice = chunk.choices[0];
         if (!choice) continue;
 
+        // Only emit the delta for current chunk's tool calls, not accumulated state
+        let toolCallsDelta: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }> | undefined;
+
         if (choice.delta.tool_calls) {
+          toolCallsDelta = [];
           for (const tc of choice.delta.tool_calls) {
             let existing = toolCallsBuffer.get(tc.index);
             if (!existing) {
@@ -109,16 +115,18 @@ export class AzureAdapter extends BaseAdapter {
             if (tc.id) existing.id = tc.id;
             if (tc.function?.name) existing.name = tc.function.name;
             if (tc.function?.arguments) existing.arguments += tc.function.arguments;
+
+            // Emit only the delta portion for this chunk
+            toolCallsDelta.push({
+              id: tc.id || existing.id,
+              type: 'function' as const,
+              function: {
+                name: tc.function?.name || '',
+                arguments: tc.function?.arguments || '',
+              },
+            });
           }
         }
-
-        const toolCalls = choice.delta.tool_calls
-          ? Array.from(toolCallsBuffer.values()).map((tc) => ({
-              id: tc.id,
-              type: 'function' as const,
-              function: { name: tc.name, arguments: tc.arguments },
-            }))
-          : undefined;
 
         yield {
           id: chunk.id,
@@ -126,7 +134,7 @@ export class AzureAdapter extends BaseAdapter {
           delta: {
             role: choice.delta.role,
             content: choice.delta.content || undefined,
-            toolCalls,
+            toolCalls: toolCallsDelta,
           },
           finishReason: choice.finish_reason,
         };
