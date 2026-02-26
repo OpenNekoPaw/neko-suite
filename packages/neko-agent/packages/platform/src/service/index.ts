@@ -5,15 +5,11 @@
 export { Service, type ServiceConfig } from './service';
 export { ToolRegistry } from './tool-registry';
 
-// PromptManager - import from agent package
+// PromptManager - local implementation
 export {
   PromptManager,
-  ChainPromptExecutor,
   createPromptManager,
-  type ChainExecutionResult,
-  type ChainExecutionOptions,
-  type StepExecutor,
-} from '@neko/agent';
+} from './prompt-manager';
 
 // Tools - re-export from tools/ for backwards compatibility
 export {

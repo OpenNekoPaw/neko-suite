@@ -163,10 +163,12 @@ export class MediaDiffService implements IMediaDiffService {
 			onProgress?.(30, 'Analyzing differences...');
 
 			// Run analysis with timeout
+			const ext = uri.fsPath.toLowerCase().match(/\.[^.]+$/)?.[0];
 			const analysisOptions: DiffOptions = {
 				timeout: DEFAULT_DIFF_TIMEOUT,
 				generateHeatmap: true,
 				...options,
+				fileExtension: ext ?? undefined,
 			};
 
 			const result = await this.withTimeout(
@@ -279,10 +281,12 @@ export class MediaDiffService implements IMediaDiffService {
 			onProgress?.(30, 'Analyzing differences...');
 
 			// Run analysis with timeout
+			const ext = currentUri.fsPath.toLowerCase().match(/\.[^.]+$/)?.[0];
 			const analysisOptions: DiffOptions = {
 				timeout: DEFAULT_DIFF_TIMEOUT,
 				generateHeatmap: true,
 				...options,
+				fileExtension: ext ?? undefined,
 			};
 
 			const result = await this.withTimeout(

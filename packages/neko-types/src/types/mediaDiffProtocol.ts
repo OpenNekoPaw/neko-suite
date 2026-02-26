@@ -134,6 +134,8 @@ export interface DiffOptions {
 	generateHeatmap?: boolean;
 	/** Maximum processing time in milliseconds */
 	timeout?: number;
+	/** Original file extension (e.g. '.png', '.mp3') for temp file naming */
+	fileExtension?: string;
 }
 
 /**

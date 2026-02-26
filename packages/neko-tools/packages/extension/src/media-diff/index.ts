@@ -58,11 +58,11 @@ export function initializeMediaDiff(
 	// Get or create the diff service
 	const diffService = getMediaDiffService();
 
-	// Register analyzers
-	const imageDiffAnalyzer = new ImageDiffAnalyzer();
-	const videoDiffAnalyzer = new VideoDiffAnalyzer(engineMediaService, imageDiffAnalyzer);
+	// Register analyzers — all delegate to neko-engine's native diff actions
+	const imageDiffAnalyzer = new ImageDiffAnalyzer(engineMediaService);
+	const videoDiffAnalyzer = new VideoDiffAnalyzer(engineMediaService);
 	const audioDiffAnalyzer = new AudioDiffAnalyzer(engineMediaService);
-	const timelineDiffAnalyzer = new TimelineDiffAnalyzer();
+	const timelineDiffAnalyzer = new TimelineDiffAnalyzer(engineMediaService);
 
 	diffService.registerAnalyzer(imageDiffAnalyzer);
 	diffService.registerAnalyzer(videoDiffAnalyzer);

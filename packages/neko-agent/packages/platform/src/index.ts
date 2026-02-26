@@ -172,15 +172,11 @@ export {
 export { Service, type ServiceConfig } from './service/service';
 export { ToolRegistry } from './service/tool-registry';
 
-// PromptManager - import from agent package
+// PromptManager - local implementation
 export {
   PromptManager,
-  ChainPromptExecutor,
   createPromptManager,
-  type ChainExecutionResult,
-  type ChainExecutionOptions,
-  type StepExecutor,
-} from '@neko/agent';
+} from './service/prompt-manager';
 
 // Task types - re-exported from shared (TaskManager implementation is in @neko/agent)
 export type {

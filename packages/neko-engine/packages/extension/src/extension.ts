@@ -133,28 +133,31 @@ function registerCommands(context: vscode.ExtensionContext): void {
 		)
 	);
 
-	// Decode Audio Segment (programmatic API for other extensions)
+	// Diff two media files (programmatic API for other extensions)
+	// Dispatches to engine's native diff: audios:diff, videos:diff, images:diff, timelines:diff
 	context.subscriptions.push(
 		vscode.commands.registerCommand(
-			'neko.engine.decodeAudio',
-			async (filePath: string, startSeconds: number, durationSeconds: number) => {
+			'neko.engine.diff',
+			async (group: string, sourceA: string, sourceB: string, options?: Record<string, unknown>) => {
 				try {
 					const engine = await getOrStartEngine();
 					if (!engine?.engine) return null;
+					const opts = { sourceA, sourceB, ...options };
 					const resultJson = await engine.engine.dispatchAction(
-						'audios',
-						'extract',
+						group,
+						'diff',
 						null,
-						JSON.stringify({ start: startSeconds, duration: durationSeconds }),
-						filePath
+						JSON.stringify(opts),
+						null, null, null, null
 					);
 					const result = JSON.parse(resultJson);
-					if (result.status === 'ok' && result.data?.samples) {
-						return { data: result.data.samples };
+					if (result.status === 'ok') {
+						return result.data;
 					}
+					log(`diff failed for ${group}: ${result.message ?? 'unknown error'}`, 'error');
 					return null;
 				} catch (error) {
-					log(`decodeAudio failed for ${filePath}: ${error}`, 'error');
+					log(`diff failed for ${group} (${sourceA} vs ${sourceB}): ${error}`, 'error');
 					return null;
 				}
 			}
