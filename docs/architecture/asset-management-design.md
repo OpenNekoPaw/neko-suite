@@ -1,7 +1,7 @@
 # 资产管理统一架构设计
 
-> 日期：2026-02-25
-> 状态：架构决策
+> 日期：2026-02-25（创建）/ 2026-02-26（Phase 1+2+3 完成更新）
+> 状态：Phase 1+2+3 已完成，Phase 4 待开发
 > 范围：neko-assets / neko-cut / neko-canvas / neko-agent / neko-engine / neko-tools
 
 ---
@@ -12,33 +12,37 @@
 
 | 包 | 资产模型 | 存储 | 元数据提取 | 缩略图 | 类型检测 |
 |---|---|---|---|---|---|
-| neko-assets | `AssetEntity/Variant/File` 三层 | JSON 持久化 | 仅 fileSize + MIME | 字段存在但未实现 | `detectMediaType` |
-| neko-cut | 适配 neko-assets | 委托 neko-assets | **重复实现** `extractMetadata` | **独立实现** ThumbnailService | **重复实现** `detectMediaType` |
-| neko-canvas | **独立 `Asset` 类型**（扁平） | 内存数组，无持久化 | 无 | 字段存在但未填充 | **重复实现** `getAssetType` |
-| neko-engine | 不管理资产 | — | `probeMedia`（Rust FFmpeg，最强） | — | — |
-| neko-agent | 不使用资产库 | — | 无 | — | URL/taskId 引用 |
-| neko-tools | 独立 MediaDiffService | — | Git 版本历史 | — | — |
+| neko-assets | `AssetEntity/Variant/File` 三层 + `AssetRegistry` Facade | JSON 持久化 | ✅ `EngineMetadataExtractor` 接入 probeMedia | ✅ `ThumbnailService` → `thumbnailPath` 关联 variant | ✅ `@neko/shared` 统一 |
+| neko-cut | ✅ 委托 neko-assets（445 行薄适配层） | 委托 neko-assets | ✅ 委托 neko-assets | **独立实现** ThumbnailService（webview 端 WebCodecs） | ✅ 已改用 `@neko/shared` |
+| neko-canvas | ✅ 委托 neko-assets（`getAllEntities` 命令） | ✅ 委托 neko-assets | 委托 neko-assets | ✅ 通过 `thumbnailPath` 获取 | ✅ 已改用 `@neko/shared` |
+| neko-engine | 不管理资产 | — | `probeMedia`（Rust FFmpeg）+ ✅ `probeInternal` 命令 | — | — |
+| neko-agent | 不使用资产库 | — | 无 | — | ✅ 已改用 `@neko/shared` |
+| neko-tools | ✅ 接入 `initializeMediaDiff` + `initializeAssetDiff`，委托 neko-assets | — | Git 版本历史 + `FFmpegService`（stub） | — | ✅ `@neko/shared` |
 
-### 1.2 四个核心问题
+### 1.2 剩余问题（Phase 2 后）
 
-**代码重复**（至少 4 处）：
-- 媒体类型检测：neko-assets `FileService` / neko-cut `AssetService` / neko-canvas `AssetLibraryProvider` 各写了一遍
-- MIME 映射：3 处独立实现
-- Variant diff：neko-assets `AssetDiffService` 和 neko-cut `AssetService` 各写了一遍
-- 文件导入对话框：neko-cut 和 neko-canvas 各写了一遍
+**已解决** ✅：
+- ~~媒体类型检测重复~~：5 处 → `@neko/shared` `media.ts` 唯一实现
+- ~~MIME 映射重复~~：3 处 → `@neko/shared` `getMimeType()` 唯一实现
+- ~~元数据提取断裂~~：`EngineMetadataExtractor` 通过 `neko.engine.probeInternal` 接入 Rust FFmpeg
+- ~~Explorer 无资产信息~~：`AssetFileDecorationProvider` 显示 badge + tooltip
+- ~~neko-cut AssetService 660 行重复~~：瘦身至 445 行，diff/metadata/nodeFileSystem 全部委托 neko-assets
+- ~~neko-canvas 完全独立~~：重写为委托 neko-assets，使用统一 `AssetEntity` 模型
+- ~~跨扩展拖拽协议未定义~~：`AssetDragData` 统一协议（`@neko/shared` `drag.ts`）
+- ~~Activity Bar Views 空壳~~：`AssetManagerTreeProvider`（按分类浏览）+ `AssetHistoryTreeProvider`（最近使用）
+- ~~`AssetDiffService.analyzeChanges` TODO~~：实现基于 file stat 的变更分析
+- ~~`IGitService` 无实现~~：`VscodeGitService` 接入 VS Code Git Extension API
 
-**元数据提取断裂**：
-- neko-engine 有最强的 `probeMedia`（Rust FFmpeg，能提取 duration/codec/分辨率）
-- neko-assets 的 `MetadataExtractor` 只用了 `fs.stat`
-- 视频/音频的核心元数据（时长、编码格式、分辨率）至今未接入资产库
+**待解决** ⚠️：
+- `IAIAnalysisService` 只有接口无实现（依赖 neko-agent AI 能力）→ Phase 4
+- Cloud Sync View（`neko.cloudSync`）无实现 → Phase 5
+- `ShaderAssetHandler` / `PresetAssetHandler` 具体实现 → Phase 4
+- `FFmpegService` 完整实现（当前为 stub）→ Phase 4
 
-**缩略图系统孤立**：
-- neko-cut 的 `ThumbnailService` 功能完善（LRU 缓存 + 并发控制 + 优先级队列），但与 neko-assets 的 `thumbnailFileId` 字段完全无关联
-- neko-canvas 的 `Asset.thumbnail` 从未被填充
-
-**neko-canvas 完全独立**：
-- 自己的 `Asset` 类型（扁平结构，无 variant/category），与 `neko-types` 中定义的 `AssetEntity` 完全不同
-- 内存存储，无持久化，关闭后丢失
+**已在 Phase 3 中解决** ✅：
+- ~~缩略图系统孤立~~：`ThumbnailService` 接入 `AssetLibrary.thumbnailGenerator`，`thumbnailPath` 关联 variant
+- ~~`AssetManifest` / `AssetRegistry` 统一注册表未实现~~：`IAssetRegistry` + `IAssetHandler` + `AssetRegistry` 已实现
+- ~~neko-tools `MediaDiffService` 未接入统一 `AssetDiffService`~~：`extension.ts` 重写，调用 `initializeMediaDiff()` + `initializeAssetDiff()`
 
 ---
 
@@ -231,72 +235,218 @@ neko-tools
 
 ## 5. 实施路线
 
-### Phase 1：统一核心 + 消除重复（当前可做）
+### Phase 1：统一核心 + 消除重复 ✅ 已完成（2026-02-26）
 
-**目标**：消除 4 处代码重复，接入 engine probeMedia
+**目标**：消除代码重复，接入 engine probeMedia，增强 Explorer 目录树
 
-| 动作 | 从 | 到 | 影响 |
-|------|----|----|------|
-| 统一媒体类型检测 | 3 处重复 | neko-assets `FileService` 唯一实现 | neko-cut / neko-canvas 删除重复代码 |
-| 统一 MIME 映射 | 3 处重复 | neko-assets `FileService` | 同上 |
-| 接入 engine probeMedia | neko-engine 独立 | neko-assets `MetadataExtractor` 调用 engine | 资产库获得完整媒体元数据 |
-| 统一 Variant diff | 2 处重复 | neko-assets `AssetDiffService` 唯一实现 | neko-cut 删除重复 |
+#### 已完成项
 
-### Phase 2：neko-canvas 接入 + 缩略图下沉
+| 动作 | 结果 | 变更文件 |
+|------|------|----------|
+| 统一媒体类型检测 | 5 处重复 → `@neko/shared` `media.ts` 唯一实现 | 新建 `neko-types/src/utils/media.ts`（74 项测试） |
+| 统一 MIME 映射 | 3 处重复 → `@neko/shared` `getMimeType()` | 同上 |
+| 接入 engine probeMedia | `EngineMetadataExtractor` 通过 `neko.engine.probeInternal` 命令调用 Rust FFmpeg | 新建 `neko-assets/src/services/EngineMetadataExtractor.ts` |
+| 初始化 AssetLibrary | extension.ts 从 stub → 完整初始化（JsonFileStorage + RuleClassifier + MetadataExtractor） | 重写 `neko-assets/src/extension.ts` |
+| FileDecorationProvider | Explorer 目录树显示时长/分辨率 badge + 完整元数据 tooltip | 新建 `neko-assets/src/providers/AssetFileDecorationProvider.ts` |
+| 统一右键菜单 | 添加到时间线 / 添加到画布 / 导入资产库 / 预览媒体 | 更新 `neko-assets/package.json` |
+| 消除 5 包重复代码 | FileService、AssetDiffService、neko-cut/AssetService、neko-canvas/assetLibrary、neko-agent/media-manager 全部改用 `@neko/shared` | 修改 5 个文件 |
 
-**目标**：neko-canvas 使用统一资产库，缩略图服务下沉到 Extension Host
+#### 当前代码结构
 
-neko-canvas 接入：
 ```
-current: neko-canvas independent Asset type (flat, in-memory)
-target:  neko-canvas uses AssetEntity (3-layer, persistent)
-
-approach:
-├─ define CanvasAssetAdapter
-│   └─ map AssetEntity to simplified canvas view
-├─ canvas nodes reference AssetFile.id instead of file path
-└─ share .neko/assets/library.json
-```
-
-缩略图服务下沉：
-```
-current: ThumbnailService in neko-cut webview
-target:  thumbnail generation in Extension Host layer
-
-reason:
-├─ thumbnail generation needs MediaProxy (WebCodecs or Native FFmpeg)
-├─ multiple packages (cut/canvas/preview) need thumbnails
-├─ Extension Host can unify caching and persistence
-└─ generated results write to AssetVariant.thumbnailFileId
-
-approach:
-├─ neko-assets adds ThumbnailService (Extension Host)
-├─ extract keyframes via neko-engine probeMedia
-├─ cache to .neko/assets/thumbnails/
-└─ neko-cut / neko-canvas webview request via postMessage
+neko-assets/
+├── src/                                    # VSCode 扩展层
+│   ├── extension.ts                        # 初始化 AssetLibrary + 注册 providers/commands
+│   ├── providers/
+│   │   └── AssetFileDecorationProvider.ts  # Explorer 文件装饰（badge + tooltip）
+│   └── services/
+│       └── EngineMetadataExtractor.ts      # probeMedia 接入的 MetadataExtractor
+│
+└── packages/asset/src/                     # 核心库（纯逻辑，不依赖 vscode）
+    ├── classifier/                         # 资产分类
+    │   ├── IClassifier.ts
+    │   └── RuleClassifier.ts
+    ├── service/                            # 业务服务
+    │   ├── AssetLibrary.ts                 # Facade（CRUD/search/import/classify）
+    │   ├── EntityService.ts                # Entity 管理
+    │   ├── VariantService.ts               # Variant 管理
+    │   ├── FileService.ts                  # 文件管理（已使用 @neko/shared 统一工具）
+    │   └── AssetDiffService.ts             # Diff 服务（已使用 @neko/shared 统一工具）
+    └── storage/                            # 存储层
+        ├── IAssetStorage.ts                # 存储接口
+        ├── InMemoryStorage.ts              # 内存存储（测试用）
+        └── JsonFileStorage.ts              # JSON 文件持久化
 ```
 
-### Phase 3：Shader / 预设资产化（neko-model 启动时）
+#### Phase 1 遗留项 ✅ 全部在 Phase 2 中解决
+
+| 遗留项 | 解决方式 | Phase |
+|--------|----------|-------|
+| neko-cut `AssetService.ts` 660 行重复 | 瘦身至 445 行，diff/metadata 委托 neko-assets 命令 | 2A ✅ |
+| neko-canvas 独立实现 | 重写为委托 neko-assets `getAllEntities` 命令 | 2B ✅ |
+| `AssetDiffService.analyzeChanges` TODO | 实现 file stat 变更分析 + `statFile` 注入 | 2A ✅ |
+| `IGitService` 无实现 | `VscodeGitService` 接入 VS Code Git Extension API | 2A ✅ |
+| Activity Bar Views 空壳 | `AssetManagerTreeProvider` + `AssetHistoryTreeProvider` | 2C ✅ |
+| 跨扩展拖拽协议未定义 | `AssetDragData` 统一协议（`drag.ts`） | 2B ✅ |
+
+---
+
+### Phase 2：深度集成 + 消除剩余重复 ✅ 已完成（2026-02-26）
+
+**目标**：neko-cut / neko-canvas 完全接入统一资产库，消除所有剩余重复代码
+
+#### Phase 2A：neko-cut 深度集成 + Variant Diff 统一 ✅
+
+**已完成项**：
+
+| 动作 | 结果 | 变更文件 |
+|------|------|----------|
+| 实现 `VscodeGitService` | 接入 VS Code Git Extension API，实现 `getFileAtRef` / `getFileHistory` | 新建 `neko-assets/src/services/VscodeGitService.ts` |
+| 完善 `AssetDiffService.analyzeChanges` | 基于 file stat 的变更分析（content/format 检测），注入 `statFile` 回调 | 修改 `neko-assets/packages/asset/src/service/AssetDiffService.ts` |
+| 注册内部 Diff 命令 | `neko.assets.compareVariants` / `compare` / `getVersionHistory` / `compareWithGit` | 修改 `neko-assets/src/extension.ts` |
+| 瘦身 neko-cut `AssetService` | 660 行 → 445 行，删除 `compareVariants` / `extractMetadata` / `nodeFileSystem` / `compareFiles` / `compareAttributes`，diff 委托 neko-assets 命令 | 修改 `neko-cut/packages/extension/src/services/AssetService.ts` |
+
+#### Phase 2B：neko-canvas 接入 + 拖拽协议 ✅
+
+**已完成项**：
+
+| 动作 | 结果 | 变更文件 |
+|------|------|----------|
+| 定义 `AssetDragData` 统一协议 | `SingleAssetDragData` / `MultiAssetDragData` / `AssetInternalDragData` + `getDragItems()` 辅助函数 | 新建 `neko-types/src/types/asset/drag.ts` |
+| neko-cut 拖拽改用共享类型 | `AssetPanel.tsx` 使用 `ASSET_DRAG_MIME` + 类型化拖拽数据；`useTimelineDragDrop` 使用 `getDragItems()`；`useAssetDragDrop` 使用 `ASSET_INTERNAL_DRAG_MIME` | 修改 3 个文件 |
+| 重写 canvas `AssetLibraryProvider` | 删除独立 `Asset` 类型和内存存储，改为通过 `neko.assets.getAllEntities` 命令委托 neko-assets；拖拽使用统一 `AssetDragData` 协议 | 重写 `neko-canvas/packages/extension/src/views/assetLibrary.ts` |
+| canvas `extension.ts` 委托 | import 命令委托 neko-assets，公共 API 适配 | 修改 `neko-canvas/packages/extension/src/extension.ts` |
+| canvas 画布接收 `AssetDragData` | `CanvasApp.tsx` drop handler 识别 `application/json` 中的 `AssetDragData` 格式 | 修改 `neko-canvas/packages/webview/src/CanvasApp.tsx` |
+| 注册 `getAllEntities` 命令 | neko-assets 注册内部命令供 canvas 调用 | 修改 `neko-assets/src/extension.ts` |
+
+#### Phase 2C：Activity Bar Views ✅
+
+**已完成项**：
+
+| 动作 | 结果 | 变更文件 |
+|------|------|----------|
+| `AssetManagerTreeProvider` | 按 EntityCategory 分组浏览，Entity → Variant 树形展开，点击打开文件 | 新建 `neko-assets/src/providers/AssetManagerTreeProvider.ts` |
+| `AssetHistoryTreeProvider` | 最近使用的 20 个实体列表，显示分类和最后使用时间 | 新建 `neko-assets/src/providers/AssetHistoryTreeProvider.ts` |
+| 注册 Activity Bar Views | `neko.assetManager` + `neko.assetHistory` 树视图 + `neko.assets.refreshViews` 刷新命令 | 修改 `neko-assets/src/extension.ts` |
+
+#### 当前代码结构（Phase 2 后）
+
+```
+neko-assets/
+├── src/                                    # VSCode 扩展层
+│   ├── extension.ts                        # 初始化 + 注册 providers/commands/views
+│   ├── providers/
+│   │   ├── AssetFileDecorationProvider.ts  # Explorer 文件装饰（badge + tooltip）
+│   │   ├── AssetManagerTreeProvider.ts     # Activity Bar 资产浏览树
+│   │   └── AssetHistoryTreeProvider.ts     # Activity Bar 最近使用树
+│   └── services/
+│       ├── EngineMetadataExtractor.ts      # probeMedia 接入的 MetadataExtractor
+│       └── VscodeGitService.ts             # Git Extension API 接入
+│
+└── packages/asset/src/                     # 核心库（纯逻辑，不依赖 vscode）
+    ├── classifier/                         # 资产分类
+    ├── service/                            # 业务服务
+    │   ├── AssetLibrary.ts                 # Facade
+    │   ├── EntityService.ts
+    │   ├── VariantService.ts
+    │   ├── FileService.ts
+    │   └── AssetDiffService.ts             # Diff 服务（含 statFile 注入）
+    └── storage/                            # 存储层
+
+neko-types/src/types/asset/
+├── entity.ts                               # Entity/Variant/File 三层模型
+├── query.ts                                # 查询类型
+├── classifier.ts                           # AI 分类类型
+├── protocol.ts                             # IPC 协议
+├── diff.ts                                 # Diff 类型
+└── drag.ts                                 # 统一拖拽协议（AssetDragData）
+```
+
+#### Phase 2 遗留项（移入后续 Phase）
+
+| 遗留项 | 原因 | 归入 | 状态 |
+|--------|------|------|------|
+| Extension Host 层统一缩略图服务 | neko-cut ThumbnailService 是 webview 端 WebCodecs 实现，架构合理但与 `thumbnailFileId` 未关联 | Phase 3B | ✅ 已完成 |
+| `IAIAnalysisService` 实现 | 依赖 neko-agent AI 分类能力成熟 | Phase 4 | ⏳ 待开发 |
+| Cloud Sync View（`neko.cloudSync`）| 依赖远程注册表基础设施 | Phase 5 | ⏳ 待开发 |
+| neko-tools `MediaDiffService` 接入 | 独立运行，优先级低 | Phase 3C | ✅ 已完成 |
+
+---
+
+### Phase 3：统一注册表 + 缩略图 + Diff 接入 ✅ 已完成（2026-02-26）
+
+**前置条件**：Phase 2 完成
+
+#### Phase 3A：AssetManifest 类型定义 ✅
+
+- `AssetType`（14 种资产类型：video/audio/image/sequence/shader/shader-preset/ai-model/lora/embedding/plugin/skill/preset/template/lut）
+- `AssetManifestSource`（4 种来源：local/git-lfs/registry/ai-generated）
+- 类型特化元数据：`ShaderMetadata` / `ModelMetadata` / `PluginMetadata` / `PresetMetadata`
+- `AssetManifest` 统一清单（id/name/version/type/source/typeMetadata/distribution/dependencies/thumbnail）
+- 文件：`packages/neko-types/src/types/asset/manifest.ts`
+
+#### Phase 3B：Extension Host 缩略图服务 + thumbnailPath 关联 ✅
+
+- `AssetVariant.thumbnailPath` 字段（存储生成的缩略图文件路径）
+- `VariantService.update()` 支持 `thumbnailPath` 更新
+- `AssetLibraryConfig.thumbnailGenerator` 回调（保持核心库 vscode-free）
+- `importFile` 流程自动调用 `ThumbnailService.generate()` → 路径写入 variant
+- `extension.ts` 实例化 `ThumbnailService` 并注入为 `thumbnailGenerator`
+- 注册 `neko.assets.generateThumbnail` / `neko.assets.getThumbnailPath` 内部命令
+- `AssetManagerTreeProvider` 节点使用缩略图作为 `iconPath`
+
+#### Phase 3C：neko-tools MediaDiffService 接入 ✅
+
+- `neko-tools/src/extension.ts` 重写：调用 `initializeMediaDiff()` + `initializeAssetDiff()`
+- 6 个 stub 命令替换为真实委托（compareFiles/compareImages/compareVideos/compareAudio/compareAssetVariants/showMediaInfo）
+- `initializeAssetDiff` 通过 `neko.assets.getAllEntities` / `neko.assets.compareVariants` 命令跨扩展访问
+- `FFmpegService` stub 创建（委托 `neko.engine.probeInternal` / `extractFrame` / `decodeAudio`）
+
+#### Phase 3D：AssetRegistry Facade ✅
+
+- `IAssetRegistry` / `IAssetHandler` / `IAssetResolver` 接口定义（`@neko/shared` `registry.ts`）
+- `AssetChangeEvent` 事件系统（registered/unregistered/updated）
+- `AssetRegistryQuery` 统一查询（types/text/tags/limit/offset）
+- `AssetRegistry` 实现：媒体类型委托 `AssetLibrary`，其他类型路由到 `IAssetHandler`
+- `AssetRegistry.onDidChange()` 响应式事件订阅
+- `AssetRegistry.resolve()` 统一路径解析
+- `entityToManifest()` 桥接：`AssetEntity` → `AssetManifest` 统一查询结果
+
+#### Phase 3 遗留项（移入后续 Phase）
+
+| 遗留项 | 原因 | 归入 |
+|--------|------|------|
+| `ShaderAssetHandler` 实现 | 依赖 neko-model Shader 编译管线 | Phase 4 |
+| `PresetAssetHandler` 实现 | 依赖 LUT/转场预设格式定义 | Phase 4 |
+| `FFmpegService` 完整实现 | 当前为 stub，委托 neko-engine；需要 bundled FFmpeg 或 native module | Phase 4 |
+| `extension.ts` 升级为 `AssetRegistry` | 当前仍使用 `AssetLibrary`，待 handler 就绪后切换 | Phase 4 |
+
+### Phase 4：AI 模型资产化 + Handler 实现（neko-agent 成熟后）
+
+**前置条件**：Phase 3 完成，`AssetRegistry` + Handler 模式已建立
 
 - `ShaderAssetHandler`：编译验证 + 预览 + 热重载
 - `PresetAssetHandler`：LUT / 转场预设 / 导出预设
-- 本地 `.neko/assets/` 目录结构扩展
-- `AssetManifest` 类型定义落地到 neko-types
-
-### Phase 4：AI 模型资产化（neko-agent 成熟后）
-
 - `ModelAssetHandler`：下载 + 校验 + 量化选择
 - 模型存储策略（懒加载 + 缓存 + 磁盘空间管理）
 - AI 生成结果自动入库
-- neko-agent 生成完成 → Extension Host 调用 `AssetLibrary.importFile()` → 自动分类 + 元数据 + 缩略图
+- neko-agent 生成完成 → Extension Host 调用 `AssetRegistry.register()` → 自动分类 + 元数据 + 缩略图
+- `IAIAnalysisService` 实现（接入 neko-agent 的 AI 分类能力）
+- `FFmpegService` 完整实现（bundled FFmpeg 或 neko-engine native module）
+- `neko-assets/extension.ts` 升级为 `AssetRegistry` 作为顶层 Facade
 
 ### Phase 5：社区分发（产品成熟后）
 
+**前置条件**：Phase 4 完成，多种资产类型已支持，Handler 模式已验证
+
 - `.neko` 包格式定义（manifest + content）
-- 远程注���表（类似 npm registry）
+- 远程注册表（类似 npm registry）
 - push / pull / search / install CLI
 - 私有化部署支持
 - 依赖解析（Shader 依赖 common.wgsl 等）
+- `project.json` / `lock.json` / `.installed/` 声明与实体分离落地
+- Cloud Sync View（`neko.cloudSync`）实现
+- `AssetManifestSource.kind: 'registry'` 完整支持
 
 ---
 
@@ -582,13 +732,15 @@ function handleDrop(data: AssetDragData) {
 
 ### 8.4 迁移计划
 
-| 步骤 | 动作 | 影响 |
-|------|------|------|
-| 1 | neko-assets extension 实现 `AssetFileDecorationProvider` | Explorer 目录树增强 |
-| 2 | neko-assets extension 实现统一右键菜单 + 拖拽协议 | 各编辑器统一消费 |
-| 3 | neko-cut 删除独立 `assetLibrary.html` 入口 | 减少维护成本 |
-| 4 | neko-canvas 删除 `AssetLibraryProvider`（内联 HTML） | 消除重复 |
-| 5 | neko-assets 实现按需 Asset Manager 侧边栏 | 社区/模型/shader 管理 |
+| 步骤 | 动作 | 影响 | 状态 |
+|------|------|------|------|
+| 1 | neko-assets extension 实现 `AssetFileDecorationProvider` | Explorer 目录树增强 | ✅ Phase 1 |
+| 2 | neko-assets extension 实现统一右键菜单 | 添加到时间线/画布/导入/预览 | ✅ Phase 1 |
+| 3 | 定义统一拖拽协议 `AssetDragData` | 各编辑器统一消费 | ✅ Phase 2B |
+| 4 | neko-cut 瘦身 `AssetService` + diff 委托 | 660→445 行，diff 走 neko-assets 命令 | ✅ Phase 2A |
+| 5 | neko-canvas 重写 `AssetLibraryProvider` 接入 `@neko/asset` | 消除独立 Asset 类型和内存存储 | ✅ Phase 2B |
+| 6 | Activity Bar Views 实现 | 资产浏览树 + 最近使用树 | ✅ Phase 2C |
+| 7 | neko-assets 实现按需 Asset Manager 侧边栏 | 社区/模型/shader 管理 | Phase 3 |
 
 ### 8.5 各 Webview 职责边界（最终状态）
 
@@ -697,4 +849,4 @@ interface IAssetHandler<T extends AssetType = AssetType> {
 
 ---
 
-*基于 2026-02-25 代码分析*
+*基于 2026-02-25 代码分析，2026-02-26 Phase 1+2 完成更新*

@@ -472,6 +472,39 @@ export function CanvasApp() {
     // Save drop position for when extension responds
     dropPositionRef.current = screenToCanvas(e.clientX, e.clientY);
 
+    // First, check for AssetDragData from asset library (unified protocol)
+    const jsonData = e.dataTransfer.getData('application/json');
+    if (jsonData) {
+      try {
+        const data = JSON.parse(jsonData);
+        if (data.type === 'asset' || data.type === 'assets') {
+          const items = data.type === 'assets' ? data.items : [data];
+          const pos = dropPositionRef.current ?? { x: 0, y: 0 };
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const file = item.files?.[0];
+            if (file) {
+              if (vscode) {
+                // Send file URI to extension for webview URI resolution
+                vscode.postMessage({
+                  type: 'resolveDroppedFiles',
+                  uris: [`file://${file.path}`],
+                  dropX: e.clientX,
+                  dropY: e.clientY,
+                });
+              } else {
+                const mt = file.mediaType === 'video' ? 'video' : file.mediaType === 'audio' ? 'audio' : 'image';
+                addMediaAt({ x: pos.x + i * 30, y: pos.y + i * 30 }, mt, file.path, file.name);
+              }
+            }
+          }
+          return;
+        }
+      } catch {
+        // Not valid asset drag data, continue with other handlers
+      }
+    }
+
     // Try to get URIs from the drop data
     const uriList = e.dataTransfer.getData('text/uri-list');
     const textData = e.dataTransfer.getData('text/plain');

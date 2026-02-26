@@ -101,6 +101,9 @@ export class VariantService {
 			}
 			variant.thumbnailFileId = updates.thumbnailFileId ?? undefined;
 		}
+		if (updates.thumbnailPath !== undefined) {
+			variant.thumbnailPath = updates.thumbnailPath ?? undefined;
+		}
 
 		await this.storage.saveVariant(entityId, variant);
 		return variant;

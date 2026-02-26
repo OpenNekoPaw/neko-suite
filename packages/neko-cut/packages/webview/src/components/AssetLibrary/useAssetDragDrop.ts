@@ -8,22 +8,17 @@
 
 import { useState, useCallback } from 'react';
 import type { MoveVariantInput, MergeEntitiesInput, MoveVariantResult, MergeEntitiesResult } from '@neko/shared';
+import { ASSET_INTERNAL_DRAG_MIME, type AssetInternalDragData } from '@neko/shared';
 import type { SelectionItem } from './types';
 
-// Internal drag data type identifier
-export const ASSET_INTERNAL_DRAG_TYPE = 'application/x-asset-internal';
+/** @deprecated Use ASSET_INTERNAL_DRAG_MIME from @neko/shared */
+export const ASSET_INTERNAL_DRAG_TYPE = ASSET_INTERNAL_DRAG_MIME;
 
 /** Drop target information */
 export interface DropTarget {
 	type: 'entity' | 'variant';
 	entityId: string;
 	variantId?: string;
-}
-
-/** Internal drag data structure */
-export interface InternalDragData {
-	type: 'asset-internal';
-	sourceItems: SelectionItem[];
 }
 
 export interface UseAssetDragDropOptions {
@@ -61,11 +56,11 @@ export function useAssetDragDrop({
 		e: React.DragEvent,
 		sourceItems: SelectionItem[]
 	) => {
-		const dragData: InternalDragData = {
+		const dragData: AssetInternalDragData = {
 			type: 'asset-internal',
 			sourceItems,
 		};
-		e.dataTransfer.setData(ASSET_INTERNAL_DRAG_TYPE, JSON.stringify(dragData));
+		e.dataTransfer.setData(ASSET_INTERNAL_DRAG_MIME, JSON.stringify(dragData));
 		e.dataTransfer.effectAllowed = 'move';
 	}, []);
 
@@ -93,7 +88,7 @@ export function useAssetDragDrop({
 		entityId: string
 	) => {
 		// Check if this is internal drag
-		if (e.dataTransfer.types.includes(ASSET_INTERNAL_DRAG_TYPE)) {
+		if (e.dataTransfer.types.includes(ASSET_INTERNAL_DRAG_MIME)) {
 			e.preventDefault();
 			e.dataTransfer.dropEffect = 'move';
 			setDropTarget({ type: 'entity', entityId });
@@ -118,11 +113,11 @@ export function useAssetDragDrop({
 		e.preventDefault();
 		setDropTarget(null);
 
-		const internalData = e.dataTransfer.getData(ASSET_INTERNAL_DRAG_TYPE);
+		const internalData = e.dataTransfer.getData(ASSET_INTERNAL_DRAG_MIME);
 		if (!internalData) return;
 
 		try {
-			const dragData: InternalDragData = JSON.parse(internalData);
+			const dragData: AssetInternalDragData = JSON.parse(internalData);
 			const sourceItems = dragData.sourceItems;
 
 			// Separate entities and variants

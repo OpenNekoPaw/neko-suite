@@ -7,7 +7,7 @@ import { useCallback, useState, RefObject } from 'react';
 import { PIXELS_PER_SECOND, TRACK_HEIGHT, TRACK_LABEL_WIDTH, DEFAULT_IMAGE_DURATION, DEFAULT_VIDEO_DURATION } from '../constants';
 import { getFileType } from '../utils';
 import type { ProjectData, TimelineTrack, TextElement } from '../types';
-import { CENTERED_TRANSFORM } from '@neko/shared';
+import { CENTERED_TRANSFORM, ASSET_DRAG_MIME, getDragItems, type AssetDragData } from '@neko/shared';
 import { getMediaInfoService } from '../services';
 
 export interface TimelineDragDropOptions {
@@ -184,25 +184,20 @@ export function useTimelineDragDrop({
     // Process drop items asynchronously
     const processDropItems = async () => {
       // First, check for asset library drag data (application/json)
-      const jsonData = e.dataTransfer.getData('application/json');
+      const jsonData = e.dataTransfer.getData(ASSET_DRAG_MIME);
       if (jsonData) {
         try {
-          const data = JSON.parse(jsonData);
+          const data = JSON.parse(jsonData) as AssetDragData;
+          const items = getDragItems(data);
 
-          if (data.type === 'assets' && Array.isArray(data.items)) {
-            // Multi-asset drop from asset library
-            for (let i = 0; i < data.items.length; i++) {
-              const item = data.items[i];
+          if (items.length > 0) {
+            for (let i = 0; i < items.length; i++) {
+              const item = items[i];
               if (item.files && item.files.length > 0) {
                 const file = item.files[0];
                 await addFileToTrack(file.path, file.name, dropTime + i * 0.5);
               }
             }
-            return; // Done processing
-          } else if (data.type === 'asset' && data.files && data.files.length > 0) {
-            // Single asset drop from asset library
-            const file = data.files[0];
-            await addFileToTrack(file.path, file.name, dropTime);
             return; // Done processing
           }
         } catch (err) {

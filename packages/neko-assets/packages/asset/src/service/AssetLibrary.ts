@@ -31,6 +31,25 @@ import { VariantService } from './VariantService';
 import { FileService, type MetadataExtractor } from './FileService';
 
 /**
+ * Thumbnail generator result
+ */
+export interface ThumbnailGeneratorResult {
+	/** Absolute path to the generated thumbnail */
+	path: string;
+	/** Width of the thumbnail */
+	width: number;
+	/** Height of the thumbnail */
+	height: number;
+}
+
+/**
+ * Thumbnail generator callback.
+ * Keeps the core library free of vscode/Node.js dependencies.
+ * Returns null if thumbnail generation is not available or not applicable.
+ */
+export type ThumbnailGenerator = (filePath: string) => Promise<ThumbnailGeneratorResult | null>;
+
+/**
  * Asset library configuration
  */
 export interface AssetLibraryConfig {
@@ -40,6 +59,8 @@ export interface AssetLibraryConfig {
 	classifier?: IAssetClassifier;
 	/** Optional metadata extractor */
 	metadataExtractor?: MetadataExtractor;
+	/** Optional thumbnail generator (injected from extension host) */
+	thumbnailGenerator?: ThumbnailGenerator;
 }
 
 /**
@@ -81,10 +102,12 @@ export class AssetLibrary {
 	private variantService: VariantService;
 	private fileService: FileService;
 	private classifier?: IAssetClassifier;
+	private thumbnailGenerator?: ThumbnailGenerator;
 
 	constructor(config: AssetLibraryConfig) {
 		this.storage = config.storage;
 		this.classifier = config.classifier;
+		this.thumbnailGenerator = config.thumbnailGenerator;
 
 		this.entityService = new EntityService(this.storage);
 		this.variantService = new VariantService(this.storage);
@@ -395,9 +418,23 @@ export class AssetLibrary {
 			variant.files.length === 1 &&
 			(file.mediaType === 'image' || file.mediaType === 'video')
 		) {
-			await this.variantService.update(entity.id, variant.id, {
+			const thumbnailUpdate: UpdateVariantInput = {
 				thumbnailFileId: file.id,
-			});
+			};
+
+			// Generate thumbnail if generator is available
+			if (this.thumbnailGenerator) {
+				try {
+					const thumb = await this.thumbnailGenerator(filePath);
+					if (thumb) {
+						thumbnailUpdate.thumbnailPath = thumb.path;
+					}
+				} catch {
+					// Thumbnail generation failure is non-fatal
+				}
+			}
+
+			await this.variantService.update(entity.id, variant.id, thumbnailUpdate);
 		}
 
 		// Re-fetch to get updated state

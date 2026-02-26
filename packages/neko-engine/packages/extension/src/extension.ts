@@ -92,9 +92,23 @@ function registerCommands(context: vscode.ExtensionContext): void {
 		vscode.commands.registerCommand('neko.engine.status', cmdShowStatus)
 	);
 
-	// Probe Media
+	// Probe Media (interactive — shows file picker + output)
 	context.subscriptions.push(
 		vscode.commands.registerCommand('neko.engine.probe', cmdProbeMedia)
+	);
+
+	// Probe Media (internal — programmatic API for other extensions)
+	context.subscriptions.push(
+		vscode.commands.registerCommand('neko.engine.probeInternal', async (filePath: string) => {
+			try {
+				const engine = await getOrStartEngine();
+				if (!engine) return null;
+				return await engine.probeMedia(filePath);
+			} catch (error) {
+				log(`probeInternal failed for ${filePath}: ${error}`, 'error');
+				return null;
+			}
+		})
 	);
 
 	// Export JVI Project

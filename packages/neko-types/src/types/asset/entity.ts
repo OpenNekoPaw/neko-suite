@@ -260,8 +260,10 @@ export interface AssetVariant {
 	attributes: VariantAttributes;
 	/** Associated files */
 	files: AssetFile[];
-	/** Thumbnail file ID */
+	/** Thumbnail source file ID (references AssetFile.id) */
 	thumbnailFileId?: string;
+	/** Generated thumbnail image path (absolute or relative to workspace) */
+	thumbnailPath?: string;
 	/** Notes/description */
 	notes?: string;
 	/** Variant-level tags */
@@ -340,6 +342,7 @@ export interface UpdateVariantInput {
 	notes?: string;
 	tags?: string[];
 	thumbnailFileId?: string;
+	thumbnailPath?: string;
 }
 
 /** Options for adding a file */

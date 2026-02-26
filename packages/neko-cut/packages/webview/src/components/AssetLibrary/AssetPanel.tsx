@@ -6,7 +6,8 @@
  */
 
 import { memo, useCallback, useState, useMemo } from 'react';
-import type { AssetEntity, AssetVariant, CreateEntityInput } from '@neko/shared';
+import type { AssetEntity, AssetVariant, CreateEntityInput, SingleAssetDragData, MultiAssetDragData, AssetDragItem } from '@neko/shared';
+import { ASSET_DRAG_MIME } from '@neko/shared';
 import { useAssetLibrary } from './useAssetLibrary';
 import { useAssetSelection } from './useAssetSelection';
 import { useAssetDragDrop } from './useAssetDragDrop';
@@ -163,7 +164,7 @@ export const AssetPanel = memo(function AssetPanel({
 
 		if (isVariantInSelection && selectedVariantItems.length > 1) {
 			// Multi-select drag: include all selected variants
-			const items = selectedVariantItems
+			const items: AssetDragItem[] = selectedVariantItems
 				.map((item) => {
 					const ent = entities.find((en) => en.id === item.entityId);
 					const vari = ent?.variants.find((v) => v.id === item.variantId);
@@ -179,10 +180,8 @@ export const AssetPanel = memo(function AssetPanel({
 				})
 				.filter((x): x is NonNullable<typeof x> => x !== null);
 
-			e.dataTransfer.setData('application/json', JSON.stringify({
-				type: 'assets',
-				items,
-			}));
+			const dragData: MultiAssetDragData = { type: 'assets', items };
+			e.dataTransfer.setData(ASSET_DRAG_MIME, JSON.stringify(dragData));
 
 			// Set drag image with count badge
 			const dragEl = document.createElement('div');
@@ -192,8 +191,8 @@ export const AssetPanel = memo(function AssetPanel({
 			e.dataTransfer.setDragImage(dragEl, 0, 0);
 			setTimeout(() => document.body.removeChild(dragEl), 0);
 		} else {
-			// Single asset drag (backward compatible)
-			e.dataTransfer.setData('application/json', JSON.stringify({
+			// Single asset drag
+			const dragData: SingleAssetDragData = {
 				type: 'asset',
 				entityId: entity.id,
 				variantId: variant.id,
@@ -201,7 +200,8 @@ export const AssetPanel = memo(function AssetPanel({
 				variantName: variant.name,
 				category: entity.category,
 				files: variant.files,
-			}));
+			};
+			e.dataTransfer.setData(ASSET_DRAG_MIME, JSON.stringify(dragData));
 		}
 		e.dataTransfer.effectAllowed = 'copyMove';
 	}, [selection.selectedItems, entities, handleInternalDragStart]);

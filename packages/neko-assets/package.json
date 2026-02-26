@@ -103,6 +103,24 @@
         "command": "neko.assets.previewMedia",
         "title": "Preview Media",
         "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.addToTimeline",
+        "title": "Add to Timeline",
+        "category": "Neko Assets",
+        "icon": "$(play)"
+      },
+      {
+        "command": "neko.assets.addToCanvas",
+        "title": "Add to Canvas",
+        "category": "Neko Assets",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "neko.assets.importFile",
+        "title": "Import to Asset Library",
+        "category": "Neko Assets",
+        "icon": "$(add)"
       }
     ],
     "menus": {
@@ -111,6 +129,21 @@
           "command": "neko.assets.previewMedia",
           "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|ts|flv|wmv|mp3|wav|ogg|flac|aac|m4a|wma|opus)$/i",
           "group": "neko@1"
+        },
+        {
+          "command": "neko.assets.addToTimeline",
+          "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|mp3|wav|ogg|flac|aac|m4a|png|jpg|jpeg|gif|webp)$/i",
+          "group": "neko@2"
+        },
+        {
+          "command": "neko.assets.addToCanvas",
+          "when": "resourceExtname =~ /\\.(png|jpg|jpeg|gif|webp|svg|bmp|mp4|mov|webm)$/i",
+          "group": "neko@3"
+        },
+        {
+          "command": "neko.assets.importFile",
+          "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|mp3|wav|ogg|flac|aac|m4a|png|jpg|jpeg|gif|webp|svg|bmp|tiff)$/i",
+          "group": "neko@4"
         }
       ]
     },
@@ -149,10 +182,13 @@
     "test": "vitest",
     "package": "vsce package"
   },
+  "dependencies": {
+    "@neko/asset": "workspace:*",
+    "@neko/shared": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
-    "@neko/shared": "workspace:*",
     "esbuild": "^0.19.8",
     "typescript": "^5.3.2",
     "vitest": "^1.0.4"

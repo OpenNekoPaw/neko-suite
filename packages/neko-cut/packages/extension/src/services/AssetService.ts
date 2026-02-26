@@ -16,7 +16,6 @@ import {
 	JsonFileStorage,
 	InMemoryStorage,
 	RuleClassifier,
-	type IAssetStorage,
 	type IFileSystem,
 } from '@neko/asset';
 import type {
@@ -37,13 +36,7 @@ import type {
 	MergeEntitiesInput,
 	MergeEntitiesResult,
 	VariantComparisonResult,
-	AttributeDiff,
-	VariantAttributes,
-	AssetDiffResult,
-	AssetChangeAnalysis,
 } from '@neko/shared';
-// ImageDiffAnalyzer is optional (provided by neko-tools extension)
-// When not available, file comparison returns basic results
 import { createServiceId } from '../base';
 
 // =============================================================================
@@ -82,45 +75,11 @@ export interface ImportResult {
 }
 
 // =============================================================================
-// Node.js File System Adapter
-// =============================================================================
-
-/**
- * Node.js file system implementation for JsonFileStorage
- */
-const nodeFileSystem: IFileSystem = {
-	async readFile(filePath: string): Promise<string> {
-		return fs.readFile(filePath, 'utf-8');
-	},
-
-	async writeFile(filePath: string, content: string): Promise<void> {
-		// Ensure directory exists
-		const dir = path.dirname(filePath);
-		await fs.mkdir(dir, { recursive: true });
-		await fs.writeFile(filePath, content, 'utf-8');
-	},
-
-	async exists(filePath: string): Promise<boolean> {
-		try {
-			await fs.access(filePath);
-			return true;
-		} catch {
-			return false;
-		}
-	},
-
-	async mkdir(dirPath: string): Promise<void> {
-		await fs.mkdir(dirPath, { recursive: true });
-	},
-};
-
-// =============================================================================
 // Asset Service
 // =============================================================================
 
 export class AssetService implements vscode.Disposable {
 	private library: AssetLibrary | null = null;
-	private storage: IAssetStorage | null = null;
 	private initialized = false;
 	private readonly disposables: vscode.Disposable[] = [];
 
@@ -139,23 +98,34 @@ export class AssetService implements vscode.Disposable {
 		}
 
 		// Create storage
+		let storage;
 		if (this.config.useInMemory) {
-			this.storage = new InMemoryStorage();
+			storage = new InMemoryStorage();
 		} else {
 			const storagePath = this.config.storagePath ?? this.getDefaultStoragePath();
 			const filePath = path.join(storagePath, 'library.json');
-			this.storage = new JsonFileStorage({
+			const nodeFs: IFileSystem = {
+				async readFile(p: string) { return fs.readFile(p, 'utf-8'); },
+				async writeFile(p: string, content: string) {
+					await fs.mkdir(path.dirname(p), { recursive: true });
+					await fs.writeFile(p, content, 'utf-8');
+				},
+				async exists(p: string) {
+					try { await fs.access(p); return true; } catch { return false; }
+				},
+				async mkdir(p: string) { await fs.mkdir(p, { recursive: true }); },
+			};
+			storage = new JsonFileStorage({
 				filePath,
-				fs: nodeFileSystem,
+				fs: nodeFs,
 				autoSaveDelay: 1000,
 			});
 		}
 
-		// Create library with rule-based classifier and metadata extractor
+		// Create library with rule-based classifier
 		this.library = new AssetLibrary({
-			storage: this.storage,
+			storage,
 			classifier: new RuleClassifier(),
-			metadataExtractor: this.extractMetadata.bind(this),
 		});
 
 		await this.library.initialize();
@@ -180,7 +150,6 @@ export class AssetService implements vscode.Disposable {
 	dispose(): void {
 		this.disposables.forEach((d) => d.dispose());
 		this.library = null;
-		this.storage = null;
 		this.initialized = false;
 	}
 
@@ -421,12 +390,12 @@ export class AssetService implements vscode.Disposable {
 	}
 
 	// =========================================================================
-	// Variant Comparison
+	// Variant Comparison (delegated to neko-assets)
 	// =========================================================================
 
 	/**
-	 * Compare two variants of the same entity
-	 * Uses ImageDiffAnalyzer for image file comparison
+	 * Compare two variants of the same entity.
+	 * Delegates to neko-assets AssetDiffService via internal command.
 	 */
 	async compareVariants(
 		entityId: string,
@@ -435,166 +404,18 @@ export class AssetService implements vscode.Disposable {
 	): Promise<VariantComparisonResult> {
 		this.ensureInitialized();
 
-		const entity = await this.getEntity(entityId);
-		if (!entity) {
-			throw new Error(`Entity not found: ${entityId}`);
+		const result = await vscode.commands.executeCommand<VariantComparisonResult | null>(
+			'neko.assets.compareVariants',
+			entityId,
+			variantIdA,
+			variantIdB,
+		);
+
+		if (!result) {
+			throw new Error('Variant comparison failed. Is neko-assets active?');
 		}
 
-		const variantA = entity.variants.find((v) => v.id === variantIdA);
-		const variantB = entity.variants.find((v) => v.id === variantIdB);
-
-		if (!variantA) {
-			throw new Error(`Variant not found: ${variantIdA}`);
-		}
-		if (!variantB) {
-			throw new Error(`Variant not found: ${variantIdB}`);
-		}
-
-		// Compare attributes
-		const attributeDiffs = this.compareAttributes(variantA.attributes, variantB.attributes);
-
-		// Compare files using ImageDiffAnalyzer
-		let fileDiff: AssetDiffResult | undefined;
-		if (variantA.files.length > 0 && variantB.files.length > 0) {
-			const fileA = variantA.files[0];
-			const fileB = variantB.files[0];
-			if (fileA && fileB) {
-				fileDiff = await this.compareFiles(fileA, fileB, variantA, variantB);
-			}
-		}
-
-		return {
-			entity,
-			variantA,
-			variantB,
-			attributeDiffs,
-			fileDiff,
-		};
-	}
-
-	/**
-	 * Compare two files
-	 * Note: ImageDiffAnalyzer is optional (from neko-tools). When not available, returns basic comparison.
-	 */
-	private async compareFiles(
-		fileA: AssetFile,
-		fileB: AssetFile,
-		variantA: AssetVariant,
-		variantB: AssetVariant
-	): Promise<AssetDiffResult> {
-		const startTime = Date.now();
-
-		// Check if files are images by extension
-		const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
-		const extA = path.extname(fileA.path).toLowerCase();
-		const extB = path.extname(fileB.path).toLowerCase();
-		const isImageA = imageExtensions.includes(extA);
-		const isImageB = imageExtensions.includes(extB);
-
-		// For images, try to get file stats for basic comparison
-		if (isImageA && isImageB) {
-			try {
-				const [statsA, statsB] = await Promise.all([
-					fs.stat(fileA.path),
-					fs.stat(fileB.path),
-				]);
-
-				// Basic similarity based on file size
-				const sizeDiff = Math.abs(statsA.size - statsB.size);
-				const maxSize = Math.max(statsA.size, statsB.size);
-				const similarity = maxSize > 0 ? 1 - (sizeDiff / maxSize) : 1;
-
-				const changes: AssetChangeAnalysis = {
-					changeTypes: [],
-				};
-
-				if (sizeDiff > 0) {
-					changes.changeTypes.push('content');
-				}
-
-				return {
-					current: {
-						name: `${variantA.name} - ${fileA.name}`,
-						path: fileA.path,
-					},
-					previous: {
-						name: `${variantB.name} - ${fileB.name}`,
-						path: fileB.path,
-					},
-					mediaType: 'image',
-					similarity,
-					changes,
-					processingTime: Date.now() - startTime,
-				};
-			} catch (error) {
-				console.error('[AssetService] File comparison failed:', error);
-				// Fall through to default result
-			}
-		}
-
-		// Default result for non-image files or on error
-		return {
-			current: {
-				name: `${variantA.name} - ${fileA.name}`,
-				path: fileA.path,
-			},
-			previous: {
-				name: `${variantB.name} - ${fileB.name}`,
-				path: fileB.path,
-			},
-			mediaType: this.detectMediaType(fileA.path),
-			similarity: fileA.path === fileB.path ? 1.0 : 0.5, // Unknown similarity
-			changes: { changeTypes: [] },
-			processingTime: Date.now() - startTime,
-		};
-	}
-
-	/**
-	 * Compare variant attributes
-	 */
-	private compareAttributes(
-		attrsA: VariantAttributes,
-		attrsB: VariantAttributes
-	): AttributeDiff[] {
-		const diffs: AttributeDiff[] = [];
-		const allKeys = new Set([
-			...Object.keys(attrsA),
-			...Object.keys(attrsB),
-		]) as Set<keyof VariantAttributes>;
-
-		for (const key of allKeys) {
-			const valueA = attrsA[key];
-			const valueB = attrsB[key];
-
-			if (valueA !== valueB) {
-				diffs.push({
-					attribute: key,
-					valueA: valueA as string | undefined,
-					valueB: valueB as string | undefined,
-				});
-			}
-		}
-
-		return diffs;
-	}
-
-	/**
-	 * Detect media type from file path
-	 */
-	private detectMediaType(filePath: string): 'image' | 'video' | 'audio' {
-		const ext = path.extname(filePath).toLowerCase();
-
-		if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'].includes(ext)) {
-			return 'image';
-		}
-		if (['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'].includes(ext)) {
-			return 'video';
-		}
-		if (['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a'].includes(ext)) {
-			return 'audio';
-		}
-
-		return 'image'; // default
+		return result;
 	}
 
 	// =========================================================================
@@ -612,80 +433,6 @@ export class AssetService implements vscode.Disposable {
 	// =========================================================================
 	// Private Helpers
 	// =========================================================================
-
-	/**
-	 * Extract metadata from a file
-	 */
-	private async extractMetadata(filePath: string): Promise<import('@neko/shared').MediaFileMetadata> {
-		const stats = await fs.stat(filePath);
-		const ext = path.extname(filePath).toLowerCase();
-
-		// Determine MIME type
-		const mimeTypes: Record<string, string> = {
-			// Video
-			'.mp4': 'video/mp4',
-			'.mov': 'video/quicktime',
-			'.avi': 'video/x-msvideo',
-			'.mkv': 'video/x-matroska',
-			'.webm': 'video/webm',
-			// Audio
-			'.mp3': 'audio/mpeg',
-			'.wav': 'audio/wav',
-			'.ogg': 'audio/ogg',
-			'.aac': 'audio/aac',
-			'.m4a': 'audio/mp4',
-			'.flac': 'audio/flac',
-			// Image
-			'.jpg': 'image/jpeg',
-			'.jpeg': 'image/jpeg',
-			'.png': 'image/png',
-			'.gif': 'image/gif',
-			'.webp': 'image/webp',
-			'.bmp': 'image/bmp',
-			'.svg': 'image/svg+xml',
-			// Text
-			'.txt': 'text/plain',
-			'.md': 'text/markdown',
-			'.json': 'application/json',
-			'.yaml': 'application/x-yaml',
-			'.yml': 'application/x-yaml',
-			'.csv': 'text/csv',
-			'.xml': 'application/xml',
-		};
-
-		const mimeType = mimeTypes[ext] ?? 'application/octet-stream';
-		const metadata: import('@neko/shared').MediaFileMetadata = {
-			fileSize: stats.size,
-			mimeType,
-		};
-
-		// Extract text-specific metadata
-		const textExts = ['.txt', '.md', '.json', '.yaml', '.yml', '.csv', '.xml'];
-		if (textExts.includes(ext)) {
-			try {
-				const content = await fs.readFile(filePath, 'utf-8');
-				metadata.characterCount = content.length;
-				metadata.wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
-				metadata.lineCount = content.split('\n').length;
-				metadata.encoding = 'utf-8';
-
-				// Simple language detection based on content
-				// Check for Chinese characters
-				if (/[\u4e00-\u9fa5]/.test(content)) {
-					metadata.language = 'zh-CN';
-				} else {
-					metadata.language = 'en';
-				}
-			} catch (error) {
-				console.error('[AssetService] Failed to extract text metadata:', error);
-			}
-		}
-
-		// TODO: Extract video/audio metadata using ffprobe or similar
-		// For now, return basic metadata
-
-		return metadata;
-	}
 
 	/**
 	 * Ensure service is initialized

@@ -1,119 +1,103 @@
 /**
  * Asset Library Provider - Webview for asset management
+ *
+ * Delegates to neko-assets via internal commands for storage/search.
+ * Uses the unified AssetDragData protocol from @neko/shared.
  */
 import * as vscode from 'vscode';
-import type { Asset, AssetFilter, AssetChangeEvent } from '../api';
+import { detectMediaType, ASSET_DRAG_MIME } from '@neko/shared';
+import type { AssetEntity, AssetVariant, SingleAssetDragData } from '@neko/shared';
 
 export class AssetLibraryProvider implements vscode.WebviewViewProvider {
-  public static readonly viewType = 'neko.assetLibrary';
+	public static readonly viewType = 'neko.assetLibrary';
 
-  private view?: vscode.WebviewView;
-  private assets: Asset[] = [];
+	private view?: vscode.WebviewView;
 
-  private readonly _onDidChangeAssets = new vscode.EventEmitter<AssetChangeEvent>();
-  public readonly onDidChangeAssets = this._onDidChangeAssets.event;
+	constructor(private readonly context: vscode.ExtensionContext) {}
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+	resolveWebviewView(
+		webviewView: vscode.WebviewView,
+		_context: vscode.WebviewViewResolveContext,
+		_token: vscode.CancellationToken
+	): void {
+		this.view = webviewView;
 
-  resolveWebviewView(
-    webviewView: vscode.WebviewView,
-    _context: vscode.WebviewViewResolveContext,
-    _token: vscode.CancellationToken
-  ): void {
-    this.view = webviewView;
+		webviewView.webview.options = {
+			enableScripts: true,
+			localResourceRoots: [this.context.extensionUri],
+		};
 
-    webviewView.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [this.context.extensionUri],
-    };
+		webviewView.webview.html = this.getHtmlForWebview(webviewView.webview);
 
-    webviewView.webview.html = this.getHtmlForWebview(webviewView.webview);
+		webviewView.webview.onDidReceiveMessage(
+			(message) => this.handleMessage(message),
+			undefined,
+			this.context.subscriptions
+		);
 
-    webviewView.webview.onDidReceiveMessage(
-      (message) => this.handleMessage(message),
-      undefined,
-      this.context.subscriptions
-    );
-  }
+		// Load initial data
+		this.refreshView();
+	}
 
-  // API Methods
-  async importAsset(path: string): Promise<Asset> {
-    const id = this.generateId();
-    const name = path.split('/').pop() || 'Unknown';
-    const type = this.getAssetType(path);
+	// =========================================================================
+	// Data Access (via neko-assets commands)
+	// =========================================================================
 
-    const asset: Asset = {
-      id,
-      name,
-      type,
-      path,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+	private async getAllEntities(): Promise<AssetEntity[]> {
+		try {
+			const entities = await vscode.commands.executeCommand<AssetEntity[]>(
+				'neko.assets.getAllEntities',
+			);
+			return entities ?? [];
+		} catch {
+			return [];
+		}
+	}
 
-    this.assets.push(asset);
-    this._onDidChangeAssets.fire({ type: 'add', assetId: id });
-    this.refreshView();
+	private async importFile(filePath: string): Promise<void> {
+		try {
+			await vscode.commands.executeCommand('neko.assets.importFile', vscode.Uri.file(filePath));
+			await this.refreshView();
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : String(error);
+			vscode.window.showErrorMessage(`Import failed: ${msg}`);
+		}
+	}
 
-    return asset;
-  }
+	// =========================================================================
+	// View
+	// =========================================================================
 
-  async listAssets(filter?: AssetFilter): Promise<Asset[]> {
-    let result = [...this.assets];
+	async refreshView(): Promise<void> {
+		if (!this.view) return;
+		const entities = await this.getAllEntities();
 
-    if (filter?.type) {
-      result = result.filter((a) => a.type === filter.type);
-    }
+		// Flatten to simple items for the webview
+		const items = entities.flatMap((entity) =>
+			entity.variants.map((variant) => ({
+				entityId: entity.id,
+				variantId: variant.id,
+				entityName: entity.name,
+				variantName: variant.name,
+				category: entity.category,
+				mediaType: variant.files[0]?.mediaType ?? 'image',
+				filePath: variant.files[0]?.path ?? '',
+				fileName: variant.files[0]?.name ?? entity.name,
+				tags: entity.tags,
+			}))
+		);
 
-    if (filter?.tags && filter.tags.length > 0) {
-      result = result.filter((a) =>
-        filter.tags!.some((tag) => a.tags?.includes(tag))
-      );
-    }
+		this.view.webview.postMessage({ type: 'updateAssets', items });
+	}
 
-    if (filter?.search) {
-      const search = filter.search.toLowerCase();
-      result = result.filter((a) =>
-        a.name.toLowerCase().includes(search)
-      );
-    }
+	// =========================================================================
+	// HTML
+	// =========================================================================
 
-    return result;
-  }
+	private getHtmlForWebview(webview: vscode.Webview): string {
+		const nonce = this.getNonce();
 
-  async getAssetById(id: string): Promise<Asset | undefined> {
-    return this.assets.find((a) => a.id === id);
-  }
-
-  async deleteAsset(id: string): Promise<void> {
-    const index = this.assets.findIndex((a) => a.id === id);
-    if (index !== -1) {
-      this.assets.splice(index, 1);
-      this._onDidChangeAssets.fire({ type: 'delete', assetId: id });
-      this.refreshView();
-    }
-  }
-
-  async updateAsset(id: string, updates: Partial<Asset>): Promise<void> {
-    const asset = this.assets.find((a) => a.id === id);
-    if (asset) {
-      Object.assign(asset, updates, { updatedAt: Date.now() });
-      this._onDidChangeAssets.fire({ type: 'update', assetId: id });
-      this.refreshView();
-    }
-  }
-
-  private refreshView(): void {
-    this.view?.webview.postMessage({
-      type: 'updateAssets',
-      assets: this.assets,
-    });
-  }
-
-  private getHtmlForWebview(webview: vscode.Webview): string {
-    const nonce = this.getNonce();
-
-    return `<!DOCTYPE html>
+		return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -161,6 +145,7 @@ export class AssetLibraryProvider implements vscode.WebviewViewProvider {
       background: var(--vscode-editor-background);
       border-radius: 4px;
       margin-bottom: 4px;
+      font-size: 24px;
     }
     .asset-name {
       font-size: 11px;
@@ -202,12 +187,12 @@ export class AssetLibraryProvider implements vscode.WebviewViewProvider {
     const searchInput = document.getElementById('search');
     const importBtn = document.getElementById('importBtn');
 
-    let assets = [];
+    let items = [];
 
     window.addEventListener('message', (event) => {
       const message = event.data;
       if (message.type === 'updateAssets') {
-        assets = message.assets;
+        items = message.items;
         renderAssets();
       }
     });
@@ -222,8 +207,10 @@ export class AssetLibraryProvider implements vscode.WebviewViewProvider {
 
     function renderAssets() {
       const search = searchInput.value.toLowerCase();
-      const filtered = assets.filter(a =>
-        a.name.toLowerCase().includes(search)
+      const filtered = items.filter(a =>
+        a.entityName.toLowerCase().includes(search) ||
+        a.variantName.toLowerCase().includes(search) ||
+        (a.tags || []).some(t => t.toLowerCase().includes(search))
       );
 
       if (filtered.length === 0) {
@@ -231,26 +218,49 @@ export class AssetLibraryProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      content.innerHTML = filtered.map(asset => \`
-        <div class="asset-item" data-id="\${asset.id}" draggable="true">
-          <div class="asset-icon">\${getIcon(asset.type)}</div>
-          <div class="asset-name">\${asset.name}</div>
+      content.innerHTML = filtered.map(item => \`
+        <div class="asset-item"
+             data-entity-id="\${item.entityId}"
+             data-variant-id="\${item.variantId}"
+             data-drag='\${JSON.stringify(item)}'
+             draggable="true">
+          <div class="asset-icon">\${getIcon(item.mediaType)}</div>
+          <div class="asset-name">\${item.entityName}</div>
         </div>
       \`).join('');
 
-      // Add drag handlers
-      document.querySelectorAll('.asset-item').forEach(item => {
-        item.addEventListener('dragstart', (e) => {
-          e.dataTransfer.setData('text/plain', item.dataset.id);
+      // Add drag handlers — use unified AssetDragData protocol
+      document.querySelectorAll('.asset-item').forEach(el => {
+        el.addEventListener('dragstart', (e) => {
+          const data = JSON.parse(el.dataset.drag);
+          const dragData = {
+            type: 'asset',
+            entityId: data.entityId,
+            variantId: data.variantId,
+            entityName: data.entityName,
+            variantName: data.variantName,
+            category: data.category,
+            files: [{
+              path: data.filePath,
+              name: data.fileName,
+              mediaType: data.mediaType,
+            }],
+          };
+          e.dataTransfer.setData('${ASSET_DRAG_MIME}', JSON.stringify(dragData));
+          e.dataTransfer.effectAllowed = 'copyMove';
         });
-        item.addEventListener('click', () => {
-          vscode.postMessage({ type: 'select', assetId: item.dataset.id });
+        el.addEventListener('click', () => {
+          vscode.postMessage({
+            type: 'select',
+            entityId: el.dataset.entityId,
+            variantId: el.dataset.variantId,
+          });
         });
       });
     }
 
-    function getIcon(type) {
-      switch (type) {
+    function getIcon(mediaType) {
+      switch (mediaType) {
         case 'video': return '🎬';
         case 'audio': return '🎵';
         case 'image': return '🖼️';
@@ -264,49 +274,37 @@ export class AssetLibraryProvider implements vscode.WebviewViewProvider {
   </script>
 </body>
 </html>`;
-  }
+	}
 
-  private getNonce(): string {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-      text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
-  }
+	private getNonce(): string {
+		let text = '';
+		const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+		for (let i = 0; i < 32; i++) {
+			text += possible.charAt(Math.floor(Math.random() * possible.length));
+		}
+		return text;
+	}
 
-  private generateId(): string {
-    return `asset_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  private getAssetType(path: string): Asset['type'] {
-    const ext = path.split('.').pop()?.toLowerCase() || '';
-    if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) return 'video';
-    if (['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext)) return 'audio';
-    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return 'image';
-    if (['txt', 'md', 'json', 'srt', 'vtt'].includes(ext)) return 'text';
-    return 'other';
-  }
-
-  private async handleMessage(message: { type: string; [key: string]: unknown }): Promise<void> {
-    switch (message.type) {
-      case 'import':
-        const uris = await vscode.window.showOpenDialog({
-          canSelectMany: true,
-          filters: {
-            'Media Files': ['mp4', 'mov', 'avi', 'mp3', 'wav', 'png', 'jpg', 'gif'],
-            'All Files': ['*'],
-          },
-        });
-        if (uris) {
-          for (const uri of uris) {
-            await this.importAsset(uri.fsPath);
-          }
-        }
-        break;
-      case 'select':
-        // Handle asset selection
-        break;
-    }
-  }
+	private async handleMessage(message: { type: string; [key: string]: unknown }): Promise<void> {
+		switch (message.type) {
+			case 'import': {
+				const uris = await vscode.window.showOpenDialog({
+					canSelectMany: true,
+					filters: {
+						'Media Files': ['mp4', 'mov', 'avi', 'mkv', 'webm', 'mp3', 'wav', 'ogg', 'flac', 'aac', 'png', 'jpg', 'jpeg', 'gif', 'webp'],
+						'All Files': ['*'],
+					},
+				});
+				if (uris) {
+					for (const uri of uris) {
+						await this.importFile(uri.fsPath);
+					}
+				}
+				break;
+			}
+			case 'select':
+				// Handle asset selection — could open preview or show properties
+				break;
+		}
+	}
 }

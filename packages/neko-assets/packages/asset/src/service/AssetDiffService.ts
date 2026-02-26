@@ -16,6 +16,7 @@ import type {
 	AttributeDiff,
 	VariantAttributes,
 } from '@neko/shared';
+import { detectMediaType } from '@neko/shared';
 import type { IAssetStorage } from '../storage/IAssetStorage';
 
 // =============================================================================
@@ -58,11 +59,16 @@ export interface IAssetDiffService {
 // =============================================================================
 
 export class AssetDiffService implements IAssetDiffService {
+	private statFile?: (filePath: string) => Promise<{ size: number } | null>;
+
 	constructor(
 		private storage: IAssetStorage,
 		private gitService?: IGitService,
-		private aiService?: IAIAnalysisService
-	) {}
+		private aiService?: IAIAnalysisService,
+		options?: { statFile?: (filePath: string) => Promise<{ size: number } | null> }
+	) {
+		this.statFile = options?.statFile;
+	}
 
 	// =========================================================================
 	// Compare
@@ -78,8 +84,11 @@ export class AssetDiffService implements IAssetDiffService {
 			this.resolveSourceInfo(request.previous),
 		]);
 
-		// Detect media type
-		const mediaType = this.detectMediaType(currentInfo.path);
+		// Detect media type (map AssetMediaType to diff-compatible type)
+		const assetType = detectMediaType(currentInfo.path);
+		const mediaType: 'image' | 'video' | 'audio' =
+			assetType === 'video' ? 'video' :
+			assetType === 'audio' ? 'audio' : 'image';
 
 		// Analyze changes
 		const changes = await this.analyzeChanges(
@@ -249,36 +258,42 @@ export class AssetDiffService implements IAssetDiffService {
 		}
 	}
 
-	private detectMediaType(path: string): 'image' | 'video' | 'audio' {
-		const ext = path.split('.').pop()?.toLowerCase() ?? '';
-
-		if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) {
-			return 'image';
-		}
-		if (['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'].includes(ext)) {
-			return 'video';
-		}
-		if (['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'].includes(ext)) {
-			return 'audio';
-		}
-
-		return 'image'; // default
-	}
-
 	private async analyzeChanges(
 		current: AssetDiffSourceInfo,
 		previous: AssetDiffSourceInfo,
-		mediaType: 'image' | 'video' | 'audio',
-		options: AssetDiffOptions
+		_mediaType: 'image' | 'video' | 'audio',
+		_options: AssetDiffOptions
 	): Promise<AssetChangeAnalysis> {
-		// TODO: Implement actual change analysis
-		// This would involve:
-		// - Image: pixel comparison, histogram analysis
-		// - Video: frame-by-frame comparison
-		// - Audio: waveform comparison
+		const changeTypes: AssetChangeAnalysis['changeTypes'] = [];
+
+		// Basic analysis via file stat comparison (works without native dependencies)
+		if (current.path && previous.path && this.statFile) {
+			try {
+				const [currentStat, previousStat] = await Promise.all([
+					this.statFile(current.path),
+					this.statFile(previous.path),
+				]);
+
+				if (currentStat && previousStat) {
+					// Size difference implies content change
+					if (currentStat.size !== previousStat.size) {
+						changeTypes.push('content');
+					}
+
+					// Format change (different extensions)
+					const currentExt = current.path.split('.').pop()?.toLowerCase();
+					const previousExt = previous.path.split('.').pop()?.toLowerCase();
+					if (currentExt !== previousExt) {
+						changeTypes.push('format');
+					}
+				}
+			} catch {
+				// stat not available — return empty analysis
+			}
+		}
 
 		return {
-			changeTypes: [],
+			changeTypes,
 			changedRegions: [],
 			changedTimeRanges: [],
 		};

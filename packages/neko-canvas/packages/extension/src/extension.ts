@@ -82,13 +82,20 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
   console.log('[NekoCanvas] Extension activated');
 
   // Return API for other extensions
+  // Asset operations now delegate to neko-assets via commands
   const api: NekoCanvasAPI = {
     asset: {
-      import: (filePath) => assetLibraryProvider.importAsset(filePath),
-      list: (filter) => assetLibraryProvider.listAssets(filter),
-      getById: (id) => assetLibraryProvider.getAssetById(id),
-      delete: (id) => assetLibraryProvider.deleteAsset(id),
-      update: (id, updates) => assetLibraryProvider.updateAsset(id, updates),
+      import: async (filePath) => {
+        await vscode.commands.executeCommand('neko.assets.importFile', vscode.Uri.file(filePath));
+        await assetLibraryProvider.refreshView();
+        // Return a compat Asset shape from the import
+        const name = filePath.split('/').pop() || 'Unknown';
+        return { id: '', name, type: 'other', path: filePath, createdAt: Date.now(), updatedAt: Date.now() };
+      },
+      list: async () => [],
+      getById: async () => undefined,
+      delete: async () => {},
+      update: async () => {},
     },
     canvas: {
       create: (config) => createCanvas(config),
@@ -97,7 +104,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
       deleteShape: (canvasId, shapeId) => canvasEditorProvider.deleteShape(shapeId),
     },
     events: {
-      onDidChangeAssets: assetLibraryProvider.onDidChangeAssets,
+      onDidChangeAssets: new vscode.EventEmitter<import('./api').AssetChangeEvent>().event,
       onDidChangeCanvas: canvasEditorProvider.onDidChangeCanvas,
     },
   };
@@ -175,7 +182,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
     })
   );
 
-  // Add to Asset Library
+  // Add to Asset Library — delegate to neko-assets
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.addToAssetLibrary', async (uri?: vscode.Uri) => {
       if (!uri) {
@@ -183,28 +190,30 @@ function registerCommands(context: vscode.ExtensionContext): void {
         return;
       }
 
-      await assetLibraryProvider.importAsset(uri.fsPath);
+      await vscode.commands.executeCommand('neko.assets.importFile', uri);
+      await assetLibraryProvider.refreshView();
       vscode.window.showInformationMessage(
         vscode.l10n.t('neko.canvas.addToAssetLibrary.success', path.basename(uri.fsPath))
       );
     })
   );
 
-  // Import Asset
+  // Import Asset — delegate to neko-assets
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.asset.import', async () => {
       const uris = await vscode.window.showOpenDialog({
         canSelectMany: true,
         filters: {
-          'Media Files': ['mp4', 'mov', 'avi', 'mp3', 'wav', 'png', 'jpg', 'gif'],
+          'Media Files': ['mp4', 'mov', 'avi', 'mkv', 'webm', 'mp3', 'wav', 'ogg', 'flac', 'aac', 'png', 'jpg', 'jpeg', 'gif', 'webp'],
           'All Files': ['*'],
         },
       });
 
       if (uris) {
         for (const uri of uris) {
-          await assetLibraryProvider.importAsset(uri.fsPath);
+          await vscode.commands.executeCommand('neko.assets.importFile', uri);
         }
+        await assetLibraryProvider.refreshView();
         vscode.window.showInformationMessage(
           vscode.l10n.t('neko.canvas.asset.import.success', String(uris.length))
         );

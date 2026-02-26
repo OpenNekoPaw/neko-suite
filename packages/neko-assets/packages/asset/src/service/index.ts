@@ -10,6 +10,8 @@ export {
 	type AssetLibraryConfig,
 	type ImportOptions,
 	type ImportResult,
+	type ThumbnailGenerator,
+	type ThumbnailGeneratorResult,
 } from './AssetLibrary';
 export {
 	AssetDiffService,
@@ -17,4 +19,9 @@ export {
 	type IGitService,
 	type IAIAnalysisService,
 } from './AssetDiffService';
+export {
+	AssetRegistry,
+	type AssetRegistryConfig,
+	type AssetChangeListener,
+} from './AssetRegistry';
 export { generateEntityId, generateVariantId, generateFileId } from './utils';

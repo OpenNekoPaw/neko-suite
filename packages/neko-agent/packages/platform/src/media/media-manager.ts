@@ -12,6 +12,10 @@ import type {
   MediaCacheConfig,
   IMediaManager,
 } from '../types/media';
+import {
+  detectMediaType as detectAssetMediaType,
+  isSubtitleFile,
+} from '@neko/shared';
 
 /**
  * Generate unique media ID
@@ -21,22 +25,19 @@ function generateMediaId(): string {
 }
 
 /**
- * Detect media type from source
+ * Detect media type from source.
+ * Maps unified AssetMediaType to neko-agent's MediaType (which includes 'subtitle').
  */
 function detectMediaType(source: string): MediaType {
-  const ext = source.split('.').pop()?.toLowerCase() || '';
+  // Check subtitle first (neko-agent-specific type)
+  if (isSubtitleFile(source)) return 'subtitle';
 
-  const videoExts = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'm4v'];
-  const audioExts = ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'wma'];
-  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'tiff'];
-  const subtitleExts = ['srt', 'vtt', 'ass', 'ssa', 'sub'];
+  const assetType = detectAssetMediaType(source);
+  if (assetType === 'video') return 'video';
+  if (assetType === 'audio') return 'audio';
+  if (assetType === 'image') return 'image';
 
-  if (videoExts.includes(ext)) return 'video';
-  if (audioExts.includes(ext)) return 'audio';
-  if (imageExts.includes(ext)) return 'image';
-  if (subtitleExts.includes(ext)) return 'subtitle';
-
-  return 'video'; // Default
+  return 'video'; // Default for agent
 }
 
 /**

@@ -16,3 +16,12 @@ export * from './protocol';
 
 // Diff types
 export * from './diff';
+
+// Drag & Drop protocol types
+export * from './drag';
+
+// Manifest types (unified registry)
+export * from './manifest';
+
+// Registry protocol types
+export * from './registry';

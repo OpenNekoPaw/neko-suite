@@ -19,3 +19,14 @@ export {
 	mapBasicColorToEngine,
 	mapEngineColorToBasic,
 } from './colorCorrectionMapping';
+
+// Media utilities (type detection, MIME mapping)
+export {
+	getFileExtension,
+	detectMediaType,
+	getMimeType,
+	isMediaFile,
+	isImageSequence,
+	isSubtitleFile,
+	getExtensionsForType,
+} from './media';
