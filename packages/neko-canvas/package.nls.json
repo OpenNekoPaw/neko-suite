@@ -1,8 +1,6 @@
 {
-  "neko.assets.title": "Assets",
-  "neko.assets.name": "Asset Library",
-  "neko.assets.contextualTitle": "Asset Library",
   "neko.canvas.new.title": "New Canvas",
+  "neko.canvas.outline.title": "Canvas Outline",
   "neko.asset.import.title": "Import Asset",
   "neko.addToAssetLibrary.title": "Add to Asset Library"
 }

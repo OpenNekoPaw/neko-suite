@@ -1,7 +1,7 @@
 {
   "name": "neko-canvas",
   "displayName": "NekoCanvas",
-  "description": "Canvas editor and asset library for VSCode",
+  "description": "Canvas editor for VSCode",
   "version": "0.0.1",
   "publisher": "neko",
   "l10n": "./l10n",
@@ -46,28 +46,11 @@
         "priority": "default"
       }
     ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "neko-assets",
-          "title": "%neko.assets.title%",
-          "icon": "$(file-media)"
-        }
-      ]
-    },
     "views": {
-      "neko-assets": [
-        {
-          "type": "webview",
-          "id": "neko.assetLibrary",
-          "name": "%neko.assets.name%",
-          "contextualTitle": "%neko.assets.contextualTitle%"
-        }
-      ],
       "explorer": [
         {
           "id": "neko.canvasOutline",
-          "name": "Canvas Outline",
+          "name": "%neko.canvas.outline.title%",
           "when": "activeCustomEditorId == 'neko.canvasEditor'",
           "icon": "$(list-tree)"
         }

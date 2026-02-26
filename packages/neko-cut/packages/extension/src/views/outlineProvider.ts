@@ -1,21 +1,22 @@
 import * as vscode from 'vscode';
 import { createServiceId } from '../base';
+import { BaseOutlineProvider } from '@neko/shared/vscode/extension';
+import type { IOutlineProvider } from '@neko/shared/vscode/extension';
 import type { ProjectData, TimelineTrack, TimelineElement } from '@neko/shared';
 
 // =============================================================================
-// 服务标识符
+// Service identifier
 // =============================================================================
 
 export const IVideoProjectOutlineProvider = createServiceId<IVideoProjectOutlineProvider>('videoProjectOutlineProvider');
 
 // =============================================================================
-// 接口定义
+// Interface
 // =============================================================================
 
-export interface IVideoProjectOutlineProvider extends vscode.TreeDataProvider<OutlineItem> {
+export interface IVideoProjectOutlineProvider extends IOutlineProvider<OutlineItem, ProjectData> {
+  /** Backward-compatible alias for updateData */
   updateProject(data: ProjectData | null): void;
-  hasData(): boolean;
-  refresh(): void;
 }
 
 // =============================================================================
@@ -38,51 +39,32 @@ class OutlineItem extends vscode.TreeItem {
 }
 
 // =============================================================================
-// 实现
+// Implementation
 // =============================================================================
 
 /**
  * Provides a tree view for the video project outline
  * Works with custom editors by receiving updates via messages
  */
-export class VideoProjectOutlineProvider implements IVideoProjectOutlineProvider {
-  private _onDidChangeTreeData = new vscode.EventEmitter<OutlineItem | undefined | null | void>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-
-  private projectData: ProjectData | null = null;
-
-  /**
-   * Update the outline with new project data
-   */
+export class VideoProjectOutlineProvider
+  extends BaseOutlineProvider<OutlineItem, ProjectData>
+  implements IVideoProjectOutlineProvider
+{
+  /** Backward-compatible alias for updateData */
   updateProject(data: ProjectData | null): void {
-    this.projectData = data;
-    this._onDidChangeTreeData.fire();
-  }
-
-  /**
-   * Check if the provider has data to display
-   */
-  hasData(): boolean {
-    return this.projectData !== null;
-  }
-
-  /**
-   * Refresh the outline view
-   */
-  refresh(): void {
-    this._onDidChangeTreeData.fire();
+    this.updateData(data);
   }
 
   getTreeItem(element: OutlineItem): vscode.TreeItem {
     return element;
   }
 
-  getParent(element: OutlineItem): OutlineItem | null {
-    if (!this.projectData) return null;
+  override getParent(element: OutlineItem): OutlineItem | null {
+    if (!this.data) return null;
 
     // Element's parent is its track
     if (element.itemType === 'element' && element.trackId) {
-      const track = this.projectData.tracks.find(t => t.id === element.trackId);
+      const track = this.data.tracks.find(t => t.id === element.trackId);
       if (track) {
         return new OutlineItem(
           this.translateTrackName(track.name),
@@ -99,10 +81,10 @@ export class VideoProjectOutlineProvider implements IVideoProjectOutlineProvider
     // Track's parent is the project
     if (element.itemType === 'track') {
       return new OutlineItem(
-        this.projectData.name || vscode.l10n.t('Project'),
+        this.data.name || vscode.l10n.t('Project'),
         vscode.TreeItemCollapsibleState.Expanded,
         'project',
-        this.projectData
+        this.data
       );
     }
 
@@ -110,52 +92,27 @@ export class VideoProjectOutlineProvider implements IVideoProjectOutlineProvider
     return null;
   }
 
-  /**
-   * Translate default track names to localized versions
-   * This helps display built-in track names in the user's language
-   */
-  private translateTrackName(trackName: string): string {
-    const defaultTrackNames: Record<string, string> = {
-      'Main Track': vscode.l10n.t('Main Track'),
-      'Media Track': vscode.l10n.t('Media Track'),
-      'Audio Track': vscode.l10n.t('Audio Track'),
-      'Text Track': vscode.l10n.t('Text Track'),
-      'Subtitle Track': vscode.l10n.t('Subtitle Track'),
-      'Shape Track': vscode.l10n.t('Shape Track'),
-    };
-
-    // If it matches a default name, return the translated version
-    if (defaultTrackNames[trackName]) {
-      return defaultTrackNames[trackName];
-    }
-
-    // Otherwise, return the original name (user-customized)
-    return trackName;
-  }
-
-  getChildren(element?: OutlineItem): Thenable<OutlineItem[]> {
-    if (!this.projectData) {
-      return Promise.resolve([]);
-    }
+  getChildren(element?: OutlineItem): OutlineItem[] {
+    if (!this.data) return [];
 
     if (!element) {
       // Root level: show project
       const projectItem = new OutlineItem(
-        this.projectData.name || vscode.l10n.t('Project'),
+        this.data.name || vscode.l10n.t('Project'),
         vscode.TreeItemCollapsibleState.Expanded,
         'project',
-        this.projectData
+        this.data
       );
-      projectItem.description = `${this.projectData.resolution.width}x${this.projectData.resolution.height} @ ${this.projectData.fps}fps`;
+      projectItem.description = `${this.data.resolution.width}x${this.data.resolution.height} @ ${this.data.fps}fps`;
       projectItem.iconPath = new vscode.ThemeIcon('file-media');
       projectItem.contextValue = 'project';
-      return Promise.resolve([projectItem]);
+      return [projectItem];
     }
 
     if (element.itemType === 'project') {
       // Project level: show tracks
       const project = element.data as ProjectData;
-      const trackItems = project.tracks.map(track => {
+      return project.tracks.map(track => {
         const item = new OutlineItem(
           this.translateTrackName(track.name),
           track.elements.length > 0
@@ -177,14 +134,12 @@ export class VideoProjectOutlineProvider implements IVideoProjectOutlineProvider
 
         return item;
       });
-
-      return Promise.resolve(trackItems);
     }
 
     if (element.itemType === 'track') {
       // Track level: show elements
       const track = element.data as TimelineTrack;
-      const elementItems = track.elements.map(el => {
+      return track.elements.map(el => {
         const effectiveDuration = el.duration - el.trimStart - el.trimEnd;
         const startTime = this.formatTime(el.startTime);
         const endTime = this.formatTime(el.startTime + effectiveDuration);
@@ -225,11 +180,26 @@ export class VideoProjectOutlineProvider implements IVideoProjectOutlineProvider
 
         return item;
       });
-
-      return Promise.resolve(elementItems);
     }
 
-    return Promise.resolve([]);
+    return [];
+  }
+
+  private translateTrackName(trackName: string): string {
+    const defaultTrackNames: Record<string, string> = {
+      'Main Track': vscode.l10n.t('Main Track'),
+      'Media Track': vscode.l10n.t('Media Track'),
+      'Audio Track': vscode.l10n.t('Audio Track'),
+      'Text Track': vscode.l10n.t('Text Track'),
+      'Subtitle Track': vscode.l10n.t('Subtitle Track'),
+      'Shape Track': vscode.l10n.t('Shape Track'),
+    };
+
+    if (defaultTrackNames[trackName]) {
+      return defaultTrackNames[trackName];
+    }
+
+    return trackName;
   }
 
   private getTrackIcon(type: string): vscode.ThemeIcon {

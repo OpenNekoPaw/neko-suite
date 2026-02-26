@@ -1,0 +1,19 @@
+{
+  "neko.assetManager.title": "素材管理",
+  "neko.assetManager.assets": "素材",
+  "neko.assetManager.history": "历史",
+  "neko.assetManager.historyTitle": "素材历史",
+  "neko.assetManager.cloudSync": "云同步",
+  "neko.assetManager.cloudSyncTitle": "云同步状态",
+  "neko.assets.sync": "同步素材",
+  "neko.assets.push": "推送到云端",
+  "neko.assets.pull": "从云端拉取",
+  "neko.assets.initLfs": "初始化 Git LFS",
+  "neko.assets.trackLfs": "使用 LFS 跟踪",
+  "neko.assets.triggerRender": "触发 CI/CD 渲染",
+  "neko.assets.viewHistory": "查看素材历史",
+  "neko.assets.previewMedia": "预览媒体",
+  "neko.assets.addToTimeline": "添加到时间线",
+  "neko.assets.addToCanvas": "添加到画布",
+  "neko.assets.importFile": "导入到素材库"
+}

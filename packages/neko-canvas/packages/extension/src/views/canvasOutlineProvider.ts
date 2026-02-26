@@ -5,6 +5,7 @@
  * Updates automatically when canvas data changes via postMessage.
  */
 import * as vscode from 'vscode';
+import { BaseOutlineProvider } from '@neko/shared/vscode/extension';
 
 // =============================================================================
 // Types (lightweight copies to avoid importing webview types)
@@ -55,18 +56,7 @@ const NODE_ICONS: Record<string, vscode.ThemeIcon> = {
 // Provider
 // =============================================================================
 
-export class CanvasOutlineProvider implements vscode.TreeDataProvider<OutlineElement> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<OutlineElement | undefined | void>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-
-  private data: CanvasOutlineData | null = null;
-
-  /** Called by CanvasEditorProvider when canvas data changes */
-  updateData(data: CanvasOutlineData | null): void {
-    this.data = data;
-    this._onDidChangeTreeData.fire();
-  }
-
+export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, CanvasOutlineData> {
   getTreeItem(element: OutlineElement): vscode.TreeItem {
     switch (element.kind) {
       case 'root': {
@@ -145,9 +135,5 @@ export class CanvasOutlineProvider implements vscode.TreeDataProvider<OutlineEle
     }
 
     return [];
-  }
-
-  dispose(): void {
-    this._onDidChangeTreeData.dispose();
   }
 }

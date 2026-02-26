@@ -62,7 +62,7 @@
           "name": "%neko.outline.title%",
           "contextualTitle": "%neko.outline.contextualTitle%",
           "icon": "$(list-tree)",
-          "visibility": "visible"
+          "when": "activeCustomEditorId == 'neko.videoEditor'"
         }
       ],
       "neko-properties": [

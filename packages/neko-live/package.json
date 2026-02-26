@@ -39,7 +39,8 @@
       "panel": [
         {
           "id": "neko-live",
-          "title": "Neko Live"
+          "title": "Neko Live",
+          "icon": "$(broadcast)"
         }
       ]
     },

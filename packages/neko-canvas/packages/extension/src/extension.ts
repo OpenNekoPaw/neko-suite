@@ -7,12 +7,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { CanvasEditorProvider } from './editor';
-import { AssetLibraryProvider, CanvasOutlineProvider, CanvasStatusBar } from './views';
+import { CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
 
 // Extension state
 let canvasEditorProvider: CanvasEditorProvider;
-let assetLibraryProvider: AssetLibraryProvider;
 let canvasOutlineProvider: CanvasOutlineProvider;
 let canvasStatusBar: CanvasStatusBar;
 
@@ -24,7 +23,6 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
 
   // Create providers
   canvasEditorProvider = new CanvasEditorProvider(context);
-  assetLibraryProvider = new AssetLibraryProvider(context);
   canvasOutlineProvider = new CanvasOutlineProvider();
   canvasStatusBar = new CanvasStatusBar();
 
@@ -45,14 +43,6 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
         },
         supportsMultipleEditorsPerDocument: false,
       }
-    )
-  );
-
-  // Register asset library view
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(
-      AssetLibraryProvider.viewType,
-      assetLibraryProvider
     )
   );
 
@@ -87,8 +77,6 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
     asset: {
       import: async (filePath) => {
         await vscode.commands.executeCommand('neko.assets.importFile', vscode.Uri.file(filePath));
-        await assetLibraryProvider.refreshView();
-        // Return a compat Asset shape from the import
         const name = filePath.split('/').pop() || 'Unknown';
         return { id: '', name, type: 'other', path: filePath, createdAt: Date.now(), updatedAt: Date.now() };
       },
@@ -191,7 +179,6 @@ function registerCommands(context: vscode.ExtensionContext): void {
       }
 
       await vscode.commands.executeCommand('neko.assets.importFile', uri);
-      await assetLibraryProvider.refreshView();
       vscode.window.showInformationMessage(
         vscode.l10n.t('neko.canvas.addToAssetLibrary.success', path.basename(uri.fsPath))
       );
@@ -213,7 +200,6 @@ function registerCommands(context: vscode.ExtensionContext): void {
         for (const uri of uris) {
           await vscode.commands.executeCommand('neko.assets.importFile', uri);
         }
-        await assetLibraryProvider.refreshView();
         vscode.window.showInformationMessage(
           vscode.l10n.t('neko.canvas.asset.import.success', String(uris.length))
         );

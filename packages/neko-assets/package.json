@@ -39,7 +39,7 @@
       "activitybar": [
         {
           "id": "neko-asset-manager",
-          "title": "Asset Manager",
+          "title": "%neko.assetManager.title%",
           "icon": "$(file-media)"
         }
       ]
@@ -48,77 +48,77 @@
       "neko-asset-manager": [
         {
           "id": "neko.assetManager",
-          "name": "Assets",
-          "contextualTitle": "Asset Manager"
+          "name": "%neko.assetManager.assets%",
+          "contextualTitle": "%neko.assetManager.title%"
         },
         {
           "id": "neko.assetHistory",
-          "name": "History",
-          "contextualTitle": "Asset History"
+          "name": "%neko.assetManager.history%",
+          "contextualTitle": "%neko.assetManager.historyTitle%"
         },
         {
           "id": "neko.cloudSync",
-          "name": "Cloud Sync",
-          "contextualTitle": "Cloud Sync Status"
+          "name": "%neko.assetManager.cloudSync%",
+          "contextualTitle": "%neko.assetManager.cloudSyncTitle%"
         }
       ]
     },
     "commands": [
       {
         "command": "neko.assets.sync",
-        "title": "Sync Assets",
+        "title": "%neko.assets.sync%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.push",
-        "title": "Push to Cloud",
+        "title": "%neko.assets.push%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.pull",
-        "title": "Pull from Cloud",
+        "title": "%neko.assets.pull%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.initLfs",
-        "title": "Initialize Git LFS",
+        "title": "%neko.assets.initLfs%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.trackLfs",
-        "title": "Track with LFS",
+        "title": "%neko.assets.trackLfs%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.triggerRender",
-        "title": "Trigger CI/CD Render",
+        "title": "%neko.assets.triggerRender%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.viewHistory",
-        "title": "View Asset History",
+        "title": "%neko.assets.viewHistory%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.previewMedia",
-        "title": "Preview Media",
+        "title": "%neko.assets.previewMedia%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.addToTimeline",
-        "title": "Add to Timeline",
+        "title": "%neko.assets.addToTimeline%",
         "category": "Neko Assets",
         "icon": "$(play)"
       },
       {
         "command": "neko.assets.addToCanvas",
-        "title": "Add to Canvas",
+        "title": "%neko.assets.addToCanvas%",
         "category": "Neko Assets",
         "icon": "$(layout)"
       },
       {
         "command": "neko.assets.importFile",
-        "title": "Import to Asset Library",
+        "title": "%neko.assets.importFile%",
         "category": "Neko Assets",
         "icon": "$(add)"
       }

@@ -1,0 +1,19 @@
+{
+  "neko.assetManager.title": "Asset Manager",
+  "neko.assetManager.assets": "Assets",
+  "neko.assetManager.history": "History",
+  "neko.assetManager.historyTitle": "Asset History",
+  "neko.assetManager.cloudSync": "Cloud Sync",
+  "neko.assetManager.cloudSyncTitle": "Cloud Sync Status",
+  "neko.assets.sync": "Sync Assets",
+  "neko.assets.push": "Push to Cloud",
+  "neko.assets.pull": "Pull from Cloud",
+  "neko.assets.initLfs": "Initialize Git LFS",
+  "neko.assets.trackLfs": "Track with LFS",
+  "neko.assets.triggerRender": "Trigger CI/CD Render",
+  "neko.assets.viewHistory": "View Asset History",
+  "neko.assets.previewMedia": "Preview Media",
+  "neko.assets.addToTimeline": "Add to Timeline",
+  "neko.assets.addToCanvas": "Add to Canvas",
+  "neko.assets.importFile": "Import to Asset Library"
+}

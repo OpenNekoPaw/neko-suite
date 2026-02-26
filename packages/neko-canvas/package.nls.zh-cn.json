@@ -1,8 +1,6 @@
 {
-  "neko.assets.title": "素材",
-  "neko.assets.name": "素材库",
-  "neko.assets.contextualTitle": "素材库",
   "neko.canvas.new.title": "新建画布",
+  "neko.canvas.outline.title": "画布大纲",
   "neko.asset.import.title": "导入素材",
   "neko.addToAssetLibrary.title": "添加到素材库"
 }

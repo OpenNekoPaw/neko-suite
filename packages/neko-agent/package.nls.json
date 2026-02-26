@@ -1,0 +1,9 @@
+{
+  "neko.aiAssistant.name": "AI Assistant",
+  "neko.aiAssistant.contextualTitle": "Neko AI Assistant",
+  "neko.ai.chat.title": "Chat with AI",
+  "neko.script.generate.title": "Generate Script",
+  "neko.script.optimize.title": "Optimize Script",
+  "neko.script.generateImage.title": "Generate Image from Script",
+  "neko.script.generateVideo.title": "Generate Video from Script"
+}
