@@ -232,17 +232,16 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				break;
 
 			case 'audio':
-				if (result.visualization) {
-					this.sendMessage({
-						type: 'mediaDiff:waveformData',
-						payload: {
-							currentWaveform:
-								result.visualization.currentWaveform ?? [],
-							previousWaveform:
-								result.visualization.previousWaveform ?? [],
-						},
-					});
-				}
+				// Always send waveform data so webview renders audio diff view
+				this.sendMessage({
+					type: 'mediaDiff:waveformData',
+					payload: {
+						currentWaveform:
+							result.visualization?.currentWaveform ?? [],
+						previousWaveform:
+							result.visualization?.previousWaveform ?? [],
+					},
+				});
 				break;
 
 			case 'video':
@@ -321,17 +320,16 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				break;
 
 			case 'audio':
-				if (result.visualization) {
-					this.sendMessage({
-						type: 'mediaDiff:waveformData',
-						payload: {
-							currentWaveform:
-								result.visualization.currentWaveform ?? [],
-							previousWaveform:
-								result.visualization.previousWaveform ?? [],
-						},
-					});
-				}
+				// Always send waveform data so webview renders audio diff view
+				this.sendMessage({
+					type: 'mediaDiff:waveformData',
+					payload: {
+						currentWaveform:
+							result.visualization?.currentWaveform ?? [],
+						previousWaveform:
+							result.visualization?.previousWaveform ?? [],
+					},
+				});
 				break;
 
 			case 'video':

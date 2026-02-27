@@ -921,10 +921,9 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
     function handleDiffResult(payload) {
       currentData = payload;
       updateSimilarityBadge(payload.similarity);
-      // Timeline diff has all data in the result, render immediately
-      if (payload.mediaType === 'timeline') {
-        render();
-      }
+      // Always render — for audio/video, show metadata immediately;
+      // visualization data (waveform/frames) will trigger re-render when it arrives
+      render();
     }
 
     function handleImageData(payload) {
@@ -1014,22 +1013,120 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
       if (!currentData) return;
 
       const content = document.getElementById('content');
+      var mt = currentData.mediaType || state.mediaType;
 
-      if (currentData.mediaType === 'timeline') {
-        renderTimelineDiff(content, currentData);
-      } else if (currentData.images) {
-        if (viewMode === 'heatmap') {
-          renderHeatmapDiff(content, currentData);
-        } else {
-          renderImageDiff(content, currentData);
-        }
-      } else if (currentData.waveforms) {
-        renderAudioDiff(content, currentData);
-      } else if (state.mediaType === 'video' || videoFrames.current || videoFrames.previous) {
-        renderVideoDiff(content, currentData);
-      } else {
-        content.innerHTML = '<div>' + state.l10n.waitingForData + '</div>';
+      switch (mt) {
+        case 'timeline':
+          renderTimelineDiff(content, currentData);
+          break;
+        case 'image':
+          if (currentData.images) {
+            if (viewMode === 'heatmap') {
+              renderHeatmapDiff(content, currentData);
+            } else {
+              renderImageDiff(content, currentData);
+            }
+          } else {
+            renderMetadataOnly(content, currentData);
+          }
+          break;
+        case 'audio':
+          if (currentData.waveforms) {
+            renderAudioDiff(content, currentData);
+          } else {
+            renderMetadataOnly(content, currentData);
+          }
+          break;
+        case 'video':
+          renderVideoDiff(content, currentData);
+          break;
+        default:
+          renderMetadataOnly(content, currentData);
+          break;
       }
+    }
+
+    /**
+     * Render metadata-only view when visualization data is not (yet) available
+     */
+    function renderMetadataOnly(container, data) {
+      var details = data.details || {};
+      var html = '<div style="padding: 24px; max-width: 600px; margin: 0 auto;">';
+
+      html += '<div style="text-align:center; margin-bottom:16px; color:var(--vscode-descriptionForeground);">'
+        + 'Diff analysis complete — visualization data unavailable'
+        + '</div>';
+
+      html += '<div class="metadata">';
+
+      // Similarity
+      html += '<div class="metadata-row"><span>Similarity:</span><span>'
+        + (data.similarity * 100).toFixed(1) + '%</span></div>';
+
+      // Duration (audio/video)
+      if (details.duration) {
+        html += '<div class="metadata-row"><span>' + state.l10n.metadata.duration + ':</span>'
+          + '<span class="' + (details.duration.current !== details.duration.previous ? 'metadata-changed' : '') + '">'
+          + (details.duration.previous != null ? details.duration.previous.toFixed(2) + 's' : 'N/A')
+          + ' → '
+          + (details.duration.current != null ? details.duration.current.toFixed(2) + 's' : 'N/A')
+          + '</span></div>';
+      }
+
+      // Sample rate (audio)
+      if (details.sampleRate) {
+        html += '<div class="metadata-row"><span>Sample Rate:</span>'
+          + '<span class="' + (details.sampleRate.current !== details.sampleRate.previous ? 'metadata-changed' : '') + '">'
+          + details.sampleRate.previous + ' Hz → ' + details.sampleRate.current + ' Hz</span></div>';
+      }
+
+      // Channels (audio)
+      if (details.channels) {
+        html += '<div class="metadata-row"><span>Channels:</span>'
+          + '<span class="' + (details.channels.current !== details.channels.previous ? 'metadata-changed' : '') + '">'
+          + details.channels.previous + ' → ' + details.channels.current + '</span></div>';
+      }
+
+      // Waveform similarity (audio)
+      if (details.waveformSimilarity != null) {
+        html += '<div class="metadata-row"><span>' + state.l10n.metadata.waveformSimilarity + ':</span>'
+          + '<span>' + (details.waveformSimilarity * 100).toFixed(1) + '%</span></div>';
+      }
+
+      // Resolution (video)
+      if (details.resolution) {
+        html += '<div class="metadata-row"><span>Resolution:</span>'
+          + '<span class="' + (details.resolution.current.width !== details.resolution.previous.width ? 'metadata-changed' : '') + '">'
+          + details.resolution.previous.width + 'x' + details.resolution.previous.height
+          + ' → ' + details.resolution.current.width + 'x' + details.resolution.current.height
+          + '</span></div>';
+      }
+
+      // FPS (video)
+      if (details.fps) {
+        html += '<div class="metadata-row"><span>FPS:</span>'
+          + '<span class="' + (details.fps.current !== details.fps.previous ? 'metadata-changed' : '') + '">'
+          + details.fps.previous + ' → ' + details.fps.current + '</span></div>';
+      }
+
+      // Codec (video)
+      if (details.codec) {
+        html += '<div class="metadata-row"><span>Codec:</span>'
+          + '<span class="' + (details.codec.current !== details.codec.previous ? 'metadata-changed' : '') + '">'
+          + details.codec.previous + ' → ' + details.codec.current + '</span></div>';
+      }
+
+      // Dimensions (image)
+      if (details.dimensions) {
+        html += '<div class="metadata-row"><span>' + state.l10n.metadata.size + ':</span>'
+          + '<span class="' + (details.dimensions.current.width !== details.dimensions.previous.width ? 'metadata-changed' : '') + '">'
+          + details.dimensions.previous.width + 'x' + details.dimensions.previous.height
+          + ' → ' + details.dimensions.current.width + 'x' + details.dimensions.current.height
+          + '</span></div>';
+      }
+
+      html += '</div></div>';
+      container.innerHTML = html;
     }
 
     function renderImageDiff(container, data) {
