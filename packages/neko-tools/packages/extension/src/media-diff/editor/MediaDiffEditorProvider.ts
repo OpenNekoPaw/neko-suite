@@ -1360,44 +1360,90 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
       \`;
 
       // Draw waveforms and attach seek handler
-      setTimeout(() => {
+      // Use requestAnimationFrame to ensure canvas has layout dimensions
+      requestAnimationFrame(() => {
         const canvas = document.getElementById('waveformCanvas');
         if (canvas) {
-          drawWaveforms(canvas, waveforms.currentWaveform, waveforms.previousWaveform);
-          initAudioSeek(canvas, dur);
+          // If canvas has no dimensions yet, wait for next frame
+          if (canvas.clientWidth === 0 || canvas.clientHeight === 0) {
+            requestAnimationFrame(() => {
+              drawWaveforms(canvas, waveforms.currentWaveform, waveforms.previousWaveform);
+              initAudioSeek(canvas, dur);
+            });
+          } else {
+            drawWaveforms(canvas, waveforms.currentWaveform, waveforms.previousWaveform);
+            initAudioSeek(canvas, dur);
+          }
         }
-      }, 0);
+      });
     }
 
     function drawWaveforms(canvas, current, previous) {
       const ctx = canvas.getContext('2d');
+      // Use devicePixelRatio for crisp rendering on HiDPI displays
+      const dpr = window.devicePixelRatio || 1;
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
-      canvas.width = width;
-      canvas.height = height;
+
+      // Skip if canvas has no layout dimensions
+      if (width === 0 || height === 0) return;
+
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      ctx.scale(dpr, dpr);
 
       const centerY = height / 2;
 
-      // Draw previous (red)
+      // Draw center line
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(255, 100, 100, 0.7)';
+      ctx.strokeStyle = 'rgba(128, 128, 128, 0.2)';
       ctx.lineWidth = 1;
-      previous.forEach((v, i) => {
-        const x = (i / previous.length) * width;
-        const y = centerY - v * centerY * 0.9;
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      });
+      ctx.moveTo(0, centerY);
+      ctx.lineTo(width, centerY);
       ctx.stroke();
 
-      // Draw current (blue)
-      ctx.beginPath();
-      ctx.strokeStyle = 'rgba(100, 150, 255, 0.7)';
-      current.forEach((v, i) => {
-        const x = (i / current.length) * width;
-        const y = centerY - v * centerY * 0.9;
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      });
-      ctx.stroke();
+      // Helper: draw mirrored waveform (positive above center, negative below)
+      function drawMirroredWaveform(data, color, fillColor) {
+        if (!data || data.length === 0) return;
+        var len = data.length;
+
+        // Fill area
+        ctx.beginPath();
+        ctx.fillStyle = fillColor;
+        for (var i = 0; i < len; i++) {
+          var x = (i / len) * width;
+          var amp = Math.abs(data[i]) * centerY * 0.9;
+          if (i === 0) {
+            ctx.moveTo(x, centerY - amp);
+          } else {
+            ctx.lineTo(x, centerY - amp);
+          }
+        }
+        // Return along bottom (mirrored)
+        for (var j = len - 1; j >= 0; j--) {
+          var x2 = (j / len) * width;
+          var amp2 = Math.abs(data[j]) * centerY * 0.9;
+          ctx.lineTo(x2, centerY + amp2);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Stroke top edge
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        for (var k = 0; k < len; k++) {
+          var x3 = (k / len) * width;
+          var y3 = centerY - Math.abs(data[k]) * centerY * 0.9;
+          k === 0 ? ctx.moveTo(x3, y3) : ctx.lineTo(x3, y3);
+        }
+        ctx.stroke();
+      }
+
+      // Draw previous (red, behind)
+      drawMirroredWaveform(previous, 'rgba(255, 100, 100, 0.8)', 'rgba(255, 100, 100, 0.15)');
+      // Draw current (blue, in front)
+      drawMirroredWaveform(current, 'rgba(100, 150, 255, 0.8)', 'rgba(100, 150, 255, 0.15)');
 
       // Draw seek cursor line if audio has time info
       if (typeof videoCurrentTime === 'number' && videoDuration > 0) {
@@ -1423,7 +1469,7 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
         ? state.fileName || state.l10n.panel.current
         : state.l10n.panel.currentWorking;
 
-      const dur = data.details?.duration?.current || 0;
+      const dur = Math.max(data.details?.duration?.current || 0, data.details?.duration?.previous || 0);
       videoDuration = dur;
 
       container.innerHTML = '<div class="video-diff-container">'

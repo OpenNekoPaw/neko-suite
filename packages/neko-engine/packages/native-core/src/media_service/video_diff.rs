@@ -292,17 +292,16 @@ pub fn diff_video_content<P: AsRef<Path>>(
 // ─────────────────────────────────────────────────────────────
 
 /// Run FFmpeg SSIM filter and return the log content.
-/// Scales input B to match input A's resolution when they differ.
+/// Uses scale2ref to scale input B to match input A's resolution when they differ.
 fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path) -> Result<String> {
     let tmp = std::env::temp_dir().join(format!(
         "neko_ssim_{}.log",
         std::process::id()
     ));
 
-    // Use filter_complex to scale [1] to match [0] before SSIM comparison.
-    // This handles different resolutions (e.g. 4K vs 720P).
+    // scale2ref scales [1:v] to match [0:v] dimensions automatically.
     let filter = format!(
-        "[1:v]scale=iw='iw(0)':ih='ih(0)':flags=bicubic[scaled];[0:v][scaled]ssim=stats_file={}",
+        "[1:v][0:v]scale2ref=flags=bicubic[scaled][ref];[ref][scaled]ssim=stats_file={}",
         tmp.display()
     );
 
@@ -320,7 +319,6 @@ fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path) -> Result<String> {
         .map_err(|e| Error::Other(format!("Failed to run ffmpeg ssim: {}", e)))?;
 
     if !tmp.exists() {
-        // FFmpeg may have failed; check stderr
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(Error::Other(format!(
             "FFmpeg SSIM produced no output. stderr: {}",
@@ -332,23 +330,22 @@ fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path) -> Result<String> {
         Error::Other(format!("Failed to read SSIM log: {}", e))
     })?;
 
-    // Clean up temp file
     let _ = std::fs::remove_file(&tmp);
 
     Ok(content)
 }
 
 /// Run FFmpeg PSNR filter and return the log content.
-/// Scales input B to match input A's resolution when they differ.
+/// Uses scale2ref to scale input B to match input A's resolution when they differ.
 fn run_ffmpeg_psnr(path_a: &Path, path_b: &Path) -> Result<String> {
     let tmp = std::env::temp_dir().join(format!(
         "neko_psnr_{}.log",
         std::process::id()
     ));
 
-    // Use filter_complex to scale [1] to match [0] before PSNR comparison.
+    // scale2ref scales [1:v] to match [0:v] dimensions automatically.
     let filter = format!(
-        "[1:v]scale=iw='iw(0)':ih='ih(0)':flags=bicubic[scaled];[0:v][scaled]psnr=stats_file={}",
+        "[1:v][0:v]scale2ref=flags=bicubic[scaled][ref];[ref][scaled]psnr=stats_file={}",
         tmp.display()
     );
 

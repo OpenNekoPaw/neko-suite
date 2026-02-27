@@ -337,6 +337,8 @@ export class MediaDiffService implements IMediaDiffService {
 				generateHeatmap: true,
 				...options,
 				fileExtension: ext ?? undefined,
+				currentPath: currentUri.fsPath,
+				previousPath: previousUri.fsPath,
 			};
 
 			const result = await this.withTimeout(

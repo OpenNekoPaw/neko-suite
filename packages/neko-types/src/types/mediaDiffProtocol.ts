@@ -152,6 +152,10 @@ export interface DiffOptions {
 	timeout?: number;
 	/** Original file extension (e.g. '.png', '.mp3') for temp file naming */
 	fileExtension?: string;
+	/** Original file path for current version (skip temp file when available) */
+	currentPath?: string;
+	/** Original file path for previous version (skip temp file when available) */
+	previousPath?: string;
 }
 
 /**

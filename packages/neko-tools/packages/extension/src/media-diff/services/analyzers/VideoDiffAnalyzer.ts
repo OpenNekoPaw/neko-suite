@@ -39,8 +39,17 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 		const localTempFiles: string[] = [];
 
 		try {
-			const ext = options?.fileExtension ?? '.mp4';
-			const [currentPath, previousPath] = await this.writeTempFiles(current, previous, ext, localTempFiles);
+			// Prefer original file paths when available (local comparison)
+			// to avoid Buffer → temp file round-trip and extension mismatch issues
+			let currentPath: string;
+			let previousPath: string;
+			if (options?.currentPath && options?.previousPath) {
+				currentPath = options.currentPath;
+				previousPath = options.previousPath;
+			} else {
+				const ext = options?.fileExtension ?? '.mp4';
+				[currentPath, previousPath] = await this.writeTempFiles(current, previous, ext, localTempFiles);
+			}
 			this.throwIfAborted();
 
 			const engineResult = await this.engineMediaService.diff(

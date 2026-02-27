@@ -150,6 +150,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
 						JSON.stringify(opts),
 						null, null, null, null
 					);
+					log(`diff raw JSON length: ${resultJson.length}, contains waveformPeaksA: ${resultJson.includes('waveformPeaksA')}`);
 					const result = JSON.parse(resultJson);
 					if (result.status === 'ok') {
 						const data = result.data;
@@ -158,17 +159,28 @@ function registerCommands(context: vscode.ExtensionContext): void {
 						// Transform here to bridge the mismatch without changing Rust or generated types.
 						if (data?.content) {
 							const { type: contentType, ...contentFields } = data.content;
+							log(`diff content type: ${contentType}, fields: ${Object.keys(contentFields).join(', ')}`);
+							if (contentType === 'audio' || contentType === 'Audio') {
+								log(`diff audio waveformPeaksA length: ${contentFields.waveformPeaksA?.length ?? 'undefined'}`);
+								log(`diff audio waveformPeaksB length: ${contentFields.waveformPeaksB?.length ?? 'undefined'}`);
+							}
 							const keyMap: Record<string, string> = {
 								Image: 'imageDiff',
 								Audio: 'audioDiff',
 								Video: 'videoDiff',
 								Timeline: 'timelineDiff',
+								image: 'imageDiff',
+								audio: 'audioDiff',
+								video: 'videoDiff',
+								timeline: 'timelineDiff',
 							};
 							const key = keyMap[contentType];
 							if (key) {
 								data[key] = contentFields;
 							}
 							delete data.content;
+						} else {
+							log(`diff result has no content field. data keys: ${Object.keys(data ?? {}).join(', ')}`);
 						}
 						return data;
 					}

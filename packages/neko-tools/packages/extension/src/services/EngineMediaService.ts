@@ -18,7 +18,38 @@ import type { EngineDiffResult } from '@neko/shared';
 // Service
 // =============================================================================
 
+const ENGINE_EXTENSION_ID = 'neko.neko-engine';
+
 export class EngineMediaService {
+	private engineActivated = false;
+
+	/**
+	 * Ensure the neko-engine extension is activated before calling its commands.
+	 * The engine registers internal commands (like neko.engine.diff) during activation,
+	 * so we must activate it first — VSCode won't auto-activate for internal commands.
+	 */
+	private async ensureEngineActivated(): Promise<boolean> {
+		if (this.engineActivated) return true;
+
+		const ext = vscode.extensions.getExtension(ENGINE_EXTENSION_ID);
+		if (!ext) {
+			console.error(`[EngineMediaService] Extension ${ENGINE_EXTENSION_ID} not installed`);
+			return false;
+		}
+
+		if (!ext.isActive) {
+			try {
+				await ext.activate();
+			} catch (error) {
+				console.error(`[EngineMediaService] Failed to activate ${ENGINE_EXTENSION_ID}:`, error);
+				return false;
+			}
+		}
+
+		this.engineActivated = true;
+		return true;
+	}
+
 	/**
 	 * Diff two media files via the engine's native diff action.
 	 *
@@ -34,6 +65,9 @@ export class EngineMediaService {
 		sourceB: string,
 		options?: Record<string, unknown>
 	): Promise<EngineDiffResult | null> {
+		const activated = await this.ensureEngineActivated();
+		if (!activated) return null;
+
 		try {
 			const result = await vscode.commands.executeCommand<EngineDiffResult>(
 				'neko.engine.diff',
@@ -43,8 +77,8 @@ export class EngineMediaService {
 				options
 			);
 			return result ?? null;
-		} catch {
-			// Engine not available
+		} catch (error) {
+			console.error(`[EngineMediaService] diff(${group}) failed:`, error);
 			return null;
 		}
 	}

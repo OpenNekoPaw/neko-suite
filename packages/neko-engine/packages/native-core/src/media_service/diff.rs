@@ -511,4 +511,77 @@ mod tests {
         push_diff_f64(&mut fields, "fps", 29.97, 30.0, 0.001);
         assert!(fields[0].changed);
     }
+
+    #[test]
+    fn test_content_diff_audio_serialize() {
+        use crate::media_service::audio_diff::{AudioContentDiff, AudioDiffRegion};
+
+        let audio = AudioContentDiff {
+            snr: 30.0,
+            duration_a: 5.0,
+            duration_b: 5.0,
+            compare_sample_rate: 48000,
+            total_samples: 240000,
+            diff_segment_count: 2,
+            total_segments: 50,
+            diff_percent: 4.0,
+            diff_regions: vec![AudioDiffRegion {
+                start: 1.0,
+                end: 2.0,
+                snr: 10.0,
+                rms_diff: 0.3,
+            }],
+            waveform_peaks_a: vec![0.1, 0.5, 0.8],
+            waveform_peaks_b: vec![0.2, 0.4, 0.9],
+        };
+
+        let content = ContentDiff::Audio(audio);
+        let json = serde_json::to_string_pretty(&content).unwrap();
+        println!("ContentDiff::Audio JSON:\n{}", json);
+
+        // Verify key fields exist
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["type"], "audio");
+        assert!(parsed["waveformPeaksA"].is_array());
+        assert!(parsed["waveformPeaksB"].is_array());
+        assert_eq!(parsed["waveformPeaksA"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_diff_result_with_audio_content_serialize() {
+        use crate::media_service::audio_diff::AudioContentDiff;
+
+        let result = DiffResult {
+            source_a: "/a.mp3".to_string(),
+            source_b: "/b.mp3".to_string(),
+            category: DiffCategory::Audio,
+            identical: false,
+            diff_count: 1,
+            total_fields: 5,
+            fields: vec![],
+            info_a: serde_json::json!({}),
+            info_b: serde_json::json!({}),
+            content: Some(ContentDiff::Audio(AudioContentDiff {
+                snr: 30.0,
+                duration_a: 5.0,
+                duration_b: 5.0,
+                compare_sample_rate: 48000,
+                total_samples: 240000,
+                diff_segment_count: 0,
+                total_segments: 50,
+                diff_percent: 0.0,
+                diff_regions: vec![],
+                waveform_peaks_a: vec![0.1, 0.5],
+                waveform_peaks_b: vec![0.2, 0.4],
+            })),
+        };
+
+        let json = serde_json::to_string_pretty(&result).unwrap();
+        println!("Full DiffResult with Audio content:\n{}", json);
+
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed["content"].is_object(), "content field should exist");
+        assert_eq!(parsed["content"]["type"], "audio");
+        assert!(parsed["content"]["waveformPeaksA"].is_array());
+    }
 }
