@@ -388,13 +388,21 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			);
 
 			if (result?.data) {
+				// Convert Node.js Buffer → ArrayBuffer for proper postMessage transfer
+				// (Buffer sent via postMessage may serialize as {type:'Buffer',data:[...]}
+				// instead of transferable ArrayBuffer)
+				const buf = result.data;
+				const imageBuffer = buf.buffer.slice(
+					buf.byteOffset,
+					buf.byteOffset + buf.byteLength
+				);
 				this.sendMessage({
 					requestId,
 					type: 'mediaDiff:frameData',
 					payload: {
 						time,
 						version,
-						imageBuffer: result.data,
+						imageBuffer,
 					},
 				});
 			}
@@ -427,12 +435,17 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			);
 
 			if (result?.data) {
+				const buf = result.data;
+				const imageBuffer = buf.buffer.slice(
+					buf.byteOffset,
+					buf.byteOffset + buf.byteLength
+				);
 				this.sendMessage({
 					requestId,
 					type: 'mediaDiff:elementThumbnail',
 					payload: {
 						src,
-						imageBuffer: result.data,
+						imageBuffer,
 					},
 				});
 			}

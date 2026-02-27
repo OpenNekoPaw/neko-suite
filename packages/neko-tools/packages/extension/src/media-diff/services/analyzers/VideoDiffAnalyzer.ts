@@ -15,11 +15,50 @@ import type {
 	VideoDiffDetails,
 	KeyframeDiff,
 	EngineVideoDiffRegion,
+	EngineMediaInfo,
+	EngineFieldDiff,
 } from '@neko/shared';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 import { EngineMediaService } from '../../../services/EngineMediaService';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'];
+
+/**
+ * Parse infoA/infoB which may be a JSON string or already-parsed object.
+ * Rust serializes info_a as serde_json::Value (object), so depending on
+ * the transport layer it may arrive as an object or a JSON string.
+ */
+function parseMediaInfo(raw: unknown): Partial<EngineMediaInfo> {
+	if (!raw) return {};
+	if (typeof raw === 'object' && raw !== null) return raw as Partial<EngineMediaInfo>;
+	if (typeof raw === 'string') {
+		try {
+			return JSON.parse(raw) as Partial<EngineMediaInfo>;
+		} catch {
+			return {};
+		}
+	}
+	return {};
+}
+
+/**
+ * Extract a numeric value from engine fields array.
+ * Fields contain probe metadata that's always available even when SSIM fails.
+ */
+function fieldValue(fields: EngineFieldDiff[], name: string, side: 'A' | 'B'): number | undefined {
+	const f = fields.find(fd => fd.field === name);
+	if (!f) return undefined;
+	const raw = side === 'A' ? f.valueA : f.valueB;
+	const n = typeof raw === 'number' ? raw : Number(raw);
+	return Number.isFinite(n) ? n : undefined;
+}
+
+function fieldString(fields: EngineFieldDiff[], name: string, side: 'A' | 'B'): string | undefined {
+	const f = fields.find(fd => fd.field === name);
+	if (!f) return undefined;
+	const raw = side === 'A' ? f.valueA : f.valueB;
+	return typeof raw === 'string' ? raw : String(raw);
+}
 
 export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 	readonly mediaType = 'video' as const;
@@ -40,8 +79,6 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 		const localTempFiles: string[] = [];
 
 		try {
-			// Prefer original file paths when available (local comparison)
-			// to avoid Buffer → temp file round-trip and extension mismatch issues
 			let currentPath: string;
 			let previousPath: string;
 			if (options?.currentPath && options?.previousPath) {
@@ -67,33 +104,38 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 
 			const videoDiff = engineResult.videoDiff;
 			const fields = engineResult.fields ?? [];
+			const infoA = parseMediaInfo(engineResult.infoA);
+			const infoB = parseMediaInfo(engineResult.infoB);
 
-			// Convert per-frame SSIM metrics → KeyframeDiff[]
+			if (!videoDiff) {
+				console.warn('[VideoDiffAnalyzer] videoDiff unavailable (SSIM/PSNR failed), using probe metadata');
+			}
+
 			const keyframeDiffs: KeyframeDiff[] = (videoDiff?.frameMetrics ?? []).map(fm => ({
 				time: fm.timestamp,
 				similarity: fm.ssim,
 			}));
 
-			// Extract codec from engine fields
-			const codecField = fields.find(f => f.field === 'codec');
+			// Metadata priority: videoDiff > infoA/infoB > fields > 0
+			const durationA = videoDiff?.durationA ?? infoA.duration ?? fieldValue(fields, 'duration', 'A') ?? 0;
+			const durationB = videoDiff?.durationB ?? infoB.duration ?? fieldValue(fields, 'duration', 'B') ?? 0;
+			const widthA = videoDiff?.widthA ?? infoA.width ?? fieldValue(fields, 'width', 'A') ?? 0;
+			const heightA = videoDiff?.heightA ?? infoA.height ?? fieldValue(fields, 'height', 'A') ?? 0;
+			const widthB = videoDiff?.widthB ?? infoB.width ?? fieldValue(fields, 'width', 'B') ?? 0;
+			const heightB = videoDiff?.heightB ?? infoB.height ?? fieldValue(fields, 'height', 'B') ?? 0;
+			const fpsA = videoDiff?.fpsA ?? infoA.fps ?? fieldValue(fields, 'fps', 'A') ?? 0;
+			const fpsB = videoDiff?.fpsB ?? infoB.fps ?? fieldValue(fields, 'fps', 'B') ?? 0;
+			const codecA = fieldString(fields, 'codec', 'A') ?? infoA.codec ?? 'unknown';
+			const codecB = fieldString(fields, 'codec', 'B') ?? infoB.codec ?? 'unknown';
 
 			const details: VideoDiffDetails = {
-				duration: {
-					current: videoDiff?.durationA ?? 0,
-					previous: videoDiff?.durationB ?? 0,
-				},
+				duration: { current: durationA, previous: durationB },
 				resolution: {
-					current: { width: videoDiff?.widthA ?? 0, height: videoDiff?.heightA ?? 0 },
-					previous: { width: videoDiff?.widthB ?? 0, height: videoDiff?.heightB ?? 0 },
+					current: { width: widthA, height: heightA },
+					previous: { width: widthB, height: heightB },
 				},
-				fps: {
-					current: videoDiff?.fpsA ?? 0,
-					previous: videoDiff?.fpsB ?? 0,
-				},
-				codec: {
-					current: codecField?.valueA ?? 'unknown',
-					previous: codecField?.valueB ?? 'unknown',
-				},
+				fps: { current: fpsA, previous: fpsB },
+				codec: { current: codecA, previous: codecB },
 				keyframeDiffs,
 				audioTrackChanged: videoDiff?.audioDiff !== undefined,
 				diffRegions: videoDiff?.diffRegions?.map((r: EngineVideoDiffRegion) => ({
@@ -103,20 +145,15 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 				})),
 			};
 
-			// Use engine's avgSsim as overall similarity
 			let similarity = videoDiff?.avgSsim ?? 0;
 
-			// Penalize for duration change
-			const durationA = videoDiff?.durationA ?? 0;
-			const durationB = videoDiff?.durationB ?? 0;
 			const durationDiff = Math.abs(durationA - durationB);
 			const maxDuration = Math.max(durationA, durationB);
 			if (maxDuration > 0) {
 				similarity *= 1 - (durationDiff / maxDuration) * 0.3;
 			}
 
-			// Penalize for resolution change
-			if (videoDiff && (videoDiff.widthA !== videoDiff.widthB || videoDiff.heightA !== videoDiff.heightB)) {
+			if (widthA !== widthB || heightA !== heightB) {
 				similarity *= 0.9;
 			}
 

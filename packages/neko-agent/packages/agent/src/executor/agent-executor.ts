@@ -4,7 +4,6 @@
  * Features are implemented via composable hooks:
  * - RetryHooks: multi-model fallback, tool retry
  * - MemoryHooks: session memory, context management
- * - RecordingHooks: execution recording for template generation
  */
 
 import type {
@@ -59,7 +58,6 @@ export interface AgentExecutorOptions {
  *
  * Extended features via hooks:
  * - RetryHooks: Tool retry, model fallback
- * - RecordingHooks: Execution recording for templates
  * - MemoryHooks: Context compression, session memory
  */
 export class AgentExecutor implements IAgentExecutor {

@@ -94,23 +94,6 @@ export {
   createMemoryHooks,
   type RetryHooksOptions,
   type MemoryHooksOptions,
-  // Recording hooks
-  RecordingHooks,
-  createRecordingHooks,
-  DEFAULT_RECORDING_CONFIG,
-  type RecordingConfig,
-  type RecordedStep,
-  type AgentRecording,
-  type ReplayOptions,
-  // Checkpoint hooks
-  CheckpointHooks,
-  createCheckpointHooks,
-  InMemoryCheckpointStorage,
-  createInMemoryCheckpointStorage,
-  DEFAULT_CHECKPOINT_POLICY,
-  type CheckpointPolicy,
-  type ICheckpointStorage,
-  type CheckpointHooksOptions,
 } from './hooks';
 
 // Export memory
@@ -350,18 +333,6 @@ export {
   type HookModuleExports,
 } from './hook-loader';
 
-// Export monitoring
-export {
-  ExecutionMonitor,
-  createExecutionMonitor,
-  type ExecutionStats,
-  type ExecutionEvent,
-  type ExecutionMonitorListener,
-  type RetryEvent,
-  type TimeoutEvent,
-  type ErrorInfo,
-} from './monitoring';
-
 // Export subagent
 export {
   // Types
@@ -452,15 +423,6 @@ export {
   type ValidationError as SessionValidationError,
   type ValidationWarning as SessionValidationWarning,
 } from './session';
-
-// Export factory
-export {
-  createConfiguredAgent,
-  estimateTokenCount,
-  type ExecutionMode,
-  type AgentFactoryConfig,
-  type AgentFactoryResult,
-} from './factory';
 
 // Export task management
 export {

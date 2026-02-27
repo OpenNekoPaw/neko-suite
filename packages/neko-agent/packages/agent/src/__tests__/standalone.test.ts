@@ -64,10 +64,6 @@ import {
   HookLoader,
   HOOK_DIRECTORIES,
   DEFAULT_HOOK_METADATA,
-
-  // Monitoring
-  ExecutionMonitor,
-  createExecutionMonitor,
 } from '../index';
 
 describe('Standalone Mode', () => {
@@ -139,11 +135,6 @@ describe('Standalone Mode', () => {
       expect(HookLoader).toBeDefined();
       expect(HOOK_DIRECTORIES).toBeDefined();
       expect(DEFAULT_HOOK_METADATA).toBeDefined();
-    });
-
-    it('should export monitoring components', () => {
-      expect(ExecutionMonitor).toBeDefined();
-      expect(createExecutionMonitor).toBeDefined();
     });
   });
 
@@ -258,55 +249,6 @@ describe('Standalone Mode', () => {
 
       expect(manager.listServers().length).toBe(1);
       expect(manager.listServers()[0]?.name).toBe('Test Server');
-    });
-  });
-
-  describe('ExecutionMonitor', () => {
-    it('should create and use execution monitor', () => {
-      const monitor = createExecutionMonitor();
-
-      monitor.recordExecutionStart('test-agent');
-
-      const stats = monitor.getStats();
-      expect(stats.totalExecutions).toBe(0); // No execution_end yet
-
-      const events = monitor.getEvents();
-      expect(events.length).toBe(1);
-      expect(events[0].type).toBe('execution_start');
-    });
-
-    it('should track execution statistics', () => {
-      const monitor = new ExecutionMonitor();
-
-      monitor.recordExecutionStart('agent1');
-      monitor.recordExecutionEnd('agent1', {
-        success: true,
-        response: 'done',
-        iterations: 2,
-        timing: { duration: 100, startTime: 0, endTime: 100 },
-        steps: [],
-      });
-
-      const stats = monitor.getStats();
-      expect(stats.totalExecutions).toBe(1);
-      expect(stats.successfulExecutions).toBe(1);
-      expect(stats.averageDuration).toBe(100);
-    });
-
-    it('should support event subscription', () => {
-      const monitor = new ExecutionMonitor();
-      const events: string[] = [];
-
-      const unsubscribe = monitor.subscribe((event) => {
-        events.push(event.type);
-      });
-
-      monitor.recordExecutionStart('agent');
-      expect(events).toContain('execution_start');
-
-      unsubscribe();
-      monitor.recordExecutionStart('agent2');
-      expect(events.length).toBe(1); // No new events after unsubscribe
     });
   });
 

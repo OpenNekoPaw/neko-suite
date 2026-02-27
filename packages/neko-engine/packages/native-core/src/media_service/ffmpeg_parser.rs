@@ -57,10 +57,13 @@ pub fn parse_ssim_log(content: &str) -> Result<Vec<SsimEntry>> {
             continue;
         }
 
-        let entry = parse_ssim_line(line).map_err(|e| {
-            Error::Other(format!("Failed to parse SSIM line '{}': {}", line, e))
-        })?;
-        entries.push(entry);
+        match parse_ssim_line(line) {
+            Ok(entry) => entries.push(entry),
+            Err(e) => {
+                // Tolerate malformed/truncated lines (e.g. from large FFmpeg output)
+                tracing::warn!("Skipping malformed SSIM line: {} ({})", e, &line[..line.len().min(80)]);
+            }
+        }
     }
 
     Ok(entries)
@@ -128,10 +131,13 @@ pub fn parse_psnr_log(content: &str) -> Result<Vec<PsnrEntry>> {
             continue;
         }
 
-        let entry = parse_psnr_line(line).map_err(|e| {
-            Error::Other(format!("Failed to parse PSNR line '{}': {}", line, e))
-        })?;
-        entries.push(entry);
+        match parse_psnr_line(line) {
+            Ok(entry) => entries.push(entry),
+            Err(e) => {
+                // Tolerate malformed/truncated lines
+                tracing::warn!("Skipping malformed PSNR line: {} ({})", e, &line[..line.len().min(80)]);
+            }
+        }
     }
 
     Ok(entries)
@@ -264,5 +270,34 @@ n:2 mse_avg:0.00 mse_y:0.00 mse_u:0.00 mse_v:0.00 psnr_avg:inf psnr_y:inf psnr_u
         let line = "n:1 mse_avg:1.23";
         let result = parse_psnr_line(line);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_ssim_log_tolerates_truncated_lines() {
+        // Simulates truncated FFmpeg output where a line is cut off
+        let log = "\
+n:1 Y:0.987654 U:0.991234 V:0.993456 All:0.990123 (20.04)
+n:2 Y:1.000000 U:1.00000
+n:3 Y:0.999999 U:0.999998 V:0.999997 All:0.999998 (56.99)
+";
+        let entries = parse_ssim_log(log).unwrap();
+        // Line 2 is truncated (missing V: and All:), should be skipped
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].frame, 1);
+        assert_eq!(entries[1].frame, 3);
+    }
+
+    #[test]
+    fn test_parse_psnr_log_tolerates_truncated_lines() {
+        let log = "\
+n:1 mse_avg:1.23 mse_y:1.45 mse_u:0.89 mse_v:0.67 psnr_avg:47.23 psnr_y:46.52 psnr_u:48.64 psnr_v:49.87
+n:2 mse_avg:0.50
+n:3 mse_avg:0.00 mse_y:0.00 mse_u:0.00 mse_v:0.00 psnr_avg:inf psnr_y:inf psnr_u:inf psnr_v:inf
+";
+        let entries = parse_psnr_log(log).unwrap();
+        // Line 2 is truncated (missing psnr_avg), should be skipped
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].frame, 1);
+        assert_eq!(entries[1].frame, 3);
     }
 }
