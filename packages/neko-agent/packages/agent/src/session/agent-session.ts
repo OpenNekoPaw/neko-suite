@@ -99,7 +99,6 @@ export class AgentSession implements IAgentSession {
   private _isRunning = false;
   private _pendingConfirmations = new Map<string, {
     request: ToolConfirmationRequest;
-    resolve: (approved: boolean) => void;
   }>();
 
   constructor(config: AgentSessionConfig) {
@@ -229,7 +228,8 @@ export class AgentSession implements IAgentSession {
 
       // Execute via AgentExecutor streaming
       // Note: user message is added by executor to its local context
-      this._history.push({ role: 'user', content: input });
+      // Store processedInput (not raw input) so plan mode reminder is preserved in history
+      this._history.push({ role: 'user', content: processedInput });
 
       for await (const step of this._executor.executeStream(processedInput, {
         messages: messagesSnapshot,
@@ -422,11 +422,8 @@ export class AgentSession implements IAgentSession {
 
   private _handleToolConfirmation(request: ToolConfirmationRequest): void {
     const toolCallId = request.toolCall.id;
-    // Store pending confirmation
-    this._pendingConfirmations.set(toolCallId, {
-      request,
-      resolve: () => {},
-    });
+    // Store pending confirmation (resolve is handled by onConfirmTool callback)
+    this._pendingConfirmations.set(toolCallId, { request });
 
     // Call user callback if provided
     if (this._config.onConfirmTool) {

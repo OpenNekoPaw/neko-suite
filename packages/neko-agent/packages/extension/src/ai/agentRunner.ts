@@ -540,9 +540,9 @@ export class AgentRunner implements IAgentRunner {
   confirmTool(toolCallId: string, approved: boolean): void {
     const pending = this._pendingConfirmations.get(toolCallId);
     if (pending) {
-      // Resolve the Promise first so _handleToolConfirmation completes
+      // Resolve the Promise — this triggers AgentSession._handleToolConfirmation.then
+      // which calls AgentSession.confirmTool internally. No need to call it directly.
       pending.resolve?.(approved);
-      this._session?.confirmTool(toolCallId, approved);
       this._pendingConfirmations.delete(toolCallId);
     } else {
       console.warn('[AgentRunner] No pending confirmation found for toolCallId:', toolCallId);

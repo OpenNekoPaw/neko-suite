@@ -110,7 +110,8 @@ export interface IMediaDiffService extends vscode.Disposable {
 export class MediaDiffService implements IMediaDiffService {
 	private readonly gitService: IGitMediaService;
 	private readonly registry: AnalyzerRegistry;
-	private currentAnalysis: AbortController | null = null;
+	/** Track all active analyses for this service instance */
+	private activeAnalyses = new Set<AbortController>();
 
 	constructor(
 		gitService?: IGitMediaService,
@@ -126,17 +127,18 @@ export class MediaDiffService implements IMediaDiffService {
 		options?: DiffOptions,
 		onProgress?: DiffProgressCallback
 	): Promise<DiffResult> {
-		// Cancel any ongoing analysis
-		this.cancel();
-		this.currentAnalysis = new AbortController();
+		const abortController = new AbortController();
+		this.activeAnalyses.add(abortController);
 
 		const mediaType = getMediaType(uri.fsPath);
 		if (!mediaType) {
+			this.activeAnalyses.delete(abortController);
 			throw new Error(`Unsupported file type: ${uri.fsPath}`);
 		}
 
 		const analyzer = this.registry.get(mediaType);
 		if (!analyzer) {
+			this.activeAnalyses.delete(abortController);
 			throw new Error(`No analyzer registered for type: ${mediaType}`);
 		}
 
@@ -159,7 +161,7 @@ export class MediaDiffService implements IMediaDiffService {
 				};
 			}
 
-			this.throwIfCancelled();
+			this.throwIfAborted(abortController);
 			onProgress?.(30, 'Analyzing differences...');
 
 			// Run analysis with timeout
@@ -180,17 +182,17 @@ export class MediaDiffService implements IMediaDiffService {
 				analysisOptions.timeout ?? DEFAULT_DIFF_TIMEOUT
 			);
 
-			this.throwIfCancelled();
+			this.throwIfAborted(abortController);
 			onProgress?.(100, 'Complete');
 
 			return result;
 		} catch (error) {
-			if (this.isCancelled()) {
+			if (abortController.signal.aborted) {
 				throw new Error('Analysis cancelled');
 			}
 			throw error;
 		} finally {
-			this.currentAnalysis = null;
+			this.activeAnalyses.delete(abortController);
 		}
 	}
 
@@ -246,20 +248,22 @@ export class MediaDiffService implements IMediaDiffService {
 		options?: DiffOptions,
 		onProgress?: DiffProgressCallback
 	): Promise<DiffResult> {
-		// Cancel any ongoing analysis
-		this.cancel();
-		this.currentAnalysis = new AbortController();
+		const abortController = new AbortController();
+		this.activeAnalyses.add(abortController);
 
 		const currentMediaType = getMediaType(currentUri.fsPath);
 		const previousMediaType = getMediaType(previousUri.fsPath);
 
 		if (!currentMediaType) {
+			this.activeAnalyses.delete(abortController);
 			throw new Error(`Unsupported file type: ${currentUri.fsPath}`);
 		}
 		if (!previousMediaType) {
+			this.activeAnalyses.delete(abortController);
 			throw new Error(`Unsupported file type: ${previousUri.fsPath}`);
 		}
 		if (currentMediaType !== previousMediaType) {
+			this.activeAnalyses.delete(abortController);
 			throw new Error(
 				`Cannot compare different media types: ${currentMediaType} vs ${previousMediaType}`
 			);
@@ -267,6 +271,7 @@ export class MediaDiffService implements IMediaDiffService {
 
 		const analyzer = this.registry.get(currentMediaType);
 		if (!analyzer) {
+			this.activeAnalyses.delete(abortController);
 			throw new Error(`No analyzer registered for type: ${currentMediaType}`);
 		}
 
@@ -277,7 +282,7 @@ export class MediaDiffService implements IMediaDiffService {
 			// Get file versions
 			const versions = await this.getLocalFileVersions(currentUri, previousUri);
 
-			this.throwIfCancelled();
+			this.throwIfAborted(abortController);
 			onProgress?.(30, 'Analyzing differences...');
 
 			// Run analysis with timeout
@@ -298,23 +303,25 @@ export class MediaDiffService implements IMediaDiffService {
 				analysisOptions.timeout ?? DEFAULT_DIFF_TIMEOUT
 			);
 
-			this.throwIfCancelled();
+			this.throwIfAborted(abortController);
 			onProgress?.(100, 'Complete');
 
 			return result;
 		} catch (error) {
-			if (this.isCancelled()) {
+			if (abortController.signal.aborted) {
 				throw new Error('Analysis cancelled');
 			}
 			throw error;
 		} finally {
-			this.currentAnalysis = null;
+			this.activeAnalyses.delete(abortController);
 		}
 	}
 
 	cancel(): void {
-		this.currentAnalysis?.abort();
-		this.currentAnalysis = null;
+		for (const ac of this.activeAnalyses) {
+			ac.abort();
+		}
+		this.activeAnalyses.clear();
 		this.registry.cancelAll();
 	}
 
@@ -333,17 +340,10 @@ export class MediaDiffService implements IMediaDiffService {
 	}
 
 	/**
-	 * Check if analysis was cancelled
+	 * Throw if analysis was aborted
 	 */
-	private isCancelled(): boolean {
-		return this.currentAnalysis?.signal.aborted ?? false;
-	}
-
-	/**
-	 * Throw if analysis was cancelled
-	 */
-	private throwIfCancelled(): void {
-		if (this.isCancelled()) {
+	private throwIfAborted(ac: AbortController): void {
+		if (ac.signal.aborted) {
 			throw new Error('Analysis cancelled');
 		}
 	}

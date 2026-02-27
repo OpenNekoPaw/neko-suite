@@ -122,10 +122,11 @@ export interface TokenUsage {
  * Stream chunk
  */
 export interface StreamChunk {
-  type: 'content' | 'tool_call' | 'usage' | 'done';
+  type: 'content' | 'thinking' | 'tool_call' | 'usage' | 'done';
   content?: string;
   toolCall?: Partial<ToolCall>;
   usage?: ServiceResponse['usage'];
+  finishReason?: ServiceResponse['finishReason'];
 }
 
 /**
@@ -262,38 +263,6 @@ export interface IMediaGenerationService {
 }
 
 /**
- * Workflow execution result
- */
-export interface WorkflowResult {
-  success: boolean;
-  outputs?: Record<string, unknown>;
-  error?: string;
-}
-
-/**
- * Workflow manager interface
- */
-export interface IWorkflowManager {
-  /**
-   * Execute a workflow
-   */
-  execute(
-    workflowId: string,
-    inputs: Record<string, unknown>
-  ): Promise<WorkflowResult>;
-
-  /**
-   * List available workflows
-   */
-  list(): string[];
-
-  /**
-   * Check if workflow exists
-   */
-  has(workflowId: string): boolean;
-}
-
-/**
  * Media task manager interface (for async media generation tasks)
  * This is a simplified interface for UI/platform integration.
  * For the full TaskManager implementation, see @neko/agent.
@@ -381,11 +350,6 @@ export interface IPlatform {
    * Media generation service
    */
   readonly media: IMediaGenerationService;
-
-  /**
-   * Workflow manager
-   */
-  readonly workflows: IWorkflowManager;
 
   /**
    * Task manager

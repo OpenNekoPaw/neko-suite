@@ -6,6 +6,8 @@
  *
  * Key differences bridged:
  * - chatStream: ServiceStreamResponse → AsyncIterable<StreamChunk>
+ * - ChatChunk.thinking → StreamChunk { type: 'thinking' }
+ * - ChatChunk.finishReason → StreamChunk { type: 'done', finishReason }
  * - ServiceResponse: strips routing/timing metadata
  * - embed: EmbeddingResponse → { embeddings: number[][] }
  */
@@ -44,20 +46,33 @@ export class SharedServiceAdapter implements SharedIService {
     messages: ChatMessage[],
     options?: SharedServiceOptions
   ): AsyncIterable<StreamChunk> {
-    const { stream } = this._service.chatStream(messages, options);
+    const { stream, response } = this._service.chatStream(messages, options);
+
+    // Prevent unhandled rejection from the response Promise
+    response.catch(() => {});
 
     for await (const chunk of stream) {
-      // Convert ChatChunk → StreamChunk
+      // Extended thinking (Claude)
+      if (chunk.thinking) {
+        yield { type: 'thinking', content: chunk.thinking };
+      }
+      // Content delta
       if (chunk.delta.content) {
         yield { type: 'content', content: chunk.delta.content };
       }
+      // Tool calls
       if (chunk.delta.toolCalls && chunk.delta.toolCalls.length > 0) {
         for (const tc of chunk.delta.toolCalls) {
           yield { type: 'tool_call', toolCall: tc };
         }
       }
+      // Usage (from finish chunk)
+      if (chunk.usage) {
+        yield { type: 'usage', usage: chunk.usage };
+      }
+      // Finish
       if (chunk.finishReason) {
-        yield { type: 'done' };
+        yield { type: 'done', finishReason: chunk.finishReason };
       }
     }
   }

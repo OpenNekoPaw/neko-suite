@@ -14,6 +14,7 @@ export async function aggregateStream(
   let id = '';
   let modelName = '';
   let finishReason: ChatResponse['finishReason'] = 'stop';
+  let usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
   const toolCalls: NonNullable<ChatMessage['toolCalls']> = [];
 
   for await (const chunk of stream) {
@@ -44,6 +45,10 @@ export async function aggregateStream(
       }
     }
 
+    if (chunk.usage) {
+      usage = chunk.usage;
+    }
+
     if (chunk.finishReason) {
       finishReason = chunk.finishReason;
     }
@@ -58,11 +63,7 @@ export async function aggregateStream(
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     },
     finishReason,
-    usage: {
-      promptTokens: 0,
-      completionTokens: 0,
-      totalTokens: 0,
-    },
+    usage,
   };
 }
 
@@ -114,6 +115,7 @@ function aggregateStreamFromChunks(chunks: ChatChunk[]): ChatResponse {
   let id = '';
   let modelName = '';
   let finishReason: ChatResponse['finishReason'] = 'stop';
+  let usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
   const toolCalls: NonNullable<ChatMessage['toolCalls']> = [];
 
   for (const chunk of chunks) {
@@ -144,6 +146,10 @@ function aggregateStreamFromChunks(chunks: ChatChunk[]): ChatResponse {
       }
     }
 
+    if (chunk.usage) {
+      usage = chunk.usage;
+    }
+
     if (chunk.finishReason) {
       finishReason = chunk.finishReason;
     }
@@ -158,10 +164,6 @@ function aggregateStreamFromChunks(chunks: ChatChunk[]): ChatResponse {
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     },
     finishReason,
-    usage: {
-      promptTokens: 0,
-      completionTokens: 0,
-      totalTokens: 0,
-    },
+    usage,
   };
 }

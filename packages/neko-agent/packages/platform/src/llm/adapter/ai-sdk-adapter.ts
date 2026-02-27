@@ -194,6 +194,11 @@ export abstract class AISdkAdapter implements Adapter {
             model: model.name,
             delta: {},
             finishReason: this.mapFinishReason(part.finishReason),
+            usage: part.usage ? {
+              promptTokens: part.usage.promptTokens ?? 0,
+              completionTokens: part.usage.completionTokens ?? 0,
+              totalTokens: (part.usage.promptTokens ?? 0) + (part.usage.completionTokens ?? 0),
+            } : undefined,
           };
         }
       }

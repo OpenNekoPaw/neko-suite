@@ -104,6 +104,8 @@ export interface ChatChunk {
   finishReason?: 'stop' | 'length' | 'tool_calls' | 'content_filter';
   /** Extended thinking content delta (Claude only) */
   thinking?: string;
+  /** Token usage (available on finish chunk) */
+  usage?: TokenUsage;
 }
 
 /**

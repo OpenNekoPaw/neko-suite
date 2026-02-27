@@ -124,6 +124,14 @@ export interface IGitMediaService extends vscode.Disposable {
 	 * Check if file is tracked by Git
 	 */
 	isTracked(uri: vscode.Uri): Promise<boolean>;
+
+	/**
+	 * Get commit history for a file
+	 * @param uri - File URI
+	 * @param maxCount - Maximum number of commits to return (default: 20)
+	 * @returns Array of { hash, subject, date } ordered newest first
+	 */
+	getFileHistory(uri: vscode.Uri, maxCount?: number): Promise<GitCommitInfo[]>;
 }
 
 // =============================================================================

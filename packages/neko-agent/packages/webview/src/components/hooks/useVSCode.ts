@@ -145,9 +145,10 @@ export const VSCodeMessages = {
    * Confirm or reject a tool execution
    * @param toolCallId - The tool call ID
    * @param approved - Whether the tool is approved
+   * @param conversationId - Optional conversation ID for multi-tab safety
    */
-  confirmTool: (toolCallId: string, approved: boolean) => {
-    postMessage({ type: 'confirmTool', toolCallId, approved });
+  confirmTool: (toolCallId: string, approved: boolean, conversationId?: string) => {
+    postMessage({ type: 'confirmTool', toolCallId, approved, conversationId });
   },
 
   /**

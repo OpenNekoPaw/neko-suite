@@ -252,19 +252,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         case 'searchProjectFiles':
           this._messages?.searchProjectFiles(webview, message.filter as string);
           break;
-        case 'confirmTool':
-          console.log('[ChatProvider] confirmTool message received:', {
-            toolCallId: message.toolCallId,
-            approved: message.approved,
-          });
-          const activeConversationId = this._conversations.getActiveId();
-          console.log('[ChatProvider] Active conversation:', activeConversationId);
-          if (activeConversationId) {
-            this._agentManager?.confirmTool(activeConversationId, message.toolCallId as string, message.approved as boolean);
+        case 'confirmTool': {
+          const confirmConversationId = (message.conversationId as string) || this._conversations.getActiveId();
+          if (confirmConversationId) {
+            this._agentManager?.confirmTool(confirmConversationId, message.toolCallId as string, message.approved as boolean);
           } else {
-            console.warn('[ChatProvider] No active conversation for confirmTool');
+            console.warn('[ChatProvider] No conversation for confirmTool');
           }
           break;
+        }
 
         // Plan mode messages
         case 'planApprove':
