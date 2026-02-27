@@ -33,6 +33,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	private isDisposed = false;
 	/** Per-handler AbortController — only cancels this handler's analysis */
 	private currentAbortController: AbortController | null = null;
+	/** Cached previous file path for frame extraction (Git mode writes to temp file) */
+	private previousFilePath: string | null = null;
 
 	constructor(
 		private readonly webview: vscode.Webview,
@@ -73,6 +75,11 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			);
 
 			if (this.isDisposed) return;
+
+			// For video in Git mode, write previous version to temp file for frame extraction
+			if (result.mediaType === 'video') {
+				await this.ensurePreviousFilePath(ref);
+			}
 
 			// Send result
 			this.sendMessage({
@@ -369,7 +376,7 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	): Promise<void> {
 		const filePath = version === 'current'
 			? this.fileUri.fsPath
-			: this.previousUri?.fsPath;
+			: (this.previousUri?.fsPath ?? this.previousFilePath);
 
 		if (!filePath) return;
 
@@ -473,6 +480,47 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	}
 
 	/**
+	 * Ensure previous file path is available for frame extraction.
+	 * In Git mode, writes the previous version to a temp file.
+	 */
+	private async ensurePreviousFilePath(ref: string): Promise<void> {
+		// Already have a path (local comparison or previously cached)
+		if (this.previousUri || this.previousFilePath) return;
+
+		try {
+			const versions = await this.diffService.getFileVersions(this.fileUri, ref);
+			if (versions.isNewFile || !versions.previous) return;
+
+			const fs = await import('fs/promises');
+			const os = await import('os');
+			const path = await import('path');
+
+			const ext = path.extname(this.fileUri.fsPath) || '.mp4';
+			const tmpPath = path.join(
+				os.tmpdir(),
+				`media-diff-prev-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+			);
+			await fs.writeFile(tmpPath, Buffer.from(versions.previous));
+			this.previousFilePath = tmpPath;
+		} catch (error) {
+			console.error('[MediaDiffMessageHandler] Failed to write previous version temp file:', error);
+		}
+	}
+
+	/**
+	 * Clean up temp files created for Git mode frame extraction
+	 */
+	private async cleanupTempFiles(): Promise<void> {
+		if (this.previousFilePath) {
+			try {
+				const fs = await import('fs/promises');
+				await fs.unlink(this.previousFilePath);
+			} catch { /* ignore */ }
+			this.previousFilePath = null;
+		}
+	}
+
+	/**
 	 * Get MIME type from file path
 	 */
 	private getMimeType(filePath: string): string {
@@ -502,5 +550,7 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		this.isDisposed = true;
 		// Only cancel this handler's analysis, NOT the shared service
 		this.cancelCurrentAnalysis();
+		// Clean up temp files created for Git mode frame extraction
+		void this.cleanupTempFiles();
 	}
 }
