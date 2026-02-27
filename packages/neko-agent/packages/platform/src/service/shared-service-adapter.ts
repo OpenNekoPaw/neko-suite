@@ -58,10 +58,25 @@ export class SharedServiceAdapter implements SharedIService {
       }
       // Content delta
       if (chunk.delta.content) {
-        const content = typeof chunk.delta.content === 'string'
-          ? chunk.delta.content
-          : chunk.delta.content.map(p => p.type === 'text' ? p.text : '').join('');
-        yield { type: 'content', content };
+        let content: string;
+        if (typeof chunk.delta.content === 'string') {
+          content = chunk.delta.content;
+        } else {
+          const parts = chunk.delta.content;
+          const nonTextParts = parts.filter(p => p.type !== 'text');
+          if (nonTextParts.length > 0) {
+            console.warn(
+              `[SharedServiceAdapter] chatStream: ${nonTextParts.length} non-text ContentPart(s) dropped (types: ${nonTextParts.map(p => p.type).join(', ')})`
+            );
+          }
+          content = parts
+            .filter((p): p is Extract<typeof p, { type: 'text' }> => p.type === 'text')
+            .map(p => p.text)
+            .join('');
+        }
+        if (content) {
+          yield { type: 'content', content };
+        }
       }
       // Tool calls
       if (chunk.delta.toolCalls && chunk.delta.toolCalls.length > 0) {

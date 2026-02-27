@@ -464,7 +464,7 @@ export function createPlatform(options: PlatformOptions = {}): Platform {
   if (!mediaTaskManager) {
     throw new Error(
       '[Platform] taskManager is required. ' +
-      'Import TaskManager from @neko/agent and pass it in options.'
+      'Provide an ITaskManager implementation (from @neko/shared) via options.taskManager.'
     );
   }
 

@@ -137,8 +137,10 @@ export class AgentExecutor implements IAgentExecutor {
       metadata: context?.metadata || {},
     };
 
-    // Add user input
-    agentContext.messages.push({ role: 'user', content: input });
+    // Add user input (unless caller already included it in the snapshot)
+    if (!context?.skipUserMessage) {
+      agentContext.messages.push({ role: 'user', content: input });
+    }
 
     // Hook: onExecuteStart
     await this.runHooks('onExecuteStart', input, agentContext);
@@ -199,7 +201,10 @@ export class AgentExecutor implements IAgentExecutor {
       metadata: context?.metadata || {},
     };
 
-    agentContext.messages.push({ role: 'user', content: input });
+    // Add user input (unless caller already included it in the snapshot)
+    if (!context?.skipUserMessage) {
+      agentContext.messages.push({ role: 'user', content: input });
+    }
 
     // Hook: onExecuteStart
     await this.runHooks('onExecuteStart', input, agentContext);

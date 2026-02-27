@@ -145,6 +145,10 @@ message AudioContentDiff {
   double diff_percent = 8;
   // Regions where audio differs significantly
   repeated AudioDiffRegion diff_regions = 9;
+  // Waveform peak data for source A (downsampled to ~800 points, values 0.0-1.0)
+  repeated float waveform_peaks_a = 10;
+  // Waveform peak data for source B (downsampled to ~800 points, values 0.0-1.0)
+  repeated float waveform_peaks_b = 11;
 }
 
 // =============================================================================

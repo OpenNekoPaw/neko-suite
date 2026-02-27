@@ -1,0 +1,310 @@
+/**
+ * AgentSession Tests
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AgentSession, PLAN_MODE_SYSTEM_REMINDER } from '../agent-session';
+import type { AgentSessionConfig, AgentEvent } from '../types';
+import type {
+  IService,
+  IToolRegistry,
+  AgentStep,
+  ChatMessage,
+} from '@neko/shared';
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+async function collectEvents(iterable: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
+  const events: AgentEvent[] = [];
+  for await (const event of iterable) {
+    events.push(event);
+  }
+  return events;
+}
+
+// =============================================================================
+// Mocks
+// =============================================================================
+
+/** Mock steps yielded by AgentExecutor.executeStream */
+function createMockExecutorModule(steps: AgentStep[]) {
+  return {
+    executeStream: vi.fn(async function* () {
+      for (const step of steps) {
+        yield step;
+      }
+    }),
+    execute: vi.fn(),
+    abort: vi.fn(),
+    getState: vi.fn().mockReturnValue('done'),
+    addHook: vi.fn(),
+    removeHook: vi.fn(),
+    getHook: vi.fn(),
+    createCheckpoint: vi.fn(),
+    setToolInjectionManager: vi.fn(),
+  };
+}
+
+function createMockService(): IService {
+  return {
+    chat: vi.fn(),
+    chatStream: vi.fn(),
+    embed: vi.fn(),
+  };
+}
+
+function createMockToolRegistry(): IToolRegistry {
+  return {
+    register: vi.fn(),
+    unregister: vi.fn(),
+    get: vi.fn(),
+    has: vi.fn(),
+    list: vi.fn().mockReturnValue([]),
+    listByCategory: vi.fn().mockReturnValue([]),
+    execute: vi.fn(),
+    toToolDefinitions: vi.fn().mockReturnValue([]),
+  };
+}
+
+function createConfig(overrides?: Partial<AgentSessionConfig>): AgentSessionConfig {
+  return {
+    service: createMockService(),
+    toolRegistry: createMockToolRegistry(),
+    systemPrompt: 'You are a helpful assistant.',
+    maxIterations: 10,
+    ...overrides,
+  };
+}
+
+// =============================================================================
+// Mock AgentExecutor — we replace the internal _executor after construction
+// =============================================================================
+
+function injectMockExecutor(session: AgentSession, steps: AgentStep[]) {
+  const mockExec = createMockExecutorModule(steps);
+  // Access private _executor via bracket notation
+  (session as unknown as Record<string, unknown>)['_executor'] = mockExec;
+  return mockExec;
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+describe('AgentSession', () => {
+  let config: AgentSessionConfig;
+
+  beforeEach(() => {
+    config = createConfig();
+  });
+
+  // -------------------------------------------------------------------------
+  // 1. Constructor
+  // -------------------------------------------------------------------------
+
+  describe('constructor', () => {
+    it('should initialize with system prompt in history', () => {
+      const session = new AgentSession(config);
+      const history = session.getHistory();
+
+      expect(history.length).toBe(1);
+      expect(history[0]!.role).toBe('system');
+      expect(history[0]!.content).toBe('You are a helpful assistant.');
+    });
+
+    it('should default execution mode to auto', () => {
+      const session = new AgentSession(config);
+      expect(session.getExecutionMode()).toBe('auto');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 2. execute() — simple text response
+  // -------------------------------------------------------------------------
+
+  describe('execute() simple response', () => {
+    it('should yield text + iteration + done events', async () => {
+      const session = new AgentSession(config);
+      const steps: AgentStep[] = [
+        { type: 'think', content: 'Hello world', timestamp: Date.now() },
+      ];
+      injectMockExecutor(session, steps);
+
+      const events = await collectEvents(session.execute('Hi'));
+
+      const textEvents = events.filter(e => e.type === 'text');
+      expect(textEvents.length).toBe(1);
+      expect(textEvents[0]!.content).toBe('Hello world');
+
+      const doneEvents = events.filter(e => e.type === 'done');
+      expect(doneEvents.length).toBe(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 3. execute() — with tool calls
+  // -------------------------------------------------------------------------
+
+  describe('execute() with tool calls', () => {
+    it('should yield tool_call and tool_result events', async () => {
+      const session = new AgentSession(config);
+      const steps: AgentStep[] = [
+        {
+          type: 'think',
+          content: '',
+          toolCalls: [{ id: 'call_1', name: 'read_file', arguments: { path: '/a.ts' } }],
+          timestamp: Date.now(),
+        },
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolResults: [
+            { success: true, data: 'file content', callId: 'call_1', name: 'read_file' },
+          ],
+          timestamp: Date.now(),
+        },
+        {
+          type: 'think',
+          content: 'Here is the file content.',
+          timestamp: Date.now(),
+        },
+      ];
+      injectMockExecutor(session, steps);
+
+      const events = await collectEvents(session.execute('Read a.ts'));
+
+      const toolCallEvents = events.filter(e => e.type === 'tool_call');
+      expect(toolCallEvents.length).toBe(1);
+      expect(toolCallEvents[0]!.toolCall!.name).toBe('read_file');
+
+      const toolResultEvents = events.filter(e => e.type === 'tool_result');
+      expect(toolResultEvents.length).toBe(1);
+      expect(toolResultEvents[0]!.toolResult!.success).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 4. execute() — user message added to history (not duplicated)
+  // -------------------------------------------------------------------------
+
+  describe('execute() user message in history', () => {
+    it('should add user message to history and pass skipUserMessage', async () => {
+      const session = new AgentSession(config);
+      const steps: AgentStep[] = [
+        { type: 'think', content: 'Response', timestamp: Date.now() },
+      ];
+      const mockExec = injectMockExecutor(session, steps);
+
+      await collectEvents(session.execute('Hello'));
+
+      // User message should be in history
+      const history = session.getHistory();
+      const userMessages = history.filter(m => m.role === 'user');
+      expect(userMessages.length).toBe(1);
+      expect(userMessages[0]!.content).toBe('Hello');
+
+      // Executor should receive skipUserMessage: true
+      const callArgs = mockExec.executeStream.mock.calls[0];
+      expect(callArgs![1]!.skipUserMessage).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 5. execute() — rejects concurrent execution
+  // -------------------------------------------------------------------------
+
+  describe('execute() concurrent rejection', () => {
+    it('should yield error when already running', async () => {
+      const session = new AgentSession(config);
+      injectMockExecutor(session, []);
+
+      // Simulate running state by setting _isRunning directly
+      (session as unknown as Record<string, boolean>)['_isRunning'] = true;
+
+      // Attempt execution while "running"
+      const events = await collectEvents(session.execute('Second'));
+      const errorEvents = events.filter(e => e.type === 'error');
+      expect(errorEvents.length).toBe(1);
+      expect(errorEvents[0]!.error!.message).toContain('already running');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 6. execute() — plan mode injects reminder
+  // -------------------------------------------------------------------------
+
+  describe('execute() plan mode', () => {
+    it('should prepend PLAN_MODE_SYSTEM_REMINDER to input', async () => {
+      const session = new AgentSession(createConfig({ executionMode: 'plan' }));
+      const steps: AgentStep[] = [
+        { type: 'think', content: 'Plan response', timestamp: Date.now() },
+      ];
+      const mockExec = injectMockExecutor(session, steps);
+
+      await collectEvents(session.execute('Build a feature'));
+
+      const callArgs = mockExec.executeStream.mock.calls[0];
+      const inputArg = callArgs![0] as string;
+      expect(inputArg).toContain(PLAN_MODE_SYSTEM_REMINDER);
+      expect(inputArg).toContain('Build a feature');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 7. cancel()
+  // -------------------------------------------------------------------------
+
+  describe('cancel()', () => {
+    it('should call executor abort', () => {
+      const session = new AgentSession(config);
+      const mockExec = injectMockExecutor(session, []);
+
+      session.cancel();
+
+      expect(mockExec.abort).toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 8. clearHistory()
+  // -------------------------------------------------------------------------
+
+  describe('clearHistory()', () => {
+    it('should preserve system prompt after clearing', async () => {
+      const session = new AgentSession(config);
+      const steps: AgentStep[] = [
+        { type: 'think', content: 'Hi', timestamp: Date.now() },
+      ];
+      injectMockExecutor(session, steps);
+
+      await collectEvents(session.execute('Hello'));
+      expect(session.getHistory().length).toBeGreaterThan(1);
+
+      session.clearHistory();
+
+      const history = session.getHistory();
+      expect(history.length).toBe(1);
+      expect(history[0]!.role).toBe('system');
+      expect(history[0]!.content).toBe('You are a helpful assistant.');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 9. dispose()
+  // -------------------------------------------------------------------------
+
+  describe('dispose()', () => {
+    it('should cancel execution and clear pending confirmations', () => {
+      const session = new AgentSession(config);
+      const mockExec = injectMockExecutor(session, []);
+
+      session.dispose();
+
+      expect(mockExec.abort).toHaveBeenCalled();
+      expect(session.isRunning()).toBe(false);
+      expect(session.getPendingConfirmations()).toEqual([]);
+    });
+  });
+});

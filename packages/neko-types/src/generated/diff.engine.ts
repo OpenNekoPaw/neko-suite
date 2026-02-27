@@ -95,6 +95,8 @@ export interface EngineAudioContentDiff {
   totalSegments: number;
   diffPercent: number;
   diffRegions: EngineAudioDiffRegion[];
+  waveformPeaksA: number[];
+  waveformPeaksB: number[];
 }
 
 export interface EngineFrameMetric {

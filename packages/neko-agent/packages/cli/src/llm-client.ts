@@ -1,7 +1,13 @@
 /**
  * LLM Client Abstraction
  *
- * Provides a built-in HTTP client for direct LLM API calls in CLI mode.
+ * Provides a built-in HTTP client for direct LLM API calls in CLI standalone mode.
+ *
+ * Adaptation path (standalone CLI):
+ *   CLIConfig → BuiltinLLMClient (ILLMClient) → LLMServiceAdapter (IService) → AgentSession
+ *
+ * When a Platform service is available (extension mode), the adapter is bypassed:
+ *   Platform.createService() → IService → AgentSession
  */
 
 import type { ChatMessage, ToolDefinition } from '@neko/shared';
@@ -138,7 +144,7 @@ class BuiltinLLMClient implements ILLMClient {
     messages: ChatMessage[],
     options?: LLMClientOptions
   ): AsyncIterable<LLMClientStreamChunk> {
-    const { provider, model, apiKey, baseUrl } = this.config;
+    const { provider, apiKey } = this.config;
     const maxTokens = options?.maxTokens ?? this.config.maxTokens;
     const temperature = options?.temperature ?? this.config.temperature;
 
@@ -146,52 +152,13 @@ class BuiltinLLMClient implements ILLMClient {
       throw new Error('API key is required');
     }
 
-    let url: string;
-    let headers: Record<string, string>;
-    let body: Record<string, unknown>;
-
-    if (provider === 'anthropic') {
-      url = baseUrl ?? 'https://api.anthropic.com/v1/messages';
-      headers = {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      };
-      const systemPrompt = this.extractSystemPrompt(messages);
-      body = {
-        model,
-        max_tokens: maxTokens,
-        temperature,
-        stream: true,
-        ...(systemPrompt ? { system: systemPrompt } : {}),
-        messages: this.formatMessagesForAnthropic(messages),
-        ...(options?.tools && options.tools.length > 0
-          ? { tools: this.formatToolsForAnthropic(options.tools) }
-          : {}),
-      };
-    } else if (provider === 'openai' || provider === 'deepseek') {
-      url = baseUrl
-        ? `${baseUrl}/v1/chat/completions`
-        : provider === 'deepseek'
-          ? 'https://api.deepseek.com/v1/chat/completions'
-          : 'https://api.openai.com/v1/chat/completions';
-      headers = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      };
-      body = {
-        model,
-        max_tokens: maxTokens,
-        temperature,
-        stream: true,
-        messages: this.formatMessagesForOpenAI(messages),
-        ...(options?.tools && options.tools.length > 0
-          ? { tools: options.tools }
-          : {}),
-      };
-    } else {
-      throw new Error(`Unsupported provider: ${provider}`);
-    }
+    const { url, headers, body } = this.buildRequestBody({
+      maxTokens,
+      temperature,
+      messages,
+      tools: options?.tools,
+      stream: true,
+    });
 
     const response = await this.fetchWithRetry(url, {
       method: 'POST',
@@ -420,6 +387,67 @@ class BuiltinLLMClient implements ILLMClient {
     }
   }
 
+  /**
+   * Build provider-specific request URL, headers, and body.
+   * Shared by both chat() (via callAPI) and chatStream().
+   */
+  private buildRequestBody(options: {
+    maxTokens: number;
+    temperature: number;
+    messages: ChatMessage[];
+    tools?: ToolDefinition[];
+    stream: boolean;
+  }): { url: string; headers: Record<string, string>; body: Record<string, unknown> } {
+    const { provider, model, apiKey, baseUrl } = this.config;
+    const { maxTokens, temperature, messages, tools, stream } = options;
+
+    if (provider === 'anthropic') {
+      const systemPrompt = this.extractSystemPrompt(messages);
+      return {
+        url: baseUrl ?? 'https://api.anthropic.com/v1/messages',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey!,
+          'anthropic-version': '2023-06-01',
+        },
+        body: {
+          model,
+          max_tokens: maxTokens,
+          temperature,
+          ...(stream ? { stream: true } : {}),
+          ...(systemPrompt ? { system: systemPrompt } : {}),
+          messages: this.formatMessagesForAnthropic(messages),
+          ...(tools && tools.length > 0
+            ? { tools: this.formatToolsForAnthropic(tools) }
+            : {}),
+        },
+      };
+    } else if (provider === 'openai' || provider === 'deepseek') {
+      const url = baseUrl
+        ? `${baseUrl}/v1/chat/completions`
+        : provider === 'deepseek'
+          ? 'https://api.deepseek.com/v1/chat/completions'
+          : 'https://api.openai.com/v1/chat/completions';
+      return {
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: {
+          model,
+          max_tokens: maxTokens,
+          temperature,
+          ...(stream ? { stream: true } : {}),
+          messages: this.formatMessagesForOpenAI(messages),
+          ...(tools && tools.length > 0 ? { tools } : {}),
+        },
+      };
+    }
+
+    throw new Error(`Unsupported provider: ${provider}`);
+  }
+
   private async callAPI(
     provider: string,
     options: {
@@ -433,50 +461,15 @@ class BuiltinLLMClient implements ILLMClient {
       signal?: AbortSignal;
     }
   ): Promise<LLMClientResponse> {
-    const { model, apiKey, baseUrl, maxTokens, temperature, messages, tools, signal } = options;
+    const { maxTokens, temperature, messages, tools, signal } = options;
 
-    let url: string;
-    let headers: Record<string, string>;
-    let body: unknown;
-
-    if (provider === 'anthropic') {
-      url = baseUrl ?? 'https://api.anthropic.com/v1/messages';
-      headers = {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      };
-      const systemPrompt = this.extractSystemPrompt(messages);
-      body = {
-        model,
-        max_tokens: maxTokens,
-        temperature,
-        ...(systemPrompt ? { system: systemPrompt } : {}),
-        messages: this.formatMessagesForAnthropic(messages),
-        ...(tools && tools.length > 0
-          ? { tools: this.formatToolsForAnthropic(tools) }
-          : {}),
-      };
-    } else if (provider === 'openai' || provider === 'deepseek') {
-      url = baseUrl
-        ? `${baseUrl}/v1/chat/completions`
-        : provider === 'deepseek'
-          ? 'https://api.deepseek.com/v1/chat/completions'
-          : 'https://api.openai.com/v1/chat/completions';
-      headers = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      };
-      body = {
-        model,
-        max_tokens: maxTokens,
-        temperature,
-        messages: this.formatMessagesForOpenAI(messages),
-        ...(tools && tools.length > 0 ? { tools } : {}),
-      };
-    } else {
-      throw new Error(`Unsupported provider: ${provider}`);
-    }
+    const { url, headers, body } = this.buildRequestBody({
+      maxTokens,
+      temperature,
+      messages,
+      tools,
+      stream: false,
+    });
 
     const response = await this.fetchWithRetry(url, {
       method: 'POST',

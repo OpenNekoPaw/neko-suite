@@ -57,6 +57,11 @@ export interface AgentContext {
   toolResults: ToolResult[];
   /** Accumulated metadata */
   metadata: Record<string, unknown>;
+  /**
+   * When true, executor should skip adding user message to context.messages
+   * because the caller (e.g. AgentSession) already included it in the snapshot.
+   */
+  skipUserMessage?: boolean;
 }
 
 /**

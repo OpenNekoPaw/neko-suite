@@ -245,27 +245,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				break;
 
 			case 'video':
-				// For video, send initial keyframe data
-				if (result.visualization?.currentKeyframes?.length) {
-					this.sendMessage({
-						type: 'mediaDiff:frameData',
-						payload: {
-							time: 0,
-							version: 'current',
-							imageBuffer: result.visualization.currentKeyframes[0]!,
-						},
-					});
-				}
-				if (result.visualization?.previousKeyframes?.length) {
-					this.sendMessage({
-						type: 'mediaDiff:frameData',
-						payload: {
-							time: 0,
-							version: 'previous',
-							imageBuffer: result.visualization.previousKeyframes[0]!,
-						},
-					});
-				}
+				// Proactively extract initial frames at t=0 for both versions
+				await this.handleSeek(0);
 				break;
 
 			case 'timeline':
@@ -333,27 +314,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				break;
 
 			case 'video':
-				// For video, send initial keyframe data
-				if (result.visualization?.currentKeyframes?.length) {
-					this.sendMessage({
-						type: 'mediaDiff:frameData',
-						payload: {
-							time: 0,
-							version: 'current',
-							imageBuffer: result.visualization.currentKeyframes[0]!,
-						},
-					});
-				}
-				if (result.visualization?.previousKeyframes?.length) {
-					this.sendMessage({
-						type: 'mediaDiff:frameData',
-						payload: {
-							time: 0,
-							version: 'previous',
-							imageBuffer: result.visualization.previousKeyframes[0]!,
-						},
-					});
-				}
+				// Proactively extract initial frames at t=0 for both versions
+				await this.handleSeek(0);
 				break;
 
 			case 'timeline':

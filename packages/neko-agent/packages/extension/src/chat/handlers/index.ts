@@ -8,3 +8,7 @@
 export { TaskHandler, type TaskHandlerDeps } from './taskHandler';
 export { ModelPresetHandler, type ModelPresetHandlerDeps } from './modelPresetHandler';
 export { SkillHandler, type SkillHandlerDeps } from './skillHandler';
+export { FileOperationHandler, type FileOperationHandlerDeps } from './fileOperationHandler';
+export { PlanModeHandler, type PlanModeHandlerDeps } from './planModeHandler';
+export { ProviderHandler, type ProviderHandlerDeps } from './providerHandler';
+export { IntegrationHandler, type IntegrationHandlerDeps } from './integrationHandler';

@@ -38,6 +38,10 @@ pub struct AudioContentDiff {
     pub diff_percent: f64,
     /// Difference regions (segments where SNR < threshold)
     pub diff_regions: Vec<AudioDiffRegion>,
+    /// Waveform peak data for source A (downsampled, values 0.0-1.0)
+    pub waveform_peaks_a: Vec<f32>,
+    /// Waveform peak data for source B (downsampled, values 0.0-1.0)
+    pub waveform_peaks_b: Vec<f32>,
 }
 
 /// A region where audio content differs
@@ -76,6 +80,8 @@ pub fn diff_audio_content(source_a: &str, source_b: &str) -> Result<AudioContent
             total_segments: 0,
             diff_percent: 0.0,
             diff_regions: Vec::new(),
+            waveform_peaks_a: Vec::new(),
+            waveform_peaks_b: Vec::new(),
         });
     }
 
@@ -132,6 +138,10 @@ pub fn diff_audio_content(source_a: &str, source_b: &str) -> Result<AudioContent
         });
     }
 
+    // Extract waveform peaks for visualization
+    let waveform_peaks_a = extract_waveform_peaks(&samples_a);
+    let waveform_peaks_b = extract_waveform_peaks(&samples_b);
+
     Ok(AudioContentDiff {
         snr,
         duration_a,
@@ -142,6 +152,8 @@ pub fn diff_audio_content(source_a: &str, source_b: &str) -> Result<AudioContent
         total_segments,
         diff_percent,
         diff_regions: final_regions,
+        waveform_peaks_a,
+        waveform_peaks_b,
     })
 }
 
@@ -220,6 +232,40 @@ fn compute_rms_diff(a: &[f32], b: &[f32]) -> f64 {
     }
 
     (sum_sq / a.len() as f64).sqrt()
+}
+
+/// Number of waveform peak points to extract for visualization
+const WAVEFORM_PEAK_COUNT: usize = 800;
+
+/// Extract waveform peak data from PCM samples for visualization.
+/// Downsamples to ~WAVEFORM_PEAK_COUNT points by taking max absolute value per bucket.
+/// Returns values in 0.0-1.0 range.
+fn extract_waveform_peaks(samples: &[f32]) -> Vec<f32> {
+    if samples.is_empty() {
+        return Vec::new();
+    }
+
+    let num_points = WAVEFORM_PEAK_COUNT.min(samples.len());
+    let bucket_size = samples.len() / num_points;
+    if bucket_size == 0 {
+        // Fewer samples than points — return abs values directly
+        return samples.iter().map(|s| s.abs().min(1.0)).collect();
+    }
+
+    let mut peaks = Vec::with_capacity(num_points);
+    for i in 0..num_points {
+        let start = i * bucket_size;
+        let end = if i == num_points - 1 {
+            samples.len()
+        } else {
+            start + bucket_size
+        };
+        let peak = samples[start..end]
+            .iter()
+            .fold(0.0f32, |max, s| max.max(s.abs()));
+        peaks.push(peak.min(1.0));
+    }
+    peaks
 }
 
 /// Merge adjacent diff regions into contiguous blocks

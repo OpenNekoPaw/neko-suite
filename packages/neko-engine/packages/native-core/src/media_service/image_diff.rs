@@ -129,9 +129,11 @@ fn compute_mse_and_diff_count(a: &RgbaImage, b: &RgbaImage) -> (f64, u64) {
     (sum_sq / total as f64, diff_count)
 }
 
-/// Compute SSIM (Structural Similarity Index) using luminance channel
+/// Compute SSIM (Structural Similarity Index) on RGB channels
 ///
-/// Simplified SSIM: operates on 8x8 blocks, averages across the image.
+/// Computes SSIM independently on R, G, B channels using 8x8 blocks,
+/// then averages the three channel scores. This captures color differences
+/// that luminance-only SSIM would miss.
 /// Constants: C1 = (0.01*255)^2, C2 = (0.03*255)^2
 fn compute_ssim(a: &RgbaImage, b: &RgbaImage) -> f64 {
     let (w, h) = a.dimensions();
@@ -141,6 +143,17 @@ fn compute_ssim(a: &RgbaImage, b: &RgbaImage) -> f64 {
         return if mse == 0.0 { 1.0 } else { (1.0 / (1.0 + mse / 100.0)).max(0.0) };
     }
 
+    // Compute SSIM per channel and average
+    let ssim_r = compute_ssim_channel(a, b, 0);
+    let ssim_g = compute_ssim_channel(a, b, 1);
+    let ssim_b = compute_ssim_channel(a, b, 2);
+
+    ((ssim_r + ssim_g + ssim_b) / 3.0).clamp(0.0, 1.0)
+}
+
+/// Compute SSIM for a single channel (0=R, 1=G, 2=B) using 8x8 blocks
+fn compute_ssim_channel(a: &RgbaImage, b: &RgbaImage, channel: usize) -> f64 {
+    let (w, h) = a.dimensions();
     let c1: f64 = (0.01 * 255.0) * (0.01 * 255.0); // 6.5025
     let c2: f64 = (0.03 * 255.0) * (0.03 * 255.0); // 58.5225
 
@@ -164,13 +177,13 @@ fn compute_ssim(a: &RgbaImage, b: &RgbaImage) -> f64 {
 
             for dy in 0..block_size {
                 for dx in 0..block_size {
-                    let la = luminance(a.get_pixel(x0 + dx, y0 + dy));
-                    let lb = luminance(b.get_pixel(x0 + dx, y0 + dy));
-                    sum_a += la;
-                    sum_b += lb;
-                    sum_a2 += la * la;
-                    sum_b2 += lb * lb;
-                    sum_ab += la * lb;
+                    let va = a.get_pixel(x0 + dx, y0 + dy)[channel] as f64;
+                    let vb = b.get_pixel(x0 + dx, y0 + dy)[channel] as f64;
+                    sum_a += va;
+                    sum_b += vb;
+                    sum_a2 += va * va;
+                    sum_b2 += vb * vb;
+                    sum_ab += va * vb;
                 }
             }
 
@@ -192,7 +205,7 @@ fn compute_ssim(a: &RgbaImage, b: &RgbaImage) -> f64 {
     if block_count == 0 {
         1.0
     } else {
-        (ssim_sum / block_count as f64).clamp(0.0, 1.0)
+        ssim_sum / block_count as f64
     }
 }
 
@@ -381,5 +394,26 @@ mod tests {
         let black = Rgba([0, 0, 0, 255]);
         assert!((luminance(&white) - 255.0).abs() < 0.01);
         assert!((luminance(&black) - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_ssim_color_only_difference() {
+        // Two images with same luminance but different colors
+        // RGB SSIM should detect this difference
+        let a = make_solid_image(64, 64, [255, 0, 0, 255]); // Red
+        let b = make_solid_image(64, 64, [0, 0, 255, 255]); // Blue
+        let ssim = compute_ssim(&a, &b);
+        assert!(ssim < 0.5, "RGB SSIM should detect color-only differences, got {}", ssim);
+    }
+
+    #[test]
+    fn test_ssim_channel_identical() {
+        let img = make_solid_image(64, 64, [100, 150, 200, 255]);
+        let ssim_r = compute_ssim_channel(&img, &img, 0);
+        let ssim_g = compute_ssim_channel(&img, &img, 1);
+        let ssim_b = compute_ssim_channel(&img, &img, 2);
+        assert!((ssim_r - 1.0).abs() < 0.001);
+        assert!((ssim_g - 1.0).abs() < 0.001);
+        assert!((ssim_b - 1.0).abs() < 0.001);
     }
 }

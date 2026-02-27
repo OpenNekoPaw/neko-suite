@@ -89,6 +89,10 @@ export class AudioDiffAnalyzer extends BaseMediaDiffAnalyzer {
 				mediaType: 'audio',
 				similarity: Math.max(0, Math.min(1, similarity)),
 				details,
+				visualization: {
+					currentWaveform: audioDiff?.waveformPeaksA ?? [],
+					previousWaveform: audioDiff?.waveformPeaksB ?? [],
+				},
 			};
 		} finally {
 			await this.cleanupFiles(localTempFiles);

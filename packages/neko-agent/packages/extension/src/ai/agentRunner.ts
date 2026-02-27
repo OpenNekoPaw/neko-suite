@@ -318,6 +318,9 @@ export class AgentRunner implements IAgentRunner {
     resolve?: (approved: boolean) => void;
   }>();
 
+  // Timeout timers for pending confirmations (5 min auto-reject)
+  private _confirmationTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
   // VSCode event emitters
   private readonly _onDidStart = new vscode.EventEmitter<void>();
   private readonly _onDidStop = new vscode.EventEmitter<void>();
@@ -490,6 +493,11 @@ export class AgentRunner implements IAgentRunner {
   cancel(): void {
     this._session?.cancel();
     this._pendingMessages = [];
+    // Clear all confirmation timers
+    for (const timer of this._confirmationTimers.values()) {
+      clearTimeout(timer);
+    }
+    this._confirmationTimers.clear();
     // Reject all pending tool confirmations so Promises don't hang
     for (const pending of this._pendingConfirmations.values()) {
       pending.resolve?.(false);
@@ -548,6 +556,12 @@ export class AgentRunner implements IAgentRunner {
   confirmTool(toolCallId: string, approved: boolean): void {
     const pending = this._pendingConfirmations.get(toolCallId);
     if (pending) {
+      // Clear the timeout timer
+      const timer = this._confirmationTimers.get(toolCallId);
+      if (timer) {
+        clearTimeout(timer);
+        this._confirmationTimers.delete(toolCallId);
+      }
       // Resolve the Promise — this triggers AgentSession._handleToolConfirmation.then
       // which calls AgentSession.confirmTool internally. No need to call it directly.
       pending.resolve?.(approved);
@@ -652,6 +666,18 @@ When using tools, always explain what you are doing.`;
         confirmationToken: request.confirmationToken,
         resolve, // Store resolve so confirmTool() can call it
       });
+
+      // Auto-reject after 5 minutes to prevent hanging Promises
+      const CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1000;
+      const timer = setTimeout(() => {
+        if (this._pendingConfirmations.has(toolCallId)) {
+          console.warn(`[AgentRunner] Tool confirmation timed out for ${request.toolCall.name} (${toolCallId})`);
+          this._pendingConfirmations.delete(toolCallId);
+          this._confirmationTimers.delete(toolCallId);
+          resolve(false);
+        }
+      }, CONFIRMATION_TIMEOUT_MS);
+      this._confirmationTimers.set(toolCallId, timer);
 
       this._onDidRequestConfirmation.fire({
         toolCallId,

@@ -222,17 +222,14 @@ export class AgentSession implements IAgentSession {
       const maxIterations = this._config.maxIterations ?? DEFAULT_MAX_ITERATIONS;
       let iteration = 0;
 
-      // Pass history to executor — executor will add user message internally
-      // We add user message to _history AFTER passing to avoid duplication
-      const messagesSnapshot = [...this._history];
-
-      // Execute via AgentExecutor streaming
-      // Note: user message is added by executor to its local context
-      // Store processedInput (not raw input) so plan mode reminder is preserved in history
+      // Add user message to history first, then pass snapshot (including user message)
+      // to executor with skipUserMessage flag so it doesn't duplicate
       this._history.push({ role: 'user', content: processedInput });
+      const messagesSnapshot = [...this._history];
 
       for await (const step of this._executor.executeStream(processedInput, {
         messages: messagesSnapshot,
+        skipUserMessage: true,
         metadata: {
           workspaceRoot: context?.workspaceRoot,
           projectType: context?.projectType,

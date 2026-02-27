@@ -1,8 +1,14 @@
 /**
  * LLM Service Adapter
  *
- * Adapts the CLI's LLM client to the IService interface
+ * Adapts the CLI's built-in ILLMClient to the @neko/shared IService interface
  * required by AgentSession.
+ *
+ * Used only in CLI standalone mode (no Platform available):
+ *   CLIConfig → BuiltinLLMClient (ILLMClient) → LLMServiceAdapter (IService) → AgentSession
+ *
+ * When running inside the extension with a Platform, use Platform.createService()
+ * directly — the adapter is not needed.
  */
 
 import type {

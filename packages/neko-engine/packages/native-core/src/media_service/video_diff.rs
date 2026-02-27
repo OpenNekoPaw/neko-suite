@@ -291,18 +291,26 @@ pub fn diff_video_content<P: AsRef<Path>>(
 // FFmpeg command runners
 // ─────────────────────────────────────────────────────────────
 
-/// Run FFmpeg SSIM filter and return the log content
+/// Run FFmpeg SSIM filter and return the log content.
+/// Scales input B to match input A's resolution when they differ.
 fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path) -> Result<String> {
     let tmp = std::env::temp_dir().join(format!(
         "neko_ssim_{}.log",
         std::process::id()
     ));
 
+    // Use filter_complex to scale [1] to match [0] before SSIM comparison.
+    // This handles different resolutions (e.g. 4K vs 720P).
+    let filter = format!(
+        "[1:v]scale=iw='iw(0)':ih='ih(0)':flags=bicubic[scaled];[0:v][scaled]ssim=stats_file={}",
+        tmp.display()
+    );
+
     let output = std::process::Command::new("ffmpeg")
         .args([
             "-i", &path_a.to_string_lossy(),
             "-i", &path_b.to_string_lossy(),
-            "-lavfi", &format!("ssim=stats_file={}", tmp.display()),
+            "-filter_complex", &filter,
             "-f", "null",
             "-",
         ])
@@ -330,18 +338,25 @@ fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path) -> Result<String> {
     Ok(content)
 }
 
-/// Run FFmpeg PSNR filter and return the log content
+/// Run FFmpeg PSNR filter and return the log content.
+/// Scales input B to match input A's resolution when they differ.
 fn run_ffmpeg_psnr(path_a: &Path, path_b: &Path) -> Result<String> {
     let tmp = std::env::temp_dir().join(format!(
         "neko_psnr_{}.log",
         std::process::id()
     ));
 
+    // Use filter_complex to scale [1] to match [0] before PSNR comparison.
+    let filter = format!(
+        "[1:v]scale=iw='iw(0)':ih='ih(0)':flags=bicubic[scaled];[0:v][scaled]psnr=stats_file={}",
+        tmp.display()
+    );
+
     let output = std::process::Command::new("ffmpeg")
         .args([
             "-i", &path_a.to_string_lossy(),
             "-i", &path_b.to_string_lossy(),
-            "-lavfi", &format!("psnr=stats_file={}", tmp.display()),
+            "-filter_complex", &filter,
             "-f", "null",
             "-",
         ])
