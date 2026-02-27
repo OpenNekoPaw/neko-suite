@@ -23,7 +23,7 @@ Neko Suite Platform 是一个统一的 AI 服务平台层，提供：
 - **配置管理**: 三层优先级配置 (Builtin < User < Workspace)
 - **Model Groups**: 模型分组与路由策略
 - **ReAct Agent**: 基于 Hooks 的可扩展 Agent 执行器
-- **工具集成**: Tool Registry, MCP, Workflow
+- **工具集成**: Tool Registry, MCP
 
 ### 技术栈
 
@@ -47,7 +47,6 @@ service/       15      5,857
 types/         18      3,277
 media/         25      6,000+
 mcp/            6      2,000+
-workflow/       5      2,000+
 template/       8      4,000+
 ─────────────────────────────
 Total         114     ~30,000
@@ -96,6 +95,7 @@ packages/platform/src/
 │
 ├── service/           # 核心服务
 │   ├── service.ts           # 主服务入口
+│   ├── shared-service-adapter.ts  # @neko/shared IService 适配器
 │   ├── tool-registry.ts     # 工具注册
 │   ├── conversation.ts      # 会话管理
 │   ├── context.ts           # 上下文压缩
@@ -103,7 +103,6 @@ packages/platform/src/
 │   └── ...tools.ts          # 各类工具
 │
 ├── mcp/               # MCP 协议
-├── workflow/          # 工作流
 ├── template/          # 模板系统
 └── types/             # 类型定义
 ```

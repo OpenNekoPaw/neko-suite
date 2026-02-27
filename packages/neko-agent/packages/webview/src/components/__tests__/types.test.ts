@@ -165,9 +165,9 @@ describe('types validation', () => {
     });
 
     it('should accept valid settings sub tabs', () => {
-      const subTabs: SettingsSubTab[] = ['provider', 'mcp', 'workflow', 'models', 'skills'];
+      const subTabs: SettingsSubTab[] = ['provider', 'mcp', 'models', 'skills'];
       subTabs.forEach((tab) => {
-        expect(['provider', 'mcp', 'workflow', 'models', 'skills']).toContain(tab);
+        expect(['provider', 'mcp', 'models', 'skills']).toContain(tab);
       });
     });
   });
@@ -254,7 +254,6 @@ describe('types validation', () => {
         selectedPromptId: 'default',
         selectedAgentId: 'default',
         configuredMCPServers: [],
-        configuredWorkflows: [],
         configuredSkills: [],
         configuredCommands: [],
         configuredHooks: [],
@@ -295,7 +294,6 @@ describe('types validation', () => {
         selectedPromptId: 'p1',
         selectedAgentId: 'p1',
         configuredMCPServers: [],
-        configuredWorkflows: [],
         configuredSkills: [],
         configuredCommands: [],
         configuredHooks: [],

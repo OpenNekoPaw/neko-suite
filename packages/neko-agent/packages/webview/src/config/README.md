@@ -9,7 +9,6 @@
 | `ui-metadata.ts` | Provider UI 元数据（图标、分类、认证字段）|
 | `prompts.ts` | 系统提示词预设 |
 | `mcp-servers.ts` | MCP 服务器预设 |
-| `workflow-engines.ts` | 工作流引擎预设 |
 
 ## 分层架构
 

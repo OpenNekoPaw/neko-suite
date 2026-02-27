@@ -223,12 +223,16 @@ export class AgentSession implements IAgentSession {
       const maxIterations = this._config.maxIterations ?? DEFAULT_MAX_ITERATIONS;
       let iteration = 0;
 
-      // Add user input to history BEFORE execution (correct ordering)
-      this._history.push({ role: 'user', content: input });
+      // Pass history to executor — executor will add user message internally
+      // We add user message to _history AFTER passing to avoid duplication
+      const messagesSnapshot = [...this._history];
 
       // Execute via AgentExecutor streaming
+      // Note: user message is added by executor to its local context
+      this._history.push({ role: 'user', content: input });
+
       for await (const step of this._executor.executeStream(processedInput, {
-        messages: [...this._history],
+        messages: messagesSnapshot,
         metadata: {
           workspaceRoot: context?.workspaceRoot,
           projectType: context?.projectType,
@@ -340,8 +344,11 @@ export class AgentSession implements IAgentSession {
   dispose(): void {
     this.cancel();
     this._isRunning = false;
+    // Reject all pending tool confirmations via permission hooks
     for (const pending of this._pendingConfirmations.values()) {
-      pending.resolve(false);
+      if (pending.request.confirmationToken && this._permissionHooks) {
+        this._permissionHooks.confirmTool(pending.request.confirmationToken, false);
+      }
     }
     this._pendingConfirmations.clear();
   }
@@ -453,13 +460,21 @@ export class AgentSession implements IAgentSession {
         // Text content
         if (step.content) {
           yield { type: 'text', content: step.content };
-          // If no tool calls, this is the final response — add to history
-          if (!step.toolCalls || step.toolCalls.length === 0) {
-            this._history.push({ role: 'assistant', content: step.content });
-          }
         }
-        // Tool calls
-        if (step.toolCalls) {
+        // Tool calls — add assistant message (with toolCalls) to history
+        if (step.toolCalls && step.toolCalls.length > 0) {
+          this._history.push({
+            role: 'assistant',
+            content: step.content ?? '',
+            toolCalls: step.toolCalls.map((tc, i) => ({
+              id: tc.id || `call_${iteration}_${i}`,
+              type: 'function' as const,
+              function: {
+                name: tc.name,
+                arguments: JSON.stringify(tc.arguments),
+              },
+            })),
+          });
           for (let i = 0; i < step.toolCalls.length; i++) {
             const tc = step.toolCalls[i];
             yield {
@@ -471,11 +486,14 @@ export class AgentSession implements IAgentSession {
               },
             };
           }
+        } else if (step.content) {
+          // No tool calls — final text response, add to history
+          this._history.push({ role: 'assistant', content: step.content });
         }
         break;
 
       case 'act':
-        // Tool results
+        // Tool results — add to history
         if (step.toolResults) {
           for (let i = 0; i < step.toolResults.length; i++) {
             const result = step.toolResults[i] as {
@@ -484,6 +502,14 @@ export class AgentSession implements IAgentSession {
               data?: unknown;
               error?: string;
             };
+            // Add tool result to history for context continuity
+            this._history.push({
+              role: 'tool',
+              content: result.success
+                ? JSON.stringify(result.data)
+                : JSON.stringify({ error: result.error }),
+              toolCallId: result.callId || `call_${iteration}_${i}`,
+            } as ChatMessage);
             yield {
               type: 'tool_result',
               toolResult: {

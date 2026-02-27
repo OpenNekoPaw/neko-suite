@@ -158,14 +158,6 @@ export const VSCodeMessages = {
     postMessage({ type: 'testMCPServer', server });
   },
 
-  /**
-   * Test a workflow connection
-   * @param workflow - Workflow configuration
-   */
-  testWorkflow: (workflow: { id: string; name: string; engineType: string; url: string; apiKey?: string; requestId?: string }) => {
-    postMessage({ type: 'testWorkflow', workflow });
-  },
-
   /** Request the list of background tasks */
   getTasks: () => {
     postMessage({ type: 'getTasks' });
@@ -282,22 +274,6 @@ export const VSCodeMessages = {
    */
   deleteMCPServer: (serverId: string) => {
     postMessage({ type: 'deleteMCPServer', serverId });
-  },
-
-  /**
-   * Update a workflow configuration
-   * @param workflow - Workflow configuration
-   */
-  updateWorkflow: (workflow: import('@neko/shared').WorkflowConfig) => {
-    postMessage({ type: 'updateWorkflow', workflow });
-  },
-
-  /**
-   * Delete a workflow
-   * @param workflowId - The workflow ID to delete
-   */
-  deleteWorkflow: (workflowId: string) => {
-    postMessage({ type: 'deleteWorkflow', workflowId });
   },
 
   /**

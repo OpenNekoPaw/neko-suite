@@ -212,46 +212,6 @@ describe('useVSCode', () => {
       });
     });
 
-    describe('workflow management', () => {
-      it('should post updateWorkflow', () => {
-        const workflow = {
-          id: 'w1',
-          name: 'Test Workflow',
-          engineType: 'comfyui',
-          url: 'http://localhost:8188',
-          enabled: true,
-        };
-        VSCodeMessages.updateWorkflow(workflow as any);
-        expect(mockPostMessage).toHaveBeenCalledWith({
-          type: 'updateWorkflow',
-          workflow,
-        });
-      });
-
-      it('should post deleteWorkflow', () => {
-        VSCodeMessages.deleteWorkflow('w1');
-        expect(mockPostMessage).toHaveBeenCalledWith({
-          type: 'deleteWorkflow',
-          workflowId: 'w1',
-        });
-      });
-
-      it('should post testWorkflow', () => {
-        const workflow = {
-          id: 'w1',
-          name: 'Test',
-          engineType: 'comfyui',
-          url: 'http://localhost:8188',
-          requestId: 'req-456',
-        };
-        VSCodeMessages.testWorkflow(workflow);
-        expect(mockPostMessage).toHaveBeenCalledWith({
-          type: 'testWorkflow',
-          workflow,
-        });
-      });
-    });
-
     describe('prompt management', () => {
       it('should post updatePrompt', () => {
         const prompt = {

@@ -65,7 +65,6 @@ graph TB
 
     subgraph "扩展层"
         MCP[mcp/<br/>MCP 协议]
-        Workflow[workflow/<br/>N8n/ComfyUI]
         Media[media/<br/>媒体生成服务]
         Task[task/<br/>任务调度]
     end
@@ -98,7 +97,6 @@ graph TB
     SkillService --> ToolGuard
 
     Executor --> MCP
-    Executor --> Workflow
     Executor --> Media
 
     Registry --> Strategy
@@ -190,12 +188,6 @@ src/
 │   ├── mcp-manager.ts        # MCP 管理器
 │   └── mcp-tool.ts           # MCP 工具包装
 │
-├── workflow/             # 工作流引擎
-│   ├── workflow-manager.ts   # 工作流管理
-│   ├── builtin-executor.ts   # 内置执行器
-│   ├── n8n-executor.ts       # N8n 执行器
-│   └── comfyui-executor.ts   # ComfyUI 执行器
-│
 ├── media/                # 媒体生成服务
 │   ├── adapters/             # 媒体服务适配器
 │   │   ├── runway-adapter.ts     # Runway
@@ -230,8 +222,8 @@ src/
 │  Skill层: skill/                                             │
 │  (技能发现/注册/注入/工具限制)                                 │
 ├──────────────────────────────────────────────────────────────┤
-│  扩展层: mcp/ | workflow/ | media/ | task/                    │
-│  (外部集成)   (工作流)     (媒体生成)  (任务调度)              │
+│  扩展层: mcp/ | media/ | task/                              │
+│  (外部集成)   (媒体生成)  (任务调度)                          │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -313,7 +305,6 @@ src/
 | 模块 | 主要导出 | 用途 |
 |------|----------|------|
 | `mcp/` | `MCPManager`, `MCPTool` | MCP 协议集成 |
-| `workflow/` | `WorkflowManager`, `N8nWorkflowExecutor` | 工作流执行 |
 | `media/` | `MediaGenerationService`, `MediaRoutingManager` | 媒体生成 |
 | `task/` | `TaskManager` | 任务调度 |
 

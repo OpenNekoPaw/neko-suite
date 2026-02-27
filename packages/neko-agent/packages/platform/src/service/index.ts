@@ -3,6 +3,7 @@
  */
 
 export { Service, type ServiceConfig } from './service';
+export { SharedServiceAdapter, toSharedService } from './shared-service-adapter';
 export { ToolRegistry } from './tool-registry';
 
 // PromptManager - local implementation

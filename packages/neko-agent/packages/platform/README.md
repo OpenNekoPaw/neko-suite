@@ -1,6 +1,6 @@
 # @neko/platform
 
-Neko Suite AI 服务平台，提供统一的 AI 服务层，支持多提供商、智能路由、Agent 执行、Skill 系统、工作流集成等能力。
+Neko Suite AI 服务平台，提供统一的 AI 服务层，支持多提供商、智能路由、Agent 执行、Skill 系统、MCP 集成等能力。
 
 ## 架构图
 
@@ -43,7 +43,6 @@ graph TB
 
     subgraph "扩展层"
         MCP[MCPManager<br/>MCP 协议]
-        Workflow[WorkflowManager<br/>N8n/ComfyUI]
         Media[MediaGenerationService<br/>图片/视频/音频]
     end
 
@@ -70,7 +69,6 @@ graph TB
     SkillService --> ToolGuard
     Tools --> MCP
     Tools --> Media
-    Platform --> Workflow
 ```
 
 ## 核心能力
@@ -84,7 +82,6 @@ graph TB
 | **扩展思考** | Claude Extended Thinking 支持 |
 | **Skill 系统** | 语义发现 + Slash 命令，Claude Code 兼容 |
 | **MCP 集成** | Stdio/HTTP 传输，动态工具发现 |
-| **工作流引擎** | N8n、ComfyUI 集成 |
 | **媒体生成** | 图片/视频/音频生成，多平台适配 |
 
 ## 目录结构
@@ -141,7 +138,6 @@ src/
 │   └── document-tools.ts   # 文档工具
 │
 ├── mcp/                # MCP 协议
-├── workflow/           # 工作流引擎
 ├── media/              # 媒体生成
 ├── task/               # 任务调度
 └── types/              # 类型定义
@@ -343,7 +339,6 @@ interface Platform {
   tools: ToolRegistry;            // 工具注册表
   prompts: PromptManager;         // 提示词管理
   mcp: MCPManager;                // MCP 管理
-  workflows: WorkflowManager;     // 工作流管理
   media: MediaGenerationService;  // 媒体生成
   skillService: SkillService;     // 技能服务
 
@@ -472,7 +467,7 @@ npm run test:coverage  # 测试覆盖率
 
 1. **资源清理**：使用完毕后调用 `platform.dispose()` 释放资源
 2. **配置优先级**：工作区配置 > 用户配置 > 内置预设
-3. **异步初始化**：MCP 和工作流连接是异步的，首次使用前确保已连接
+3. **异步初始化**：MCP 连接是异步的，首次使用前确保已连接
 4. **扩展思考**：仅 Claude 模型支持，需要设置 `thinkingBudget`
 5. **流式优先**：Agent 执行推荐使用 `executeStream` 获得实时反馈
 6. **Skill 目录**：技能放 `.skill/`，斜杠命令放 `.command/`

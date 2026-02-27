@@ -13,7 +13,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getService } from '../base';
 import type { Platform, TaskManager } from '@neko/platform';
-import { getWorkflowTestService } from '@neko/platform';
 import { getMCPTestService } from '@neko/agent';
 import type { ProviderConfig } from '@neko/shared';
 import type { IAgentManager } from '../ai/agentManager';
@@ -379,14 +378,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         case 'addMCPServer':
           this._addMCPServer();
           break;
-        case 'addWorkflow':
-          this._addWorkflow();
-          break;
         case 'testMCPServer':
           this._handleTestMCPServer(webview, message.server as { id: string; name: string; command: string; args?: string[]; env?: Record<string, string>; requestId?: string });
-          break;
-        case 'testWorkflow':
-          this._handleTestWorkflow(webview, message.workflow as { id: string; name: string; engineType: string; url: string; apiKey?: string; requestId?: string });
           break;
 
         // Task handling (delegated to TaskHandler)
@@ -1062,7 +1055,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   // ============================================================================
-  // Integration Methods (MCP/Workflow - VSCode UI dependent)
+  // Integration Methods (MCP - VSCode UI dependent)
   // ============================================================================
 
   private async _handleTestMCPServer(
@@ -1098,39 +1091,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async _handleTestWorkflow(
-    webview: vscode.Webview,
-    workflow: { id: string; name: string; engineType: string; url: string; apiKey?: string; requestId?: string }
-  ): Promise<void> {
-    const requestId = workflow.requestId || `workflow-test-${Date.now()}`;
-
-    try {
-      const testService = getWorkflowTestService();
-      const result = await testService.test({
-        id: workflow.id,
-        name: workflow.name,
-        engineType: workflow.engineType,
-        url: workflow.url,
-        apiKey: workflow.apiKey,
-        timeout: 10000,
-      });
-
-      webview.postMessage({
-        type: 'workflowTestResult',
-        requestId,
-        success: result.success,
-        error: result.error,
-      });
-    } catch (error) {
-      webview.postMessage({
-        type: 'workflowTestResult',
-        requestId,
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }
-
   private async _addMCPServer(): Promise<void> {
     const serverName = await vscode.window.showInputBox({
       prompt: 'Enter MCP Server name',
@@ -1158,38 +1118,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     await this._context.globalState.update('neko.mcpServers', mcpServers);
 
     vscode.window.showInformationMessage(`MCP Server "${serverName}" added successfully.`);
-    this._sendSettings();
-  }
-
-  private async _addWorkflow(): Promise<void> {
-    const workflowType = await vscode.window.showQuickPick(
-      ['ComfyUI', 'Dify', 'n8n', 'Custom'],
-      { placeHolder: 'Select workflow type' }
-    );
-
-    if (!workflowType) return;
-
-    const workflowName = await vscode.window.showInputBox({
-      prompt: 'Enter workflow name',
-      placeHolder: 'e.g., my-workflow',
-    });
-
-    if (!workflowName) return;
-
-    const baseUrl = await vscode.window.showInputBox({
-      prompt: `Enter ${workflowType} base URL`,
-      placeHolder: workflowType === 'ComfyUI' ? 'http://127.0.0.1:8188' :
-                   workflowType === 'Dify' ? 'https://api.dify.ai' :
-                   workflowType === 'n8n' ? 'http://localhost:5678' : 'http://localhost:8000',
-    });
-
-    if (!baseUrl) return;
-
-    const workflows = this._context.globalState.get<Record<string, any>>('neko.workflows', {});
-    workflows[workflowName] = { type: workflowType, baseUrl };
-    await this._context.globalState.update('neko.workflows', workflows);
-
-    vscode.window.showInformationMessage(`Workflow "${workflowName}" added successfully.`);
     this._sendSettings();
   }
 

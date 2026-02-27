@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { SettingsState, SettingsSubTab, ConfiguredMCPServer, ConfiguredWorkflow, ConfiguredProvider } from '@/components/types';
+import { SettingsState, SettingsSubTab, ConfiguredMCPServer, ConfiguredProvider } from '@/components/types';
 import { ProviderSettings } from '@/components/SettingsView/ProviderSettings';
 import { MCPSettings } from '@/components/SettingsView/MCPSettings';
-import { WorkflowSettings } from '@/components/SettingsView/WorkflowSettings';
 import { ModelSettings, UIModelConfig } from '@/components/SettingsView/ModelSettings';
 import { SkillSettings } from '@/components/SettingsView/SkillSettings';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -27,10 +26,7 @@ interface SettingsViewProps {
   onDeleteModel?: (modelId: string) => void;
   onUpdateMCPServers: (servers: ConfiguredMCPServer[]) => void;
   onDeleteMCPServer: (serverId: string) => void;
-  onUpdateWorkflows: (workflows: ConfiguredWorkflow[]) => void;
-  onDeleteWorkflow: (workflowId: string) => void;
   onTestMCPServer?: (server: ConfiguredMCPServer) => Promise<{ success: boolean; error?: string }>;
-  onTestWorkflow?: (workflow: ConfiguredWorkflow) => Promise<{ success: boolean; error?: string }>;
   // Model settings props
   models?: UIModelConfig[];
   onConfigureModel?: (modelId: string, apiKey: string, baseUrl?: string) => void;
@@ -58,7 +54,6 @@ const SUB_TABS: { id: SettingsSubTab; labelKey: string }[] = [
   { id: 'provider', labelKey: 'settings.tabs.provider' },
   { id: 'skills', labelKey: 'settings.tabs.skills' },
   { id: 'mcp', labelKey: 'settings.tabs.mcp' },
-  { id: 'workflow', labelKey: 'settings.tabs.workflow' },
 ];
 
 export function SettingsView({
@@ -73,10 +68,7 @@ export function SettingsView({
   onDeleteModel,
   onUpdateMCPServers,
   onDeleteMCPServer,
-  onUpdateWorkflows,
-  onDeleteWorkflow,
   onTestMCPServer,
-  onTestWorkflow,
   models = [],
   onConfigureModel,
   onToggleModel,
@@ -159,14 +151,6 @@ export function SettingsView({
             onUpdateServers={onUpdateMCPServers}
             onDeleteServer={onDeleteMCPServer}
             onTestServer={onTestMCPServer}
-          />
-        )}
-        {activeSubTab === 'workflow' && (
-          <WorkflowSettings
-            configuredWorkflows={settings.configuredWorkflows}
-            onUpdateWorkflows={onUpdateWorkflows}
-            onDeleteWorkflow={onDeleteWorkflow}
-            onTestWorkflow={onTestWorkflow}
           />
         )}
         {activeSubTab === 'skills' && (

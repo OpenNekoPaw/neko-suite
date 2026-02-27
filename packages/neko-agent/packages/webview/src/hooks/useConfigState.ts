@@ -31,7 +31,6 @@ export const DEFAULT_SETTINGS: SettingsState = {
   selectedPromptId: 'default',
   selectedAgentId: 'default',
   configuredMCPServers: [],
-  configuredWorkflows: [],
   configuredSkills: [],
   configuredCommands: [],
   configuredHooks: [],

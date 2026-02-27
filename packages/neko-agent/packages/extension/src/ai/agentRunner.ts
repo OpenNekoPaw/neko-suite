@@ -15,7 +15,7 @@
 import * as vscode from 'vscode';
 import { createServiceId } from '../base';
 import type { Platform, ChatMessage } from '@neko/platform';
-import { getBuiltinPrompt } from '@neko/platform';
+import { getBuiltinPrompt, toSharedService } from '@neko/platform';
 import type {
   ToolConfirmationRequest,
 } from '@neko/agent';
@@ -379,12 +379,12 @@ export class AgentRunner implements IAgentRunner {
     // Get custom hooks from HookManager (if available)
     const customHooks = config.hookManager?.getHooks() ?? [];
 
-    // Create service from platform
-    const service = config.platform.createService(config.groupId);
+    // Create service from platform, adapted to @neko/shared IService
+    const service = toSharedService(config.platform.createService(config.groupId));
 
     // Create agent session
     this._session = createAgentSession({
-      service: service as unknown as import('@neko/shared').IService,
+      service,
       toolRegistry: config.platform.tools,
       systemPrompt: effectiveSystemPrompt,
       executionMode: config.executionMode ?? 'auto',

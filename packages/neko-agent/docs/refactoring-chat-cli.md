@@ -219,20 +219,18 @@ export interface ContextHandlerDeps {
 
 ### 当前状态
 
-`LLMServiceAdapter.chatStream()` 是 TODO 占位符，降级为非流式响应。
+`PlatformLLMClient` 已删除。Extension 通过 `SharedServiceAdapter`（`toSharedService()`）将 Platform `Service` 适配为 `@neko/shared` 的 `IService`。CLI 使用 `BuiltinLLMClient` + `LLMServiceAdapter`。
 
 ### 目标
 
 ```
-ILLMClient.chatStream?() → AsyncIterable<LLMStreamChunk>
-  ├── PlatformLLMClient: 利用 IService.chatStream() → ChatChunk → LLMStreamChunk
-  └── BuiltinLLMClient: HTTP SSE 流式解析
-       ├── Anthropic: event: content_block_delta
-       └── OpenAI/DeepSeek: data: {"choices":[{"delta":...}]}
+Extension 路径:
+  Platform.Service → SharedServiceAdapter → @neko/shared IService → AgentSession
 
-LLMServiceAdapter.chatStream() → AsyncIterable<StreamChunk>
-  ├── 有 chatStream: 转换 LLMStreamChunk → StreamChunk
-  └── 无 chatStream: 降级为非流式（现有行为）
+CLI 路径:
+  BuiltinLLMClient → LLMServiceAdapter → @neko/shared IService → AgentSession
+    ├── Anthropic: event: content_block_delta
+    └── OpenAI/DeepSeek: data: {"choices":[{"delta":...}]}
 ```
 
 ### 新增类型
@@ -267,9 +265,9 @@ export interface LLMStreamChunk {
 | Phase 2 | 更新 handlers/index.ts | ⏳ 待开始 |
 | Phase 2b | 重构 ChatViewProvider 委托 | ⏳ 待开始 |
 | Phase 3 | CLI LLMStreamChunk 类型 | ⏳ 待开始 |
-| Phase 3 | PlatformLLMClient.chatStream | ⏳ 待开始 |
 | Phase 3 | BuiltinLLMClient.chatStream | ⏳ 待开始 |
 | Phase 3 | LLMServiceAdapter.chatStream | ⏳ 待开始 |
+| Phase 3 | ~~PlatformLLMClient.chatStream~~ | ✅ 已删除（由 SharedServiceAdapter 替代） |
 | Phase 4 | Handler 单元测试 (7) | ⏳ 待开始 |
 | Phase 4 | Message 处理器测试 (2) | ⏳ 待开始 |
 | Phase 4 | CLI 流式测试 (2) | ⏳ 待开始 |

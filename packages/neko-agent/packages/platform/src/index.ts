@@ -170,6 +170,7 @@ export {
 // =============================================================================
 
 export { Service, type ServiceConfig } from './service/service';
+export { SharedServiceAdapter, toSharedService } from './service/shared-service-adapter';
 export { ToolRegistry } from './service/tool-registry';
 
 // PromptManager - local implementation
@@ -275,27 +276,6 @@ export {
 } from './tools';
 
 // =============================================================================
-// Workflow Layer
-// =============================================================================
-
-export {
-  WorkflowManager,
-  BuiltinWorkflowExecutor,
-  N8nWorkflowExecutor,
-  ComfyUIWorkflowExecutor,
-  WorkflowTool,
-  createWorkflowTools,
-  type WorkflowExecutor,
-  type BuiltinWorkflowHandler,
-  // Test service
-  WorkflowTestService,
-  getWorkflowTestService,
-  type WorkflowTestConfig,
-  type WorkflowTestResult,
-  type WorkflowEngineType,
-} from './workflow';
-
-// =============================================================================
 // Media Layer
 // =============================================================================
 
@@ -390,8 +370,6 @@ import { ToolRegistry } from './service/tool-registry';
 // Import from agent package (optional peer dependency)
 import type { ITaskManager, ITaskStorage } from '@neko/shared';
 import { PromptManager } from './service/prompt-manager';
-import { WorkflowManager } from './workflow/workflow-manager';
-import type { Workflow } from './types/workflow';
 // Media Generation imports
 import { MediaGenerationService } from './media/media-generation-service';
 import { createMediaPlatform } from './media';
@@ -443,8 +421,6 @@ export interface Platform {
   tools: ToolRegistry;
   /** Prompt manager */
   prompts: PromptManager;
-  /** Workflow manager */
-  workflows: WorkflowManager;
   /** Media generation service */
   media: MediaGenerationService;
   /** Create a service instance */
@@ -479,37 +455,6 @@ export function createPlatform(options: PlatformOptions = {}): Platform {
 
   // Initialize prompt manager
   const promptManager = new PromptManager();
-
-  // Initialize Workflow manager and load configs from ConfigManager
-  const workflowManager = new WorkflowManager();
-  const enabledWorkflows = configManager.getEnabledWorkflows();
-  for (const preset of enabledWorkflows) {
-    // Map engineType to WorkflowType
-    const typeMap: Record<string, 'builtin' | 'n8n' | 'comfyui' | 'custom'> = {
-      comfyui: 'comfyui',
-      n8n: 'n8n',
-      dify: 'custom',
-      langflow: 'custom',
-      flowise: 'custom',
-      make: 'custom',
-      zapier: 'custom',
-      custom: 'custom',
-    };
-    const workflow: Workflow = {
-      id: preset.id,
-      name: preset.name,
-      description: preset.description,
-      type: typeMap[preset.engineType] || 'custom',
-      inputSchema: {},
-      outputSchema: {},
-      config: {
-        url: preset.url,
-        apiKey: preset.apiKey,
-        engineType: preset.engineType,
-      },
-    };
-    workflowManager.register(workflow);
-  }
 
   // ==========================================================================
   // Initialize Media Generation Service
@@ -566,7 +511,6 @@ export function createPlatform(options: PlatformOptions = {}): Platform {
     llmRouter: llmRoutingManager,
     tools: toolRegistry,
     prompts: promptManager,
-    workflows: workflowManager,
     media: mediaGenerationService,
     createService,
     dispose,

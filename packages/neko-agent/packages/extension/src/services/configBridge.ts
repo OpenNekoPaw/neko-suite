@@ -13,7 +13,6 @@ import type { Platform } from '@neko/platform';
 import type {
   ConfigState,
   MCPServerConfig,
-  WorkflowConfig,
   PromptPresetConfig,
   ProviderConfig,
   ModelConfig,
@@ -419,11 +418,6 @@ export class ConfigBridge implements vscode.Disposable {
           this.notifyChange(postMessage, 'mcp', (message.server as MCPServerConfig).id);
           return true;
 
-        case 'updateWorkflow':
-          await cm.setWorkflow(message.workflow as WorkflowConfig);
-          this.notifyChange(postMessage, 'workflow', (message.workflow as WorkflowConfig).id);
-          return true;
-
         case 'updatePrompt': {
           const prompt = message.prompt as PromptPresetConfig;
 
@@ -463,11 +457,6 @@ export class ConfigBridge implements vscode.Disposable {
         case 'deleteMCPServer':
           await cm.removeMCPServer((message.serverId || message.id) as string);
           this.notifyChange(postMessage, 'mcp', (message.serverId || message.id) as string);
-          return true;
-
-        case 'deleteWorkflow':
-          await cm.removeWorkflow((message.workflowId || message.id) as string);
-          this.notifyChange(postMessage, 'workflow', (message.workflowId || message.id) as string);
           return true;
 
         case 'deletePrompt': {
@@ -534,7 +523,7 @@ export class ConfigBridge implements vscode.Disposable {
       providers: cm.getProviders(),
       models: cm.getModels(),
       mcpServers: cm.getMCPServers(),
-      workflows: cm.getWorkflows(),
+      workflows: [], // TODO: workflow support removed from platform
       prompts: cm.getPrompts(),
       skills: this.cachedSkills,
       commands: this.cachedCommands,
@@ -556,7 +545,7 @@ export class ConfigBridge implements vscode.Disposable {
    */
   private notifyChange(
     postMessage: PostMessageFn,
-    changeType: 'provider' | 'model' | 'mcp' | 'workflow' | 'prompt',
+    changeType: 'provider' | 'model' | 'mcp' | 'workflow' | 'prompt', // TODO: remove 'workflow' when ConfigState.workflows is removed
     id: string
   ): void {
     postMessage({ type: 'configChanged', changeType, id });

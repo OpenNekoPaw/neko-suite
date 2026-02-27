@@ -79,8 +79,6 @@ const handleConfigState: MessageHandler = (message, context) => {
         configuredModels: message.config.models || [],
         // MCP servers
         configuredMCPServers: message.config.mcpServers || [],
-        // Workflows
-        configuredWorkflows: message.config.workflows || [],
         // Prompts (agents)
         configuredPrompts: newPrompts,
         configuredAgents: newPrompts,
@@ -152,15 +150,6 @@ const handleMCPServerTestResult: MessageHandler = (_message, _context) => {
 };
 
 /**
- * Handle 'workflowTestResult' message - Workflow test result
- * Note: Actual handling is done via addEventListener in index.tsx
- * This handler just marks the message as handled for the registry
- */
-const handleWorkflowTestResult: MessageHandler = (_message, _context) => {
-  // Handled by dedicated listener in index.tsx
-};
-
-/**
  * Handle 'skillsData' message - Skills and commands from extension
  */
 const handleSkillsData: MessageHandler = (message, context) => {
@@ -215,7 +204,6 @@ export const configHandlers: HandlerRegistration[] = [
   { type: 'modelPresetToggled', handler: handleModelPresetToggled },
   { type: 'modelPresetConfigRemoved', handler: handleModelPresetConfigRemoved },
   { type: 'mcpServerTestResult', handler: handleMCPServerTestResult },
-  { type: 'workflowTestResult', handler: handleWorkflowTestResult },
   { type: 'skillsData', handler: handleSkillsData },
   { type: 'skillsChanged', handler: handleSkillsChanged },
   { type: 'hooksData', handler: handleHooksData },

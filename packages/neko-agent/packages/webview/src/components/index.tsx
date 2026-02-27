@@ -3,7 +3,6 @@ import {
   Message,
   OpenTab,
   ConfiguredMCPServer,
-  ConfiguredWorkflow,
   ConfiguredProvider,
   ShellExecutionMode,
   PromptMode,
@@ -914,22 +913,6 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
     VSCodeMessages.deleteMCPServer(serverId);
   };
 
-  const handleUpdateWorkflows = (workflows: ConfiguredWorkflow[]) => {
-    setSettings(prev => ({ ...prev, configuredWorkflows: workflows }));
-    // Persist each workflow to backend
-    workflows.forEach(workflow => {
-      VSCodeMessages.updateWorkflow(workflow);
-    });
-  };
-
-  const handleDeleteWorkflow = (workflowId: string) => {
-    setSettings(prev => ({
-      ...prev,
-      configuredWorkflows: prev.configuredWorkflows.filter(w => w.id !== workflowId),
-    }));
-    VSCodeMessages.deleteWorkflow(workflowId);
-  };
-
   // Provider handlers for Platform ConfigManager
   const handleUpdateProviders = (providers: ConfiguredProvider[]) => {
     setSettings(prev => ({ ...prev, configuredProviders: providers }));
@@ -1103,41 +1086,6 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
         ...server,
         requestId,
       } as any);
-
-      // Timeout after 30 seconds
-      setTimeout(() => {
-        window.removeEventListener('message', handleTestResult);
-        resolve({
-          success: false,
-          error: 'Connection timeout (30s)',
-        });
-      }, 30000);
-    });
-  };
-
-  // Test Workflow connection - returns Promise for async result
-  const handleTestWorkflow = (workflow: ConfiguredWorkflow): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      const requestId = `workflow-test-${Date.now()}`;
-
-      const handleTestResult = (event: MessageEvent) => {
-        const message = event.data;
-        if (message.type === 'workflowTestResult' && message.requestId === requestId) {
-          window.removeEventListener('message', handleTestResult);
-          resolve({
-            success: message.success,
-            error: message.error,
-          });
-        }
-      };
-
-      window.addEventListener('message', handleTestResult);
-
-      // Send test request
-      VSCodeMessages.testWorkflow({
-        ...workflow,
-        requestId,
-      });
 
       // Timeout after 30 seconds
       setTimeout(() => {
@@ -1395,10 +1343,7 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
           onDeleteModel={handleDeleteModel}
           onUpdateMCPServers={handleUpdateMCPServers}
           onDeleteMCPServer={handleDeleteMCPServer}
-          onUpdateWorkflows={handleUpdateWorkflows}
-          onDeleteWorkflow={handleDeleteWorkflow}
           onTestMCPServer={handleTestMCPServer}
-          onTestWorkflow={handleTestWorkflow}
           models={modelPresets}
           onConfigureModel={handleConfigureModelPreset}
           onToggleModel={handleToggleModelPreset}

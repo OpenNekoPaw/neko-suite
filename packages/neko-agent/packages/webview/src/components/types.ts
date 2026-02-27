@@ -123,7 +123,7 @@ export interface OpenTab {
 
 export type TabType = 'chat' | 'settings' | 'tasks' | 'agents';
 
-export type SettingsSubTab = 'provider' | 'mcp' | 'workflow' | 'models' | 'skills';
+export type SettingsSubTab = 'provider' | 'mcp' | 'models' | 'skills';
 
 // Shell execution mode for tool confirmation
 export type ShellExecutionMode = 'plan' | 'ask' | 'auto';
@@ -154,7 +154,6 @@ export interface AgentState {
 // Re-export shared config types for convenience
 export type {
   MCPServerConfig as ConfiguredMCPServer,
-  WorkflowConfig as ConfiguredWorkflow,
   PromptPresetConfig as ConfiguredPrompt,
   PromptPresetType,
   ChatModelOption,
@@ -188,8 +187,6 @@ export interface SettingsState {
   selectedAgentId: string | null;
   // 已配置的 MCP 服务器列表
   configuredMCPServers: Array<import('@neko/shared').MCPServerConfig>;
-  // 已配置的工作流列表
-  configuredWorkflows: Array<import('@neko/shared').WorkflowConfig>;
   // 已配置的 Skills 列表
   configuredSkills: Array<import('@neko/shared').ConfiguredSkill>;
   // 已配置的 Slash Commands 列表

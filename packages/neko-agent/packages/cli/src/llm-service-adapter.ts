@@ -22,14 +22,9 @@ export class LLMServiceAdapter implements IService {
   private _client: ILLMClient;
   private _config: CLIConfig;
 
-  constructor(config: CLIConfig, existingService?: IService) {
+  constructor(config: CLIConfig) {
     this._config = config;
-    // If an existing service is provided, use it directly
-    if (existingService) {
-      this._client = createLLMClient(config, existingService);
-    } else {
-      this._client = createLLMClient(config);
-    }
+    this._client = createLLMClient(config);
   }
 
   async chat(
@@ -129,10 +124,17 @@ export class LLMServiceAdapter implements IService {
 
 /**
  * Create an LLM service adapter
+ *
+ * If an existing IService is provided (e.g. from Platform), returns it directly
+ * to avoid unnecessary double-wrapping (IService → ILLMClient → IService).
+ * Only wraps BuiltinLLMClient when no existing service is available.
  */
 export function createLLMServiceAdapter(
   config: CLIConfig,
   existingService?: IService
-): LLMServiceAdapter {
-  return new LLMServiceAdapter(config, existingService);
+): IService {
+  if (existingService) {
+    return existingService;
+  }
+  return new LLMServiceAdapter(config);
 }

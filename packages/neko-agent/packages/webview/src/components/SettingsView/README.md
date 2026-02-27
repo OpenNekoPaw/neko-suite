@@ -10,7 +10,6 @@
 | `ModelSettings` | 配置模型参数（temperature, maxTokens）|
 | `PromptSettings` | 管理系统提示词预设 |
 | `MCPSettings` | 配置 MCP 服务器连接 |
-| `WorkflowSettings` | 配置工作流引擎（ComfyUI, Fal.ai）|
 
 **结构**：
 ```
@@ -19,8 +18,7 @@ SettingsView/
 ├── ProviderSettings.tsx   # Provider 配置
 ├── ModelSettings.tsx      # Model 配置
 ├── PromptSettings.tsx     # 提示词配置
-├── MCPSettings.tsx        # MCP 服务器配置
-└── WorkflowSettings.tsx   # 工作流配置
+└── MCPSettings.tsx        # MCP 服务器配置
 ```
 
 ## 数据流
@@ -57,7 +55,6 @@ interface Settings {
   configuredModels: ModelConfig[];
   configuredPrompts: PromptPresetConfig[];
   configuredMCPServers: ConfiguredMCPServer[];
-  configuredWorkflows: ConfiguredWorkflow[];
   executionMode: 'auto' | 'ask' | 'plan';
 }
 ```
@@ -67,5 +64,5 @@ interface Settings {
 - Tab 页切换不同配置类别
 - 卡片式列表展示已配置项
 - 模态框编辑详细配置
-- 连接测试按钮（MCP、Workflow）
+- 连接测试按钮（MCP）
 - 即时保存到 Extension Host

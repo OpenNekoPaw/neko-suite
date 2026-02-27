@@ -16,7 +16,6 @@ graph TB
         Provider[ProviderSection<br/>提供商配置]
         Group[GroupSection<br/>模型组配置]
         MCP[MCPSection<br/>MCP 服务器配置]
-        Workflow[WorkflowSection<br/>工作流配置]
         Media[MediaSection<br/>媒体生成配置]
     end
 
@@ -31,7 +30,6 @@ graph TB
     Manager --> Provider
     Manager --> Group
     Manager --> MCP
-    Manager --> Workflow
     Manager --> Media
 ```
 
@@ -76,7 +74,6 @@ class ConfigManager {
 
   // 扩展配置
   readonly mcp: MCPSection;
-  readonly workflows: WorkflowSection;
   readonly media: MediaSection;
 
   // 合并配置
@@ -129,7 +126,6 @@ interface ConfigSection<T> {
 ← provider/       # 提供商初始化
 ← llm/            # LLM 配置
 ← mcp/            # MCP 配置
-← workflow/       # 工作流配置
 ← media/          # 媒体配置
 ```
 

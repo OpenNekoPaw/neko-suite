@@ -1,12 +1,10 @@
 /**
  * LLM Client Abstraction
  *
- * Provides a unified interface for LLM calls, supporting:
- * 1. Platform Service integration (when available)
- * 2. Built-in HTTP client (fallback)
+ * Provides a built-in HTTP client for direct LLM API calls in CLI mode.
  */
 
-import type { ChatMessage, IService, ServiceOptions, ServiceResponse } from '@neko/shared';
+import type { ChatMessage } from '@neko/shared';
 import type { CLIConfig } from './types';
 
 /**
@@ -86,117 +84,11 @@ export interface LLMClientStreamChunk {
 
 /**
  * Create LLM client from CLI config
- *
- * If a Platform Service is provided, uses it for advanced features.
- * Otherwise, falls back to built-in HTTP client.
  */
 export function createLLMClient(
-  config: CLIConfig,
-  service?: IService
+  config: CLIConfig
 ): ILLMClient {
-  if (service) {
-    return new PlatformLLMClient(config, service);
-  }
   return new BuiltinLLMClient(config);
-}
-
-/**
- * Platform-based LLM Client
- *
- * Uses Platform's Service for:
- * - Multi-provider routing
- * - Fallback mechanisms
- * - Retry policies
- * - Timeout handling
- */
-class PlatformLLMClient implements ILLMClient {
-  constructor(
-    private config: CLIConfig,
-    private service: IService
-  ) {}
-
-  async chat(
-    messages: ChatMessage[],
-    options?: LLMClientOptions
-  ): Promise<LLMClientResponse> {
-    const serviceOptions: ServiceOptions = {
-      model: this.config.model,
-      maxTokens: options?.maxTokens ?? this.config.maxTokens,
-      temperature: options?.temperature ?? this.config.temperature,
-      signal: options?.signal,
-    };
-
-    // Add tools if provided
-    if (options?.tools && options.tools.length > 0) {
-      serviceOptions.tools = options.tools as ServiceOptions['tools'];
-    }
-
-    const response = await this.service.chat(messages, serviceOptions);
-    return this.convertResponse(response);
-  }
-
-  async *chatStream(
-    messages: ChatMessage[],
-    options?: LLMClientOptions
-  ): AsyncIterable<LLMClientStreamChunk> {
-    // Delegate to platform service streaming if available
-    const serviceOptions: ServiceOptions = {
-      model: this.config.model,
-      maxTokens: options?.maxTokens ?? this.config.maxTokens,
-      temperature: options?.temperature ?? this.config.temperature,
-      signal: options?.signal,
-    };
-    if (options?.tools && options.tools.length > 0) {
-      serviceOptions.tools = options.tools as ServiceOptions['tools'];
-    }
-
-    for await (const chunk of this.service.chatStream(messages, serviceOptions)) {
-      yield {
-        type: chunk.type,
-        content: chunk.content,
-        toolCall: chunk.toolCall ? {
-          id: chunk.toolCall.id,
-          name: chunk.toolCall.name,
-          arguments: chunk.toolCall.arguments as Record<string, unknown> | undefined,
-        } : undefined,
-        usage: chunk.usage ? {
-          inputTokens: chunk.usage.promptTokens,
-          outputTokens: chunk.usage.completionTokens,
-        } : undefined,
-      };
-    }
-  }
-
-  getProvider(): string {
-    return this.config.provider;
-  }
-
-  getModel(): string {
-    return this.config.model;
-  }
-
-  private convertResponse(response: ServiceResponse): LLMClientResponse {
-    const result: LLMClientResponse = {
-      content: typeof response.message.content === 'string'
-        ? response.message.content
-        : '',
-      usage: {
-        inputTokens: response.usage.inputTokens,
-        outputTokens: response.usage.outputTokens,
-      },
-    };
-
-    // Extract tool calls from message
-    if (response.message.toolCalls && response.message.toolCalls.length > 0) {
-      result.toolCalls = response.message.toolCalls.map((tc) => ({
-        id: tc.id,
-        name: tc.name,
-        arguments: tc.arguments,
-      }));
-    }
-
-    return result;
-  }
 }
 
 /**
@@ -430,6 +322,7 @@ class BuiltinLLMClient implements ILLMClient {
   ): AsyncIterable<LLMClientStreamChunk> {
     // Track tool call accumulation
     const toolCalls = new Map<number, { id: string; name: string; args: string }>();
+    let finished = false;
 
     for await (const data of this.parseSSELines(body)) {
       let event: Record<string, unknown>;
@@ -439,7 +332,24 @@ class BuiltinLLMClient implements ILLMClient {
         continue;
       }
 
+      // Handle standalone usage chunk (choices: [] or absent, with usage field)
+      // OpenAI sends usage in a separate chunk after finish_reason when stream_options.include_usage is true
       const choices = event.choices as Array<Record<string, unknown>> | undefined;
+      if ((!choices || choices.length === 0) && event.usage) {
+        const usage = event.usage as Record<string, number>;
+        yield {
+          type: 'usage',
+          usage: {
+            inputTokens: usage.prompt_tokens ?? 0,
+            outputTokens: usage.completion_tokens ?? 0,
+          },
+        };
+        if (finished) {
+          yield { type: 'done' };
+        }
+        continue;
+      }
+
       if (!choices || choices.length === 0) continue;
 
       const choice = choices[0];
@@ -486,7 +396,7 @@ class BuiltinLLMClient implements ILLMClient {
           };
         }
 
-        // Usage from the final chunk
+        // Usage may be in this chunk or in a subsequent standalone chunk
         const usage = event.usage as Record<string, number> | undefined;
         if (usage) {
           yield {
@@ -496,10 +406,17 @@ class BuiltinLLMClient implements ILLMClient {
               outputTokens: usage.completion_tokens ?? 0,
             },
           };
+          yield { type: 'done' };
+        } else {
+          // Mark finished, wait for standalone usage chunk
+          finished = true;
         }
-
-        yield { type: 'done' };
       }
+    }
+
+    // If stream ended without explicit done (no usage chunk came)
+    if (finished) {
+      yield { type: 'done' };
     }
   }
 
