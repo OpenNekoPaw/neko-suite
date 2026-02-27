@@ -149,6 +149,7 @@ export class AgentManager implements IAgentManager {
 
   /** 最大 Agent 实例数量 */
   private _maxAgents = 10;
+  private readonly _defaultMaxAgents = 10;
 
   /** Platform 实例（共享） */
   private _platform?: Platform;
@@ -426,6 +427,11 @@ export class AgentManager implements IAgentManager {
    * 处理等待队列：当 Agent 停止时尝试处理等待的请求
    */
   private _processWaitingQueue(): void {
+    // Shrink _maxAgents back toward default when pressure is relieved
+    if (this._maxAgents > this._defaultMaxAgents && this._agents.size <= this._defaultMaxAgents) {
+      this._maxAgents = this._defaultMaxAgents;
+    }
+
     if (this._waitingQueue.length === 0) return;
 
     // 检查是否有可用容量

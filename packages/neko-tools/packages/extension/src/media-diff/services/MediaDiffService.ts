@@ -16,6 +16,7 @@ import {
 	type DiffOptions,
 	type DiffResult,
 	type FileVersionPair,
+	type GitCommitInfo,
 	getMediaType,
 	DEFAULT_DIFF_TIMEOUT,
 } from '@neko/shared';
@@ -49,7 +50,8 @@ export interface IMediaDiffService extends vscode.Disposable {
 		uri: vscode.Uri,
 		ref?: string,
 		options?: DiffOptions,
-		onProgress?: DiffProgressCallback
+		onProgress?: DiffProgressCallback,
+		signal?: AbortSignal
 	): Promise<DiffResult>;
 
 	/**
@@ -58,12 +60,14 @@ export interface IMediaDiffService extends vscode.Disposable {
 	 * @param previousUri - Previous file URI (shown on the left)
 	 * @param options - Analysis options
 	 * @param onProgress - Progress callback
+	 * @param signal - Optional AbortSignal for per-caller cancellation
 	 */
 	analyzeLocalFiles(
 		currentUri: vscode.Uri,
 		previousUri: vscode.Uri,
 		options?: DiffOptions,
-		onProgress?: DiffProgressCallback
+		onProgress?: DiffProgressCallback,
+		signal?: AbortSignal
 	): Promise<DiffResult>;
 
 	/**
@@ -93,6 +97,13 @@ export interface IMediaDiffService extends vscode.Disposable {
 	 * Check if file has changes in Git
 	 */
 	hasChanges(uri: vscode.Uri): Promise<boolean>;
+
+	/**
+	 * Get file commit history
+	 * @param uri - File URI
+	 * @param maxCount - Maximum number of commits to return
+	 */
+	getFileHistory(uri: vscode.Uri, maxCount?: number): Promise<GitCommitInfo[]>;
 
 	/**
 	 * Register an analyzer
@@ -125,10 +136,25 @@ export class MediaDiffService implements IMediaDiffService {
 		uri: vscode.Uri,
 		ref: string = 'HEAD',
 		options?: DiffOptions,
-		onProgress?: DiffProgressCallback
+		onProgress?: DiffProgressCallback,
+		signal?: AbortSignal
 	): Promise<DiffResult> {
 		const abortController = new AbortController();
 		this.activeAnalyses.add(abortController);
+
+		// Link external signal to our internal controller
+		if (signal) {
+			if (signal.aborted) {
+				this.activeAnalyses.delete(abortController);
+				throw new Error('Analysis cancelled');
+			}
+			const onAbort = () => abortController.abort();
+			signal.addEventListener('abort', onAbort, { once: true });
+			// Clean up listener when analysis finishes
+			abortController.signal.addEventListener('abort', () => {
+				signal.removeEventListener('abort', onAbort);
+			}, { once: true });
+		}
 
 		const mediaType = getMediaType(uri.fsPath);
 		if (!mediaType) {
@@ -246,10 +272,24 @@ export class MediaDiffService implements IMediaDiffService {
 		currentUri: vscode.Uri,
 		previousUri: vscode.Uri,
 		options?: DiffOptions,
-		onProgress?: DiffProgressCallback
+		onProgress?: DiffProgressCallback,
+		signal?: AbortSignal
 	): Promise<DiffResult> {
 		const abortController = new AbortController();
 		this.activeAnalyses.add(abortController);
+
+		// Link external signal to our internal controller
+		if (signal) {
+			if (signal.aborted) {
+				this.activeAnalyses.delete(abortController);
+				throw new Error('Analysis cancelled');
+			}
+			const onAbort = () => abortController.abort();
+			signal.addEventListener('abort', onAbort, { once: true });
+			abortController.signal.addEventListener('abort', () => {
+				signal.removeEventListener('abort', onAbort);
+			}, { once: true });
+		}
 
 		const currentMediaType = getMediaType(currentUri.fsPath);
 		const previousMediaType = getMediaType(previousUri.fsPath);
@@ -333,6 +373,13 @@ export class MediaDiffService implements IMediaDiffService {
 	async hasChanges(uri: vscode.Uri): Promise<boolean> {
 		const changes = await this.gitService.getChangedMediaFiles();
 		return changes.some((c) => c.uri === uri.toString());
+	}
+
+	async getFileHistory(
+		uri: vscode.Uri,
+		maxCount?: number
+	): Promise<GitCommitInfo[]> {
+		return this.gitService.getFileHistory(uri, maxCount);
 	}
 
 	registerAnalyzer(analyzer: IMediaDiffAnalyzer): void {

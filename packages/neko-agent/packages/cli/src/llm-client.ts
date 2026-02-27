@@ -4,7 +4,7 @@
  * Provides a built-in HTTP client for direct LLM API calls in CLI mode.
  */
 
-import type { ChatMessage } from '@neko/shared';
+import type { ChatMessage, ToolDefinition } from '@neko/shared';
 import type { CLIConfig } from './types';
 
 /**
@@ -42,7 +42,7 @@ export interface ILLMClient {
  * LLM Client options
  */
 export interface LLMClientOptions {
-  tools?: unknown[];
+  tools?: ToolDefinition[];
   maxTokens?: number;
   temperature?: number;
   signal?: AbortSignal;
@@ -166,7 +166,7 @@ class BuiltinLLMClient implements ILLMClient {
         ...(systemPrompt ? { system: systemPrompt } : {}),
         messages: this.formatMessagesForAnthropic(messages),
         ...(options?.tools && options.tools.length > 0
-          ? { tools: options.tools }
+          ? { tools: this.formatToolsForAnthropic(options.tools) }
           : {}),
       };
     } else if (provider === 'openai' || provider === 'deepseek') {
@@ -429,7 +429,7 @@ class BuiltinLLMClient implements ILLMClient {
       maxTokens: number;
       temperature: number;
       messages: ChatMessage[];
-      tools?: unknown[];
+      tools?: ToolDefinition[];
       signal?: AbortSignal;
     }
   ): Promise<LLMClientResponse> {
@@ -453,7 +453,9 @@ class BuiltinLLMClient implements ILLMClient {
         temperature,
         ...(systemPrompt ? { system: systemPrompt } : {}),
         messages: this.formatMessagesForAnthropic(messages),
-        ...(tools && tools.length > 0 ? { tools } : {}),
+        ...(tools && tools.length > 0
+          ? { tools: this.formatToolsForAnthropic(tools) }
+          : {}),
       };
     } else if (provider === 'openai' || provider === 'deepseek') {
       url = baseUrl
@@ -610,6 +612,17 @@ class BuiltinLLMClient implements ILLMClient {
       }
       return { role: m.role, content: m.content };
     });
+  }
+
+  /**
+   * Convert ToolDefinition[] (OpenAI format) to Anthropic tool format
+   */
+  private formatToolsForAnthropic(tools: ToolDefinition[]): unknown[] {
+    return tools.map((t) => ({
+      name: t.function.name,
+      description: t.function.description,
+      input_schema: t.function.parameters,
+    }));
   }
 
   private parseResponse(

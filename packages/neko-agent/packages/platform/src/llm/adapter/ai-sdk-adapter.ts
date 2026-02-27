@@ -434,10 +434,6 @@ export abstract class AISdkAdapter implements Adapter {
       };
     }
 
-    // Debug: log transformed tools
-    console.log('[AISdkAdapter] Original tools:', JSON.stringify(tools, null, 2));
-    console.log('[AISdkAdapter] Transformed tools:', JSON.stringify(result, null, 2));
-
     return result;
   }
 

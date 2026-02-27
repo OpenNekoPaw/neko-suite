@@ -487,6 +487,11 @@ export class AgentRunner implements IAgentRunner {
   cancel(): void {
     this._session?.cancel();
     this._pendingMessages = [];
+    // Reject all pending tool confirmations so Promises don't hang
+    for (const pending of this._pendingConfirmations.values()) {
+      pending.resolve?.(false);
+    }
+    this._pendingConfirmations.clear();
   }
 
   isRunning(): boolean {
@@ -660,10 +665,9 @@ When using tools, always explain what you are doing.`;
   // -------------------------------------------------------------------------
 
   dispose(): void {
-    this.cancel();
+    this.cancel(); // Also rejects pending confirmations
     this._session?.dispose();
     this._isRunning = false;
-    this._pendingConfirmations.clear();
     this._onDidStart.dispose();
     this._onDidStop.dispose();
     this._onDidRequestConfirmation.dispose();

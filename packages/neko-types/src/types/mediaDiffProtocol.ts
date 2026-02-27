@@ -103,6 +103,22 @@ export interface MediaFileChange {
 }
 
 /**
+ * Git commit information for file history
+ */
+export interface GitCommitInfo {
+	/** Full commit hash */
+	hash: string;
+	/** Abbreviated commit hash (7 chars) */
+	shortHash: string;
+	/** Commit subject (first line of message) */
+	subject: string;
+	/** Author name */
+	authorName: string;
+	/** Commit date (ISO 8601 string) */
+	date: string;
+}
+
+/**
  * File version pair for comparison
  */
 export interface FileVersionPair {
@@ -360,6 +376,26 @@ export interface DiffResult {
 }
 
 // =============================================================================
+// Git Commit Info
+// =============================================================================
+
+/**
+ * Git commit information for file history
+ */
+export interface GitCommitInfo {
+	/** Commit hash (full SHA) */
+	hash: string;
+	/** Short hash (first 7 characters) */
+	shortHash: string;
+	/** Commit subject (first line of message) */
+	subject: string;
+	/** Author name */
+	authorName: string;
+	/** Commit date (ISO 8601 string) */
+	date: string;
+}
+
+// =============================================================================
 // IPC Message Types - Requests (Webview → Extension)
 // =============================================================================
 
@@ -438,6 +474,39 @@ export interface CancelAnalysisRequest extends BaseMediaDiffRequest {
 }
 
 /**
+ * Get file history (Git commits) request
+ */
+export interface GetFileHistoryRequest extends BaseMediaDiffRequest {
+	type: 'mediaDiff:getFileHistory';
+	payload: {
+		/** Maximum number of commits to return */
+		maxCount?: number;
+	};
+}
+
+/**
+ * Change comparison ref and re-run diff
+ */
+export interface ChangeRefRequest extends BaseMediaDiffRequest {
+	type: 'mediaDiff:changeRef';
+	payload: {
+		/** Git ref to compare against (commit hash, branch, tag) */
+		ref: string;
+	};
+}
+
+/**
+ * Inspect element request (lazy content diff for timeline media elements)
+ */
+export interface InspectElementRequest extends BaseMediaDiffRequest {
+	type: 'mediaDiff:inspectElement';
+	payload: {
+		/** Media source path */
+		src: string;
+	};
+}
+
+/**
  * All request types
  */
 export type MediaDiffRequest =
@@ -446,7 +515,10 @@ export type MediaDiffRequest =
 	| SetViewModeRequest
 	| SeekRequest
 	| GetFrameRequest
-	| CancelAnalysisRequest;
+	| CancelAnalysisRequest
+	| GetFileHistoryRequest
+	| ChangeRefRequest
+	| InspectElementRequest;
 
 // =============================================================================
 // IPC Message Types - Responses (Extension → Webview)
@@ -542,6 +614,27 @@ export interface WaveformDataResponse extends BaseMediaDiffResponse {
 }
 
 /**
+ * File history response
+ */
+export interface FileHistoryResponse extends BaseMediaDiffResponse {
+	type: 'mediaDiff:fileHistory';
+	payload: {
+		commits: GitCommitInfo[];
+	};
+}
+
+/**
+ * Element thumbnail response (lazy content diff)
+ */
+export interface ElementThumbnailResponse extends BaseMediaDiffResponse {
+	type: 'mediaDiff:elementThumbnail';
+	payload: {
+		src: string;
+		imageBuffer: ArrayBuffer;
+	};
+}
+
+/**
  * All response types
  */
 export type MediaDiffResponse =
@@ -550,7 +643,9 @@ export type MediaDiffResponse =
 	| DiffResultResponse
 	| FrameDataResponse
 	| ImageDataResponse
-	| WaveformDataResponse;
+	| WaveformDataResponse
+	| FileHistoryResponse
+	| ElementThumbnailResponse;
 
 // =============================================================================
 // Protocol Constants

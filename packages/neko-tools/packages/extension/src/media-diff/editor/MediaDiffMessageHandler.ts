@@ -26,6 +26,8 @@ import { MediaDiffService } from '../services/MediaDiffService';
  */
 export class MediaDiffMessageHandler implements vscode.Disposable {
 	private isDisposed = false;
+	/** Per-handler abort controller — only cancels this handler's analyses */
+	private abortController = new AbortController();
 
 	constructor(
 		private readonly webview: vscode.Webview,
@@ -45,6 +47,9 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 		if (this.isDisposed) return;
 
+		// Cancel previous analysis for this handler and create fresh controller
+		this.resetAbortController();
+
 		try {
 			// Run diff analysis with progress
 			const result = await this.diffService.analyze(
@@ -56,7 +61,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 						type: 'mediaDiff:progress',
 						payload: { progress, stage },
 					});
-				}
+				},
+				this.abortController.signal
 			);
 
 			if (this.isDisposed) return;
@@ -90,6 +96,9 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			return;
 		}
 
+		// Cancel previous analysis for this handler and create fresh controller
+		this.resetAbortController();
+
 		try {
 			// Run diff analysis with progress
 			const result = await this.diffService.analyzeLocalFiles(
@@ -101,7 +110,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 						type: 'mediaDiff:progress',
 						payload: { progress, stage },
 					});
-				}
+				},
+				this.abortController.signal
 			);
 
 			if (this.isDisposed) return;
@@ -167,7 +177,15 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 					break;
 
 				case 'mediaDiff:cancel':
-					this.diffService.cancel();
+					this.abortController.abort();
+					break;
+
+				case 'mediaDiff:getFileHistory':
+					await this.handleGetFileHistory(requestId);
+					break;
+
+				case 'mediaDiff:changeRef':
+					await this.initializeDiff(message.payload.ref);
 					break;
 			}
 		} catch (error) {
@@ -460,8 +478,16 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		}
 	}
 
+	/**
+	 * Abort current analysis and create a fresh AbortController
+	 */
+	private resetAbortController(): void {
+		this.abortController.abort();
+		this.abortController = new AbortController();
+	}
+
 	dispose(): void {
 		this.isDisposed = true;
-		this.diffService.cancel();
+		this.abortController.abort();
 	}
 }
