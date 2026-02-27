@@ -206,6 +206,8 @@ export interface VideoDiffDetails {
 	keyframeDiffs: KeyframeDiff[];
 	/** Whether audio track changed */
 	audioTrackChanged: boolean;
+	/** Diff regions where video frames differ significantly (SSIM < threshold) */
+	diffRegions?: Array<{ start: number; end: number; avgSsim: number }>;
 }
 
 /**
@@ -233,6 +235,8 @@ export interface AudioDiffDetails {
 	spectralDifference: number;
 	/** Detected silence regions */
 	silenceRegions?: { current: TimeRange[]; previous: TimeRange[] };
+	/** Diff regions where audio differs significantly (SNR < threshold) */
+	diffRegions?: Array<{ start: number; end: number; snr: number }>;
 }
 
 // =============================================================================

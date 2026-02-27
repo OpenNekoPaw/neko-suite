@@ -119,9 +119,10 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "npm run compile:extension && npm run copy:webview",
+    "compile": "npm run build:webview && npm run compile:extension && npm run copy:webview",
     "compile:extension": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:sharp --format=cjs --platform=node",
-    "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp ../neko-cut/packages/webview/dist/*.html dist/webview/ 2>/dev/null || true && cp -R ../neko-cut/packages/webview/dist/assets/* dist/webview/assets/ 2>/dev/null || true",
+    "build:webview": "cd packages/webview && npm run build",
+    "copy:webview": "rm -rf dist/webview && cp -R packages/webview/dist dist/webview",
     "watch": "npm run compile:extension -- --watch",
     "lint": "eslint src --ext ts,tsx",
     "test": "vitest",

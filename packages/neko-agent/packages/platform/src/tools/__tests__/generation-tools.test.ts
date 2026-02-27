@@ -16,7 +16,7 @@ import {
   type AIGenerationService,
   type GeneratedMedia,
 } from '../generation-tools';
-import { ToolRegistry } from '../../service/tool-registry';
+import { ToolRegistry } from '@neko/agent';
 
 // Create a mock AI generation service
 function createMockAIService(): AIGenerationService {

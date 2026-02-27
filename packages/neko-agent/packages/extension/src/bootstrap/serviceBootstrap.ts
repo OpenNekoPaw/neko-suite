@@ -6,8 +6,8 @@
  */
 
 import * as vscode from 'vscode';
-import { Platform, createPlatform, type ToolRegistry } from '@neko/platform';
-import { MCPManager, TaskManager } from '@neko/agent';
+import { Platform, createPlatform } from '@neko/platform';
+import { MCPManager, TaskManager, ToolRegistry } from '@neko/agent';
 import { ServiceCollection, createServiceId } from '../base';
 import { IEditorRegistry, EditorRegistry } from '../editor/common/editorRegistry';
 import { AgentManager, IAgentManager as IAgentManagerInterface } from '../ai/agentManager';
@@ -143,26 +143,27 @@ export async function bootstrapCoreServices(
   context.subscriptions.push({ dispose: () => taskManager.dispose() });
 
   // ==========================================================================
-  // 2. Create Platform
+  // 2. Tool Registry (from @neko/agent)
+  // ==========================================================================
+  const toolRegistry = new ToolRegistry();
+  services.set(IToolRegistry, toolRegistry);
+
+  // ==========================================================================
+  // 3. Create Platform (with injected toolRegistry)
   // ==========================================================================
   const platform = createPlatform({
     workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     taskManager,
+    toolRegistry,
   });
   services.set(IPlatform, platform);
 
   // ==========================================================================
-  // 3. Connection State Manager
+  // 4. Connection State Manager
   // ==========================================================================
   const connectionStateManager = new ConnectionStateManager();
   services.set(IConnectionStateManager, connectionStateManager);
   context.subscriptions.push(connectionStateManager);
-
-  // ==========================================================================
-  // 4. Tool Registry (from Platform)
-  // ==========================================================================
-  const toolRegistry = platform.tools;
-  services.set(IToolRegistry, toolRegistry);
 
   // ==========================================================================
   // 5. MCP Manager

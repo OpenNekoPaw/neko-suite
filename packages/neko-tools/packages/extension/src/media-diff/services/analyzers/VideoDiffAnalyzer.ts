@@ -14,6 +14,7 @@ import type {
 	DiffResult,
 	VideoDiffDetails,
 	KeyframeDiff,
+	EngineVideoDiffRegion,
 } from '@neko/shared';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 import { EngineMediaService } from '../../../services/EngineMediaService';
@@ -95,6 +96,11 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 				},
 				keyframeDiffs,
 				audioTrackChanged: videoDiff?.audioDiff !== undefined,
+				diffRegions: videoDiff?.diffRegions?.map((r: EngineVideoDiffRegion) => ({
+					start: r.start,
+					end: r.end,
+					avgSsim: r.avgSsim,
+				})),
 			};
 
 			// Use engine's avgSsim as overall similarity

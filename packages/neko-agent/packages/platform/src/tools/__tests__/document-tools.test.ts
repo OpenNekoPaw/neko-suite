@@ -14,7 +14,7 @@ import {
   type StoryboardResult,
   type SubtitleResult,
 } from '../document-tools';
-import { ToolRegistry } from '../../service/tool-registry';
+import { ToolRegistry } from '@neko/agent';
 
 // Create a mock document generation service
 function createMockDocumentService(): DocumentGenerationService {

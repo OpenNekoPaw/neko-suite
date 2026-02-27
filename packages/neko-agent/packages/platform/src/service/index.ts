@@ -4,7 +4,7 @@
 
 export { Service, type ServiceConfig } from './service';
 export { SharedServiceAdapter, toSharedService } from './shared-service-adapter';
-export { ToolRegistry } from './tool-registry';
+// ToolRegistry is now in @neko/agent, re-exported from platform/index.ts
 
 // PromptManager - local implementation
 export {

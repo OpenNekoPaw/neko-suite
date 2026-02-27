@@ -1,79 +1,144 @@
-分析如何提供音频、视频、图片LSP功能？是否必须使用AI模型？
-在音视频与图片处理中引入 LSP (Language Server Protocol)，本质是将“多媒体素材”视为“源代码”，将“Prompt/参数”视为“编译器指令”。
-通过 Rust (后端 Server) + WebView (前端 Client)，你可以构建一套跨模态的协议。以下是具体分析：
-1. 如何提供音视频/图片 LSP 功能？
-在架构上，你需要模拟标准的 LSP 交互流程：
-定义符号 (Symbol Definition)：
-将视频中的“场景”、音频中的“音效/对白”、图片中的“主体”定义为 Symbols。
-功能：在 WebView 中点击时间轴上的某个波形，LSP Server 返回该片段的属性（采样率、语意标签、对应 Prompt）。
-诊断信息 (Diagnostics)：
-视频：检测黑场、掉帧、噪点、AI 闪烁。
-音频：检测爆音、静音、音频相位抵消。
-UI 表现：像代码报错一样，在时间轴或滚动条上显示红色/黄色波浪线。
-悬停预览 (Hover)：
-鼠标悬停在某张图片或视频片段上，LSP 返回该素材的 Diff 增量数据（例如：相比上一版改动了哪些 Prompt 权重）。
-代码补全 (Completion)：
-基于已生成的素材风格，推荐后续视频片段的 Prompt。
-2. 是否必须使用 AI 模型？
-答案是：不一定，取决于你想要达到的“语义深度”。
-你可以将功能分为 “确定性逻辑”（非 AI）和 “语义逻辑”（AI）：
-(1) 非 AI 实现（基于传统信号处理）—— 基础必要
-音频 LSP：利用 FFT（快速傅里叶变换）检测频率缺失或音量异常。
-视频 LSP：利用像素差值、帧率检测、位深校验。
-图片 LSP：利用 pHash (感知哈希) 检测重复图，利用直方图检测曝光问题。
-价值：性能极高，在 Rust 侧用 ffmpeg-next 即可实现。
-(2) AI 实现（基于深度学习）—— 高级价值
-语义对齐：必须使用 CLIP。没有它，LSP 无法理解“图片里是否有猫”。
-内容识别：必须使用 Whisper (音频转文字) 或 YOLO (物体检测)。没有它们，LSP 无法提供“跳转到人声处”或“查找所有包含汽车的帧”等高级功能。
-质量评估：必须使用 VMAF/NIQE 模型来判断 AI 生成素材的“自然度”。
-3. 混合建议方案
-为了保证插件的响应速度（LSP 的核心是快），建议采取 “异步分层” 策略：
-LSP Core (Rust)：使用物理算法提供基础诊断（如剪辑错位、静音、文件格式错误），不启动 AI。
-LSP AI-Extension (Plugin)：当用户开启“深度分析”时，在后台启动 ort (ONNX Runtime) 进行语义识别。
-LSP Indexer：利用 SurrealDB 或向量数据库（如 Qdrant 的本地版）在 Rust 侧为素材建立索引。
-4. 总结
-功能层级	技术手段	是否必须 AI	典型场景
-基础诊断	信号处理 / 像素比对	否	检测掉帧、黑屏、音频爆音
-结构分析	特征提取 / 聚类	可选	素材去重、相似图片分组
-语义服务	CLIP / Whisper / YOLO	是	Prompt 对齐、内容搜索、自动打标
-结论：如果你要做“内容不符”的抽卡筛选，AI 是必须的；如果你要做“技术规格校验”，传统 Rust 算法足够。
-分析如何处理 剧本fountain、图片、音频、视频、timelines数据之间的LSP功能和单独文件的LSP功能
-在 Rust + WebView 架构中，将音视频与剧本（Fountain）整合进 LSP (Language Server Protocol) 体系，本质是将“多媒体素材”视为可索引、可跳转、可校验的“结构化代码”。
-以下是分层次的功能分析，涵盖单文件与跨文件联动的实现逻辑：
-1. 单文件 LSP：基础诊断与静态分析
-每个文件类型在 Rust 后端都有独立的解析器（Parser），不一定全部依赖 AI，但 AI 能显著提升语义深度。
-剧本 (Fountain)：
-实现：使用 Rust 编写 Fountain 语法解析器。
-LSP 功能：角色名/场景头自动补全（Completion）、场景编号大纲（Symbols）、对话字数校验（Diagnostics）。
-图片 (Image)：
-LSP 功能：悬停预览 (Hover) 显示 EXIF/Prompt 信息；诊断 (Diagnostics) 标识低分辨率或色彩断层。
-音频/视频 (AV)：
-LSP 功能：折叠 (Folding) 冗余片段；诊断 静音、黑场、掉帧或音量爆音。
-2. 跨文件联动 LSP：实现“多模态跳转”
-这是该插件的核心价值，通过一套全局索引（Global Index）打通所有素材。
-A. 剧本 
- 时间轴 (Script-to-Timeline Sync)
-功能：转到定义 (Go to Definition)。在剧本中点击一行对白，Timeline 自动跳转到对应的音频/视频片段。
-实现：利用 Whisper.cpp (Rust) 将音频转文字，并与剧本进行模糊匹配，建立 ScriptLine -> TimeRange 的索引映射。
-B. Prompt 
- 图片/视频 (Prompt-to-Asset References)
-功能：查找所有引用 (Find All References)。在剧本的视觉描述（Action）上按快捷键，WebView 弹出所有符合该描述的 AI 生成素材（图片或视频）。
-实现：必须使用 AI (CLIP)。通过计算 Text-to-Image 的相似度，将 Prompt 作为“变量名”，素材作为“实例值”。
-C. 时间轴 
- 物理素材 (Timeline-to-Source)
-功能：重命名重构 (Rename)。在 Timeline 修改一个素材名称，底层文件系统同步重命名，并更新所有引用该素材的剧本标记。
-3. 是否必须使用 AI 模型？分级建议
-功能维度	技术手段	是否必须 AI	推荐工具 (Rust 侧)
-语法解析	正则/Peg Parser	否	pest 或 nom
-技术指标校验	信号处理	否	ffmpeg-next
-内容语义匹配	向量嵌入 (Embedding)	是	ort (ONNX Runtime) 加载 CLIP
-语音内容检索	自动语音识别 (ASR)	是	whisper-rs
-4. 架构实现路径 (Rust + WebView)
-Server 层 (Rust)：建立一个 Workspace Manager。它不仅扫描 .fountain 文本，还扫描同目录下的 .png, .mp4。
-协议层 (JSON-RPC)：扩展标准的 LSP。
-例如请求：textDocument/hover 返回的不仅是文字，还包含 base64 缩略图数据给 WebView。
-Client 层 (WebView)：
-Timeline 可视化：将 LSP 传回的“语义锚点”渲染为 Timeline 上的 Marker。
-联动反馈：当剧本光标移动时，通过 window.__TAURI__.emit 通知 Timeline 同步滚动。
-5. 价值分析：解决“抽卡”痛点
-通过 LSP 联动，你可以直接在剧本里看到：“这行对白我有 5 个候选视频，其中 3 个符合语义，1 个音画同步有问题”。这种以剧本为核心的全局 Diff，能让创作者从琐碎的文件管理中解脱。
+# 媒体 LSP 功能规划
+
+> 将"多媒体素材"视为"源代码"，将"Prompt/参数"视为"编译器指令"，通过 LSP 协议提供诊断、跳转、预览等能力。
+
+## 现状：已实现的媒体 Diff 基础设施
+
+当前项目已具备完整的媒体 Diff 系统，这是 LSP 功能的核心基础：
+
+### 架构概览
+
+```
+Webview (React) ←postMessage→ Extension Host (TS) ←vscode.commands→ Rust Engine ←CLI→ FFmpeg
+```
+
+### 已实现的分析器
+
+| 分析器 | 媒体类型 | 核心算法 |
+|--------|---------|---------|
+| AudioDiffAnalyzer | mp3/wav/ogg/flac/aac/m4a | SNR (100ms窗口) + 波形提取 (800点) |
+| VideoDiffAnalyzer | mp4/mov/avi/mkv/webm/m4v | FFmpeg SSIM/PSNR + 差异区域合并 |
+| ImageDiffAnalyzer | png/jpg/gif/webp/bmp/svg | SSIM/PSNR + 像素差异热力图 |
+| TimelineDiffAnalyzer | jvi | JSON 结构对比 (轨道/元素级) |
+
+### 已实现的能力
+
+- Git 集成：自动检测媒体文件变更，支持 ref 对比
+- Custom Editor：VSCode 自定义编辑器 (`neko.mediaDiff`)
+- Webview 通信协议：InitDiff / DiffResult / Progress / Waveform / Frame
+- Rust 原生高性能算法：FFmpeg SSIM/PSNR/SNR
+
+## LSP 功能规划
+
+### 1. 单文件诊断 (Diagnostics)
+
+将媒体文件的"技术问题"映射为 LSP 诊断信息，在时间轴或滚动条上显示红色/黄色标记。
+
+| 媒体类型 | 诊断项 | 技术手段 | 是否需要 AI |
+|---------|--------|---------|------------|
+| 视频 | 黑场、掉帧、噪点 | FFmpeg SSIM/像素差值 | 否 |
+| 音频 | 爆音、静音、相位抵消 | SNR/FFT 频率分析 | 否 |
+| 图片 | 低分辨率、色彩断层、曝光异常 | 直方图/SSIM | 否 |
+| Timeline | 轨道冲突、素材缺失、时长不匹配 | JVI 结构校验 | 否 |
+| 剧本 (Fountain) | 角色名拼写、场景编号、对话字数 | pest/nom 语法解析 | 否 |
+
+基础诊断完全基于信号处理，不依赖 AI，可在 Rust 侧用现有 FFmpeg 管线实现。
+
+### 2. 悬停预览 (Hover)
+
+鼠标悬停时返回素材的元数据和 Diff 增量：
+
+- 图片/视频：EXIF 信息、Prompt 参数、与上一版的 SSIM 差异
+- 音频：采样率、时长、SNR、波形缩略图
+- Timeline 元素：关联的物理素材路径、变更历史
+
+### 3. 符号定义 (Symbol Definition)
+
+将媒体内容结构化为可索引的符号：
+
+- 视频：场景 (按关键帧分割)、音轨
+- 音频：片段 (按静音分割)、人声/背景音区域
+- 图片：主体区域 (需 AI)
+- Timeline：轨道、元素、属性节点
+
+### 4. 跨文件联动
+
+这是 LSP 的核心价值——通过全局索引打通所有素材。
+
+**A. 剧本 ↔ 时间轴 (Go to Definition)**
+
+在剧本中点击一行对白，Timeline 跳转到对应的音频/视频片段。
+
+实现路径：Whisper.cpp (Rust) 音频转文字 → 与剧本模糊匹配 → 建立 ScriptLine → TimeRange 索引。
+
+**B. Prompt ↔ 素材 (Find All References)**
+
+在剧本的视觉描述上查找所有符合该描述的 AI 生成素材。
+
+实现路径：CLIP Text-to-Image 相似度计算，将 Prompt 作为"变量名"，素材作为"实例值"。需要 AI。
+
+**C. Timeline ↔ 物理素材 (Rename)**
+
+在 Timeline 修改素材名称，底层文件系统同步重命名，并更新所有引用。
+
+实现路径：基于现有 TimelineDiffAnalyzer 的 JVI 结构解析，纯逻辑实现。
+
+## AI 模型需求分级
+
+| 功能层级 | 技术手段 | 是否必须 AI | 典型场景 |
+|---------|---------|------------|---------|
+| 基础诊断 | 信号处理 / 像素比对 | 否 | 掉帧、黑屏、爆音检测 |
+| 结构分析 | 特征提取 / 聚类 | 可选 | 素材去重、相似图片分组 |
+| 语义服务 | CLIP / Whisper / YOLO | 是 | Prompt 对齐、内容搜索、自动打标 |
+| 质量评估 | VMAF / NIQE | 是 | AI 生成素材"自然度"评分 |
+
+结论：技术规格校验用现有 Rust 算法即可；内容语义理解必须引入 AI。
+
+## 实现策略：异步分层
+
+为保证 LSP 响应速度，采取分层架构：
+
+```
+L1 - LSP Core (Rust)
+    物理算法提供基础诊断 (剪辑错位/静音/格式错误)
+    不启动 AI，响应时间 < 100ms
+
+L2 - LSP AI Extension (Plugin)
+    用户开启"深度分析"时，后台启动 ort (ONNX Runtime)
+    语义识别、内容搜索、Prompt 对齐
+    异步返回结果，不阻塞基础功能
+
+L3 - LSP Indexer
+    向量数据库 (Qdrant 本地版) 为素材建立语义索引
+    支持跨文件引用查找和相似素材推荐
+```
+
+## 实现路线图
+
+### Phase 1：基础诊断 (基于现有 Diff 基础设施)
+
+- 复用 Rust 侧 SSIM/PSNR/SNR 算法
+- 实现 Diagnostics Provider，在 VSCode Problems 面板显示媒体问题
+- 实现 Hover Provider，显示媒体元数据
+
+### Phase 2：符号与导航
+
+- 实现 DocumentSymbol Provider (媒体文件结构化)
+- 实现 Definition Provider (剧本 → Timeline 跳转)
+- 实现 References Provider (素材引用查找)
+
+### Phase 3：AI 增强
+
+- 集成 ort (ONNX Runtime) 加载 CLIP/Whisper
+- 实现语义搜索和 Prompt 对齐评分
+- 实现 Completion Provider (基于风格推荐 Prompt)
+
+## 技术选型
+
+| 组件 | 推荐方案 | 备注 |
+|------|---------|------|
+| LSP Server | Rust `tower-lsp` 或 Node.js `vscode-languageserver` | 考虑与现有 Rust Engine 复用 |
+| 语法解析 | pest / nom (Rust) | Fountain 剧本解析 |
+| 信号处理 | FFmpeg (已集成) | 音视频基础诊断 |
+| 语义模型 | ort (ONNX Runtime) | CLIP / Whisper / YOLO |
+| 向量索引 | Qdrant (本地嵌入式) | 素材语义检索 |

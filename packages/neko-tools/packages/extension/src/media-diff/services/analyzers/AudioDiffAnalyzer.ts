@@ -13,6 +13,7 @@ import type {
 	DiffOptions,
 	DiffResult,
 	AudioDiffDetails,
+	EngineAudioDiffRegion,
 } from '@neko/shared';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 import { EngineMediaService } from '../../../services/EngineMediaService';
@@ -80,6 +81,11 @@ export class AudioDiffAnalyzer extends BaseMediaDiffAnalyzer {
 				channels: { current: 1, previous: 1 }, // Engine compares as mono
 				waveformSimilarity: this.snrToSimilarity(audioDiff?.snr ?? 0),
 				spectralDifference: (audioDiff?.diffPercent ?? 0) / 100,
+				diffRegions: audioDiff?.diffRegions?.map((r: EngineAudioDiffRegion) => ({
+					start: r.start,
+					end: r.end,
+					snr: r.snr,
+				})),
 			};
 
 			// Compute overall similarity from SNR

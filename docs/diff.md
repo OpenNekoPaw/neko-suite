@@ -172,33 +172,82 @@ VideoDiffRegion {
 
 ## 四、前端渲染方案 (Webview)
 
-### 4.1 视频对比: WebGL 渲染器
+### 4.0 Webview 架构 (React)
 
-不使用两个 `<video>` 标签并排，而是将视频帧抽离到 Canvas 中通过 WebGL 处理。
+neko-tools 使用独立的 React webview 包 (`packages/neko-tools/packages/webview/`)，替代了原先内联 vanilla JS。
+
+技术栈: React 18 + Vite + Tailwind CSS + postMessage IPC
+
+```
+packages/neko-tools/packages/webview/
+├── mediaDiff.html                          # Vite 入口
+├── vite.config.ts                          # base './', single entry
+└── src/
+    ├── mediaDiff.tsx                        # ReactDOM.createRoot
+    ├── hooks/useMediaDiffProtocol.ts        # Extension↔Webview IPC 核心 hook
+    ├── styles/index.css                     # Tailwind directives
+    └── components/MediaDiff/
+        ├── types.ts                         # 组件 Props 类型
+        ├── MediaDiffApp.tsx                 # 顶层组件 (状态管理 + GitRefSelector + ProgressOverlay)
+        ├── MediaDiffViewer.tsx              # 媒体类型分发器
+        ├── DiffControls.tsx                 # 模式切换 + 相似度显示
+        ├── ImageDiffViewer.tsx              # side-by-side/slider/overlay/onion-skin
+        ├── AudioDiffViewer.tsx              # 波形 Canvas 渲染
+        ├── VideoDiffViewer.tsx              # 帧图片模式 (Blob URL from engine)
+        └── TimelineDiffViewer.tsx           # 轨道/元素变更树 (TODO)
+```
 
 数据流:
 ```
-Rust (Custom Protocol / 局部服务) → 视频流推送
-  → 前端两个隐藏 <video> 元素 (纹理输入)
-    → WebGL Fragment Shader 实时计算 abs(colorA - colorB)
+Extension Host                          Webview (React)
+MediaDiffMessageHandler                 useMediaDiffProtocol hook
+  │                                       │
+  │── mediaDiff:progress ──────────────→  setState(progress)
+  │── mediaDiff:result ────────────────→  setState(diffResult)
+  │── mediaDiff:imageData (ArrayBuffer) → URL.createObjectURL → Blob URL
+  │── mediaDiff:waveformData ──────────→  setState(waveform[])
+  │── mediaDiff:frameData (ArrayBuffer) → URL.createObjectURL → Blob URL
+  │                                       │
+  │←── mediaDiff:init ─────────────────── sendInit()
+  │←── mediaDiff:getFrame ─────────────── sendGetFrame(time, version)
+  │←── mediaDiff:changeRef ────────────── sendChangeRef(ref)
 ```
 
-可视化模式:
-- 卷帘模式 (Curtain/Slider): Shader 根据鼠标 X 坐标决定渲染视频 A 还是 B
-- 热力图模式: 像素差值映射为色谱 (差值越大越红)
-- 动态闪烁 (Flicker): 快速切换 A/B 帧，肉眼对位置偏移和噪点极度敏感
+构建链路:
+```
+pnpm build → turbo → @neko-tools/webview#build (vite) → dist/assets/mediaDiff.js + style.css
+           → neko-tools#compile → compile:extension (esbuild) + copy:webview
+           → 最终: dist/webview/assets/mediaDiff.js + style.css
+```
 
-### 4.2 音频对比: 多层 Canvas + Web Audio API
+MediaDiffEditorProvider.getHtmlForWebview() 仅生成 ~15 行 HTML shell，通过 `window.initialState` 注入配置，加载 React bundle。
 
-采用"宏观时间轴 + 微观波形"双层结构。
+### 4.1 视频对比: 帧图片模式 + WebGL 渲染器 (TODO)
 
-波形渲染:
-- 分轨显示: Wavesurfer.js 或高性能 Canvas 绘制 A、B 及 Diff 三轨
-- AI 增强显示: 分轨数据使用半透明层叠加 (蓝色=背景音差异，红色=人声差异)
+当前实现: Extension 通过 `neko.engine.extractFrame` 提取 JPEG 帧 → ArrayBuffer → Blob URL → `<img>` 渲染。支持 side-by-side 和 slider 模式。
 
-交互同步:
-- requestAnimationFrame 驱动时间轴
-- 波形缩放 (Zoom) 时视频预览帧同步跳转
+计划增强 (WebGL):
+- 帧数据 (JPEG Blob URL) → Canvas `drawImage` → WebGL 纹理
+- Fragment Shader 三种模式:
+  - Curtain: `uv.x < sliderPos ? textureA : textureB`
+  - Heatmap: `abs(colorA - colorB)` → 色谱映射
+  - Flicker: `requestAnimationFrame` 交替 A/B
+
+### 4.2 音频对比: Canvas 波形 + 三轨增强 (TODO)
+
+当前实现: Canvas 绘制 A/B 两轨波形 (800 点峰值)，支持 side-by-side 和 overlay 模式。
+
+计划增强 (三轨):
+```
+┌─────────────────────────────────┐
+│  A Track (Previous) — 红色       │
+├─────────────────────────────────┤
+│  B Track (Current) — 绿色       │
+├─────────────────────────────────┤
+│  Diff Track (|A-B|) — 黄色      │
+│  差异区域半透明红色背景高亮       │
+└─────────────────────────────────┘
+```
 
 ### 4.3 AI 结果可视化: SVG 矢量层
 
@@ -207,16 +256,14 @@ AI 语义信息叠加在视频层之上:
 - 文本 Diff 面板: monaco-editor Diff 模式展示 Whisper 识别的对白差异
 - 关联跳转: 点击差异文字 → postMessage 通知 Extension Host → 驱动视频跳转到指定时间
 
-### 4.4 Timeline 可视化对比
+### 4.4 Timeline 可视化对比 (TODO)
 
-数据对齐与坐标转换:
-```
-pixelX = (time - viewportStart) * zoomLevel * pixelsPerSecond
-```
+TimelineDiffViewer 组件:
+- Summary 统计 (tracks added/removed/modified, elements added/removed/modified)
+- Track 变更列表 (可折叠，按 changeType 分组)
+- Element 变更 (带缩略图懒加载 via `mediaDiff:inspectElement`)
 
-分片加载 (Windowing): 不一次性渲染全量 Timeline，根据当前 Scroll 位移只从 Rust 获取视口正负 5 秒内的差异数据。
-
-多轨道布局 (参考 Premiere/Resolve):
+未来增强 — 多轨道布局 (参考 Premiere/Resolve):
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -231,16 +278,6 @@ pixelX = (time - viewportStart) * zoomLevel * pixelsPerSecond
 │  ● 冲突点标记，密集时聚合为带数字的气泡            │
 └─────────────────────────────────────────────────┘
 ```
-
-- 全局鸟瞰图: Rust 预生成全量差异热力图，颜色深浅代表差异密度，点击/拖拽缩略框快速跳转
-- 核心差异轴: Video / Audio / AI Metadata 三轨垂直排列
-- 标记层: SVG 覆盖层标记冲突点，缩放倍率小时聚类显示
-
-高性能渲染 (Canvas 2D):
-- 背景: 网格线、时间刻度 (1s, 5s, 10s)
-- 差异块: 内容增删 → 矩形色块；属性变化 (音量/对比度) → 折线图
-- 播放指针: requestAnimationFrame 驱动红线同步
-- 双向联动: 拖动指针 → Rust 拉取对应帧 → WebView 渲染
 
 交互设计:
 
@@ -358,12 +395,21 @@ AI 绘画 (Midjourney/Stable Diffusion) 抽卡面临海量、同质化、随机�
 - [x] Timeline: JVI 结构对比、轨道/元素级变更检测
 - [x] 通信协议: mediaDiffProtocol 请求/响应消息定义
 
-### Phase 2: 前端可视化 (进行中)
+### Phase 2A: Webview 统一 (已完成)
 
-- [ ] P0 — Webview 波形渲染组件 (音频 A/B/Diff 三轨)
-- [ ] P0 — Webview 视频帧对比 UI (WebGL 渲染器)
-- [ ] P1 — 差异区域时间轴高亮
-- [ ] P1 — 视频卷帘/热力图/闪烁三种可视化模式
+- [x] React webview 包骨架 (Vite + Tailwind + postMessage IPC)
+- [x] useMediaDiffProtocol hook (ArrayBuffer→BlobURL, 消息收发)
+- [x] 展示组件: ImageDiffViewer / AudioDiffViewer / VideoDiffViewer / DiffControls
+- [x] MediaDiffApp 顶层组件 (GitRefSelector + ProgressOverlay)
+- [x] MediaDiffEditorProvider 重写 (1939→293 行 HTML shell)
+- [x] 构建链路: turbo + vite + esbuild + copy:webview
+
+### Phase 2B: 前端可视化增强 (进行中)
+
+- [ ] P0 — TimelineDiffViewer 组件 (Summary + Track/Element 变更树)
+- [ ] P0 — 音频三轨波形 (A/B/Diff 轨 + 差异区域高亮)
+- [ ] P0 — 视频帧 WebGL 渲染器 (curtain/heatmap/flicker)
+- [ ] P1 — 差异区域时间轴高亮 (DiffRegionOverlay)
 - [ ] P1 — Timeline 多轨道布局 + 全局鸟瞰图
 - [ ] P2 — 波形缩放与视频帧同步跳转
 

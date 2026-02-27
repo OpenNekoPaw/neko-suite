@@ -14,7 +14,7 @@ import {
   type VideoAnalysisResult,
   type TextExtractionResult,
 } from '../analysis-tools';
-import { ToolRegistry } from '../../service/tool-registry';
+import { ToolRegistry } from '@neko/agent';
 
 // Create a mock vision analysis service
 function createMockVisionService(): VisionAnalysisService {

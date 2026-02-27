@@ -9,9 +9,22 @@ import type {
   Tool,
   ToolCategory,
   ToolResult,
+  ToolExecutionConfig,
+  ToolFilterOptions,
   IToolRegistry,
 } from '@neko/shared';
 import { AgentError } from '../errors';
+
+/**
+ * Default tool execution config
+ */
+const DEFAULT_EXECUTION_CONFIG: ToolExecutionConfig = {
+  timeout: 30000,
+  retry: {
+    maxRetries: 0,
+    retryableErrors: [],
+  },
+};
 
 /**
  * Tool Registry implementation
@@ -19,6 +32,8 @@ import { AgentError } from '../errors';
 export class ToolRegistry implements IToolRegistry {
   /** Registered tools by name */
   private tools: Map<string, Tool> = new Map();
+  /** Per-tool execution configs */
+  private executionConfigs: Map<string, ToolExecutionConfig> = new Map();
 
   /**
    * Register a tool
@@ -40,6 +55,7 @@ export class ToolRegistry implements IToolRegistry {
    */
   unregister(name: string): void {
     this.tools.delete(name);
+    this.executionConfigs.delete(name);
   }
 
   /**
@@ -125,20 +141,31 @@ export class ToolRegistry implements IToolRegistry {
    * Convert tools to LLM tool definitions
    *
    * Returns tools in the format expected by Claude/OpenAI API.
-   * Supports optional filtering by tool names.
+   * Supports filtering by include/exclude lists and categories.
    *
-   * @param filter Optional filter with tool names to include
+   * @param filter Optional filter to limit which tools are included
    * @returns Array of tool definitions
    */
-  toToolDefinitions(filter?: { toolNames?: string[] }): Array<{
+  toToolDefinitions(filter?: ToolFilterOptions): Array<{
     type: 'function';
     function: { name: string; description: string; parameters: Record<string, unknown> };
   }> {
     let tools = this.list();
-    if (filter?.toolNames && filter.toolNames.length > 0) {
-      const allowedNames = new Set(filter.toolNames);
-      tools = tools.filter((tool) => allowedNames.has(tool.name));
+
+    if (filter) {
+      if (filter.include && filter.include.length > 0) {
+        const includeSet = new Set(filter.include);
+        tools = tools.filter((tool) => includeSet.has(tool.name));
+      }
+      if (filter.exclude && filter.exclude.length > 0) {
+        const excludeSet = new Set(filter.exclude);
+        tools = tools.filter((tool) => !excludeSet.has(tool.name));
+      }
+      if (filter.categories && filter.categories.length > 0) {
+        tools = tools.filter((tool) => filter.categories!.includes(tool.category));
+      }
     }
+
     return tools.map((tool) => ({
       type: 'function' as const,
       function: {
@@ -147,6 +174,20 @@ export class ToolRegistry implements IToolRegistry {
         parameters: tool.parameters,
       },
     }));
+  }
+
+  /**
+   * Set execution config for a tool
+   */
+  setExecutionConfig(name: string, config: ToolExecutionConfig): void {
+    this.executionConfigs.set(name, config);
+  }
+
+  /**
+   * Get execution config for a tool
+   */
+  getExecutionConfig(name: string): ToolExecutionConfig {
+    return this.executionConfigs.get(name) ?? DEFAULT_EXECUTION_CONFIG;
   }
 
   /**
@@ -161,6 +202,7 @@ export class ToolRegistry implements IToolRegistry {
    */
   clear(): void {
     this.tools.clear();
+    this.executionConfigs.clear();
   }
 
   /**

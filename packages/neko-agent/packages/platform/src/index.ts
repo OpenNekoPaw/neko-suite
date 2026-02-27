@@ -171,7 +171,8 @@ export {
 
 export { Service, type ServiceConfig } from './service/service';
 export { SharedServiceAdapter, toSharedService } from './service/shared-service-adapter';
-export { ToolRegistry } from './service/tool-registry';
+// ToolRegistry implementation is now in @neko/agent.
+// Platform uses IToolRegistry interface from @neko/shared.
 
 // PromptManager - local implementation
 export {
@@ -365,7 +366,7 @@ import { ConfigManager, type ConfigManagerOptions } from './config/config-manage
 import { ProviderRegistry } from './provider/provider-registry';
 import { GroupManager } from './provider/group-manager';
 import { Service } from './service/service';
-import { ToolRegistry } from './service/tool-registry';
+import type { IToolRegistry } from '@neko/shared';
 // TaskManager is now in @neko/agent, but we need it for createPlatform
 // Import from agent package (optional peer dependency)
 import type { ITaskManager, ITaskStorage } from '@neko/shared';
@@ -403,6 +404,11 @@ export interface PlatformOptions {
     updateOutputData?(id: string, outputData: Record<string, unknown>): Promise<boolean>;
     delete?(id: string): Promise<boolean>;
   };
+  /**
+   * Tool registry instance (from @neko/agent).
+   * Platform no longer creates its own ToolRegistry.
+   */
+  toolRegistry: IToolRegistry;
 }
 
 /**
@@ -418,7 +424,7 @@ export interface Platform {
   /** LLM routing manager for intelligent provider selection */
   llmRouter: LLMRoutingManager;
   /** Tool registry */
-  tools: ToolRegistry;
+  tools: IToolRegistry;
   /** Prompt manager */
   prompts: PromptManager;
   /** Media generation service */
@@ -432,7 +438,7 @@ export interface Platform {
 /**
  * Create a fully configured platform instance
  */
-export function createPlatform(options: PlatformOptions = {}): Platform {
+export function createPlatform(options: PlatformOptions): Platform {
   // Initialize configuration manager with locale support
   const configOptions: ConfigManagerOptions = {
     userConfigStorage: options.userConfigStorage,
@@ -450,8 +456,8 @@ export function createPlatform(options: PlatformOptions = {}): Platform {
   // Initialize LLM routing manager for intelligent provider selection
   const llmRoutingManager = new LLMRoutingManager(providerRegistry, configManager);
 
-  // Initialize tool registry
-  const toolRegistry = new ToolRegistry();
+  // Use injected tool registry (from @neko/agent) or undefined
+  const toolRegistry = options.toolRegistry;
 
   // Initialize prompt manager
   const promptManager = new PromptManager();
