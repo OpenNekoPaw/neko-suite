@@ -222,16 +222,108 @@ pnpm build → turbo → @neko-tools/webview#build (vite) → dist/assets/mediaD
 
 MediaDiffEditorProvider.getHtmlForWebview() 仅生成 ~15 行 HTML shell，通过 `window.initialState` 注入配置，加载 React bundle。
 
-### 4.1 视频对比: 帧图片模式 + WebGL 渲染器 (TODO)
+### 4.1 视频对比: H264+PCM 流 + WebGL 渲染器
 
-当前实现: Extension 通过 `neko.engine.extractFrame` 提取 JPEG 帧 → ArrayBuffer → Blob URL → `<img>` 渲染。支持 side-by-side 和 slider 模式。
+#### 架构决策: 三种传输方案对比
 
-计划增强 (WebGL):
-- 帧数据 (JPEG Blob URL) → Canvas `drawImage` → WebGL 纹理
-- Fragment Shader 三种模式:
-  - Curtain: `uv.x < sliderPos ? textureA : textureB`
-  - Heatmap: `abs(colorA - colorB)` → 色谱映射
-  - Flicker: `requestAnimationFrame` 交替 A/B
+| 维度 | A: 帧提取 (当前) | B: H264+PCM 流 (推荐) | C: 直接文件访问 |
+|------|------------------|----------------------|----------------|
+| 数据流 | Rust decode→JPEG→postMessage | Rust decode→H264 encode→WebSocket→WebCodecs | webview.asWebviewUri→`<video>` |
+| 单帧延迟 | ~100ms | 首帧 ~200ms，后续 <16ms | 浏览器原生 |
+| 流畅播放 | ❌ 不可能 | ✅ 60fps 硬件解码 | ✅ 原生 |
+| WebGL 对比 | ✅ JPEG→Image→texture | ✅ VideoFrame→texture (零拷贝) | ⚠️ CSP tainted canvas |
+| 音频 | ❌ 无 | ✅ PCM→Web Audio | ✅ 原生 |
+| 格式兼容 | ✅ 任意 (Rust 解码) | ✅ 任意 (Rust 转码) | ⚠️ 仅浏览器支持格式 |
+| Seek 精度 | ✅ 帧精确 | ✅ GOP=1 帧精确 | ⚠️ 受关键帧间隔影响 |
+| GPU 占用 | 高 (每帧 decode+encode) | 低 (Rust encode + 浏览器 decode) | 无 |
+
+选择方案 B，原因:
+1. 流畅播放 + 精确对比兼得
+2. VideoFrame 零拷贝进 WebGL，省去 JPEG 编解码中间层
+3. 复用现有 `start_stream` 管线和 neko-client WebCodecs 播放器
+4. 彻底解决 VideoToolbox 耗尽问题（解码移到浏览器端）
+
+方案 C 的致命问题: `<video>` seek 非帧精确、双 `<video>` 同步不可靠、CSP 限制 canvas 像素读取、ProRes/DNxHR 等专业格式浏览器不支持。
+
+#### 为什么 decode→encode 而非 demux-only
+
+源文件可能是 ProRes/DNxHR/MJPEG/FFV1 等格式，WebCodecs VideoDecoder 不支持:
+
+| 格式 | WebCodecs 支持 |
+|------|---------------|
+| H.264 | ✅ |
+| H.265 | ✅ (部分平台) |
+| VP9/AV1 | ✅ |
+| ProRes | ❌ |
+| DNxHR/DNxHD | ❌ |
+| MJPEG/FFV1 | ❌ |
+
+必须在 Rust 端 decode→encode H264，确保任意源格式都能播放。macOS VideoToolbox 零拷贝路径 (IOSurface → encode) 开销极小 (~3ms/帧 delta)。GOP=1 All-Intra 保证 seek 零延迟。
+
+#### 数据流对比
+
+```
+方案 A (7 次格式转换):
+  Rust: H264→NV12(GPU)→RGBA(GPU)→RGBA(CPU)→JPEG(CPU)→Base64
+  JS:   Base64→Buffer→ArrayBuffer→Blob→Image→WebGL Texture
+
+方案 B (1 次格式转换):
+  Rust: Container→FFmpeg Decode→NV12(GPU)→VideoToolbox H264 Encode→NALUs
+  传输: WebSocket Binary (25B header + NAL data)
+  JS:   NALUs→WebCodecs VideoDecoder→VideoFrame→WebGL Texture
+```
+
+#### 传输方式: WebSocket 直连
+
+```
+Rust Engine                    Webview
+  │                              │
+  │ start_stream(source, sid)    │
+  │ → HwAccelDecoder             │
+  │ → HwAccelEncoder (H264)      │
+  │ → broadcast::channel         │
+  │ → StreamRegistry             │
+  │                              │
+  │    ws://127.0.0.1:PORT/v1/streams/:stream_id
+  │ ─────────────────────────────→│
+  │  [pts:i64][dts:i64][key:u8]  │
+  │  [duration:i64][H264 NALs]   │ → H264StreamClient
+  │                              │ → WebCodecs VideoDecoder
+  │  [pts:i64][dur:i64][sr:u32]  │
+  │  [ch:u16][PCM f32le data]    │ → AudioStreamClient
+  │                              │ → Web Audio API
+  │                              │
+  │                              │ FrameScheduler (A/V 同步)
+  │                              │ → Canvas / WebGL 渲染
+```
+
+复用现有基础设施:
+- `neko-client/H264StreamClient` — WebCodecs H264 硬件解码 + 关键帧感知 seek
+- `neko-client/AudioStreamClient` — PCM f32le 播放 + 主时钟 (AudioContext.getOutputTimestamp)
+- `neko-client/FrameScheduler` — A/V 同步 (自适应阈值 + EMA 漂移修正)
+- Rust `VideoService.start_stream()` — decode→encode 管线 (All-Intra, GOP=1)
+- `native-http` WebSocket streaming endpoint + StreamRegistry broadcast channel
+
+#### WebGL Shader 集成
+
+VideoFrame (WebCodecs 解码输出) 直接作为 WebGL 纹理源:
+
+```javascript
+// VideoFrame 零拷贝绑定为 WebGL 纹理 (GPU 内直接传递)
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoFrame);
+videoFrame.close(); // 必须手动释放
+```
+
+Fragment Shader 三种模式 (与帧提取方案完全相同):
+- Curtain: `uv.x < sliderPos ? texture(A, uv) : texture(B, uv)`
+- Heatmap: `abs(texture(A, uv) - texture(B, uv))` → 色谱映射
+- Flicker: `requestAnimationFrame` 交替绑定 A/B 纹理
+
+双流同步: FramePairBuffer 按 PTS 配对两路 VideoFrame，配对成功才触发 WebGL 渲染。
+
+#### 帧提取降级为按需
+
+保留现有帧提取作为静态截图功能 (缩略图、关键帧预览)，流播放完全替代实时帧提取。
 
 ### 4.2 音频对比: Canvas 波形 + 三轨增强 (TODO)
 
@@ -408,7 +500,11 @@ AI 绘画 (Midjourney/Stable Diffusion) 抽卡面临海量、同质化、随机�
 
 - [ ] P0 — TimelineDiffViewer 组件 (Summary + Track/Element 变更树)
 - [ ] P0 — 音频三轨波形 (A/B/Diff 轨 + 差异区域高亮)
-- [ ] P0 — 视频帧 WebGL 渲染器 (curtain/heatmap/flicker)
+- [ ] P0 — 视频 H264+PCM 流 + WebGL 渲染器
+  - [ ] neko-client 适配: H264StreamClient.feedPacket() 支持 postMessage/WebSocket 双输入
+  - [ ] 双流 FramePairBuffer: 按 PTS 配对 A/B VideoFrame
+  - [ ] WebGL shader: curtain/heatmap/flicker (VideoFrame 作为纹理源)
+  - [ ] 音频播放: AudioStreamClient + Web Audio API
 - [ ] P1 — 差异区域时间轴高亮 (DiffRegionOverlay)
 - [ ] P1 — Timeline 多轨道布局 + 全局鸟瞰图
 - [ ] P2 — 波形缩放与视频帧同步跳转
