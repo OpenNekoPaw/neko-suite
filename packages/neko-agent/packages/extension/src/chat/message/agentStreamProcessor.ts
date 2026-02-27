@@ -163,8 +163,9 @@ export class AgentStreamProcessor {
     const streamingMessageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const collectedToolCalls: CollectedToolCall[] = [];
     const contentBlocks: ContentBlock[] = [];
-    let currentTextBlockId: string | null = null;
-    let currentThinkingBlockId: string | null = null;
+    const toolBlocksByCallId = new Map<string, ContentBlock>();
+    let currentTextBlock: ContentBlock | null = null;
+    let currentThinkingBlock: ContentBlock | null = null;
 
     const sendPhaseChange = (phase: AgentPhase, toolName?: string) => {
       if (phase !== currentPhase) {
@@ -179,20 +180,17 @@ export class AgentStreamProcessor {
           sendPhaseChange('thinking');
           accumulatedThinking += event.thinking || '';
 
-          if (!currentThinkingBlockId) {
-            currentThinkingBlockId = `block-thinking-${Date.now()}`;
-            contentBlocks.push({
-              id: currentThinkingBlockId,
+          if (!currentThinkingBlock) {
+            currentThinkingBlock = {
+              id: `block-thinking-${Date.now()}`,
               type: 'thinking',
               timestamp: Date.now(),
               thinking: event.thinking || '',
               isThinkingComplete: false,
-            });
+            };
+            contentBlocks.push(currentThinkingBlock);
           } else {
-            const thinkingBlock = contentBlocks.find(b => b.id === currentThinkingBlockId);
-            if (thinkingBlock) {
-              thinkingBlock.thinking = (thinkingBlock.thinking || '') + (event.thinking || '');
-            }
+            currentThinkingBlock.thinking = (currentThinkingBlock.thinking || '') + (event.thinking || '');
           }
 
           webview.postMessage({
@@ -207,28 +205,22 @@ export class AgentStreamProcessor {
           sendPhaseChange('streaming');
           accumulatedResponse += event.content || '';
 
-          if (currentThinkingBlockId) {
-            const thinkingBlock = contentBlocks.find(b => b.id === currentThinkingBlockId);
-            if (thinkingBlock) {
-              thinkingBlock.isThinkingComplete = true;
-            }
-            currentThinkingBlockId = null;
+          if (currentThinkingBlock) {
+            currentThinkingBlock.isThinkingComplete = true;
+            currentThinkingBlock = null;
           }
 
-          if (!currentTextBlockId) {
-            currentTextBlockId = `block-text-${Date.now()}`;
-            contentBlocks.push({
-              id: currentTextBlockId,
+          if (!currentTextBlock) {
+            currentTextBlock = {
+              id: `block-text-${Date.now()}`,
               type: 'text',
               timestamp: Date.now(),
               content: event.content || '',
               isStreaming: true,
-            });
+            };
+            contentBlocks.push(currentTextBlock);
           } else {
-            const textBlock = contentBlocks.find(b => b.id === currentTextBlockId);
-            if (textBlock) {
-              textBlock.content = (textBlock.content || '') + (event.content || '');
-            }
+            currentTextBlock.content = (currentTextBlock.content || '') + (event.content || '');
           }
 
           webview.postMessage({
@@ -241,12 +233,9 @@ export class AgentStreamProcessor {
 
         case 'tool_call':
           sendPhaseChange('acting', event.toolCall?.name);
-          if (currentTextBlockId) {
-            const textBlock = contentBlocks.find(b => b.id === currentTextBlockId);
-            if (textBlock) {
-              textBlock.isStreaming = false;
-            }
-            currentTextBlockId = null;
+          if (currentTextBlock) {
+            currentTextBlock.isStreaming = false;
+            currentTextBlock = null;
           }
 
           if (event.toolCall) {
@@ -257,12 +246,14 @@ export class AgentStreamProcessor {
             };
             collectedToolCalls.push(toolCallData);
 
-            contentBlocks.push({
+            const toolBlock: ContentBlock = {
               id: `block-tool-${event.toolCall.id}`,
               type: 'tool_call',
               timestamp: Date.now(),
               toolCall: toolCallData,
-            });
+            };
+            contentBlocks.push(toolBlock);
+            toolBlocksByCallId.set(event.toolCall.id, toolBlock);
           }
           webview.postMessage({
             type: 'toolCall',
@@ -281,7 +272,8 @@ export class AgentStreamProcessor {
             streamingMessageId,
             event,
             collectedToolCalls,
-            contentBlocks
+            contentBlocks,
+            toolBlocksByCallId
           );
           break;
 
@@ -357,7 +349,8 @@ export class AgentStreamProcessor {
     streamingMessageId: string,
     event: AgentEvent,
     collectedToolCalls: CollectedToolCall[],
-    contentBlocks: ContentBlock[]
+    contentBlocks: ContentBlock[],
+    toolBlocksByCallId: Map<string, ContentBlock>
   ): void {
     if (event.toolResult) {
       const toolCall = collectedToolCalls.find(tc => tc.id === event.toolResult!.toolCallId);
@@ -369,9 +362,7 @@ export class AgentStreamProcessor {
         };
       }
 
-      const toolBlock = contentBlocks.find(
-        b => b.type === 'tool_call' && b.toolCall?.id === event.toolResult!.toolCallId
-      );
+      const toolBlock = toolBlocksByCallId.get(event.toolResult.toolCallId);
       if (toolBlock && toolBlock.toolCall) {
         toolBlock.toolCall.result = {
           success: event.toolResult.success,

@@ -379,6 +379,9 @@ export class AgentRunner implements IAgentRunner {
     // Get custom hooks from HookManager (if available)
     const customHooks = config.hookManager?.getHooks() ?? [];
 
+    // Dispose previous session before creating new one
+    this._session?.dispose();
+
     // Create service from platform, adapted to @neko/shared IService
     const service = toSharedService(config.platform.createService(config.groupId));
 

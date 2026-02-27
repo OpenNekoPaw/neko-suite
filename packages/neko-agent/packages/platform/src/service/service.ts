@@ -309,31 +309,56 @@ export class Service implements IService {
     const startTime = Date.now();
     const groupId = options.groupId || this.defaultGroupId;
     const sessionId = options.sessionId;
+    const excludeModels: string[] = [];
 
-    const routing = this.resolveRouting(groupId, options.modelId);
-    const { model, provider, adapter } = this.resolveResources(routing);
-    const providerId = routing.providerId;
+    // Pre-flight fallback loop: find an available provider before starting stream
+    let routing;
+    let model;
+    let provider;
+    let adapter;
+    let providerId: string;
 
-    // Check if provider is available (circuit breaker + health, session-scoped)
-    if (!this.config.providerRegistry.isProviderAvailable(providerId, sessionId)) {
-      throw new PlatformError({
-        category: 'server',
-        code: 'PROVIDER_UNAVAILABLE',
-        message: `Provider ${providerId} is currently unavailable`,
-        retryable: true,
-      });
-    }
+    while (true) {
+      routing = this.resolveRouting(groupId, options.modelId, excludeModels);
+      const resources = this.resolveResources(routing);
+      model = resources.model;
+      provider = resources.provider;
+      adapter = resources.adapter;
+      providerId = routing.providerId;
 
-    // Try to acquire rate limit synchronously
-    const rateLimitResult = this.config.providerRegistry.tryAcquireRateLimit(providerId);
-    if (!rateLimitResult.allowed) {
-      throw new PlatformError({
-        category: 'rate_limit',
-        code: 'RATE_LIMIT_EXCEEDED',
-        message: `Rate limit exceeded for provider ${providerId}`,
-        retryable: true,
-        retryAfter: rateLimitResult.retryAfterMs,
-      });
+      // Check if provider is available (circuit breaker + health, session-scoped)
+      if (!this.config.providerRegistry.isProviderAvailable(providerId, sessionId)) {
+        excludeModels.push(routing.modelId);
+        const fallback = this.config.groupManager.routeFallback(groupId, 'server', excludeModels);
+        if (!fallback) {
+          throw new PlatformError({
+            category: 'server',
+            code: 'PROVIDER_UNAVAILABLE',
+            message: `Provider ${providerId} is currently unavailable`,
+            retryable: true,
+          });
+        }
+        continue;
+      }
+
+      // Try to acquire rate limit synchronously
+      const rateLimitResult = this.config.providerRegistry.tryAcquireRateLimit(providerId);
+      if (!rateLimitResult.allowed) {
+        excludeModels.push(routing.modelId);
+        const fallback = this.config.groupManager.routeFallback(groupId, 'rate_limit', excludeModels);
+        if (!fallback) {
+          throw new PlatformError({
+            category: 'rate_limit',
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: `Rate limit exceeded for provider ${providerId}`,
+            retryable: true,
+            retryAfter: rateLimitResult.retryAfterMs,
+          });
+        }
+        continue;
+      }
+
+      break; // Found an available provider
     }
 
     const chatOptions: ChatOptions = { ...options, model: model.name, stream: true };

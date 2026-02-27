@@ -338,12 +338,16 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
     .similarity-high { background: var(--vscode-testing-iconPassed); color: white; }
     .similarity-medium { background: var(--vscode-editorWarning-foreground); color: black; }
     .similarity-low { background: var(--vscode-testing-iconFailed); color: white; }
-    .view-mode-select {
+    .view-mode-select, .ref-select {
       padding: 4px 8px;
       background: var(--vscode-dropdown-background);
       color: var(--vscode-dropdown-foreground);
       border: 1px solid var(--vscode-dropdown-border);
       border-radius: 4px;
+    }
+    .ref-select {
+      max-width: 300px;
+      font-size: 12px;
     }
     .diff-content {
       flex: 1;
@@ -770,7 +774,10 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
 <body>
   <div id="root">
     <div class="diff-header">
-      <span class="diff-title">${displayTitle}</span>
+      <span class="diff-title" id="diffTitle">${displayTitle}</span>
+      ${!isLocalComparison ? `<select class="ref-select" id="refSelect" title="Compare against version">
+        <option value="HEAD" selected>HEAD</option>
+      </select>` : ''}
       <span class="similarity-badge" id="similarity">${l10n.loading}</span>
       <select class="view-mode-select" id="viewMode">
         <option value="side-by-side">${l10n.viewMode.sideBySide}</option>
@@ -830,11 +837,62 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
         case 'mediaDiff:elementThumbnail':
           handleElementThumbnail(message.payload);
           break;
+        case 'mediaDiff:fileHistory':
+          handleFileHistory(message.payload);
+          break;
         case 'mediaDiff:error':
           showError(message.error);
           break;
       }
     });
+
+    // Current ref being compared against
+    let currentRef = 'HEAD';
+
+    // Ref select change handler (only for Git comparison mode)
+    const refSelect = document.getElementById('refSelect');
+    if (refSelect) {
+      refSelect.addEventListener('change', (e) => {
+        const ref = e.target.value;
+        if (ref === currentRef) return;
+        currentRef = ref;
+
+        // Update title
+        const titleEl = document.getElementById('diffTitle');
+        if (titleEl) {
+          const shortRef = ref === 'HEAD' ? 'HEAD' : ref.substring(0, 7);
+          titleEl.textContent = state.fileName + ' (' + shortRef + ' \\u2194 Working)';
+        }
+
+        // Reset state and re-run diff
+        currentData = null;
+        videoFrames = { current: null, previous: null };
+
+        vscode.postMessage({
+          type: 'mediaDiff:changeRef',
+          requestId: Date.now().toString(),
+          timestamp: Date.now(),
+          payload: { ref: ref }
+        });
+      });
+    }
+
+    function handleFileHistory(payload) {
+      const select = document.getElementById('refSelect');
+      if (!select || !payload.commits) return;
+
+      // Keep HEAD as first option, add commits
+      select.innerHTML = '<option value="HEAD">HEAD (latest)</option>';
+      for (var i = 0; i < payload.commits.length; i++) {
+        var c = payload.commits[i];
+        var opt = document.createElement('option');
+        opt.value = c.hash;
+        // Format: "abc1234 - commit message (2024-01-15)"
+        var dateStr = c.date ? c.date.substring(0, 10) : '';
+        opt.textContent = c.shortHash + ' - ' + c.subject.substring(0, 50) + (c.subject.length > 50 ? '...' : '') + ' (' + dateStr + ')';
+        select.appendChild(opt);
+      }
+    }
 
     // View mode change
     document.getElementById('viewMode').addEventListener('change', (e) => {
@@ -1703,6 +1761,13 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
         requestId: Date.now().toString(),
         timestamp: Date.now(),
         payload: { fileUri: '', ref: 'HEAD' }
+      });
+      // Request file history for version selector
+      vscode.postMessage({
+        type: 'mediaDiff:getFileHistory',
+        requestId: Date.now().toString(),
+        timestamp: Date.now(),
+        payload: { maxCount: 30 }
       });
     }
   </script>

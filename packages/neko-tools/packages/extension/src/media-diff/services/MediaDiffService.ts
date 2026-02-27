@@ -109,6 +109,11 @@ export interface IMediaDiffService extends vscode.Disposable {
 	 * Register an analyzer
 	 */
 	registerAnalyzer(analyzer: IMediaDiffAnalyzer): void;
+
+	/**
+	 * Get commit history for a file
+	 */
+	getFileHistory(uri: vscode.Uri, maxCount?: number): Promise<import('@neko/shared').GitCommitInfo[]>;
 }
 
 // =============================================================================

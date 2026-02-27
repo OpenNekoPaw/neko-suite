@@ -403,61 +403,11 @@ export class GitMediaService implements IGitMediaService {
 		);
 
 		try {
-			// Use --follow to track renames, %H=full hash, %h=short hash, %s=subject, %an=author, %aI=ISO date
-			const format = '%H%x1f%h%x1f%s%x1f%an%x1f%aI';
-			const { stdout } = await execAsync(
-				`git log --follow -n ${maxCount} --format="${format}" -- "${relativePath}"`,
-				{
-					cwd: workspaceFolder.uri.fsPath,
-					maxBuffer: 1024 * 1024,
-				}
-			);
-
-			if (!stdout.trim()) {
-				return [];
-			}
-
-			return stdout
-				.trim()
-				.split('\n')
-				.map((line) => {
-					const [hash, shortHash, subject, authorName, date] =
-						line.split('\x1f');
-					return {
-						hash: hash!,
-						shortHash: shortHash!,
-						subject: subject!,
-						authorName: authorName!,
-						date: date!,
-					};
-				});
-		} catch (error) {
-			console.warn('[GitMediaService] Failed to get file history:', error);
-			return [];
-		}
-	}
-
-	async getFileHistory(
-		uri: vscode.Uri,
-		maxCount: number = 20
-	): Promise<GitCommitInfo[]> {
-		await this.ensureInitialized();
-
-		const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-		if (!workspaceFolder) {
-			return [];
-		}
-
-		const relativePath = path.relative(
-			workspaceFolder.uri.fsPath,
-			uri.fsPath
-		);
-
-		try {
-			// Use %x1f (unit separator) as field delimiter, %x1e (record separator) as record delimiter
+			// %x1f = unit separator (field delimiter), %x1e = record separator
+			// --follow tracks renames
 			const format = '%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e';
 			const { stdout } = await execAsync(
-				`git log --max-count=${maxCount} --format="${format}" -- "${relativePath}"`,
+				`git log --follow --max-count=${maxCount} --format="${format}" -- "${relativePath}"`,
 				{
 					cwd: workspaceFolder.uri.fsPath,
 					maxBuffer: 1024 * 1024,
@@ -483,10 +433,7 @@ export class GitMediaService implements IGitMediaService {
 					};
 				});
 		} catch (error) {
-			console.error(
-				'[GitMediaService] Failed to get file history:',
-				error
-			);
+			console.warn('[GitMediaService] Failed to get file history:', error);
 			return [];
 		}
 	}

@@ -7,6 +7,11 @@
  * - Process diff requests from webview
  * - Run diff analysis
  * - Send results back to webview
+ *
+ * Concurrency Design:
+ * - Each handler manages its own AbortController for cancellation scoping
+ * - dispose() only cancels this handler's analysis, not the shared service
+ * - Multiple editors can run analyses concurrently without interference
  */
 
 import * as vscode from 'vscode';
@@ -26,8 +31,8 @@ import { MediaDiffService } from '../services/MediaDiffService';
  */
 export class MediaDiffMessageHandler implements vscode.Disposable {
 	private isDisposed = false;
-	/** Per-handler abort controller — only cancels this handler's analyses */
-	private abortController = new AbortController();
+	/** Per-handler AbortController — only cancels this handler's analysis */
+	private currentAbortController: AbortController | null = null;
 
 	constructor(
 		private readonly webview: vscode.Webview,
@@ -47,8 +52,10 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 		if (this.isDisposed) return;
 
-		// Cancel previous analysis for this handler and create fresh controller
-		this.resetAbortController();
+		// Cancel any previous analysis for this handler
+		this.cancelCurrentAnalysis();
+		const abortController = new AbortController();
+		this.currentAbortController = abortController;
 
 		try {
 			// Run diff analysis with progress
@@ -62,7 +69,7 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 						payload: { progress, stage },
 					});
 				},
-				this.abortController.signal
+				abortController.signal
 			);
 
 			if (this.isDisposed) return;
@@ -74,12 +81,17 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			});
 
 			// Send visualization data based on media type
-			await this.sendVisualizationData(result);
+			await this.sendVisualizationData(result, ref);
 		} catch (error) {
+			if (abortController.signal.aborted) return; // Silently ignore cancelled
 			this.sendMessage({
 				type: 'mediaDiff:error',
 				error: error instanceof Error ? error.message : String(error),
 			});
+		} finally {
+			if (this.currentAbortController === abortController) {
+				this.currentAbortController = null;
+			}
 		}
 	}
 
@@ -96,8 +108,10 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			return;
 		}
 
-		// Cancel previous analysis for this handler and create fresh controller
-		this.resetAbortController();
+		// Cancel any previous analysis for this handler
+		this.cancelCurrentAnalysis();
+		const abortController = new AbortController();
+		this.currentAbortController = abortController;
 
 		try {
 			// Run diff analysis with progress
@@ -111,7 +125,7 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 						payload: { progress, stage },
 					});
 				},
-				this.abortController.signal
+				abortController.signal
 			);
 
 			if (this.isDisposed) return;
@@ -125,10 +139,15 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			// Send visualization data based on media type
 			await this.sendVisualizationDataForLocal(result);
 		} catch (error) {
+			if (abortController.signal.aborted) return;
 			this.sendMessage({
 				type: 'mediaDiff:error',
 				error: error instanceof Error ? error.message : String(error),
 			});
+		} finally {
+			if (this.currentAbortController === abortController) {
+				this.currentAbortController = null;
+			}
 		}
 	}
 
@@ -177,11 +196,15 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 					break;
 
 				case 'mediaDiff:cancel':
-					this.abortController.abort();
+					// Only cancel this handler's analysis, not the global service
+					this.cancelCurrentAnalysis();
 					break;
 
 				case 'mediaDiff:getFileHistory':
-					await this.handleGetFileHistory(requestId);
+					await this.handleGetFileHistory(
+						message.payload?.maxCount,
+						requestId
+					);
 					break;
 
 				case 'mediaDiff:changeRef':
@@ -200,12 +223,12 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	/**
 	 * Send visualization data based on media type
 	 */
-	private async sendVisualizationData(result: DiffResult): Promise<void> {
+	private async sendVisualizationData(result: DiffResult, ref: string = 'HEAD'): Promise<void> {
 		if (this.isDisposed) return;
 
 		switch (result.mediaType) {
 			case 'image':
-				await this.sendImageData();
+				await this.sendImageData(ref);
 				break;
 
 			case 'audio':
@@ -255,9 +278,9 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	/**
 	 * Send image data to webview
 	 */
-	private async sendImageData(): Promise<void> {
+	private async sendImageData(ref: string = 'HEAD'): Promise<void> {
 		try {
-			const versions = await this.diffService.getFileVersions(this.fileUri);
+			const versions = await this.diffService.getFileVersions(this.fileUri, ref);
 
 			// Handle new file case
 			if (versions.isNewFile) {
@@ -416,7 +439,6 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	/**
 	 * Handle inspect element request — lazy content diff for timeline media elements.
 	 * Extracts a low-resolution thumbnail frame from the media source.
-	 * Concurrency is limited to avoid overloading the engine.
 	 */
 	private async handleInspectElement(
 		src: string,
@@ -453,6 +475,44 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	}
 
 	/**
+	 * Handle get file history request
+	 */
+	private async handleGetFileHistory(
+		maxCount?: number,
+		requestId?: string
+	): Promise<void> {
+		try {
+			const commits = await this.diffService.getFileHistory(
+				this.fileUri,
+				maxCount
+			);
+			this.sendMessage({
+				requestId,
+				type: 'mediaDiff:fileHistory',
+				payload: { commits },
+			});
+		} catch (error) {
+			console.error('[MediaDiffMessageHandler] Failed to get file history:', error);
+			this.sendMessage({
+				requestId,
+				type: 'mediaDiff:fileHistory',
+				payload: { commits: [] },
+			});
+		}
+	}
+
+	/**
+	 * Cancel the current analysis for this handler only.
+	 * Does NOT affect analyses from other handlers sharing the same diffService.
+	 */
+	private cancelCurrentAnalysis(): void {
+		if (this.currentAbortController) {
+			this.currentAbortController.abort();
+			this.currentAbortController = null;
+		}
+	}
+
+	/**
 	 * Get MIME type from file path
 	 */
 	private getMimeType(filePath: string): string {
@@ -478,16 +538,9 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		}
 	}
 
-	/**
-	 * Abort current analysis and create a fresh AbortController
-	 */
-	private resetAbortController(): void {
-		this.abortController.abort();
-		this.abortController = new AbortController();
-	}
-
 	dispose(): void {
 		this.isDisposed = true;
-		this.abortController.abort();
+		// Only cancel this handler's analysis, NOT the shared service
+		this.cancelCurrentAnalysis();
 	}
 }
