@@ -240,12 +240,6 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 			case 'audio':
 				// Always send waveform data so webview renders audio diff view
-				console.log('[MediaDiffMessageHandler] Sending waveformData:',
-					'currentWaveform length:', result.visualization?.currentWaveform?.length ?? 'undefined',
-					'previousWaveform length:', result.visualization?.previousWaveform?.length ?? 'undefined',
-					'first 5 current:', JSON.stringify(result.visualization?.currentWaveform?.slice(0, 5)),
-					'first 5 previous:', JSON.stringify(result.visualization?.previousWaveform?.slice(0, 5))
-				);
 				this.sendMessage({
 					type: 'mediaDiff:waveformData',
 					payload: {
@@ -315,12 +309,6 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 			case 'audio':
 				// Always send waveform data so webview renders audio diff view
-				console.log('[MediaDiffMessageHandler] Sending waveformData:',
-					'currentWaveform length:', result.visualization?.currentWaveform?.length ?? 'undefined',
-					'previousWaveform length:', result.visualization?.previousWaveform?.length ?? 'undefined',
-					'first 5 current:', JSON.stringify(result.visualization?.currentWaveform?.slice(0, 5)),
-					'first 5 previous:', JSON.stringify(result.visualization?.previousWaveform?.slice(0, 5))
-				);
 				this.sendMessage({
 					type: 'mediaDiff:waveformData',
 					payload: {

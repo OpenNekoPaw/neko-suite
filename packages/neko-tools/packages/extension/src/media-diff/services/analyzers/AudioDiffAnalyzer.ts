@@ -66,20 +66,6 @@ export class AudioDiffAnalyzer extends BaseMediaDiffAnalyzer {
 				throw new Error('Engine audio diff unavailable');
 			}
 
-			// Debug: log engine result structure to verify waveform data arrives
-			console.log('[AudioDiffAnalyzer] engineResult keys:', Object.keys(engineResult));
-			console.log('[AudioDiffAnalyzer] audioDiff present:', !!engineResult.audioDiff);
-			if (engineResult.audioDiff) {
-				const ad = engineResult.audioDiff;
-				console.log('[AudioDiffAnalyzer] audioDiff keys:', Object.keys(ad));
-				console.log('[AudioDiffAnalyzer] waveformPeaksA length:', ad.waveformPeaksA?.length ?? 'undefined');
-				console.log('[AudioDiffAnalyzer] waveformPeaksB length:', ad.waveformPeaksB?.length ?? 'undefined');
-				console.log('[AudioDiffAnalyzer] durationA:', ad.durationA, 'durationB:', ad.durationB);
-				console.log('[AudioDiffAnalyzer] snr:', ad.snr);
-			} else {
-				console.log('[AudioDiffAnalyzer] audioDiff is MISSING! Full engineResult:', JSON.stringify(engineResult).slice(0, 500));
-			}
-
 			// Convert Engine types → Protocol types
 			const audioDiff = engineResult.audioDiff;
 			const details: AudioDiffDetails = {
