@@ -1573,7 +1573,7 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
           : tc.changeType === 'removed' ? 'badge-removed' : 'badge-modified';
 
         tracksHtml += '<div class="track-change">'
-          + '<div class="track-change-header" onclick="this.parentElement.classList.toggle(\'collapsed\')">'
+          + '<div class="track-change-header" onclick="this.parentElement.classList.toggle(&quot;collapsed&quot;)">'
           + '<span class="change-badge ' + badgeClass + '">' + tc.changeType + '</span>'
           + '<span class="track-type-badge">' + escHtml(tc.trackType) + '</span>'
           + '<span>' + escHtml(tc.trackName) + '</span>'

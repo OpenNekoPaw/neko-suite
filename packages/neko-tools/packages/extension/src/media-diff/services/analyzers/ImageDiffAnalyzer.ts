@@ -24,7 +24,7 @@ const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.sv
 export class ImageDiffAnalyzer extends BaseMediaDiffAnalyzer {
 	readonly mediaType = 'image' as const;
 	private readonly engineMediaService: EngineMediaService;
-	private tempFiles: string[] = [];
+	private activeTempFiles = new Set<string>();
 
 	constructor(engineMediaService?: EngineMediaService) {
 		super(IMAGE_EXTENSIONS);
@@ -37,11 +37,11 @@ export class ImageDiffAnalyzer extends BaseMediaDiffAnalyzer {
 		options?: DiffOptions
 	): Promise<DiffResult> {
 		this.createAbortController();
-		this.tempFiles = [];
+		const localTempFiles: string[] = [];
 
 		try {
 			const ext = options?.fileExtension ?? '.png';
-			const [currentPath, previousPath] = await this.writeTempFiles(current, previous, ext);
+			const [currentPath, previousPath] = await this.writeTempFiles(current, previous, ext, localTempFiles);
 			this.throwIfAborted();
 
 			const engineResult = await this.engineMediaService.diff(
@@ -90,14 +90,15 @@ export class ImageDiffAnalyzer extends BaseMediaDiffAnalyzer {
 				visualization,
 			};
 		} finally {
-			await this.cleanupTempFiles();
+			await this.cleanupFiles(localTempFiles);
 		}
 	}
 
 	private async writeTempFiles(
 		current: Buffer,
 		previous: Buffer,
-		ext: string
+		ext: string,
+		localTempFiles: string[]
 	): Promise<[string, string]> {
 		const tempDir = os.tmpdir();
 		const timestamp = Date.now();
@@ -111,19 +112,25 @@ export class ImageDiffAnalyzer extends BaseMediaDiffAnalyzer {
 			fs.writeFile(previousPath, previous),
 		]);
 
-		this.tempFiles.push(currentPath, previousPath);
+		localTempFiles.push(currentPath, previousPath);
+		this.activeTempFiles.add(currentPath);
+		this.activeTempFiles.add(previousPath);
 		return [currentPath, previousPath];
 	}
 
-	private async cleanupTempFiles(): Promise<void> {
-		for (const file of this.tempFiles) {
+	private async cleanupFiles(files: string[]): Promise<void> {
+		for (const file of files) {
 			try { await fs.unlink(file); } catch { /* ignore */ }
+			this.activeTempFiles.delete(file);
 		}
-		this.tempFiles = [];
 	}
 
 	override cancel(): void {
 		super.cancel();
-		this.cleanupTempFiles().catch(() => {});
+		const files = [...this.activeTempFiles];
+		this.activeTempFiles.clear();
+		for (const file of files) {
+			fs.unlink(file).catch(() => {});
+		}
 	}
 }

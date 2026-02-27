@@ -152,7 +152,25 @@ function registerCommands(context: vscode.ExtensionContext): void {
 					);
 					const result = JSON.parse(resultJson);
 					if (result.status === 'ok') {
-						return result.data;
+						const data = result.data;
+						// Rust ContentDiff is a tagged enum: { content: { type: "Image"|"Audio"|"Video"|"Timeline", ...fields } }
+						// TypeScript EngineDiffResult expects flat fields: { imageDiff?, audioDiff?, videoDiff?, timelineDiff? }
+						// Transform here to bridge the mismatch without changing Rust or generated types.
+						if (data?.content) {
+							const { type: contentType, ...contentFields } = data.content;
+							const keyMap: Record<string, string> = {
+								Image: 'imageDiff',
+								Audio: 'audioDiff',
+								Video: 'videoDiff',
+								Timeline: 'timelineDiff',
+							};
+							const key = keyMap[contentType];
+							if (key) {
+								data[key] = contentFields;
+							}
+							delete data.content;
+						}
+						return data;
 					}
 					log(`diff failed for ${group}: ${result.message ?? 'unknown error'}`, 'error');
 					return null;
