@@ -58,7 +58,10 @@ export class SharedServiceAdapter implements SharedIService {
       }
       // Content delta
       if (chunk.delta.content) {
-        yield { type: 'content', content: chunk.delta.content };
+        const content = typeof chunk.delta.content === 'string'
+          ? chunk.delta.content
+          : chunk.delta.content.map(p => p.type === 'text' ? p.text : '').join('');
+        yield { type: 'content', content };
       }
       // Tool calls
       if (chunk.delta.toolCalls && chunk.delta.toolCalls.length > 0) {

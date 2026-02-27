@@ -884,11 +884,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _handleCancelMessage(webview: vscode.Webview): void {
     const conversationId = this._conversations.getActiveId();
     if (conversationId && this._agentManager) {
-      this._agentManager.cancel(conversationId);
-      webview.postMessage({
-        type: 'messageCancelled',
-        conversationId,
-      });
+      const agent = this._agentManager.get(conversationId);
+      if (agent?.isRunning()) {
+        // Wait for agent to actually stop before notifying webview
+        const disposable = agent.onDidStop(() => {
+          disposable.dispose();
+          webview.postMessage({ type: 'messageCancelled', conversationId });
+        });
+        this._agentManager.cancel(conversationId);
+      } else {
+        // Not running, just send immediately
+        this._agentManager.cancel(conversationId);
+        webview.postMessage({ type: 'messageCancelled', conversationId });
+      }
     }
   }
 
