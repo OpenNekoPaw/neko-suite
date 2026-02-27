@@ -62,6 +62,17 @@ pub enum FrameData {
 pub enum GpuTextureHandle {
     /// No GPU texture (CPU-only frame)
     None,
+    /// CPU NV12 data (software decode fallback when hardware decoder is exhausted)
+    CpuNv12 {
+        /// Y plane data
+        y_data: Vec<u8>,
+        /// UV plane data (interleaved)
+        uv_data: Vec<u8>,
+        /// Y plane linesize (bytes per row)
+        y_linesize: u32,
+        /// UV plane linesize (bytes per row)
+        uv_linesize: u32,
+    },
     /// macOS VideoToolbox CVPixelBuffer
     #[cfg(target_os = "macos")]
     VideoToolbox {

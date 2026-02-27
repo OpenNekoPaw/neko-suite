@@ -194,6 +194,33 @@ impl Nv12TextureImporter {
                 Err(Error::Other("No GPU texture handle available".to_string()))
             }
 
+            GpuTextureHandle::CpuNv12 {
+                y_data,
+                uv_data,
+                y_linesize,
+                uv_linesize,
+            } => {
+                // Software decode fallback: upload CPU NV12 data to GPU textures
+                let color_space = ColorSpace::from_ffmpeg(gpu_texture.color_space);
+                let mut imported = self.create_textures(
+                    gpu_texture.width,
+                    gpu_texture.height,
+                    color_space,
+                );
+                let frame_data = Nv12FrameData {
+                    y_data,
+                    uv_data,
+                    y_linesize: *y_linesize,
+                    uv_linesize: *uv_linesize,
+                    width: gpu_texture.width,
+                    height: gpu_texture.height,
+                    color_space,
+                };
+                self.upload_nv12_with_linesize(&imported, &frame_data)?;
+                imported.pts = gpu_texture.pts;
+                Ok(imported)
+            }
+
             #[allow(unreachable_patterns)]
             _ => Err(Error::Other(
                 "Unsupported GPU texture handle for this platform".to_string(),

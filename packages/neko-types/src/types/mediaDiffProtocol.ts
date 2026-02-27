@@ -665,6 +665,9 @@ export const MEDIA_DIFF_PROTOCOL_VERSION = '1.0.0';
 /** Default analysis timeout (30 seconds) */
 export const DEFAULT_DIFF_TIMEOUT = 30000;
 
+/** Default analysis timeout for video (120 seconds) — SSIM/PSNR is per-frame */
+export const DEFAULT_VIDEO_DIFF_TIMEOUT = 120000;
+
 /** Default keyframe sample count for video diff */
 export const DEFAULT_KEYFRAME_SAMPLES = 10;
 

@@ -35,6 +35,11 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	private currentAbortController: AbortController | null = null;
 	/** Cached previous file path for frame extraction (Git mode writes to temp file) */
 	private previousFilePath: string | null = null;
+	/** Debounce timer for seek requests to avoid VideoToolbox session exhaustion */
+	private seekDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	/** Pending frame extraction promises for concurrency control */
+	private activeFrameExtractions = 0;
+	private static readonly MAX_CONCURRENT_FRAMES = 4;
 
 	constructor(
 		private readonly webview: vscode.Webview,
@@ -357,17 +362,31 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	}
 
 	/**
-	 * Handle seek request for video — extracts frames for both versions at the given time
+	 * Handle seek request for video — debounced to avoid VideoToolbox exhaustion.
+	 * Rapid slider dragging can fire dozens of seek events; only the last one matters.
 	 */
 	private async handleSeek(time: number, requestId?: string): Promise<void> {
-		await Promise.all([
-			this.handleGetFrame(time, 'current', requestId),
-			this.handleGetFrame(time, 'previous', requestId),
-		]);
+		// Cancel any pending debounced seek
+		if (this.seekDebounceTimer) {
+			clearTimeout(this.seekDebounceTimer);
+			this.seekDebounceTimer = null;
+		}
+
+		return new Promise<void>((resolve) => {
+			this.seekDebounceTimer = setTimeout(async () => {
+				this.seekDebounceTimer = null;
+				await Promise.all([
+					this.handleGetFrame(time, 'current', requestId),
+					this.handleGetFrame(time, 'previous', requestId),
+				]);
+				resolve();
+			}, 50);
+		});
 	}
 
 	/**
-	 * Handle get frame request for video — extracts a single frame via neko-engine
+	 * Handle get frame request for video — extracts a single frame via neko-engine.
+	 * Includes concurrency control to prevent VideoToolbox session exhaustion.
 	 */
 	private async handleGetFrame(
 		time: number,
@@ -379,6 +398,12 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			: (this.previousUri?.fsPath ?? this.previousFilePath);
 
 		if (!filePath) return;
+
+		// Wait if too many concurrent extractions
+		while (this.activeFrameExtractions >= MediaDiffMessageHandler.MAX_CONCURRENT_FRAMES) {
+			await new Promise(resolve => setTimeout(resolve, 50));
+		}
+		this.activeFrameExtractions++;
 
 		try {
 			const result = await vscode.commands.executeCommand<{ data: Buffer } | null>(
@@ -408,6 +433,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			}
 		} catch (error) {
 			console.error(`[MediaDiffMessageHandler] Failed to extract frame at ${time}s (${version}):`, error);
+		} finally {
+			this.activeFrameExtractions--;
 		}
 	}
 
@@ -561,6 +588,11 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 	dispose(): void {
 		this.isDisposed = true;
+		// Cancel pending seek debounce
+		if (this.seekDebounceTimer) {
+			clearTimeout(this.seekDebounceTimer);
+			this.seekDebounceTimer = null;
+		}
 		// Only cancel this handler's analysis, NOT the shared service
 		this.cancelCurrentAnalysis();
 		// Clean up temp files created for Git mode frame extraction

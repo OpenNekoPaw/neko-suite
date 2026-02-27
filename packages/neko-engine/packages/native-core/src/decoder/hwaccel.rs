@@ -434,12 +434,129 @@ impl HwAccelDecoder {
                 }
 
                 _ => {
-                    // Not a hardware format or unsupported
-                    Err(Error::DecodeFailed(format!(
-                        "Unsupported hardware pixel format: {:?}",
-                        format
-                    )))
+                    // Software decode fallback: extract raw frame data and convert to NV12
+                    self.extract_cpu_nv12(hw_frame, format)
                 }
+            }
+        }
+    }
+
+    /// Extract CPU NV12 data from a software-decoded frame (YUV420P/NV12 fallback).
+    ///
+    /// When hardware decoder sessions are exhausted, FFmpeg falls back to software
+    /// decoding which produces YUV420P frames. This method reads the raw plane data
+    /// and converts it to NV12 format for the GPU upload path.
+    fn extract_cpu_nv12(
+        &self,
+        hw_frame: &VideoFrame,
+        format: Pixel,
+    ) -> Result<GpuTextureHandle> {
+        let width = hw_frame.width() as usize;
+        let height = hw_frame.height() as usize;
+
+        unsafe {
+            let frame_ptr = hw_frame.as_ptr();
+
+            match format {
+                Pixel::YUV420P => {
+                    // YUV420P: 3 separate planes (Y, U, V)
+                    let y_ptr = (*frame_ptr).data[0];
+                    let u_ptr = (*frame_ptr).data[1];
+                    let v_ptr = (*frame_ptr).data[2];
+                    let y_linesize = (*frame_ptr).linesize[0] as usize;
+                    let u_linesize = (*frame_ptr).linesize[1] as usize;
+                    let v_linesize = (*frame_ptr).linesize[2] as usize;
+
+                    if y_ptr.is_null() || u_ptr.is_null() || v_ptr.is_null() {
+                        return Err(Error::DecodeFailed(
+                            "YUV420P frame has null plane pointers".to_string(),
+                        ));
+                    }
+
+                    // Copy Y plane
+                    let mut y_data = Vec::with_capacity(y_linesize * height);
+                    for row in 0..height {
+                        let src = std::slice::from_raw_parts(
+                            y_ptr.add(row * y_linesize),
+                            width.min(y_linesize),
+                        );
+                        y_data.extend_from_slice(src);
+                        // Pad to y_linesize if needed
+                        if width < y_linesize {
+                            y_data.resize(y_data.len() + (y_linesize - width), 0);
+                        }
+                    }
+
+                    // Interleave U and V planes into NV12 UV plane
+                    let uv_height = height / 2;
+                    let uv_width = width / 2;
+                    let uv_linesize = uv_width * 2; // Interleaved UV = 2 bytes per pixel
+                    let mut uv_data = Vec::with_capacity(uv_linesize * uv_height);
+                    for row in 0..uv_height {
+                        let u_row = std::slice::from_raw_parts(
+                            u_ptr.add(row * u_linesize),
+                            uv_width.min(u_linesize),
+                        );
+                        let v_row = std::slice::from_raw_parts(
+                            v_ptr.add(row * v_linesize),
+                            uv_width.min(v_linesize),
+                        );
+                        for col in 0..uv_width {
+                            uv_data.push(u_row[col]);
+                            uv_data.push(v_row[col]);
+                        }
+                    }
+
+                    tracing::debug!(
+                        "Software decode fallback: YUV420P {}x{} → CpuNv12",
+                        width,
+                        height
+                    );
+
+                    Ok(GpuTextureHandle::CpuNv12 {
+                        y_data,
+                        uv_data,
+                        y_linesize: y_linesize as u32,
+                        uv_linesize: uv_linesize as u32,
+                    })
+                }
+
+                Pixel::NV12 => {
+                    // NV12: 2 planes (Y + interleaved UV) — already in target format
+                    let y_ptr = (*frame_ptr).data[0];
+                    let uv_ptr = (*frame_ptr).data[1];
+                    let y_linesize = (*frame_ptr).linesize[0] as usize;
+                    let uv_linesize_raw = (*frame_ptr).linesize[1] as usize;
+
+                    if y_ptr.is_null() || uv_ptr.is_null() {
+                        return Err(Error::DecodeFailed(
+                            "NV12 frame has null plane pointers".to_string(),
+                        ));
+                    }
+
+                    let y_data = std::slice::from_raw_parts(y_ptr, y_linesize * height).to_vec();
+                    let uv_height = height / 2;
+                    let uv_data =
+                        std::slice::from_raw_parts(uv_ptr, uv_linesize_raw * uv_height).to_vec();
+
+                    tracing::debug!(
+                        "Software decode fallback: NV12 {}x{} → CpuNv12",
+                        width,
+                        height
+                    );
+
+                    Ok(GpuTextureHandle::CpuNv12 {
+                        y_data,
+                        uv_data,
+                        y_linesize: y_linesize as u32,
+                        uv_linesize: uv_linesize_raw as u32,
+                    })
+                }
+
+                _ => Err(Error::DecodeFailed(format!(
+                    "Unsupported pixel format for software fallback: {:?}",
+                    format
+                ))),
             }
         }
     }

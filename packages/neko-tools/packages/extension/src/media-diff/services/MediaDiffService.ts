@@ -19,6 +19,7 @@ import {
 	type GitCommitInfo,
 	getMediaType,
 	DEFAULT_DIFF_TIMEOUT,
+	DEFAULT_VIDEO_DIFF_TIMEOUT,
 } from '@neko/shared';
 import { GitMediaService, type IGitMediaService } from './GitMediaService';
 import {
@@ -197,8 +198,9 @@ export class MediaDiffService implements IMediaDiffService {
 
 			// Run analysis with timeout
 			const ext = uri.fsPath.toLowerCase().match(/\.[^.]+$/)?.[0];
+			const defaultTimeout = mediaType === 'video' ? DEFAULT_VIDEO_DIFF_TIMEOUT : DEFAULT_DIFF_TIMEOUT;
 			const analysisOptions: DiffOptions = {
-				timeout: DEFAULT_DIFF_TIMEOUT,
+				timeout: defaultTimeout,
 				generateHeatmap: true,
 				...options,
 				fileExtension: ext ?? undefined,
@@ -210,7 +212,7 @@ export class MediaDiffService implements IMediaDiffService {
 					Buffer.from(versions.previous),
 					analysisOptions
 				),
-				analysisOptions.timeout ?? DEFAULT_DIFF_TIMEOUT
+				analysisOptions.timeout ?? defaultTimeout
 			);
 
 			this.throwIfAborted(abortController);
@@ -332,8 +334,9 @@ export class MediaDiffService implements IMediaDiffService {
 
 			// Run analysis with timeout
 			const ext = currentUri.fsPath.toLowerCase().match(/\.[^.]+$/)?.[0];
+			const defaultTimeout = currentMediaType === 'video' ? DEFAULT_VIDEO_DIFF_TIMEOUT : DEFAULT_DIFF_TIMEOUT;
 			const analysisOptions: DiffOptions = {
-				timeout: DEFAULT_DIFF_TIMEOUT,
+				timeout: defaultTimeout,
 				generateHeatmap: true,
 				...options,
 				fileExtension: ext ?? undefined,
@@ -347,7 +350,7 @@ export class MediaDiffService implements IMediaDiffService {
 					Buffer.from(versions.previous),
 					analysisOptions
 				),
-				analysisOptions.timeout ?? DEFAULT_DIFF_TIMEOUT
+				analysisOptions.timeout ?? defaultTimeout
 			);
 
 			this.throwIfAborted(abortController);
