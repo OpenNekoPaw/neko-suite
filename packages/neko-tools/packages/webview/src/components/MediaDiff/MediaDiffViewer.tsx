@@ -97,6 +97,21 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
   );
 
   const renderViewer = () => {
+    // Identical files — show message instead of diff viewer
+    if (diffResult?.similarity === 1.0 && (diffResult?.details as any)?.identical) {
+      return (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-4xl mb-4 opacity-40">{'='}</div>
+            <div className="text-lg text-[var(--vscode-foreground)] mb-2">Files are identical</div>
+            <div className="text-sm text-[var(--vscode-descriptionForeground)]">
+              No differences detected (MD5 match)
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     switch (mediaType) {
       case 'image':
         return (

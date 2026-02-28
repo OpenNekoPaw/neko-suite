@@ -41,6 +41,10 @@ export interface StreamingVideoDiffViewerHandle {
 	seek(time: number): void;
 	/** Render a static frame pair (Blob URLs) through the existing DiffRenderer */
 	renderStaticPair(blobUrlA: string, blobUrlB: string): Promise<void>;
+	/** Pause audio output (mute + discard incoming packets) */
+	pauseAudio(): void;
+	/** Resume audio output */
+	resumeAudio(): void;
 }
 
 // ─── Seek filter tolerance (seconds) ─────────────────────────────────────────
@@ -104,6 +108,12 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 				// renderPair accepts DiffFrame (VideoFrame | ImageBitmap) and closes them
 				renderer.renderPair(bitmapA, bitmapB);
 			},
+			pauseAudio() {
+				audioClientRef.current?.pause();
+			},
+			resumeAudio() {
+				audioClientRef.current?.resume();
+			},
 		}), []);
 
 		// ── Setup streaming pipeline ─────────────────────────────────────────
@@ -124,6 +134,7 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 			// 2. Create FramePairBuffer
 			const halfFrameUs = (1_000_000 / fps) / 2; // half-frame tolerance in microseconds
 			let pairCount = 0;
+			let singleCount = 0;
 			const buffer = new FramePairBuffer({
 				toleranceUs: halfFrameUs,
 				maxBufferSize: 10,
@@ -135,6 +146,16 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 					renderer.renderPair(pair.frameA, pair.frameB);
 					// Report current time from frame PTS
 					const timeSec = pair.frameA.timestamp / 1_000_000;
+					onTimeUpdate?.(timeSec);
+				},
+				onSingle: (frame, side) => {
+					singleCount++;
+					if (singleCount <= 3 || singleCount % 30 === 0) {
+						console.log(`[StreamingDiff] Single #${singleCount}: side=${side} PTS=${frame.timestamp}`);
+					}
+					renderer.renderSingle(frame, side);
+					// Report current time
+					const timeSec = frame.timestamp / 1_000_000;
 					onTimeUpdate?.(timeSec);
 				},
 			});

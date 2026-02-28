@@ -64,6 +64,17 @@ interface SimilarityBadgeProps {
 const SimilarityBadge = memo(function SimilarityBadge({
   similarity,
 }: SimilarityBadgeProps) {
+  // Files are identical
+  if (similarity >= 1.0) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--vscode-input-background)] rounded">
+        <span className="text-sm font-bold text-green-400">
+          Identical
+        </span>
+      </div>
+    );
+  }
+
   const percentage = Math.round(similarity * 100);
 
   let colorClass = 'text-red-400';

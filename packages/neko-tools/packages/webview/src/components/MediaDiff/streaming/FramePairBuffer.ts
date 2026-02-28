@@ -30,6 +30,9 @@ export interface FramePairBufferConfig {
 	maxBufferSize: number;
 	/** Called when a valid pair is found */
 	onPair: (pair: FramePair) => void;
+	/** Called when one stream has ended and a frame arrives from the other.
+	 *  The frame is NOT closed — the callback owns it. */
+	onSingle?: (frame: VideoFrame, side: 'A' | 'B') => void;
 }
 
 // ─── Internal types ──────────────────────────────────────────────────────────
@@ -47,6 +50,7 @@ export class FramePairBuffer {
 	private readonly toleranceUs: number;
 	private readonly maxBufferSize: number;
 	private readonly onPair: (pair: FramePair) => void;
+	private readonly onSingle: ((frame: VideoFrame, side: 'A' | 'B') => void) | null;
 	private disposed = false;
 	/** Track whether each stream has signaled end-of-stream */
 	private eofA = false;
@@ -56,6 +60,7 @@ export class FramePairBuffer {
 		this.toleranceUs = config.toleranceUs;
 		this.maxBufferSize = config.maxBufferSize;
 		this.onPair = config.onPair;
+		this.onSingle = config.onSingle ?? null;
 	}
 
 	/** Feed a frame from stream A (current version) */
@@ -64,9 +69,13 @@ export class FramePairBuffer {
 			frame.close();
 			return;
 		}
-		// If stream B has ended, no more matches possible — discard
+		// If stream B has ended and its queue is empty, emit as single frame
 		if (this.eofB && this.queueB.length === 0) {
-			frame.close();
+			if (this.onSingle) {
+				this.onSingle(frame, 'A');
+			} else {
+				frame.close();
+			}
 			return;
 		}
 		this.insertSorted(this.queueA, frame);
@@ -79,9 +88,13 @@ export class FramePairBuffer {
 			frame.close();
 			return;
 		}
-		// If stream A has ended, no more matches possible — discard
+		// If stream A has ended and its queue is empty, emit as single frame
 		if (this.eofA && this.queueA.length === 0) {
-			frame.close();
+			if (this.onSingle) {
+				this.onSingle(frame, 'B');
+			} else {
+				frame.close();
+			}
 			return;
 		}
 		this.insertSorted(this.queueB, frame);
@@ -192,16 +205,30 @@ export class FramePairBuffer {
 
 	/**
 	 * Drain remaining frames when matching is no longer possible.
+	 * If onSingle is configured, emit remaining frames; otherwise close them.
 	 * Called after markEndOfStream and after tryMatch.
 	 */
 	private drainIfDone(): void {
-		// If one stream ended and its queue is empty, drain the other
-		if (this.eofA && this.queueA.length === 0) {
-			for (const bf of this.queueB) bf.frame.close();
+		// If stream A ended and its queue is empty, drain B frames
+		if (this.eofA && this.queueA.length === 0 && this.queueB.length > 0) {
+			for (const bf of this.queueB) {
+				if (this.onSingle) {
+					this.onSingle(bf.frame, 'B');
+				} else {
+					bf.frame.close();
+				}
+			}
 			this.queueB = [];
 		}
-		if (this.eofB && this.queueB.length === 0) {
-			for (const bf of this.queueA) bf.frame.close();
+		// If stream B ended and its queue is empty, drain A frames
+		if (this.eofB && this.queueB.length === 0 && this.queueA.length > 0) {
+			for (const bf of this.queueA) {
+				if (this.onSingle) {
+					this.onSingle(bf.frame, 'A');
+				} else {
+					bf.frame.close();
+				}
+			}
 			this.queueA = [];
 		}
 	}

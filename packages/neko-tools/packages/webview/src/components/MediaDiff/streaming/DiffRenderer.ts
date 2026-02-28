@@ -294,6 +294,38 @@ export class DiffRenderer {
 		this.draw();
 	}
 
+	/**
+	 * Render a single frame (one-sided update).
+	 * Only uploads the new frame's texture; the other side retains its last content.
+	 * Used when one stream has ended but the other continues playing.
+	 */
+	renderSingle(frame: DiffFrame, side: 'A' | 'B'): void {
+		if (this.disposed) {
+			frame.close();
+			return;
+		}
+
+		const { w, h } = getFrameDimensions(frame);
+		if (w > 0 && h > 0 && (this.frameWidth !== w || this.frameHeight !== h)) {
+			this.frameWidth = w;
+			this.frameHeight = h;
+			this.applyCanvasSize();
+		}
+
+		const gl = this.gl;
+		if (side === 'A') {
+			gl.activeTexture(gl.TEXTURE0);
+			gl.bindTexture(gl.TEXTURE_2D, this.texA);
+		} else {
+			gl.activeTexture(gl.TEXTURE1);
+			gl.bindTexture(gl.TEXTURE_2D, this.texB);
+		}
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, frame);
+		frame.close();
+
+		this.draw();
+	}
+
 	/** Dispose all WebGL resources */
 	dispose(): void {
 		if (this.disposed) return;

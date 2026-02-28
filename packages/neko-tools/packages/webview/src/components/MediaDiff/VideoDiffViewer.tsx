@@ -247,22 +247,32 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext({ sampleRate: 48000 });
     }
+    // Resume AudioContext if it was suspended (browser autoplay policy)
+    if (audioContextRef.current.state === 'suspended') {
+      audioContextRef.current.resume().catch(() => {});
+    }
     setIsPlaying(prev => {
       const next = !prev;
       onStreamControl?.(next ? 'play' : 'pause');
-      if (!next && streamConfig) {
-        // Pausing: extract frames at current time for static display
-        onTimeChange?.(localTime);
+      if (next) {
+        // Resuming: unmute audio
+        streamingRef.current?.resumeAudio();
+      } else {
+        // Pausing: mute audio + extract frames at current time for static display
+        streamingRef.current?.pauseAudio();
+        if (streamConfig) {
+          onTimeChange?.(localTime);
+        }
       }
       return next;
     });
   }, [onStreamControl, onTimeChange, localTime, streamConfig]);
 
-  // Handle stream end (either video finishes) — auto-pause
+  // Handle stream end (one video finished) — do NOT auto-pause,
+  // the longer video continues rendering via renderSingle
   const handleStreamEnd = useCallback(() => {
-    setIsPlaying(false);
-    onStreamControl?.('pause');
-  }, [onStreamControl]);
+    console.log('[VideoDiffViewer] One stream ended, other continues');
+  }, []);
 
   // ── Dual-mode: render static frames through DiffRenderer when paused ────
   // When paused and streamConfig exists, the StreamingVideoDiffViewer stays
