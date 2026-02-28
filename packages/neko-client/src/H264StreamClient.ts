@@ -65,6 +65,8 @@ export interface H264StreamClientConfig {
 	onError?: (error: Error) => void;
 	/** Callback when a packet is received (for bitrate monitoring) */
 	onPacketReceived?: (sizeBytes: number) => void;
+	/** Callback when the stream ends normally (EOF, close code 1000) */
+	onStreamEnd?: () => void;
 }
 
 export interface H264StreamClientStats {
@@ -117,6 +119,13 @@ export class H264StreamClient {
 	private readonly maxReconnectAttempts = 5;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// EOF detection: if no packets arrive for this long, consider stream ended.
+	// Keep short (500ms) to avoid freezing when one video in a diff ends
+	// before the other. Normal inter-packet gaps are ~33ms at 30fps.
+	private static readonly EOF_TIMEOUT_MS = 500;
+	private eofTimer: ReturnType<typeof setTimeout> | null = null;
+	private streamEndFired = false;
+
 	constructor(config: H264StreamClientConfig) {
 		this.config = {
 			websocketUrl: config.websocketUrl,
@@ -126,6 +135,7 @@ export class H264StreamClient {
 			onConnectionChange: config.onConnectionChange ?? (() => {}),
 			onError: config.onError ?? (() => {}),
 			onPacketReceived: config.onPacketReceived ?? (() => {}),
+			onStreamEnd: config.onStreamEnd ?? (() => {}),
 		};
 	}
 
@@ -142,6 +152,7 @@ export class H264StreamClient {
 
 	dispose(): void {
 		this.disposed = true;
+		this.clearEofTimer();
 
 		if (this.reconnectTimer) {
 			clearTimeout(this.reconnectTimer);
@@ -234,6 +245,9 @@ export class H264StreamClient {
 		if (this.disposed) return;
 		logger.info('Resetting decoder for seek');
 
+		// Clear EOF timer — seek will resume the stream
+		this.clearEofTimer();
+
 		// Reset framesDecoded so the caller can detect when post-seek frames
 		// start arriving (e.g. to freeze wall-clock until first new frame).
 		this.stats.framesDecoded = 0;
@@ -282,9 +296,14 @@ export class H264StreamClient {
 				}
 			};
 
-			this.ws.onclose = () => {
+			this.ws.onclose = (event) => {
 				this.stats.isConnected = false;
 				this.config.onConnectionChange(false);
+				// Close code 1000 = normal closure (stream ended / EOF)
+				if (event.code === 1000) {
+					this.config.onStreamEnd();
+					return; // Don't reconnect on normal EOF
+				}
 				this.tryReconnect();
 			};
 
@@ -302,6 +321,9 @@ export class H264StreamClient {
 	private handlePacket(data: ArrayBuffer): void {
 		this.stats.packetsReceived++;
 		const receiveTime = performance.now();
+
+		// Reset EOF timer — we got a packet, stream is still active
+		this.resetEofTimer();
 
 		// Notify packet size for bitrate monitoring
 		this.config.onPacketReceived(data.byteLength);
@@ -402,5 +424,33 @@ export class H264StreamClient {
 			this.reconnectTimer = null;
 			this.setupWebSocket();
 		}, delay);
+	}
+
+	/**
+	 * Reset the EOF timeout timer. Called on every packet received.
+	 * If no packets arrive for EOF_TIMEOUT_MS, fires onStreamEnd once.
+	 */
+	private resetEofTimer(): void {
+		if (this.eofTimer) clearTimeout(this.eofTimer);
+		// Only start EOF timer after we've received at least one packet
+		if (this.stats.packetsReceived > 0) {
+			this.eofTimer = setTimeout(() => {
+				this.eofTimer = null;
+				if (!this.disposed && !this.streamEndFired) {
+					this.streamEndFired = true;
+					console.log('[H264StreamClient] EOF detected (no packets for', H264StreamClient.EOF_TIMEOUT_MS, 'ms)');
+					this.config.onStreamEnd();
+				}
+			}, H264StreamClient.EOF_TIMEOUT_MS);
+		}
+	}
+
+	/** Clear EOF timer (called on dispose and seek reset) */
+	private clearEofTimer(): void {
+		if (this.eofTimer) {
+			clearTimeout(this.eofTimer);
+			this.eofTimer = null;
+		}
+		this.streamEndFired = false;
 	}
 }

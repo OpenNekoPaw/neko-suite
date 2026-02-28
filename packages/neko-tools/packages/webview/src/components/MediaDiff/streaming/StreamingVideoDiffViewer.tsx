@@ -29,6 +29,10 @@ export interface StreamingVideoDiffViewerProps {
 	onTimeUpdate?: (time: number) => void;
 	/** Report stream errors to parent for UI visibility */
 	onError?: (error: string) => void;
+	/** Pre-created AudioContext from user gesture to satisfy autoplay policy */
+	audioContext?: AudioContext;
+	/** Called when either video stream reaches end-of-stream */
+	onStreamEnd?: () => void;
 }
 
 /** Imperative handle exposed via ref for parent-driven seek and static rendering */
@@ -37,6 +41,10 @@ export interface StreamingVideoDiffViewerHandle {
 	seek(time: number): void;
 	/** Render a static frame pair (Blob URLs) through the existing DiffRenderer */
 	renderStaticPair(blobUrlA: string, blobUrlB: string): Promise<void>;
+	/** Pause audio output (mute + discard incoming packets) */
+	pauseAudio(): void;
+	/** Resume audio output */
+	resumeAudio(): void;
 }
 
 // ─── Seek filter tolerance (seconds) ─────────────────────────────────────────
@@ -54,6 +62,8 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 		onSliderChange,
 		onTimeUpdate,
 		onError,
+		audioContext,
+		onStreamEnd,
 	}, ref) {
 		const canvasRef = useRef<HTMLCanvasElement>(null);
 		const rendererRef = useRef<DiffRenderer | null>(null);
@@ -98,6 +108,12 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 				// renderPair accepts DiffFrame (VideoFrame | ImageBitmap) and closes them
 				renderer.renderPair(bitmapA, bitmapB);
 			},
+			pauseAudio() {
+				audioClientRef.current?.pause();
+			},
+			resumeAudio() {
+				audioClientRef.current?.resume();
+			},
 		}), []);
 
 		// ── Setup streaming pipeline ─────────────────────────────────────────
@@ -107,6 +123,8 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 
 			const { port, currentStreamId, previousStreamId, currentAudioStreamId, width, height, fps } = streamConfig;
 
+			console.log('[StreamingDiff] Pipeline setup:', { port, currentStreamId, previousStreamId, width, height, fps });
+
 			// 1. Create DiffRenderer (WebGL)
 			const renderer = new DiffRenderer({ canvas, width, height });
 			renderer.setMode(diffMode);
@@ -115,13 +133,29 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 
 			// 2. Create FramePairBuffer
 			const halfFrameUs = (1_000_000 / fps) / 2; // half-frame tolerance in microseconds
+			let pairCount = 0;
+			let singleCount = 0;
 			const buffer = new FramePairBuffer({
 				toleranceUs: halfFrameUs,
 				maxBufferSize: 10,
 				onPair: (pair) => {
+					pairCount++;
+					if (pairCount <= 3 || pairCount % 30 === 0) {
+						console.log(`[StreamingDiff] Pair #${pairCount}: PTS A=${pair.frameA.timestamp} B=${pair.frameB.timestamp}`);
+					}
 					renderer.renderPair(pair.frameA, pair.frameB);
 					// Report current time from frame PTS
 					const timeSec = pair.frameA.timestamp / 1_000_000;
+					onTimeUpdate?.(timeSec);
+				},
+				onSingle: (frame, side) => {
+					singleCount++;
+					if (singleCount <= 3 || singleCount % 30 === 0) {
+						console.log(`[StreamingDiff] Single #${singleCount}: side=${side} PTS=${frame.timestamp}`);
+					}
+					renderer.renderSingle(frame, side);
+					// Report current time
+					const timeSec = frame.timestamp / 1_000_000;
 					onTimeUpdate?.(timeSec);
 				},
 			});
@@ -145,14 +179,31 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 				feed(frame);
 			};
 
+			let frameCountA = 0;
+			let frameCountB = 0;
+
 			const clientA = new H264StreamClient({
 				websocketUrl: `${baseUrl}/${currentStreamId}`,
 				width,
 				height,
-				onFrame: (frame) => filterFrame(frame, (f) => buffer.feedA(f)),
+				onFrame: (frame) => {
+					frameCountA++;
+					if (frameCountA <= 5 || frameCountA % 60 === 0) {
+						console.log(`[StreamingDiff] Frame A #${frameCountA}: PTS=${frame.timestamp} size=${frame.displayWidth}x${frame.displayHeight}`);
+					}
+					filterFrame(frame, (f) => buffer.feedA(f));
+				},
 				onError: (err) => {
 					console.error('[StreamingDiff] Stream A error:', err);
 					onError?.(err.message);
+				},
+				onConnectionChange: (connected) => {
+					console.log(`[StreamingDiff] Stream A connection: ${connected ? 'OPEN' : 'CLOSED'}`);
+				},
+				onStreamEnd: () => {
+					console.log('[StreamingDiff] Stream A ended (EOF)');
+					buffer.markEndOfStream('A');
+					onStreamEnd?.();
 				},
 			});
 
@@ -160,10 +211,24 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 				websocketUrl: `${baseUrl}/${previousStreamId}`,
 				width,
 				height,
-				onFrame: (frame) => filterFrame(frame, (f) => buffer.feedB(f)),
+				onFrame: (frame) => {
+					frameCountB++;
+					if (frameCountB <= 5 || frameCountB % 60 === 0) {
+						console.log(`[StreamingDiff] Frame B #${frameCountB}: PTS=${frame.timestamp} size=${frame.displayWidth}x${frame.displayHeight}`);
+					}
+					filterFrame(frame, (f) => buffer.feedB(f));
+				},
 				onError: (err) => {
 					console.error('[StreamingDiff] Stream B error:', err);
 					onError?.(err.message);
+				},
+				onConnectionChange: (connected) => {
+					console.log(`[StreamingDiff] Stream B connection: ${connected ? 'OPEN' : 'CLOSED'}`);
+				},
+				onStreamEnd: () => {
+					console.log('[StreamingDiff] Stream B ended (EOF)');
+					buffer.markEndOfStream('B');
+					onStreamEnd?.();
 				},
 			});
 
@@ -175,6 +240,7 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 			void clientB.connect();
 
 			// 5. Create AudioStreamClient if audio track exists
+			console.log('[StreamingDiff] Audio setup:', { currentAudioStreamId, hasAudioContext: !!audioContext, audioContextState: audioContext?.state });
 			if (currentAudioStreamId) {
 				const audioClient = new AudioStreamClient({
 					websocketUrl: `${baseUrl}/${currentAudioStreamId}`,
@@ -182,9 +248,17 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 					onError: (err) => {
 						console.error('[StreamingDiff] Audio error:', err);
 					},
+					onConnectionChange: (connected) => {
+						console.log(`[StreamingDiff] Audio connection: ${connected ? 'OPEN' : 'CLOSED'}`);
+					},
+					onStreamEnd: () => {
+						console.log('[StreamingDiff] Audio stream ended (EOF)');
+					},
 				});
 				audioClientRef.current = audioClient;
-				void audioClient.connect();
+				void audioClient.connect(audioContext);
+			} else {
+				console.log('[StreamingDiff] No audio stream ID — skipping audio');
 			}
 
 			// 6. Cleanup

@@ -65,6 +65,8 @@ export interface AudioStreamClientConfig {
 	onConnectionChange?: (connected: boolean) => void;
 	/** Callback on error */
 	onError?: (error: Error) => void;
+	/** Callback when the stream ends normally (EOF, close code 1000) */
+	onStreamEnd?: () => void;
 }
 
 export interface AudioStreamStats {
@@ -139,6 +141,7 @@ export class AudioStreamClient {
 			fadeOutDuration: config.fadeOutDuration ?? AudioStreamClient.DEFAULT_FADE_OUT,
 			onConnectionChange: config.onConnectionChange ?? (() => {}),
 			onError: config.onError ?? (() => {}),
+			onStreamEnd: config.onStreamEnd ?? (() => {}),
 		};
 	}
 
@@ -491,9 +494,14 @@ export class AudioStreamClient {
 				}
 			};
 
-			this.ws.onclose = () => {
+			this.ws.onclose = (event) => {
 				this.isConnected = false;
 				this.config.onConnectionChange(false);
+				// Close code 1000 = normal closure (stream ended / EOF)
+				if (event.code === 1000) {
+					this.config.onStreamEnd();
+					return;
+				}
 				this.tryReconnect();
 			};
 

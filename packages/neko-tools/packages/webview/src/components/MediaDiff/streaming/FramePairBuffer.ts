@@ -30,6 +30,9 @@ export interface FramePairBufferConfig {
 	maxBufferSize: number;
 	/** Called when a valid pair is found */
 	onPair: (pair: FramePair) => void;
+	/** Called when one stream has ended and a frame arrives from the other.
+	 *  The frame is NOT closed — the callback owns it. */
+	onSingle?: (frame: VideoFrame, side: 'A' | 'B') => void;
 }
 
 // ─── Internal types ──────────────────────────────────────────────────────────
@@ -47,18 +50,32 @@ export class FramePairBuffer {
 	private readonly toleranceUs: number;
 	private readonly maxBufferSize: number;
 	private readonly onPair: (pair: FramePair) => void;
+	private readonly onSingle: ((frame: VideoFrame, side: 'A' | 'B') => void) | null;
 	private disposed = false;
+	/** Track whether each stream has signaled end-of-stream */
+	private eofA = false;
+	private eofB = false;
 
 	constructor(config: FramePairBufferConfig) {
 		this.toleranceUs = config.toleranceUs;
 		this.maxBufferSize = config.maxBufferSize;
 		this.onPair = config.onPair;
+		this.onSingle = config.onSingle ?? null;
 	}
 
 	/** Feed a frame from stream A (current version) */
 	feedA(frame: VideoFrame): void {
 		if (this.disposed) {
 			frame.close();
+			return;
+		}
+		// If stream B has ended and its queue is empty, emit as single frame
+		if (this.eofB && this.queueB.length === 0) {
+			if (this.onSingle) {
+				this.onSingle(frame, 'A');
+			} else {
+				frame.close();
+			}
 			return;
 		}
 		this.insertSorted(this.queueA, frame);
@@ -71,6 +88,15 @@ export class FramePairBuffer {
 			frame.close();
 			return;
 		}
+		// If stream A has ended and its queue is empty, emit as single frame
+		if (this.eofA && this.queueA.length === 0) {
+			if (this.onSingle) {
+				this.onSingle(frame, 'B');
+			} else {
+				frame.close();
+			}
+			return;
+		}
 		this.insertSorted(this.queueB, frame);
 		this.tryMatch();
 	}
@@ -81,6 +107,20 @@ export class FramePairBuffer {
 		for (const bf of this.queueB) bf.frame.close();
 		this.queueA = [];
 		this.queueB = [];
+		this.eofA = false;
+		this.eofB = false;
+	}
+
+	/**
+	 * Mark a stream as ended (EOF). When the opposite stream has also ended
+	 * or we can't match any more frames, remaining frames are drained (closed).
+	 * This prevents the buffer from filling up and freezing when one video
+	 * is shorter than the other.
+	 */
+	markEndOfStream(stream: 'A' | 'B'): void {
+		if (stream === 'A') this.eofA = true;
+		else this.eofB = true;
+		this.drainIfDone();
 	}
 
 	/** Dispose — release all resources */
@@ -150,6 +190,9 @@ export class FramePairBuffer {
 				matched = true; // continue scanning
 			}
 		}
+
+		// After matching, drain remaining frames if one stream has ended
+		this.drainIfDone();
 	}
 
 	/** Evict oldest frames if queue exceeds max size */
@@ -157,6 +200,36 @@ export class FramePairBuffer {
 		while (queue.length > this.maxBufferSize) {
 			const evicted = queue.shift();
 			evicted?.frame.close();
+		}
+	}
+
+	/**
+	 * Drain remaining frames when matching is no longer possible.
+	 * If onSingle is configured, emit remaining frames; otherwise close them.
+	 * Called after markEndOfStream and after tryMatch.
+	 */
+	private drainIfDone(): void {
+		// If stream A ended and its queue is empty, drain B frames
+		if (this.eofA && this.queueA.length === 0 && this.queueB.length > 0) {
+			for (const bf of this.queueB) {
+				if (this.onSingle) {
+					this.onSingle(bf.frame, 'B');
+				} else {
+					bf.frame.close();
+				}
+			}
+			this.queueB = [];
+		}
+		// If stream B ended and its queue is empty, drain A frames
+		if (this.eofB && this.queueB.length === 0 && this.queueA.length > 0) {
+			for (const bf of this.queueA) {
+				if (this.onSingle) {
+					this.onSingle(bf.frame, 'A');
+				} else {
+					bf.frame.close();
+				}
+			}
+			this.queueA = [];
 		}
 	}
 }
