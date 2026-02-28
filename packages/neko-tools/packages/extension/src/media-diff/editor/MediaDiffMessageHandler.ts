@@ -101,8 +101,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 			if (this.isDisposed) return;
 
-			// For video in Git mode, write previous version to temp file for frame extraction
-			if (result.mediaType === 'video') {
+			// For video/audio in Git mode, write previous version to temp file for streaming
+			if (result.mediaType === 'video' || result.mediaType === 'audio') {
 				await this.ensurePreviousFilePath(ref);
 			}
 
@@ -817,8 +817,9 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	 *   1. Ensure frame server is running → get port
 	 *   2. Resolve file paths
 	 *   3. Dispatch `audios:stream` for each file → get streamIds
-	 *   4. Pause both streams (user-initiated play)
-	 *   5. Send `mediaDiff:audioStreamConfig` to webview
+	 *   4. Send `mediaDiff:audioStreamConfig` to webview immediately
+	 *      (no engine-level pause — AudioStreamClient pauses locally
+	 *       to avoid subscriber timeout)
 	 */
 	private async handleStartAudioStreaming(requestId?: string): Promise<void> {
 		try {
@@ -880,19 +881,9 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				throw new Error('Audio stream creation returned no streamId');
 			}
 
-			// 5. Pause both streams
-			await Promise.allSettled([
-				Promise.resolve(vscode.commands.executeCommand(
-					'neko.engine.dispatch', 'audios', 'pause',
-					{ streamId: this.currentAudioOnlyStreamId }
-				)),
-				Promise.resolve(vscode.commands.executeCommand(
-					'neko.engine.dispatch', 'audios', 'pause',
-					{ streamId: this.previousAudioOnlyStreamId }
-				)),
-			]);
-
-			// 6. Send config to webview
+			// 5. Send config to webview immediately so WebSocket clients
+			//    connect before the engine subscriber timeout fires.
+			//    AudioStreamClients pause locally to suppress auto-playback.
 			const config: AudioStreamConfig = {
 				port: this.frameServerPort,
 				currentAudioStreamId: this.currentAudioOnlyStreamId,
@@ -943,12 +934,24 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 	/**
 	 * Forward playback control to audio-only streams.
+	 *
+	 * On first 'play', lazily creates streams (neko-preview pattern):
+	 * streams are only created when the user clicks Play, ensuring
+	 * WebSocket clients connect immediately after creation and well
+	 * within the engine's subscriber timeout.
 	 */
 	private async handleAudioStreamControl(
 		action: 'play' | 'pause' | 'seek',
 		payload: { time?: number },
 		requestId?: string
 	): Promise<void> {
+		// Lazy stream creation on first play (neko-preview pattern)
+		if (action === 'play' && !this.currentAudioOnlyStreamId) {
+			await this.handleStartAudioStreaming(requestId);
+			// Streams auto-play after creation — no resume needed
+			return;
+		}
+
 		const allStreams = [
 			this.currentAudioOnlyStreamId,
 			this.previousAudioOnlyStreamId,

@@ -158,7 +158,6 @@ export default function MediaDiffApp() {
     sendStartStreaming,
     sendStreamControl,
     audioStreamConfig,
-    sendStartAudioStreaming,
     sendAudioStreamControl,
   } = protocol;
 
@@ -178,12 +177,9 @@ export default function MediaDiffApp() {
     }
   }, [diffResult?.mediaType, streamConfig, sendStartStreaming]);
 
-  // Auto-start audio streaming when audio diff result is ready
-  useEffect(() => {
-    if (diffResult?.mediaType === 'audio' && !audioStreamConfig) {
-      sendStartAudioStreaming();
-    }
-  }, [diffResult?.mediaType, audioStreamConfig, sendStartAudioStreaming]);
+  // Audio streaming: no auto-start — streams are created lazily
+  // on first Play click via handleAudioStreamControl('play') in the
+  // extension, matching the neko-preview pattern.
 
   const handleRetry = useCallback(() => {
     if (initialState.isLocalComparison && initialState.previousUri) {

@@ -606,26 +606,27 @@ const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
 // =============================================================================
 
 interface AudioPlayerControlsProps {
-  currentSrc: string;
-  previousSrc: string;
+  audioStreamConfig: AudioStreamConfig | null;
   currentTime: number;
   duration: number;
   playingVersion: 'current' | 'previous' | 'both';
   onPlayingVersionChange: (version: 'current' | 'previous' | 'both') => void;
   onTimeChange: (time: number) => void;
+  onAudioStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => void;
 }
 
 const AudioPlayerControls = memo(function AudioPlayerControls({
-  currentSrc,
-  previousSrc,
+  audioStreamConfig,
   currentTime,
   duration,
   playingVersion,
   onPlayingVersionChange,
   onTimeChange,
+  onAudioStreamControl,
 }: AudioPlayerControlsProps) {
-  const currentAudioRef = useRef<HTMLAudioElement>(null);
-  const previousAudioRef = useRef<HTMLAudioElement>(null);
+  const currentClientRef = useRef<AudioStreamClient | null>(null);
+  const previousClientRef = useRef<AudioStreamClient | null>(null);
+  const rafRef = useRef<number>(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const formatTime = (seconds: number) => {
@@ -634,64 +635,109 @@ const AudioPlayerControls = memo(function AudioPlayerControls({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Create and connect AudioStreamClients when config arrives.
+  // Config arrives after user clicks Play (neko-preview pattern:
+  // streams created lazily on first play).
+  useEffect(() => {
+    if (!audioStreamConfig) return;
+
+    const { port, currentAudioStreamId, previousAudioStreamId } = audioStreamConfig;
+    const baseUrl = `ws://127.0.0.1:${port}/v1/streams`;
+
+    const currentClient = new AudioStreamClient({
+      websocketUrl: `${baseUrl}/${currentAudioStreamId}`,
+      volume: playingVersion === 'previous' ? 0 : 1,
+      onError: (err) => console.error('[AudioDiff] Current stream error:', err),
+    });
+
+    const previousClient = new AudioStreamClient({
+      websocketUrl: `${baseUrl}/${previousAudioStreamId}`,
+      volume: playingVersion === 'current' ? 0 : 1,
+      onError: (err) => console.error('[AudioDiff] Previous stream error:', err),
+    });
+
+    currentClientRef.current = currentClient;
+    previousClientRef.current = previousClient;
+
+    // Connect immediately — streams just created, data flows right away.
+    // No local pause needed (neko-preview pattern).
+    void currentClient.connect();
+    void previousClient.connect();
+
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      currentClient.dispose();
+      previousClient.dispose();
+      currentClientRef.current = null;
+      previousClientRef.current = null;
+    };
+  }, [audioStreamConfig]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Time tracking via requestAnimationFrame polling AudioStreamClient.getCurrentTime()
+  useEffect(() => {
+    if (!isPlaying) {
+      cancelAnimationFrame(rafRef.current);
+      return;
+    }
+
+    const tick = () => {
+      const client = currentClientRef.current;
+      if (client?.isClockReady) {
+        onTimeChange(client.getCurrentTime());
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [isPlaying, onTimeChange]);
+
+  // Mute/unmute based on playingVersion
+  useEffect(() => {
+    const cur = currentClientRef.current;
+    const prev = previousClientRef.current;
+    if (cur) cur.setVolume(playingVersion === 'previous' ? 0 : 1);
+    if (prev) prev.setVolume(playingVersion === 'current' ? 0 : 1);
+  }, [playingVersion]);
+
   const handlePlayPause = useCallback(() => {
-    const current = currentAudioRef.current;
-    const previous = previousAudioRef.current;
+    const cur = currentClientRef.current;
+    const prev = previousClientRef.current;
 
     if (isPlaying) {
-      current?.pause();
-      previous?.pause();
+      cur?.pause();
+      prev?.pause();
+      onAudioStreamControl?.('pause');
       setIsPlaying(false);
     } else {
-      if (playingVersion === 'current' || playingVersion === 'both') {
-        current?.play().catch(() => {});
-      }
-      if (playingVersion === 'previous' || playingVersion === 'both') {
-        previous?.play().catch(() => {});
-      }
+      // If clients exist (not first play), resume them
+      if (cur) cur.resume();
+      if (prev) prev.resume();
+      // Send play — on first click this triggers lazy stream creation
+      // in the extension (neko-preview pattern); on subsequent clicks
+      // it resumes the engine streams.
+      onAudioStreamControl?.('play');
       setIsPlaying(true);
     }
-  }, [isPlaying, playingVersion]);
+  }, [isPlaying, onAudioStreamControl]);
 
-  useEffect(() => {
-    const current = currentAudioRef.current;
-    const previous = previousAudioRef.current;
-    if (current && Math.abs(current.currentTime - currentTime) > 0.1) {
-      current.currentTime = currentTime;
-    }
-    if (previous && Math.abs(previous.currentTime - currentTime) > 0.1) {
-      previous.currentTime = currentTime;
-    }
-  }, [currentTime]);
-
-  useEffect(() => {
-    const current = currentAudioRef.current;
-    if (!current) return;
-    const handleTimeUpdate = () => {
-      onTimeChange(current.currentTime);
-    };
-    current.addEventListener('timeupdate', handleTimeUpdate);
-    return () => current.removeEventListener('timeupdate', handleTimeUpdate);
-  }, [onTimeChange]);
-
-  useEffect(() => {
-    const current = currentAudioRef.current;
-    const previous = previousAudioRef.current;
-    if (current) current.muted = playingVersion === 'previous';
-    if (previous) previous.muted = playingVersion === 'current';
-  }, [playingVersion]);
+  const handleSeek = useCallback((time: number) => {
+    onTimeChange(time);
+    // Reset audio clocks for seek
+    currentClientRef.current?.resetClock();
+    previousClientRef.current?.resetClock();
+    // Tell extension to seek engine streams
+    onAudioStreamControl?.('seek', { time });
+  }, [onTimeChange, onAudioStreamControl]);
 
   return (
     <div className="flex items-center gap-4 p-3 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)]">
-      <audio ref={currentAudioRef} src={currentSrc} />
-      <audio ref={previousAudioRef} src={previousSrc} />
-
       <button
         type="button"
         className="w-8 h-8 flex items-center justify-center bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] rounded hover:bg-[var(--vscode-button-hoverBackground)]"
         onClick={handlePlayPause}
       >
-        {isPlaying ? '⏸' : '▶'}
+        {isPlaying ? '\u23F8' : '\u25B6'}
       </button>
 
       <div className="flex items-center gap-1 text-xs">
@@ -741,7 +787,7 @@ const AudioPlayerControls = memo(function AudioPlayerControls({
           max={duration || 1}
           step={0.01}
           value={currentTime}
-          onChange={(e) => onTimeChange(parseFloat(e.target.value))}
+          onChange={(e) => handleSeek(parseFloat(e.target.value))}
           className="w-full h-1 bg-[var(--vscode-input-background)] rounded-lg appearance-none cursor-pointer"
         />
       </div>
@@ -846,8 +892,6 @@ const AudioDetails = memo(function AudioDetails({ details }: AudioDetailsProps) 
 
 export const AudioDiffViewer = memo(function AudioDiffViewer({
   viewMode,
-  currentSrc,
-  previousSrc,
   details,
   currentWaveform = [],
   previousWaveform = [],
@@ -855,6 +899,8 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
   onTimeChange,
   playingVersion = 'current',
   onPlayingVersionChange,
+  audioStreamConfig,
+  onAudioStreamControl,
   isLoading,
   error,
 }: AudioDiffViewerProps) {
@@ -949,13 +995,13 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
         />
       )}
       <AudioPlayerControls
-        currentSrc={currentSrc}
-        previousSrc={previousSrc}
+        audioStreamConfig={audioStreamConfig ?? null}
         currentTime={localTime}
         duration={duration}
         playingVersion={localPlayingVersion}
         onPlayingVersionChange={handlePlayingVersionChange}
         onTimeChange={handleTimeChange}
+        onAudioStreamControl={onAudioStreamControl}
       />
       <AudioDetails details={details} />
     </div>
