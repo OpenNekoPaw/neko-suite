@@ -61,6 +61,8 @@ export interface H264StreamClientConfig {
 	onError?: (error: Error) => void;
 	/** Callback when a packet is received (for bitrate monitoring) */
 	onPacketReceived?: (sizeBytes: number) => void;
+	/** Callback when the stream ends normally (EOF, close code 1000) */
+	onStreamEnd?: () => void;
 }
 
 export interface H264StreamClientStats {
@@ -122,6 +124,7 @@ export class H264StreamClient {
 			onConnectionChange: config.onConnectionChange ?? (() => {}),
 			onError: config.onError ?? (() => {}),
 			onPacketReceived: config.onPacketReceived ?? (() => {}),
+			onStreamEnd: config.onStreamEnd ?? (() => {}),
 		};
 	}
 
@@ -278,9 +281,14 @@ export class H264StreamClient {
 				}
 			};
 
-			this.ws.onclose = () => {
+			this.ws.onclose = (event) => {
 				this.stats.isConnected = false;
 				this.config.onConnectionChange(false);
+				// Close code 1000 = normal closure (stream ended / EOF)
+				if (event.code === 1000) {
+					this.config.onStreamEnd();
+					return; // Don't reconnect on normal EOF
+				}
 				this.tryReconnect();
 			};
 

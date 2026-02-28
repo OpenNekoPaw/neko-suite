@@ -85,7 +85,28 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		this.currentAbortController = abortController;
 
 		try {
-			// Run diff analysis with progress
+			// Fast path: detect video/audio from extension and show UI immediately.
+			// Full SSIM/PSNR analysis runs in background and updates result when done.
+			const mediaType = this.detectMediaTypeFromExtension();
+			if (mediaType === 'video' || mediaType === 'audio') {
+				// Write previous version to temp file first (needed for streaming + frame extraction)
+				await this.ensurePreviousFilePath(ref);
+
+				// Send preliminary result so webview can show play UI immediately
+				this.sendMessage({
+					type: 'mediaDiff:result',
+					payload: {
+						mediaType,
+						similarity: -1,
+						details: { analysisInProgress: true },
+					},
+				});
+
+				// Send initial visualization data (extracts t=0 frames for video)
+				await this.sendVisualizationData({ mediaType, similarity: -1 } as DiffResult, ref);
+			}
+
+			// Run full diff analysis (may take 5-30s for video SSIM/PSNR)
 			const result = await this.diffService.analyze(
 				this.fileUri,
 				ref,
@@ -101,19 +122,21 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 			if (this.isDisposed) return;
 
-			// For video/audio in Git mode, write previous version to temp file for streaming
-			if (result.mediaType === 'video' || result.mediaType === 'audio') {
+			// For video/audio in Git mode, ensure temp file exists (may already be done in fast path)
+			if ((result.mediaType === 'video' || result.mediaType === 'audio') && !this.previousFilePath && !this.previousUri) {
 				await this.ensurePreviousFilePath(ref);
 			}
 
-			// Send result
+			// Send full result (updates preliminary result with SSIM scores)
 			this.sendMessage({
 				type: 'mediaDiff:result',
 				payload: result,
 			});
 
-			// Send visualization data based on media type
-			await this.sendVisualizationData(result, ref);
+			// Send visualization data for non-video/audio types (video/audio already sent in fast path)
+			if (mediaType !== 'video' && mediaType !== 'audio') {
+				await this.sendVisualizationData(result, ref);
+			}
 		} catch (error) {
 			if (abortController.signal.aborted) return; // Silently ignore cancelled
 			this.sendMessage({
@@ -146,6 +169,21 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		this.currentAbortController = abortController;
 
 		try {
+			// Fast path: detect video/audio from extension and show UI immediately
+			const mediaType = this.detectMediaTypeFromExtension();
+			if (mediaType === 'video' || mediaType === 'audio') {
+				this.sendMessage({
+					type: 'mediaDiff:result',
+					payload: {
+						mediaType,
+						similarity: -1,
+						details: { analysisInProgress: true },
+					},
+				});
+
+				await this.sendVisualizationDataForLocal({ mediaType, similarity: -1 } as DiffResult);
+			}
+
 			// Run diff analysis with progress
 			const result = await this.diffService.analyzeLocalFiles(
 				this.fileUri,
@@ -162,14 +200,16 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 			if (this.isDisposed) return;
 
-			// Send result
+			// Send full result
 			this.sendMessage({
 				type: 'mediaDiff:result',
 				payload: result,
 			});
 
-			// Send visualization data based on media type
-			await this.sendVisualizationDataForLocal(result);
+			// Send visualization data for non-video/audio types
+			if (mediaType !== 'video' && mediaType !== 'audio') {
+				await this.sendVisualizationDataForLocal(result);
+			}
 		} catch (error) {
 			if (abortController.signal.aborted) return;
 			this.sendMessage({
@@ -610,6 +650,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				throw new Error('Failed to probe media files');
 			}
 
+			console.log('[MediaDiffMessageHandler] Probe results:', JSON.stringify({ currentInfo, previousInfo }));
+
 			// Use the larger dimensions (to avoid clipping) and current file's fps
 			const width = Math.max(currentInfo.width, previousInfo.width);
 			const height = Math.max(currentInfo.height, previousInfo.height);
@@ -644,26 +686,44 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				throw new Error('Stream creation returned no streamId');
 			}
 
-			// 5. Create audio streams if both files have audio tracks
-			if (currentInfo.hasAudio && previousInfo.hasAudio) {
+			// 5. Create audio streams if either file has audio tracks
+			// Only the current version audio is played (previous is available for future A/B toggle)
+			console.log('[MediaDiffMessageHandler] Audio probe:', {
+				currentHasAudio: currentInfo.hasAudio,
+				previousHasAudio: previousInfo.hasAudio,
+			});
+			if (currentInfo.hasAudio) {
 				try {
-					const [curAudioResult, prevAudioResult] = await Promise.all([
-						vscode.commands.executeCommand<string | null>(
+					const audioPromises: Promise<string | null>[] = [
+						Promise.resolve(vscode.commands.executeCommand<string | null>(
 							'neko.engine.dispatch',
 							'audios', 'stream',
 							{ source: currentPath, sessionId: this.sessionId }
-						),
-						vscode.commands.executeCommand<string | null>(
-							'neko.engine.dispatch',
-							'audios', 'stream',
-							{ source: previousPath, sessionId: this.sessionId }
-						),
-					]);
+						)),
+					];
+					// Only create previous audio stream if it has audio
+					if (previousInfo.hasAudio) {
+						audioPromises.push(
+							Promise.resolve(vscode.commands.executeCommand<string | null>(
+								'neko.engine.dispatch',
+								'audios', 'stream',
+								{ source: previousPath, sessionId: this.sessionId }
+							))
+						);
+					}
 
-					if (curAudioResult && prevAudioResult) {
+					const audioResults = await Promise.all(audioPromises);
+					const curAudioResult = audioResults[0];
+
+					if (curAudioResult) {
 						const curAudio = JSON.parse(curAudioResult);
-						const prevAudio = JSON.parse(prevAudioResult);
 						this.currentAudioStreamId = curAudio.streamId ?? curAudio.data?.streamId ?? null;
+						console.log('[MediaDiffMessageHandler] Audio stream created:', this.currentAudioStreamId);
+					}
+
+					const prevAudioResult = audioResults[1];
+					if (prevAudioResult) {
+						const prevAudio = JSON.parse(prevAudioResult);
 						this.previousAudioStreamId = prevAudio.streamId ?? prevAudio.data?.streamId ?? null;
 					}
 				} catch (audioErr) {
@@ -1045,6 +1105,21 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			} catch { /* ignore */ }
 			this.previousFilePath = null;
 		}
+	}
+
+	/**
+	 * Quick media type detection from file extension (no I/O).
+	 * Used for fast-path: show video/audio UI before full analysis completes.
+	 * Returns null for non-video/audio types (they don't benefit from lazy loading).
+	 */
+	private detectMediaTypeFromExtension(): 'video' | 'audio' | null {
+		const ext = this.fileUri.fsPath.toLowerCase().match(/\.[^.]+$/)?.[0];
+		if (!ext) return null;
+		const videoExts = new Set(['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.flv', '.wmv', '.mpg', '.mpeg', '.ts', '.mts']);
+		const audioExts = new Set(['.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.aiff', '.aif']);
+		if (videoExts.has(ext)) return 'video';
+		if (audioExts.has(ext)) return 'audio';
+		return null;
 	}
 
 	/**

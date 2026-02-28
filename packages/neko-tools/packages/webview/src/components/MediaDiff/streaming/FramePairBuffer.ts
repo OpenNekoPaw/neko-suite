@@ -48,6 +48,9 @@ export class FramePairBuffer {
 	private readonly maxBufferSize: number;
 	private readonly onPair: (pair: FramePair) => void;
 	private disposed = false;
+	/** Track whether each stream has signaled end-of-stream */
+	private eofA = false;
+	private eofB = false;
 
 	constructor(config: FramePairBufferConfig) {
 		this.toleranceUs = config.toleranceUs;
@@ -61,6 +64,11 @@ export class FramePairBuffer {
 			frame.close();
 			return;
 		}
+		// If stream B has ended, no more matches possible — discard
+		if (this.eofB && this.queueB.length === 0) {
+			frame.close();
+			return;
+		}
 		this.insertSorted(this.queueA, frame);
 		this.tryMatch();
 	}
@@ -68,6 +76,11 @@ export class FramePairBuffer {
 	/** Feed a frame from stream B (previous version) */
 	feedB(frame: VideoFrame): void {
 		if (this.disposed) {
+			frame.close();
+			return;
+		}
+		// If stream A has ended, no more matches possible — discard
+		if (this.eofA && this.queueA.length === 0) {
 			frame.close();
 			return;
 		}
@@ -81,6 +94,20 @@ export class FramePairBuffer {
 		for (const bf of this.queueB) bf.frame.close();
 		this.queueA = [];
 		this.queueB = [];
+		this.eofA = false;
+		this.eofB = false;
+	}
+
+	/**
+	 * Mark a stream as ended (EOF). When the opposite stream has also ended
+	 * or we can't match any more frames, remaining frames are drained (closed).
+	 * This prevents the buffer from filling up and freezing when one video
+	 * is shorter than the other.
+	 */
+	markEndOfStream(stream: 'A' | 'B'): void {
+		if (stream === 'A') this.eofA = true;
+		else this.eofB = true;
+		this.drainIfDone();
 	}
 
 	/** Dispose — release all resources */
@@ -150,6 +177,9 @@ export class FramePairBuffer {
 				matched = true; // continue scanning
 			}
 		}
+
+		// After matching, drain remaining frames if one stream has ended
+		this.drainIfDone();
 	}
 
 	/** Evict oldest frames if queue exceeds max size */
@@ -157,6 +187,22 @@ export class FramePairBuffer {
 		while (queue.length > this.maxBufferSize) {
 			const evicted = queue.shift();
 			evicted?.frame.close();
+		}
+	}
+
+	/**
+	 * Drain remaining frames when matching is no longer possible.
+	 * Called after markEndOfStream and after tryMatch.
+	 */
+	private drainIfDone(): void {
+		// If one stream ended and its queue is empty, drain the other
+		if (this.eofA && this.queueA.length === 0) {
+			for (const bf of this.queueB) bf.frame.close();
+			this.queueB = [];
+		}
+		if (this.eofB && this.queueB.length === 0) {
+			for (const bf of this.queueA) bf.frame.close();
+			this.queueA = [];
 		}
 	}
 }

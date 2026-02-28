@@ -1,8 +1,9 @@
 /**
  * DiffRenderer — WebGL2-based diff visualization for paired VideoFrames.
  *
- * Supports three diff modes:
- * - **Curtain**: Side-by-side split at adjustable slider position
+ * Supports four diff modes:
+ * - **Side-by-side**: Left/right split showing both frames simultaneously
+ * - **Curtain**: Wipe split at adjustable slider position
  * - **Heatmap**: Pixel difference magnitude rendered as blue→green→yellow→red
  * - **Flicker**: Rapidly alternates between A and B frames
  *
@@ -15,7 +16,7 @@
 /** Frame source accepted by renderPair: VideoFrame (streaming) or ImageBitmap (static) */
 export type DiffFrame = VideoFrame | ImageBitmap;
 
-export type DiffMode = 'curtain' | 'heatmap' | 'flicker';
+export type DiffMode = 'side-by-side' | 'curtain' | 'heatmap' | 'flicker';
 
 export interface DiffRendererConfig {
 	canvas: HTMLCanvasElement;
@@ -43,6 +44,31 @@ void main() {
 	vUv = pos * 0.5 + 0.5;
 	vUv.y = 1.0 - vUv.y;
 	gl_Position = vec4(pos, 0.0, 1.0);
+}
+`;
+
+const SIDEBYSIDE_FRAGMENT = `#version 300 es
+precision highp float;
+
+uniform sampler2D uTexA;
+uniform sampler2D uTexB;
+uniform float uDividerWidth; // divider width in UV space
+
+in vec2 vUv;
+out vec4 fragColor;
+
+void main() {
+	float half_ = 0.5;
+	if (abs(vUv.x - half_) < uDividerWidth) {
+		// Divider line
+		fragColor = vec4(0.4, 0.4, 0.4, 1.0);
+	} else if (vUv.x < half_) {
+		// Left: frame A, remap x [0, 0.5) -> [0, 1]
+		fragColor = texture(uTexA, vec2(vUv.x * 2.0, vUv.y));
+	} else {
+		// Right: frame B, remap x (0.5, 1] -> [0, 1]
+		fragColor = texture(uTexB, vec2((vUv.x - half_) * 2.0, vUv.y));
+	}
 }
 `;
 
@@ -118,10 +144,23 @@ void main() {
 }
 `;
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Extract pixel dimensions from either VideoFrame or ImageBitmap */
+function getFrameDimensions(frame: DiffFrame): { w: number; h: number } {
+	if ('displayWidth' in frame) {
+		// VideoFrame
+		return { w: frame.displayWidth, h: frame.displayHeight };
+	}
+	// ImageBitmap
+	return { w: frame.width, h: frame.height };
+}
+
 // ─── DiffRenderer ────────────────────────────────────────────────────────────
 
 export class DiffRenderer {
 	private gl: WebGL2RenderingContext;
+	private canvas: HTMLCanvasElement;
 	private texA: WebGLTexture;
 	private texB: WebGLTexture;
 	private programs: Record<DiffMode, WebGLProgram>;
@@ -132,11 +171,20 @@ export class DiffRenderer {
 	private flickerShowA = true;
 	private flickerRafId: number | null = null;
 	private disposed = false;
+	/** Source frame dimensions (not canvas dimensions) */
+	private frameWidth = 0;
+	private frameHeight = 0;
 
 	constructor(config: DiffRendererConfig) {
 		const { canvas, width, height } = config;
-		canvas.width = width;
-		canvas.height = height;
+		this.canvas = canvas;
+
+		// Allow 0x0 — will auto-resize from first frame in renderPair
+		if (width > 0 && height > 0) {
+			this.frameWidth = width;
+			this.frameHeight = height;
+			this.applyCanvasSize();
+		}
 
 		const gl = canvas.getContext('webgl2', {
 			alpha: false,
@@ -146,7 +194,9 @@ export class DiffRenderer {
 		if (!gl) throw new Error('WebGL2 not available');
 		this.gl = gl;
 
-		gl.viewport(0, 0, width, height);
+		if (this.frameWidth > 0 && this.frameHeight > 0) {
+			this.applyCanvasSize();
+		}
 
 		// Create textures
 		this.texA = this.createTexture();
@@ -154,6 +204,7 @@ export class DiffRenderer {
 
 		// Compile all shader programs
 		this.programs = {
+			'side-by-side': this.createProgram(VERTEX_SHADER, SIDEBYSIDE_FRAGMENT),
 			curtain: this.createProgram(VERTEX_SHADER, CURTAIN_FRAGMENT),
 			heatmap: this.createProgram(VERTEX_SHADER, HEATMAP_FRAGMENT),
 			flicker: this.createProgram(VERTEX_SHADER, FLICKER_FRAGMENT),
@@ -161,6 +212,11 @@ export class DiffRenderer {
 
 		// Cache uniform locations
 		this.uniformLocations = {
+			'side-by-side': {
+				uTexA: gl.getUniformLocation(this.programs['side-by-side'], 'uTexA'),
+				uTexB: gl.getUniformLocation(this.programs['side-by-side'], 'uTexB'),
+				uDividerWidth: gl.getUniformLocation(this.programs['side-by-side'], 'uDividerWidth'),
+			},
 			curtain: {
 				uTexA: gl.getUniformLocation(this.programs.curtain, 'uTexA'),
 				uTexB: gl.getUniformLocation(this.programs.curtain, 'uTexB'),
@@ -189,6 +245,11 @@ export class DiffRenderer {
 
 		this.currentMode = mode;
 
+		// Re-apply canvas size (side-by-side uses 2x width)
+		if (this.frameWidth > 0 && this.frameHeight > 0) {
+			this.applyCanvasSize();
+		}
+
 		// Start flicker animation if entering flicker mode
 		if (mode === 'flicker') {
 			this.startFlickerLoop();
@@ -206,6 +267,14 @@ export class DiffRenderer {
 			frameA.close();
 			frameB.close();
 			return;
+		}
+
+		// Auto-resize canvas from actual frame dimensions when config had 0x0
+		const { w, h } = getFrameDimensions(frameA);
+		if (w > 0 && h > 0 && (this.frameWidth !== w || this.frameHeight !== h)) {
+			this.frameWidth = w;
+			this.frameHeight = h;
+			this.applyCanvasSize();
 		}
 
 		const gl = this.gl;
@@ -241,6 +310,18 @@ export class DiffRenderer {
 
 	// ─── Private ─────────────────────────────────────────────────────────
 
+	/** Apply canvas dimensions based on frame size and current mode.
+	 *  Side-by-side mode doubles the canvas width to preserve aspect ratio. */
+	private applyCanvasSize(): void {
+		const cw = this.currentMode === 'side-by-side' ? this.frameWidth * 2 : this.frameWidth;
+		const ch = this.frameHeight;
+		if (this.canvas.width !== cw || this.canvas.height !== ch) {
+			this.canvas.width = cw;
+			this.canvas.height = ch;
+			this.gl.viewport(0, 0, cw, ch);
+		}
+	}
+
 	private draw(): void {
 		const gl = this.gl;
 		const mode = this.currentMode;
@@ -254,7 +335,12 @@ export class DiffRenderer {
 		gl.uniform1i(locs.uTexB!, 1);
 
 		// Mode-specific uniforms
-		if (mode === 'curtain') {
+		if (mode === 'side-by-side') {
+			// 1px divider in UV space (canvas is 2x frame width in side-by-side)
+			const canvasWidth = this.frameWidth * 2;
+			const dividerWidth = canvasWidth > 0 ? 0.5 / canvasWidth : 0.001;
+			gl.uniform1f(locs.uDividerWidth!, dividerWidth);
+		} else if (mode === 'curtain') {
 			gl.uniform1f(locs.uSliderPos!, this.sliderPosition);
 		} else if (mode === 'flicker') {
 			gl.uniform1f(locs.uShowA!, this.flickerShowA ? 1.0 : 0.0);

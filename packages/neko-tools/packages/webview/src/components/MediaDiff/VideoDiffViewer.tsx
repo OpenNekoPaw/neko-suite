@@ -99,7 +99,7 @@ interface VideoDetailsProps {
 }
 
 const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) {
-  if (!details) return null;
+  if (!details || !details.duration) return null;
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -202,6 +202,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const streamingRef = useRef<StreamingVideoDiffViewerHandle>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   // Track time from streaming frame PTS
   const handleTimeUpdate = useCallback((time: number) => {
@@ -209,16 +210,17 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
   }, []);
 
   const duration = streamConfig?.duration ?? Math.max(
-    details?.duration.current ?? 0,
-    details?.duration.previous ?? 0
+    details?.duration?.current ?? 0,
+    details?.duration?.previous ?? 0
   );
 
   // Map DiffViewMode to streaming DiffMode
   const diffMode: DiffMode =
+    viewMode === 'side-by-side' ? 'side-by-side' :
     viewMode === 'overlay' ? 'heatmap' :
     viewMode === 'onion-skin' ? 'flicker' :
     viewMode === 'slider' ? 'curtain' :
-    'curtain'; // side-by-side defaults to curtain in streaming mode
+    'side-by-side';
 
   const handleSeek = useCallback(
     (time: number) => {
@@ -241,6 +243,10 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
   );
 
   const handlePlayPause = useCallback(() => {
+    // Pre-create AudioContext during user gesture to satisfy autoplay policy
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext({ sampleRate: 48000 });
+    }
     setIsPlaying(prev => {
       const next = !prev;
       onStreamControl?.(next ? 'play' : 'pause');
@@ -251,6 +257,12 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
       return next;
     });
   }, [onStreamControl, onTimeChange, localTime, streamConfig]);
+
+  // Handle stream end (either video finishes) — auto-pause
+  const handleStreamEnd = useCallback(() => {
+    setIsPlaying(false);
+    onStreamControl?.('pause');
+  }, [onStreamControl]);
 
   // ── Dual-mode: render static frames through DiffRenderer when paused ────
   // When paused and streamConfig exists, the StreamingVideoDiffViewer stays
@@ -335,6 +347,8 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
         onStreamControl={onStreamControl}
         onTimeUpdate={handleTimeUpdate}
         onError={setStreamError}
+        audioContext={audioContextRef.current ?? undefined}
+        onStreamEnd={handleStreamEnd}
       />
       {streamError && (
         <div className="px-3 py-2 text-xs text-red-400 bg-red-900/20 border-t border-red-500/30">
