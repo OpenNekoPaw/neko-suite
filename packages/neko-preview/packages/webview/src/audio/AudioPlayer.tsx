@@ -15,6 +15,9 @@ import type {
 	PreviewInitMessage,
 	PreviewWaveformMessage,
 } from '../shared/types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('AudioPlayer');
 
 export function AudioPlayer() {
 	const { postMessage } = useVscodeReady();
@@ -132,10 +135,10 @@ export function AudioPlayer() {
 						websocketUrl: streamUrl,
 						volume,
 						onConnectionChange: (connected) => {
-							console.log('[AudioPlayer] Stream connected:', connected);
+							logger.info(`Stream connected: ${connected}`);
 						},
 						onError: (err) => {
-							console.warn('[AudioPlayer] Stream error:', err);
+							logger.warn('Stream error:', err);
 						},
 					});
 					audioClientRef.current = audioClient;

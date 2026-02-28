@@ -19,6 +19,10 @@ import { AudioPreviewProvider } from './providers/AudioPreviewProvider';
 import { PreviewService } from './services/PreviewService';
 import { StatusBarManager } from './ui/StatusBarManager';
 import type { NekoPreviewAPI } from './types/api';
+import { createVSCodeLogger } from '@neko/shared/vscode/extension';
+import { setRootLogger, getLogger } from './utils/logger';
+
+const logger = getLogger('Extension');
 
 // =============================================================================
 // Extension State
@@ -34,15 +38,18 @@ let sharedPreviewService: PreviewService | null = null;
 // =============================================================================
 
 export async function activate(context: vscode.ExtensionContext): Promise<NekoPreviewAPI> {
-	console.log('[NekoPreview] Activating extension...');
+	const rootLogger = createVSCodeLogger('Neko Preview', 'NekoPreview', context);
+	setRootLogger(rootLogger);
+
+	logger.info('Activating extension...');
 
 	// Create shared PreviewService singleton (NativeEngine + frame server)
 	sharedPreviewService = await PreviewService.tryCreate();
 	if (sharedPreviewService) {
 		context.subscriptions.push(sharedPreviewService);
-		console.log(`[NekoPreview] Shared PreviewService ready (port: ${sharedPreviewService.port})`);
+		logger.info(`Shared PreviewService ready (port: ${sharedPreviewService.port})`);
 	} else {
-		console.warn('[NekoPreview] Failed to create PreviewService — native engine unavailable');
+		logger.warn('Failed to create PreviewService — native engine unavailable');
 	}
 
 	// Create shared status bar
@@ -128,7 +135,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
 	context.subscriptions.push(videoProvider);
 	context.subscriptions.push(audioProvider);
 
-	console.log('[NekoPreview] Extension activated');
+	logger.info('Extension activated');
 
 	// Build and return public API for other extensions
 	const api: NekoPreviewAPI = {
@@ -199,7 +206,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
 // =============================================================================
 
 export function deactivate(): void {
-	console.log('[NekoPreview] Deactivating extension...');
+	logger.info('Deactivating extension...');
 
 	videoProvider?.dispose();
 	videoProvider = null;
@@ -213,5 +220,5 @@ export function deactivate(): void {
 	// sharedPreviewService is disposed via context.subscriptions
 	sharedPreviewService = null;
 
-	console.log('[NekoPreview] Extension deactivated');
+	logger.info('Extension deactivated');
 }

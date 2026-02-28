@@ -3,6 +3,9 @@ import { ToolCall } from '@/components/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import { ImagePreview, AudioPlayer, VideoPlayer } from '@/components/ChatView/MediaPreview';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('ToolCallDisplay');
 
 // Get vscode API for postMessage
 const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
@@ -279,7 +282,7 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
 
   // Handle tool confirmation (ask mode)
   const handleConfirm = useCallback((approved: boolean) => {
-    console.log('[ToolCallDisplay] handleConfirm called:', {
+    logger.info('handleConfirm called:', {
       toolCallId: toolCall.id,
       toolName: toolCall.name,
       approved,
@@ -344,7 +347,7 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
 
   // If needs confirmation, show confirmation UI
   if (needsConfirmation) {
-    console.log('[ToolCallDisplay] Rendering confirmation UI for:', {
+    logger.info('Rendering confirmation UI for:', {
       toolCallId: toolCall.id,
       toolName: toolCall.name,
       hasResult: !!toolCall.result,

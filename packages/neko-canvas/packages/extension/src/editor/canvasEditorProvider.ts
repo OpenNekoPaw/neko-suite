@@ -8,6 +8,9 @@ import * as vscode from 'vscode';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
 import type { CanvasStatusBar } from '../views/canvasStatusBar';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('CanvasEditorProvider');
 
 // NekoPreviewAPI type (matches neko-preview/src/types/api.ts)
 interface NekoPreviewAPI {
@@ -53,7 +56,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     try {
       const ext = vscode.extensions.getExtension('neko.neko-preview');
       if (!ext) {
-        console.warn('[NekoCanvas] neko-preview extension not found');
+        logger.warn('neko-preview extension not found');
         return null;
       }
       if (!ext.isActive) {
@@ -62,7 +65,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       this._previewApi = ext.exports as NekoPreviewAPI;
       return this._previewApi?.isAvailable ? this._previewApi : null;
     } catch (error) {
-      console.error('[NekoCanvas] Failed to get preview API:', error);
+      logger.error(`Failed to get preview API: ${error}`);
       return null;
     }
   }
@@ -282,7 +285,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           this.syncOutline(data);
           this.syncStatusBar(data);
         } catch (error) {
-          console.error('[NekoCanvas] Failed to save:', error);
+          logger.error(`Failed to save: ${error}`);
         }
         break;
       }
@@ -313,7 +316,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.audioPreview');
           }
         } catch (error) {
-          console.error('[NekoCanvas] Failed to open media preview:', error);
+          logger.error(`Failed to open media preview: ${error}`);
           vscode.window.showErrorMessage(`Failed to open media preview: ${assetPath}`);
         }
         break;
@@ -367,19 +370,19 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
       case 'media:probe': {
         const assetPath = message.assetPath as string;
-        console.log('[NekoCanvas] media:probe received, assetPath:', assetPath, 'nodeId:', message.nodeId);
+        logger.debug(`media:probe received, assetPath: ${assetPath}, nodeId: ${message.nodeId}`);
         if (!assetPath) break;
         try {
           const filePath = this.resolveAssetPath(assetPath, document.uri);
-          console.log('[NekoCanvas] Resolved filePath:', filePath);
+          logger.debug(`Resolved filePath: ${filePath}`);
           const api = await this.getPreviewApi();
-          console.log('[NekoCanvas] Preview API available:', !!api, 'isAvailable:', api?.isAvailable);
+          logger.debug(`Preview API available: ${!!api}, isAvailable: ${api?.isAvailable}`);
           if (!api) {
             webviewPanel.webview.postMessage({ type: 'media:probeResult', nodeId: message.nodeId, error: 'Preview engine not available' });
             break;
           }
           const mediaInfo = await api.probeMedia(filePath);
-          console.log('[NekoCanvas] Probe result:', JSON.stringify(mediaInfo));
+          logger.debug(`Probe result: ${JSON.stringify(mediaInfo)}`);
           webviewPanel.webview.postMessage({
             type: 'media:probeResult',
             nodeId: message.nodeId,
@@ -387,7 +390,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             port: api.port,
           });
         } catch (error) {
-          console.error('[NekoCanvas] Probe failed:', error);
+          logger.error(`Probe failed: ${error}`);
           webviewPanel.webview.postMessage({
             type: 'media:probeResult',
             nodeId: message.nodeId,
@@ -519,7 +522,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             });
           } catch {
             // Skip invalid URIs
-            console.warn('[NekoCanvas] Failed to resolve dropped URI:', uriStr);
+            logger.warn(`Failed to resolve dropped URI: ${uriStr}`);
           }
         }
 

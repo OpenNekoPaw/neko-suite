@@ -9,6 +9,9 @@
 import { StateCreator } from 'zustand';
 import type { ProjectData } from '../../types';
 import type { EditorElement } from '../../types/editor-types';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('Keyframe');
 import type { AnimatableProperty, AnimationKeyframe, ElementTransform } from '../../types/animation';
 import type { EffectParameterKeyframe } from '../../types/effects';
 import type {
@@ -123,7 +126,7 @@ export const createKeyframeSlice: StateCreator<
 
     const { rootKey, propKey } = parsePropertyPath(property);
     if (rootKey !== 'transform') {
-      console.warn(`Keyframes for ${rootKey} properties are not yet supported`);
+      logger.warn(`Keyframes for ${rootKey} properties are not yet supported`);
       return;
     }
 
@@ -131,7 +134,7 @@ export const createKeyframeSlice: StateCreator<
     const animTransform = element.animTransform ?? createDefaultElementTransform();
     const animProp = animTransform[propKey as keyof ElementTransform] as AnimatableProperty;
     if (!animProp || typeof animProp !== 'object' || !('baseValue' in animProp)) {
-      console.warn(`Property ${property} is not animatable`);
+      logger.warn(`Property ${property} is not animatable`);
       return;
     }
 

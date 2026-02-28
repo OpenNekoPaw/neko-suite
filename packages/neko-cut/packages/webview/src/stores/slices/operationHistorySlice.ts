@@ -9,6 +9,9 @@ import { StateCreator } from 'zustand';
 import type { ProjectData } from '../../types';
 import { applyOperation, invertOperation, type EditOperation } from '@neko/shared';
 import { syncOperationToExtension } from '../utils/extension-sync';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('OperationHistory');
 
 const MAX_OP_HISTORY_SIZE = 200;
 
@@ -68,7 +71,7 @@ export const createOperationHistorySlice: StateCreator<
       });
       syncOperationToExtension(inv);
     } catch (e) {
-      console.error('[OperationHistory] opUndo failed:', e);
+      logger.error('opUndo failed:', e);
     }
   },
 
@@ -88,7 +91,7 @@ export const createOperationHistorySlice: StateCreator<
       });
       syncOperationToExtension(op);
     } catch (e) {
-      console.error('[OperationHistory] opRedo failed:', e);
+      logger.error('opRedo failed:', e);
     }
   },
 

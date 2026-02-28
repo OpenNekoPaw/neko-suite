@@ -9,6 +9,9 @@ import { getActionsForElementType, mapElementTypeToAIType } from '../../types';
 import type { TimelineTrack as TrackType, TimelineElement, AIQuickAction } from '../../types';
 import type { EditOperation } from '@neko/shared';
 import { createMeta } from '../../stores/utils/operation-helpers';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('TimelineTrack');
 
 interface TimelineTrackProps {
   track: TrackType;
@@ -610,7 +613,7 @@ export const TimelineTrack = memo(function TimelineTrack({
             label: t('timeline.contextMenu.reverse'),
             onClick: () => {
               // TODO: Implement reverse playback
-              console.log('Reverse playback');
+              logger.info('Reverse playback');
             },
           },
         ],
@@ -647,7 +650,7 @@ export const TimelineTrack = memo(function TimelineTrack({
           onClick: async () => {
             const result = await separateVideoAudio(track.id, element.id);
             if (!result.success) {
-              console.error('Failed to separate audio:', result.error);
+              logger.error('Failed to separate audio:', result.error);
             }
           },
         });

@@ -7,6 +7,9 @@ import { PreviewControls } from './components/PreviewControls';
 import { Timeline } from './components/Timeline';
 import type { TimelineElement } from './types';
 import { useEditorStore } from './stores/editor-store';
+import { getLogger } from './utils/logger';
+
+const logger = getLogger('App');
 
 // Split ratio: Preview占比 (0.0 ~ 1.0)
 const DEFAULT_PREVIEW_RATIO = 0.5; // 默认 Preview 占 50%
@@ -90,11 +93,11 @@ function App() {
       if (captureFunc) {
         await captureFunc();
       } else {
-        console.error('[App] PreviewPanel capture function not available');
+        logger.error('PreviewPanel capture function not available');
       }
 
     } catch (error) {
-      console.error('[App] Screenshot capture failed:', error);
+      logger.error('Screenshot capture failed:', error);
     } finally {
       setIsCapturingScreenshot(false);
     }

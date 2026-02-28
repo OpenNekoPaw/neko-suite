@@ -5,6 +5,9 @@
 
 import { useState, useCallback } from 'react';
 import { useTranslation } from '@/i18n/I18nContext';
+import { getLogger } from '../../../utils/logger';
+
+const logger = getLogger('UsageIndicator');
 
 interface UsageIndicatorProps {
   /** Current context token count */
@@ -61,7 +64,7 @@ export function UsageIndicator({
     try {
       await onCompress();
     } catch (error) {
-      console.error('[UsageIndicator] Compression failed:', error);
+      logger.error('Compression failed:', error);
     }
   }, [onCompress, isCompressing]);
 

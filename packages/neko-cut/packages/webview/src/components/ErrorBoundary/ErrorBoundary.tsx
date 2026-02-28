@@ -4,6 +4,9 @@
  */
 
 import React, { Component, type ErrorInfo, type ReactNode } from 'react';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('ErrorBoundary');
 
 // =============================================================================
 // Types
@@ -38,8 +41,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     // 记录错误
-    console.error('[ErrorBoundary] Caught error:', error);
-    console.error('[ErrorBoundary] Error info:', errorInfo);
+    logger.error('Caught error:', error);
+    logger.error('Error info:', errorInfo);
 
     // 调用可选的错误回调
     this.props.onError?.(error, errorInfo);

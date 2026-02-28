@@ -10,6 +10,7 @@
 
 import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
+import { getLogger } from '../base';
 import type {
   ConfigState,
   MCPServerConfig,
@@ -29,6 +30,8 @@ import type {
 import { getPromptFileService, type PromptFileService } from './PromptFileService';
 import { getSkillFileService, type SkillFileService, type SkillScanResult } from './SkillFileService';
 import { getHookFileService, type HookFileService, type HookScanResult } from './HookFileService';
+
+const logger = getLogger('ConfigBridge');
 
 /**
  * 消息发送函数类型
@@ -224,7 +227,7 @@ export class ConfigBridge implements vscode.Disposable {
             this.cachedCommands = merged.commands;
             this.broadcastSkillsUpdate();
           } catch (err) {
-            console.error('[ConfigBridge] Failed to create skill:', err);
+            logger.error('Failed to create skill:', err);
           }
           return true;
         }
@@ -252,7 +255,7 @@ export class ConfigBridge implements vscode.Disposable {
                 skill.description
               );
             } catch (err) {
-              console.error('[ConfigBridge] Failed to create skill file:', err);
+              logger.error('Failed to create skill file:', err);
             }
           }
 
@@ -273,7 +276,7 @@ export class ConfigBridge implements vscode.Disposable {
             try {
               await this.skillFileService.deleteSkillDirectory(skillName, source);
             } catch (err) {
-              console.error('[ConfigBridge] Failed to delete skill directory:', err);
+              logger.error('Failed to delete skill directory:', err);
             }
           }
           
@@ -293,7 +296,7 @@ export class ConfigBridge implements vscode.Disposable {
           // Check if source skill has a directory path
           if (!skill.directoryPath) {
             // Fallback to createSkillFile for skills without directory
-            console.log('[ConfigBridge] Skill has no directoryPath, using createSkillFile');
+            logger.info('Skill has no directoryPath, using createSkillFile');
             try {
               await this.skillFileService.createSkillFile(
                 newName,
@@ -302,7 +305,7 @@ export class ConfigBridge implements vscode.Disposable {
                 skill.description
               );
             } catch (err) {
-              console.error('[ConfigBridge] Failed to create skill file:', err);
+              logger.error('Failed to create skill file:', err);
             }
           } else {
             // Duplicate the entire skill directory
@@ -313,7 +316,7 @@ export class ConfigBridge implements vscode.Disposable {
                 targetSource
               );
             } catch (err) {
-              console.error('[ConfigBridge] Failed to duplicate skill directory:', err);
+              logger.error('Failed to duplicate skill directory:', err);
             }
           }
 
@@ -349,7 +352,7 @@ export class ConfigBridge implements vscode.Disposable {
                 command.content
               );
             } catch (err) {
-              console.error('[ConfigBridge] Failed to create command file:', err);
+              logger.error('Failed to create command file:', err);
             }
           }
 
@@ -370,7 +373,7 @@ export class ConfigBridge implements vscode.Disposable {
             try {
               await this.skillFileService.deleteCommandFile(commandName, source);
             } catch (err) {
-              console.error('[ConfigBridge] Failed to delete command file:', err);
+              logger.error('Failed to delete command file:', err);
             }
           }
           
@@ -428,7 +431,7 @@ export class ConfigBridge implements vscode.Disposable {
             const oldFilePath = await this.resolvePromptFilePath(existingPrompt);
             if (oldFilePath) {
               await this.promptFileService.deletePromptFile(oldFilePath);
-              console.log('[ConfigBridge] Deleted old prompt file after source change:', oldFilePath);
+              logger.info('Deleted old prompt file after source change:', oldFilePath);
             }
             // Keep just the filename for creating in new location
             const pathModule = await import('path');
@@ -504,7 +507,7 @@ export class ConfigBridge implements vscode.Disposable {
           return false;
       }
     } catch (error) {
-      console.error(`[ConfigBridge] Error handling ${message.type}:`, error);
+      logger.error(`Error handling ${message.type}:`, error);
       postMessage({
         type: 'error',
         message: `Failed to ${message.type}: ${error instanceof Error ? error.message : String(error)}`,
@@ -571,7 +574,7 @@ export class ConfigBridge implements vscode.Disposable {
         models,
       });
     } catch (error) {
-      console.error(`[ConfigBridge] Error listing models for ${providerId}:`, error);
+      logger.error(`Error listing models for ${providerId}:`, error);
       postMessage({
         type: 'providerModelsResult',
         requestId,
@@ -609,7 +612,7 @@ export class ConfigBridge implements vscode.Disposable {
         error: result.error,
       });
     } catch (error) {
-      console.error(`[ConfigBridge] Error validating API key for ${providerId}${modelId ? ` model ${modelId}` : ''}:`, error);
+      logger.error(`Error validating API key for ${providerId}${modelId ? ` model ${modelId}` : ''}:`, error);
       postMessage({
         type: 'validateApiKeyResult',
         requestId,
@@ -638,7 +641,7 @@ export class ConfigBridge implements vscode.Disposable {
       try {
         postMessage(message);
       } catch (error) {
-        console.error('[ConfigBridge] Failed to broadcast state change:', error);
+        logger.error('Failed to broadcast state change:', error);
       }
     }
   }
@@ -710,7 +713,7 @@ export class ConfigBridge implements vscode.Disposable {
         }
       }
     } catch (error) {
-      console.error('[ConfigBridge] Failed to initialize prompt file sync:', error);
+      logger.error('Failed to initialize prompt file sync:', error);
     }
   }
 
@@ -742,7 +745,7 @@ export class ConfigBridge implements vscode.Disposable {
       // Update prompt config with file path
       prompt.filePath = result.filePath;
     } catch (error) {
-      console.error('[ConfigBridge] Failed to sync prompt to file:', error);
+      logger.error('Failed to sync prompt to file:', error);
     }
   }
 
@@ -815,7 +818,7 @@ export class ConfigBridge implements vscode.Disposable {
       this.cachedSkills = merged.skills;
       this.cachedCommands = merged.commands;
     } catch (error) {
-      console.error('[ConfigBridge] Failed to initialize skill file sync:', error);
+      logger.error('Failed to initialize skill file sync:', error);
     }
   }
 
@@ -842,7 +845,7 @@ export class ConfigBridge implements vscode.Disposable {
       try {
         postMessage(message);
       } catch (error) {
-        console.error('[ConfigBridge] Failed to broadcast skills change:', error);
+        logger.error('Failed to broadcast skills change:', error);
       }
     }
   }
@@ -875,7 +878,7 @@ export class ConfigBridge implements vscode.Disposable {
         this.skillEnabledState = new Map(Object.entries(stored));
       }
     } catch (error) {
-      console.error('[ConfigBridge] Failed to load skill enabled state:', error);
+      logger.error('Failed to load skill enabled state:', error);
     }
   }
 
@@ -892,7 +895,7 @@ export class ConfigBridge implements vscode.Disposable {
       }
       this.context.globalState.update(SKILL_ENABLED_STATE_KEY, obj);
     } catch (error) {
-      console.error('[ConfigBridge] Failed to save skill enabled state:', error);
+      logger.error('Failed to save skill enabled state:', error);
     }
   }
 
@@ -938,7 +941,7 @@ export class ConfigBridge implements vscode.Disposable {
       try {
         postMessage(message);
       } catch (error) {
-        console.error('[ConfigBridge] Failed to broadcast skills update:', error);
+        logger.error('Failed to broadcast skills update:', error);
       }
     }
   }
@@ -962,7 +965,7 @@ export class ConfigBridge implements vscode.Disposable {
       // Convert to configured format and cache
       this.cachedHooks = this.hookFileService.toConfigured(scanResult);
     } catch (error) {
-      console.error('[ConfigBridge] Failed to initialize hook file sync:', error);
+      logger.error('Failed to initialize hook file sync:', error);
     }
   }
 
@@ -983,7 +986,7 @@ export class ConfigBridge implements vscode.Disposable {
       try {
         postMessage(message);
       } catch (error) {
-        console.error('[ConfigBridge] Failed to broadcast hooks change:', error);
+        logger.error('Failed to broadcast hooks change:', error);
       }
     }
   }
@@ -1035,7 +1038,7 @@ export class ConfigBridge implements vscode.Disposable {
         this.toolSkillEnabledState = new Map(Object.entries(stored));
       }
     } catch (error) {
-      console.error('[ConfigBridge] Failed to load ToolSkill enabled state:', error);
+      logger.error('Failed to load ToolSkill enabled state:', error);
     }
   }
 
@@ -1052,7 +1055,7 @@ export class ConfigBridge implements vscode.Disposable {
       }
       this.context.globalState.update(ConfigBridge.TOOL_SKILL_ENABLED_STATE_KEY, obj);
     } catch (error) {
-      console.error('[ConfigBridge] Failed to save ToolSkill enabled state:', error);
+      logger.error('Failed to save ToolSkill enabled state:', error);
     }
   }
 
@@ -1069,7 +1072,7 @@ export class ConfigBridge implements vscode.Disposable {
       try {
         postMessage(message);
       } catch (error) {
-        console.error('[ConfigBridge] Failed to broadcast ToolSkills update:', error);
+        logger.error('Failed to broadcast ToolSkills update:', error);
       }
     }
   }

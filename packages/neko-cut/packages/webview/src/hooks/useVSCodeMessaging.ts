@@ -1,6 +1,9 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useEditorStore } from '../stores/editor-store';
 import type { ProjectData } from '../types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('useVSCodeMessaging');
 import { DEFAULT_IMAGE_DURATION, DEFAULT_VIDEO_DURATION } from '../constants';
 import { getMediaInfoService } from '../services';
 import { getVSCodeAPI, postMessage } from '../utils/vscodeApi';
@@ -131,10 +134,10 @@ export function useVSCodeMessaging() {
       // Only save if content has changed
       if (content !== lastSavedRef.current) {
         lastSavedRef.current = content;
-        console.log('[useVSCodeMessaging] Manual save triggered, tracks:', projectRef.current.tracks?.length);
+        logger.info('Manual save triggered, tracks:', projectRef.current.tracks?.length);
         sendMessage({ type: 'save', content: projectRef.current });
       } else {
-        console.log('[useVSCodeMessaging] No changes to save');
+        logger.info('No changes to save');
       }
     }
   }, [sendMessage]);
@@ -215,7 +218,7 @@ export function useVSCodeMessaging() {
                 try {
                   duration = await mediaInfoService.getDuration(message.path);
                 } catch (e) {
-                  console.warn('[useVSCodeMessaging] Failed to get media duration:', e);
+                  logger.warn('Failed to get media duration:', e);
                 }
               }
 
@@ -231,17 +234,17 @@ export function useVSCodeMessaging() {
               // Pre-request the webview URI for this file
               sendMessage({ type: 'requestFile', path: message.path });
 
-              console.log(`Added ${message.mediaType} file to timeline:`, message.path);
+              logger.info(`Added ${message.mediaType} file to timeline: ${message.path}`);
             };
             addMediaToStore().catch(err => {
-              console.error('[useVSCodeMessaging] Failed to add media file to timeline:', err);
+              logger.error('Failed to add media file to timeline:', err);
             });
           }
           break;
 
         case 'saved':
           // Confirmation that file was saved
-          console.log('Project saved successfully');
+          logger.info('Project saved successfully');
           break;
 
         case 'externalChange':
@@ -288,7 +291,7 @@ export function useVSCodeMessaging() {
                     }
                   }));
 
-                  console.log(`Jumped to element at ${element.startTime}s`);
+                  logger.info(`Jumped to element at ${element.startTime}s`);
                 }
               }
             }
@@ -296,7 +299,7 @@ export function useVSCodeMessaging() {
           break;
 
         case 'error':
-          console.error('Error from extension:', message.message);
+          logger.error('Error from extension:', message.message);
           break;
 
         case 'exportProgress':
@@ -406,7 +409,7 @@ export function useVSCodeMessaging() {
             message.type !== 'fileRangeResult' &&
             message.type !== 'audioDecodeResult'
           ) {
-            console.log('Unknown message type:', message.type);
+            logger.info('Unknown message type:', message.type);
           }
       }
     };
@@ -468,7 +471,7 @@ export function useVSCodeMessaging() {
     if (vscode) {
       vscode.postMessage({ type: 'writeExportChunk', data: buffer });
     } else {
-      console.log('Would send binary chunk:', data.byteLength, 'bytes');
+      logger.info(`Would send binary chunk: ${data.byteLength} bytes`);
     }
   }, []);
 

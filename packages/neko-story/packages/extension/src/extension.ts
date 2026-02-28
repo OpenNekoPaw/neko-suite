@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { createVSCodeLogger } from '@neko/shared/vscode/extension';
 import { FountainDocumentSymbolProvider } from './providers/documentSymbol';
 import { FountainCompletionProvider } from './providers/completion';
 import { FountainDefinitionProvider, FountainReferenceProvider } from './providers/definition';
@@ -8,11 +9,16 @@ import { FountainDocumentLinkProvider } from './providers/documentLink';
 import { PreviewPanel } from './panels/PreviewPanel';
 import { getStoryTemplate } from './templates/storyTemplate';
 import { WorkspaceIndexService } from './services/WorkspaceIndexService';
+import { setRootLogger, getRootLogger } from './utils/logger';
 
 const FOUNTAIN_SELECTOR: vscode.DocumentSelector = { language: 'nekostory' };
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('Neko Story extension activated');
+  const rootLogger = createVSCodeLogger('Neko Story', 'NekoStory', context);
+  setRootLogger(rootLogger);
+  const logger = getRootLogger();
+
+  logger.info('Extension activated');
 
   // Create shared workspace index service
   const indexService = new WorkspaceIndexService();

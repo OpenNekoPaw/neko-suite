@@ -32,6 +32,9 @@ import type {
 } from '@neko/shared';
 import { MAX_CONCURRENT_REQUESTS, MEDIA_REQUEST_TIMEOUT } from '@neko/shared';
 import { getVSCodeAPI } from '../utils/vscodeApi';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('MediaRequestProxy');
 
 // =============================================================================
 // MediaRequestProxy Interface
@@ -383,13 +386,13 @@ class MediaRequestProxy implements IMediaRequestProxy {
 				// Skip corrupted frame, continue with others
 				skippedCount++;
 				if (skippedCount <= 3) {
-					console.warn(`[MediaRequestProxy] Skipped corrupted frame at ${frame.time.toFixed(2)}s:`, error);
+					logger.warn(`Skipped corrupted frame at ${frame.time.toFixed(2)}s:`, error);
 				}
 			}
 		}
 
 		if (skippedCount > 0) {
-			console.warn(`[MediaRequestProxy] Skipped ${skippedCount}/${response.payload.frames.length} corrupted frames`);
+			logger.warn(`Skipped ${skippedCount}/${response.payload.frames.length} corrupted frames`);
 		}
 
 		return results;
@@ -845,7 +848,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
 		if (error) {
 			// 超时属于需要追踪的异常：输出队列状态，便于定位瓶颈
 			if (error.message.startsWith('Request timeout after')) {
-				console.warn('[MediaRequestProxy] Request timeout:', {
+				logger.warn('Request timeout:', {
 					requestId,
 					type: pending.requestType,
 					timeoutMs: pending.timeoutMs,
@@ -994,7 +997,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
 		try {
 			return await createImageBitmap(blob);
 		} catch (error) {
-			console.error(`[MediaRequestProxy] createImageBitmap failed: bufferSize=${buffer.byteLength}, mimeType=${mimeType}`, error);
+			logger.error(`createImageBitmap failed: bufferSize=${buffer.byteLength}, mimeType=${mimeType}`, error);
 			throw error;
 		}
 	}

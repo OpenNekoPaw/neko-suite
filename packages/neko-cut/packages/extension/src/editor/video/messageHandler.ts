@@ -10,6 +10,9 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { VideoEditorModel } from './videoEditorModel';
 import { MessageFromWebview, ProjectData, ContextMenuItem, applyOperation, type EditOperation } from '@neko/shared';
+import { getLogger } from '../../base';
+
+const logger = getLogger('MessageHandler');
 
 /**
  * Handles messages between Extension Host and WebView
@@ -99,7 +102,7 @@ export class MessageHandler {
 				break;
 
 			default:
-				console.warn('Unknown message type:', (message as { type: string }).type);
+				logger.warn(`Unknown message type: ${(message as { type: string }).type}`);
 		}
 	}
 
@@ -137,7 +140,7 @@ export class MessageHandler {
 			const newData = applyOperation(currentData as any, operation) as ProjectData;
 			this.model.applyIncrementalUpdate(newData);
 		} catch (e) {
-			console.error('[MessageHandler] Incremental sync failed:', e);
+			logger.error('Incremental sync failed', e);
 			// Non-fatal: full save on Cmd+S will resync
 		}
 	}
@@ -159,7 +162,7 @@ export class MessageHandler {
 				this.sendError('Failed to save project');
 			}
 		} catch (error) {
-			console.error('Save error:', error);
+			logger.error('Save error', error);
 			this.sendError(`Save error: ${error}`);
 		}
 	}
@@ -231,7 +234,7 @@ export class MessageHandler {
 			try {
 				await vscode.workspace.fs.stat(fileUri);
 			} catch {
-				console.error('[MessageHandler] File not found:', absolutePath);
+				logger.error(`File not found: ${absolutePath}`);
 				this.sendError(`File not found: ${filePath}`);
 				return;
 			}
@@ -244,7 +247,7 @@ export class MessageHandler {
 				uri: webviewUri.toString(),
 			});
 		} catch (error) {
-			console.error('File request error:', error);
+			logger.error('File request error', error);
 			this.sendError(`Failed to load file: ${filePath}`);
 		}
 	}
@@ -274,7 +277,7 @@ export class MessageHandler {
 				mediaType,
 			});
 		} catch (error) {
-			console.error('Add media error:', error);
+			logger.error('Add media error', error);
 			this.sendError(`Failed to add media: ${relativePath}`);
 		}
 	}
@@ -305,7 +308,7 @@ export class MessageHandler {
 				selectedId: selectedItem?.id,
 			});
 		} catch (error) {
-			console.error('[MessageHandler] Context menu error:', error);
+			logger.error('Context menu error', error);
 			this.webview.postMessage({
 				type: 'contextMenuResult',
 				menuId,
@@ -345,7 +348,7 @@ export class MessageHandler {
 			this._exportWriteStream = fs.createWriteStream(this._exportFilePath);
 
 			this._exportWriteStream.on('error', error => {
-				console.error('[MessageHandler] Write stream error:', error);
+				logger.error('Write stream error', error);
 				this.webview.postMessage({
 					type: 'exportStreamError',
 					error: error.message,
@@ -358,7 +361,7 @@ export class MessageHandler {
 				path: saveUri.fsPath,
 			});
 		} catch (error) {
-			console.error('[MessageHandler] Show export dialog error:', error);
+			logger.error('Show export dialog error', error);
 			this.webview.postMessage({
 				type: 'exportDialogResult',
 				success: false,
@@ -372,7 +375,7 @@ export class MessageHandler {
 	 */
 	private async handleWriteExportChunk(data: ArrayBuffer): Promise<void> {
 		if (!this._exportWriteStream || !this._exportFilePath) {
-			console.error('[MessageHandler] No export stream available');
+			logger.error('No export stream available');
 			this.webview.postMessage({
 				type: 'exportChunkResult',
 				success: false,
@@ -396,7 +399,7 @@ export class MessageHandler {
 				success: true,
 			});
 		} catch (error) {
-			console.error('[MessageHandler] Write chunk error:', error);
+			logger.error('Write chunk error:', error);
 			this.webview.postMessage({
 				type: 'exportChunkResult',
 				success: false,
@@ -452,7 +455,7 @@ export class MessageHandler {
 				}
 			}
 		} catch (err) {
-			console.error('[MessageHandler] Finalize export error:', err);
+			logger.error('Finalize export error:', err);
 			this.webview.postMessage({
 				type: 'exportComplete',
 				success: false,
@@ -485,7 +488,7 @@ export class MessageHandler {
 				type: 'exportCancelled',
 			});
 		} catch (error) {
-			console.error('[MessageHandler] Cancel export error:', error);
+			logger.error('Cancel export error:', error);
 		}
 	}
 
@@ -575,7 +578,7 @@ export class MessageHandler {
 				vscode.env.openExternal(vscode.Uri.file(path.dirname(saveUri.fsPath)));
 			}
 		} catch (error) {
-			console.error('[MessageHandler] Save blob error:', error);
+			logger.error('Save blob error:', error);
 			this.webview.postMessage({
 				type: 'blobSaveResult',
 				success: false,
@@ -621,7 +624,7 @@ export class MessageHandler {
 				path: saveUri.fsPath,
 			});
 		} catch (error) {
-			console.error('[MessageHandler] Select export path error:', error);
+			logger.error('Select export path error:', error);
 			this.webview.postMessage({
 				type: 'exportPathSelected',
 				success: false,
@@ -685,7 +688,7 @@ export class MessageHandler {
 				vscode.env.openExternal(vscode.Uri.file(path.dirname(filePath)));
 			}
 		} catch (error) {
-			console.error('[MessageHandler] Save blob to path error:', error);
+			logger.error('Save blob to path error:', error);
 			this.webview.postMessage({
 				type: 'blobSaveResult',
 				success: false,
@@ -740,7 +743,7 @@ export class MessageHandler {
 			// Convert to base64 for transfer
 			const base64Data = buffer.toString('base64');
 
-			console.log(`[MessageHandler] readFileRange: path=${filePath}, requested=${start}-${end}, actual=${actualStart}-${actualEnd}, size=${length}, fileSize=${fileSize}`);
+			logger.debug(`readFileRange: path=${filePath}, requested=${start}-${end}, actual=${actualStart}-${actualEnd}, size=${length}, fileSize=${fileSize}`);
 
 			this.webview.postMessage({
 				type: 'fileRangeResult',
@@ -752,7 +755,7 @@ export class MessageHandler {
 				fileSize,
 			});
 		} catch (error) {
-			console.error('[MessageHandler] File range read error:', error);
+			logger.error('File range read error:', error);
 			this.webview.postMessage({
 				type: 'fileRangeResult',
 				requestId,

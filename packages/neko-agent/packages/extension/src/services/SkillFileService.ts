@@ -17,6 +17,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { getLogger } from '../base';
 import type {
   Skill,
   SlashCommand,
@@ -27,6 +28,8 @@ import type {
 } from '@neko/shared';
 import { SkillLoader, createNodeSkillLoader } from '@neko/agent';
 import { builtinSkills, builtinCommands } from '@neko/agent';
+
+const logger = getLogger('SkillFileService');
 
 // =============================================================================
 // Types
@@ -132,7 +135,7 @@ export class SkillFileService implements vscode.Disposable {
     } catch (err) {
       // Ignore if already exists
       if ((err as NodeJS.ErrnoException).code !== 'EEXIST') {
-        console.warn('[SkillFileService] Failed to create directory:', dirPath, err);
+        logger.warn(`Failed to create directory: ${dirPath}`, err);
       }
     }
   }
@@ -214,7 +217,7 @@ export class SkillFileService implements vscode.Disposable {
     try {
       return await this.skillLoader.loadFromDirectory(dirPath, source);
     } catch (err) {
-      console.warn('[SkillFileService] Failed to load from directory:', dirPath, err);
+      logger.warn(`Failed to load from directory: ${dirPath}`, err);
       return {
         skills: [],
         commands: [],
@@ -272,7 +275,7 @@ export class SkillFileService implements vscode.Disposable {
     try {
       await fs.access(filePath);
       // File exists, return path without overwriting
-      console.log('[SkillFileService] Skill file already exists:', filePath);
+      logger.info('Skill file already exists:', filePath);
       return filePath;
     } catch {
       // File doesn't exist, create it
@@ -321,7 +324,7 @@ Add your skill instructions here.
     }
 
     await fs.writeFile(filePath, fileContent, 'utf-8');
-    console.log('[SkillFileService] Created skill file:', filePath);
+    logger.info('Created skill file:', filePath);
 
     return filePath;
   }
@@ -383,7 +386,7 @@ Add your skill instructions here.
       // SKILL.md might not exist or have different format, ignore
     }
 
-    console.log('[SkillFileService] Duplicated skill directory:', sourceDir, '->', newSkillDir);
+    logger.info(`Duplicated skill directory: ${sourceDir} -> ${newSkillDir}`);
     return newSkillDir;
   }
 
@@ -403,7 +406,7 @@ Add your skill instructions here.
       : this.getWorkspaceSkillsDir();
 
     if (!basePath) {
-      console.warn('[SkillFileService] No workspace folder open for project skills');
+      logger.warn('No workspace folder open for project skills');
       return false;
     }
 
@@ -413,17 +416,17 @@ Add your skill instructions here.
     try {
       await fs.access(skillDir);
     } catch {
-      console.warn('[SkillFileService] Skill directory does not exist:', skillDir);
+      logger.warn('Skill directory does not exist:', skillDir);
       return false;
     }
 
     // Recursively delete the directory
     try {
       await fs.rm(skillDir, { recursive: true, force: true });
-      console.log('[SkillFileService] Deleted skill directory:', skillDir);
+      logger.info('Deleted skill directory:', skillDir);
       return true;
     } catch (err) {
-      console.error('[SkillFileService] Failed to delete skill directory:', skillDir, err);
+      logger.error(`Failed to delete skill directory: ${skillDir}`, err);
       return false;
     }
   }
@@ -484,7 +487,7 @@ Add your skill instructions here.
     try {
       await fs.access(filePath);
       // File exists, return path without overwriting
-      console.log('[SkillFileService] Command file already exists:', filePath);
+      logger.info('Command file already exists:', filePath);
       return filePath;
     } catch {
       // File doesn't exist, create it
@@ -505,7 +508,7 @@ Add your command instructions here.
 `;
 
     await fs.writeFile(filePath, defaultContent, 'utf-8');
-    console.log('[SkillFileService] Created command file:', filePath);
+    logger.info('Created command file:', filePath);
 
     return filePath;
   }
@@ -526,7 +529,7 @@ Add your command instructions here.
       : this.getWorkspaceCommandsDir();
 
     if (!basePath) {
-      console.warn('[SkillFileService] No workspace folder open for project commands');
+      logger.warn('No workspace folder open for project commands');
       return false;
     }
 
@@ -536,17 +539,17 @@ Add your command instructions here.
     try {
       await fs.access(filePath);
     } catch {
-      console.warn('[SkillFileService] Command file does not exist:', filePath);
+      logger.warn('Command file does not exist:', filePath);
       return false;
     }
 
     // Delete the file
     try {
       await fs.unlink(filePath);
-      console.log('[SkillFileService] Deleted command file:', filePath);
+      logger.info('Deleted command file:', filePath);
       return true;
     } catch (err) {
-      console.error('[SkillFileService] Failed to delete command file:', filePath, err);
+      logger.error(`Failed to delete command file: ${filePath}`, err);
       return false;
     }
   }
@@ -661,7 +664,7 @@ Add your command instructions here.
 
       this.fileWatchers.push(watcher);
     } catch (err) {
-      console.warn('[SkillFileService] Failed to watch directory:', dirPath, err);
+      logger.warn(`Failed to watch directory: ${dirPath}`, err);
     }
   }
 

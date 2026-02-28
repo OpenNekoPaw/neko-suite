@@ -7,7 +7,8 @@
  * - Bootstrap services for MCP, Platform, Workflow
  */
 import * as vscode from 'vscode';
-import { ServiceCollection, setGlobalServices } from './base';
+import { ServiceCollection, setGlobalServices, setRootLogger, getRootLogger } from './base';
+import { createVSCodeLogger } from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { VideoEditorProvider } from './editor/video/videoEditorProvider';
 import { PropertyPanelViewProvider } from './propertyPanel/propertyPanelViewProvider';
@@ -17,7 +18,11 @@ import { registerCommands } from './commands';
  * Activate the extension
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  console.log('[NekoCut] Activating extension...');
+  // Initialize logger → VSCode OutputChannel + Console
+  const logger = createVSCodeLogger('Neko Cut', 'NekoCut', context);
+  setRootLogger(logger);
+
+  logger.info('Activating extension...');
 
   // Initialize service collection
   const services = new ServiceCollection();
@@ -80,7 +85,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
         }
       } catch (error) {
-        console.error('[NekoCut] Failed to open media preview:', error);
+        getRootLogger().error('Failed to open media preview', error);
       }
     })
   );
@@ -121,12 +126,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     videoEditorProvider.handlePropertyPanelMessage(message);
   });
 
-  console.log('[NekoCut] Extension activated');
+  getRootLogger().info('Extension activated');
 }
 
 /**
  * Deactivate the extension
  */
 export function deactivate(): void {
-  console.log('[NekoCut] Deactivating extension...');
+  getRootLogger().info('Deactivating extension...');
 }

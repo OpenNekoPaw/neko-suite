@@ -5,6 +5,11 @@
  * and resource exhaustion.
  */
 
+import { ConsoleLogger } from '../logger/console-logger';
+import { LogLevel } from '../logger/types';
+
+const logger = new ConsoleLogger('ConcurrencyPool', LogLevel.Debug);
+
 /**
  * Concurrency pool options
  */
@@ -168,7 +173,7 @@ export class ConcurrencyPool {
    */
   release(): void {
     if (this.running <= 0) {
-      console.warn('[ConcurrencyPool] Release called but no running tasks');
+      logger.warn('Release called but no running tasks');
       return;
     }
 

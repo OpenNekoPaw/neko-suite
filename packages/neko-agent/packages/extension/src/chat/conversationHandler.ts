@@ -4,12 +4,15 @@
  */
 
 import * as vscode from 'vscode';
+import { getLogger } from '../base';
 import {
   ConversationManager,
   type ConversationMessage,
   type ConversationStorage,
   type ContentBlock,
 } from './conversationManager';
+
+const logger = getLogger('ConversationHandler');
 
 /**
  * Check if a string looks like a local file path
@@ -41,7 +44,7 @@ function toWebviewUri(webview: vscode.Webview, filePath: string): string {
   try {
     return webview.asWebviewUri(vscode.Uri.file(filePath)).toString();
   } catch {
-    console.warn('[Neko Suite] Failed to convert path to webview URI:', filePath);
+    logger.warn(`Failed to convert path to webview URI: ${filePath}`);
     return filePath;
   }
 }
@@ -207,7 +210,7 @@ export class ConversationHandler {
     // Clean up empty conversations from previous sessions
     const cleaned = this._conversationManager.cleanupEmpty();
     if (cleaned > 0) {
-      console.log(`[Neko Suite] Cleaned up ${cleaned} empty conversation(s)`);
+      logger.info(`Cleaned up ${cleaned} empty conversation(s)`);
     }
   }
 

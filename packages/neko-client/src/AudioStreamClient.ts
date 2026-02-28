@@ -12,6 +12,10 @@
  * PTS and duration are in microseconds.
  */
 
+import { getLogger } from './utils/logger';
+
+const logger = getLogger('Audio');
+
 const PCM_HEADER_SIZE = 8 + 8 + 4 + 2; // pts(8) + duration(8) + sampleRate(4) + channels(2) = 22 bytes
 
 function parsePcmPacket(data: ArrayBuffer): {
@@ -150,7 +154,7 @@ export class AudioStreamClient {
 	async connect(existingAudioCtx?: AudioContext): Promise<void> {
 		if (this.disposed) return;
 
-		console.log('[AudioStreamClient] Connecting to:', this.config.websocketUrl);
+		logger.info(`Connecting to: ${this.config.websocketUrl}`);
 
 		if (existingAudioCtx) {
 			this.audioCtx = existingAudioCtx;
@@ -167,7 +171,7 @@ export class AudioStreamClient {
 			try {
 				await this.audioCtx.resume();
 			} catch (e) {
-				console.warn('[AudioStreamClient] AudioContext resume failed:', e);
+				logger.warn('AudioContext resume failed', e);
 			}
 		}
 
@@ -242,10 +246,8 @@ export class AudioStreamClient {
 				this.gainNode.gain.linearRampToValueAtTime(this.config.volume, now + this.config.fadeInDuration);
 			}
 
-			console.log(
-				'[AudioStreamClient] Prebuffer complete:',
-				'accumulated=', this.prebufferAccum.toFixed(3), 's',
-				'packets=', this.prebufferQueue.length,
+			logger.info(
+				`Prebuffer complete: accumulated=${this.prebufferAccum.toFixed(3)}s packets=${this.prebufferQueue.length}`,
 			);
 
 			// Schedule all queued buffers
@@ -277,10 +279,8 @@ export class AudioStreamClient {
 			if (absDrift >= AudioStreamClient.DRIFT_MIN && absDrift <= AudioStreamClient.DRIFT_MAX) {
 				const correction = drift * AudioStreamClient.DRIFT_CORRECTION;
 				this.ptsOffset -= correction;
-				console.log(
-					'[AudioStreamClient] Drift calibration:',
-					'drift=', (drift * 1000).toFixed(2), 'ms',
-					'correction=', (correction * 1000).toFixed(2), 'ms',
+				logger.info(
+					`Drift calibration: drift=${(drift * 1000).toFixed(2)}ms correction=${(correction * 1000).toFixed(2)}ms`,
 				);
 			}
 		}
@@ -477,7 +477,7 @@ export class AudioStreamClient {
 				this.isConnected = true;
 				this.reconnectAttempts = 0;
 				this.config.onConnectionChange(true);
-				console.log('[AudioStreamClient] WebSocket connected');
+				logger.info('WebSocket connected');
 
 				// Resume AudioContext if suspended (browser autoplay policy)
 				if (this.audioCtx?.state === 'suspended') {
@@ -498,10 +498,10 @@ export class AudioStreamClient {
 			};
 
 			this.ws.onerror = (event) => {
-				console.error('[AudioStreamClient] WebSocket error:', event);
+				logger.error('WebSocket error', event);
 			};
 		} catch (error) {
-			console.error('[AudioStreamClient] WebSocket setup failed:', error);
+			logger.error('WebSocket setup failed', error);
 			this.tryReconnect();
 		}
 	}
@@ -522,13 +522,8 @@ export class AudioStreamClient {
 
 		this.packetCount++;
 		if (this.packetCount <= 3 || this.packetCount % 200 === 0) {
-			console.log(
-				'[AudioStreamClient] Packet #' + this.packetCount,
-				'pts=', packet.pts,
-				'dur=', packet.duration,
-				'sr=', packet.sampleRate,
-				'ch=', packet.channels,
-				'pcmBytes=', packet.pcmData.byteLength,
+			logger.info(
+				`Packet #${this.packetCount} pts=${packet.pts} dur=${packet.duration} sr=${packet.sampleRate} ch=${packet.channels} pcmBytes=${packet.pcmData.byteLength}`,
 			);
 		}
 

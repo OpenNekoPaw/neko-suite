@@ -4,6 +4,10 @@
  * and facilitates communication with other editors (video editor)
  */
 
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('CanvasMessaging');
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -111,7 +115,7 @@ export class CanvasMessaging {
    */
   send<T>(type: MessageType, data?: T): void {
     if (!this.vscode) {
-      console.warn('[CanvasMessaging] VSCode API not available');
+      logger.warn('VSCode API not available');
       return;
     }
 

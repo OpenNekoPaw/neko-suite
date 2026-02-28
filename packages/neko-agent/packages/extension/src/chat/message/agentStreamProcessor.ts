@@ -16,6 +16,9 @@ import * as path from 'path';
 import type { Platform } from '@neko/platform';
 import type { AgentEvent } from '@neko/agent';
 import type { ConversationHandler } from '../conversationHandler';
+import { getLogger } from '../../base';
+
+const logger = getLogger('AgentStreamProcessor');
 
 /**
  * Plan step for plan persistence
@@ -427,7 +430,7 @@ export class AgentStreamProcessor {
       try {
         return webview.asWebviewUri(vscode.Uri.file(filePath)).toString();
       } catch {
-        console.warn('[Neko Suite] Failed to convert path to webview URI:', filePath);
+        logger.warn('Failed to convert path to webview URI:', filePath);
         return filePath;
       }
     };
@@ -491,7 +494,7 @@ export class AgentStreamProcessor {
     try {
       const workspaceFolders = vscode.workspace.workspaceFolders;
       if (!workspaceFolders || workspaceFolders.length === 0) {
-        console.warn('[Neko Suite] No workspace folder, cannot save outputs locally');
+        logger.warn('No workspace folder, cannot save outputs locally');
         return savedPaths;
       }
 
@@ -522,7 +525,7 @@ export class AgentStreamProcessor {
         try {
           const response = await fetch(output.url);
           if (!response.ok) {
-            console.error('[Neko Suite] Download failed:', response.status, response.statusText);
+            logger.error('Download failed:', { status: response.status, statusText: response.statusText });
             continue;
           }
 
@@ -530,12 +533,12 @@ export class AgentStreamProcessor {
           await fs.promises.writeFile(localPath, buffer);
           savedPaths.push(localPath);
         } catch (downloadError) {
-          console.error('[Neko Suite] Failed to download/save output:', downloadError);
+          logger.error('Failed to download/save output:', downloadError);
           savedPaths.push(output.url);
         }
       }
     } catch (error) {
-      console.error('[Neko Suite] Failed to save outputs locally:', error);
+      logger.error('Failed to save outputs locally:', error);
     }
 
     return savedPaths;
@@ -622,7 +625,7 @@ export class AgentStreamProcessor {
         this.deps.conversations.manager.updateMessages(conversationId, updatedMessages);
       }
     } catch (error) {
-      console.error('[Neko Suite] Failed to update tool result with URLs:', error);
+      logger.error('Failed to update tool result with URLs:', error);
     }
   }
 }

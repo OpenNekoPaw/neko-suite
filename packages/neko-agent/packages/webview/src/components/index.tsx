@@ -30,6 +30,9 @@ import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/hooks/useKeyboardShort
 
 // Import message handler
 import { useMessageHandler, setExternalMessageContext } from '@/handlers';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('AIAssistant');
 
 // Extended skill confirm request with conversation binding
 interface BoundSkillConfirmRequest extends SkillConfirmRequest {
@@ -307,7 +310,7 @@ export function AIAssistant() {
               forceUpdate(n => n + 1);
             }
           }
-          console.error('[AIAssistant] Compression failed:', message.error);
+          logger.error('Compression failed:', message.error);
           break;
       }
     };

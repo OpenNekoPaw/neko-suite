@@ -12,6 +12,10 @@
  *   type = 0x03: Flush segment (final partial segment)
  */
 
+import { getLogger } from './utils/logger';
+
+const logger = getLogger('FMP4');
+
 // =============================================================================
 // Constants
 // =============================================================================
@@ -114,7 +118,7 @@ export class FMP4StreamClient {
 			this.mimeType = MIME_TYPE;
 		} else if (MediaSource.isTypeSupported(MIME_TYPE_VIDEO_ONLY)) {
 			this.mimeType = MIME_TYPE_VIDEO_ONLY;
-			console.warn('[FMP4] Opus in MP4 not supported, falling back to video-only');
+			logger.warn('Opus in MP4 not supported, falling back to video-only');
 		} else {
 			this.config.onError(new Error(`MSE does not support: ${MIME_TYPE}`));
 			return;
@@ -180,7 +184,7 @@ export class FMP4StreamClient {
 
 		this.mediaSource.addEventListener('sourceopen', () => {
 			this.stats.isSourceOpen = true;
-			console.log('[FMP4] MediaSource opened');
+			logger.info('MediaSource opened');
 
 			try {
 				this.sourceBuffer = this.mediaSource!.addSourceBuffer(this.mimeType);
@@ -192,20 +196,20 @@ export class FMP4StreamClient {
 				});
 
 				this.sourceBuffer.addEventListener('error', (e) => {
-					console.error('[FMP4] SourceBuffer error:', e);
+					logger.error('SourceBuffer error', e);
 					this.config.onError(new Error('SourceBuffer error'));
 				});
 
 				// Flush any segments that arrived before sourceopen
 				this.flushPendingSegments();
 			} catch (e) {
-				console.error('[FMP4] Failed to create SourceBuffer:', e);
+				logger.error('Failed to create SourceBuffer', e);
 				this.config.onError(e instanceof Error ? e : new Error(String(e)));
 			}
 		});
 
 		this.mediaSource.addEventListener('sourceended', () => {
-			console.log('[FMP4] MediaSource ended');
+			logger.info('MediaSource ended');
 		});
 
 		this.mediaSource.addEventListener('sourceclose', () => {
@@ -236,7 +240,7 @@ export class FMP4StreamClient {
 				this.evictBuffer();
 				this.pendingSegments.unshift(data);
 			} else {
-				console.error('[FMP4] appendBuffer error:', e);
+				logger.error('appendBuffer error', e);
 			}
 		}
 	}
@@ -310,7 +314,7 @@ export class FMP4StreamClient {
 				this.stats.isConnected = true;
 				this.reconnectAttempts = 0;
 				this.config.onConnectionChange(true);
-				console.log('[FMP4] WebSocket connected');
+				logger.info('WebSocket connected');
 			};
 
 			this.ws.onmessage = (event) => {
@@ -326,10 +330,10 @@ export class FMP4StreamClient {
 			};
 
 			this.ws.onerror = (event) => {
-				console.error('[FMP4] WebSocket error:', event);
+				logger.error('WebSocket error', event);
 			};
 		} catch (error) {
-			console.error('[FMP4] WebSocket setup failed:', error);
+			logger.error('WebSocket setup failed', error);
 			this.tryReconnect();
 		}
 	}
@@ -345,7 +349,7 @@ export class FMP4StreamClient {
 
 		switch (msgType) {
 			case MSG_TYPE_INIT:
-				console.log(`[FMP4] Init segment received: ${payload.byteLength} bytes`);
+				logger.info(`Init segment received: ${payload.byteLength} bytes`);
 				this.stats.initReceived = true;
 				this.appendSegment(payload);
 				// Auto-play after init
@@ -354,7 +358,7 @@ export class FMP4StreamClient {
 
 			case MSG_TYPE_SEGMENT:
 				if (!this.stats.initReceived) {
-					console.warn('[FMP4] Media segment before init, queuing');
+					logger.warn('Media segment before init, queuing');
 					this.pendingSegments.push(payload);
 					return;
 				}
@@ -368,7 +372,7 @@ export class FMP4StreamClient {
 				break;
 
 			default:
-				console.warn(`[FMP4] Unknown message type: 0x${msgType.toString(16)}`);
+				logger.warn(`Unknown message type: 0x${msgType.toString(16)}`);
 		}
 	}
 

@@ -6,6 +6,9 @@
 import { useCallback } from 'react';
 import { useEditorStore } from '../stores/editor-store';
 import { sendAIAction } from '../utils/vscodeApi';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('TimelineActions');
 
 export interface TimelineActionsOptions {
   selectedElements: Array<{ trackId: string; elementId: string }>;
@@ -84,7 +87,7 @@ export function useTimelineActions({ selectedElements }: TimelineActionsOptions)
   const handleExecuteAIAction = useCallback(
     (actionId: string, elementIds: string[]) => {
       sendAIAction(actionId, elementIds);
-      console.log('[Timeline] AI Action sent:', actionId, 'for elements:', elementIds);
+      logger.info('AI Action sent: ' + actionId, { elementIds });
     },
     []
   );

@@ -14,6 +14,9 @@ import {
   FrameScheduler,
   formatTime,
 } from '@neko/neko-client';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('InlineMediaPlayer');
 
 // =============================================================================
 // Types
@@ -151,7 +154,7 @@ export function InlineMediaPlayer({
         width,
         height,
         onFrame,
-        onError: (err) => console.error('[InlineMediaPlayer] H264 error:', err),
+        onError: (err) => logger.error(`H264 error: ${err}`),
       });
       clientRef.current = client;
       client.connect();
@@ -161,7 +164,7 @@ export function InlineMediaPlayer({
       const audioClient = new AudioStreamClient({
         websocketUrl: audioStreamUrl,
         volume: 0.8,
-        onError: (err) => console.warn('[InlineMediaPlayer] Audio error:', err),
+        onError: (err) => logger.warn(`Audio error: ${err}`),
       });
       audioClientRef.current = audioClient;
       audioClient.connect();

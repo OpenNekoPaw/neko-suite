@@ -31,6 +31,9 @@ import type {
 	CompatibleModeRequest,
 	CompatibleModeResponse,
 } from '@neko/shared';
+import { getLogger } from '../base';
+
+const logger = getLogger('MediaService');
 
 // =============================================================================
 // ActionRequest / ActionResponse helpers
@@ -133,8 +136,8 @@ export class MediaService implements vscode.Disposable {
 				return true;
 			}
 		} catch (error) {
-			console.error(
-				'[MediaService] handleMessage error:',
+			logger.error(
+				'handleMessage error:',
 				error instanceof Error ? error.message : JSON.stringify(error)
 			);
 		}
@@ -229,7 +232,7 @@ export class MediaService implements vscode.Disposable {
 					captureOptions.height = Math.round(srcHeight * scale);
 				}
 			} catch (probeError) {
-				console.warn(`[MediaService] probe failed, using full resolution:`, probeError);
+				logger.warn('probe failed, using full resolution:', probeError);
 				// Continue without scale — full resolution fallback
 			}
 		}
@@ -547,11 +550,11 @@ export class MediaService implements vscode.Disposable {
 		duration: number;
 	}): Promise<void> {
 		if (this._activeVideoStreamId) {
-			console.warn('[MediaService] Stream already exists, skipping create');
+			logger.warn('Stream already exists, skipping create');
 			return;
 		}
 
-		console.log('[MediaService] Creating editor-level stream, baseDir:', this.documentDir);
+		logger.info('Creating editor-level stream, baseDir:', this.documentDir);
 
 		const result = await this.dispatch({
 			group: 'timelines',
@@ -574,8 +577,8 @@ export class MediaService implements vscode.Disposable {
 		this._streamState = 'paused';
 
 		this.notifyStreamCreated();
-		console.log(
-			`[MediaService] Editor stream created (paused): video=${this._activeVideoStreamId}, audio=${this._activeAudioStreamId}`
+		logger.info(
+			`Editor stream created (paused): video=${this._activeVideoStreamId}, audio=${this._activeAudioStreamId}`
 		);
 	}
 
@@ -605,7 +608,7 @@ export class MediaService implements vscode.Disposable {
 			type: 'frameServer:streamStopped',
 			streamId: stoppedId,
 		});
-		console.log(`[MediaService] Editor stream destroyed: ${stoppedId}`);
+		logger.info(`Editor stream destroyed: ${stoppedId}`);
 	}
 
 	/** Notify Webview that stream was created (with WebSocket URLs) */

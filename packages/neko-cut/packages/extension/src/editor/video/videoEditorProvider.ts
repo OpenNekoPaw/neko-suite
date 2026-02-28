@@ -11,7 +11,9 @@ import { MessageHandler } from './messageHandler';
 import { MediaService } from '../../services/MediaService';
 import { FrameServerService } from '../../services/FrameServerService';
 import { ExportService } from '../../services/ExportService';
-import { getService } from '../../base';
+import { getService, getLogger } from '../../base';
+
+const logger = getLogger('VideoEditorProvider');
 import { IStatusBar } from '../../views/statusBar';
 import { IVideoProjectOutlineProvider } from '../../views/outlineProvider';
 import type { TimelineElement, ProjectDefaults } from '@neko/shared';
@@ -81,7 +83,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 			// The editor should be active when export starts, so we can just pin the active editor
 			vscode.commands.executeCommand('workbench.action.pinEditor');
 		} catch (error) {
-			console.warn('[VideoEditorProvider] Failed to pin editor tab:', error);
+			logger.warn('Failed to pin editor tab:', error);
 		}
 	}
 
@@ -332,7 +334,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		// Cancel deferred cleanup if editor is being reopened during background export
 		const deferSubs = this.deferredCleanupSubs.get(docUri);
 		if (deferSubs) {
-			console.log('[VideoEditorProvider] Cancelling deferred cleanup — editor reopened');
+			logger.info('Cancelling deferred cleanup — editor reopened');
 			for (const s of deferSubs) s.dispose();
 			this.deferredCleanupSubs.delete(docUri);
 		}
@@ -342,15 +344,15 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		let frameServerService = this.frameServerServices.get(docUri) ?? null;
 		if (frameServerService?.isAvailable()) {
 			frameServerPort = frameServerService.getPort();
-			console.log(`[VideoEditorProvider] Reusing frame server on port ${frameServerPort}`);
+			logger.info(`Reusing frame server on port ${frameServerPort}`);
 		} else {
 			frameServerService = await FrameServerService.tryCreate({ port: 0 });
 			if (!frameServerService) {
-				console.error('[VideoEditorProvider] Frame server not available — media operations will fail');
+				logger.error('Frame server not available — media operations will fail');
 			} else {
 				frameServerPort = frameServerService.getPort();
 				this.frameServerServices.set(docUri, frameServerService);
-				console.log(`[VideoEditorProvider] Frame server started on port ${frameServerPort}`);
+				logger.info(`Frame server started on port ${frameServerPort}`);
 			}
 		}
 
@@ -370,7 +372,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 				const projectData = JSON.parse(document.getText());
 				await mediaService.createEditorStream(projectData);
 			} catch (err) {
-				console.error('[VideoEditorProvider] Failed to create editor stream:', err);
+				logger.error('Failed to create editor stream:', err);
 				// Non-fatal: Webview will show "初始化 GPU..." until stream becomes available
 			}
 		}
@@ -385,7 +387,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 			this.exportServices.set(docUri, exportService);
 		}
 		if (reusingExport) {
-			console.log('[VideoEditorProvider] Reusing ExportService with active export');
+			logger.info('Reusing ExportService with active export');
 		}
 
 		if (frameServerService && exportService) {
@@ -601,7 +603,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 
 						exists = fs.existsSync(absolutePath);
 					} catch (error) {
-						console.error('[VideoEditorProvider] File validation error:', error);
+						logger.error('File validation error:', error);
 						exists = false;
 					}
 
@@ -612,14 +614,14 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 							exists,
 						});
 					} catch (postError) {
-						console.error('[VideoEditorProvider] Failed to send validation response:', postError);
+						logger.error('Failed to send validation response:', postError);
 					}
 					return;
 				}
 
 				// Handle webview ready message - send frame server config
 				if (message.type === 'ready') {
-					console.log('[VideoEditorProvider] Webview ready, sending frame server config');
+					logger.info('Webview ready, sending frame server config');
 					if (frameServerPort) {
 						webviewPanel.webview.postMessage({
 							type: 'frameServer:config',
@@ -688,7 +690,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 									type: 'media:frameServer:projectPlayback:update',
 									payload: { projectData: content },
 								}).catch((err: unknown) => {
-									console.warn('[VideoEditorProvider] Stream fallback update failed:', err);
+									logger.warn('Stream fallback update failed:', err);
 								});
 							});
 						} else {
@@ -698,7 +700,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 								type: 'media:frameServer:projectPlayback:update',
 								payload: { projectData: content },
 							}).catch((err: unknown) => {
-								console.warn('[VideoEditorProvider] Stream update from operation failed:', err);
+								logger.warn('Stream update from operation failed:', err);
 							});
 						}
 					}
@@ -771,7 +773,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 					type: 'media:frameServer:projectPlayback:update',
 					payload: { projectData: content },
 				}).catch((err: unknown) => {
-					console.warn('[VideoEditorProvider] Timeline update failed:', err);
+					logger.warn('Timeline update failed:', err);
 				});
 			}
 		});
@@ -783,13 +785,13 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 					// Skip reload if this is an internal save (from webview)
 					// This prevents the save operation from overwriting webview state
 					if (model!.isInternalSave) {
-						console.log('[VideoEditorProvider] Skipping reload for internal save');
+						logger.info('Skipping reload for internal save');
 						// Decrement counter after processing the event
 						model!.decrementInternalSaveCounter();
 						return;
 					}
 					// 重新加载模型内容 (only for external changes)
-					console.log('[VideoEditorProvider] External change detected, reloading model');
+					logger.info('External change detected, reloading model');
 					model!.reload();
 				}
 			}
@@ -807,7 +809,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 			// If export is running, defer cleanup until export completes
 			const exportService = this.exportServices.get(docUri);
 			if (exportService?.isExporting()) {
-				console.log('[VideoEditorProvider] Export in progress — deferring cleanup until export finishes');
+				logger.info('Export in progress — deferring cleanup until export finishes');
 
 				const deferCleanup = () => {
 					// Now safe to dispose everything
@@ -898,7 +900,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		if (isDev) {
 			// Development mode: connect to Vite dev server for HMR
 			const devServerUrl = `http://localhost:${devServerPort}`;
-			console.log(`[VideoEditorProvider] Dev mode enabled, connecting to ${devServerUrl}`);
+			logger.info(`Dev mode enabled, connecting to ${devServerUrl}`);
 
 			return `<!DOCTYPE html>
 <html lang="${locale}" data-vscode-locale="${locale}">

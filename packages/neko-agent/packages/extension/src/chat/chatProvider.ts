@@ -9,7 +9,9 @@
  */
 
 import * as vscode from 'vscode';
-import { getService } from '../base';
+import { getService, getLogger } from '../base';
+
+const logger = getLogger('ChatProvider');
 import type { Platform, TaskManager } from '@neko/platform';
 import type { ProviderConfig } from '@neko/shared';
 import type { IAgentManager } from '../ai/agentManager';
@@ -106,7 +108,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         // Load AGENTS.md content
         this._systemPrompt.loadAgentsFile().catch((err) => {
-          console.error('[ChatViewProvider] Failed to load AGENTS.md:', err);
+          logger.error('Failed to load AGENTS.md:', err);
         });
 
         // Get ConnectionStateManager for state sync
@@ -153,7 +155,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         };
       }
     } catch (error) {
-      console.error('Failed to get services:', error);
+      logger.error('Failed to get services:', error);
     }
   }
 
@@ -186,7 +188,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       // Clean up the temporary runner
       this._agentManager.remove('__toolskill_init__');
     } catch (error) {
-      console.error('[ChatProvider] Failed to initialize ToolSkills:', error);
+      logger.error('Failed to initialize ToolSkills:', error);
     }
   }
 
@@ -233,7 +235,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     await vscode.commands.executeCommand('neko.aiAssistant.focus');
 
     if (!this._view?.webview) {
-      console.warn('[Neko Suite] AI Assistant webview not available');
+      logger.warn('AI Assistant webview not available');
       return;
     }
 
@@ -286,7 +288,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           if (confirmConversationId) {
             this._agentManager?.confirmTool(confirmConversationId, message.toolCallId as string, message.approved as boolean);
           } else {
-            console.warn('[ChatProvider] No conversation for confirmTool');
+            logger.warn('No conversation for confirmTool');
           }
           break;
         }

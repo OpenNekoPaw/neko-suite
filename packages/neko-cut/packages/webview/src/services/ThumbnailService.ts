@@ -17,6 +17,9 @@
 import type { UrlResolver } from './urlResolverFactory';
 import { getFileUri } from '../hooks/useVSCodeMessaging';
 import { getMediaProxy } from './mediaProxyFactory';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('ThumbnailService');
 import {
   getPyramidThumbnailGenerator,
   clearPyramidThumbnailCacheForVideo,
@@ -178,32 +181,32 @@ class RequestQueue {
     } else {
       this._queue.splice(insertIndex, 0, request);
     }
-    console.log(`[RequestQueue] Enqueued ${request.key}, queue length: ${this._queue.length}, active: ${this._activeCount}`);
+    logger.info(`Enqueued ${request.key}, queue length: ${this._queue.length}, active: ${this._activeCount}`);
     this._processQueue();
   }
 
   private async _processQueue(): Promise<void> {
-    console.log(`[RequestQueue] _processQueue called, active: ${this._activeCount}, max: ${this._maxConcurrent}, queue: ${this._queue.length}`);
+    logger.info(`_processQueue called, active: ${this._activeCount}, max: ${this._maxConcurrent}, queue: ${this._queue.length}`);
     while (this._activeCount < this._maxConcurrent && this._queue.length > 0) {
       const request = this._queue.shift();
       if (!request) break;
 
       // Check if aborted before starting
       if (request.signal?.aborted) {
-        console.log(`[RequestQueue] Request ${request.key} was aborted before execution`);
+        logger.info(`Request ${request.key} was aborted before execution`);
         request.reject(new Error('Request aborted'));
         continue;
       }
 
-      console.log(`[RequestQueue] Starting execution of ${request.key}`);
+      logger.info(`Starting execution of ${request.key}`);
       this._activeCount++;
 
       try {
         const result = await request.execute();
-        console.log(`[RequestQueue] Completed ${request.key}`);
+        logger.info(`Completed ${request.key}`);
         request.resolve(result);
       } catch (error) {
-        console.error(`[RequestQueue] Failed ${request.key}:`, error);
+        logger.error(`Failed ${request.key}`, error);
         request.reject(error instanceof Error ? error : new Error(String(error)));
       } finally {
         this._activeCount--;
@@ -248,11 +251,11 @@ export class ThumbnailService implements IThumbnailService {
   ): Promise<ThumbnailData[]> {
     const { signal, priority = 0 } = options;
 
-    console.log(`[ThumbnailService] getThumbnails called: ${filePath}, count=${count}, height=${height}`);
+    logger.info(`getThumbnails called: ${filePath}, count=${count}, height=${height}`);
 
     // Check if aborted
     if (signal?.aborted) {
-      console.log(`[ThumbnailService] Request already aborted`);
+      logger.info('Request already aborted');
       throw new Error('Request aborted');
     }
 
@@ -262,18 +265,18 @@ export class ThumbnailService implements IThumbnailService {
     // Check cache (LRU)
     const cached = this._cache.get(cacheKey);
     if (cached) {
-      console.log(`[ThumbnailService] Returning cached result for ${cacheKey}`);
+      logger.info(`Returning cached result for ${cacheKey}`);
       return cached;
     }
 
     // Check pending requests (deduplication)
     const pending = this._pending.get(cacheKey);
     if (pending) {
-      console.log(`[ThumbnailService] Returning pending request for ${cacheKey}`);
+      logger.info(`Returning pending request for ${cacheKey}`);
       return pending;
     }
 
-    console.log(`[ThumbnailService] Creating new request for ${cacheKey}`);
+    logger.info(`Creating new request for ${cacheKey}`);
 
     // Create new request
     const requestPromise = new Promise<ThumbnailData[]>((resolve, reject) => {
@@ -287,13 +290,13 @@ export class ThumbnailService implements IThumbnailService {
       const execute = async (): Promise<ThumbnailData[]> => {
         // Check if image
         const ext = this._getExtension(filePath);
-        console.log(`[ThumbnailService] execute: filePath=${filePath}, ext=${ext}`);
+        logger.info(`execute: filePath=${filePath}, ext=${ext}`);
         if (IMAGE_EXTENSIONS.has(ext)) {
-          console.log(`[ThumbnailService] Generating image thumbnails`);
+          logger.info('Generating image thumbnails');
           return this._generateImageThumbnails(filePath, count, height);
         }
 
-        console.log(`[ThumbnailService] Generating video thumbnails`);
+        logger.info('Generating video thumbnails');
         // Generate video thumbnails via media proxy
         return this._generateVideoThumbnails(
           filePath,
@@ -355,7 +358,7 @@ export class ThumbnailService implements IThumbnailService {
         dataUrl: frame.dataUrl,
       }));
     } catch (error) {
-      console.error('[ThumbnailService] getThumbnailsForViewport failed:', error);
+      logger.error('getThumbnailsForViewport failed:', error);
       // Return empty array on failure
       return [];
     }
@@ -459,11 +462,11 @@ export class ThumbnailService implements IThumbnailService {
     signal?: AbortSignal,
     priority = 0
   ): Promise<ThumbnailData[]> {
-    console.log(`[ThumbnailService] _generateVideoThumbnails called: ${filePath}`);
+    logger.info(`_generateVideoThumbnails called: ${filePath}`);
 
     // Check abort
     if (signal?.aborted) {
-      console.log(`[ThumbnailService] Request aborted at start`);
+      logger.info('Request aborted at start');
       throw new Error('Request aborted');
     }
 
@@ -472,10 +475,10 @@ export class ThumbnailService implements IThumbnailService {
     try {
       const mediaRequestPriority = THUMBNAIL_MEDIA_REQUEST_PRIORITY_BASE + priority;
 
-      console.log(`[ThumbnailService] Getting media info for ${filePath}`);
+      logger.info(`Getting media info for ${filePath}`);
       // Get media info first to calculate duration and aspect ratio
       const mediaInfo = await getMediaProxy().probeMediaInfo(filePath, { signal, priority: mediaRequestPriority });
-      console.log(`[ThumbnailService] Media info: duration=${mediaInfo.duration}, ${mediaInfo.width}x${mediaInfo.height}`);
+      logger.info(`Media info: duration=${mediaInfo.duration}, ${mediaInfo.width}x${mediaInfo.height}`);
 
       if (signal?.aborted) {
         throw new Error('Request aborted');
@@ -520,8 +523,8 @@ export class ThumbnailService implements IThumbnailService {
       }
 
       // Extract frames at selected times
-      console.log(`[ThumbnailService] Generating ${thumbnailTimes.length} thumbnails for ${filePath}`);
-      console.log(`[ThumbnailService] Thumbnail times: [${thumbnailTimes.slice(0, 5).map(t => t.toFixed(3)).join(', ')}${thumbnailTimes.length > 5 ? ', ...' : ''}]`);
+      logger.info(`Generating ${thumbnailTimes.length} thumbnails for ${filePath}`);
+      logger.info(`Thumbnail times: [${thumbnailTimes.slice(0, 5).map(t => t.toFixed(3)).join(', ')}${thumbnailTimes.length > 5 ? ', ...' : ''}]`);
 
       for (const targetTime of thumbnailTimes) {
         // Check abort before each frame
@@ -548,19 +551,19 @@ export class ThumbnailService implements IThumbnailService {
             thumbnails.push({ time: targetTime, dataUrl });
             imageBitmap.close();
           } else {
-            console.warn(`[ThumbnailService] getVideoFrame returned null for time ${targetTime.toFixed(3)}s`);
+            logger.warn(`getVideoFrame returned null for time ${targetTime.toFixed(3)}s`);
             thumbnails.push(this._createPlaceholderThumbnail(targetTime, width, height));
           }
         } catch (frameError) {
           if (signal?.aborted) {
             throw new Error('Request aborted');
           }
-          console.warn(`[ThumbnailService] Failed to get frame at ${targetTime.toFixed(3)}s:`, frameError);
+          logger.warn(`Failed to get frame at ${targetTime.toFixed(3)}s`, frameError);
           thumbnails.push(this._createPlaceholderThumbnail(targetTime, width, height));
         }
       }
 
-      console.log(`[ThumbnailService] Generated ${thumbnails.length} thumbnails successfully`);
+      logger.info(`Generated ${thumbnails.length} thumbnails successfully`);
       return thumbnails;
     } catch (error) {
       if (signal?.aborted) {

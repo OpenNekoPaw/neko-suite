@@ -24,6 +24,9 @@ import {
   type InputProcessor,
   type IFileReader,
 } from '@neko/agent';
+import { getLogger } from '../base';
+
+const logger = getLogger('MessageHandler');
 
 type AgentPhase = 'idle' | 'thinking' | 'acting' | 'streaming';
 
@@ -339,7 +342,7 @@ export class MessageHandler {
         this._conversations.addMessageToConversation(conversationId, assistantMessage);
       }
     } catch (error) {
-      console.error('Agent execution error:', error);
+      logger.error('Agent execution error:', error);
       this._updateAgentState(conversationId, 'idle', undefined, Date.now());
       webview.postMessage({
         type: 'agentPhase',
@@ -409,13 +412,13 @@ export class MessageHandler {
 
       if (result.errors.length > 0) {
         for (const error of result.errors) {
-          console.warn(`[Neko Suite] Could not read file: ${error.reference}`, error.error);
+          logger.warn(`Could not read file: ${error.reference}`, error.error);
         }
       }
 
       return { message: messageText, fileContents };
     } catch (error) {
-      console.error('[Neko Suite] InputProcessor error:', error);
+      logger.error('InputProcessor error:', error);
       return { message: messageText, fileContents: [] };
     }
   }
@@ -449,7 +452,7 @@ export class MessageHandler {
 
       webview.postMessage({ type: 'projectFiles', files: projectFiles });
     } catch (error) {
-      console.error('Error searching project files:', error);
+      logger.error('Error searching project files:', error);
       webview.postMessage({ type: 'projectFiles', files: [] });
     }
   }

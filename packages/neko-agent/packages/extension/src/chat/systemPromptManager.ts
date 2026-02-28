@@ -13,7 +13,10 @@
  */
 
 import type { Platform } from '@neko/platform';
+import { getLogger } from '../base';
 import { getPromptFileService } from '../services/PromptFileService';
+
+const logger = getLogger('SystemPromptManager');
 
 // =============================================================================
 // Built-in Default System Prompt
@@ -298,7 +301,7 @@ export class SystemPromptManager {
         return planPrompt;
       }
       // Fallback to default if plan-mode prompt not found
-      console.warn('[SystemPromptManager] Plan mode prompt not found, using default');
+      logger.warn('Plan mode prompt not found, using default');
     }
 
     // 2. AGENTS.md content (completely replaces default)

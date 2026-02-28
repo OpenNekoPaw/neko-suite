@@ -6,9 +6,11 @@
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { createVSCodeLogger } from '@neko/shared/vscode/extension';
 import { CanvasEditorProvider } from './editor';
 import { CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
+import { setRootLogger, getRootLogger } from './utils/logger';
 
 // Extension state
 let canvasEditorProvider: CanvasEditorProvider;
@@ -19,7 +21,11 @@ let canvasStatusBar: CanvasStatusBar;
  * Activate the extension
  */
 export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
-  console.log('[NekoCanvas] Activating extension...');
+  const rootLogger = createVSCodeLogger('Neko Canvas', 'NekoCanvas', context);
+  setRootLogger(rootLogger);
+  const logger = getRootLogger();
+
+  logger.info('Activating extension...');
 
   // Create providers
   canvasEditorProvider = new CanvasEditorProvider(context);
@@ -69,7 +75,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
   // Register commands
   registerCommands(context);
 
-  console.log('[NekoCanvas] Extension activated');
+  logger.info('Extension activated');
 
   // Return API for other extensions
   // Asset operations now delegate to neko-assets via commands
@@ -263,7 +269,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
           await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
         }
       } catch (error) {
-        console.error('[NekoCanvas] Failed to open media preview:', error);
+        logger.error(`Failed to open media preview: ${error}`);
       }
     })
   );
@@ -291,5 +297,5 @@ async function createCanvas(config: CanvasConfig): Promise<string> {
  * Deactivate the extension
  */
 export function deactivate(): void {
-  console.log('[NekoCanvas] Deactivating extension...');
+  getRootLogger().info('Deactivating extension...');
 }

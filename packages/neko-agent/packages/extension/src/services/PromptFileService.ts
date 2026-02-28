@@ -16,6 +16,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { PromptPresetConfig, PromptSource } from '@neko/shared';
+import { getLogger } from '../base';
+
+const logger = getLogger('PromptFileService');
 
 // =============================================================================
 // Types
@@ -201,7 +204,7 @@ export class PromptFileService implements vscode.Disposable {
             content,
           });
         } catch (err) {
-          console.warn(`[PromptFileService] Failed to read file ${filePath}:`, err);
+          logger.warn(`Failed to read file ${filePath}:`, err);
         }
       }
     } catch {
@@ -255,7 +258,7 @@ export class PromptFileService implements vscode.Disposable {
     await fs.promises.writeFile(filePath, content, 'utf-8');
 
     const id = this.generatePromptId(source, fileName);
-    console.log('[PromptFileService] Saved prompt file:', { id, filePath });
+    logger.info('Saved prompt file:', { id, filePath });
 
     return { filePath, id };
   }
@@ -288,10 +291,10 @@ export class PromptFileService implements vscode.Disposable {
   async deletePromptFile(filePath: string): Promise<boolean> {
     try {
       await fs.promises.unlink(filePath);
-      console.log('[PromptFileService] Deleted prompt file:', filePath);
+      logger.info('Deleted prompt file:', filePath);
       return true;
     } catch (err) {
-      console.error('[PromptFileService] Failed to delete file:', err);
+      logger.error('Failed to delete file:', err);
       return false;
     }
   }
@@ -430,7 +433,7 @@ export class PromptFileService implements vscode.Disposable {
 
       this.fileWatchers.push(watcher);
     } catch (err) {
-      console.warn('[PromptFileService] Failed to watch directory:', dirPath, err);
+      logger.warn(`Failed to watch directory: ${dirPath}`, err);
     }
   }
 
@@ -458,7 +461,7 @@ export class PromptFileService implements vscode.Disposable {
     if (projectPath) {
       try {
         const content = await fs.promises.readFile(projectPath, 'utf-8');
-        console.log('[PromptFileService] Loaded project AGENTS.md:', projectPath);
+        logger.info('Loaded project AGENTS.md:', projectPath);
         return { content, source: 'project' };
       } catch {
         // File doesn't exist, continue to personal
@@ -469,7 +472,7 @@ export class PromptFileService implements vscode.Disposable {
     const personalPath = this.getUserAgentsFilePath();
     try {
       const content = await fs.promises.readFile(personalPath, 'utf-8');
-      console.log('[PromptFileService] Loaded personal AGENTS.md:', personalPath);
+      logger.info('Loaded personal AGENTS.md:', personalPath);
       return { content, source: 'personal' };
     } catch {
       // File doesn't exist
@@ -522,7 +525,7 @@ export class PromptFileService implements vscode.Disposable {
     await fs.promises.mkdir(dirPath, { recursive: true });
 
     await fs.promises.writeFile(filePath, defaultContent, 'utf-8');
-    console.log('[PromptFileService] Created AGENTS.md:', filePath);
+    logger.info('Created AGENTS.md:', filePath);
 
     return filePath;
   }

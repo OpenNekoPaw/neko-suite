@@ -11,6 +11,9 @@
 import { useRef, useEffect, useCallback, useState, memo } from 'react';
 import { useEditorStore } from '../stores/editor-store';
 import { useTranslation } from '../i18n/I18nContext';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('PreviewPanel');
 import { useMediaInfoCache } from '../hooks/useMediaInfoCache';
 import { PREVIEW_QUALITY } from '../constants';
 import { postMessage } from '../utils/vscodeApi';
@@ -178,16 +181,16 @@ export const PreviewPanel = memo(function PreviewPanel({
     const handleMessage = (event: MessageEvent) => {
       const message = event.data;
       if (message.type === 'frameServer:config' && typeof message.port === 'number') {
-        console.log(`[PreviewPanel] Received frame server config, port: ${message.port}`);
+        logger.info(`Received frame server config, port: ${message.port}`);
         setFrameServerPort(message.port);
       }
       if (message.type === 'frameServer:streamCreated') {
-        console.log(`[PreviewPanel] Stream created: video=${message.streamId}, audio=${message.audioStreamId ?? 'none'}`);
+        logger.info(`Stream created: video=${message.streamId}, audio=${message.audioStreamId ?? 'none'}`);
         setStreamWsUrl(typeof message.wsUrl === 'string' ? message.wsUrl : null);
         setAudioWsUrl(typeof message.audioWsUrl === 'string' ? message.audioWsUrl : null);
       }
       if (message.type === 'frameServer:streamStopped') {
-        console.log(`[PreviewPanel] Stream stopped: ${message.streamId}`);
+        logger.info(`Stream stopped: ${message.streamId}`);
         setStreamWsUrl(null);
         setAudioWsUrl(null);
       }
@@ -250,14 +253,14 @@ export const PreviewPanel = memo(function PreviewPanel({
         }
       },
       onConnectionChange: (connected: boolean) => {
-        console.log(`[PreviewPanel] H.264 stream ${connected ? 'connected' : 'disconnected'}`);
+        logger.info(`H.264 stream ${connected ? 'connected' : 'disconnected'}`);
         setIsInitialized(connected);
         if (connected) {
           setInitError(null);
         }
       },
       onError: (error: Error) => {
-        console.error('[PreviewPanel] H.264 stream error:', error);
+        logger.error('H.264 stream error:', error);
         setInitError(error.message);
       },
       onPacketReceived: (sizeBytes: number) => {
@@ -283,10 +286,10 @@ export const PreviewPanel = memo(function PreviewPanel({
         websocketUrl: audioWsUrl,
         volume: 1.0,
         onConnectionChange: (connected) => {
-          console.log(`[PreviewPanel] Audio stream ${connected ? 'connected' : 'disconnected'}`);
+          logger.info(`Audio stream ${connected ? 'connected' : 'disconnected'}`);
         },
         onError: (err) => {
-          console.warn('[PreviewPanel] Audio stream error:', err);
+          logger.warn('Audio stream error:', err);
         },
       });
       audioClientRef.current = audioClient;
@@ -330,7 +333,7 @@ export const PreviewPanel = memo(function PreviewPanel({
         clockSourceRef.current = 'audio';
         const audioTimeUs = audioClient.getCurrentTime() * 1_000_000;
         schedulerRef.current?.switchClock(audioTimeUs);
-        console.log('[PreviewPanel] Clock source switched: wall → audio');
+        logger.info('Clock source switched: wall -> audio');
       }
       newTime = audioClient.getCurrentTime();
     } else {
@@ -400,7 +403,7 @@ export const PreviewPanel = memo(function PreviewPanel({
     playWallTimeRef.current = performance.now();
     clockSourceRef.current = 'wall';
 
-    console.log('[PreviewPanel] Resuming H264 push for playback');
+    logger.info('Resuming H264 push for playback');
     postMessage({
       type: 'media:frameServer:projectPlayback:resume',
       payload: {
@@ -481,7 +484,7 @@ export const PreviewPanel = memo(function PreviewPanel({
         bitmap.close();
       } catch (err) {
         if ((err as Error).name === 'AbortError') return;
-        console.warn('[PreviewPanel] Composite frame failed:', err);
+        logger.warn('Composite frame failed:', err);
       }
     };
 
@@ -556,7 +559,7 @@ export const PreviewPanel = memo(function PreviewPanel({
     const width = Math.round(project.resolution.width * scale);
     const height = Math.round(project.resolution.height * scale);
 
-    console.log(`[PreviewPanel] Sending quality update: ${width}x${height} (scale=${scale}, quality=${previewQuality})`);
+    logger.info(`Sending quality update: ${width}x${height} (scale=${scale}, quality=${previewQuality})`);
     postMessage({
       type: 'media:frameServer:projectPlayback:quality',
       payload: { width, height },
@@ -591,7 +594,7 @@ export const PreviewPanel = memo(function PreviewPanel({
 
   const captureScreenshot = useCallback(async () => {
     if (!isInitialized || !project || !canvasRef.current) {
-      console.error('[PreviewPanel] Cannot capture: not initialized or no project');
+      logger.error('Cannot capture: not initialized or no project');
       return;
     }
 
@@ -627,9 +630,9 @@ export const PreviewPanel = memo(function PreviewPanel({
         mimeType: 'image/png',
       });
 
-      console.log('[PreviewPanel] Screenshot sent to extension');
+      logger.info('Screenshot sent to extension');
     } catch (error) {
-      console.error('[PreviewPanel] Screenshot capture failed:', error);
+      logger.error('Screenshot capture failed:', error);
       throw error;
     }
   }, [isInitialized, project, currentTime]);

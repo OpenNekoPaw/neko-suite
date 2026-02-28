@@ -11,6 +11,9 @@ import type { FrameSchedulerStats, AudioStreamStats, H264StreamStats } from '@ne
 import { useExtensionMessage, useVscodeReady } from '../shared/useVscodeMessage';
 import { VideoControls } from './VideoControls';
 import type { MediaInfo, PreviewInitMessage } from '../shared/types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('VideoPlayer');
 
 /** Auto-hide delay for controls overlay (ms) */
 const CONTROLS_HIDE_DELAY = 3000;
@@ -218,7 +221,7 @@ export function VideoPlayer() {
 			if (clockSourceRef.current === 'wall') {
 				clockSourceRef.current = 'audio';
 				schedulerRef.current?.flush();
-				console.log('[VideoPlayer] Clock source switched: wall → audio, scheduler flushed');
+				logger.info('Clock source switched: wall -> audio, scheduler flushed');
 			}
 			newTime = audioClient.getCurrentTime();
 		} else {
@@ -265,11 +268,8 @@ export function VideoPlayer() {
 			}
 			// Log scheduling decisions periodically or when frames are skipped
 			if (result.skipped > 0) {
-				console.log(
-					'[VideoPlayer] Schedule: skipped=', result.skipped,
-					'action=', result.action,
-					'delta=', (result.deltaUs / 1000).toFixed(1), 'ms',
-					'queue=', scheduler.getStats().queueLength,
+				logger.debug(
+					`Schedule: skipped=${result.skipped} action=${result.action} delta=${(result.deltaUs / 1000).toFixed(1)}ms queue=${scheduler.getStats().queueLength}`,
 				);
 			}
 		}
@@ -287,13 +287,8 @@ export function VideoPlayer() {
 			const sched = schedulerRef.current?.getStats();
 			const audio = audioClientRef.current?.getStats();
 			const clockSrc = (audioClient && audioClient.isClockReady) ? 'audio' : 'wall';
-			console.log(
-				'[VideoPlayer] Tick:',
-				'time=', newTime.toFixed(2), 's',
-				'clock=', clockSrc,
-				'h264=[recv=', h264?.packetsReceived, 'dec=', h264?.framesDecoded, 'drop=', h264?.framesDropped, ']',
-				'sched=[q=', sched?.queueLength, 'rend=', sched?.rendered, 'skip=', sched?.skipped, 'bp=', sched?.backpressure, ']',
-				audio ? `audio=[prebuf=${audio.prebuffering} drift=${audio.driftMs.toFixed(1)}ms]` : 'audio=none',
+			logger.debug(
+				`Tick: time=${newTime.toFixed(2)}s clock=${clockSrc} h264=[recv=${h264?.packetsReceived} dec=${h264?.framesDecoded} drop=${h264?.framesDropped}] sched=[q=${sched?.queueLength} rend=${sched?.rendered} skip=${sched?.skipped} bp=${sched?.backpressure}] ${audio ? `audio=[prebuf=${audio.prebuffering} drift=${audio.driftMs.toFixed(1)}ms]` : 'audio=none'}`,
 			);
 		}
 
@@ -344,7 +339,7 @@ export function VideoPlayer() {
 					audioStreamId?: string;
 					audioStreamUrl?: string;
 				};
-				console.log('[VideoPlayer] streamReady received:', { streamUrl, audioStreamUrl });
+				logger.info(`streamReady received: streamUrl=${streamUrl} audioStreamUrl=${audioStreamUrl}`);
 				// Dispose previous clients if any
 				clientRef.current?.dispose();
 				audioClientRef.current?.dispose();
@@ -361,7 +356,7 @@ export function VideoPlayer() {
 					onFrame,
 					onConnectionChange: setIsConnected,
 					onError: (err) => {
-						console.error('[VideoPlayer] Stream error:', err);
+						logger.error('Stream error:', err);
 						setError(err.message);
 					},
 				});
@@ -374,10 +369,10 @@ export function VideoPlayer() {
 						websocketUrl: audioStreamUrl,
 						volume,
 						onConnectionChange: (connected) => {
-							console.log('[VideoPlayer] Audio stream connected:', connected);
+							logger.info(`Audio stream connected: ${connected}`);
 						},
 						onError: (err) => {
-							console.warn('[VideoPlayer] Audio stream error:', err);
+							logger.warn('Audio stream error:', err);
 						},
 					});
 					audioClientRef.current = audioClient;

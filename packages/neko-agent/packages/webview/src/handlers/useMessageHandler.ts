@@ -11,6 +11,9 @@ import {
   type StreamingState,
   type NonCurrentConversationUpdater,
 } from '@/handlers';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('MessageHandler');
 import type {
   Message,
   ConversationSummary,
@@ -207,7 +210,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
 
       const handled = registry.handle(message, context);
       if (!handled) {
-        console.warn(`[AIAssistant] Unknown message type: ${message.type}`);
+        logger.warn(`Unknown message type: ${message.type}`);
       }
     },
     [registry, context]

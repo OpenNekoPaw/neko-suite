@@ -16,6 +16,9 @@ import * as vscode from 'vscode';
 import { PreviewService, type MediaInfo } from '../services/PreviewService';
 import { getWebviewHtml } from '../utils/html';
 import type { StatusBarManager } from '../ui/StatusBarManager';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('AudioPreview');
 
 // =============================================================================
 // AudioPreviewProvider
@@ -141,7 +144,7 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 								payload: waveform,
 							});
 						} catch (error) {
-							console.error('[AudioPreview] Waveform generation failed:', error);
+							logger.error('Waveform generation failed:', error);
 						}
 						break;
 					}
@@ -186,7 +189,7 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
 								});
 							}
 						} catch (error) {
-							console.error('[AudioPreview] Failed to start audio stream:', error);
+							logger.error('Failed to start audio stream:', error);
 						}
 						break;
 					}

@@ -13,6 +13,9 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { vscode } from '../../hooks/useVSCode';
+import { getLogger } from '../../../utils/logger';
+
+const logger = getLogger('MermaidBlock');
 
 interface MermaidBlockProps {
   code: string;
@@ -445,7 +448,7 @@ function MermaidBlockComponent({ code }: MermaidBlockProps) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error('Failed to copy mermaid code:', err);
+      logger.error('Failed to copy mermaid code:', err);
     }
   }, [code]);
 
@@ -479,7 +482,7 @@ function MermaidBlockComponent({ code }: MermaidBlockProps) {
         URL.revokeObjectURL(url);
       }, 100);
     } catch (err) {
-      console.error('Failed to download SVG:', err);
+      logger.error('Failed to download SVG:', err);
     }
   }, [svg]);
 

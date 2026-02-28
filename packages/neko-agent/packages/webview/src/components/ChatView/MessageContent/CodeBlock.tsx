@@ -5,6 +5,9 @@
 
 import { useState, useCallback } from 'react';
 import { Highlight, themes } from 'prism-react-renderer';
+import { getLogger } from '../../../utils/logger';
+
+const logger = getLogger('CodeBlock');
 
 interface CodeBlockProps {
   code: string;
@@ -21,7 +24,7 @@ export function CodeBlock({ code, language = 'text', showLineNumbers = false }: 
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error('Failed to copy code:', err);
+      logger.error('Failed to copy code:', err);
     }
   }, [code]);
 

@@ -7,7 +7,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { getLogger } from '../../base';
 import type { MessageAttachment } from '../types';
+
+const logger = getLogger('AttachmentProcessor');
 
 /**
  * Processed attachment result
@@ -54,7 +57,7 @@ export class AttachmentProcessor {
                 imageAttachments.push(base64Data);
               }
             } catch (err) {
-              console.error('Failed to read image attachment:', err);
+              logger.error('Failed to read image attachment:', err);
             }
           }
           break;
@@ -66,7 +69,7 @@ export class AttachmentProcessor {
               const content = await fs.promises.readFile(attachment.path, 'utf-8');
               textContent += `\n\n### File: ${attachment.name}\n\`\`\`\n${content}\n\`\`\``;
             } catch (err) {
-              console.error('Failed to read file attachment:', err);
+              logger.error('Failed to read file attachment:', err);
               textContent += `\n\n### File: ${attachment.name}\n(Failed to read file)`;
             }
           }
@@ -112,7 +115,7 @@ export class AttachmentProcessor {
         data: buffer.toString('base64'),
       };
     } catch (err) {
-      console.error('Failed to read file as base64:', err);
+      logger.error('Failed to read file as base64:', err);
       return null;
     }
   }

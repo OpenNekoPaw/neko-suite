@@ -7,6 +7,7 @@
 
 import * as vscode from 'vscode';
 import { ServiceCollection } from '../base';
+import { getRootLogger } from '../base';
 import { IEditorRegistry, EditorRegistry } from '../editor/common/editorRegistry';
 import { VideoEditorModelProvider } from '../editor/video/videoEditorModel';
 import { IStatusBar, StatusBar } from '../views/statusBar';
@@ -93,7 +94,7 @@ export async function bootstrapCoreServices(
 
   // Initialize asset service in background
   assetService.initialize().catch(error => {
-    console.error('[NekoCut] Failed to initialize AssetService:', error);
+    getRootLogger().error('Failed to initialize AssetService:', error);
   });
 
   return {

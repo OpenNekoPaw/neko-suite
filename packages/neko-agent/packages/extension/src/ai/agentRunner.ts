@@ -13,7 +13,9 @@
  */
 
 import * as vscode from 'vscode';
-import { createServiceId } from '../base';
+import { createServiceId, getLogger } from '../base';
+
+const logger = getLogger('AgentRunner');
 import type { Platform, ChatMessage } from '@neko/platform';
 import { getBuiltinPrompt, toSharedService } from '@neko/platform';
 import type {
@@ -372,7 +374,7 @@ export class AgentRunner implements IAgentRunner {
       try {
         await this._promptBuilder.loadAgentsFile(config.workspaceRoot, getDefaultPersonalPath());
       } catch (err) {
-        console.warn('[AgentRunner] Failed to load AGENTS.md:', err);
+        logger.warn('Failed to load AGENTS.md:', err);
       }
     }
 
@@ -405,10 +407,10 @@ export class AgentRunner implements IAgentRunner {
         return this._handleToolConfirmation(request);
       },
       onValidationWarning: (warning) => {
-        console.warn('[AgentRunner] Validation warning:', warning.message);
+        logger.warn('Validation warning:', warning.message);
       },
       onValidationError: (error) => {
-        console.error('[AgentRunner] Validation error:', error.message, error.details);
+        logger.error('Validation error:', { message: error.message, details: error.details });
       },
     });
   }
@@ -567,7 +569,7 @@ export class AgentRunner implements IAgentRunner {
       pending.resolve?.(approved);
       this._pendingConfirmations.delete(toolCallId);
     } else {
-      console.warn('[AgentRunner] No pending confirmation found for toolCallId:', toolCallId);
+      logger.warn('No pending confirmation found for toolCallId:', toolCallId);
     }
   }
 
@@ -636,10 +638,10 @@ export class AgentRunner implements IAgentRunner {
     if (config.executionMode === 'plan') {
       const planModePreset = getBuiltinPrompt('plan-mode');
       if (planModePreset?.systemPrompt) {
-        console.log('[AgentRunner] Using plan-mode system prompt');
+        logger.info('Using plan-mode system prompt');
         return planModePreset.systemPrompt;
       }
-      console.warn('[AgentRunner] Plan-mode preset not found, using default prompt');
+      logger.warn('Plan-mode preset not found, using default prompt');
     }
 
     // Use prompt builder's built-in prompt
@@ -671,7 +673,7 @@ When using tools, always explain what you are doing.`;
       const CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1000;
       const timer = setTimeout(() => {
         if (this._pendingConfirmations.has(toolCallId)) {
-          console.warn(`[AgentRunner] Tool confirmation timed out for ${request.toolCall.name} (${toolCallId})`);
+          logger.warn(`Tool confirmation timed out for ${request.toolCall.name} (${toolCallId})`);
           this._pendingConfirmations.delete(toolCallId);
           this._confirmationTimers.delete(toolCallId);
           resolve(false);

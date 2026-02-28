@@ -14,6 +14,9 @@
  */
 
 import * as vscode from 'vscode';
+import { getLogger } from '../base';
+
+const logger = getLogger('FrameServerService');
 
 // =============================================================================
 // Types (matching NativeEngine NAPI interface)
@@ -81,26 +84,26 @@ export class FrameServerService implements vscode.Disposable {
 	 */
 	private async initialize(config?: FrameServerConfig): Promise<boolean> {
 		try {
-			console.log('[FrameServerService] Loading native addon...');
+			logger.info('Loading native addon...');
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
 			const addon = require('@neko-engine/native-napi') as NativeEngineModule;
-			console.log('[FrameServerService] Native addon loaded, creating NativeEngine...');
+			logger.info('Native addon loaded, creating NativeEngine...');
 
 			this._engine = await addon.NativeEngine.create();
-			console.log(`[FrameServerService] NativeEngine created (GPU: ${this._engine.hasGpu() ? 'enabled' : 'disabled'})`);
+			logger.info(`NativeEngine created (GPU: ${this._engine.hasGpu() ? 'enabled' : 'disabled'})`);
 
 			// Start the embedded HTTP/WebSocket server
 			const requestedPort = config?.port ?? 0; // 0 = auto-assign
 			this._port = await this._engine.startFrameServer(requestedPort);
 
-			console.log(
-				`[FrameServerService] Frame server started on port ${this._port}`
+			logger.info(
+				`Frame server started on port ${this._port}`
 			);
 
 			return true;
 		} catch (error) {
-			console.error(
-				'[FrameServerService] Failed to initialize:',
+			logger.error(
+				'Failed to initialize:',
 				error instanceof Error ? error.message : error,
 				error instanceof Error ? error.stack : ''
 			);
@@ -199,7 +202,7 @@ export class FrameServerService implements vscode.Disposable {
 		if (this._engine) {
 			try {
 				await this._engine.stopFrameServer();
-				console.log('[FrameServerService] Frame server stopped');
+				logger.info('Frame server stopped');
 			} catch {
 				// Ignore stop errors
 			}

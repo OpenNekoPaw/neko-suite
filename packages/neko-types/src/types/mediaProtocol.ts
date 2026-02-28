@@ -14,6 +14,11 @@
  * - 保证类型安全的 IPC 通信
  */
 
+import { ConsoleLogger } from '../logger/console-logger';
+import { LogLevel } from '../logger/types';
+
+const logger = new ConsoleLogger('MediaProtocol', LogLevel.Debug);
+
 // =============================================================================
 // Media Request Types
 // =============================================================================
@@ -556,8 +561,8 @@ export function parseYuv420pBuffer(
 	const sizes = calculateYuv420pPlaneSizes(width, height);
 
 	if (buffer.length < sizes.totalSize) {
-		console.error(
-			`YUV420P buffer too small: expected ${sizes.totalSize} bytes, got ${buffer.length}`
+		logger.error(
+			`YUV420P buffer too small: expected ${sizes.totalSize} bytes, got ${buffer.length}`,
 		);
 		return null;
 	}

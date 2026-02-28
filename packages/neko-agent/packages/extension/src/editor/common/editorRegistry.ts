@@ -4,7 +4,9 @@
  */
 
 import * as vscode from 'vscode';
-import { createServiceId } from '../../base';
+import { createServiceId, getLogger } from '../../base';
+
+const logger = getLogger('EditorRegistry');
 import { EditorType, IEditorModel } from './editorModel';
 
 // =============================================================================
@@ -146,7 +148,7 @@ export class EditorRegistry implements IEditorRegistry {
 
   registerModelProvider(type: EditorType, provider: IEditorModelProvider): vscode.Disposable {
     if (this._providers.has(type)) {
-      console.warn(`[EditorRegistry] Provider for "${type}" is being overwritten`);
+      logger.warn(`Provider for "${type}" is being overwritten`);
     }
     this._providers.set(type, provider);
 
@@ -171,7 +173,7 @@ export class EditorRegistry implements IEditorRegistry {
     const key = model.uri.toString();
 
     if (this._models.has(key)) {
-      console.warn(`[EditorRegistry] Model for "${key}" already exists`);
+      logger.warn(`Model for "${key}" already exists`);
     }
 
     this._models.set(key, model);

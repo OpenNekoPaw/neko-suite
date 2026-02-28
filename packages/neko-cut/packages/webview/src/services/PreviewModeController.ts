@@ -27,6 +27,9 @@
  */
 
 import { postMessage } from '../utils/vscodeApi';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('PreviewModeController');
 
 /**
  * Preview mode
@@ -153,7 +156,7 @@ export class PreviewModeController {
 		const previousMode = this.mode;
 		this.mode = mode;
 
-		console.log(`[PreviewModeController] Mode changed: ${previousMode} → ${mode}`);
+		logger.info(`Mode changed: ${previousMode} → ${mode}`);
 
 		// Notify callback
 		this.config.onModeChange(mode);
@@ -163,7 +166,7 @@ export class PreviewModeController {
 			try {
 				listener(mode);
 			} catch (error) {
-				console.error('[PreviewModeController] Listener error:', error);
+				logger.error('Listener error:', error);
 			}
 		}
 
@@ -183,7 +186,7 @@ export class PreviewModeController {
 				payload: { mode },
 			});
 		} catch (error) {
-			console.warn('[PreviewModeController] Failed to sync mode to Extension:', error);
+			logger.warn('Failed to sync mode to Extension:', error);
 		}
 	}
 

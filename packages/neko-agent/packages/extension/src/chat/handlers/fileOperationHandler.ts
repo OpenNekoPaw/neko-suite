@@ -12,6 +12,9 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Platform } from '@neko/platform';
+import { getLogger } from '../../base';
+
+const logger = getLogger('FileOperationHandler');
 
 /**
  * Dependencies for FileOperationHandler
@@ -60,7 +63,7 @@ export class FileOperationHandler {
         await vscode.commands.executeCommand('vscode.open', uri);
       }
     } catch (error) {
-      console.error('[Neko Suite] Failed to open file:', error);
+      logger.error('Failed to open file:', error);
       vscode.window.showErrorMessage(`Failed to open file: ${filePath}`);
     }
   }
@@ -71,7 +74,7 @@ export class FileOperationHandler {
     try {
       await vscode.env.openExternal(vscode.Uri.parse(url));
     } catch (error) {
-      console.error('[Neko Suite] Failed to open URL:', error);
+      logger.error('Failed to open URL:', error);
       vscode.window.showErrorMessage(`Failed to open URL: ${url}`);
     }
   }
@@ -125,7 +128,7 @@ export class FileOperationHandler {
       const uri = vscode.Uri.file(filePath);
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
-      console.error('[Neko Suite] Failed to open prompt config:', error);
+      logger.error('Failed to open prompt config:', error);
       vscode.window.showErrorMessage(`Failed to open prompt config: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -136,7 +139,7 @@ export class FileOperationHandler {
       const promptFileService = getPromptFileService();
       await promptFileService.openAgentsFile(source);
     } catch (error) {
-      console.error('[Neko Suite] Failed to open AGENTS.md:', error);
+      logger.error('Failed to open AGENTS.md:', error);
       vscode.window.showErrorMessage(`Failed to open AGENTS.md: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -174,7 +177,7 @@ export class FileOperationHandler {
       const uri = vscode.Uri.file(filePath);
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
-      console.error('[Neko Suite] Failed to open settings.json:', error);
+      logger.error('Failed to open settings.json:', error);
       vscode.window.showErrorMessage(`Failed to open settings.json: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -238,7 +241,7 @@ export class FileOperationHandler {
       const uri = vscode.Uri.file(fullPath);
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
-      console.error('[Neko Suite] Failed to open skill file:', error);
+      logger.error('Failed to open skill file:', error);
       vscode.window.showErrorMessage(`Failed to open skill file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -277,7 +280,7 @@ export class FileOperationHandler {
       const uri = vscode.Uri.file(fullPath);
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
-      console.error('[Neko Suite] Failed to open command file:', error);
+      logger.error('Failed to open command file:', error);
       vscode.window.showErrorMessage(`Failed to open command file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -299,7 +302,7 @@ export class FileOperationHandler {
         vscode.window.showInformationMessage(`SVG saved to ${uri.fsPath}`);
       }
     } catch (error) {
-      console.error('[Neko Suite] Failed to save SVG:', error);
+      logger.error('Failed to save SVG:', error);
       vscode.window.showErrorMessage('Failed to save SVG file');
     }
   }

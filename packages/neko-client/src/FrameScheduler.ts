@@ -18,6 +18,10 @@
  *   - WAIT:   frame.timestamp > masterClockUs + SYNC_THRESHOLD  (too early)
  */
 
+import { getLogger } from './utils/logger';
+
+const logger = getLogger('FrameScheduler');
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -171,9 +175,7 @@ export class FrameScheduler {
 				return { action: 'wait', skipped: 0, deltaUs: 0 };
 			}
 			this.warmupComplete = true;
-			console.log(
-				'[FrameScheduler] Warmup complete: buffered', this.queue.length, 'frames',
-			);
+			logger.info(`Warmup complete: buffered ${this.queue.length} frames`);
 		}
 
 		// Establish A/V PTS offset on first call with a queued frame.
@@ -182,11 +184,8 @@ export class FrameScheduler {
 		if (this.avOffsetUs === null && this.queue.length > 0) {
 			this.avOffsetUs = masterClockUs - this.queue[0]!.timestamp;
 			this.stats.avOffsetUs = this.avOffsetUs;
-			console.log(
-				'[FrameScheduler] A/V offset established:',
-				(this.avOffsetUs / 1000).toFixed(1), 'ms',
-				'(masterClock=', (masterClockUs / 1_000_000).toFixed(3), 's',
-				'firstFramePTS=', (this.queue[0]!.timestamp / 1_000_000).toFixed(3), 's)',
+			logger.info(
+				`A/V offset established: ${(this.avOffsetUs / 1000).toFixed(1)}ms (masterClock=${(masterClockUs / 1_000_000).toFixed(3)}s firstFramePTS=${(this.queue[0]!.timestamp / 1_000_000).toFixed(3)}s)`,
 			);
 		}
 
@@ -295,14 +294,13 @@ export class FrameScheduler {
 		if (this.queue.length > 0) {
 			this.avOffsetUs = newMasterClockUs - this.queue[0]!.timestamp;
 			this.stats.avOffsetUs = this.avOffsetUs;
-			console.log(
-				'[FrameScheduler] switchClock: A/V offset recalculated:',
-				(this.avOffsetUs / 1000).toFixed(1), 'ms',
+			logger.info(
+				`switchClock: A/V offset recalculated: ${(this.avOffsetUs / 1000).toFixed(1)}ms`,
 			);
 		} else {
 			this.avOffsetUs = null;
 			this.stats.avOffsetUs = 0;
-			console.log('[FrameScheduler] switchClock: queue empty, offset reset');
+			logger.info('switchClock: queue empty, offset reset');
 		}
 	}
 

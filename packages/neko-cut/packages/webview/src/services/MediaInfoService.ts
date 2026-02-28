@@ -7,6 +7,9 @@
 
 import { getMediaProxy } from './mediaProxyFactory';
 import { DEFAULT_VIDEO_DURATION, DEFAULT_IMAGE_DURATION } from '../constants';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('MediaInfoService');
 
 // =============================================================================
 // Types
@@ -122,7 +125,7 @@ export class MediaInfoService implements IMediaInfoService {
         height: probeResult.height || undefined,
       };
     } catch (error) {
-      console.warn('[MediaInfoService] FFmpeg probe failed for:', filePath, error);
+      logger.warn('FFmpeg probe failed for: ' + filePath, error);
       return { duration: DEFAULT_VIDEO_DURATION };
     }
   }

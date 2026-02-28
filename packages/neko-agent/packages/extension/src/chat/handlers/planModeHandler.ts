@@ -10,11 +10,14 @@
 
 import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
+import { getLogger } from '../../base';
 import type { SystemPromptManager } from '../systemPromptManager';
 import type { ConversationHandler } from '../conversationHandler';
 import type { SettingsManager } from '../settingsManager';
 import type { IAgentManager } from '../../ai/agentManager';
 import type { MessageHandler } from '../messageHandler';
+
+const logger = getLogger('PlanModeHandler');
 
 /**
  * Dependencies for PlanModeHandler
@@ -58,7 +61,7 @@ export class PlanModeHandler {
     conversationId: string,
     filePath?: string
   ): Promise<void> {
-    console.log('[ChatProvider] Plan approved:', { planId, conversationId, filePath });
+    logger.info('Plan approved:', { planId, conversationId, filePath });
 
     // Persist the plan status change
     this._updatePlanStatusInConversation(conversationId, planId, 'approved');
@@ -98,7 +101,7 @@ export class PlanModeHandler {
           this.deps.messages?.handleUserMessage(webview, executeMessage);
         }
       } catch (error) {
-        console.error('[ChatProvider] Failed to read plan file:', error);
+        logger.error('Failed to read plan file:', error);
         webview.postMessage({
           type: 'error',
           message: `Failed to read plan file: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -130,7 +133,7 @@ export class PlanModeHandler {
     planId: string,
     conversationId: string
   ): void {
-    console.log('[ChatProvider] Plan rejected:', { planId, conversationId });
+    logger.info('Plan rejected:', { planId, conversationId });
 
     // Persist the plan status change
     this._updatePlanStatusInConversation(conversationId, planId, 'rejected');
@@ -158,7 +161,7 @@ export class PlanModeHandler {
     conversationId: string,
     action: 'approve' | 'reject'
   ): void {
-    console.log('[ChatProvider] Plan step action:', { planId, stepId, conversationId, action });
+    logger.info('Plan step action:', { planId, stepId, conversationId, action });
 
     const newStatus = action === 'approve' ? 'approved' : 'rejected';
 
@@ -182,7 +185,7 @@ export class PlanModeHandler {
     newDescription: string,
     conversationId: string
   ): void {
-    console.log('[ChatProvider] Plan step modified:', { planId, stepId, newDescription, conversationId });
+    logger.info('Plan step modified:', { planId, stepId, newDescription, conversationId });
 
     // Persist the step modification
     this._updatePlanStepInConversation(conversationId, planId, stepId, {
@@ -213,7 +216,7 @@ export class PlanModeHandler {
   ): void {
     const conversation = this.deps.conversations.manager.get(conversationId);
     if (!conversation) {
-      console.warn('[ChatProvider] Conversation not found for plan step update:', conversationId);
+      logger.warn('Conversation not found for plan step update:', conversationId);
       return;
     }
 
@@ -260,7 +263,7 @@ export class PlanModeHandler {
 
     if (updated) {
       this.deps.conversations.manager.updateMessages(conversationId, updatedMessages);
-      console.log('[ChatProvider] Persisted plan step update:', { conversationId, planId, stepId, update });
+      logger.info('Persisted plan step update:', { conversationId, planId, stepId, update });
     }
   }
 
@@ -271,7 +274,7 @@ export class PlanModeHandler {
   ): void {
     const conversation = this.deps.conversations.manager.get(conversationId);
     if (!conversation) {
-      console.warn('[ChatProvider] Conversation not found for plan status update:', conversationId);
+      logger.warn('Conversation not found for plan status update:', conversationId);
       return;
     }
 
@@ -308,7 +311,7 @@ export class PlanModeHandler {
 
     if (updated) {
       this.deps.conversations.manager.updateMessages(conversationId, updatedMessages);
-      console.log('[ChatProvider] Persisted plan status update:', { conversationId, planId, status });
+      logger.info('Persisted plan status update:', { conversationId, planId, status });
     }
   }
 }

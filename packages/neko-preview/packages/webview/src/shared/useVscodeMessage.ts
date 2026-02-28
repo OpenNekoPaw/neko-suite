@@ -6,6 +6,9 @@
 
 import { useEffect, useCallback, useRef } from 'react';
 import type { WebviewMessage, ExtensionMessage } from './types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('useVscodeMessage');
 
 // Acquire VSCode API (available in webview context)
 interface VsCodeApi {
@@ -22,9 +25,9 @@ function getVsCodeApi(): VsCodeApi {
 		vscodeApi = (window as any).acquireVsCodeApi?.() ?? null;
 		if (!vscodeApi) {
 			// Fallback for dev mode (outside VSCode)
-			console.warn('[useVscodeMessage] acquireVsCodeApi not available, using mock');
+			logger.warn('acquireVsCodeApi not available, using mock');
 			vscodeApi = {
-				postMessage: (msg) => console.log('[mock postMessage]', msg),
+				postMessage: (msg) => logger.info(`[mock postMessage] ${JSON.stringify(msg)}`),
 				getState: () => null,
 				setState: () => {},
 			};

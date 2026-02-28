@@ -5,6 +5,9 @@
 
 import { useState, useCallback, memo } from 'react';
 import { Message } from '@/components/types';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('MessageActions');
 
 interface MessageActionsProps {
   message: Message;
@@ -34,7 +37,7 @@ export const MessageActions = memo(function MessageActions({
       setTimeout(() => setCopied(false), 2000);
       onCopy?.();
     } catch (err) {
-      console.error('Failed to copy:', err);
+      logger.error('Failed to copy:', err);
     }
   }, [message.content, onCopy]);
 

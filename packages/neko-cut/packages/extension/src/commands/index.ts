@@ -8,6 +8,9 @@ import * as path from 'path';
 import { createDefaultProject } from '@neko/shared';
 import type { VideoProjectOutlineProvider } from '../views/outlineProvider';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
+import { getLogger } from '../base';
+
+const logger = getLogger('Commands');
 import { registerTimelineCommands } from './timeline-commands';
 /**
  * Register all extension commands
@@ -45,7 +48,7 @@ export function registerCommands(
       const webview = videoEditorProvider.getActiveWebview();
 
       if (!webview) {
-        console.warn('No active webview found for element selection');
+        logger.warn('No active webview found for element selection');
         return;
       }
 
@@ -56,7 +59,7 @@ export function registerCommands(
         elementId,
       });
 
-      console.log(`Selecting element: track=${trackId}, element=${elementId}`);
+      logger.debug(`Selecting element: track=${trackId}, element=${elementId}`);
     })
   );
 

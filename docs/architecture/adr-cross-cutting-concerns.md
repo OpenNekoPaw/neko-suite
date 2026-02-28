@@ -1,7 +1,7 @@
 # ADR: 统一横切关注点基础设施
 
 > 日期：2026-02-28
-> 状态：已实施（Phase 1）
+> 状态：已实施（Phase 1-3）
 
 ## 决策
 
@@ -43,8 +43,8 @@ Layer 2 - Webview     import from '@neko/shared/i18n/webview'      依赖 DOM
 ## 实施计划
 
 - [x] Phase 1: 基础设施搭建（纯新增，无破坏性变更）
-- [ ] Phase 2: 各 webview tailwind.config.js 改用共享 preset
-- [ ] Phase 3: 逐包迁移 console.log → logger
+- [x] Phase 2: 各 webview tailwind.config.js 改用共享 preset
+- [x] Phase 3: 逐包迁移 console.log → logger（~400 处，8 个包）
 - [ ] Phase 4: 统一 i18n 实现
 - [ ] Phase 5: 推广 ErrorBoundary + VSCodeErrorHandler
 

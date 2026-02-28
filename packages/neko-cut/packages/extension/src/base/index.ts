@@ -10,3 +10,5 @@ export {
   getService,
   getGlobalServices,
 } from './serviceCollection';
+
+export { setRootLogger, getLogger, getRootLogger } from './logger';

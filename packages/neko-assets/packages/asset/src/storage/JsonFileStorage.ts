@@ -17,6 +17,9 @@ import type {
 	StorageEventListener,
 	StorageEventType,
 } from './IAssetStorage';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('JsonFileStorage');
 
 /**
  * File system interface for JSON storage
@@ -464,7 +467,7 @@ export class JsonFileStorage implements IAssetStorageWithEvents {
 			try {
 				listener(event);
 			} catch (e) {
-				console.error('Storage event listener error:', e);
+				logger.error('Storage event listener error:', e);
 			}
 		}
 	}

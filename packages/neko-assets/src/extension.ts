@@ -23,6 +23,10 @@ import { AssetFileDecorationProvider } from './providers/AssetFileDecorationProv
 import { AssetManagerTreeProvider } from './providers/AssetManagerTreeProvider';
 import { AssetHistoryTreeProvider } from './providers/AssetHistoryTreeProvider';
 import { VscodeGitService } from './services/VscodeGitService';
+import { createVSCodeLogger } from '@neko/shared/vscode/extension';
+import { setRootLogger, getLogger } from './utils/logger';
+
+const logger = getLogger('Extension');
 
 // =============================================================================
 // Extension State
@@ -61,7 +65,10 @@ const nodeFileSystem: IFileSystem = {
 // =============================================================================
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-	console.log('[Neko Assets] Activating extension...');
+	const rootLogger = createVSCodeLogger('Neko Assets', 'NekoAssets', context);
+	setRootLogger(rootLogger);
+
+	logger.info('Activating extension...');
 
 	// 1. Initialize AssetLibrary
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -89,7 +96,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			});
 
 			await library.initialize();
-			console.log('[Neko Assets] AssetLibrary initialized at', storagePath);
+			logger.info(`AssetLibrary initialized at ${storagePath}`);
 
 			// Initialize AssetDiffService with Git integration
 			const gitService = new VscodeGitService();
@@ -108,9 +115,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 					},
 				},
 			);
-			console.log('[Neko Assets] AssetDiffService initialized with Git integration');
+			logger.info('AssetDiffService initialized with Git integration');
 		} catch (error) {
-			console.error('[Neko Assets] Failed to initialize AssetLibrary:', error);
+			logger.error('Failed to initialize AssetLibrary:', error);
 		}
 	}
 
@@ -155,7 +162,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	// 6. Register internal API commands (for cross-extension access)
 	registerInternalCommands(context);
 
-	console.log('[Neko Assets] Extension activated');
+	logger.info('Extension activated');
 }
 
 // =============================================================================
@@ -282,7 +289,7 @@ function registerLegacyCommands(context: vscode.ExtensionContext): void {
 					await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
 				}
 			} catch (error) {
-				console.error('[Neko Assets] Failed to open media preview:', error);
+				logger.error('Failed to open media preview:', error);
 				vscode.window.showErrorMessage(`Failed to preview: ${uri.fsPath}`);
 			}
 		}),
@@ -303,7 +310,7 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
 				try {
 					return await library.getAllEntities();
 				} catch (error) {
-					console.error('[Neko Assets] getAllEntities failed:', error);
+					logger.error('getAllEntities failed:', error);
 					return [];
 				}
 			},
@@ -319,7 +326,7 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
 				try {
 					return await diffService.compareVariants(entityId, variantIdA, variantIdB);
 				} catch (error) {
-					console.error('[Neko Assets] compareVariants failed:', error);
+					logger.error('compareVariants failed:', error);
 					return null;
 				}
 			},
@@ -335,7 +342,7 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
 				try {
 					return await diffService.compare(request);
 				} catch (error) {
-					console.error('[Neko Assets] compare failed:', error);
+					logger.error('compare failed:', error);
 					return null;
 				}
 			},
@@ -351,7 +358,7 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
 				try {
 					return await diffService.getVersionHistory(filePath);
 				} catch (error) {
-					console.error('[Neko Assets] getVersionHistory failed:', error);
+					logger.error('getVersionHistory failed:', error);
 					return [];
 				}
 			},
@@ -367,7 +374,7 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
 				try {
 					return await diffService.compareWithGit(filePath, ref);
 				} catch (error) {
-					console.error('[Neko Assets] compareWithGit failed:', error);
+					logger.error('compareWithGit failed:', error);
 					return null;
 				}
 			},
@@ -383,7 +390,7 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
 				try {
 					return await thumbnailService.generate(filePath);
 				} catch (error) {
-					console.error('[Neko Assets] generateThumbnail failed:', error);
+					logger.error('generateThumbnail failed:', error);
 					return null;
 				}
 			},
@@ -399,7 +406,7 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
 				try {
 					return await thumbnailService.getCached(filePath);
 				} catch (error) {
-					console.error('[Neko Assets] getThumbnailPath failed:', error);
+					logger.error('getThumbnailPath failed:', error);
 					return null;
 				}
 			},
@@ -416,7 +423,7 @@ export async function deactivate(): Promise<void> {
 		try {
 			await library.flush();
 		} catch (error) {
-			console.error('[Neko Assets] Failed to flush library on deactivate:', error);
+			logger.error('Failed to flush library on deactivate:', error);
 		}
 		library = null;
 	}

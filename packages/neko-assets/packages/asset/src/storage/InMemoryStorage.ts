@@ -16,6 +16,9 @@ import type {
 	StorageEventListener,
 	StorageEventType,
 } from './IAssetStorage';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('InMemoryStorage');
 
 /**
  * In-memory storage implementation
@@ -386,7 +389,7 @@ export class InMemoryStorage implements IAssetStorageWithEvents {
 			try {
 				listener(event);
 			} catch (e) {
-				console.error('Storage event listener error:', e);
+				logger.error('Storage event listener error:', e);
 			}
 		}
 	}

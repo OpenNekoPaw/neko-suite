@@ -4,6 +4,9 @@ import type { SubtitleElement } from '@neko/shared';
 import { generateWaveform } from '../../utils/waveform';
 import { ShapeElementContent } from '../ShapeElementContent';
 import { getThumbnailService, type ThumbnailData } from '../../services';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('TimelineElementContent');
 
 interface VisibleRange {
   startTime: number;
@@ -197,7 +200,7 @@ const MediaElementContent = memo(function MediaElementContent({
           setIsLoading(false);
         })
         .catch((error) => {
-          console.warn('[MediaElementContent] Failed to generate thumbnails:', error);
+          logger.warn('Failed to generate thumbnails:', error);
           setIsLoading(false);
         });
     }, delay);
@@ -461,7 +464,7 @@ const AudioElementContent = memo(function AudioElementContent({
           setIsLoading(false);
         }
       } catch (error) {
-        console.warn('Failed to load audio waveform:', error);
+        logger.warn('Failed to load audio waveform:', error);
         if (!cancelled) {
           setIsLoading(false);
         }

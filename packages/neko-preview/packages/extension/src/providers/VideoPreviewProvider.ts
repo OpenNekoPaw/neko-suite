@@ -16,6 +16,9 @@ import * as vscode from 'vscode';
 import { PreviewService, type MediaInfo } from '../services/PreviewService';
 import { getWebviewHtml } from '../utils/html';
 import type { StatusBarManager } from '../ui/StatusBarManager';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('VideoPreview');
 
 // =============================================================================
 // VideoPreviewProvider
@@ -222,7 +225,7 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
 								payload: { imageDataUrl: `data:image/jpeg;base64,${frameData}` },
 							});
 						} catch (error) {
-							console.error('[VideoPreview] Frame capture failed:', error);
+							logger.error('Frame capture failed:', error);
 						}
 						break;
 					}

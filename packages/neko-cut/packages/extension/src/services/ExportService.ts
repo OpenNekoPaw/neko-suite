@@ -17,6 +17,9 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import type { FrameServerService } from './FrameServerService';
 import type { ProjectData } from '@neko/shared';
+import { getLogger } from '../base';
+
+const logger = getLogger('ExportService');
 
 // =============================================================================
 // Types
@@ -183,7 +186,7 @@ export class ExportService implements vscode.Disposable {
 
 		this._currentJobId = actualJobId;
 
-		console.log(`[ExportService] Export started: jobId=${actualJobId}, totalFrames=${totalFrames}`);
+		logger.info(`Export started: jobId=${actualJobId}, totalFrames=${totalFrames}`);
 
 		// Start progress polling
 		this.startPolling();
@@ -206,9 +209,9 @@ export class ExportService implements vscode.Disposable {
 				action: 'export_cancel',
 				id: jobId,
 			});
-			console.log(`[ExportService] Export cancelled: jobId=${jobId}`);
+			logger.info(`Export cancelled: jobId=${jobId}`);
 		} catch (error) {
-			console.warn('[ExportService] Failed to cancel export:', error);
+			logger.warn('Failed to cancel export:', error);
 		}
 
 		this._currentJobId = null;
@@ -291,10 +294,10 @@ export class ExportService implements vscode.Disposable {
 						this._onDidError.fire(progress.error ?? 'Export failed');
 					}
 
-					console.log(`[ExportService] Export ${progress.state}: jobId=${jobId}`);
+					logger.info(`Export ${progress.state}: jobId=${jobId}`);
 				}
 			} catch (error) {
-				console.warn('[ExportService] Progress poll error:', error);
+				logger.warn('Progress poll error:', error);
 			}
 		}, PROGRESS_POLL_INTERVAL_MS);
 	}

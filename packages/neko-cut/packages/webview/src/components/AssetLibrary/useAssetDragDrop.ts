@@ -10,6 +10,9 @@ import { useState, useCallback } from 'react';
 import type { MoveVariantInput, MergeEntitiesInput, MoveVariantResult, MergeEntitiesResult } from '@neko/shared';
 import { ASSET_INTERNAL_DRAG_MIME, type AssetInternalDragData } from '@neko/shared';
 import type { SelectionItem } from './types';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('AssetDragDrop');
 
 /** @deprecated Use ASSET_INTERNAL_DRAG_MIME from @neko/shared */
 export const ASSET_INTERNAL_DRAG_TYPE = ASSET_INTERNAL_DRAG_MIME;
@@ -149,7 +152,7 @@ export function useAssetDragDrop({
 
 			onOperationComplete?.();
 		} catch (err) {
-			console.error('[useAssetDragDrop] Drop operation failed:', err);
+			logger.error('Drop operation failed:', err);
 		}
 	}, [moveVariant, mergeEntities, onOperationComplete]);
 

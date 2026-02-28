@@ -5,7 +5,7 @@
  * Routes messages to AssetService for processing.
  */
 
-import * as vscode from 'vscode';
+import { getLogger } from '../base';
 import type {
 	AssetRequest,
 	AssetResponse,
@@ -21,6 +21,8 @@ import type {
 } from '@neko/shared';
 import { getService } from '../base';
 import { IAssetService, type AssetService, type ImportOptions } from '../services/AssetService';
+
+const logger = getLogger('AssetMessageHandler');
 
 // =============================================================================
 // Message Handler
@@ -290,7 +292,7 @@ export async function handleAssetMessage(
 		}
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
-		console.error('[AssetMessageHandler] Error:', errorMessage);
+		logger.error('Error:', errorMessage);
 		respond({
 			type: 'asset:error',
 			payload: { message: errorMessage, code: 'OPERATION_FAILED' },

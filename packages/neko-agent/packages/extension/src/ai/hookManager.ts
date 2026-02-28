@@ -19,6 +19,9 @@ import {
   type ExecutorHooks,
   HOOK_DIRECTORIES,
 } from '@neko/agent';
+import { getLogger } from '../base';
+
+const logger = getLogger('HookManager');
 
 // =============================================================================
 // esbuild Compiler Implementation
@@ -296,17 +299,16 @@ export class HookManager implements vscode.Disposable {
 
       // Log results
       if (result.hooks.length > 0) {
-        console.log(
-          `[HookManager] Loaded ${result.hooks.length} hook(s):`,
-          result.hooks.map((h) => h.metadata.name).join(', ')
+        logger.info(
+          `Loaded ${result.hooks.length} hook(s): ${result.hooks.map((h) => h.metadata.name).join(', ')}`
         );
       }
 
       // Report errors
       for (const error of result.errors) {
-        console.error(`[HookManager] Failed to load ${error.file}: ${error.message}`);
+        logger.error(`Failed to load ${error.file}: ${error.message}`);
         if (error.details) {
-          console.error(`  Details: ${error.details}`);
+          logger.error(`  Details: ${error.details}`);
         }
       }
 
@@ -315,7 +317,7 @@ export class HookManager implements vscode.Disposable {
         this.loadedHooks = hooks;
         this.loadErrors = errors;
 
-        console.log(`[HookManager] Reloaded ${hooks.length} hook(s)`);
+        logger.info(`Reloaded ${hooks.length} hook(s)`);
 
         // Fire reload event
         this._onDidReload.fire({ hooks, errors });
@@ -323,7 +325,7 @@ export class HookManager implements vscode.Disposable {
 
       this.initialized = true;
     } catch (error) {
-      console.error('[HookManager] Failed to initialize:', error);
+      logger.error('Failed to initialize:', error);
       // Don't throw - allow extension to continue without custom hooks
     }
   }

@@ -6,6 +6,9 @@ import { ToastProvider } from '@/components/Toast';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { detectLocale } from '@/i18n';
 import '@/index.css';
+import { getLogger } from '@/utils/logger';
+
+const logger = getLogger('NekoSuite');
 
 try {
   const rootElement = document.getElementById('root');
@@ -26,8 +29,8 @@ try {
       </React.StrictMode>
     );
   } else {
-    console.error('[Neko Suite] Root element not found!');
+    logger.error('Root element not found!');
   }
 } catch (error) {
-  console.error('[Neko Suite] Error rendering app:', error);
+  logger.error('Error rendering app:', error);
 }

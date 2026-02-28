@@ -8,6 +8,10 @@
  * - Resume support
  */
 
+import { getLogger } from '../base';
+
+const logger = getLogger('ConversationManager');
+
 /**
  * Tool call information
  */
@@ -519,7 +523,7 @@ export class ConversationManager {
     }
 
     if (removed > 0) {
-      console.log(`[ConversationManager] Cleanup: removed ${removed} conversations`);
+      logger.info(`Cleanup: removed ${removed} conversations`);
       this._persist();
     }
   }

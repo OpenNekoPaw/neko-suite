@@ -9,6 +9,9 @@ import { getFileType } from '../utils';
 import type { ProjectData, TimelineTrack, TextElement } from '../types';
 import { CENTERED_TRANSFORM, ASSET_DRAG_MIME, getDragItems, type AssetDragData } from '@neko/shared';
 import { getMediaInfoService } from '../services';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('useTimelineDragDrop');
 
 export interface TimelineDragDropOptions {
   timelineRef: RefObject<HTMLDivElement>;
@@ -141,7 +144,7 @@ export function useTimelineDragDrop({
         try {
           duration = await getMediaInfoService().getDuration(filePath);
         } catch (e) {
-          console.warn('[useTimelineDragDrop] Failed to get audio duration:', e);
+          logger.warn('Failed to get audio duration:', e);
         }
         addMediaElement(audioTrackId, filePath, displayName, duration, startTime);
       } else {
@@ -161,7 +164,7 @@ export function useTimelineDragDrop({
           try {
             duration = await getMediaInfoService().getDuration(filePath);
           } catch (e) {
-            console.warn('[useTimelineDragDrop] Failed to get video duration:', e);
+            logger.warn('Failed to get video duration:', e);
             duration = DEFAULT_VIDEO_DURATION;
           }
           // Video: use addMediaElementWithAudio for automatic audio track creation
@@ -202,7 +205,7 @@ export function useTimelineDragDrop({
           }
         } catch (err) {
           // Not valid JSON or not asset data, continue with other handlers
-          console.debug('[useTimelineDragDrop] JSON parse failed, trying other handlers');
+          logger.debug('JSON parse failed, trying other handlers');
         }
       }
 
@@ -251,7 +254,7 @@ export function useTimelineDragDrop({
 
     // Execute async processing
     processDropItems().catch(err => {
-      console.error('[useTimelineDragDrop] Error processing drop:', err);
+      logger.error('Error processing drop:', err);
       onError?.('Failed to process dropped files');
     });
   }, [project, tracks, zoomLevel, addMediaElement, addMediaElementWithAudio, addElement, addTrack, tracksRef, onError]);

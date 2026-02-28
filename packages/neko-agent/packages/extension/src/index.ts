@@ -6,7 +6,8 @@
  */
 
 import * as vscode from 'vscode';
-import { ServiceCollection, setGlobalServices } from './base';
+import { ServiceCollection, setGlobalServices, setRootLogger, getRootLogger } from './base';
+import { createVSCodeLogger } from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { ChatViewProvider } from './chat';
 import { createNekoCutTools, createNekoCanvasTools } from './tools/extensionTools';
@@ -15,7 +16,11 @@ import { createNekoCutTools, createNekoCanvasTools } from './tools/extensionTool
  * Activate the extension
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  console.log('[NekoAgent] Activating extension...');
+  // Initialize logger
+  const logger = createVSCodeLogger('Neko Agent', 'NekoAgent', context);
+  setRootLogger(logger);
+
+  logger.info('Activating extension...');
 
   // Initialize service collection
   const services = new ServiceCollection();
@@ -56,7 +61,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
-  console.log('[NekoAgent] Extension activated');
+  getRootLogger().info('Extension activated');
 }
 
 /**
@@ -71,7 +76,7 @@ function registerExtensionTools(toolRegistry: { register: (tool: unknown) => voi
   const nekocanvasTools = createNekoCanvasTools();
   nekocanvasTools.forEach((tool) => toolRegistry.register(tool));
 
-  console.log(`[NekoAgent] Registered ${nekocutTools.length + nekocanvasTools.length} extension tools`);
+  getRootLogger().info(`Registered ${nekocutTools.length + nekocanvasTools.length} extension tools`);
 }
 
 /**
@@ -201,5 +206,5 @@ function registerCommands(
  * Deactivate the extension
  */
 export function deactivate(): void {
-  console.log('[NekoAgent] Deactivating extension...');
+  getRootLogger().info('Deactivating extension...');
 }

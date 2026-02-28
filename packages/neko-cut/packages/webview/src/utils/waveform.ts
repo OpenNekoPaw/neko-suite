@@ -9,6 +9,9 @@
  */
 
 import { getMediaProxy } from '../services/mediaProxyFactory';
+import { getLogger } from './logger';
+
+const logger = getLogger('Waveform');
 
 export interface WaveformData {
   peaks: number[]; // Normalized peak values (0-1), mono-mixed
@@ -167,7 +170,7 @@ export async function generateWaveform(
       sampleRate: engineData.sampleRate,
     };
   } catch (error) {
-    console.error('[Waveform] Failed to generate waveform via engine:', error);
+    logger.error('Failed to generate waveform via engine:', error);
     return {
       peaks: generatePlaceholderPeaks(samples),
       duration: 0,
@@ -209,7 +212,7 @@ export async function generateWaveformRange(
 
     return normalizePeaks(resamplePeaks(extracted, samples));
   } catch (error) {
-    console.error('[Waveform] Failed to generate waveform range:', error);
+    logger.error('Failed to generate waveform range:', error);
     return generatePlaceholderPeaks(samples);
   }
 }

@@ -5,6 +5,9 @@
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('TaskHandlers');
 
 /**
  * Handle 'tasksUpdated' message - Background tasks list updated
@@ -24,7 +27,7 @@ const handleTaskCreated: MessageHandler = (message, context) => {
  * Handle 'taskUpdated' message - Background task updated
  */
 const handleTaskUpdated: MessageHandler = (message, context) => {
-  console.log('[AIAssistant] Task updated:', message.task);
+  logger.info('Task updated:', message.task);
   context.setBackgroundTasks(prev => prev.map(t =>
     t.id === message.task.id
       ? { ...t, ...message.task }  // Merge to preserve existing fields

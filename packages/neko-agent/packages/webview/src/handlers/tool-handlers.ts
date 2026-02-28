@@ -11,6 +11,9 @@
 import type { MessageHandler, HandlerRegistration } from './types';
 import type { BackgroundTask } from '@/components/TaskListView';
 import type { ContentBlock, ToolCall, Plan, PlanStep, Message } from '@/components/types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('ToolHandlers');
 
 /**
  * Parse plan markdown content into Plan object
@@ -118,7 +121,7 @@ const handleToolCall: MessageHandler = (message, context) => {
   // Use messageId from extension if provided for precise targeting
   const targetMessageId = message.messageId || context.streamingMessageIdRef.current;
 
-  console.log('[AIAssistant] handleToolCall received:', {
+  logger.info('handleToolCall received:', {
     conversationId: message.conversationId,
     messageId: message.messageId,
     toolName: message.toolName,
@@ -139,7 +142,7 @@ const handleToolCall: MessageHandler = (message, context) => {
         targetIndex = findTargetMessageForToolCall(prev, context.streamingMessageIdRef.current);
       }
 
-      console.log('[AIAssistant] toolCall targetIndex:', targetIndex, 'using messageId:', !!message.messageId);
+      logger.info(`toolCall targetIndex: ${targetIndex}, using messageId: ${!!message.messageId}`);
 
       const toolCallId = message.toolCallId || `tool-${Date.now()}`;
       const newToolCall: ToolCall = {
@@ -158,7 +161,7 @@ const handleToolCall: MessageHandler = (message, context) => {
 
       // If no target message found, create a new assistant message for tool calls
       if (targetIndex === -1) {
-        console.log('[AIAssistant] Creating new assistant message for toolCall');
+        logger.info('Creating new assistant message for toolCall');
         // Use messageId from extension if provided
         const newId = message.messageId || Date.now().toString();
         // Update ref so subsequent toolCalls/toolResults can find this message
@@ -296,7 +299,7 @@ const handleToolResult: MessageHandler = (message, context) => {
   const targetMessageId = message.messageId || context.streamingMessageIdRef.current;
 
   // Debug: log tool result data
-  console.log('[AIAssistant] toolResult received:', {
+  logger.info('toolResult received:', {
     success: message.success,
     data: message.data,
     hasBackgroundMode: resultData?.backgroundMode,
@@ -320,7 +323,7 @@ const handleToolResult: MessageHandler = (message, context) => {
       }
 
       if (targetIndex === -1) {
-        console.log('[AIAssistant] No target message found for toolResult');
+        logger.info('No target message found for toolResult');
         return prev;
       }
 
@@ -425,7 +428,7 @@ const handleToolResult: MessageHandler = (message, context) => {
 
           finalBlocks = [...updatedBlocks, planBlock];
 
-          console.log('[AIAssistant] Created plan ContentBlock:', {
+          logger.info('Created plan ContentBlock:', {
             planId,
             title: planTitle,
             stepsCount: plan.steps.length,
@@ -576,14 +579,14 @@ const handleToolResult: MessageHandler = (message, context) => {
       updatedAt: new Date().toISOString(),
     };
 
-    console.log('[AIAssistant] Creating background task:', newTask);
+    logger.info('Creating background task:', newTask);
 
     context.setBackgroundTasks(prevTasks => {
       if (prevTasks.some(t => t.id === taskId)) {
-        console.log('[AIAssistant] Task already exists, skipping:', taskId);
+        logger.info(`Task already exists, skipping: ${taskId}`);
         return prevTasks;
       }
-      console.log('[AIAssistant] Added task to list, total:', prevTasks.length + 1);
+      logger.info(`Added task to list, total: ${prevTasks.length + 1}`);
       return [newTask, ...prevTasks];
     });
   }
@@ -596,7 +599,7 @@ const handleToolResult: MessageHandler = (message, context) => {
 const handleToolConfirmation: MessageHandler = (message, context) => {
   const toolCallId = message.toolCallId as string;
 
-  console.log('[AIAssistant] toolConfirmation received:', {
+  logger.info('toolConfirmation received:', {
     conversationId: message.conversationId,
     toolCallId,
     toolName: message.toolName,
@@ -612,7 +615,7 @@ const handleToolConfirmation: MessageHandler = (message, context) => {
       );
 
       if (targetIndex === -1) {
-        console.log('[AIAssistant] No target message found for toolConfirmation');
+        logger.info('No target message found for toolConfirmation');
         return prev;
       }
 

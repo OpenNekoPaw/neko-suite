@@ -12,6 +12,9 @@ import { StateCreator } from 'zustand';
 import type { ProjectData } from '../../types';
 import { applyOperation, type EditOperation } from '@neko/shared';
 import { createMeta } from '../utils/operation-helpers';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('Dispatch');
 
 // 依赖接口
 interface ProjectDependency {
@@ -44,7 +47,7 @@ export const createDispatchSlice: StateCreator<
       set({ project: newProject as any });
       pushOperation(op);
     } catch (e) {
-      console.error('[Dispatch] apply failed:', e, op);
+      logger.error('apply failed:', { error: e, op });
     }
   },
 
@@ -63,7 +66,7 @@ export const createDispatchSlice: StateCreator<
       set({ project: newProject as any });
       pushOperation(batchOp);
     } catch (e) {
-      console.error('[Dispatch] batch apply failed:', e, ops);
+      logger.error('batch apply failed:', { error: e, ops });
     }
   },
 });

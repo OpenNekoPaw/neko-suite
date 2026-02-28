@@ -8,7 +8,9 @@
 import * as vscode from 'vscode';
 import { Platform, createPlatform } from '@neko/platform';
 import { MCPManager, TaskManager, ToolRegistry } from '@neko/agent';
-import { ServiceCollection, createServiceId } from '../base';
+import { ServiceCollection, createServiceId, getLogger } from '../base';
+
+const logger = getLogger('ServiceBootstrap');
 import { IEditorRegistry, EditorRegistry } from '../editor/common/editorRegistry';
 import { AgentManager, IAgentManager as IAgentManagerInterface } from '../ai/agentManager';
 
@@ -181,7 +183,7 @@ export async function bootstrapCoreServices(
 
   // Connect MCP servers in background
   connectMCPServers(mcpManager, toolRegistry, connectionStateManager).catch(error => {
-    console.error('[NekoAgent] Failed to connect MCP servers:', error);
+    logger.error('Failed to connect MCP servers:', error);
   });
 
   // ==========================================================================
@@ -202,7 +204,7 @@ export async function bootstrapCoreServices(
   taskManager.initialize().then(() => {
     return taskManager.resumePendingTasks();
   }).catch((err) => {
-    console.error('[NekoAgent] Failed to initialize TaskManager:', err);
+    logger.error('Failed to initialize TaskManager:', err);
   });
 
   return {
@@ -231,11 +233,11 @@ async function connectMCPServers(
     try {
       await mcpManager.connect(server.id);
       connectionStateManager.updateState(server.id, server.name, 'mcp', 'connected');
-      console.log(`[NekoAgent] Connected to MCP server: ${server.name}`);
+      logger.info(`Connected to MCP server: ${server.name}`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       connectionStateManager.updateState(server.id, server.name, 'mcp', 'error', errorMessage);
-      console.error(`[NekoAgent] Failed to connect to MCP server ${server.name}:`, error);
+      logger.error(`Failed to connect to MCP server ${server.name}:`, error);
     }
   }
 
@@ -251,7 +253,7 @@ async function connectMCPServers(
 // =============================================================================
 
 export function logServicesStatus(result: IServiceBootstrapResult): void {
-  console.log('[NekoAgent] Services initialized:', {
+  logger.info('Services initialized:', {
     platform: !!result.platform,
     mcpManager: result.mcpManager.listServers().length + ' servers',
     taskManager: !!result.taskManager,

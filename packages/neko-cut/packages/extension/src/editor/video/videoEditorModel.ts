@@ -6,6 +6,9 @@
 import * as vscode from 'vscode';
 import { BaseEditorModel, EditorCapabilities, IModelChangeEvent } from '../common/editorModel';
 import { ProjectData, createDefaultProject } from '@neko/shared';
+import { getLogger } from '../../base';
+
+const logger = getLogger('VideoEditorModel');
 
 // =============================================================================
 // 视频编辑器模型
@@ -101,7 +104,7 @@ export class VideoEditorModel extends BaseEditorModel {
       }
 
       // 所有重试失败后，记录警告并重置计数器
-      console.warn('[VideoEditorModel] Failed to apply edit after retries:', lastError?.message);
+      logger.warn('Failed to apply edit after retries:', lastError?.message);
       // Decrement counter since no document change event will be fired
       if (this._internalSaveCounter > 0) {
         this._internalSaveCounter--;
@@ -172,7 +175,7 @@ export class VideoEditorModel extends BaseEditorModel {
       const parsed = JSON.parse(text) as ProjectData;
       return this.validateAndMigrate(parsed);
     } catch (error) {
-      console.error('[VideoEditorModel] Failed to parse .jvi file:', error);
+      logger.error('Failed to parse .jvi file:', error);
       return createDefaultProject();
     }
   }

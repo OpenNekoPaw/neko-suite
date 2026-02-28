@@ -8,6 +8,9 @@ import { useEditorStore } from '../stores/editor-store';
 import { exportHandlers, updateExportProgress } from './handlers/export-handlers';
 import { renderHandlers, updateRenderTask } from './handlers/render-handlers';
 import { getVSCodeAPI } from '../utils/vscodeApi';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('TimelineToolExecutor');
 
 // Track initialization state to prevent duplicate listeners
 let isInitialized = false;
@@ -32,7 +35,7 @@ function registerHandlers(): void {
     toolHandlers.set(name, handler);
   });
 
-  console.log(`[TimelineToolExecutor] Registered ${toolHandlers.size} tool handlers`);
+  logger.info(`Registered ${toolHandlers.size} tool handlers`);
 }
 
 /**
@@ -86,7 +89,7 @@ function handleToolMessage(message: ToolExecuteRequest): void {
 export function initToolExecutor(): void {
   // Prevent duplicate initialization
   if (isInitialized) {
-    console.warn('[TimelineToolExecutor] Already initialized, skipping');
+    logger.warn('Already initialized, skipping');
     return;
   }
 
@@ -171,7 +174,7 @@ export function initToolExecutor(): void {
   window.addEventListener('message', messageHandler);
   isInitialized = true;
 
-  console.log('[TimelineToolExecutor] Initialized');
+  logger.info('Initialized');
 }
 
 /**
@@ -191,7 +194,7 @@ export function disposeToolExecutor(): void {
   toolHandlers.clear();
   isInitialized = false;
 
-  console.log('[TimelineToolExecutor] Disposed');
+  logger.info('Disposed');
 }
 
 /**

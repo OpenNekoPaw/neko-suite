@@ -37,7 +37,9 @@ import type {
 	MergeEntitiesResult,
 	VariantComparisonResult,
 } from '@neko/shared';
-import { createServiceId } from '../base';
+import { createServiceId, getLogger } from '../base';
+
+const logger = getLogger('AssetService');
 
 // =============================================================================
 // Service Identifier
@@ -361,7 +363,7 @@ export class AssetService implements vscode.Disposable {
 				const result = await this.importFile(uri.fsPath, { autoClassify: true });
 				results.push(result);
 			} catch (error) {
-				console.error(`[AssetService] Failed to import ${uri.fsPath}:`, error);
+				logger.error(`Failed to import ${uri.fsPath}:`, error);
 				vscode.window.showErrorMessage(`Failed to import ${path.basename(uri.fsPath)}`);
 			}
 		}

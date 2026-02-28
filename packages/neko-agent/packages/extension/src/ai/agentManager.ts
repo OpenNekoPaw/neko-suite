@@ -9,7 +9,9 @@
  */
 
 import * as vscode from 'vscode';
-import { createServiceId } from '../base';
+import { createServiceId, getLogger } from '../base';
+
+const logger = getLogger('AgentManager');
 import type { Platform } from '@neko/platform';
 import type { ChatMessage } from '@neko/shared';
 import { AgentRunner, IAgentRunner, IAgentConfig } from './agentRunner';
@@ -351,7 +353,7 @@ export class AgentManager implements IAgentManager {
       }
     }
 
-    console.log(`[AgentManager] Loaded ${messages.length} messages with context for: ${conversationId}`);
+    logger.info(`Loaded ${messages.length} messages with context for: ${conversationId}`);
   }
 
   clearHistory(conversationId: string): void {
@@ -406,7 +408,7 @@ export class AgentManager implements IAgentManager {
       }
 
       if (evictId) {
-        console.log(`[AgentManager] Evicting agent (LRU): ${evictId}`);
+        logger.info(`Evicting agent (LRU): ${evictId}`);
         this.remove(evictId);
       } else {
         // 所有 Agent 都在运行，无法驱逐
@@ -414,9 +416,9 @@ export class AgentManager implements IAgentManager {
         const absoluteMax = 20;
         if (this._maxAgents < absoluteMax) {
           this._maxAgents++;
-          console.warn(`[AgentManager] All agents running, temporarily increased maxAgents to ${this._maxAgents}`);
+          logger.warn(`All agents running, temporarily increased maxAgents to ${this._maxAgents}`);
         } else {
-          console.error(`[AgentManager] Cannot evict: reached absolute max (${absoluteMax}) agents, all running`);
+          logger.error(`Cannot evict: reached absolute max (${absoluteMax}) agents, all running`);
         }
         break;
       }
@@ -444,7 +446,7 @@ export class AgentManager implements IAgentManager {
         try {
           const agent = this.getOrCreate(waiting.conversationId);
           waiting.resolve(agent);
-          console.log(`[AgentManager] Processed waiting request for: ${waiting.conversationId}`);
+          logger.info(`Processed waiting request for: ${waiting.conversationId}`);
         } catch (error) {
           waiting.reject(error instanceof Error ? error : new Error(String(error)));
         }

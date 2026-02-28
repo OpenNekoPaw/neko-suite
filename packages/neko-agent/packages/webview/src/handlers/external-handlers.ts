@@ -7,6 +7,9 @@
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('ExternalHandlers');
 
 /**
  * Extended context with external message support
@@ -32,13 +35,13 @@ export function setExternalMessageContext(ctx: ExternalMessageContext): void {
  */
 const handleExternalMessage: MessageHandler = (message) => {
   if (!externalContext) {
-    console.warn('[AIAssistant] External message context not set');
+    logger.warn('External message context not set');
     return;
   }
 
   const messageText = message.message as string;
   if (messageText?.trim()) {
-    console.log('[AIAssistant] Received external message, auto-sending:', messageText.substring(0, 50));
+    logger.info(`Received external message, auto-sending: ${messageText.substring(0, 50)}`);
     externalContext.triggerSend(messageText);
   }
 };
@@ -48,13 +51,13 @@ const handleExternalMessage: MessageHandler = (message) => {
  */
 const handlePrefillInput: MessageHandler = (message) => {
   if (!externalContext) {
-    console.warn('[AIAssistant] External message context not set');
+    logger.warn('External message context not set');
     return;
   }
 
   const messageText = message.message as string;
   if (messageText) {
-    console.log('[AIAssistant] Prefilling input:', messageText.substring(0, 50));
+    logger.info(`Prefilling input: ${messageText.substring(0, 50)}`);
     externalContext.setInputValue(messageText);
   }
 };

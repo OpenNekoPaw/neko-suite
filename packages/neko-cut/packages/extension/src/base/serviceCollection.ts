@@ -6,6 +6,7 @@
  */
 
 import * as vscode from 'vscode';
+import { getRootLogger } from './logger';
 
 // =============================================================================
 // Service Identifier
@@ -81,7 +82,7 @@ export class ServiceCollection implements vscode.Disposable {
       try {
         disposable.dispose();
       } catch (error) {
-        console.error('[ServiceCollection] Error disposing service:', error);
+        getRootLogger().error('[ServiceCollection] Error disposing service:', error);
       }
     }
     this._disposables.length = 0;

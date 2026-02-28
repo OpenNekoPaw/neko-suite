@@ -24,6 +24,9 @@ import type {
   SkillSource,
 } from '@neko/shared';
 import { createHook, parseHookEvent } from '@neko/shared';
+import { getLogger } from '../base';
+
+const logger = getLogger('HookFileService');
 
 // =============================================================================
 // Types
@@ -98,7 +101,7 @@ export class HookFileService implements vscode.Disposable {
     } catch (err) {
       // Ignore if already exists
       if ((err as NodeJS.ErrnoException).code !== 'EEXIST') {
-        console.warn('[HookFileService] Failed to create directory:', dirPath, err);
+        logger.warn(`Failed to create directory: ${dirPath}`, err);
       }
     }
   }
@@ -395,7 +398,7 @@ export class HookFileService implements vscode.Disposable {
 
       this.fileWatchers.push(watcher);
     } catch (err) {
-      console.warn('[HookFileService] Failed to watch directory:', dirPath, err);
+      logger.warn(`Failed to watch directory: ${dirPath}`, err);
     }
   }
 

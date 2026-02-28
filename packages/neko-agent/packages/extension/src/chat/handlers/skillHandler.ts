@@ -26,6 +26,9 @@ import type {
 } from '@neko/agent';
 import { toSkillSummary, createToolGuard } from '@neko/agent';
 import type { SkillToolDefinition } from '@neko/shared';
+import { getLogger } from '../../base';
+
+const logger = getLogger('SkillHandler');
 
 export interface SkillHandlerDeps {
   skillService?: SkillService;
@@ -110,7 +113,7 @@ export class SkillHandler {
 
       webview.postMessage({ type: 'skillsList', skills: summaries });
     } catch (error) {
-      console.error('[SkillHandler] Failed to get skills:', error);
+      logger.error('Failed to get skills:', error);
       webview.postMessage({ type: 'skillsList', skills: [] });
     }
   }

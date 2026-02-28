@@ -19,6 +19,9 @@ import type {
 	MergeEntitiesResult,
 } from '@neko/shared';
 import { sendRequest, sendMessage } from '../../utils/vscodeApi';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('AssetLibrary');
 import type {
 	AssetFilterState,
 	AssetSelectionState,
@@ -129,7 +132,7 @@ export function useAssetLibrary(): UseAssetLibraryReturn {
 			});
 			return result;
 		} catch (err) {
-			console.error('[AssetLibrary] Search failed:', err);
+			logger.error('Search failed:', err);
 			throw err;
 		}
 	}, []);
@@ -309,7 +312,7 @@ export function useAssetLibrary(): UseAssetLibraryReturn {
 	const importFiles = useCallback(async (files: File[]) => {
 		// TODO: Implement drag-drop import
 		// This would require sending file data to Extension
-		console.log('[AssetLibrary] Import files:', files);
+		logger.info('Import files:', files);
 	}, []);
 
 	const importByPaths = useCallback(async (paths: string[]) => {
@@ -320,7 +323,7 @@ export function useAssetLibrary(): UseAssetLibraryReturn {
 					payload: { filePath, options: { autoClassify: true } },
 				});
 			} catch (err) {
-				console.error('[AssetLibrary] Failed to import:', filePath, err);
+				logger.error('Failed to import:', { filePath, error: err });
 			}
 		}
 		// Refresh after all imports
@@ -412,7 +415,7 @@ export function useAssetLibrary(): UseAssetLibraryReturn {
 
 		// Verify both variants are from the same entity
 		if (target1.entityId !== target2.entityId) {
-			console.error('[AssetLibrary] Cannot compare variants from different entities');
+			logger.error('Cannot compare variants from different entities');
 			return;
 		}
 

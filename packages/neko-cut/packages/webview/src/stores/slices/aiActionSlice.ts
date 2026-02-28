@@ -6,6 +6,9 @@
 
 import { StateCreator } from 'zustand';
 import { sendAIAction, isVSCodeContext } from '../../utils/vscodeApi';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('AIAction');
 
 // AI Action types matching shared/src/types/ai-actions.ts
 export type AIActionId =
@@ -83,10 +86,10 @@ export const createAIActionSlice: StateCreator<
     // Send to Extension Host
     if (isVSCodeContext()) {
       sendAIAction(actionId, elementIds, trackIds);
-      console.log('[AIAction] Sent to Extension:', actionId, 'elements:', elementIds);
+      logger.info('Sent to Extension:', { actionId, elementIds });
     } else {
       // Development mode - simulate action
-      console.log('[AIAction] Dev mode - would execute:', actionId, 'elements:', elementIds);
+      logger.info('Dev mode - would execute:', { actionId, elementIds });
 
       // Simulate processing for dev mode
       setTimeout(() => {

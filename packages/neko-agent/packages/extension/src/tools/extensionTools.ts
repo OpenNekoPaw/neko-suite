@@ -10,6 +10,9 @@ import type {
   NekoCutAPI,
   NekoCanvasAPI,
 } from '@neko/shared';
+import { getLogger } from '../base';
+
+const logger = getLogger('ExtensionTools');
 
 /**
  * Tool definition interface
@@ -33,7 +36,7 @@ export function createNekoCutTools(): Tool[] {
   const nekocutExt = vscode.extensions.getExtension<NekoCutAPI>('neko.nekocut');
 
   if (!nekocutExt) {
-    console.log('[NekoAgent] NekoCut extension not found, skipping NekoCut tools');
+    logger.info('NekoCut extension not found, skipping NekoCut tools');
     return [];
   }
 
@@ -164,7 +167,7 @@ export function createNekoCanvasTools(): Tool[] {
   const nekocanvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
 
   if (!nekocanvasExt) {
-    console.log('[NekoAgent] NekoCanvas extension not found, skipping NekoCanvas tools');
+    logger.info('NekoCanvas extension not found, skipping NekoCanvas tools');
     return [];
   }
 

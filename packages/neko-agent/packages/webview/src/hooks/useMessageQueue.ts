@@ -8,6 +8,9 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { AttachedFile } from '@/components/ChatView/InputArea/types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('MessageQueue');
 
 /**
  * Queued message structure
@@ -95,7 +98,7 @@ export function useMessageQueue(): UseMessageQueueReturn {
 
     // Prevent duplicate messages within the same conversation
     if (recentContentHashes.current.has(contentHash)) {
-      console.warn('[MessageQueue] Duplicate message detected, skipping:', content.slice(0, 50));
+      logger.warn(`Duplicate message detected, skipping: ${content.slice(0, 50)}`);
       return;
     }
 

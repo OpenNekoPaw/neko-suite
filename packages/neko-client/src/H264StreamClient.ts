@@ -15,6 +15,10 @@
  * PTS, DTS, and duration are in microseconds.
  */
 
+import { getLogger } from './utils/logger';
+
+const logger = getLogger('H264');
+
 const H264_HEADER_SIZE = 8 + 8 + 1 + 8; // pts(8) + dts(8) + is_keyframe(1) + duration(8) = 25 bytes
 
 function parseH264Packet(data: ArrayBuffer): {
@@ -206,7 +210,7 @@ export class H264StreamClient {
 		this.decoder = new VideoDecoder({
 			output: (frame) => this.handleDecodedFrame(frame),
 			error: (error) => {
-				console.error('[H264StreamClient] Decoder error:', error);
+				logger.error('Decoder error', error);
 				this.stats.isDecoderReady = false;
 				this.config.onError(error);
 			},
@@ -228,7 +232,7 @@ export class H264StreamClient {
 	 */
 	resetDecoder(): void {
 		if (this.disposed) return;
-		console.log('[H264StreamClient] Resetting decoder for seek');
+		logger.info('Resetting decoder for seek');
 
 		// Reset framesDecoded so the caller can detect when post-seek frames
 		// start arriving (e.g. to freeze wall-clock until first new frame).
@@ -245,10 +249,10 @@ export class H264StreamClient {
 				});
 				this.waitingForKeyframe = true;
 				this.stats.isDecoderReady = true;
-				console.log('[H264StreamClient] Decoder reset via fast path');
+				logger.info('Decoder reset via fast path');
 				return;
 			} catch {
-				console.warn('[H264StreamClient] Fast reset failed, falling back to createDecoder');
+				logger.warn('Fast reset failed, falling back to createDecoder');
 			}
 		}
 
@@ -285,11 +289,11 @@ export class H264StreamClient {
 			};
 
 			this.ws.onerror = (event) => {
-				console.error('[H264StreamClient] WebSocket error:', event);
+				logger.error('WebSocket error', event);
 				this.config.onError(new Error('WebSocket connection error'));
 			};
 		} catch (error) {
-			console.error('[H264StreamClient] WebSocket setup failed:', error);
+			logger.error('WebSocket setup failed', error);
 			this.config.onError(error instanceof Error ? error : new Error(String(error)));
 			this.tryReconnect();
 		}
@@ -317,7 +321,7 @@ export class H264StreamClient {
 				return;
 			}
 			this.waitingForKeyframe = false;
-			console.log('[H264StreamClient] Keyframe received, decoding resumed');
+			logger.info('Keyframe received, decoding resumed');
 		}
 
 		// Track timing for performance stats
@@ -333,7 +337,7 @@ export class H264StreamClient {
 			this.decoder.decode(chunk);
 		} catch (error) {
 			this.stats.framesDropped++;
-			console.warn('[H264StreamClient] Decode error:', error);
+			logger.warn('Decode error', error);
 		}
 	}
 

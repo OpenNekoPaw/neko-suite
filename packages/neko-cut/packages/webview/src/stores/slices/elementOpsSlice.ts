@@ -23,6 +23,9 @@ import { generateId } from '../../utils';
 import { getMediaProxy } from '../../services/mediaProxyFactory';
 import { CENTERED_TRANSFORM } from '@neko/shared';
 import { createMeta } from '../utils/operation-helpers';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('ElementOpsSlice');
 
 /**
  * Detect if video file has audio track via Extension FFmpeg probe
@@ -32,7 +35,7 @@ async function detectVideoHasAudio(src: string): Promise<boolean> {
     const mediaInfo = await getMediaProxy().probeMediaInfo(src);
     return mediaInfo?.hasAudio ?? false;
   } catch (error) {
-    console.warn('[detectVideoHasAudio] Failed to detect audio:', error);
+    logger.warn('Failed to detect audio:', error);
     return false;
   }
 }
@@ -413,9 +416,9 @@ export const createElementOpsSlice: StateCreator<
           },
         });
 
-        console.log('[addMediaElementWithAudio] Audio element created asynchronously:', audioElementId);
+        logger.info(`Audio element created asynchronously: ${audioElementId}`);
       } catch (error) {
-        console.error('[addMediaElementWithAudio] Audio detection/creation failed:', error);
+        logger.error('Audio detection/creation failed:', error);
       }
     };
 
@@ -425,7 +428,7 @@ export const createElementOpsSlice: StateCreator<
         const subtitleTracks = await getMediaProxy().extractSubtitles(src);
         if (!subtitleTracks || subtitleTracks.length === 0) return;
 
-        console.log(`[addMediaElementWithAudio] Detected ${subtitleTracks.length} subtitle tracks`);
+        logger.info(`Detected ${subtitleTracks.length} subtitle tracks`);
 
         for (const extractedTrack of subtitleTracks) {
           const trackName = extractedTrack.title || `Subtitle ${extractedTrack.language || 'Unknown'}`;
@@ -489,17 +492,17 @@ export const createElementOpsSlice: StateCreator<
           batchDispatch(batchOps);
         }
       } catch (error) {
-        console.error('[addMediaElementWithAudio] Subtitle detection failed:', error);
+        logger.error('Subtitle detection failed:', error);
       }
     };
 
     // Fire-and-forget async operations
     detectAndCreateAudio().catch(err => {
-      console.error('[addMediaElementWithAudio] Audio detection error:', err);
+      logger.error('Audio detection error:', err);
     });
 
     detectAndCreateSubtitles().catch(err => {
-      console.error('[addMediaElementWithAudio] Subtitle detection error:', err);
+      logger.error('Subtitle detection error:', err);
     });
 
     return { videoElementId };
@@ -660,7 +663,7 @@ export const createElementOpsSlice: StateCreator<
         return { success: false, error: 'Video has no audio track' };
       }
     } catch (error) {
-      console.error('[separateVideoAudio] Audio detection failed:', error);
+      logger.error('Audio detection failed:', error);
       return { success: false, error: 'Failed to detect audio' };
     }
 
@@ -756,7 +759,7 @@ export const createElementOpsSlice: StateCreator<
     const linkedAudioId = mediaElement.linkedAudioId;
 
     if (!linkedAudioId) {
-      console.warn('[unseparateVideoAudio] No linked audio found');
+      logger.warn('No linked audio found');
       return;
     }
 
@@ -781,7 +784,7 @@ export const createElementOpsSlice: StateCreator<
     }
 
     if (!audioTrackId || !audioElement) {
-      console.warn('[unseparateVideoAudio] Linked audio track/element not found');
+      logger.warn('Linked audio track/element not found');
       return;
     }
 

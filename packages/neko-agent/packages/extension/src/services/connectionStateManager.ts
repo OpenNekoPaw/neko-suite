@@ -6,6 +6,9 @@
  */
 
 import * as vscode from 'vscode';
+import { getLogger } from '../base';
+
+const logger = getLogger('ConnectionStateManager');
 
 /**
  * Connection status enum
@@ -155,7 +158,7 @@ export class ConnectionStateManager implements vscode.Disposable {
       try {
         listener(event);
       } catch (error) {
-        console.error('[ConnectionStateManager] Listener error:', error);
+        logger.error('Listener error:', error);
       }
     }
   }

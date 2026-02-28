@@ -8,6 +8,9 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useEditorStore } from '../stores/editor-store';
 import { getMediaProxy } from '../services/mediaProxyFactory';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('useMediaInfoCache');
 
 // =============================================================================
 // Types
@@ -89,7 +92,7 @@ export function useMediaInfoCache(): CurrentMediaInfo {
 
       return info.totalBitrateStr;
     } catch (error) {
-      console.warn('[useMediaInfoCache] Failed to fetch bitrate info:', error);
+      logger.warn('Failed to fetch bitrate info:', error);
       return null;
     }
   }, []);

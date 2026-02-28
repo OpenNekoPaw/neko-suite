@@ -5,6 +5,9 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { AttachedFile } from './InputArea/types';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('DropZone');
 
 interface DropZoneProps {
   children: React.ReactNode;
@@ -56,11 +59,11 @@ export function DropZone({
     const files: AttachedFile[] = [];
     const validFiles = Array.from(fileList).filter(file => {
       if (!isAcceptedType(file)) {
-        console.warn(`File type not accepted: ${file.type}`);
+        logger.warn(`File type not accepted: ${file.type}`);
         return false;
       }
       if (file.size > maxSize) {
-        console.warn(`File too large: ${file.name} (${file.size} bytes)`);
+        logger.warn(`File too large: ${file.name} (${file.size} bytes)`);
         return false;
       }
       return true;
@@ -81,7 +84,7 @@ export function DropZone({
           const preview = await readFileAsDataURL(file);
           attachedFile.preview = preview;
         } catch (err) {
-          console.error('Failed to read file preview:', err);
+          logger.error('Failed to read file preview:', err);
         }
       }
 

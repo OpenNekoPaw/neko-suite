@@ -11,6 +11,9 @@
  */
 
 import * as vscode from 'vscode';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('PreviewService');
 
 // =============================================================================
 // Types (matching NativeEngine NAPI interface)
@@ -96,24 +99,21 @@ export class PreviewService implements vscode.Disposable {
 
 	private async initialize(): Promise<boolean> {
 		try {
-			console.log('[PreviewService] Loading native addon...');
+			logger.info('Loading native addon...');
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
 			const addon = require('@neko-engine/native-napi') as NativeEngineModule;
 			this._engine = await addon.NativeEngine.create();
-			console.log(
-				`[PreviewService] NativeEngine created (GPU: ${this._engine.hasGpu() ? 'enabled' : 'disabled'})`
+			logger.info(
+				`NativeEngine created (GPU: ${this._engine.hasGpu() ? 'enabled' : 'disabled'})`
 			);
 
 			// Start embedded HTTP/WebSocket server
 			this._port = await this._engine.startFrameServer(0);
-			console.log(`[PreviewService] Frame server on port ${this._port}`);
+			logger.info(`Frame server on port ${this._port}`);
 
 			return true;
 		} catch (error) {
-			console.error(
-				'[PreviewService] Failed to initialize:',
-				error instanceof Error ? error.message : error
-			);
+			logger.error(`Failed to initialize: ${error instanceof Error ? error.message : error}`);
 			return false;
 		}
 	}
@@ -203,7 +203,7 @@ export class PreviewService implements vscode.Disposable {
 		});
 
 		if (videoResult.status === 'error') {
-			console.error('[PreviewService] Failed to start video playback:', videoResult.error);
+			logger.error('Failed to start video playback:', videoResult.error);
 			return { videoStreamId: null, audioStreamId: null };
 		}
 
@@ -223,7 +223,7 @@ export class PreviewService implements vscode.Disposable {
 			});
 
 			if (audioResult.status === 'error') {
-				console.warn('[PreviewService] Failed to start audio stream:', audioResult.error);
+				logger.warn('Failed to start audio stream:', audioResult.error);
 			} else {
 				const audioData = audioResult.data as Record<string, unknown> | undefined;
 				audioStreamId = (audioData?.streamId as string) ?? null;
@@ -494,7 +494,7 @@ export class PreviewService implements vscode.Disposable {
 		if (this._engine) {
 			try {
 				await this._engine.stopFrameServer();
-				console.log('[PreviewService] Frame server stopped');
+				logger.info('Frame server stopped');
 			} catch {
 				// Ignore
 			}

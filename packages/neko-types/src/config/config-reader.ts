@@ -10,6 +10,10 @@ import * as path from 'path';
 import * as os from 'os';
 import type { UnifiedConfig } from './types';
 import { CONFIG_DIR_NAME, CONFIG_FILE_NAME } from './types';
+import { ConsoleLogger } from '../logger/console-logger';
+import { LogLevel } from '../logger/types';
+
+const logger = new ConsoleLogger('ConfigReader', LogLevel.Debug);
 
 // =============================================================================
 // Path Utilities
@@ -63,7 +67,7 @@ export function readConfigFile(filePath: string): UnifiedConfig | null {
     return JSON.parse(content) as UnifiedConfig;
   } catch (error) {
     // Log error but don't throw - return null for missing/invalid config
-    console.error(`Failed to read config from ${filePath}:`, error);
+    logger.error(`Failed to read config from ${filePath}`, error);
     return null;
   }
 }
