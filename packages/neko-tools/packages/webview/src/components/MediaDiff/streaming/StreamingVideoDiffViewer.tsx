@@ -31,10 +31,12 @@ export interface StreamingVideoDiffViewerProps {
 	onError?: (error: string) => void;
 }
 
-/** Imperative handle exposed via ref for parent-driven seek */
+/** Imperative handle exposed via ref for parent-driven seek and static rendering */
 export interface StreamingVideoDiffViewerHandle {
 	/** Locally reset decoders and buffers for a seek at `time` (seconds) */
 	seek(time: number): void;
+	/** Render a static frame pair (Blob URLs) through the existing DiffRenderer */
+	renderStaticPair(blobUrlA: string, blobUrlB: string): Promise<void>;
 }
 
 // ─── Seek filter tolerance (seconds) ─────────────────────────────────────────
@@ -81,6 +83,20 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 				clientBRef.current?.resetDecoder();
 				// 4. Reset audio clock for seek
 				audioClientRef.current?.resetClock();
+			},
+			async renderStaticPair(blobUrlA: string, blobUrlB: string) {
+				const renderer = rendererRef.current;
+				if (!renderer) return;
+				const [blobA, blobB] = await Promise.all([
+					fetch(blobUrlA).then(r => r.blob()),
+					fetch(blobUrlB).then(r => r.blob()),
+				]);
+				const [bitmapA, bitmapB] = await Promise.all([
+					createImageBitmap(blobA),
+					createImageBitmap(blobB),
+				]);
+				// renderPair accepts DiffFrame (VideoFrame | ImageBitmap) and closes them
+				renderer.renderPair(bitmapA, bitmapB);
 			},
 		}), []);
 

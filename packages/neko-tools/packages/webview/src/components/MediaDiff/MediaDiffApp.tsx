@@ -155,7 +155,6 @@ export default function MediaDiffApp() {
     sendGetFileHistory,
     sendChangeRef,
     sendInspectElement,
-    sendStartStreaming,
     sendStreamControl,
     audioStreamConfig,
     sendAudioStreamControl,
@@ -170,16 +169,9 @@ export default function MediaDiffApp() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-start streaming when video diff result is ready
-  useEffect(() => {
-    if (diffResult?.mediaType === 'video' && !streamConfig) {
-      sendStartStreaming();
-    }
-  }, [diffResult?.mediaType, streamConfig, sendStartStreaming]);
-
-  // Audio streaming: no auto-start — streams are created lazily
-  // on first Play click via handleAudioStreamControl('play') in the
-  // extension, matching the neko-preview pattern.
+  // Streaming: no auto-start — streams are created lazily on first
+  // Play click via handleStreamControl/handleAudioStreamControl('play')
+  // in the extension, matching the neko-preview pattern.
 
   const handleRetry = useCallback(() => {
     if (initialState.isLocalComparison && initialState.previousUri) {

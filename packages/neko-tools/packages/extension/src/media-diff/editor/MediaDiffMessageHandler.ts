@@ -573,7 +573,10 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	 *   1. Ensure frame server is running → get port
 	 *   2. Probe both files → get resolution, fps, duration
 	 *   3. Dispatch `videos:stream` for each file → get streamIds
-	 *   4. Send `mediaDiff:streamConfig` to webview
+	 *   4. Send `mediaDiff:streamConfig` to webview immediately
+	 *      (no engine-level pause — neko-preview pattern: streams
+	 *       created lazily on first play, WebSocket clients connect
+	 *       immediately after config arrives)
 	 */
 	private async handleStartStreaming(requestId?: string): Promise<void> {
 		try {
@@ -668,25 +671,9 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				}
 			}
 
-			// 6. Pause all streams so playback starts only on user action
-			const pausePromises: Promise<unknown>[] = [];
-			for (const [sid, group] of [
-				[this.currentStreamId, 'videos'],
-				[this.previousStreamId, 'videos'],
-				[this.currentAudioStreamId, 'audios'],
-				[this.previousAudioStreamId, 'audios'],
-			] as const) {
-				if (sid) {
-					pausePromises.push(
-						Promise.resolve(vscode.commands.executeCommand(
-							'neko.engine.dispatch', group, 'pause', { streamId: sid }
-						))
-					);
-				}
-			}
-			await Promise.allSettled(pausePromises);
-
-			// 7. Send config to webview
+			// 6. Send config to webview immediately (no engine-level pause).
+			// Streams auto-play — WebSocket clients connect as soon as
+			// config arrives, well within the subscriber timeout.
 			const config: StreamConfig = {
 				port: this.frameServerPort,
 				currentStreamId: this.currentStreamId,
@@ -750,14 +737,25 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	/**
 	 * Forward playback control (play/pause/seek) to all active streams.
 	 *
+	 * On first 'play', lazily creates streams (neko-preview pattern):
+	 * streams are only created when the user clicks Play, ensuring
+	 * WebSocket clients connect immediately after creation and well
+	 * within the engine's subscriber timeout.
+	 *
 	 * Controls both video and audio streams simultaneously.
-	 * Follows neko-preview pattern: dispatch to the correct group (videos/audios).
 	 */
 	private async handleStreamControl(
 		action: 'play' | 'pause' | 'seek',
 		payload: { time?: number; speed?: number },
 		requestId?: string
 	): Promise<void> {
+		// Lazy stream creation on first play (neko-preview pattern)
+		if (action === 'play' && !this.currentStreamId) {
+			await this.handleStartStreaming(requestId);
+			// Streams auto-play after creation — no resume needed
+			return;
+		}
+
 		// Collect all active streams with their dispatch group
 		const allStreams = [
 			{ id: this.currentStreamId, group: 'videos' },

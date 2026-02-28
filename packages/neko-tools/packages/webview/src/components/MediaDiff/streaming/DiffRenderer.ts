@@ -12,6 +12,9 @@
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/** Frame source accepted by renderPair: VideoFrame (streaming) or ImageBitmap (static) */
+export type DiffFrame = VideoFrame | ImageBitmap;
+
 export type DiffMode = 'curtain' | 'heatmap' | 'flicker';
 
 export interface DiffRendererConfig {
@@ -197,8 +200,8 @@ export class DiffRenderer {
 		this.sliderPosition = Math.max(0, Math.min(1, pos));
 	}
 
-	/** Render a paired frame. Uploads textures and draws. Closes VideoFrames after upload. */
-	renderPair(frameA: VideoFrame, frameB: VideoFrame): void {
+	/** Render a paired frame. Uploads textures and draws. Closes frames after upload. */
+	renderPair(frameA: DiffFrame, frameB: DiffFrame): void {
 		if (this.disposed) {
 			frameA.close();
 			frameB.close();

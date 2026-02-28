@@ -6,7 +6,7 @@
  * via WebSocket H264 streams from neko-engine.
  */
 
-import { memo, useState, useCallback, useRef } from 'react';
+import { memo, useState, useCallback, useRef, useEffect } from 'react';
 import type { VideoDiffViewerProps } from './types';
 import { StreamingVideoDiffViewer, type StreamingVideoDiffViewerHandle } from './streaming/StreamingVideoDiffViewer';
 import type { DiffMode } from './streaming/DiffRenderer';
@@ -186,6 +186,8 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
 export const VideoDiffViewer = memo(function VideoDiffViewer({
   viewMode,
   details,
+  currentFrameSrc,
+  previousFrameSrc,
   currentTime = 0,
   onTimeChange,
   sliderPosition = 0.5,
@@ -242,9 +244,23 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
     setIsPlaying(prev => {
       const next = !prev;
       onStreamControl?.(next ? 'play' : 'pause');
+      if (!next && streamConfig) {
+        // Pausing: extract frames at current time for static display
+        onTimeChange?.(localTime);
+      }
       return next;
     });
-  }, [onStreamControl]);
+  }, [onStreamControl, onTimeChange, localTime, streamConfig]);
+
+  // ── Dual-mode: render static frames through DiffRenderer when paused ────
+  // When paused and streamConfig exists, the StreamingVideoDiffViewer stays
+  // mounted (pipeline alive for quick resume). We render extracted JPEG frames
+  // through the same DiffRenderer for higher-quality pixel-precise display.
+  useEffect(() => {
+    if (!isPlaying && streamConfig && currentFrameSrc && previousFrameSrc) {
+      void streamingRef.current?.renderStaticPair(currentFrameSrc, previousFrameSrc);
+    }
+  }, [isPlaying, streamConfig, currentFrameSrc, previousFrameSrc]);
 
   if (error) {
     return (
@@ -257,15 +273,53 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
     );
   }
 
-  if (isLoading || !streamConfig) {
+  if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
           <div className="text-sm text-[var(--vscode-descriptionForeground)]">
-            {streamConfig ? 'Loading video frames...' : 'Starting video streams...'}
+            Analyzing video...
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // Before first play: show Play overlay + controls (no streamConfig yet —
+  // streams are created lazily on first Play click, neko-preview pattern)
+  if (!streamConfig) {
+    return (
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <div className="flex-1 flex items-center justify-center bg-black">
+          {isPlaying ? (
+            // Streams being created after Play click
+            <div className="text-center">
+              <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <div className="text-sm text-[var(--vscode-descriptionForeground)]">
+                Starting video streams...
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="w-16 h-16 flex items-center justify-center rounded-full bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] transition-colors text-[var(--vscode-button-foreground)] text-2xl"
+              onClick={handlePlayPause}
+              title="Play video diff"
+            >
+              {'\u25B6'}
+            </button>
+          )}
+        </div>
+        <SeekControls
+          currentTime={localTime}
+          duration={duration}
+          onSeek={handleSeek}
+          isPlaying={isPlaying}
+          onPlayPause={handlePlayPause}
+          diffRegions={details?.diffRegions}
+        />
+        <VideoDetails details={details} />
       </div>
     );
   }
