@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef, memo } from 'react';
-import { H264StreamClient } from '@neko/neko-client';
+import { H264StreamClient, AudioStreamClient } from '@neko/neko-client';
 import { FramePairBuffer } from './FramePairBuffer';
 import { DiffRenderer, type DiffMode } from './DiffRenderer';
 import type { StreamConfig } from '@neko/shared';
@@ -25,6 +25,8 @@ export interface StreamingVideoDiffViewerProps {
 	onSliderChange?: (pos: number) => void;
 	/** Send stream control messages (play/pause/seek) to extension */
 	onStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
+	/** Report current playback time (seconds) from frame PTS */
+	onTimeUpdate?: (time: number) => void;
 	/** Report stream errors to parent for UI visibility */
 	onError?: (error: string) => void;
 }
@@ -48,6 +50,7 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 		diffMode,
 		sliderPosition,
 		onSliderChange,
+		onTimeUpdate,
 		onError,
 	}, ref) {
 		const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -55,6 +58,7 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 		const bufferRef = useRef<FramePairBuffer | null>(null);
 		const clientARef = useRef<H264StreamClient | null>(null);
 		const clientBRef = useRef<H264StreamClient | null>(null);
+		const audioClientRef = useRef<AudioStreamClient | null>(null);
 		const containerRef = useRef<HTMLDivElement>(null);
 
 		// ── Slider drag state ────────────────────────────────────────────────
@@ -75,6 +79,8 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 				// 3. Reset H264 decoders — start clean from next keyframe
 				clientARef.current?.resetDecoder();
 				clientBRef.current?.resetDecoder();
+				// 4. Reset audio clock for seek
+				audioClientRef.current?.resetClock();
 			},
 		}), []);
 
@@ -83,7 +89,7 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 			const canvas = canvasRef.current;
 			if (!canvas) return;
 
-			const { port, currentStreamId, previousStreamId, width, height, fps } = streamConfig;
+			const { port, currentStreamId, previousStreamId, currentAudioStreamId, width, height, fps } = streamConfig;
 
 			// 1. Create DiffRenderer (WebGL)
 			const renderer = new DiffRenderer({ canvas, width, height });
@@ -98,6 +104,9 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 				maxBufferSize: 10,
 				onPair: (pair) => {
 					renderer.renderPair(pair.frameA, pair.frameB);
+					// Report current time from frame PTS
+					const timeSec = pair.frameA.timestamp / 1_000_000;
+					onTimeUpdate?.(timeSec);
 				},
 			});
 			bufferRef.current = buffer;
@@ -145,18 +154,33 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 			clientARef.current = clientA;
 			clientBRef.current = clientB;
 
-			// 4. Connect both streams
+			// 4. Connect both video streams
 			void clientA.connect();
 			void clientB.connect();
 
-			// 5. Cleanup
+			// 5. Create AudioStreamClient if audio track exists
+			if (currentAudioStreamId) {
+				const audioClient = new AudioStreamClient({
+					websocketUrl: `${baseUrl}/${currentAudioStreamId}`,
+					volume: 1.0,
+					onError: (err) => {
+						console.error('[StreamingDiff] Audio error:', err);
+					},
+				});
+				audioClientRef.current = audioClient;
+				void audioClient.connect();
+			}
+
+			// 6. Cleanup
 			return () => {
 				clientA.dispose();
 				clientB.dispose();
+				audioClientRef.current?.dispose();
 				buffer.dispose();
 				renderer.dispose();
 				clientARef.current = null;
 				clientBRef.current = null;
+				audioClientRef.current = null;
 				bufferRef.current = null;
 				rendererRef.current = null;
 				seekFilterRef.current = null;

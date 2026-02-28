@@ -13,6 +13,7 @@ import type {
   MediaType,
   GitCommitInfo,
   StreamConfig,
+  AudioStreamConfig,
 } from '@neko/shared';
 
 // Re-export for convenience
@@ -26,6 +27,7 @@ export type {
   MediaType,
   GitCommitInfo,
   StreamConfig,
+  AudioStreamConfig,
 };
 
 // =============================================================================
@@ -89,6 +91,10 @@ export interface AudioDiffViewerProps extends BaseDiffViewerProps {
   onTimeChange?: (time: number) => void;
   playingVersion?: 'current' | 'previous' | 'both';
   onPlayingVersionChange?: (version: 'current' | 'previous' | 'both') => void;
+  /** Audio stream config for WebSocket PCM playback */
+  audioStreamConfig?: AudioStreamConfig | null;
+  /** Send audio stream control to extension */
+  onAudioStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => void;
 }
 
 // =============================================================================
@@ -142,10 +148,13 @@ export interface MediaDiffViewerProps {
   filePath?: string;
   /** Stream config for real-time video diff */
   streamConfig?: StreamConfig | null;
+  /** Audio stream config for audio diff */
+  audioStreamConfig?: AudioStreamConfig | null;
   /** Callbacks */
   onTimeChange?: (time: number) => void;
   onInspectElement?: (src: string) => void;
   onStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
+  onAudioStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => void;
 }
 
 // =============================================================================

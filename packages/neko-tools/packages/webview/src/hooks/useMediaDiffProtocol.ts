@@ -14,6 +14,7 @@ import type {
   GitCommitInfo,
   MediaType,
   StreamConfig,
+  AudioStreamConfig,
 } from '@neko/shared';
 import type { InitialState } from '../components/MediaDiff/types';
 
@@ -49,6 +50,8 @@ export interface MediaDiffProtocolState {
   streamConfig: StreamConfig | null;
   /** Stream error message */
   streamError: string | null;
+  /** Audio-only stream config from extension (set when audio streaming is active) */
+  audioStreamConfig: AudioStreamConfig | null;
 }
 
 // =============================================================================
@@ -94,6 +97,9 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
   sendStartStreaming: () => void;
   sendStopStreaming: () => void;
   sendStreamControl: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
+  sendStartAudioStreaming: () => void;
+  sendStopAudioStreaming: () => void;
+  sendAudioStreamControl: (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => void;
 } {
   const [state, setState] = useState<MediaDiffProtocolState>(() => ({
     diffResult: null,
@@ -112,6 +118,7 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     initialState: getDefaultInitialState(),
     streamConfig: null,
     streamError: null,
+    audioStreamConfig: null,
   }));
 
   // Track Blob URLs for cleanup
@@ -243,6 +250,14 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
           setState((prev) => ({
             ...prev,
             streamConfig: msg.payload,
+            streamError: null,
+          }));
+          break;
+
+        case 'mediaDiff:audioStreamConfig':
+          setState((prev) => ({
+            ...prev,
+            audioStreamConfig: msg.payload,
             streamError: null,
           }));
           break;
@@ -383,6 +398,37 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     []
   );
 
+  const sendStartAudioStreaming = useCallback(() => {
+    vscode.postMessage({
+      type: 'mediaDiff:startAudioStreaming',
+      requestId: nextRequestId(),
+      timestamp: Date.now(),
+      payload: {},
+    });
+  }, []);
+
+  const sendStopAudioStreaming = useCallback(() => {
+    setState((prev) => ({ ...prev, audioStreamConfig: null, streamError: null }));
+    vscode.postMessage({
+      type: 'mediaDiff:stopAudioStreaming',
+      requestId: nextRequestId(),
+      timestamp: Date.now(),
+      payload: {},
+    });
+  }, []);
+
+  const sendAudioStreamControl = useCallback(
+    (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => {
+      vscode.postMessage({
+        type: 'mediaDiff:audioStreamControl',
+        requestId: nextRequestId(),
+        timestamp: Date.now(),
+        payload: { action, ...payload },
+      });
+    },
+    []
+  );
+
   return {
     ...state,
     sendInit,
@@ -396,5 +442,8 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     sendStartStreaming,
     sendStopStreaming,
     sendStreamControl,
+    sendStartAudioStreaming,
+    sendStopAudioStreaming,
+    sendAudioStreamControl,
   };
 }

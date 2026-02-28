@@ -157,6 +157,9 @@ export default function MediaDiffApp() {
     sendInspectElement,
     sendStartStreaming,
     sendStreamControl,
+    audioStreamConfig,
+    sendStartAudioStreaming,
+    sendAudioStreamControl,
   } = protocol;
 
   // Auto-init on mount
@@ -174,6 +177,13 @@ export default function MediaDiffApp() {
       sendStartStreaming();
     }
   }, [diffResult?.mediaType, streamConfig, sendStartStreaming]);
+
+  // Auto-start audio streaming when audio diff result is ready
+  useEffect(() => {
+    if (diffResult?.mediaType === 'audio' && !audioStreamConfig) {
+      sendStartAudioStreaming();
+    }
+  }, [diffResult?.mediaType, audioStreamConfig, sendStartAudioStreaming]);
 
   const handleRetry = useCallback(() => {
     if (initialState.isLocalComparison && initialState.previousUri) {
@@ -245,6 +255,8 @@ export default function MediaDiffApp() {
           onTimeChange={handleTimeChange}
           onInspectElement={sendInspectElement}
           onStreamControl={sendStreamControl}
+          audioStreamConfig={audioStreamConfig}
+          onAudioStreamControl={sendAudioStreamControl}
         />
       </div>
 

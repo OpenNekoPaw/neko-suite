@@ -72,6 +72,8 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
   onTimeChange,
   onInspectElement,
   onStreamControl,
+  audioStreamConfig,
+  onAudioStreamControl,
 }: MediaDiffViewerProps) {
   const [viewMode, setViewMode] = useState<DiffViewMode>('side-by-side');
   const [sliderPosition, setSliderPosition] = useState(0.5);
@@ -148,6 +150,8 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
             onTimeChange={handleTimeChange}
             playingVersion={playingVersion}
             onPlayingVersionChange={setPlayingVersion}
+            audioStreamConfig={audioStreamConfig}
+            onAudioStreamControl={onAudioStreamControl}
             isLoading={isLoading}
             error={error}
           />

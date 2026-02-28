@@ -201,6 +201,11 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
   const [streamError, setStreamError] = useState<string | null>(null);
   const streamingRef = useRef<StreamingVideoDiffViewerHandle>(null);
 
+  // Track time from streaming frame PTS
+  const handleTimeUpdate = useCallback((time: number) => {
+    setLocalTime(time);
+  }, []);
+
   const duration = streamConfig?.duration ?? Math.max(
     details?.duration.current ?? 0,
     details?.duration.previous ?? 0
@@ -274,6 +279,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
         sliderPosition={localSliderPosition}
         onSliderChange={handleSliderChange}
         onStreamControl={onStreamControl}
+        onTimeUpdate={handleTimeUpdate}
         onError={setStreamError}
       />
       {streamError && (

@@ -545,6 +545,34 @@ export interface StreamControlRequest extends BaseMediaDiffRequest {
 }
 
 /**
+ * Start audio-only streaming for audio diff
+ */
+export interface StartAudioStreamingRequest extends BaseMediaDiffRequest {
+	type: 'mediaDiff:startAudioStreaming';
+	payload: Record<string, never>;
+}
+
+/**
+ * Stop audio-only streaming
+ */
+export interface StopAudioStreamingRequest extends BaseMediaDiffRequest {
+	type: 'mediaDiff:stopAudioStreaming';
+	payload: Record<string, never>;
+}
+
+/**
+ * Audio stream playback control (play, pause, seek)
+ */
+export interface AudioStreamControlRequest extends BaseMediaDiffRequest {
+	type: 'mediaDiff:audioStreamControl';
+	payload: {
+		action: 'play' | 'pause' | 'seek';
+		/** Seek time in seconds (only for action='seek') */
+		time?: number;
+	};
+}
+
+/**
  * All request types
  */
 export type MediaDiffRequest =
@@ -559,7 +587,10 @@ export type MediaDiffRequest =
 	| InspectElementRequest
 	| StartStreamingRequest
 	| StopStreamingRequest
-	| StreamControlRequest;
+	| StreamControlRequest
+	| StartAudioStreamingRequest
+	| StopAudioStreamingRequest
+	| AudioStreamControlRequest;
 
 // =============================================================================
 // IPC Message Types - Responses (Extension → Webview)
@@ -665,6 +696,21 @@ export interface FileHistoryResponse extends BaseMediaDiffResponse {
 }
 
 /**
+ * Audio-only stream configuration for audio diff (no video).
+ * Sent when audio diff starts streaming via WebSocket PCM.
+ */
+export interface AudioStreamConfig {
+	/** Frame server port */
+	port: number;
+	/** Current version audio stream ID */
+	currentAudioStreamId: string;
+	/** Previous version audio stream ID */
+	previousAudioStreamId: string;
+	/** Audio duration in seconds */
+	duration: number;
+}
+
+/**
  * Stream configuration data sent to webview after streams are created
  */
 export interface StreamConfig {
@@ -694,6 +740,14 @@ export interface StreamConfig {
 export interface StreamConfigResponse extends BaseMediaDiffResponse {
 	type: 'mediaDiff:streamConfig';
 	payload: StreamConfig;
+}
+
+/**
+ * Audio stream config response (Extension → Webview)
+ */
+export interface AudioStreamConfigResponse extends BaseMediaDiffResponse {
+	type: 'mediaDiff:audioStreamConfig';
+	payload: AudioStreamConfig;
 }
 
 /**
@@ -728,6 +782,7 @@ export type MediaDiffResponse =
 	| FileHistoryResponse
 	| ElementThumbnailResponse
 	| StreamConfigResponse
+	| AudioStreamConfigResponse
 	| StreamErrorResponse;
 
 // =============================================================================

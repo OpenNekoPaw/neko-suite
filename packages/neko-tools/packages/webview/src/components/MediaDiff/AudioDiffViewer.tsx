@@ -4,7 +4,9 @@
  */
 
 import { memo, useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import { AudioStreamClient } from '@neko/neko-client';
 import type { AudioDiffViewerProps } from './types';
+import type { AudioStreamConfig } from '@neko/shared';
 
 // =============================================================================
 // Waveform Canvas
