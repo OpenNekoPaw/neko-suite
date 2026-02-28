@@ -120,7 +120,7 @@ export class VideoFrameProvider implements FrameProvider {
 			const responseJson = await this._engine.captureFrame(layer.source, localTime, 100, 'rgba');
 			const response = JSON.parse(responseJson);
 
-			if (!response.success || !response.data) {
+			if (response.status !== 'ok' || !response.data) {
 				return null;
 			}
 

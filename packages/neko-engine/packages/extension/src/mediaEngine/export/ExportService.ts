@@ -328,10 +328,10 @@ export class ExportService {
 			);
 			const response = JSON.parse(responseJson);
 
-			if (!response.success) {
+			if (response.status !== 'ok') {
 				return {
 					success: false,
-					error: response.error || 'Export dispatch failed',
+					error: response.error?.message ?? 'Export dispatch failed',
 				};
 			}
 
@@ -472,9 +472,9 @@ export class ExportService {
 					const responseJson = await this._engine.getTaskProgress(jobId);
 					const response = JSON.parse(responseJson);
 
-					if (!response.success) {
+					if (response.status !== 'ok') {
 						this._stopPolling();
-						resolve({ success: false, error: response.error || 'Progress query failed' });
+						resolve({ success: false, error: response.error?.message ?? 'Progress query failed' });
 						return;
 					}
 

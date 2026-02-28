@@ -233,8 +233,9 @@ export class NativeMediaEngine implements IMediaEngine {
 			const responseJson = await this._engine.probeVideo(source);
 			const response = JSON.parse(responseJson);
 
-			if (!response.success) {
-				throw new Error(response.error || 'Probe failed');
+			if (response.status !== 'ok') {
+				const msg = response.error?.message ?? response.error ?? 'Probe failed';
+				throw new Error(msg);
 			}
 
 			const data = response.data;
@@ -345,8 +346,8 @@ class NativeVideoDecoder implements IDecoder {
 			const responseJson = await this._engine.captureFrame(this._config.source, 0, 85, 'rgba');
 			const response = JSON.parse(responseJson);
 
-			if (!response.success || !response.data) {
-				throw new Error(response.error || 'Failed to capture initial frame');
+			if (response.status !== 'ok' || !response.data) {
+				throw new Error(response.error?.message ?? 'Failed to capture initial frame');
 			}
 
 			this._mediaInfo = {
@@ -381,7 +382,7 @@ class NativeVideoDecoder implements IDecoder {
 			const responseJson = await this._engine.captureFrame(this._config.source, time, 100, 'rgba');
 			const response = JSON.parse(responseJson);
 
-			if (!response.success || !response.data) {
+			if (response.status !== 'ok' || !response.data) {
 				return null;
 			}
 
@@ -453,8 +454,8 @@ class NativeAudioDecoder implements IDecoder {
 			);
 			const response = JSON.parse(responseJson);
 
-			if (!response.success || !response.data) {
-				throw new Error(response.error || 'Failed to get audio info');
+			if (response.status !== 'ok' || !response.data) {
+				throw new Error(response.error?.message ?? 'Failed to get audio info');
 			}
 
 			const info = response.data;
@@ -497,7 +498,7 @@ class NativeAudioDecoder implements IDecoder {
 			);
 			const response = JSON.parse(responseJson);
 
-			if (!response.success || !response.data) {
+			if (response.status !== 'ok' || !response.data) {
 				return null;
 			}
 
@@ -536,7 +537,7 @@ class NativeAudioDecoder implements IDecoder {
 			);
 			const response = JSON.parse(responseJson);
 
-			if (!response.success || !response.data) {
+			if (response.status !== 'ok' || !response.data) {
 				return;
 			}
 
@@ -695,7 +696,7 @@ class NativeEffectProcessor implements IEffectProcessor {
 			// Fetch GPU info
 			const gpuJson = await this._engine.gpuInfo();
 			const gpuResponse = JSON.parse(gpuJson);
-			if (gpuResponse.success && gpuResponse.data) {
+			if (gpuResponse.status === 'ok' && gpuResponse.data) {
 				this._gpuInfo = {
 					deviceName: gpuResponse.data.name ?? 'Unknown',
 					vendor: gpuResponse.data.vendor ?? 'Unknown',
@@ -756,7 +757,7 @@ class NativeEffectProcessor implements IEffectProcessor {
 					})
 				);
 				const response = JSON.parse(responseJson);
-				if (!response.success || !response.data?.data) {
+				if (response.status !== 'ok' || !response.data?.data) {
 					throw new Error(response.error?.message ?? 'Effect apply failed');
 				}
 				currentData = new Uint8Array(Buffer.from(response.data.data, 'base64'));
@@ -791,7 +792,7 @@ class NativeEffectProcessor implements IEffectProcessor {
 			JSON.stringify({ id, code: shaderCode, params: [] })
 		);
 		const response = JSON.parse(responseJson);
-		if (!response.success) {
+		if (response.status !== 'ok') {
 			throw new Error(response.error?.message ?? `Failed to register shader: ${id}`);
 		}
 	}

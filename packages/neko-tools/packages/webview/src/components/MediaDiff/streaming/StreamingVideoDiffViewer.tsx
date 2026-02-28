@@ -25,6 +25,8 @@ export interface StreamingVideoDiffViewerProps {
 	onSliderChange?: (pos: number) => void;
 	/** Send stream control messages (play/pause/seek) to extension */
 	onStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
+	/** Report stream errors to parent for UI visibility */
+	onError?: (error: string) => void;
 }
 
 /** Imperative handle exposed via ref for parent-driven seek */
@@ -46,6 +48,7 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 		diffMode,
 		sliderPosition,
 		onSliderChange,
+		onError,
 	}, ref) {
 		const canvasRef = useRef<HTMLCanvasElement>(null);
 		const rendererRef = useRef<DiffRenderer | null>(null);
@@ -122,7 +125,10 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 				width,
 				height,
 				onFrame: (frame) => filterFrame(frame, (f) => buffer.feedA(f)),
-				onError: (err) => console.error('[StreamingDiff] Stream A error:', err),
+				onError: (err) => {
+					console.error('[StreamingDiff] Stream A error:', err);
+					onError?.(err.message);
+				},
 			});
 
 			const clientB = new H264StreamClient({
@@ -130,7 +136,10 @@ export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewer
 				width,
 				height,
 				onFrame: (frame) => filterFrame(frame, (f) => buffer.feedB(f)),
-				onError: (err) => console.error('[StreamingDiff] Stream B error:', err),
+				onError: (err) => {
+					console.error('[StreamingDiff] Stream B error:', err);
+					onError?.(err.message);
+				},
 			});
 
 			clientARef.current = clientA;

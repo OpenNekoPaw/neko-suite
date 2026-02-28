@@ -286,9 +286,11 @@ export class H264StreamClient {
 
 			this.ws.onerror = (event) => {
 				console.error('[H264StreamClient] WebSocket error:', event);
+				this.config.onError(new Error('WebSocket connection error'));
 			};
 		} catch (error) {
 			console.error('[H264StreamClient] WebSocket setup failed:', error);
+			this.config.onError(error instanceof Error ? error : new Error(String(error)));
 			this.tryReconnect();
 		}
 	}

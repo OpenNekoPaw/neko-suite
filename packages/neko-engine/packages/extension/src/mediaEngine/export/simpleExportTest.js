@@ -108,9 +108,9 @@ async function main() {
 			JSON.stringify(exportConfig)
 		);
 		const response = JSON.parse(responseJson);
-		console.log(`  Response: ${response.success ? '✓ Job started' : '✗ Failed: ' + response.error}`);
+		console.log(`  Response: ${response.status === 'ok' ? '✓ Job started' : '✗ Failed: ' + (response.error?.message ?? response.error)}`);
 
-		if (!response.success) {
+		if (response.status !== 'ok') {
 			console.error('❌ Export dispatch failed');
 			process.exit(1);
 		}

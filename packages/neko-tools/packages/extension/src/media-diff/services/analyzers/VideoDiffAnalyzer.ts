@@ -145,16 +145,31 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 				})),
 			};
 
-			let similarity = videoDiff?.avgSsim ?? 0;
-
 			const durationDiff = Math.abs(durationA - durationB);
 			const maxDuration = Math.max(durationA, durationB);
-			if (maxDuration > 0) {
-				similarity *= 1 - (durationDiff / maxDuration) * 0.3;
-			}
 
-			if (widthA !== widthB || heightA !== heightB) {
-				similarity *= 0.9;
+			let similarity: number;
+			if (videoDiff) {
+				// SSIM available — use it with metadata penalties
+				similarity = videoDiff.avgSsim;
+				if (maxDuration > 0) {
+					similarity *= 1 - (durationDiff / maxDuration) * 0.3;
+				}
+				if (widthA !== widthB || heightA !== heightB) {
+					similarity *= 0.9;
+				}
+			} else {
+				// SSIM unavailable — estimate from metadata
+				similarity = 1.0;
+				if (maxDuration > 0) {
+					similarity *= 1 - Math.min(1, durationDiff / maxDuration);
+				}
+				if (widthA !== widthB || heightA !== heightB) {
+					similarity *= 0.8;
+				}
+				if (codecA !== codecB) {
+					similarity *= 0.9;
+				}
 			}
 
 			return {

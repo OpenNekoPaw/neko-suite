@@ -1,7 +1,7 @@
 /**
  * VSCode Extension Host API Module
  *
- * Shared base classes for VSCode extension host providers.
+ * Shared base classes and infrastructure for VSCode extension host providers.
  * Requires the vscode module (extension host context only).
  *
  * Import via: @neko/shared/vscode/extension
@@ -11,3 +11,12 @@
  */
 export { BaseOutlineProvider } from './baseOutlineProvider';
 export type { IOutlineProvider } from './baseOutlineProvider';
+
+// Logger (OutputChannel transport)
+export { OutputChannelTransport, createVSCodeLogger } from './logger';
+
+// Error reporter (showErrorMessage wrapper)
+export { VSCodeErrorHandler } from './error-reporter';
+
+// i18n bridge (locale detection + webview injection)
+export { getVSCodeLocale, injectLocaleAttribute } from './i18n-bridge';

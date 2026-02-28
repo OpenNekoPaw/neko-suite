@@ -6,8 +6,8 @@ export * from './utils/index';
 // Configuration (unified config format for agent-cli and platform)
 export * from './config/index';
 
-// Error handling
-export * from './errors/base-error';
+// Error handling (BaseError + IErrorHandler)
+export * from './errors/index';
 
 // Tools
 export * from './tools/index';
@@ -18,6 +18,18 @@ export * from './core/index';
 // Operations (EditOperation 指令序列系统)
 export * from './operations';
 
+// Logger (ILogger + ConsoleLogger)
+export * from './logger/index';
+
+// i18n (II18nService + I18nService)
+export * from './i18n/index';
+
+// Theme (design tokens + ThemeKind)
+export * from './theme/index';
+
 // VSCode Webview API is NOT exported from main entry to avoid
 // requiring DOM types in Node.js consumers.
 // Use subpath import instead: import { ... } from '@neko/shared/vscode';
+//
+// VSCode Extension Host API (OutputChannelTransport, VSCodeErrorHandler, etc.)
+// Use subpath import: import { ... } from '@neko/shared/vscode/extension';

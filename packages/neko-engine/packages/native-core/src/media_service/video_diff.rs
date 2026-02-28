@@ -294,9 +294,15 @@ pub fn diff_video_content<P: AsRef<Path>>(
 /// Run FFmpeg SSIM filter and return the log content.
 /// Uses scale2ref to scale input B to match input A's resolution when they differ.
 fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path) -> Result<String> {
+    // Use SystemTime nanos as unique suffix to prevent concurrent collisions
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
     let tmp = std::env::temp_dir().join(format!(
-        "neko_ssim_{}.log",
-        std::process::id()
+        "neko_ssim_{}_{}.log",
+        std::process::id(),
+        nanos
     ));
 
     // scale2ref scales [1:v] to match [0:v] dimensions automatically.
@@ -318,12 +324,21 @@ fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path) -> Result<String> {
         .output()
         .map_err(|e| Error::Other(format!("Failed to run ffmpeg ssim: {}", e)))?;
 
-    if !tmp.exists() {
+    // Check exit status FIRST (before checking file existence)
+    if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let _ = std::fs::remove_file(&tmp);
         return Err(Error::Other(format!(
-            "FFmpeg SSIM produced no output. stderr: {}",
-            stderr.chars().take(500).collect::<String>()
+            "FFmpeg SSIM failed (exit {}): {}",
+            output.status,
+            &stderr[..stderr.len().min(500)]
         )));
+    }
+
+    if !tmp.exists() {
+        return Err(Error::Other(
+            "FFmpeg SSIM succeeded but produced no stats file".into(),
+        ));
     }
 
     let content = std::fs::read_to_string(&tmp).map_err(|e| {
@@ -338,9 +353,15 @@ fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path) -> Result<String> {
 /// Run FFmpeg PSNR filter and return the log content.
 /// Uses scale2ref to scale input B to match input A's resolution when they differ.
 fn run_ffmpeg_psnr(path_a: &Path, path_b: &Path) -> Result<String> {
+    // Use SystemTime nanos as unique suffix to prevent concurrent collisions
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
     let tmp = std::env::temp_dir().join(format!(
-        "neko_psnr_{}.log",
-        std::process::id()
+        "neko_psnr_{}_{}.log",
+        std::process::id(),
+        nanos
     ));
 
     // scale2ref scales [1:v] to match [0:v] dimensions automatically.
@@ -362,12 +383,21 @@ fn run_ffmpeg_psnr(path_a: &Path, path_b: &Path) -> Result<String> {
         .output()
         .map_err(|e| Error::Other(format!("Failed to run ffmpeg psnr: {}", e)))?;
 
-    if !tmp.exists() {
+    // Check exit status FIRST (before checking file existence)
+    if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let _ = std::fs::remove_file(&tmp);
         return Err(Error::Other(format!(
-            "FFmpeg PSNR produced no output. stderr: {}",
-            stderr.chars().take(500).collect::<String>()
+            "FFmpeg PSNR failed (exit {}): {}",
+            output.status,
+            &stderr[..stderr.len().min(500)]
         )));
+    }
+
+    if !tmp.exists() {
+        return Err(Error::Other(
+            "FFmpeg PSNR succeeded but produced no stats file".into(),
+        ));
     }
 
     let content = std::fs::read_to_string(&tmp).map_err(|e| {
