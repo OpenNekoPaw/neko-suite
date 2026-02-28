@@ -13,6 +13,7 @@ import type {
   DiffResult,
   GitCommitInfo,
   MediaType,
+  StreamConfig,
 } from '@neko/shared';
 import type { InitialState } from '../components/MediaDiff/types';
 
@@ -44,6 +45,10 @@ export interface MediaDiffProtocolState {
   commits: GitCommitInfo[];
   elementThumbnails: Map<string, string>;
   initialState: InitialState;
+  /** Stream config from extension (set when streaming is active) */
+  streamConfig: StreamConfig | null;
+  /** Stream error message */
+  streamError: string | null;
 }
 
 // =============================================================================
@@ -86,6 +91,9 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
   sendCancel: () => void;
   sendGetFileHistory: (maxCount?: number) => void;
   sendInspectElement: (src: string) => void;
+  sendStartStreaming: () => void;
+  sendStopStreaming: () => void;
+  sendStreamControl: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
 } {
   const [state, setState] = useState<MediaDiffProtocolState>(() => ({
     diffResult: null,
@@ -102,6 +110,8 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     commits: [],
     elementThumbnails: new Map(),
     initialState: getDefaultInitialState(),
+    streamConfig: null,
+    streamError: null,
   }));
 
   // Track Blob URLs for cleanup
@@ -227,6 +237,22 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
           });
           break;
         }
+
+        // ── Streaming responses ──────────────────────────────────────
+        case 'mediaDiff:streamConfig':
+          setState((prev) => ({
+            ...prev,
+            streamConfig: msg.payload,
+            streamError: null,
+          }));
+          break;
+
+        case 'mediaDiff:streamError':
+          setState((prev) => ({
+            ...prev,
+            streamError: msg.error ?? 'Stream error',
+          }));
+          break;
       }
     }
 
@@ -326,6 +352,37 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     });
   }, []);
 
+  const sendStartStreaming = useCallback(() => {
+    vscode.postMessage({
+      type: 'mediaDiff:startStreaming',
+      requestId: nextRequestId(),
+      timestamp: Date.now(),
+      payload: {},
+    });
+  }, []);
+
+  const sendStopStreaming = useCallback(() => {
+    setState((prev) => ({ ...prev, streamConfig: null, streamError: null }));
+    vscode.postMessage({
+      type: 'mediaDiff:stopStreaming',
+      requestId: nextRequestId(),
+      timestamp: Date.now(),
+      payload: {},
+    });
+  }, []);
+
+  const sendStreamControl = useCallback(
+    (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => {
+      vscode.postMessage({
+        type: 'mediaDiff:streamControl',
+        requestId: nextRequestId(),
+        timestamp: Date.now(),
+        payload: { action, ...payload },
+      });
+    },
+    []
+  );
+
   return {
     ...state,
     sendInit,
@@ -336,5 +393,8 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     sendCancel,
     sendGetFileHistory,
     sendInspectElement,
+    sendStartStreaming,
+    sendStopStreaming,
+    sendStreamControl,
   };
 }

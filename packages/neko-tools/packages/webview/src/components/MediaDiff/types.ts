@@ -12,6 +12,7 @@ import type {
   TimelineDiffDetails,
   MediaType,
   GitCommitInfo,
+  StreamConfig,
 } from '@neko/shared';
 
 // Re-export for convenience
@@ -24,6 +25,7 @@ export type {
   TimelineDiffDetails,
   MediaType,
   GitCommitInfo,
+  StreamConfig,
 };
 
 // =============================================================================
@@ -69,6 +71,10 @@ export interface VideoDiffViewerProps extends BaseDiffViewerProps {
   onPlayPause?: () => void;
   sliderPosition?: number;
   onSliderChange?: (position: number) => void;
+  /** Stream config for real-time H264 dual-stream mode */
+  streamConfig?: StreamConfig | null;
+  /** Send stream playback control to extension */
+  onStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
 }
 
 // =============================================================================
@@ -134,9 +140,12 @@ export interface MediaDiffViewerProps {
   error?: string | null;
   gitRef?: string;
   filePath?: string;
+  /** Stream config for real-time video diff */
+  streamConfig?: StreamConfig | null;
   /** Callbacks */
   onTimeChange?: (time: number) => void;
   onInspectElement?: (src: string) => void;
+  onStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
 }
 
 // =============================================================================

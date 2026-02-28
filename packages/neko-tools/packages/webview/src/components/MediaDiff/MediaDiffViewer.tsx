@@ -68,8 +68,10 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
   error,
   gitRef,
   filePath,
+  streamConfig,
   onTimeChange,
   onInspectElement,
+  onStreamControl,
 }: MediaDiffViewerProps) {
   const [viewMode, setViewMode] = useState<DiffViewMode>('side-by-side');
   const [sliderPosition, setSliderPosition] = useState(0.5);
@@ -126,6 +128,8 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
             onTimeChange={handleTimeChange}
             sliderPosition={sliderPosition}
             onSliderChange={setSliderPosition}
+            streamConfig={streamConfig}
+            onStreamControl={onStreamControl}
             isLoading={isLoading}
             error={error}
           />

@@ -1,0 +1,220 @@
+/**
+ * StreamingVideoDiffViewer — Real-time H264 dual-stream video diff.
+ *
+ * Connects two H264StreamClients to the frame server, pairs decoded
+ * VideoFrames via FramePairBuffer, and renders diffs via WebGL DiffRenderer.
+ *
+ * Seek handling follows the neko-preview pattern:
+ * 1. Arm seekFilter — reject stale pre-seek frames still in WebSocket buffer
+ * 2. Flush FramePairBuffer — discard queued frames
+ * 3. Reset H264 decoders — start clean from next keyframe
+ */
+
+import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef, memo } from 'react';
+import { H264StreamClient } from '@neko/neko-client';
+import { FramePairBuffer } from './FramePairBuffer';
+import { DiffRenderer, type DiffMode } from './DiffRenderer';
+import type { StreamConfig } from '@neko/shared';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface StreamingVideoDiffViewerProps {
+	streamConfig: StreamConfig;
+	diffMode: DiffMode;
+	sliderPosition: number;
+	onSliderChange?: (pos: number) => void;
+	/** Send stream control messages (play/pause/seek) to extension */
+	onStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
+}
+
+/** Imperative handle exposed via ref for parent-driven seek */
+export interface StreamingVideoDiffViewerHandle {
+	/** Locally reset decoders and buffers for a seek at `time` (seconds) */
+	seek(time: number): void;
+}
+
+// ─── Seek filter tolerance (seconds) ─────────────────────────────────────────
+// Frames arriving with PTS more than this far from seek target are rejected.
+// Matches neko-preview's 2-second tolerance.
+const SEEK_FILTER_TOLERANCE_SEC = 2.0;
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+export const StreamingVideoDiffViewer = memo(forwardRef<StreamingVideoDiffViewerHandle, StreamingVideoDiffViewerProps>(
+	function StreamingVideoDiffViewer({
+		streamConfig,
+		diffMode,
+		sliderPosition,
+		onSliderChange,
+	}, ref) {
+		const canvasRef = useRef<HTMLCanvasElement>(null);
+		const rendererRef = useRef<DiffRenderer | null>(null);
+		const bufferRef = useRef<FramePairBuffer | null>(null);
+		const clientARef = useRef<H264StreamClient | null>(null);
+		const clientBRef = useRef<H264StreamClient | null>(null);
+		const containerRef = useRef<HTMLDivElement>(null);
+
+		// ── Slider drag state ────────────────────────────────────────────────
+		const isDraggingRef = useRef(false);
+
+		// ── Seek filter state (neko-preview pattern) ─────────────────────────
+		// When set, onFrame rejects stale pre-seek frames whose PTS is far
+		// from the target. Cleared when the first valid post-seek frame arrives.
+		const seekFilterRef = useRef<number | null>(null);
+
+		// ── Expose seek handle to parent ─────────────────────────────────────
+		useImperativeHandle(ref, () => ({
+			seek(time: number) {
+				// 1. Arm seek filter — reject stale WebSocket-buffered frames
+				seekFilterRef.current = time;
+				// 2. Flush FramePairBuffer — discard queued frames
+				bufferRef.current?.flush();
+				// 3. Reset H264 decoders — start clean from next keyframe
+				clientARef.current?.resetDecoder();
+				clientBRef.current?.resetDecoder();
+			},
+		}), []);
+
+		// ── Setup streaming pipeline ─────────────────────────────────────────
+		useEffect(() => {
+			const canvas = canvasRef.current;
+			if (!canvas) return;
+
+			const { port, currentStreamId, previousStreamId, width, height, fps } = streamConfig;
+
+			// 1. Create DiffRenderer (WebGL)
+			const renderer = new DiffRenderer({ canvas, width, height });
+			renderer.setMode(diffMode);
+			renderer.setSliderPosition(sliderPosition);
+			rendererRef.current = renderer;
+
+			// 2. Create FramePairBuffer
+			const halfFrameUs = (1_000_000 / fps) / 2; // half-frame tolerance in microseconds
+			const buffer = new FramePairBuffer({
+				toleranceUs: halfFrameUs,
+				maxBufferSize: 10,
+				onPair: (pair) => {
+					renderer.renderPair(pair.frameA, pair.frameB);
+				},
+			});
+			bufferRef.current = buffer;
+
+			// 3. Create H264 stream clients with seek-filter-aware onFrame callbacks
+			const baseUrl = `ws://127.0.0.1:${port}/v1/streams`;
+
+			const filterFrame = (frame: VideoFrame, feed: (f: VideoFrame) => void) => {
+				const seekTarget = seekFilterRef.current;
+				if (seekTarget !== null) {
+					const frameSec = frame.timestamp / 1_000_000;
+					if (Math.abs(frameSec - seekTarget) > SEEK_FILTER_TOLERANCE_SEC) {
+						// Stale pre-seek frame — discard
+						frame.close();
+						return;
+					}
+					// First valid frame near seek target — disable filter
+					seekFilterRef.current = null;
+				}
+				feed(frame);
+			};
+
+			const clientA = new H264StreamClient({
+				websocketUrl: `${baseUrl}/${currentStreamId}`,
+				width,
+				height,
+				onFrame: (frame) => filterFrame(frame, (f) => buffer.feedA(f)),
+				onError: (err) => console.error('[StreamingDiff] Stream A error:', err),
+			});
+
+			const clientB = new H264StreamClient({
+				websocketUrl: `${baseUrl}/${previousStreamId}`,
+				width,
+				height,
+				onFrame: (frame) => filterFrame(frame, (f) => buffer.feedB(f)),
+				onError: (err) => console.error('[StreamingDiff] Stream B error:', err),
+			});
+
+			clientARef.current = clientA;
+			clientBRef.current = clientB;
+
+			// 4. Connect both streams
+			void clientA.connect();
+			void clientB.connect();
+
+			// 5. Cleanup
+			return () => {
+				clientA.dispose();
+				clientB.dispose();
+				buffer.dispose();
+				renderer.dispose();
+				clientARef.current = null;
+				clientBRef.current = null;
+				bufferRef.current = null;
+				rendererRef.current = null;
+				seekFilterRef.current = null;
+			};
+		}, [streamConfig]); // Re-create pipeline only when config changes
+
+		// ── Sync diff mode ───────────────────────────────────────────────────
+		useEffect(() => {
+			rendererRef.current?.setMode(diffMode);
+		}, [diffMode]);
+
+		// ── Sync slider position ─────────────────────────────────────────────
+		useEffect(() => {
+			rendererRef.current?.setSliderPosition(sliderPosition);
+		}, [sliderPosition]);
+
+		// ── Slider drag handlers (for curtain mode) ──────────────────────────
+		const handlePointerDown = useCallback(
+			(e: React.PointerEvent<HTMLCanvasElement>) => {
+				if (diffMode !== 'curtain') return;
+				isDraggingRef.current = true;
+				(e.target as HTMLElement).setPointerCapture(e.pointerId);
+				const rect = (e.target as HTMLElement).getBoundingClientRect();
+				const pos = (e.clientX - rect.left) / rect.width;
+				onSliderChange?.(Math.max(0, Math.min(1, pos)));
+			},
+			[diffMode, onSliderChange]
+		);
+
+		const handlePointerMove = useCallback(
+			(e: React.PointerEvent<HTMLCanvasElement>) => {
+				if (!isDraggingRef.current || diffMode !== 'curtain') return;
+				const rect = (e.target as HTMLElement).getBoundingClientRect();
+				const pos = (e.clientX - rect.left) / rect.width;
+				onSliderChange?.(Math.max(0, Math.min(1, pos)));
+			},
+			[diffMode, onSliderChange]
+		);
+
+		const handlePointerUp = useCallback(() => {
+			isDraggingRef.current = false;
+		}, []);
+
+		return (
+			<div
+				ref={containerRef}
+				className="flex-1 flex items-center justify-center overflow-hidden bg-black relative"
+			>
+				<canvas
+					ref={canvasRef}
+					className="max-w-full max-h-full object-contain"
+					style={{ cursor: diffMode === 'curtain' ? 'col-resize' : 'default' }}
+					onPointerDown={handlePointerDown}
+					onPointerMove={handlePointerMove}
+					onPointerUp={handlePointerUp}
+					onPointerCancel={handlePointerUp}
+				/>
+				{/* Curtain mode slider line indicator */}
+				{diffMode === 'curtain' && (
+					<div
+						className="absolute top-0 bottom-0 w-0.5 bg-white/60 pointer-events-none"
+						style={{ left: `${sliderPosition * 100}%` }}
+					/>
+				)}
+			</div>
+		);
+	}
+));
+
+export default StreamingVideoDiffViewer;

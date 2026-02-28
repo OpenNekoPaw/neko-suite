@@ -19,6 +19,7 @@ import type {
 	MediaDiffRequest,
 	MediaDiffResponse,
 	DiffResult,
+	StreamConfig,
 } from '@neko/shared';
 import { MediaDiffService } from '../services/MediaDiffService';
 
@@ -40,6 +41,16 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	/** Pending frame extraction promises for concurrency control */
 	private activeFrameExtractions = 0;
 	private static readonly MAX_CONCURRENT_FRAMES = 4;
+
+	// ── Streaming state ──────────────────────────────────────────────────
+	/** Frame server port (null = not started) */
+	private frameServerPort: number | null = null;
+	/** Current version video stream ID */
+	private currentStreamId: string | null = null;
+	/** Previous version video stream ID */
+	private previousStreamId: string | null = null;
+	/** Session ID for grouping streams from this handler */
+	private readonly sessionId = `diff-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 	constructor(
 		private readonly webview: vscode.Webview,
@@ -221,6 +232,23 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 				case 'mediaDiff:changeRef':
 					await this.initializeDiff(message.payload.ref);
+					break;
+
+				// ── Streaming lifecycle ──────────────────────────────
+				case 'mediaDiff:startStreaming':
+					await this.handleStartStreaming(requestId);
+					break;
+
+				case 'mediaDiff:stopStreaming':
+					await this.handleStopStreaming(requestId);
+					break;
+
+				case 'mediaDiff:streamControl':
+					await this.handleStreamControl(
+						message.payload.action,
+						message.payload,
+						requestId
+					);
 					break;
 			}
 		} catch (error) {
@@ -508,6 +536,201 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		}
 	}
 
+	// =========================================================================
+	// Streaming Lifecycle
+	// =========================================================================
+
+	/**
+	 * Start dual H264 streams (current + previous) via neko-engine.
+	 *
+	 * Flow:
+	 *   1. Ensure frame server is running → get port
+	 *   2. Probe both files → get resolution, fps, duration
+	 *   3. Dispatch `videos:stream` for each file → get streamIds
+	 *   4. Send `mediaDiff:streamConfig` to webview
+	 */
+	private async handleStartStreaming(requestId?: string): Promise<void> {
+		try {
+			// 1. Ensure frame server is running
+			const serverResult = await vscode.commands.executeCommand<{ port: number } | null>(
+				'neko.engine.ensureFrameServer'
+			);
+			if (!serverResult) {
+				throw new Error('Failed to start frame server');
+			}
+			this.frameServerPort = serverResult.port;
+
+			// 2. Resolve file paths for both versions
+			const currentPath = this.fileUri.fsPath;
+			const previousPath = this.previousUri?.fsPath ?? this.previousFilePath;
+			if (!previousPath) {
+				throw new Error('No previous file available for streaming');
+			}
+
+			// 3. Probe both files in parallel to get resolution, fps, duration
+			const [currentInfo, previousInfo] = await Promise.all([
+				vscode.commands.executeCommand<{ width: number; height: number; fps: number; duration: number } | null>(
+					'neko.engine.probeInternal', currentPath
+				),
+				vscode.commands.executeCommand<{ width: number; height: number; fps: number; duration: number } | null>(
+					'neko.engine.probeInternal', previousPath
+				),
+			]);
+
+			if (!currentInfo || !previousInfo) {
+				throw new Error('Failed to probe media files');
+			}
+
+			// Use the larger dimensions (to avoid clipping) and current file's fps
+			const width = Math.max(currentInfo.width, previousInfo.width);
+			const height = Math.max(currentInfo.height, previousInfo.height);
+			const fps = currentInfo.fps || 30;
+			const duration = Math.max(currentInfo.duration, previousInfo.duration);
+
+			// 4. Start streams for both files via videos:stream
+			const [currentResult, previousResult] = await Promise.all([
+				vscode.commands.executeCommand<string | null>(
+					'neko.engine.dispatch',
+					'videos', 'stream',
+					{ source: currentPath, sessionId: this.sessionId }
+				),
+				vscode.commands.executeCommand<string | null>(
+					'neko.engine.dispatch',
+					'videos', 'stream',
+					{ source: previousPath, sessionId: this.sessionId }
+				),
+			]);
+
+			if (!currentResult || !previousResult) {
+				throw new Error('Failed to create video streams');
+			}
+
+			const currentStream = JSON.parse(currentResult);
+			const previousStream = JSON.parse(previousResult);
+
+			this.currentStreamId = currentStream.streamId ?? currentStream.data?.streamId;
+			this.previousStreamId = previousStream.streamId ?? previousStream.data?.streamId;
+
+			if (!this.currentStreamId || !this.previousStreamId) {
+				throw new Error('Stream creation returned no streamId');
+			}
+
+			// 5. Send config to webview
+			const config: StreamConfig = {
+				port: this.frameServerPort,
+				currentStreamId: this.currentStreamId,
+				previousStreamId: this.previousStreamId,
+				width,
+				height,
+				fps,
+				duration,
+			};
+
+			this.sendMessage({
+				requestId,
+				type: 'mediaDiff:streamConfig',
+				payload: config,
+			});
+		} catch (error) {
+			console.error('[MediaDiffMessageHandler] Failed to start streaming:', error);
+			this.sendMessage({
+				requestId,
+				type: 'mediaDiff:streamError',
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+
+	/**
+	 * Stop both streams and clean up state.
+	 */
+	private async handleStopStreaming(requestId?: string): Promise<void> {
+		try {
+			const stopPromises: Promise<unknown>[] = [];
+
+			if (this.currentStreamId) {
+				stopPromises.push(
+					vscode.commands.executeCommand(
+						'neko.engine.dispatch',
+						'streams', 'stop',
+						{ streamId: this.currentStreamId }
+					)
+				);
+			}
+			if (this.previousStreamId) {
+				stopPromises.push(
+					vscode.commands.executeCommand(
+						'neko.engine.dispatch',
+						'streams', 'stop',
+						{ streamId: this.previousStreamId }
+					)
+				);
+			}
+
+			await Promise.allSettled(stopPromises);
+		} catch (error) {
+			console.error('[MediaDiffMessageHandler] Failed to stop streaming:', error);
+		} finally {
+			this.currentStreamId = null;
+			this.previousStreamId = null;
+		}
+	}
+
+	/**
+	 * Forward playback control (play/pause/seek) to both streams simultaneously.
+	 *
+	 * Follows neko-preview pattern: dispatch to `videos` group (not `streams`),
+	 * so the engine routes seek/pause/resume through the video controller which
+	 * handles keyframe-seeking and stream lifecycle correctly.
+	 */
+	private async handleStreamControl(
+		action: 'play' | 'pause' | 'seek',
+		payload: { time?: number; speed?: number },
+		requestId?: string
+	): Promise<void> {
+		if (!this.currentStreamId || !this.previousStreamId) return;
+
+		try {
+			let streamAction: string;
+			let options: Record<string, unknown>;
+
+			switch (action) {
+				case 'play':
+					streamAction = 'resume';
+					options = { speed: payload.speed ?? 1.0 };
+					break;
+				case 'pause':
+					streamAction = 'pause';
+					options = {};
+					break;
+				case 'seek':
+					streamAction = 'seek';
+					options = { time: payload.time ?? 0 };
+					break;
+			}
+
+			await Promise.all([
+				vscode.commands.executeCommand(
+					'neko.engine.dispatch',
+					'videos', streamAction,
+					{ ...options, streamId: this.currentStreamId }
+				),
+				vscode.commands.executeCommand(
+					'neko.engine.dispatch',
+					'videos', streamAction,
+					{ ...options, streamId: this.previousStreamId }
+				),
+			]);
+		} catch (error) {
+			console.error(`[MediaDiffMessageHandler] Stream control '${action}' failed:`, error);
+			this.sendMessage({
+				requestId,
+				type: 'mediaDiff:streamError',
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+
 	/**
 	 * Cancel the current analysis for this handler only.
 	 * Does NOT affect analyses from other handlers sharing the same diffService.
@@ -595,6 +818,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		}
 		// Only cancel this handler's analysis, NOT the shared service
 		this.cancelCurrentAnalysis();
+		// Stop active streams (fire-and-forget)
+		void this.handleStopStreaming();
 		// Clean up temp files created for Git mode frame extraction
 		void this.cleanupTempFiles();
 	}

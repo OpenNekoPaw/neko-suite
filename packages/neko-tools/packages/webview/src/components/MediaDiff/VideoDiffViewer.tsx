@@ -1,68 +1,15 @@
 /**
  * VideoDiffViewer Component
- * Video comparison viewer using extracted frame images (via neko-engine).
- * Unlike neko-cut which uses <video> elements, this renders JPEG frames
- * extracted by the Extension Host and sent as ArrayBuffer → Blob URL.
+ *
+ * Real-time H264 dual-stream video diff viewer.
+ * Uses StreamingVideoDiffViewer for WebGL-accelerated diff rendering
+ * via WebSocket H264 streams from neko-engine.
  */
 
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useRef } from 'react';
 import type { VideoDiffViewerProps } from './types';
-import { VideoFrameRenderer } from './VideoFrameRenderer';
-import type { WebGLRenderMode } from './VideoFrameRenderer';
-
-// =============================================================================
-// Frame Display
-// =============================================================================
-
-interface FrameDisplayProps {
-  src?: string;
-  label: string;
-}
-
-const FrameDisplay = memo(function FrameDisplay({ src, label }: FrameDisplayProps) {
-  return (
-    <div className="flex-1 flex flex-col items-center">
-      <div className="text-xs text-[var(--vscode-descriptionForeground)] mb-2 font-medium">
-        {label}
-      </div>
-      <div className="flex-1 flex items-center justify-center overflow-hidden bg-black rounded border border-[var(--vscode-panel-border)]">
-        {src ? (
-          <img
-            src={src}
-            alt={label}
-            className="max-w-full max-h-full object-contain"
-            draggable={false}
-          />
-        ) : (
-          <div className="text-[var(--vscode-descriptionForeground)] text-xs">
-            No frame data
-          </div>
-        )}
-      </div>
-    </div>
-  );
-});
-
-// =============================================================================
-// Side-by-Side Frame View
-// =============================================================================
-
-interface SideBySideFrameViewProps {
-  currentFrameSrc?: string;
-  previousFrameSrc?: string;
-}
-
-const SideBySideFrameView = memo(function SideBySideFrameView({
-  currentFrameSrc,
-  previousFrameSrc,
-}: SideBySideFrameViewProps) {
-  return (
-    <div className="flex flex-1 gap-2 p-2 overflow-hidden">
-      <FrameDisplay src={previousFrameSrc} label="Previous (HEAD)" />
-      <FrameDisplay src={currentFrameSrc} label="Current (Working)" />
-    </div>
-  );
-});
+import { StreamingVideoDiffViewer, type StreamingVideoDiffViewerHandle } from './streaming/StreamingVideoDiffViewer';
+import type { DiffMode } from './streaming/DiffRenderer';
 
 // =============================================================================
 // Timeline Seek Controls
@@ -72,6 +19,8 @@ interface SeekControlsProps {
   currentTime: number;
   duration: number;
   onSeek: (time: number) => void;
+  isPlaying: boolean;
+  onPlayPause: () => void;
   diffRegions?: Array<{ start: number; end: number }>;
 }
 
@@ -79,6 +28,8 @@ const SeekControls = memo(function SeekControls({
   currentTime,
   duration,
   onSeek,
+  isPlaying,
+  onPlayPause,
   diffRegions,
 }: SeekControlsProps) {
   const formatTime = (seconds: number) => {
@@ -90,6 +41,15 @@ const SeekControls = memo(function SeekControls({
 
   return (
     <div className="flex items-center gap-4 p-3 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)]">
+      {/* Play/Pause button */}
+      <button
+        type="button"
+        className="w-8 h-8 flex items-center justify-center rounded hover:bg-[var(--vscode-list-hoverBackground)] transition-colors text-[var(--vscode-foreground)]"
+        onClick={onPlayPause}
+        title={isPlaying ? 'Pause' : 'Play'}
+      >
+        {isPlaying ? '\u23F8' : '\u25B6'}
+      </button>
       <span className="text-xs text-[var(--vscode-foreground)] font-mono min-w-[100px]">
         {formatTime(currentTime)} / {formatTime(duration)}
       </span>
@@ -154,7 +114,7 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
           <div className="text-[var(--vscode-descriptionForeground)] mb-1">Duration</div>
           <div className="flex items-center gap-2">
             <span className="text-red-400">{formatDuration(details.duration.previous)}</span>
-            <span>→</span>
+            <span>&rarr;</span>
             <span className="text-green-400">{formatDuration(details.duration.current)}</span>
           </div>
         </div>
@@ -162,11 +122,11 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
           <div className="text-[var(--vscode-descriptionForeground)] mb-1">Resolution</div>
           <div className="flex items-center gap-2">
             <span className="text-red-400">
-              {details.resolution.previous.width}×{details.resolution.previous.height}
+              {details.resolution.previous.width}&times;{details.resolution.previous.height}
             </span>
-            <span>→</span>
+            <span>&rarr;</span>
             <span className="text-green-400">
-              {details.resolution.current.width}×{details.resolution.current.height}
+              {details.resolution.current.width}&times;{details.resolution.current.height}
             </span>
           </div>
         </div>
@@ -174,7 +134,7 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
           <div className="text-[var(--vscode-descriptionForeground)] mb-1">Frame Rate</div>
           <div className="flex items-center gap-2">
             <span className="text-red-400">{details.fps.previous.toFixed(2)} fps</span>
-            <span>→</span>
+            <span>&rarr;</span>
             <span className="text-green-400">{details.fps.current.toFixed(2)} fps</span>
           </div>
         </div>
@@ -183,7 +143,7 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
             <div className="text-[var(--vscode-descriptionForeground)] mb-1">Codec</div>
             <div className="flex items-center gap-2">
               <span className="text-red-400">{details.codec.previous}</span>
-              <span>→</span>
+              <span>&rarr;</span>
               <span className="text-green-400">{details.codec.current}</span>
             </div>
           </div>
@@ -225,32 +185,43 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
 
 export const VideoDiffViewer = memo(function VideoDiffViewer({
   viewMode,
-  currentSrc: _currentSrc,
-  previousSrc: _previousSrc,
   details,
-  currentFrameSrc,
-  previousFrameSrc,
   currentTime = 0,
   onTimeChange,
   sliderPosition = 0.5,
   onSliderChange,
+  streamConfig,
+  onStreamControl,
   isLoading,
   error,
 }: VideoDiffViewerProps) {
   const [localTime, setLocalTime] = useState(currentTime);
   const [localSliderPosition, setLocalSliderPosition] = useState(sliderPosition);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const streamingRef = useRef<StreamingVideoDiffViewerHandle>(null);
 
-  const duration = Math.max(
+  const duration = streamConfig?.duration ?? Math.max(
     details?.duration.current ?? 0,
     details?.duration.previous ?? 0
   );
+
+  // Map DiffViewMode to streaming DiffMode
+  const diffMode: DiffMode =
+    viewMode === 'overlay' ? 'heatmap' :
+    viewMode === 'onion-skin' ? 'flicker' :
+    viewMode === 'slider' ? 'curtain' :
+    'curtain'; // side-by-side defaults to curtain in streaming mode
 
   const handleSeek = useCallback(
     (time: number) => {
       setLocalTime(time);
       onTimeChange?.(time);
+      // Local reset: arm seek filter, flush buffer, reset decoders
+      streamingRef.current?.seek(time);
+      // Remote: tell extension to seek both engine streams
+      onStreamControl?.('seek', { time });
     },
-    [onTimeChange]
+    [onTimeChange, onStreamControl]
   );
 
   const handleSliderChange = useCallback(
@@ -261,58 +232,54 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
     [onSliderChange]
   );
 
+  const handlePlayPause = useCallback(() => {
+    setIsPlaying(prev => {
+      const next = !prev;
+      onStreamControl?.(next ? 'play' : 'pause');
+      return next;
+    });
+  }, [onStreamControl]);
+
   if (error) {
     return (
       <div className="flex-1 flex items-center justify-center text-red-400">
         <div className="text-center">
-          <div className="text-2xl mb-2">⚠️</div>
+          <div className="text-2xl mb-2">{'\u26A0\uFE0F'}</div>
           <div>{error}</div>
         </div>
       </div>
     );
   }
 
-  if (isLoading) {
+  if (isLoading || !streamConfig) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
           <div className="text-sm text-[var(--vscode-descriptionForeground)]">
-            Loading video frames...
+            {streamConfig ? 'Loading video frames...' : 'Starting video streams...'}
           </div>
         </div>
       </div>
     );
   }
 
-  // Map DiffViewMode to WebGL render mode
-  const webglMode: WebGLRenderMode | null =
-    viewMode === 'overlay' ? 'heatmap' :
-    viewMode === 'onion-skin' ? 'flicker' :
-    viewMode === 'slider' ? 'curtain' :
-    null;
-
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      {viewMode === 'side-by-side' && (
-        <SideBySideFrameView
-          currentFrameSrc={currentFrameSrc}
-          previousFrameSrc={previousFrameSrc}
-        />
-      )}
-      {webglMode && (
-        <VideoFrameRenderer
-          currentFrameSrc={currentFrameSrc}
-          previousFrameSrc={previousFrameSrc}
-          mode={webglMode}
-          sliderPosition={localSliderPosition}
-          onSliderChange={handleSliderChange}
-        />
-      )}
+      <StreamingVideoDiffViewer
+        ref={streamingRef}
+        streamConfig={streamConfig}
+        diffMode={diffMode}
+        sliderPosition={localSliderPosition}
+        onSliderChange={handleSliderChange}
+        onStreamControl={onStreamControl}
+      />
       <SeekControls
         currentTime={localTime}
         duration={duration}
         onSeek={handleSeek}
+        isPlaying={isPlaying}
+        onPlayPause={handlePlayPause}
         diffRegions={details?.diffRegions}
       />
       <VideoDetails details={details} />

@@ -1,0 +1,162 @@
+/**
+ * FramePairBuffer — PTS-based frame pairing for dual video streams.
+ *
+ * Receives decoded VideoFrames from two independent H264 streams (A = current, B = previous),
+ * buffers them, and emits paired frames when their PTS values match within tolerance.
+ *
+ * Design:
+ * - Each stream maintains a sorted queue (ascending PTS)
+ * - On every feed(), scans the opposite queue for a matching PTS within tolerance
+ * - Matched pairs are emitted via `onPair` callback
+ * - Stale frames (PTS too far behind latest) are closed to prevent memory leaks
+ * - `flush()` closes all buffered frames (used on seek)
+ */
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface FramePair {
+	/** Current version frame */
+	frameA: VideoFrame;
+	/** Previous version frame */
+	frameB: VideoFrame;
+	/** Matched PTS in microseconds */
+	pts: number;
+}
+
+export interface FramePairBufferConfig {
+	/** PTS matching tolerance in microseconds (default: half-frame duration) */
+	toleranceUs: number;
+	/** Max buffered frames per stream before dropping oldest (default: 10) */
+	maxBufferSize: number;
+	/** Called when a valid pair is found */
+	onPair: (pair: FramePair) => void;
+}
+
+// ─── Internal types ──────────────────────────────────────────────────────────
+
+interface BufferedFrame {
+	frame: VideoFrame;
+	pts: number; // microseconds
+}
+
+// ─── FramePairBuffer ─────────────────────────────────────────────────────────
+
+export class FramePairBuffer {
+	private queueA: BufferedFrame[] = [];
+	private queueB: BufferedFrame[] = [];
+	private readonly toleranceUs: number;
+	private readonly maxBufferSize: number;
+	private readonly onPair: (pair: FramePair) => void;
+	private disposed = false;
+
+	constructor(config: FramePairBufferConfig) {
+		this.toleranceUs = config.toleranceUs;
+		this.maxBufferSize = config.maxBufferSize;
+		this.onPair = config.onPair;
+	}
+
+	/** Feed a frame from stream A (current version) */
+	feedA(frame: VideoFrame): void {
+		if (this.disposed) {
+			frame.close();
+			return;
+		}
+		this.insertSorted(this.queueA, frame);
+		this.tryMatch();
+	}
+
+	/** Feed a frame from stream B (previous version) */
+	feedB(frame: VideoFrame): void {
+		if (this.disposed) {
+			frame.close();
+			return;
+		}
+		this.insertSorted(this.queueB, frame);
+		this.tryMatch();
+	}
+
+	/** Flush all buffered frames (e.g. on seek). Closes all VideoFrames. */
+	flush(): void {
+		for (const bf of this.queueA) bf.frame.close();
+		for (const bf of this.queueB) bf.frame.close();
+		this.queueA = [];
+		this.queueB = [];
+	}
+
+	/** Dispose — release all resources */
+	dispose(): void {
+		if (this.disposed) return;
+		this.disposed = true;
+		this.flush();
+	}
+
+	// ─── Private ─────────────────────────────────────────────────────────
+
+	/** Insert frame into queue sorted by PTS ascending */
+	private insertSorted(queue: BufferedFrame[], frame: VideoFrame): void {
+		const pts = frame.timestamp; // microseconds
+		const entry: BufferedFrame = { frame, pts };
+
+		// Fast path: append (most common — frames arrive in order)
+		if (queue.length === 0 || pts >= queue[queue.length - 1].pts) {
+			queue.push(entry);
+		} else {
+			// Binary search insert position
+			let lo = 0;
+			let hi = queue.length;
+			while (lo < hi) {
+				const mid = (lo + hi) >>> 1;
+				if (queue[mid].pts < pts) lo = mid + 1;
+				else hi = mid;
+			}
+			queue.splice(lo, 0, entry);
+		}
+
+		// Evict oldest if over capacity
+		this.evictOldest(queue);
+	}
+
+	/** Try to match frames across queues */
+	private tryMatch(): void {
+		if (this.queueA.length === 0 || this.queueB.length === 0) return;
+
+		let matched = true;
+		while (matched && this.queueA.length > 0 && this.queueB.length > 0) {
+			matched = false;
+
+			const a = this.queueA[0];
+			const b = this.queueB[0];
+			const diff = Math.abs(a.pts - b.pts);
+
+			if (diff <= this.toleranceUs) {
+				// Match found — remove both and emit
+				this.queueA.shift();
+				this.queueB.shift();
+				this.onPair({
+					frameA: a.frame,
+					frameB: b.frame,
+					pts: Math.min(a.pts, b.pts),
+				});
+				matched = true;
+			} else if (a.pts < b.pts) {
+				// A is behind — drop it (stale)
+				this.queueA.shift();
+				a.frame.close();
+				matched = true; // continue scanning
+			} else {
+				// B is behind — drop it (stale)
+				this.queueB.shift();
+				b.frame.close();
+				matched = true; // continue scanning
+			}
+		}
+	}
+
+	/** Evict oldest frames if queue exceeds max size */
+	private evictOldest(queue: BufferedFrame[]): void {
+		while (queue.length > this.maxBufferSize) {
+			const evicted = queue.shift();
+			evicted?.frame.close();
+		}
+	}
+}

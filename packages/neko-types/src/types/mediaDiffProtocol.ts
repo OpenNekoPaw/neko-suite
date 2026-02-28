@@ -515,6 +515,36 @@ export interface InspectElementRequest extends BaseMediaDiffRequest {
 }
 
 /**
+ * Start dual-stream video diff (replaces frame extraction for video)
+ */
+export interface StartStreamingRequest extends BaseMediaDiffRequest {
+	type: 'mediaDiff:startStreaming';
+	payload: Record<string, never>;
+}
+
+/**
+ * Stop dual-stream video diff
+ */
+export interface StopStreamingRequest extends BaseMediaDiffRequest {
+	type: 'mediaDiff:stopStreaming';
+	payload: Record<string, never>;
+}
+
+/**
+ * Stream playback control (play, pause, seek)
+ */
+export interface StreamControlRequest extends BaseMediaDiffRequest {
+	type: 'mediaDiff:streamControl';
+	payload: {
+		action: 'play' | 'pause' | 'seek';
+		/** Seek time in seconds (only for action='seek') */
+		time?: number;
+		/** Playback speed multiplier (only for action='play') */
+		speed?: number;
+	};
+}
+
+/**
  * All request types
  */
 export type MediaDiffRequest =
@@ -526,7 +556,10 @@ export type MediaDiffRequest =
 	| CancelAnalysisRequest
 	| GetFileHistoryRequest
 	| ChangeRefRequest
-	| InspectElementRequest;
+	| InspectElementRequest
+	| StartStreamingRequest
+	| StopStreamingRequest
+	| StreamControlRequest;
 
 // =============================================================================
 // IPC Message Types - Responses (Extension → Webview)
@@ -632,6 +665,46 @@ export interface FileHistoryResponse extends BaseMediaDiffResponse {
 }
 
 /**
+ * Stream configuration data sent to webview after streams are created
+ */
+export interface StreamConfig {
+	/** Frame server port */
+	port: number;
+	/** Current version video stream ID */
+	currentStreamId: string;
+	/** Previous version video stream ID */
+	previousStreamId: string;
+	/** Current version audio stream ID (if audio exists) */
+	currentAudioStreamId?: string;
+	/** Previous version audio stream ID (if audio exists) */
+	previousAudioStreamId?: string;
+	/** Video width */
+	width: number;
+	/** Video height */
+	height: number;
+	/** Video framerate */
+	fps: number;
+	/** Video duration in seconds */
+	duration: number;
+}
+
+/**
+ * Stream config response (Extension → Webview)
+ */
+export interface StreamConfigResponse extends BaseMediaDiffResponse {
+	type: 'mediaDiff:streamConfig';
+	payload: StreamConfig;
+}
+
+/**
+ * Stream error response (Extension → Webview)
+ */
+export interface StreamErrorResponse extends BaseMediaDiffResponse {
+	type: 'mediaDiff:streamError';
+	error: string;
+}
+
+/**
  * Element thumbnail response (lazy content diff)
  */
 export interface ElementThumbnailResponse extends BaseMediaDiffResponse {
@@ -653,7 +726,9 @@ export type MediaDiffResponse =
 	| ImageDataResponse
 	| WaveformDataResponse
 	| FileHistoryResponse
-	| ElementThumbnailResponse;
+	| ElementThumbnailResponse
+	| StreamConfigResponse
+	| StreamErrorResponse;
 
 // =============================================================================
 // Protocol Constants

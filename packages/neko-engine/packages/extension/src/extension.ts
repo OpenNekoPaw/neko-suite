@@ -34,6 +34,8 @@ let manager: MediaEngineManager | null = null;
 let exportService: ExportService | null = null;
 let statusBarItem: vscode.StatusBarItem;
 let outputChannel: vscode.OutputChannel;
+/** Cached frame server port (null = not started) */
+let frameServerPort: number | null = null;
 
 // =============================================================================
 // Activation
@@ -180,6 +182,67 @@ function registerCommands(context: vscode.ExtensionContext): void {
 					return null;
 				} catch (error) {
 					log(`diff failed for ${group} (${sourceA} vs ${sourceB}): ${error}`, 'error');
+					return null;
+				}
+			}
+		)
+	);
+
+	// Ensure Frame Server is running (programmatic API for other extensions)
+	// Starts the embedded HTTP/WebSocket server if not already running.
+	// Returns { port: number } on success, null on failure.
+	context.subscriptions.push(
+		vscode.commands.registerCommand(
+			'neko.engine.ensureFrameServer',
+			async (): Promise<{ port: number } | null> => {
+				try {
+					const engine = await getOrStartEngine();
+					if (!engine?.engine) return null;
+
+					// Check if already running
+					const existingPort = frameServerPort;
+					if (existingPort !== null) {
+						return { port: existingPort };
+					}
+
+					// Start frame server with auto-assigned port
+					const port = await engine.engine.startFrameServer(0);
+					frameServerPort = port;
+					log(`Frame server started on port ${port}`);
+					return { port };
+				} catch (error) {
+					log(`ensureFrameServer failed: ${error}`, 'error');
+					return null;
+				}
+			}
+		)
+	);
+
+	// Generic dispatch (programmatic API for other extensions)
+	// Dispatches an ActionRequest to the engine and returns the JSON result.
+	// Parameters: (group: string, action: string, options?: Record<string, unknown>)
+	context.subscriptions.push(
+		vscode.commands.registerCommand(
+			'neko.engine.dispatch',
+			async (
+				group: string,
+				action: string,
+				options?: Record<string, unknown>
+			): Promise<string | null> => {
+				try {
+					const engine = await getOrStartEngine();
+					if (!engine?.engine) return null;
+
+					const optionsJson = options ? JSON.stringify(options) : null;
+					return await engine.engine.dispatchAction(
+						group,
+						action,
+						null,
+						optionsJson,
+						null, null, null, null
+					);
+				} catch (error) {
+					log(`dispatch(${group}:${action}) failed: ${error}`, 'error');
 					return null;
 				}
 			}
@@ -623,6 +686,8 @@ export async function deactivate(): Promise<void> {
 		manager.dispose();
 		manager = null;
 	}
+
+	frameServerPort = null;
 
 	log('Extension deactivated');
 }

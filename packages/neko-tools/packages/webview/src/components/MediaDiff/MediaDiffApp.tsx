@@ -146,6 +146,7 @@ export default function MediaDiffApp() {
     previousFrameSrc,
     commits,
     elementThumbnails,
+    streamConfig,
     initialState,
     sendInit,
     sendInitLocal,
@@ -154,6 +155,8 @@ export default function MediaDiffApp() {
     sendGetFileHistory,
     sendChangeRef,
     sendInspectElement,
+    sendStartStreaming,
+    sendStreamControl,
   } = protocol;
 
   // Auto-init on mount
@@ -164,6 +167,13 @@ export default function MediaDiffApp() {
       sendInit(initialState.ref);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-start streaming when video diff result is ready
+  useEffect(() => {
+    if (diffResult?.mediaType === 'video' && !streamConfig) {
+      sendStartStreaming();
+    }
+  }, [diffResult?.mediaType, streamConfig, sendStartStreaming]);
 
   const handleRetry = useCallback(() => {
     if (initialState.isLocalComparison && initialState.previousUri) {
@@ -231,8 +241,10 @@ export default function MediaDiffApp() {
           error={undefined}
           gitRef={initialState.ref ?? 'HEAD'}
           filePath={initialState.fileName}
+          streamConfig={streamConfig}
           onTimeChange={handleTimeChange}
           onInspectElement={sendInspectElement}
+          onStreamControl={sendStreamControl}
         />
       </div>
 
