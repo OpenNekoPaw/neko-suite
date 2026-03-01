@@ -3,12 +3,16 @@
  *
  * Unified internationalization for all Neko Suite packages.
  *
- * Layer 0 (this module): II18nService interface + I18nService default
+ * Layer 0 (this module): II18nService interface + I18nService default implementation
  * Layer 1 (vscode/extension/i18n-bridge): VSCode locale detection for Extension Host
- * Layer 2 (each webview): Thin React Provider wrapping I18nService
+ * Layer 2 (i18n/webview): detectWebviewLocale() — requires DOM
+ * Layer 2 (i18n/react): I18nProvider + useI18n + useTranslation — requires React
  *
- * NOTE: detectWebviewLocale() requires DOM and is NOT exported here.
- * Import it from '@neko/shared/i18n/webview' in webview context only.
+ * Each webview package creates an I18nService instance, registers namespaced bundles,
+ * and wraps its React tree with <I18nProvider service={i18nService}>.
+ *
+ * NOTE: DOM/React dependencies are NOT exported here.
+ * Import from '@neko/shared/i18n/webview' or '@neko/shared/i18n/react' respectively.
  */
 export type { II18nService, MessageBundle, SupportedLocale } from './types';
 export {

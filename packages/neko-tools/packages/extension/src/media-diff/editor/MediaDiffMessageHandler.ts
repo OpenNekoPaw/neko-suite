@@ -154,8 +154,13 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				payload: result,
 			});
 
-			// Send visualization data for non-video/audio types (video/audio already sent above)
-			if (mediaType !== 'video' && mediaType !== 'audio') {
+			// Send visualization data
+			// For video/audio: preliminary sendVisualizationData (line 124) only sent
+			// UI scaffolding (t=0 frames / empty waveform). Now send the REAL data
+			// from the completed analysis result.
+			if (mediaType === 'video' || mediaType === 'audio') {
+				this.sendWaveformFromResult(result);
+			} else {
 				await this.sendVisualizationData(result, ref);
 			}
 		} catch (error) {

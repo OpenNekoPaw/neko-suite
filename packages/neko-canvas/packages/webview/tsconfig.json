@@ -19,7 +19,8 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@neko/shared": ["../../../neko-types/src"],
+      "@neko/shared": ["../../../neko-types/src/index.ts"],
+      "@neko/shared/*": ["../../../neko-types/src/*"],
       "@neko/neko-client": ["../../../neko-client/src"]
     }
   },

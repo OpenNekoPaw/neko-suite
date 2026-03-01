@@ -1,126 +1,57 @@
 /**
- * Internationalization (i18n) module
- * Provides locale detection and translation utilities
+ * i18n setup for neko-agent webview
+ *
+ * Uses shared I18nService from @neko/shared with Model B namespacing.
+ * Each top-level translation category is registered as a separate namespace.
+ * Components continue using t('dotted.key') unchanged.
  */
+import { I18nService } from '@neko/shared';
+import { detectWebviewLocale } from '@neko/shared/i18n/webview';
+import type { SupportedLocale, MessageBundle } from '@neko/shared';
 
-import { en, Translations } from './locales/en';
-import { zhCN } from './locales/zh-CN';
+import { bundles as enBundles } from './locales/en';
+import { bundles as zhCnBundles } from './locales/zh-cn';
 
-// Supported locales
-export type SupportedLocale = 'en' | 'zh-cn' | 'zh-tw';
+// Create service instance with detected locale
+export const i18nService = new I18nService(detectWebviewLocale());
 
-// Locale to translations mapping
-const locales: Record<string, Translations> = {
-  'en': en,
-  'en-us': en,
-  'en-gb': en,
-  'zh-cn': zhCN,
-  'zh-hans': zhCN,
-  'zh': zhCN,
-  'zh-tw': zhCN, // Fallback to simplified for now
-  'zh-hant': zhCN,
-};
+// Register all bundles by namespace
+function registerAll(
+  allBundles: Record<string, MessageBundle>,
+  locale: SupportedLocale,
+): void {
+  Object.entries(allBundles).forEach(([ns, bundle]) => {
+    i18nService.registerBundle(ns, locale, bundle);
+  });
+}
 
-// Default locale
-const DEFAULT_LOCALE = 'en';
-
-// Current locale state
-let currentLocale: string = DEFAULT_LOCALE;
-let currentTranslations: Translations = en;
+registerAll(enBundles, 'en');
+registerAll(zhCnBundles, 'zh-cn');
 
 /**
- * Get translations for a locale
+ * Translate a message key with optional named parameters
  */
-export function getTranslations(locale: string): Translations {
-  const normalizedLocale = locale.toLowerCase();
-  return locales[normalizedLocale] || en;
+export function t(key: string, params?: Record<string, string | number>): string {
+  return i18nService.t(key, params);
 }
 
 /**
- * Set the current locale
+ * Change locale at runtime
  */
-export function setLocale(locale: string): void {
-  currentLocale = locale.toLowerCase();
-  currentTranslations = getTranslations(currentLocale);
+export function setLocale(locale: SupportedLocale): void {
+  i18nService.setLocale(locale);
 }
 
 /**
- * Get the current locale
+ * Get current locale
  */
-export function getLocale(): string {
-  return currentLocale;
+export function getLocale(): SupportedLocale {
+  return i18nService.locale;
 }
 
 /**
- * Get current translations
+ * Detect locale from webview DOM attribute
  */
-export function getT(): Translations {
-  return currentTranslations;
+export function detectLocale(): SupportedLocale {
+  return detectWebviewLocale();
 }
-
-/**
- * Translate a key path with optional interpolation
- * @param keyPath - Dot-separated path to translation key (e.g., "common.cancel")
- * @param params - Optional parameters for interpolation (e.g., { name: "John" } for "Hello {name}")
- */
-export function t(keyPath: string, params?: Record<string, string | number>): string {
-  const keys = keyPath.split('.');
-  let value: any = currentTranslations;
-
-  for (const key of keys) {
-    if (value && typeof value === 'object' && key in value) {
-      value = value[key];
-    } else {
-      // Fallback to English if key not found
-      value = keys.reduce((obj: any, k) => obj?.[k], en);
-      if (value === undefined) {
-        return keyPath;
-      }
-      break;
-    }
-  }
-
-  if (typeof value !== 'string') {
-    return keyPath;
-  }
-
-  // Handle interpolation
-  if (params) {
-    return value.replace(/\{(\w+)\}/g, (_, key) => {
-      return params[key]?.toString() ?? `{${key}}`;
-    });
-  }
-
-  return value;
-}
-
-/**
- * Detect locale from VSCode environment
- * VSCode passes language via data attribute or message
- */
-export function detectLocale(): string {
-  // Check for VSCode webview language data attribute
-  const root = document.documentElement;
-  const vscodeLocale = root.getAttribute('data-vscode-locale');
-  if (vscodeLocale) {
-    return vscodeLocale.toLowerCase();
-  }
-
-  // Fallback to browser language
-  const browserLang = navigator.language || (navigator as any).userLanguage;
-  if (browserLang) {
-    return browserLang.toLowerCase();
-  }
-
-  return DEFAULT_LOCALE;
-}
-
-/**
- * Initialize i18n with detected or provided locale
- */
-export function initI18n(locale?: string): void {
-  const detectedLocale = locale || detectLocale();
-  setLocale(detectedLocale);
-}
-
-export { en, zhCN, type Translations };

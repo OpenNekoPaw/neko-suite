@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import { detectMediaType, ASSET_DRAG_MIME } from '@neko/shared';
 import type { AssetEntity, AssetVariant, SingleAssetDragData } from '@neko/shared';
+import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import { handleError } from '../utils/errorHandler';
 
 export class AssetLibraryProvider implements vscode.WebviewViewProvider {
@@ -98,7 +99,7 @@ export class AssetLibraryProvider implements vscode.WebviewViewProvider {
 		const nonce = this.getNonce();
 
 		return `<!DOCTYPE html>
-<html lang="en">
+<html ${injectLocaleAttribute()}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">

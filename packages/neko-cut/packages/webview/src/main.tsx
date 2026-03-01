@@ -4,7 +4,7 @@ import App from '@/App';
 import { I18nProvider } from '@/i18n/I18nContext';
 import { ToastProvider } from '@/components/Toast';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { detectLocale } from '@/i18n';
+import { i18nService } from '@/i18n';
 import '@/index.css';
 import { getLogger } from '@/utils/logger';
 
@@ -14,13 +14,10 @@ try {
   const rootElement = document.getElementById('root');
 
   if (rootElement) {
-    // Detect locale from VSCode environment
-    const initialLocale = detectLocale();
-
     ReactDOM.createRoot(rootElement).render(
       <React.StrictMode>
         <ErrorBoundary>
-          <I18nProvider initialLocale={initialLocale}>
+          <I18nProvider service={i18nService}>
             <ToastProvider>
               <App />
             </ToastProvider>

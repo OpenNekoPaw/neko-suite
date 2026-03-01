@@ -68,7 +68,7 @@ export function PropertyPanel({
       }}
     >
       <PanelHeader
-        title={isMulti ? t('panel.multiSelected', selectedNodes.length) : getNodeTypeLabel(node.type)}
+        title={isMulti ? t('panel.multiSelected', { count: selectedNodes.length }) : getNodeTypeLabel(node.type)}
       />
 
       {isMulti ? (
@@ -228,7 +228,7 @@ function MultiSelectionInfo({ nodes }: { nodes: CanvasNode[] }) {
   return (
     <div className="px-3 py-3">
       <p className="text-xs mb-2" style={{ color: 'var(--toolbar-fg-secondary)' }}>
-        {t('panel.multiSelected', nodes.length)}
+        {t('panel.multiSelected', { count: nodes.length })}
       </p>
       <div className="space-y-1">
         {Array.from(typeCounts.entries()).map(([type, count]) => (

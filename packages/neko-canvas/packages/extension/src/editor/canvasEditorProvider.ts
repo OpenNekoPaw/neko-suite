@@ -5,6 +5,7 @@
  * NativeEngine and frame server via NekoPreviewAPI.
  */
 import * as vscode from 'vscode';
+import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
 import type { CanvasStatusBar } from '../views/canvasStatusBar';
@@ -221,7 +222,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     const nonce = this.getNonce();
 
     return `<!DOCTYPE html>
-<html lang="en">
+<html ${injectLocaleAttribute()}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">

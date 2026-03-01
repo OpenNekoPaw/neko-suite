@@ -252,12 +252,15 @@ const OverlayWaveform = memo(function OverlayWaveform({
     [onSeek, duration, zoom, scrollOffset]
   );
 
-  // Wheel zoom/scroll
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
+  // Wheel zoom: Ctrl+wheel = zoom, plain wheel = scroll
+  // Use native addEventListener with { passive: false } to allow preventDefault
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
-        const rect = e.currentTarget.getBoundingClientRect();
+        const rect = el.getBoundingClientRect();
         const cursorFraction = (e.clientX - rect.left) / rect.width;
         const cursorTime = scrollOffset + cursorFraction / zoom;
         const zoomDelta = e.deltaY > 0 ? 0.8 : 1.25;
@@ -270,9 +273,10 @@ const OverlayWaveform = memo(function OverlayWaveform({
         const newOffset = Math.max(0, Math.min(1 - 1 / zoom, scrollOffset + scrollDelta));
         onScrollOffsetChange(newOffset);
       }
-    },
-    [zoom, scrollOffset, containerWidth, onZoomChange, onScrollOffsetChange]
-  );
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoom, scrollOffset, containerWidth, onZoomChange, onScrollOffsetChange]);
 
   // Middle-click drag to pan
   const handleMouseDown = useCallback(
@@ -309,7 +313,6 @@ const OverlayWaveform = memo(function OverlayWaveform({
     <div
       ref={containerRef}
       className="flex-1 m-2 bg-[var(--vscode-input-background)] rounded border border-[var(--vscode-panel-border)] p-4"
-      onWheel={handleWheel}
       onMouseDown={handleMouseDown}
     >
       <div className="flex items-center justify-between mb-2 text-xs">
@@ -470,12 +473,15 @@ const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
   }, []);
 
   // Wheel zoom: Ctrl+wheel = zoom, plain wheel = scroll
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
+  // Use native addEventListener with { passive: false } to allow preventDefault
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
         // Zoom centered on cursor position
-        const rect = e.currentTarget.getBoundingClientRect();
+        const rect = el.getBoundingClientRect();
         const cursorFraction = (e.clientX - rect.left) / rect.width;
         const cursorTime = scrollOffset + cursorFraction / zoom;
 
@@ -491,9 +497,10 @@ const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
         const newOffset = Math.max(0, Math.min(1 - 1 / zoom, scrollOffset + scrollDelta));
         onScrollOffsetChange(newOffset);
       }
-    },
-    [zoom, scrollOffset, containerWidth, onZoomChange, onScrollOffsetChange]
-  );
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoom, scrollOffset, containerWidth, onZoomChange, onScrollOffsetChange]);
 
   // Middle-click drag to pan
   const handleMouseDown = useCallback(
@@ -536,7 +543,6 @@ const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
     <div
       ref={containerRef}
       className="flex-1 overflow-y-auto p-2 space-y-1"
-      onWheel={handleWheel}
       onMouseDown={handleMouseDown}
     >
       {/* Zoom indicator */}
@@ -810,7 +816,7 @@ interface AudioDetailsProps {
 }
 
 const AudioDetails = memo(function AudioDetails({ details }: AudioDetailsProps) {
-  if (!details) return null;
+  if (!details || !details.duration || !details.sampleRate || !details.channels) return null;
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -910,8 +916,8 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
   const [scrollOffset, setScrollOffset] = useState(0);
 
   const duration = Math.max(
-    details?.duration.current ?? 0,
-    details?.duration.previous ?? 0
+    details?.duration?.current ?? 0,
+    details?.duration?.previous ?? 0
   );
 
   const handleTimeChange = useCallback(
@@ -962,8 +968,14 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
     );
   }
 
-  const displayCurrentWaveform = currentWaveform.length > 0 ? currentWaveform : Array(100).fill(0.5).map(() => Math.random());
-  const displayPreviousWaveform = previousWaveform.length > 0 ? previousWaveform : Array(100).fill(0.5).map(() => Math.random());
+  const displayCurrentWaveform = useMemo(
+    () => currentWaveform.length > 0 ? currentWaveform : Array.from({ length: 100 }, () => Math.random()),
+    [currentWaveform]
+  );
+  const displayPreviousWaveform = useMemo(
+    () => previousWaveform.length > 0 ? previousWaveform : Array.from({ length: 100 }, () => Math.random()),
+    [previousWaveform]
+  );
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">

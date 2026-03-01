@@ -9,7 +9,7 @@ import type { MenuEntry } from './components/common/ContextMenu';
 import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
 import { PropertyPanel } from './components/panels/PropertyPanel';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
-import { t, setLocale, detectLocale } from './i18n';
+import { t, setLocale } from './i18n';
 
 // Default canvas data for new files
 const DEFAULT_CANVAS_DATA: CanvasData = {
@@ -34,9 +34,6 @@ const vscode = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCodeApi() : nu
 if (vscode) {
   (window as unknown as Record<string, unknown>).vscode = vscode;
 }
-
-// Initialize locale
-setLocale(detectLocale());
 
 // Media type detection by file extension
 const MEDIA_EXTENSIONS: Record<string, 'image' | 'video' | 'audio'> = {
@@ -141,7 +138,7 @@ export function CanvasApp() {
             keyboardActionRef.current(message.action as string);
             break;
           case 'setLocale':
-            setLocale(message.locale as string);
+            setLocale(message.locale as 'en' | 'zh-cn');
             break;
           case 'addMedia':
             // Extension sends media file info to add to canvas
@@ -971,13 +968,13 @@ export function CanvasApp() {
         className="h-[22px] flex items-center px-2 text-[11px] shrink-0 gap-0"
         style={{ backgroundColor: 'var(--statusbar-bg)', color: 'var(--statusbar-fg)' }}
       >
-        <span className="px-1.5 hover:bg-white/10 cursor-default">{t('status.zoom', (viewport.zoom * 100).toFixed(0))}</span>
-        <span className="px-1.5 hover:bg-white/10 cursor-default">{t('status.pan', viewport.pan.x.toFixed(0), viewport.pan.y.toFixed(0))}</span>
+        <span className="px-1.5 hover:bg-white/10 cursor-default">{t('status.zoom', { level: (viewport.zoom * 100).toFixed(0) })}</span>
+        <span className="px-1.5 hover:bg-white/10 cursor-default">{t('status.pan', { x: viewport.pan.x.toFixed(0), y: viewport.pan.y.toFixed(0) })}</span>
         {isConnecting && (
           <span className="px-1.5 animate-pulse">{t('status.connecting')}</span>
         )}
         {selectedNodeIds.length > 0 && (
-          <span className="px-1.5 hover:bg-white/10 cursor-default">{t('status.selected', selectedNodeIds.length)}</span>
+          <span className="px-1.5 hover:bg-white/10 cursor-default">{t('status.selected', { count: selectedNodeIds.length })}</span>
         )}
         <div className="flex-1" />
         {/* Property panel toggle */}
