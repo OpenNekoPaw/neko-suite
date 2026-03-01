@@ -42,6 +42,9 @@ Layer 1 - VSCode      → import from '@neko/shared/vscode/extension'
 
 Layer 2 - Webview     → import from '@neko/shared/i18n/webview'
                         依赖 DOM，仅 Webview（Browser）
+
+Layer 2 - React       → import from '@neko/shared/i18n/react'
+                        依赖 React，I18nProvider + useTranslation
 ```
 
 ---
@@ -72,6 +75,7 @@ src/
 │   ├── types.ts            # II18nService, SupportedLocale, MessageBundle
 │   ├── core.ts             # I18nService, interpolate(), normalizeLocale()
 │   ├── webview.ts          # detectWebviewLocale()（DOM 依赖，子路径导入）
+│   ├── react.tsx           # I18nProvider, useI18n, useTranslation（React 依赖，子路径导入）
 │   └── index.ts
 ├── theme/                  # 主题系统
 │   ├── types.ts            # ThemeKind
@@ -161,6 +165,9 @@ import {
 
 // Layer 2: Webview（DOM 依赖）
 import { detectWebviewLocale } from '@neko/shared/i18n/webview';
+
+// Layer 2: React Provider（React 依赖）
+import { I18nProvider, useI18n, useTranslation } from '@neko/shared/i18n/react';
 
 // Tailwind preset（在 tailwind.config.js 中）
 import { nekoTailwindPreset } from '@neko/shared/theme/tailwind-preset';

@@ -176,6 +176,11 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 				mediaType: 'video',
 				similarity: Math.max(0, Math.min(1, similarity)),
 				details,
+				// Include audio waveform peaks when engine returns embedded audio diff
+				visualization: videoDiff?.audioDiff ? {
+					currentWaveform: videoDiff.audioDiff.waveformPeaksA ?? [],
+					previousWaveform: videoDiff.audioDiff.waveformPeaksB ?? [],
+				} : undefined,
 			};
 		} finally {
 			await this.cleanupFiles(localTempFiles);

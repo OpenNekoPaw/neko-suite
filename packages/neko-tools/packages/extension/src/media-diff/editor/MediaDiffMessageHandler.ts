@@ -130,13 +130,10 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				ref,
 				{ generateHeatmap: true },
 				(progress, stage) => {
-					// Only send progress for non-video/audio (video/audio UI is already shown)
-					if (mediaType !== 'video' && mediaType !== 'audio') {
-						this.sendMessage({
-							type: 'mediaDiff:progress',
-							payload: { progress, stage },
-						});
-					}
+					this.sendMessage({
+						type: 'mediaDiff:progress',
+						payload: { progress, stage },
+					});
 				},
 				abortController.signal
 			);
@@ -243,13 +240,10 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				this.previousUri,
 				{ generateHeatmap: true },
 				(progress, stage) => {
-					// Only send progress for non-video/audio (video/audio UI is already shown)
-					if (mediaType !== 'video' && mediaType !== 'audio') {
-						this.sendMessage({
-							type: 'mediaDiff:progress',
-							payload: { progress, stage },
-						});
-					}
+					this.sendMessage({
+						type: 'mediaDiff:progress',
+						payload: { progress, stage },
+					});
 				},
 				abortController.signal
 			);
@@ -262,8 +256,12 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				payload: result,
 			});
 
-			// Send visualization data for non-video/audio types
-			if (mediaType !== 'video' && mediaType !== 'audio') {
+			// Send visualization data
+			// For video/audio: preliminary sendVisualizationDataForLocal (line 218) only
+			// sent UI scaffolding. Now send the REAL data from the completed analysis.
+			if (mediaType === 'video' || mediaType === 'audio') {
+				this.sendWaveformFromResult(result);
+			} else {
 				await this.sendVisualizationDataForLocal(result);
 			}
 		} catch (error) {
@@ -380,6 +378,21 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				error: error instanceof Error ? error.message : String(error),
 			});
 		}
+	}
+
+	/**
+	 * Send waveform data extracted from a completed analysis result.
+	 * Works for both audio (direct waveform) and video (embedded audio diff).
+	 */
+	private sendWaveformFromResult(result: DiffResult): void {
+		if (this.isDisposed) return;
+		const currentWaveform = result.visualization?.currentWaveform ?? [];
+		const previousWaveform = result.visualization?.previousWaveform ?? [];
+		if (currentWaveform.length === 0 && previousWaveform.length === 0) return;
+		this.sendMessage({
+			type: 'mediaDiff:waveformData',
+			payload: { currentWaveform, previousWaveform },
+		});
 	}
 
 	/**
