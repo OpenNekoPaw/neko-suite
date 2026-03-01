@@ -1,4 +1,4 @@
-import React, { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { getLogger } from '@/utils/logger';
 
 const logger = getLogger('ErrorBoundary');
@@ -22,11 +22,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    logger.error('[ErrorBoundary] Caught error:', error, errorInfo);
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    logger.error(`[ErrorBoundary] Caught error: ${error.message}`, { error, errorInfo });
   }
 
-  render(): ReactNode {
+  override render(): ReactNode {
     if (this.state.hasError && this.state.error) {
       return (
         <div style={{

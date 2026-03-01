@@ -1,7 +1,7 @@
 # ADR: 统一横切关注点基础设施
 
 > 日期：2026-02-28
-> 状态：已实施（Phase 1-3）
+> 状态：已实施（Phase 1-3, 5）
 
 ## 决策
 
@@ -46,9 +46,23 @@ Layer 2 - Webview     import from '@neko/shared/i18n/webview'      依赖 DOM
 - [x] Phase 2: 各 webview tailwind.config.js 改用共享 preset
 - [x] Phase 3: 逐包迁移 console.log → logger（~400 处，8 个包）
 - [ ] Phase 4: 统一 i18n 实现
-- [ ] Phase 5: 推广 ErrorBoundary + VSCodeErrorHandler
+- [x] Phase 5: 推广 ErrorBoundary + VSCodeErrorHandler
 
 ## 构建注意
 
 - `detectWebviewLocale()` 依赖 DOM，不能从主入口导出，需通过 `@neko/shared/i18n/webview` 子路径导入
 - `Map` 迭代使用 `forEach` 而非 `for...of`，避免 `--downlevelIteration` 要求
+
+## Phase 5 实施记录
+
+已在 5 个 webview 包中推广 `ErrorBoundary` 组件：
+
+| 包 | 路径 | 说明 |
+|----|------|------|
+| neko-story | `packages/webview/src/components/ErrorBoundary.tsx` | 轻量版，使用 `console.error` |
+| neko-canvas | `packages/webview/src/components/ErrorBoundary.tsx` | 使用 `@neko/shared` ConsoleLogger |
+| neko-agent | `packages/webview/src/components/ErrorBoundary.tsx` | 使用 `@neko/shared` ConsoleLogger |
+| neko-preview | `packages/webview/src/components/ErrorBoundary.tsx` | 使用 `@neko/shared` ConsoleLogger |
+| neko-cut | `packages/webview/src/components/ErrorBoundary/ErrorBoundary.tsx` | 增强版，支持自定义 fallback + HOC |
+
+所有组件均已适配 TypeScript strict 模式（`override` 修饰符、`ILogger` 接口签名）。
