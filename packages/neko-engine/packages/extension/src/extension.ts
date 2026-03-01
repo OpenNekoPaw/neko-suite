@@ -25,6 +25,8 @@ import {
 	createVideoFrameProvider,
 	type ExportProgress,
 } from './mediaEngine/export';
+import { setRootLogger, setErrorHandler, handleError } from './base';
+import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 
 // =============================================================================
 // Extension State
@@ -47,6 +49,11 @@ let frameServerPort: number | null = null;
 export function activate(context: vscode.ExtensionContext): void {
 	outputChannel = vscode.window.createOutputChannel('Neko Engine');
 	context.subscriptions.push(outputChannel);
+
+	// Initialize structured logger and error handler
+	const logger = createVSCodeLogger('Neko Engine', 'NekoEngine', context);
+	setRootLogger(logger);
+	setErrorHandler(new VSCodeErrorHandler(logger));
 
 	log('Activating extension...');
 
@@ -294,10 +301,9 @@ async function cmdStartEngine(): Promise<void> {
 		updateStatusBar('ready');
 		vscode.window.showInformationMessage('Neko Engine started');
 	} catch (error) {
-		const msg = error instanceof Error ? error.message : String(error);
-		log(`Failed to start engine: ${msg}`, 'error');
+		log(`Failed to start engine: ${error instanceof Error ? error.message : String(error)}`, 'error');
 		updateStatusBar('error');
-		vscode.window.showErrorMessage(`Failed to start Neko Engine: ${msg}`);
+		handleError(error, { showToUser: true, severity: 'error' });
 	}
 }
 
@@ -322,9 +328,8 @@ async function cmdStopEngine(): Promise<void> {
 		updateStatusBar('idle');
 		vscode.window.showInformationMessage('Neko Engine stopped');
 	} catch (error) {
-		const msg = error instanceof Error ? error.message : String(error);
-		log(`Failed to stop engine: ${msg}`, 'error');
-		vscode.window.showErrorMessage(`Failed to stop Neko Engine: ${msg}`);
+		log(`Failed to stop engine: ${error instanceof Error ? error.message : String(error)}`, 'error');
+		handleError(error, { showToUser: true, severity: 'error' });
 	}
 }
 
@@ -385,8 +390,7 @@ async function cmdShowStatus(): Promise<void> {
 			`Neko Engine: ${engine.state} | GPU: ${gpu.data?.name ?? 'N/A'}`
 		);
 	} catch (error) {
-		const msg = error instanceof Error ? error.message : String(error);
-		vscode.window.showErrorMessage(`Failed to get status: ${msg}`);
+		handleError(error, { showToUser: true, severity: 'error' });
 	}
 }
 
@@ -443,8 +447,7 @@ async function cmdProbeMedia(): Promise<void> {
 			`${mediaInfo.width}x${mediaInfo.height} | ${mediaInfo.codec} | ${mediaInfo.duration.toFixed(1)}s`
 		);
 	} catch (error) {
-		const msg = error instanceof Error ? error.message : String(error);
-		vscode.window.showErrorMessage(`Probe failed: ${msg}`);
+		handleError(error, { showToUser: true, severity: 'error' });
 	}
 }
 
@@ -569,14 +572,13 @@ async function cmdExportProject(): Promise<void> {
 					}
 				} else {
 					log(`Export failed: ${result.error}`, 'error');
-					vscode.window.showErrorMessage(`Export failed: ${result.error}`);
+					handleError(new Error(result.error ?? 'Export failed'), { showToUser: true, severity: 'error' });
 				}
 			}
 		);
 	} catch (error) {
-		const msg = error instanceof Error ? error.message : String(error);
-		log(`Export error: ${msg}`, 'error');
-		vscode.window.showErrorMessage(`Export error: ${msg}`);
+		log(`Export error: ${error instanceof Error ? error.message : String(error)}`, 'error');
+		handleError(error, { showToUser: true, severity: 'error' });
 	}
 }
 
@@ -609,10 +611,9 @@ async function getOrStartEngine(): Promise<NativeMediaEngine | null> {
 		updateStatusBar('ready');
 		return engine;
 	} catch (error) {
-		const msg = error instanceof Error ? error.message : String(error);
-		log(`Failed to get engine: ${msg}`, 'error');
+		log(`Failed to get engine: ${error instanceof Error ? error.message : String(error)}`, 'error');
 		updateStatusBar('error');
-		vscode.window.showErrorMessage(`Neko Engine initialization failed: ${msg}`);
+		handleError(error, { showToUser: true, severity: 'error' });
 		return null;
 	}
 }

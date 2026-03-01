@@ -6,11 +6,12 @@
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { createVSCodeLogger } from '@neko/shared/vscode/extension';
+import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { CanvasEditorProvider } from './editor';
 import { CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
 import { setRootLogger, getRootLogger } from './utils/logger';
+import { setErrorHandler, handleError } from './utils/errorHandler';
 
 // Extension state
 let canvasEditorProvider: CanvasEditorProvider;
@@ -23,6 +24,7 @@ let canvasStatusBar: CanvasStatusBar;
 export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
   const rootLogger = createVSCodeLogger('Neko Canvas', 'NekoCanvas', context);
   setRootLogger(rootLogger);
+  setErrorHandler(new VSCodeErrorHandler(rootLogger));
   const logger = getRootLogger();
 
   logger.info('Activating extension...');
@@ -171,7 +173,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
         await new Promise(resolve => setTimeout(resolve, 200));
         await vscode.commands.executeCommand('renameFile');
       } catch (error) {
-        vscode.window.showErrorMessage(vscode.l10n.t('neko.canvas.new.failed', String(error)));
+        await handleError(error, { showToUser: true });
       }
     })
   );

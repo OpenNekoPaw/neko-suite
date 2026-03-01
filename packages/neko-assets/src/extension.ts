@@ -23,8 +23,9 @@ import { AssetFileDecorationProvider } from './providers/AssetFileDecorationProv
 import { AssetManagerTreeProvider } from './providers/AssetManagerTreeProvider';
 import { AssetHistoryTreeProvider } from './providers/AssetHistoryTreeProvider';
 import { VscodeGitService } from './services/VscodeGitService';
-import { createVSCodeLogger } from '@neko/shared/vscode/extension';
+import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { setRootLogger, getLogger } from './utils/logger';
+import { setErrorHandler, handleError } from './utils/errorHandler';
 
 const logger = getLogger('Extension');
 
@@ -67,6 +68,7 @@ const nodeFileSystem: IFileSystem = {
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	const rootLogger = createVSCodeLogger('Neko Assets', 'NekoAssets', context);
 	setRootLogger(rootLogger);
+	setErrorHandler(new VSCodeErrorHandler(rootLogger));
 
 	logger.info('Activating extension...');
 
@@ -219,8 +221,7 @@ function registerAssetCommands(context: vscode.ExtensionContext): void {
 					`Imported: ${result.entity.name} (${result.isNewEntity ? 'new entity' : 'existing entity'})`,
 				);
 			} catch (error) {
-				const msg = error instanceof Error ? error.message : String(error);
-				vscode.window.showErrorMessage(`Import failed: ${msg}`);
+				await handleError(error, { showToUser: true });
 			}
 		}),
 	);
@@ -289,8 +290,7 @@ function registerLegacyCommands(context: vscode.ExtensionContext): void {
 					await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
 				}
 			} catch (error) {
-				logger.error('Failed to open media preview:', error);
-				vscode.window.showErrorMessage(`Failed to preview: ${uri.fsPath}`);
+				await handleError(error, { showToUser: true });
 			}
 		}),
 	);

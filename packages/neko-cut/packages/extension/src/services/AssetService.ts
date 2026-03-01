@@ -364,7 +364,7 @@ export class AssetService implements vscode.Disposable {
 				results.push(result);
 			} catch (error) {
 				logger.error(`Failed to import ${uri.fsPath}:`, error);
-				vscode.window.showErrorMessage(`Failed to import ${path.basename(uri.fsPath)}`);
+				handleError(error, { showToUser: true, severity: 'error' });
 			}
 		}
 

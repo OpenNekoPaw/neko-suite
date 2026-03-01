@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import { detectMediaType, ASSET_DRAG_MIME } from '@neko/shared';
 import type { AssetEntity, AssetVariant, SingleAssetDragData } from '@neko/shared';
+import { handleError } from '../utils/errorHandler';
 
 export class AssetLibraryProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = 'neko.assetLibrary';
@@ -59,8 +60,7 @@ export class AssetLibraryProvider implements vscode.WebviewViewProvider {
 			await vscode.commands.executeCommand('neko.assets.importFile', vscode.Uri.file(filePath));
 			await this.refreshView();
 		} catch (error) {
-			const msg = error instanceof Error ? error.message : String(error);
-			vscode.window.showErrorMessage(`Import failed: ${msg}`);
+			await handleError(error, { showToUser: true });
 		}
 	}
 
