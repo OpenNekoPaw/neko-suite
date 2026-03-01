@@ -37,7 +37,7 @@ import type {
 	MergeEntitiesResult,
 	VariantComparisonResult,
 } from '@neko/shared';
-import { createServiceId, getLogger } from '../base';
+import { createServiceId, getLogger, handleError } from '../base';
 
 const logger = getLogger('AssetService');
 

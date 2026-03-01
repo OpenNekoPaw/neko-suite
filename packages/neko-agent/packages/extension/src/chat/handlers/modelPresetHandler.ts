@@ -11,6 +11,7 @@
 
 import * as vscode from 'vscode';
 import type { GenericConfigService } from '../../services/genericConfigService';
+import { handleError } from '../../base';
 
 /**
  * Dependencies for ModelPresetHandler
@@ -165,7 +166,7 @@ export class ModelPresetHandler {
         }
       });
     } catch (error) {
-      vscode.window.showErrorMessage(`Failed to export: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      handleError(error, { showToUser: true, severity: 'error' });
     }
   }
 

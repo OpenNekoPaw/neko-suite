@@ -12,3 +12,9 @@ export {
 } from './serviceCollection';
 
 export { setRootLogger, getLogger, getRootLogger } from './logger';
+
+export {
+  setErrorHandler,
+  getErrorHandler,
+  handleError,
+} from './errorHandler';

@@ -8,7 +8,7 @@ import * as path from 'path';
 import { createDefaultProject } from '@neko/shared';
 import type { VideoProjectOutlineProvider } from '../views/outlineProvider';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
-import { getLogger } from '../base';
+import { getLogger, handleError } from '../base';
 
 const logger = getLogger('Commands');
 import { registerTimelineCommands } from './timeline-commands';
@@ -318,7 +318,7 @@ async function exportVideoCommand(editorProvider: VideoEditorProvider): Promise<
         disposables.push(
           exportService.onDidError(error => {
             cleanup();
-            vscode.window.showErrorMessage(`Export failed: ${error}`);
+            handleError(error, { showToUser: true, severity: 'error' });
             resolve();
           })
         );
@@ -345,7 +345,7 @@ async function exportVideoCommand(editorProvider: VideoEditorProvider): Promise<
         // Start the export
         exportService.startExport(project, config).catch(error => {
           cleanup();
-          vscode.window.showErrorMessage(`Failed to start export: ${error}`);
+          handleError(error, { showToUser: true, severity: 'error' });
           resolve();
         });
       });

@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
+import type { TimelineToolResult } from '../bootstrap/toolsBootstrap';
 import { getTimelineBridge } from '../bootstrap/toolsBootstrap';
 
 /**
@@ -16,379 +17,239 @@ export function registerTimelineCommands(
 ): void {
   const bridge = getTimelineBridge();
 
+  /**
+   * Execute a timeline bridge action with the active webview.
+   * Handles webview acquisition, null-guard with user warning, and bridge setup.
+   *
+   * @param toolName - The timeline tool action name to execute
+   * @param params - Parameters to pass to the tool
+   * @returns The tool execution result, or undefined if no webview is available
+   */
+  async function withActiveWebview<T = unknown>(
+    toolName: string,
+    params: Record<string, unknown>
+  ): Promise<TimelineToolResult<T> | undefined> {
+    const webview = videoEditorProvider.getActiveWebview();
+    if (!webview) {
+      vscode.window.showWarningMessage('No video project is open.');
+      return;
+    }
+    bridge.setWebview(webview);
+    return bridge.execute<T>(toolName, params);
+  }
+
   // Timeline Info Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.timeline.getInfo', async () => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('GetTimelineInfo', {});
-      return result;
-    })
+    vscode.commands.registerCommand('neko.timeline.getInfo', () =>
+      withActiveWebview('GetTimelineInfo', {})
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.timeline.listElements', async (trackType?: string) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('ListElements', { trackType });
-      return result;
-    })
+    vscode.commands.registerCommand('neko.timeline.listElements', (trackType?: string) =>
+      withActiveWebview('ListElements', { trackType })
+    )
   );
 
   // Element Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.element.add', async (params: {
+    vscode.commands.registerCommand('neko.element.add', (params: {
       type: string;
       trackId?: string;
       startTime?: number;
       duration?: number;
       properties?: Record<string, unknown>;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('AddElement', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('AddElement', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.element.update', async (params: {
+    vscode.commands.registerCommand('neko.element.update', (params: {
       elementId: string;
       properties: Record<string, unknown>;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('UpdateElement', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('UpdateElement', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.element.delete', async (elementId: string) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('DeleteElement', { elementId });
-      return result;
-    })
+    vscode.commands.registerCommand('neko.element.delete', (elementId: string) =>
+      withActiveWebview('DeleteElement', { elementId })
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.element.getInfo', async (elementId: string) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('GetElementInfo', { elementId });
-      return result;
-    })
+    vscode.commands.registerCommand('neko.element.getInfo', (elementId: string) =>
+      withActiveWebview('GetElementInfo', { elementId })
+    )
   );
 
   // Track Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.track.add', async (params: {
+    vscode.commands.registerCommand('neko.track.add', (params: {
       type: string;
       name?: string;
       index?: number;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('AddTrack', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('AddTrack', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.track.delete', async (trackId: string) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('DeleteTrack', { trackId });
-      return result;
-    })
+    vscode.commands.registerCommand('neko.track.delete', (trackId: string) =>
+      withActiveWebview('DeleteTrack', { trackId })
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.track.reorder', async (params: {
+    vscode.commands.registerCommand('neko.track.reorder', (params: {
       trackId: string;
       newIndex: number;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('ReorderTrack', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('ReorderTrack', params)
+    )
   );
 
   // Effect Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.effect.list', async () => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('ListEffects', {});
-      return result;
-    })
+    vscode.commands.registerCommand('neko.effect.list', () =>
+      withActiveWebview('ListEffects', {})
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.effect.add', async (params: {
+    vscode.commands.registerCommand('neko.effect.add', (params: {
       elementId: string;
       effectType: string;
       parameters?: Record<string, unknown>;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('AddEffect', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('AddEffect', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.effect.update', async (params: {
+    vscode.commands.registerCommand('neko.effect.update', (params: {
       elementId: string;
       effectId: string;
       params: Record<string, unknown>;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('UpdateEffect', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('UpdateEffect', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.effect.remove', async (params: {
+    vscode.commands.registerCommand('neko.effect.remove', (params: {
       elementId: string;
       effectId: string;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('RemoveEffect', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('RemoveEffect', params)
+    )
   );
 
   // Transition Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.transition.list', async () => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('ListTransitions', {});
-      return result;
-    })
+    vscode.commands.registerCommand('neko.transition.list', () =>
+      withActiveWebview('ListTransitions', {})
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.transition.add', async (params: {
+    vscode.commands.registerCommand('neko.transition.add', (params: {
       elementId: string;
       transitionType: string;
       duration?: number;
       position?: 'in' | 'out';
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('SetTransition', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('SetTransition', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.transition.remove', async (params: {
+    vscode.commands.registerCommand('neko.transition.remove', (params: {
       elementId: string;
       placement: 'in' | 'out';
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('RemoveTransition', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('RemoveTransition', params)
+    )
   );
 
   // Mask Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.mask.add', async (params: {
+    vscode.commands.registerCommand('neko.mask.add', (params: {
       elementId: string;
       maskType: string;
       params: Record<string, unknown>;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('AddMask', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('AddMask', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.mask.update', async (params: {
+    vscode.commands.registerCommand('neko.mask.update', (params: {
       elementId: string;
       maskId: string;
       params: Record<string, unknown>;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('UpdateMask', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('UpdateMask', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.mask.remove', async (params: {
+    vscode.commands.registerCommand('neko.mask.remove', (params: {
       elementId: string;
       maskId: string;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('RemoveMask', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('RemoveMask', params)
+    )
   );
 
   // Keyframe Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.keyframe.get', async (params: {
+    vscode.commands.registerCommand('neko.keyframe.get', (params: {
       elementId: string;
       property?: string;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('GetKeyframes', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('GetKeyframes', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.keyframe.add', async (params: {
+    vscode.commands.registerCommand('neko.keyframe.add', (params: {
       elementId: string;
       property: string;
       time: number;
       value: unknown;
       easing?: string;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('AddKeyframe', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('AddKeyframe', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.keyframe.update', async (params: {
+    vscode.commands.registerCommand('neko.keyframe.update', (params: {
       elementId: string;
       keyframeId: string;
       time?: number;
       value?: unknown;
       easing?: string;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('UpdateKeyframe', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('UpdateKeyframe', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.keyframe.remove', async (params: {
+    vscode.commands.registerCommand('neko.keyframe.remove', (params: {
       elementId: string;
       keyframeId: string;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('RemoveKeyframe', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('RemoveKeyframe', params)
+    )
   );
 
   // Shape Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.shape.add', async (params: {
+    vscode.commands.registerCommand('neko.shape.add', (params: {
       trackId: string;
       shapeType: string;
       name?: string;
@@ -396,20 +257,13 @@ export function registerTimelineCommands(
       size?: { width?: number; height?: number };
       style?: Record<string, unknown>;
       transform?: Record<string, unknown>;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('AddShape', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('AddShape', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.shape.update', async (params: {
+    vscode.commands.registerCommand('neko.shape.update', (params: {
       shapeId?: string;
       elementId?: string;
       position?: { x?: number; y?: number };
@@ -417,21 +271,14 @@ export function registerTimelineCommands(
       style?: Record<string, unknown>;
       visible?: boolean;
       locked?: boolean;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('UpdateShape', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('UpdateShape', params)
+    )
   );
 
   // Color Correction Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.color.set', async (params: {
+    vscode.commands.registerCommand('neko.color.set', (params: {
       elementId: string;
       brightness?: number;
       contrast?: number;
@@ -439,105 +286,63 @@ export function registerTimelineCommands(
       temperature?: number;
       tint?: number;
       gamma?: number;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('SetColorCorrection', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('SetColorCorrection', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.color.reset', async (elementId: string) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('ResetColorCorrection', { elementId });
-      return result;
-    })
+    vscode.commands.registerCommand('neko.color.reset', (elementId: string) =>
+      withActiveWebview('ResetColorCorrection', { elementId })
+    )
   );
 
   // Audio Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.audio.setProperties', async (params: {
+    vscode.commands.registerCommand('neko.audio.setProperties', (params: {
       elementId: string;
       volume?: number;
       pan?: number;
       muted?: boolean;
       fadeIn?: number;
       fadeOut?: number;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('SetAudioProperties', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('SetAudioProperties', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.audio.addKeyframe', async (params: {
+    vscode.commands.registerCommand('neko.audio.addKeyframe', (params: {
       elementId: string;
       property: 'volume' | 'pan';
       time: number;
       value: number;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('AddAudioKeyframe', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('AddAudioKeyframe', params)
+    )
   );
 
   // Track Properties Command
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.track.setProperties', async (params: {
+    vscode.commands.registerCommand('neko.track.setProperties', (params: {
       trackId: string;
       name?: string;
       muted?: boolean;
       locked?: boolean;
       solo?: boolean;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('SetTrackProperties', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('SetTrackProperties', params)
+    )
   );
 
   // Media Separate Audio Command
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.media.separateAudio', async (params: {
+    vscode.commands.registerCommand('neko.media.separateAudio', (params: {
       elementId: string;
       targetTrackId?: string;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('SeparateAudio', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('SeparateAudio', params)
+    )
   );
 
   // Export Progress Command (uses ExportService directly)
@@ -554,160 +359,97 @@ export function registerTimelineCommands(
 
   // Animation Commands (existing add_animation -> add_keyframe)
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.animation.add', async (params: {
+    vscode.commands.registerCommand('neko.animation.add', (params: {
       elementId: string;
       property: string;
       keyframes: Array<{ time: number; value: unknown; easing?: string }>;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('AddAnimation', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('AddAnimation', params)
+    )
   );
 
   // Subtitle Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.subtitle.add', async (params: {
+    vscode.commands.registerCommand('neko.subtitle.add', (params: {
       text: string;
       startTime: number;
       endTime: number;
       style?: Record<string, unknown>;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('AddSubtitle', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('AddSubtitle', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.subtitle.import', async (params: {
+    vscode.commands.registerCommand('neko.subtitle.import', (params: {
       format: 'srt' | 'vtt' | 'ass';
       content: string;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('ImportSubtitles', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('ImportSubtitles', params)
+    )
   );
 
   // Media Operation Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.media.trim', async (params: {
+    vscode.commands.registerCommand('neko.media.trim', (params: {
       elementId: string;
       startTime: number;
       endTime: number;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('TrimMedia', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('TrimMedia', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.media.split', async (params: {
+    vscode.commands.registerCommand('neko.media.split', (params: {
       elementId: string;
       splitTime: number;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('SplitMedia', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('SplitMedia', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.media.setSpeed', async (params: {
+    vscode.commands.registerCommand('neko.media.setSpeed', (params: {
       elementId: string;
       speed: number;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('SetSpeed', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('SetSpeed', params)
+    )
   );
 
   // Render Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.render.frame', async (params: {
+    vscode.commands.registerCommand('neko.render.frame', (params: {
       time: number;
       width?: number;
       height?: number;
       format?: 'png' | 'jpeg' | 'webp';
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('RenderFrame', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('RenderFrame', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.render.clip', async (params: {
+    vscode.commands.registerCommand('neko.render.clip', (params: {
       startTime: number;
       endTime: number;
       format?: 'mp4' | 'webm';
       quality?: 'low' | 'medium' | 'high';
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('RenderClip', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('RenderClip', params)
+    )
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.render.thumbnail', async (params: {
+    vscode.commands.registerCommand('neko.render.thumbnail', (params: {
       elementId: string;
       time?: number;
       width?: number;
       height?: number;
-    }) => {
-      const webview = videoEditorProvider.getActiveWebview();
-      if (!webview) {
-        vscode.window.showWarningMessage('No video project is open.');
-        return;
-      }
-      bridge.setWebview(webview);
-      const result = await bridge.execute('GetThumbnail', params);
-      return result;
-    })
+    }) =>
+      withActiveWebview('GetThumbnail', params)
+    )
   );
 
   // Export Command (delegates to neko.exportVideo which uses ExportService directly)

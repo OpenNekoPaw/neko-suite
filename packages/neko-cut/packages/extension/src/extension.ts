@@ -7,8 +7,8 @@
  * - Bootstrap services for MCP, Platform, Workflow
  */
 import * as vscode from 'vscode';
-import { ServiceCollection, setGlobalServices, setRootLogger, getRootLogger } from './base';
-import { createVSCodeLogger } from '@neko/shared/vscode/extension';
+import { ServiceCollection, setGlobalServices, setRootLogger, setErrorHandler, getRootLogger } from './base';
+import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { VideoEditorProvider } from './editor/video/videoEditorProvider';
 import { PropertyPanelViewProvider } from './propertyPanel/propertyPanelViewProvider';
@@ -21,6 +21,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Initialize logger → VSCode OutputChannel + Console
   const logger = createVSCodeLogger('Neko Cut', 'NekoCut', context);
   setRootLogger(logger);
+
+  // Initialize error handler
+  setErrorHandler(new VSCodeErrorHandler(logger));
 
   logger.info('Activating extension...');
 

@@ -6,8 +6,8 @@
  */
 
 import * as vscode from 'vscode';
-import { ServiceCollection, setGlobalServices, setRootLogger, getRootLogger } from './base';
-import { createVSCodeLogger } from '@neko/shared/vscode/extension';
+import { ServiceCollection, setGlobalServices, setRootLogger, setErrorHandler, getRootLogger } from './base';
+import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { ChatViewProvider } from './chat';
 import { createNekoCutTools, createNekoCanvasTools } from './tools/extensionTools';
@@ -19,6 +19,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Initialize logger
   const logger = createVSCodeLogger('Neko Agent', 'NekoAgent', context);
   setRootLogger(logger);
+
+  // Initialize error handler
+  setErrorHandler(new VSCodeErrorHandler(logger));
 
   logger.info('Activating extension...');
 

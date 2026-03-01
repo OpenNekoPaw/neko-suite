@@ -12,7 +12,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Platform } from '@neko/platform';
-import { getLogger } from '../../base';
+import { getLogger, handleError } from '../../base';
 
 const logger = getLogger('FileOperationHandler');
 
@@ -64,7 +64,7 @@ export class FileOperationHandler {
       }
     } catch (error) {
       logger.error('Failed to open file:', error);
-      vscode.window.showErrorMessage(`Failed to open file: ${filePath}`);
+      handleError(error, { showToUser: true, severity: 'error' });
     }
   }
 
@@ -75,7 +75,7 @@ export class FileOperationHandler {
       await vscode.env.openExternal(vscode.Uri.parse(url));
     } catch (error) {
       logger.error('Failed to open URL:', error);
-      vscode.window.showErrorMessage(`Failed to open URL: ${url}`);
+      handleError(error, { showToUser: true, severity: 'error' });
     }
   }
 
@@ -129,7 +129,7 @@ export class FileOperationHandler {
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
       logger.error('Failed to open prompt config:', error);
-      vscode.window.showErrorMessage(`Failed to open prompt config: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      handleError(error, { showToUser: true, severity: 'error' });
     }
   }
 
@@ -140,7 +140,7 @@ export class FileOperationHandler {
       await promptFileService.openAgentsFile(source);
     } catch (error) {
       logger.error('Failed to open AGENTS.md:', error);
-      vscode.window.showErrorMessage(`Failed to open AGENTS.md: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      handleError(error, { showToUser: true, severity: 'error' });
     }
   }
 
@@ -178,7 +178,7 @@ export class FileOperationHandler {
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
       logger.error('Failed to open settings.json:', error);
-      vscode.window.showErrorMessage(`Failed to open settings.json: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      handleError(error, { showToUser: true, severity: 'error' });
     }
   }
 
@@ -242,7 +242,7 @@ export class FileOperationHandler {
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
       logger.error('Failed to open skill file:', error);
-      vscode.window.showErrorMessage(`Failed to open skill file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      handleError(error, { showToUser: true, severity: 'error' });
     }
   }
 
@@ -281,7 +281,7 @@ export class FileOperationHandler {
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
       logger.error('Failed to open command file:', error);
-      vscode.window.showErrorMessage(`Failed to open command file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      handleError(error, { showToUser: true, severity: 'error' });
     }
   }
 
@@ -303,7 +303,7 @@ export class FileOperationHandler {
       }
     } catch (error) {
       logger.error('Failed to save SVG:', error);
-      vscode.window.showErrorMessage('Failed to save SVG file');
+      handleError(error, { showToUser: true, severity: 'error' });
     }
   }
 }
