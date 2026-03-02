@@ -70,7 +70,7 @@ export function initializeMediaDiff(
 	diffService.registerAnalyzer(timelineDiffAnalyzer);
 
 	// Create and register the editor provider
-	const editorProvider = new MediaDiffEditorProvider(context, diffService);
+	const editorProvider = new MediaDiffEditorProvider(context, diffService, engineMediaService);
 
 	// Register custom editor
 	context.subscriptions.push(

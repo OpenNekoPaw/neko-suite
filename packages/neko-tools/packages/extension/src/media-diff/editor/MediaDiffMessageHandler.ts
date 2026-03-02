@@ -22,6 +22,7 @@ import type {
 	StreamConfig,
 	AudioStreamConfig,
 } from '@neko/shared';
+import type { EngineClient } from '@neko/neko-client';
 import { MediaDiffService } from '../services/MediaDiffService';
 
 // =============================================================================
@@ -44,8 +45,6 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	private static readonly MAX_CONCURRENT_FRAMES = 4;
 
 	// ── Streaming state ──────────────────────────────────────────────────
-	/** Frame server port (null = not started) */
-	private frameServerPort: number | null = null;
 	/** Current version video stream ID */
 	private currentStreamId: string | null = null;
 	/** Previous version video stream ID */
@@ -65,8 +64,19 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		private readonly webview: vscode.Webview,
 		private readonly fileUri: vscode.Uri,
 		private readonly diffService: MediaDiffService,
+		private readonly engineClient: EngineClient | null,
 		private readonly previousUri?: vscode.Uri
 	) {}
+
+	/**
+	 * Assert engine client is available. Throws into caller's try/catch.
+	 */
+	private requireEngine(): EngineClient {
+		if (!this.engineClient) {
+			throw new Error('neko-engine not available');
+		}
+		return this.engineClient;
+	}
 
 	/**
 	 * Initialize diff analysis
@@ -122,6 +132,16 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 				// Extract t=0 frames for preview (non-blocking for the user)
 				await this.sendVisualizationData({ mediaType, similarity: -1 } as DiffResult, ref);
+			}
+
+			// Start early waveform extraction in parallel with diff (audio only).
+			// Waveform arrives in ~500ms; full diff takes 5-30s.
+			if (mediaType === 'audio' && this.engineClient) {
+				const previousPath = this.previousUri?.fsPath ?? this.previousFilePath;
+				if (previousPath) {
+					// Fire-and-forget — errors handled internally
+					this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, previousPath);
+				}
 			}
 
 			// Run full diff analysis (may take 5-30s for video SSIM/PSNR)
@@ -232,6 +252,11 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 					});
 					return;
 				}
+			}
+
+			// Start early waveform extraction in parallel with diff (audio only).
+			if (mediaType === 'audio' && this.engineClient && this.previousUri) {
+				this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, this.previousUri.fsPath);
 			}
 
 			// Run diff analysis with progress
@@ -392,6 +417,38 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		this.sendMessage({
 			type: 'mediaDiff:waveformData',
 			payload: { currentWaveform, previousWaveform },
+		});
+	}
+
+	/**
+	 * Start early waveform extraction in parallel with diff analysis.
+	 *
+	 * Dispatches `audios:waveform` for both files — resolves in ~500ms,
+	 * well before the full `audios:diff` completes (5-30s). The early
+	 * waveform is sent immediately; it gets replaced by the authoritative
+	 * waveform from `sendWaveformFromResult()` when the full diff finishes.
+	 *
+	 * Fire-and-forget: errors are logged but never propagate.
+	 */
+	private startEarlyWaveform(
+		engine: EngineClient,
+		currentPath: string,
+		previousPath: string,
+	): Promise<void> {
+		return Promise.all([
+			engine.waveform(currentPath),
+			engine.waveform(previousPath),
+		]).then(([wfA, wfB]) => {
+			if (this.isDisposed) return;
+			this.sendMessage({
+				type: 'mediaDiff:waveformData',
+				payload: {
+					currentWaveform: wfA.peaks,
+					previousWaveform: wfB.peaks,
+				},
+			});
+		}).catch((err) => {
+			console.warn('[MediaDiffMessageHandler] Early waveform extraction failed (non-fatal):', err);
 		});
 	}
 
@@ -570,21 +627,9 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		this.activeFrameExtractions++;
 
 		try {
-			const result = await vscode.commands.executeCommand<{ data: Buffer } | null>(
-				'neko.engine.extractFrame',
-				filePath,
-				time
-			);
+			const imageBuffer = await this.requireEngine().extractFrame(filePath, time);
 
-			if (result?.data) {
-				// Convert Node.js Buffer → ArrayBuffer for proper postMessage transfer
-				// (Buffer sent via postMessage may serialize as {type:'Buffer',data:[...]}
-				// instead of transferable ArrayBuffer)
-				const buf = result.data;
-				const imageBuffer = buf.buffer.slice(
-					buf.byteOffset,
-					buf.byteOffset + buf.byteLength
-				);
+			if (imageBuffer) {
 				this.sendMessage({
 					requestId,
 					type: 'mediaDiff:frameData',
@@ -619,18 +664,9 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 		try {
 			// Extract a thumbnail frame at t=0 with low resolution
-			const result = await vscode.commands.executeCommand<{ data: Buffer } | null>(
-				'neko.engine.extractFrame',
-				absoluteSrc,
-				0
-			);
+			const imageBuffer = await this.requireEngine().extractFrame(absoluteSrc, 0);
 
-			if (result?.data) {
-				const buf = result.data;
-				const imageBuffer = buf.buffer.slice(
-					buf.byteOffset,
-					buf.byteOffset + buf.byteLength
-				);
+			if (imageBuffer) {
 				this.sendMessage({
 					requestId,
 					type: 'mediaDiff:elementThumbnail',
@@ -690,35 +726,20 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	 */
 	private async handleStartStreaming(requestId?: string): Promise<void> {
 		try {
-			// 1. Ensure frame server is running
-			const serverResult = await vscode.commands.executeCommand<{ port: number } | null>(
-				'neko.engine.ensureFrameServer'
-			);
-			if (!serverResult) {
-				throw new Error('Failed to start frame server');
-			}
-			this.frameServerPort = serverResult.port;
+			const engine = this.requireEngine();
 
-			// 2. Resolve file paths for both versions
+			// 1. Resolve file paths for both versions
 			const currentPath = this.fileUri.fsPath;
 			const previousPath = this.previousUri?.fsPath ?? this.previousFilePath;
 			if (!previousPath) {
 				throw new Error('No previous file available for streaming');
 			}
 
-			// 3. Probe both files in parallel to get resolution, fps, duration, hasAudio
+			// 2. Probe both files in parallel to get resolution, fps, duration, hasAudio
 			const [currentInfo, previousInfo] = await Promise.all([
-				vscode.commands.executeCommand<{ width: number; height: number; fps: number; duration: number; hasAudio?: boolean } | null>(
-					'neko.engine.probeInternal', currentPath
-				),
-				vscode.commands.executeCommand<{ width: number; height: number; fps: number; duration: number; hasAudio?: boolean } | null>(
-					'neko.engine.probeInternal', previousPath
-				),
+				engine.probe('videos', currentPath),
+				engine.probe('videos', previousPath),
 			]);
-
-			if (!currentInfo || !previousInfo) {
-				throw new Error('Failed to probe media files');
-			}
 
 			console.log('[MediaDiffMessageHandler] Probe results:', JSON.stringify({ currentInfo, previousInfo }));
 
@@ -728,36 +749,16 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			const fps = currentInfo.fps || 30;
 			const duration = Math.max(currentInfo.duration, previousInfo.duration);
 
-			// 4. Start streams for both files via videos:stream
-			const [currentResult, previousResult] = await Promise.all([
-				vscode.commands.executeCommand<string | null>(
-					'neko.engine.dispatch',
-					'videos', 'stream',
-					{ source: currentPath, sessionId: this.sessionId }
-				),
-				vscode.commands.executeCommand<string | null>(
-					'neko.engine.dispatch',
-					'videos', 'stream',
-					{ source: previousPath, sessionId: this.sessionId }
-				),
+			// 3. Start streams for both files via videos:stream
+			const [currentHandle, previousHandle] = await Promise.all([
+				engine.createStream('videos', currentPath, { sessionId: this.sessionId }),
+				engine.createStream('videos', previousPath, { sessionId: this.sessionId }),
 			]);
 
-			if (!currentResult || !previousResult) {
-				throw new Error('Failed to create video streams');
-			}
+			this.currentStreamId = currentHandle.streamId;
+			this.previousStreamId = previousHandle.streamId;
 
-			const currentStream = JSON.parse(currentResult);
-			const previousStream = JSON.parse(previousResult);
-
-			this.currentStreamId = currentStream.streamId ?? currentStream.data?.streamId;
-			this.previousStreamId = previousStream.streamId ?? previousStream.data?.streamId;
-
-			if (!this.currentStreamId || !this.previousStreamId) {
-				throw new Error('Stream creation returned no streamId');
-			}
-
-			// 5. Always try to create audio streams — don't rely on hasAudio probe
-			// (probeInternal may return hasAudio as undefined for some formats).
+			// 4. Always try to create audio streams — don't rely on hasAudio probe
 			// If the file has no audio track, the engine returns an error which we catch.
 			console.log('[MediaDiffMessageHandler] Audio probe:', {
 				currentHasAudio: currentInfo.hasAudio,
@@ -765,29 +766,19 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			});
 			try {
 				const [curAudioResult, prevAudioResult] = await Promise.allSettled([
-					Promise.resolve(vscode.commands.executeCommand<string | null>(
-						'neko.engine.dispatch',
-						'audios', 'stream',
-						{ source: currentPath, sessionId: this.sessionId }
-					)),
-					Promise.resolve(vscode.commands.executeCommand<string | null>(
-						'neko.engine.dispatch',
-						'audios', 'stream',
-						{ source: previousPath, sessionId: this.sessionId }
-					)),
+					engine.createStream('audios', currentPath, { sessionId: this.sessionId }),
+					engine.createStream('audios', previousPath, { sessionId: this.sessionId }),
 				]);
 
-				if (curAudioResult.status === 'fulfilled' && curAudioResult.value) {
-					const curAudio = JSON.parse(curAudioResult.value);
-					this.currentAudioStreamId = curAudio.streamId ?? curAudio.data?.streamId ?? null;
+				if (curAudioResult.status === 'fulfilled') {
+					this.currentAudioStreamId = curAudioResult.value.streamId;
 					console.log('[MediaDiffMessageHandler] Current audio stream created:', this.currentAudioStreamId);
 				} else {
 					console.log('[MediaDiffMessageHandler] Current file has no audio track (or stream creation failed)');
 				}
 
-				if (prevAudioResult.status === 'fulfilled' && prevAudioResult.value) {
-					const prevAudio = JSON.parse(prevAudioResult.value);
-					this.previousAudioStreamId = prevAudio.streamId ?? prevAudio.data?.streamId ?? null;
+				if (prevAudioResult.status === 'fulfilled') {
+					this.previousAudioStreamId = prevAudioResult.value.streamId;
 					console.log('[MediaDiffMessageHandler] Previous audio stream created:', this.previousAudioStreamId);
 				} else {
 					console.log('[MediaDiffMessageHandler] Previous file has no audio track (or stream creation failed)');
@@ -796,11 +787,11 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				console.warn('[MediaDiffMessageHandler] Audio stream creation failed (non-fatal):', audioErr);
 			}
 
-			// 6. Send config to webview immediately (no engine-level pause).
+			// 5. Send config to webview immediately (no engine-level pause).
 			// Streams auto-play — WebSocket clients connect as soon as
 			// config arrives, well within the subscriber timeout.
 			const config: StreamConfig = {
-				port: this.frameServerPort,
+				port: engine.port,
 				currentStreamId: this.currentStreamId,
 				previousStreamId: this.previousStreamId,
 				currentAudioStreamId: this.currentAudioStreamId ?? undefined,
@@ -831,19 +822,18 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	 */
 	private async handleStopStreaming(_requestId?: string): Promise<void> {
 		try {
-			const stopPromises: Promise<unknown>[] = [];
+			const engine = this.requireEngine();
+			const stopPromises: Promise<void>[] = [];
 
-			for (const [sid, group] of [
-				[this.currentStreamId, 'streams'],
-				[this.previousStreamId, 'streams'],
-				[this.currentAudioStreamId, 'streams'],
-				[this.previousAudioStreamId, 'streams'],
-			] as const) {
+			for (const sid of [
+				this.currentStreamId,
+				this.previousStreamId,
+				this.currentAudioStreamId,
+				this.previousAudioStreamId,
+			]) {
 				if (sid) {
 					stopPromises.push(
-						Promise.resolve(vscode.commands.executeCommand(
-							'neko.engine.dispatch', group, 'stop', { streamId: sid }
-						))
+						engine.controlStream('streams', sid, 'stop')
 					);
 				}
 			}
@@ -892,7 +882,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		if (allStreams.length === 0) return;
 
 		try {
-			let streamAction: string;
+			const engine = this.requireEngine();
+			let streamAction: 'resume' | 'pause' | 'seek';
 			let options: Record<string, unknown>;
 
 			switch (action) {
@@ -912,11 +903,7 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 			await Promise.all(
 				allStreams.map((s) =>
-					Promise.resolve(vscode.commands.executeCommand(
-						'neko.engine.dispatch',
-						s.group, streamAction,
-						{ ...options, streamId: s.id }
-					))
+					engine.controlStream(s.group, s.id, streamAction, options)
 				)
 			);
 		} catch (error) {
@@ -946,69 +933,40 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	 */
 	private async handleStartAudioStreaming(requestId?: string): Promise<void> {
 		try {
-			// 1. Ensure frame server
-			const serverResult = await vscode.commands.executeCommand<{ port: number } | null>(
-				'neko.engine.ensureFrameServer'
-			);
-			if (!serverResult) {
-				throw new Error('Failed to start frame server');
-			}
-			this.frameServerPort = serverResult.port;
+			const engine = this.requireEngine();
 
-			// 2. Resolve file paths
+			// 1. Resolve file paths
 			const currentPath = this.fileUri.fsPath;
 			const previousPath = this.previousUri?.fsPath ?? this.previousFilePath;
 			if (!previousPath) {
 				throw new Error('No previous file available for audio streaming');
 			}
 
-			// 3. Probe duration
+			// 2. Probe duration
 			const [currentInfo, previousInfo] = await Promise.all([
-				vscode.commands.executeCommand<{ duration: number } | null>(
-					'neko.engine.probeInternal', currentPath
-				),
-				vscode.commands.executeCommand<{ duration: number } | null>(
-					'neko.engine.probeInternal', previousPath
-				),
+				engine.probe('audios', currentPath),
+				engine.probe('audios', previousPath),
 			]);
 
 			const duration = Math.max(
-				currentInfo?.duration ?? 0,
-				previousInfo?.duration ?? 0
+				currentInfo.duration ?? 0,
+				previousInfo.duration ?? 0
 			);
 
-			// 4. Create audio streams
-			const [curResult, prevResult] = await Promise.all([
-				vscode.commands.executeCommand<string | null>(
-					'neko.engine.dispatch',
-					'audios', 'stream',
-					{ source: currentPath, sessionId: this.sessionId }
-				),
-				vscode.commands.executeCommand<string | null>(
-					'neko.engine.dispatch',
-					'audios', 'stream',
-					{ source: previousPath, sessionId: this.sessionId }
-				),
+			// 3. Create audio streams
+			const [curHandle, prevHandle] = await Promise.all([
+				engine.createStream('audios', currentPath, { sessionId: this.sessionId }),
+				engine.createStream('audios', previousPath, { sessionId: this.sessionId }),
 			]);
 
-			if (!curResult || !prevResult) {
-				throw new Error('Failed to create audio streams');
-			}
+			this.currentAudioOnlyStreamId = curHandle.streamId;
+			this.previousAudioOnlyStreamId = prevHandle.streamId;
 
-			const curAudio = JSON.parse(curResult);
-			const prevAudio = JSON.parse(prevResult);
-			this.currentAudioOnlyStreamId = curAudio.streamId ?? curAudio.data?.streamId;
-			this.previousAudioOnlyStreamId = prevAudio.streamId ?? prevAudio.data?.streamId;
-
-			if (!this.currentAudioOnlyStreamId || !this.previousAudioOnlyStreamId) {
-				throw new Error('Audio stream creation returned no streamId');
-			}
-
-			// 5. Send config to webview immediately so WebSocket clients
+			// 4. Send config to webview immediately so WebSocket clients
 			//    connect before the engine subscriber timeout fires.
 			//    AudioStreamClients pause locally to suppress auto-playback.
 			const config: AudioStreamConfig = {
-				port: this.frameServerPort,
+				port: engine.port,
 				currentAudioStreamId: this.currentAudioOnlyStreamId,
 				previousAudioStreamId: this.previousAudioOnlyStreamId,
 				duration,
@@ -1034,14 +992,13 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	 */
 	private async handleStopAudioStreaming(_requestId?: string): Promise<void> {
 		try {
-			const stopPromises: Promise<unknown>[] = [];
+			const engine = this.requireEngine();
+			const stopPromises: Promise<void>[] = [];
 
 			for (const sid of [this.currentAudioOnlyStreamId, this.previousAudioOnlyStreamId]) {
 				if (sid) {
 					stopPromises.push(
-						Promise.resolve(vscode.commands.executeCommand(
-							'neko.engine.dispatch', 'streams', 'stop', { streamId: sid }
-						))
+						engine.controlStream('streams', sid, 'stop')
 					);
 				}
 			}
@@ -1083,7 +1040,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		if (allStreams.length === 0) return;
 
 		try {
-			let streamAction: string;
+			const engine = this.requireEngine();
+			let streamAction: 'resume' | 'pause' | 'seek';
 			let options: Record<string, unknown>;
 
 			switch (action) {
@@ -1103,11 +1061,7 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 			await Promise.all(
 				allStreams.map((sid) =>
-					Promise.resolve(vscode.commands.executeCommand(
-						'neko.engine.dispatch',
-						'audios', streamAction,
-						{ ...options, streamId: sid }
-					))
+					engine.controlStream('audios', sid, streamAction, options)
 				)
 			);
 		} catch (error) {

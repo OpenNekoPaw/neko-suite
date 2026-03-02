@@ -9,7 +9,7 @@ import { IEditorRegistry } from '../common/editorRegistry';
 import { VideoEditorModel } from './videoEditorModel';
 import { MessageHandler } from './messageHandler';
 import { MediaService } from '../../services/MediaService';
-import { FrameServerService } from '../../services/FrameServerService';
+import { EngineConnection } from '../../services/EngineConnection';
 import { ExportService } from '../../services/ExportService';
 import { getService, getLogger } from '../../base';
 
@@ -47,7 +47,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 	private activeWebviewPanels: Map<string, vscode.WebviewPanel> = new Map();
 	private modelDisposables: Map<string, vscode.Disposable> = new Map();
 	private mediaServices: Map<string, MediaService> = new Map();
-	private frameServerServices: Map<string, FrameServerService> = new Map();
+	private engineConnection: EngineConnection = new EngineConnection();
 	private exportServices: Map<string, ExportService> = new Map();
 	/** Deferred cleanup subscriptions (cancelled when editor is reopened during export) */
 	private deferredCleanupSubs: Map<string, vscode.Disposable[]> = new Map();
@@ -339,32 +339,22 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 			this.deferredCleanupSubs.delete(docUri);
 		}
 
-		// Initialize Frame Server — reuse existing if still alive (background export)
-		let frameServerPort: number | null = null;
-		let frameServerService = this.frameServerServices.get(docUri) ?? null;
-		if (frameServerService?.isAvailable()) {
-			frameServerPort = frameServerService.getPort();
-			logger.info(`Reusing frame server on port ${frameServerPort}`);
-		} else {
-			frameServerService = await FrameServerService.tryCreate({ port: 0 });
-			if (!frameServerService) {
-				logger.error('Frame server not available — media operations will fail');
-			} else {
-				frameServerPort = frameServerService.getPort();
-				this.frameServerServices.set(docUri, frameServerService);
-				logger.info(`Frame server started on port ${frameServerPort}`);
-			}
+		// Initialize EngineClient — shared across all documents
+		const client = await this.engineConnection.ensureClient();
+		if (!client) {
+			logger.error('EngineClient not available — media operations will fail');
 		}
+		const frameServerPort = this.engineConnection.port;
 
-		// Create MediaService — routes Webview messages to NativeEngine via FrameServerService
+		// Create MediaService — routes Webview messages to NativeEngine via EngineClient
 		// Always create a new one for the new webview (old one holds stale webview ref)
-		if (frameServerService) {
+		if (client) {
 			const oldMedia = this.mediaServices.get(docUri);
 			if (oldMedia) {
-				// Dispose without destroying editor stream (export may still use frame server)
+				// Dispose without destroying editor stream (export may still use client)
 				oldMedia.dispose();
 			}
-			const mediaService = new MediaService(webviewPanel, frameServerService, document.uri);
+			const mediaService = new MediaService(webviewPanel, client, document.uri);
 			this.mediaServices.set(docUri, mediaService);
 
 			// Create editor-level stream (paused state) immediately
@@ -380,17 +370,17 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		// Create or reuse ExportService — reuse if there's an active background export
 		let exportService = this.exportServices.get(docUri);
 		const reusingExport = exportService?.isExporting() ?? false;
-		if (frameServerService && !reusingExport) {
+		if (client && !reusingExport) {
 			exportService?.dispose();
 			const jviDir = path.dirname(document.uri.fsPath);
-			exportService = new ExportService(frameServerService, jviDir);
+			exportService = new ExportService(client, jviDir);
 			this.exportServices.set(docUri, exportService);
 		}
 		if (reusingExport) {
 			logger.info('Reusing ExportService with active export');
 		}
 
-		if (frameServerService && exportService) {
+		if (client && exportService) {
 
 			// Forward export events to the Webview
 		// NOTE: postMessage may throw after panel disposal (background export).
@@ -822,12 +812,6 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 						this.mediaServices.delete(docUri);
 					}
 
-					const fs = this.frameServerServices.get(docUri);
-					if (fs) {
-						fs.dispose();
-						this.frameServerServices.delete(docUri);
-					}
-
 					this.broadcastExportStatus();
 				};
 
@@ -856,13 +840,6 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 					await mediaService.destroyEditorStream();
 					mediaService.dispose();
 					this.mediaServices.delete(docUri);
-				}
-
-				// Dispose FrameServerService
-				const frameServer = this.frameServerServices.get(docUri);
-				if (frameServer) {
-					await frameServer.dispose();
-					this.frameServerServices.delete(docUri);
 				}
 			}
 

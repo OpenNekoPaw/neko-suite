@@ -2,17 +2,20 @@
  * EngineMediaService - neko-engine Media Diff Adapter
  *
  * Adapter layer between diff analyzers and neko-engine's Rust backend.
- * Delegates diff operations to the engine via vscode commands:
- *   - diff → neko.engine.diff (audios:diff, videos:diff, images:diff, timelines:diff)
+ * Uses EngineClient (HTTP dispatch via Frame Server) for all engine operations.
+ *
+ * Port discovery still requires vscode.commands (one-time ensureFrameServer),
+ * but all subsequent operations go through HTTP to the Frame Server.
  *
  * This adapter exists to:
- *   1. Decouple analyzers from vscode command names (testability)
+ *   1. Decouple analyzers from transport details (testability)
  *   2. Provide graceful degradation when engine is unavailable
- *   3. Adapt neko-engine response shapes to analyzer expectations
+ *   3. Lazy-initialize the HTTP client on first use
  */
 
 import * as vscode from 'vscode';
 import type { EngineDiffResult } from '@neko/shared';
+import { EngineClient } from '@neko/neko-client';
 
 // =============================================================================
 // Service
@@ -21,20 +24,38 @@ import type { EngineDiffResult } from '@neko/shared';
 const ENGINE_EXTENSION_ID = 'neko.neko-engine';
 
 export class EngineMediaService {
-	private engineActivated = false;
+	private client: EngineClient | null = null;
+	private initPromise: Promise<EngineClient | null> | null = null;
 
 	/**
-	 * Ensure the neko-engine extension is activated before calling its commands.
-	 * The engine registers internal commands (like neko.engine.diff) during activation,
-	 * so we must activate it first — VSCode won't auto-activate for internal commands.
+	 * Create with an existing EngineClient (for testing or shared instances).
 	 */
-	private async ensureEngineActivated(): Promise<boolean> {
-		if (this.engineActivated) return true;
+	constructor(client?: EngineClient) {
+		this.client = client ?? null;
+	}
 
+	/**
+	 * Lazy-initialize: activate engine extension → start Frame Server → create HTTP client.
+	 * Cached after first successful init.
+	 */
+	async ensureClient(): Promise<EngineClient | null> {
+		if (this.client) return this.client;
+
+		// Prevent concurrent initialization
+		if (this.initPromise) return this.initPromise;
+
+		this.initPromise = this.initializeClient();
+		const result = await this.initPromise;
+		this.initPromise = null;
+		return result;
+	}
+
+	private async initializeClient(): Promise<EngineClient | null> {
+		// 1. Ensure engine extension is activated
 		const ext = vscode.extensions.getExtension(ENGINE_EXTENSION_ID);
 		if (!ext) {
 			console.error(`[EngineMediaService] Extension ${ENGINE_EXTENSION_ID} not installed`);
-			return false;
+			return null;
 		}
 
 		if (!ext.isActive) {
@@ -42,12 +63,26 @@ export class EngineMediaService {
 				await ext.activate();
 			} catch (error) {
 				console.error(`[EngineMediaService] Failed to activate ${ENGINE_EXTENSION_ID}:`, error);
-				return false;
+				return null;
 			}
 		}
 
-		this.engineActivated = true;
-		return true;
+		// 2. Ensure Frame Server is running → get port
+		try {
+			const result = await vscode.commands.executeCommand<{ port: number } | null>(
+				'neko.engine.ensureFrameServer'
+			);
+			if (!result) {
+				console.error('[EngineMediaService] ensureFrameServer returned null');
+				return null;
+			}
+
+			this.client = new EngineClient(result.port);
+			return this.client;
+		} catch (error) {
+			console.error('[EngineMediaService] Failed to start frame server:', error);
+			return null;
+		}
 	}
 
 	/**
@@ -65,18 +100,11 @@ export class EngineMediaService {
 		sourceB: string,
 		options?: Record<string, unknown>
 	): Promise<EngineDiffResult | null> {
-		const activated = await this.ensureEngineActivated();
-		if (!activated) return null;
+		const client = await this.ensureClient();
+		if (!client) return null;
 
 		try {
-			const result = await vscode.commands.executeCommand<EngineDiffResult>(
-				'neko.engine.diff',
-				group,
-				sourceA,
-				sourceB,
-				options
-			);
-			return result ?? null;
+			return await client.diff<EngineDiffResult>(group, sourceA, sourceB, options);
 		} catch (error) {
 			console.error(`[EngineMediaService] diff(${group}) failed:`, error);
 			return null;

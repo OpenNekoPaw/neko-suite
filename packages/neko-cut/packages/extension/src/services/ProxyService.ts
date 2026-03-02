@@ -2,7 +2,7 @@
  * ProxyService - Video proxy file generation and management
  *
  * Manages low-resolution proxy files for smoother timeline editing.
- * Delegates transcoding to neko-engine via FrameServerService.dispatch().
+ * Delegates transcoding to neko-engine via EngineClient.dispatch().
  *
  * Storage layout:
  *   <projectDir>/.neko/proxies/
@@ -20,7 +20,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
 import { createServiceId } from '../base';
-import type { FrameServerService } from './FrameServerService';
+import { EngineClient, type ActionRequest, type ActionResponse } from '@neko/neko-client';
 import type {
 	ProxyManifest,
 	ProxyEntry,
@@ -55,20 +55,6 @@ const AUTO_PROXY_THRESHOLDS = {
 // Types
 // =============================================================================
 
-interface ActionRequest {
-	group: string;
-	action: string;
-	id?: string;
-	options?: Record<string, unknown>;
-}
-
-interface ActionResponse {
-	id: string;
-	status: 'ok' | 'error' | 'pending' | 'progress';
-	data?: unknown;
-	error?: { code: string; message: string } | null;
-}
-
 export interface ProxyGenerateResult {
 	resourceId: string;
 	proxyPath: string;
@@ -91,7 +77,7 @@ export class ProxyService implements vscode.Disposable {
 	readonly onDidChangeProxy = this._onDidChangeProxy.event;
 
 	constructor(
-		private readonly frameServer: FrameServerService,
+		private readonly client: EngineClient,
 	) {}
 
 	// =========================================================================
@@ -479,16 +465,7 @@ export class ProxyService implements vscode.Disposable {
 	}
 
 	private async dispatch(req: ActionRequest): Promise<ActionResponse> {
-		const json = JSON.stringify({
-			group: req.group,
-			action: req.action,
-			id: req.id ?? '',
-			options: req.options ?? {},
-			body: null,
-		});
-
-		const responseJson = await this.frameServer.dispatch(json);
-		const response = JSON.parse(responseJson) as ActionResponse;
+		const response = await this.client.dispatch(req);
 
 		if (response.status === 'error') {
 			const errMsg = response.error?.message

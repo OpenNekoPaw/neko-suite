@@ -1,7 +1,12 @@
 /**
- * @neko/neko-client - Media streaming clients for Neko Suite
+ * @neko/neko-client - Media clients for Neko Suite
  *
- * Provides browser-side clients for consuming media streams from neko-engine:
+ * Provides clients for consuming neko-engine services:
+ *
+ * Engine dispatch (HTTP/WS — works in both Extension Host and Webview):
+ * - EngineClient: HTTP dispatch + WS stream management
+ *
+ * Stream consumers (browser-side):
  * - H264StreamClient: H.264 WebCodecs decoder
  * - AudioStreamClient: PCM Web Audio player (master clock for A/V sync)
  * - FrameScheduler: A/V synchronized frame scheduling
@@ -57,3 +62,21 @@ export {
 	formatTime,
 	formatTimePrecise,
 } from './formatTime';
+
+// Engine HTTP/WS dispatch client
+export {
+	EngineClient,
+	type EngineClientConfig,
+} from './EngineClient';
+
+export type {
+	ActionRequest,
+	ActionResponse,
+	RawProbeData,
+	RawWaveformData,
+	ProbeResult,
+	WaveformResult,
+	StreamHandle,
+} from './engine/types';
+
+export { transformDiffResponse } from './engine/responseTransform';

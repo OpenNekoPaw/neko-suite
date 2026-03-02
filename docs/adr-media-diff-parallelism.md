@@ -1,8 +1,8 @@
 # 音视频 Diff 并行与 Lazy Loading 分析
 
-> 日期：2026-03-01
-> 状态：分析完成，待实施
-> 关联：docs/diff.md, docs/adr-video-diff-streaming.md
+> 日期：2026-03-01（Phase 1），2026-03-02（架构更新）
+> 状态：Phase 1 已实施，Phase 2-3 待实施
+> 关联：docs/diff.md, docs/adr-video-diff-streaming.md, docs/adr-unified-engine.md
 
 ## 背景
 
@@ -17,9 +17,9 @@ t=0ms   detectMediaType → send preliminary result → UI 立即显示
 t=5ms   ensurePreviousFilePath(ref) ← Git 拉取前版本
         ⏳ 阻塞 3-30s
 
-t=3s    areFilesIdentical() → MD5 并行哈希两文件 ← ✅ 唯一的并行点
+t=3s    areFilesIdentical() → MD5 并行哈希两文件 ← ✅ 并行
 
-t=3.1s  sendVisualizationData(dummy) → 发送空波形 ← ❌ BUG（已知）
+t=3.1s  sendVisualizationData(dummy) → 发送空波形（占位）
 
 t=3.2s  diffService.analyze() → AudioDiffAnalyzer
         └─ engineMediaService.diff('audios', pathA, pathB)
@@ -27,7 +27,7 @@ t=3.2s  diffService.analyze() → AudioDiffAnalyzer
            ⏳ 阻塞 1-30s（取决于文件大小）
 
 t=30s   send mediaDiff:result（含完整分析结果）
-        ⚠️ 跳过 audio 的 waveformData 发送 ← ❌ BUG（已知）
+        send mediaDiff:waveformData（真实波形） ← ✅ Phase 1 已修复
 
 t=30s+  用户点击 Play → 才创建 AudioStreamClient ← ✅ Lazy
 ```
@@ -53,9 +53,7 @@ t=5ms   ensurePreviousFilePath(ref) ← Git 拉取
 
 t=3s    MD5 并行哈希 ← ✅
 
-t=3.1s  handleSeek(0) → 提取 t=0 帧 ← ✅ Promise.all 并行
-        ├─ handleGetFrame(0, 'current')
-        └─ handleGetFrame(0, 'previous')
+t=3.1s  sendVisualizationData(dummy) → 跳过帧提取（engine 未就绪） ← ✅ Phase 1 已修复
 
 t=3.3s  diffService.analyze() → VideoDiffAnalyzer
         └─ engineMediaService.diff('videos', pathA, pathB)
@@ -69,7 +67,8 @@ t=3.3s  diffService.analyze() → VideoDiffAnalyzer
         ⏳ 阻塞 5-60s
 
 t=30s   send mediaDiff:result
-        ⚠️ 跳过 audio waveformData 发送 ← ❌ 同样的 BUG
+        send mediaDiff:waveformData（音频波形） ← ✅ Phase 1 已修复
+        + 进度报告全程可见 ← ✅ Phase 1 已修复
 
 t=30s+  用户点击 Play → handleStartStreaming()
         ├─ Probe A + B ← ✅ Promise.all
@@ -161,22 +160,29 @@ Probe A → Probe B → FFmpeg SSIM → FFmpeg PSNR
 
 ## 五、优化路线图
 
-### Phase 1：短期修复（修 Bug + 低成本）
+### Phase 1：短期修复（修 Bug + 低成本）— ✅ 已完成
 
-| # | 优化 | 工作量 | 收益 |
-|---|------|-------|------|
-| 1 | **修复波形数据发送 bug**：分析完成后对 audio 类型也发送 waveformData | ~5 行 | 波形恢复显示 |
-| 2 | **视频分析中音频波形也发送**：videos:diff 返回的 audio_diff 波形推送到 webview | ~10 行 | 视频 diff 有音频波形 |
-| 3 | **启用 audio/video 进度报告**：移除 `mediaType !== 'audio'` 过滤 | 删 2 行 | 用户看到分析进度 |
+| # | 优化 | 状态 | 改动 |
+|---|------|------|------|
+| 1 | **修复波形数据发送 bug**：分析完成后对 audio 类型也发送 waveformData | ✅ | `sendWaveformFromResult()` 新方法 |
+| 2 | **视频分析中音频波形也发送**：`VideoDiffAnalyzer` 从 `videoDiff.audioDiff` 提取波形峰值到 `visualization` | ✅ | `VideoDiffAnalyzer.ts` + `sendWaveformFromResult()` |
+| 3 | **启用 audio/video 进度报告**：移除 `mediaType !== 'audio'` 过滤 | ✅ | 删除两处 if 过滤 |
+| 4 | **修复视频帧提取竞态**：preliminary 调用跳过 `handleSeek(0)`，避免 engine 未激活时报错 | ✅ | `sendVisualizationData` + `sendVisualizationDataForLocal` |
 
-### Phase 2：Engine 拆分与并行
+### Phase 2：统一通信 + 并行调度 — ✅ 部分完成
 
-| # | 优化 | 工作量 | 收益 |
-|---|------|-------|------|
-| 4 | **Engine 新增 `audios:probe`**：快速返回 duration/sampleRate | Rust 中等 | Probe 提前，UI 立即显示时间轴 |
-| 5 | **Engine 新增 `audios:waveform`**：只生成波形峰值不计算 SNR | Rust 中等 | 波形可在 SNR 之前渲染 |
-| 6 | **Engine `videos:diff` 内 SSIM \|\| PSNR 并行**：两个 FFmpeg 进程并行 | Rust 中等 | **分析时间减少 30-50%** |
-| 7 | **Extension 层并行调度**：Probe + 波形 \|\| 精确分析 | TS 中等 | 波形提前 5-30s 显示 |
+> **实现方案**：在 `@neko/neko-client` 中新增 `EngineClient` HTTP 客户端（见 [adr-unified-engine.md](./adr-unified-engine.md)）
+>
+> **关键发现**：Engine 已有 `audios:probe`、`audios:waveform` 命令（neko-preview / neko-cut 已在使用），无需 Rust 改动。
+> neko-tools 已从 VSCode commands 迁移到 HTTP dispatch。
+
+| # | 优化 | 状态 | 改动 |
+|---|------|------|------|
+| 4 | **在 `@neko/neko-client` 中添加 `EngineClient`**：HTTP dispatch + WS URL 构建，零 vscode 依赖 | ✅ | `EngineClient.ts` + `engine/types.ts` + `engine/responseTransform.ts` |
+| 5 | **neko-tools 迁移到 EngineClient**：替换所有 VSCode commands 调用 | ✅ | `EngineMediaService.ts`（lazy init）+ `MediaDiffMessageHandler.ts`（全部 streaming/extraction 方法） |
+| 6 | **音频并行调度 waveform \|\| diff**：波形提前 5-30s 送达 webview | ✅ | `startEarlyWaveform()` 在 `initializeDiff` / `initializeLocalDiff` 中并行启动 |
+| 7 | **Engine `videos:diff` 内 SSIM \|\| PSNR 并行**：两个 FFmpeg 进程并行 | ⏳ 待实施 | Rust 改动，**分析时间减少 30-50%** |
+| — | **视频 probe 提前发送**：需新增 `mediaDiff:probeResult` webview 消息处理 | ⏳ 待实施 | 需 webview 侧配合 |
 
 ### Phase 3：流式/渐进式
 
@@ -185,26 +191,16 @@ Probe A → Probe B → FFmpeg SSIM → FFmpeg PSNR
 | 8 | **Engine 流式帧指标返回**：SSIM 每处理 N 帧回调一次 | Rust 大 | 视频帧相似度渐进显示 |
 | 9 | **高精度波形（zoom 按需加载）**：800 点不够时 zoom 再请求更多 | 全栈 中等 | 深度 zoom 下波形不失真 |
 
-## 六、已确认的 Bug
+## 六、已修复的 Bug（Phase 1）
 
-### BUG-1：波形数据发送逻辑错误
+### BUG-1：波形数据发送逻辑错误 — ✅ 已修复
 
-**位置**：`MediaDiffMessageHandler.ts` 第 157-159 行
+**原问题**：`initializeDiff` / `initializeLocalDiff` 分析完成后显式跳过 audio/video 的波形发送。
 
-```typescript
-// Send visualization data for non-video/audio types (video/audio already sent above)
-if (mediaType !== 'video' && mediaType !== 'audio') {
-    await this.sendVisualizationData(result, ref);
-}
-```
+**修复**：新增 `sendWaveformFromResult(result)` 方法，在完整分析完成后发送真实波形数据。同时 `VideoDiffAnalyzer` 从 `videoDiff.audioDiff.waveformPeaksA/B` 提取音频波形到 `visualization` 字段。
 
-**问题**：
-1. 第 124 行用 dummy DiffResult（无 visualization）调用 `sendVisualizationData` → 发送空波形
-2. 分析完成后显式跳过 audio/video 的二次发送
-3. webview 只从 `mediaDiff:waveformData` 读取波形，不从 `mediaDiff:result` 提取
+### BUG-2：视频帧提取竞态 — ✅ 已修复
 
-**影响**：音频波形永远为空数组，触发随机数 fallback。
+**原问题**：preliminary `sendVisualizationData` 在 engine 未激活时就调用 `handleSeek(0)` → `neko.engine.extractFrame` not found。
 
-### BUG-2：initializeLocalDiff 同样问题
-
-**位置**：`MediaDiffMessageHandler.ts` 第 260-263 行，同样的跳过逻辑。
+**修复**：preliminary 调用（无 `visualization` 字段）跳过帧提取。帧提取由用户交互（play/seek）触发，此时 engine 已通过 `diff` 命令激活。

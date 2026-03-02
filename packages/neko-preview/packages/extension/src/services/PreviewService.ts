@@ -1,61 +1,36 @@
 /**
  * PreviewService - Media preview orchestration service
  *
- * Wraps NativeEngine NAPI for media preview operations:
+ * Connects to neko-engine's Frame Server via EngineClient (HTTP) for:
  * - Media probing (metadata extraction)
  * - Video playback control (start/stop/seek via H.264 stream)
  * - Waveform data generation
  *
  * Architecture:
- * PreviewService → NativeEngine (NAPI) → Rust EngineApi
+ * PreviewService → EngineClient (HTTP) → neko-engine Frame Server → Rust EngineApi
  */
 
 import * as vscode from 'vscode';
+import { EngineClient } from '@neko/neko-client';
+import type { ActionRequest as EngineActionRequest, ActionResponse } from '@neko/neko-client';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('PreviewService');
 
+const ENGINE_EXTENSION_ID = 'neko.neko-engine';
+
 // =============================================================================
-// Types (matching NativeEngine NAPI interface)
+// Types
 // =============================================================================
 
-interface NativeEngineInstance {
-	startFrameServer(port?: number | null): Promise<number>;
-	stopFrameServer(): Promise<void>;
-	getFrameServerPort(): number | null;
-	dispatch(requestJson: string): Promise<string>;
-	dispatchAction(
-		group: string,
-		action: string,
-		id: string | null,
-		options: string | null,
-		source: string | null,
-		sessionId: string | null,
-		streamId: string | null,
-		body: string | null,
-	): Promise<string>;
-	hasGpu(): boolean;
-}
-
-interface NativeEngineModule {
-	NativeEngine: { create(): Promise<NativeEngineInstance> };
-}
-
-interface ActionRequest {
-	group: string;
-	action: string;
-	id?: string;
+/**
+ * Extended ActionRequest accepting legacy top-level source/sessionId/streamId.
+ * These are merged into options before forwarding to EngineClient.
+ */
+interface ActionRequest extends EngineActionRequest {
 	source?: string;
 	sessionId?: string;
 	streamId?: string;
-	options?: Record<string, unknown>;
-	body?: unknown;
-}
-
-interface ActionResponse {
-	status: string;
-	data?: Record<string, unknown>;
-	error?: { code: string; message: string };
 }
 
 export interface MediaInfo {
@@ -77,13 +52,13 @@ export interface MediaInfo {
 // =============================================================================
 
 export class PreviewService implements vscode.Disposable {
-	private _engine: NativeEngineInstance | null = null;
+	private _client: EngineClient | null = null;
 	private _port: number | null = null;
 	private _disposed = false;
 
 	/**
 	 * Try to create a PreviewService instance.
-	 * Returns null if native addon is unavailable.
+	 * Returns null if engine connection fails.
 	 */
 	static async tryCreate(): Promise<PreviewService | null> {
 		const service = new PreviewService();
@@ -99,17 +74,31 @@ export class PreviewService implements vscode.Disposable {
 
 	private async initialize(): Promise<boolean> {
 		try {
-			logger.info('Loading native addon...');
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const addon = require('@neko-engine/native-napi') as NativeEngineModule;
-			this._engine = await addon.NativeEngine.create();
-			logger.info(
-				`NativeEngine created (GPU: ${this._engine.hasGpu() ? 'enabled' : 'disabled'})`
-			);
+			logger.info('Connecting to neko-engine Frame Server...');
 
-			// Start embedded HTTP/WebSocket server
-			this._port = await this._engine.startFrameServer(0);
-			logger.info(`Frame server on port ${this._port}`);
+			// 1. Ensure engine extension is activated
+			const ext = vscode.extensions.getExtension(ENGINE_EXTENSION_ID);
+			if (!ext) {
+				logger.error(`Extension ${ENGINE_EXTENSION_ID} not installed`);
+				return false;
+			}
+
+			if (!ext.isActive) {
+				await ext.activate();
+			}
+
+			// 2. Ensure Frame Server is running → get port
+			const result = await vscode.commands.executeCommand<{ port: number } | null>(
+				'neko.engine.ensureFrameServer'
+			);
+			if (!result) {
+				logger.error('ensureFrameServer returned null');
+				return false;
+			}
+
+			this._port = result.port;
+			this._client = new EngineClient(result.port);
+			logger.info(`Connected to Frame Server on port ${this._port}`);
 
 			return true;
 		} catch (error) {
@@ -123,7 +112,7 @@ export class PreviewService implements vscode.Disposable {
 	// =========================================================================
 
 	get isAvailable(): boolean {
-		return this._engine !== null && this._port !== null && !this._disposed;
+		return this._client !== null && this._port !== null && !this._disposed;
 	}
 
 	get port(): number | null {
@@ -466,21 +455,23 @@ export class PreviewService implements vscode.Disposable {
 	// =========================================================================
 
 	async dispatch(request: ActionRequest): Promise<ActionResponse> {
-		if (!this._engine || this._disposed) {
+		if (!this._client || this._disposed) {
 			throw new Error('PreviewService not available');
 		}
 
-		const responseJson = await this._engine.dispatchAction(
-			request.group,
-			request.action,
-			request.id ?? null,
-			request.options ? JSON.stringify(request.options) : null,
-			request.source ?? null,
-			request.sessionId ?? null,
-			request.streamId ?? null,
-			request.body ? JSON.stringify(request.body) : null,
-		);
-		return JSON.parse(responseJson) as ActionResponse;
+		// Merge legacy top-level fields into options
+		const options: Record<string, unknown> = { ...request.options };
+		if (request.source !== undefined) options.source = request.source;
+		if (request.sessionId !== undefined) options.sessionId = request.sessionId;
+		if (request.streamId !== undefined) options.streamId = request.streamId;
+
+		return this._client.dispatch({
+			group: request.group,
+			action: request.action,
+			id: request.id,
+			options: Object.keys(options).length > 0 ? options : undefined,
+			body: request.body,
+		});
 	}
 
 	// =========================================================================
@@ -491,16 +482,9 @@ export class PreviewService implements vscode.Disposable {
 		if (this._disposed) return;
 		this._disposed = true;
 
-		if (this._engine) {
-			try {
-				await this._engine.stopFrameServer();
-				logger.info('Frame server stopped');
-			} catch {
-				// Ignore
-			}
-			this._engine = null;
-		}
-
+		// No need to stop Frame Server — managed by neko-engine extension
+		this._client = null;
 		this._port = null;
+		logger.info('PreviewService disposed');
 	}
 }

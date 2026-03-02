@@ -6,11 +6,11 @@
  *
  * Architecture:
  * extension.ts → VideoPreviewProvider / AudioPreviewProvider
- *   → PreviewService → NativeEngine (NAPI) → Rust EngineApi
+ *   → PreviewService → EngineClient (HTTP) → neko-engine Frame Server
  *   → Webview (H264StreamClient / Web Audio API)
  *
  * Exports NekoPreviewAPI for other extensions (e.g. neko-canvas)
- * to share the same NativeEngine instance and frame server.
+ * to share the same engine connection and frame server.
  */
 
 import * as vscode from 'vscode';

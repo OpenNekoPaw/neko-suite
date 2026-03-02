@@ -16,6 +16,7 @@ import {
 } from '@neko/shared';
 import { MediaDiffService } from '../services/MediaDiffService';
 import { MediaDiffMessageHandler } from './MediaDiffMessageHandler';
+import { EngineMediaService } from '../../services/EngineMediaService';
 
 // Storage key for persisting local compare files
 const LOCAL_COMPARE_FILES_KEY = 'mediaDiff.localCompareFiles';
@@ -31,15 +32,18 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
 	public static readonly viewType = 'neko.mediaDiff';
 
 	private readonly diffService: MediaDiffService;
+	private readonly engineMediaService: EngineMediaService;
 	private activeWebviews: Map<string, vscode.WebviewPanel> = new Map();
 	/** Map from document URI to the previous file URI for local comparison */
 	private localCompareFiles: Map<string, vscode.Uri> = new Map();
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
-		diffService?: MediaDiffService
+		diffService?: MediaDiffService,
+		engineMediaService?: EngineMediaService
 	) {
 		this.diffService = diffService ?? new MediaDiffService();
+		this.engineMediaService = engineMediaService ?? new EngineMediaService();
 		// Restore persisted local compare files
 		this.restoreLocalCompareFiles();
 	}
@@ -153,10 +157,18 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
 		);
 
 		// Create message handler with optional previousUri for local comparison
+		const engineClient = await this.engineMediaService.ensureClient();
+		if (!engineClient) {
+			webviewPanel.webview.postMessage({
+				type: 'mediaDiff:error',
+				error: 'neko-engine extension not available. Install it for media diff analysis.',
+			});
+		}
 		const messageHandler = new MediaDiffMessageHandler(
 			webviewPanel.webview,
 			document.uri,
 			this.diffService,
+			engineClient,
 			previousUri
 		);
 

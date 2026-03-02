@@ -2,7 +2,7 @@
  * ExportService - Unified video export service
  *
  * Responsibilities:
- * - Dispatches export requests to NativeEngine via FrameServerService
+ * - Dispatches export requests to NativeEngine via EngineClient
  * - Polls export progress and emits events
  * - Manages export lifecycle (start, poll, cancel)
  * - Independent of Webview — supports VSCode commands and tool handlers
@@ -15,7 +15,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { FrameServerService } from './FrameServerService';
+import { EngineClient, type ActionRequest, type ActionResponse } from '@neko/neko-client';
 import type { ProjectData } from '@neko/shared';
 import { getLogger } from '../base';
 
@@ -69,22 +69,6 @@ export interface ExportResult {
 	error?: string;
 	totalFrames?: number;
 	elapsedMs?: number;
-}
-
-// Internal ActionRequest/ActionResponse types (matching MediaService pattern)
-interface ActionRequest {
-	group: string;
-	action: string;
-	id?: string;
-	options?: Record<string, unknown>;
-	body?: unknown;
-}
-
-interface ActionResponse {
-	id: string;
-	status: 'ok' | 'error' | 'pending' | 'progress';
-	data?: Record<string, unknown>;
-	error?: { code: string; message: string } | null;
 }
 
 // =============================================================================
@@ -144,7 +128,7 @@ export class ExportService implements vscode.Disposable {
 	readonly onDidCancel = this._onDidCancel.event;
 
 	constructor(
-		private readonly frameServer: FrameServerService,
+		private readonly client: EngineClient,
 		private readonly documentDir: string
 	) {}
 
@@ -159,10 +143,6 @@ export class ExportService implements vscode.Disposable {
 	async startExport(project: ProjectData, config: ExportConfig): Promise<string> {
 		if (this._currentJobId) {
 			throw new Error('An export is already in progress');
-		}
-
-		if (!this.frameServer.isAvailable()) {
-			throw new Error('NativeEngine not available');
 		}
 
 		const jobId = `export-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -615,19 +595,10 @@ export class ExportService implements vscode.Disposable {
 	}
 
 	/**
-	 * Dispatch an ActionRequest to NativeEngine via FrameServerService
+	 * Dispatch an ActionRequest to NativeEngine via EngineClient
 	 */
 	private async dispatch(req: ActionRequest): Promise<ActionResponse> {
-		const json = JSON.stringify({
-			group: req.group,
-			action: req.action,
-			id: req.id ?? '',
-			options: req.options ?? {},
-			body: req.body ?? null,
-		});
-
-		const responseJson = await this.frameServer.dispatch(json);
-		const response = JSON.parse(responseJson) as ActionResponse;
+		const response = await this.client.dispatch(req);
 
 		if (response.status === 'error') {
 			const errMsg = response.error?.message ?? `${req.group}:${req.action} failed`;

@@ -34,6 +34,14 @@ vi.mock('vscode', () => {
 				hide: vi.fn(),
 				dispose: vi.fn(),
 			})),
+			createOutputChannel: vi.fn(() => ({
+				append: vi.fn(),
+				appendLine: vi.fn(),
+				clear: vi.fn(),
+				show: vi.fn(),
+				hide: vi.fn(),
+				dispose: vi.fn(),
+			})),
 		},
 		commands: {
 			registerCommand: vi.fn((_id: string, handler: (...args: unknown[]) => unknown) => {

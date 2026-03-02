@@ -4,7 +4,7 @@
  * 职责：
  * - 接收 Webview 的媒体处理请求 (IPC 消息)
  * - 转换为 NativeEngine ActionRequest
- * - 通过 FrameServerService.dispatch() 转发到 Rust 端
+ * - 通过 EngineClient.dispatch() 转发到 Rust 端
  * - 将 ActionResponse 转换回 Webview 消息格式
  *
  * 设计原则：
@@ -15,7 +15,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { FrameServerService } from './FrameServerService';
+import { EngineClient, type ActionRequest, type ActionResponse } from '@neko/neko-client';
 import type {
 	MediaRequest,
 	MediaResponse,
@@ -36,35 +36,6 @@ import { getLogger } from '../base';
 const logger = getLogger('MediaService');
 
 // =============================================================================
-// ActionRequest / ActionResponse helpers
-// =============================================================================
-
-interface ActionRequest {
-	group: string;
-	action: string;
-	id?: string;
-	options?: Record<string, unknown>;
-	body?: unknown;
-}
-
-interface ActionResponse {
-	id: string;
-	status: 'ok' | 'error' | 'pending' | 'progress';
-	data?: unknown;
-	error?: { code: string; message: string } | null;
-}
-
-function buildActionJson(req: ActionRequest): string {
-	return JSON.stringify({
-		group: req.group,
-		action: req.action,
-		id: req.id ?? '',
-		options: req.options ?? {},
-		body: req.body ?? null,
-	});
-}
-
-// =============================================================================
 // MediaService
 // =============================================================================
 
@@ -79,7 +50,7 @@ export class MediaService implements vscode.Disposable {
 
 	constructor(
 		private readonly webviewPanel: vscode.WebviewPanel,
-		private readonly frameServer: FrameServerService,
+		private readonly client: EngineClient,
 		documentUri?: vscode.Uri
 	) {
 		this.documentDir = documentUri
@@ -616,7 +587,7 @@ export class MediaService implements vscode.Disposable {
 	notifyStreamCreated(): void {
 		if (!this._activeVideoStreamId) return;
 
-		const port = this.frameServer.getPort();
+		const port = this.client.port;
 		const baseUrl = port ? `ws://127.0.0.1:${port}/v1/streams` : null;
 		this.sendResponse({
 			type: 'frameServer:streamCreated',
@@ -763,14 +734,11 @@ export class MediaService implements vscode.Disposable {
 		}
 
 		try {
-			const resultJson = await this.frameServer.dispatch(
-				buildActionJson({
-					group: 'streams',
-					action: 'stats',
-					options: { streamId },
-				})
-			);
-			const result = JSON.parse(resultJson) as ActionResponse;
+			const result = await this.dispatch({
+				group: 'streams',
+				action: 'stats',
+				options: { streamId },
+			});
 
 			this.sendResponse({
 				type: 'media:response:getStreamStats',
@@ -844,12 +812,10 @@ export class MediaService implements vscode.Disposable {
 	// =========================================================================
 
 	/**
-	 * Dispatch an ActionRequest to NativeEngine via FrameServerService
+	 * Dispatch an ActionRequest to NativeEngine via EngineClient
 	 */
 	private async dispatch(req: ActionRequest): Promise<ActionResponse> {
-		const json = buildActionJson(req);
-		const responseJson = await this.frameServer.dispatch(json);
-		const response = JSON.parse(responseJson) as ActionResponse;
+		const response = await this.client.dispatch(req);
 
 		if (response.status === 'error') {
 			const errMsg = response.error?.message
