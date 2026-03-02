@@ -52,6 +52,7 @@ const mockProviders: Provider[] = [
     displayName: 'OpenAI',
     type: 'openai',
     apiUrl: 'https://api.openai.com/v1',
+    apiKey: 'test-key',
     enabled: true,
   },
 ];
@@ -145,6 +146,7 @@ function createMockConfig(adapter?: Partial<Adapter>): ServiceConfig {
         streamTimeout: 10000,
       },
     })),
+    getChatModelOptions: vi.fn(() => []),
   } as unknown as ConfigManager;
 
   const providerRegistry = {

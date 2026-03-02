@@ -1,7 +1,7 @@
 # 音视频 Diff 并行与 Lazy Loading 分析
 
-> 日期：2026-03-01（Phase 1），2026-03-02（架构更新）
-> 状态：Phase 1 已实施，Phase 2-3 待实施
+> 日期：2026-03-01（Phase 1），2026-03-02（架构更新 + Phase 2 实施）
+> 状态：Phase 1 已完成，Phase 2 已完成（#4-#7），Phase 3 待实施
 > 关联：docs/diff.md, docs/adr-video-diff-streaming.md, docs/adr-unified-engine.md
 
 ## 背景
@@ -57,10 +57,10 @@ t=3.1s  sendVisualizationData(dummy) → 跳过帧提取（engine 未就绪） �
 
 t=3.3s  diffService.analyze() → VideoDiffAnalyzer
         └─ engineMediaService.diff('videos', pathA, pathB)
-           Rust 内部串行：
+           Rust 内部：
            ├─ Probe A → Probe B （串行）
-           ├─ FFmpeg SSIM （串行）
-           ├─ FFmpeg PSNR （串行）
+           ├─ FFmpeg SSIM ┐
+           │  FFmpeg PSNR ┘ ← ✅ 并行（std::thread::scope）
            ├─ 合并帧指标 + 识别差异区域
            ├─ 音频 diff（如有音轨）（串行）
            └─ 生成差异视频（可选）（串行）
@@ -84,7 +84,7 @@ t=30s+  用户点击 Play → handleStartStreaming()
 | 音视频 Probe | Rust 内串行 Probe A → Probe B | 可并行 | 节省 ~100ms |
 | 音频波形 A+B+Diff | 包含在 `videos:diff` 的 audio_diff 中 | 可拆出独立任务 | 波形提前渲染 |
 | 视频帧渲染 | ✅ t=0 帧并行提取；streaming 按需 | 已实现 | - |
-| SSIM + PSNR | Rust 内串行 | **可并行**（两个独立 FFmpeg 进程） | 节省 30-50% 分析时间 |
+| SSIM + PSNR | ✅ Rust 内并行 | **已实现**（`std::thread::scope`） | 节省 30-50% 分析时间 |
 | 分块/关键帧相似度 | 包含在 SSIM 结果中一次性返回 | 可分段返回 | 渐进式显示 |
 | 音视频播放 | ✅ lazy + 流创建并行 | 已实现 | - |
 
@@ -103,8 +103,9 @@ FFmpeg decode A → FFmpeg decode B → Resample 48kHz mono
 
 **`videos:diff`**：
 ```
-Probe A → Probe B → FFmpeg SSIM → FFmpeg PSNR
-→ 合并帧指标 → 差异区域识别 → 音频 diff（可选） → 差异视频（可选）
+Probe A → Probe B → ┌─ FFmpeg SSIM ─┐ → 合并帧指标
+                     └─ FFmpeg PSNR ─┘   ← std::thread::scope 并行
+→ 差异区域识别 → 音频 diff（可选） → 差异视频（可选）
 → 一次性返回 VideoContentDiff
 ```
 
@@ -113,7 +114,7 @@ Probe A → Probe B → FFmpeg SSIM → FFmpeg PSNR
 | 可并行组 | 当前耗时 | 并行后耗时 | 节省 |
 |---------|---------|-----------|------|
 | Probe A \|\| Probe B | ~200ms | ~100ms | 50% |
-| SSIM \|\| PSNR | 主瓶颈，各 5-30s | max(SSIM,PSNR) | **30-50%** |
+| SSIM \|\| PSNR | 主瓶颈，各 5-30s | max(SSIM,PSNR) | **30-50%** ✅ 已实施 |
 | 视频分析 \|\| 音频波形 | 串行叠加 | max(视频,音频) | 取决于音频时长 |
 
 ## 四、波形分段加载分析
@@ -169,7 +170,7 @@ Probe A → Probe B → FFmpeg SSIM → FFmpeg PSNR
 | 3 | **启用 audio/video 进度报告**：移除 `mediaType !== 'audio'` 过滤 | ✅ | 删除两处 if 过滤 |
 | 4 | **修复视频帧提取竞态**：preliminary 调用跳过 `handleSeek(0)`，避免 engine 未激活时报错 | ✅ | `sendVisualizationData` + `sendVisualizationDataForLocal` |
 
-### Phase 2：统一通信 + 并行调度 — ✅ 部分完成
+### Phase 2：统一通信 + 并行调度 — ✅ 已完成（#4-#7）
 
 > **实现方案**：在 `@neko/neko-client` 中新增 `EngineClient` HTTP 客户端（见 [adr-unified-engine.md](./adr-unified-engine.md)）
 >
@@ -181,7 +182,7 @@ Probe A → Probe B → FFmpeg SSIM → FFmpeg PSNR
 | 4 | **在 `@neko/neko-client` 中添加 `EngineClient`**：HTTP dispatch + WS URL 构建，零 vscode 依赖 | ✅ | `EngineClient.ts` + `engine/types.ts` + `engine/responseTransform.ts` |
 | 5 | **neko-tools 迁移到 EngineClient**：替换所有 VSCode commands 调用 | ✅ | `EngineMediaService.ts`（lazy init）+ `MediaDiffMessageHandler.ts`（全部 streaming/extraction 方法） |
 | 6 | **音频并行调度 waveform \|\| diff**：波形提前 5-30s 送达 webview | ✅ | `startEarlyWaveform()` 在 `initializeDiff` / `initializeLocalDiff` 中并行启动 |
-| 7 | **Engine `videos:diff` 内 SSIM \|\| PSNR 并行**：两个 FFmpeg 进程并行 | ⏳ 待实施 | Rust 改动，**分析时间减少 30-50%** |
+| 7 | **Engine `videos:diff` 内 SSIM \|\| PSNR 并行**：两个 FFmpeg 进程并行 | ✅ | `video_diff.rs` 使用 `std::thread::scope` 并行执行 SSIM+PSNR，**分析时间减少 30-50%** |
 | — | **视频 probe 提前发送**：需新增 `mediaDiff:probeResult` webview 消息处理 | ⏳ 待实施 | 需 webview 侧配合 |
 
 ### Phase 3：流式/渐进式

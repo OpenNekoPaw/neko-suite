@@ -22,6 +22,8 @@ import type {
 	ProbeResult,
 	WaveformResult,
 	StreamHandle,
+	DiffResult,
+	Resolution,
 } from './engine/types';
 import { transformDiffResponse } from './engine/responseTransform';
 
@@ -68,6 +70,9 @@ export class EngineClient {
 			group: req.group,
 			action: req.action,
 			id: req.id ?? '',
+			source: req.source ?? undefined,
+			sessionId: req.sessionId ?? undefined,
+			streamId: req.streamId ?? undefined,
 			options: req.options ?? {},
 			body: req.body ?? null,
 		});
@@ -164,8 +169,10 @@ export class EngineClient {
 	/**
 	 * Diff two media files.
 	 * Dispatches `{group}:diff` and transforms the Rust tagged-enum response.
+	 * Returns typed DiffResult with flattened content (imageDiff/audioDiff/videoDiff/timelineDiff).
+	 * Pass a custom type parameter T for consumers using @neko/shared EngineDiffResult.
 	 */
-	async diff<T = unknown>(
+	async diff<T = DiffResult>(
 		group: string,
 		sourceA: string,
 		sourceB: string,
@@ -185,7 +192,7 @@ export class EngineClient {
 		const data = resp.data as Record<string, unknown> | undefined;
 		if (!data) return null;
 
-		return transformDiffResponse(data) as T;
+		return transformDiffResponse(data) as unknown as T;
 	}
 
 	/**
@@ -224,7 +231,7 @@ export class EngineClient {
 	// =========================================================================
 
 	/**
-	 * Create a media stream and return its WebSocket URL.
+	 * Create a media stream and return its WebSocket URL + metadata.
 	 * Dispatches `{group}:stream`.
 	 * For `timelines:stream`, also returns audioStreamId/audioWsUrl.
 	 */
@@ -250,9 +257,13 @@ export class EngineClient {
 		}
 
 		const audioStreamId = data?.['audioStreamId'] as string | undefined;
+		const resolution = data?.['resolution'] as Resolution | undefined;
 		return {
 			streamId,
 			wsUrl: this.getStreamWsUrl(streamId),
+			sessionId: (data?.['sessionId'] as string | undefined) ?? undefined,
+			resolution,
+			fps: (data?.['fps'] as number | undefined) ?? undefined,
 			audioStreamId: audioStreamId ?? undefined,
 			audioWsUrl: audioStreamId ? this.getStreamWsUrl(audioStreamId) : undefined,
 		};

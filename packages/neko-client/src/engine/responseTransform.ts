@@ -1,16 +1,19 @@
 /**
  * Response transform — Rust tagged enum → flat TypeScript
  *
- * Rust's ContentDiff is a tagged enum:
+ * Rust's ContentDiff is a tagged enum (serde tag = "type"):
  *   { content: { type: "Image"|"Audio"|"Video"|"Timeline", ...fields } }
  *
- * TypeScript EngineDiffResult expects flat fields:
+ * TypeScript DiffResult expects flat fields:
  *   { imageDiff?, audioDiff?, videoDiff?, timelineDiff? }
  *
  * Ported from neko-engine/packages/extension/src/extension.ts:168-185
  */
 
-const CONTENT_TYPE_KEY_MAP: Record<string, string> = {
+import type { DiffResult } from './types';
+
+/** Maps Rust ContentDiff tag values to DiffResult field names */
+const CONTENT_TYPE_KEY_MAP: Partial<Record<string, keyof Pick<DiffResult, 'imageDiff' | 'audioDiff' | 'videoDiff' | 'timelineDiff'>>> = {
 	Image: 'imageDiff',
 	Audio: 'audioDiff',
 	Video: 'videoDiff',

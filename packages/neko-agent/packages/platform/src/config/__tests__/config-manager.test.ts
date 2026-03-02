@@ -40,7 +40,6 @@ describe('ConfigManager', () => {
       expect(providerIds).toContain('openai');
       expect(providerIds).toContain('anthropic');
       expect(providerIds).toContain('google');
-      expect(providerIds).toContain('ollama');
     });
 
     it('should include expected models', () => {

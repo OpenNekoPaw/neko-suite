@@ -1,9 +1,11 @@
 /**
- * PromptManager and ChainPromptExecutor Unit Tests
+ * PromptManager Unit Tests (Platform - Lightweight implementation)
+ *
+ * Note: ChainPromptExecutor tests are in @neko/agent package.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PromptManager, ChainPromptExecutor } from '../prompt-manager';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { PromptManager } from '../prompt-manager';
 import type { Prompt } from '../../types/prompt';
 
 describe('PromptManager', () => {
@@ -13,42 +15,43 @@ describe('PromptManager', () => {
     manager = new PromptManager();
   });
 
-  describe('builtin prompts', () => {
-    it('should have builtin prompts registered', () => {
+  describe('initial state', () => {
+    it('should start with no prompts', () => {
       const prompts = manager.list();
-      expect(prompts.length).toBeGreaterThan(0);
-    });
-
-    it('should include system-video-editor prompt', () => {
-      const prompt = manager.get('system-video-editor');
-      expect(prompt).toBeDefined();
-      expect(prompt?.category).toBe('system');
-    });
-
-    it('should include format-json-output prompt', () => {
-      const prompt = manager.get('format-json-output');
-      expect(prompt).toBeDefined();
-      expect(prompt?.category).toBe('format');
-    });
-
-    it('should include task-planning prompt', () => {
-      const prompt = manager.get('task-planning');
-      expect(prompt).toBeDefined();
-      expect(prompt?.category).toBe('chain');
+      expect(prompts.length).toBe(0);
     });
   });
 
   describe('list by category', () => {
     it('should list prompts by category', () => {
+      manager.register({
+        id: 'sys-1',
+        name: 'System 1',
+        description: 'System prompt',
+        category: 'system',
+        template: 'Test',
+        variables: [],
+        version: '1.0.0',
+      });
+      manager.register({
+        id: 'custom-1',
+        name: 'Custom 1',
+        description: 'Custom prompt',
+        category: 'custom',
+        template: 'Test',
+        variables: [],
+        version: '1.0.0',
+      });
+
       const systemPrompts = manager.listByCategory('system');
       expect(systemPrompts.every((p) => p.category === 'system')).toBe(true);
+      expect(systemPrompts.length).toBe(1);
     });
 
     it('should return empty array for category with no prompts', () => {
-      // Unregister all custom prompts to test empty case
       const customPrompts = manager.listByCategory('custom');
-      // Initially should be empty since we only registered non-custom prompts
       expect(Array.isArray(customPrompts)).toBe(true);
+      expect(customPrompts.length).toBe(0);
     });
   });
 
@@ -172,188 +175,6 @@ describe('PromptManager', () => {
 
       expect(result.content).toContain('"key"');
       expect(result.content).toContain('"value"');
-    });
-  });
-});
-
-describe('ChainPromptExecutor', () => {
-  let promptManager: PromptManager;
-  let executor: ChainPromptExecutor;
-
-  beforeEach(() => {
-    promptManager = new PromptManager();
-    executor = new ChainPromptExecutor(promptManager);
-  });
-
-  describe('builtin chains', () => {
-    it('should have builtin chains registered', () => {
-      const chains = executor.listChains();
-      expect(chains.length).toBeGreaterThan(0);
-    });
-
-    it('should include video-edit-workflow chain', () => {
-      const chain = executor.getChain('chain-video-edit-workflow');
-      expect(chain).toBeDefined();
-      expect(chain?.steps.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('register chain', () => {
-    it('should register custom chain', () => {
-      executor.registerChain({
-        id: 'custom-chain',
-        name: 'Custom Chain',
-        description: 'Test chain',
-        steps: [
-          { name: 'step1', promptId: 'task-planning' },
-        ],
-      });
-
-      expect(executor.getChain('custom-chain')).toBeDefined();
-    });
-  });
-
-  describe('create simple chain', () => {
-    it('should create chain from prompt IDs', () => {
-      const chain = executor.createSimpleChain(
-        'simple-chain',
-        'Simple Chain',
-        ['task-planning']
-      );
-
-      expect(chain.id).toBe('simple-chain');
-      expect(chain.steps.length).toBe(1);
-      expect(executor.getChain('simple-chain')).toBeDefined();
-    });
-  });
-
-  describe('execute chain', () => {
-    it('should execute chain with mock executor', async () => {
-      // Register a simple test prompt
-      promptManager.register({
-        id: 'test-prompt',
-        name: 'Test',
-        description: 'Test prompt',
-        category: 'custom',
-        template: 'Input: {{input}}',
-        variables: [
-          { name: 'input', description: 'Input', type: 'string', required: true },
-        ],
-        version: '1.0.0',
-      });
-
-      executor.registerChain({
-        id: 'test-chain',
-        name: 'Test Chain',
-        description: 'For testing',
-        steps: [{ name: 'test', promptId: 'test-prompt' }],
-      });
-
-      const mockExecutor = vi.fn().mockResolvedValue('Mock response');
-      const result = await executor.execute('test-chain', mockExecutor, {
-        variables: { input: 'test value' },
-      });
-
-      expect(result.output).toBe('Mock response');
-      expect(result.stepResults.size).toBe(1);
-      expect(result.executionTime).toBeGreaterThanOrEqual(0);
-      expect(mockExecutor).toHaveBeenCalledWith('Input: test value');
-    });
-
-    it('should throw error for non-existent chain', async () => {
-      const mockExecutor = vi.fn();
-      await expect(executor.execute('non-existent', mockExecutor)).rejects.toThrow(
-        "Chain 'non-existent' not found"
-      );
-    });
-
-    it('should call onStepComplete callback', async () => {
-      promptManager.register({
-        id: 'callback-test',
-        name: 'Callback Test',
-        description: 'Test',
-        category: 'custom',
-        template: 'Test',
-        variables: [],
-        version: '1.0.0',
-      });
-
-      executor.registerChain({
-        id: 'callback-chain',
-        name: 'Callback Chain',
-        description: 'For testing callbacks',
-        steps: [{ name: 'step1', promptId: 'callback-test' }],
-      });
-
-      const onStepComplete = vi.fn();
-      const mockExecutor = vi.fn().mockResolvedValue('result');
-
-      await executor.execute('callback-chain', mockExecutor, { onStepComplete });
-
-      expect(onStepComplete).toHaveBeenCalledWith('step1', 'result');
-    });
-
-    it('should apply transform function', async () => {
-      promptManager.register({
-        id: 'transform-test',
-        name: 'Transform Test',
-        description: 'Test',
-        category: 'custom',
-        template: 'Test',
-        variables: [],
-        version: '1.0.0',
-      });
-
-      executor.registerChain({
-        id: 'transform-chain',
-        name: 'Transform Chain',
-        description: 'For testing transforms',
-        steps: [
-          {
-            name: 'step1',
-            promptId: 'transform-test',
-            transform: (output: string) => output.toUpperCase(),
-          },
-        ],
-      });
-
-      const mockExecutor = vi.fn().mockResolvedValue('lowercase');
-      const result = await executor.execute('transform-chain', mockExecutor);
-
-      expect(result.output).toBe('LOWERCASE');
-    });
-
-    it('should handle transform errors gracefully', async () => {
-      promptManager.register({
-        id: 'error-transform',
-        name: 'Error Transform',
-        description: 'Test',
-        category: 'custom',
-        template: 'Test',
-        variables: [],
-        version: '1.0.0',
-      });
-
-      executor.registerChain({
-        id: 'error-chain',
-        name: 'Error Chain',
-        description: 'For testing error handling',
-        steps: [
-          {
-            name: 'step1',
-            promptId: 'error-transform',
-            transform: () => {
-              throw new Error('Transform failed');
-            },
-          },
-        ],
-      });
-
-      const mockExecutor = vi.fn().mockResolvedValue('original');
-      const result = await executor.execute('error-chain', mockExecutor);
-
-      // Should keep original result when transform fails
-      expect(result.output).toBe('original');
     });
   });
 });

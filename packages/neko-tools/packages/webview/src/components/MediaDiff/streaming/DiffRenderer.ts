@@ -183,7 +183,6 @@ export class DiffRenderer {
 		if (width > 0 && height > 0) {
 			this.frameWidth = width;
 			this.frameHeight = height;
-			this.applyCanvasSize();
 		}
 
 		const gl = canvas.getContext('webgl2', {

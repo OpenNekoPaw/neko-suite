@@ -14,7 +14,8 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
+import { createWriteStream } from 'fs';
 import { promisify } from 'util';
 import {
 	type MediaType,
@@ -133,6 +134,19 @@ export interface IGitMediaService extends vscode.Disposable {
 	 * @returns Array of { hash, subject, date } ordered newest first
 	 */
 	getFileHistory(uri: vscode.Uri, maxCount?: number): Promise<GitCommitInfo[]>;
+
+	/**
+	 * Extract file at a Git ref directly to a local path (zero-copy).
+	 * Uses `git show` piped to a file stream — never loads content into memory.
+	 * @param uri - File URI in the workspace
+	 * @param ref - Git ref (e.g. 'HEAD', commit hash)
+	 * @param outputPath - Absolute path to write the file to
+	 */
+	extractFileToPath(
+		uri: vscode.Uri,
+		ref: string,
+		outputPath: string
+	): Promise<void>;
 }
 
 // =============================================================================
@@ -436,6 +450,57 @@ export class GitMediaService implements IGitMediaService {
 			console.warn('[GitMediaService] Failed to get file history:', error);
 			return [];
 		}
+	}
+
+	async extractFileToPath(
+		uri: vscode.Uri,
+		ref: string,
+		outputPath: string
+	): Promise<void> {
+		await this.ensureInitialized();
+
+		const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+		if (!workspaceFolder) {
+			throw new Error('File is not in a workspace');
+		}
+
+		const relativePath = this.getRelativePath(uri);
+
+		return new Promise<void>((resolve, reject) => {
+			const gitProcess = spawn(
+				'git',
+				['show', `${ref}:${relativePath}`],
+				{ cwd: workspaceFolder.uri.fsPath, stdio: ['ignore', 'pipe', 'pipe'] }
+			);
+
+			const fileStream = createWriteStream(outputPath);
+			let stderrChunks: Buffer[] = [];
+
+			gitProcess.stdout.pipe(fileStream);
+			gitProcess.stderr.on('data', (chunk: Buffer) => {
+				stderrChunks.push(chunk);
+			});
+
+			fileStream.on('error', (err) => {
+				gitProcess.kill();
+				reject(new Error(`Failed to write to ${outputPath}: ${err.message}`));
+			});
+
+			gitProcess.on('close', (code) => {
+				if (code === 0) {
+					resolve();
+				} else {
+					const stderr = Buffer.concat(stderrChunks).toString();
+					reject(new Error(
+						`git show ${ref}:${relativePath} failed (code ${code}): ${stderr}`
+					));
+				}
+			});
+
+			gitProcess.on('error', (err) => {
+				reject(new Error(`Failed to spawn git: ${err.message}`));
+			});
+		});
 	}
 
 	/**

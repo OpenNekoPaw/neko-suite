@@ -115,6 +115,16 @@ export interface IMediaDiffService extends vscode.Disposable {
 	 * Get commit history for a file
 	 */
 	getFileHistory(uri: vscode.Uri, maxCount?: number): Promise<import('@neko/shared').GitCommitInfo[]>;
+
+	/**
+	 * Extract previous version of a file directly to a local path (zero-copy).
+	 * Never loads file content into extension memory.
+	 */
+	extractPreviousToFile(
+		uri: vscode.Uri,
+		ref: string,
+		outputPath: string
+	): Promise<void>;
 }
 
 // =============================================================================
@@ -175,30 +185,46 @@ export class MediaDiffService implements IMediaDiffService {
 		}
 
 		try {
-			// Report progress: fetching versions
-			onProgress?.(10, 'Fetching file versions...');
+			const ext = uri.fsPath.toLowerCase().match(/\.[^.]+$/)?.[0];
+			const defaultTimeout = mediaType === 'video' ? DEFAULT_VIDEO_DIFF_TIMEOUT : DEFAULT_DIFF_TIMEOUT;
 
-			// Get file versions
-			const versions = await this.gitService.getFileVersions(uri, ref);
+			// Fast path: caller provided file paths (video/audio Git mode).
+			// Analyzers use paths directly — skip reading files into memory.
+			// This avoids the costly Buffer round-trip for large media files.
+			const hasDirectPaths = !!(options?.currentPath && options?.previousPath);
 
-			// Handle new file case - no diff analysis needed
-			if (versions.isNewFile) {
-				onProgress?.(100, 'Complete');
-				return {
-					mediaType,
-					similarity: 0, // New file has no similarity to previous
-					details: {
-						isNewFile: true,
-					},
-				};
+			let currentBuf: Buffer;
+			let previousBuf: Buffer;
+
+			if (hasDirectPaths) {
+				// Paths provided — empty buffers (analyzers ignore them when paths exist)
+				currentBuf = Buffer.alloc(0);
+				previousBuf = Buffer.alloc(0);
+				onProgress?.(20, 'Analyzing differences...');
+			} else {
+				onProgress?.(10, 'Fetching file versions...');
+				const versions = await this.gitService.getFileVersions(uri, ref);
+
+				// Handle new file case - no diff analysis needed
+				if (versions.isNewFile) {
+					onProgress?.(100, 'Complete');
+					return {
+						mediaType,
+						similarity: 0,
+						details: {
+							isNewFile: true,
+						},
+					};
+				}
+
+				currentBuf = Buffer.from(versions.current);
+				previousBuf = Buffer.from(versions.previous);
+				onProgress?.(30, 'Analyzing differences...');
 			}
 
 			this.throwIfAborted(abortController);
-			onProgress?.(30, 'Analyzing differences...');
 
 			// Run analysis with timeout
-			const ext = uri.fsPath.toLowerCase().match(/\.[^.]+$/)?.[0];
-			const defaultTimeout = mediaType === 'video' ? DEFAULT_VIDEO_DIFF_TIMEOUT : DEFAULT_DIFF_TIMEOUT;
 			const analysisOptions: DiffOptions = {
 				timeout: defaultTimeout,
 				generateHeatmap: true,
@@ -207,11 +233,7 @@ export class MediaDiffService implements IMediaDiffService {
 			};
 
 			const result = await this.withTimeout(
-				analyzer.analyze(
-					Buffer.from(versions.current),
-					Buffer.from(versions.previous),
-					analysisOptions
-				),
+				analyzer.analyze(currentBuf, previousBuf, analysisOptions),
 				analysisOptions.timeout ?? defaultTimeout
 			);
 
@@ -394,6 +416,14 @@ export class MediaDiffService implements IMediaDiffService {
 
 	registerAnalyzer(analyzer: IMediaDiffAnalyzer): void {
 		this.registry.register(analyzer);
+	}
+
+	async extractPreviousToFile(
+		uri: vscode.Uri,
+		ref: string,
+		outputPath: string
+	): Promise<void> {
+		return this.gitService.extractFileToPath(uri, ref, outputPath);
 	}
 
 	/**

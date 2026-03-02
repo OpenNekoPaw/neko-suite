@@ -94,13 +94,14 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		const abortController = new AbortController();
 		this.currentAbortController = abortController;
 
+		// Track whether the background pipeline took ownership of abortController cleanup
+		let pipelineOwnsCleanup = false;
+
 		try {
 			// Fast path: detect video/audio from extension and show UI immediately.
-			// Send preliminary result BEFORE any I/O (ensurePreviousFilePath downloads
-			// the full previous version from Git which can take seconds for large videos).
+			// Send preliminary result BEFORE any I/O so webview renders Play button.
 			const mediaType = this.detectMediaTypeFromExtension();
 			if (mediaType === 'video' || mediaType === 'audio') {
-				// Send preliminary result immediately (zero I/O) so webview shows Play button
 				this.sendMessage({
 					type: 'mediaDiff:result',
 					payload: {
@@ -111,14 +112,13 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				});
 			}
 
-			// For video/audio: write previous version temp file (needed for streaming).
-			// This runs AFTER the preliminary result so the webview already has the Play UI.
+			// For video/audio: extract previous version to temp file (needed for all subsequent ops).
 			if (mediaType === 'video' || mediaType === 'audio') {
 				await this.ensurePreviousFilePath(ref);
 
 				// MD5 check: skip expensive diff if files are identical
-				const previousPath = this.previousUri?.fsPath ?? this.previousFilePath;
-				if (previousPath && await this.areFilesIdentical(this.fileUri.fsPath, previousPath)) {
+				const prevPath = this.previousUri?.fsPath ?? this.previousFilePath;
+				if (prevPath && await this.areFilesIdentical(this.fileUri.fsPath, prevPath)) {
 					this.sendMessage({
 						type: 'mediaDiff:result',
 						payload: {
@@ -130,54 +130,37 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 					return;
 				}
 
-				// Extract t=0 frames for preview (non-blocking for the user)
-				await this.sendVisualizationData({ mediaType, similarity: -1 } as DiffResult, ref);
-			}
-
-			// Start early waveform extraction in parallel with diff (audio only).
-			// Waveform arrives in ~500ms; full diff takes 5-30s.
-			if (mediaType === 'audio' && this.engineClient) {
-				const previousPath = this.previousUri?.fsPath ?? this.previousFilePath;
-				if (previousPath) {
-					// Fire-and-forget — errors handled internally
-					this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, previousPath);
-				}
-			}
-
-			// Run full diff analysis (may take 5-30s for video SSIM/PSNR)
-			const result = await this.diffService.analyze(
-				this.fileUri,
-				ref,
-				{ generateHeatmap: true },
-				(progress, stage) => {
-					this.sendMessage({
-						type: 'mediaDiff:progress',
-						payload: { progress, stage },
-					});
-				},
-				abortController.signal
-			);
-
-			if (this.isDisposed) return;
-
-			// For video/audio in Git mode, ensure temp file exists (may already be done above)
-			if ((result.mediaType === 'video' || result.mediaType === 'audio') && !this.previousFilePath && !this.previousUri) {
-				await this.ensurePreviousFilePath(ref);
-			}
-
-			// Send full result (updates preliminary result with SSIM scores)
-			this.sendMessage({
-				type: 'mediaDiff:result',
-				payload: result,
-			});
-
-			// Send visualization data
-			// For video/audio: preliminary sendVisualizationData (line 124) only sent
-			// UI scaffolding (t=0 frames / empty waveform). Now send the REAL data
-			// from the completed analysis result.
-			if (mediaType === 'video' || mediaType === 'audio') {
-				this.sendWaveformFromResult(result);
+				// ── Fire-and-forget pipeline: frame extraction + waveform + diff ──
+				// IMPORTANT: Do NOT await — handleMessage must return immediately
+				// so subsequent messages (streamControl, seek, etc.) are not blocked
+				// by the long-running SSIM/PSNR analysis (5-30s).
+				// Pipeline takes ownership of abortController cleanup.
+				pipelineOwnsCleanup = true;
+				const previousPath = prevPath;
+				this.runAnalysisPipeline(mediaType, previousPath, ref, abortController);
+				return;
 			} else {
+				// Non-video/audio: sequential path (image/timeline)
+				const result = await this.diffService.analyze(
+					this.fileUri,
+					ref,
+					{ generateHeatmap: true },
+					(progress, stage) => {
+						this.sendMessage({
+							type: 'mediaDiff:progress',
+							payload: { progress, stage },
+						});
+					},
+					abortController.signal
+				);
+
+				if (this.isDisposed) return;
+
+				this.sendMessage({
+					type: 'mediaDiff:result',
+					payload: result,
+				});
+
 				await this.sendVisualizationData(result, ref);
 			}
 		} catch (error) {
@@ -187,7 +170,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				error: error instanceof Error ? error.message : String(error),
 			});
 		} finally {
-			if (this.currentAbortController === abortController) {
+			// Only clean up if the background pipeline didn't take ownership
+			if (!pipelineOwnsCleanup && this.currentAbortController === abortController) {
 				this.currentAbortController = null;
 			}
 		}
@@ -211,9 +195,26 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		const abortController = new AbortController();
 		this.currentAbortController = abortController;
 
+		let pipelineOwnsCleanup = false;
+
 		try {
 			// Fast path: detect video/audio from extension and show UI immediately
 			const mediaType = this.detectMediaTypeFromExtension();
+
+			// MD5 check: skip expensive diff if files are identical
+			if (await this.areFilesIdentical(this.fileUri.fsPath, this.previousUri.fsPath)) {
+				const detectedType = mediaType ?? 'image';
+				this.sendMessage({
+					type: 'mediaDiff:result',
+					payload: {
+						mediaType: detectedType,
+						similarity: 1.0,
+						details: { identical: true },
+					},
+				});
+				return;
+			}
+
 			if (mediaType === 'video' || mediaType === 'audio') {
 				this.sendMessage({
 					type: 'mediaDiff:result',
@@ -224,69 +225,34 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 					},
 				});
 
-				// MD5 check: skip expensive diff if files are identical
-				if (await this.areFilesIdentical(this.fileUri.fsPath, this.previousUri.fsPath)) {
-					this.sendMessage({
-						type: 'mediaDiff:result',
-						payload: {
-							mediaType,
-							similarity: 1.0,
-							details: { identical: true },
-						},
-					});
-					return;
-				}
-
-				await this.sendVisualizationDataForLocal({ mediaType, similarity: -1 } as DiffResult);
+				// ── Fire-and-forget pipeline ──
+				// IMPORTANT: Do NOT await — handleMessage must return immediately
+				// so subsequent messages (streamControl, seek, etc.) are not blocked.
+				pipelineOwnsCleanup = true;
+				this.runLocalAnalysisPipeline(mediaType, abortController);
+				return;
 			} else {
-				// Non-video/audio: also check MD5 before expensive analysis
-				if (await this.areFilesIdentical(this.fileUri.fsPath, this.previousUri.fsPath)) {
-					const detectedType = mediaType ?? 'image';
-					this.sendMessage({
-						type: 'mediaDiff:result',
-						payload: {
-							mediaType: detectedType,
-							similarity: 1.0,
-							details: { identical: true },
-						},
-					});
-					return;
-				}
-			}
+				// Non-video/audio: sequential path
+				const result = await this.diffService.analyzeLocalFiles(
+					this.fileUri,
+					this.previousUri,
+					{ generateHeatmap: true },
+					(progress, stage) => {
+						this.sendMessage({
+							type: 'mediaDiff:progress',
+							payload: { progress, stage },
+						});
+					},
+					abortController.signal
+				);
 
-			// Start early waveform extraction in parallel with diff (audio only).
-			if (mediaType === 'audio' && this.engineClient && this.previousUri) {
-				this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, this.previousUri.fsPath);
-			}
+				if (this.isDisposed) return;
 
-			// Run diff analysis with progress
-			const result = await this.diffService.analyzeLocalFiles(
-				this.fileUri,
-				this.previousUri,
-				{ generateHeatmap: true },
-				(progress, stage) => {
-					this.sendMessage({
-						type: 'mediaDiff:progress',
-						payload: { progress, stage },
-					});
-				},
-				abortController.signal
-			);
+				this.sendMessage({
+					type: 'mediaDiff:result',
+					payload: result,
+				});
 
-			if (this.isDisposed) return;
-
-			// Send full result
-			this.sendMessage({
-				type: 'mediaDiff:result',
-				payload: result,
-			});
-
-			// Send visualization data
-			// For video/audio: preliminary sendVisualizationDataForLocal (line 218) only
-			// sent UI scaffolding. Now send the REAL data from the completed analysis.
-			if (mediaType === 'video' || mediaType === 'audio') {
-				this.sendWaveformFromResult(result);
-			} else {
 				await this.sendVisualizationDataForLocal(result);
 			}
 		} catch (error) {
@@ -296,10 +262,139 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				error: error instanceof Error ? error.message : String(error),
 			});
 		} finally {
-			if (this.currentAbortController === abortController) {
+			if (!pipelineOwnsCleanup && this.currentAbortController === abortController) {
 				this.currentAbortController = null;
 			}
 		}
+	}
+
+	/**
+	 * Run analysis pipeline for Git mode (fire-and-forget).
+	 * Runs frame extraction, waveform, and SSIM/PSNR in parallel.
+	 * Each task sends its own message to webview independently.
+	 * Errors are caught and reported per-task — never propagates.
+	 */
+	private runAnalysisPipeline(
+		mediaType: 'video' | 'audio',
+		previousPath: string | undefined,
+		ref: string,
+		abortController: AbortController,
+	): void {
+		const run = async () => {
+			try {
+				const parallelTasks: Promise<void>[] = [];
+
+				// Task A: Extract t=0 preview frames (fast, ~200ms)
+				parallelTasks.push(
+					this.sendVisualizationData({ mediaType, similarity: -1 } as DiffResult, ref)
+						.catch(err => console.warn('[MediaDiffMessageHandler] Frame extraction failed:', err))
+				);
+
+				// Task B: Early waveform extraction (audio only, ~500ms)
+				if (mediaType === 'audio' && this.engineClient && previousPath) {
+					this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, previousPath);
+				}
+
+				// Task C: Full diff analysis (SSIM/PSNR, 5-30s)
+				const diffOptions: Record<string, unknown> = { generateHeatmap: true };
+				if (previousPath) {
+					diffOptions.currentPath = this.fileUri.fsPath;
+					diffOptions.previousPath = previousPath;
+				}
+
+				parallelTasks.push(
+					this.diffService.analyze(
+						this.fileUri,
+						ref,
+						diffOptions,
+						(progress, stage) => {
+							this.sendMessage({
+								type: 'mediaDiff:progress',
+								payload: { progress, stage },
+							});
+						},
+						abortController.signal
+					).then(result => {
+						if (this.isDisposed) return;
+						this.sendMessage({ type: 'mediaDiff:result', payload: result });
+						this.sendWaveformFromResult(result);
+					})
+				);
+
+				await Promise.all(parallelTasks);
+			} catch (error) {
+				if (abortController.signal.aborted) return;
+				this.sendMessage({
+					type: 'mediaDiff:error',
+					error: error instanceof Error ? error.message : String(error),
+				});
+			} finally {
+				if (this.currentAbortController === abortController) {
+					this.currentAbortController = null;
+				}
+			}
+		};
+		void run();
+	}
+
+	/**
+	 * Run analysis pipeline for local file comparison (fire-and-forget).
+	 * Same pattern as runAnalysisPipeline but uses analyzeLocalFiles.
+	 */
+	private runLocalAnalysisPipeline(
+		mediaType: 'video' | 'audio',
+		abortController: AbortController,
+	): void {
+		const previousUri = this.previousUri!;
+		const run = async () => {
+			try {
+				const parallelTasks: Promise<void>[] = [];
+
+				// Task A: Frame extraction / visualization
+				parallelTasks.push(
+					this.sendVisualizationDataForLocal({ mediaType, similarity: -1 } as DiffResult)
+						.catch(err => console.warn('[MediaDiffMessageHandler] Local frame extraction failed:', err))
+				);
+
+				// Task B: Early waveform (audio only)
+				if (mediaType === 'audio' && this.engineClient) {
+					this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, previousUri.fsPath);
+				}
+
+				// Task C: Full diff analysis
+				parallelTasks.push(
+					this.diffService.analyzeLocalFiles(
+						this.fileUri,
+						previousUri,
+						{ generateHeatmap: true },
+						(progress, stage) => {
+							this.sendMessage({
+								type: 'mediaDiff:progress',
+								payload: { progress, stage },
+							});
+						},
+						abortController.signal
+					).then(result => {
+						if (this.isDisposed) return;
+						this.sendMessage({ type: 'mediaDiff:result', payload: result });
+						this.sendWaveformFromResult(result);
+					})
+				);
+
+				await Promise.all(parallelTasks);
+			} catch (error) {
+				if (abortController.signal.aborted) return;
+				this.sendMessage({
+					type: 'mediaDiff:error',
+					error: error instanceof Error ? error.message : String(error),
+				});
+			} finally {
+				if (this.currentAbortController === abortController) {
+					this.currentAbortController = null;
+				}
+			}
+		};
+		void run();
 	}
 
 	/**
@@ -1087,17 +1182,14 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 	/**
 	 * Ensure previous file path is available for frame extraction.
-	 * In Git mode, writes the previous version to a temp file.
+	 * In Git mode, extracts the previous version directly to a temp file
+	 * via `git show` — never loads file content into extension memory.
 	 */
 	private async ensurePreviousFilePath(ref: string): Promise<void> {
 		// Already have a path (local comparison or previously cached)
 		if (this.previousUri || this.previousFilePath) return;
 
 		try {
-			const versions = await this.diffService.getFileVersions(this.fileUri, ref);
-			if (versions.isNewFile || !versions.previous) return;
-
-			const fs = await import('fs/promises');
 			const os = await import('os');
 			const path = await import('path');
 
@@ -1106,10 +1198,13 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				os.tmpdir(),
 				`media-diff-prev-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
 			);
-			await fs.writeFile(tmpPath, Buffer.from(versions.previous));
+
+			// Zero-copy: git show pipes directly to file, no memory buffering
+			await this.diffService.extractPreviousToFile(this.fileUri, ref, tmpPath);
 			this.previousFilePath = tmpPath;
 		} catch (error) {
-			console.error('[MediaDiffMessageHandler] Failed to write previous version temp file:', error);
+			// File may not exist in the ref (new file) — not an error
+			console.warn('[MediaDiffMessageHandler] Could not extract previous version:', error);
 		}
 	}
 

@@ -17,6 +17,7 @@ const mockProviders: Provider[] = [
     displayName: 'OpenAI',
     type: 'openai',
     apiUrl: 'https://api.openai.com/v1',
+    apiKey: 'test-key',
     enabled: true,
   },
   {
@@ -25,6 +26,7 @@ const mockProviders: Provider[] = [
     displayName: 'Anthropic',
     type: 'anthropic',
     apiUrl: 'https://api.anthropic.com',
+    apiKey: 'test-key',
     enabled: true,
   },
   {

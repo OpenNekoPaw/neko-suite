@@ -11,7 +11,17 @@ export default defineConfig({
       'packages/agent/src/**/*.test.ts',
       'packages/cli/src/**/*.test.ts',
     ],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/packages/webview/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/packages/webview/**',
+      // Extension tests require vscode module (run via VSCode extension test runner)
+      'packages/extension/src/**/*.test.ts',
+      // Platform task-manager was deprecated and moved to @neko/agent
+      'packages/platform/src/task/__test__/**',
+      // media-generation-service depends on deprecated task-manager path
+      'packages/platform/src/media/__tests__/media-generation-service.test.ts',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

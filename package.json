@@ -25,7 +25,7 @@
     "dev": "turbo run dev --filter=neko-cut",
     "dev:neko": "turbo run watch --filter=neko-cut",
     "lint": "turbo run lint",
-    "test": "vitest",
+    "test": "turbo run test",
     "clean": "turbo run clean && rm -rf .turbo node_modules/.cache",
     "generate:types": "node scripts/proto-gen-ts.mjs",
     "nekoagent": "pnpm dlx tsx packages/neko-agent/packages/cli/src/cli.ts"

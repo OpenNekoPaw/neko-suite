@@ -149,7 +149,9 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
         case 'mediaDiff:progress':
           setState((prev) => ({
             ...prev,
-            isLoading: true,
+            // When a preliminary diffResult already exists (video/audio fast path),
+            // keep current isLoading to avoid re-blocking the interactive UI.
+            isLoading: prev.diffResult != null ? prev.isLoading : true,
             progress: msg.payload,
             error: null,
           }));

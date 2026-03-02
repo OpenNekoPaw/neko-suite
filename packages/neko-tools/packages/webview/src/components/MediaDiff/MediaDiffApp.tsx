@@ -248,13 +248,31 @@ export default function MediaDiffApp() {
         />
       </div>
 
-      {/* Progress overlay */}
-      {progress && (
+      {/* Full-screen progress overlay — only when no content to show yet */}
+      {progress && !diffResult && (
         <ProgressOverlay
           progress={progress.progress}
           stage={progress.stage}
           onCancel={sendCancel}
         />
+      )}
+
+      {/* Non-blocking inline indicator — when content is already visible (video/audio) */}
+      {progress && diffResult && (
+        <div className="absolute bottom-4 right-4 z-40 flex items-center gap-2 px-3 py-2 text-xs rounded-lg bg-[var(--vscode-editor-background)] border border-[var(--vscode-panel-border)] shadow-lg">
+          <div className="w-3 h-3 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin" />
+          <span className="text-[var(--vscode-descriptionForeground)]">
+            {progress.stage} {Math.round(progress.progress)}%
+          </span>
+          <button
+            type="button"
+            className="ml-1 text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]"
+            onClick={sendCancel}
+            title="Cancel analysis"
+          >
+            ✕
+          </button>
+        </div>
       )}
     </div>
   );

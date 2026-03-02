@@ -39,17 +39,21 @@ describe('LLMRoutingManager', () => {
   const mockProviders: Provider[] = [
     {
       id: 'openai',
+      name: 'openai',
       type: 'openai',
       displayName: 'OpenAI',
+      apiUrl: 'https://api.openai.com/v1',
+      apiKey: 'test-key',
       enabled: true,
-      config: { apiKey: 'test' },
     },
     {
       id: 'anthropic',
+      name: 'anthropic',
       type: 'anthropic',
       displayName: 'Anthropic',
+      apiUrl: 'https://api.anthropic.com',
+      apiKey: 'test-key',
       enabled: true,
-      config: { apiKey: 'test' },
     },
   ];
 
@@ -159,8 +163,8 @@ describe('LLMRoutingManager', () => {
 
     it('should respect user preference for preferred provider', async () => {
       const preference: LLMRoutingPreference = {
-        preferredTargets: ['anthropic'],
-        optimizeFor: 'quality', // Prefer quality to avoid cost affecting selection
+        preferredProvider: 'anthropic',
+        optimize: 'quality',
       };
 
       // Run multiple times to verify preference consistently affects selection

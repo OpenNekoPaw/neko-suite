@@ -32,7 +32,7 @@ test/
 .cache/
 
 # 项目配置（敏感）
-CLAUDE.md
+# CLAUDE.md
 
 # 日志与缓存
 *.log
