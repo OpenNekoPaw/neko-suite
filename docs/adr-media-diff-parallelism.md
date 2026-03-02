@@ -1,7 +1,7 @@
 # 音视频 Diff 并行与 Lazy Loading 分析
 
-> 日期：2026-03-01（Phase 1），2026-03-02（架构更新 + Phase 2 实施）
-> 状态：Phase 1 已完成，Phase 2 已完成（#4-#7），Phase 3 待实施
+> 日期：2026-03-01（Phase 1），2026-03-02（架构更新 + Phase 2 实施 + Phase 2.5 前端阻塞修复）
+> 状态：Phase 1 已完成，Phase 2 已完成（#4-#7），Phase 2.5 已完成（#8-#10），Phase 3 待实施
 > 关联：docs/diff.md, docs/adr-video-diff-streaming.md, docs/adr-unified-engine.md
 
 ## 背景
@@ -185,6 +185,18 @@ Probe A → Probe B → ┌─ FFmpeg SSIM ─┐ → 合并帧指标
 | 7 | **Engine `videos:diff` 内 SSIM \|\| PSNR 并行**：两个 FFmpeg 进程并行 | ✅ | `video_diff.rs` 使用 `std::thread::scope` 并行执行 SSIM+PSNR，**分析时间减少 30-50%** |
 | — | **视频 probe 提前发送**：需新增 `mediaDiff:probeResult` webview 消息处理 | ⏳ 待实施 | 需 webview 侧配合 |
 
+### Phase 2.5：前端阻塞修复 — ✅ 已完成（#8-#10）
+
+> **问题根因**：Phase 2 解决了 Engine 层并行，但前端仍有两类阻塞：
+> 1. ProgressOverlay 全屏遮罩阻塞用户交互
+> 2. `handleMessage` 中 `await` 长时间管线导致 webview 消息队列串行化
+
+| # | 优化 | 状态 | 改动 |
+|---|------|------|------|
+| 8 | **ProgressOverlay 非阻塞化**：有 diffResult 时改为右下角小指示器，不再全屏遮罩 | ✅ | `MediaDiffApp.tsx` 条件渲染 |
+| 9 | **progress handler 保持 isLoading 状态**：收到进度消息时不再重置 `isLoading: true`（当 diffResult 已存在） | ✅ | `useMediaDiffProtocol.ts` |
+| 10 | **handleMessage 消息队列去阻塞**：`initializeDiff` / `initializeLocalDiff` 中分析管线改为 fire-and-forget | ✅ | `MediaDiffMessageHandler.ts` 新增 `runAnalysisPipeline` / `runLocalAnalysisPipeline` |
+
 ### Phase 3：流式/渐进式
 
 | # | 优化 | 工作量 | 收益 |
@@ -205,3 +217,59 @@ Probe A → Probe B → ┌─ FFmpeg SSIM ─┐ → 合并帧指标
 **原问题**：preliminary `sendVisualizationData` 在 engine 未激活时就调用 `handleSeek(0)` → `neko.engine.extractFrame` not found。
 
 **修复**：preliminary 调用（无 `visualization` 字段）跳过帧提取。帧提取由用户交互（play/seek）触发，此时 engine 已通过 `diff` 命令激活。
+
+## 七、已修复的 Bug（Phase 2.5）
+
+### BUG-3：ProgressOverlay 全屏遮罩阻塞交互 — ✅ 已修复
+
+**现象**：视频/音频 diff 分析过程中，"Analyzing differences... 30%" 全屏半透明遮罩（`absolute inset-0 z-50`，80% 不透明度）覆盖整个 UI，用户无法操作已加载的内容。
+
+**根因**：`MediaDiffApp.tsx` 中 `ProgressOverlay` 无条件渲染为全屏覆盖层，只要有 `progress` 就显示。即使 `diffResult` 已到达、音视频播放器已可用，遮罩仍然阻塞。
+
+**修复**：
+- 无 `diffResult` 时：保持全屏 `ProgressOverlay`（首次加载体验）
+- 有 `diffResult` 时：改为右下角非阻塞小指示器（`absolute bottom-4 right-4 z-40`），显示进度百分比和取消按钮
+
+**同时修复**：`useMediaDiffProtocol.ts` 中 `mediaDiff:progress` handler 不再在 `diffResult` 已存在时重置 `isLoading: true`，避免已渲染的播放器被 loading 状态覆盖。
+
+### BUG-4：handleMessage 消息队列串行化 — ✅ 已修复
+
+**现象**：本地文件对比和 Git diff 均出现播放卡住（视频 "Starting video streams..."、音频 "0:00 / 0:00"），即使分析已完成。
+
+**根因**：`MediaDiffMessageHandler.handleMessage()` 是 webview 消息的唯一入口。`initializeDiff` 和 `initializeLocalDiff` 内部 `await Promise.all(parallelTasks)` 阻塞 5-30s，期间所有后续 webview 消息（`streamControl`、`audioStreamControl`、`seek` 等）排队等待，无法处理。
+
+```
+消息队列阻塞示意：
+t=0s    handleMessage('mediaDiff:initialize') → await initializeDiff()
+t=0.1s  handleMessage('streamControl:start')  → 排队等待 ⏳
+t=0.2s  handleMessage('audioStreamControl')   → 排队等待 ⏳
+t=5-30s initializeDiff() 完成 → 才开始处理排队消息
+```
+
+**修复**：
+1. 提取分析管线为独立方法 `runAnalysisPipeline()` / `runLocalAnalysisPipeline()`
+2. 使用 fire-and-forget 模式：`void run()` 立即返回，不阻塞 `handleMessage`
+3. 新增 `pipelineOwnsCleanup` 标志：防止 `initializeDiff` 的 `finally` 块在管线仍在运行时清除 `abortController`
+
+```
+修复后消息流：
+t=0s    handleMessage('mediaDiff:initialize')
+        → initializeDiff(): 快速初始化 + void runAnalysisPipeline()
+        → 立即返回 ✅
+t=0.1s  handleMessage('streamControl:start') → 立即处理 ✅
+t=0.2s  handleMessage('audioStreamControl')  → 立即处理 ✅
+t=5-30s runAnalysisPipeline() 后台完成 → 发送 mediaDiff:result
+```
+
+### 其他 await 路径分析
+
+对 `handleMessage` 中所有 await 路径进行了全面分析，确认以下调用均为快速操作（<2s），不构成阻塞风险：
+
+| 消息类型 | await 操作 | 耗时 | 风险 |
+|---------|-----------|------|------|
+| `streamControl:start` | `handleStartStreaming()` — probe + 创建流 | ~300-500ms | ✅ 可接受 |
+| `streamControl:stop` | `handleStopStreaming()` — 销毁流 | ~50ms | ✅ 无风险 |
+| `streamControl:seek` | `handleSeek()` — 帧提取 | ~100-200ms | ✅ 可接受 |
+| `audioStreamControl:*` | 音频流创建/销毁/seek | ~100-300ms | ✅ 可接受 |
+| `mediaDiff:cancel` | `abortController.abort()` | ~0ms | ✅ 无风险 |
+| `mediaDiff:requestWaveform` | `handleWaveformRequest()` — engine 波形提取 | ~500ms-2s | ✅ 可接受 |
