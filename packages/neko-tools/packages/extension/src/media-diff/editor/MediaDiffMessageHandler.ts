@@ -407,7 +407,6 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				break;
 
 			case 'audio':
-				// Always send waveform data so webview renders audio diff view
 				this.sendMessage({
 					type: 'mediaDiff:waveformData',
 					payload: {
@@ -420,12 +419,14 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				break;
 
 			case 'video':
-				// Proactively extract initial frames at t=0 for both versions
-				await this.handleSeek(0);
+				// Skip frame extraction for preliminary calls (engine may not be active yet).
+				// Frames are extracted on-demand when user interacts (seek/play).
+				if (result.visualization) {
+					await this.handleSeek(0);
+				}
 				break;
 
 			case 'timeline':
-				// Timeline diff data is fully contained in the result, no extra visualization needed
 				break;
 		}
 	}
@@ -476,7 +477,6 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				break;
 
 			case 'audio':
-				// Always send waveform data so webview renders audio diff view
 				this.sendMessage({
 					type: 'mediaDiff:waveformData',
 					payload: {
@@ -489,12 +489,13 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				break;
 
 			case 'video':
-				// Proactively extract initial frames at t=0 for both versions
-				await this.handleSeek(0);
+				// Skip frame extraction for preliminary calls (engine may not be active yet)
+				if (result.visualization) {
+					await this.handleSeek(0);
+				}
 				break;
 
 			case 'timeline':
-				// Timeline diff data is fully contained in the result, no extra visualization needed
 				break;
 		}
 	}
