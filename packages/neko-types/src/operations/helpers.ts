@@ -6,6 +6,7 @@ import type { ProjectData } from '../types/project';
 import type { TimelineTrack } from '../types/timelineTrack';
 import type { TimelineElement } from '../types/element';
 import type { ShapeInstance } from '../types/shape';
+import type { WebviewElement } from './webview-types';
 import { OperationError } from './errors';
 
 /**
@@ -84,11 +85,11 @@ export function updateShapeInProject(
   updater: (shape: ShapeInstance) => ShapeInstance,
 ): ProjectData {
   return updateElementInProject(project, trackId, elementId, element => {
-    const shapes: ShapeInstance[] = (element as any).shapes ?? [];
+    const shapes: ShapeInstance[] = (element as WebviewElement).shapes ?? [];
     const { index } = findShape(shapes, shapeId);
     const newShapes = [...shapes];
     newShapes[index] = updater(newShapes[index]!);
-    return { ...element, shapes: newShapes } as any;
+    return { ...element, shapes: newShapes } as WebviewElement;
   });
 }
 
@@ -96,14 +97,14 @@ export function updateShapeInProject(
  * 获取 element 的 shapes 数组（安全访问）
  */
 export function getShapes(element: TimelineElement): ShapeInstance[] {
-  return (element as any).shapes ?? [];
+  return (element as WebviewElement).shapes ?? [];
 }
 
 /**
  * 设置 element 的 shapes 数组
  */
 export function setShapes(element: TimelineElement, shapes: ShapeInstance[]): TimelineElement {
-  return { ...element, shapes } as any;
+  return { ...element, shapes } as WebviewElement;
 }
 
 /**

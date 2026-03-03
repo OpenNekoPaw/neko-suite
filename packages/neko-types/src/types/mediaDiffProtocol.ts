@@ -770,6 +770,17 @@ export interface ElementThumbnailResponse extends BaseMediaDiffResponse {
 }
 
 /**
+ * Fetch state response — sent by Extension when Git previous-version
+ * extraction starts/finishes. Webview uses this to disable Play button
+ * until the previous file is available for streaming.
+ */
+export interface FetchStateResponse extends BaseMediaDiffResponse {
+	type: 'mediaDiff:fetchState';
+	/** 'fetching': git show in progress; 'ready': file available or fetch skipped */
+	state: 'fetching' | 'ready';
+}
+
+/**
  * All response types
  */
 export type MediaDiffResponse =
@@ -783,7 +794,8 @@ export type MediaDiffResponse =
 	| ElementThumbnailResponse
 	| StreamConfigResponse
 	| AudioStreamConfigResponse
-	| StreamErrorResponse;
+	| StreamErrorResponse
+	| FetchStateResponse;
 
 // =============================================================================
 // Protocol Constants

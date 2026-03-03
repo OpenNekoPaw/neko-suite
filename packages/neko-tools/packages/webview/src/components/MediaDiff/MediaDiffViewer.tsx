@@ -69,6 +69,7 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
   gitRef,
   filePath,
   streamConfig,
+  isFetchingPrevious,
   onTimeChange,
   onInspectElement,
   onStreamControl,
@@ -146,6 +147,7 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
             sliderPosition={sliderPosition}
             onSliderChange={setSliderPosition}
             streamConfig={streamConfig}
+            isFetchingPrevious={isFetchingPrevious}
             onStreamControl={onStreamControl}
             isLoading={isLoading}
             error={error}
@@ -166,6 +168,7 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
             playingVersion={playingVersion}
             onPlayingVersionChange={setPlayingVersion}
             audioStreamConfig={audioStreamConfig}
+            isFetchingPrevious={isFetchingPrevious}
             onAudioStreamControl={onAudioStreamControl}
             isLoading={isLoading}
             error={error}

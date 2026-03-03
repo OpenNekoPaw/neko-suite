@@ -52,6 +52,12 @@ export interface MediaDiffProtocolState {
   streamError: string | null;
   /** Audio-only stream config from extension (set when audio streaming is active) */
   audioStreamConfig: AudioStreamConfig | null;
+  /**
+   * True while the extension is running `git show` to extract the previous
+   * version to a temp file. Play button should be disabled during this time
+   * to prevent a race condition where streaming starts before the file exists.
+   */
+  isFetchingPrevious: boolean;
 }
 
 // =============================================================================
@@ -119,6 +125,7 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     streamConfig: null,
     streamError: null,
     audioStreamConfig: null,
+    isFetchingPrevious: false,
   }));
 
   // Track Blob URLs for cleanup
@@ -246,6 +253,14 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
           });
           break;
         }
+
+        // ── Fetch state (git show progress) ─────────────────────────
+        case 'mediaDiff:fetchState':
+          setState((prev) => ({
+            ...prev,
+            isFetchingPrevious: msg.state === 'fetching',
+          }));
+          break;
 
         // ── Streaming responses ──────────────────────────────────────
         case 'mediaDiff:streamConfig':

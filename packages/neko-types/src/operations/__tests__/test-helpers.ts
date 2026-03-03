@@ -7,6 +7,7 @@ import type { TimelineTrack } from '../../types/timelineTrack';
 import type { TimelineElement, MediaElement, AudioElement, TextElement, ShapeElement } from '../../types/element';
 import type { ShapeInstance, ShapeStyle, RectangleShape } from '../../types/shape';
 import type { OperationMeta } from '../types';
+import type { WebviewElement } from '../webview-types';
 
 let counter = 0;
 
@@ -153,6 +154,17 @@ export function createTestShapeInstance(overrides: Partial<ShapeInstance> = {}):
     locked: false,
     ...overrides,
   };
+}
+
+/**
+ * 创建 WebviewElement（TimelineElement + UI-only 字段）
+ * 用于需要 animTransform / masks / shapes 字段的测试
+ */
+export function createWebviewElement(
+  base: TimelineElement,
+  extras: Partial<Omit<WebviewElement, keyof TimelineElement>> = {},
+): WebviewElement {
+  return { ...base, ...extras } as WebviewElement;
 }
 
 export function createTestProject(overrides: Partial<ProjectData> = {}): ProjectData {

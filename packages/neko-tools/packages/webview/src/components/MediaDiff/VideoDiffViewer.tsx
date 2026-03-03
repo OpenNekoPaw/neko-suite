@@ -22,6 +22,8 @@ interface SeekControlsProps {
   isPlaying: boolean;
   onPlayPause: () => void;
   diffRegions?: Array<{ start: number; end: number }>;
+  /** Disable Play while git show is extracting the previous version */
+  isFetchingPrevious?: boolean;
 }
 
 const SeekControls = memo(function SeekControls({
@@ -31,6 +33,7 @@ const SeekControls = memo(function SeekControls({
   isPlaying,
   onPlayPause,
   diffRegions,
+  isFetchingPrevious,
 }: SeekControlsProps) {
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -41,12 +44,17 @@ const SeekControls = memo(function SeekControls({
 
   return (
     <div className="flex items-center gap-4 p-3 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)]">
-      {/* Play/Pause button */}
+      {/* Play/Pause button — disabled while previous version is being fetched */}
       <button
         type="button"
-        className="w-8 h-8 flex items-center justify-center rounded hover:bg-[var(--vscode-list-hoverBackground)] transition-colors text-[var(--vscode-foreground)]"
-        onClick={onPlayPause}
-        title={isPlaying ? 'Pause' : 'Play'}
+        className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
+          isFetchingPrevious
+            ? 'opacity-40 cursor-not-allowed text-[var(--vscode-foreground)]'
+            : 'hover:bg-[var(--vscode-list-hoverBackground)] text-[var(--vscode-foreground)]'
+        }`}
+        onClick={isFetchingPrevious ? undefined : onPlayPause}
+        disabled={isFetchingPrevious}
+        title={isFetchingPrevious ? 'Fetching previous version…' : isPlaying ? 'Pause' : 'Play'}
       >
         {isPlaying ? '\u23F8' : '\u25B6'}
       </button>
@@ -194,6 +202,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
   onSliderChange,
   streamConfig,
   onStreamControl,
+  isFetchingPrevious,
   isLoading,
   error,
 }: VideoDiffViewerProps) {
@@ -314,7 +323,15 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
     return (
       <div className="flex flex-col flex-1 overflow-hidden">
         <div className="flex-1 flex items-center justify-center bg-black">
-          {isPlaying ? (
+          {isFetchingPrevious ? (
+            // git show in progress — previous version not yet available
+            <div className="text-center">
+              <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <div className="text-sm text-[var(--vscode-descriptionForeground)]">
+                Fetching previous version…
+              </div>
+            </div>
+          ) : isPlaying ? (
             // Streams being created after Play click
             <div className="text-center">
               <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
@@ -340,6 +357,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
           isPlaying={isPlaying}
           onPlayPause={handlePlayPause}
           diffRegions={details?.diffRegions}
+          isFetchingPrevious={isFetchingPrevious}
         />
         <VideoDetails details={details} />
       </div>
@@ -372,6 +390,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
         isPlaying={isPlaying}
         onPlayPause={handlePlayPause}
         diffRegions={details?.diffRegions}
+        isFetchingPrevious={isFetchingPrevious}
       />
       <VideoDetails details={details} />
     </div>

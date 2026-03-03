@@ -619,6 +619,8 @@ interface AudioPlayerControlsProps {
   onPlayingVersionChange: (version: 'current' | 'previous' | 'both') => void;
   onTimeChange: (time: number) => void;
   onAudioStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => void;
+  /** Disable Play while git show is extracting the previous version */
+  isFetchingPrevious?: boolean;
 }
 
 const AudioPlayerControls = memo(function AudioPlayerControls({
@@ -629,6 +631,7 @@ const AudioPlayerControls = memo(function AudioPlayerControls({
   onPlayingVersionChange,
   onTimeChange,
   onAudioStreamControl,
+  isFetchingPrevious,
 }: AudioPlayerControlsProps) {
   const currentClientRef = useRef<AudioStreamClient | null>(null);
   const previousClientRef = useRef<AudioStreamClient | null>(null);
@@ -740,8 +743,14 @@ const AudioPlayerControls = memo(function AudioPlayerControls({
     <div className="flex items-center gap-4 p-3 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)]">
       <button
         type="button"
-        className="w-8 h-8 flex items-center justify-center bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] rounded hover:bg-[var(--vscode-button-hoverBackground)]"
-        onClick={handlePlayPause}
+        className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
+          isFetchingPrevious
+            ? 'opacity-40 cursor-not-allowed text-[var(--vscode-foreground)]'
+            : 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)]'
+        }`}
+        onClick={isFetchingPrevious ? undefined : handlePlayPause}
+        disabled={isFetchingPrevious}
+        title={isFetchingPrevious ? 'Fetching previous version…' : isPlaying ? 'Pause' : 'Play'}
       >
         {isPlaying ? '\u23F8' : '\u25B6'}
       </button>
@@ -907,6 +916,7 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
   onPlayingVersionChange,
   audioStreamConfig,
   onAudioStreamControl,
+  isFetchingPrevious,
   isLoading,
   error,
 }: AudioDiffViewerProps) {
@@ -1014,6 +1024,7 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
         onPlayingVersionChange={handlePlayingVersionChange}
         onTimeChange={handleTimeChange}
         onAudioStreamControl={onAudioStreamControl}
+        isFetchingPrevious={isFetchingPrevious}
       />
       <AudioDetails details={details} />
     </div>

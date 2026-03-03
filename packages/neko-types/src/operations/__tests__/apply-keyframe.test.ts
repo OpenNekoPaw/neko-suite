@@ -5,35 +5,21 @@
 import { describe, it, expect } from 'vitest';
 import { applyOperation } from '../apply';
 import type { Keyframe } from '../../types/keyframe';
+import type { WebviewElement } from '../webview-types';
 import {
   createTestProject,
   createTestTrack,
   createTestMediaElement,
   createMeta,
+  createWebviewElement,
 } from './test-helpers';
 
 describe('apply-keyframe', () => {
   function createKeyframeProject() {
-    const elem = {
-      ...createTestMediaElement({ id: 'e1' }),
+    const elem = createWebviewElement(createTestMediaElement({ id: 'e1' }), {
       animTransform: {
         x: { baseValue: 0.5, keyframes: [{ time: 0, value: 0.5, easing: 'linear' as const }] },
       },
-      effects: [
-        {
-          id: 'fx1',
-          type: 'blur',
-          enabled: true,
-          parameters: { radius: 5 },
-          animatedParameters: {
-            radius: {
-              baseValue: 5,
-              keyframes: [{ id: 'kf-fx1', time: 0, value: 5, easing: 'linear' as const }],
-            },
-          },
-          order: 0,
-        },
-      ],
       masks: [
         {
           id: 'mask1',
@@ -62,9 +48,32 @@ describe('apply-keyframe', () => {
           },
         },
       ],
-    } as any;
-    const track = createTestTrack({ id: 't1', elements: [elem] });
+    });
+    // effects are on the base element — set them via spread after webview wrapping
+    const elemWithEffects: WebviewElement = {
+      ...elem,
+      effects: [
+        {
+          id: 'fx1',
+          type: 'blur',
+          enabled: true,
+          parameters: { radius: 5 },
+          animatedParameters: {
+            radius: {
+              baseValue: 5,
+              keyframes: [{ id: 'kf-fx1', time: 0, value: 5, easing: 'linear' as const }],
+            },
+          },
+          order: 0,
+        },
+      ],
+    };
+    const track = createTestTrack({ id: 't1', elements: [elemWithEffects] });
     return createTestProject({ tracks: [track] });
+  }
+
+  function getEl(project: ReturnType<typeof createTestProject>): WebviewElement {
+    return project.tracks[0]!.elements[0]! as WebviewElement;
   }
 
   describe('keyframe.add — transform', () => {
@@ -83,10 +92,10 @@ describe('apply-keyframe', () => {
         },
       });
 
-      const animTransform = (result.tracks[0].elements[0] as any).animTransform;
-      expect(animTransform.x.keyframes).toHaveLength(2);
-      expect(animTransform.x.keyframes[1].time).toBe(1);
-      expect(animTransform.x.keyframes[1].value).toBe(0.8);
+      const animTransform = getEl(result).animTransform!;
+      expect(animTransform['x']!.keyframes).toHaveLength(2);
+      expect(animTransform['x']!.keyframes[1]!.time).toBe(1);
+      expect(animTransform['x']!.keyframes[1]!.value).toBe(0.8);
     });
 
     it('should insert keyframe in sorted order', () => {
@@ -104,9 +113,9 @@ describe('apply-keyframe', () => {
         },
       });
 
-      const keyframes = (result.tracks[0].elements[0] as any).animTransform.x.keyframes;
-      expect(keyframes[0].time).toBe(-0.5);
-      expect(keyframes[1].time).toBe(0);
+      const keyframes = getEl(result).animTransform!['x']!.keyframes;
+      expect(keyframes[0]!.time).toBe(-0.5);
+      expect(keyframes[1]!.time).toBe(0);
     });
   });
 
@@ -129,7 +138,7 @@ describe('apply-keyframe', () => {
         },
       });
 
-      const keyframes = (result.tracks[0].elements[0] as any).animTransform.x.keyframes;
+      const keyframes = getEl(result).animTransform!['x']!.keyframes;
       expect(keyframes).toHaveLength(0);
     });
   });
@@ -151,8 +160,8 @@ describe('apply-keyframe', () => {
         before: { updates: { value: 0.5 } },
       });
 
-      const keyframes = (result.tracks[0].elements[0] as any).animTransform.x.keyframes;
-      expect(keyframes[0].value).toBe(0.9);
+      const keyframes = getEl(result).animTransform!['x']!.keyframes;
+      expect(keyframes[0]!.value).toBe(0.9);
     });
   });
 
@@ -171,7 +180,7 @@ describe('apply-keyframe', () => {
         },
       });
 
-      const params = (result.tracks[0].elements[0] as any).effects[0].animatedParameters.radius;
+      const params = getEl(result).effects[0]!.animatedParameters!['radius']!;
       expect(params.keyframes).toHaveLength(2);
     });
 
@@ -193,7 +202,7 @@ describe('apply-keyframe', () => {
         },
       });
 
-      const params = (result.tracks[0].elements[0] as any).effects[0].animatedParameters.radius;
+      const params = getEl(result).effects[0]!.animatedParameters!['radius']!;
       expect(params.keyframes).toHaveLength(0);
     });
   });
@@ -213,7 +222,7 @@ describe('apply-keyframe', () => {
         },
       });
 
-      const feather = (result.tracks[0].elements[0] as any).masks[0].animation.feather;
+      const feather = getEl(result).masks![0]!.animation!.feather!;
       expect(feather.keyframes).toHaveLength(2);
     });
   });
@@ -238,9 +247,9 @@ describe('apply-keyframe', () => {
         },
       });
 
-      const shapeKfs = (result.tracks[0].elements[0] as any).masks[0].animation.shapeKeyframes;
+      const shapeKfs = getEl(result).masks![0]!.animation!.shapeKeyframes!;
       expect(shapeKfs).toHaveLength(2);
-      expect(shapeKfs[1].time).toBe(2);
+      expect(shapeKfs[1]!.time).toBe(2);
     });
 
     it('should remove mask shape keyframe by id', () => {
@@ -259,14 +268,14 @@ describe('apply-keyframe', () => {
           keyframe: {
             id: 'kf-ms1',
             time: 0,
-            shape: { type: 'rectangle', centerX: 50, centerY: 50, width: 100, height: 100, rotation: 0, cornerRadius: 0 },
-            easing: 'linear',
+            shape: { type: 'rectangle' as const, centerX: 50, centerY: 50, width: 100, height: 100, rotation: 0, cornerRadius: 0 },
+            easing: 'linear' as const,
           },
           index: 0,
         },
       });
 
-      const shapeKfs = (result.tracks[0].elements[0] as any).masks[0].animation.shapeKeyframes;
+      const shapeKfs = getEl(result).masks![0]!.animation!.shapeKeyframes!;
       expect(shapeKfs).toHaveLength(0);
     });
   });

@@ -497,8 +497,8 @@ export function invertOperation(op: EditOperation): EditOperation {
           trackId: addOp.payload.trackId,
           elementId: addOp.payload.elementId,
           target: addOp.payload.target,
-          keyframeId: (addOp.payload.keyframe as any).id,
-          keyframeTime: (addOp.payload.keyframe as any).time,
+          keyframeId: 'id' in addOp.payload.keyframe ? addOp.payload.keyframe.id : undefined,
+          keyframeTime: addOp.payload.keyframe.time,
         },
         before: {
           keyframe: addOp.payload.keyframe,

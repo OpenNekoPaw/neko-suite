@@ -148,6 +148,7 @@ export default function MediaDiffApp() {
     elementThumbnails,
     streamConfig,
     initialState,
+    isFetchingPrevious,
     sendInit,
     sendInitLocal,
     sendSeek,
@@ -240,6 +241,7 @@ export default function MediaDiffApp() {
           gitRef={initialState.ref ?? 'HEAD'}
           filePath={initialState.fileName}
           streamConfig={streamConfig}
+          isFetchingPrevious={isFetchingPrevious}
           onTimeChange={handleTimeChange}
           onInspectElement={sendInspectElement}
           onStreamControl={sendStreamControl}

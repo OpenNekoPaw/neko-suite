@@ -73,7 +73,7 @@ export function applyOperation(project: ProjectData, op: EditOperation): Project
       return applyBatch(project, op);
 
     default:
-      throw OperationError.invalidOperation(`Unknown operation type: ${(op as any).type}`);
+      throw OperationError.invalidOperation(`Unknown operation type: ${(op as Record<string, unknown>).type}`);
   }
 }
 

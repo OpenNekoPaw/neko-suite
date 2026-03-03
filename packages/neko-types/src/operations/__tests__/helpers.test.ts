@@ -19,7 +19,9 @@ import {
   createTestTrack,
   createTestMediaElement,
   createTestShapeInstance,
+  createWebviewElement,
 } from './test-helpers';
+import type { WebviewElement } from '../webview-types';
 
 describe('findTrack', () => {
   it('should find track by id', () => {
@@ -138,7 +140,7 @@ describe('updateElementInProject', () => {
 describe('updateShapeInProject', () => {
   it('should return new ProjectData with updated shape', () => {
     const s1 = createTestShapeInstance({ id: 's1', name: 'Old Shape' });
-    const elem = { ...createTestMediaElement({ id: 'e1' }), shapes: [s1] } as any;
+    const elem = createWebviewElement(createTestMediaElement({ id: 'e1' }), { shapes: [s1] });
     const track = createTestTrack({ id: 't1', elements: [elem] });
     const project = createTestProject({ tracks: [track] });
 
@@ -147,7 +149,7 @@ describe('updateShapeInProject', () => {
       name: 'New Shape',
     }));
 
-    const updatedShapes = (result.tracks[0]!.elements[0]! as any).shapes;
+    const updatedShapes = (result.tracks[0]!.elements[0]! as WebviewElement).shapes;
     expect(updatedShapes[0].name).toBe('New Shape');
   });
 
@@ -174,7 +176,7 @@ describe('pickKeys', () => {
 
   it('should return empty object when no keys match', () => {
     const obj = { a: 1 };
-    const updates = { x: 2 } as any;
+    const updates = { x: 2 } as Partial<typeof obj>;
 
     const result = pickKeys(obj, updates);
     expect(result).toEqual({});

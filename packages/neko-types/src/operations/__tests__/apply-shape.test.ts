@@ -4,22 +4,27 @@
 
 import { describe, it, expect } from 'vitest';
 import { applyOperation } from '../apply';
-import type { ShapeInstance } from '../../types/shape';
+import type { WebviewElement } from '../webview-types';
 import {
   createTestProject,
   createTestTrack,
   createTestShapeElement,
   createTestShapeInstance,
   createMeta,
+  createWebviewElement,
 } from './test-helpers';
 
 describe('apply-shape', () => {
   function createShapeProject() {
     const shape1 = createTestShapeInstance({ id: 's1', zIndex: 0 });
     const shape2 = createTestShapeInstance({ id: 's2', zIndex: 1 });
-    const elem = { ...createTestShapeElement({ id: 'e1' }), shapes: [shape1, shape2] } as any;
+    const elem = createWebviewElement(createTestShapeElement({ id: 'e1' }), { shapes: [shape1, shape2] });
     const track = createTestTrack({ id: 't1', type: 'shape', elements: [elem] });
     return { project: createTestProject({ tracks: [track] }), shape1, shape2, elem };
+  }
+
+  function getShapes(project: ReturnType<typeof createTestProject>, trackIdx = 0, elemIdx = 0) {
+    return (project.tracks[trackIdx]!.elements[elemIdx]! as WebviewElement).shapes ?? [];
   }
 
   describe('shape.addElement', () => {
@@ -34,8 +39,8 @@ describe('apply-shape', () => {
         payload: { trackId: 't1', element: elem },
       });
 
-      expect(result.tracks[0].elements).toHaveLength(1);
-      expect(result.tracks[0].elements[0].id).toBe('se1');
+      expect(result.tracks[0]!.elements).toHaveLength(1);
+      expect(result.tracks[0]!.elements[0]!.id).toBe('se1');
     });
   });
 
@@ -50,9 +55,9 @@ describe('apply-shape', () => {
         payload: { trackId: 't1', elementId: 'e1', shape: newShape },
       });
 
-      const shapes = (result.tracks[0].elements[0] as any).shapes;
+      const shapes = getShapes(result);
       expect(shapes).toHaveLength(3);
-      expect(shapes[2].id).toBe('s3');
+      expect(shapes[2]!.id).toBe('s3');
     });
   });
 
@@ -67,9 +72,9 @@ describe('apply-shape', () => {
         before: { shape: shape1, index: 0 },
       });
 
-      const shapes = (result.tracks[0].elements[0] as any).shapes;
+      const shapes = getShapes(result);
       expect(shapes).toHaveLength(1);
-      expect(shapes[0].id).toBe('s2');
+      expect(shapes[0]!.id).toBe('s2');
     });
   });
 
@@ -84,9 +89,9 @@ describe('apply-shape', () => {
         payload: { trackId: 't1', elementId: 'e1', newShape: dup },
       });
 
-      const shapes = (result.tracks[0].elements[0] as any).shapes;
+      const shapes = getShapes(result);
       expect(shapes).toHaveLength(3);
-      expect(shapes[2].id).toBe('s1-dup');
+      expect(shapes[2]!.id).toBe('s1-dup');
     });
   });
 
@@ -101,8 +106,8 @@ describe('apply-shape', () => {
         before: { updates: { name: 'Test Shape' } },
       });
 
-      const shapes = (result.tracks[0].elements[0] as any).shapes;
-      expect(shapes[0].name).toBe('Renamed');
+      const shapes = getShapes(result);
+      expect(shapes[0]!.name).toBe('Renamed');
     });
   });
 
@@ -120,9 +125,9 @@ describe('apply-shape', () => {
         before: { shape: { centerX: 50, centerY: 50 } },
       });
 
-      const shapes = (result.tracks[0].elements[0] as any).shapes;
-      expect(shapes[0].shape.centerX).toBe(75);
-      expect(shapes[0].shape.centerY).toBe(75);
+      const shapes = getShapes(result);
+      expect(shapes[0]!.shape.centerX).toBe(75);
+      expect(shapes[0]!.shape.centerY).toBe(75);
     });
   });
 
@@ -135,15 +140,15 @@ describe('apply-shape', () => {
         meta: createMeta(),
         payload: {
           trackId: 't1', elementId: 'e1', shapeId: 's1',
-          style: { fill: { color: '#ff0000' } as any },
+          style: { fill: { color: '#ff0000' } },
         },
-        before: { style: { fill: { color: '#4a90d9' } as any } },
+        before: { style: { fill: { color: '#4a90d9' } } },
       });
 
-      const shapes = (result.tracks[0].elements[0] as any).shapes;
-      expect(shapes[0].style.fill.color).toBe('#ff0000');
+      const shapes = getShapes(result);
+      expect(shapes[0]!.style.fill.color).toBe('#ff0000');
       // 其他 fill 字段保持不变
-      expect(shapes[0].style.fill.opacity).toBe(1);
+      expect(shapes[0]!.style.fill.opacity).toBe(1);
     });
   });
 
@@ -158,8 +163,8 @@ describe('apply-shape', () => {
         before: { value: true },
       });
 
-      const shapes = (result.tracks[0].elements[0] as any).shapes;
-      expect(shapes[0].visible).toBe(false);
+      const shapes = getShapes(result);
+      expect(shapes[0]!.visible).toBe(false);
     });
   });
 
@@ -173,11 +178,11 @@ describe('apply-shape', () => {
         payload: { trackId: 't1', elementId: 'e1', shapeId: 's1', fromIndex: 0, toIndex: 1 },
       });
 
-      const shapes = (result.tracks[0].elements[0] as any).shapes;
-      expect(shapes[0].id).toBe('s2');
-      expect(shapes[1].id).toBe('s1');
-      expect(shapes[0].zIndex).toBe(0);
-      expect(shapes[1].zIndex).toBe(1);
+      const shapes = getShapes(result);
+      expect(shapes[0]!.id).toBe('s2');
+      expect(shapes[1]!.id).toBe('s1');
+      expect(shapes[0]!.zIndex).toBe(0);
+      expect(shapes[1]!.zIndex).toBe(1);
     });
   });
 });

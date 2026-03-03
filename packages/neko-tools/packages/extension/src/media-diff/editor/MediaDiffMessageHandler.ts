@@ -40,6 +40,12 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	private previousFilePath: string | null = null;
 	/** Debounce timer for seek requests to avoid VideoToolbox session exhaustion */
 	private seekDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	/**
+	 * In-flight promise for ensurePreviousFilePath (Git mode only).
+	 * Set before git show starts, cleared after it resolves.
+	 * handleStartStreaming awaits this before using previousFilePath.
+	 */
+	private fetchPromise: Promise<void> | null = null;
 	/** Pending frame extraction promises for concurrency control */
 	private activeFrameExtractions = 0;
 	private static readonly MAX_CONCURRENT_FRAMES = 4;
@@ -114,7 +120,14 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 			// For video/audio: extract previous version to temp file (needed for all subsequent ops).
 			if (mediaType === 'video' || mediaType === 'audio') {
-				await this.ensurePreviousFilePath(ref);
+				// Broadcast fetch state so the webview can disable Play until the file is ready.
+				// handleStartStreaming awaits this.fetchPromise to avoid the race condition
+				// where the user clicks Play before git show finishes (3-30s).
+				this.sendFetchState('fetching');
+				this.fetchPromise = this.ensurePreviousFilePath(ref);
+				await this.fetchPromise;
+				this.fetchPromise = null;
+				this.sendFetchState('ready');
 
 				// MD5 check: skip expensive diff if files are identical
 				const prevPath = this.previousUri?.fsPath ?? this.previousFilePath;
@@ -837,9 +850,16 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		try {
 			const engine = this.requireEngine();
 
-			// 1. Resolve file paths for both versions
+			// 1. Resolve file paths for both versions.
+			// If git show is still in progress, wait for it rather than failing immediately.
+			// This handles the race where the user clicks Play before ensurePreviousFilePath
+			// finishes (3-30s for large repos).
 			const currentPath = this.fileUri.fsPath;
-			const previousPath = this.previousUri?.fsPath ?? this.previousFilePath;
+			let previousPath = this.previousUri?.fsPath ?? this.previousFilePath;
+			if (!previousPath && this.fetchPromise) {
+				await this.fetchPromise;
+				previousPath = this.previousUri?.fsPath ?? this.previousFilePath;
+			}
 			if (!previousPath) {
 				throw new Error('No previous file available for streaming');
 			}
@@ -1044,9 +1064,13 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 		try {
 			const engine = this.requireEngine();
 
-			// 1. Resolve file paths
+			// 1. Resolve file paths, awaiting git fetch if still in progress.
 			const currentPath = this.fileUri.fsPath;
-			const previousPath = this.previousUri?.fsPath ?? this.previousFilePath;
+			let previousPath = this.previousUri?.fsPath ?? this.previousFilePath;
+			if (!previousPath && this.fetchPromise) {
+				await this.fetchPromise;
+				previousPath = this.previousUri?.fsPath ?? this.previousFilePath;
+			}
 			if (!previousPath) {
 				throw new Error('No previous file available for audio streaming');
 			}
@@ -1192,6 +1216,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			this.currentAbortController.abort();
 			this.currentAbortController = null;
 		}
+		// Clear stale fetch promise so handleStartStreaming doesn't await an old git fetch.
+		this.fetchPromise = null;
 	}
 
 	/**
@@ -1301,6 +1327,14 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			'.svg': 'image/svg+xml',
 		};
 		return mimeTypes[ext ?? ''] ?? 'application/octet-stream';
+	}
+
+	/**
+	 * Broadcast git-fetch state to webview so Play button can be disabled
+	 * while the previous-version file is being extracted.
+	 */
+	private sendFetchState(state: 'fetching' | 'ready'): void {
+		this.sendMessage({ type: 'mediaDiff:fetchState', state } as Partial<MediaDiffResponse>);
 	}
 
 	/**

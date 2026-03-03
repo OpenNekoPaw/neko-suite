@@ -15,6 +15,7 @@
 - [x] Timeline Alignment Phase 0-5 — [timeline-alignment](./docs/timeline-alignment.md)
 - [x] Media Diff Phase 1-2.6 — [diff.md §已完成](./docs/diff.md)
 - [x] task-plan P0 #1-2, P1 #3-6 — [task-plan](./docs/task-plan.md)
+- [x] **Bug #1 修复：Git fetch 期间播放失败** — `mediaDiff:fetchState` 协议 + 双重保护（Extension await + Webview 禁用 Play）— [diff.md §Bug #1](./docs/diff.md)
 
 </details>
 
@@ -28,11 +29,6 @@
 
 ### neko-cut
 - [ ] 拖拽导入优化：外部文件拖入时间线有竞态问题
-
-### neko-tools（媒体 Diff）
-- [ ] **Bug: Git fetch 期间播放失败**：`ensurePreviousFilePath` 阻塞 3-30s，播放按钮无响应
-  - 方案：DiffState 状态机管理 · 预计 2-3h
-  - 见 [diff.md §Bug #1](./docs/diff.md)
 
 ---
 

@@ -17,6 +17,7 @@ import {
   createTestShapeElement,
   createTestShapeInstance,
   createMeta,
+  createWebviewElement,
 } from './test-helpers';
 
 /**
@@ -249,7 +250,7 @@ describe('roundtrip', () => {
     function createShapeProject() {
       const shape1 = createTestShapeInstance({ id: 's1', zIndex: 0 });
       const shape2 = createTestShapeInstance({ id: 's2', zIndex: 1 });
-      const elem = { ...createTestShapeElement({ id: 'e1' }), shapes: [shape1, shape2] } as any;
+      const elem = createWebviewElement(createTestShapeElement({ id: 'e1' }), { shapes: [shape1, shape2] });
       const track = createTestTrack({ id: 't1', type: 'shape', elements: [elem] });
       return { project: createTestProject({ tracks: [track] }), shape1, shape2 };
     }
@@ -328,12 +329,11 @@ describe('roundtrip', () => {
 
   describe('keyframe operations', () => {
     function createKeyframeProject() {
-      const elem = {
-        ...createTestMediaElement({ id: 'e1' }),
+      const elem = createWebviewElement(createTestMediaElement({ id: 'e1' }), {
         animTransform: {
-          x: { baseValue: 0.5, keyframes: [{ time: 0, value: 0.5, easing: 'linear' }] },
+          x: { baseValue: 0.5, keyframes: [{ time: 0, value: 0.5, easing: 'linear' as const }] },
         },
-      } as any;
+      });
       const track = createTestTrack({ id: 't1', elements: [elem] });
       return createTestProject({ tracks: [track] });
     }
@@ -347,7 +347,7 @@ describe('roundtrip', () => {
           trackId: 't1',
           elementId: 'e1',
           target: { kind: 'transform', property: 'x' },
-          keyframe: { time: 1, value: 0.8, easing: 'ease-in' as any },
+          keyframe: { time: 1, value: 0.8, easing: 'ease-in' as const },
         },
       };
       assertRoundtrip(project, op);

@@ -71,7 +71,7 @@ export function applyShapeOperation(project: ProjectData, op: ShapeOperation): P
       const { trackId, elementId, shapeId, shape: shapeUpdates } = op.payload;
       return updateShapeInProject(project, trackId, elementId, shapeId, shape => ({
         ...shape,
-        shape: { ...shape.shape, ...shapeUpdates } as any,
+        shape: { ...shape.shape, ...shapeUpdates } as typeof shape.shape,
       }));
     }
 

@@ -172,6 +172,8 @@ VideoDiffRegion {
 | `mediaDiff:init` | Git 模式初始化 (fileUri + ref) |
 | `mediaDiff:initLocal` | 本地文件对比 (currentUri + previousUri) |
 | `mediaDiff:getFrame` | 视频帧提取 (time + version) |
+| `mediaDiff:streamControl` | 流控制 (play/pause/seek) |
+| `mediaDiff:audioStreamControl` | 音频流控制 |
 
 响应消息:
 
@@ -181,6 +183,9 @@ VideoDiffRegion {
 | `mediaDiff:progress` | 进度回调 (progress + stage) |
 | `mediaDiff:waveformData` | 音频波形 (800点 × 2) |
 | `mediaDiff:frameData` | 视频帧图像 (JPEG ArrayBuffer) |
+| `mediaDiff:streamConfig` | 视频双流配置 (port + streamId × 2) |
+| `mediaDiff:audioStreamConfig` | 音频双流配置 |
+| `mediaDiff:fetchState` | Git 拉取状态 (`fetching`\|`ready`) — Webview 用于禁用 Play 按钮 |
 
 ---
 
@@ -216,15 +221,20 @@ packages/neko-tools/packages/webview/
 Extension Host                          Webview (React)
 MediaDiffMessageHandler                 useMediaDiffProtocol hook
   │                                       │
+  │── mediaDiff:fetchState('fetching') ─→  setState(isFetchingPrevious=true)
+  │   [git show 3-30s...]
+  │── mediaDiff:fetchState('ready') ───→  setState(isFetchingPrevious=false)
   │── mediaDiff:progress ──────────────→  setState(progress)
   │── mediaDiff:result ────────────────→  setState(diffResult)
   │── mediaDiff:imageData (ArrayBuffer) → URL.createObjectURL → Blob URL
   │── mediaDiff:waveformData ──────────→  setState(waveform[])
   │── mediaDiff:frameData (ArrayBuffer) → URL.createObjectURL → Blob URL
+  │── mediaDiff:streamConfig ──────────→  setState(streamConfig)
   │                                       │
   │←── mediaDiff:init ─────────────────── sendInit()
   │←── mediaDiff:getFrame ─────────────── sendGetFrame(time, version)
   │←── mediaDiff:changeRef ────────────── sendChangeRef(ref)
+  │←── mediaDiff:streamControl ────────── sendStreamControl(action)
 ```
 
 构建链路:
@@ -493,11 +503,20 @@ AI 绘画 (Midjourney/Stable Diffusion) 抽卡面临海量、同质化、随机�
 
 ## 六、待修复问题
 
-### Bug #1: Git 拉取期间播放失败 (P0)
+### Bug #1: Git 拉取期间播放失败 ✅ 已修复 (2026-03-03)
 
-`ensurePreviousFilePath` 阻塞 3-30s，期间 `previousFilePath = null`，用户点击 Play 报错。
+**根因**：`ensurePreviousFilePath` 阻塞 3-30s（`git show` 将旧版本写入临时文件），期间 `previousFilePath = null`，用户点击 Play 触发 `handleStartStreaming` 直接报错。
 
-**推荐方案**：DiffState 状态机（IDLE → FETCHING_PREVIOUS → ANALYZING → READY），Webview 侧禁用 Play 按钮直到 fetch 完成。涉及 `MediaDiffMessageHandler.ts` + `useMediaDiffProtocol.ts`，预计 2-3h。
+**修复方案**（双重保护）：
+
+1. **Extension 侧** — `MediaDiffMessageHandler` 在 `git show` 前后广播 `mediaDiff:fetchState`，并在 `handleStartStreaming` / `handleStartAudioStreaming` 中通过 `await this.fetchPromise` 等待 fetch 完成再继续。
+2. **Webview 侧** — `useMediaDiffProtocol` 跟踪 `isFetchingPrevious` 状态，`VideoDiffViewer` 和 `AudioDiffViewer` 的 Play 按钮在 fetching 期间禁用（`disabled + opacity-40`），主区域显示 spinner + "Fetching previous version…"。
+
+**涉及文件**：
+- `neko-types/src/types/mediaDiffProtocol.ts` — 新增 `FetchStateResponse` 类型
+- `extension/src/media-diff/editor/MediaDiffMessageHandler.ts` — `fetchPromise` 字段 + `sendFetchState()` + 两个 handler 等待逻辑
+- `webview/src/hooks/useMediaDiffProtocol.ts` — `isFetchingPrevious` 状态
+- `webview/src/components/MediaDiff/types.ts` / `MediaDiffApp.tsx` / `MediaDiffViewer.tsx` / `VideoDiffViewer.tsx` / `AudioDiffViewer.tsx` — prop 链路
 
 ### Bug #2: 视频无早期预览 (P1)
 

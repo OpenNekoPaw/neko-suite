@@ -77,6 +77,8 @@ export interface VideoDiffViewerProps extends BaseDiffViewerProps {
   streamConfig?: StreamConfig | null;
   /** Send stream playback control to extension */
   onStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
+  /** True while git show is extracting the previous version — disables Play */
+  isFetchingPrevious?: boolean;
 }
 
 // =============================================================================
@@ -95,6 +97,8 @@ export interface AudioDiffViewerProps extends BaseDiffViewerProps {
   audioStreamConfig?: AudioStreamConfig | null;
   /** Send audio stream control to extension */
   onAudioStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => void;
+  /** True while git show is extracting the previous version — disables Play */
+  isFetchingPrevious?: boolean;
 }
 
 // =============================================================================
@@ -150,6 +154,8 @@ export interface MediaDiffViewerProps {
   streamConfig?: StreamConfig | null;
   /** Audio stream config for audio diff */
   audioStreamConfig?: AudioStreamConfig | null;
+  /** True while git show is extracting the previous version — disables Play */
+  isFetchingPrevious?: boolean;
   /** Callbacks */
   onTimeChange?: (time: number) => void;
   onInspectElement?: (src: string) => void;
