@@ -164,7 +164,7 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 
 | 领域 | ADR 文件 | 要点 |
 |------|----------|------|
-| 媒体流 | `docs/adr-video-diff-streaming.md` | H264+PCM 流式传输，非逐帧提取 |
+| 媒体流 | `docs/diff.md` §4.1 | H264+PCM 流式传输，非逐帧提取 |
 | 横切关注点 | `docs/architecture/adr-cross-cutting-concerns.md` | Logger/i18n/Theme/Error 统一在 @neko/shared，三层隔离 |
 | 跨语言架构 | `docs/architecture/cross-language-architecture.md` | Rust 引擎为数据模型权威来源，TS 仅负责 UI |
 | 共享包设计 | `docs/architecture/shared-packages-design.md` | @neko/shared 通过 exports 子路径分层 |

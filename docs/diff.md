@@ -1,5 +1,19 @@
 # 音视频 Diff 技术文档
 
+> 关联：[engine.md](./engine.md) · [adr-unified-engine.md](./adr-unified-engine.md)
+
+<details>
+<summary>✅ 已完成的优化（Phase 1-2.6）</summary>
+
+**Phase 1（短期修复）** — 波形发送 bug 修复、进度报告、帧提取竞态修复
+**Phase 2（统一通信+并行）** — EngineClient 迁移、音频波形并行调度、SSIM‖PSNR 并行（30-50% 提速）
+**Phase 2.5（前端去阻塞）** — ProgressOverlay 非阻塞化、消息队列 fire-and-forget
+**Phase 2.6（后续修复）** — Git Ref 切换停止旧流、早期波形取消机制
+
+</details>
+
+---
+
 ## 一、架构概览
 
 ```
@@ -477,24 +491,41 @@ AI 绘画 (Midjourney/Stable Diffusion) 抽卡面临海量、同质化、随机�
 
 ---
 
-## 六、开发计划
+## 六、待修复问题
 
-### Phase 1: 基础 Diff 完善 (已完成)
+### Bug #1: Git 拉取期间播放失败 (P0)
 
-- [x] 音频: FFmpeg 解码、SNR 计算、100ms 分段分析、差异区域检测与合并、波形峰值提取
-- [x] 视频: FFmpeg SSIM/PSNR、分辨率自适应、帧级指标、差异区域构建、差异视频生成
-- [x] 图像: SSIM/PSNR、像素差异统计、热力图生成
-- [x] Timeline: JVI 结构对比、轨道/元素级变更检测
-- [x] 通信协议: mediaDiffProtocol 请求/响应消息定义
+`ensurePreviousFilePath` 阻塞 3-30s，期间 `previousFilePath = null`，用户点击 Play 报错。
 
-### Phase 2A: Webview 统一 (已完成)
+**推荐方案**：DiffState 状态机（IDLE → FETCHING_PREVIOUS → ANALYZING → READY），Webview 侧禁用 Play 按钮直到 fetch 完成。涉及 `MediaDiffMessageHandler.ts` + `useMediaDiffProtocol.ts`，预计 2-3h。
 
-- [x] React webview 包骨架 (Vite + Tailwind + postMessage IPC)
-- [x] useMediaDiffProtocol hook (ArrayBuffer→BlobURL, 消息收发)
-- [x] 展示组件: ImageDiffViewer / AudioDiffViewer / VideoDiffViewer / DiffControls
-- [x] MediaDiffApp 顶层组件 (GitRefSelector + ProgressOverlay)
-- [x] MediaDiffEditorProvider 重写 (1939→293 行 HTML shell)
-- [x] 构建链路: turbo + vite + esbuild + copy:webview
+### Bug #2: 视频无早期预览 (P1)
+
+音频有 ~500ms 早期波形，视频黑屏 5-60s。
+
+**推荐方案**：实现 `startEarlyFrameExtraction`（参考 `startEarlyWaveform`），并行提取 t=0 帧，200ms 内送达预览。预计 1-2h。
+
+### Bug #3: Probe 重复执行 (P2)
+
+`videos:diff` 已返回 duration/width/fps，`handleStartStreaming` 重复 probe (~200ms)。
+
+**推荐方案**：Extension 侧缓存 diff 结果 metadata。预计 1h。
+
+### Bug #4: 早期波形覆盖权威波形 (P3)
+
+理论竞态：早期波形可能覆盖权威波形。实际不会发生（diff 总比 waveform 慢 10 倍以上），暂不修复。
+
+---
+
+## 七、开发计划
+
+### Phase 1: 基础 Diff ✅ 已完成
+
+音频/视频/图像/Timeline 分析器 + 通信协议 — 全部完成。
+
+### Phase 2A: Webview 统一 ✅ 已完成
+
+React webview 包 + useMediaDiffProtocol hook + 展示组件 + 构建链路 — 全部完成。
 
 ### Phase 2B: 前端可视化增强 (进行中)
 
@@ -511,8 +542,10 @@ AI 绘画 (Midjourney/Stable Diffusion) 抽卡面临海量、同质化、随机�
 
 ### Phase 3: 后端算法增强
 
+- [ ] P0 — Engine 流式帧指标返回（SSIM 每 N 帧回调，渐进显示）— Rust 工作量大
 - [ ] P1 — 音频静音检测 (Protocol 已定义 `silenceRegions`)
 - [ ] P1 — 视频关键帧智能采样 (长视频性能优化)
+- [ ] P2 — 高精度波形 zoom（按需加载，800 点 → 更多）
 - [ ] P2 — 音频频谱分析 (频域对比)
 - [ ] P2 — 音频响度归一化 (BS.1770 标准)
 - [ ] P2 — 音频多声道对比

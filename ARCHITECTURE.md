@@ -163,9 +163,9 @@ Extension Host (@neko/platform LLM 路由)
 
 | 领域 | 文档 | 核心决策 |
 |------|------|---------|
-| 媒体流传输 | [adr-video-diff-streaming.md](./docs/adr-video-diff-streaming.md) | H.264 + PCM 流式传输，非逐帧提取 |
+| 媒体流传输 | [diff.md §4.1](./docs/diff.md) | H.264 + PCM 流式传输，非逐帧提取 |
 | 引擎通信统一 | [adr-unified-engine.md](./docs/adr-unified-engine.md) | EngineClient HTTP dispatch 统一所有 Engine 调用 |
-| Diff 并行化 | [adr-media-diff-parallelism.md](./docs/adr-media-diff-parallelism.md) | SSIM‖PSNR 并行 + 早期波形 + 消息队列去阻塞 |
+| Diff 并行化 | [diff.md §六](./docs/diff.md) | SSIM‖PSNR 并行 + 早期波形 + 消息队列去阻塞 |
 | 横切关注点 | [architecture/adr-cross-cutting-concerns.md](./docs/architecture/adr-cross-cutting-concerns.md) | Logger/i18n/Theme/Error 统一在 @neko/shared，三层隔离 |
 | 跨语言架构 | [architecture/cross-language-architecture.md](./docs/architecture/cross-language-architecture.md) | Rust 引擎为数据模型权威，TS 仅负责 UI |
 | 共享包设计 | [architecture/shared-packages-design.md](./docs/architecture/shared-packages-design.md) | @neko/shared 通过子路径分层导出 |
