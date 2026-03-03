@@ -1,110 +1,44 @@
 # Neko Audio
 
-> 音频工站：独立波形编辑、频谱分析、麦克风录制与降噪
+> 音频工站：波形编辑、频谱分析、麦克风录制与 AI 降噪（规划中）
 
 ## Context Summary
 
-- **项目**：Neko Suite - VS Code 全能内容创作工作站
-- **角色**：音频工作站，波形编辑与处理
-- **规范**：[README.md](../../README.md)
+- 项目：Neko Suite - VSCode 创意工作套件
+- 架构：Extension Host + Webview（规划中，尚未实现）
+- 规范：[CLAUDE.md](../../CLAUDE.md)
 
----
+## Quick Reference
 
-## 概述
+- **职责**：专业音频编辑——波形可视化、频谱分析、录制、AI 降噪
+- **入口**：`src/extension.ts`（单包结构）
+- **依赖**：`@neko/shared`
+- **激活依赖**：neko-engine、neko-tools
+- **状态**：🚧 规划中
 
-**Neko Audio** 是 Neko Suite 的音频工作站，提供专业级的音频编辑能力。支持波形可视化、频谱分析、麦克风录制、AI 降噪等功能，让音频处理变得简单高效。
-
----
-
-## 核心功能
-
-| 功能 | 说明 |
-|------|------|
-| **波形编辑** | 可视化波形、精确剪辑 |
-| **频谱分析** | 实时频谱显示 |
-| **麦克风录制** | 直接录制画外音 |
-| **AI 降噪** | 智能去除背景噪音 |
-| **音量标准化** | 自动调整音量 |
-| **淡入淡出** | 平滑的音频过渡 |
-| **音频裁剪** | 精确裁剪音频片段 |
-
----
-
-## 支持格式
-
-| 格式 | 说明 |
-|------|------|
-| MP3 | MPEG Audio Layer 3 |
-| WAV | Waveform Audio |
-| OGG | Ogg Vorbis |
-| FLAC | Free Lossless Audio |
-| AAC | Advanced Audio Coding |
-| M4A | MPEG-4 Audio |
-
----
-
-## 配置项
-
-| 配置 | 默认值 | 说明 |
-|------|--------|------|
-| `neko.audio.sampleRate` | `48000` | 录制采样率 |
-| `neko.audio.inputDevice` | `""` | 首选输入设备 |
-
----
-
-## 命令
-
-| 命令 | 说明 |
-|------|------|
-| `Neko Audio: Record Audio` | 录制音频 |
-| `Neko Audio: Denoise Audio` | AI 降噪 |
-| `Neko Audio: Normalize Audio` | 音量标准化 |
-| `Neko Audio: Show Spectrum Analyzer` | 显示频谱分析器 |
-| `Neko Audio: Trim Audio` | 裁剪音频 |
-| `Neko Audio: Apply Fade In` | 应用淡入 |
-| `Neko Audio: Apply Fade Out` | 应用淡出 |
-
----
-
-## 工作流
+## Architecture
 
 ```
 音频文件 / 麦克风录制
-    │
-    ├─→ 波形可视化
-    │
-    ├─→ 频谱分析
-    │
-    ├─→ 编辑处理
-    │   ├── 裁剪
-    │   ├── 淡入淡出
-    │   └── 音量调节
-    │
-    ├─→ AI 降噪
-    │
-    └─→ 导出 / 添加到时间线
+  │
+  ▼
+Extension Host
+  └── neko-engine NAPI → 音频解码/编码（FFmpeg）
+        │
+        ▼
+Webview (规划中)
+  ├── 波形可视化（Canvas 2D）
+  ├── 频谱分析（Web Audio API AnalyserNode）
+  ├── 编辑操作（裁剪、淡入淡出、音量）
+  └── AI 降噪（调用降噪模型）
 ```
 
----
+### 支持格式
 
-## 依赖关系
+MP3、WAV、OGG、FLAC、AAC、M4A
 
-```
-neko-audio (独立)
-    └── @neko/shared (类型)
-```
+### 技术栈
 
----
-
-## 技术栈
-
-- **音频处理**：Web Audio API
-- **可视化**：Canvas 2D
-- **录制**：MediaRecorder API
-- **类型**：@neko/shared
-
----
-
-## License
-
-MIT
+- 音频处理：Web Audio API + neko-engine（FFmpeg）
+- 可视化：Canvas 2D
+- 录制：MediaRecorder API

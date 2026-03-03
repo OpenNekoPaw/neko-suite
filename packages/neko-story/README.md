@@ -1,115 +1,68 @@
 # Neko Story
 
-> 文学入口：利用 VS Code 原生编辑器，实现「文驱动制片」
+> 文学入口：利用 VSCode 原生编辑器实现「文驱动制片」
 
 ## Context Summary
 
-- **项目**：Neko Suite - VS Code 全能内容创作工作站
-- **角色**：剧本编辑器，LSP 语言服务支持
-- **规范**：[README.md](../../README.md)
+- 项目：Neko Suite - VSCode 创意工作套件
+- 架构：Extension Host (LSP) + Parser 子包 + Webview (预览 UI) 双进程
+- 规范：[CLAUDE.md](../../CLAUDE.md)
 
----
+## Quick Reference
 
-## 概述
+- **职责**：剧本语法高亮、智能补全、实时预览、一键转换为 neko-cut 时间线
+- **入口**：`packages/extension/src/extension.ts`
+- **支持格式**：`.nks`（Neko Story）、`.story`（通用）、`.fountain`（Fountain 标准）
+- **子包**：`extension/`、`parser/`（`@neko-story/parser`）、`types/`、`webview/`
+- **依赖**：`@neko-story/types`、`@neko-story/parser`、`@neko/shared`
 
-**Neko Story** 是 Neko Suite 的文学创作入口，利用 VS Code 原生编辑器的强大能力，为剧本创作提供语法高亮、智能补全、实时预览等功能。通过「文驱动制片」的理念，让创作者专注于故事本身。
+## Architecture
 
----
+```
+VSCode 原生编辑器（.nks / .fountain 文件）
+  │
+  ├── TextMate Grammar     → 语法高亮
+  ├── LSP / Language Server → 智能补全（角色/场景/动作）
+  └── Extension Host
+        ├── @neko-story/parser → 剧本解析 → AST
+        └── 命令
+              ├── Preview Story   → 开启 Webview 预览面板
+              ├── Convert to Timeline → 生成 .jvi 项目文件 → neko-cut
+              └── Generate Storyboard → 调用 neko-agent AI 生成分镜
+```
 
-## 核心功能
+### 包结构
 
-| 功能 | 说明 |
-|------|------|
-| **语法高亮** | 剧本专用语法着色 |
-| **智能补全** | 角色、场景、动作自动补全 |
-| **实时预览** | 剧本预览面板 |
-| **时间线转换** | 一键转换为时间线项目 |
-| **分镜生成** | AI 辅助生成分镜脚本 |
+```
+packages/
+├── types/      # @neko-story/types  剧本 AST 类型定义
+├── parser/     # @neko-story/parser 剧本解析器（支持 .nks / .fountain）
+├── extension/  # VSCode 扩展：语言服务、命令、Webview 触发
+└── webview/    # React 预览 UI
+```
 
----
+## Deep Dive
 
-## 文件格式
+### 工作流
 
-| 扩展名 | 说明 |
-|--------|------|
-| `.nks` | Neko Story 剧本文件 |
-| `.story` | 通用剧本文件 |
+```
+编写剧本 (.nks / .fountain)
+  │
+  ├── 实时预览（Webview 预览面板）
+  ├── AI 解析（neko-agent）→ 生成 Neko-Script
+  └── 转换为时间线（neko-cut）→ 自动摆放素材
+```
 
----
+### 剧本语法示例
 
-## 剧本语法示例
-
-```nekostory
+```
 # 场景一：咖啡馆
 
 [内景 - 日]
 
-**角色A** 走进咖啡馆，环顾四周。
+**角色A** 走进咖啡馆。
 
-角色A：（自言自语）今天人真少啊。
+角色A：今天人真少啊。
 
-> 镜头：特写角色A的表情
-
-**角色B** 从角落站起来，挥手示意。
-
-角色B：这边！
-
----
-
-# 场景二：街道
-
-[外景 - 夜]
-
-两人并肩走在街道上。
+> 镜头：特写
 ```
-
----
-
-## 命令
-
-| 命令 | 说明 |
-|------|------|
-| `Neko Story: Preview Story` | 预览剧本 |
-| `Neko Story: Convert to Timeline` | 转换为时间线 |
-| `Neko Story: Generate Storyboard` | 生成分镜脚本 |
-
----
-
-## 工作流
-
-```
-编写剧本 (.nks)
-    │
-    ├─→ 预览剧本 (Preview)
-    │
-    ├─→ AI 解析 (neko-agent)
-    │       │
-    │       └─→ 生成 Neko-Script 指令
-    │
-    └─→ 转换为时间线 (neko-cut)
-            │
-            └─→ 自动摆放素材
-```
-
----
-
-## 依赖关系
-
-```
-neko-story (独立)
-    └── @neko/shared (类型)
-```
-
----
-
-## 技术栈
-
-- **语言服务**：LSP (Language Server Protocol)
-- **语法定义**：TextMate Grammar
-- **类型**：@neko/shared
-
----
-
-## License
-
-MIT

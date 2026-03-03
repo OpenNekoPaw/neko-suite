@@ -292,7 +292,7 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 				// Task B: Early waveform extraction (audio only, ~500ms)
 				if (mediaType === 'audio' && this.engineClient && previousPath) {
-					this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, previousPath);
+					this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, previousPath, abortController.signal);
 				}
 
 				// Task C: Full diff analysis (SSIM/PSNR, 5-30s)
@@ -358,7 +358,7 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 
 				// Task B: Early waveform (audio only)
 				if (mediaType === 'audio' && this.engineClient) {
-					this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, previousUri.fsPath);
+					this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, previousUri.fsPath, abortController.signal);
 				}
 
 				// Task C: Full diff analysis
@@ -454,6 +454,9 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 					break;
 
 				case 'mediaDiff:changeRef':
+					// Stop any active streams before switching refs to prevent resource leaks
+					await this.handleStopStreaming();
+					await this.handleStopAudioStreaming();
 					await this.initializeDiff(message.payload.ref);
 					break;
 
@@ -524,17 +527,19 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	 * waveform from `sendWaveformFromResult()` when the full diff finishes.
 	 *
 	 * Fire-and-forget: errors are logged but never propagate.
+	 * Supports cancellation via AbortSignal.
 	 */
 	private startEarlyWaveform(
 		engine: EngineClient,
 		currentPath: string,
 		previousPath: string,
+		signal: AbortSignal,
 	): Promise<void> {
 		return Promise.all([
 			engine.waveform(currentPath),
 			engine.waveform(previousPath),
 		]).then(([wfA, wfB]) => {
-			if (this.isDisposed) return;
+			if (this.isDisposed || signal.aborted) return;
 			this.sendMessage({
 				type: 'mediaDiff:waveformData',
 				payload: {
@@ -543,6 +548,7 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				},
 			});
 		}).catch((err) => {
+			if (signal.aborted) return; // Silently ignore cancelled requests
 			console.warn('[MediaDiffMessageHandler] Early waveform extraction failed (non-fatal):', err);
 		});
 	}
@@ -559,15 +565,19 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				break;
 
 			case 'audio':
-				this.sendMessage({
-					type: 'mediaDiff:waveformData',
-					payload: {
-						currentWaveform:
-							result.visualization?.currentWaveform ?? [],
-						previousWaveform:
-							result.visualization?.previousWaveform ?? [],
-					},
-				});
+				// Skip sending empty waveform for preliminary results.
+				// Task B (startEarlyWaveform) will send real waveform data in ~500ms.
+				if (result.visualization) {
+					this.sendMessage({
+						type: 'mediaDiff:waveformData',
+						payload: {
+							currentWaveform:
+								result.visualization?.currentWaveform ?? [],
+							previousWaveform:
+								result.visualization?.previousWaveform ?? [],
+						},
+					});
+				}
 				break;
 
 			case 'video':
@@ -629,15 +639,19 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				break;
 
 			case 'audio':
-				this.sendMessage({
-					type: 'mediaDiff:waveformData',
-					payload: {
-						currentWaveform:
-							result.visualization?.currentWaveform ?? [],
-						previousWaveform:
-							result.visualization?.previousWaveform ?? [],
-					},
-				});
+				// Skip sending empty waveform for preliminary results.
+				// Task B (startEarlyWaveform) will send real waveform data in ~500ms.
+				if (result.visualization) {
+					this.sendMessage({
+						type: 'mediaDiff:waveformData',
+						payload: {
+							currentWaveform:
+								result.visualization?.currentWaveform ?? [],
+							previousWaveform:
+								result.visualization?.previousWaveform ?? [],
+						},
+					});
+				}
 				break;
 
 			case 'video':
