@@ -8,16 +8,16 @@
 
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
-| **neko-types** | Alpha | 80% | 102 个 TS 文件，覆盖全域类型 + 操作系统 |
-| **neko-engine** | Alpha | 70% | 164 个 Rust 文件，GPU 渲染 + 编解码 + 导出已可运行 |
-| **neko-cut** | Alpha | 65% | 200 个 TS/TSX 文件，时间线 + 预览 + 导出 + 色彩校正 |
-| **neko-agent** | Alpha | 70% | 418 个 TS/TSX 文件，Agent 引擎 + LLM 平台 + CLI + UI |
-| **neko-client** | Alpha | 75% | H264/fMP4/PCM 流客户端，帧调度 + 性能监控 |
+| **neko-types** | Alpha | 85% | 共享类型 + 横切关注点统一（Logger/i18n/Theme/Error 三层隔离） |
+| **neko-engine** | Alpha | 70% | GPU 渲染 + 编解码 + 导出 + 统一 HTTP/WS 通信（EngineClient） |
+| **neko-cut** | Alpha | 70% | 时间线 + 预览 + 导出 + EditOperation 29 操作 + Proto 对齐 |
+| **neko-agent** | Alpha | 70% | Agent 引擎 + LLM 平台 + CLI + UI |
+| **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
 | **neko-preview** | WIP | 60% | 视频/音频预览 Provider + 播放器 UI |
 | **neko-story** | WIP | 55% | Fountain 解析器 + LSP（补全/定义/悬停/符号）+ 预览 |
 | **neko-assets** | Alpha | 55% | Phase 1-3 ✅（统一注册表 + 缩略图 + Diff 接入），Phase 4-5 待开发 |
-| **neko-tools** | WIP | 50% | 媒体 Diff + EngineMediaService 接入 + 资产变体对比 |
-| **neko-canvas** | WIP | 40% | 节点系统 + 连线 + 视口裁剪 + 画布操作，仍在规划 |
+| **neko-tools** | WIP | 55% | 媒体 Diff + EngineClient + 并行优化 + 资产变体对比 |
+| **neko-canvas** | WIP | 40% | 节点系统 + 连线 + 视口裁剪 + 画布操作 |
 | **neko-proto** | Early | 30% | timeline.proto 定义，生成类型在 neko-types |
 | **neko-model** | Planned | 0% | 3D 编辑器，架构设计已完成（见 docs/architecture/3d-capability-analysis.md） |
 | **neko-sketch** | Planned | 5% | 仅扩展入口骨架 |
@@ -36,7 +36,7 @@
 
 ## Phase 1: 核心剪辑能力 (Current)
 
-> 目标：实现基础视频剪辑闭环 — **进度 ~70%**
+> 目标：实现基础视频剪辑闭环 — **进度 ~75%**
 
 ### neko-engine (媒体引擎 Sidecar)
 
@@ -47,7 +47,6 @@
   - [x] blend modes（12 个 WGSL shader）
   - [x] color correction + transitions
   - [x] custom shader processor
-  - [ ] WebGPU 实时预览优化
 - [x] 编解码服务4
   - [x] 视频解码（含硬件加速、IDR scanner、decoder pool）
   - [x] 视频编码（含硬件加速、muxer、iframe）
@@ -64,6 +63,7 @@
 - [x] HTTP API 路由层（video/audio/timeline/effects/stream/task controllers）
 - [x] .jvi 项目格式 loader/converter
 - [x] 遥测（metrics / spans）
+- [x] 统一 HTTP/WS 通信（EngineClient 单端口架构，3 个消费者包迁移完成）
 - [ ] 预加载优化
 - [ ] 音量标准化
 
@@ -76,6 +76,8 @@
   - [x] 元素拖拽、缩放、分割
   - [x] 轨道锁定/静音/隐藏
   - [x] 撤销/重做历史（13 个 store slices）
+  - [x] EditOperation 系统（29 操作类型 + 6 slice 迁移 + 增量同步）
+  - [x] Timeline Proto 对齐（Proto → Rust → TS 三层字段同步）
   - [x] Minimap 导航
   - [x] 键盘快捷键 + 右键菜单
 - [x] 预览系统
@@ -115,11 +117,13 @@
 - [x] FrameScheduler
 - [x] PlaybackPerformanceMonitor
 - [x] 能力检测（detectCapabilities）
+- [x] EngineClient（HTTP dispatch + 便捷方法，零 vscode 依赖）
 
 ### neko-types (共享类型层)
 
 - [x] 全域类型定义（timeline/track/element/keyframe/effects/animation/agent/skill/task/mcp/canvas）
 - [x] 操作系统（apply/invert/helpers，支持撤销重做）
+- [x] 横切关注点统一（Logger/i18n/Theme/Error 三层隔离，Phase 1-5 全部完成）
 - [x] 配置读取/适配/规范化
 - [x] VSCode API 代理类型
 - [x] 并发池工具
@@ -364,8 +368,10 @@
   - [x] 视频 Diff
   - [x] 音频 Diff
   - [x] GitMediaService
+- [x] Diff 并行优化（SSIM‖PSNR 并行 + 早期波形 + 前端去阻塞）
 - [x] 资产变体对比（asset-diff，委托 neko-assets）
-- [x] EngineMediaService 接入 neko-engine
+- [x] EngineClient 迁移（统一 HTTP 通信）
+- [ ] Diff 前端可视化增强（Phase 2B）— [详见 diff.md](./docs/diff.md)
 - [ ] 批量处理
 
 ---
@@ -373,10 +379,11 @@
 ## 里程碑计划
 
 ### M1: 基础剪辑闭环 (Current)
-- neko-engine GPU 渲染 + 编解码稳定
-- neko-cut 时间线 + 预览 + 导出完整
-- neko-client 流媒体播放稳定
-- neko-types 全域类型覆盖
+- neko-engine GPU 渲染 + 编解码稳定 + 统一 HTTP/WS 通信 ✅
+- neko-cut 时间线 + 预览 + 导出 + EditOperation + Proto 对齐 ✅
+- neko-client 流媒体播放 + EngineClient ✅
+- neko-types 全域类型 + 横切关注点统一 ✅
+- 剩余：预加载优化、拖拽导入、多分辨率预览
 
 ### M2: AI 集成
 - neko-agent 时间线操作 Skills 完成
@@ -410,9 +417,9 @@
 - [ ] 单元测试覆盖率提升（neko-agent 47 个测试最好，其他包偏少）
 
 ### 中优先级
-- [ ] 文档完善（docs/ 已有 engine/shaders/timeline-alignment/editoperation/architecture）
 - [ ] 规范化 git commit message
-- [ ] 类型定义文档
+- [ ] 类型定义文档（JSDoc 覆盖率低）
+- [ ] neko-types 83 个 `as any` 需替换为判别联合
 
 ### 低优先级
 - [ ] 国际化扩展（neko-cut/neko-agent 已有中英双语）
@@ -437,4 +444,4 @@
 
 ---
 
-*最后更新: 2026-02-26*
+*最后更新: 2026-03-03*
