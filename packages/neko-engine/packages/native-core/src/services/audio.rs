@@ -1,6 +1,6 @@
 //! Audio service trait
 
-use crate::domain::AudioTranscodeOptions;
+use crate::domain::{AudioTranscodeOptions, LoudnessAnalysis};
 use crate::error::Result;
 use crate::services::IStreamPlayback;
 use neko_types::{MediaInfo, StreamId, WaveformData};
@@ -39,4 +39,14 @@ pub trait IAudioService: IStreamPlayback {
         &self,
         source: &Path,
     ) -> Result<WaveformData>;
+
+    /// Analyze audio loudness per ITU-R BS.1770-4 (EBU R128).
+    ///
+    /// Returns integrated LUFS, true peak, loudness range,
+    /// and recommended gain to reach `target_lufs`.
+    async fn analyze_loudness(
+        &self,
+        path: &Path,
+        target_lufs: f64,
+    ) -> Result<LoudnessAnalysis>;
 }

@@ -60,6 +60,9 @@ tokio-util = { version = "0.7", features = ["rt"] }
 # Image encoding - pure Rust JPEG encoder
 image.workspace = true
 
+# Loudness measurement - ITU-R BS.1770-4
+ebur128.workspace = true
+
 # Base64 encoding
 base64.workspace = true
 

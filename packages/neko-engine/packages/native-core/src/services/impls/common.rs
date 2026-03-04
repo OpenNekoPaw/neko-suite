@@ -1,8 +1,10 @@
 //! Shared utilities for service implementations
 
 use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
-use crate::error::Result;
+use crate::domain::LoudnessAnalysis;
+use crate::error::{Error, Result};
 use crate::media_service::MediaInfo as InternalMediaInfo;
+use ebur128::{EbuR128, Mode};
 use neko_types::{MediaInfo, WaveformData};
 
 /// Convert internal probe MediaInfo to neko_types::MediaInfo
@@ -120,6 +122,93 @@ pub fn generate_waveform_blocking(path: &str) -> Result<WaveformData> {
     Ok(waveform)
 }
 
+/// Analyze audio loudness per ITU-R BS.1770-4 (EBU R128).
+///
+/// This is a blocking function — call from `spawn_blocking`.
+///
+/// # Arguments
+/// * `path` - Path to the media file (audio or video — FFmpeg extracts the audio stream)
+/// * `target_lufs` - Target integrated loudness in LUFS (e.g. -14.0 for streaming)
+///
+/// # Returns
+/// * `LoudnessAnalysis` with integrated LUFS, true peak, LRA, and recommended gain
+pub fn analyze_loudness_blocking(path: &str, target_lufs: f64) -> Result<LoudnessAnalysis> {
+    // Decode to F32 interleaved, preserve original channel count
+    // (ebur128 handles channel weighting internally per BS.1770-4)
+    let mut decoder = FfmpegAudioDecoder::new()
+        .with_output_format(SampleFormat::F32);
+    let audio_info = decoder.open(path)?;
+
+    let channels = audio_info.channels as u32;
+    let sample_rate = audio_info.sample_rate;
+
+    // Initialize EBU R128 meter with integrated loudness, true peak, and LRA
+    let mut meter = EbuR128::new(
+        channels,
+        sample_rate,
+        Mode::I | Mode::TRUE_PEAK | Mode::LRA,
+    )
+    .map_err(|e| Error::Other(format!("Failed to initialize EBU R128 meter: {}", e)))?;
+
+    // Feed all decoded frames to the meter
+    while let Some(frame) = decoder.decode_next()? {
+        let samples: &[f32] = bytemuck::cast_slice(&frame.data);
+        meter
+            .add_frames_f32(samples)
+            .map_err(|e| Error::Other(format!("EBU R128 add_frames error: {}", e)))?;
+    }
+
+    // Extract integrated loudness
+    let integrated_lufs = meter
+        .loudness_global()
+        .map_err(|e| Error::Other(format!("Failed to get integrated loudness: {}", e)))?;
+
+    // Handle silence: ebur128 returns -f64::INFINITY for pure silence
+    if integrated_lufs.is_infinite() || integrated_lufs.is_nan() {
+        return Ok(LoudnessAnalysis {
+            integrated_lufs: -70.0,
+            true_peak_dbfs: -100.0,
+            loudness_range: 0.0,
+            recommended_gain: 0.0,
+            target_lufs,
+        });
+    }
+
+    // True peak: max across all channels (linear → dBFS)
+    let mut true_peak_linear = 0.0_f64;
+    for ch in 0..channels {
+        let peak = meter
+            .true_peak(ch)
+            .map_err(|e| {
+                Error::Other(format!("Failed to get true peak for channel {}: {}", ch, e))
+            })?;
+        if peak > true_peak_linear {
+            true_peak_linear = peak;
+        }
+    }
+    let true_peak_dbfs = if true_peak_linear > 0.0 {
+        20.0 * true_peak_linear.log10()
+    } else {
+        -100.0
+    };
+
+    // Loudness range
+    let loudness_range = meter
+        .loudness_range()
+        .map_err(|e| Error::Other(format!("Failed to get loudness range: {}", e)))?;
+
+    // Calculate recommended gain, clamped to practical range
+    let recommended_gain = (target_lufs - integrated_lufs).clamp(-60.0, 60.0);
+
+    Ok(LoudnessAnalysis {
+        integrated_lufs,
+        true_peak_dbfs,
+        loudness_range,
+        recommended_gain,
+        target_lufs,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,6 +216,12 @@ mod tests {
     #[test]
     fn test_generate_waveform_nonexistent_file() {
         let result = generate_waveform_blocking("/nonexistent/file.mp4");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_analyze_loudness_nonexistent_file() {
+        let result = analyze_loudness_blocking("/nonexistent/file.mp3", -14.0);
         assert!(result.is_err());
     }
 }

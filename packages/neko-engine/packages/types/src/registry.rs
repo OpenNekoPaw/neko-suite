@@ -39,7 +39,7 @@ pub mod actions {
 
     pub const AUDIOS: &[&str] = &[
         "probe", "transcode", "stream", "waveform", "diff", "stop", "pause",
-        "resume", "speed", "seek", "loop",
+        "resume", "speed", "seek", "loop", "analyze_loudness",
     ];
 
     pub const IMAGES: &[&str] = &["probe", "capture", "encode", "diff"];

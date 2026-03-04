@@ -17,6 +17,10 @@
 - [x] task-plan P0 #1-2, P1 #3-6 — [task-plan](./docs/task-plan.md)
 - [x] **Bug #1 修复：Git fetch 期间播放失败** — `mediaDiff:fetchState` 协议 + 双重保护（Extension await + Webview 禁用 Play）— [diff.md §Bug #1](./docs/diff.md)
 - [x] **拖拽导入竞态修复**：三处竟态全部消除 — drop 串行化队列（`dropQueueRef`）+ `getCurrentTracks()` 实时状态 + `addMediaElementWithAudio` await 音频/字幕检测
+- [x] **FIFO 导出队列**：Rust `VecDeque` + TS `enqueueExport` 多任务轮询 + `timelines:export_enqueue` / `export_queue` API + ExportPanel UI
+- [x] **Operations 类型安全**：新增 `WebviewElement` 类型，消除测试中 `as any`，apply-keyframe 重构
+- [x] **Diff 协议增强**：`mediaDiff:fetchState` 协议 + MessageHandler 重构 + 音频/视频 Diff 查看器改进
+- [x] **文档大整理**：新增 5 个 ARCHITECTURE.md + 全部包 README 精简 + 废弃文档清理
 
 </details>
 
@@ -76,7 +80,6 @@
 ### neko-cut
 - [ ] 多分辨率预览切换（1/4、1/2、Full）— [task-plan #10](./docs/task-plan.md)
 - [ ] 导出预设管理（常用配置保存/加载）
-- [ ] 后台导出队列（多任务并发导出）
 - [ ] 更多编码格式支持（ProRes、DNxHD）
 - [ ] 反向播放支持（需 neko-engine 配合）— [task-plan #9](./docs/task-plan.md)
 
@@ -170,4 +173,4 @@
 
 ---
 
-*最后更新：2026-03-03*
+*最后更新：2026-03-04*

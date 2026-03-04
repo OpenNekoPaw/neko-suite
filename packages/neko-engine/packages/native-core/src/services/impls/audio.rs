@@ -6,11 +6,11 @@ use crate::audio::{
     AudioCodec as InternalAudioCodec, AudioDecoder, AudioEncoder, AudioEncoderConfig,
     FfmpegAudioDecoder, FfmpegAudioEncoder, SampleFormat,
 };
-use crate::domain::{AudioTranscodeOptions, FrameData};
+use crate::domain::{AudioTranscodeOptions, FrameData, LoudnessAnalysis};
 use crate::error::{Error, Result};
 use crate::gpu::GpuContext;
 use crate::media_service::probe_media_info;
-use crate::services::impls::common::{convert_media_info, generate_waveform_blocking};
+use crate::services::impls::common::{analyze_loudness_blocking, convert_media_info, generate_waveform_blocking};
 use crate::services::impls::stream_loop::{
     pack_pcm_f32le_stream_frame, ActiveStreams, create_stream_channels, StreamPlaybackDelegate,
     WallClockPacer, EOF_IDLE_TIMEOUT, eof_idle_wait,
@@ -354,6 +354,18 @@ impl IAudioService for AudioService {
             .await
             .map_err(|e| Error::Other(format!("Waveform generation task failed: {}", e)))?
     }
+
+    async fn analyze_loudness(
+        &self,
+        path: &Path,
+        target_lufs: f64,
+    ) -> Result<LoudnessAnalysis> {
+        let path = path.to_string_lossy().to_string();
+
+        tokio::task::spawn_blocking(move || analyze_loudness_blocking(&path, target_lufs))
+            .await
+            .map_err(|e| Error::Other(format!("Loudness analysis task failed: {}", e)))?
+    }
 }
 
 #[cfg(test)]
@@ -415,6 +427,15 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Stream not found"));
+    }
+
+    #[tokio::test]
+    async fn test_audio_service_analyze_loudness_nonexistent() {
+        let service = create_test_service();
+        let result = service
+            .analyze_loudness(Path::new("/nonexistent/file.mp3"), -14.0)
+            .await;
+        assert!(result.is_err());
     }
 
     #[test]

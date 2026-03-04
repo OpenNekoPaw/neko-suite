@@ -87,6 +87,16 @@ struct AudioDiffRequestOptions {
     source_b: Option<String>,
 }
 
+/// Options for audios:analyze_loudness
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct AnalyzeLoudnessOptions {
+    /// Source file path (audio or video)
+    source: Option<String>,
+    /// Target LUFS for recommended gain calculation (default: -14.0)
+    target_lufs: Option<f64>,
+}
+
 impl Controller for AudioController {
     async fn handle(
         &self,
@@ -251,6 +261,31 @@ impl Controller for AudioController {
                 let response = serde_json::to_value(&result)?;
                 Ok(ActionResponse::ok("", response))
             }
+            "analyze_loudness" => {
+                let opts: AnalyzeLoudnessOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let (res_id, file_path) = resolve_resource(
+                    &self.resource_registry, resource_id, opts.source.as_deref(),
+                )
+                    .await?;
+
+                let target_lufs = opts.target_lufs.unwrap_or(-14.0);
+
+                let analysis = self.audio_service
+                    .analyze_loudness(&file_path, target_lufs)
+                    .await?;
+
+                let mut response = serde_json::to_value(&analysis)?;
+                if let Value::Object(ref mut map) = response {
+                    map.insert(
+                        "resourceId".to_string(),
+                        Value::String(res_id.as_str().to_string()),
+                    );
+                }
+
+                Ok(ActionResponse::ok("", response))
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "audios".to_string(),
                 action: action.to_string(),
@@ -337,6 +372,17 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[tokio::test]
+    async fn test_audio_controller_analyze_loudness_missing_source() {
+        let controller = create_test_controller();
+
+        let result = controller
+            .handle("analyze_loudness", None, Value::Null, None)
+            .await;
+
+        assert!(result.is_err());
+    }
+
     #[test]
     fn test_audio_controller_actions() {
         let controller = create_test_controller();
@@ -353,6 +399,7 @@ mod tests {
         assert!(actions.contains(&"speed"));
         assert!(actions.contains(&"seek"));
         assert!(actions.contains(&"loop"));
-        assert_eq!(actions.len(), 11);
+        assert!(actions.contains(&"analyze_loudness"));
+        assert_eq!(actions.len(), 12);
     }
 }

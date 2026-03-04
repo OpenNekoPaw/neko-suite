@@ -73,6 +73,9 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 # Text rendering - font shaping, layout, rasterization
 cosmic-text = "0.12"
 
+# Loudness measurement - ITU-R BS.1770-4
+ebur128 = "0.1"
+
 [profile.release]
 lto = true
 opt-level = 3
