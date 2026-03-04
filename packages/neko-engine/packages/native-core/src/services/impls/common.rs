@@ -135,20 +135,15 @@ pub fn generate_waveform_blocking(path: &str) -> Result<WaveformData> {
 pub fn analyze_loudness_blocking(path: &str, target_lufs: f64) -> Result<LoudnessAnalysis> {
     // Decode to F32 interleaved, preserve original channel count
     // (ebur128 handles channel weighting internally per BS.1770-4)
-    let mut decoder = FfmpegAudioDecoder::new()
-        .with_output_format(SampleFormat::F32);
+    let mut decoder = FfmpegAudioDecoder::new().with_output_format(SampleFormat::F32);
     let audio_info = decoder.open(path)?;
 
     let channels = audio_info.channels as u32;
     let sample_rate = audio_info.sample_rate;
 
     // Initialize EBU R128 meter with integrated loudness, true peak, and LRA
-    let mut meter = EbuR128::new(
-        channels,
-        sample_rate,
-        Mode::I | Mode::TRUE_PEAK | Mode::LRA,
-    )
-    .map_err(|e| Error::Other(format!("Failed to initialize EBU R128 meter: {}", e)))?;
+    let mut meter = EbuR128::new(channels, sample_rate, Mode::I | Mode::TRUE_PEAK | Mode::LRA)
+        .map_err(|e| Error::Other(format!("Failed to initialize EBU R128 meter: {}", e)))?;
 
     // Feed all decoded frames to the meter
     while let Some(frame) = decoder.decode_next()? {
@@ -177,11 +172,9 @@ pub fn analyze_loudness_blocking(path: &str, target_lufs: f64) -> Result<Loudnes
     // True peak: max across all channels (linear → dBFS)
     let mut true_peak_linear = 0.0_f64;
     for ch in 0..channels {
-        let peak = meter
-            .true_peak(ch)
-            .map_err(|e| {
-                Error::Other(format!("Failed to get true peak for channel {}: {}", ch, e))
-            })?;
+        let peak = meter.true_peak(ch).map_err(|e| {
+            Error::Other(format!("Failed to get true peak for channel {}: {}", ch, e))
+        })?;
         if peak > true_peak_linear {
             true_peak_linear = peak;
         }

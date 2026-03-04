@@ -5,8 +5,8 @@
 use std::path::PathBuf;
 
 use crate::domain::{
-    AudioElementData, AudioProperties, Element, ElementType, MediaElementData,
-    ShapeElementData, SubtitleElementData, TextElementData, Timeline, Track, Transform,
+    AudioElementData, AudioProperties, Element, ElementType, MediaElementData, ShapeElementData,
+    SubtitleElementData, TextElementData, Timeline, Track, Transform,
 };
 use crate::error::Result;
 use crate::export::{
@@ -205,7 +205,12 @@ impl ProjectConverter {
                 let src = self.resolve_path(&audio.src);
 
                 let (volume, pan, fade_in, fade_out) = if let Some(ref props) = audio.audio {
-                    (props.volume as f32, props.pan as f32, props.fade_in, props.fade_out)
+                    (
+                        props.volume as f32,
+                        props.pan as f32,
+                        props.fade_in,
+                        props.fade_out,
+                    )
                 } else {
                     (1.0, 0.0, 0.0, 0.0)
                 };
@@ -286,48 +291,44 @@ impl ProjectConverter {
                     transition_out: None,
                 })
             }
-            JviElement::Shape(shape) => {
-                Ok(Element {
-                    id: shape.id,
-                    name: shape.name,
-                    element_type: ElementType::Shape(ShapeElementData::default()),
-                    start_time: shape.start_time,
-                    duration: shape.duration,
-                    trim_start: shape.trim_start,
-                    trim_end: shape.trim_end,
-                    transform: Transform::default(),
-                    opacity: 1.0,
-                    blend_mode: BlendMode::Normal,
-                    effects: Vec::new(),
-                    muted: false,
-                    hidden: false,
-                    locked: false,
-                    speed: None,
-                    transition_in: None,
-                    transition_out: None,
-                })
-            }
-            JviElement::Subtitle(sub) => {
-                Ok(Element {
-                    id: sub.id,
-                    name: sub.name,
-                    element_type: ElementType::Subtitle(SubtitleElementData::default()),
-                    start_time: sub.start_time,
-                    duration: sub.duration,
-                    trim_start: sub.trim_start,
-                    trim_end: sub.trim_end,
-                    transform: Transform::default(),
-                    opacity: 1.0,
-                    blend_mode: BlendMode::Normal,
-                    effects: Vec::new(),
-                    muted: false,
-                    hidden: false,
-                    locked: false,
-                    speed: None,
-                    transition_in: None,
-                    transition_out: None,
-                })
-            }
+            JviElement::Shape(shape) => Ok(Element {
+                id: shape.id,
+                name: shape.name,
+                element_type: ElementType::Shape(ShapeElementData::default()),
+                start_time: shape.start_time,
+                duration: shape.duration,
+                trim_start: shape.trim_start,
+                trim_end: shape.trim_end,
+                transform: Transform::default(),
+                opacity: 1.0,
+                blend_mode: BlendMode::Normal,
+                effects: Vec::new(),
+                muted: false,
+                hidden: false,
+                locked: false,
+                speed: None,
+                transition_in: None,
+                transition_out: None,
+            }),
+            JviElement::Subtitle(sub) => Ok(Element {
+                id: sub.id,
+                name: sub.name,
+                element_type: ElementType::Subtitle(SubtitleElementData::default()),
+                start_time: sub.start_time,
+                duration: sub.duration,
+                trim_start: sub.trim_start,
+                trim_end: sub.trim_end,
+                transform: Transform::default(),
+                opacity: 1.0,
+                blend_mode: BlendMode::Normal,
+                effects: Vec::new(),
+                muted: false,
+                hidden: false,
+                locked: false,
+                speed: None,
+                transition_in: None,
+                transition_out: None,
+            }),
         }
     }
 

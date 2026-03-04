@@ -118,7 +118,10 @@ impl SessionManager {
         // Cascade: destroy all streams belonging to this session
         self.stream_registry.destroy_session(session_id).await;
 
-        tracing::debug!("Destroyed session {} (streams cascade-destroyed)", session_id);
+        tracing::debug!(
+            "Destroyed session {} (streams cascade-destroyed)",
+            session_id
+        );
     }
 
     /// Add a resource to a session's scope

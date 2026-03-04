@@ -61,7 +61,11 @@ pub fn parse_ssim_log(content: &str) -> Result<Vec<SsimEntry>> {
             Ok(entry) => entries.push(entry),
             Err(e) => {
                 // Tolerate malformed/truncated lines (e.g. from large FFmpeg output)
-                tracing::warn!("Skipping malformed SSIM line: {} ({})", e, &line[..line.len().min(80)]);
+                tracing::warn!(
+                    "Skipping malformed SSIM line: {} ({})",
+                    e,
+                    &line[..line.len().min(80)]
+                );
             }
         }
     }
@@ -82,27 +86,25 @@ fn parse_ssim_line(line: &str) -> std::result::Result<SsimEntry, String> {
             match key {
                 "n" => {
                     frame = Some(
-                        value.parse::<u64>().map_err(|e| format!("bad frame: {}", e))?,
+                        value
+                            .parse::<u64>()
+                            .map_err(|e| format!("bad frame: {}", e))?,
                     );
                 }
                 "Y" => {
-                    y = Some(
-                        value.parse::<f64>().map_err(|e| format!("bad Y: {}", e))?,
-                    );
+                    y = Some(value.parse::<f64>().map_err(|e| format!("bad Y: {}", e))?);
                 }
                 "U" => {
-                    u = Some(
-                        value.parse::<f64>().map_err(|e| format!("bad U: {}", e))?,
-                    );
+                    u = Some(value.parse::<f64>().map_err(|e| format!("bad U: {}", e))?);
                 }
                 "V" => {
-                    v = Some(
-                        value.parse::<f64>().map_err(|e| format!("bad V: {}", e))?,
-                    );
+                    v = Some(value.parse::<f64>().map_err(|e| format!("bad V: {}", e))?);
                 }
                 "All" => {
                     all = Some(
-                        value.parse::<f64>().map_err(|e| format!("bad All: {}", e))?,
+                        value
+                            .parse::<f64>()
+                            .map_err(|e| format!("bad All: {}", e))?,
                     );
                 }
                 _ => {} // ignore dB value in parentheses, etc.
@@ -135,7 +137,11 @@ pub fn parse_psnr_log(content: &str) -> Result<Vec<PsnrEntry>> {
             Ok(entry) => entries.push(entry),
             Err(e) => {
                 // Tolerate malformed/truncated lines
-                tracing::warn!("Skipping malformed PSNR line: {} ({})", e, &line[..line.len().min(80)]);
+                tracing::warn!(
+                    "Skipping malformed PSNR line: {} ({})",
+                    e,
+                    &line[..line.len().min(80)]
+                );
             }
         }
     }
@@ -154,7 +160,9 @@ fn parse_psnr_line(line: &str) -> std::result::Result<PsnrEntry, String> {
             match key {
                 "n" => {
                     frame = Some(
-                        value.parse::<u64>().map_err(|e| format!("bad frame: {}", e))?,
+                        value
+                            .parse::<u64>()
+                            .map_err(|e| format!("bad frame: {}", e))?,
                     );
                 }
                 "mse_avg" => {

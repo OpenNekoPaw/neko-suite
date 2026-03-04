@@ -10,9 +10,12 @@
 
 use std::sync::Arc;
 
-use crate::encoder::{EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwAccelEncoder, VideoCodec, global_encoder_pool};
-use crate::error::Result;
 use crate::domain::Timeline;
+use crate::encoder::{
+    global_encoder_pool, EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwAccelEncoder,
+    VideoCodec,
+};
+use crate::error::Result;
 use crate::export::{ExportSettings, GpuExportPipeline, GpuPipelineTiming};
 use crate::gpu::GpuContext;
 
@@ -136,7 +139,10 @@ impl PreviewPipeline {
         if self.config.width != config.width || self.config.height != config.height {
             tracing::info!(
                 "PreviewPipeline: resolution change {}x{} -> {}x{}, flushing & resetting encoder",
-                self.config.width, self.config.height, config.width, config.height
+                self.config.width,
+                self.config.height,
+                config.width,
+                config.height
             );
             // Flush old encoder to retrieve any buffered frames (e.g. B-frames)
             if self.encoder_initialized {
@@ -168,7 +174,8 @@ impl PreviewPipeline {
             }
             self.encoder_initialized = false;
             self.frame_count = 0;
-            self.gpu_pipeline.update_resolution(config.width, config.height);
+            self.gpu_pipeline
+                .update_resolution(config.width, config.height);
         }
         self.config = config;
         Ok(flushed)
@@ -195,8 +202,8 @@ impl PreviewPipeline {
         encoder_config.bitrate = self.config.bitrate;
         encoder_config.gop_size = Some(self.config.gop_size);
         encoder_config.use_zero_copy_gpu = true; // Enable zero-copy for preview
-        // Preview-optimized: disable B-frames to eliminate pipeline delay,
-        // use baseline profile (no B-frames support), and fastest preset
+                                                 // Preview-optimized: disable B-frames to eliminate pipeline delay,
+                                                 // use baseline profile (no B-frames support), and fastest preset
         encoder_config.max_b_frames = Some(0);
         encoder_config.profile = Some("baseline".to_string());
         encoder_config.preset = EncoderPreset::Ultrafast;
@@ -282,15 +289,18 @@ impl PreviewPipeline {
         // PTS based on actual timeline time, not frame_count
         let pts = (time * 1_000_000.0) as i64;
         let encode_start = std::time::Instant::now();
-        let packets = self.encoder.encode_frame_gpu(
-            iosurface_result.gpu_handle.unwrap(),
-            pts,
-        )?;
+        let packets = self
+            .encoder
+            .encode_frame_gpu(iosurface_result.gpu_handle.unwrap(), pts)?;
         let encode_ns = encode_start.elapsed().as_nanos() as u64;
 
         self.frame_count += 1;
 
-        Ok((packets.iter().map(PreviewFrame::from).collect(), timing, encode_ns))
+        Ok((
+            packets.iter().map(PreviewFrame::from).collect(),
+            timing,
+            encode_ns,
+        ))
     }
 
     /// Render frame with detailed timing breakdown (non-macOS fallback)
@@ -316,7 +326,11 @@ impl PreviewPipeline {
 
         self.frame_count += 1;
 
-        Ok((packets.iter().map(PreviewFrame::from).collect(), timing, encode_ns))
+        Ok((
+            packets.iter().map(PreviewFrame::from).collect(),
+            timing,
+            encode_ns,
+        ))
     }
 
     /// Flush encoder and get remaining packets

@@ -244,11 +244,9 @@ impl ProbeCache {
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
         // Read file metadata for validation
-        let file_meta = std::fs::metadata(path)
-            .map_err(|_| Error::FileNotFound(path.display().to_string()))?;
-        let mtime = file_meta
-            .modified()
-            .unwrap_or(SystemTime::UNIX_EPOCH);
+        let file_meta =
+            std::fs::metadata(path).map_err(|_| Error::FileNotFound(path.display().to_string()))?;
+        let mtime = file_meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
         let file_size = file_meta.len();
 
         // Fast path: check cache with read lock

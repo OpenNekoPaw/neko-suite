@@ -1,5 +1,9 @@
 # 重构计划：统一 Timeline 模型
 
+> **状态：✅ 已完成**（2026-03-05 确认）
+> 所有阶段已实施完毕。`export/types.rs` 仅保留导出专用类型，`domain/timeline.rs` 为唯一权威模型。
+> 遗留问题：`neko_types::BlendMode` 仍为 16 变体（gpu::BlendMode 已有 27），独立跟踪。
+
 ## 目标
 
 将 `export/types.rs` 中的核心领域类型（`TimelineData`、`TrackData`、`ElementData` 等）
@@ -75,10 +79,18 @@ domain::Element 已有 `source_path()`, `start_time`, `duration`, `end_time()`,
 
 ### Phase 4: 更新外部消费者
 
-7. `jvi/converter.rs` — 输出 domain::Timeline 而非 export::TimelineData
-8. `jvi/loader.rs` — 返回 (Timeline, ExportSettings)
-9. `preview/pipeline.rs` — 改用 domain::Timeline
-12. `frame_server/server.rs` — 无需改（只引用 ExportService + routes）
-13. `services/impls/timeline.rs` — 删除 crate::export::ElementData 引用
-14. `services/impls/export.rs` — 更新 import
-15. `services/export.rs` — 更新 import
+7. `jvi/converter.rs` — 输出 domain::Timeline 而非 export::TimelineData ✅
+8. `jvi/loader.rs` — 返回 (Timeline, ExportSettings) ✅
+9. `preview/pipeline.rs` — 改用 domain::Timeline ✅
+12. `frame_server/server.rs` — 无需改（只引用 ExportService + routes） ✅
+13. `services/impls/timeline.rs` — 删除 crate::export::ElementData 引用 ✅
+14. `services/impls/export.rs` — 更新 import ✅
+15. `services/export.rs` — 更新 import ✅
+
+## 已知 Proto 对齐差异（完成后确认）
+
+| 差异 | 位置 | 影响 |
+|------|------|------|
+| `neko_types::BlendMode` 16 变体 vs `gpu::BlendMode` 27 变体 | `types/effects.rs` vs `gpu/compositor.rs` | domain::Element 只能路由 16 种混合模式 |
+| `TransitionEffect.transition_type: String` vs proto `TransitionType` enum | `domain/timeline.rs` | 无编译期校验 |
+| `Track.track_type` JSON key 为 `"type"`（serde rename），proto IDL 字段名为 `track_type` | `domain/timeline.rs` | IDL 与 wire 格式不一致 |

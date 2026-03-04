@@ -109,7 +109,10 @@ impl StreamEntry {
     }
 
     /// Send a frame to all subscribers
-    pub fn send_frame(&self, frame: FrameData) -> Result<usize, broadcast::error::SendError<FrameData>> {
+    pub fn send_frame(
+        &self,
+        frame: FrameData,
+    ) -> Result<usize, broadcast::error::SendError<FrameData>> {
         self.tx.send(frame)
     }
 

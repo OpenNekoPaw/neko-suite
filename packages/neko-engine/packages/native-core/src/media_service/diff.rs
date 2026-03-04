@@ -126,7 +126,10 @@ pub fn diff_media<P: AsRef<Path>>(
         // JVI files are JSON, not media — skip FFmpeg probe
         (MediaInfo::default(), MediaInfo::default())
     } else {
-        (global_probe_cache().probe(path_a)?, global_probe_cache().probe(path_b)?)
+        (
+            global_probe_cache().probe(path_a)?,
+            global_probe_cache().probe(path_b)?,
+        )
     };
 
     // Build field diffs based on category
@@ -145,15 +148,13 @@ pub fn diff_media<P: AsRef<Path>>(
 
     // Content-level diff for image, audio, video, and timeline
     let content = match category {
-        DiffCategory::Image => {
-            match diff_image_content(path_a, path_b) {
-                Ok(img_diff) => Some(ContentDiff::Image(img_diff)),
-                Err(e) => {
-                    tracing::warn!("Image content diff failed: {}", e);
-                    None
-                }
+        DiffCategory::Image => match diff_image_content(path_a, path_b) {
+            Ok(img_diff) => Some(ContentDiff::Image(img_diff)),
+            Err(e) => {
+                tracing::warn!("Image content diff failed: {}", e);
+                None
             }
-        }
+        },
         DiffCategory::Audio => {
             let sa = path_a.to_string_lossy();
             let sb = path_b.to_string_lossy();
@@ -174,15 +175,13 @@ pub fn diff_media<P: AsRef<Path>>(
                 }
             }
         }
-        DiffCategory::Timeline => {
-            match diff_timeline_content(path_a, path_b) {
-                Ok(tl_diff) => Some(ContentDiff::Timeline(tl_diff)),
-                Err(e) => {
-                    tracing::warn!("Timeline content diff failed: {}", e);
-                    None
-                }
+        DiffCategory::Timeline => match diff_timeline_content(path_a, path_b) {
+            Ok(tl_diff) => Some(ContentDiff::Timeline(tl_diff)),
+            Err(e) => {
+                tracing::warn!("Timeline content diff failed: {}", e);
+                None
             }
-        }
+        },
         _ => None,
     };
 
@@ -216,12 +215,32 @@ fn diff_video_fields(a: &MediaInfo, b: &MediaInfo) -> Vec<FieldDiff> {
     // Audio properties (if present)
     push_diff_bool(&mut fields, "hasAudio", a.has_audio, b.has_audio);
     push_diff_opt_str(&mut fields, "audioCodec", &a.audio_codec, &b.audio_codec);
-    push_diff_opt_u32(&mut fields, "audioSampleRate", a.audio_sample_rate, b.audio_sample_rate);
-    push_diff_opt_u32(&mut fields, "audioChannels", a.audio_channels, b.audio_channels);
-    push_diff_opt_u64(&mut fields, "audioBitrate", a.audio_bitrate, b.audio_bitrate);
+    push_diff_opt_u32(
+        &mut fields,
+        "audioSampleRate",
+        a.audio_sample_rate,
+        b.audio_sample_rate,
+    );
+    push_diff_opt_u32(
+        &mut fields,
+        "audioChannels",
+        a.audio_channels,
+        b.audio_channels,
+    );
+    push_diff_opt_u64(
+        &mut fields,
+        "audioBitrate",
+        a.audio_bitrate,
+        b.audio_bitrate,
+    );
 
     // Subtitle info
-    push_diff_bool(&mut fields, "hasSubtitles", a.has_subtitles, b.has_subtitles);
+    push_diff_bool(
+        &mut fields,
+        "hasSubtitles",
+        a.has_subtitles,
+        b.has_subtitles,
+    );
     push_diff_usize(
         &mut fields,
         "subtitleTrackCount",
@@ -239,9 +258,24 @@ fn diff_audio_fields(a: &MediaInfo, b: &MediaInfo) -> Vec<FieldDiff> {
     push_diff_f64(&mut fields, "duration", a.duration, b.duration, 0.01);
     push_diff_str(&mut fields, "format", &a.format, &b.format);
     push_diff_opt_str(&mut fields, "audioCodec", &a.audio_codec, &b.audio_codec);
-    push_diff_opt_u32(&mut fields, "audioSampleRate", a.audio_sample_rate, b.audio_sample_rate);
-    push_diff_opt_u32(&mut fields, "audioChannels", a.audio_channels, b.audio_channels);
-    push_diff_opt_u64(&mut fields, "audioBitrate", a.audio_bitrate, b.audio_bitrate);
+    push_diff_opt_u32(
+        &mut fields,
+        "audioSampleRate",
+        a.audio_sample_rate,
+        b.audio_sample_rate,
+    );
+    push_diff_opt_u32(
+        &mut fields,
+        "audioChannels",
+        a.audio_channels,
+        b.audio_channels,
+    );
+    push_diff_opt_u64(
+        &mut fields,
+        "audioBitrate",
+        a.audio_bitrate,
+        b.audio_bitrate,
+    );
 
     fields
 }
@@ -351,27 +385,50 @@ fn push_diff_opt_str(
     if va != vb {
         fields.push(FieldDiff::diff(name, va, vb));
     } else {
-        fields.push(FieldDiff { field: name.to_string(), value_a: va.clone(), value_b: va, changed: false });
+        fields.push(FieldDiff {
+            field: name.to_string(),
+            value_a: va.clone(),
+            value_b: va,
+            changed: false,
+        });
     }
 }
 
 fn push_diff_opt_u32(fields: &mut Vec<FieldDiff>, name: &str, a: Option<u32>, b: Option<u32>) {
-    let va = a.map(|v| serde_json::Value::from(v as u64)).unwrap_or(serde_json::Value::Null);
-    let vb = b.map(|v| serde_json::Value::from(v as u64)).unwrap_or(serde_json::Value::Null);
+    let va = a
+        .map(|v| serde_json::Value::from(v as u64))
+        .unwrap_or(serde_json::Value::Null);
+    let vb = b
+        .map(|v| serde_json::Value::from(v as u64))
+        .unwrap_or(serde_json::Value::Null);
     if va != vb {
         fields.push(FieldDiff::diff(name, va, vb));
     } else {
-        fields.push(FieldDiff { field: name.to_string(), value_a: va.clone(), value_b: va, changed: false });
+        fields.push(FieldDiff {
+            field: name.to_string(),
+            value_a: va.clone(),
+            value_b: va,
+            changed: false,
+        });
     }
 }
 
 fn push_diff_opt_u64(fields: &mut Vec<FieldDiff>, name: &str, a: Option<u64>, b: Option<u64>) {
-    let va = a.map(serde_json::Value::from).unwrap_or(serde_json::Value::Null);
-    let vb = b.map(serde_json::Value::from).unwrap_or(serde_json::Value::Null);
+    let va = a
+        .map(serde_json::Value::from)
+        .unwrap_or(serde_json::Value::Null);
+    let vb = b
+        .map(serde_json::Value::from)
+        .unwrap_or(serde_json::Value::Null);
     if va != vb {
         fields.push(FieldDiff::diff(name, va, vb));
     } else {
-        fields.push(FieldDiff { field: name.to_string(), value_a: va.clone(), value_b: va, changed: false });
+        fields.push(FieldDiff {
+            field: name.to_string(),
+            value_a: va.clone(),
+            value_b: va,
+            changed: false,
+        });
     }
 }
 
@@ -434,7 +491,10 @@ mod tests {
         let codec_diff = fields.iter().find(|f| f.field == "audioCodec").unwrap();
         assert!(codec_diff.changed);
 
-        let sr_diff = fields.iter().find(|f| f.field == "audioSampleRate").unwrap();
+        let sr_diff = fields
+            .iter()
+            .find(|f| f.field == "audioSampleRate")
+            .unwrap();
         assert!(sr_diff.changed);
     }
 
@@ -494,7 +554,11 @@ mod tests {
 
     #[test]
     fn test_diff_media_file_not_found() {
-        let result = diff_media("/nonexistent/a.mp4", "/nonexistent/b.mp4", DiffCategory::Video);
+        let result = diff_media(
+            "/nonexistent/a.mp4",
+            "/nonexistent/b.mp4",
+            DiffCategory::Video,
+        );
         assert!(result.is_err());
     }
 

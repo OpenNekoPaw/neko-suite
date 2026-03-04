@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::decoder::{HwAccelType, HwAccelDecoder, global_pool};
+use crate::decoder::{global_pool, HwAccelDecoder, HwAccelType};
 use crate::domain::{Element, ElementType, Timeline};
 use crate::error::{Error, Result};
 use crate::gpu::{
@@ -207,11 +207,7 @@ pub struct GpuExportPipeline {
 
 impl GpuExportPipeline {
     /// Create a new GPU export pipeline
-    pub fn new(
-        timeline: Timeline,
-        settings: ExportSettings,
-        ctx: Arc<GpuContext>,
-    ) -> Result<Self> {
+    pub fn new(timeline: Timeline, settings: ExportSettings, ctx: Arc<GpuContext>) -> Result<Self> {
         let total_frames = timeline.total_frames_at_fps(settings.fps);
         let output_width = settings.width;
         let output_height = settings.height;
@@ -248,7 +244,8 @@ impl GpuExportPipeline {
 
         for src in sources {
             let mut guard = pool.acquire(&src, HwAccelType::Auto)?;
-            let decoder = guard.take_decoder()
+            let decoder = guard
+                .take_decoder()
                 .ok_or_else(|| Error::Other("Decoder guard was empty".to_string()))?;
 
             tracing::info!(
@@ -306,7 +303,10 @@ impl GpuExportPipeline {
         }
         tracing::info!(
             "GpuExportPipeline: resolution {}x{} -> {}x{}",
-            self.output_width, self.output_height, width, height
+            self.output_width,
+            self.output_height,
+            width,
+            height
         );
         self.output_width = width;
         self.output_height = height;
@@ -359,11 +359,16 @@ impl GpuExportPipeline {
             let _span = tracing::debug_span!(span::DECODE_VISIBLE_MEDIA).entered();
             self.collect_visible_media(time)
         };
-        tracing::debug!("Found {} visible media elements at time {:.2}s", media_elements.len(), time);
+        tracing::debug!(
+            "Found {} visible media elements at time {:.2}s",
+            media_elements.len(),
+            time
+        );
 
         let mut gpu_layers: Vec<GpuLayer> = Vec::new();
         {
-            let _span = tracing::debug_span!(span::GPU_PIPELINE, layers = media_elements.len()).entered();
+            let _span =
+                tracing::debug_span!(span::GPU_PIPELINE, layers = media_elements.len()).entered();
             for (media, z_idx) in &media_elements {
                 if let Some(layer) = self.decode_to_gpu_layer_timed(media, time, *z_idx, timing)? {
                     gpu_layers.push(layer);
@@ -375,7 +380,11 @@ impl GpuExportPipeline {
         let text_z_start = media_elements.len() as i32;
         let text_elements = self.collect_visible_text(time, text_z_start);
         if !text_elements.is_empty() {
-            tracing::debug!("Rendering {} text elements at time {:.2}s", text_elements.len(), time);
+            tracing::debug!(
+                "Rendering {} text elements at time {:.2}s",
+                text_elements.len(),
+                time
+            );
             for (text, z_idx) in &text_elements {
                 if let Some(layer) = self.render_text_to_gpu_layer(text, *z_idx) {
                     gpu_layers.push(layer);
@@ -393,7 +402,8 @@ impl GpuExportPipeline {
                 width = self.output_width,
                 height = self.output_height,
                 layer_count = layer_refs.len()
-            ).entered();
+            )
+            .entered();
             let result = self.compositor.composite(
                 &layer_refs,
                 self.output_width,
@@ -453,7 +463,9 @@ impl GpuExportPipeline {
         let result = self.process_frame_timed(time, background_color, &mut timing)?;
 
         // Create texture view for the composited RGBA texture
-        let texture_view = result.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let texture_view = result
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
         // Reuse or create NV12 output buffers (cached for performance)
         let needs_new_buffers = match &self.nv12_output_cache {
@@ -526,7 +538,9 @@ impl GpuExportPipeline {
         let result = self.process_frame_timed(time, background_color, &mut timing)?;
 
         // Create texture view for the composited RGBA texture
-        let texture_view = result.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let texture_view = result
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
         // Lazy initialize zero-copy converter
         if self.zerocopy_converter.is_none() {
@@ -540,7 +554,8 @@ impl GpuExportPipeline {
         let gpu_handle = {
             let start = Instant::now();
             let _span = tracing::debug_span!(span::RGBA_TO_NV12, zerocopy = true).entered();
-            let handle = converter.convert_to_iosurface(&texture_view, result.width, result.height, 1)?;
+            let handle =
+                converter.convert_to_iosurface(&texture_view, result.width, result.height, 1)?;
             timing.rgba_to_nv12_ns = start.elapsed().as_nanos() as u64;
             handle
         };
@@ -619,11 +634,7 @@ impl GpuExportPipeline {
     }
 
     /// Render a text element to a GpuLayer
-    fn render_text_to_gpu_layer(
-        &mut self,
-        element: &Element,
-        z_index: i32,
-    ) -> Option<GpuLayer> {
+    fn render_text_to_gpu_layer(&mut self, element: &Element, z_index: i32) -> Option<GpuLayer> {
         let text_data = match &element.element_type {
             ElementType::Text(t) => t,
             _ => return None,
@@ -642,12 +653,15 @@ impl GpuExportPipeline {
             text_decoration: Some(text_data.text_decoration.clone()),
             stroke_color: Some(text_data.stroke_color.clone()),
             stroke_width: Some(text_data.stroke_width),
-            shadow: text_data.shadow.as_ref().map(|s| crate::gpu::TextShadowStyle {
-                color: s.color.clone(),
-                offset_x: s.offset_x,
-                offset_y: s.offset_y,
-                blur: s.blur,
-            }),
+            shadow: text_data
+                .shadow
+                .as_ref()
+                .map(|s| crate::gpu::TextShadowStyle {
+                    color: s.color.clone(),
+                    offset_x: s.offset_x,
+                    offset_y: s.offset_y,
+                    blur: s.blur,
+                }),
             background_color: Some(text_data.background_color.clone()),
         };
 
@@ -732,19 +746,24 @@ impl GpuExportPipeline {
         z_index: i32,
         timing: &mut GpuPipelineTiming,
     ) -> Result<Option<GpuLayer>> {
-        let src = element.source_path().ok_or_else(|| {
-            Error::Other("Element has no source path".to_string())
-        })?;
+        let src = element
+            .source_path()
+            .ok_or_else(|| Error::Other("Element has no source path".to_string()))?;
 
-        let decoder = self.decoders.get_mut(&src).ok_or_else(|| {
-            Error::Other(format!("No decoder found for source: {}", src))
-        })?;
+        let decoder = self
+            .decoders
+            .get_mut(&src)
+            .ok_or_else(|| Error::Other(format!("No decoder found for source: {}", src)))?;
 
         let source_time = element.get_source_time(timeline_time);
 
         // Debug: Log seek time
         if timeline_time < 0.2 || (timeline_time > 30.0 && timeline_time < 30.2) {
-            tracing::debug!("Seeking to source_time={:.2}s for timeline_time={:.2}s", source_time, timeline_time);
+            tracing::debug!(
+                "Seeking to source_time={:.2}s for timeline_time={:.2}s",
+                source_time,
+                timeline_time
+            );
         }
 
         // Step 1: Hardware decode → NV12 GPU texture
@@ -754,11 +773,7 @@ impl GpuExportPipeline {
             let result = match decoder.decode_gpu_at(source_time)? {
                 Some(tex) => tex,
                 None => {
-                    tracing::warn!(
-                        "No frame at source time {:.2}s for {}",
-                        source_time,
-                        src
-                    );
+                    tracing::warn!("No frame at source time {:.2}s for {}", source_time, src);
                     return Ok(None);
                 }
             };
@@ -792,9 +807,12 @@ impl GpuExportPipeline {
         {
             let _span = tracing::trace_span!(span::GPU_SUBMIT).entered();
             let dst = self.layer_texture_pool.get(tex_idx);
-            let mut encoder = self.ctx.device().create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Texture Copy Encoder"),
-            });
+            let mut encoder =
+                self.ctx
+                    .device()
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("Texture Copy Encoder"),
+                    });
 
             encoder.copy_texture_to_texture(
                 wgpu::ImageCopyTexture {
@@ -922,13 +940,10 @@ mod tests {
         let mut timeline = Timeline::new(Resolution::full_hd(), 30.0);
         timeline.duration = 10.0;
 
-        let mut pipeline =
-            GpuExportPipeline::new(timeline, create_test_settings(), ctx).unwrap();
+        let mut pipeline = GpuExportPipeline::new(timeline, create_test_settings(), ctx).unwrap();
         pipeline.initialize().unwrap();
 
-        let result = pipeline
-            .process_frame(5.0, [0.0, 0.0, 0.0, 1.0])
-            .unwrap();
+        let result = pipeline.process_frame(5.0, [0.0, 0.0, 0.0, 1.0]).unwrap();
         assert_eq!(result.width, 1920);
         assert_eq!(result.height, 1080);
         assert_eq!(result.layer_count, 0);

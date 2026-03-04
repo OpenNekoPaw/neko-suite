@@ -98,7 +98,11 @@ impl FfmpegAudioDecoder {
 
     /// Convert decoded frame to output format
     fn convert_frame(&mut self, decoded_frame: AudioFrame) -> Result<Option<DecodedAudioFrame>> {
-        let audio_info = self.audio_info.as_ref().ok_or(Error::DecoderNotInitialized)?.clone();
+        let audio_info = self
+            .audio_info
+            .as_ref()
+            .ok_or(Error::DecoderNotInitialized)?
+            .clone();
 
         // Get timestamp
         let pts = decoded_frame.pts().unwrap_or(0);
@@ -108,7 +112,11 @@ impl FfmpegAudioDecoder {
         // Resample if needed, handling input format changes (common with AAC)
         let output_frame = if self.resampler.is_some() {
             let mut output = AudioFrame::empty();
-            let result = self.resampler.as_mut().unwrap().run(&decoded_frame, &mut output);
+            let result = self
+                .resampler
+                .as_mut()
+                .unwrap()
+                .run(&decoded_frame, &mut output);
 
             if result.is_ok() {
                 output
@@ -116,16 +124,23 @@ impl FfmpegAudioDecoder {
                 // Input format changed — rebuild resampler from actual decoded frame params
                 let frame_layout = {
                     let layout = decoded_frame.channel_layout();
-                    if layout.bits() != 0 { layout }
-                    else { Self::channel_layout_for_channels(decoded_frame.channels() as u16) }
+                    if layout.bits() != 0 {
+                        layout
+                    } else {
+                        Self::channel_layout_for_channels(decoded_frame.channels() as u16)
+                    }
                 };
                 let output_channels = self.output_channels.unwrap_or(audio_info.channels);
                 let output_rate = self.output_sample_rate.unwrap_or(audio_info.sample_rate);
 
                 tracing::warn!(
                     "Resampler input changed, rebuilding: {:?}/{}ch/{} Hz -> {:?}/{}ch/{} Hz",
-                    decoded_frame.format(), decoded_frame.channels(), decoded_frame.rate(),
-                    Self::to_ffmpeg_sample_format(self.output_format), output_channels, output_rate
+                    decoded_frame.format(),
+                    decoded_frame.channels(),
+                    decoded_frame.rate(),
+                    Self::to_ffmpeg_sample_format(self.output_format),
+                    output_channels,
+                    output_rate
                 );
 
                 self.resampler = Some(ResamplerContext::get(
@@ -138,7 +153,10 @@ impl FfmpegAudioDecoder {
                 )?);
 
                 let mut output = AudioFrame::empty();
-                self.resampler.as_mut().unwrap().run(&decoded_frame, &mut output)?;
+                self.resampler
+                    .as_mut()
+                    .unwrap()
+                    .run(&decoded_frame, &mut output)?;
                 output
             }
         } else {
@@ -277,7 +295,10 @@ impl AudioDecoder for FfmpegAudioDecoder {
     }
 
     fn seek(&mut self, time_seconds: f64) -> Result<()> {
-        let input_ctx = self.input_ctx.as_mut().ok_or(Error::DecoderNotInitialized)?;
+        let input_ctx = self
+            .input_ctx
+            .as_mut()
+            .ok_or(Error::DecoderNotInitialized)?;
         let decoder = self.decoder.as_mut().ok_or(Error::DecoderNotInitialized)?;
 
         if time_seconds < 0.0 {

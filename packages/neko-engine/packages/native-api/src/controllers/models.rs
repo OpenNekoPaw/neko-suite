@@ -108,9 +108,7 @@ mod tests {
     async fn test_models_controller_diff_missing_sources() {
         let controller = ModelsController::new();
 
-        let result = controller
-            .handle("diff", None, Value::Null, None)
-            .await;
+        let result = controller.handle("diff", None, Value::Null, None).await;
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("sourceA"));
@@ -120,9 +118,7 @@ mod tests {
     async fn test_models_controller_unknown_action() {
         let controller = ModelsController::new();
 
-        let result = controller
-            .handle("unknown", None, Value::Null, None)
-            .await;
+        let result = controller.handle("unknown", None, Value::Null, None).await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -143,6 +139,9 @@ mod tests {
     #[test]
     fn test_models_controller_actions() {
         let controller = ModelsController::new();
-        assert_eq!(controller.actions(), &["probe", "capture", "stream", "diff"]);
+        assert_eq!(
+            controller.actions(),
+            &["probe", "capture", "stream", "diff"]
+        );
     }
 }

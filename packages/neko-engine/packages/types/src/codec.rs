@@ -265,9 +265,19 @@ mod tests {
 
     #[test]
     fn test_video_codec_roundtrip() {
-        for codec in [VideoCodec::H264, VideoCodec::H265, VideoCodec::Vp9, VideoCodec::Av1, VideoCodec::ProRes] {
+        for codec in [
+            VideoCodec::H264,
+            VideoCodec::H265,
+            VideoCodec::Vp9,
+            VideoCodec::Av1,
+            VideoCodec::ProRes,
+        ] {
             let s = codec.as_str();
-            assert_eq!(VideoCodec::from_str(s), Some(codec), "roundtrip failed for {s}");
+            assert_eq!(
+                VideoCodec::from_str(s),
+                Some(codec),
+                "roundtrip failed for {s}"
+            );
         }
     }
 
@@ -296,9 +306,20 @@ mod tests {
 
     #[test]
     fn test_audio_codec_roundtrip() {
-        for codec in [AudioCodec::Aac, AudioCodec::Mp3, AudioCodec::Opus, AudioCodec::Flac, AudioCodec::Pcm, AudioCodec::Vorbis] {
+        for codec in [
+            AudioCodec::Aac,
+            AudioCodec::Mp3,
+            AudioCodec::Opus,
+            AudioCodec::Flac,
+            AudioCodec::Pcm,
+            AudioCodec::Vorbis,
+        ] {
             let s = codec.as_str();
-            assert_eq!(AudioCodec::from_str(s), Some(codec), "roundtrip failed for {s}");
+            assert_eq!(
+                AudioCodec::from_str(s),
+                Some(codec),
+                "roundtrip failed for {s}"
+            );
         }
     }
 
@@ -313,7 +334,13 @@ mod tests {
 
     #[test]
     fn test_encoder_preset_roundtrip() {
-        for preset in [EncoderPreset::Ultrafast, EncoderPreset::Fast, EncoderPreset::Medium, EncoderPreset::Slow, EncoderPreset::Veryslow] {
+        for preset in [
+            EncoderPreset::Ultrafast,
+            EncoderPreset::Fast,
+            EncoderPreset::Medium,
+            EncoderPreset::Slow,
+            EncoderPreset::Veryslow,
+        ] {
             let s = preset.as_str();
             assert!(s.len() > 0, "empty string for preset {:?}", preset);
         }
@@ -364,11 +391,26 @@ mod tests {
 
     #[test]
     fn test_video_codec_type_aliases() {
-        assert_eq!(VideoCodecType::from_codec_name("avc1"), Some(VideoCodecType::H264));
-        assert_eq!(VideoCodecType::from_codec_name("hev1"), Some(VideoCodecType::H265));
-        assert_eq!(VideoCodecType::from_codec_name("hvc1"), Some(VideoCodecType::H265));
-        assert_eq!(VideoCodecType::from_codec_name("vp09"), Some(VideoCodecType::Vp9));
-        assert_eq!(VideoCodecType::from_codec_name("av01"), Some(VideoCodecType::Av1));
+        assert_eq!(
+            VideoCodecType::from_codec_name("avc1"),
+            Some(VideoCodecType::H264)
+        );
+        assert_eq!(
+            VideoCodecType::from_codec_name("hev1"),
+            Some(VideoCodecType::H265)
+        );
+        assert_eq!(
+            VideoCodecType::from_codec_name("hvc1"),
+            Some(VideoCodecType::H265)
+        );
+        assert_eq!(
+            VideoCodecType::from_codec_name("vp09"),
+            Some(VideoCodecType::Vp9)
+        );
+        assert_eq!(
+            VideoCodecType::from_codec_name("av01"),
+            Some(VideoCodecType::Av1)
+        );
         assert_eq!(VideoCodecType::from_codec_name("unknown"), None);
     }
 }

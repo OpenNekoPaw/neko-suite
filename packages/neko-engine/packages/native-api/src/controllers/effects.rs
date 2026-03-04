@@ -128,12 +128,12 @@ impl Controller for EffectsController {
                     ApiError::InvalidRequest("shader_id required for effects:apply".to_string())
                 })?;
 
-                let rgba_data = base64_decode(&data_b64).map_err(|e| {
-                    ApiError::InvalidRequest(format!("Invalid base64 data: {}", e))
-                })?;
+                let rgba_data = base64_decode(&data_b64)
+                    .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64 data: {}", e)))?;
 
                 let service = self.require_service()?;
-                let result = service.apply_effect(&rgba_data, width, height, &shader_id, &opts.params)?;
+                let result =
+                    service.apply_effect(&rgba_data, width, height, &shader_id, &opts.params)?;
 
                 let response = serde_json::json!({
                     "width": width,
@@ -167,9 +167,11 @@ impl Controller for EffectsController {
                     .collect();
 
                 let service = self.require_service()?;
-                service.register_shader(&id, &code, param_defs).map_err(|e| {
-                    ApiError::ServiceError(format!("Shader registration failed: {}", e))
-                })?;
+                service
+                    .register_shader(&id, &code, param_defs)
+                    .map_err(|e| {
+                        ApiError::ServiceError(format!("Shader registration failed: {}", e))
+                    })?;
 
                 let response = serde_json::json!({
                     "id": id,
@@ -281,7 +283,9 @@ mod tests {
     #[tokio::test]
     async fn test_info_missing_shader_id() {
         let controller = create_test_controller();
-        let result = controller.handle("info", None, serde_json::json!({}), None).await;
+        let result = controller
+            .handle("info", None, serde_json::json!({}), None)
+            .await;
         assert!(result.is_err());
     }
 }

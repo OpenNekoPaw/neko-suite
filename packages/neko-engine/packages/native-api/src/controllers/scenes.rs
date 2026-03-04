@@ -70,9 +70,7 @@ mod tests {
     async fn test_scenes_controller_unknown_action() {
         let controller = ScenesController::new();
 
-        let result = controller
-            .handle("unknown", None, Value::Null, None)
-            .await;
+        let result = controller.handle("unknown", None, Value::Null, None).await;
 
         assert!(result.is_err());
         match result.unwrap_err() {

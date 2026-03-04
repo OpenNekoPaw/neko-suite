@@ -37,7 +37,10 @@ impl NodeService {
     }
 
     /// Create with existing monitor
-    pub fn with_monitor(monitor: Arc<Mutex<SystemMonitor>>, gpu_ctx: Option<Arc<GpuContext>>) -> Self {
+    pub fn with_monitor(
+        monitor: Arc<Mutex<SystemMonitor>>,
+        gpu_ctx: Option<Arc<GpuContext>>,
+    ) -> Self {
         Self {
             monitor,
             gpu_ctx,

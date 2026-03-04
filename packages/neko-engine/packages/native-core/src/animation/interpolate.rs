@@ -106,13 +106,12 @@ pub fn interpolate_value(
             AnimatableValue::Number(lerp(*a, *b, t_eased))
         }
 
-        (
-            AnimatableValue::Point2D { x: ax, y: ay },
-            AnimatableValue::Point2D { x: bx, y: by },
-        ) => AnimatableValue::Point2D {
-            x: lerp(*ax, *bx, t_eased),
-            y: lerp(*ay, *by, t_eased),
-        },
+        (AnimatableValue::Point2D { x: ax, y: ay }, AnimatableValue::Point2D { x: bx, y: by }) => {
+            AnimatableValue::Point2D {
+                x: lerp(*ax, *bx, t_eased),
+                y: lerp(*ay, *by, t_eased),
+            }
+        }
 
         (
             AnimatableValue::Point3D {
@@ -192,8 +191,13 @@ mod tests {
         let from = AnimatableValue::Number(0.0);
         let to = AnimatableValue::Number(100.0);
 
-        let result =
-            interpolate_value(&from, &to, 0.5, EasingType::Linear, InterpolationMode::Linear);
+        let result = interpolate_value(
+            &from,
+            &to,
+            0.5,
+            EasingType::Linear,
+            InterpolationMode::Linear,
+        );
         assert_eq!(result, AnimatableValue::Number(50.0));
     }
 
@@ -202,12 +206,14 @@ mod tests {
         let from = AnimatableValue::Point2D { x: 0.0, y: 0.0 };
         let to = AnimatableValue::Point2D { x: 100.0, y: 200.0 };
 
-        let result =
-            interpolate_value(&from, &to, 0.5, EasingType::Linear, InterpolationMode::Linear);
-        assert_eq!(
-            result,
-            AnimatableValue::Point2D { x: 50.0, y: 100.0 }
+        let result = interpolate_value(
+            &from,
+            &to,
+            0.5,
+            EasingType::Linear,
+            InterpolationMode::Linear,
         );
+        assert_eq!(result, AnimatableValue::Point2D { x: 50.0, y: 100.0 });
     }
 
     #[test]
@@ -231,10 +237,20 @@ mod tests {
         let from = AnimatableValue::Number(0.0);
         let to = AnimatableValue::Number(100.0);
 
-        let linear =
-            interpolate_value(&from, &to, 0.5, EasingType::Linear, InterpolationMode::Linear);
-        let ease_in =
-            interpolate_value(&from, &to, 0.5, EasingType::EaseInQuad, InterpolationMode::Linear);
+        let linear = interpolate_value(
+            &from,
+            &to,
+            0.5,
+            EasingType::Linear,
+            InterpolationMode::Linear,
+        );
+        let ease_in = interpolate_value(
+            &from,
+            &to,
+            0.5,
+            EasingType::EaseInQuad,
+            InterpolationMode::Linear,
+        );
 
         // EaseInQuad at 0.5 should be slower (smaller value) than linear
         let linear_val = linear.as_number().unwrap();
@@ -257,8 +273,13 @@ mod tests {
             a: 1.0,
         };
 
-        let result =
-            interpolate_value(&from, &to, 0.5, EasingType::Linear, InterpolationMode::Linear);
+        let result = interpolate_value(
+            &from,
+            &to,
+            0.5,
+            EasingType::Linear,
+            InterpolationMode::Linear,
+        );
         if let AnimatableValue::Color { r, g, b, a } = result {
             assert!((r - 0.5).abs() < 1e-6);
             assert!((g - 0.0).abs() < 1e-6);

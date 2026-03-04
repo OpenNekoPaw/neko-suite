@@ -121,7 +121,8 @@ impl ActiveStreams {
         let (handle, linked_handle) = {
             let mut loops = self.loops.write().await;
             let handle = loops.remove(stream_id.as_str());
-            let linked_handle = handle.as_ref()
+            let linked_handle = handle
+                .as_ref()
                 .and_then(|h| h.linked_stream_id.as_ref())
                 .and_then(|linked_id| loops.remove(linked_id));
             (handle, linked_handle)
@@ -241,7 +242,11 @@ impl StreamPlaybackDelegate {
 
     /// Hot-update timeline data for a running stream.
     /// The video/audio loops will pick up the new timeline on the next frame iteration.
-    pub async fn update_timeline(&self, stream_id: &StreamId, timeline: Arc<Timeline>) -> Result<()> {
+    pub async fn update_timeline(
+        &self,
+        stream_id: &StreamId,
+        timeline: Arc<Timeline>,
+    ) -> Result<()> {
         self.active_streams
             .update_state(stream_id, |s| {
                 s.timeline_update = Some(timeline);
@@ -253,7 +258,11 @@ impl StreamPlaybackDelegate {
     /// Hot-update preview config (resolution/bitrate) for a running stream.
     /// The video loop will pick up the new config on the next frame iteration
     /// and call pipeline.update_config().
-    pub async fn update_config(&self, stream_id: &StreamId, config: PreviewPipelineConfig) -> Result<()> {
+    pub async fn update_config(
+        &self,
+        stream_id: &StreamId,
+        config: PreviewPipelineConfig,
+    ) -> Result<()> {
         self.active_streams
             .update_state(stream_id, |s| {
                 s.config_update = Some(config);
@@ -340,9 +349,14 @@ impl WallClockPacer {
 ///
 /// Wire format: [pts_us:i64 LE][dts_us:i64 LE][is_keyframe:u8][duration_us:i64 LE][H.264 NAL data...]
 /// PTS, DTS, and duration are converted from stream time_base units to microseconds.
-pub fn pack_h264_frame(packet: &EncodedPacket, width: u32, height: u32, time_base: f64) -> FrameData {
+pub fn pack_h264_frame(
+    packet: &EncodedPacket,
+    width: u32,
+    height: u32,
+    time_base: f64,
+) -> FrameData {
     let header_size = 8 + 8 + 1 + 8; // pts + dts + is_keyframe + duration
-    // Convert from stream time_base units to microseconds
+                                     // Convert from stream time_base units to microseconds
     let pts_us = (packet.pts as f64 * time_base * 1_000_000.0) as i64;
     let dts_us = (packet.dts as f64 * time_base * 1_000_000.0) as i64;
     let duration_us = (packet.duration as f64 * time_base * 1_000_000.0) as i64;
@@ -409,7 +423,10 @@ pub fn eof_idle_wait(
     timeout: Duration,
 ) -> Option<f64> {
     let eof_start = std::time::Instant::now();
-    tracing::info!("Stream reached EOF, waiting for seek (timeout: {:?})", timeout);
+    tracing::info!(
+        "Stream reached EOF, waiting for seek (timeout: {:?})",
+        timeout
+    );
 
     loop {
         // Check cancellation
@@ -618,5 +635,4 @@ mod tests {
         pacer.reset();
         assert_eq!(pacer.frame_number, 0);
     }
-
 }

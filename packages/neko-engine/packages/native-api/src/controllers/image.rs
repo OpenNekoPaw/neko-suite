@@ -22,10 +22,7 @@ pub struct ImageController {
 
 impl ImageController {
     /// Create a new ImageController
-    pub fn new(
-        image_service: Arc<ImageService>,
-        resource_registry: Arc<ResourceRegistry>,
-    ) -> Self {
+    pub fn new(image_service: Arc<ImageService>, resource_registry: Arc<ResourceRegistry>) -> Self {
         Self {
             image_service,
             resource_registry,
@@ -126,10 +123,9 @@ impl Controller for ImageController {
                     serde_json::from_value(options).unwrap_or_default();
 
                 // Resolve resource (by ID or source path)
-                let (res_id, file_path) = resolve_resource(
-                    &self.resource_registry, resource_id, opts.source.as_deref(),
-                )
-                    .await?;
+                let (res_id, file_path) =
+                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
+                        .await?;
 
                 // Parse format
                 let format = match opts.format.to_lowercase().as_str() {
@@ -180,9 +176,8 @@ impl Controller for ImageController {
                 })?;
 
                 // Decode base64 RGBA data
-                let rgba_data = base64_decode(&data_b64).map_err(|e| {
-                    ApiError::InvalidRequest(format!("Invalid base64 data: {}", e))
-                })?;
+                let rgba_data = base64_decode(&data_b64)
+                    .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64 data: {}", e)))?;
 
                 // Encode RGBA to JPEG
                 use neko_native_core::media_service::encode_rgba_to_jpeg;
@@ -252,9 +247,7 @@ mod tests {
     async fn test_image_controller_probe_missing_source() {
         let controller = create_test_controller();
 
-        let result = controller
-            .handle("probe", None, Value::Null, None)
-            .await;
+        let result = controller.handle("probe", None, Value::Null, None).await;
 
         assert!(result.is_err());
     }
@@ -263,9 +256,7 @@ mod tests {
     async fn test_image_controller_unknown_action() {
         let controller = create_test_controller();
 
-        let result = controller
-            .handle("unknown", None, Value::Null, None)
-            .await;
+        let result = controller.handle("unknown", None, Value::Null, None).await;
 
         assert!(result.is_err());
     }

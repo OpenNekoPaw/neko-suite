@@ -275,7 +275,9 @@ impl GpuProcessor {
         let queue = self.ctx.queue();
 
         // Create input buffer with data
-        let input_buffer = self.ctx.create_buffer_with_data(input, wgpu::BufferUsages::STORAGE);
+        let input_buffer = self
+            .ctx
+            .create_buffer_with_data(input, wgpu::BufferUsages::STORAGE);
 
         // Acquire output buffer from pool
         let output_pooled = self.buffer_pool.acquire(input.len() as u64);
@@ -300,9 +302,9 @@ impl GpuProcessor {
             blacks: params.blacks,
             _padding: 0.0,
         };
-        let uniform_buffer =
-            self.ctx
-                .create_buffer_with_data(bytemuck::bytes_of(&uniforms), wgpu::BufferUsages::UNIFORM);
+        let uniform_buffer = self
+            .ctx
+            .create_buffer_with_data(bytemuck::bytes_of(&uniforms), wgpu::BufferUsages::UNIFORM);
 
         // Create bind group
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

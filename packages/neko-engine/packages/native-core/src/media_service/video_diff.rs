@@ -50,6 +50,14 @@ pub struct VideoDiffOptions {
     /// Whether to include audio waveform comparison
     #[serde(default = "default_true")]
     pub include_audio: bool,
+
+    /// Start time in seconds for range-based diff (None = from beginning)
+    #[serde(default)]
+    pub start_time: Option<f64>,
+
+    /// End time in seconds for range-based diff (None = to end)
+    #[serde(default)]
+    pub end_time: Option<f64>,
 }
 
 fn default_ssim_threshold() -> f64 {
@@ -66,6 +74,8 @@ impl Default for VideoDiffOptions {
             generate_diff_video: false,
             diff_video_output: None,
             include_audio: true,
+            start_time: None,
+            end_time: None,
         }
     }
 }
@@ -182,11 +192,11 @@ pub fn diff_video_content<P: AsRef<Path>>(
     // reduces analysis time by ~30-50%.
     let (ssim_result, psnr_result) = std::thread::scope(|s| {
         let ssim_handle = s.spawn(|| -> Result<Vec<_>> {
-            let log = run_ffmpeg_ssim(path_a, path_b)?;
+            let log = run_ffmpeg_ssim(path_a, path_b, opts.start_time, opts.end_time)?;
             parse_ssim_log(&log)
         });
         let psnr_handle = s.spawn(|| -> Result<Vec<_>> {
-            let log = run_ffmpeg_psnr(path_a, path_b)?;
+            let log = run_ffmpeg_psnr(path_a, path_b, opts.start_time, opts.end_time)?;
             parse_psnr_log(&log)
         });
         // scope blocks until both threads finish
@@ -246,8 +256,7 @@ pub fn diff_video_content<P: AsRef<Path>>(
         0.0
     };
 
-    let diff_regions =
-        build_diff_regions(&frame_metrics, opts.ssim_threshold, base_fps);
+    let diff_regions = build_diff_regions(&frame_metrics, opts.ssim_threshold, base_fps);
 
     // Step 7: Audio diff (optional)
     let audio_diff = if opts.include_audio && info_a.has_audio && info_b.has_audio {
@@ -311,17 +320,19 @@ pub fn diff_video_content<P: AsRef<Path>>(
 
 /// Run FFmpeg SSIM filter and return the log content.
 /// Uses scale2ref to scale input B to match input A's resolution when they differ.
-fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path) -> Result<String> {
+/// Supports optional time range via start_time/end_time parameters.
+fn run_ffmpeg_ssim(
+    path_a: &Path,
+    path_b: &Path,
+    start_time: Option<f64>,
+    end_time: Option<f64>,
+) -> Result<String> {
     // Use SystemTime nanos as unique suffix to prevent concurrent collisions
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos();
-    let tmp = std::env::temp_dir().join(format!(
-        "neko_ssim_{}_{}.log",
-        std::process::id(),
-        nanos
-    ));
+    let tmp = std::env::temp_dir().join(format!("neko_ssim_{}_{}.log", std::process::id(), nanos));
 
     // scale2ref scales [1:v] to match [0:v] dimensions automatically.
     let filter = format!(
@@ -329,14 +340,33 @@ fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path) -> Result<String> {
         tmp.display()
     );
 
-    let output = std::process::Command::new("ffmpeg")
-        .args([
-            "-i", &path_a.to_string_lossy(),
-            "-i", &path_b.to_string_lossy(),
-            "-filter_complex", &filter,
-            "-f", "null",
-            "-",
-        ])
+    let mut cmd = std::process::Command::new("ffmpeg");
+
+    // Input A with optional time range
+    if let Some(t) = start_time {
+        cmd.args(["-ss", &t.to_string()]);
+    }
+    cmd.args(["-i", &path_a.to_string_lossy()]);
+
+    // Input B with optional time range
+    if let Some(t) = start_time {
+        cmd.args(["-ss", &t.to_string()]);
+    }
+    cmd.args(["-i", &path_b.to_string_lossy()]);
+
+    // Duration limit (if end_time specified)
+    if let Some(end) = end_time {
+        if let Some(start) = start_time {
+            let duration = (end - start).max(0.0);
+            cmd.args(["-t", &duration.to_string()]);
+        } else {
+            cmd.args(["-to", &end.to_string()]);
+        }
+    }
+
+    cmd.args(["-filter_complex", &filter, "-f", "null", "-"]);
+
+    let output = cmd
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
@@ -359,9 +389,8 @@ fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path) -> Result<String> {
         ));
     }
 
-    let content = std::fs::read_to_string(&tmp).map_err(|e| {
-        Error::Other(format!("Failed to read SSIM log: {}", e))
-    })?;
+    let content = std::fs::read_to_string(&tmp)
+        .map_err(|e| Error::Other(format!("Failed to read SSIM log: {}", e)))?;
 
     let _ = std::fs::remove_file(&tmp);
 
@@ -370,17 +399,19 @@ fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path) -> Result<String> {
 
 /// Run FFmpeg PSNR filter and return the log content.
 /// Uses scale2ref to scale input B to match input A's resolution when they differ.
-fn run_ffmpeg_psnr(path_a: &Path, path_b: &Path) -> Result<String> {
+/// Supports optional time range via start_time/end_time parameters.
+fn run_ffmpeg_psnr(
+    path_a: &Path,
+    path_b: &Path,
+    start_time: Option<f64>,
+    end_time: Option<f64>,
+) -> Result<String> {
     // Use SystemTime nanos as unique suffix to prevent concurrent collisions
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos();
-    let tmp = std::env::temp_dir().join(format!(
-        "neko_psnr_{}_{}.log",
-        std::process::id(),
-        nanos
-    ));
+    let tmp = std::env::temp_dir().join(format!("neko_psnr_{}_{}.log", std::process::id(), nanos));
 
     // scale2ref scales [1:v] to match [0:v] dimensions automatically.
     let filter = format!(
@@ -388,14 +419,33 @@ fn run_ffmpeg_psnr(path_a: &Path, path_b: &Path) -> Result<String> {
         tmp.display()
     );
 
-    let output = std::process::Command::new("ffmpeg")
-        .args([
-            "-i", &path_a.to_string_lossy(),
-            "-i", &path_b.to_string_lossy(),
-            "-filter_complex", &filter,
-            "-f", "null",
-            "-",
-        ])
+    let mut cmd = std::process::Command::new("ffmpeg");
+
+    // Input A with optional time range
+    if let Some(t) = start_time {
+        cmd.args(["-ss", &t.to_string()]);
+    }
+    cmd.args(["-i", &path_a.to_string_lossy()]);
+
+    // Input B with optional time range
+    if let Some(t) = start_time {
+        cmd.args(["-ss", &t.to_string()]);
+    }
+    cmd.args(["-i", &path_b.to_string_lossy()]);
+
+    // Duration limit (if end_time specified)
+    if let Some(end) = end_time {
+        if let Some(start) = start_time {
+            let duration = (end - start).max(0.0);
+            cmd.args(["-t", &duration.to_string()]);
+        } else {
+            cmd.args(["-to", &end.to_string()]);
+        }
+    }
+
+    cmd.args(["-filter_complex", &filter, "-f", "null", "-"]);
+
+    let output = cmd
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
@@ -418,9 +468,8 @@ fn run_ffmpeg_psnr(path_a: &Path, path_b: &Path) -> Result<String> {
         ));
     }
 
-    let content = std::fs::read_to_string(&tmp).map_err(|e| {
-        Error::Other(format!("Failed to read PSNR log: {}", e))
-    })?;
+    let content = std::fs::read_to_string(&tmp)
+        .map_err(|e| Error::Other(format!("Failed to read PSNR log: {}", e)))?;
 
     let _ = std::fs::remove_file(&tmp);
 
@@ -428,17 +477,16 @@ fn run_ffmpeg_psnr(path_a: &Path, path_b: &Path) -> Result<String> {
 }
 
 /// Generate a visual difference video using FFmpeg blend=difference
-fn generate_diff_video(
-    path_a: &Path,
-    path_b: &Path,
-    output: &Path,
-) -> Result<()> {
+fn generate_diff_video(path_a: &Path, path_b: &Path, output: &Path) -> Result<()> {
     let result = std::process::Command::new("ffmpeg")
         .args([
             "-y",
-            "-i", &path_a.to_string_lossy(),
-            "-i", &path_b.to_string_lossy(),
-            "-filter_complex", "blend=all_mode=difference",
+            "-i",
+            &path_a.to_string_lossy(),
+            "-i",
+            &path_b.to_string_lossy(),
+            "-filter_complex",
+            "blend=all_mode=difference",
             "-an",
             &output.to_string_lossy(),
         ])
@@ -507,10 +555,8 @@ fn build_diff_regions(
     let frame_duration = if fps > 0.0 { 1.0 / fps } else { 1.0 / 30.0 };
 
     // Collect diff frames
-    let diff_frames: Vec<&FrameMetric> = metrics
-        .iter()
-        .filter(|f| f.ssim < ssim_threshold)
-        .collect();
+    let diff_frames: Vec<&FrameMetric> =
+        metrics.iter().filter(|f| f.ssim < ssim_threshold).collect();
 
     if diff_frames.is_empty() {
         return Vec::new();
@@ -572,12 +618,32 @@ mod tests {
         use super::super::ffmpeg_parser::{PsnrEntry, SsimEntry};
 
         let ssim = vec![
-            SsimEntry { frame: 1, y: 0.99, u: 0.99, v: 0.99, all: 0.99 },
-            SsimEntry { frame: 2, y: 0.85, u: 0.86, v: 0.87, all: 0.86 },
+            SsimEntry {
+                frame: 1,
+                y: 0.99,
+                u: 0.99,
+                v: 0.99,
+                all: 0.99,
+            },
+            SsimEntry {
+                frame: 2,
+                y: 0.85,
+                u: 0.86,
+                v: 0.87,
+                all: 0.86,
+            },
         ];
         let psnr = vec![
-            PsnrEntry { frame: 1, mse_avg: 0.1, psnr_avg: 48.0 },
-            PsnrEntry { frame: 2, mse_avg: 5.0, psnr_avg: 31.0 },
+            PsnrEntry {
+                frame: 1,
+                mse_avg: 0.1,
+                psnr_avg: 48.0,
+            },
+            PsnrEntry {
+                frame: 2,
+                mse_avg: 5.0,
+                psnr_avg: 31.0,
+            },
         ];
 
         let metrics = build_frame_metrics(&ssim, &psnr, 30.0);
@@ -594,13 +660,33 @@ mod tests {
         use super::super::ffmpeg_parser::{PsnrEntry, SsimEntry};
 
         let ssim = vec![
-            SsimEntry { frame: 1, y: 0.99, u: 0.99, v: 0.99, all: 0.99 },
-            SsimEntry { frame: 2, y: 0.85, u: 0.86, v: 0.87, all: 0.86 },
-            SsimEntry { frame: 3, y: 0.90, u: 0.91, v: 0.92, all: 0.91 },
+            SsimEntry {
+                frame: 1,
+                y: 0.99,
+                u: 0.99,
+                v: 0.99,
+                all: 0.99,
+            },
+            SsimEntry {
+                frame: 2,
+                y: 0.85,
+                u: 0.86,
+                v: 0.87,
+                all: 0.86,
+            },
+            SsimEntry {
+                frame: 3,
+                y: 0.90,
+                u: 0.91,
+                v: 0.92,
+                all: 0.91,
+            },
         ];
-        let psnr = vec![
-            PsnrEntry { frame: 1, mse_avg: 0.1, psnr_avg: 48.0 },
-        ];
+        let psnr = vec![PsnrEntry {
+            frame: 1,
+            mse_avg: 0.1,
+            psnr_avg: 48.0,
+        }];
 
         let metrics = build_frame_metrics(&ssim, &psnr, 30.0);
         assert_eq!(metrics.len(), 3);
@@ -612,8 +698,18 @@ mod tests {
     #[test]
     fn test_build_diff_regions_no_diffs() {
         let metrics = vec![
-            FrameMetric { frame: 1, timestamp: 0.0, ssim: 0.99, psnr: 48.0 },
-            FrameMetric { frame: 2, timestamp: 1.0 / 30.0, ssim: 0.98, psnr: 45.0 },
+            FrameMetric {
+                frame: 1,
+                timestamp: 0.0,
+                ssim: 0.99,
+                psnr: 48.0,
+            },
+            FrameMetric {
+                frame: 2,
+                timestamp: 1.0 / 30.0,
+                ssim: 0.98,
+                psnr: 45.0,
+            },
         ];
         let regions = build_diff_regions(&metrics, 0.95, 30.0);
         assert!(regions.is_empty());
@@ -622,9 +718,24 @@ mod tests {
     #[test]
     fn test_build_diff_regions_all_diff() {
         let metrics = vec![
-            FrameMetric { frame: 1, timestamp: 0.0, ssim: 0.80, psnr: 30.0 },
-            FrameMetric { frame: 2, timestamp: 1.0 / 30.0, ssim: 0.82, psnr: 31.0 },
-            FrameMetric { frame: 3, timestamp: 2.0 / 30.0, ssim: 0.78, psnr: 29.0 },
+            FrameMetric {
+                frame: 1,
+                timestamp: 0.0,
+                ssim: 0.80,
+                psnr: 30.0,
+            },
+            FrameMetric {
+                frame: 2,
+                timestamp: 1.0 / 30.0,
+                ssim: 0.82,
+                psnr: 31.0,
+            },
+            FrameMetric {
+                frame: 3,
+                timestamp: 2.0 / 30.0,
+                ssim: 0.78,
+                psnr: 29.0,
+            },
         ];
         let regions = build_diff_regions(&metrics, 0.95, 30.0);
         assert_eq!(regions.len(), 1); // All adjacent → merged into one region
@@ -635,12 +746,32 @@ mod tests {
     #[test]
     fn test_build_diff_regions_with_gap() {
         let metrics = vec![
-            FrameMetric { frame: 1, timestamp: 0.0, ssim: 0.80, psnr: 30.0 },
-            FrameMetric { frame: 2, timestamp: 1.0 / 30.0, ssim: 0.82, psnr: 31.0 },
+            FrameMetric {
+                frame: 1,
+                timestamp: 0.0,
+                ssim: 0.80,
+                psnr: 30.0,
+            },
+            FrameMetric {
+                frame: 2,
+                timestamp: 1.0 / 30.0,
+                ssim: 0.82,
+                psnr: 31.0,
+            },
             // Gap: frame 3-30 are fine (ssim > 0.95)
-            FrameMetric { frame: 30, timestamp: 29.0 / 30.0, ssim: 0.99, psnr: 48.0 },
+            FrameMetric {
+                frame: 30,
+                timestamp: 29.0 / 30.0,
+                ssim: 0.99,
+                psnr: 48.0,
+            },
             // Another diff at 2 seconds
-            FrameMetric { frame: 60, timestamp: 59.0 / 30.0, ssim: 0.70, psnr: 25.0 },
+            FrameMetric {
+                frame: 60,
+                timestamp: 59.0 / 30.0,
+                ssim: 0.70,
+                psnr: 25.0,
+            },
         ];
         let regions = build_diff_regions(&metrics, 0.95, 30.0);
         assert_eq!(regions.len(), 2); // Two separate regions

@@ -418,7 +418,10 @@ mod tests {
         let g2 = rgba_data2[1];
         let b2 = rgba_data2[2];
 
-        println!("Test 2 (Y=16, UV=128): RGBA({}, {}, {}, {})", r2, g2, rgba_data2[2], rgba_data2[3]);
+        println!(
+            "Test 2 (Y=16, UV=128): RGBA({}, {}, {}, {})",
+            r2, g2, rgba_data2[2], rgba_data2[3]
+        );
 
         // Y=16 should produce black (0,0,0)
         assert!(r2 < 10, "R should be ~0, got {}", r2);
@@ -440,7 +443,10 @@ mod tests {
         let g3 = rgba_data3[1];
         let b3 = rgba_data3[2];
 
-        println!("Test 3 (Y=235, UV=128): RGBA({}, {}, {}, {})", r3, g3, b3, rgba_data3[3]);
+        println!(
+            "Test 3 (Y=235, UV=128): RGBA({}, {}, {}, {})",
+            r3, g3, b3, rgba_data3[3]
+        );
 
         // Y=235 should produce white (~255,255,255)
         assert!(r3 > 245, "R should be ~255, got {}", r3);
@@ -593,7 +599,8 @@ mod tests {
         let rgba_texture = renderer.render_to_new_texture(&nv12_texture);
 
         // Read back RGBA data
-        let rgba_data = read_texture_to_cpu(&ctx, &rgba_texture, nv12_texture.width, nv12_texture.height);
+        let rgba_data =
+            read_texture_to_cpu(&ctx, &rgba_texture, nv12_texture.width, nv12_texture.height);
 
         // Analyze the output
         let pixel_count = (nv12_texture.width * nv12_texture.height) as usize;
@@ -658,7 +665,9 @@ mod tests {
         assert!(
             max_r > 50 || max_g > 50 || max_b > 50,
             "Output appears to be all black! Max RGB: ({}, {}, {})",
-            max_r, max_g, max_b
+            max_r,
+            max_g,
+            max_b
         );
 
         // Verify there's some color variation (not a solid color)

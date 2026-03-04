@@ -65,9 +65,7 @@ impl HwAccelType {
     /// Get FFmpeg AVHWDeviceType
     pub fn av_hw_device_type(&self) -> ffmpeg::ffi::AVHWDeviceType {
         match self {
-            HwAccelType::VideoToolbox => {
-                ffmpeg::ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VIDEOTOOLBOX
-            }
+            HwAccelType::VideoToolbox => ffmpeg::ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
             HwAccelType::Vaapi => ffmpeg::ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI,
             HwAccelType::Cuda => ffmpeg::ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_CUDA,
             HwAccelType::D3d11va => ffmpeg::ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA,
@@ -79,7 +77,11 @@ impl HwAccelType {
                 return ffmpeg::ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI;
                 #[cfg(target_os = "windows")]
                 return ffmpeg::ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA;
-                #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+                #[cfg(not(any(
+                    target_os = "macos",
+                    target_os = "linux",
+                    target_os = "windows"
+                )))]
                 return ffmpeg::ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE;
             }
         }

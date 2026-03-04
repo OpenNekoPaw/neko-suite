@@ -13,9 +13,9 @@
 //! No CPU-based format conversion is performed (zero-copy design).
 
 use super::codec_ext::HwEncoderTypeExt;
-use super::traits::{EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwEncoderType};
 #[cfg(test)]
 use super::traits::VideoCodec;
+use super::traits::{EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwEncoderType};
 use crate::error::{Error, Result};
 
 use ffmpeg_next as ffmpeg;
@@ -67,7 +67,9 @@ pub fn detect_hw_encoders() -> Vec<HwEncoderType> {
     #[cfg(target_os = "windows")]
     {
         // Check for NVIDIA (NVENC)
-        if std::env::var("CUDA_PATH").is_ok() || Path::new("C:\\Windows\\System32\\nvEncodeAPI64.dll").exists() {
+        if std::env::var("CUDA_PATH").is_ok()
+            || Path::new("C:\\Windows\\System32\\nvEncodeAPI64.dll").exists()
+        {
             available.push(HwEncoderType::Nvenc);
         }
 
@@ -218,7 +220,8 @@ impl HwAccelEncoder {
             for y in 0..h {
                 let src_offset = y * w;
                 let dst_offset = y * y_stride;
-                y_data[dst_offset..dst_offset + w].copy_from_slice(&data[src_offset..src_offset + w]);
+                y_data[dst_offset..dst_offset + w]
+                    .copy_from_slice(&data[src_offset..src_offset + w]);
             }
         }
 
@@ -237,7 +240,8 @@ impl HwAccelEncoder {
             for y in 0..uv_h {
                 let src_offset = uv_offset + y * w;
                 let dst_offset = y * uv_stride;
-                uv_data[dst_offset..dst_offset + w].copy_from_slice(&data[src_offset..src_offset + w]);
+                uv_data[dst_offset..dst_offset + w]
+                    .copy_from_slice(&data[src_offset..src_offset + w]);
             }
         }
     }
@@ -279,11 +283,19 @@ impl HwAccelEncoder {
     ///
     /// When `use_zero_copy` is true and hw_type is VideoToolbox, this will set up
     /// the complete hardware frame context chain for true zero-copy encoding.
-    fn try_open_hw_encoder(&mut self, config: &EncoderConfig, hw_type: HwEncoderType) -> Result<bool> {
+    fn try_open_hw_encoder(
+        &mut self,
+        config: &EncoderConfig,
+        hw_type: HwEncoderType,
+    ) -> Result<bool> {
         let encoder_name = match hw_type.encoder_name(config.codec) {
             Some(name) => name,
             None => {
-                tracing::debug!("Hardware encoder {:?} does not support codec {:?}", hw_type, config.codec);
+                tracing::debug!(
+                    "Hardware encoder {:?} does not support codec {:?}",
+                    hw_type,
+                    config.codec
+                );
                 return Ok(false);
             }
         };
@@ -338,7 +350,9 @@ impl HwAccelEncoder {
             }
             self.zero_copy_active = true;
 
-            tracing::info!("Zero-copy encoding enabled (CVPixelBuffer via data[3], VIDEOTOOLBOX format)");
+            tracing::info!(
+                "Zero-copy encoding enabled (CVPixelBuffer via data[3], VIDEOTOOLBOX format)"
+            );
         }
 
         #[cfg(not(target_os = "macos"))]
@@ -376,8 +390,8 @@ impl HwAccelEncoder {
             HwEncoderType::VideoToolbox => {
                 // VideoToolbox specific options
                 opts.set("allow_sw", "0"); // Disable software fallback within VT
-                // realtime mode: Ultrafast/Fast → prioritize speed (preview),
-                // Medium/Slow/Veryslow → prioritize quality (export)
+                                           // realtime mode: Ultrafast/Fast → prioritize speed (preview),
+                                           // Medium/Slow/Veryslow → prioritize quality (export)
                 match config.preset {
                     EncoderPreset::Ultrafast | EncoderPreset::Fast => {
                         opts.set("realtime", "1");
@@ -445,7 +459,11 @@ impl HwAccelEncoder {
                 self.frame_count = 0;
 
                 #[cfg(target_os = "macos")]
-                let format_str = if self.zero_copy_active { "VIDEOTOOLBOX (zero-copy)" } else { "NV12" };
+                let format_str = if self.zero_copy_active {
+                    "VIDEOTOOLBOX (zero-copy)"
+                } else {
+                    "NV12"
+                };
                 #[cfg(not(target_os = "macos"))]
                 let format_str = "NV12";
 
@@ -484,7 +502,6 @@ impl HwAccelEncoder {
             }
         }
     }
-
 }
 
 impl Default for HwAccelEncoder {
@@ -547,7 +564,11 @@ impl Encoder for HwAccelEncoder {
     }
 
     fn encode_frame(&mut self, data: &[u8], pts: i64) -> Result<Vec<EncodedPacket>> {
-        let config = self.config.as_ref().ok_or(Error::EncoderNotInitialized)?.clone();
+        let config = self
+            .config
+            .as_ref()
+            .ok_or(Error::EncoderNotInitialized)?
+            .clone();
 
         // Validate input data size (NV12: width * height * 1.5)
         let expected_size = (config.width * config.height * 3 / 2) as usize;
@@ -664,7 +685,11 @@ impl Encoder for HwAccelEncoder {
 
         const K_IO_SURFACE_LOCK_READ_ONLY: u32 = 1;
 
-        let config = self.config.as_ref().ok_or(Error::EncoderNotInitialized)?.clone();
+        let config = self
+            .config
+            .as_ref()
+            .ok_or(Error::EncoderNotInitialized)?
+            .clone();
         let io_surface = gpu_handle as IOSurfaceRef;
 
         // Check if zero-copy mode is active
@@ -731,7 +756,10 @@ impl Encoder for HwAccelEncoder {
 
                 // Create AVBufferRef to manage CVPixelBuffer lifetime
                 // This prevents FFmpeg from trying to free the frame data
-                extern "C" fn release_cv_pixel_buffer(opaque: *mut std::ffi::c_void, _data: *mut u8) {
+                extern "C" fn release_cv_pixel_buffer(
+                    opaque: *mut std::ffi::c_void,
+                    _data: *mut u8,
+                ) {
                     if !opaque.is_null() {
                         #[link(name = "CoreFoundation", kind = "framework")]
                         extern "C" {
@@ -755,7 +783,9 @@ impl Encoder for HwAccelEncoder {
                 if (*frame_ptr).buf[0].is_null() {
                     // Failed to create buffer, manually release CVPixelBuffer
                     CFRelease(cv_pixel_buffer as *const Object);
-                    return Err(Error::Other("Failed to create AVBufferRef for CVPixelBuffer".into()));
+                    return Err(Error::Other(
+                        "Failed to create AVBufferRef for CVPixelBuffer".into(),
+                    ));
                 }
             }
 
@@ -800,11 +830,13 @@ impl Encoder for HwAccelEncoder {
             // ================================================================
 
             // Lock IOSurface for CPU read
-            let lock_result = unsafe {
-                IOSurfaceLock(io_surface, K_IO_SURFACE_LOCK_READ_ONLY, ptr::null_mut())
-            };
+            let lock_result =
+                unsafe { IOSurfaceLock(io_surface, K_IO_SURFACE_LOCK_READ_ONLY, ptr::null_mut()) };
             if lock_result != 0 {
-                return Err(Error::Other(format!("Failed to lock IOSurface: {}", lock_result)));
+                return Err(Error::Other(format!(
+                    "Failed to lock IOSurface: {}",
+                    lock_result
+                )));
             }
 
             // Get IOSurface plane addresses and strides
@@ -820,7 +852,8 @@ impl Encoder for HwAccelEncoder {
             if pts < 3 {
                 let height = config.height as usize;
                 let plane_size = y_stride * height;
-                let y_data = unsafe { std::slice::from_raw_parts(y_ptr, std::cmp::min(plane_size, 256)) };
+                let y_data =
+                    unsafe { std::slice::from_raw_parts(y_ptr, std::cmp::min(plane_size, 256)) };
                 let non_zero = y_data.iter().filter(|&&b| b != 0).count();
                 tracing::debug!(
                     "encode_frame_gpu: pts={} y_ptr={:?} y_stride={} first_16={:02x?} non_zero_in_256={}",
@@ -902,7 +935,7 @@ impl HwAccelEncoder {
         #[link(name = "CoreVideo", kind = "framework")]
         extern "C" {
             fn CVPixelBufferCreateWithIOSurface(
-                allocator: *const Object,       // kCFAllocatorDefault = NULL
+                allocator: *const Object, // kCFAllocatorDefault = NULL
                 surface: IOSurfaceRef,
                 pixel_buffer_attributes: *const Object, // NULL for default
                 pixel_buffer_out: *mut CVPixelBufferRef,
@@ -974,9 +1007,16 @@ impl HwAccelEncoder {
         let io_surface_ref = io_surface as IOSurfaceRef;
 
         // Lock IOSurface for reading
-        let lock_result = IOSurfaceLock(io_surface_ref, K_IO_SURFACE_LOCK_READ_ONLY, std::ptr::null_mut());
+        let lock_result = IOSurfaceLock(
+            io_surface_ref,
+            K_IO_SURFACE_LOCK_READ_ONLY,
+            std::ptr::null_mut(),
+        );
         if lock_result != 0 {
-            return Err(Error::Other(format!("Failed to lock IOSurface: {}", lock_result)));
+            return Err(Error::Other(format!(
+                "Failed to lock IOSurface: {}",
+                lock_result
+            )));
         }
 
         // Get plane info
@@ -1026,7 +1066,11 @@ impl HwAccelEncoder {
         }
 
         // Unlock IOSurface
-        IOSurfaceUnlock(io_surface_ref, K_IO_SURFACE_LOCK_READ_ONLY, std::ptr::null_mut());
+        IOSurfaceUnlock(
+            io_surface_ref,
+            K_IO_SURFACE_LOCK_READ_ONLY,
+            std::ptr::null_mut(),
+        );
 
         Ok(nv12_data)
     }
@@ -1067,22 +1111,43 @@ mod tests {
         );
 
         // NVENC
-        assert_eq!(HwEncoderType::Nvenc.encoder_name(VideoCodec::H264), Some("h264_nvenc"));
-        assert_eq!(HwEncoderType::Nvenc.encoder_name(VideoCodec::H265), Some("hevc_nvenc"));
+        assert_eq!(
+            HwEncoderType::Nvenc.encoder_name(VideoCodec::H264),
+            Some("h264_nvenc")
+        );
+        assert_eq!(
+            HwEncoderType::Nvenc.encoder_name(VideoCodec::H265),
+            Some("hevc_nvenc")
+        );
 
         // VAAPI
-        assert_eq!(HwEncoderType::Vaapi.encoder_name(VideoCodec::H264), Some("h264_vaapi"));
-        assert_eq!(HwEncoderType::Vaapi.encoder_name(VideoCodec::H265), Some("hevc_vaapi"));
+        assert_eq!(
+            HwEncoderType::Vaapi.encoder_name(VideoCodec::H264),
+            Some("h264_vaapi")
+        );
+        assert_eq!(
+            HwEncoderType::Vaapi.encoder_name(VideoCodec::H265),
+            Some("hevc_vaapi")
+        );
 
         // QSV
-        assert_eq!(HwEncoderType::Qsv.encoder_name(VideoCodec::H264), Some("h264_qsv"));
-        assert_eq!(HwEncoderType::Qsv.encoder_name(VideoCodec::H265), Some("hevc_qsv"));
+        assert_eq!(
+            HwEncoderType::Qsv.encoder_name(VideoCodec::H264),
+            Some("h264_qsv")
+        );
+        assert_eq!(
+            HwEncoderType::Qsv.encoder_name(VideoCodec::H265),
+            Some("hevc_qsv")
+        );
 
         // None returns None
         assert_eq!(HwEncoderType::None.encoder_name(VideoCodec::H264), None);
 
         // VP9 and ProRes have no hardware encoders
-        assert_eq!(HwEncoderType::VideoToolbox.encoder_name(VideoCodec::Vp9), None);
+        assert_eq!(
+            HwEncoderType::VideoToolbox.encoder_name(VideoCodec::Vp9),
+            None
+        );
         assert_eq!(HwEncoderType::Nvenc.encoder_name(VideoCodec::ProRes), None);
     }
 

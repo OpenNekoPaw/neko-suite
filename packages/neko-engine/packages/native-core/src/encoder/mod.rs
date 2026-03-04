@@ -14,17 +14,17 @@ pub mod pipeline;
 pub mod pool;
 mod traits;
 
+pub use codec_ext::{
+    AudioCodecExt, ContainerFormatExt, EncoderPresetExt, HwEncoderTypeExt, VideoCodecExt,
+};
 pub use hwaccel::HwAccelEncoder;
 pub use iframe::{encode_nv12_to_h264_iframe, global_iframe_encoder, IFrameConfig, IFrameEncoder};
 pub use muxer::{FfmpegMuxer, Muxer, StreamInfo};
 pub use pipeline::{
     AsyncExportPipeline, CompositedFrame, PipelineConfig, PipelineFrame, PipelineProgress,
 };
-pub use pool::{EncoderPool, global_encoder_pool};
+pub use pool::{global_encoder_pool, EncoderPool};
 pub use traits::{
     ContainerFormat, EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwEncoderType,
     VideoCodec,
-};
-pub use codec_ext::{
-    AudioCodecExt, ContainerFormatExt, EncoderPresetExt, HwEncoderTypeExt, VideoCodecExt,
 };

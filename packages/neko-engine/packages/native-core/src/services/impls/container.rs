@@ -55,12 +55,13 @@ impl ServiceContainer {
         let video_service = Arc::new(VideoService::new(gpu_ctx.clone(), task_service.clone()));
         let audio_service = Arc::new(AudioService::new(gpu_ctx.clone(), task_service.clone()));
         let image_service = Arc::new(ImageService::new(gpu_ctx.clone()));
-        let timeline_service = Arc::new(TimelineService::new(gpu_ctx.clone(), task_service.clone()));
+        let timeline_service =
+            Arc::new(TimelineService::new(gpu_ctx.clone(), task_service.clone()));
 
         // Export service requires GPU
-        let export_service = gpu_ctx.as_ref().map(|ctx| {
-            Arc::new(ExportService::new(Arc::clone(ctx)))
-        });
+        let export_service = gpu_ctx
+            .as_ref()
+            .map(|ctx| Arc::new(ExportService::new(Arc::clone(ctx))));
 
         Ok(Self {
             gpu_ctx,

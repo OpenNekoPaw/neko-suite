@@ -1,6 +1,8 @@
 //! FFmpeg-based audio encoder
 
-use super::traits::{AudioCodec, AudioEncoder, AudioEncoderConfig, EncodedAudioPacket, SampleFormat};
+use super::traits::{
+    AudioCodec, AudioEncoder, AudioEncoderConfig, EncodedAudioPacket, SampleFormat,
+};
 use crate::encoder::codec_ext::AudioCodecExt;
 use crate::error::{Error, Result};
 
@@ -120,10 +122,7 @@ impl FfmpegAudioEncoder {
                 return None;
             }
             let data = std::slice::from_raw_parts(extradata, size).to_vec();
-            tracing::debug!(
-                "Audio encoder extradata: {} bytes",
-                size,
-            );
+            tracing::debug!("Audio encoder extradata: {} bytes", size,);
             Some(data)
         }
     }
@@ -245,7 +244,9 @@ impl AudioEncoder for FfmpegAudioEncoder {
     fn encode_frame(&mut self, data: &[u8], samples: usize) -> Result<Vec<EncodedAudioPacket>> {
         let config = self.config.as_ref().ok_or(Error::EncoderNotInitialized)?;
         let encoder_format = self.encoder_format.ok_or(Error::EncoderNotInitialized)?;
-        let channel_layout = self.encoder_channel_layout.ok_or(Error::EncoderNotInitialized)?;
+        let channel_layout = self
+            .encoder_channel_layout
+            .ok_or(Error::EncoderNotInitialized)?;
 
         // Extract values from config to avoid holding the borrow
         let sample_format = config.sample_format;
@@ -316,8 +317,9 @@ impl AudioEncoder for FfmpegAudioEncoder {
                             if src_offset + bytes_per_sample <= chunk.len()
                                 && dst_offset + bytes_per_sample <= plane.len()
                             {
-                                plane[dst_offset..dst_offset + bytes_per_sample]
-                                    .copy_from_slice(&chunk[src_offset..src_offset + bytes_per_sample]);
+                                plane[dst_offset..dst_offset + bytes_per_sample].copy_from_slice(
+                                    &chunk[src_offset..src_offset + bytes_per_sample],
+                                );
                             }
                         }
                     }
@@ -342,7 +344,9 @@ impl AudioEncoder for FfmpegAudioEncoder {
     fn flush(&mut self) -> Result<Vec<EncodedAudioPacket>> {
         let config = self.config.as_ref().ok_or(Error::EncoderNotInitialized)?;
         let encoder_format = self.encoder_format.ok_or(Error::EncoderNotInitialized)?;
-        let channel_layout = self.encoder_channel_layout.ok_or(Error::EncoderNotInitialized)?;
+        let channel_layout = self
+            .encoder_channel_layout
+            .ok_or(Error::EncoderNotInitialized)?;
 
         // Extract values to avoid holding borrow
         let sample_rate = config.sample_rate;
@@ -362,7 +366,8 @@ impl AudioEncoder for FfmpegAudioEncoder {
             let remaining_samples = self.fifo.len() / (channels * bytes_per_sample);
 
             if remaining_samples > 0 {
-                let mut enc_frame = AudioFrame::new(encoder_format, remaining_samples, channel_layout);
+                let mut enc_frame =
+                    AudioFrame::new(encoder_format, remaining_samples, channel_layout);
                 enc_frame.set_rate(sample_rate);
                 enc_frame.set_pts(Some(self.pts));
 
@@ -383,7 +388,9 @@ impl AudioEncoder for FfmpegAudioEncoder {
                                     && dst_offset + bytes_per_sample <= plane.len()
                                 {
                                     plane[dst_offset..dst_offset + bytes_per_sample]
-                                        .copy_from_slice(&chunk[src_offset..src_offset + bytes_per_sample]);
+                                        .copy_from_slice(
+                                            &chunk[src_offset..src_offset + bytes_per_sample],
+                                        );
                                 }
                             }
                         }
@@ -447,8 +454,7 @@ mod tests {
 
     #[test]
     fn test_audio_encoder_config() {
-        let config = AudioEncoderConfig::new(48000, 2, AudioCodec::Aac)
-            .with_bitrate(256_000);
+        let config = AudioEncoderConfig::new(48000, 2, AudioCodec::Aac).with_bitrate(256_000);
 
         assert_eq!(config.sample_rate, 48000);
         assert_eq!(config.channels, 2);

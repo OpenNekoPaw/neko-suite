@@ -505,7 +505,10 @@ impl GpuCompositor {
             let aligned_len = (layer.data.len() + 3) & !3;
             combined_textures.extend_from_slice(&layer.data);
             // Add padding bytes if needed
-            combined_textures.resize(combined_textures.len() + (aligned_len - layer.data.len()), 0);
+            combined_textures.resize(
+                combined_textures.len() + (aligned_len - layer.data.len()),
+                0,
+            );
             current_offset += aligned_len as u32;
 
             // Append mask data if present (tracked in offset for subsequent layers)
@@ -522,9 +525,10 @@ impl GpuCompositor {
         }
 
         // Create buffers
-        let layer_data_buffer = self
-            .ctx
-            .create_buffer_with_data(bytemuck::cast_slice(&gpu_layers), wgpu::BufferUsages::STORAGE);
+        let layer_data_buffer = self.ctx.create_buffer_with_data(
+            bytemuck::cast_slice(&gpu_layers),
+            wgpu::BufferUsages::STORAGE,
+        );
 
         let texture_buffer = self
             .ctx
@@ -647,7 +651,10 @@ mod tests {
         assert_eq!(BlendMode::from_str("color_dodge"), BlendMode::ColorDodge);
         assert_eq!(BlendMode::from_str("linear_dodge"), BlendMode::LinearDodge);
         assert_eq!(BlendMode::from_str("add"), BlendMode::LinearDodge); // alias
-        assert_eq!(BlendMode::from_str("lighter_color"), BlendMode::LighterColor);
+        assert_eq!(
+            BlendMode::from_str("lighter_color"),
+            BlendMode::LighterColor
+        );
 
         // Contrast Group
         assert_eq!(BlendMode::from_str("overlay"), BlendMode::Overlay);
@@ -731,9 +738,9 @@ mod tests {
         // Should be solid black (background color)
         assert_eq!(result.data.len(), (64 * 64 * 4) as usize);
         // Check first pixel is black with alpha 1.0
-        assert_eq!(result.data[0], 0);   // R
-        assert_eq!(result.data[1], 0);   // G
-        assert_eq!(result.data[2], 0);   // B
+        assert_eq!(result.data[0], 0); // R
+        assert_eq!(result.data[1], 0); // G
+        assert_eq!(result.data[2], 0); // B
         assert_eq!(result.data[3], 255); // A
     }
 

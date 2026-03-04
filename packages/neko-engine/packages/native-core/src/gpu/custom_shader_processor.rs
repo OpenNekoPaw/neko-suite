@@ -103,45 +103,44 @@ impl CustomShaderProcessor {
         let device = ctx.device();
 
         // Shared bind group layout (same as GpuProcessor / GpuStyleProcessor)
-        let bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Custom Shader Bind Group Layout"),
-                entries: &[
-                    // binding 0: input storage (read-only)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Custom Shader Bind Group Layout"),
+            entries: &[
+                // binding 0: input storage (read-only)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
                     },
-                    // binding 1: output storage (read-write)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
+                    count: None,
+                },
+                // binding 1: output storage (read-write)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
                     },
-                    // binding 2: uniform
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
+                    count: None,
+                },
+                // binding 2: uniform
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
                     },
-                ],
-            });
+                    count: None,
+                },
+            ],
+        });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Custom Shader Pipeline Layout"),
@@ -161,35 +160,121 @@ impl CustomShaderProcessor {
         };
 
         // Compile all preset shaders
-        processor.register_preset("pixelate", "Pixelate effect", PRESET_PIXELATE, vec![
-            ParamDef { name: "pixel_size".into(), default: 8.0, min: 1.0, max: 100.0 },
-        ])?;
+        processor.register_preset(
+            "pixelate",
+            "Pixelate effect",
+            PRESET_PIXELATE,
+            vec![ParamDef {
+                name: "pixel_size".into(),
+                default: 8.0,
+                min: 1.0,
+                max: 100.0,
+            }],
+        )?;
 
-        processor.register_preset("edge_detect", "Edge detection (Sobel)", PRESET_EDGE_DETECT, vec![
-            ParamDef { name: "threshold".into(), default: 0.1, min: 0.0, max: 1.0 },
-            ParamDef { name: "strength".into(), default: 1.0, min: 0.0, max: 3.0 },
-        ])?;
+        processor.register_preset(
+            "edge_detect",
+            "Edge detection (Sobel)",
+            PRESET_EDGE_DETECT,
+            vec![
+                ParamDef {
+                    name: "threshold".into(),
+                    default: 0.1,
+                    min: 0.0,
+                    max: 1.0,
+                },
+                ParamDef {
+                    name: "strength".into(),
+                    default: 1.0,
+                    min: 0.0,
+                    max: 3.0,
+                },
+            ],
+        )?;
 
-        processor.register_preset("posterize", "Tone separation", PRESET_POSTERIZE, vec![
-            ParamDef { name: "levels".into(), default: 4.0, min: 2.0, max: 32.0 },
-        ])?;
+        processor.register_preset(
+            "posterize",
+            "Tone separation",
+            PRESET_POSTERIZE,
+            vec![ParamDef {
+                name: "levels".into(),
+                default: 4.0,
+                min: 2.0,
+                max: 32.0,
+            }],
+        )?;
 
-        processor.register_preset("noise", "Noise overlay", PRESET_NOISE, vec![
-            ParamDef { name: "amount".into(), default: 0.1, min: 0.0, max: 1.0 },
-            ParamDef { name: "time".into(), default: 0.0, min: 0.0, max: 10000.0 },
-        ])?;
+        processor.register_preset(
+            "noise",
+            "Noise overlay",
+            PRESET_NOISE,
+            vec![
+                ParamDef {
+                    name: "amount".into(),
+                    default: 0.1,
+                    min: 0.0,
+                    max: 1.0,
+                },
+                ParamDef {
+                    name: "time".into(),
+                    default: 0.0,
+                    min: 0.0,
+                    max: 10000.0,
+                },
+            ],
+        )?;
 
-        processor.register_preset("rgb_split", "RGB channel split", PRESET_RGB_SPLIT, vec![
-            ParamDef { name: "offset".into(), default: 5.0, min: 0.0, max: 50.0 },
-            ParamDef { name: "angle".into(), default: 0.0, min: 0.0, max: 6.28318 },
-        ])?;
+        processor.register_preset(
+            "rgb_split",
+            "RGB channel split",
+            PRESET_RGB_SPLIT,
+            vec![
+                ParamDef {
+                    name: "offset".into(),
+                    default: 5.0,
+                    min: 0.0,
+                    max: 50.0,
+                },
+                ParamDef {
+                    name: "angle".into(),
+                    default: 0.0,
+                    min: 0.0,
+                    max: 6.28318,
+                },
+            ],
+        )?;
 
-        processor.register_preset("wave_distort", "Wave distortion", PRESET_WAVE_DISTORT, vec![
-            ParamDef { name: "amplitude".into(), default: 10.0, min: 0.0, max: 100.0 },
-            ParamDef { name: "frequency".into(), default: 5.0, min: 0.1, max: 50.0 },
-            ParamDef { name: "speed".into(), default: 1.0, min: 0.0, max: 10.0 },
-            ParamDef { name: "time".into(), default: 0.0, min: 0.0, max: 10000.0 },
-        ])?;
+        processor.register_preset(
+            "wave_distort",
+            "Wave distortion",
+            PRESET_WAVE_DISTORT,
+            vec![
+                ParamDef {
+                    name: "amplitude".into(),
+                    default: 10.0,
+                    min: 0.0,
+                    max: 100.0,
+                },
+                ParamDef {
+                    name: "frequency".into(),
+                    default: 5.0,
+                    min: 0.1,
+                    max: 50.0,
+                },
+                ParamDef {
+                    name: "speed".into(),
+                    default: 1.0,
+                    min: 0.0,
+                    max: 10.0,
+                },
+                ParamDef {
+                    name: "time".into(),
+                    default: 0.0,
+                    min: 0.0,
+                    max: 10000.0,
+                },
+            ],
+        )?;
 
         Ok(processor)
     }
@@ -377,7 +462,8 @@ fn sample_at(x: i32, y: i32) -> vec4<f32> {
     ) -> Result<Vec<u8>> {
         if width == 0 || height == 0 {
             return Err(Error::InvalidParameter(format!(
-                "Frame dimensions must be non-zero: {}x{}", width, height
+                "Frame dimensions must be non-zero: {}x{}",
+                width, height
             )));
         }
 
@@ -558,8 +644,18 @@ mod tests {
     #[test]
     fn test_build_uniforms_defaults() {
         let defs = vec![
-            ParamDef { name: "a".into(), default: 5.0, min: 0.0, max: 10.0 },
-            ParamDef { name: "b".into(), default: 3.0, min: 0.0, max: 10.0 },
+            ParamDef {
+                name: "a".into(),
+                default: 5.0,
+                min: 0.0,
+                max: 10.0,
+            },
+            ParamDef {
+                name: "b".into(),
+                default: 3.0,
+                min: 0.0,
+                max: 10.0,
+            },
         ];
 
         // Empty JSON → use defaults
@@ -588,9 +684,12 @@ mod tests {
 
     #[test]
     fn test_build_uniforms_with_values() {
-        let defs = vec![
-            ParamDef { name: "a".into(), default: 5.0, min: 0.0, max: 10.0 },
-        ];
+        let defs = vec![ParamDef {
+            name: "a".into(),
+            default: 5.0,
+            min: 0.0,
+            max: 10.0,
+        }];
 
         let json = serde_json::json!({"a": 7.5});
 
@@ -616,9 +715,12 @@ mod tests {
 
     #[test]
     fn test_build_uniforms_clamping() {
-        let defs = vec![
-            ParamDef { name: "a".into(), default: 5.0, min: 0.0, max: 10.0 },
-        ];
+        let defs = vec![ParamDef {
+            name: "a".into(),
+            default: 5.0,
+            min: 0.0,
+            max: 10.0,
+        }];
 
         let json = serde_json::json!({"a": 999.0});
 
@@ -647,9 +749,12 @@ mod tests {
         let meta = PresetShaderMeta {
             id: "pixelate".into(),
             description: "Pixelate effect".into(),
-            params: vec![
-                ParamDef { name: "pixel_size".into(), default: 8.0, min: 1.0, max: 100.0 },
-            ],
+            params: vec![ParamDef {
+                name: "pixel_size".into(),
+                default: 8.0,
+                min: 1.0,
+                max: 100.0,
+            }],
         };
         let json = serde_json::to_value(&meta).unwrap();
         assert_eq!(json["id"], "pixelate");
@@ -661,21 +766,26 @@ mod tests {
         let mut presets: HashMap<String, PresetShaderMeta> = HashMap::new();
         let mut customs: HashMap<String, PresetShaderMeta> = HashMap::new();
 
-        presets.insert("pixelate".into(), PresetShaderMeta {
-            id: "pixelate".into(),
-            description: "Pixelate".into(),
-            params: vec![],
-        });
-        customs.insert("my_shader".into(), PresetShaderMeta {
-            id: "my_shader".into(),
-            description: "Custom".into(),
-            params: vec![],
-        });
+        presets.insert(
+            "pixelate".into(),
+            PresetShaderMeta {
+                id: "pixelate".into(),
+                description: "Pixelate".into(),
+                params: vec![],
+            },
+        );
+        customs.insert(
+            "my_shader".into(),
+            PresetShaderMeta {
+                id: "my_shader".into(),
+                description: "Custom".into(),
+                params: vec![],
+            },
+        );
 
         // Simulates get_shader_info logic: preset OR custom
-        let find = |id: &str| -> Option<&PresetShaderMeta> {
-            presets.get(id).or_else(|| customs.get(id))
-        };
+        let find =
+            |id: &str| -> Option<&PresetShaderMeta> { presets.get(id).or_else(|| customs.get(id)) };
 
         assert!(find("pixelate").is_some());
         assert!(find("my_shader").is_some());
@@ -704,7 +814,10 @@ mod tests {
         // Simulates the apply() zero-size validation
         let validate = |width: u32, height: u32| -> std::result::Result<(), String> {
             if width == 0 || height == 0 {
-                Err(format!("Frame dimensions must be non-zero: {}x{}", width, height))
+                Err(format!(
+                    "Frame dimensions must be non-zero: {}x{}",
+                    width, height
+                ))
             } else {
                 Ok(())
             }

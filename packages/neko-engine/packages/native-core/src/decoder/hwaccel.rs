@@ -25,8 +25,7 @@ use std::path::Path;
 #[cfg(target_os = "macos")]
 #[link(name = "CoreVideo", kind = "framework")]
 extern "C" {
-    fn CVPixelBufferGetIOSurface(pixelBuffer: *const std::ffi::c_void)
-        -> *const std::ffi::c_void;
+    fn CVPixelBufferGetIOSurface(pixelBuffer: *const std::ffi::c_void) -> *const std::ffi::c_void;
     fn CVPixelBufferRetain(pixelBuffer: *const std::ffi::c_void) -> *const std::ffi::c_void;
     fn CVPixelBufferRelease(pixelBuffer: *const std::ffi::c_void);
 }
@@ -362,8 +361,7 @@ impl HwAccelDecoder {
 
                     // Get IOSurface from CVPixelBuffer for Metal interop
                     let io_surface =
-                        CVPixelBufferGetIOSurface(pixel_buffer as *const std::ffi::c_void)
-                            as usize;
+                        CVPixelBufferGetIOSurface(pixel_buffer as *const std::ffi::c_void) as usize;
 
                     if io_surface == 0 {
                         return Err(Error::DecodeFailed(format!(
@@ -392,11 +390,9 @@ impl HwAccelDecoder {
                         ));
                     }
 
-                    let frames_ctx =
-                        (*hw_frames_ctx).data as *mut ffmpeg::ffi::AVHWFramesContext;
+                    let frames_ctx = (*hw_frames_ctx).data as *mut ffmpeg::ffi::AVHWFramesContext;
                     let device_ctx = (*frames_ctx).device_ctx;
-                    let vaapi_ctx =
-                        (*device_ctx).hwctx as *mut ffmpeg::ffi::AVVAAPIDeviceContext;
+                    let vaapi_ctx = (*device_ctx).hwctx as *mut ffmpeg::ffi::AVVAAPIDeviceContext;
                     let display = (*vaapi_ctx).display as usize;
 
                     Ok(GpuTextureHandle::Vaapi {
@@ -446,11 +442,7 @@ impl HwAccelDecoder {
     /// When hardware decoder sessions are exhausted, FFmpeg falls back to software
     /// decoding which produces YUV420P frames. This method reads the raw plane data
     /// and converts it to NV12 format for the GPU upload path.
-    fn extract_cpu_nv12(
-        &self,
-        hw_frame: &VideoFrame,
-        format: Pixel,
-    ) -> Result<GpuTextureHandle> {
+    fn extract_cpu_nv12(&self, hw_frame: &VideoFrame, format: Pixel) -> Result<GpuTextureHandle> {
         let width = hw_frame.width() as usize;
         let height = hw_frame.height() as usize;
 
@@ -681,7 +673,10 @@ impl Decoder for HwAccelDecoder {
     }
 
     fn seek(&mut self, time_seconds: f64) -> Result<()> {
-        let input_ctx = self.input_ctx.as_mut().ok_or(Error::DecoderNotInitialized)?;
+        let input_ctx = self
+            .input_ctx
+            .as_mut()
+            .ok_or(Error::DecoderNotInitialized)?;
         let decoder = self.decoder.as_mut().ok_or(Error::DecoderNotInitialized)?;
 
         if time_seconds < 0.0 {

@@ -33,13 +33,13 @@ pub mod telemetry;
 
 /// Prelude — commonly used types for convenience
 pub mod prelude {
-    pub use crate::error::{Error, Result};
-    pub use crate::services::{
-        IAudioService, IExportService, IImageService, INodeService,
-        IStreamPlayback, ITaskService, ITimelineService, IVideoService,
-        AudioService, ExportService as CoreExportService, ImageService,
-        NodeService, ServiceContainer, TaskService, TimelineService, VideoService,
-    };
     pub use crate::domain::{FrameData, StreamConfig, Timeline};
+    pub use crate::error::{Error, Result};
     pub use crate::gpu::GpuContext;
+    pub use crate::services::{
+        AudioService, ExportService as CoreExportService, IAudioService, IExportService,
+        IImageService, INodeService, IStreamPlayback, ITaskService, ITimelineService,
+        IVideoService, ImageService, NodeService, ServiceContainer, TaskService, TimelineService,
+        VideoService,
+    };
 }

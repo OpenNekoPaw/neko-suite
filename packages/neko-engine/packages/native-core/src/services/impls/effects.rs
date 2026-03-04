@@ -23,9 +23,10 @@ impl EffectsService {
 
 impl IEffectsService for EffectsService {
     fn list_presets(&self) -> Vec<PresetShaderMeta> {
-        let proc = self.processor.lock().map_err(|e| {
-            Error::GpuError(format!("Failed to acquire processor lock: {}", e))
-        });
+        let proc = self
+            .processor
+            .lock()
+            .map_err(|e| Error::GpuError(format!("Failed to acquire processor lock: {}", e)));
         match proc {
             Ok(p) => p.list_all().into_iter().cloned().collect(),
             Err(_) => Vec::new(),
@@ -33,9 +34,10 @@ impl IEffectsService for EffectsService {
     }
 
     fn get_shader_info(&self, shader_id: &str) -> Option<PresetShaderMeta> {
-        let proc = self.processor.lock().map_err(|e| {
-            Error::GpuError(format!("Failed to acquire processor lock: {}", e))
-        });
+        let proc = self
+            .processor
+            .lock()
+            .map_err(|e| Error::GpuError(format!("Failed to acquire processor lock: {}", e)));
         match proc {
             Ok(p) => p.get_shader_info(shader_id).cloned(),
             Err(_) => None,
@@ -50,9 +52,10 @@ impl IEffectsService for EffectsService {
         shader_id: &str,
         params: &serde_json::Value,
     ) -> Result<Vec<u8>> {
-        let proc = self.processor.lock().map_err(|e| {
-            Error::GpuError(format!("Failed to acquire processor lock: {}", e))
-        })?;
+        let proc = self
+            .processor
+            .lock()
+            .map_err(|e| Error::GpuError(format!("Failed to acquire processor lock: {}", e)))?;
         proc.apply(input, width, height, shader_id, params)
     }
 
@@ -62,9 +65,10 @@ impl IEffectsService for EffectsService {
         wgsl_source: &str,
         param_defs: Vec<ParamDef>,
     ) -> Result<()> {
-        let mut proc = self.processor.lock().map_err(|e| {
-            Error::GpuError(format!("Failed to acquire processor lock: {}", e))
-        })?;
+        let mut proc = self
+            .processor
+            .lock()
+            .map_err(|e| Error::GpuError(format!("Failed to acquire processor lock: {}", e)))?;
         proc.register_custom_shader(id, wgsl_source, param_defs)
     }
 }

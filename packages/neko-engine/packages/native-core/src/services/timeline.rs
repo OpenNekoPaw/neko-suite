@@ -1,7 +1,7 @@
 //! Timeline service trait
 
-use crate::domain::{FrameData, StreamConfig, Timeline, TimelineProjectInfo};
 use crate::domain::operations::EditOperationEnvelope;
+use crate::domain::{FrameData, StreamConfig, Timeline, TimelineProjectInfo};
 use crate::error::Result;
 use crate::export::ExportStats;
 use crate::services::IStreamPlayback;
@@ -74,11 +74,7 @@ pub trait ITimelineService: IStreamPlayback {
     async fn probe(&self, jvi_path: &Path) -> Result<TimelineProjectInfo>;
 
     /// Composite a single frame at specified time
-    async fn composite(
-        &self,
-        timeline: &Timeline,
-        frame_number: u64,
-    ) -> Result<FrameData>;
+    async fn composite(&self, timeline: &Timeline, frame_number: u64) -> Result<FrameData>;
 
     /// Start a timeline stream for preview (returns paired video + audio streams)
     async fn start_stream(

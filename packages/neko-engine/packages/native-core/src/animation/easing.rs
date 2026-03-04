@@ -277,9 +277,7 @@ impl Easing {
             }
 
             // Cubic Bezier
-            EasingType::CubicBezier(x1, y1, x2, y2) => {
-                Self::cubic_bezier(t, x1, y1, x2, y2)
-            }
+            EasingType::CubicBezier(x1, y1, x2, y2) => Self::cubic_bezier(t, x1, y1, x2, y2),
         }
     }
 
@@ -369,7 +367,10 @@ mod tests {
     fn test_easing_from_str() {
         assert_eq!(EasingType::from_str("linear"), EasingType::Linear);
         assert_eq!(EasingType::from_str("easeInQuad"), EasingType::EaseInQuad);
-        assert_eq!(EasingType::from_str("ease_out_cubic"), EasingType::EaseOutCubic);
+        assert_eq!(
+            EasingType::from_str("ease_out_cubic"),
+            EasingType::EaseOutCubic
+        );
         assert_eq!(EasingType::from_str("unknown"), EasingType::Linear);
     }
 

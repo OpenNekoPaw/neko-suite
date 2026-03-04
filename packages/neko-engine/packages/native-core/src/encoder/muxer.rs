@@ -96,10 +96,7 @@ impl FfmpegMuxer {
     /// Set audio stream extradata (e.g. OpusHead for Opus in MP4).
     /// Must be called after `add_audio_stream()` and before `write_header()`.
     pub fn set_audio_extradata(&mut self, extradata: &[u8]) -> Result<()> {
-        let output_ctx = self
-            .output_ctx
-            .as_mut()
-            .ok_or(Error::MuxerNotInitialized)?;
+        let output_ctx = self.output_ctx.as_mut().ok_or(Error::MuxerNotInitialized)?;
 
         let stream_index = self
             .audio_stream_index
@@ -115,7 +112,9 @@ impl FfmpegMuxer {
             // Access the stream's codecpar via the raw AVFormatContext pointer
             let fmt_ctx = output_ctx.as_mut_ptr();
             if stream_index >= (*fmt_ctx).nb_streams as usize {
-                return Err(Error::InvalidParameter("Audio stream index out of range".to_string()));
+                return Err(Error::InvalidParameter(
+                    "Audio stream index out of range".to_string(),
+                ));
             }
             let stream_ptr = *(*fmt_ctx).streams.add(stream_index);
             let params_ptr = (*stream_ptr).codecpar;
@@ -129,10 +128,13 @@ impl FfmpegMuxer {
 
             // Allocate and copy new extradata (av_malloc for FFmpeg-managed memory)
             let size = extradata.len();
-            let buf = ffmpeg::ffi::av_malloc(size + ffmpeg::ffi::AV_INPUT_BUFFER_PADDING_SIZE as usize)
-                as *mut u8;
+            let buf =
+                ffmpeg::ffi::av_malloc(size + ffmpeg::ffi::AV_INPUT_BUFFER_PADDING_SIZE as usize)
+                    as *mut u8;
             if buf.is_null() {
-                return Err(Error::Other("Failed to allocate extradata buffer".to_string()));
+                return Err(Error::Other(
+                    "Failed to allocate extradata buffer".to_string(),
+                ));
             }
             std::ptr::copy_nonoverlapping(extradata.as_ptr(), buf, size);
             // Zero padding bytes
@@ -192,10 +194,7 @@ impl Muxer for FfmpegMuxer {
     }
 
     fn add_video_stream(&mut self, config: &EncoderConfig) -> Result<StreamInfo> {
-        let output_ctx = self
-            .output_ctx
-            .as_mut()
-            .ok_or(Error::MuxerNotInitialized)?;
+        let output_ctx = self.output_ctx.as_mut().ok_or(Error::MuxerNotInitialized)?;
 
         if self.header_written {
             return Err(Error::InvalidParameter(
@@ -256,10 +255,7 @@ impl Muxer for FfmpegMuxer {
     }
 
     fn add_audio_stream(&mut self, config: &AudioEncoderConfig) -> Result<StreamInfo> {
-        let output_ctx = self
-            .output_ctx
-            .as_mut()
-            .ok_or(Error::MuxerNotInitialized)?;
+        let output_ctx = self.output_ctx.as_mut().ok_or(Error::MuxerNotInitialized)?;
 
         if self.header_written {
             return Err(Error::InvalidParameter(
@@ -312,13 +308,12 @@ impl Muxer for FfmpegMuxer {
     }
 
     fn write_header(&mut self) -> Result<()> {
-        let output_ctx = self
-            .output_ctx
-            .as_mut()
-            .ok_or(Error::MuxerNotInitialized)?;
+        let output_ctx = self.output_ctx.as_mut().ok_or(Error::MuxerNotInitialized)?;
 
         if self.header_written {
-            return Err(Error::InvalidParameter("Header already written".to_string()));
+            return Err(Error::InvalidParameter(
+                "Header already written".to_string(),
+            ));
         }
 
         output_ctx.write_header()?;
@@ -330,10 +325,7 @@ impl Muxer for FfmpegMuxer {
     }
 
     fn write_video_packet(&mut self, packet: &EncodedPacket) -> Result<()> {
-        let output_ctx = self
-            .output_ctx
-            .as_mut()
-            .ok_or(Error::MuxerNotInitialized)?;
+        let output_ctx = self.output_ctx.as_mut().ok_or(Error::MuxerNotInitialized)?;
 
         let stream_index = self
             .video_stream_index
@@ -346,9 +338,9 @@ impl Muxer for FfmpegMuxer {
         }
 
         // Get the actual stream time_base from FFmpeg (may differ from what we set)
-        let stream = output_ctx.stream(stream_index).ok_or_else(|| {
-            Error::InvalidParameter("Video stream not found".to_string())
-        })?;
+        let stream = output_ctx
+            .stream(stream_index)
+            .ok_or_else(|| Error::InvalidParameter("Video stream not found".to_string()))?;
         let stream_time_base = stream.time_base();
 
         // Rescale PTS from encoder time_base (1/fps) to stream time_base
@@ -397,10 +389,7 @@ impl Muxer for FfmpegMuxer {
     }
 
     fn write_audio_packet(&mut self, packet: &EncodedPacket) -> Result<()> {
-        let output_ctx = self
-            .output_ctx
-            .as_mut()
-            .ok_or(Error::MuxerNotInitialized)?;
+        let output_ctx = self.output_ctx.as_mut().ok_or(Error::MuxerNotInitialized)?;
 
         let stream_index = self
             .audio_stream_index

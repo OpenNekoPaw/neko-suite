@@ -240,7 +240,11 @@ impl TexturePool {
     }
 
     /// Create a new texture pool with specified max size
-    pub fn with_capacity(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, max_textures: usize) -> Self {
+    pub fn with_capacity(
+        device: Arc<wgpu::Device>,
+        queue: Arc<wgpu::Queue>,
+        max_textures: usize,
+    ) -> Self {
         Self {
             device,
             queue,
@@ -257,9 +261,10 @@ impl TexturePool {
     /// Evicts LRU textures if pool exceeds capacity.
     pub fn acquire(&mut self, width: u32, height: u32, format: TextureFormat) -> &mut GpuTexture {
         // First, try to find a FREE texture with matching dimensions
-        let free_match_idx = self.textures.iter().position(|t| {
-            !t.is_in_use() && t.matches(width, height, format)
-        });
+        let free_match_idx = self
+            .textures
+            .iter()
+            .position(|t| !t.is_in_use() && t.matches(width, height, format));
 
         if let Some(idx) = free_match_idx {
             let texture = &mut self.textures[idx];
@@ -298,7 +303,8 @@ impl TexturePool {
     fn evict_if_needed(&mut self) {
         while self.textures.len() >= self.max_textures {
             // Find the oldest FREE texture (LRU eviction)
-            let lru_idx = self.textures
+            let lru_idx = self
+                .textures
                 .iter()
                 .enumerate()
                 .filter(|(_, t)| !t.is_in_use())
@@ -546,12 +552,7 @@ pub struct Yuv420pTexture {
 
 impl Yuv420pTexture {
     /// Create a new YUV420P texture set
-    pub fn new(
-        device: &wgpu::Device,
-        width: u32,
-        height: u32,
-        id: u64,
-    ) -> Self {
+    pub fn new(device: &wgpu::Device, width: u32, height: u32, id: u64) -> Self {
         let color_space = YuvColorSpace::from_resolution(width, height);
 
         // Y plane: full resolution
@@ -875,11 +876,20 @@ mod tests {
     #[test]
     fn test_yuv_color_space_detection() {
         // SD resolution -> BT.601
-        assert_eq!(YuvColorSpace::from_resolution(720, 480), YuvColorSpace::Bt601);
+        assert_eq!(
+            YuvColorSpace::from_resolution(720, 480),
+            YuvColorSpace::Bt601
+        );
         // HD resolution -> BT.709
-        assert_eq!(YuvColorSpace::from_resolution(1920, 1080), YuvColorSpace::Bt709);
+        assert_eq!(
+            YuvColorSpace::from_resolution(1920, 1080),
+            YuvColorSpace::Bt709
+        );
         // 4K resolution -> BT.2020
-        assert_eq!(YuvColorSpace::from_resolution(3840, 2160), YuvColorSpace::Bt2020);
+        assert_eq!(
+            YuvColorSpace::from_resolution(3840, 2160),
+            YuvColorSpace::Bt2020
+        );
     }
 
     #[test]

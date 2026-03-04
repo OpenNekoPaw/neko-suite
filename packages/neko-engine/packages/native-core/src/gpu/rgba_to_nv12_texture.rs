@@ -605,9 +605,7 @@ impl RgbaToNv12TextureConverter {
         // IOSurface exporter
         let exporter = MacOsTextureExporter::new(ctx.clone())?;
 
-        tracing::info!(
-            "RGBA to NV12 texture converter initialized (Dual Render Pass Pipeline)"
-        );
+        tracing::info!("RGBA to NV12 texture converter initialized (Dual Render Pass Pipeline)");
 
         Ok(Self {
             ctx,
@@ -685,7 +683,10 @@ impl RgbaToNv12TextureConverter {
 
         tracing::debug!(
             "Created staging textures: Y={}x{} (R8Unorm), UV={}x{} (RG8Unorm)",
-            width, height, width / 2, height / 2
+            width,
+            height,
+            width / 2,
+            height / 2
         );
     }
 
@@ -746,31 +747,34 @@ impl RgbaToNv12TextureConverter {
         let uv_view = iosurface_uv.create_view(&wgpu::TextureViewDescriptor::default());
 
         // Create bind group (shared by both passes)
-        let bind_group = self.ctx.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("RGBA to NV12 Render Bind Group"),
-            layout: &self.render_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.uniform_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(input_texture),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-            ],
-        });
-
-        let mut encoder = self
+        let bind_group = self
             .ctx
             .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("RGBA to NV12 Direct Render Encoder"),
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("RGBA to NV12 Render Bind Group"),
+                layout: &self.render_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.uniform_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(input_texture),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                ],
             });
+
+        let mut encoder =
+            self.ctx
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("RGBA to NV12 Direct Render Encoder"),
+                });
 
         // ========== True Zero-Copy: Direct Render to IOSurface ==========
         // Pass 1: Y plane (full resolution) - renders directly to IOSurface
@@ -951,9 +955,12 @@ impl RgbaToNv12TextureConverter {
 
         device.poll(wgpu::Maintain::Wait);
 
-        y_rx.recv().map_err(|_| crate::error::Error::Other("Y buffer map failed".to_string()))?
+        y_rx.recv()
+            .map_err(|_| crate::error::Error::Other("Y buffer map failed".to_string()))?
             .map_err(|e| crate::error::Error::Other(format!("Y buffer async error: {:?}", e)))?;
-        uv_rx.recv().map_err(|_| crate::error::Error::Other("UV buffer map failed".to_string()))?
+        uv_rx
+            .recv()
+            .map_err(|_| crate::error::Error::Other("UV buffer map failed".to_string()))?
             .map_err(|e| crate::error::Error::Other(format!("UV buffer async error: {:?}", e)))?;
 
         // Copy data to IOSurface

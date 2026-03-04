@@ -134,10 +134,9 @@ impl Controller for AudioController {
                 let opts: TranscodeRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) = resolve_resource(
-                    &self.resource_registry, resource_id, opts.source.as_deref(),
-                )
-                    .await?;
+                let (res_id, file_path) =
+                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
+                        .await?;
 
                 let output_path = opts.output.ok_or_else(|| {
                     ApiError::InvalidRequest(
@@ -148,14 +147,17 @@ impl Controller for AudioController {
                 // Build AudioTranscodeOptions from request
                 use neko_native_core::domain::{AudioOutputFormat, AudioTranscodeOptions};
 
-                let format = opts.codec.as_deref().map(|c| match c.to_lowercase().as_str() {
-                    "aac" | "m4a" => AudioOutputFormat::Aac,
-                    "mp3" => AudioOutputFormat::Mp3,
-                    "opus" | "ogg" => AudioOutputFormat::Opus,
-                    "flac" => AudioOutputFormat::Flac,
-                    "pcm" | "wav" => AudioOutputFormat::Pcm,
-                    _ => AudioOutputFormat::Aac,
-                });
+                let format = opts
+                    .codec
+                    .as_deref()
+                    .map(|c| match c.to_lowercase().as_str() {
+                        "aac" | "m4a" => AudioOutputFormat::Aac,
+                        "mp3" => AudioOutputFormat::Mp3,
+                        "opus" | "ogg" => AudioOutputFormat::Opus,
+                        "flac" => AudioOutputFormat::Flac,
+                        "pcm" | "wav" => AudioOutputFormat::Pcm,
+                        _ => AudioOutputFormat::Aac,
+                    });
 
                 let transcode_opts = AudioTranscodeOptions {
                     format,
@@ -181,10 +183,9 @@ impl Controller for AudioController {
                 let opts: StreamRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) = resolve_resource(
-                    &self.resource_registry, resource_id, opts.source.as_deref(),
-                )
-                    .await?;
+                let (res_id, file_path) =
+                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
+                        .await?;
 
                 let session_id = opts.session_id.unwrap_or_else(|| "default".to_string());
 
@@ -218,15 +219,11 @@ impl Controller for AudioController {
                 let opts: WaveformRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) = resolve_resource(
-                    &self.resource_registry, resource_id, opts.source.as_deref(),
-                )
-                    .await?;
+                let (res_id, file_path) =
+                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
+                        .await?;
 
-                let waveform = self
-                    .audio_service
-                    .generate_waveform(&file_path)
-                    .await?;
+                let waveform = self.audio_service.generate_waveform(&file_path).await?;
 
                 let response = serde_json::json!({
                     "resourceId": res_id.as_str(),
@@ -236,13 +233,7 @@ impl Controller for AudioController {
                 Ok(ActionResponse::ok("", response))
             }
             "stop" | "pause" | "resume" | "speed" | "seek" | "loop" => {
-                handle_stream_control(
-                    self.audio_service.as_ref(),
-                    action,
-                    options,
-                    "audios",
-                )
-                .await
+                handle_stream_control(self.audio_service.as_ref(), action, options, "audios").await
             }
             "diff" => {
                 let opts: AudioDiffRequestOptions =
@@ -271,14 +262,14 @@ impl Controller for AudioController {
                 let opts: AnalyzeLoudnessOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) = resolve_resource(
-                    &self.resource_registry, resource_id, opts.source.as_deref(),
-                )
-                    .await?;
+                let (res_id, file_path) =
+                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
+                        .await?;
 
                 let target_lufs = opts.target_lufs.unwrap_or(-14.0);
 
-                let analysis = self.audio_service
+                let analysis = self
+                    .audio_service
                     .analyze_loudness(&file_path, target_lufs)
                     .await?;
 
@@ -325,9 +316,7 @@ mod tests {
     async fn test_audio_controller_probe_missing_source() {
         let controller = create_test_controller();
 
-        let result = controller
-            .handle("probe", None, Value::Null, None)
-            .await;
+        let result = controller.handle("probe", None, Value::Null, None).await;
 
         assert!(result.is_err());
     }
@@ -336,9 +325,7 @@ mod tests {
     async fn test_audio_controller_unknown_action() {
         let controller = create_test_controller();
 
-        let result = controller
-            .handle("unknown", None, Value::Null, None)
-            .await;
+        let result = controller.handle("unknown", None, Value::Null, None).await;
 
         assert!(result.is_err());
     }
@@ -347,9 +334,7 @@ mod tests {
     async fn test_audio_controller_waveform_missing_source() {
         let controller = create_test_controller();
 
-        let result = controller
-            .handle("waveform", None, Value::Null, None)
-            .await;
+        let result = controller.handle("waveform", None, Value::Null, None).await;
 
         assert!(result.is_err());
     }
@@ -370,9 +355,7 @@ mod tests {
         let controller = create_test_controller();
 
         let opts = serde_json::json!({ "source": "/some/file.mp3" });
-        let result = controller
-            .handle("transcode", None, opts, None)
-            .await;
+        let result = controller.handle("transcode", None, opts, None).await;
 
         // Should fail because output path is missing
         assert!(result.is_err());

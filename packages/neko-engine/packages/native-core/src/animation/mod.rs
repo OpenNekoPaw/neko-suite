@@ -11,4 +11,4 @@ mod timeline;
 pub use easing::{Easing, EasingType};
 pub use interpolate::{AnimatableValue, InterpolationMode};
 pub use keyframe::{Keyframe, KeyframeTrack};
-pub use timeline::{AnimationPresets, AnimationTimeline, AnimationState, EvaluatedProperties};
+pub use timeline::{AnimationPresets, AnimationState, AnimationTimeline, EvaluatedProperties};

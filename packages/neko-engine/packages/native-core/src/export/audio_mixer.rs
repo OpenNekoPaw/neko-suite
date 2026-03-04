@@ -5,9 +5,9 @@
 
 use std::collections::HashMap;
 
+use crate::animation::{Easing, EasingType};
 use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
 use crate::domain::{ElementType, Timeline};
-use crate::animation::{Easing, EasingType};
 use crate::error::Result;
 
 use super::types::ExportSettings;
@@ -64,7 +64,11 @@ impl ActiveAudioElement {
 
         // Clamp and guard against NaN
         let result = vol.clamp(0.0, 10.0); // Allow up to 10x for gain boost, limiter handles the rest
-        if result.is_finite() { result } else { 0.0 }
+        if result.is_finite() {
+            result
+        } else {
+            0.0
+        }
     }
 
     fn get_source_time(&self, timeline_time: f64) -> f64 {
@@ -117,13 +121,19 @@ impl AudioMixer {
                 Ok(info) => {
                     tracing::info!(
                         "Opened audio decoder for {}: {} Hz, {} ch, {:.2}s",
-                        src, info.sample_rate, info.channels, info.duration
+                        src,
+                        info.sample_rate,
+                        info.channels,
+                        info.duration
                     );
-                    self.sources.insert(src.clone(), AudioSource {
-                        decoder,
-                        current_position: -1.0,
-                        residual: Vec::new(),
-                    });
+                    self.sources.insert(
+                        src.clone(),
+                        AudioSource {
+                            decoder,
+                            current_position: -1.0,
+                            residual: Vec::new(),
+                        },
+                    );
                 }
                 Err(e) => {
                     tracing::error!("Failed to open audio decoder for {}: {}", src, e);
@@ -149,16 +159,25 @@ impl AudioMixer {
                     Ok(info) => {
                         tracing::info!(
                             "Hot-update: opened audio decoder for {}: {} Hz, {} ch",
-                            src, info.sample_rate, info.channels
+                            src,
+                            info.sample_rate,
+                            info.channels
                         );
-                        self.sources.insert(src.clone(), AudioSource {
-                            decoder,
-                            current_position: -1.0,
-                            residual: Vec::new(),
-                        });
+                        self.sources.insert(
+                            src.clone(),
+                            AudioSource {
+                                decoder,
+                                current_position: -1.0,
+                                residual: Vec::new(),
+                            },
+                        );
                     }
                     Err(e) => {
-                        tracing::error!("Hot-update: failed to open audio decoder for {}: {}", src, e);
+                        tracing::error!(
+                            "Hot-update: failed to open audio decoder for {}: {}",
+                            src,
+                            e
+                        );
                     }
                 }
             }
@@ -168,7 +187,9 @@ impl AudioMixer {
     fn get_audio_sources(&self) -> Vec<String> {
         let mut sources = Vec::new();
         for track in &self.timeline.tracks {
-            if track.muted { continue; }
+            if track.muted {
+                continue;
+            }
             for element in &track.elements {
                 if let Some(src) = element.source_path() {
                     let dominated = match &element.element_type {
@@ -188,14 +209,22 @@ impl AudioMixer {
     fn get_active_elements(&self, time: f64) -> Vec<ActiveAudioElement> {
         let mut active = Vec::new();
         for track in &self.timeline.tracks {
-            if track.muted { continue; }
+            if track.muted {
+                continue;
+            }
             for element in &track.elements {
-                if !element.is_visible_at(time) { continue; }
+                if !element.is_visible_at(time) {
+                    continue;
+                }
                 match &element.element_type {
                     ElementType::Audio(audio) => {
-                        if element.is_audio_muted() { continue; }
+                        if element.is_audio_muted() {
+                            continue;
+                        }
                         // Get fade curves and gain from AudioProperties if available
-                        let (fade_in_curve, fade_out_curve, gain) = audio.audio.as_ref()
+                        let (fade_in_curve, fade_out_curve, gain) = audio
+                            .audio
+                            .as_ref()
                             .map(|a| (a.fade_in_curve, a.fade_out_curve, a.gain))
                             .unwrap_or((EasingType::Linear, EasingType::Linear, 0.0));
                         active.push(ActiveAudioElement {
@@ -214,9 +243,13 @@ impl AudioMixer {
                     }
                     ElementType::Media(media) if !element.is_audio_muted() => {
                         // Skip if audio is handled by a linked audio element in audio track
-                        if media.linked_audio_id.is_some() { continue; }
+                        if media.linked_audio_id.is_some() {
+                            continue;
+                        }
                         // Get fade curves and gain from AudioProperties if available
-                        let (fade_in_curve, fade_out_curve, gain) = media.audio.as_ref()
+                        let (fade_in_curve, fade_out_curve, gain) = media
+                            .audio
+                            .as_ref()
                             .map(|a| (a.fade_in_curve, a.fade_out_curve, a.gain))
                             .unwrap_or((EasingType::Linear, EasingType::Linear, 0.0));
                         active.push(ActiveAudioElement {
@@ -275,7 +308,7 @@ impl AudioMixer {
                 }
                 source.residual.clear();
                 source.current_position = source_time; // Align to requested time, not decoder timestamp
-                // After seek, decode a few frames to skip AAC priming silence
+                                                       // After seek, decode a few frames to skip AAC priming silence
                 for _ in 0..3 {
                     match source.decoder.decode_next() {
                         Ok(Some(f)) => {
@@ -327,8 +360,12 @@ impl AudioMixer {
                     let l = frame_samples[idx] * left_gain;
                     let r = frame_samples[idx + 1] * right_gain;
                     // Guard: skip NaN/Inf samples (e.g. from corrupt audio data)
-                    if l.is_finite() { output[idx] += l; }
-                    if r.is_finite() { output[idx + 1] += r; }
+                    if l.is_finite() {
+                        output[idx] += l;
+                    }
+                    if r.is_finite() {
+                        output[idx + 1] += r;
+                    }
                 }
             }
         }
@@ -354,8 +391,12 @@ impl AudioMixer {
         output
     }
 
-    pub fn sample_rate(&self) -> u32 { self.output_sample_rate }
-    pub fn channels(&self) -> u16 { self.output_channels }
+    pub fn sample_rate(&self) -> u32 {
+        self.output_sample_rate
+    }
+    pub fn channels(&self) -> u16 {
+        self.output_channels
+    }
 
     pub fn close(&mut self) {
         for (src, source) in self.sources.iter_mut() {
@@ -367,15 +408,17 @@ impl AudioMixer {
 }
 
 impl Drop for AudioMixer {
-    fn drop(&mut self) { self.close(); }
+    fn drop(&mut self) {
+        self.close();
+    }
 }
 
 /// Soft limiter to prevent clipping with smooth gain reduction
 struct SoftLimiter {
-    threshold: f32,      // Limiting threshold (default 0.95)
-    knee_width: f32,     // Soft knee width (default 0.1)
-    release_coeff: f32,  // Release coefficient
-    envelope: f32,       // Envelope follower state
+    threshold: f32,     // Limiting threshold (default 0.95)
+    knee_width: f32,    // Soft knee width (default 0.1)
+    release_coeff: f32, // Release coefficient
+    envelope: f32,      // Envelope follower state
 }
 
 /// Minimum envelope value to avoid extreme gain when dividing by envelope.
@@ -411,8 +454,8 @@ impl SoftLimiter {
             self.envelope = abs_sample;
         } else {
             self.envelope = (self.release_coeff * self.envelope
-                          + (1.0 - self.release_coeff) * abs_sample)
-                          .max(MIN_ENVELOPE);
+                + (1.0 - self.release_coeff) * abs_sample)
+                .max(MIN_ENVELOPE);
         }
 
         // Soft knee compression

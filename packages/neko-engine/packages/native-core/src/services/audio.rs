@@ -35,18 +35,11 @@ pub trait IAudioService: IStreamPlayback {
     ) -> Result<(StreamId, broadcast::Receiver<FrameData>)>;
 
     /// Generate waveform visualization data
-    async fn generate_waveform(
-        &self,
-        source: &Path,
-    ) -> Result<WaveformData>;
+    async fn generate_waveform(&self, source: &Path) -> Result<WaveformData>;
 
     /// Analyze audio loudness per ITU-R BS.1770-4 (EBU R128).
     ///
     /// Returns integrated LUFS, true peak, loudness range,
     /// and recommended gain to reach `target_lufs`.
-    async fn analyze_loudness(
-        &self,
-        path: &Path,
-        target_lufs: f64,
-    ) -> Result<LoudnessAnalysis>;
+    async fn analyze_loudness(&self, path: &Path, target_lufs: f64) -> Result<LoudnessAnalysis>;
 }

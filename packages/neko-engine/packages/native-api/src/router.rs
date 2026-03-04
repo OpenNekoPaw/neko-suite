@@ -47,10 +47,22 @@ impl ActionRouter {
         Self {
             node_controller: NodeController::new(node_service),
             task_controller: TaskController::new(task_service),
-            video_controller: VideoController::new(video_service, resource_registry.clone(), stream_registry.clone()),
-            audio_controller: AudioController::new(audio_service, resource_registry.clone(), stream_registry.clone()),
+            video_controller: VideoController::new(
+                video_service,
+                resource_registry.clone(),
+                stream_registry.clone(),
+            ),
+            audio_controller: AudioController::new(
+                audio_service,
+                resource_registry.clone(),
+                stream_registry.clone(),
+            ),
             image_controller: ImageController::new(image_service, resource_registry),
-            timeline_controller: TimelineController::new(timeline_service.clone(), export_service, stream_registry.clone()),
+            timeline_controller: TimelineController::new(
+                timeline_service.clone(),
+                export_service,
+                stream_registry.clone(),
+            ),
             stream_controller: StreamController::new(stream_registry, timeline_service),
             effects_controller: EffectsController::new(effects_service),
             models_controller: ModelsController::new(),
@@ -67,11 +79,7 @@ impl ActionRouter {
             Some(request.id.as_str())
         };
 
-        tracing::debug!(
-            "Routing {}:{} to controller",
-            request.group,
-            request.action
-        );
+        tracing::debug!("Routing {}:{} to controller", request.group, request.action);
 
         match request.group.as_str() {
             groups::NODES => {
@@ -257,7 +265,10 @@ mod tests {
         let request = ActionRequest::new("models", "probe");
         let result = router.route(request).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not yet implemented"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("not yet implemented"));
     }
 
     #[tokio::test]
@@ -267,7 +278,10 @@ mod tests {
         let request = ActionRequest::new("canvas", "composite");
         let result = router.route(request).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not yet implemented"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("not yet implemented"));
     }
 
     #[tokio::test]
@@ -277,7 +291,10 @@ mod tests {
         let request = ActionRequest::new("scenes", "composite");
         let result = router.route(request).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not yet implemented"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("not yet implemented"));
     }
 
     #[test]
@@ -307,8 +324,22 @@ mod tests {
         let actions = router.actions("streams").unwrap();
         assert_eq!(
             actions,
-            &["create", "activate", "pause", "resume", "destroy", "list",
-              "stop", "seek", "speed", "loop", "stats", "update", "quality", "applyOperation"]
+            &[
+                "create",
+                "activate",
+                "pause",
+                "resume",
+                "destroy",
+                "list",
+                "stop",
+                "seek",
+                "speed",
+                "loop",
+                "stats",
+                "update",
+                "quality",
+                "applyOperation"
+            ]
         );
     }
 }

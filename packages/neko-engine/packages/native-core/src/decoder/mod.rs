@@ -36,10 +36,10 @@
 //! ```
 
 pub mod common;
+pub mod hwaccel;
 pub mod idr_scanner;
 pub mod pool;
 mod traits;
-pub mod hwaccel;
 
 // Re-export common types
 pub use common::{detect_hw_accel, get_best_hw_accel, HwAccelType};

@@ -60,7 +60,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .init();
     }
 
-    tracing::info!("Neko Suite Video Export Server v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!(
+        "Neko Suite Video Export Server v{}",
+        env!("CARGO_PKG_VERSION")
+    );
 
     // Run the appropriate command
     let mut runner = Runner::new();

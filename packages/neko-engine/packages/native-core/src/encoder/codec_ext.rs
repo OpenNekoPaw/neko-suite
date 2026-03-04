@@ -38,7 +38,7 @@ impl VideoCodecExt for VideoCodec {
             VideoCodec::H265 => pixels * 3,    // ~3 bits per pixel (more efficient)
             VideoCodec::Vp9 => pixels * 3,     // Similar to H.265
             VideoCodec::Av1 => pixels * 2,     // Most efficient
-            VideoCodec::ProRes => pixels * 12,  // Higher quality
+            VideoCodec::ProRes => pixels * 12, // Higher quality
         }
     }
 }
@@ -280,10 +280,7 @@ mod tests {
             HwEncoderType::VideoToolbox.encoder_name(VideoCodec::Vp9),
             None
         );
-        assert_eq!(
-            HwEncoderType::Nvenc.encoder_name(VideoCodec::ProRes),
-            None
-        );
+        assert_eq!(HwEncoderType::Nvenc.encoder_name(VideoCodec::ProRes), None);
     }
 
     #[test]

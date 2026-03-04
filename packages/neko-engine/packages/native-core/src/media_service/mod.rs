@@ -19,18 +19,17 @@ mod subtitle;
 mod timeline_diff;
 mod video_diff;
 
-pub use audio_diff::{AudioContentDiff, AudioDiffRegion, diff_audio_content};
-pub use diff::{ContentDiff, DiffCategory, DiffResult, FieldDiff, diff_media};
-pub use image_diff::{ImageContentDiff, diff_image_content};
+pub use audio_diff::{diff_audio_content, AudioContentDiff, AudioDiffRegion};
+pub use diff::{diff_media, ContentDiff, DiffCategory, DiffResult, FieldDiff};
+pub use image_diff::{diff_image_content, ImageContentDiff};
 pub use jpeg_encoder::encode_rgba_to_jpeg;
-pub use probe::{MediaInfo, ProbeCache, SubtitleStream, global_probe_cache, probe_media_info};
-pub use subtitle::{ExtractedSubtitleTrack, SubtitleCue, extract_subtitles};
+pub use probe::{global_probe_cache, probe_media_info, MediaInfo, ProbeCache, SubtitleStream};
+pub use subtitle::{extract_subtitles, ExtractedSubtitleTrack, SubtitleCue};
 pub use timeline_diff::{
-    TimelineContentDiff, TimelineChangeType, TimelineDiffSummary,
-    TimelineProjectMeta, TrackChange, ElementChange, PropertyChange,
-    TimelineDiffOptions, ElementContentDiff, ElementContentDiffResult,
-    diff_timeline_content, diff_timeline_content_with_options,
+    diff_timeline_content, diff_timeline_content_with_options, ElementChange, ElementContentDiff,
+    ElementContentDiffResult, PropertyChange, TimelineChangeType, TimelineContentDiff,
+    TimelineDiffOptions, TimelineDiffSummary, TimelineProjectMeta, TrackChange,
 };
 pub use video_diff::{
-    FrameMetric, VideoContentDiff, VideoDiffOptions, VideoDiffRegion, diff_video_content,
+    diff_video_content, FrameMetric, VideoContentDiff, VideoDiffOptions, VideoDiffRegion,
 };

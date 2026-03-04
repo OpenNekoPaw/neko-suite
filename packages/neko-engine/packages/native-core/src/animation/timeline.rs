@@ -140,12 +140,8 @@ impl AnimationTimeline {
 
     /// Get animation duration (calculated from tracks if not explicitly set)
     pub fn duration(&self) -> f64 {
-        self.duration.unwrap_or_else(|| {
-            self.tracks
-                .iter()
-                .map(|t| t.duration())
-                .fold(0.0, f64::max)
-        })
+        self.duration
+            .unwrap_or_else(|| self.tracks.iter().map(|t| t.duration()).fold(0.0, f64::max))
     }
 
     /// Enable looping
@@ -319,7 +315,11 @@ impl AnimationPresets {
         use super::easing::EasingType;
 
         let mut pos_track = KeyframeTrack::new("positionX");
-        pos_track.add_with_easing(0.0, AnimatableValue::number(-distance), EasingType::EaseOutCubic);
+        pos_track.add_with_easing(
+            0.0,
+            AnimatableValue::number(-distance),
+            EasingType::EaseOutCubic,
+        );
         pos_track.add(duration, AnimatableValue::number(0.0));
 
         let mut opacity_track = KeyframeTrack::new("opacity");
@@ -367,7 +367,11 @@ impl AnimationPresets {
             AnimatableValue::number(-height),
             EasingType::EaseOutQuad,
         );
-        pos_track.add_with_easing(duration, AnimatableValue::number(0.0), EasingType::EaseInQuad);
+        pos_track.add_with_easing(
+            duration,
+            AnimatableValue::number(0.0),
+            EasingType::EaseInQuad,
+        );
 
         let mut timeline = AnimationTimeline::new(id, target_id);
         timeline.add_track(pos_track);

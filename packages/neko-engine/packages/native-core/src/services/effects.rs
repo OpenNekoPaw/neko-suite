@@ -25,10 +25,6 @@ pub trait IEffectsService: Send + Sync {
     ) -> Result<Vec<u8>>;
 
     /// Register a custom WGSL shader at runtime
-    fn register_shader(
-        &self,
-        id: &str,
-        wgsl_source: &str,
-        param_defs: Vec<ParamDef>,
-    ) -> Result<()>;
+    fn register_shader(&self, id: &str, wgsl_source: &str, param_defs: Vec<ParamDef>)
+        -> Result<()>;
 }

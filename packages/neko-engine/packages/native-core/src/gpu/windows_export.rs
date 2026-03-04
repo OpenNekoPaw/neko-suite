@@ -19,16 +19,12 @@ use windows::{
         Foundation::{CloseHandle, HANDLE},
         Graphics::{
             Direct3D12::{
-                ID3D12Device, ID3D12Resource,
-                D3D12_HEAP_FLAG_SHARED, D3D12_HEAP_PROPERTIES, D3D12_HEAP_TYPE_DEFAULT,
-                D3D12_RESOURCE_DESC, D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-                D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS,
-                D3D12_RESOURCE_STATE_COMMON, D3D12_TEXTURE_LAYOUT_UNKNOWN,
+                ID3D12Device, ID3D12Resource, D3D12_HEAP_FLAG_SHARED, D3D12_HEAP_PROPERTIES,
+                D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_DESC, D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+                D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, D3D12_RESOURCE_STATE_COMMON,
+                D3D12_TEXTURE_LAYOUT_UNKNOWN,
             },
-            Dxgi::Common::{
-                DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8G8_UNORM,
-                DXGI_SAMPLE_DESC,
-            },
+            Dxgi::Common::{DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8_UNORM, DXGI_SAMPLE_DESC},
         },
     },
 };
@@ -89,98 +85,106 @@ impl WindowsTextureExporter {
         let device = self.ctx.device();
 
         let (y_resource, uv_resource, y_hal, uv_hal) = unsafe {
-            device.as_hal::<wgpu_hal::api::Dx12, _, _>(|hal_device| {
-                let hal_device = hal_device.ok_or_else(|| {
-                    Error::Other("wgpu backend is not D3D12".to_string())
-                })?;
+            device
+                .as_hal::<wgpu_hal::api::Dx12, _, _>(|hal_device| {
+                    let hal_device = hal_device
+                        .ok_or_else(|| Error::Other("wgpu backend is not D3D12".to_string()))?;
 
-                let d3d12_device = hal_device.raw_device();
+                    let d3d12_device = hal_device.raw_device();
 
-                // Create shared D3D12 resources
-                let y_resource = self.create_shared_resource(
-                    d3d12_device, width, height,
-                    DXGI_FORMAT_R8_UNORM,
-                )?;
-                let uv_resource = self.create_shared_resource(
-                    d3d12_device, width / 2, height / 2,
-                    DXGI_FORMAT_R8G8_UNORM,
-                )?;
+                    // Create shared D3D12 resources
+                    let y_resource = self.create_shared_resource(
+                        d3d12_device,
+                        width,
+                        height,
+                        DXGI_FORMAT_R8_UNORM,
+                    )?;
+                    let uv_resource = self.create_shared_resource(
+                        d3d12_device,
+                        width / 2,
+                        height / 2,
+                        DXGI_FORMAT_R8G8_UNORM,
+                    )?;
 
-                // Convert to d3d12 crate Resource for wgpu_hal
-                let y_raw = Interface::as_raw(&y_resource)
-                    as *mut winapi::um::d3d12::ID3D12Resource;
-                let uv_raw = Interface::as_raw(&uv_resource)
-                    as *mut winapi::um::d3d12::ID3D12Resource;
+                    // Convert to d3d12 crate Resource for wgpu_hal
+                    let y_raw =
+                        Interface::as_raw(&y_resource) as *mut winapi::um::d3d12::ID3D12Resource;
+                    let uv_raw =
+                        Interface::as_raw(&uv_resource) as *mut winapi::um::d3d12::ID3D12Resource;
 
-                // AddRef for the d3d12 crate copies (windows crate still owns one ref)
-                Interface::as_raw(&y_resource)
-                    .as_ref().unwrap().AddRef();
-                Interface::as_raw(&uv_resource)
-                    .as_ref().unwrap().AddRef();
+                    // AddRef for the d3d12 crate copies (windows crate still owns one ref)
+                    Interface::as_raw(&y_resource).as_ref().unwrap().AddRef();
+                    Interface::as_raw(&uv_resource).as_ref().unwrap().AddRef();
 
-                let y_d3d12_res: d3d12::Resource = std::mem::transmute(y_raw);
-                let uv_d3d12_res: d3d12::Resource = std::mem::transmute(uv_raw);
+                    let y_d3d12_res: d3d12::Resource = std::mem::transmute(y_raw);
+                    let uv_d3d12_res: d3d12::Resource = std::mem::transmute(uv_raw);
 
-                // Wrap as wgpu_hal textures
-                let y_hal = wgpu_hal::dx12::Device::texture_from_raw(
-                    y_d3d12_res,
-                    wgpu::TextureFormat::R8Unorm,
-                    wgpu::TextureDimension::D2,
-                    wgpu::Extent3d {
-                        width, height, depth_or_array_layers: 1,
-                    },
-                    1, 1,
-                );
+                    // Wrap as wgpu_hal textures
+                    let y_hal = wgpu_hal::dx12::Device::texture_from_raw(
+                        y_d3d12_res,
+                        wgpu::TextureFormat::R8Unorm,
+                        wgpu::TextureDimension::D2,
+                        wgpu::Extent3d {
+                            width,
+                            height,
+                            depth_or_array_layers: 1,
+                        },
+                        1,
+                        1,
+                    );
 
-                let uv_hal = wgpu_hal::dx12::Device::texture_from_raw(
-                    uv_d3d12_res,
-                    wgpu::TextureFormat::Rg8Unorm,
-                    wgpu::TextureDimension::D2,
-                    wgpu::Extent3d {
-                        width: width / 2,
-                        height: height / 2,
-                        depth_or_array_layers: 1,
-                    },
-                    1, 1,
-                );
+                    let uv_hal = wgpu_hal::dx12::Device::texture_from_raw(
+                        uv_d3d12_res,
+                        wgpu::TextureFormat::Rg8Unorm,
+                        wgpu::TextureDimension::D2,
+                        wgpu::Extent3d {
+                            width: width / 2,
+                            height: height / 2,
+                            depth_or_array_layers: 1,
+                        },
+                        1,
+                        1,
+                    );
 
-                Ok((y_resource, uv_resource, y_hal, uv_hal))
-            })
-            .ok_or_else(|| Error::Other("Failed to access D3D12 HAL".to_string()))??
+                    Ok((y_resource, uv_resource, y_hal, uv_hal))
+                })
+                .ok_or_else(|| Error::Other("Failed to access D3D12 HAL".to_string()))??
         };
 
         // Create wgpu textures
         let y_desc = wgpu::TextureDescriptor {
             label: Some("Export Y Plane (D3D12 Shared)"),
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::R8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::STORAGE_BINDING,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
             view_formats: &[],
         };
         let uv_desc = wgpu::TextureDescriptor {
             label: Some("Export UV Plane (D3D12 Shared)"),
             size: wgpu::Extent3d {
-                width: width / 2, height: height / 2, depth_or_array_layers: 1,
+                width: width / 2,
+                height: height / 2,
+                depth_or_array_layers: 1,
             },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rg8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::STORAGE_BINDING,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
             view_formats: &[],
         };
 
-        let y_texture = unsafe {
-            device.create_texture_from_hal::<wgpu_hal::api::Dx12>(y_hal, &y_desc)
-        };
-        let uv_texture = unsafe {
-            device.create_texture_from_hal::<wgpu_hal::api::Dx12>(uv_hal, &uv_desc)
-        };
+        let y_texture =
+            unsafe { device.create_texture_from_hal::<wgpu_hal::api::Dx12>(y_hal, &y_desc) };
+        let uv_texture =
+            unsafe { device.create_texture_from_hal::<wgpu_hal::api::Dx12>(uv_hal, &uv_desc) };
 
         Ok(WindowsExportBackingStore {
             y_texture,
@@ -202,9 +206,8 @@ impl WindowsTextureExporter {
     ) -> Result<ID3D12Resource> {
         // Wrap d3d12 crate device as windows crate ID3D12Device
         let raw_ptr = d3d12_device.as_mut_ptr();
-        let win_device: ManuallyDrop<ID3D12Device> = ManuallyDrop::new(
-            std::mem::transmute_copy(&raw_ptr)
-        );
+        let win_device: ManuallyDrop<ID3D12Device> =
+            ManuallyDrop::new(std::mem::transmute_copy(&raw_ptr));
 
         let heap_props = D3D12_HEAP_PROPERTIES {
             Type: D3D12_HEAP_TYPE_DEFAULT,
@@ -228,20 +231,18 @@ impl WindowsTextureExporter {
         };
 
         let mut resource: Option<ID3D12Resource> = None;
-        win_device.CreateCommittedResource(
-            &heap_props,
-            D3D12_HEAP_FLAG_SHARED,
-            &resource_desc,
-            D3D12_RESOURCE_STATE_COMMON,
-            None, // optimized clear value
-            &mut resource,
-        ).map_err(|e| Error::Other(format!(
-            "CreateCommittedResource (shared) failed: {}", e
-        )))?;
+        win_device
+            .CreateCommittedResource(
+                &heap_props,
+                D3D12_HEAP_FLAG_SHARED,
+                &resource_desc,
+                D3D12_RESOURCE_STATE_COMMON,
+                None, // optimized clear value
+                &mut resource,
+            )
+            .map_err(|e| Error::Other(format!("CreateCommittedResource (shared) failed: {}", e)))?;
 
-        resource.ok_or_else(|| {
-            Error::Other("CreateCommittedResource returned null".to_string())
-        })
+        resource.ok_or_else(|| Error::Other("CreateCommittedResource returned null".to_string()))
     }
 }
 
@@ -262,8 +263,12 @@ pub struct WindowsExportBackingStore {
 impl WindowsExportBackingStore {
     /// Create texture views for shader binding
     pub fn create_views(&self) -> (wgpu::TextureView, wgpu::TextureView) {
-        let y_view = self.y_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let uv_view = self.uv_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let y_view = self
+            .y_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let uv_view = self
+            .uv_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         (y_view, uv_view)
     }
 
@@ -286,7 +291,8 @@ impl WindowsExportBackingStore {
 
             tracing::trace!(
                 "Exported NV12 as DXGI shared handles: Y={:?}, UV={:?}",
-                y_handle, uv_handle
+                y_handle,
+                uv_handle
             );
 
             Ok(ExportedNv12Handles {
@@ -312,21 +318,25 @@ impl WindowsExportBackingStore {
     ) -> Result<HANDLE> {
         // Query IDXGIResource1 from ID3D12Resource
         let dxgi_resource: windows::Win32::Graphics::Dxgi::IDXGIResource1 =
-            resource.cast().map_err(|e| Error::Other(format!(
-                "QueryInterface IDXGIResource1 ({}) failed: {}", label, e
-            )))?;
+            resource.cast().map_err(|e| {
+                Error::Other(format!(
+                    "QueryInterface IDXGIResource1 ({}) failed: {}",
+                    label, e
+                ))
+            })?;
 
-        let handle = dxgi_resource.CreateSharedHandle(
-            None,
-            windows::Win32::Graphics::Dxgi::DXGI_SHARED_RESOURCE_READ,
-            PCWSTR::null(),
-        ).map_err(|e| Error::Other(format!(
-            "CreateSharedHandle ({}) failed: {}", label, e
-        )))?;
+        let handle = dxgi_resource
+            .CreateSharedHandle(
+                None,
+                windows::Win32::Graphics::Dxgi::DXGI_SHARED_RESOURCE_READ,
+                PCWSTR::null(),
+            )
+            .map_err(|e| Error::Other(format!("CreateSharedHandle ({}) failed: {}", label, e)))?;
 
         if handle.is_invalid() {
             return Err(Error::Other(format!(
-                "CreateSharedHandle ({}) returned invalid handle", label
+                "CreateSharedHandle ({}) returned invalid handle",
+                label
             )));
         }
 

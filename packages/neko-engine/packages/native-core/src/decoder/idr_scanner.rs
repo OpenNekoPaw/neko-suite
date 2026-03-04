@@ -284,12 +284,13 @@ impl IdrScanner {
         while i < data.len() {
             // Find start code
             let (start, sc_len) = if i + 3 < data.len()
-                && data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 0 && data[i + 3] == 1
+                && data[i] == 0
+                && data[i + 1] == 0
+                && data[i + 2] == 0
+                && data[i + 3] == 1
             {
                 (i + 4, 4)
-            } else if i + 2 < data.len()
-                && data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 1
-            {
+            } else if i + 2 < data.len() && data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 1 {
                 (i + 3, 3)
             } else {
                 i += 1;
@@ -304,8 +305,10 @@ impl IdrScanner {
             let mut end = start;
             while end < data.len() {
                 if end + 3 < data.len()
-                    && data[end] == 0 && data[end + 1] == 0
-                    && (data[end + 2] == 1 || (data[end + 2] == 0 && end + 3 < data.len() && data[end + 3] == 1))
+                    && data[end] == 0
+                    && data[end + 1] == 0
+                    && (data[end + 2] == 1
+                        || (data[end + 2] == 0 && end + 3 < data.len() && data[end + 3] == 1))
                 {
                     break;
                 }
@@ -329,7 +332,10 @@ impl IdrScanner {
         while offset + length_size <= data.len() {
             let nal_len = match length_size {
                 4 => u32::from_be_bytes([
-                    data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
                 ]) as usize,
                 2 => u16::from_be_bytes([data[offset], data[offset + 1]]) as usize,
                 1 => data[offset] as usize,
@@ -491,7 +497,7 @@ mod tests {
 
         let mut data = Vec::new();
         data.extend_from_slice(&[0x00, 0x00, 0x00, 0x03, 0x67, 0xAA, 0xBB]); // len=3
-        data.extend_from_slice(&[0x00, 0x00, 0x00, 0x02, 0x65, 0xCC]);       // len=2
+        data.extend_from_slice(&[0x00, 0x00, 0x00, 0x02, 0x65, 0xCC]); // len=2
 
         let nals = scanner.iter_avcc_nals(&data, 4);
         assert_eq!(nals.len(), 2);

@@ -35,9 +35,9 @@ impl HalTextureImport {
     pub fn supports_external_textures(&self) -> bool {
         let backend = &self.ctx.info().backend;
         match backend.as_str() {
-            "metal" => true,   // Metal supports IOSurface
-            "vulkan" => true,  // Vulkan supports external memory
-            "dx12" => true,    // D3D12 supports shared handles
+            "metal" => true,  // Metal supports IOSurface
+            "vulkan" => true, // Vulkan supports external memory
+            "dx12" => true,   // D3D12 supports shared handles
             _ => false,
         }
     }
@@ -208,7 +208,8 @@ pub mod d3d12_import {
         _desc: &wgpu::TextureDescriptor,
     ) -> Result<wgpu::Texture> {
         Err(Error::Other(
-            "Use WindowsTextureImporter::import_d3d11() for the full zero-copy pipeline".to_string(),
+            "Use WindowsTextureImporter::import_d3d11() for the full zero-copy pipeline"
+                .to_string(),
         ))
     }
 

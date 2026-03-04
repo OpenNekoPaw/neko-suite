@@ -12,8 +12,8 @@
 use std::sync::Arc;
 
 use cosmic_text::{
-    Attrs, Buffer as CosmicBuffer, Color as CosmicColor, Family, FontSystem, Metrics,
-    Shaping, SwashCache, Weight, Style,
+    Attrs, Buffer as CosmicBuffer, Color as CosmicColor, Family, FontSystem, Metrics, Shaping,
+    Style, SwashCache, Weight,
 };
 
 use crate::gpu::GpuContext;
@@ -128,10 +128,7 @@ impl TextRenderer {
             name => Family::Name(name),
         };
 
-        let attrs = Attrs::new()
-            .family(family)
-            .weight(weight)
-            .style(style);
+        let attrs = Attrs::new().family(family).weight(weight).style(style);
 
         // Create text buffer with metrics — use configurable line_height
         let line_height = style_opts.line_height.unwrap_or(1.2);
@@ -192,7 +189,15 @@ impl TextRenderer {
             let shadow_color = CosmicColor::rgba(sr, sg, sb, sa);
             let sx = offset_x + shadow.offset_x as i32;
             let sy = offset_y + shadow.offset_y as i32;
-            self.draw_text_to_buffer(&mut buffer, shadow_color, &mut pixels, buf_width, buf_height, sx, sy);
+            self.draw_text_to_buffer(
+                &mut buffer,
+                shadow_color,
+                &mut pixels,
+                buf_width,
+                buf_height,
+                sx,
+                sy,
+            );
         }
 
         // Step 3: Render stroke (draw text at 8 offsets around center)
@@ -203,11 +208,20 @@ impl TextRenderer {
                 let sw_i = sw.ceil() as i32;
                 for dy in -sw_i..=sw_i {
                     for dx in -sw_i..=sw_i {
-                        if dx == 0 && dy == 0 { continue; }
-                        if (dx * dx + dy * dy) as f32 > sw * sw { continue; }
+                        if dx == 0 && dy == 0 {
+                            continue;
+                        }
+                        if (dx * dx + dy * dy) as f32 > sw * sw {
+                            continue;
+                        }
                         self.draw_text_to_buffer(
-                            &mut buffer, stroke_color, &mut pixels,
-                            buf_width, buf_height, offset_x + dx, offset_y + dy,
+                            &mut buffer,
+                            stroke_color,
+                            &mut pixels,
+                            buf_width,
+                            buf_height,
+                            offset_x + dx,
+                            offset_y + dy,
                         );
                     }
                 }
@@ -215,7 +229,15 @@ impl TextRenderer {
         }
 
         // Step 4: Render main text
-        self.draw_text_to_buffer(&mut buffer, text_color, &mut pixels, buf_width, buf_height, offset_x, offset_y);
+        self.draw_text_to_buffer(
+            &mut buffer,
+            text_color,
+            &mut pixels,
+            buf_width,
+            buf_height,
+            offset_x,
+            offset_y,
+        );
 
         // Step 5: Render text decoration (underline / line-through)
         if let Some(ref decoration) = style_opts.text_decoration {
@@ -227,11 +249,16 @@ impl TextRenderer {
                         _ => continue,
                     };
                     let line_start_x = offset_x;
-                    let line_end_x = run.glyphs.last().map_or(0, |g| (g.x + g.w).ceil() as i32) + offset_x;
+                    let line_end_x =
+                        run.glyphs.last().map_or(0, |g| (g.x + g.w).ceil() as i32) + offset_x;
                     let thickness = (font_size / 20.0).max(1.0).ceil() as i32;
                     for ty in line_y..line_y + thickness {
                         for tx in line_start_x..line_end_x {
-                            if tx >= 0 && ty >= 0 && (tx as u32) < buf_width && (ty as u32) < buf_height {
+                            if tx >= 0
+                                && ty >= 0
+                                && (tx as u32) < buf_width
+                                && (ty as u32) < buf_height
+                            {
                                 let idx = ((ty as u32 * buf_width + tx as u32) * 4) as usize;
                                 if idx + 3 < pixels.len() {
                                     pixels[idx] = r;
@@ -273,7 +300,9 @@ impl TextRenderer {
                 let cg = color.g();
                 let cb = color.b();
                 let ca = color.a();
-                if ca == 0 { return; }
+                if ca == 0 {
+                    return;
+                }
 
                 for dy in 0..h as i32 {
                     for dx in 0..w as i32 {
@@ -283,15 +312,23 @@ impl TextRenderer {
                             continue;
                         }
                         let idx = ((py as u32 * buf_width + px as u32) * 4) as usize;
-                        if idx + 3 >= pixels.len() { continue; }
+                        if idx + 3 >= pixels.len() {
+                            continue;
+                        }
 
                         let src_a = ca as f32 / 255.0;
                         let dst_a = pixels[idx + 3] as f32 / 255.0;
                         let out_a = src_a + dst_a * (1.0 - src_a);
                         if out_a > 0.0 {
-                            pixels[idx] = ((cr as f32 * src_a + pixels[idx] as f32 * dst_a * (1.0 - src_a)) / out_a) as u8;
-                            pixels[idx + 1] = ((cg as f32 * src_a + pixels[idx + 1] as f32 * dst_a * (1.0 - src_a)) / out_a) as u8;
-                            pixels[idx + 2] = ((cb as f32 * src_a + pixels[idx + 2] as f32 * dst_a * (1.0 - src_a)) / out_a) as u8;
+                            pixels[idx] = ((cr as f32 * src_a
+                                + pixels[idx] as f32 * dst_a * (1.0 - src_a))
+                                / out_a) as u8;
+                            pixels[idx + 1] = ((cg as f32 * src_a
+                                + pixels[idx + 1] as f32 * dst_a * (1.0 - src_a))
+                                / out_a) as u8;
+                            pixels[idx + 2] = ((cb as f32 * src_a
+                                + pixels[idx + 2] as f32 * dst_a * (1.0 - src_a))
+                                / out_a) as u8;
                             pixels[idx + 3] = (out_a * 255.0) as u8;
                         }
                     }
@@ -304,22 +341,25 @@ impl TextRenderer {
     ///
     /// Creates an Rgba8Unorm texture and writes the pixel data.
     pub fn upload_to_texture(&self, rasterized: &RasterizedText) -> wgpu::Texture {
-        let texture = self.gpu_ctx.device().create_texture(&wgpu::TextureDescriptor {
-            label: Some("Text Texture"),
-            size: wgpu::Extent3d {
-                width: rasterized.width,
-                height: rasterized.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
+        let texture = self
+            .gpu_ctx
+            .device()
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("Text Texture"),
+                size: wgpu::Extent3d {
+                    width: rasterized.width,
+                    height: rasterized.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
 
         self.gpu_ctx.queue().write_texture(
             wgpu::ImageCopyTexture {

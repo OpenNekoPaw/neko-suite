@@ -24,8 +24,7 @@ use std::thread::{self, JoinHandle};
 
 use crate::audio::AudioEncoderConfig;
 use crate::encoder::{
-    ContainerFormat, EncodedPacket, Encoder, EncoderConfig, FfmpegMuxer,
-    HwAccelEncoder, Muxer,
+    ContainerFormat, EncodedPacket, Encoder, EncoderConfig, FfmpegMuxer, HwAccelEncoder, Muxer,
 };
 use crate::error::{Error, Result};
 use crate::gpu::{CompositeLayer, GpuCompositor, GpuContext, GpuLayer};
@@ -88,14 +87,9 @@ pub struct CompositedFrame {
 /// Packet ready for muxing (video or audio)
 enum MuxPacket {
     /// Video packet with frame index for ordering
-    Video {
-        index: u64,
-        packet: EncodedPacket,
-    },
+    Video { index: u64, packet: EncodedPacket },
     /// Audio packet
-    Audio {
-        packet: EncodedPacket,
-    },
+    Audio { packet: EncodedPacket },
     /// Signal that all audio packets have been sent
     AudioFinished,
 }
@@ -297,7 +291,16 @@ impl AsyncExportPipeline {
         let mux_handle = thread::Builder::new()
             .name("pipeline-mux".into())
             .spawn(move || {
-                Self::mux_worker(mux_rx, audio_rx_dummy, output_path, container, mux_encoder_config, mux_audio_config, cancel_mux, progress_mux)
+                Self::mux_worker(
+                    mux_rx,
+                    audio_rx_dummy,
+                    output_path,
+                    container,
+                    mux_encoder_config,
+                    mux_audio_config,
+                    cancel_mux,
+                    progress_mux,
+                )
             })
             .map_err(|e| Error::Other(format!("Failed to spawn mux worker: {}", e)))?;
 
@@ -349,7 +352,13 @@ impl AsyncExportPipeline {
         let encode_handle = thread::Builder::new()
             .name("pipeline-encode".into())
             .spawn(move || {
-                Self::encode_worker(encode_rx, encode_tx, encoder_config, cancel_encode, progress_encode)
+                Self::encode_worker(
+                    encode_rx,
+                    encode_tx,
+                    encoder_config,
+                    cancel_encode,
+                    progress_encode,
+                )
             })
             .map_err(|e| Error::Other(format!("Failed to spawn encode worker: {}", e)))?;
 
@@ -359,7 +368,16 @@ impl AsyncExportPipeline {
         let mux_handle = thread::Builder::new()
             .name("pipeline-mux".into())
             .spawn(move || {
-                Self::mux_worker(mux_rx, audio_rx, output_path, container, mux_encoder_config, mux_audio_config, cancel_mux, progress_mux)
+                Self::mux_worker(
+                    mux_rx,
+                    audio_rx,
+                    output_path,
+                    container,
+                    mux_encoder_config,
+                    mux_audio_config,
+                    cancel_mux,
+                    progress_mux,
+                )
             })
             .map_err(|e| Error::Other(format!("Failed to spawn mux worker: {}", e)))?;
 
@@ -391,18 +409,24 @@ impl AsyncExportPipeline {
         }
 
         if self.progress.has_error() {
-            let err = self.progress.get_error().unwrap_or_else(|| "Unknown error".into());
+            let err = self
+                .progress
+                .get_error()
+                .unwrap_or_else(|| "Unknown error".into());
             return Err(Error::Other(err));
         }
 
-        let tx = self.input_tx.as_ref().ok_or_else(|| {
-            Error::Other("Pipeline input already closed".into())
-        })?;
+        let tx = self
+            .input_tx
+            .as_ref()
+            .ok_or_else(|| Error::Other("Pipeline input already closed".into()))?;
 
         tx.send(frame)
             .map_err(|_| Error::Other("Pipeline compose channel closed".into()))?;
 
-        self.progress.frames_submitted.fetch_add(1, Ordering::Relaxed);
+        self.progress
+            .frames_submitted
+            .fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 
@@ -415,19 +439,27 @@ impl AsyncExportPipeline {
         }
 
         if self.progress.has_error() {
-            let err = self.progress.get_error().unwrap_or_else(|| "Unknown error".into());
+            let err = self
+                .progress
+                .get_error()
+                .unwrap_or_else(|| "Unknown error".into());
             return Err(Error::Other(err));
         }
 
-        let tx = self.composited_tx.as_ref().ok_or_else(|| {
-            Error::Other("Pipeline not in encode-only mode".into())
-        })?;
+        let tx = self
+            .composited_tx
+            .as_ref()
+            .ok_or_else(|| Error::Other("Pipeline not in encode-only mode".into()))?;
 
         tx.send(frame)
             .map_err(|_| Error::Other("Pipeline encode channel closed".into()))?;
 
-        self.progress.frames_submitted.fetch_add(1, Ordering::Relaxed);
-        self.progress.frames_composited.fetch_add(1, Ordering::Relaxed);
+        self.progress
+            .frames_submitted
+            .fetch_add(1, Ordering::Relaxed);
+        self.progress
+            .frames_composited
+            .fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 
@@ -437,9 +469,10 @@ impl AsyncExportPipeline {
             return Err(Error::Cancelled);
         }
 
-        let tx = self.audio_tx.as_ref().ok_or_else(|| {
-            Error::Other("Pipeline audio channel not available".into())
-        })?;
+        let tx = self
+            .audio_tx
+            .as_ref()
+            .ok_or_else(|| Error::Other("Pipeline audio channel not available".into()))?;
 
         tx.send(MuxPacket::Audio { packet })
             .map_err(|_| Error::Other("Pipeline audio channel closed".into()))?;
@@ -697,7 +730,10 @@ impl AsyncExportPipeline {
 
         encoder.close();
         if dropped_frames > 0 {
-            tracing::warn!("Encode worker: {} frames dropped during encoding", dropped_frames);
+            tracing::warn!(
+                "Encode worker: {} frames dropped during encoding",
+                dropped_frames
+            );
         }
         tracing::debug!("Encode worker: input channel closed, exiting");
         Ok(())
@@ -735,7 +771,10 @@ impl AsyncExportPipeline {
                     true
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to add audio stream (continuing without audio): {}", e);
+                    tracing::warn!(
+                        "Failed to add audio stream (continuing without audio): {}",
+                        e
+                    );
                     false
                 }
             }
@@ -781,14 +820,20 @@ impl AsyncExportPipeline {
             } else if !video_done {
                 match video_rx.recv() {
                     Ok(mux_packet) => Self::handle_mux_packet(&mut muxer, mux_packet, &progress)?,
-                    Err(_) => { video_done = true; }
+                    Err(_) => {
+                        video_done = true;
+                    }
                 }
             } else {
                 // Only audio remaining
                 match audio_rx.recv() {
-                    Ok(MuxPacket::AudioFinished) => { audio_done = true; }
+                    Ok(MuxPacket::AudioFinished) => {
+                        audio_done = true;
+                    }
                     Ok(mux_packet) => Self::handle_mux_packet(&mut muxer, mux_packet, &progress)?,
-                    Err(_) => { audio_done = true; }
+                    Err(_) => {
+                        audio_done = true;
+                    }
                 }
             }
         }
@@ -810,20 +855,18 @@ impl AsyncExportPipeline {
         progress: &PipelineProgress,
     ) -> Result<()> {
         match packet {
-            MuxPacket::Video { index, packet } => {
-                match muxer.write_video_packet(&packet) {
-                    Ok(()) => {
-                        if index != u64::MAX {
-                            progress.frames_muxed.fetch_add(1, Ordering::Relaxed);
-                        }
-                        tracing::trace!("Muxed video packet (frame {})", index);
+            MuxPacket::Video { index, packet } => match muxer.write_video_packet(&packet) {
+                Ok(()) => {
+                    if index != u64::MAX {
+                        progress.frames_muxed.fetch_add(1, Ordering::Relaxed);
                     }
-                    Err(e) => {
-                        progress.set_error(format!("Mux error on video frame {}: {}", index, e));
-                        return Err(e);
-                    }
+                    tracing::trace!("Muxed video packet (frame {})", index);
                 }
-            }
+                Err(e) => {
+                    progress.set_error(format!("Mux error on video frame {}: {}", index, e));
+                    return Err(e);
+                }
+            },
             MuxPacket::Audio { packet } => {
                 match muxer.write_audio_packet(&packet) {
                     Ok(()) => {

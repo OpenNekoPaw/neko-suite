@@ -127,11 +127,7 @@ impl ResourceRegistry {
     }
 
     /// Register with explicit resource type
-    pub async fn register_with_type(
-        &self,
-        path: &Path,
-        resource_type: ResourceType,
-    ) -> ResourceId {
+    pub async fn register_with_type(&self, path: &Path, resource_type: ResourceType) -> ResourceId {
         let canonical = Self::canonicalize_path(path);
 
         // Check if already registered

@@ -84,7 +84,9 @@ impl ITaskService for TaskService {
     }
 
     fn probe(&self, task_id: &str) -> Result<TaskProgress> {
-        let tasks = self.tasks.try_read()
+        let tasks = self
+            .tasks
+            .try_read()
             .map_err(|_| Error::Other("Task lock busy".to_string()))?;
         match tasks.get(task_id) {
             Some(handle) => Ok(handle.current_progress()),
@@ -93,7 +95,9 @@ impl ITaskService for TaskService {
     }
 
     fn pause(&self, task_id: &str) -> Result<()> {
-        let tasks = self.tasks.try_read()
+        let tasks = self
+            .tasks
+            .try_read()
             .map_err(|_| Error::Other("Task lock busy".to_string()))?;
         match tasks.get(task_id) {
             Some(handle) => {
@@ -105,7 +109,9 @@ impl ITaskService for TaskService {
     }
 
     fn resume(&self, task_id: &str) -> Result<()> {
-        let tasks = self.tasks.try_read()
+        let tasks = self
+            .tasks
+            .try_read()
             .map_err(|_| Error::Other("Task lock busy".to_string()))?;
         match tasks.get(task_id) {
             Some(handle) => {
@@ -117,7 +123,9 @@ impl ITaskService for TaskService {
     }
 
     fn cancel(&self, task_id: &str) -> Result<()> {
-        let tasks = self.tasks.try_read()
+        let tasks = self
+            .tasks
+            .try_read()
             .map_err(|_| Error::Other("Task lock busy".to_string()))?;
         match tasks.get(task_id) {
             Some(handle) => {
@@ -136,7 +144,9 @@ impl ITaskService for TaskService {
     }
 
     fn subscribe(&self, task_id: &str) -> Result<broadcast::Receiver<TaskProgress>> {
-        let tasks = self.tasks.try_read()
+        let tasks = self
+            .tasks
+            .try_read()
             .map_err(|_| Error::Other("Task lock busy".to_string()))?;
         match tasks.get(task_id) {
             Some(handle) => Ok(handle.subscribe()),

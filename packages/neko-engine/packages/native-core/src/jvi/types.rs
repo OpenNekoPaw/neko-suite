@@ -292,7 +292,10 @@ pub struct JviTransform {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JviAudioProperties {
-    #[serde(default = "default_volume", deserialize_with = "deserialize_animatable_value")]
+    #[serde(
+        default = "default_volume",
+        deserialize_with = "deserialize_animatable_value"
+    )]
     pub volume: f32,
     #[serde(default, deserialize_with = "deserialize_animatable_value")]
     pub pan: f32,
@@ -340,11 +343,10 @@ where
     let value = serde_json::Value::deserialize(deserializer)?;
 
     match value {
-        serde_json::Value::Number(n) => {
-            n.as_f64()
-                .map(|v| v as f32)
-                .ok_or_else(|| D::Error::custom("Invalid number"))
-        }
+        serde_json::Value::Number(n) => n
+            .as_f64()
+            .map(|v| v as f32)
+            .ok_or_else(|| D::Error::custom("Invalid number")),
         serde_json::Value::Object(obj) => {
             // Try to get baseValue (camelCase)
             if let Some(base) = obj.get("baseValue") {
@@ -358,7 +360,9 @@ where
                     return Ok(n as f32);
                 }
             }
-            Err(D::Error::custom("Object must have baseValue or base_value field"))
+            Err(D::Error::custom(
+                "Object must have baseValue or base_value field",
+            ))
         }
         serde_json::Value::Null => Ok(1.0), // Default value
         _ => Err(D::Error::custom("Expected number or object with baseValue")),

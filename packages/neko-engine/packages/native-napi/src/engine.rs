@@ -22,10 +22,9 @@ static ENGINE: OnceCell<Arc<EngineApi>> = OnceCell::const_new();
 async fn get_engine() -> napi::Result<Arc<EngineApi>> {
     ENGINE
         .get_or_try_init(|| async {
-            EngineApi::new()
-                .await
-                .map(Arc::new)
-                .map_err(|e| napi::Error::from_reason(format!("Failed to initialize engine: {}", e)))
+            EngineApi::new().await.map(Arc::new).map_err(|e| {
+                napi::Error::from_reason(format!("Failed to initialize engine: {}", e))
+            })
         })
         .await
         .cloned()
@@ -71,7 +70,11 @@ impl NativeEngine {
 
         tracing::info!(
             "NativeEngine created (GPU: {})",
-            if engine.has_gpu() { "enabled" } else { "disabled" }
+            if engine.has_gpu() {
+                "enabled"
+            } else {
+                "disabled"
+            }
         );
 
         Ok(Self {
@@ -111,8 +114,8 @@ impl NativeEngine {
             .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
             .unwrap_or(serde_json::Value::Null);
 
-        let body_value: Option<serde_json::Value> = body
-            .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null));
+        let body_value: Option<serde_json::Value> =
+            body.map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null));
 
         let request = ActionRequest {
             group,
@@ -139,7 +142,11 @@ impl NativeEngine {
     /// Get list of supported action groups
     #[napi]
     pub fn groups(&self) -> Vec<String> {
-        self.engine.groups().into_iter().map(|s| s.to_string()).collect()
+        self.engine
+            .groups()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect()
     }
 
     /// Get list of supported actions for a group
@@ -155,22 +162,49 @@ impl NativeEngine {
     /// Get system health status
     #[napi]
     pub async fn health(&self) -> napi::Result<String> {
-        self.dispatch_action("nodes".to_string(), "health".to_string(), None, None, None, None, None, None)
-            .await
+        self.dispatch_action(
+            "nodes".to_string(),
+            "health".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
     }
 
     /// Get system metrics (CPU, memory, GPU usage)
     #[napi]
     pub async fn metrics(&self) -> napi::Result<String> {
-        self.dispatch_action("nodes".to_string(), "metric".to_string(), None, None, None, None, None, None)
-            .await
+        self.dispatch_action(
+            "nodes".to_string(),
+            "metric".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
     }
 
     /// Get GPU information
     #[napi]
     pub async fn gpu_info(&self) -> napi::Result<String> {
-        self.dispatch_action("nodes".to_string(), "gpu".to_string(), None, None, None, None, None, None)
-            .await
+        self.dispatch_action(
+            "nodes".to_string(),
+            "gpu".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
     }
 
     /// Probe a video file for metadata
@@ -182,7 +216,10 @@ impl NativeEngine {
             "probe".to_string(),
             None,
             Some(options.to_string()),
-            None, None, None, None,
+            None,
+            None,
+            None,
+            None,
         )
         .await
     }
@@ -190,22 +227,49 @@ impl NativeEngine {
     /// List all active tasks
     #[napi]
     pub async fn list_tasks(&self) -> napi::Result<String> {
-        self.dispatch_action("tasks".to_string(), "list".to_string(), None, None, None, None, None, None)
-            .await
+        self.dispatch_action(
+            "tasks".to_string(),
+            "list".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
     }
 
     /// Get task progress
     #[napi]
     pub async fn get_task_progress(&self, task_id: String) -> napi::Result<String> {
-        self.dispatch_action("tasks".to_string(), "probe".to_string(), Some(task_id), None, None, None, None, None)
-            .await
+        self.dispatch_action(
+            "tasks".to_string(),
+            "probe".to_string(),
+            Some(task_id),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
     }
 
     /// Cancel a task
     #[napi]
     pub async fn cancel_task(&self, task_id: String) -> napi::Result<String> {
-        self.dispatch_action("tasks".to_string(), "cancel".to_string(), Some(task_id), None, None, None, None, None)
-            .await
+        self.dispatch_action(
+            "tasks".to_string(),
+            "cancel".to_string(),
+            Some(task_id),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
     }
 
     /// Capture a single frame from video
@@ -230,7 +294,10 @@ impl NativeEngine {
             "capture".to_string(),
             None,
             Some(options.to_string()),
-            None, None, None, None,
+            None,
+            None,
+            None,
+            None,
         )
         .await
     }
@@ -271,10 +338,7 @@ impl NativeEngine {
 
         let actual_port = addr.port();
 
-        tracing::info!(
-            "Frame server started on http://127.0.0.1:{}",
-            actual_port
-        );
+        tracing::info!("Frame server started on http://127.0.0.1:{}", actual_port);
 
         // Store the server state
         {
@@ -282,10 +346,7 @@ impl NativeEngine {
                 .http_server
                 .lock()
                 .map_err(|_| napi::Error::from_reason("Failed to lock http_server state"))?;
-            *guard = Some(HttpServerState {
-                addr,
-                shutdown_tx,
-            });
+            *guard = Some(HttpServerState { addr, shutdown_tx });
         }
 
         Ok(actual_port)
@@ -304,10 +365,7 @@ impl NativeEngine {
 
         if let Some(server_state) = state {
             let _ = server_state.shutdown_tx.send(());
-            tracing::info!(
-                "Frame server on port {} stopped",
-                server_state.addr.port()
-            );
+            tracing::info!("Frame server on port {} stopped", server_state.addr.port());
         }
 
         Ok(())
@@ -321,7 +379,6 @@ impl NativeEngine {
             .ok()
             .and_then(|guard| guard.as_ref().map(|s| s.addr.port()))
     }
-
 }
 
 #[cfg(test)]

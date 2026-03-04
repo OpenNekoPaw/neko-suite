@@ -3,23 +3,23 @@
 //! Provides video-related operations: probing, capture, extraction,
 //! streaming, transcoding, keyframe analysis, waveform generation, and proxy creation.
 
-use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType, global_pool};
-use crate::domain::{CaptureOptions, ExtractOptions, ExtractType, FrameData, TaskHandle, TranscodeOptions};
-use crate::encoder::{
-    ContainerFormat, Encoder, EncoderConfig, FfmpegMuxer, HwAccelEncoder, Muxer,
-};
 use crate::audio::{
     AudioDecoder, AudioEncoder, AudioEncoderConfig, FfmpegAudioDecoder, FfmpegAudioEncoder,
     SampleFormat,
 };
+use crate::decoder::{global_pool, Decoder, HwAccelDecoder, HwAccelType};
+use crate::decoder::{IdrScanner, KeyframeInfo};
+use crate::domain::{
+    CaptureOptions, ExtractOptions, ExtractType, FrameData, TaskHandle, TranscodeOptions,
+};
+use crate::encoder::{ContainerFormat, Encoder, EncoderConfig, FfmpegMuxer, HwAccelEncoder, Muxer};
 use crate::error::{Error, Result};
 use crate::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
-use crate::decoder::{IdrScanner, KeyframeInfo};
 use crate::media_service::{encode_rgba_to_jpeg, extract_subtitles, global_probe_cache};
 use crate::services::impls::common::{convert_media_info, generate_waveform_blocking};
 use crate::services::impls::stream_loop::{
-    pack_h264_frame, ActiveStreams, create_stream_channels, StreamPlaybackDelegate, WallClockPacer,
-    StreamLoopHandle, EOF_IDLE_TIMEOUT, eof_idle_wait,
+    create_stream_channels, eof_idle_wait, pack_h264_frame, ActiveStreams, StreamLoopHandle,
+    StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
 use crate::services::{IStreamPlayback, ITaskService, IVideoService};
 use neko_types::{FrameFormat, LoopRegion, MediaInfo, StreamId, WaveformData};
@@ -43,13 +43,7 @@ fn container_from_path(path: &Path) -> ContainerFormat {
 /// Produces a smaller image by averaging source pixels that map to each
 /// destination pixel. This is intentionally simple — thumbnail quality
 /// does not need a Lanczos kernel.
-fn bilinear_downscale_rgba(
-    src: &[u8],
-    src_w: u32,
-    src_h: u32,
-    dst_w: u32,
-    dst_h: u32,
-) -> Vec<u8> {
+fn bilinear_downscale_rgba(src: &[u8], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> Vec<u8> {
     let mut dst = vec![0u8; (dst_w * dst_h * 4) as usize];
     let x_ratio = src_w as f64 / dst_w as f64;
     let y_ratio = src_h as f64 / dst_h as f64;
@@ -119,7 +113,6 @@ impl VideoService {
             playback,
         }
     }
-
 }
 
 impl IStreamPlayback for VideoService {
@@ -196,7 +189,8 @@ impl IVideoService for VideoService {
                 // Convert NV12 to RGBA using GPU
                 let renderer = Nv12Renderer::new(Arc::clone(&ctx))?;
                 let output_texture = renderer.create_output_texture(src_width, src_height);
-                let output_view = output_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                let output_view =
+                    output_texture.create_view(&wgpu::TextureViewDescriptor::default());
                 renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
 
                 // Read RGBA data from GPU
@@ -204,8 +198,11 @@ impl IVideoService for VideoService {
 
                 // Downscale if target dimensions are specified and smaller than source
                 let (final_rgba, out_w, out_h) = match (target_width, target_height) {
-                    (Some(tw), Some(th)) if tw > 0 && th > 0 && (tw < src_width || th < src_height) => {
-                        let scaled = bilinear_downscale_rgba(&rgba_data, src_width, src_height, tw, th);
+                    (Some(tw), Some(th))
+                        if tw > 0 && th > 0 && (tw < src_width || th < src_height) =>
+                    {
+                        let scaled =
+                            bilinear_downscale_rgba(&rgba_data, src_width, src_height, tw, th);
                         (scaled, tw, th)
                     }
                     _ => (rgba_data, src_width, src_height),
@@ -255,7 +252,9 @@ impl IVideoService for VideoService {
                 let path = source.to_string_lossy().to_string();
                 let tracks = tokio::task::spawn_blocking(move || extract_subtitles(&path))
                     .await
-                    .map_err(|e| Error::Other(format!("Subtitle extraction task failed: {}", e)))??;
+                    .map_err(|e| {
+                        Error::Other(format!("Subtitle extraction task failed: {}", e))
+                    })??;
 
                 // Convert internal types to neko_types (which has Serialize)
                 let typed_tracks: Vec<neko_types::ExtractedSubtitleTrack> = tracks
@@ -313,9 +312,10 @@ impl IVideoService for VideoService {
         source: &Path,
         session_id: &str,
     ) -> Result<(StreamId, broadcast::Receiver<FrameData>)> {
-        let _gpu_ctx = self.gpu_ctx.clone().ok_or_else(|| {
-            Error::Other("GPU context required for video streaming".to_string())
-        })?;
+        let _gpu_ctx = self
+            .gpu_ctx
+            .clone()
+            .ok_or_else(|| Error::Other("GPU context required for video streaming".to_string()))?;
 
         let path = source.to_string_lossy().to_string();
 
@@ -390,11 +390,12 @@ impl IVideoService for VideoService {
                 // Get stream time_base for PTS→microseconds conversion
                 let time_base = decoder.time_base();
 
-                let encoder_config = EncoderConfig::new(width, height, fps, crate::encoder::VideoCodec::H264)
-                    .with_preset(crate::encoder::EncoderPreset::Fast)
-                    .with_hw_encoder(crate::encoder::HwEncoderType::Auto)
-                    .with_gop_size(1)       // All-Intra: every frame is a keyframe (uniform encode cost)
-                    .with_max_b_frames(0);
+                let encoder_config =
+                    EncoderConfig::new(width, height, fps, crate::encoder::VideoCodec::H264)
+                        .with_preset(crate::encoder::EncoderPreset::Fast)
+                        .with_hw_encoder(crate::encoder::HwEncoderType::Auto)
+                        .with_gop_size(1) // All-Intra: every frame is a keyframe (uniform encode cost)
+                        .with_max_b_frames(0);
                 let enc_pool = crate::encoder::global_encoder_pool();
                 let mut encoder = match enc_pool.acquire(&encoder_config) {
                     Ok(e) => e,
@@ -408,7 +409,9 @@ impl IVideoService for VideoService {
                 let mut last_seek_seq: u64 = 0;
 
                 loop {
-                    if encode_cancel.is_cancelled() { break; }
+                    if encode_cancel.is_cancelled() {
+                        break;
+                    }
 
                     let state = state_rx.borrow().clone();
 
@@ -451,15 +454,25 @@ impl IVideoService for VideoService {
                                 continue;
                             } else {
                                 // No loop: enter EOF idle wait for seek
-                                match eof_idle_wait(&encode_cancel, &state_rx, last_seek_seq, EOF_IDLE_TIMEOUT) {
+                                match eof_idle_wait(
+                                    &encode_cancel,
+                                    &state_rx,
+                                    last_seek_seq,
+                                    EOF_IDLE_TIMEOUT,
+                                ) {
                                     Some(time) => {
                                         let _ = decoder.seek(time);
                                         Encoder::close(&mut encoder);
-                                        if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
-                                            tracing::error!("Failed to re-open encoder after EOF seek: {}", e);
+                                        if let Err(e) = Encoder::open(&mut encoder, &encoder_config)
+                                        {
+                                            tracing::error!(
+                                                "Failed to re-open encoder after EOF seek: {}",
+                                                e
+                                            );
                                             break;
                                         }
-                                        seek_counter_enc.fetch_add(1, std::sync::atomic::Ordering::Release);
+                                        seek_counter_enc
+                                            .fetch_add(1, std::sync::atomic::Ordering::Release);
                                         continue;
                                     }
                                     None => break, // Cancelled or timeout
@@ -478,7 +491,9 @@ impl IVideoService for VideoService {
 
                     let gpu_handle = match gpu_texture.handle {
                         #[cfg(target_os = "macos")]
-                        crate::decoder::GpuTextureHandle::VideoToolbox { io_surface, .. } => io_surface,
+                        crate::decoder::GpuTextureHandle::VideoToolbox { io_surface, .. } => {
+                            io_surface
+                        }
                         #[allow(unreachable_patterns)]
                         _ => {
                             tracing::warn!("Unsupported GPU texture handle for encoding");
@@ -489,7 +504,8 @@ impl IVideoService for VideoService {
                     match Encoder::encode_frame_gpu(&mut encoder, gpu_handle, pts) {
                         Ok(packets) => {
                             for p in &packets {
-                                let frame_data = pack_h264_frame(p, tex_width, tex_height, time_base);
+                                let frame_data =
+                                    pack_h264_frame(p, tex_width, tex_height, time_base);
                                 // Push to FrameQueue; blocks if queue is full (backpressure)
                                 if queue_tx.send(frame_data).is_err() {
                                     // Pacing thread exited
@@ -526,7 +542,9 @@ impl IVideoService for VideoService {
             let mut last_seek_count = 0u64;
 
             loop {
-                if cancel_clone2.is_cancelled() { break; }
+                if cancel_clone2.is_cancelled() {
+                    break;
+                }
 
                 // Detect seek: drain stale frames from queue
                 let current_seek = seek_counter_pac.load(std::sync::atomic::Ordering::Acquire);
@@ -618,8 +636,14 @@ impl IVideoService for VideoService {
             let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
             let media_info = decoder.open(&path)?;
 
-            let width = options.resolution.map(|r| r.width).unwrap_or(media_info.width);
-            let height = options.resolution.map(|r| r.height).unwrap_or(media_info.height);
+            let width = options
+                .resolution
+                .map(|r| r.width)
+                .unwrap_or(media_info.width);
+            let height = options
+                .resolution
+                .map(|r| r.height)
+                .unwrap_or(media_info.height);
             let fps = media_info.fps;
 
             let codec = options.video_codec;
@@ -712,11 +736,19 @@ impl IVideoService for VideoService {
                         Some(nv12_texture) => {
                             let gpu_handle = match nv12_texture.handle {
                                 #[cfg(target_os = "macos")]
-                                crate::decoder::GpuTextureHandle::VideoToolbox { io_surface, .. } => io_surface,
+                                crate::decoder::GpuTextureHandle::VideoToolbox {
+                                    io_surface,
+                                    ..
+                                } => io_surface,
                                 #[allow(unreachable_patterns)]
-                                _ => return Err(Error::Other("Unsupported GPU texture handle for encoding".to_string())),
+                                _ => {
+                                    return Err(Error::Other(
+                                        "Unsupported GPU texture handle for encoding".to_string(),
+                                    ))
+                                }
                             };
-                            let packets = video_encoder.encode_frame_gpu(gpu_handle, nv12_texture.pts)?;
+                            let packets =
+                                video_encoder.encode_frame_gpu(gpu_handle, nv12_texture.pts)?;
                             for packet in &packets {
                                 muxer.write_video_packet(packet)?;
                             }
@@ -753,7 +785,10 @@ impl IVideoService for VideoService {
                                             audio_done = true;
                                         }
                                         Err(e) => {
-                                            tracing::warn!("Audio decode error during transcode: {}", e);
+                                            tracing::warn!(
+                                                "Audio decode error during transcode: {}",
+                                                e
+                                            );
                                             audio_done = true;
                                         }
                                     }
@@ -771,11 +806,8 @@ impl IVideoService for VideoService {
                     {
                         match AudioDecoder::decode_next(adec) {
                             Ok(Some(frame)) => {
-                                let apackets = AudioEncoder::encode_frame(
-                                    aenc,
-                                    &frame.data,
-                                    frame.samples,
-                                )?;
+                                let apackets =
+                                    AudioEncoder::encode_frame(aenc, &frame.data, frame.samples)?;
                                 for ap in &apackets {
                                     let video_packet = crate::encoder::EncodedPacket {
                                         data: ap.data.clone(),
@@ -873,7 +905,10 @@ impl IVideoService for VideoService {
         let proxy_height = (media_info.height / 4).max(180);
         let (proxy_width, proxy_height) = if proxy_width > 960 {
             let scale = 960.0 / proxy_width as f64;
-            ((proxy_width as f64 * scale) as u32, (proxy_height as f64 * scale) as u32)
+            (
+                (proxy_width as f64 * scale) as u32,
+                (proxy_height as f64 * scale) as u32,
+            )
         } else {
             (proxy_width, proxy_height)
         };
@@ -916,14 +951,18 @@ mod tests {
     #[tokio::test]
     async fn test_video_service_get_keyframes_nonexistent() {
         let service = create_test_service();
-        let result = service.get_keyframes(Path::new("/nonexistent/file.mp4")).await;
+        let result = service
+            .get_keyframes(Path::new("/nonexistent/file.mp4"))
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_video_service_generate_waveform_nonexistent() {
         let service = create_test_service();
-        let result = service.generate_waveform(Path::new("/nonexistent/file.mp4"), None).await;
+        let result = service
+            .generate_waveform(Path::new("/nonexistent/file.mp4"), None)
+            .await;
         assert!(result.is_err());
     }
 
@@ -934,7 +973,9 @@ mod tests {
             extract_type: ExtractType::Subtitles,
             time_range: None,
         };
-        let result = service.extract(Path::new("/nonexistent/file.mp4"), options, None).await;
+        let result = service
+            .extract(Path::new("/nonexistent/file.mp4"), options, None)
+            .await;
         assert!(result.is_err());
     }
 
@@ -945,7 +986,9 @@ mod tests {
             extract_type: ExtractType::Frame { time: 1.0 },
             time_range: None,
         };
-        let result = service.extract(Path::new("/nonexistent/file.mp4"), options, None).await;
+        let result = service
+            .extract(Path::new("/nonexistent/file.mp4"), options, None)
+            .await;
         // Should fail because no GPU context or file doesn't exist
         assert!(result.is_err());
     }
@@ -961,7 +1004,9 @@ mod tests {
             },
             time_range: None,
         };
-        let result = service.extract(Path::new("/nonexistent/file.mp4"), options, None).await;
+        let result = service
+            .extract(Path::new("/nonexistent/file.mp4"), options, None)
+            .await;
         // Should fail because no GPU context or file doesn't exist
         assert!(result.is_err());
     }
@@ -983,10 +1028,7 @@ mod tests {
         let stream_id = StreamId::new("test");
         let result = service.stop_stream(&stream_id).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Stream not found"));
+        assert!(result.unwrap_err().to_string().contains("Stream not found"));
     }
 
     #[tokio::test]
@@ -1007,7 +1049,11 @@ mod tests {
     async fn test_video_service_generate_proxy_nonexistent() {
         let service = create_test_service();
         let result = service
-            .generate_proxy(Path::new("/nonexistent/file.mp4"), Path::new("/tmp/proxy.mp4"), None)
+            .generate_proxy(
+                Path::new("/nonexistent/file.mp4"),
+                Path::new("/tmp/proxy.mp4"),
+                None,
+            )
             .await;
         assert!(result.is_err());
     }

@@ -39,12 +39,9 @@ async fn get_bridge_engine() -> napi::Result<Arc<EngineApi>> {
                 )
                 .try_init();
 
-            EngineApi::new()
-                .await
-                .map(Arc::new)
-                .map_err(|e| {
-                    napi::Error::from_reason(format!("Failed to initialize bridge engine: {}", e))
-                })
+            EngineApi::new().await.map(Arc::new).map_err(|e| {
+                napi::Error::from_reason(format!("Failed to initialize bridge engine: {}", e))
+            })
         })
         .await
         .cloned()
@@ -69,8 +66,7 @@ async fn dispatch_to_json(request: ActionRequest) -> napi::Result<String> {
 /// Returns JSON ActionResponse with media metadata (streams, duration, format, etc.)
 #[napi]
 pub async fn bridge_probe_media(path: String) -> napi::Result<String> {
-    let request = ActionRequest::new("videos", "probe")
-        .with_options(json!({ "source": path }));
+    let request = ActionRequest::new("videos", "probe").with_options(json!({ "source": path }));
 
     dispatch_to_json(request).await
 }
@@ -82,11 +78,10 @@ pub async fn bridge_probe_media(path: String) -> napi::Result<String> {
 /// Returns JSON ActionResponse with extracted subtitle tracks
 #[napi]
 pub async fn bridge_extract_subtitles(path: String) -> napi::Result<String> {
-    let request = ActionRequest::new("videos", "extract")
-        .with_options(json!({
-            "source": path,
-            "type": "subtitles"
-        }));
+    let request = ActionRequest::new("videos", "extract").with_options(json!({
+        "source": path,
+        "type": "subtitles"
+    }));
 
     dispatch_to_json(request).await
 }
@@ -118,8 +113,7 @@ pub async fn bridge_extract_frame(
         opts["height"] = json!(h);
     }
 
-    let request = ActionRequest::new("videos", "capture")
-        .with_options(opts);
+    let request = ActionRequest::new("videos", "capture").with_options(opts);
 
     dispatch_to_json(request).await
 }
@@ -142,8 +136,7 @@ pub async fn bridge_gpu_info() -> napi::Result<String> {
 /// Returns JSON ActionResponse with audio metadata (codec, sample rate, channels, etc.)
 #[napi]
 pub async fn bridge_audio_info(path: String) -> napi::Result<String> {
-    let request = ActionRequest::new("audios", "probe")
-        .with_options(json!({ "source": path }));
+    let request = ActionRequest::new("audios", "probe").with_options(json!({ "source": path }));
 
     dispatch_to_json(request).await
 }
@@ -155,8 +148,7 @@ pub async fn bridge_audio_info(path: String) -> napi::Result<String> {
 /// Returns JSON ActionResponse with waveform sample data
 #[napi]
 pub async fn bridge_generate_waveform(path: String) -> napi::Result<String> {
-    let request = ActionRequest::new("videos", "waveform")
-        .with_options(json!({ "source": path }));
+    let request = ActionRequest::new("videos", "waveform").with_options(json!({ "source": path }));
 
     dispatch_to_json(request).await
 }
@@ -168,8 +160,7 @@ pub async fn bridge_generate_waveform(path: String) -> napi::Result<String> {
 /// Returns JSON ActionResponse with keyframe timestamp list
 #[napi]
 pub async fn bridge_get_keyframes(path: String) -> napi::Result<String> {
-    let request = ActionRequest::new("videos", "keyframes")
-        .with_options(json!({ "source": path }));
+    let request = ActionRequest::new("videos", "keyframes").with_options(json!({ "source": path }));
 
     dispatch_to_json(request).await
 }
@@ -200,8 +191,8 @@ pub async fn bridge_effects_list() -> napi::Result<String> {
 /// Returns JSON ActionResponse with shader parameter definitions
 #[napi]
 pub async fn bridge_effects_info(shader_id: String) -> napi::Result<String> {
-    let request = ActionRequest::new("effects", "info")
-        .with_options(json!({ "shaderId": shader_id }));
+    let request =
+        ActionRequest::new("effects", "info").with_options(json!({ "shaderId": shader_id }));
     dispatch_to_json(request).await
 }
 
@@ -223,14 +214,13 @@ pub async fn bridge_effects_apply(
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or(json!({}));
 
-    let request = ActionRequest::new("effects", "apply")
-        .with_options(json!({
-            "data": data_base64,
-            "width": width,
-            "height": height,
-            "shaderId": shader_id,
-            "params": params,
-        }));
+    let request = ActionRequest::new("effects", "apply").with_options(json!({
+        "data": data_base64,
+        "width": width,
+        "height": height,
+        "shaderId": shader_id,
+        "params": params,
+    }));
 
     dispatch_to_json(request).await
 }
@@ -251,12 +241,11 @@ pub async fn bridge_effects_register(
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or(json!([]));
 
-    let request = ActionRequest::new("effects", "register")
-        .with_options(json!({
-            "shaderId": id,
-            "code": code,
-            "params": params,
-        }));
+    let request = ActionRequest::new("effects", "register").with_options(json!({
+        "shaderId": id,
+        "code": code,
+        "params": params,
+    }));
 
     dispatch_to_json(request).await
 }
@@ -277,14 +266,12 @@ pub async fn bridge_encode_jpeg(
     height: u32,
     quality: Option<u32>,
 ) -> napi::Result<String> {
-    let request = ActionRequest::new("images", "encode")
-        .with_options(json!({
-            "data": rgba_data_base64,
-            "width": width,
-            "height": height,
-            "quality": quality.unwrap_or(85),
-        }));
+    let request = ActionRequest::new("images", "encode").with_options(json!({
+        "data": rgba_data_base64,
+        "width": width,
+        "height": height,
+        "quality": quality.unwrap_or(85),
+    }));
 
     dispatch_to_json(request).await
 }
-

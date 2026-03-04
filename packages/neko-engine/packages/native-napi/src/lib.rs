@@ -9,13 +9,12 @@ pub use engine::NativeEngine;
 
 // Bridge functions (Phase A + B)
 pub use bridge::{
-    bridge_audio_info, bridge_encode_jpeg, bridge_extract_frame,
-    bridge_extract_subtitles, bridge_generate_waveform, bridge_get_keyframes, bridge_gpu_info,
-    bridge_probe_media,
+    bridge_audio_info, bridge_encode_jpeg, bridge_extract_frame, bridge_extract_subtitles,
+    bridge_generate_waveform, bridge_get_keyframes, bridge_gpu_info, bridge_probe_media,
 };
 
 // Types used by bridge functions
 pub use types::{
-    JsAudioInfo, JsFrameData, JsGpuInfo, JsHwAccelInfo,
-    JsProbeMediaInfo, JsExtractedSubtitleTrack, JsSubtitleCue, JsProbeSubtitleStream,
+    JsAudioInfo, JsExtractedSubtitleTrack, JsFrameData, JsGpuInfo, JsHwAccelInfo, JsProbeMediaInfo,
+    JsProbeSubtitleStream, JsSubtitleCue,
 };

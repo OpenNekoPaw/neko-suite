@@ -29,8 +29,8 @@
 //! // Decoder automatically returned to pool when guard is dropped
 //! ```
 
-use super::traits::Decoder;
 use super::hwaccel::{HwAccelDecoder, HwAccelDecoderConfig};
+use super::traits::Decoder;
 use super::HwAccelType;
 use crate::error::{Error, Result};
 
@@ -268,12 +268,7 @@ impl DecoderPool {
     ///
     /// Called automatically by `DecoderGuard::drop`, but can also be called
     /// manually after `DecoderGuard::take_decoder()` for long-lived decoder usage.
-    pub fn return_decoder(
-        &self,
-        decoder: HwAccelDecoder,
-        video_path: &str,
-        hw_accel: HwAccelType,
-    ) {
+    pub fn return_decoder(&self, decoder: HwAccelDecoder, video_path: &str, hw_accel: HwAccelType) {
         let mut state = self.state.lock().unwrap();
         state.in_use_count = state.in_use_count.saturating_sub(1);
 

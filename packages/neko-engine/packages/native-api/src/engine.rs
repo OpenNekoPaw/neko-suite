@@ -54,23 +54,25 @@ impl EngineApi {
         let video_service = Arc::new(VideoService::new(gpu_ctx.clone(), task_service.clone()));
         let audio_service = Arc::new(AudioService::new(gpu_ctx.clone(), task_service.clone()));
         let image_service = Arc::new(ImageService::new(gpu_ctx.clone()));
-        let timeline_service = Arc::new(TimelineService::new(gpu_ctx.clone(), task_service.clone()));
+        let timeline_service =
+            Arc::new(TimelineService::new(gpu_ctx.clone(), task_service.clone()));
 
         // Export service requires GPU
-        let export_service = gpu_ctx.as_ref().map(|ctx| {
-            Arc::new(ExportService::new(Arc::clone(ctx)))
-        });
+        let export_service = gpu_ctx
+            .as_ref()
+            .map(|ctx| Arc::new(ExportService::new(Arc::clone(ctx))));
 
         // Effects service requires GPU
-        let effects_service = gpu_ctx.as_ref().and_then(|ctx| {
-            match EffectsService::new(Arc::clone(ctx)) {
-                Ok(svc) => Some(Arc::new(svc)),
-                Err(e) => {
-                    tracing::warn!("Effects service initialization failed: {}", e);
-                    None
-                }
-            }
-        });
+        let effects_service =
+            gpu_ctx
+                .as_ref()
+                .and_then(|ctx| match EffectsService::new(Arc::clone(ctx)) {
+                    Ok(svc) => Some(Arc::new(svc)),
+                    Err(e) => {
+                        tracing::warn!("Effects service initialization failed: {}", e);
+                        None
+                    }
+                });
 
         // Create registries
         let resource_registry = Arc::new(ResourceRegistry::new());
@@ -125,11 +127,7 @@ impl EngineApi {
     pub async fn dispatch(&self, request: ActionRequest) -> ActionResponse {
         let request_id = request.id.clone();
 
-        tracing::debug!(
-            "Dispatching {}:{}",
-            request.group,
-            request.action
-        );
+        tracing::debug!("Dispatching {}:{}", request.group, request.action);
 
         match self.router.route(request).await {
             Ok(mut response) => {

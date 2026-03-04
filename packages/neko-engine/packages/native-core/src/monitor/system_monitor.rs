@@ -2,10 +2,10 @@
 //!
 //! Provides CPU, memory, and GPU usage monitoring during video export.
 
-use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
 
 /// System resource snapshot at a point in time
 #[derive(Debug, Clone)]
@@ -60,8 +60,7 @@ impl SystemMonitor {
     /// Create a new system monitor
     pub fn new() -> Self {
         let mut system = System::new_with_specifics(
-            RefreshKind::new()
-                .with_processes(ProcessRefreshKind::new().with_cpu().with_memory()),
+            RefreshKind::new().with_processes(ProcessRefreshKind::new().with_cpu().with_memory()),
         );
 
         let pid = Pid::from_u32(std::process::id());
@@ -69,10 +68,7 @@ impl SystemMonitor {
         // Prime sysinfo with initial refresh so the first sample() returns
         // non-zero memory data. sysinfo requires at least one prior refresh
         // to populate baseline process metrics.
-        system.refresh_process_specifics(
-            pid,
-            ProcessRefreshKind::new().with_cpu().with_memory(),
-        );
+        system.refresh_process_specifics(pid, ProcessRefreshKind::new().with_cpu().with_memory());
 
         // Set last_refresh to the past so the first sample() call is not
         // rate-limited and actually performs a refresh.
@@ -229,7 +225,8 @@ impl SystemMonitor {
                     // Parse "Video Memory: XXXX MiB" line
                     for line in content.lines() {
                         if let Some(rest) = line.strip_prefix("Video Memory") {
-                            let rest = rest.trim_start_matches(|c: char| c == ':' || c.is_whitespace());
+                            let rest =
+                                rest.trim_start_matches(|c: char| c == ':' || c.is_whitespace());
                             if let Some(mib_str) = rest.strip_suffix("MiB") {
                                 if let Ok(mib) = mib_str.trim().parse::<u64>() {
                                     return (None, Some(mib * 1024 * 1024));
@@ -250,11 +247,10 @@ impl SystemMonitor {
     /// Requires Windows 10+ (IDXGIAdapter3). Falls back to None on older systems.
     #[cfg(target_os = "windows")]
     fn sample_gpu(&self) -> (Option<f64>, Option<u64>) {
-        use windows::Win32::Graphics::Dxgi::{
-            CreateDXGIFactory1, IDXGIAdapter3, IDXGIFactory1,
-            DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
-        };
         use windows::core::Interface;
+        use windows::Win32::Graphics::Dxgi::{
+            CreateDXGIFactory1, IDXGIAdapter3, IDXGIFactory1, DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
+        };
 
         let factory: IDXGIFactory1 = match unsafe { CreateDXGIFactory1() } {
             Ok(f) => f,

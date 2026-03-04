@@ -12,12 +12,10 @@ pub const COMMON_WGSL: &str = include_str!("../../../shaders/common.wgsl");
 pub const BLEND_MODES_WGSL: &str = include_str!("../../../shaders/blend_modes.wgsl");
 
 /// Color correction functions (exposure, contrast, HSL, etc.)
-pub const COLOR_CORRECTION_WGSL: &str =
-    include_str!("../../../shaders/color_correction.wgsl");
+pub const COLOR_CORRECTION_WGSL: &str = include_str!("../../../shaders/color_correction.wgsl");
 
 /// Video transition effects
-pub const TRANSITIONS_WGSL: &str =
-    include_str!("../../../shaders/transitions.wgsl");
+pub const TRANSITIONS_WGSL: &str = include_str!("../../../shaders/transitions.wgsl");
 
 /// Video effects (blur, sharpen, vignette, etc.)
 pub const EFFECTS_WGSL: &str = include_str!("../../../shaders/effects.wgsl");

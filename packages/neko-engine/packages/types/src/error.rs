@@ -124,11 +124,17 @@ impl ApiError {
 
     // Convenience constructors
     pub fn resource_not_found(id: &str) -> Self {
-        Self::new(ErrorCode::ResourceNotFound, format!("Resource not found: {}", id))
+        Self::new(
+            ErrorCode::ResourceNotFound,
+            format!("Resource not found: {}", id),
+        )
     }
 
     pub fn stream_not_found(id: &str) -> Self {
-        Self::new(ErrorCode::StreamNotFound, format!("Stream not found: {}", id))
+        Self::new(
+            ErrorCode::StreamNotFound,
+            format!("Stream not found: {}", id),
+        )
     }
 
     pub fn task_not_found(id: &str) -> Self {

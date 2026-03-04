@@ -10,11 +10,12 @@ use crate::domain::{AudioTranscodeOptions, FrameData, LoudnessAnalysis};
 use crate::error::{Error, Result};
 use crate::gpu::GpuContext;
 use crate::media_service::global_probe_cache;
-use crate::services::impls::common::{analyze_loudness_blocking, convert_media_info, generate_waveform_blocking};
+use crate::services::impls::common::{
+    analyze_loudness_blocking, convert_media_info, generate_waveform_blocking,
+};
 use crate::services::impls::stream_loop::{
-    pack_pcm_f32le_stream_frame, ActiveStreams, create_stream_channels, StreamPlaybackDelegate,
-    WallClockPacer, EOF_IDLE_TIMEOUT, eof_idle_wait,
-    StreamLoopHandle,
+    create_stream_channels, eof_idle_wait, pack_pcm_f32le_stream_frame, ActiveStreams,
+    StreamLoopHandle, StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
 use crate::services::{IAudioService, IStreamPlayback, ITaskService};
 use neko_types::{LoopRegion, MediaInfo, StreamId, WaveformData};
@@ -56,7 +57,6 @@ impl AudioService {
             playback,
         }
     }
-
 }
 
 impl IStreamPlayback for AudioService {
@@ -232,7 +232,9 @@ impl IAudioService for AudioService {
 
             loop {
                 // Check cancellation
-                if cancel_clone.is_cancelled() { break; }
+                if cancel_clone.is_cancelled() {
+                    break;
+                }
 
                 // Read playback state
                 let state = state_rx.borrow().clone();
@@ -279,7 +281,9 @@ impl IAudioService for AudioService {
                             let samples: &mut [f32] = bytemuck::cast_slice_mut(&mut pcm_data);
                             let num_samples = samples.len() / ch;
                             for i in 0..num_samples {
-                                if fade_in_remaining == 0 { break; }
+                                if fade_in_remaining == 0 {
+                                    break;
+                                }
                                 let progress = 1.0 - (fade_in_remaining as f32 / total as f32);
                                 let gain = progress * progress; // quadratic ease-in
                                 for c in 0..ch {
@@ -307,7 +311,12 @@ impl IAudioService for AudioService {
                             pacer.reset();
                         } else {
                             // No loop: enter EOF idle wait for seek
-                            match eof_idle_wait(&cancel_clone, &state_rx, last_seek_seq, EOF_IDLE_TIMEOUT) {
+                            match eof_idle_wait(
+                                &cancel_clone,
+                                &state_rx,
+                                last_seek_seq,
+                                EOF_IDLE_TIMEOUT,
+                            ) {
                                 Some(time) => {
                                     let _ = AudioDecoder::seek(&mut decoder, time);
                                     pacer.reset();
@@ -344,10 +353,7 @@ impl IAudioService for AudioService {
         Ok((stream_id, rx))
     }
 
-    async fn generate_waveform(
-        &self,
-        source: &Path,
-    ) -> Result<WaveformData> {
+    async fn generate_waveform(&self, source: &Path) -> Result<WaveformData> {
         let path = source.to_string_lossy().to_string();
 
         tokio::task::spawn_blocking(move || generate_waveform_blocking(&path))
@@ -355,11 +361,7 @@ impl IAudioService for AudioService {
             .map_err(|e| Error::Other(format!("Waveform generation task failed: {}", e)))?
     }
 
-    async fn analyze_loudness(
-        &self,
-        path: &Path,
-        target_lufs: f64,
-    ) -> Result<LoudnessAnalysis> {
+    async fn analyze_loudness(&self, path: &Path, target_lufs: f64) -> Result<LoudnessAnalysis> {
         let path = path.to_string_lossy().to_string();
 
         tokio::task::spawn_blocking(move || analyze_loudness_blocking(&path, target_lufs))
@@ -388,7 +390,9 @@ mod tests {
     #[tokio::test]
     async fn test_audio_service_generate_waveform_nonexistent() {
         let service = create_test_service();
-        let result = service.generate_waveform(Path::new("/nonexistent/file.mp3")).await;
+        let result = service
+            .generate_waveform(Path::new("/nonexistent/file.mp3"))
+            .await;
         assert!(result.is_err());
     }
 
@@ -408,7 +412,9 @@ mod tests {
     #[tokio::test]
     async fn test_audio_service_start_stream_nonexistent() {
         let service = create_test_service();
-        let result = service.start_stream(Path::new("/nonexistent/file.mp3"), "session1").await;
+        let result = service
+            .start_stream(Path::new("/nonexistent/file.mp3"), "session1")
+            .await;
         // Stream creation succeeds (async), but the decode loop will fail internally
         // The stream_id is returned immediately
         assert!(result.is_ok());
@@ -423,10 +429,7 @@ mod tests {
         let stream_id = StreamId::new("test");
         let result = service.stop_stream(&stream_id).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Stream not found"));
+        assert!(result.unwrap_err().to_string().contains("Stream not found"));
     }
 
     #[tokio::test]
@@ -499,7 +502,11 @@ mod tests {
             }
         }
 
-        assert!(frames_received >= 3, "Should receive at least 3 PCM frames, got {}", frames_received);
+        assert!(
+            frames_received >= 3,
+            "Should receive at least 3 PCM frames, got {}",
+            frames_received
+        );
         let _ = service.stop_stream(&stream_id).await;
     }
 
@@ -540,7 +547,11 @@ mod tests {
             }
         }
 
-        assert!(frames_received >= 3, "Should receive at least 3 PCM frames from aac, got {}", frames_received);
+        assert!(
+            frames_received >= 3,
+            "Should receive at least 3 PCM frames from aac, got {}",
+            frames_received
+        );
         let _ = service.stop_stream(&stream_id).await;
     }
 }

@@ -14,9 +14,5 @@ pub trait IImageService: Send + Sync {
     async fn probe(&self, path: &Path) -> Result<MediaInfo>;
 
     /// Capture/load image with optional transformations
-    async fn capture(
-        &self,
-        source: &Path,
-        options: CaptureOptions,
-    ) -> Result<FrameData>;
+    async fn capture(&self, source: &Path, options: CaptureOptions) -> Result<FrameData>;
 }

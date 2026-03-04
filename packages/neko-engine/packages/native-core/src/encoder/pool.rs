@@ -85,7 +85,9 @@ impl EncoderPool {
                 let entry = pool.swap_remove(idx);
                 tracing::debug!(
                     "EncoderPool: reusing pooled encoder ({}x{}, pool_size={})",
-                    config.width, config.height, pool.len()
+                    config.width,
+                    config.height,
+                    pool.len()
                 );
                 return Ok(entry.encoder);
             }
@@ -97,7 +99,8 @@ impl EncoderPool {
 
         tracing::debug!(
             "EncoderPool: created new encoder ({}x{})",
-            config.width, config.height
+            config.width,
+            config.height
         );
 
         Ok(encoder)
@@ -125,7 +128,12 @@ impl EncoderPool {
         // Check capacity
         if pool.len() >= self.max_encoders {
             // Drop the oldest
-            if let Some(oldest_idx) = pool.iter().enumerate().min_by_key(|(_, e)| e.last_used).map(|(i, _)| i) {
+            if let Some(oldest_idx) = pool
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, e)| e.last_used)
+                .map(|(i, _)| i)
+            {
                 pool.swap_remove(oldest_idx);
             }
         }

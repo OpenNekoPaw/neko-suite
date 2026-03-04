@@ -168,7 +168,10 @@ pub struct TimelineContentDiff {
 // =============================================================================
 
 /// Compare two .jvi project files and produce a structural diff (no content diff).
-pub fn diff_timeline_content<P: AsRef<Path>>(source_a: P, source_b: P) -> Result<TimelineContentDiff> {
+pub fn diff_timeline_content<P: AsRef<Path>>(
+    source_a: P,
+    source_b: P,
+) -> Result<TimelineContentDiff> {
     diff_timeline_content_with_options(source_a, source_b, &TimelineDiffOptions::default())
 }
 
@@ -300,7 +303,10 @@ fn run_single_content_diff(
                 .and_then(|e| e.to_str())
                 .unwrap_or("")
                 .to_lowercase();
-            if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tiff") {
+            if matches!(
+                ext.as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tiff"
+            ) {
                 match diff_image_content(curr_path, prev_path) {
                     Ok(diff) => ElementContentDiffResult::Image { diff },
                     Err(e) => ElementContentDiffResult::Error {
@@ -317,7 +323,10 @@ fn run_single_content_diff(
             }
         }
         _ => ElementContentDiffResult::Error {
-            message: format!("Unsupported element type for content diff: {}", element_type),
+            message: format!(
+                "Unsupported element type for content diff: {}",
+                element_type
+            ),
         },
     }
 }
@@ -340,8 +349,10 @@ fn resolve_media_path(src: &str, base_dir: Option<&Path>) -> std::path::PathBuf 
 
 fn diff_tracks(current: &[JviTrack], previous: &[JviTrack]) -> Vec<TrackChange> {
     let mut changes = Vec::new();
-    let current_map: HashMap<&str, &JviTrack> = current.iter().map(|t| (t.id.as_str(), t)).collect();
-    let previous_map: HashMap<&str, &JviTrack> = previous.iter().map(|t| (t.id.as_str(), t)).collect();
+    let current_map: HashMap<&str, &JviTrack> =
+        current.iter().map(|t| (t.id.as_str(), t)).collect();
+    let previous_map: HashMap<&str, &JviTrack> =
+        previous.iter().map(|t| (t.id.as_str(), t)).collect();
 
     // Removed tracks
     for prev in previous {
@@ -439,13 +450,20 @@ fn diff_track_props(current: &JviTrack, previous: &JviTrack) -> Vec<PropertyChan
 
 fn diff_elements(current: &[JviElement], previous: &[JviElement]) -> Vec<ElementChange> {
     let mut changes = Vec::new();
-    let current_map: HashMap<&str, &JviElement> = current.iter().map(|e| (element_id(e), e)).collect();
-    let previous_map: HashMap<&str, &JviElement> = previous.iter().map(|e| (element_id(e), e)).collect();
+    let current_map: HashMap<&str, &JviElement> =
+        current.iter().map(|e| (element_id(e), e)).collect();
+    let previous_map: HashMap<&str, &JviElement> =
+        previous.iter().map(|e| (element_id(e), e)).collect();
 
     // Removed
     for prev in previous {
         if !current_map.contains_key(element_id(prev)) {
-            changes.push(make_element_change(prev, TimelineChangeType::Removed, Vec::new(), None));
+            changes.push(make_element_change(
+                prev,
+                TimelineChangeType::Removed,
+                Vec::new(),
+                None,
+            ));
         }
     }
 
@@ -453,7 +471,12 @@ fn diff_elements(current: &[JviElement], previous: &[JviElement]) -> Vec<Element
     for curr in current {
         match previous_map.get(element_id(curr)) {
             None => {
-                changes.push(make_element_change(curr, TimelineChangeType::Added, Vec::new(), None));
+                changes.push(make_element_change(
+                    curr,
+                    TimelineChangeType::Added,
+                    Vec::new(),
+                    None,
+                ));
             }
             Some(prev) => {
                 let prop_changes = diff_element_props(curr, prev);
@@ -461,7 +484,12 @@ fn diff_elements(current: &[JviElement], previous: &[JviElement]) -> Vec<Element
                     let prev_src = element_src(prev);
                     let curr_src = element_src(curr);
                     let previous_src = if curr_src != prev_src { prev_src } else { None };
-                    changes.push(make_element_change(curr, TimelineChangeType::Modified, prop_changes, previous_src));
+                    changes.push(make_element_change(
+                        curr,
+                        TimelineChangeType::Modified,
+                        prop_changes,
+                        previous_src,
+                    ));
                 }
             }
         }
@@ -479,10 +507,25 @@ fn diff_element_props(current: &JviElement, previous: &JviElement) -> Vec<Proper
 
     // Properties to compare (skip id, type, name — those are identity fields)
     let props = [
-        "src", "duration", "startTime", "trimStart", "trimEnd",
-        "content", "fontSize", "fontFamily", "color", "backgroundColor",
-        "textAlign", "fontWeight", "fontStyle", "muted", "hidden", "locked",
-        "opacity", "blendMode", "transform",
+        "src",
+        "duration",
+        "startTime",
+        "trimStart",
+        "trimEnd",
+        "content",
+        "fontSize",
+        "fontFamily",
+        "color",
+        "backgroundColor",
+        "textAlign",
+        "fontWeight",
+        "fontStyle",
+        "muted",
+        "hidden",
+        "locked",
+        "opacity",
+        "blendMode",
+        "transform",
     ];
 
     if let (Some(curr_obj), Some(prev_obj)) = (curr_json.as_object(), prev_json.as_object()) {
@@ -518,11 +561,41 @@ fn element_id(el: &JviElement) -> &str {
 
 fn element_name(el: &JviElement) -> &str {
     match el {
-        JviElement::Media(e) => if e.name.is_empty() { "media" } else { &e.name },
-        JviElement::Audio(e) => if e.name.is_empty() { "audio" } else { &e.name },
-        JviElement::Text(e) => if e.name.is_empty() { "text" } else { &e.name },
-        JviElement::Shape(e) => if e.name.is_empty() { "shape" } else { &e.name },
-        JviElement::Subtitle(e) => if e.name.is_empty() { "subtitle" } else { &e.name },
+        JviElement::Media(e) => {
+            if e.name.is_empty() {
+                "media"
+            } else {
+                &e.name
+            }
+        }
+        JviElement::Audio(e) => {
+            if e.name.is_empty() {
+                "audio"
+            } else {
+                &e.name
+            }
+        }
+        JviElement::Text(e) => {
+            if e.name.is_empty() {
+                "text"
+            } else {
+                &e.name
+            }
+        }
+        JviElement::Shape(e) => {
+            if e.name.is_empty() {
+                "shape"
+            } else {
+                &e.name
+            }
+        }
+        JviElement::Subtitle(e) => {
+            if e.name.is_empty() {
+                "subtitle"
+            } else {
+                &e.name
+            }
+        }
     }
 }
 
@@ -583,8 +656,14 @@ fn make_element_change(
     }
 }
 
-fn elements_as_changes(elements: &[JviElement], change_type: TimelineChangeType) -> Vec<ElementChange> {
-    elements.iter().map(|el| make_element_change(el, change_type, Vec::new(), None)).collect()
+fn elements_as_changes(
+    elements: &[JviElement],
+    change_type: TimelineChangeType,
+) -> Vec<ElementChange> {
+    elements
+        .iter()
+        .map(|el| make_element_change(el, change_type, Vec::new(), None))
+        .collect()
 }
 
 fn build_summary(track_changes: &[TrackChange]) -> TimelineDiffSummary {
@@ -643,7 +722,10 @@ mod tests {
         ProjectData {
             version: "1.0".to_string(),
             name: name.to_string(),
-            resolution: crate::jvi::Resolution { width: 1920, height: 1080 },
+            resolution: crate::jvi::Resolution {
+                width: 1920,
+                height: 1080,
+            },
             fps: 30.0,
             tracks,
             defaults: None,
@@ -735,19 +817,17 @@ mod tests {
                 track_type: "video".to_string(),
                 change_type: TimelineChangeType::Added,
                 property_changes: vec![],
-                element_changes: vec![
-                    ElementChange {
-                        element_id: "e1".to_string(),
-                        element_name: "clip".to_string(),
-                        element_type: "media".to_string(),
-                        change_type: TimelineChangeType::Added,
-                        property_changes: vec![],
-                        src: Some("test.mp4".to_string()),
-                        previous_src: None,
-                        start_time: Some(0.0),
-                        duration: Some(5.0),
-                    },
-                ],
+                element_changes: vec![ElementChange {
+                    element_id: "e1".to_string(),
+                    element_name: "clip".to_string(),
+                    element_type: "media".to_string(),
+                    change_type: TimelineChangeType::Added,
+                    property_changes: vec![],
+                    src: Some("test.mp4".to_string()),
+                    previous_src: None,
+                    start_time: Some(0.0),
+                    duration: Some(5.0),
+                }],
             },
             TrackChange {
                 track_id: "t2".to_string(),

@@ -26,10 +26,7 @@ use windows::{
         Foundation::{CloseHandle, HANDLE},
         Graphics::{
             Direct3D11::ID3D11Texture2D,
-            Direct3D12::{
-                ID3D12Device, ID3D12Resource,
-                D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-            },
+            Direct3D12::{ID3D12Device, ID3D12Resource, D3D12_RESOURCE_DIMENSION_TEXTURE2D},
             Dxgi::{IDXGIResource1, DXGI_SHARED_RESOURCE_READ},
         },
     },
@@ -70,7 +67,7 @@ impl WindowsTextureImporter {
         // ManuallyDrop prevents the windows crate from calling Release when dropped,
         // since we don't own this reference (D3D11VA/FFmpeg owns it).
         let d3d11_texture: ManuallyDrop<ID3D11Texture2D> = ManuallyDrop::new(
-            std::mem::transmute_copy(&(texture_ptr as *mut std::ffi::c_void))
+            std::mem::transmute_copy(&(texture_ptr as *mut std::ffi::c_void)),
         );
 
         // Get texture description for logging
@@ -88,28 +85,28 @@ impl WindowsTextureImporter {
 
         // Query for IDXGIResource1 to get shared handle.
         // cast() calls QueryInterface which does AddRef, so dxgi_resource is a new owned ref.
-        let dxgi_resource: IDXGIResource1 = d3d11_texture.cast()
+        let dxgi_resource: IDXGIResource1 = d3d11_texture
+            .cast()
             .map_err(|e| Error::Other(format!("QueryInterface IDXGIResource1 failed: {}", e)))?;
 
         // Create shared handle (NT handle, read-only).
         // IDXGIResource1::CreateSharedHandle returns Result<HANDLE>.
-        let shared_handle = dxgi_resource.CreateSharedHandle(
-            None,                        // pattributes: Option<*const SECURITY_ATTRIBUTES>
-            DXGI_SHARED_RESOURCE_READ,   // dwaccess: u32
-            PCWSTR::null(),              // lpname: IntoParam<PCWSTR>
-        ).map_err(|e| Error::Other(format!("CreateSharedHandle failed: {}", e)))?;
+        let shared_handle = dxgi_resource
+            .CreateSharedHandle(
+                None,                      // pattributes: Option<*const SECURITY_ATTRIBUTES>
+                DXGI_SHARED_RESOURCE_READ, // dwaccess: u32
+                PCWSTR::null(),            // lpname: IntoParam<PCWSTR>
+            )
+            .map_err(|e| Error::Other(format!("CreateSharedHandle failed: {}", e)))?;
 
         if shared_handle.is_invalid() {
-            return Err(Error::Other("CreateSharedHandle returned invalid handle".to_string()));
+            return Err(Error::Other(
+                "CreateSharedHandle returned invalid handle".to_string(),
+            ));
         }
 
         // Import shared handle into wgpu via D3D12
-        let result = self.import_shared_handle(
-            shared_handle,
-            gpu_texture,
-            desc.Width,
-            desc.Height,
-        );
+        let result = self.import_shared_handle(shared_handle, gpu_texture, desc.Width, desc.Height);
 
         // Always close the shared handle after import
         let _ = CloseHandle(shared_handle);
@@ -136,9 +133,8 @@ impl WindowsTextureImporter {
         // Access the D3D12 HAL device through wgpu
         let (y_hal, uv_hal) = device
             .as_hal::<wgpu_hal::api::Dx12, _, _>(|hal_device| {
-                let hal_device = hal_device.ok_or_else(|| {
-                    Error::Other("wgpu backend is not D3D12".to_string())
-                })?;
+                let hal_device = hal_device
+                    .ok_or_else(|| Error::Other("wgpu backend is not D3D12".to_string()))?;
 
                 let d3d12_device = hal_device.raw_device();
 
@@ -146,13 +142,13 @@ impl WindowsTextureImporter {
                 // ID3D12Device for calling OpenSharedHandle.
                 // ManuallyDrop prevents Release — wgpu owns this device.
                 let d3d12_raw_ptr = d3d12_device.as_mut_ptr();
-                let d3d12_win: ManuallyDrop<ID3D12Device> = ManuallyDrop::new(
-                    std::mem::transmute_copy(&d3d12_raw_ptr)
-                );
+                let d3d12_win: ManuallyDrop<ID3D12Device> =
+                    ManuallyDrop::new(std::mem::transmute_copy(&d3d12_raw_ptr));
 
                 // OpenSharedHandle: get ID3D12Resource from the shared handle
                 let mut d3d12_resource: Option<ID3D12Resource> = None;
-                d3d12_win.OpenSharedHandle(shared_handle, &mut d3d12_resource)
+                d3d12_win
+                    .OpenSharedHandle(shared_handle, &mut d3d12_resource)
                     .map_err(|e| Error::Other(format!("OpenSharedHandle failed: {}", e)))?;
 
                 let d3d12_resource = d3d12_resource.ok_or_else(|| {
@@ -170,8 +166,10 @@ impl WindowsTextureImporter {
 
                 tracing::debug!(
                     "D3D12 shared resource: {}x{}, format={:?}, mip_levels={}",
-                    res_desc.Width, res_desc.Height,
-                    res_desc.Format, res_desc.MipLevels
+                    res_desc.Width,
+                    res_desc.Height,
+                    res_desc.Format,
+                    res_desc.MipLevels
                 );
 
                 // Convert ID3D12Resource (windows crate) → d3d12::Resource (winapi ComPtr).
@@ -184,7 +182,8 @@ impl WindowsTextureImporter {
                 //
                 // d3d12::ComPtr::from_raw does AddRef, so we use a direct construction
                 // to transfer ownership without changing the refcount.
-                let resource_raw = Interface::as_raw(&d3d12_resource) as *mut winapi::um::d3d12::ID3D12Resource;
+                let resource_raw =
+                    Interface::as_raw(&d3d12_resource) as *mut winapi::um::d3d12::ID3D12Resource;
                 std::mem::forget(d3d12_resource); // Transfer ownership, skip Release
 
                 // Construct d3d12::Resource (ComPtr) by writing the raw pointer directly.
@@ -272,7 +271,8 @@ impl WindowsTextureImporter {
 
         tracing::trace!(
             "Zero-copy D3D11VA import successful: {}x{} NV12",
-            width, height
+            width,
+            height
         );
 
         Ok(ImportedNv12Texture {

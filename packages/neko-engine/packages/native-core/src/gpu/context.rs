@@ -124,11 +124,12 @@ impl GpuContext {
     /// Create a storage buffer with initial data
     pub fn create_buffer_with_data(&self, data: &[u8], usage: wgpu::BufferUsages) -> wgpu::Buffer {
         use wgpu::util::DeviceExt;
-        self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Storage Buffer"),
-            contents: data,
-            usage: usage | wgpu::BufferUsages::COPY_DST,
-        })
+        self.device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Storage Buffer"),
+                contents: data,
+                usage: usage | wgpu::BufferUsages::COPY_DST,
+            })
     }
 
     /// Create an empty buffer

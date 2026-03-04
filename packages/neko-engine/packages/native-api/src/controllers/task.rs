@@ -103,9 +103,7 @@ mod tests {
         let task_service = Arc::new(TaskService::new());
         let controller = TaskController::new(task_service);
 
-        let result = controller
-            .handle("probe", None, Value::Null, None)
-            .await;
+        let result = controller.handle("probe", None, Value::Null, None).await;
 
         assert!(result.is_err());
     }
@@ -115,9 +113,7 @@ mod tests {
         let task_service = Arc::new(TaskService::new());
         let controller = TaskController::new(task_service);
 
-        let result = controller
-            .handle("unknown", None, Value::Null, None)
-            .await;
+        let result = controller.handle("unknown", None, Value::Null, None).await;
 
         assert!(result.is_err());
     }

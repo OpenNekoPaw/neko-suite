@@ -184,12 +184,7 @@ impl GpuLayerBuilder {
     }
 
     /// Build GPU layer from RGBA texture
-    pub fn build_from_rgba(
-        self,
-        texture: wgpu::Texture,
-        width: u32,
-        height: u32,
-    ) -> GpuLayer {
+    pub fn build_from_rgba(self, texture: wgpu::Texture, width: u32, height: u32) -> GpuLayer {
         GpuLayer::from_rgba(
             texture,
             width,

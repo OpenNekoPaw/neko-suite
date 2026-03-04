@@ -299,10 +299,13 @@ impl GpuStyleProcessor {
             source: wgpu::ShaderSource::Wgsl(shaders::GLOW_COMPUTE_SHADER.into()),
         });
 
-        let chromatic_aberration_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Chromatic Aberration Shader"),
-            source: wgpu::ShaderSource::Wgsl(shaders::CHROMATIC_ABERRATION_COMPUTE_SHADER.into()),
-        });
+        let chromatic_aberration_shader =
+            device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Chromatic Aberration Shader"),
+                source: wgpu::ShaderSource::Wgsl(
+                    shaders::CHROMATIC_ABERRATION_COMPUTE_SHADER.into(),
+                ),
+            });
 
         // Create bind group layout (same for all)
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -359,12 +362,13 @@ impl GpuStyleProcessor {
             entry_point: "main",
         });
 
-        let film_grain_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Film Grain Pipeline"),
-            layout: Some(&pipeline_layout),
-            module: &film_grain_shader,
-            entry_point: "main",
-        });
+        let film_grain_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Film Grain Pipeline"),
+                layout: Some(&pipeline_layout),
+                module: &film_grain_shader,
+                entry_point: "main",
+            });
 
         let glow_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("Glow Pipeline"),

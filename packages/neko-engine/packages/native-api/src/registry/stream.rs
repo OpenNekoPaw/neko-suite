@@ -108,7 +108,11 @@ impl StreamRegistry {
                 .push(id_str);
         }
 
-        tracing::debug!("Created stream {} for session {}", stream_id.as_str(), session_id);
+        tracing::debug!(
+            "Created stream {} for session {}",
+            stream_id.as_str(),
+            session_id
+        );
         (stream_id, rx)
     }
 
@@ -137,12 +141,7 @@ impl StreamRegistry {
         mut external_rx: broadcast::Receiver<FrameData>,
         cancel_token: CancellationToken,
     ) -> broadcast::Receiver<FrameData> {
-        let (entry, rx) = StreamEntry::with_id(
-            stream_id.clone(),
-            session_id,
-            resource_id,
-            config,
-        );
+        let (entry, rx) = StreamEntry::with_id(stream_id.clone(), session_id, resource_id, config);
         let registry_tx = entry.tx.clone();
         let id_str = stream_id.as_str().to_string();
 
@@ -168,21 +167,28 @@ impl StreamRegistry {
         let _ = self.activate(&stream_id).await;
 
         // Register cancel token for cleanup
-        self.set_cancel_token(&stream_id, cancel_token.clone()).await;
+        self.set_cancel_token(&stream_id, cancel_token.clone())
+            .await;
 
         // Spawn forwarding task: external_rx → registry_tx
         // Waits for at least one WebSocket subscriber before forwarding,
         // so frames aren't lost into an empty broadcast channel.
         let forward_id = id_str.clone();
         tokio::spawn(async move {
-            tracing::info!("Forwarding task started for stream {}, waiting for subscriber...", forward_id);
+            tracing::info!(
+                "Forwarding task started for stream {}, waiting for subscriber...",
+                forward_id
+            );
 
             // Wait until at least one WebSocket client subscribes to the registry channel.
             // Frames accumulate in the external broadcast channel (capacity 64) during this wait.
             let wait_start = tokio::time::Instant::now();
             loop {
                 if cancel_token.is_cancelled() {
-                    tracing::debug!("External stream {} cancelled while waiting for subscriber", forward_id);
+                    tracing::debug!(
+                        "External stream {} cancelled while waiting for subscriber",
+                        forward_id
+                    );
                     return;
                 }
                 // receiver_count() returns the number of active Receivers on this Sender
@@ -197,7 +203,10 @@ impl StreamRegistry {
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                 // Safety timeout: don't wait forever (5 seconds)
                 if wait_start.elapsed() > std::time::Duration::from_secs(5) {
-                    tracing::warn!("Stream {} timed out waiting for subscriber, starting anyway", forward_id);
+                    tracing::warn!(
+                        "Stream {} timed out waiting for subscriber, starting anyway",
+                        forward_id
+                    );
                     break;
                 }
             }
@@ -371,7 +380,11 @@ impl StreamRegistry {
         let session_map = self.session_streams.read().await;
         session_map
             .get(session_id)
-            .map(|ids| ids.iter().map(|id| StreamId::from_string(id.clone())).collect())
+            .map(|ids| {
+                ids.iter()
+                    .map(|id| StreamId::from_string(id.clone()))
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -405,10 +418,7 @@ impl StreamRegistry {
         for stream_id in stream_ids {
             let _ = self.destroy(&stream_id).await;
         }
-        tracing::debug!(
-            "Destroyed all streams for resource {}",
-            resource_id
-        );
+        tracing::debug!("Destroyed all streams for resource {}", resource_id);
     }
 
     /// Cleanup stale streams
@@ -685,12 +695,7 @@ mod tests {
 
         // Get sender and push a frame through it
         let tx = registry.get_sender(&stream_id).await.unwrap();
-        let frame = FrameData::new(
-            vec![42u8; 100],
-            1920,
-            1080,
-            neko_types::FrameFormat::Rgba,
-        );
+        let frame = FrameData::new(vec![42u8; 100], 1920, 1080, neko_types::FrameFormat::Rgba);
         tx.send(frame).unwrap();
 
         let received = rx.try_recv().unwrap();

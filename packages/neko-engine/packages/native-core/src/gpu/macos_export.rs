@@ -19,8 +19,8 @@ use crate::gpu::GpuContext;
 use std::sync::Arc;
 
 use metal::{
-    Device as MTLDevice, MTLPixelFormat, MTLStorageMode, MTLTextureType,
-    MTLTextureUsage, TextureDescriptor,
+    Device as MTLDevice, MTLPixelFormat, MTLStorageMode, MTLTextureType, MTLTextureUsage,
+    TextureDescriptor,
 };
 use objc::runtime::Object;
 use objc::{class, msg_send, sel, sel_impl};
@@ -340,8 +340,12 @@ impl FrameNv12Textures {
     /// Create texture views for shader binding
     #[allow(dead_code)] // Phase 2: used by zero-copy export pipeline
     pub fn create_views(&self) -> (wgpu::TextureView, wgpu::TextureView) {
-        let y_view = self.y_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let uv_view = self.uv_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let y_view = self
+            .y_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let uv_view = self
+            .uv_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         (y_view, uv_view)
     }
 }
@@ -394,9 +398,8 @@ impl MacOsTextureExporter {
         let io_surface = unsafe { self.create_nv12_iosurface(width, height)? };
 
         // Create Metal textures from IOSurface planes
-        let (y_metal, uv_metal) = unsafe {
-            self.create_metal_textures_from_iosurface(io_surface, width, height)?
-        };
+        let (y_metal, uv_metal) =
+            unsafe { self.create_metal_textures_from_iosurface(io_surface, width, height)? };
 
         // Increment use count to keep IOSurface alive
         unsafe {
@@ -427,7 +430,10 @@ impl MacOsTextureExporter {
     /// This is a lightweight operation (just pointer wrapping) and should
     /// be called fresh each frame.
     #[allow(dead_code)] // Phase 2: zero-copy export pipeline
-    pub fn import_frame_textures(&self, backing: &IOSurfaceBackingStore) -> Result<FrameNv12Textures> {
+    pub fn import_frame_textures(
+        &self,
+        backing: &IOSurfaceBackingStore,
+    ) -> Result<FrameNv12Textures> {
         let (y_metal, uv_metal) = backing.metal_textures();
 
         // Import Metal textures into wgpu (fresh each frame)
@@ -466,7 +472,9 @@ impl MacOsTextureExporter {
         );
 
         if props.is_null() {
-            return Err(Error::Other("Failed to create IOSurface properties".to_string()));
+            return Err(Error::Other(
+                "Failed to create IOSurface properties".to_string(),
+            ));
         }
 
         // Set basic properties
@@ -502,7 +510,9 @@ impl MacOsTextureExporter {
             CFRelease(height_num);
             CFRelease(format_num);
             CFRelease(props as *const _);
-            return Err(Error::Other("Failed to create NSMutableArray for plane info".to_string()));
+            return Err(Error::Other(
+                "Failed to create NSMutableArray for plane info".to_string(),
+            ));
         }
 
         // Y plane info
@@ -519,7 +529,9 @@ impl MacOsTextureExporter {
             CFRelease(height_num);
             CFRelease(format_num);
             CFRelease(props as *const _);
-            return Err(Error::Other("Failed to create Y plane dictionary".to_string()));
+            return Err(Error::Other(
+                "Failed to create Y plane dictionary".to_string(),
+            ));
         }
 
         let y_width_num = CFNumberCreate(
@@ -558,10 +570,26 @@ impl MacOsTextureExporter {
         );
 
         CFDictionarySetValue(y_plane_dict, kIOSurfacePlaneWidth, y_width_num as *const _);
-        CFDictionarySetValue(y_plane_dict, kIOSurfacePlaneHeight, y_height_num as *const _);
-        CFDictionarySetValue(y_plane_dict, kIOSurfacePlaneBytesPerRow, y_bpr_num as *const _);
-        CFDictionarySetValue(y_plane_dict, kIOSurfacePlaneBytesPerElement, y_bpe_num as *const _);
-        CFDictionarySetValue(y_plane_dict, kIOSurfacePlaneOffset, y_offset_num as *const _);
+        CFDictionarySetValue(
+            y_plane_dict,
+            kIOSurfacePlaneHeight,
+            y_height_num as *const _,
+        );
+        CFDictionarySetValue(
+            y_plane_dict,
+            kIOSurfacePlaneBytesPerRow,
+            y_bpr_num as *const _,
+        );
+        CFDictionarySetValue(
+            y_plane_dict,
+            kIOSurfacePlaneBytesPerElement,
+            y_bpe_num as *const _,
+        );
+        CFDictionarySetValue(
+            y_plane_dict,
+            kIOSurfacePlaneOffset,
+            y_offset_num as *const _,
+        );
         CFDictionarySetValue(y_plane_dict, kIOSurfacePlaneSize, y_size_num as *const _);
 
         let _: () = msg_send![plane_info, addObject: y_plane_dict];
@@ -587,7 +615,9 @@ impl MacOsTextureExporter {
             CFRelease(y_size_num);
             CFRelease(y_plane_dict as *const _);
             CFRelease(props as *const _);
-            return Err(Error::Other("Failed to create UV plane dictionary".to_string()));
+            return Err(Error::Other(
+                "Failed to create UV plane dictionary".to_string(),
+            ));
         }
 
         let uv_width = (width / 2) as i64;
@@ -627,11 +657,31 @@ impl MacOsTextureExporter {
             &uv_size as *const _ as *const _,
         );
 
-        CFDictionarySetValue(uv_plane_dict, kIOSurfacePlaneWidth, uv_width_num as *const _);
-        CFDictionarySetValue(uv_plane_dict, kIOSurfacePlaneHeight, uv_height_num as *const _);
-        CFDictionarySetValue(uv_plane_dict, kIOSurfacePlaneBytesPerRow, uv_bpr_num as *const _);
-        CFDictionarySetValue(uv_plane_dict, kIOSurfacePlaneBytesPerElement, uv_bpe_num as *const _);
-        CFDictionarySetValue(uv_plane_dict, kIOSurfacePlaneOffset, uv_offset_num as *const _);
+        CFDictionarySetValue(
+            uv_plane_dict,
+            kIOSurfacePlaneWidth,
+            uv_width_num as *const _,
+        );
+        CFDictionarySetValue(
+            uv_plane_dict,
+            kIOSurfacePlaneHeight,
+            uv_height_num as *const _,
+        );
+        CFDictionarySetValue(
+            uv_plane_dict,
+            kIOSurfacePlaneBytesPerRow,
+            uv_bpr_num as *const _,
+        );
+        CFDictionarySetValue(
+            uv_plane_dict,
+            kIOSurfacePlaneBytesPerElement,
+            uv_bpe_num as *const _,
+        );
+        CFDictionarySetValue(
+            uv_plane_dict,
+            kIOSurfacePlaneOffset,
+            uv_offset_num as *const _,
+        );
         CFDictionarySetValue(uv_plane_dict, kIOSurfacePlaneSize, uv_size_num as *const _);
 
         let _: () = msg_send![plane_info, addObject: uv_plane_dict];
@@ -821,15 +871,11 @@ impl MacOsTextureExporter {
         };
 
         // Create wgpu textures from HAL textures
-        let y_texture = device.create_texture_from_hal::<wgpu_hal::api::Metal>(
-            y_hal_texture,
-            &y_texture_desc,
-        );
+        let y_texture =
+            device.create_texture_from_hal::<wgpu_hal::api::Metal>(y_hal_texture, &y_texture_desc);
 
-        let uv_texture = device.create_texture_from_hal::<wgpu_hal::api::Metal>(
-            uv_hal_texture,
-            &uv_texture_desc,
-        );
+        let uv_texture = device
+            .create_texture_from_hal::<wgpu_hal::api::Metal>(uv_hal_texture, &uv_texture_desc);
 
         Ok((y_texture, uv_texture))
     }
@@ -863,7 +909,10 @@ mod tests {
         let backing = match exporter.create_backing_store(1920, 1080) {
             Ok(b) => b,
             Err(e) => {
-                println!("IOSurface creation failed (expected in some environments): {}", e);
+                println!(
+                    "IOSurface creation failed (expected in some environments): {}",
+                    e
+                );
                 return;
             }
         };
@@ -871,7 +920,10 @@ mod tests {
         assert_eq!(backing.width, 1920);
         assert_eq!(backing.height, 1080);
         assert!(backing.io_surface_handle() != 0);
-        println!("IOSurface backing store created: handle={:#x}", backing.io_surface_handle());
+        println!(
+            "IOSurface backing store created: handle={:#x}",
+            backing.io_surface_handle()
+        );
 
         // Test per-frame import
         let frame_textures = match exporter.import_frame_textures(&backing) {

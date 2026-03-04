@@ -45,8 +45,8 @@ impl<W: Write> Base64Encoder<W> {
             if self.buffer_len == 1 {
                 out[1] = BASE64_CHARS[((self.buffer[0] & 0x03) << 4) as usize];
             } else {
-                out[1] = BASE64_CHARS
-                    [(((self.buffer[0] & 0x03) << 4) | (self.buffer[1] >> 4)) as usize];
+                out[1] =
+                    BASE64_CHARS[(((self.buffer[0] & 0x03) << 4) | (self.buffer[1] >> 4)) as usize];
                 out[2] = BASE64_CHARS[((self.buffer[1] & 0x0f) << 2) as usize];
             }
             self.writer.write_all(&out)?;
@@ -64,10 +64,8 @@ impl<W: Write> Write for Base64Encoder<W> {
             if self.buffer_len == 3 {
                 let out = [
                     BASE64_CHARS[(self.buffer[0] >> 2) as usize],
-                    BASE64_CHARS
-                        [(((self.buffer[0] & 0x03) << 4) | (self.buffer[1] >> 4)) as usize],
-                    BASE64_CHARS
-                        [(((self.buffer[1] & 0x0f) << 2) | (self.buffer[2] >> 6)) as usize],
+                    BASE64_CHARS[(((self.buffer[0] & 0x03) << 4) | (self.buffer[1] >> 4)) as usize],
+                    BASE64_CHARS[(((self.buffer[1] & 0x0f) << 2) | (self.buffer[2] >> 6)) as usize],
                     BASE64_CHARS[(self.buffer[2] & 0x3f) as usize],
                 ];
                 self.writer.write_all(&out)?;
@@ -188,10 +186,7 @@ pub async fn handle_stream_control<S: IStreamPlayback>(
     let opts: StreamControlOptions = serde_json::from_value(options).unwrap_or_default();
 
     let stream_id_str = opts.stream_id.ok_or_else(|| {
-        ApiError::InvalidRequest(format!(
-            "stream_id required for {}:{}",
-            group_name, action
-        ))
+        ApiError::InvalidRequest(format!("stream_id required for {}:{}", group_name, action))
     })?;
     let stream_id = StreamId::from_string(stream_id_str);
 
@@ -231,10 +226,7 @@ pub async fn handle_stream_control<S: IStreamPlayback>(
         }
         "seek" => {
             let time = opts.time.ok_or_else(|| {
-                ApiError::InvalidRequest(format!(
-                    "time required for {}:seek",
-                    group_name
-                ))
+                ApiError::InvalidRequest(format!("time required for {}:seek", group_name))
             })?;
             playback.seek(&stream_id, time).await?;
             let response = serde_json::json!({
@@ -248,16 +240,12 @@ pub async fn handle_stream_control<S: IStreamPlayback>(
                 None
             } else {
                 match (opts.in_point, opts.out_point) {
-                    (Some(in_pt), Some(out_pt)) => {
-                        Some(LoopRegion::new(in_pt, out_pt))
-                    }
+                    (Some(in_pt), Some(out_pt)) => Some(LoopRegion::new(in_pt, out_pt)),
                     _ => {
-                        return Err(ApiError::InvalidRequest(
-                            format!(
-                                "in_point and out_point required for {}:loop (or set clear=true)",
-                                group_name
-                            ),
-                        ));
+                        return Err(ApiError::InvalidRequest(format!(
+                            "in_point and out_point required for {}:loop (or set clear=true)",
+                            group_name
+                        )));
                     }
                 }
             };

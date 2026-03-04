@@ -58,7 +58,8 @@ impl PipelineMetrics {
 
     /// Record decode stage duration
     pub fn record_decode(&self, duration_ns: u64) {
-        self.decode_time_ns.fetch_add(duration_ns, Ordering::Relaxed);
+        self.decode_time_ns
+            .fetch_add(duration_ns, Ordering::Relaxed);
     }
 
     /// Record GPU pipeline duration
@@ -68,7 +69,8 @@ impl PipelineMetrics {
 
     /// Record encode stage duration
     pub fn record_encode(&self, duration_ns: u64) {
-        self.encode_time_ns.fetch_add(duration_ns, Ordering::Relaxed);
+        self.encode_time_ns
+            .fetch_add(duration_ns, Ordering::Relaxed);
     }
 
     /// Record mux stage duration

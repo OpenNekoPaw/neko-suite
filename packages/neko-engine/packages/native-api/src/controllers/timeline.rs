@@ -9,7 +9,9 @@ use neko_native_core::jvi::JviLoader;
 use neko_native_core::media_service::{
     diff_media, diff_timeline_content_with_options, DiffCategory, TimelineDiffOptions,
 };
-use neko_native_core::services::{ExportService, IExportService, ITimelineService, TimelineService};
+use neko_native_core::services::{
+    ExportService, IExportService, ITimelineService, TimelineService,
+};
 use neko_types::registry;
 use neko_types::{ActionResponse, Resolution, StreamId};
 use serde::Deserialize;
@@ -102,13 +104,10 @@ impl Controller for TimelineController {
     ) -> ApiResult<ActionResponse> {
         match action {
             "probe" => {
-                let opts: ProbeRequestOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: ProbeRequestOptions = serde_json::from_value(options).unwrap_or_default();
 
                 let source = opts.source.as_deref().or(_resource_id).ok_or_else(|| {
-                    ApiError::InvalidRequest(
-                        "source path required for timelines:probe".to_string(),
-                    )
+                    ApiError::InvalidRequest("source path required for timelines:probe".to_string())
                 })?;
 
                 let path = Path::new(source);
@@ -159,17 +158,20 @@ impl Controller for TimelineController {
                 })?;
 
                 // Try Timeline domain format first, fallback to JVI format
-                let base_dir = opts.base_dir.as_deref()
+                let base_dir = opts
+                    .base_dir
+                    .as_deref()
                     .map(std::path::PathBuf::from)
                     .unwrap_or_else(|| std::path::PathBuf::from("."));
                 let timeline: Timeline = serde_json::from_value(body.clone())
                     .or_else(|_| {
-                        let json_str = serde_json::to_string(&body)
-                            .map_err(|e| ApiError::InvalidRequest(format!("Invalid JSON: {}", e)))?;
+                        let json_str = serde_json::to_string(&body).map_err(|e| {
+                            ApiError::InvalidRequest(format!("Invalid JSON: {}", e))
+                        })?;
                         let loader = JviLoader::new();
-                        let (tl, _) = loader
-                            .load_from_json(&json_str, base_dir)
-                            .map_err(|e| ApiError::InvalidRequest(format!("Invalid timeline/JVI data: {}", e)))?;
+                        let (tl, _) = loader.load_from_json(&json_str, base_dir).map_err(|e| {
+                            ApiError::InvalidRequest(format!("Invalid timeline/JVI data: {}", e))
+                        })?;
                         Ok::<Timeline, ApiError>(tl)
                     })
                     .map_err(|e: ApiError| e)?;
@@ -235,30 +237,25 @@ impl Controller for TimelineController {
                 Ok(ActionResponse::ok("", response))
             }
             "stop" | "pause" | "resume" | "speed" | "seek" | "loop" => {
-                handle_stream_control(
-                    self.timeline_service.as_ref(),
-                    action,
-                    options,
-                    "timelines",
-                )
-                .await
+                handle_stream_control(self.timeline_service.as_ref(), action, options, "timelines")
+                    .await
             }
             "stream_stats" => {
                 let opts: crate::controllers::utils::StreamControlOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
                 let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest("stream_id required for timelines:stream_stats".to_string())
+                    ApiError::InvalidRequest(
+                        "stream_id required for timelines:stream_stats".to_string(),
+                    )
                 })?;
                 let stream_id = StreamId::from_string(stream_id);
 
                 match self.timeline_service.get_stream_stats(&stream_id).await {
-                    Some(stats) => {
-                        Ok(ActionResponse::ok(
-                            stream_id.as_str(),
-                            serde_json::to_value(stats)?,
-                        ))
-                    }
+                    Some(stats) => Ok(ActionResponse::ok(
+                        stream_id.as_str(),
+                        serde_json::to_value(stats)?,
+                    )),
                     None => Err(ApiError::NotFound(format!(
                         "No stats for stream '{}'",
                         stream_id.as_str()
@@ -374,7 +371,10 @@ impl Controller for TimelineController {
                     ApiError::ServiceError(format!("Failed to enqueue export: {}", e))
                 })?;
 
-                Ok(ActionResponse::ok("", serde_json::json!({ "jobId": job_id })))
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({ "jobId": job_id }),
+                ))
             }
             "export_queue" => {
                 let export_service = self.export_service.as_ref().ok_or_else(|| {
@@ -408,15 +408,20 @@ impl Controller for TimelineController {
                             include_content_diff: true,
                             base_dir,
                         };
-                        let result = diff_timeline_content_with_options(&source_a, &source_b, &tl_opts)
-                            .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
-                        serde_json::to_value(&result)
-                            .map_err(|e| ApiError::ServiceError(format!("Serialization failed: {}", e)))
+                        let result =
+                            diff_timeline_content_with_options(&source_a, &source_b, &tl_opts)
+                                .map_err(|e| {
+                                    ApiError::ServiceError(format!("Diff failed: {}", e))
+                                })?;
+                        serde_json::to_value(&result).map_err(|e| {
+                            ApiError::ServiceError(format!("Serialization failed: {}", e))
+                        })
                     } else {
                         let result = diff_media(&source_a, &source_b, DiffCategory::Timeline)
                             .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
-                        serde_json::to_value(&result)
-                            .map_err(|e| ApiError::ServiceError(format!("Serialization failed: {}", e)))
+                        serde_json::to_value(&result).map_err(|e| {
+                            ApiError::ServiceError(format!("Serialization failed: {}", e))
+                        })
                     }
                 })
                 .await
@@ -457,9 +462,7 @@ mod tests {
     async fn test_timeline_controller_unknown_action() {
         let controller = create_test_controller();
 
-        let result = controller
-            .handle("unknown", None, Value::Null, None)
-            .await;
+        let result = controller.handle("unknown", None, Value::Null, None).await;
 
         assert!(result.is_err());
     }
@@ -554,9 +557,7 @@ mod tests {
     async fn test_timeline_controller_export_missing_body() {
         let controller = create_test_controller();
 
-        let result = controller
-            .handle("export", None, Value::Null, None)
-            .await;
+        let result = controller.handle("export", None, Value::Null, None).await;
 
         // Without GPU, it should fail on export_service check first
         assert!(result.is_err());
@@ -566,9 +567,7 @@ mod tests {
     async fn test_timeline_controller_probe_missing_source() {
         let controller = create_test_controller();
 
-        let result = controller
-            .handle("probe", None, Value::Null, None)
-            .await;
+        let result = controller.handle("probe", None, Value::Null, None).await;
 
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
@@ -580,9 +579,7 @@ mod tests {
         let controller = create_test_controller();
 
         let opts = serde_json::json!({ "source": "/nonexistent/file.jvi" });
-        let result = controller
-            .handle("probe", None, opts, None)
-            .await;
+        let result = controller.handle("probe", None, opts, None).await;
 
         assert!(result.is_err());
     }

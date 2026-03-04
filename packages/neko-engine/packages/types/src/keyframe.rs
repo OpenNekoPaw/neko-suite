@@ -80,4 +80,3 @@ impl KeyframeIndex {
         self.avg_gop_size = Some(total_frames as f64 / (self.keyframes.len() - 1) as f64);
     }
 }
-

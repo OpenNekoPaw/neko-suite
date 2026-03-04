@@ -42,10 +42,7 @@ pub struct ImageContentDiff {
 }
 
 /// Compare two images at the pixel level
-pub fn diff_image_content<P: AsRef<Path>>(
-    source_a: P,
-    source_b: P,
-) -> Result<ImageContentDiff> {
+pub fn diff_image_content<P: AsRef<Path>>(source_a: P, source_b: P) -> Result<ImageContentDiff> {
     let path_a = source_a.as_ref();
     let path_b = source_b.as_ref();
 
@@ -140,7 +137,11 @@ fn compute_ssim(a: &RgbaImage, b: &RgbaImage) -> f64 {
     if w < 8 || h < 8 {
         // Too small for block-based SSIM, fall back to simple comparison
         let (mse, _) = compute_mse_and_diff_count(a, b);
-        return if mse == 0.0 { 1.0 } else { (1.0 / (1.0 + mse / 100.0)).max(0.0) };
+        return if mse == 0.0 {
+            1.0
+        } else {
+            (1.0 / (1.0 + mse / 100.0)).max(0.0)
+        };
     }
 
     // Compute SSIM per channel and average
@@ -194,8 +195,7 @@ fn compute_ssim_channel(a: &RgbaImage, b: &RgbaImage, channel: usize) -> f64 {
             let sigma_ab = (sum_ab / n) - (mu_a * mu_b);
 
             let numerator = (2.0 * mu_a * mu_b + c1) * (2.0 * sigma_ab + c2);
-            let denominator =
-                (mu_a * mu_a + mu_b * mu_b + c1) * (sigma_a2 + sigma_b2 + c2);
+            let denominator = (mu_a * mu_a + mu_b * mu_b + c1) * (sigma_a2 + sigma_b2 + c2);
 
             ssim_sum += numerator / denominator;
             block_count += 1;
@@ -334,7 +334,11 @@ mod tests {
     fn test_ssim_identical() {
         let img = make_solid_image(64, 64, [100, 150, 200, 255]);
         let ssim = compute_ssim(&img, &img);
-        assert!((ssim - 1.0).abs() < 0.001, "SSIM should be ~1.0, got {}", ssim);
+        assert!(
+            (ssim - 1.0).abs() < 0.001,
+            "SSIM should be ~1.0, got {}",
+            ssim
+        );
     }
 
     #[test]
@@ -342,7 +346,11 @@ mod tests {
         let a = make_solid_image(64, 64, [0, 0, 0, 255]);
         let b = make_solid_image(64, 64, [255, 255, 255, 255]);
         let ssim = compute_ssim(&a, &b);
-        assert!(ssim < 0.1, "SSIM should be low for opposite images, got {}", ssim);
+        assert!(
+            ssim < 0.1,
+            "SSIM should be low for opposite images, got {}",
+            ssim
+        );
     }
 
     #[test]
@@ -377,15 +385,22 @@ mod tests {
     fn test_diff_to_heatmap_color_max() {
         let c = diff_to_heatmap_color(255);
         assert_eq!(c[0], 255); // Red
-        assert_eq!(c[1], 0);   // No green
+        assert_eq!(c[1], 0); // No green
     }
 
     #[test]
     fn test_psnr_identical() {
         let img = make_solid_image(16, 16, [128, 128, 128, 255]);
         let (mse, _) = compute_mse_and_diff_count(&img, &img);
-        let psnr = if mse > 0.0 { 10.0 * (255.0_f64 * 255.0 / mse).log10() } else { f64::INFINITY };
-        assert!(psnr.is_infinite(), "PSNR should be infinity for identical images");
+        let psnr = if mse > 0.0 {
+            10.0 * (255.0_f64 * 255.0 / mse).log10()
+        } else {
+            f64::INFINITY
+        };
+        assert!(
+            psnr.is_infinite(),
+            "PSNR should be infinity for identical images"
+        );
     }
 
     #[test]
@@ -403,7 +418,11 @@ mod tests {
         let a = make_solid_image(64, 64, [255, 0, 0, 255]); // Red
         let b = make_solid_image(64, 64, [0, 0, 255, 255]); // Blue
         let ssim = compute_ssim(&a, &b);
-        assert!(ssim < 0.5, "RGB SSIM should detect color-only differences, got {}", ssim);
+        assert!(
+            ssim < 0.5,
+            "RGB SSIM should detect color-only differences, got {}",
+            ssim
+        );
     }
 
     #[test]

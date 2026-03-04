@@ -50,31 +50,40 @@ impl Runner {
 
             // Groups with typed actions — extract (group, action_name, opts) and dispatch
             Command::Nodes { action } => {
-                self.dispatch_action("nodes", action.action_name(), action.opts()).await
+                self.dispatch_action("nodes", action.action_name(), action.opts())
+                    .await
             }
             Command::Tasks { action } => {
-                self.dispatch_action("tasks", action.action_name(), action.opts()).await
+                self.dispatch_action("tasks", action.action_name(), action.opts())
+                    .await
             }
             Command::Videos { action } => {
-                self.dispatch_action("videos", action.action_name(), action.opts()).await
+                self.dispatch_action("videos", action.action_name(), action.opts())
+                    .await
             }
             Command::Audios { action } => {
-                self.dispatch_action("audios", action.action_name(), action.opts()).await
+                self.dispatch_action("audios", action.action_name(), action.opts())
+                    .await
             }
             Command::Images { action } => {
-                self.dispatch_action("images", action.action_name(), action.opts()).await
+                self.dispatch_action("images", action.action_name(), action.opts())
+                    .await
             }
             Command::Streams { action } => {
-                self.dispatch_action("streams", action.action_name(), action.opts()).await
+                self.dispatch_action("streams", action.action_name(), action.opts())
+                    .await
             }
             Command::Models { action } => {
-                self.dispatch_action("models", action.action_name(), action.opts()).await
+                self.dispatch_action("models", action.action_name(), action.opts())
+                    .await
             }
             Command::Canvas { action } => {
-                self.dispatch_action("canvas", action.action_name(), action.opts()).await
+                self.dispatch_action("canvas", action.action_name(), action.opts())
+                    .await
             }
             Command::Scenes { action } => {
-                self.dispatch_action("scenes", action.action_name(), action.opts()).await
+                self.dispatch_action("scenes", action.action_name(), action.opts())
+                    .await
             }
 
             // Timelines: special handling for export (progress bar), generic for others
@@ -88,8 +97,10 @@ impl Runner {
                     hw_encoder,
                     zero_copy,
                 } => {
-                    self.run_export(jvi_file, output, codec, bitrate, preset, hw_encoder, zero_copy)
-                        .await
+                    self.run_export(
+                        jvi_file, output, codec, bitrate, preset, hw_encoder, zero_copy,
+                    )
+                    .await
                 }
                 ref a => {
                     let action_name = timeline_action_name_from_opts(a);
@@ -163,7 +174,10 @@ impl Runner {
         ));
         pb.println(format!(
             "Settings: {} frames @ {} fps, codec: {}, bitrate: {} kbps",
-            total_frames, fps, codec, bitrate / 1000
+            total_frames,
+            fps,
+            codec,
+            bitrate / 1000
         ));
 
         // Start export via EngineApi
@@ -238,8 +252,7 @@ impl Runner {
                         .unwrap_or(0.0);
 
                     if avg_fps > 0.0 {
-                        let eta_secs =
-                            ((total_frames - current_frame) as f64 / avg_fps) as u64;
+                        let eta_secs = ((total_frames - current_frame) as f64 / avg_fps) as u64;
                         let hw_decode_ms = stats["hw_decode_ms"]
                             .as_f64()
                             .or_else(|| stats["hwDecodeMs"].as_f64())
@@ -393,8 +406,7 @@ impl Runner {
                     Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         format!("Failed to serialize response: {}", e),
-                    ))
-                        as Box<dyn std::error::Error + Send + Sync>
+                    )) as Box<dyn std::error::Error + Send + Sync>
                 })?
             ),
             _ => println!(
@@ -403,8 +415,7 @@ impl Runner {
                     Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         format!("Failed to serialize response: {}", e),
-                    ))
-                        as Box<dyn std::error::Error + Send + Sync>
+                    )) as Box<dyn std::error::Error + Send + Sync>
                 })?
             ),
         }
@@ -540,10 +551,7 @@ fn print_performance_summary(data: &serde_json::Value) {
         "    NV12→RGBA:     {:>6.2} ms  (GPU shader)",
         nv12_to_rgba_ms
     );
-    println!(
-        "    Composite:     {:>6.2} ms  (GPU render)",
-        composite_ms
-    );
+    println!("    Composite:     {:>6.2} ms  (GPU render)", composite_ms);
     println!(
         "    RGBA→NV12:     {:>6.2} ms  (GPU compute)",
         rgba_to_nv12_ms
@@ -576,10 +584,7 @@ fn print_performance_summary(data: &serde_json::Value) {
         peak_memory_bytes as f64 / 1024.0 / 1024.0
     );
     if let Some(vram) = vram_usage_bytes {
-        println!(
-            "  Peak VRAM:   {:>6.1} MB",
-            vram as f64 / 1024.0 / 1024.0
-        );
+        println!("  Peak VRAM:   {:>6.1} MB", vram as f64 / 1024.0 / 1024.0);
     }
 }
 

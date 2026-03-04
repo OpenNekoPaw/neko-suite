@@ -489,20 +489,8 @@ impl RgbaToNv12Converter {
             label: Some("NV12 Readback"),
         });
 
-        encoder.copy_buffer_to_buffer(
-            &output.y_buffer,
-            0,
-            y_staging,
-            0,
-            output.y_size() as u64,
-        );
-        encoder.copy_buffer_to_buffer(
-            &output.uv_buffer,
-            0,
-            uv_staging,
-            0,
-            output.uv_size() as u64,
-        );
+        encoder.copy_buffer_to_buffer(&output.y_buffer, 0, y_staging, 0, output.y_size() as u64);
+        encoder.copy_buffer_to_buffer(&output.uv_buffer, 0, uv_staging, 0, output.uv_size() as u64);
 
         self.ctx.queue().submit(std::iter::once(encoder.finish()));
 

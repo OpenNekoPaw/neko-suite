@@ -11,7 +11,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, Mutex, RwLock};
 
 use crate::audio::{AudioEncoder, AudioEncoderConfig, FfmpegAudioEncoder, SampleFormat};
-use crate::encoder::{AsyncExportPipeline, CompositedFrame, ContainerFormat, EncodedPacket, PipelineConfig};
+use crate::encoder::{
+    AsyncExportPipeline, CompositedFrame, ContainerFormat, EncodedPacket, PipelineConfig,
+};
 use crate::error::{Error, Result};
 use crate::gpu::GpuContext;
 use crate::monitor::SystemMonitor;
@@ -147,9 +149,11 @@ pub struct ExportService {
 impl ExportService {
     /// Create a new export service
     pub async fn new() -> Result<Self> {
-        let gpu_ctx = Arc::new(GpuContext::new().await.map_err(|e| {
-            Error::Other(format!("Failed to create GPU context: {}", e))
-        })?);
+        let gpu_ctx = Arc::new(
+            GpuContext::new()
+                .await
+                .map_err(|e| Error::Other(format!("Failed to create GPU context: {}", e)))?,
+        );
 
         let (progress_tx, _) = broadcast::channel(100);
 
@@ -203,8 +207,12 @@ impl ExportService {
             let jobs = self.jobs.read().await;
             for (job_id, job) in jobs.iter() {
                 let status = match job.state {
-                    ExportState::Pending | ExportState::Initializing | ExportState::Decoding
-                    | ExportState::Compositing | ExportState::Encoding | ExportState::Muxing
+                    ExportState::Pending
+                    | ExportState::Initializing
+                    | ExportState::Decoding
+                    | ExportState::Compositing
+                    | ExportState::Encoding
+                    | ExportState::Muxing
                     | ExportState::Finalizing => QueueStatus::Running,
                     ExportState::Completed => QueueStatus::Completed,
                     ExportState::Cancelled => QueueStatus::Cancelled,
@@ -444,7 +452,11 @@ impl ExportService {
         // Update state to Initializing (blocking)
         {
             let rt = tokio::runtime::Handle::current();
-            rt.block_on(Self::update_job_state(&jobs, &job_id, ExportState::Initializing));
+            rt.block_on(Self::update_job_state(
+                &jobs,
+                &job_id,
+                ExportState::Initializing,
+            ));
         }
 
         // Initialize GPU export pipeline (decode + composite)
@@ -477,19 +489,27 @@ impl ExportService {
                     Ok(()) => {
                         tracing::info!(
                             "Audio encoder opened: {:?}, {}Hz, {}ch",
-                            audio_cfg.codec, audio_cfg.sample_rate, audio_cfg.channels
+                            audio_cfg.codec,
+                            audio_cfg.sample_rate,
+                            audio_cfg.channels
                         );
                         audio_encoder = Some(enc);
                         audio_encoder_config = Some(audio_cfg);
                     }
                     Err(e) => {
-                        tracing::warn!("Audio encoder init failed (continuing without audio): {}", e);
+                        tracing::warn!(
+                            "Audio encoder init failed (continuing without audio): {}",
+                            e
+                        );
                         audio_encoder_config = None;
                     }
                 }
             }
             Err(e) => {
-                tracing::warn!("Audio mixer initialization failed (continuing without audio): {}", e);
+                tracing::warn!(
+                    "Audio mixer initialization failed (continuing without audio): {}",
+                    e
+                );
                 audio_encoder_config = None;
             }
         }
@@ -539,7 +559,11 @@ impl ExportService {
         // Update state to Encoding
         {
             let rt = tokio::runtime::Handle::current();
-            rt.block_on(Self::update_job_state(&jobs, &job_id, ExportState::Encoding));
+            rt.block_on(Self::update_job_state(
+                &jobs,
+                &job_id,
+                ExportState::Encoding,
+            ));
         }
 
         // Create stats collector for periodic output (every 100ms)
@@ -570,7 +594,8 @@ impl ExportService {
                     Ok(result) => (result.data, result.gpu_handle, result.timing),
                     Err(e) => {
                         tracing::warn!("Zero-copy failed, falling back to CPU: {}", e);
-                        let result = gpu_pipeline.process_frame_to_nv12_timed(time, [0.0, 0.0, 0.0, 1.0])?;
+                        let result =
+                            gpu_pipeline.process_frame_to_nv12_timed(time, [0.0, 0.0, 0.0, 1.0])?;
                         (result.data, result.gpu_handle, result.timing)
                     }
                 }
@@ -578,7 +603,8 @@ impl ExportService {
 
             #[cfg(not(target_os = "macos"))]
             let (nv12_data, gpu_handle, gpu_timing) = {
-                let result = gpu_pipeline.process_frame_to_nv12_timed(time, [0.0, 0.0, 0.0, 1.0])?;
+                let result =
+                    gpu_pipeline.process_frame_to_nv12_timed(time, [0.0, 0.0, 0.0, 1.0])?;
                 (result.data, result.gpu_handle, result.timing)
             };
 
@@ -709,7 +735,11 @@ impl ExportService {
         // Update state to Finalizing
         {
             let rt = tokio::runtime::Handle::current();
-            rt.block_on(Self::update_job_state(&jobs, &job_id, ExportState::Finalizing));
+            rt.block_on(Self::update_job_state(
+                &jobs,
+                &job_id,
+                ExportState::Finalizing,
+            ));
         }
 
         Ok(())
@@ -820,11 +850,10 @@ mod tests {
 
     #[test]
     fn test_export_job_progress() {
-        use crate::export::types::{
-            ExportAudioCodec, ExportHwEncoder, ExportPreset, ExportSettings,
-            ExportVideoCodec,
-        };
         use crate::domain::Timeline;
+        use crate::export::types::{
+            ExportAudioCodec, ExportHwEncoder, ExportPreset, ExportSettings, ExportVideoCodec,
+        };
         use neko_types::Resolution;
 
         let mut timeline = Timeline::new(Resolution::full_hd(), 30.0);

@@ -92,10 +92,7 @@ extern "C" {
         descriptor: *mut VADRMPRIMESurfaceDescriptor,
     ) -> VAStatus;
 
-    fn vaSyncSurface(
-        display: *mut std::ffi::c_void,
-        surface_id: u32,
-    ) -> VAStatus;
+    fn vaSyncSurface(display: *mut std::ffi::c_void, surface_id: u32) -> VAStatus;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +186,9 @@ impl Drop for DmaBufGuard {
     fn drop(&mut self) {
         for &fd in &self.fds {
             if fd >= 0 {
-                unsafe { libc::close(fd); }
+                unsafe {
+                    libc::close(fd);
+                }
             }
         }
     }
@@ -318,7 +317,10 @@ impl LinuxTextureImporter {
 
         tracing::debug!(
             "VAAPI DMA-BUF export: {}x{}, fourcc={:#x}, planes={}",
-            desc.width, desc.height, desc.fourcc, frame.planes.len()
+            desc.width,
+            desc.height,
+            desc.fourcc,
+            frame.planes.len()
         );
 
         Ok(frame)
@@ -345,84 +347,84 @@ impl LinuxTextureImporter {
 
         // Access the Vulkan HAL device through wgpu
         let (y_texture, uv_texture) = unsafe {
-            device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal_device| {
-                let hal_device = hal_device.ok_or_else(|| {
-                    Error::Other("wgpu backend is not Vulkan".to_string())
-                })?;
+            device
+                .as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal_device| {
+                    let hal_device = hal_device
+                        .ok_or_else(|| Error::Other("wgpu backend is not Vulkan".to_string()))?;
 
-                let vk_device = hal_device.raw_device();
+                    let vk_device = hal_device.raw_device();
 
-                // Import Y plane (R8Unorm, full resolution)
-                let y_image = self.import_dmabuf_plane(
-                    vk_device,
-                    &dma_buf.planes[0],
-                    dma_buf.width,
-                    dma_buf.height,
-                    vk::Format::R8_UNORM,
-                )?;
+                    // Import Y plane (R8Unorm, full resolution)
+                    let y_image = self.import_dmabuf_plane(
+                        vk_device,
+                        &dma_buf.planes[0],
+                        dma_buf.width,
+                        dma_buf.height,
+                        vk::Format::R8_UNORM,
+                    )?;
 
-                // Import UV plane (R8G8Unorm, half resolution)
-                let uv_image = self.import_dmabuf_plane(
-                    vk_device,
-                    &dma_buf.planes[1],
-                    dma_buf.width / 2,
-                    dma_buf.height / 2,
-                    vk::Format::R8G8_UNORM,
-                )?;
+                    // Import UV plane (R8G8Unorm, half resolution)
+                    let uv_image = self.import_dmabuf_plane(
+                        vk_device,
+                        &dma_buf.planes[1],
+                        dma_buf.width / 2,
+                        dma_buf.height / 2,
+                        vk::Format::R8G8_UNORM,
+                    )?;
 
-                // Wrap VkImages as wgpu_hal textures
-                let y_hal = wgpu_hal::vulkan::Device::texture_from_raw(
-                    y_image.image,
-                    &wgpu_hal::TextureDescriptor {
-                        label: Some("NV12 Y Plane (DMA-BUF)"),
-                        size: wgpu::Extent3d {
-                            width: dma_buf.width,
-                            height: dma_buf.height,
-                            depth_or_array_layers: 1,
+                    // Wrap VkImages as wgpu_hal textures
+                    let y_hal = wgpu_hal::vulkan::Device::texture_from_raw(
+                        y_image.image,
+                        &wgpu_hal::TextureDescriptor {
+                            label: Some("NV12 Y Plane (DMA-BUF)"),
+                            size: wgpu::Extent3d {
+                                width: dma_buf.width,
+                                height: dma_buf.height,
+                                depth_or_array_layers: 1,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::R8Unorm,
+                            usage: wgpu_hal::TextureUses::RESOURCE,
+                            memory_flags: wgpu_hal::MemoryFlags::empty(),
+                            view_formats: vec![],
                         },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::R8Unorm,
-                        usage: wgpu_hal::TextureUses::RESOURCE,
-                        memory_flags: wgpu_hal::MemoryFlags::empty(),
-                        view_formats: vec![],
-                    },
-                    // Drop guard: clean up VkImage + VkDeviceMemory when wgpu drops the texture
-                    Some(Box::new(VulkanImportGuard {
-                        device: vk_device.clone(),
-                        image: y_image.image,
-                        memory: y_image.memory,
-                    })),
-                );
+                        // Drop guard: clean up VkImage + VkDeviceMemory when wgpu drops the texture
+                        Some(Box::new(VulkanImportGuard {
+                            device: vk_device.clone(),
+                            image: y_image.image,
+                            memory: y_image.memory,
+                        })),
+                    );
 
-                let uv_hal = wgpu_hal::vulkan::Device::texture_from_raw(
-                    uv_image.image,
-                    &wgpu_hal::TextureDescriptor {
-                        label: Some("NV12 UV Plane (DMA-BUF)"),
-                        size: wgpu::Extent3d {
-                            width: dma_buf.width / 2,
-                            height: dma_buf.height / 2,
-                            depth_or_array_layers: 1,
+                    let uv_hal = wgpu_hal::vulkan::Device::texture_from_raw(
+                        uv_image.image,
+                        &wgpu_hal::TextureDescriptor {
+                            label: Some("NV12 UV Plane (DMA-BUF)"),
+                            size: wgpu::Extent3d {
+                                width: dma_buf.width / 2,
+                                height: dma_buf.height / 2,
+                                depth_or_array_layers: 1,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::Rg8Unorm,
+                            usage: wgpu_hal::TextureUses::RESOURCE,
+                            memory_flags: wgpu_hal::MemoryFlags::empty(),
+                            view_formats: vec![],
                         },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Rg8Unorm,
-                        usage: wgpu_hal::TextureUses::RESOURCE,
-                        memory_flags: wgpu_hal::MemoryFlags::empty(),
-                        view_formats: vec![],
-                    },
-                    Some(Box::new(VulkanImportGuard {
-                        device: vk_device.clone(),
-                        image: uv_image.image,
-                        memory: uv_image.memory,
-                    })),
-                );
+                        Some(Box::new(VulkanImportGuard {
+                            device: vk_device.clone(),
+                            image: uv_image.image,
+                            memory: uv_image.memory,
+                        })),
+                    );
 
-                Ok((y_hal, uv_hal))
-            })
-            .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??
+                    Ok((y_hal, uv_hal))
+                })
+                .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??
         };
 
         // Create wgpu::Texture from HAL textures
@@ -468,7 +470,8 @@ impl LinuxTextureImporter {
 
         tracing::trace!(
             "Zero-copy DMA-BUF import successful: {}x{} NV12",
-            dma_buf.width, dma_buf.height
+            dma_buf.width,
+            dma_buf.height
         );
 
         Ok(ImportedNv12Texture {
@@ -507,7 +510,11 @@ impl LinuxTextureImporter {
             .push_next(&mut external_memory_info)
             .image_type(vk::ImageType::TYPE_2D)
             .format(format)
-            .extent(vk::Extent3D { width, height, depth: 1 })
+            .extent(vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            })
             .mip_levels(1)
             .array_layers(1)
             .samples(vk::SampleCountFlags::TYPE_1)
@@ -544,10 +551,8 @@ impl LinuxTextureImporter {
             .build();
 
         // Find a suitable memory type that supports the image
-        let memory_type_index = self.find_memory_type_index(
-            mem_reqs.memory_type_bits,
-            vk::MemoryPropertyFlags::empty(),
-        )?;
+        let memory_type_index = self
+            .find_memory_type_index(mem_reqs.memory_type_bits, vk::MemoryPropertyFlags::empty())?;
 
         let alloc_info = vk::MemoryAllocateInfo::builder()
             .push_next(&mut import_fd_info)
@@ -555,14 +560,12 @@ impl LinuxTextureImporter {
             .memory_type_index(memory_type_index)
             .build();
 
-        let memory = vk_device
-            .allocate_memory(&alloc_info, None)
-            .map_err(|e| {
-                // On failure, Vulkan does NOT consume the fd, so we must close it.
-                libc::close(dup_fd);
-                vk_device.destroy_image(image, None);
-                Error::Other(format!("vkAllocateMemory (DMA-BUF import) failed: {:?}", e))
-            })?;
+        let memory = vk_device.allocate_memory(&alloc_info, None).map_err(|e| {
+            // On failure, Vulkan does NOT consume the fd, so we must close it.
+            libc::close(dup_fd);
+            vk_device.destroy_image(image, None);
+            Error::Other(format!("vkAllocateMemory (DMA-BUF import) failed: {:?}", e))
+        })?;
 
         // 4. Bind memory to image
         vk_device
@@ -571,7 +574,10 @@ impl LinuxTextureImporter {
 
         tracing::trace!(
             "Imported DMA-BUF plane: fd={}, {}x{}, format={:?}",
-            plane.fd, width, height, format
+            plane.fd,
+            width,
+            height,
+            format
         );
 
         Ok(VulkanImportedImage { image, memory })
@@ -586,31 +592,31 @@ impl LinuxTextureImporter {
         let device = self.ctx.device();
 
         unsafe {
-            device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal_device| {
-                let hal_device = hal_device.ok_or_else(|| {
-                    Error::Other("wgpu backend is not Vulkan".to_string())
-                })?;
+            device
+                .as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal_device| {
+                    let hal_device = hal_device
+                        .ok_or_else(|| Error::Other("wgpu backend is not Vulkan".to_string()))?;
 
-                let instance = hal_device.shared_instance();
-                let physical_device = hal_device.raw_physical_device();
-                let mem_props = instance
-                    .raw_instance()
-                    .get_physical_device_memory_properties(physical_device);
+                    let instance = hal_device.shared_instance();
+                    let physical_device = hal_device.raw_physical_device();
+                    let mem_props = instance
+                        .raw_instance()
+                        .get_physical_device_memory_properties(physical_device);
 
-                for i in 0..mem_props.memory_type_count {
-                    if (type_bits & (1 << i)) != 0 {
-                        let props = mem_props.memory_types[i as usize].property_flags;
-                        if props.contains(required_flags) {
-                            return Ok(i);
+                    for i in 0..mem_props.memory_type_count {
+                        if (type_bits & (1 << i)) != 0 {
+                            let props = mem_props.memory_types[i as usize].property_flags;
+                            if props.contains(required_flags) {
+                                return Ok(i);
+                            }
                         }
                     }
-                }
 
-                Err(Error::Other(
-                    "No suitable Vulkan memory type for DMA-BUF import".to_string(),
-                ))
-            })
-            .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))?
+                    Err(Error::Other(
+                        "No suitable Vulkan memory type for DMA-BUF import".to_string(),
+                    ))
+                })
+                .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))?
         }
     }
 }
@@ -674,8 +680,8 @@ const CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD: u32 = 1;
 #[repr(C)]
 struct CudaExternalMemoryHandleDesc {
     handle_type: u32,
-    _type_pad: u32,              // padding: union is 8-byte aligned (contains pointers)
-    handle_union: [u8; 16],      // union { int fd; struct { void*, const void* } win32; ... }
+    _type_pad: u32,         // padding: union is 8-byte aligned (contains pointers)
+    handle_union: [u8; 16], // union { int fd; struct { void*, const void* } win32; ... }
     size: u64,
     flags: u32,
     _reserved: [u32; 16],
@@ -713,14 +719,14 @@ struct CudaExternalMemoryBufferDesc {
 struct CudaMemcpy2D {
     src_x_in_bytes: usize,
     src_y: usize,
-    src_memory_type: u32,    // CU_MEMORYTYPE_DEVICE = 2
+    src_memory_type: u32, // CU_MEMORYTYPE_DEVICE = 2
     src_host: *const std::ffi::c_void,
     src_device: CUdeviceptr,
     src_array: *const std::ffi::c_void,
     src_pitch: usize,
     dst_x_in_bytes: usize,
     dst_y: usize,
-    dst_memory_type: u32,    // CU_MEMORYTYPE_DEVICE = 2
+    dst_memory_type: u32, // CU_MEMORYTYPE_DEVICE = 2
     dst_host: *mut std::ffi::c_void,
     dst_device: CUdeviceptr,
     dst_array: *mut std::ffi::c_void,
@@ -745,10 +751,7 @@ extern "C" {
 
     fn cuDestroyExternalMemory(ext_mem: CUexternalMemory) -> CUresult;
 
-    fn cuMemcpy2DAsync_v2(
-        copy: *const CudaMemcpy2D,
-        stream: CUstream,
-    ) -> CUresult;
+    fn cuMemcpy2DAsync_v2(copy: *const CudaMemcpy2D, stream: CUstream) -> CUresult;
 
     fn cuStreamSynchronize(stream: CUstream) -> CUresult;
 }
@@ -792,19 +795,21 @@ impl CudaTextureImporter {
         //           export as fd, import into CUDA, copy NVDEC data
         let (y_texture, uv_texture) = device
             .as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal_device| {
-                let hal_device = hal_device.ok_or_else(|| {
-                    Error::Other("wgpu backend is not Vulkan".to_string())
-                })?;
+                let hal_device = hal_device
+                    .ok_or_else(|| Error::Other("wgpu backend is not Vulkan".to_string()))?;
 
                 let vk_device = hal_device.raw_device();
 
                 // Create exportable Y plane
                 let y_result = self.create_exportable_plane_and_copy(
-                    vk_device, hal_device,
-                    device_ptr, pitch,
-                    width, height,
+                    vk_device,
+                    hal_device,
+                    device_ptr,
+                    pitch,
+                    width,
+                    height,
                     vk::Format::R8_UNORM,
-                    0, // Y plane offset = 0
+                    0,              // Y plane offset = 0
                     width as usize, // Y plane: 1 byte per pixel
                     height as usize,
                 )?;
@@ -813,9 +818,12 @@ impl CudaTextureImporter {
                 // NV12: UV plane starts at offset pitch * height in CUDA memory
                 let uv_offset = pitch * height as usize;
                 let uv_result = self.create_exportable_plane_and_copy(
-                    vk_device, hal_device,
-                    device_ptr + uv_offset, pitch,
-                    width / 2, height / 2,
+                    vk_device,
+                    hal_device,
+                    device_ptr + uv_offset,
+                    pitch,
+                    width / 2,
+                    height / 2,
                     vk::Format::R8G8_UNORM,
                     0,
                     (width) as usize, // UV plane: 2 bytes per pixel, width/2 pixels = width bytes
@@ -827,7 +835,11 @@ impl CudaTextureImporter {
                     y_result.image,
                     &wgpu_hal::TextureDescriptor {
                         label: Some("NV12 Y Plane (CUDA)"),
-                        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                        size: wgpu::Extent3d {
+                            width,
+                            height,
+                            depth_or_array_layers: 1,
+                        },
                         mip_level_count: 1,
                         sample_count: 1,
                         dimension: wgpu::TextureDimension::D2,
@@ -874,7 +886,11 @@ impl CudaTextureImporter {
         // Create wgpu textures
         let y_desc = wgpu::TextureDescriptor {
             label: Some("NV12 Y Plane (CUDA Zero-Copy)"),
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -885,7 +901,9 @@ impl CudaTextureImporter {
         let uv_desc = wgpu::TextureDescriptor {
             label: Some("NV12 UV Plane (CUDA Zero-Copy)"),
             size: wgpu::Extent3d {
-                width: width / 2, height: height / 2, depth_or_array_layers: 1,
+                width: width / 2,
+                height: height / 2,
+                depth_or_array_layers: 1,
             },
             mip_level_count: 1,
             sample_count: 1,
@@ -903,7 +921,8 @@ impl CudaTextureImporter {
 
         tracing::trace!(
             "CUDA GPU-to-GPU import successful: {}x{} NV12",
-            width, height
+            width,
+            height
         );
 
         Ok(ImportedNv12Texture {
@@ -944,7 +963,11 @@ impl CudaTextureImporter {
             .push_next(&mut external_memory_info)
             .image_type(vk::ImageType::TYPE_2D)
             .format(format)
-            .extent(vk::Extent3D { width, height, depth: 1 })
+            .extent(vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            })
             .mip_levels(1)
             .array_layers(1)
             .samples(vk::SampleCountFlags::TYPE_1)
@@ -965,10 +988,8 @@ impl CudaTextureImporter {
             .handle_types(vk::ExternalMemoryHandleTypeFlags::OPAQUE_FD)
             .build();
 
-        let memory_type_index = self.find_memory_type_for_cuda(
-            hal_device,
-            mem_reqs.memory_type_bits,
-        )?;
+        let memory_type_index =
+            self.find_memory_type_for_cuda(hal_device, mem_reqs.memory_type_bits)?;
 
         let alloc_info = vk::MemoryAllocateInfo::builder()
             .push_next(&mut export_info)
@@ -976,20 +997,16 @@ impl CudaTextureImporter {
             .memory_type_index(memory_type_index)
             .build();
 
-        let memory = vk_device
-            .allocate_memory(&alloc_info, None)
-            .map_err(|e| {
-                vk_device.destroy_image(image, None);
-                Error::Other(format!("vkAllocateMemory (CUDA export) failed: {:?}", e))
-            })?;
+        let memory = vk_device.allocate_memory(&alloc_info, None).map_err(|e| {
+            vk_device.destroy_image(image, None);
+            Error::Other(format!("vkAllocateMemory (CUDA export) failed: {:?}", e))
+        })?;
 
-        vk_device
-            .bind_image_memory(image, memory, 0)
-            .map_err(|e| {
-                vk_device.destroy_image(image, None);
-                vk_device.free_memory(memory, None);
-                Error::Other(format!("vkBindImageMemory (CUDA) failed: {:?}", e))
-            })?;
+        vk_device.bind_image_memory(image, memory, 0).map_err(|e| {
+            vk_device.destroy_image(image, None);
+            vk_device.free_memory(memory, None);
+            Error::Other(format!("vkBindImageMemory (CUDA) failed: {:?}", e))
+        })?;
 
         // 3. Export Vulkan memory as fd
         let get_fd_info = vk::MemoryGetFdInfoKHR::builder()
@@ -999,25 +1016,19 @@ impl CudaTextureImporter {
 
         // Use vkGetMemoryFdKHR via ash extension
         let instance = hal_device.shared_instance();
-        let ext_memory_fd = ash::extensions::khr::ExternalMemoryFd::new(
-            instance.raw_instance(),
-            vk_device,
-        );
+        let ext_memory_fd =
+            ash::extensions::khr::ExternalMemoryFd::new(instance.raw_instance(), vk_device);
 
-        let exported_fd = ext_memory_fd
-            .get_memory_fd(&get_fd_info)
-            .map_err(|e| {
-                vk_device.destroy_image(image, None);
-                vk_device.free_memory(memory, None);
-                Error::Other(format!("vkGetMemoryFdKHR failed: {:?}", e))
-            })?;
+        let exported_fd = ext_memory_fd.get_memory_fd(&get_fd_info).map_err(|e| {
+            vk_device.destroy_image(image, None);
+            vk_device.free_memory(memory, None);
+            Error::Other(format!("vkGetMemoryFdKHR failed: {:?}", e))
+        })?;
 
         // 4. Import fd into CUDA
         let mut cuda_ext_mem: CUexternalMemory = std::ptr::null_mut();
-        let cuda_handle_desc = CudaExternalMemoryHandleDesc::new_opaque_fd(
-            exported_fd,
-            mem_reqs.size,
-        );
+        let cuda_handle_desc =
+            CudaExternalMemoryHandleDesc::new_opaque_fd(exported_fd, mem_reqs.size);
 
         let cu_result = cuImportExternalMemory(&mut cuda_ext_mem, &cuda_handle_desc);
         if cu_result != CUDA_SUCCESS {
@@ -1102,7 +1113,12 @@ impl CudaTextureImporter {
 
         tracing::trace!(
             "CUDA → Vulkan copy: {}x{} ({} bytes/row, dst_pitch={}), src={:#x} → dst={:#x}",
-            width, height, copy_width_bytes, dst_pitch, src_device_ptr, cuda_dst_ptr
+            width,
+            height,
+            copy_width_bytes,
+            dst_pitch,
+            src_device_ptr,
+            cuda_dst_ptr
         );
 
         Ok(VulkanImportedImage { image, memory })

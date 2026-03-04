@@ -13,10 +13,10 @@ use crate::decoder::{GpuTextureHandle, Nv12GpuTexture};
 use crate::error::{Error, Result};
 use crate::gpu::GpuContext;
 
+#[cfg(target_os = "linux")]
+use super::linux_import::{CudaTextureImporter, LinuxTextureImporter};
 #[cfg(target_os = "macos")]
 use super::macos_import::MacOsTextureImporter;
-#[cfg(target_os = "linux")]
-use super::linux_import::{LinuxTextureImporter, CudaTextureImporter};
 #[cfg(target_os = "windows")]
 use super::windows_import::WindowsTextureImporter;
 
@@ -40,10 +40,10 @@ impl ColorSpace {
     pub fn from_ffmpeg(colorspace: i32) -> Self {
         // FFmpeg AVCOL_SPC_* values
         match colorspace {
-            1 => ColorSpace::Bt709,      // AVCOL_SPC_BT709
-            5 | 6 => ColorSpace::Bt601,  // AVCOL_SPC_BT470BG, AVCOL_SPC_SMPTE170M
-            9 => ColorSpace::Bt2020,     // AVCOL_SPC_BT2020_NCL
-            _ => ColorSpace::Bt709,      // Default to BT.709 for HD content
+            1 => ColorSpace::Bt709,     // AVCOL_SPC_BT709
+            5 | 6 => ColorSpace::Bt601, // AVCOL_SPC_BT470BG, AVCOL_SPC_SMPTE170M
+            9 => ColorSpace::Bt2020,    // AVCOL_SPC_BT2020_NCL
+            _ => ColorSpace::Bt709,     // Default to BT.709 for HD content
         }
     }
 }
@@ -175,9 +175,10 @@ impl Nv12TextureImporter {
             } => self.import_videotoolbox(*pixel_buffer, *io_surface, gpu_texture),
 
             #[cfg(target_os = "linux")]
-            GpuTextureHandle::Vaapi { surface_id, display } => {
-                self.import_vaapi(*surface_id, *display, gpu_texture)
-            }
+            GpuTextureHandle::Vaapi {
+                surface_id,
+                display,
+            } => self.import_vaapi(*surface_id, *display, gpu_texture),
 
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             GpuTextureHandle::Cuda { device_ptr, pitch } => {
@@ -202,11 +203,8 @@ impl Nv12TextureImporter {
             } => {
                 // Software decode fallback: upload CPU NV12 data to GPU textures
                 let color_space = ColorSpace::from_ffmpeg(gpu_texture.color_space);
-                let mut imported = self.create_textures(
-                    gpu_texture.width,
-                    gpu_texture.height,
-                    color_space,
-                );
+                let mut imported =
+                    self.create_textures(gpu_texture.width, gpu_texture.height, color_space);
                 let frame_data = Nv12FrameData {
                     y_data,
                     uv_data,
@@ -452,11 +450,7 @@ impl Nv12TextureImporter {
     }
 
     /// Upload contiguous NV12 data (simple case without linesize padding)
-    pub fn upload_nv12_data(
-        &self,
-        imported: &ImportedNv12Texture,
-        nv12_data: &[u8],
-    ) -> Result<()> {
+    pub fn upload_nv12_data(&self, imported: &ImportedNv12Texture, nv12_data: &[u8]) -> Result<()> {
         let width = imported.width;
         let height = imported.height;
         let y_size = (width * height) as usize;

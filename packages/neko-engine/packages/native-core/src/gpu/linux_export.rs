@@ -105,120 +105,124 @@ impl LinuxTextureExporter {
     /// Returns wgpu textures backed by exportable Vulkan memory.
     /// After rendering into these textures, call `export_as_dmabuf()`
     /// to get DMA-BUF fds for the encoder.
-    pub fn create_backing_store(
-        &self,
-        width: u32,
-        height: u32,
-    ) -> Result<LinuxExportBackingStore> {
+    pub fn create_backing_store(&self, width: u32, height: u32) -> Result<LinuxExportBackingStore> {
         let device = self.ctx.device();
 
         let (y_img, uv_img, y_hal, uv_hal) = unsafe {
-            device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal_device| {
-                let hal_device = hal_device.ok_or_else(|| {
-                    Error::Other("wgpu backend is not Vulkan".to_string())
-                })?;
-                let vk_device = hal_device.raw_device();
+            device
+                .as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal_device| {
+                    let hal_device = hal_device
+                        .ok_or_else(|| Error::Other("wgpu backend is not Vulkan".to_string()))?;
+                    let vk_device = hal_device.raw_device();
 
-                // Create exportable Y plane image
-                let y_img = self.create_exportable_image(
-                    vk_device, hal_device,
-                    width, height,
-                    vk::Format::R8_UNORM,
-                )?;
+                    // Create exportable Y plane image
+                    let y_img = self.create_exportable_image(
+                        vk_device,
+                        hal_device,
+                        width,
+                        height,
+                        vk::Format::R8_UNORM,
+                    )?;
 
-                // Create exportable UV plane image
-                let uv_img = self.create_exportable_image(
-                    vk_device, hal_device,
-                    width / 2, height / 2,
-                    vk::Format::R8G8_UNORM,
-                )?;
+                    // Create exportable UV plane image
+                    let uv_img = self.create_exportable_image(
+                        vk_device,
+                        hal_device,
+                        width / 2,
+                        height / 2,
+                        vk::Format::R8G8_UNORM,
+                    )?;
 
-                // Wrap as wgpu_hal textures with drop guards
-                let y_hal = wgpu_hal::vulkan::Device::texture_from_raw(
-                    y_img.image,
-                    &wgpu_hal::TextureDescriptor {
-                        label: Some("Export Y Plane"),
-                        size: wgpu::Extent3d {
-                            width, height, depth_or_array_layers: 1,
+                    // Wrap as wgpu_hal textures with drop guards
+                    let y_hal = wgpu_hal::vulkan::Device::texture_from_raw(
+                        y_img.image,
+                        &wgpu_hal::TextureDescriptor {
+                            label: Some("Export Y Plane"),
+                            size: wgpu::Extent3d {
+                                width,
+                                height,
+                                depth_or_array_layers: 1,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::R8Unorm,
+                            usage: wgpu_hal::TextureUses::RESOURCE
+                                | wgpu_hal::TextureUses::STORAGE_READ_WRITE,
+                            memory_flags: wgpu_hal::MemoryFlags::empty(),
+                            view_formats: vec![],
                         },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::R8Unorm,
-                        usage: wgpu_hal::TextureUses::RESOURCE
-                            | wgpu_hal::TextureUses::STORAGE_READ_WRITE,
-                        memory_flags: wgpu_hal::MemoryFlags::empty(),
-                        view_formats: vec![],
-                    },
-                    Some(Box::new(ExportableImageGuard {
-                        device: vk_device.clone(),
-                        image: y_img.image,
-                        memory: y_img.memory,
-                    })),
-                );
+                        Some(Box::new(ExportableImageGuard {
+                            device: vk_device.clone(),
+                            image: y_img.image,
+                            memory: y_img.memory,
+                        })),
+                    );
 
-                let uv_hal = wgpu_hal::vulkan::Device::texture_from_raw(
-                    uv_img.image,
-                    &wgpu_hal::TextureDescriptor {
-                        label: Some("Export UV Plane"),
-                        size: wgpu::Extent3d {
-                            width: width / 2,
-                            height: height / 2,
-                            depth_or_array_layers: 1,
+                    let uv_hal = wgpu_hal::vulkan::Device::texture_from_raw(
+                        uv_img.image,
+                        &wgpu_hal::TextureDescriptor {
+                            label: Some("Export UV Plane"),
+                            size: wgpu::Extent3d {
+                                width: width / 2,
+                                height: height / 2,
+                                depth_or_array_layers: 1,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::Rg8Unorm,
+                            usage: wgpu_hal::TextureUses::RESOURCE
+                                | wgpu_hal::TextureUses::STORAGE_READ_WRITE,
+                            memory_flags: wgpu_hal::MemoryFlags::empty(),
+                            view_formats: vec![],
                         },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Rg8Unorm,
-                        usage: wgpu_hal::TextureUses::RESOURCE
-                            | wgpu_hal::TextureUses::STORAGE_READ_WRITE,
-                        memory_flags: wgpu_hal::MemoryFlags::empty(),
-                        view_formats: vec![],
-                    },
-                    Some(Box::new(ExportableImageGuard {
-                        device: vk_device.clone(),
-                        image: uv_img.image,
-                        memory: uv_img.memory,
-                    })),
-                );
+                        Some(Box::new(ExportableImageGuard {
+                            device: vk_device.clone(),
+                            image: uv_img.image,
+                            memory: uv_img.memory,
+                        })),
+                    );
 
-                Ok((y_img, uv_img, y_hal, uv_hal))
-            })
-            .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??
+                    Ok((y_img, uv_img, y_hal, uv_hal))
+                })
+                .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??
         };
 
         // Create wgpu textures from HAL
         let y_desc = wgpu::TextureDescriptor {
             label: Some("Export Y Plane (DMA-BUF)"),
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::R8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::STORAGE_BINDING,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
             view_formats: &[],
         };
         let uv_desc = wgpu::TextureDescriptor {
             label: Some("Export UV Plane (DMA-BUF)"),
             size: wgpu::Extent3d {
-                width: width / 2, height: height / 2, depth_or_array_layers: 1,
+                width: width / 2,
+                height: height / 2,
+                depth_or_array_layers: 1,
             },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rg8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::STORAGE_BINDING,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
             view_formats: &[],
         };
 
-        let y_texture = unsafe {
-            device.create_texture_from_hal::<wgpu_hal::api::Vulkan>(y_hal, &y_desc)
-        };
-        let uv_texture = unsafe {
-            device.create_texture_from_hal::<wgpu_hal::api::Vulkan>(uv_hal, &uv_desc)
-        };
+        let y_texture =
+            unsafe { device.create_texture_from_hal::<wgpu_hal::api::Vulkan>(y_hal, &y_desc) };
+        let uv_texture =
+            unsafe { device.create_texture_from_hal::<wgpu_hal::api::Vulkan>(uv_hal, &uv_desc) };
 
         Ok(LinuxExportBackingStore {
             ctx: self.ctx.clone(),
@@ -253,7 +257,11 @@ impl LinuxTextureExporter {
             .push_next(&mut external_memory_info)
             .image_type(vk::ImageType::TYPE_2D)
             .format(format)
-            .extent(vk::Extent3D { width, height, depth: 1 })
+            .extent(vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            })
             .mip_levels(1)
             .array_layers(1)
             .samples(vk::SampleCountFlags::TYPE_1)
@@ -290,20 +298,16 @@ impl LinuxTextureExporter {
             .memory_type_index(memory_type_index)
             .build();
 
-        let memory = vk_device
-            .allocate_memory(&alloc_info, None)
-            .map_err(|e| {
-                vk_device.destroy_image(image, None);
-                Error::Other(format!("vkAllocateMemory (export) failed: {:?}", e))
-            })?;
+        let memory = vk_device.allocate_memory(&alloc_info, None).map_err(|e| {
+            vk_device.destroy_image(image, None);
+            Error::Other(format!("vkAllocateMemory (export) failed: {:?}", e))
+        })?;
 
-        vk_device
-            .bind_image_memory(image, memory, 0)
-            .map_err(|e| {
-                vk_device.destroy_image(image, None);
-                vk_device.free_memory(memory, None);
-                Error::Other(format!("vkBindImageMemory (export) failed: {:?}", e))
-            })?;
+        vk_device.bind_image_memory(image, memory, 0).map_err(|e| {
+            vk_device.destroy_image(image, None);
+            vk_device.free_memory(memory, None);
+            Error::Other(format!("vkBindImageMemory (export) failed: {:?}", e))
+        })?;
 
         // Query row pitch for LINEAR tiling
         let subresource = vk::ImageSubresource {
@@ -315,7 +319,11 @@ impl LinuxTextureExporter {
 
         tracing::debug!(
             "Created exportable image: {}x{}, format={:?}, pitch={}, alloc={}",
-            width, height, format, layout.row_pitch, mem_reqs.size
+            width,
+            height,
+            format,
+            layout.row_pitch,
+            mem_reqs.size
         );
 
         Ok(ExportableImage {
@@ -385,8 +393,12 @@ pub struct LinuxExportBackingStore {
 impl LinuxExportBackingStore {
     /// Create texture views for shader binding
     pub fn create_views(&self) -> (wgpu::TextureView, wgpu::TextureView) {
-        let y_view = self.y_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let uv_view = self.uv_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let y_view = self
+            .y_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let uv_view = self
+            .uv_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         (y_view, uv_view)
     }
 
@@ -398,50 +410,49 @@ impl LinuxExportBackingStore {
         let device = self.ctx.device();
 
         let (y_fd, uv_fd) = unsafe {
-            device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal_device| {
-                let hal_device = hal_device.ok_or_else(|| {
-                    Error::Other("wgpu backend is not Vulkan".to_string())
-                })?;
+            device
+                .as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal_device| {
+                    let hal_device = hal_device
+                        .ok_or_else(|| Error::Other("wgpu backend is not Vulkan".to_string()))?;
 
-                let vk_device = hal_device.raw_device();
-                let instance = hal_device.shared_instance();
-                let ext_memory_fd = ash::extensions::khr::ExternalMemoryFd::new(
-                    instance.raw_instance(),
-                    vk_device,
-                );
+                    let vk_device = hal_device.raw_device();
+                    let instance = hal_device.shared_instance();
+                    let ext_memory_fd = ash::extensions::khr::ExternalMemoryFd::new(
+                        instance.raw_instance(),
+                        vk_device,
+                    );
 
-                // Export Y plane memory as DMA-BUF fd
-                let y_get_fd_info = vk::MemoryGetFdInfoKHR::builder()
-                    .memory(self.y_vk_memory)
-                    .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
-                    .build();
-                let y_fd = ext_memory_fd
-                    .get_memory_fd(&y_get_fd_info)
-                    .map_err(|e| Error::Other(format!(
-                        "vkGetMemoryFdKHR (Y) failed: {:?}", e
-                    )))?;
+                    // Export Y plane memory as DMA-BUF fd
+                    let y_get_fd_info = vk::MemoryGetFdInfoKHR::builder()
+                        .memory(self.y_vk_memory)
+                        .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
+                        .build();
+                    let y_fd = ext_memory_fd.get_memory_fd(&y_get_fd_info).map_err(|e| {
+                        Error::Other(format!("vkGetMemoryFdKHR (Y) failed: {:?}", e))
+                    })?;
 
-                // Export UV plane memory as DMA-BUF fd
-                let uv_get_fd_info = vk::MemoryGetFdInfoKHR::builder()
-                    .memory(self.uv_vk_memory)
-                    .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
-                    .build();
-                let uv_fd = ext_memory_fd
-                    .get_memory_fd(&uv_get_fd_info)
-                    .map_err(|e| {
+                    // Export UV plane memory as DMA-BUF fd
+                    let uv_get_fd_info = vk::MemoryGetFdInfoKHR::builder()
+                        .memory(self.uv_vk_memory)
+                        .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
+                        .build();
+                    let uv_fd = ext_memory_fd.get_memory_fd(&uv_get_fd_info).map_err(|e| {
                         // Close Y fd on failure
                         libc::close(y_fd);
                         Error::Other(format!("vkGetMemoryFdKHR (UV) failed: {:?}", e))
                     })?;
 
-                Ok((y_fd, uv_fd))
-            })
-            .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??
+                    Ok((y_fd, uv_fd))
+                })
+                .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??
         };
 
         tracing::trace!(
             "Exported NV12 as DMA-BUF: Y fd={} (pitch={}), UV fd={} (pitch={})",
-            y_fd, self.y_row_pitch, uv_fd, self.uv_row_pitch
+            y_fd,
+            self.y_row_pitch,
+            uv_fd,
+            self.uv_row_pitch
         );
 
         Ok(ExportedNv12Frame {
@@ -470,42 +481,38 @@ impl LinuxExportBackingStore {
         let device = self.ctx.device();
 
         let (y_fd, uv_fd) = unsafe {
-            device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal_device| {
-                let hal_device = hal_device.ok_or_else(|| {
-                    Error::Other("wgpu backend is not Vulkan".to_string())
-                })?;
+            device
+                .as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal_device| {
+                    let hal_device = hal_device
+                        .ok_or_else(|| Error::Other("wgpu backend is not Vulkan".to_string()))?;
 
-                let vk_device = hal_device.raw_device();
-                let instance = hal_device.shared_instance();
-                let ext_memory_fd = ash::extensions::khr::ExternalMemoryFd::new(
-                    instance.raw_instance(),
-                    vk_device,
-                );
+                    let vk_device = hal_device.raw_device();
+                    let instance = hal_device.shared_instance();
+                    let ext_memory_fd = ash::extensions::khr::ExternalMemoryFd::new(
+                        instance.raw_instance(),
+                        vk_device,
+                    );
 
-                let y_info = vk::MemoryGetFdInfoKHR::builder()
-                    .memory(self.y_vk_memory)
-                    .handle_type(vk::ExternalMemoryHandleTypeFlags::OPAQUE_FD)
-                    .build();
-                let y_fd = ext_memory_fd
-                    .get_memory_fd(&y_info)
-                    .map_err(|e| Error::Other(format!(
-                        "vkGetMemoryFdKHR (CUDA Y) failed: {:?}", e
-                    )))?;
+                    let y_info = vk::MemoryGetFdInfoKHR::builder()
+                        .memory(self.y_vk_memory)
+                        .handle_type(vk::ExternalMemoryHandleTypeFlags::OPAQUE_FD)
+                        .build();
+                    let y_fd = ext_memory_fd.get_memory_fd(&y_info).map_err(|e| {
+                        Error::Other(format!("vkGetMemoryFdKHR (CUDA Y) failed: {:?}", e))
+                    })?;
 
-                let uv_info = vk::MemoryGetFdInfoKHR::builder()
-                    .memory(self.uv_vk_memory)
-                    .handle_type(vk::ExternalMemoryHandleTypeFlags::OPAQUE_FD)
-                    .build();
-                let uv_fd = ext_memory_fd
-                    .get_memory_fd(&uv_info)
-                    .map_err(|e| {
+                    let uv_info = vk::MemoryGetFdInfoKHR::builder()
+                        .memory(self.uv_vk_memory)
+                        .handle_type(vk::ExternalMemoryHandleTypeFlags::OPAQUE_FD)
+                        .build();
+                    let uv_fd = ext_memory_fd.get_memory_fd(&uv_info).map_err(|e| {
                         libc::close(y_fd);
                         Error::Other(format!("vkGetMemoryFdKHR (CUDA UV) failed: {:?}", e))
                     })?;
 
-                Ok((y_fd, uv_fd))
-            })
-            .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??
+                    Ok((y_fd, uv_fd))
+                })
+                .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??
         };
 
         Ok(CudaExportInfo {

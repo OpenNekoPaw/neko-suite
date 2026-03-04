@@ -20,8 +20,7 @@ pub mod groups {
     pub const EFFECTS: &str = "effects";
 
     pub const ALL: &[&str] = &[
-        NODES, TASKS, VIDEOS, AUDIOS, IMAGES, TIMELINES, STREAMS, MODELS,
-        CANVAS, SCENES, EFFECTS,
+        NODES, TASKS, VIDEOS, AUDIOS, IMAGES, TIMELINES, STREAMS, MODELS, CANVAS, SCENES, EFFECTS,
     ];
 }
 
@@ -32,26 +31,71 @@ pub mod actions {
     pub const TASKS: &[&str] = &["probe", "pause", "resume", "cancel", "list"];
 
     pub const VIDEOS: &[&str] = &[
-        "probe", "capture", "extract", "stream", "transcode", "keyframes",
-        "waveform", "proxy", "diff", "stop", "pause", "resume", "speed",
-        "seek", "loop",
+        "probe",
+        "capture",
+        "extract",
+        "stream",
+        "transcode",
+        "keyframes",
+        "waveform",
+        "proxy",
+        "diff",
+        "stop",
+        "pause",
+        "resume",
+        "speed",
+        "seek",
+        "loop",
     ];
 
     pub const AUDIOS: &[&str] = &[
-        "probe", "transcode", "stream", "waveform", "diff", "stop", "pause",
-        "resume", "speed", "seek", "loop", "analyze_loudness",
+        "probe",
+        "transcode",
+        "stream",
+        "waveform",
+        "diff",
+        "stop",
+        "pause",
+        "resume",
+        "speed",
+        "seek",
+        "loop",
+        "analyze_loudness",
     ];
 
     pub const IMAGES: &[&str] = &["probe", "capture", "encode", "diff"];
 
     pub const TIMELINES: &[&str] = &[
-        "probe", "composite", "stream", "stream_stats", "stop", "pause", "resume", "speed",
-        "loop", "seek", "diff", "export", "export_progress", "export_cancel",
+        "probe",
+        "composite",
+        "stream",
+        "stream_stats",
+        "stop",
+        "pause",
+        "resume",
+        "speed",
+        "loop",
+        "seek",
+        "diff",
+        "export",
+        "export_progress",
+        "export_cancel",
     ];
 
     pub const STREAMS: &[&str] = &[
-        "create", "activate", "pause", "resume", "destroy", "list",
-        "stop", "seek", "speed", "loop", "stats", "update", "quality",
+        "create",
+        "activate",
+        "pause",
+        "resume",
+        "destroy",
+        "list",
+        "stop",
+        "seek",
+        "speed",
+        "loop",
+        "stats",
+        "update",
+        "quality",
         "applyOperation",
     ];
 

@@ -85,7 +85,9 @@ pub struct PlaybackSpeed {
 
 impl PlaybackSpeed {
     pub fn new(rate: f64) -> Self {
-        Self { rate: rate.clamp(0.1, 16.0) }
+        Self {
+            rate: rate.clamp(0.1, 16.0),
+        }
     }
 
     pub fn normal() -> Self {

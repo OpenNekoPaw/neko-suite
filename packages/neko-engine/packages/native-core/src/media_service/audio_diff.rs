@@ -5,7 +5,7 @@
 
 use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
 use crate::error::{Error, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Unified sample rate for comparison (48 kHz)
 const COMPARE_SAMPLE_RATE: u32 = 48000;
@@ -15,6 +15,28 @@ const COMPARE_CHANNELS: u16 = 1;
 const SEGMENT_DURATION: f64 = 0.1;
 /// SNR threshold (dB) below which a segment is considered "different"
 const DIFF_SNR_THRESHOLD: f64 = 20.0;
+
+/// Options for audio content diff
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioDiffOptions {
+    /// Start time in seconds for range-based diff (None = from beginning)
+    #[serde(default)]
+    pub start_time: Option<f64>,
+
+    /// End time in seconds for range-based diff (None = to end)
+    #[serde(default)]
+    pub end_time: Option<f64>,
+}
+
+impl Default for AudioDiffOptions {
+    fn default() -> Self {
+        Self {
+            start_time: None,
+            end_time: None,
+        }
+    }
+}
 
 /// Audio content diff result
 #[derive(Debug, Clone, Serialize)]
@@ -303,7 +325,10 @@ mod tests {
     fn test_snr_identical() {
         let samples = vec![0.5f32; 1000];
         let snr = compute_snr(&samples, &samples);
-        assert!(snr.is_infinite(), "SNR should be infinity for identical signals");
+        assert!(
+            snr.is_infinite(),
+            "SNR should be infinity for identical signals"
+        );
     }
 
     #[test]
@@ -311,7 +336,11 @@ mod tests {
         let a = vec![0.5f32; 1000];
         let b = vec![-0.5f32; 1000];
         let snr = compute_snr(&a, &b);
-        assert!(snr < 10.0, "SNR should be low for opposite signals, got {}", snr);
+        assert!(
+            snr < 10.0,
+            "SNR should be low for opposite signals, got {}",
+            snr
+        );
     }
 
     #[test]
@@ -319,7 +348,11 @@ mod tests {
         let a: Vec<f32> = (0..1000).map(|i| (i as f32 * 0.01).sin()).collect();
         let b: Vec<f32> = a.iter().map(|s| s + 0.001).collect();
         let snr = compute_snr(&a, &b);
-        assert!(snr > 30.0, "SNR should be high for very similar signals, got {}", snr);
+        assert!(
+            snr > 30.0,
+            "SNR should be high for very similar signals, got {}",
+            snr
+        );
     }
 
     #[test]
@@ -342,21 +375,49 @@ mod tests {
         let a = vec![1.0f32; 1000];
         let b = vec![0.0f32; 1000];
         let rms = compute_rms_diff(&a, &b);
-        assert!((rms - 1.0).abs() < 0.001, "RMS diff should be 1.0, got {}", rms);
+        assert!(
+            (rms - 1.0).abs() < 0.001,
+            "RMS diff should be 1.0, got {}",
+            rms
+        );
     }
 
     #[test]
     fn test_merge_adjacent_regions() {
         let regions = vec![
-            AudioDiffRegion { start: 0.0, end: 0.1, snr: 5.0, rms_diff: 0.5 },
-            AudioDiffRegion { start: 0.1, end: 0.2, snr: 3.0, rms_diff: 0.8 },
-            AudioDiffRegion { start: 0.2, end: 0.3, snr: 8.0, rms_diff: 0.3 },
+            AudioDiffRegion {
+                start: 0.0,
+                end: 0.1,
+                snr: 5.0,
+                rms_diff: 0.5,
+            },
+            AudioDiffRegion {
+                start: 0.1,
+                end: 0.2,
+                snr: 3.0,
+                rms_diff: 0.8,
+            },
+            AudioDiffRegion {
+                start: 0.2,
+                end: 0.3,
+                snr: 8.0,
+                rms_diff: 0.3,
+            },
             // Gap
-            AudioDiffRegion { start: 1.0, end: 1.1, snr: 10.0, rms_diff: 0.2 },
+            AudioDiffRegion {
+                start: 1.0,
+                end: 1.1,
+                snr: 10.0,
+                rms_diff: 0.2,
+            },
         ];
 
         let merged = merge_adjacent_regions(regions);
-        assert_eq!(merged.len(), 2, "Should merge first 3 into 1, keep last separate");
+        assert_eq!(
+            merged.len(),
+            2,
+            "Should merge first 3 into 1, keep last separate"
+        );
         assert_eq!(merged[0].start, 0.0);
         assert_eq!(merged[0].end, 0.3);
         assert_eq!(merged[0].snr, 3.0); // Worst SNR

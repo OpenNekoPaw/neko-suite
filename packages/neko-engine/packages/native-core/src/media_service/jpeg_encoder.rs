@@ -48,18 +48,19 @@ pub fn encode_rgba_to_jpeg(
     let expected_rgba8 = pixel_count * 4;
     let expected_rgba16f = pixel_count * 8; // Rgba16Float = 4 channels × 2 bytes (f16)
 
-    let rgb_data = if rgba_data.len() == expected_rgba8 {
-        // RGBA8: 4 bytes per pixel
-        rgba8_to_rgb(rgba_data)
-    } else if rgba_data.len() == expected_rgba16f {
-        // Rgba16Float: 8 bytes per pixel (4 × f16)
-        rgba16f_to_rgb(rgba_data)
-    } else {
-        return Err(Error::InvalidParameter(format!(
+    let rgb_data =
+        if rgba_data.len() == expected_rgba8 {
+            // RGBA8: 4 bytes per pixel
+            rgba8_to_rgb(rgba_data)
+        } else if rgba_data.len() == expected_rgba16f {
+            // Rgba16Float: 8 bytes per pixel (4 × f16)
+            rgba16f_to_rgb(rgba_data)
+        } else {
+            return Err(Error::InvalidParameter(format!(
             "RGBA data size mismatch: expected {} (RGBA8) or {} (Rgba16Float) bytes, got {} bytes",
             expected_rgba8, expected_rgba16f, rgba_data.len()
         )));
-    };
+        };
 
     // Encode to JPEG
     let mut jpeg_buffer = Cursor::new(Vec::new());
@@ -252,13 +253,17 @@ mod tests {
         let f16_zero: [u8; 2] = 0x0000u16.to_le_bytes();
         let mut data = Vec::with_capacity(32);
         for _ in 0..4 {
-            data.extend_from_slice(&f16_one);  // R
+            data.extend_from_slice(&f16_one); // R
             data.extend_from_slice(&f16_zero); // G
             data.extend_from_slice(&f16_zero); // B
-            data.extend_from_slice(&f16_one);  // A
+            data.extend_from_slice(&f16_one); // A
         }
         let result = encode_rgba_to_jpeg(&data, width, height, 85);
-        assert!(result.is_ok(), "Encoding Rgba16Float failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Encoding Rgba16Float failed: {:?}",
+            result.err()
+        );
         let jpeg = result.unwrap();
         assert_eq!(jpeg[0], 0xFF);
         assert_eq!(jpeg[1], 0xD8);

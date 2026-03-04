@@ -7,4 +7,4 @@
 
 mod pipeline;
 
-pub use pipeline::{PreviewPipeline, PreviewPipelineConfig, PreviewFrame};
+pub use pipeline::{PreviewFrame, PreviewPipeline, PreviewPipelineConfig};

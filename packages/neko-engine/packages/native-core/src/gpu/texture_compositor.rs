@@ -532,7 +532,13 @@ impl TextureCompositor {
 
         // Composite each layer
         for (_, layer) in sorted_layers.iter() {
-            self.composite_layer(&mut encoder, layer, &output_view, output_width, output_height)?;
+            self.composite_layer(
+                &mut encoder,
+                layer,
+                &output_view,
+                output_width,
+                output_height,
+            )?;
         }
 
         // Submit commands and wait for completion
@@ -593,28 +599,31 @@ impl TextureCompositor {
             .unwrap_or(&self.dummy_view);
 
         // Create bind group
-        let bind_group = self.ctx.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Texture Compositor Bind Group"),
-            layout: &self.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.uniform_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&layer.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::TextureView(mask_view),
-                },
-            ],
-        });
+        let bind_group = self
+            .ctx
+            .device()
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Texture Compositor Bind Group"),
+                layout: &self.bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.uniform_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&layer.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(mask_view),
+                    },
+                ],
+            });
 
         // Render pass
         {
@@ -643,7 +652,8 @@ impl TextureCompositor {
 
     /// Read output texture to CPU (for encoding or testing)
     pub fn read_output_sync(&self, result: &TextureCompositeResult) -> Result<Vec<u8>> {
-        self.ctx.read_texture_sync(&result.texture, result.width, result.height)
+        self.ctx
+            .read_texture_sync(&result.texture, result.width, result.height)
     }
 
     /// Get GPU context

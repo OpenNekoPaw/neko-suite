@@ -69,12 +69,7 @@ pub struct ExportSettings {
 impl ExportSettings {
     /// Convert to EncoderConfig
     pub fn to_encoder_config(&self) -> EncoderConfig {
-        let mut config = EncoderConfig::new(
-            self.width,
-            self.height,
-            self.fps,
-            self.video_codec,
-        );
+        let mut config = EncoderConfig::new(self.width, self.height, self.fps, self.video_codec);
 
         if let Some(bitrate) = self.video_bitrate {
             config = config.with_bitrate(bitrate);
@@ -158,7 +153,6 @@ pub struct ExportMetadata {
 #[serde(rename_all = "camelCase")]
 pub struct ExportStats {
     // === Detailed Pipeline Timing (per-frame average in milliseconds) ===
-
     /// Hardware decode time (VideoToolbox/NVDEC)
     pub hw_decode_ms: f64,
     /// NV12 texture import to wgpu (CPU→GPU transfer)
@@ -175,7 +169,6 @@ pub struct ExportStats {
     pub encode_submit_ms: f64,
 
     // === Aggregate Timing (backward compatible, in milliseconds) ===
-
     /// Total decode time (hw_decode alias)
     pub decode_time_ms: u64,
     /// Total GPU pipeline time (import + nv12→rgba + composite + rgba→nv12 + readback)
@@ -186,7 +179,6 @@ pub struct ExportStats {
     pub mux_time_ms: u64,
 
     // === Performance Metrics ===
-
     /// Average FPS during export
     pub avg_fps: f64,
     /// Peak memory usage in bytes

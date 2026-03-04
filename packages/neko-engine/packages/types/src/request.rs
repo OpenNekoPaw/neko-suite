@@ -258,13 +258,12 @@ mod tests {
 
     #[test]
     fn test_request_option_accessors() {
-        let req = ActionRequest::new("videos", "probe")
-            .with_options(json!({
-                "path": "/video.mp4",
-                "fps": 29.97,
-                "width": 1920,
-                "loop": true
-            }));
+        let req = ActionRequest::new("videos", "probe").with_options(json!({
+            "path": "/video.mp4",
+            "fps": 29.97,
+            "width": 1920,
+            "loop": true
+        }));
 
         assert_eq!(req.option_str("path"), Some("/video.mp4"));
         assert_eq!(req.option_f64("fps"), Some(29.97));
@@ -276,10 +275,11 @@ mod tests {
     #[test]
     fn test_request_parse_body() {
         #[derive(serde::Deserialize, PartialEq, Debug)]
-        struct MyBody { name: String }
+        struct MyBody {
+            name: String,
+        }
 
-        let req = ActionRequest::new("test", "test")
-            .with_body(json!({"name": "hello"}));
+        let req = ActionRequest::new("test", "test").with_body(json!({"name": "hello"}));
         let body: MyBody = req.parse_body().unwrap();
         assert_eq!(body.name, "hello");
     }

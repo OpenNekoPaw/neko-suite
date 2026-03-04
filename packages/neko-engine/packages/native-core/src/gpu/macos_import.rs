@@ -19,7 +19,9 @@ use crate::gpu::GpuContext;
 
 use std::sync::Arc;
 
-use metal::{Device as MTLDevice, MTLPixelFormat, MTLTextureType, MTLTextureUsage, TextureDescriptor};
+use metal::{
+    Device as MTLDevice, MTLPixelFormat, MTLTextureType, MTLTextureUsage, TextureDescriptor,
+};
 use objc::runtime::Object;
 use objc::{msg_send, sel, sel_impl};
 
@@ -82,7 +84,8 @@ impl MacOsTextureImporter {
         // CRITICAL: Lock CVPixelBuffer to ensure GPU has finished writing
         // CVPixelBufferLockBaseAddress waits for GPU operations to complete,
         // unlike IOSurfaceLock which only provides CPU-level synchronization.
-        let lock_result = CVPixelBufferLockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
+        let lock_result =
+            CVPixelBufferLockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
         if lock_result != 0 {
             return Err(Error::Other(format!(
                 "CVPixelBufferLockBaseAddress failed: {}",
@@ -275,17 +278,11 @@ impl MacOsTextureImporter {
 
         // Use create_texture_from_hal to wrap the HAL textures
         let y_texture = unsafe {
-            device.create_texture_from_hal::<wgpu_hal::api::Metal>(
-                y_hal_texture,
-                &y_texture_desc,
-            )
+            device.create_texture_from_hal::<wgpu_hal::api::Metal>(y_hal_texture, &y_texture_desc)
         };
 
         let uv_texture = unsafe {
-            device.create_texture_from_hal::<wgpu_hal::api::Metal>(
-                uv_hal_texture,
-                &uv_texture_desc,
-            )
+            device.create_texture_from_hal::<wgpu_hal::api::Metal>(uv_hal_texture, &uv_texture_desc)
         };
 
         let y_view = y_texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -293,7 +290,8 @@ impl MacOsTextureImporter {
 
         tracing::trace!(
             "Zero-copy import successful: {}x{} NV12 from IOSurface",
-            y_width, y_height
+            y_width,
+            y_height
         );
 
         Ok(ImportedNv12Texture {
@@ -400,7 +398,9 @@ pub unsafe fn read_iosurface_plane(
     let base_address = IOSurfaceGetBaseAddressOfPlane(io_surface_ref, plane);
     if base_address.is_null() {
         IOSurfaceUnlock(io_surface_ref, kIOSurfaceLockReadOnly, std::ptr::null_mut());
-        return Err(Error::Other("IOSurface plane base address is null".to_string()));
+        return Err(Error::Other(
+            "IOSurface plane base address is null".to_string(),
+        ));
     }
 
     // Copy data

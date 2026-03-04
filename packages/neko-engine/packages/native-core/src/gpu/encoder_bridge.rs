@@ -22,29 +22,16 @@ pub struct GpuBufferHandles {
 pub enum GpuBufferHandle {
     /// macOS: IOSurface
     #[cfg(target_os = "macos")]
-    IOSurface {
-        surface: usize,
-        plane: u32,
-    },
+    IOSurface { surface: usize, plane: u32 },
     /// Linux: DMA-BUF file descriptor
     #[cfg(target_os = "linux")]
-    DmaBuf {
-        fd: i32,
-        offset: u32,
-        stride: u32,
-    },
+    DmaBuf { fd: i32, offset: u32, stride: u32 },
     /// Windows: D3D11 shared handle
     #[cfg(target_os = "windows")]
-    D3d11Shared {
-        handle: usize,
-        array_index: u32,
-    },
+    D3d11Shared { handle: usize, array_index: u32 },
     /// CUDA device pointer
     #[cfg(any(target_os = "linux", target_os = "windows"))]
-    Cuda {
-        device_ptr: usize,
-        pitch: usize,
-    },
+    Cuda { device_ptr: usize, pitch: usize },
 }
 
 /// GPU frame ready for encoding

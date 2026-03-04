@@ -3,10 +3,10 @@
 //! Provides types and utilities for loading and parsing .jvi project files.
 //! The .jvi format is a JSON-based project file format used by Neko Suite.
 
-mod types;
-mod loader;
 mod converter;
+mod loader;
+mod types;
 
-pub use types::*;
-pub use loader::JviLoader;
 pub use converter::ProjectConverter;
+pub use loader::JviLoader;
+pub use types::*;

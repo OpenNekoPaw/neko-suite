@@ -173,9 +173,8 @@ impl From<&neko_native_core::audio::AudioInfo> for JsAudioInfo {
 // ============================================================================
 
 use neko_native_core::media_service::{
-    ExtractedSubtitleTrack as RustExtractedSubtitleTrack,
-    MediaInfo as RustProbeMediaInfo, SubtitleCue as RustSubtitleCue,
-    SubtitleStream as RustSubtitleStream,
+    ExtractedSubtitleTrack as RustExtractedSubtitleTrack, MediaInfo as RustProbeMediaInfo,
+    SubtitleCue as RustSubtitleCue, SubtitleStream as RustSubtitleStream,
 };
 
 /// Probed media information for JavaScript

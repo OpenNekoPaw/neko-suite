@@ -92,9 +92,7 @@ mod tests {
         let node_service = Arc::new(NodeService::new(None));
         let controller = NodeController::new(node_service);
 
-        let result = controller
-            .handle("unknown", None, Value::Null, None)
-            .await;
+        let result = controller.handle("unknown", None, Value::Null, None).await;
 
         assert!(result.is_err());
     }

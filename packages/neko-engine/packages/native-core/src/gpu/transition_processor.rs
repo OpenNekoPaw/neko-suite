@@ -443,9 +443,18 @@ mod tests {
     #[test]
     fn test_transition_type_from_str() {
         assert_eq!(TransitionType::from_str("fade"), TransitionType::Fade);
-        assert_eq!(TransitionType::from_str("wipe_left"), TransitionType::WipeLeft);
-        assert_eq!(TransitionType::from_str("WipeLeft"), TransitionType::WipeLeft);
-        assert_eq!(TransitionType::from_str("iris_circle"), TransitionType::IrisCircle);
+        assert_eq!(
+            TransitionType::from_str("wipe_left"),
+            TransitionType::WipeLeft
+        );
+        assert_eq!(
+            TransitionType::from_str("WipeLeft"),
+            TransitionType::WipeLeft
+        );
+        assert_eq!(
+            TransitionType::from_str("iris_circle"),
+            TransitionType::IrisCircle
+        );
         assert_eq!(TransitionType::from_str("unknown"), TransitionType::Fade);
     }
 

@@ -11,11 +11,10 @@
 // Phase 2: Zero-copy GPU pipeline — not yet integrated into export path
 #![allow(dead_code)]
 
-use crate::decoder::{Decoder, HwAccelType, MediaInfo, HwAccelDecoder};
+use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType, MediaInfo};
 use crate::error::Result;
 use crate::gpu::{
-    ColorSpace, GpuContext,
-    Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter,
+    ColorSpace, GpuContext, Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter,
 };
 
 use std::sync::Arc;
@@ -176,7 +175,9 @@ impl GpuPipeline {
         }
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
-            Err(Error::Other("Zero-copy pipeline not supported on this platform".to_string()))
+            Err(Error::Other(
+                "Zero-copy pipeline not supported on this platform".to_string(),
+            ))
         }
     }
 

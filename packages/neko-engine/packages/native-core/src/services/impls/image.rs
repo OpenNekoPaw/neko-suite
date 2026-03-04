@@ -27,7 +27,6 @@ impl ImageService {
     pub fn new(gpu_ctx: Option<Arc<GpuContext>>) -> Self {
         Self { gpu_ctx }
     }
-
 }
 
 impl IImageService for ImageService {
@@ -40,11 +39,7 @@ impl IImageService for ImageService {
         Ok(convert_media_info(info))
     }
 
-    async fn capture(
-        &self,
-        source: &Path,
-        options: CaptureOptions,
-    ) -> Result<FrameData> {
+    async fn capture(&self, source: &Path, options: CaptureOptions) -> Result<FrameData> {
         let path = source.to_string_lossy().to_string();
         let gpu_ctx = self.gpu_ctx.clone();
         let quality = options.quality;
@@ -72,8 +67,7 @@ impl IImageService for ImageService {
                     output_texture.create_view(&wgpu::TextureViewDescriptor::default());
                 renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
 
-                let rgba_data =
-                    ctx.read_texture_sync(&output_texture, width, height)?;
+                let rgba_data = ctx.read_texture_sync(&output_texture, width, height)?;
 
                 let (data, output_format) = match format {
                     FrameFormat::Jpeg => {
@@ -95,9 +89,7 @@ impl IImageService for ImageService {
                     timestamp: 0.0,
                 })
             } else {
-                Err(Error::Other(
-                    "GPU context required for capture".to_string(),
-                ))
+                Err(Error::Other("GPU context required for capture".to_string()))
             }
         })
         .await
@@ -126,7 +118,9 @@ mod tests {
     async fn test_image_service_capture_no_gpu() {
         let service = create_test_service();
         let options = CaptureOptions::default();
-        let result = service.capture(Path::new("/nonexistent/file.png"), options).await;
+        let result = service
+            .capture(Path::new("/nonexistent/file.png"), options)
+            .await;
         assert!(result.is_err());
     }
 
