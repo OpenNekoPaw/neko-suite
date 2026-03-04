@@ -7,8 +7,10 @@
 
 use crate::error::{Error, Result};
 use ffmpeg_next as ffmpeg;
-use std::path::Path;
-use std::sync::Once;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Once, OnceLock, RwLock};
+use std::time::{Instant, SystemTime};
 
 static FFMPEG_INIT: Once = Once::new();
 
@@ -202,6 +204,114 @@ pub fn probe_media_info<P: AsRef<Path>>(path: P) -> Result<MediaInfo> {
     info.has_subtitles = !info.subtitle_streams.is_empty();
 
     Ok(info)
+}
+
+// =============================================================================
+// ProbeCache — Thread-safe cache for probe results
+// =============================================================================
+
+/// Maximum number of cached probe entries
+const DEFAULT_PROBE_CACHE_MAX: usize = 256;
+
+struct ProbeCacheEntry {
+    info: MediaInfo,
+    mtime: SystemTime,
+    file_size: u64,
+    last_used: Instant,
+}
+
+/// Thread-safe probe result cache.
+///
+/// Caches `MediaInfo` keyed by canonical file path. Validates cache entries
+/// by checking file mtime + size — if either changed, re-probes from disk.
+/// Uses simple LRU eviction when capacity is reached.
+pub struct ProbeCache {
+    cache: RwLock<HashMap<PathBuf, ProbeCacheEntry>>,
+    max_entries: usize,
+}
+
+impl ProbeCache {
+    /// Create a new probe cache with the given capacity
+    pub fn new(max_entries: usize) -> Self {
+        Self {
+            cache: RwLock::new(HashMap::new()),
+            max_entries,
+        }
+    }
+
+    /// Probe with caching: returns cached result if file unchanged, otherwise re-probes.
+    pub fn probe(&self, path: &Path) -> Result<MediaInfo> {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+
+        // Read file metadata for validation
+        let file_meta = std::fs::metadata(path)
+            .map_err(|_| Error::FileNotFound(path.display().to_string()))?;
+        let mtime = file_meta
+            .modified()
+            .unwrap_or(SystemTime::UNIX_EPOCH);
+        let file_size = file_meta.len();
+
+        // Fast path: check cache with read lock
+        {
+            let cache = self.cache.read().unwrap();
+            if let Some(entry) = cache.get(&canonical) {
+                if entry.mtime == mtime && entry.file_size == file_size {
+                    return Ok(entry.info.clone());
+                }
+            }
+        }
+
+        // Cache miss or stale — probe from disk
+        let info = probe_media_info(path)?;
+
+        // Write to cache
+        {
+            let mut cache = self.cache.write().unwrap();
+
+            // Evict oldest entry if at capacity
+            if cache.len() >= self.max_entries && !cache.contains_key(&canonical) {
+                if let Some(oldest_key) = cache
+                    .iter()
+                    .min_by_key(|(_, v)| v.last_used)
+                    .map(|(k, _)| k.clone())
+                {
+                    cache.remove(&oldest_key);
+                }
+            }
+
+            cache.insert(
+                canonical,
+                ProbeCacheEntry {
+                    info: info.clone(),
+                    mtime,
+                    file_size,
+                    last_used: Instant::now(),
+                },
+            );
+        }
+
+        Ok(info)
+    }
+
+    /// Invalidate cache entry for a specific path
+    pub fn invalidate(&self, path: &Path) {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let mut cache = self.cache.write().unwrap();
+        cache.remove(&canonical);
+    }
+
+    /// Clear all cached entries
+    pub fn clear(&self) {
+        let mut cache = self.cache.write().unwrap();
+        cache.clear();
+    }
+}
+
+static GLOBAL_PROBE_CACHE: OnceLock<ProbeCache> = OnceLock::new();
+
+/// Get the global probe cache singleton
+pub fn global_probe_cache() -> &'static ProbeCache {
+    GLOBAL_PROBE_CACHE.get_or_init(|| ProbeCache::new(DEFAULT_PROBE_CACHE_MAX))
 }
 
 #[cfg(test)]

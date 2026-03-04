@@ -19,9 +19,12 @@ import type { IFileSystem } from '@neko/asset';
 import { detectMediaType } from '@neko/shared';
 import { createEngineMetadataExtractor } from './services/EngineMetadataExtractor';
 import { ThumbnailService } from './services/ThumbnailService';
+import { AssetHealthMonitor, createFileAccessChecker } from './services/AssetHealthMonitor';
+import { MediaLibrarySettingsService } from './services/MediaLibrarySettingsService';
 import { AssetFileDecorationProvider } from './providers/AssetFileDecorationProvider';
 import { AssetManagerTreeProvider } from './providers/AssetManagerTreeProvider';
 import { AssetHistoryTreeProvider } from './providers/AssetHistoryTreeProvider';
+import { MediaLibraryTreeProvider } from './providers/MediaLibraryTreeProvider';
 import { VscodeGitService } from './services/VscodeGitService';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { setRootLogger, getLogger } from './utils/logger';
@@ -95,6 +98,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				classifier: new RuleClassifier(),
 				metadataExtractor,
 				thumbnailGenerator: (filePath) => thumbnailService!.generate(filePath),
+				fileAccessChecker: createFileAccessChecker(),
 			});
 
 			await library.initialize();
@@ -118,6 +122,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				},
 			);
 			logger.info('AssetDiffService initialized with Git integration');
+
+			// Initialize Asset Health Monitor
+			const healthMonitor = new AssetHealthMonitor(library);
+			healthMonitor.registerCommands(context);
+			context.subscriptions.push(healthMonitor);
+
+			// Run initial health check (non-blocking)
+			healthMonitor.runInitialCheck();
 		} catch (error) {
 			logger.error('Failed to initialize AssetLibrary:', error);
 		}
@@ -155,13 +167,39 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		);
 	}
 
-	// 4. Register asset action commands
+	// 4. Initialize Media Library Settings (P1)
+	if (library && workspaceRoot) {
+		const settingsService = new MediaLibrarySettingsService(workspaceRoot);
+		await settingsService.load();
+		context.subscriptions.push(settingsService);
+
+		// Sync path variables into library
+		library.updatePathVariables(await settingsService.getPathVariableMap());
+		settingsService.onDidChange(async () => {
+			library!.updatePathVariables(await settingsService.getPathVariableMap());
+		});
+
+		// Register Media Library TreeView
+		const mediaLibraryProvider = new MediaLibraryTreeProvider(settingsService);
+		const mediaLibraryTree = vscode.window.createTreeView('neko.mediaLibraries', {
+			treeDataProvider: mediaLibraryProvider,
+			showCollapseAll: true,
+			canSelectMany: true,
+			dragAndDropController: mediaLibraryProvider,
+		});
+		context.subscriptions.push(mediaLibraryTree, mediaLibraryProvider);
+
+		// Register media library commands
+		registerMediaLibraryCommands(context, settingsService);
+	}
+
+	// 5. Register asset action commands
 	registerAssetCommands(context);
 
-	// 5. Register existing commands (sync, push, pull, LFS, preview)
+	// 6. Register existing commands (sync, push, pull, LFS, preview)
 	registerLegacyCommands(context);
 
-	// 6. Register internal API commands (for cross-extension access)
+	// 7. Register internal API commands (for cross-extension access)
 	registerInternalCommands(context);
 
 	logger.info('Extension activated');
@@ -220,6 +258,129 @@ function registerAssetCommands(context: vscode.ExtensionContext): void {
 				vscode.window.showInformationMessage(
 					`Imported: ${result.entity.name} (${result.isNewEntity ? 'new entity' : 'existing entity'})`,
 				);
+			} catch (error) {
+				await handleError(error, { showToUser: true });
+			}
+		}),
+	);
+}
+
+// =============================================================================
+// Media Library Commands (P1)
+// =============================================================================
+
+function registerMediaLibraryCommands(
+	context: vscode.ExtensionContext,
+	settingsService: MediaLibrarySettingsService,
+): void {
+	// Add Media Library
+	context.subscriptions.push(
+		vscode.commands.registerCommand('neko.assets.addMediaLibrary', async () => {
+			const dirUri = await vscode.window.showOpenDialog({
+				canSelectFiles: false,
+				canSelectFolders: true,
+				canSelectMany: false,
+				title: 'Select media library directory',
+			});
+			if (!dirUri?.[0]) return;
+
+			const name = await vscode.window.showInputBox({
+				prompt: 'Enter a name for this media library',
+				placeHolder: 'e.g., Team Footage',
+			});
+			if (!name) return;
+
+			const variable = await vscode.window.showInputBox({
+				prompt: 'Enter a variable name (used as ${VARIABLE} in paths)',
+				placeHolder: 'e.g., TEAM_FOOTAGE',
+				validateInput: (v) => {
+					if (!/^[A-Z_][A-Z0-9_]*$/.test(v)) {
+						return 'Variable must be UPPER_SNAKE_CASE';
+					}
+					return undefined;
+				},
+			});
+			if (!variable) return;
+
+			try {
+				await settingsService.addLibrary({
+					name,
+					path: dirUri[0].fsPath,
+					variable,
+				});
+				vscode.window.showInformationMessage(`Media library "${name}" added`);
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : String(error);
+				vscode.window.showErrorMessage(`Failed to add library: ${msg}`);
+			}
+		}),
+	);
+
+	// Remove Media Library
+	context.subscriptions.push(
+		vscode.commands.registerCommand('neko.assets.removeMediaLibrary', async (item?: unknown) => {
+			// Get variable from tree item context or show picker
+			let variable: string | undefined;
+			if (item && typeof item === 'object' && 'library' in item) {
+				variable = (item as { library: { variable: string } }).library.variable;
+			} else {
+				const libraries = await settingsService.getResolvedLibraries();
+				const picked = await vscode.window.showQuickPick(
+					libraries.map(l => ({ label: l.name, description: `\${${l.variable}}`, variable: l.variable })),
+					{ title: 'Select library to remove' },
+				);
+				variable = picked?.variable;
+			}
+			if (!variable) return;
+
+			await settingsService.removeLibrary(variable);
+			vscode.window.showInformationMessage('Media library removed');
+		}),
+	);
+
+	// Set Local Override
+	context.subscriptions.push(
+		vscode.commands.registerCommand('neko.assets.setLocalOverride', async (item?: unknown) => {
+			let variable: string | undefined;
+			if (item && typeof item === 'object' && 'library' in item) {
+				variable = (item as { library: { variable: string } }).library.variable;
+			} else {
+				const libraries = await settingsService.getResolvedLibraries();
+				const picked = await vscode.window.showQuickPick(
+					libraries.map(l => ({ label: l.name, description: `\${${l.variable}}`, variable: l.variable })),
+					{ title: 'Select library to set local override' },
+				);
+				variable = picked?.variable;
+			}
+			if (!variable) return;
+
+			const dirUri = await vscode.window.showOpenDialog({
+				canSelectFiles: false,
+				canSelectFolders: true,
+				canSelectMany: false,
+				title: `Select local path for \${${variable}}`,
+			});
+			if (!dirUri?.[0]) return;
+
+			await settingsService.setLocalOverride(variable, dirUri[0].fsPath);
+			vscode.window.showInformationMessage(`Local override set for \${${variable}}`);
+		}),
+	);
+
+	// Import from Library (context menu on media library files)
+	context.subscriptions.push(
+		vscode.commands.registerCommand('neko.assets.importFromLibrary', async (item?: unknown) => {
+			if (!library || !item || typeof item !== 'object' || !('filePath' in item)) return;
+
+			try {
+				const result = await library.importFile(
+					(item as { filePath: string }).filePath,
+					{ autoClassify: true },
+				);
+				vscode.window.showInformationMessage(
+					`Imported: ${result.entity.name}`,
+				);
+				vscode.commands.executeCommand('neko.assets.refreshViews');
 			} catch (error) {
 				await handleError(error, { showToUser: true });
 			}

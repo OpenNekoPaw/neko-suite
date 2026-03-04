@@ -25,3 +25,6 @@ export * from './manifest';
 
 // Registry protocol types
 export * from './registry';
+
+// Settings types (media library config)
+export * from './settings';

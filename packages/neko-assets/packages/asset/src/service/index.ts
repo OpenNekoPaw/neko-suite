@@ -24,4 +24,12 @@ export {
 	type AssetRegistryConfig,
 	type AssetChangeListener,
 } from './AssetRegistry';
+export { AssetHealthService, type AssetHealthServiceConfig } from './AssetHealthService';
+export { PathResolver } from './PathResolver';
+export type {
+	FileAccessChecker,
+	FileHealthResult,
+	HealthCheckProgress,
+	PathVariableMap,
+} from './types';
 export { generateEntityId, generateVariantId, generateFileId } from './utils';

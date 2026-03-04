@@ -3,7 +3,7 @@
 //! Provides video-related operations: probing, capture, extraction,
 //! streaming, transcoding, keyframe analysis, waveform generation, and proxy creation.
 
-use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType};
+use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType, global_pool};
 use crate::domain::{CaptureOptions, ExtractOptions, ExtractType, FrameData, TaskHandle, TranscodeOptions};
 use crate::encoder::{
     ContainerFormat, Encoder, EncoderConfig, FfmpegMuxer, HwAccelEncoder, Muxer,
@@ -15,7 +15,7 @@ use crate::audio::{
 use crate::error::{Error, Result};
 use crate::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
 use crate::decoder::{IdrScanner, KeyframeInfo};
-use crate::media_service::{encode_rgba_to_jpeg, extract_subtitles, probe_media_info};
+use crate::media_service::{encode_rgba_to_jpeg, extract_subtitles, global_probe_cache};
 use crate::services::impls::common::{convert_media_info, generate_waveform_blocking};
 use crate::services::impls::stream_loop::{
     pack_h264_frame, ActiveStreams, create_stream_channels, StreamPlaybackDelegate, WallClockPacer,
@@ -152,7 +152,7 @@ impl IVideoService for VideoService {
     async fn probe(&self, path: &Path) -> Result<MediaInfo> {
         // Use blocking task for FFmpeg probe
         let path = path.to_path_buf();
-        let info = tokio::task::spawn_blocking(move || probe_media_info(&path))
+        let info = tokio::task::spawn_blocking(move || global_probe_cache().probe(&path))
             .await
             .map_err(|e| Error::Other(format!("Probe task failed: {}", e)))??;
 
@@ -322,7 +322,7 @@ impl IVideoService for VideoService {
         // Probe to get video info
         let media_info = tokio::task::spawn_blocking({
             let path = path.clone();
-            move || probe_media_info(Path::new(&path))
+            move || global_probe_cache().probe(Path::new(&path))
         })
         .await
         .map_err(|e| Error::Other(format!("Probe task failed: {}", e)))??;
@@ -368,12 +368,24 @@ impl IVideoService for VideoService {
             // =================================================================
             let encode_cancel = cancel_clone.clone();
             let encode_handle = std::thread::spawn(move || {
-                // Initialize decoder and encoder (owned, no locks needed)
-                let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
-                if let Err(e) = decoder.open(&path) {
-                    tracing::error!("Failed to open video decoder: {}", e);
-                    return;
-                }
+                // Acquire decoder from pool (reuses existing if available)
+                let pool = global_pool();
+                let mut guard = match pool.acquire(&path, HwAccelType::Auto) {
+                    Ok(g) => g,
+                    Err(e) => {
+                        tracing::error!("Failed to acquire decoder from pool: {}", e);
+                        return;
+                    }
+                };
+                // Take decoder from guard for long-lived ownership in stream loop
+                let mut decoder = match guard.take_decoder() {
+                    Some(d) => d,
+                    None => {
+                        tracing::error!("Decoder guard was empty");
+                        return;
+                    }
+                };
+                let decoder_path = path.clone();
 
                 // Get stream time_base for PTS→microseconds conversion
                 let time_base = decoder.time_base();
@@ -496,6 +508,9 @@ impl IVideoService for VideoService {
                     }
                 }
                 Encoder::close(&mut encoder);
+
+                // Return decoder to pool for reuse by future streams
+                pool.return_decoder(decoder, &decoder_path, HwAccelType::Auto);
             });
 
             // =================================================================
@@ -845,7 +860,7 @@ impl IVideoService for VideoService {
         let path = source.to_string_lossy().to_string();
         let media_info = tokio::task::spawn_blocking({
             let path = path.clone();
-            move || probe_media_info(Path::new(&path))
+            move || global_probe_cache().probe(Path::new(&path))
         })
         .await
         .map_err(|e| Error::Other(format!("Probe task failed: {}", e)))??;

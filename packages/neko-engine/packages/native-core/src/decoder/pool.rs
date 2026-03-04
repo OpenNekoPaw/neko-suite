@@ -55,8 +55,8 @@ impl Default for DecoderPoolConfig {
     fn default() -> Self {
         Self {
             max_decoders_per_file: 2,
-            max_total_decoders: 8,
-            idle_timeout: Duration::from_secs(30),
+            max_total_decoders: 16,
+            idle_timeout: Duration::from_secs(120),
             enable_hw_accel: true,
         }
     }
@@ -264,8 +264,11 @@ impl DecoderPool {
         Ok(())
     }
 
-    /// Return a decoder to the pool
-    fn return_decoder(
+    /// Return a decoder to the pool for reuse.
+    ///
+    /// Called automatically by `DecoderGuard::drop`, but can also be called
+    /// manually after `DecoderGuard::take_decoder()` for long-lived decoder usage.
+    pub fn return_decoder(
         &self,
         decoder: HwAccelDecoder,
         video_path: &str,
@@ -402,6 +405,25 @@ impl DecoderGuard {
     pub fn is_hw_active(&self) -> bool {
         self.decoder().is_hw_active()
     }
+
+    /// Take ownership of the decoder, preventing auto-return to pool on drop.
+    ///
+    /// Use this when the caller needs to hold the decoder for an extended period
+    /// (e.g., stream loops). The caller is responsible for returning the decoder
+    /// to the pool via `DecoderPool::return_decoder()` when done.
+    pub fn take_decoder(&mut self) -> Option<HwAccelDecoder> {
+        self.decoder.take()
+    }
+
+    /// Get the video path this guard was acquired for
+    pub fn video_path(&self) -> &str {
+        &self.video_path
+    }
+
+    /// Get the hardware acceleration type
+    pub fn hw_accel(&self) -> HwAccelType {
+        self.hw_accel
+    }
 }
 
 impl std::ops::Deref for DecoderGuard {
@@ -455,8 +477,8 @@ mod tests {
     fn test_pool_config_default() {
         let config = DecoderPoolConfig::default();
         assert_eq!(config.max_decoders_per_file, 2);
-        assert_eq!(config.max_total_decoders, 8);
-        assert_eq!(config.idle_timeout, Duration::from_secs(30));
+        assert_eq!(config.max_total_decoders, 16);
+        assert_eq!(config.idle_timeout, Duration::from_secs(120));
         assert!(config.enable_hw_accel);
     }
 

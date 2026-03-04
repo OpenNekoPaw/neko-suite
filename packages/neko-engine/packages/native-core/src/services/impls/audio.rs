@@ -9,7 +9,7 @@ use crate::audio::{
 use crate::domain::{AudioTranscodeOptions, FrameData, LoudnessAnalysis};
 use crate::error::{Error, Result};
 use crate::gpu::GpuContext;
-use crate::media_service::probe_media_info;
+use crate::media_service::global_probe_cache;
 use crate::services::impls::common::{analyze_loudness_blocking, convert_media_info, generate_waveform_blocking};
 use crate::services::impls::stream_loop::{
     pack_pcm_f32le_stream_frame, ActiveStreams, create_stream_channels, StreamPlaybackDelegate,
@@ -88,7 +88,7 @@ impl IStreamPlayback for AudioService {
 impl IAudioService for AudioService {
     async fn probe(&self, path: &Path) -> Result<MediaInfo> {
         let path = path.to_path_buf();
-        let info = tokio::task::spawn_blocking(move || probe_media_info(&path))
+        let info = tokio::task::spawn_blocking(move || global_probe_cache().probe(&path))
             .await
             .map_err(|e| Error::Other(format!("Probe task failed: {}", e)))??;
 

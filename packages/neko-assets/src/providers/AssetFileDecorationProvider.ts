@@ -11,7 +11,7 @@
 
 import * as vscode from 'vscode';
 import type { AssetLibrary } from '@neko/asset';
-import type { AssetEntity, AssetFile, MediaFileMetadata } from '@neko/shared';
+import type { AssetEntity, AssetFile, AssetFileStatus, MediaFileMetadata } from '@neko/shared';
 import { isMediaFile } from '@neko/shared';
 
 // =============================================================================
@@ -98,8 +98,8 @@ export class AssetFileDecorationProvider implements vscode.FileDecorationProvide
 	private readonly _onDidChangeFileDecorations = new vscode.EventEmitter<vscode.Uri | vscode.Uri[] | undefined>();
 	readonly onDidChangeFileDecorations = this._onDidChangeFileDecorations.event;
 
-	/** Cache: file path → metadata (to avoid repeated lookups) */
-	private metadataCache = new Map<string, MediaFileMetadata | null>();
+	/** Cache: file path → asset file data (to avoid repeated lookups) */
+	private fileCache = new Map<string, AssetFile | null>();
 
 	constructor(private readonly library: AssetLibrary) {}
 
@@ -117,13 +117,15 @@ export class AssetFileDecorationProvider implements vscode.FileDecorationProvide
 		// Only process media files
 		if (!isMediaFile(uri.fsPath)) return undefined;
 
-		// Look up cached metadata
-		const cached = this.metadataCache.get(uri.fsPath);
-		if (cached === null) return undefined; // Known to have no metadata
-		if (cached) return this.createDecoration(cached);
+		// Look up cached file data
+		const cached = this.fileCache.get(uri.fsPath);
+		if (cached === null) return undefined; // Known to have no data
+		if (cached) {
+			return this.createDecorationForFile(cached);
+		}
 
 		// Trigger async lookup (don't block)
-		this.lookupMetadata(uri.fsPath);
+		this.lookupFile(uri.fsPath);
 		return undefined;
 	}
 
@@ -133,11 +135,11 @@ export class AssetFileDecorationProvider implements vscode.FileDecorationProvide
 	refresh(uris?: vscode.Uri[]): void {
 		if (uris) {
 			for (const uri of uris) {
-				this.metadataCache.delete(uri.fsPath);
+				this.fileCache.delete(uri.fsPath);
 			}
 			this._onDidChangeFileDecorations.fire(uris);
 		} else {
-			this.metadataCache.clear();
+			this.fileCache.clear();
 			this._onDidChangeFileDecorations.fire(undefined);
 		}
 	}
@@ -145,6 +147,27 @@ export class AssetFileDecorationProvider implements vscode.FileDecorationProvide
 	// =========================================================================
 	// Private
 	// =========================================================================
+
+	private createDecorationForFile(file: AssetFile): vscode.FileDecoration {
+		// Status-based decorations take priority
+		if (file.status === 'offline') {
+			return {
+				badge: '⚡',
+				tooltip: 'Asset offline — path not accessible',
+				color: new vscode.ThemeColor('list.warningForeground'),
+			};
+		}
+		if (file.status === 'missing') {
+			return {
+				badge: '✕',
+				tooltip: 'Asset missing — file not found',
+				color: new vscode.ThemeColor('list.errorForeground'),
+			};
+		}
+
+		// Normal metadata-based decoration
+		return this.createDecoration(file.metadata);
+	}
 
 	private createDecoration(metadata: MediaFileMetadata): vscode.FileDecoration {
 		// Determine badge content
@@ -180,24 +203,25 @@ export class AssetFileDecorationProvider implements vscode.FileDecorationProvide
 		};
 	}
 
-	private async lookupMetadata(fsPath: string): Promise<void> {
+	private async lookupFile(fsPath: string): Promise<void> {
 		try {
-			const metadata = await this.findMetadataByPath(fsPath);
-			this.metadataCache.set(fsPath, metadata);
+			const file = await this.findFileByPath(fsPath);
+			this.fileCache.set(fsPath, file);
 
-			if (metadata) {
+			if (file) {
 				// Trigger re-render for this file
 				this._onDidChangeFileDecorations.fire(vscode.Uri.file(fsPath));
 			}
 		} catch {
-			this.metadataCache.set(fsPath, null);
+			this.fileCache.set(fsPath, null);
 		}
 	}
 
 	/**
 	 * Find metadata for a file path by searching through all entities.
+	 * Also returns file status for decoration.
 	 */
-	private async findMetadataByPath(fsPath: string): Promise<MediaFileMetadata | null> {
+	private async findFileByPath(fsPath: string): Promise<AssetFile | null> {
 		try {
 			const entities: AssetEntity[] = await this.library.getAllEntities();
 
@@ -205,7 +229,7 @@ export class AssetFileDecorationProvider implements vscode.FileDecorationProvide
 				for (const variant of entity.variants) {
 					for (const file of variant.files) {
 						if (this.pathMatches(file.path, fsPath)) {
-							return file.metadata;
+							return file;
 						}
 					}
 				}
@@ -215,6 +239,14 @@ export class AssetFileDecorationProvider implements vscode.FileDecorationProvide
 		}
 
 		return null;
+	}
+
+	/**
+	 * Find metadata for a file path by searching through all entities.
+	 */
+	private async findMetadataByPath(fsPath: string): Promise<MediaFileMetadata | null> {
+		const file = await this.findFileByPath(fsPath);
+		return file?.metadata ?? null;
 	}
 
 	/**

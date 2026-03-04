@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::decoder::{Decoder, HwAccelType, HwAccelDecoder};
+use crate::decoder::{HwAccelType, HwAccelDecoder, global_pool};
 use crate::domain::{Element, ElementType, Timeline};
 use crate::error::{Error, Result};
 use crate::gpu::{
@@ -241,53 +241,47 @@ impl GpuExportPipeline {
         })
     }
 
-    /// Initialize all required video decoders
+    /// Initialize all required video decoders from the pool
     pub fn initialize(&mut self) -> Result<()> {
         let sources = self.timeline.get_media_sources();
+        let pool = global_pool();
 
         for src in sources {
-            let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
+            let mut guard = pool.acquire(&src, HwAccelType::Auto)?;
+            let decoder = guard.take_decoder()
+                .ok_or_else(|| Error::Other("Decoder guard was empty".to_string()))?;
 
-            match decoder.open(&src) {
-                Ok(info) => {
-                    tracing::info!(
-                        "Opened HW decoder for {}: {}x{} @ {:.2}fps, {:.2}s",
-                        src,
-                        info.width,
-                        info.height,
-                        info.fps,
-                        info.duration
-                    );
-                    self.decoders.insert(src, decoder);
-                }
-                Err(e) => {
-                    tracing::error!("Failed to open HW decoder for {}: {}", src, e);
-                    return Err(e);
-                }
-            }
+            tracing::info!(
+                "Acquired pooled HW decoder for {}: hw={}",
+                src,
+                decoder.is_hw_active()
+            );
+            self.decoders.insert(src, decoder);
         }
 
         Ok(())
     }
 
     /// Hot-update timeline data for an active pipeline.
-    /// Opens decoders for any new media sources, keeps existing decoders intact.
+    /// Opens decoders for any new media sources via pool, keeps existing decoders intact.
     pub fn update_timeline(&mut self, timeline: Timeline) {
         // Open decoders for new sources that don't exist yet
         let new_sources = timeline.get_media_sources();
+        let pool = global_pool();
         for src in &new_sources {
             if !self.decoders.contains_key(src) {
-                let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
-                match decoder.open(src) {
-                    Ok(info) => {
-                        tracing::info!(
-                            "Hot-update: opened decoder for new source {}: {}x{} @ {:.2}fps",
-                            src, info.width, info.height, info.fps
-                        );
-                        self.decoders.insert(src.clone(), decoder);
+                match pool.acquire(src, HwAccelType::Auto) {
+                    Ok(mut guard) => {
+                        if let Some(decoder) = guard.take_decoder() {
+                            tracing::info!(
+                                "Hot-update: acquired pooled decoder for new source {}",
+                                src
+                            );
+                            self.decoders.insert(src.clone(), decoder);
+                        }
                     }
                     Err(e) => {
-                        tracing::error!("Hot-update: failed to open decoder for {}: {}", src, e);
+                        tracing::error!("Hot-update: failed to acquire decoder for {}: {}", src, e);
                     }
                 }
             }
@@ -560,13 +554,13 @@ impl GpuExportPipeline {
         })
     }
 
-    /// Close all decoders and release resources
+    /// Close all decoders and return them to the pool for reuse
     pub fn close(&mut self) {
-        for (src, decoder) in self.decoders.iter_mut() {
-            tracing::debug!("Closing decoder for {}", src);
-            decoder.close();
+        let pool = global_pool();
+        for (src, decoder) in self.decoders.drain() {
+            tracing::debug!("Returning decoder for {} to pool", src);
+            pool.return_decoder(decoder, &src, HwAccelType::Auto);
         }
-        self.decoders.clear();
     }
 
     // =========================================================================

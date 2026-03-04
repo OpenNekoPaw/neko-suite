@@ -67,6 +67,10 @@
 - [ ] 导出 PDF（Fountain 标准格式）— [task-plan #12](./docs/task-plan.md)
 
 ### neko-assets（Phase 4）
+- [x] **External Media Library** Phase P0/P1（2026-03-04 完成）— [adr-external-media-library](./docs/architecture/adr-external-media-library.md)
+  - [x] P0: 路径韧性（健康检查 + 离线检测 + 重定位 UI + 状态装饰）
+  - [x] P1: 媒体库管理（settings.json + 路径变量 + TreeView + 拖拽导入）
+  - [ ] P2: 性能优化（元数据缓存 + 增量索引 + 搜索 + 代理文件 + 批量导入）
 - [ ] ShaderAssetHandler（编译验证 + 预览 + 热重载）
 - [ ] PresetAssetHandler（LUT / 转场预设 / 导出预设）
 - [ ] ModelAssetHandler（AI 模型下载 + 校验 + 量化选择）

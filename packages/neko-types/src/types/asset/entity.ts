@@ -178,6 +178,31 @@ export interface EntityMetadata {
 // Core Data Structures
 // =============================================================================
 
+// =============================================================================
+// File Status Types
+// =============================================================================
+
+/** Asset file accessibility status */
+export type AssetFileStatus =
+	| 'online' // File accessible at path
+	| 'offline' // Path not accessible (NAS disconnected, mount unavailable)
+	| 'missing' // Parent directory accessible but file not found (deleted/moved)
+	| 'remapped'; // Original path invalid, user provided new path
+
+/** Remap record for relocated files */
+export interface AssetFileRemap {
+	/** Original path that was invalid */
+	originalPath: string;
+	/** New path provided by user */
+	remappedPath: string;
+	/** Timestamp of remapping */
+	remappedAt: number;
+}
+
+// =============================================================================
+// File Types
+// =============================================================================
+
 /** File purpose in the variant */
 export type FilePurpose =
 	| 'main' // Primary display file
@@ -246,6 +271,12 @@ export interface AssetFile {
 	purpose?: FilePurpose;
 	/** Creation timestamp */
 	createdAt: number;
+	/** File accessibility status (undefined treated as 'online' for backward compat) */
+	status?: AssetFileStatus;
+	/** Last time status was checked */
+	lastCheckedAt?: number;
+	/** Remap history when path was relocated */
+	remap?: AssetFileRemap;
 }
 
 /** Asset variant - different representation of the same entity */

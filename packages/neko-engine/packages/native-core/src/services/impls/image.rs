@@ -6,7 +6,7 @@ use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType};
 use crate::domain::{CaptureOptions, FrameData};
 use crate::error::{Error, Result};
 use crate::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
-use crate::media_service::{encode_rgba_to_jpeg, probe_media_info};
+use crate::media_service::{encode_rgba_to_jpeg, global_probe_cache};
 use crate::services::impls::common::convert_media_info;
 use crate::services::IImageService;
 use neko_types::{FrameFormat, MediaInfo};
@@ -33,7 +33,7 @@ impl ImageService {
 impl IImageService for ImageService {
     async fn probe(&self, path: &Path) -> Result<MediaInfo> {
         let path = path.to_path_buf();
-        let info = tokio::task::spawn_blocking(move || probe_media_info(&path))
+        let info = tokio::task::spawn_blocking(move || global_probe_cache().probe(&path))
             .await
             .map_err(|e| Error::Other(format!("Probe task failed: {}", e)))??;
 

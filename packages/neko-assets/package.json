@@ -52,6 +52,11 @@
           "contextualTitle": "%neko.assetManager.title%"
         },
         {
+          "id": "neko.mediaLibraries",
+          "name": "Media Libraries",
+          "contextualTitle": "External Media Libraries"
+        },
+        {
           "id": "neko.assetHistory",
           "name": "%neko.assetManager.history%",
           "contextualTitle": "%neko.assetManager.historyTitle%"
@@ -121,9 +126,83 @@
         "title": "%neko.assets.importFile%",
         "category": "Neko Assets",
         "icon": "$(add)"
+      },
+      {
+        "command": "neko.assets.validateAll",
+        "title": "Validate All Assets",
+        "category": "Neko Assets",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "neko.assets.relocateFile",
+        "title": "Relocate File...",
+        "category": "Neko Assets",
+        "icon": "$(file-symlink-file)"
+      },
+      {
+        "command": "neko.assets.showHealthReport",
+        "title": "Show Asset Health Report",
+        "category": "Neko Assets",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "neko.assets.addMediaLibrary",
+        "title": "Add Media Library...",
+        "category": "Neko Assets",
+        "icon": "$(folder-add)"
+      },
+      {
+        "command": "neko.assets.removeMediaLibrary",
+        "title": "Remove Media Library",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.setLocalOverride",
+        "title": "Set Local Path Override...",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.importFromLibrary",
+        "title": "Import to Asset Library",
+        "category": "Neko Assets",
+        "icon": "$(add)"
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "neko.assets.addMediaLibrary",
+          "when": "view == neko.mediaLibraries",
+          "group": "navigation"
+        },
+        {
+          "command": "neko.assets.validateAll",
+          "when": "view == neko.assetManager",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "neko.assets.removeMediaLibrary",
+          "when": "viewItem == mediaLibrary || viewItem == mediaLibrary:offline",
+          "group": "inline"
+        },
+        {
+          "command": "neko.assets.setLocalOverride",
+          "when": "viewItem == mediaLibrary || viewItem == mediaLibrary:offline",
+          "group": "1_modify"
+        },
+        {
+          "command": "neko.assets.importFromLibrary",
+          "when": "viewItem == mediaLibrary:file",
+          "group": "inline"
+        },
+        {
+          "command": "neko.assets.relocateFile",
+          "when": "viewItem == variant:hasOffline",
+          "group": "inline"
+        }
+      ],
       "explorer/context": [
         {
           "command": "neko.assets.previewMedia",

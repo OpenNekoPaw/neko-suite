@@ -29,6 +29,9 @@ import type { IAssetClassifier } from '../classifier/IClassifier';
 import { EntityService } from './EntityService';
 import { VariantService } from './VariantService';
 import { FileService, type MetadataExtractor } from './FileService';
+import { AssetHealthService } from './AssetHealthService';
+import { PathResolver } from './PathResolver';
+import type { FileAccessChecker, FileHealthResult, HealthCheckProgress, PathVariableMap } from './types';
 
 /**
  * Thumbnail generator result
@@ -61,6 +64,10 @@ export interface AssetLibraryConfig {
 	metadataExtractor?: MetadataExtractor;
 	/** Optional thumbnail generator (injected from extension host) */
 	thumbnailGenerator?: ThumbnailGenerator;
+	/** Optional file access checker for health monitoring */
+	fileAccessChecker?: FileAccessChecker;
+	/** Optional path variable map for resolving ${VAR} paths */
+	pathVariables?: PathVariableMap;
 }
 
 /**
@@ -103,6 +110,8 @@ export class AssetLibrary {
 	private fileService: FileService;
 	private classifier?: IAssetClassifier;
 	private thumbnailGenerator?: ThumbnailGenerator;
+	private healthService?: AssetHealthService;
+	private pathResolver: PathResolver;
 
 	constructor(config: AssetLibraryConfig) {
 		this.storage = config.storage;
@@ -114,6 +123,20 @@ export class AssetLibrary {
 		this.fileService = new FileService(this.storage, {
 			metadataExtractor: config.metadataExtractor,
 		});
+
+		// Initialize health service if checker provided
+		if (config.fileAccessChecker) {
+			this.healthService = new AssetHealthService({
+				storage: this.storage,
+				fileAccessChecker: config.fileAccessChecker,
+			});
+		}
+
+		// Initialize path resolver
+		this.pathResolver = new PathResolver();
+		if (config.pathVariables) {
+			this.pathResolver.setVariables(config.pathVariables);
+		}
 	}
 
 	// =========================================================================
@@ -344,6 +367,9 @@ export class AssetLibrary {
 		filePath: string,
 		options?: ImportOptions
 	): Promise<ImportResult> {
+		// Contract path to use variables if possible
+		const storedPath = this.pathResolver.contract(filePath);
+
 		let entity: AssetEntity;
 		let variant: AssetVariant;
 		let isNewEntity = false;
@@ -406,10 +432,10 @@ export class AssetLibrary {
 			isNewVariant = true;
 		}
 
-		// Add file
+		// Add file (use contracted path for storage, absolute path for operations)
 		const file = await this.fileService.add(
 			variant.id,
-			filePath,
+			storedPath,
 			options?.fileOptions
 		);
 
@@ -449,6 +475,65 @@ export class AssetLibrary {
 			isNewVariant,
 			classification,
 		};
+	}
+
+	// =========================================================================
+	// Health Check & Path Resolution
+	// =========================================================================
+
+	/**
+	 * Validate all asset files for accessibility
+	 */
+	async validateAll(onProgress?: HealthCheckProgress): Promise<FileHealthResult[]> {
+		if (!this.healthService) return [];
+		return this.healthService.validateAll(onProgress);
+	}
+
+	/**
+	 * Relocate a file to a new path
+	 */
+	async relocateFile(
+		variantId: string,
+		fileId: string,
+		newPath: string,
+	): Promise<FileHealthResult | null> {
+		if (!this.healthService) return null;
+		return this.healthService.relocateFile(variantId, fileId, newPath);
+	}
+
+	/**
+	 * Get health summary counts
+	 */
+	async getHealthSummary(): Promise<{
+		total: number;
+		online: number;
+		offline: number;
+		missing: number;
+		remapped: number;
+	} | null> {
+		if (!this.healthService) return null;
+		return this.healthService.getSummary();
+	}
+
+	/**
+	 * Update path variables (when settings change)
+	 */
+	updatePathVariables(variables: PathVariableMap): void {
+		this.pathResolver.setVariables(variables);
+	}
+
+	/**
+	 * Resolve a stored path to absolute (expanding variables)
+	 */
+	resolvePath(storedPath: string): string {
+		return this.pathResolver.resolve(storedPath);
+	}
+
+	/**
+	 * Contract absolute path to use variables if possible
+	 */
+	contractPath(absolutePath: string): string {
+		return this.pathResolver.contract(absolutePath);
 	}
 
 	// =========================================================================

@@ -15,7 +15,7 @@
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
 | **neko-preview** | WIP | 60% | 视频/音频预览 Provider + 播放器 UI |
 | **neko-story** | WIP | 55% | Fountain 解析器 + LSP（补全/定义/悬停/符号）+ 预览 |
-| **neko-assets** | Alpha | 55% | Phase 1-3 ✅（统一注册表 + 缩略图 + Diff 接入），Phase 4-5 待开发 |
+| **neko-assets** | Alpha | 65% | Phase 1-3 ✅ + Phase 3.5 ✅（外部媒体库 P0/P1：健康检查 + 路径变量 + 媒体库 TreeView），Phase 4-5 待开发 |
 | **neko-tools** | WIP | 60% | 媒体 Diff + EngineClient + 并行优化 + 协议增强 + 资产变体对比 |
 | **neko-canvas** | WIP | 40% | 节点系统 + 连线 + 视口裁剪 + 画布操作 |
 | **neko-proto** | Early | 30% | timeline.proto 定义，生成类型在 neko-types |

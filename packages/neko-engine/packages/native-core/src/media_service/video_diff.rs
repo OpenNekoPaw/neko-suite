@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 
 use super::audio_diff::{diff_audio_content, AudioContentDiff};
 use super::ffmpeg_parser::{parse_psnr_log, parse_ssim_log};
-use super::probe::probe_media_info;
+use super::probe::global_probe_cache;
 use crate::error::{Error, Result};
 
 /// SSIM threshold below which a frame is considered "different"
@@ -171,8 +171,8 @@ pub fn diff_video_content<P: AsRef<Path>>(
     }
 
     // Step 1: Probe metadata
-    let info_a = probe_media_info(path_a)?;
-    let info_b = probe_media_info(path_b)?;
+    let info_a = global_probe_cache().probe(path_a)?;
+    let info_b = global_probe_cache().probe(path_b)?;
 
     let fps_a = if info_a.fps > 0.0 { info_a.fps } else { 30.0 };
     let fps_b = if info_b.fps > 0.0 { info_b.fps } else { 30.0 };

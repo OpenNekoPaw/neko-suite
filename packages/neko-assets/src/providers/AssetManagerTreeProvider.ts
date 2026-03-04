@@ -43,9 +43,17 @@ class EntityItem extends vscode.TreeItem {
 			entity.tags.length > 0 ? `Tags: ${entity.tags.join(', ')}` : undefined,
 		].filter(Boolean).join('\n');
 
+		// Check if any files have accessibility issues
+		const hasProblems = entity.variants.some(v =>
+			v.files.some(f => f.status === 'offline' || f.status === 'missing'),
+		);
+
 		// Use thumbnail as icon if available, otherwise fall back to theme icon
 		const defaultVariant = entity.variants.find(v => v.id === entity.defaultVariantId) ?? entity.variants[0];
-		if (defaultVariant?.thumbnailPath) {
+		if (hasProblems) {
+			this.iconPath = new vscode.ThemeIcon('warning',
+				new vscode.ThemeColor('list.warningForeground'));
+		} else if (defaultVariant?.thumbnailPath) {
 			this.iconPath = vscode.Uri.file(defaultVariant.thumbnailPath);
 		} else {
 			this.iconPath = new vscode.ThemeIcon('file-media');
@@ -70,11 +78,25 @@ class VariantItem extends vscode.TreeItem {
 		public readonly variant: AssetVariant,
 	) {
 		super(variant.name, vscode.TreeItemCollapsibleState.None);
-		this.description = variant.files.length > 0 ? `${variant.files.length} files` : 'no files';
-		this.contextValue = 'variant';
+
+		// Check for offline/missing files
+		const offlineFiles = variant.files.filter(
+			f => f.status === 'offline' || f.status === 'missing',
+		);
+
+		if (offlineFiles.length > 0) {
+			this.description = `${offlineFiles.length} offline`;
+			this.contextValue = 'variant:hasOffline';
+		} else {
+			this.description = variant.files.length > 0 ? `${variant.files.length} files` : 'no files';
+			this.contextValue = 'variant';
+		}
 
 		// Use thumbnail as icon if available
-		if (variant.thumbnailPath) {
+		if (offlineFiles.length > 0) {
+			this.iconPath = new vscode.ThemeIcon('warning',
+				new vscode.ThemeColor('list.warningForeground'));
+		} else if (variant.thumbnailPath) {
 			this.iconPath = vscode.Uri.file(variant.thumbnailPath);
 		} else {
 			this.iconPath = new vscode.ThemeIcon('versions');

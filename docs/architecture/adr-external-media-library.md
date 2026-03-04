@@ -1,7 +1,8 @@
 # ADR: External Media Library Support
 
-> Status: Proposed
+> Status: Accepted (P0/P1 Implemented)
 > Date: 2026-03-04
+> Implementation: 2026-03-04
 > Context: Whether neko-suite should support browsing/referencing files outside the project workspace without copying them in.
 
 ## 1. Background
@@ -139,20 +140,34 @@ Cache invalidation: compare `file mtime + size` before using cached data.
 
 ## 6. Implementation Priority
 
-### P0 — Path Resilience (immediate value)
+### P0 — Path Resilience (✅ Implemented 2026-03-04)
 
-- [ ] Asset accessibility check on project open
-- [ ] Friendly error UI for offline/missing assets
-- [ ] "Relocate file" action for moved assets
-- [ ] Asset status indicator in timeline and asset panel
+- [x] Asset accessibility check on project open
+- [x] Friendly error UI for offline/missing assets
+- [x] "Relocate file" action for moved assets
+- [x] Asset status indicator in timeline and asset panel
 
-### P1 — Media Library Management (short-term)
+**Implementation**:
+- `AssetFile` extended with `status`, `lastCheckedAt`, `remap` fields
+- `AssetHealthService` provides batch validation with concurrency control
+- `AssetHealthMonitor` runs initial check with progress UI, shows warning notifications
+- `AssetFileDecorationProvider` shows offline (⚡ orange) and missing (✕ red) badges
+- Commands: `validateAll`, `relocateFile`, `showHealthReport`
 
-- [ ] `.neko/settings.json` media library configuration
-- [ ] Path variable system (`${VAR}/path`) in asset references
-- [ ] `.neko/settings.local.json` per-machine overrides (gitignored)
-- [ ] External directory browsing TreeView
-- [ ] Drag-and-drop from media library to timeline
+### P1 — Media Library Management (✅ Implemented 2026-03-04)
+
+- [x] `.neko/settings.json` media library configuration
+- [x] Path variable system (`${VAR}/path`) in asset references
+- [x] `.neko/settings.local.json` per-machine overrides (gitignored)
+- [x] External directory browsing TreeView
+- [x] Drag-and-drop from media library to timeline
+
+**Implementation**:
+- `MediaLibrarySettingsService` manages settings files with file watcher (300ms debounce)
+- `PathResolver` handles `${VAR}/path` ↔ absolute path conversion
+- `MediaLibraryTreeProvider` with lazy directory loading, drag-and-drop controller
+- `AssetLibrary.importFile()` contracts paths before storage
+- Commands: `addMediaLibrary`, `removeMediaLibrary`, `setLocalOverride`, `importFromLibrary`
 
 ### P2 — Performance & Polish (mid-term)
 
@@ -164,25 +179,37 @@ Cache invalidation: compare `file mtime + size` before using cached data.
 
 ## 7. Architecture Impact
 
-### Modified Components
+### Implemented Components (P0/P1)
 
 ```
-@neko/shared
-  └── new: MediaLibraryConfig type, AssetStatus type
+@neko/shared (neko-types)
+  ├── types/asset/entity.ts — AssetFileStatus, AssetFileRemap, AssetFile fields
+  └── types/asset/settings.ts — MediaLibraryEntry, MediaLibrarySettings, ResolvedMediaLibrary
 
-neko-assets
-  ├── mod: AssetLibrary — path variable resolution
-  ├── mod: FileService — accessibility check
-  ├── new: MediaLibraryService — library config management
-  └── new: AssetHealthService — status monitoring
+@neko/asset (neko-assets/packages/asset)
+  ├── service/types.ts — FileAccessChecker, FileHealthResult, PathVariableMap
+  ├── service/PathResolver.ts — path variable resolution (resolve/contract)
+  ├── service/AssetHealthService.ts — batch validation, relocate, summary
+  ├── service/FileService.ts — add() sets status='online', lastCheckedAt
+  └── service/AssetLibrary.ts — health facade methods, path variable sync, importFile contracts paths
 
-neko-cut/extension
-  ├── mod: AssetService — use path variables
-  └── mod: AssetTreeProvider — add media library nodes
+neko-assets/src (extension layer)
+  ├── services/AssetHealthMonitor.ts — createFileAccessChecker, initial check, commands
+  ├── services/MediaLibrarySettingsService.ts — settings file management, file watcher
+  ├── providers/MediaLibraryTreeProvider.ts — TreeView with drag-and-drop
+  ├── providers/AssetManagerTreeProvider.ts — status indicators on entities/variants
+  ├── providers/AssetFileDecorationProvider.ts — offline/missing badges
+  └── extension.ts — wiring, command registration (8 new commands)
 
-neko-cut/webview
-  └── mod: Timeline — offline asset visual indicator
+package.json
+  └── views: neko.mediaLibraries, commands: validateAll, relocateFile, showHealthReport,
+      addMediaLibrary, removeMediaLibrary, setLocalOverride, importFromLibrary
 ```
+
+### Tests Added
+
+- `PathResolver.test.ts` — 19 tests (resolve, contract, round-trip, variables)
+- `AssetHealthService.test.ts` — 13 tests (validateAll, validateFile, relocate, summary)
 
 ### No Changes Required
 

@@ -77,6 +77,8 @@ export class FileService {
 			metadata,
 			purpose: options?.purpose ?? 'main',
 			createdAt: Date.now(),
+			status: 'online',
+			lastCheckedAt: Date.now(),
 		};
 
 		await this.storage.saveFile(variantId, file);

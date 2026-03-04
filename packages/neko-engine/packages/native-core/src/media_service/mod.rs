@@ -23,7 +23,7 @@ pub use audio_diff::{AudioContentDiff, AudioDiffRegion, diff_audio_content};
 pub use diff::{ContentDiff, DiffCategory, DiffResult, FieldDiff, diff_media};
 pub use image_diff::{ImageContentDiff, diff_image_content};
 pub use jpeg_encoder::encode_rgba_to_jpeg;
-pub use probe::{MediaInfo, SubtitleStream, probe_media_info};
+pub use probe::{MediaInfo, ProbeCache, SubtitleStream, global_probe_cache, probe_media_info};
 pub use subtitle::{ExtractedSubtitleTrack, SubtitleCue, extract_subtitles};
 pub use timeline_diff::{
     TimelineContentDiff, TimelineChangeType, TimelineDiffSummary,

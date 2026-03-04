@@ -8,7 +8,7 @@ use std::path::Path;
 
 use super::audio_diff::{diff_audio_content, AudioContentDiff};
 use super::image_diff::{diff_image_content, ImageContentDiff};
-use super::probe::{probe_media_info, MediaInfo};
+use super::probe::{global_probe_cache, MediaInfo};
 use super::timeline_diff::{diff_timeline_content, TimelineContentDiff};
 use super::video_diff::{diff_video_content, VideoContentDiff, VideoDiffOptions};
 use crate::error::{Error, Result};
@@ -126,7 +126,7 @@ pub fn diff_media<P: AsRef<Path>>(
         // JVI files are JSON, not media — skip FFmpeg probe
         (MediaInfo::default(), MediaInfo::default())
     } else {
-        (probe_media_info(path_a)?, probe_media_info(path_b)?)
+        (global_probe_cache().probe(path_a)?, global_probe_cache().probe(path_b)?)
     };
 
     // Build field diffs based on category
