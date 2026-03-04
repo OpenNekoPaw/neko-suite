@@ -104,6 +104,7 @@ export type {
 	ProbeResult,
 	WaveformResult,
 	StreamHandle,
+	LoudnessAnalysis,
 } from './engine/types';
 
 export { transformDiffResponse } from './engine/responseTransform';

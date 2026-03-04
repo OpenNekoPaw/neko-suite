@@ -15,4 +15,6 @@ export const audio = {
   'audio.highFreq': '高频',
   'audio.solo': '独奏',
   'audio.master': '主音量',
+  'audio.normalizeLoudness': '标准化响度',
+  'audio.normalizing': '分析中...',
 } as const satisfies MessageBundle;

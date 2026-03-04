@@ -50,7 +50,7 @@ EngineClient (Extension Host 或 Webview 均可)
 
 ### 类型导出
 
-`ActionRequest`、`ActionResponse`、`ProbeResult`、`StreamHandle`、`DiffResult` 等引擎 API 类型
+`ActionRequest`、`ActionResponse`、`ProbeResult`、`StreamHandle`、`DiffResult`、`LoudnessAnalysis` 等引擎 API 类型
 
 ### 技术栈
 

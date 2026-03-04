@@ -24,6 +24,7 @@ import type {
 	StreamHandle,
 	DiffResult,
 	Resolution,
+	LoudnessAnalysis,
 } from './engine/types';
 import { transformDiffResponse } from './engine/responseTransform';
 
@@ -288,6 +289,28 @@ export class EngineClient {
 			console.warn(`[EngineClient] controlStream(${action}) warning:`, resp.error?.message);
 		}
 		return resp;
+	}
+
+	// =========================================================================
+	// Loudness analysis
+	// =========================================================================
+
+	/**
+	 * Analyze audio loudness per ITU-R BS.1770-4.
+	 * Dispatches `audios:analyze_loudness`.
+	 * Returns integrated LUFS, true peak, loudness range, and recommended gain.
+	 */
+	async analyzeLoudness(
+		source: string,
+		targetLufs: number = -14,
+	): Promise<LoudnessAnalysis> {
+		const resp = await this.dispatch({
+			group: 'audios',
+			action: 'analyze_loudness',
+			options: { source, targetLufs },
+		});
+		this.assertOk(resp, 'audios:analyze_loudness');
+		return resp.data as LoudnessAnalysis;
 	}
 
 	// =========================================================================

@@ -351,6 +351,24 @@ export interface WaveformResult {
 	peaksPerSecond: number;
 }
 
+// =============================================================================
+// Loudness Analysis (from native-core/src/domain/loudness.rs)
+// =============================================================================
+
+/** Result of ITU-R BS.1770-4 loudness analysis */
+export interface LoudnessAnalysis {
+	/** Integrated loudness in LUFS */
+	integratedLufs: number;
+	/** True peak level in dBFS */
+	truePeakDbfs: number;
+	/** Loudness Range in LU */
+	loudnessRange: number;
+	/** Recommended gain adjustment in dB to reach targetLufs */
+	recommendedGain: number;
+	/** Target LUFS used for calculation */
+	targetLufs: number;
+}
+
 /** Stream handle with convenience WebSocket URL */
 export interface StreamHandle {
 	streamId: string;

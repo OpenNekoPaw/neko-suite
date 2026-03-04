@@ -35,7 +35,7 @@ native-core (Rust)
   ├── decoder/       → 硬件解码器、零拷贝管线
   ├── encoder/       → 硬件编码器、异步导出管线
   ├── animation/     → 关键帧、缓动、时间轴插值
-  ├── audio/         → 音频编解码、混音
+  ├── audio/         → 音频编解码、混音、响度分析（ITU-R BS.1770-4）
   ├── frame_server/  → HTTP 帧服务、媒体探测
   ├── keyframe_cache/ → IDR 扫描、智能关键帧缓存
   ├── export/        → GPU 导出管线、音视频混流
@@ -71,6 +71,7 @@ packages/
 | `tokio` | 异步运行时 |
 | `axum` | HTTP/WebSocket |
 | `napi-rs` | Node.js 绑定 |
+| `ebur128` | ITU-R BS.1770-4 响度测量 |
 
 ### 构建
 

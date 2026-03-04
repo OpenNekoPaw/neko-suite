@@ -15,4 +15,6 @@ export const audio = {
   'audio.highFreq': 'High',
   'audio.solo': 'Solo',
   'audio.master': 'Master',
+  'audio.normalizeLoudness': 'Normalize Loudness',
+  'audio.normalizing': 'Analyzing...',
 } as const satisfies MessageBundle;

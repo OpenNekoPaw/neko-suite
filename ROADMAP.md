@@ -9,8 +9,8 @@
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
 | **neko-types** | Alpha | 87% | 共享类型 + 横切关注点统一 + Operations 类型安全增强（WebviewElement） |
-| **neko-engine** | Alpha | 75% | GPU 渲染 + 编解码 + FIFO 导出队列 + 统一 HTTP/WS 通信（EngineClient） |
-| **neko-cut** | Alpha | 75% | 时间线 + 预览 + FIFO 导出队列 + 拖拽竞态修复 + EditOperation 29 操作 |
+| **neko-engine** | Alpha | 78% | GPU 渲染 + 编解码 + FIFO 导出队列 + 统一 HTTP/WS 通信（EngineClient）+ 响度标准化 |
+| **neko-cut** | Alpha | 77% | 时间线 + 预览 + FIFO 导出队列 + 拖拽竞态修复 + EditOperation 29 操作 + 响度标准化 UI |
 | **neko-agent** | Alpha | 70% | Agent 引擎 + LLM 平台 + CLI + UI |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
 | **neko-preview** | WIP | 60% | 视频/音频预览 Provider + 播放器 UI |
@@ -65,7 +65,7 @@
 - [x] 遥测（metrics / spans）
 - [x] 统一 HTTP/WS 通信（EngineClient 单端口架构，3 个消费者包迁移完成）
 - [ ] 预加载优化
-- [ ] 音量标准化
+- [x] 音量标准化（ITU-R BS.1770-4 LUFS 分析 + 非破坏性增益调整）
 
 ### neko-cut (视频剪辑器)
 

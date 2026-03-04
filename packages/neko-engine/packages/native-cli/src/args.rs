@@ -272,6 +272,8 @@ define_actions!(AudioAction {
     Seek => "seek",
     /// Set loop region for audio stream
     Loop => "loop",
+    /// Analyze audio loudness (ITU-R BS.1770-4 / EBU R128)
+    AnalyzeLoudness => "analyze_loudness",
 });
 
 define_actions!(ImageAction {

@@ -95,6 +95,12 @@ export class MediaService implements vscode.Disposable {
 				return true;
 			}
 
+			// Loudness analysis
+			if (type === 'media:analyzeLoudness') {
+				await this.handleAnalyzeLoudness(msg);
+				return true;
+			}
+
 			// Media bitrate
 			if (type === 'media:getMediaBitrate') {
 				await this.handleMediaBitrate(msg);
@@ -710,6 +716,70 @@ export class MediaService implements vscode.Disposable {
 					...(payload.bitrate !== undefined && { bitrate: payload.bitrate }),
 					...(payload.fps !== undefined && { fps: payload.fps }),
 				},
+			});
+		}
+	}
+
+	// =========================================================================
+	// Loudness Analysis
+	// =========================================================================
+
+	/**
+	 * media:analyzeLoudness → audios:analyze_loudness (per file)
+	 *
+	 * Accepts multiple sources and returns per-file analysis results.
+	 * Each file is analyzed sequentially to avoid overloading the engine.
+	 */
+	private async handleAnalyzeLoudness(
+		msg: Record<string, unknown>
+	): Promise<void> {
+		const requestId = msg.requestId as string;
+		const payload = msg.payload as {
+			sources: string[];
+			targetLufs?: number;
+		};
+
+		try {
+			const targetLufs = payload.targetLufs ?? -14;
+			const results: Array<{
+				source: string;
+				analysis?: unknown;
+				error?: string;
+			}> = [];
+
+			for (const source of payload.sources) {
+				try {
+					const absolutePath = this.resolveMediaPath(source);
+					const result = await this.dispatch({
+						group: 'audios',
+						action: 'analyze_loudness',
+						options: { source: absolutePath, targetLufs },
+					});
+					results.push({ source, analysis: result.data });
+				} catch (error) {
+					results.push({
+						source,
+						error:
+							error instanceof Error
+								? error.message
+								: 'Analysis failed',
+					});
+				}
+			}
+
+			this.sendResponse({
+				type: 'media:response:analyzeLoudness',
+				requestId,
+				payload: { results },
+			});
+		} catch (error) {
+			this.sendResponse({
+				type: 'media:response:analyzeLoudness',
+				requestId,
+				error:
+					error instanceof Error
+						? error.message
+						: 'Unknown error',
 			});
 		}
 	}

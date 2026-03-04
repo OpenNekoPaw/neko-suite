@@ -71,10 +71,10 @@ packages/neko-engine/
 │  │    gpu/       — wgpu 上下文 + 纹理合成 + 格式转换│    │
 │  │    decoder/   — 硬件解码（VideoToolbox/VAAPI）  │    │
 │  │    encoder/   — 硬件编码（H.264/VP9）          │    │
-│  │    audio/     — 音频编解码 + 混音              │    │
+│  │    audio/     — 音频编解码 + 混音 + 响度分析（ebur128）│    │
 │  │    export/    — GPU 导出管线 + 媒体合成         │    │
 │  │    animation/ — 关键帧插值 + 缓动函数          │    │
-│  │    domain/    — 领域模型（Timeline/Transform）  │    │
+│  │    domain/    — 领域模型（Timeline/Transform/Loudness）│    │
 │  │    services/  — 服务 trait（IVideo/IAudio/IExport）│   │
 │  │    frame_server/ — HTTP 帧服务 + 媒体探测      │    │
 │  │    keyframe_cache/ — IDR 帧缓存              │    │

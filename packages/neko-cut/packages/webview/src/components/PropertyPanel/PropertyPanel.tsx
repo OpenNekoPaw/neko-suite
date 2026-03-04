@@ -5,6 +5,7 @@
 
 import { memo, useCallback, useMemo, useState } from 'react';
 import { PropertyRow, type PropertyDefinition } from './PropertyRow';
+import { NormalizeLoudnessButton } from './NormalizeLoudnessButton';
 import { AIActionsButton } from './AIActionsButton';
 import { SpeedControl } from '../SpeedControl';
 import { TransitionPicker } from '../TransitionPicker';
@@ -15,6 +16,7 @@ import { useTranslation } from '../../i18n/I18nContext';
 import type { TimelineElement, AnimatableProperty, EasingType, SpeedProperties, Transition, ColorCorrection, EffectInstance, ProjectDefaults, MaskInstance } from '../../types';
 import { getKeyframeAtTime, hasKeyframes } from '../../utils/animation';
 import { createAnimatableProperty, createDefaultElementTransform } from '../../types/animation';
+import { hasMediaSource } from '../../types/capabilities';
 
 // =============================================================================
 // Property Definitions
@@ -406,6 +408,15 @@ export const PropertyPanel = memo(function PropertyPanel({
     onElementChange(element.id, { masks } as Partial<TimelineElement>);
   }, [element, onElementChange]);
 
+  // Handle loudness normalization - apply recommended gain
+  const handleApplyNormalizedGain = useCallback((gain: number) => {
+    if (!element) return;
+    const gainDef = AUDIO_PROPERTIES.find(d => d.key === 'gain');
+    if (gainDef) {
+      handlePropertyChange('audio.gain', gain, gainDef);
+    }
+  }, [element, handlePropertyChange]);
+
   // Render property rows for a group
   const renderPropertyRows = useCallback((
     properties: PropertyDefinition[],
@@ -464,6 +475,13 @@ export const PropertyPanel = memo(function PropertyPanel({
       {/* Audio Properties - always show */}
       <PropertyGroup titleKey="propertyPanel.group.audio" disabled={isDisabled} defaultExpanded={!isDisabled}>
         {renderPropertyRows(AUDIO_PROPERTIES, 'audio')}
+        {element && hasMediaSource(element) && (
+          <NormalizeLoudnessButton
+            source={element.src}
+            onApplyGain={handleApplyNormalizedGain}
+            disabled={isDisabled}
+          />
+        )}
       </PropertyGroup>
 
       {/* Speed Control - always show */}

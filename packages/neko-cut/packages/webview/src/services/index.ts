@@ -78,3 +78,11 @@ export {
   resetPreviewModeController,
   type PreviewModeControllerConfig,
 } from './PreviewModeController';
+
+// Loudness Analysis Service
+export {
+  analyzeLoudness,
+  disposeLoudnessService,
+  type LoudnessAnalysisResult,
+  type LoudnessAnalysisItem,
+} from './LoudnessService';

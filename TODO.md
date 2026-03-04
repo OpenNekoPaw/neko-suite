@@ -21,6 +21,7 @@
 - [x] **Operations 类型安全**：新增 `WebviewElement` 类型，消除测试中 `as any`，apply-keyframe 重构
 - [x] **Diff 协议增强**：`mediaDiff:fetchState` 协议 + MessageHandler 重构 + 音频/视频 Diff 查看器改进
 - [x] **文档大整理**：新增 5 个 ARCHITECTURE.md + 全部包 README 精简 + 废弃文档清理
+- [x] **音频响度标准化**：Rust `audios:analyze_loudness`（ebur128 crate, ITU-R BS.1770-4）+ EngineClient 便捷方法 + neko-cut PropertyPanel "Normalize Loudness" 按钮（非破坏性增益调整）
 
 </details>
 
@@ -30,7 +31,6 @@
 
 ### neko-engine
 - [ ] 预加载优化：首帧解码延迟过高（>200ms）
-- [ ] 音量标准化 API：`audios:normalize` 路由缺失
 
 ---
 
@@ -96,7 +96,7 @@
 - [ ] Diff 后端增强（Phase 3）— [diff.md §Phase 3](./docs/diff.md)
   - [ ] 音频静音检测（协议已定义，未实现）
   - [ ] 视频关键帧智能采样（长视频优化）
-  - [ ] 音频频谱分析 / 响度归一化 BS.1770
+  - [x] 音频频谱分析 / 响度归一化 BS.1770（已实现为 `audios:analyze_loudness`）
   - [ ] 视频场景切割检测
 
 ### neko-canvas
