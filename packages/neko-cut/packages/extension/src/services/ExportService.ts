@@ -176,7 +176,8 @@ export class ExportService implements vscode.Disposable {
 			body: exportJobConfig,
 		});
 
-		const actualJobId = (response.data?.jobId as string) ?? jobId;
+		const responseData = response.data as Record<string, unknown> | undefined;
+		const actualJobId = (responseData?.jobId as string) ?? jobId;
 
 		this._activeJobs.set(actualJobId, { config, startedAt: Date.now() });
 
@@ -268,7 +269,7 @@ export class ExportService implements vscode.Disposable {
 				action: 'export_progress',
 				id,
 			});
-			return this.parseProgress(response.data);
+			return this.parseProgress(response.data as Record<string, unknown> | undefined);
 		} catch {
 			return null;
 		}
@@ -326,7 +327,7 @@ export class ExportService implements vscode.Disposable {
 				id: jobId,
 			});
 
-			const progress = this.parseProgress(response.data);
+			const progress = this.parseProgress(response.data as Record<string, unknown> | undefined);
 			if (!progress) return;
 
 			this._onDidProgress.fire(progress);
@@ -384,7 +385,7 @@ export class ExportService implements vscode.Disposable {
 		config: ExportConfig,
 		duration: number
 	): Record<string, unknown> {
-		const qualityPreset = QUALITY_PRESETS[config.quality] ?? QUALITY_PRESETS.medium;
+		const qualityPreset = QUALITY_PRESETS[config.quality] ?? { preset: 'medium', baseBitrate: 6_000_000 };
 
 		// Scale bitrate by resolution relative to 1080p
 		const pixelRatio = (config.width * config.height) / (1920 * 1080);
@@ -427,7 +428,7 @@ export class ExportService implements vscode.Disposable {
 			id: track.id,
 			name: track.name ?? '',
 			type: track.type,
-			elements: track.elements.map(el => this.convertElement(el)),
+			elements: track.elements.map(el => this.convertElement(el as unknown as Record<string, unknown>)),
 			muted: track.muted ?? false,
 			locked: track.locked ?? false,
 			hidden: track.hidden ?? false,
