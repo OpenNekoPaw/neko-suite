@@ -496,14 +496,11 @@ export const createElementOpsSlice: StateCreator<
       }
     };
 
-    // Fire-and-forget async operations
-    detectAndCreateAudio().catch(err => {
-      logger.error('Audio detection error:', err);
-    });
-
-    detectAndCreateSubtitles().catch(err => {
-      logger.error('Subtitle detection error:', err);
-    });
+    // Await sequentially: the video element is already in the timeline (dispatched
+    // above). Awaiting here lets addMediaElementWithAudio's caller (processDropItems)
+    // sequence multiple video drops without interleaved audio-track creation races.
+    await detectAndCreateAudio();
+    await detectAndCreateSubtitles();
 
     return { videoElementId };
   },

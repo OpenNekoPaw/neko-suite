@@ -167,6 +167,12 @@ export function Timeline() {
     addMediaElementWithAudio,
     addElement,
     addTrack,
+    // Read live store state instead of the stale React-closure snapshot.
+    // Required to prevent duplicate track creation across multi-file drops.
+    getCurrentTracks: useCallback(
+      () => useEditorStore.getState().project?.tracks ?? [],
+      []
+    ),
     onError: (message) => showToast(message, 'error'),
   });
 

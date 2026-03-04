@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { applyOperation } from '../apply';
 import type { WebviewElement } from '../webview-types';
+import type { RectangleShape } from '../../types/shape';
 import {
   createTestProject,
   createTestTrack,
@@ -126,8 +127,9 @@ describe('apply-shape', () => {
       });
 
       const shapes = getShapes(result);
-      expect(shapes[0]!.shape.centerX).toBe(75);
-      expect(shapes[0]!.shape.centerY).toBe(75);
+      const rect = shapes[0]!.shape as RectangleShape;
+      expect(rect.centerX).toBe(75);
+      expect(rect.centerY).toBe(75);
     });
   });
 
@@ -140,9 +142,9 @@ describe('apply-shape', () => {
         meta: createMeta(),
         payload: {
           trackId: 't1', elementId: 'e1', shapeId: 's1',
-          style: { fill: { color: '#ff0000' } },
+          style: { fill: { type: 'solid' as const, color: '#ff0000', opacity: 1 } },
         },
-        before: { style: { fill: { color: '#4a90d9' } } },
+        before: { style: { fill: { type: 'solid' as const, color: '#4a90d9', opacity: 1 } } },
       });
 
       const shapes = getShapes(result);

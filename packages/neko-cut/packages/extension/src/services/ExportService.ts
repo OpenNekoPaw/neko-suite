@@ -1,16 +1,18 @@
 /**
- * ExportService - Unified video export service
+ * ExportService - Unified video export service with FIFO queue support
  *
  * Responsibilities:
  * - Dispatches export requests to NativeEngine via EngineClient
- * - Polls export progress and emits events
- * - Manages export lifecycle (start, poll, cancel)
+ * - Polls export progress for all active jobs and emits events
+ * - Manages export lifecycle (enqueue, poll, cancel)
  * - Independent of Webview — supports VSCode commands and tool handlers
  *
  * Action protocol:
- * - timelines:export          — start export
+ * - timelines:export          — start export (immediate, backward compat)
+ * - timelines:export_enqueue  — enqueue export (FIFO, new)
  * - timelines:export_progress — poll progress
  * - timelines:export_cancel   — cancel export
+ * - timelines:export_queue    — list queue entries
  */
 
 import * as vscode from 'vscode';
@@ -38,6 +40,12 @@ export interface ExportConfig {
 	videoCodec?: string;
 	/** Explicit audio codec — if omitted, default for format is used */
 	audioCodec?: string;
+}
+
+/** Per-job info tracked by the service */
+interface ExportJobInfo {
+	config: ExportConfig;
+	startedAt: number;
 }
 
 /** Progress reported by Rust export pipeline */
@@ -71,13 +79,21 @@ export interface ExportResult {
 	elapsedMs?: number;
 }
 
+/** Queue status sent to Webview */
+export interface ExportQueueStatus {
+	/** Jobs currently running */
+	active: number;
+	/** Jobs waiting in queue */
+	pending: number;
+}
+
 // =============================================================================
 // Constants
 // =============================================================================
 
 const PROGRESS_POLL_INTERVAL_MS = 200;
 
-/** Terminal states that stop polling */
+/** Terminal states that stop polling a specific job */
 const TERMINAL_STATES = new Set(['completed', 'cancelled', 'error']);
 
 /** Default video codec per container format (serde: rename_all = "lowercase") */
@@ -108,7 +124,8 @@ const QUALITY_PRESETS: Record<string, { preset: string; baseBitrate: number }> =
 // =============================================================================
 
 export class ExportService implements vscode.Disposable {
-	private _currentJobId: string | null = null;
+	/** Active jobs being polled (jobId → info) */
+	private _activeJobs = new Map<string, ExportJobInfo>();
 	private _pollingTimer: ReturnType<typeof setInterval> | null = null;
 	private _disposed = false;
 
@@ -117,6 +134,7 @@ export class ExportService implements vscode.Disposable {
 	private readonly _onDidComplete = new vscode.EventEmitter<ExportResult>();
 	private readonly _onDidError = new vscode.EventEmitter<string>();
 	private readonly _onDidCancel = new vscode.EventEmitter<void>();
+	private readonly _onDidQueueChange = new vscode.EventEmitter<ExportQueueStatus>();
 
 	/** Fired when export progress is updated */
 	readonly onDidProgress = this._onDidProgress.event;
@@ -126,6 +144,8 @@ export class ExportService implements vscode.Disposable {
 	readonly onDidError = this._onDidError.event;
 	/** Fired when export is cancelled */
 	readonly onDidCancel = this._onDidCancel.event;
+	/** Fired when the queue state changes (job added, started, or finished) */
+	readonly onDidQueueChange = this._onDidQueueChange.event;
 
 	constructor(
 		private readonly client: EngineClient,
@@ -137,51 +157,57 @@ export class ExportService implements vscode.Disposable {
 	// =========================================================================
 
 	/**
-	 * Start an export job
+	 * Enqueue an export job.
+	 * If no job is currently running on the Rust side, it starts immediately.
+	 * Otherwise it is placed in the FIFO queue and starts when ready.
+	 *
 	 * @returns The job ID for tracking
 	 */
-	async startExport(project: ProjectData, config: ExportConfig): Promise<string> {
-		if (this._currentJobId) {
-			throw new Error('An export is already in progress');
-		}
-
+	async enqueueExport(project: ProjectData, config: ExportConfig): Promise<string> {
 		const jobId = `export-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
-		// Compute duration from project tracks
 		const duration = this.computeProjectDuration(project);
-
-		// Build the ExportJobConfig for Rust
 		const exportJobConfig = this.buildExportJobConfig(jobId, project, config, duration);
 
-		// Dispatch timelines:export
+		// Dispatch timelines:export_enqueue
 		const response = await this.dispatch({
 			group: 'timelines',
-			action: 'export',
+			action: 'export_enqueue',
 			body: exportJobConfig,
 		});
 
-		const data = response.data;
-		const actualJobId = (data?.jobId as string) ?? jobId;
-		const totalFrames = (data?.totalFrames as number) ?? Math.ceil(duration * config.fps);
+		const actualJobId = (response.data?.jobId as string) ?? jobId;
 
-		this._currentJobId = actualJobId;
+		this._activeJobs.set(actualJobId, { config, startedAt: Date.now() });
 
-		logger.info(`Export started: jobId=${actualJobId}, totalFrames=${totalFrames}`);
+		logger.info(`Export enqueued: jobId=${actualJobId}`);
 
-		// Start progress polling
-		this.startPolling();
+		this._onDidQueueChange.fire(this.buildQueueStatus());
+
+		// Ensure polling is running
+		if (!this._pollingTimer) {
+			this.startPolling();
+		}
 
 		return actualJobId;
 	}
 
 	/**
-	 * Cancel the current export job
+	 * Start an export job immediately (backward-compatible entry point).
+	 * Internally delegates to `enqueueExport`.
+	 *
+	 * @returns The job ID for tracking
+	 */
+	async startExport(project: ProjectData, config: ExportConfig): Promise<string> {
+		return this.enqueueExport(project, config);
+	}
+
+	/**
+	 * Cancel the most-recently enqueued export job (or the first running one).
 	 */
 	async cancelExport(): Promise<void> {
-		if (!this._currentJobId) return;
-
-		const jobId = this._currentJobId;
-		this.stopPolling();
+		const jobId = [...this._activeJobs.keys()].at(-1);
+		if (!jobId) return;
 
 		try {
 			await this.dispatch({
@@ -194,21 +220,53 @@ export class ExportService implements vscode.Disposable {
 			logger.warn('Failed to cancel export:', error);
 		}
 
-		this._currentJobId = null;
+		this._activeJobs.delete(jobId);
 		this._onDidCancel.fire();
+		this._onDidQueueChange.fire(this.buildQueueStatus());
+
+		if (this._activeJobs.size === 0) {
+			this.stopPolling();
+		}
 	}
 
 	/**
-	 * Get current export progress (one-shot query)
+	 * Cancel a specific export job by ID.
 	 */
-	async getProgress(): Promise<ExportProgress | null> {
-		if (!this._currentJobId) return null;
+	async cancelJob(jobId: string): Promise<void> {
+		if (!this._activeJobs.has(jobId)) return;
+
+		try {
+			await this.dispatch({
+				group: 'timelines',
+				action: 'export_cancel',
+				id: jobId,
+			});
+			logger.info(`Export job cancelled: jobId=${jobId}`);
+		} catch (error) {
+			logger.warn('Failed to cancel export job:', error);
+		}
+
+		this._activeJobs.delete(jobId);
+		this._onDidCancel.fire();
+		this._onDidQueueChange.fire(this.buildQueueStatus());
+
+		if (this._activeJobs.size === 0) {
+			this.stopPolling();
+		}
+	}
+
+	/**
+	 * Get current export progress for a specific job (one-shot query)
+	 */
+	async getProgress(jobId?: string): Promise<ExportProgress | null> {
+		const id = jobId ?? [...this._activeJobs.keys()].at(-1);
+		if (!id) return null;
 
 		try {
 			const response = await this.dispatch({
 				group: 'timelines',
 				action: 'export_progress',
-				id: this._currentJobId,
+				id,
 			});
 			return this.parseProgress(response.data);
 		} catch {
@@ -217,17 +275,24 @@ export class ExportService implements vscode.Disposable {
 	}
 
 	/**
-	 * Whether an export is currently in progress
+	 * Whether any export job is currently active
 	 */
 	isExporting(): boolean {
-		return this._currentJobId !== null;
+		return this._activeJobs.size > 0;
 	}
 
 	/**
-	 * Get the current job ID (if any)
+	 * Get the most recently added job ID (if any)
 	 */
 	getCurrentJobId(): string | null {
-		return this._currentJobId;
+		return [...this._activeJobs.keys()].at(-1) ?? null;
+	}
+
+	/**
+	 * Get the current queue status summary
+	 */
+	getQueueStatus(): ExportQueueStatus {
+		return this.buildQueueStatus();
 	}
 
 	// =========================================================================
@@ -238,48 +303,61 @@ export class ExportService implements vscode.Disposable {
 		this.stopPolling();
 
 		this._pollingTimer = setInterval(async () => {
-			if (!this._currentJobId || this._disposed) {
+			if (this._disposed) {
+				this.stopPolling();
+				return;
+			}
+			if (this._activeJobs.size === 0) {
 				this.stopPolling();
 				return;
 			}
 
-			try {
-				const response = await this.dispatch({
-					group: 'timelines',
-					action: 'export_progress',
-					id: this._currentJobId,
-				});
-
-				const progress = this.parseProgress(response.data);
-				if (!progress) return;
-
-				this._onDidProgress.fire(progress);
-
-				// Check for terminal states
-				if (TERMINAL_STATES.has(progress.state)) {
-					this.stopPolling();
-					const jobId = this._currentJobId;
-					this._currentJobId = null;
-
-					if (progress.state === 'completed') {
-						this._onDidComplete.fire({
-							success: true,
-							outputPath: undefined, // Rust doesn't echo it back in progress
-							totalFrames: progress.totalFrames,
-							elapsedMs: progress.elapsedMs,
-						});
-					} else if (progress.state === 'cancelled') {
-						this._onDidCancel.fire();
-					} else if (progress.state === 'error') {
-						this._onDidError.fire(progress.error ?? 'Export failed');
-					}
-
-					logger.info(`Export ${progress.state}: jobId=${jobId}`);
-				}
-			} catch (error) {
-				logger.warn('Progress poll error:', error);
-			}
+			// Poll all active jobs in parallel
+			const jobIds = [...this._activeJobs.keys()];
+			await Promise.allSettled(jobIds.map(jobId => this.pollJob(jobId)));
 		}, PROGRESS_POLL_INTERVAL_MS);
+	}
+
+	private async pollJob(jobId: string): Promise<void> {
+		try {
+			const response = await this.dispatch({
+				group: 'timelines',
+				action: 'export_progress',
+				id: jobId,
+			});
+
+			const progress = this.parseProgress(response.data);
+			if (!progress) return;
+
+			this._onDidProgress.fire(progress);
+
+			// Handle terminal state
+			if (TERMINAL_STATES.has(progress.state)) {
+				this._activeJobs.delete(jobId);
+				this._onDidQueueChange.fire(this.buildQueueStatus());
+
+				if (progress.state === 'completed') {
+					this._onDidComplete.fire({
+						success: true,
+						outputPath: undefined,
+						totalFrames: progress.totalFrames,
+						elapsedMs: progress.elapsedMs,
+					});
+				} else if (progress.state === 'cancelled') {
+					this._onDidCancel.fire();
+				} else if (progress.state === 'error') {
+					this._onDidError.fire(progress.error ?? 'Export failed');
+				}
+
+				logger.info(`Export ${progress.state}: jobId=${jobId}`);
+
+				if (this._activeJobs.size === 0) {
+					this.stopPolling();
+				}
+			}
+		} catch (error) {
+			logger.warn(`Progress poll error for jobId=${jobId}:`, error);
+		}
 	}
 
 	private stopPolling(): void {
@@ -289,12 +367,16 @@ export class ExportService implements vscode.Disposable {
 		}
 	}
 
+	private buildQueueStatus(): ExportQueueStatus {
+		return { active: this._activeJobs.size, pending: 0 };
+	}
+
 	// =========================================================================
 	// Config Building
 	// =========================================================================
 
 	/**
-	 * Build ExportJobConfig for Rust timelines:export action
+	 * Build ExportJobConfig for Rust timelines:export_enqueue action
 	 */
 	private buildExportJobConfig(
 		jobId: string,
@@ -618,14 +700,20 @@ export class ExportService implements vscode.Disposable {
 
 		this.stopPolling();
 
-		// Fire-and-forget cancel if export is running
-		if (this._currentJobId) {
-			this.cancelExport().catch(() => {});
+		// Fire-and-forget cancel for all active jobs
+		for (const jobId of this._activeJobs.keys()) {
+			this.dispatch({
+				group: 'timelines',
+				action: 'export_cancel',
+				id: jobId,
+			}).catch(() => {});
 		}
+		this._activeJobs.clear();
 
 		this._onDidProgress.dispose();
 		this._onDidComplete.dispose();
 		this._onDidError.dispose();
 		this._onDidCancel.dispose();
+		this._onDidQueueChange.dispose();
 	}
 }

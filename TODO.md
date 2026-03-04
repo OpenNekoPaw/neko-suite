@@ -16,6 +16,7 @@
 - [x] Media Diff Phase 1-2.6 — [diff.md §已完成](./docs/diff.md)
 - [x] task-plan P0 #1-2, P1 #3-6 — [task-plan](./docs/task-plan.md)
 - [x] **Bug #1 修复：Git fetch 期间播放失败** — `mediaDiff:fetchState` 协议 + 双重保护（Extension await + Webview 禁用 Play）— [diff.md §Bug #1](./docs/diff.md)
+- [x] **拖拽导入竞态修复**：三处竟态全部消除 — drop 串行化队列（`dropQueueRef`）+ `getCurrentTracks()` 实时状态 + `addMediaElementWithAudio` await 音频/字幕检测
 
 </details>
 
@@ -26,9 +27,6 @@
 ### neko-engine
 - [ ] 预加载优化：首帧解码延迟过高（>200ms）
 - [ ] 音量标准化 API：`audios:normalize` 路由缺失
-
-### neko-cut
-- [ ] 拖拽导入优化：外部文件拖入时间线有竞态问题
 
 ---
 

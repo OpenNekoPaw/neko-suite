@@ -343,6 +343,49 @@ impl Controller for TimelineController {
                     serde_json::json!({ "cancelled": cancelled }),
                 ))
             }
+            "export_enqueue" => {
+                let export_service = self.export_service.as_ref().ok_or_else(|| {
+                    ApiError::ServiceError(
+                        "Export service not available (GPU required)".to_string(),
+                    )
+                })?;
+
+                let config_value = body
+                    .or_else(|| {
+                        if options.is_object() && !options.is_null() {
+                            Some(options.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or_else(|| {
+                        ApiError::InvalidRequest(
+                            "timelines:export_enqueue requires ExportJobConfig in body or options"
+                                .to_string(),
+                        )
+                    })?;
+
+                let config: neko_native_core::export::ExportJobConfig =
+                    serde_json::from_value(config_value).map_err(|e| {
+                        ApiError::InvalidRequest(format!("Invalid ExportJobConfig: {}", e))
+                    })?;
+
+                let job_id = export_service.enqueue(config).await.map_err(|e| {
+                    ApiError::ServiceError(format!("Failed to enqueue export: {}", e))
+                })?;
+
+                Ok(ActionResponse::ok("", serde_json::json!({ "jobId": job_id })))
+            }
+            "export_queue" => {
+                let export_service = self.export_service.as_ref().ok_or_else(|| {
+                    ApiError::ServiceError(
+                        "Export service not available (GPU required)".to_string(),
+                    )
+                })?;
+
+                let entries = export_service.list_queue().await;
+                Ok(ActionResponse::ok("", serde_json::to_value(entries)?))
+            }
             "diff" => {
                 let opts: TimelineDiffRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();

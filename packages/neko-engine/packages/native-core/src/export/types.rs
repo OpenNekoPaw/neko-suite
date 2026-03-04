@@ -228,6 +228,38 @@ pub enum ExportState {
 }
 
 // =============================================================================
+// Queue Types
+// =============================================================================
+
+/// Status of a job in the export queue
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum QueueStatus {
+    /// Waiting to start
+    Pending,
+    /// Currently running
+    Running,
+    /// Finished successfully
+    Completed,
+    /// Failed with error
+    Failed,
+    /// Cancelled by user
+    Cancelled,
+}
+
+/// Entry in the export queue (pending or active)
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueEntry {
+    /// Job ID
+    pub job_id: String,
+    /// Queue status
+    pub status: QueueStatus,
+    /// Unix millisecond timestamp when the entry was created
+    pub created_at: u64,
+}
+
+// =============================================================================
 // API Response Types
 // =============================================================================
 

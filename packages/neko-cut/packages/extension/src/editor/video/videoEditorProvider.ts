@@ -457,6 +457,10 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 				this.broadcastExportStatus();
 			}));
 
+			disposables.push(exportService.onDidQueueChange(status => {
+				postToWebview({ type: 'export:queueStatus', active: status.active, pending: status.pending });
+			}));
+
 			// Store disposables for cleanup
 			this.context.subscriptions.push(...disposables);
 		}

@@ -355,7 +355,7 @@ describe('roundtrip', () => {
 
     it('keyframe.remove roundtrip', () => {
       const project = createKeyframeProject();
-      const kf = { time: 0, value: 0.5, easing: 'linear' };
+      const kf = { time: 0, value: 0.5, easing: 'linear' as const };
       const op: EditOperation = {
         type: 'keyframe.remove',
         meta,

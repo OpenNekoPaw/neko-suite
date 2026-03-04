@@ -3,12 +3,12 @@
 //! Coordinates GpuExportPipeline, AudioMixer, and AsyncExportPipeline
 //! to perform server-side video export with audio mixing.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, Mutex, RwLock};
 
 use crate::audio::{AudioEncoder, AudioEncoderConfig, FfmpegAudioEncoder, SampleFormat};
 use crate::encoder::{AsyncExportPipeline, CompositedFrame, ContainerFormat, EncodedPacket, PipelineConfig};
@@ -21,6 +21,7 @@ use super::audio_mixer::AudioMixer;
 use super::gpu_export_pipeline::GpuExportPipeline;
 use super::types::{
     ExportJobConfig, ExportMetadata, ExportProgress, ExportStartResponse, ExportState, ExportStats,
+    QueueEntry, QueueStatus,
 };
 
 /// Active export job
@@ -137,6 +138,8 @@ pub struct ExportService {
     gpu_ctx: Arc<GpuContext>,
     /// Active export jobs
     jobs: Arc<RwLock<HashMap<String, ExportJob>>>,
+    /// Pending job queue (FIFO order)
+    pending: Arc<Mutex<VecDeque<(ExportJobConfig, u64)>>>,
     /// Progress broadcast channel
     progress_tx: broadcast::Sender<ExportProgress>,
 }
@@ -153,6 +156,7 @@ impl ExportService {
         Ok(Self {
             gpu_ctx,
             jobs: Arc::new(RwLock::new(HashMap::new())),
+            pending: Arc::new(Mutex::new(VecDeque::new())),
             progress_tx,
         })
     }
@@ -164,8 +168,172 @@ impl ExportService {
         Self {
             gpu_ctx,
             jobs: Arc::new(RwLock::new(HashMap::new())),
+            pending: Arc::new(Mutex::new(VecDeque::new())),
             progress_tx,
         }
+    }
+
+    /// Enqueue an export job — returns the job_id immediately.
+    ///
+    /// If no job is currently running, the job starts immediately.
+    /// Otherwise it waits until the running job finishes.
+    pub async fn enqueue_export(&self, config: ExportJobConfig) -> Result<String> {
+        let job_id = config.job_id.clone();
+        let created_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        {
+            let mut pending = self.pending.lock().await;
+            pending.push_back((config, created_at));
+        }
+
+        self.try_process_next().await;
+
+        Ok(job_id)
+    }
+
+    /// List all queued (pending) and active jobs.
+    pub async fn list_queue(&self) -> Vec<QueueEntry> {
+        let mut entries = Vec::new();
+
+        // Active jobs
+        {
+            let jobs = self.jobs.read().await;
+            for (job_id, job) in jobs.iter() {
+                let status = match job.state {
+                    ExportState::Pending | ExportState::Initializing | ExportState::Decoding
+                    | ExportState::Compositing | ExportState::Encoding | ExportState::Muxing
+                    | ExportState::Finalizing => QueueStatus::Running,
+                    ExportState::Completed => QueueStatus::Completed,
+                    ExportState::Cancelled => QueueStatus::Cancelled,
+                    ExportState::Error => QueueStatus::Failed,
+                };
+                entries.push(QueueEntry {
+                    job_id: job_id.clone(),
+                    status,
+                    created_at: job.start_time.elapsed().as_millis() as u64,
+                });
+            }
+        }
+
+        // Pending jobs (in order)
+        {
+            let pending = self.pending.lock().await;
+            for (config, created_at) in pending.iter() {
+                entries.push(QueueEntry {
+                    job_id: config.job_id.clone(),
+                    status: QueueStatus::Pending,
+                    created_at: *created_at,
+                });
+            }
+        }
+
+        entries
+    }
+
+    /// Internal: start the next pending job if no job is currently running.
+    async fn try_process_next(&self) {
+        Self::process_next_from_queue(
+            Arc::clone(&self.jobs),
+            Arc::clone(&self.pending),
+            Arc::clone(&self.gpu_ctx),
+            self.progress_tx.clone(),
+        )
+        .await;
+    }
+
+    /// Static helper: dequeue and start the next pending job when the queue is idle.
+    ///
+    /// Called from `try_process_next` (via `enqueue_export`) and from the blocking
+    /// thread completion callback (so the chain continues automatically).
+    async fn process_next_from_queue(
+        jobs: Arc<RwLock<HashMap<String, ExportJob>>>,
+        pending: Arc<Mutex<VecDeque<(ExportJobConfig, u64)>>>,
+        gpu_ctx: Arc<GpuContext>,
+        progress_tx: broadcast::Sender<ExportProgress>,
+    ) {
+        // Check if any job is still running (non-terminal state)
+        {
+            let jobs_guard = jobs.read().await;
+            let has_active = jobs_guard.values().any(|j| {
+                !matches!(
+                    j.state,
+                    ExportState::Completed | ExportState::Cancelled | ExportState::Error
+                )
+            });
+            if has_active {
+                return;
+            }
+        }
+
+        // Dequeue next pending job
+        let next = {
+            let mut pending_guard = pending.lock().await;
+            pending_guard.pop_front()
+        };
+
+        let Some((config, _created_at)) = next else {
+            return;
+        };
+
+        let job_id = config.job_id.clone();
+        let total_frames = config.timeline.total_frames();
+        let job = ExportJob::new(config.clone(), total_frames);
+        let cancel_flag = Arc::clone(&job.cancel_flag);
+
+        {
+            let mut jobs_guard = jobs.write().await;
+            if jobs_guard.contains_key(&job_id) {
+                tracing::warn!("Queue: job {} already exists, skipping", job_id);
+                return;
+            }
+            jobs_guard.insert(job_id.clone(), job);
+        }
+
+        let jobs_c = Arc::clone(&jobs);
+        let pending_c = Arc::clone(&pending);
+        let gpu_ctx_c = Arc::clone(&gpu_ctx);
+        let progress_tx_c = progress_tx.clone();
+        let job_id_c = job_id.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let result = Self::export_worker_sync(
+                config,
+                Arc::clone(&gpu_ctx_c),
+                jobs_c.clone(),
+                progress_tx_c.clone(),
+                cancel_flag,
+            );
+
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async {
+                {
+                    let mut jobs_guard = jobs_c.write().await;
+                    if let Some(job) = jobs_guard.get_mut(&job_id_c) {
+                        match &result {
+                            Ok(()) => {
+                                job.state = ExportState::Completed;
+                                tracing::info!("Queued export job {} completed", job_id_c);
+                            }
+                            Err(Error::Cancelled) => {
+                                job.state = ExportState::Cancelled;
+                                tracing::info!("Queued export job {} cancelled", job_id_c);
+                            }
+                            Err(e) => {
+                                job.state = ExportState::Error;
+                                tracing::error!("Queued export job {} failed: {}", job_id_c, e);
+                            }
+                        }
+                    }
+                }
+                // Continue processing the queue
+                Self::process_next_from_queue(jobs_c, pending_c, gpu_ctx_c, progress_tx_c).await;
+            });
+
+            result
+        });
     }
 
     /// Start an export job
@@ -187,40 +355,46 @@ impl ExportService {
         }
 
         // Spawn export worker in blocking thread
-        let gpu_ctx = Arc::clone(&self.gpu_ctx);
-        let jobs = Arc::clone(&self.jobs);
-        let progress_tx = self.progress_tx.clone();
+        let gpu_ctx_c = Arc::clone(&self.gpu_ctx);
+        let jobs_c = Arc::clone(&self.jobs);
+        let pending_c = Arc::clone(&self.pending);
+        let progress_tx_c = self.progress_tx.clone();
         let job_id_clone = job_id.clone();
 
         tokio::task::spawn_blocking(move || {
             let result = Self::export_worker_sync(
                 config,
-                gpu_ctx,
-                jobs.clone(),
-                progress_tx,
+                gpu_ctx_c.clone(),
+                jobs_c.clone(),
+                progress_tx_c.clone(),
                 cancel_flag,
             );
 
             // Update job state on completion (need to use block_on for async)
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
-                let mut jobs_guard = jobs.write().await;
-                if let Some(job) = jobs_guard.get_mut(&job_id_clone) {
-                    match &result {
-                        Ok(()) => {
-                            job.state = ExportState::Completed;
-                            tracing::info!("Export job {} completed", job_id_clone);
-                        }
-                        Err(Error::Cancelled) => {
-                            job.state = ExportState::Cancelled;
-                            tracing::info!("Export job {} cancelled", job_id_clone);
-                        }
-                        Err(e) => {
-                            job.state = ExportState::Error;
-                            tracing::error!("Export job {} failed: {}", job_id_clone, e);
+                {
+                    let mut jobs_guard = jobs_c.write().await;
+                    if let Some(job) = jobs_guard.get_mut(&job_id_clone) {
+                        match &result {
+                            Ok(()) => {
+                                job.state = ExportState::Completed;
+                                tracing::info!("Export job {} completed", job_id_clone);
+                            }
+                            Err(Error::Cancelled) => {
+                                job.state = ExportState::Cancelled;
+                                tracing::info!("Export job {} cancelled", job_id_clone);
+                            }
+                            Err(e) => {
+                                job.state = ExportState::Error;
+                                tracing::error!("Export job {} failed: {}", job_id_clone, e);
+                            }
                         }
                     }
                 }
+
+                // Process next queued job if any
+                Self::process_next_from_queue(jobs_c, pending_c, gpu_ctx_c, progress_tx_c).await;
             });
 
             result

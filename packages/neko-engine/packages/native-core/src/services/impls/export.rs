@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::error::Result;
 use crate::export::{
-    ExportJobConfig, ExportProgress, ExportStartResponse,
+    ExportJobConfig, ExportProgress, ExportStartResponse, QueueEntry,
 };
 use crate::gpu::GpuContext;
 use crate::services::IExportService;
@@ -38,12 +38,20 @@ impl IExportService for ExportService {
         self.inner.start_export(config).await
     }
 
+    async fn enqueue(&self, config: ExportJobConfig) -> Result<String> {
+        self.inner.enqueue_export(config).await
+    }
+
     async fn progress(&self, job_id: &str) -> Option<ExportProgress> {
         self.inner.get_progress(job_id).await
     }
 
     async fn cancel(&self, job_id: &str) -> Result<bool> {
         Ok(self.inner.cancel_export(job_id).await)
+    }
+
+    async fn list_queue(&self) -> Vec<QueueEntry> {
+        self.inner.list_queue().await
     }
 }
 

@@ -4,7 +4,27 @@
 
 import { describe, it, expect } from 'vitest';
 import { invertOperation } from '../invert';
-import type { EditOperation } from '../types';
+import type {
+  EditOperation,
+  TrackAddOperation,
+  TrackRemoveOperation,
+  TrackUpdateOperation,
+  TrackReorderOperation,
+  TrackToggleOperation,
+  ElementAddOperation,
+  ElementRemoveOperation,
+  ElementMoveOperation,
+  ElementUnlinkAudioOperation,
+  ElementLinkAudioOperation,
+  ElementUpdateOperation,
+  ShapeRemoveOperation,
+  ShapeAddOperation,
+  ShapeReorderOperation,
+  KeyframeRemoveOperation,
+  KeyframeAddOperation,
+  BatchOperation,
+  ProjectUpdateOperation,
+} from '../types';
 import {
   createTestTrack,
   createTestMediaElement,
@@ -25,9 +45,9 @@ describe('invertOperation', () => {
         payload: { track },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as TrackRemoveOperation;
       expect(inv.type).toBe('track.remove');
-      expect((inv as any).payload.trackId).toBe('t1');
+      expect(inv.payload.trackId).toBe('t1');
     });
 
     it('track.remove → track.add', () => {
@@ -39,10 +59,10 @@ describe('invertOperation', () => {
         before: { track, index: 2 },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as TrackAddOperation;
       expect(inv.type).toBe('track.add');
-      expect((inv as any).payload.track.id).toBe('t1');
-      expect((inv as any).payload.index).toBe(2);
+      expect(inv.payload.track.id).toBe('t1');
+      expect(inv.payload.index).toBe(2);
     });
 
     it('track.update → track.update with swapped before/payload', () => {
@@ -53,10 +73,10 @@ describe('invertOperation', () => {
         before: { updates: { name: 'Old' } },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as TrackUpdateOperation;
       expect(inv.type).toBe('track.update');
-      expect((inv as any).payload.updates.name).toBe('Old');
-      expect((inv as any).before.updates.name).toBe('New');
+      expect(inv.payload.updates.name).toBe('Old');
+      expect(inv.before.updates.name).toBe('New');
     });
 
     it('track.reorder → track.reorder with swapped indices', () => {
@@ -66,10 +86,10 @@ describe('invertOperation', () => {
         payload: { trackId: 't1', fromIndex: 0, toIndex: 2 },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as TrackReorderOperation;
       expect(inv.type).toBe('track.reorder');
-      expect((inv as any).payload.fromIndex).toBe(2);
-      expect((inv as any).payload.toIndex).toBe(0);
+      expect(inv.payload.fromIndex).toBe(2);
+      expect(inv.payload.toIndex).toBe(0);
     });
 
     it('track.toggle → track.toggle (self-inverse)', () => {
@@ -80,9 +100,9 @@ describe('invertOperation', () => {
         before: { value: false },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as TrackToggleOperation;
       expect(inv.type).toBe('track.toggle');
-      expect((inv as any).before.value).toBe(true);
+      expect(inv.before.value).toBe(true);
     });
   });
 
@@ -95,9 +115,9 @@ describe('invertOperation', () => {
         payload: { trackId: 't1', element: elem },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as ElementRemoveOperation;
       expect(inv.type).toBe('element.remove');
-      expect((inv as any).payload.elementId).toBe('e1');
+      expect(inv.payload.elementId).toBe('e1');
     });
 
     it('element.remove → element.add', () => {
@@ -109,10 +129,10 @@ describe('invertOperation', () => {
         before: { element: elem, index: 0 },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as ElementAddOperation;
       expect(inv.type).toBe('element.add');
-      expect((inv as any).payload.element.id).toBe('e1');
-      expect((inv as any).payload.index).toBe(0);
+      expect(inv.payload.element.id).toBe('e1');
+      expect(inv.payload.index).toBe(0);
     });
 
     it('element.move → element.move with swapped tracks', () => {
@@ -123,10 +143,10 @@ describe('invertOperation', () => {
         before: { fromIndex: 0 },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as ElementMoveOperation;
       expect(inv.type).toBe('element.move');
-      expect((inv as any).payload.fromTrackId).toBe('t2');
-      expect((inv as any).payload.toTrackId).toBe('t1');
+      expect(inv.payload.fromTrackId).toBe('t2');
+      expect(inv.payload.toTrackId).toBe('t1');
     });
 
     it('element.linkAudio → element.unlinkAudio', () => {
@@ -142,9 +162,9 @@ describe('invertOperation', () => {
         },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as ElementUnlinkAudioOperation;
       expect(inv.type).toBe('element.unlinkAudio');
-      expect((inv as any).before.linkedAudioId).toBe('a1');
+      expect(inv.before.linkedAudioId).toBe('a1');
     });
 
     it('element.unlinkAudio → element.linkAudio', () => {
@@ -160,9 +180,9 @@ describe('invertOperation', () => {
         },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as ElementLinkAudioOperation;
       expect(inv.type).toBe('element.linkAudio');
-      expect((inv as any).payload.audioElement.id).toBe('a1');
+      expect(inv.payload.audioElement.id).toBe('a1');
     });
   });
 
@@ -181,12 +201,11 @@ describe('invertOperation', () => {
         before: { trimEnd: 0 },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as BatchOperation;
       expect(inv.type).toBe('batch');
-      const batch = inv as any;
-      expect(batch.payload.operations).toHaveLength(2);
-      expect(batch.payload.operations[0].type).toBe('element.remove');
-      expect(batch.payload.operations[1].type).toBe('element.update');
+      expect(inv.payload.operations).toHaveLength(2);
+      expect(inv.payload.operations[0]!.type).toBe('element.remove');
+      expect(inv.payload.operations[1]!.type).toBe('element.update');
     });
 
     it('element.splitKeepLeft → element.update', () => {
@@ -197,10 +216,10 @@ describe('invertOperation', () => {
         before: { trimEnd: 0, name: 'Original' },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as ElementUpdateOperation;
       expect(inv.type).toBe('element.update');
-      expect((inv as any).payload.updates.trimEnd).toBe(0);
-      expect((inv as any).payload.updates.name).toBe('Original');
+      expect(inv.payload.updates.trimEnd).toBe(0);
+      expect(inv.payload.updates.name).toBe('Original');
     });
 
     it('element.splitKeepRight → element.update', () => {
@@ -211,11 +230,11 @@ describe('invertOperation', () => {
         before: { startTime: 0, trimStart: 0, name: 'Original' },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as ElementUpdateOperation;
       expect(inv.type).toBe('element.update');
-      expect((inv as any).payload.updates.startTime).toBe(0);
-      expect((inv as any).payload.updates.trimStart).toBe(0);
-      expect((inv as any).payload.updates.name).toBe('Original');
+      expect(inv.payload.updates.startTime).toBe(0);
+      expect(inv.payload.updates.trimStart).toBe(0);
+      expect(inv.payload.updates.name).toBe('Original');
     });
   });
 
@@ -228,9 +247,9 @@ describe('invertOperation', () => {
         payload: { trackId: 't1', elementId: 'e1', shape },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as ShapeRemoveOperation;
       expect(inv.type).toBe('shape.remove');
-      expect((inv as any).payload.shapeId).toBe('s1');
+      expect(inv.payload.shapeId).toBe('s1');
     });
 
     it('shape.remove → shape.add', () => {
@@ -242,9 +261,9 @@ describe('invertOperation', () => {
         before: { shape, index: 0 },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as ShapeAddOperation;
       expect(inv.type).toBe('shape.add');
-      expect((inv as any).payload.shape.id).toBe('s1');
+      expect(inv.payload.shape.id).toBe('s1');
     });
 
     it('shape.reorder → shape.reorder with swapped indices', () => {
@@ -254,10 +273,10 @@ describe('invertOperation', () => {
         payload: { trackId: 't1', elementId: 'e1', shapeId: 's1', fromIndex: 0, toIndex: 2 },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as ShapeReorderOperation;
       expect(inv.type).toBe('shape.reorder');
-      expect((inv as any).payload.fromIndex).toBe(2);
-      expect((inv as any).payload.toIndex).toBe(0);
+      expect(inv.payload.fromIndex).toBe(2);
+      expect(inv.payload.toIndex).toBe(0);
     });
   });
 
@@ -274,9 +293,9 @@ describe('invertOperation', () => {
         },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as KeyframeRemoveOperation;
       expect(inv.type).toBe('keyframe.remove');
-      expect((inv as any).payload.keyframeTime).toBe(0);
+      expect(inv.payload.keyframeTime).toBe(0);
     });
 
     it('keyframe.remove → keyframe.add', () => {
@@ -293,9 +312,9 @@ describe('invertOperation', () => {
         before: { keyframe: kf, index: 0 },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as KeyframeAddOperation;
       expect(inv.type).toBe('keyframe.add');
-      expect((inv as any).payload.keyframe.time).toBe(0);
+      expect(inv.payload.keyframe.time).toBe(0);
     });
   });
 
@@ -314,14 +333,12 @@ describe('invertOperation', () => {
         },
       };
 
-      const inv = invertOperation(op);
-      expect(inv.type).toBe('batch');
-      const batch = inv as any;
+      const inv = invertOperation(op) as BatchOperation;
       // 逆序删除
-      expect(batch.payload.operations[0].type).toBe('element.remove');
-      expect(batch.payload.operations[0].payload.elementId).toBe('e2');
-      expect(batch.payload.operations[1].type).toBe('element.remove');
-      expect(batch.payload.operations[1].payload.elementId).toBe('e1');
+      expect(inv.payload.operations[0]!.type).toBe('element.remove');
+      expect((inv.payload.operations[0]! as ElementRemoveOperation).payload.elementId).toBe('e2');
+      expect(inv.payload.operations[1]!.type).toBe('element.remove');
+      expect((inv.payload.operations[1]! as ElementRemoveOperation).payload.elementId).toBe('e1');
     });
   });
 
@@ -334,10 +351,10 @@ describe('invertOperation', () => {
         before: { updates: { name: 'Old Name' } },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as ProjectUpdateOperation;
       expect(inv.type).toBe('project.update');
-      expect((inv as any).payload.updates.name).toBe('Old Name');
-      expect((inv as any).before.updates.name).toBe('New Name');
+      expect(inv.payload.updates.name).toBe('Old Name');
+      expect(inv.before.updates.name).toBe('New Name');
     });
   });
 
@@ -362,15 +379,14 @@ describe('invertOperation', () => {
         },
       };
 
-      const inv = invertOperation(op);
+      const inv = invertOperation(op) as BatchOperation;
       expect(inv.type).toBe('batch');
-      const batch = inv as any;
-      expect(batch.payload.operations).toHaveLength(2);
+      expect(inv.payload.operations).toHaveLength(2);
       // 逆序
-      expect(batch.payload.operations[0].type).toBe('track.remove');
-      expect(batch.payload.operations[0].payload.trackId).toBe('t2');
-      expect(batch.payload.operations[1].type).toBe('track.remove');
-      expect(batch.payload.operations[1].payload.trackId).toBe('t1');
+      expect(inv.payload.operations[0]!.type).toBe('track.remove');
+      expect((inv.payload.operations[0]! as TrackRemoveOperation).payload.trackId).toBe('t2');
+      expect(inv.payload.operations[1]!.type).toBe('track.remove');
+      expect((inv.payload.operations[1]! as TrackRemoveOperation).payload.trackId).toBe('t1');
     });
   });
 });
