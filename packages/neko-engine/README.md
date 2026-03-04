@@ -37,7 +37,6 @@ native-core (Rust)
   ├── animation/     → 关键帧、缓动、时间轴插值
   ├── audio/         → 音频编解码、混音、响度分析（ITU-R BS.1770-4）
   ├── frame_server/  → HTTP 帧服务、媒体探测
-  ├── keyframe_cache/ → IDR 扫描、智能关键帧缓存
   ├── export/        → GPU 导出管线、音视频混流
   └── jvi/           → JVI 项目格式解析
 ```

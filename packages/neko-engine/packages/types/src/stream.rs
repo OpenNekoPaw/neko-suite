@@ -67,34 +67,6 @@ impl Default for LoopCount {
     }
 }
 
-/// Keyframe seek result (timelines:keyframe response)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KeyframeSeekResult {
-    /// Whether the keyframe was found in cache
-    pub cache_hit: bool,
-    /// Keyframe timestamp (seconds)
-    pub keyframe_timestamp: f64,
-    /// Keyframe PTS
-    pub keyframe_pts: i64,
-    /// Keyframe frame index
-    pub keyframe_frame_index: u64,
-    /// Number of frames to decode from keyframe to target
-    pub frames_to_decode: u64,
-    /// Prefetch status
-    pub prefetch_status: PrefetchStatus,
-}
-
-/// Prefetch status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum PrefetchStatus {
-    Ready,
-    WarmingUp,
-    #[default]
-    NotStarted,
-}
-
 /// Stream codec type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

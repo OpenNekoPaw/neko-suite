@@ -81,29 +81,3 @@ impl KeyframeIndex {
     }
 }
 
-/// Cache status for keyframe cache
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CacheStatus {
-    /// Not in cache
-    Miss,
-    /// In cache and ready
-    Hit,
-    /// Currently being cached
-    Pending,
-    /// Cache entry expired
-    Expired,
-}
-
-/// Cached keyframe entry
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CachedKeyframe {
-    /// Keyframe info
-    pub info: KeyframeInfo,
-    /// Cache status
-    pub status: CacheStatus,
-    /// Decoded frame data (if cached)
-    #[serde(skip)]
-    pub data: Option<Vec<u8>>,
-}

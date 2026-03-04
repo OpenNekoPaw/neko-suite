@@ -11,6 +11,7 @@ pub mod hwaccel;
 pub mod iframe;
 mod muxer;
 pub mod pipeline;
+pub mod pool;
 mod traits;
 
 pub use hwaccel::HwAccelEncoder;
@@ -19,6 +20,7 @@ pub use muxer::{FfmpegMuxer, Muxer, StreamInfo};
 pub use pipeline::{
     AsyncExportPipeline, CompositedFrame, PipelineConfig, PipelineFrame, PipelineProgress,
 };
+pub use pool::{EncoderPool, global_encoder_pool};
 pub use traits::{
     ContainerFormat, EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwEncoderType,
     VideoCodec,

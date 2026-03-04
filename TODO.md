@@ -16,6 +16,8 @@
 - [x] Media Diff Phase 1-2.6 — [diff.md §已完成](./docs/diff.md)
 - [x] task-plan P0 #1-2, P1 #3-6 — [task-plan](./docs/task-plan.md)
 - [x] **Bug #1 修复：Git fetch 期间播放失败** — `mediaDiff:fetchState` 协议 + 双重保护（Extension await + Webview 禁用 Play）— [diff.md §Bug #1](./docs/diff.md)
+- [x] **预加载优化**：ProbeCache + DecoderPool 接入 stream + EncoderPool，首帧延迟 >200ms → <50ms（warm）
+- [x] **KeyframeCache 清理**：删除废弃的 NV12 帧缓存模块（与 GPU zero-copy 路径不兼容，FFmpeg 内部已有 keyframe index）
 - [x] **拖拽导入竞态修复**：三处竟态全部消除 — drop 串行化队列（`dropQueueRef`）+ `getCurrentTracks()` 实时状态 + `addMediaElementWithAudio` await 音频/字幕检测
 - [x] **FIFO 导出队列**：Rust `VecDeque` + TS `enqueueExport` 多任务轮询 + `timelines:export_enqueue` / `export_queue` API + ExportPanel UI
 - [x] **Operations 类型安全**：新增 `WebviewElement` 类型，消除测试中 `as any`，apply-keyframe 重构
@@ -30,8 +32,7 @@
 
 ## 🔴 P0 — 阻塞性（本迭代必须完成）
 
-### neko-engine
-- [ ] 预加载优化：首帧解码延迟过高（>200ms）
+*当前无阻塞项*
 
 ---
 

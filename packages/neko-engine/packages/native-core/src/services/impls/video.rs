@@ -390,16 +390,19 @@ impl IVideoService for VideoService {
                 // Get stream time_base for PTS→microseconds conversion
                 let time_base = decoder.time_base();
 
-                let mut encoder = HwAccelEncoder::new();
                 let encoder_config = EncoderConfig::new(width, height, fps, crate::encoder::VideoCodec::H264)
                     .with_preset(crate::encoder::EncoderPreset::Fast)
                     .with_hw_encoder(crate::encoder::HwEncoderType::Auto)
                     .with_gop_size(1)       // All-Intra: every frame is a keyframe (uniform encode cost)
                     .with_max_b_frames(0);
-                if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
-                    tracing::error!("Failed to open video encoder: {}", e);
-                    return;
-                }
+                let enc_pool = crate::encoder::global_encoder_pool();
+                let mut encoder = match enc_pool.acquire(&encoder_config) {
+                    Ok(e) => e,
+                    Err(e) => {
+                        tracing::error!("Failed to acquire encoder from pool: {}", e);
+                        return;
+                    }
+                };
 
                 let mut current_speed = 1.0;
                 let mut last_seek_seq: u64 = 0;
@@ -501,13 +504,13 @@ impl IVideoService for VideoService {
                     }
                 }
 
-                // Flush encoder
+                // Flush encoder and return to pool
                 if let Ok(packets) = Encoder::flush(&mut encoder) {
                     for p in &packets {
                         let _ = queue_tx.send(pack_h264_frame(p, width, height, time_base));
                     }
                 }
-                Encoder::close(&mut encoder);
+                enc_pool.release(encoder, encoder_config);
 
                 // Return decoder to pool for reuse by future streams
                 pool.return_decoder(decoder, &decoder_path, HwAccelType::Auto);

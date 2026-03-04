@@ -1,7 +1,7 @@
 //! Unified Timeline model
 //!
 //! The single source of truth for timeline data structures.
-//! Used by all modules: export, jvi, keyframe_cache, preview, services.
+//! Used by all modules: export, jvi, preview, services.
 
 use neko_types::{BlendMode, EffectParams, Resolution, TrackType};
 use serde::{Deserialize, Serialize};

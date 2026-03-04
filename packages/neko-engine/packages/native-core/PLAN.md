@@ -77,9 +77,7 @@ domain::Element 已有 `source_path()`, `start_time`, `duration`, `end_time()`,
 
 7. `jvi/converter.rs` — 输出 domain::Timeline 而非 export::TimelineData
 8. `jvi/loader.rs` — 返回 (Timeline, ExportSettings)
-9. `keyframe_cache/types.rs` — CacheRequest 改用 domain::Timeline
-10. `keyframe_cache/service.rs` — 改用 domain::Timeline
-11. `preview/pipeline.rs` — 改用 domain::Timeline
+9. `preview/pipeline.rs` — 改用 domain::Timeline
 12. `frame_server/server.rs` — 无需改（只引用 ExportService + routes）
 13. `services/impls/timeline.rs` — 删除 crate::export::ElementData 引用
 14. `services/impls/export.rs` — 更新 import

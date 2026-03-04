@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use crate::encoder::{EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwAccelEncoder, VideoCodec};
+use crate::encoder::{EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwAccelEncoder, VideoCodec, global_encoder_pool};
 use crate::error::Result;
 use crate::domain::Timeline;
 use crate::export::{ExportSettings, GpuExportPipeline, GpuPipelineTiming};
@@ -154,6 +154,17 @@ impl PreviewPipeline {
                         tracing::warn!("PreviewPipeline: encoder flush failed: {}", e);
                     }
                 }
+                // Return old encoder to pool
+                let mut old_config = EncoderConfig::new(
+                    self.config.width,
+                    self.config.height,
+                    self.config.fps,
+                    VideoCodec::H264,
+                );
+                old_config.gop_size = Some(self.config.gop_size);
+                old_config.max_b_frames = Some(0);
+                let encoder = std::mem::replace(&mut self.encoder, HwAccelEncoder::new());
+                global_encoder_pool().release(encoder, old_config);
             }
             self.encoder_initialized = false;
             self.frame_count = 0;
@@ -169,7 +180,7 @@ impl PreviewPipeline {
         self.gpu_pipeline.update_timeline(timeline);
     }
 
-    /// Initialize encoder with current config
+    /// Initialize encoder with current config (using encoder pool)
     fn ensure_encoder_initialized(&mut self) -> Result<()> {
         if self.encoder_initialized {
             return Ok(());
@@ -190,7 +201,7 @@ impl PreviewPipeline {
         encoder_config.profile = Some("baseline".to_string());
         encoder_config.preset = EncoderPreset::Ultrafast;
 
-        self.encoder.open(&encoder_config)?;
+        self.encoder = global_encoder_pool().acquire(&encoder_config)?;
         self.encoder_initialized = true;
 
         tracing::info!(
@@ -324,11 +335,26 @@ impl PreviewPipeline {
         self.encoder.is_hw_active()
     }
 
-    /// Close all resources
+    /// Close all resources, returning encoder to pool
     pub fn close(&mut self) {
         self.gpu_pipeline.close();
-        self.encoder.close();
-        self.encoder_initialized = false;
+
+        // Return encoder to pool if it was initialized
+        if self.encoder_initialized {
+            let mut encoder_config = EncoderConfig::new(
+                self.config.width,
+                self.config.height,
+                self.config.fps,
+                VideoCodec::H264,
+            );
+            encoder_config.gop_size = Some(self.config.gop_size);
+            encoder_config.max_b_frames = Some(0);
+
+            // Swap out the encoder and release to pool
+            let encoder = std::mem::replace(&mut self.encoder, HwAccelEncoder::new());
+            global_encoder_pool().release(encoder, encoder_config);
+            self.encoder_initialized = false;
+        }
     }
 }
 

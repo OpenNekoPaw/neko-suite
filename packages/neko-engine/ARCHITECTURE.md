@@ -77,7 +77,6 @@ packages/neko-engine/
 │  │    domain/    — 领域模型（Timeline/Transform/Loudness）│    │
 │  │    services/  — 服务 trait（IVideo/IAudio/IExport）│   │
 │  │    frame_server/ — HTTP 帧服务 + 媒体探测      │    │
-│  │    keyframe_cache/ — IDR 帧缓存              │    │
 │  └───────────────────────────────────────────────┘    │
 │                                                       │
 │  ┌─ Shared Types ────────────────────────────────┐    │

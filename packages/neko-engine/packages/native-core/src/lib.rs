@@ -25,7 +25,6 @@ pub mod export;
 pub mod frame_server;
 pub mod gpu;
 pub mod jvi;
-pub mod keyframe_cache;
 pub mod media_service;
 pub mod monitor;
 pub mod preview;

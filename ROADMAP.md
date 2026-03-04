@@ -9,7 +9,7 @@
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
 | **neko-types** | Alpha | 87% | 共享类型 + 横切关注点统一 + Operations 类型安全增强（WebviewElement） |
-| **neko-engine** | Alpha | 78% | GPU 渲染 + 编解码 + FIFO 导出队列 + 统一 HTTP/WS 通信（EngineClient）+ 响度标准化 |
+| **neko-engine** | Alpha | 80% | GPU 渲染 + 编解码 + FIFO 导出队列 + 统一 HTTP/WS 通信（EngineClient）+ 响度标准化 + 预加载优化（ProbeCache/DecoderPool/EncoderPool） |
 | **neko-cut** | Alpha | 77% | 时间线 + 预览 + FIFO 导出队列 + 拖拽竞态修复 + EditOperation 29 操作 + 响度标准化 UI |
 | **neko-agent** | Alpha | 70% | Agent 引擎 + LLM 平台 + CLI + UI |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
@@ -57,14 +57,13 @@
   - [x] audio mixer
   - [x] 导出服务（TS 侧 ExportService）
   - [x] FIFO 导出队列（Rust VecDeque + TS 多任务轮询 + 队列状态事件）
-- [x] 关键帧缓存服务
 - [x] 动画系统（keyframe / easing / interpolate）
 - [x] 媒体服务（video/audio/image/subtitle diff）
 - [x] HTTP API 路由层（video/audio/timeline/effects/stream/task controllers）
 - [x] .jvi 项目格式 loader/converter
 - [x] 遥测（metrics / spans）
 - [x] 统一 HTTP/WS 通信（EngineClient 单端口架构，3 个消费者包迁移完成）
-- [ ] 预加载优化
+- [x] 预加载优化（ProbeCache + DecoderPool stream 接入 + EncoderPool，首帧延迟 <50ms）
 - [x] 音量标准化（ITU-R BS.1770-4 LUFS 分析 + 非破坏性增益调整）
 - [x] Diff 异步并发修复（6 个 controller `spawn_blocking` 卸载，消除 tokio 线程饥饿）
 
@@ -382,11 +381,11 @@
 ## 里程碑计划
 
 ### M1: 基础剪辑闭环 (Current)
-- neko-engine GPU 渲染 + 编解码稳定 + 统一 HTTP/WS 通信 + FIFO 导出队列 ✅
+- neko-engine GPU 渲染 + 编解码稳定 + 统一 HTTP/WS 通信 + FIFO 导出队列 + 预加载优化 ✅
 - neko-cut 时间线 + 预览 + 导出队列 + 拖拽竞态修复 + EditOperation + Proto 对齐 ✅
 - neko-client 流媒体播放 + EngineClient ✅
 - neko-types 全域类型 + 横切关注点统一 + Operations 类型安全 ✅
-- 剩余：预加载优化、多分辨率预览
+- 剩余：多分辨率预览
 
 ### M2: AI 集成
 - neko-agent 时间线操作 Skills 完成
