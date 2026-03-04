@@ -22,6 +22,7 @@
 - [x] **Diff 协议增强**：`mediaDiff:fetchState` 协议 + MessageHandler 重构 + 音频/视频 Diff 查看器改进
 - [x] **文档大整理**：新增 5 个 ARCHITECTURE.md + 全部包 README 精简 + 废弃文档清理
 - [x] **音频响度标准化**：Rust `audios:analyze_loudness`（ebur128 crate, ITU-R BS.1770-4）+ EngineClient 便捷方法 + neko-cut PropertyPanel "Normalize Loudness" 按钮（非破坏性增益调整）
+- [x] **Diff 异步并发修复**：6 个 controller（video/audio/image/models/canvas/timeline）的 diff 操作用 `spawn_blocking` 卸载到阻塞线程池，消除 tokio 工作线程饥饿导致的播放阻塞
 
 </details>
 

@@ -66,6 +66,7 @@
 - [x] 统一 HTTP/WS 通信（EngineClient 单端口架构，3 个消费者包迁移完成）
 - [ ] 预加载优化
 - [x] 音量标准化（ITU-R BS.1770-4 LUFS 分析 + 非破坏性增益调整）
+- [x] Diff 异步并发修复（6 个 controller `spawn_blocking` 卸载，消除 tokio 线程饥饿）
 
 ### neko-cut (视频剪辑器)
 

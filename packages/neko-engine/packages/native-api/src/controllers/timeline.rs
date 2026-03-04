@@ -397,22 +397,32 @@ impl Controller for TimelineController {
                     ApiError::InvalidRequest("sourceB path required for timelines:diff".to_string())
                 })?;
 
-                // When content diff is requested, use the extended timeline diff directly
-                if opts.include_content_diff {
-                    let tl_opts = TimelineDiffOptions {
-                        include_content_diff: true,
-                        base_dir: opts.base_dir,
-                    };
-                    let result = diff_timeline_content_with_options(&source_a, &source_b, &tl_opts)
-                        .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
-                    let response = serde_json::to_value(&result)?;
-                    Ok(ActionResponse::ok("", response))
-                } else {
-                    let result = diff_media(&source_a, &source_b, DiffCategory::Timeline)
-                        .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
-                    let response = serde_json::to_value(&result)?;
-                    Ok(ActionResponse::ok("", response))
-                }
+                // Run blocking diff on a dedicated thread pool
+                // to avoid starving the tokio async executor
+                let include_content_diff = opts.include_content_diff;
+                let base_dir = opts.base_dir;
+
+                let response = tokio::task::spawn_blocking(move || {
+                    if include_content_diff {
+                        let tl_opts = TimelineDiffOptions {
+                            include_content_diff: true,
+                            base_dir,
+                        };
+                        let result = diff_timeline_content_with_options(&source_a, &source_b, &tl_opts)
+                            .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+                        serde_json::to_value(&result)
+                            .map_err(|e| ApiError::ServiceError(format!("Serialization failed: {}", e)))
+                    } else {
+                        let result = diff_media(&source_a, &source_b, DiffCategory::Timeline)
+                            .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+                        serde_json::to_value(&result)
+                            .map_err(|e| ApiError::ServiceError(format!("Serialization failed: {}", e)))
+                    }
+                })
+                .await
+                .map_err(|e| ApiError::ServiceError(format!("Diff task failed: {}", e)))??;
+
+                Ok(ActionResponse::ok("", response))
             }
             _ => Err(ApiError::UnknownAction {
                 group: "timelines".to_string(),

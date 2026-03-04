@@ -184,6 +184,7 @@ Webview H264StreamClient / AudioStreamClient
 | **Facade** | EngineApi — 统一入口，隐藏内部复杂性 |
 | **Router** | ActionRouter — 请求分发到对应 Controller |
 | **DTO** | types/ crate — 纯数据传输对象，无业务逻辑 |
+| **spawn_blocking** | Controller 层长时间同步操作（diff/FFmpeg）卸载到 tokio 阻塞线程池，避免饿死 async 工作线程 |
 
 ---
 

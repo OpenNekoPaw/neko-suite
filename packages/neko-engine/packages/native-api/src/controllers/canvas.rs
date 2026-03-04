@@ -54,8 +54,14 @@ impl Controller for CanvasController {
                     ApiError::InvalidRequest("sourceB path required for canvas:diff".to_string())
                 })?;
 
-                let result = diff_media(&source_a, &source_b, DiffCategory::Canvas)
-                    .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+                // Run blocking diff on a dedicated thread pool
+                // to avoid starving the tokio async executor
+                let result = tokio::task::spawn_blocking(move || {
+                    diff_media(&source_a, &source_b, DiffCategory::Canvas)
+                        .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))
+                })
+                .await
+                .map_err(|e| ApiError::ServiceError(format!("Diff task failed: {}", e)))??;
 
                 let response = serde_json::to_value(&result)?;
                 Ok(ActionResponse::ok("", response))

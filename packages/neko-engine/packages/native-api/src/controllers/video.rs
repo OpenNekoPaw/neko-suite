@@ -505,10 +505,6 @@ impl Controller for VideoController {
                     ApiError::InvalidRequest("sourceB path required for videos:diff".to_string())
                 })?;
 
-                // Metadata diff (always)
-                let mut result = diff_media(&source_a, &source_b, DiffCategory::Video)
-                    .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
-
                 // Content-level diff with custom options
                 let video_opts = VideoDiffOptions {
                     ssim_threshold: opts.ssim_threshold.unwrap_or(0.95),
@@ -517,16 +513,26 @@ impl Controller for VideoController {
                     include_audio: opts.include_audio.unwrap_or(true),
                 };
 
-                match diff_video_content(&source_a, &source_b, &video_opts) {
-                    Ok(video_diff) => {
-                        result.content =
-                            Some(neko_native_core::media_service::ContentDiff::Video(video_diff));
+                // Run blocking FFmpeg diff operations on a dedicated thread pool
+                // to avoid starving the tokio async executor
+                let result = tokio::task::spawn_blocking(move || {
+                    let mut result = diff_media(&source_a, &source_b, DiffCategory::Video)
+                        .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+
+                    match diff_video_content(&source_a, &source_b, &video_opts) {
+                        Ok(video_diff) => {
+                            result.content =
+                                Some(neko_native_core::media_service::ContentDiff::Video(video_diff));
+                        }
+                        Err(e) => {
+                            tracing::warn!("Video content diff failed: {}", e);
+                        }
                     }
-                    Err(e) => {
-                        tracing::warn!("Video content diff failed: {}", e);
-                        // result.content remains as set by diff_media (None or default)
-                    }
-                }
+
+                    Ok::<_, ApiError>(result)
+                })
+                .await
+                .map_err(|e| ApiError::ServiceError(format!("Diff task failed: {}", e)))??;
 
                 let response = serde_json::to_value(&result)?;
                 Ok(ActionResponse::ok("", response))
