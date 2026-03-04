@@ -23,8 +23,8 @@ use crate::controllers::utils::handle_stream_control;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::StreamRegistry;
-use neko_native_core::domain::{StreamCodec, StreamConfig, Timeline};
 use neko_native_core::domain::operations::EditOperationEnvelope;
+use neko_native_core::domain::{StreamCodec, StreamConfig, Timeline};
 use neko_native_core::jvi::JviLoader;
 use neko_native_core::services::{IStreamPlayback, ITimelineService, TimelineService};
 use neko_types::registry;
@@ -41,7 +41,10 @@ pub struct StreamController {
 
 impl StreamController {
     /// Create a new StreamController
-    pub fn new(stream_registry: Arc<StreamRegistry>, timeline_service: Arc<TimelineService>) -> Self {
+    pub fn new(
+        stream_registry: Arc<StreamRegistry>,
+        timeline_service: Arc<TimelineService>,
+    ) -> Self {
         Self {
             stream_registry,
             timeline_service,
@@ -111,13 +114,10 @@ impl Controller for StreamController {
     ) -> ApiResult<ActionResponse> {
         match action {
             "create" => {
-                let opts: CreateOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: CreateOptions = serde_json::from_value(options).unwrap_or_default();
 
                 let session_id = opts.session_id.ok_or_else(|| {
-                    ApiError::InvalidRequest(
-                        "sessionId is required for streams:create".to_string(),
-                    )
+                    ApiError::InvalidRequest("sessionId is required for streams:create".to_string())
                 })?;
 
                 let res_id = opts
@@ -148,9 +148,12 @@ impl Controller for StreamController {
                     .await;
 
                 // Auto-activate
-                self.stream_registry.activate(&stream_id).await.map_err(
-                    |e| ApiError::StreamError(format!("Failed to activate stream: {}", e)),
-                )?;
+                self.stream_registry
+                    .activate(&stream_id)
+                    .await
+                    .map_err(|e| {
+                        ApiError::StreamError(format!("Failed to activate stream: {}", e))
+                    })?;
 
                 let response = serde_json::json!({
                     "streamId": stream_id.as_str(),
@@ -189,7 +192,9 @@ impl Controller for StreamController {
                     .await
                     .map_err(|e| ApiError::StreamError(e.to_string()))?;
 
-                // Also pause playback (stops encoding loop in the stream)
+                // Also pause decode loop if running. Use let _ = because the loop may not
+                // be active yet (stream created but timelines:stream not called) or may have
+                // finished at EOF. The registry state change above is the authoritative signal.
                 let _ = self.timeline_service.pause(&sid).await;
 
                 let response = serde_json::json!({
@@ -219,7 +224,8 @@ impl Controller for StreamController {
                     let _ = self.timeline_service.set_speed(&sid, speed).await;
                 }
 
-                // Resume playback (restarts encoding loop)
+                // Signal decode loop to resume if running. Use let _ = for the same reason
+                // as pause: the loop may not be active (stream not yet started or already at EOF).
                 let _ = self.timeline_service.resume(&sid).await;
 
                 let response = serde_json::json!({
@@ -234,6 +240,12 @@ impl Controller for StreamController {
                 let stream_id = resolve_stream_id(&options, resource_id, "streams:destroy")?;
 
                 let sid = StreamId::from_string(stream_id.clone());
+
+                // Clean up TimelineService internal state (stats_receivers + current_timelines).
+                // Use let _ = because stop_stream may fail if stream is not in ActiveStreams
+                // (e.g. already stopped via EOF timeout), which is not an error for destroy.
+                let _ = self.timeline_service.stop_stream(&sid).await;
+
                 self.stream_registry
                     .destroy(&sid)
                     .await
@@ -248,19 +260,13 @@ impl Controller for StreamController {
             }
 
             "list" => {
-                let opts: ListOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: ListOptions = serde_json::from_value(options).unwrap_or_default();
 
                 let session_id = opts.session_id.ok_or_else(|| {
-                    ApiError::InvalidRequest(
-                        "sessionId is required for streams:list".to_string(),
-                    )
+                    ApiError::InvalidRequest("sessionId is required for streams:list".to_string())
                 })?;
 
-                let stream_ids = self
-                    .stream_registry
-                    .get_session_streams(&session_id)
-                    .await;
+                let stream_ids = self.stream_registry.get_session_streams(&session_id).await;
 
                 let ids: Vec<&str> = stream_ids.iter().map(|id| id.as_str()).collect();
 
@@ -278,10 +284,20 @@ impl Controller for StreamController {
                 let stream_id_str = resolve_stream_id(&options, resource_id, "streams:quality")?;
                 let stream_id = StreamId::from_string(stream_id_str.clone());
 
-                let width = options.get("width").and_then(|v| v.as_u64()).map(|v| v as u32)
-                    .ok_or_else(|| ApiError::InvalidRequest("width required for streams:quality".to_string()))?;
-                let height = options.get("height").and_then(|v| v.as_u64()).map(|v| v as u32)
-                    .ok_or_else(|| ApiError::InvalidRequest("height required for streams:quality".to_string()))?;
+                let width = options
+                    .get("width")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32)
+                    .ok_or_else(|| {
+                        ApiError::InvalidRequest("width required for streams:quality".to_string())
+                    })?;
+                let height = options
+                    .get("height")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32)
+                    .ok_or_else(|| {
+                        ApiError::InvalidRequest("height required for streams:quality".to_string())
+                    })?;
                 let bitrate = options.get("bitrate").and_then(|v| v.as_u64());
                 let fps = options.get("fps").and_then(|v| v.as_f64());
 
@@ -302,13 +318,8 @@ impl Controller for StreamController {
 
             // Playback control actions — delegated to TimelineService via handle_stream_control
             "stop" | "seek" | "speed" | "loop" => {
-                handle_stream_control(
-                    self.timeline_service.as_ref(),
-                    action,
-                    options,
-                    "streams",
-                )
-                .await
+                handle_stream_control(self.timeline_service.as_ref(), action, options, "streams")
+                    .await
             }
 
             // Stream stats — delegated to TimelineService
@@ -317,9 +328,7 @@ impl Controller for StreamController {
                     serde_json::from_value(options).unwrap_or_default();
 
                 let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest(
-                        "streamId required for streams:stats".to_string(),
-                    )
+                    ApiError::InvalidRequest("streamId required for streams:stats".to_string())
                 })?;
                 let stream_id = StreamId::from_string(stream_id);
 
@@ -341,9 +350,7 @@ impl Controller for StreamController {
                     serde_json::from_value(options.clone()).unwrap_or_default();
 
                 let stream_id_str = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest(
-                        "streamId required for streams:update".to_string(),
-                    )
+                    ApiError::InvalidRequest("streamId required for streams:update".to_string())
                 })?;
                 let stream_id = StreamId::from_string(stream_id_str);
 
@@ -354,7 +361,8 @@ impl Controller for StreamController {
                 })?;
 
                 // Resolve baseDir from options (same as timelines:stream)
-                let base_dir = options.get("baseDir")
+                let base_dir = options
+                    .get("baseDir")
                     .and_then(|v| v.as_str())
                     .map(std::path::PathBuf::from)
                     .unwrap_or_else(|| std::path::PathBuf::from("."));
@@ -362,18 +370,18 @@ impl Controller for StreamController {
                 // Parse timeline (try domain format first, fallback to JVI)
                 let timeline: Timeline = serde_json::from_value(body.clone())
                     .or_else(|domain_err| {
-                        let json_str = serde_json::to_string(&body)
-                            .map_err(|e| ApiError::InvalidRequest(format!("Invalid JSON: {}", e)))?;
+                        let json_str = serde_json::to_string(&body).map_err(|e| {
+                            ApiError::InvalidRequest(format!("Invalid JSON: {}", e))
+                        })?;
                         let loader = JviLoader::new();
-                        let (tl, _) = loader
-                            .load_from_json(&json_str, base_dir)
-                            .map_err(|e| {
-                                tracing::warn!(
-                                    "streams:update timeline parse failed - domain: {}, JVI: {}",
-                                    domain_err, e
-                                );
-                                ApiError::InvalidRequest(format!("Invalid timeline data: {}", e))
-                            })?;
+                        let (tl, _) = loader.load_from_json(&json_str, base_dir).map_err(|e| {
+                            tracing::warn!(
+                                "streams:update timeline parse failed - domain: {}, JVI: {}",
+                                domain_err,
+                                e
+                            );
+                            ApiError::InvalidRequest(format!("Invalid timeline data: {}", e))
+                        })?;
                         Ok::<Timeline, ApiError>(tl)
                     })
                     .map_err(|e: ApiError| e)?;
@@ -411,21 +419,13 @@ impl Controller for StreamController {
                 })?;
 
                 let operation: EditOperationEnvelope = serde_json::from_value(body)
-                    .map_err(|e| {
-                        ApiError::InvalidRequest(format!("Invalid operation: {}", e))
-                    })?;
+                    .map_err(|e| ApiError::InvalidRequest(format!("Invalid operation: {}", e)))?;
 
                 let applied = self
                     .timeline_service
-                    .apply_operation_to_stream(
-                        &stream_id,
-                        &operation,
-                        base_dir.as_deref(),
-                    )
+                    .apply_operation_to_stream(&stream_id, &operation, base_dir.as_deref())
                     .await
-                    .map_err(|e| {
-                        ApiError::StreamError(format!("Apply operation failed: {}", e))
-                    })?;
+                    .map_err(|e| ApiError::StreamError(format!("Apply operation failed: {}", e)))?;
 
                 let response = serde_json::json!({
                     "streamId": stream_id.as_str(),
@@ -458,7 +458,10 @@ mod tests {
     fn create_test_controller() -> StreamController {
         let stream_registry = Arc::new(StreamRegistry::new());
         let task_service = Arc::new(neko_native_core::services::TaskService::new());
-        let timeline_service = Arc::new(neko_native_core::services::TimelineService::new(None, task_service));
+        let timeline_service = Arc::new(neko_native_core::services::TimelineService::new(
+            None,
+            task_service,
+        ));
         StreamController::new(stream_registry, timeline_service)
     }
 
@@ -474,9 +477,7 @@ mod tests {
             "fps": 30.0,
         });
 
-        let result = controller
-            .handle("create", None, options, None)
-            .await;
+        let result = controller.handle("create", None, options, None).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -485,7 +486,10 @@ mod tests {
         let data = response.data.unwrap();
         assert!(data["streamId"].as_str().unwrap().starts_with("strm_"));
         assert_eq!(data["state"], "active");
-        assert!(data["wsEndpoint"].as_str().unwrap().starts_with("/v1/streams/strm_"));
+        assert!(data["wsEndpoint"]
+            .as_str()
+            .unwrap()
+            .starts_with("/v1/streams/strm_"));
     }
 
     #[tokio::test]
@@ -497,7 +501,10 @@ mod tests {
             "sessionId": "test-session",
             "resourceId": "vid_abc123",
         });
-        let result = controller.handle("create", None, options, None).await.unwrap();
+        let result = controller
+            .handle("create", None, options, None)
+            .await
+            .unwrap();
         let stream_id = result.data.as_ref().unwrap()["streamId"]
             .as_str()
             .unwrap()
@@ -542,8 +549,14 @@ mod tests {
             "resourceId": "vid_2",
         });
 
-        controller.handle("create", None, options1, None).await.unwrap();
-        controller.handle("create", None, options2, None).await.unwrap();
+        controller
+            .handle("create", None, options1, None)
+            .await
+            .unwrap();
+        controller
+            .handle("create", None, options2, None)
+            .await
+            .unwrap();
 
         // List
         let list_opts = serde_json::json!({ "sessionId": "session-1" });
@@ -561,9 +574,7 @@ mod tests {
     async fn test_create_stream_missing_session_id() {
         let controller = create_test_controller();
 
-        let result = controller
-            .handle("create", None, Value::Null, None)
-            .await;
+        let result = controller.handle("create", None, Value::Null, None).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -574,9 +585,7 @@ mod tests {
     async fn test_unknown_action() {
         let controller = create_test_controller();
 
-        let result = controller
-            .handle("unknown", None, Value::Null, None)
-            .await;
+        let result = controller.handle("unknown", None, Value::Null, None).await;
 
         assert!(result.is_err());
     }

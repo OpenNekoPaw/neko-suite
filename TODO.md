@@ -25,6 +25,10 @@
 - [x] **文档大整理**：新增 5 个 ARCHITECTURE.md + 全部包 README 精简 + 废弃文档清理
 - [x] **音频响度标准化**：Rust `audios:analyze_loudness`（ebur128 crate, ITU-R BS.1770-4）+ EngineClient 便捷方法 + neko-cut PropertyPanel "Normalize Loudness" 按钮（非破坏性增益调整）
 - [x] **Diff 异步并发修复**：6 个 controller（video/audio/image/models/canvas/timeline）的 diff 操作用 `spawn_blocking` 卸载到阻塞线程池，消除 tokio 工作线程饥饿导致的播放阻塞
+- [x] **Timeline Model 合并**：消除 `domain::Timeline` vs `export::TimelineData` 双模型 — `export/types.rs` 仅保留导出专用类型，`domain/timeline.rs` 成为唯一模型，`to_transform_2d()` / `to_gpu_blend_mode()` / `effective_volume()` 等 GPU 转换方法已补充，`jvi/converter.rs` 已切换至 domain 层，~1,500-2,000 行变更
+- [x] **Stream Playback 统一**：提取 `IStreamPlayback` trait（`playback.rs`）+ `StreamPlaybackDelegate`（`stream_loop.rs`）消除 3 服务 × 6 方法重复实现；`handle_stream_control()` 统一四个 Controller 流控；修复 seek bug（`seek_seq += 1`）；修复 `StreamController` pause/resume 错误传播 + destroy 补充 `stop_stream()` 清理
+- [x] **BlendMode 补齐**：`neko_types::BlendMode` 扩展至 27 变体（对齐 `gpu::BlendMode` / proto / TS 类型），补全 `to_gpu_blend_mode()` + `convert_blend_mode()` 两处 match arm（`effects.rs` + `domain/timeline.rs` + `services/impls/timeline.rs`）
+- [x] **Diff Phase 2B**：前端可视化增强（TimelineDiffViewer + 音频三轨波形 + 视频 WebGL 渲染器 curtain/heatmap/flicker + DiffRegionOverlay）— [diff.md §Phase 2B](./docs/diff.md)
 
 </details>
 
@@ -39,21 +43,15 @@
 ## 🟡 P1 — 核心功能（当前迭代）
 
 ### neko-tools（媒体 Diff）
-- [ ] **Diff Phase 2B**：前端可视化增强 — [diff.md §Phase 2B](./docs/diff.md)
-  - [ ] TimelineDiffViewer 组件（Summary + Track/Element 树）
-  - [ ] 音频三轨波形（A/B/Diff + diff 区域高亮）
-  - [ ] 视频 H264+PCM 流 + WebGL 渲染器（curtain/heatmap/flicker）
-  - [ ] Diff 区域时间轴高亮（DiffRegionOverlay）
+- [x] **Diff Phase 2B**：前端可视化增强 — [diff.md §Phase 2B](./docs/diff.md)
+  - [x] TimelineDiffViewer 组件（Summary + Track/Element 树）
+  - [x] 音频三轨波形（A/B/Diff + diff 区域高亮）
+  - [x] 视频 H264+PCM 流 + WebGL 渲染器（curtain/heatmap/flicker）
+  - [x] Diff 区域时间轴高亮（DiffRegionOverlay）
 - [ ] **Diff Phase 3**：Engine 流式帧指标返回（SSIM 每 N 帧回调，Rust 工作量大）
   - 见 [diff.md §Phase 3](./docs/diff.md)
 - [ ] **Bug: 视频无早期预览**：音频有 ~500ms 早期波形，视频黑屏 5-60s
   - 方案：实现 `startEarlyFrameExtraction`（并行提取 t=0 帧）· 预计 1-2h
-
-### neko-engine
-- [ ] **Stream Playback 统一**：修复 seek bug + 提取 IStreamPlayback trait — [engine.md §重构 #1](./docs/engine.md)
-  - 约 500-800 行变更，涉及 13 个文件
-- [ ] **Timeline Model 合并**：消除 domain::Timeline vs export::TimelineData 双模型 — [engine.md §重构 #2](./docs/engine.md)
-  - 删除 6 个冗余 DTO 类型，约 1500-2000 行变更
 
 ### neko-agent（AI Skills）
 - [ ] 批量时间线操作 Skill（当前仅支持单元素操作）— [task-plan #11](./docs/task-plan.md)
@@ -179,4 +177,4 @@
 
 ---
 
-*最后更新：2026-03-04*
+*最后更新：2026-03-05*

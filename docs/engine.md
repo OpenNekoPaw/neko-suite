@@ -259,50 +259,45 @@ neko-engine 开发完成度报告
   ---
   规划中的重构（2 项，仅 neko-engine 相关）
 
-  1. Stream Playback 统一
+  1. Stream Playback 统一 ✅ 已完成
 
   目标：消除 Video/Audio/Timeline 三处流控重复 + 修复 seek bug
-  计划文档：docs/refactor-plan-stream-playback.md
 
-  核心问题：
-  - seek bug：VideoService::seek 缺少 seek_seq += 1 → 重复 seek 被静默忽略
-  - ISP 违反：6 个流控方法 × 3 个 trait = 18 个重复定义 + 18 个重复实现
-  - Controller 重复：3 个 Controller 各自定义相同的 StreamControlOptions
+  已完成工作：
+  - seek bug 已修复：StreamPlaybackDelegate.seek() 正确递增 seek_seq，VideoService/AudioService/TimelineService 均委托至此
+  - IStreamPlayback trait 已提取：services/playback.rs（6 个方法）
+  - StreamPlaybackDelegate 已实现：services/impls/stream_loop.rs（所有服务共用）
+  - handle_stream_control() 已统一：video/audio/timeline/stream 四个 Controller 共用 utils.rs 实现
+  - StreamControlOptions 已共用：单一定义，无重复
 
-  三阶段实施：
-  Phase 1 — 修复 seek bug（+1 行代码）
-  Phase 2 — 提取 IStreamPlayback trait + StreamPlaybackDelegate（新建 playback.rs）
-  Phase 3 — 统一 Controller 层流控处理（共用 handle_stream_control()）
+  遗留修复（本次完成）：
+  - StreamController.pause：错误传播（`let _ =` → `?`）
+  - StreamController.resume：错误传播（`let _ =` → `?`）
+  - StreamController.destroy：补充 stop_stream() 调用，清理 TimelineService 内部状态（stats_receivers / current_timelines）
 
-  涉及 13 文件（1 新建 + 12 修改），预估 500-800 行变更
-  状态：设计完成，未开始
-
-  2. Timeline 模型合并
+  2. Timeline 模型合并 ✅ 已完成
 
   目标：消除 domain::Timeline vs export::TimelineData 双模型
   计划文档：native-core/PLAN.md
 
   核心决策：以 domain::Timeline 为唯一模型，删除 export 层 DTO
 
-  待删除类型（6 个）：
-  TimelineData / TrackData / ElementData / MediaElementData / TextElementData / ElementTransform
+  已删除类型（6 个）：
+  TimelineData / TrackData / ElementData / MediaElementData(export) / TextElementData(export) / ElementTransform
 
-  待保留类型（export 专属）：
+  保留类型（export 专属，仍在 export/types.rs）：
   ExportSettings / ExportJobConfig / ExportProgress / ExportState / ExportStats
 
-  需补充 domain 能力（3 个方法）：
-  - MediaElementData.to_transform_2d() → gpu::Transform2D
-  - MediaElementData.get_blend_mode() → gpu::BlendMode
-  - Element.effective_volume() / effective_pan() / is_muted()
+  已补充 domain 能力：
+  - Element.to_transform_2d() → gpu::Transform2D（domain/timeline.rs）
+  - Element.to_gpu_blend_mode() → gpu::BlendMode（domain/timeline.rs）
+  - Element.effective_volume() / effective_pan() / is_audio_muted()（domain/timeline.rs）
 
-  四阶段实施：
-  Phase 1 — 增强 domain/timeline.rs（GPU 转换方法）
-  Phase 2 — 删除 export/types.rs 重复类型
-  Phase 3 — 更新 export/ 内部引用
-  Phase 4 — 更新外部消费方（jvi/keyframe_cache/preview/services）
+  涉及 15 文件，~1,500-2,000 行变更，已完成
 
-  涉及 15 文件，预估 1,500-2,000 行变更
-  状态：设计完成，未开始
+  遗留问题（独立跟踪）：
+  - ✅ neko_types::BlendMode 已扩展至 27 变体（对齐 gpu::BlendMode / proto / TS），to_gpu_blend_mode() + convert_blend_mode() 两处 match arm 均已补全
+  - TransitionEffect.transition_type 为 String 而非强类型 enum
 
   ---
   规划中的跨包重构/新功能（4 项）
@@ -322,6 +317,10 @@ neko-engine 开发完成度报告
   │ 4 │ neko-canvas 功能补齐             │ neko-canvas  │ 中     │ 17       │ 计划完成，全部未开始                  │
   │   │ Undo/Redo + Copy/Paste +         │              │        │          │ neko-canvas/PLAN.md                   │
   │   │ Port 端口 + UI 面板              │              │        │          │                                       │
+  ├───┼──────────────────────────────────┼─────��────────┼────────┼──────────┼───────────────────────────────────────┤
+  │ 5 │ BlendMode domain 层补齐          │ neko-engine  │ 低     │ 2        │ ✅ 已完成                             │
+  │   │ neko_types::BlendMode 16→27 变体 │              │        │          │ effects.rs + domain/timeline.rs       │
+  │   │ + to_gpu_blend_mode() 扩展       │              │        │          │ + services/impls/timeline.rs          │
   └───┴──────────────────────────────────┴──────────────┴────────┴──────────┴───────────────────────────────────────┘
 
   ---
@@ -333,7 +332,7 @@ neko-engine 开发完成度报告
 
   第二批（跨包核心功能）:
     ├─ #2 Agent Handler 拆分 — 完成 Phase 2（7 个新 Handler）
-    └─ #1 EditOperation 双轨 — 依赖 Timeline 稳定
+    └─ #1 EditOperation 双轨 — Timeline 模型已稳定（合并已完成）
 
   第三批（扩展功能）:
     ├─ #3 neko-story Phase 3.3 集成
