@@ -6,21 +6,22 @@
 
 use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType};
 use crate::domain::{FrameData, MediaReference, StreamConfig, Timeline, TimelineProjectInfo};
-use crate::export::{AudioMixer, ExportSettings, ExportStats};
-use crate::jvi::JviLoader;
 use crate::error::{Error, Result};
+use crate::export::{AudioMixer, ExportSettings, ExportStats};
 use crate::gpu::{
     BlendMode as GpuBlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext,
     LayerPixelFormat, Nv12Renderer, Nv12TextureImporter,
 };
+use crate::jvi::JviLoader;
+use crate::monitor::SystemMonitor;
 use crate::preview::{PreviewFrame, PreviewPipeline, PreviewPipelineConfig};
 use crate::services::impls::stream_loop::{
-    pack_pcm_f32le_stream_frame, ActiveStreams, PlaybackState, StreamLoopHandle,
-    StreamPlaybackDelegate, WallClockPacer,
-    EOF_IDLE_TIMEOUT, eof_idle_wait,
+    eof_idle_wait, pack_pcm_f32le_stream_frame, ActiveStreams, PlaybackState, StreamLoopHandle,
+    StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
-use crate::services::{IStreamPlayback, ITaskService, ITimelineService, StreamStats, TimelineStreamResult};
-use crate::monitor::SystemMonitor;
+use crate::services::{
+    IStreamPlayback, ITaskService, ITimelineService, StreamStats, TimelineStreamResult,
+};
 use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
 use neko_types::{BlendMode, FrameFormat, LoopRegion, StreamId};
 use std::collections::HashMap;
@@ -133,7 +134,10 @@ impl TimelineService {
 
         tracing::info!(
             "Setting quality for stream '{}': {}x{} @ {}kbps",
-            stream_id.as_str(), width, height, bitrate / 1000
+            stream_id.as_str(),
+            width,
+            height,
+            bitrate / 1000
         );
 
         self.playback.update_config(stream_id, config).await
@@ -141,23 +145,43 @@ impl TimelineService {
 
     /// Convert domain BlendMode to GPU BlendMode
     fn convert_blend_mode(mode: &BlendMode) -> GpuBlendMode {
+        // Delegate to the canonical implementation on Element to avoid duplication.
+        // This wrapper exists for use with &BlendMode references in the compositing path.
+        use neko_types::BlendMode as BM;
         match mode {
-            BlendMode::Normal => GpuBlendMode::Normal,
-            BlendMode::Multiply => GpuBlendMode::Multiply,
-            BlendMode::Screen => GpuBlendMode::Screen,
-            BlendMode::Overlay => GpuBlendMode::Overlay,
-            BlendMode::Darken => GpuBlendMode::Darken,
-            BlendMode::Lighten => GpuBlendMode::Lighten,
-            BlendMode::ColorDodge => GpuBlendMode::ColorDodge,
-            BlendMode::ColorBurn => GpuBlendMode::ColorBurn,
-            BlendMode::HardLight => GpuBlendMode::HardLight,
-            BlendMode::SoftLight => GpuBlendMode::SoftLight,
-            BlendMode::Difference => GpuBlendMode::Difference,
-            BlendMode::Exclusion => GpuBlendMode::Exclusion,
-            BlendMode::Hue => GpuBlendMode::Hue,
-            BlendMode::Saturation => GpuBlendMode::Saturation,
-            BlendMode::Color => GpuBlendMode::Color,
-            BlendMode::Luminosity => GpuBlendMode::Luminosity,
+            // Basic
+            BM::Normal => GpuBlendMode::Normal,
+            BM::Dissolve => GpuBlendMode::Dissolve,
+            // Darken Group
+            BM::Darken => GpuBlendMode::Darken,
+            BM::Multiply => GpuBlendMode::Multiply,
+            BM::ColorBurn => GpuBlendMode::ColorBurn,
+            BM::LinearBurn => GpuBlendMode::LinearBurn,
+            BM::DarkerColor => GpuBlendMode::DarkerColor,
+            // Lighten Group
+            BM::Lighten => GpuBlendMode::Lighten,
+            BM::Screen => GpuBlendMode::Screen,
+            BM::ColorDodge => GpuBlendMode::ColorDodge,
+            BM::LinearDodge => GpuBlendMode::LinearDodge,
+            BM::LighterColor => GpuBlendMode::LighterColor,
+            // Contrast Group
+            BM::Overlay => GpuBlendMode::Overlay,
+            BM::SoftLight => GpuBlendMode::SoftLight,
+            BM::HardLight => GpuBlendMode::HardLight,
+            BM::VividLight => GpuBlendMode::VividLight,
+            BM::LinearLight => GpuBlendMode::LinearLight,
+            BM::PinLight => GpuBlendMode::PinLight,
+            BM::HardMix => GpuBlendMode::HardMix,
+            // Difference Group
+            BM::Difference => GpuBlendMode::Difference,
+            BM::Exclusion => GpuBlendMode::Exclusion,
+            BM::Subtract => GpuBlendMode::Subtract,
+            BM::Divide => GpuBlendMode::Divide,
+            // HSL Group
+            BM::Hue => GpuBlendMode::Hue,
+            BM::Saturation => GpuBlendMode::Saturation,
+            BM::Color => GpuBlendMode::Color,
+            BM::Luminosity => GpuBlendMode::Luminosity,
         }
     }
 
@@ -290,9 +314,7 @@ impl ITimelineService for TimelineService {
                         crate::domain::ElementType::Text(_) => {
                             (element.id.clone(), String::new(), "text".to_string())
                         }
-                        _ => {
-                            (element.id.clone(), String::new(), "other".to_string())
-                        }
+                        _ => (element.id.clone(), String::new(), "other".to_string()),
                     };
 
                     // Only add media references for elements with source files
@@ -350,11 +372,7 @@ impl ITimelineService for TimelineService {
         Ok(info)
     }
 
-    async fn composite(
-        &self,
-        timeline: &Timeline,
-        frame_number: u64,
-    ) -> Result<FrameData> {
+    async fn composite(&self, timeline: &Timeline, frame_number: u64) -> Result<FrameData> {
         let gpu_ctx = self
             .gpu_ctx
             .as_ref()
@@ -381,35 +399,37 @@ impl ITimelineService for TimelineService {
             let ctx = gpu_ctx.clone();
 
             // Decode frame in blocking task
-            let decoded_rgba = tokio::task::spawn_blocking(move || -> Result<(Vec<u8>, u32, u32)> {
-                let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
-                let media_info = decoder.open(&source_path)?;
-                let src_width = media_info.width;
-                let src_height = media_info.height;
+            let decoded_rgba =
+                tokio::task::spawn_blocking(move || -> Result<(Vec<u8>, u32, u32)> {
+                    let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
+                    let media_info = decoder.open(&source_path)?;
+                    let src_width = media_info.width;
+                    let src_height = media_info.height;
 
-                let gpu_texture = decoder
-                    .decode_gpu_at(source_time)?
-                    .ok_or_else(|| {
-                        Error::Other(format!("No frame at time {} for {}", source_time, source_path))
+                    let gpu_texture = decoder.decode_gpu_at(source_time)?.ok_or_else(|| {
+                        Error::Other(format!(
+                            "No frame at time {} for {}",
+                            source_time, source_path
+                        ))
                     })?;
 
-                // NV12 → RGBA via GPU
-                let importer = Nv12TextureImporter::new(Arc::clone(&ctx));
-                let nv12_texture = importer.import(&gpu_texture)?;
+                    // NV12 → RGBA via GPU
+                    let importer = Nv12TextureImporter::new(Arc::clone(&ctx));
+                    let nv12_texture = importer.import(&gpu_texture)?;
 
-                let renderer = Nv12Renderer::new(Arc::clone(&ctx))?;
-                let output_texture = renderer.create_output_texture(src_width, src_height);
-                let output_view =
-                    output_texture.create_view(&wgpu::TextureViewDescriptor::default());
-                renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
+                    let renderer = Nv12Renderer::new(Arc::clone(&ctx))?;
+                    let output_texture = renderer.create_output_texture(src_width, src_height);
+                    let output_view =
+                        output_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                    renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
 
-                let rgba_data =
-                    Self::read_texture_to_rgba8(&ctx, &output_texture, src_width, src_height)?;
+                    let rgba_data =
+                        Self::read_texture_to_rgba8(&ctx, &output_texture, src_width, src_height)?;
 
-                Ok((rgba_data, src_width, src_height))
-            })
-            .await
-            .map_err(|e| Error::Other(format!("Element decode task failed: {}", e)))??;
+                    Ok((rgba_data, src_width, src_height))
+                })
+                .await
+                .map_err(|e| Error::Other(format!("Element decode task failed: {}", e)))??;
 
             let (rgba_data, src_width, src_height) = decoded_rgba;
 
@@ -530,17 +550,18 @@ impl ITimelineService for TimelineService {
                 width,
                 height,
                 fps,
-                bitrate: 4_000_000, // 4 Mbps for timeline preview
+                bitrate: 4_000_000,            // 4 Mbps for timeline preview
                 gop_size: (fps as u32).max(1), // 1 second GOP
             };
 
-            let mut pipeline = match PreviewPipeline::new(video_timeline.clone(), video_gpu_ctx, preview_config) {
-                Ok(p) => p,
-                Err(e) => {
-                    tracing::error!("Failed to create PreviewPipeline: {}", e);
-                    return;
-                }
-            };
+            let mut pipeline =
+                match PreviewPipeline::new(video_timeline.clone(), video_gpu_ctx, preview_config) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        tracing::error!("Failed to create PreviewPipeline: {}", e);
+                        return;
+                    }
+                };
 
             if let Err(e) = pipeline.initialize() {
                 tracing::error!("Failed to initialize PreviewPipeline: {}", e);
@@ -549,7 +570,10 @@ impl ITimelineService for TimelineService {
 
             tracing::info!(
                 "PreviewPipeline initialized: {}x{} @ {}fps, hw={}",
-                width, height, fps, pipeline.is_hw_active()
+                width,
+                height,
+                fps,
+                pipeline.is_hw_active()
             );
 
             let mut pacer = WallClockPacer::new(fps, 1.0);
@@ -567,7 +591,9 @@ impl ITimelineService for TimelineService {
 
             loop {
                 // Check cancellation
-                if video_cancel.is_cancelled() { break; }
+                if video_cancel.is_cancelled() {
+                    break;
+                }
 
                 // Read playback state
                 let state = video_state_rx.borrow().clone();
@@ -577,7 +603,10 @@ impl ITimelineService for TimelineService {
                     last_timeline_seq = state.timeline_seq;
                     if let Some(new_tl) = &state.timeline_update {
                         let new_timeline = (**new_tl).clone();
-                        tracing::info!("Video loop: hot-updating timeline (seq={})", state.timeline_seq);
+                        tracing::info!(
+                            "Video loop: hot-updating timeline (seq={})",
+                            state.timeline_seq
+                        );
                         pipeline.update_timeline(new_timeline.clone());
                         video_duration = new_timeline.duration;
                     }
@@ -589,7 +618,10 @@ impl ITimelineService for TimelineService {
                     if let Some(new_config) = &state.config_update {
                         tracing::info!(
                             "Video loop: hot-updating config (seq={}): {}x{} @ {}kbps",
-                            state.config_seq, new_config.width, new_config.height, new_config.bitrate / 1000
+                            state.config_seq,
+                            new_config.width,
+                            new_config.height,
+                            new_config.bitrate / 1000
                         );
                         match pipeline.update_config(new_config.clone()) {
                             Ok(flushed_frames) => {
@@ -649,7 +681,12 @@ impl ITimelineService for TimelineService {
                         pacer.reset();
                     } else {
                         // No loop: enter EOF idle wait for seek
-                        match eof_idle_wait(&video_cancel, &video_state_rx, last_seek_seq, EOF_IDLE_TIMEOUT) {
+                        match eof_idle_wait(
+                            &video_cancel,
+                            &video_state_rx,
+                            last_seek_seq,
+                            EOF_IDLE_TIMEOUT,
+                        ) {
                             Some(time) => {
                                 current_time = time;
                                 pacer.reset();
@@ -693,7 +730,11 @@ impl ITimelineService for TimelineService {
                         stats.record_frame(timing);
                     }
                     Err(e) => {
-                        tracing::warn!("PreviewPipeline render error at {:.3}s: {}", current_time, e);
+                        tracing::warn!(
+                            "PreviewPipeline render error at {:.3}s: {}",
+                            current_time,
+                            e
+                        );
                     }
                 }
 
@@ -808,7 +849,9 @@ impl ITimelineService for TimelineService {
             // and lost before the client can subscribe.
             let wait_start = std::time::Instant::now();
             while audio_tx.receiver_count() == 0 {
-                if audio_cancel.is_cancelled() { return; }
+                if audio_cancel.is_cancelled() {
+                    return;
+                }
                 std::thread::sleep(std::time::Duration::from_millis(10));
                 if wait_start.elapsed() > std::time::Duration::from_secs(5) {
                     tracing::warn!("Audio loop: timed out waiting for subscriber, starting anyway");
@@ -849,7 +892,10 @@ impl ITimelineService for TimelineService {
                 if state.timeline_seq != last_timeline_seq {
                     last_timeline_seq = state.timeline_seq;
                     if let Some(new_tl) = &state.timeline_update {
-                        tracing::info!("Audio loop: hot-updating timeline (seq={})", state.timeline_seq);
+                        tracing::info!(
+                            "Audio loop: hot-updating timeline (seq={})",
+                            state.timeline_seq
+                        );
                         mixer.update_timeline((**new_tl).clone());
                     }
                 }
@@ -893,7 +939,12 @@ impl ITimelineService for TimelineService {
                         pacer.reset();
                     } else {
                         // No loop: enter EOF idle wait for seek
-                        match eof_idle_wait(&audio_cancel, &audio_state_rx, last_seek_seq, EOF_IDLE_TIMEOUT) {
+                        match eof_idle_wait(
+                            &audio_cancel,
+                            &audio_state_rx,
+                            last_seek_seq,
+                            EOF_IDLE_TIMEOUT,
+                        ) {
                             Some(time) => {
                                 current_time = time;
                                 pacer.reset();
@@ -916,7 +967,9 @@ impl ITimelineService for TimelineService {
                             let ch = channels as usize;
                             let total = fade_in_samples_total;
                             for i in 0..mixed.samples {
-                                if fade_in_remaining == 0 { break; }
+                                if fade_in_remaining == 0 {
+                                    break;
+                                }
                                 let progress = 1.0 - (fade_in_remaining as f32 / total as f32);
                                 let gain = progress * progress; // quadratic ease-in
                                 for c in 0..ch {
@@ -961,7 +1014,9 @@ impl ITimelineService for TimelineService {
             };
             tracing::info!(
                 "Audio stream ended: {} frames in {:.1}s, avg mix {:.2}ms/frame",
-                total_frames, elapsed, avg_mix_ms
+                total_frames,
+                elapsed,
+                avg_mix_ms
             );
 
             mixer.close();
@@ -982,15 +1037,14 @@ impl ITimelineService for TimelineService {
             join_handle: audio_join,
             linked_stream_id: None,
         };
-        self.active_streams.insert_paired(video_handle, audio_handle).await;
+        self.active_streams
+            .insert_paired(video_handle, audio_handle)
+            .await;
 
         // Store stats receiver for polling via get_stream_stats()
         {
             let mut receivers = self.stats_receivers.write().await;
-            receivers.insert(
-                video_stream_id.as_str().to_string(),
-                stats_rx.clone(),
-            );
+            receivers.insert(video_stream_id.as_str().to_string(), stats_rx.clone());
         }
 
         // Store initial timeline for incremental operations
@@ -1010,7 +1064,9 @@ impl ITimelineService for TimelineService {
 
     async fn get_stream_stats(&self, stream_id: &StreamId) -> Option<StreamStats> {
         let receivers = self.stats_receivers.read().await;
-        receivers.get(stream_id.as_str()).map(|rx| rx.borrow().clone())
+        receivers
+            .get(stream_id.as_str())
+            .map(|rx| rx.borrow().clone())
     }
 
     async fn update_stream(&self, stream_id: &StreamId, timeline: &Timeline) -> Result<()> {
@@ -1033,7 +1089,9 @@ impl ITimelineService for TimelineService {
             stream_id.as_str()
         );
 
-        self.playback.update_timeline(stream_id, timeline_arc).await?;
+        self.playback
+            .update_timeline(stream_id, timeline_arc)
+            .await?;
 
         // Store current timeline for incremental operations
         self.current_timelines
@@ -1125,10 +1183,7 @@ mod tests {
         let stream_id = StreamId::new("test");
         let result = service.stop_stream(&stream_id).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Stream not found"));
+        assert!(result.unwrap_err().to_string().contains("Stream not found"));
     }
 
     #[tokio::test]

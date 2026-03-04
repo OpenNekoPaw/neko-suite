@@ -2,23 +2,40 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Blend mode for compositing layers
+/// Blend mode for compositing layers — 27 modes aligned with gpu::BlendMode and timeline.proto
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BlendMode {
+    // Basic
     #[default]
     Normal,
-    Multiply,
-    Screen,
-    Overlay,
+    Dissolve,
+    // Darken Group
     Darken,
-    Lighten,
-    ColorDodge,
+    Multiply,
     ColorBurn,
-    HardLight,
+    LinearBurn,
+    DarkerColor,
+    // Lighten Group
+    Lighten,
+    Screen,
+    ColorDodge,
+    LinearDodge, // Add
+    LighterColor,
+    // Contrast Group
+    Overlay,
     SoftLight,
+    HardLight,
+    VividLight,
+    LinearLight,
+    PinLight,
+    HardMix,
+    // Difference Group
     Difference,
     Exclusion,
+    Subtract,
+    Divide,
+    // HSL Group
     Hue,
     Saturation,
     Color,
@@ -28,18 +45,35 @@ pub enum BlendMode {
 impl BlendMode {
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
+            // Basic
             "normal" => Self::Normal,
-            "multiply" => Self::Multiply,
-            "screen" => Self::Screen,
-            "overlay" => Self::Overlay,
+            "dissolve" => Self::Dissolve,
+            // Darken Group
             "darken" => Self::Darken,
-            "lighten" => Self::Lighten,
-            "color-dodge" | "colordodge" => Self::ColorDodge,
+            "multiply" => Self::Multiply,
             "color-burn" | "colorburn" => Self::ColorBurn,
-            "hard-light" | "hardlight" => Self::HardLight,
+            "linear-burn" | "linearburn" => Self::LinearBurn,
+            "darker-color" | "darkercolor" => Self::DarkerColor,
+            // Lighten Group
+            "lighten" => Self::Lighten,
+            "screen" => Self::Screen,
+            "color-dodge" | "colordodge" => Self::ColorDodge,
+            "linear-dodge" | "lineardodge" | "add" => Self::LinearDodge,
+            "lighter-color" | "lightercolor" => Self::LighterColor,
+            // Contrast Group
+            "overlay" => Self::Overlay,
             "soft-light" | "softlight" => Self::SoftLight,
+            "hard-light" | "hardlight" => Self::HardLight,
+            "vivid-light" | "vividlight" => Self::VividLight,
+            "linear-light" | "linearlight" => Self::LinearLight,
+            "pin-light" | "pinlight" => Self::PinLight,
+            "hard-mix" | "hardmix" => Self::HardMix,
+            // Difference Group
             "difference" => Self::Difference,
             "exclusion" => Self::Exclusion,
+            "subtract" => Self::Subtract,
+            "divide" => Self::Divide,
+            // HSL Group
             "hue" => Self::Hue,
             "saturation" => Self::Saturation,
             "color" => Self::Color,
@@ -50,18 +84,35 @@ impl BlendMode {
 
     pub fn as_str(&self) -> &'static str {
         match self {
+            // Basic
             Self::Normal => "normal",
-            Self::Multiply => "multiply",
-            Self::Screen => "screen",
-            Self::Overlay => "overlay",
+            Self::Dissolve => "dissolve",
+            // Darken Group
             Self::Darken => "darken",
-            Self::Lighten => "lighten",
-            Self::ColorDodge => "color-dodge",
+            Self::Multiply => "multiply",
             Self::ColorBurn => "color-burn",
-            Self::HardLight => "hard-light",
+            Self::LinearBurn => "linear-burn",
+            Self::DarkerColor => "darker-color",
+            // Lighten Group
+            Self::Lighten => "lighten",
+            Self::Screen => "screen",
+            Self::ColorDodge => "color-dodge",
+            Self::LinearDodge => "linear-dodge",
+            Self::LighterColor => "lighter-color",
+            // Contrast Group
+            Self::Overlay => "overlay",
             Self::SoftLight => "soft-light",
+            Self::HardLight => "hard-light",
+            Self::VividLight => "vivid-light",
+            Self::LinearLight => "linear-light",
+            Self::PinLight => "pin-light",
+            Self::HardMix => "hard-mix",
+            // Difference Group
             Self::Difference => "difference",
             Self::Exclusion => "exclusion",
+            Self::Subtract => "subtract",
+            Self::Divide => "divide",
+            // HSL Group
             Self::Hue => "hue",
             Self::Saturation => "saturation",
             Self::Color => "color",
