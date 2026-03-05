@@ -62,6 +62,12 @@
         "category": "Neko Story"
       },
       {
+        "command": "neko.story.exportPdf",
+        "title": "%neko.story.exportPdf.title%",
+        "icon": "$(file-pdf)",
+        "category": "Neko Story"
+      },
+      {
         "command": "neko.story.generateStoryboard",
         "title": "Generate Storyboard",
         "category": "Neko Story"

@@ -132,6 +132,19 @@ export function activate(context: vscode.ExtensionContext) {
 
       await vscode.commands.executeCommand('vscode.openWith', saveUri, 'neko.cut.editor');
     }),
+    vscode.commands.registerCommand('neko.story.exportPdf', () => {
+      if (!PreviewPanel.currentPanel) {
+        const editor = vscode.window.activeTextEditor;
+        if (editor && editor.document.languageId === 'nekostory') {
+          PreviewPanel.createOrShow(context.extensionUri);
+          setTimeout(() => PreviewPanel.currentPanel?.print(), 800);
+        } else {
+          vscode.window.showInformationMessage('请先打开剧本文件，再导出 PDF');
+        }
+        return;
+      }
+      PreviewPanel.currentPanel.print();
+    }),
     vscode.commands.registerCommand('neko.story.generateStoryboard', () => {
       vscode.window.showInformationMessage('Generate storyboard - Coming soon');
     }),

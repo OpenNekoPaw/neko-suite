@@ -4,7 +4,8 @@ import type { FountainDocument } from '@neko-story/types';
 
 type MessageToWebview =
   | { type: 'update'; document: FountainDocument }
-  | { type: 'scrollTo'; line: number };
+  | { type: 'scrollTo'; line: number }
+  | { type: 'print' };
 
 type MessageFromWebview =
   | { type: 'ready' }
@@ -159,6 +160,10 @@ export class PreviewPanel implements vscode.Disposable {
 
   private scrollPreviewToLine(line: number) {
     this.postMessage({ type: 'scrollTo', line });
+  }
+
+  public print(): void {
+    this.postMessage({ type: 'print' });
   }
 
   private postMessage(message: MessageToWebview) {
