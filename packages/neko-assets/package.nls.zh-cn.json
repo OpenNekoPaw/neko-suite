@@ -5,6 +5,8 @@
   "neko.assetManager.historyTitle": "素材历史",
   "neko.assetManager.cloudSync": "云同步",
   "neko.assetManager.cloudSyncTitle": "云同步状态",
+  "neko.views.mediaLibraries.name": "媒体库",
+  "neko.views.mediaLibraries.contextualTitle": "外部媒体库",
   "neko.assets.sync": "同步素材",
   "neko.assets.push": "推送到云端",
   "neko.assets.pull": "从云端拉取",

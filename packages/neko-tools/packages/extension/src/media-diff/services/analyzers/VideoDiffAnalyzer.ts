@@ -90,13 +90,34 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 			}
 			this.throwIfAborted();
 
+			// Step 1: Quick probe to get durations for smart range selection
+			const probeA = await this.engineMediaService.probe('videos', currentPath);
+			const probeB = await this.engineMediaService.probe('videos', previousPath);
+			const probeDurA = probeA?.duration ?? 0;
+			const probeDurB = probeB?.duration ?? 0;
+
+			// Step 2: Smart range selection
+			// - If durations differ significantly, only compare the overlapping range
+			// - This avoids processing the entire long video when comparing 120s vs 5s
+			const minDur = Math.min(probeDurA, probeDurB);
+			const maxDur = Math.max(probeDurA, probeDurB);
+			const durRatio = maxDur > 0 ? minDur / maxDur : 1;
+
+			let diffOptions: { sampleFps: number; endTime?: number } = { sampleFps: 1.0 };
+
+			// If duration difference > 20%, limit comparison to shorter video's length
+			if (durRatio < 0.8 && minDur > 0) {
+				diffOptions.endTime = minDur;
+				console.log(`[VideoDiffAnalyzer] Duration mismatch detected (${probeDurA.toFixed(1)}s vs ${probeDurB.toFixed(1)}s), limiting comparison to ${minDur.toFixed(1)}s`);
+			}
+
 			// Use 1fps sampling for initial diff to reduce computation time
 			// For 60min video: 108K frames → 3.6K frames → ~1-2s instead of 30s
 			const engineResult = await this.engineMediaService.diff(
 				'videos',
 				currentPath,
 				previousPath,
-				{ sampleFps: 1.0 }
+				diffOptions
 			);
 
 			this.throwIfAborted();

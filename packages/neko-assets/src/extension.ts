@@ -82,6 +82,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	initI18n(locale);
 	logger.info(`i18n initialized with locale: ${locale}`);
 
+	// Create metadata extractor (used by both AssetLibrary and MediaLibrary)
+	const metadataExtractor = createEngineMetadataExtractor();
+
 	// 1. Initialize AssetLibrary
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 	if (workspaceRoot) {
@@ -93,8 +96,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				fs: nodeFileSystem,
 				autoSaveDelay: 1000,
 			});
-
-			const metadataExtractor = createEngineMetadataExtractor();
 
 			// Initialize ThumbnailService
 			thumbnailService = new ThumbnailService(workspaceRoot);

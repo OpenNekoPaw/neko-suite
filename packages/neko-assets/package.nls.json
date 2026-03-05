@@ -5,6 +5,8 @@
   "neko.assetManager.historyTitle": "Asset History",
   "neko.assetManager.cloudSync": "Cloud Sync",
   "neko.assetManager.cloudSyncTitle": "Cloud Sync Status",
+  "neko.views.mediaLibraries.name": "Media Libraries",
+  "neko.views.mediaLibraries.contextualTitle": "External Media Libraries",
   "neko.assets.sync": "Sync Assets",
   "neko.assets.push": "Push to Cloud",
   "neko.assets.pull": "Pull from Cloud",

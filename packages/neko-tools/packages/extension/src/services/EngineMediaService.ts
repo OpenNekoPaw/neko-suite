@@ -110,4 +110,23 @@ export class EngineMediaService {
 			return null;
 		}
 	}
+
+	/**
+	 * Probe media metadata via the engine's native probe action.
+	 *
+	 * @param group - Action group: 'videos' | 'audios'
+	 * @param source - Absolute path to media file
+	 * @returns ProbeResult or null if engine unavailable
+	 */
+	async probe(group: 'videos' | 'audios', source: string): Promise<any | null> {
+		const client = await this.ensureClient();
+		if (!client) return null;
+
+		try {
+			return await client.probe(group, source);
+		} catch (error) {
+			console.error(`[EngineMediaService] probe(${group}) failed:`, error);
+			return null;
+		}
+	}
 }

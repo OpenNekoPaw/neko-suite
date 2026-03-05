@@ -53,8 +53,8 @@
         },
         {
           "id": "neko.mediaLibraries",
-          "name": "Media Libraries",
-          "contextualTitle": "External Media Libraries"
+          "name": "%neko.views.mediaLibraries.name%",
+          "contextualTitle": "%neko.views.mediaLibraries.contextualTitle%"
         },
         {
           "id": "neko.assetHistory",

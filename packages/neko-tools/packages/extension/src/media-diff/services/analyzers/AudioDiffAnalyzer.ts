@@ -55,10 +55,32 @@ export class AudioDiffAnalyzer extends BaseMediaDiffAnalyzer {
 			}
 			this.throwIfAborted();
 
+			// Step 1: Quick probe to get durations for smart range selection
+			const probeA = await this.engineMediaService.probe('audios', currentPath);
+			const probeB = await this.engineMediaService.probe('audios', previousPath);
+			const probeDurA = probeA?.duration ?? 0;
+			const probeDurB = probeB?.duration ?? 0;
+
+			// Step 2: Smart range selection
+			// - If durations differ significantly, only compare the overlapping range
+			// - This avoids processing the entire long audio when comparing 120s vs 5s
+			const minDur = Math.min(probeDurA, probeDurB);
+			const maxDur = Math.max(probeDurA, probeDurB);
+			const durRatio = maxDur > 0 ? minDur / maxDur : 1;
+
+			let diffOptions: { endTime?: number } = {};
+
+			// If duration difference > 20%, limit comparison to shorter audio's length
+			if (durRatio < 0.8 && minDur > 0) {
+				diffOptions.endTime = minDur;
+				console.log(`[AudioDiffAnalyzer] Duration mismatch detected (${probeDurA.toFixed(1)}s vs ${probeDurB.toFixed(1)}s), limiting comparison to ${minDur.toFixed(1)}s`);
+			}
+
 			const engineResult = await this.engineMediaService.diff(
 				'audios',
 				currentPath,
-				previousPath
+				previousPath,
+				diffOptions
 			);
 
 			this.throwIfAborted();

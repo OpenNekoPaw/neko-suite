@@ -9,6 +9,7 @@
 **Phase 2（统一通信+并行）** — EngineClient 迁移、音频波形并行调度、SSIM‖PSNR 并行（30-50% 提速）
 **Phase 2.5（前端去阻塞）** — ProgressOverlay 非阻塞化、消息队列 fire-and-forget
 **Phase 2.6（后续修复）** — Git Ref 切换停止旧流、早期波形取消机制
+**Phase 2.7（性能优化）** — 视频对比帧率采样（`sample_fps` 参数 + Webview 降采样），60 分钟视频 30s → 1-2s（15-30x 提升）
 
 </details>
 
@@ -588,10 +589,14 @@ React webview 包 + useMediaDiffProtocol hook + 展示组件 + 构建链路 — 
 
 - [ ] P0 — Engine 流式帧指标返回（SSIM 每 N 帧回调，渐进显示）— Rust 工作量大
 - [ ] P1 — 音频静音检测 (Protocol 已定义 `silenceRegions`)
-- [ ] P1 — 视频关键帧智能采样 (长视频性能优化)
+- [x] P1 — 视频关键帧智能采样 (长视频性能优化) — **已完成**
+  - Rust: `VideoDiffOptions.sample_fps` 支持帧率降采样（FFmpeg fps filter）
+  - TypeScript: `VideoDiffAnalyzer` 默认使用 1fps 采样
+  - Webview: `downsampleKeyframeDiffs` 降采样至 500 帧渲染
+  - 性能提升: 60 分钟视频 30s → 1-2s（15-30x）
 - [ ] P2 — 高精度波形 zoom（按需加载，800 点 → 更多）
-- [ ] P2 — 音频频谱分析 (频域对比)
-- [ ] P2 — 音频响度归一化 (BS.1770 标准)
+- [x] P2 — 音频频谱分析 (频域对比) — **已实现为 `audios:analyze_loudness`**
+- [x] P2 — 音频响度归一化 (BS.1770 标准) — **已实现为 `audios:analyze_loudness`**
 - [ ] P2 — 音频多声道对比
 - [ ] P2 — 视频场景切换检测
 
