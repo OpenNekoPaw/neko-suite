@@ -11,6 +11,9 @@ import { PreviewPanel } from './panels/PreviewPanel';
 import { getStoryTemplate } from './templates/storyTemplate';
 import { WorkspaceIndexService } from './services/WorkspaceIndexService';
 import { setRootLogger, getRootLogger } from './utils/logger';
+import * as path from 'path';
+import { parse } from '@neko-story/parser';
+import { TimelineConverter, formatDuration } from './converters/TimelineConverter';
 
 const FOUNTAIN_SELECTOR: vscode.DocumentSelector = { language: 'nekostory' };
 
@@ -77,8 +80,57 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('neko.story.preview', () => {
       PreviewPanel.createOrShow(context.extensionUri);
     }),
-    vscode.commands.registerCommand('neko.story.toTimeline', () => {
-      vscode.window.showInformationMessage('Convert to timeline - Coming soon');
+    vscode.commands.registerCommand('neko.story.toTimeline', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.languageId !== 'nekostory') {
+        vscode.window.showErrorMessage('请在剧本文件中执行此命令');
+        return;
+      }
+
+      const text = editor.document.getText();
+      const doc = parse(text);
+      const baseName = path.basename(
+        editor.document.fileName,
+        path.extname(editor.document.fileName),
+      );
+
+      const converter = new TimelineConverter();
+      const result = converter.convert(doc, baseName);
+
+      const picked = await vscode.window.showQuickPick(
+        [
+          {
+            label: '$(file-add) 新建 neko-cut 项目',
+            description: `${result.sceneCount} 个场景 · 约 ${formatDuration(result.totalDurationSec)} · ${result.characterNames.length} 个角色`,
+          },
+        ],
+        {
+          placeHolder: '预览：剧本将转换为以下时间线，确认后选择保存位置',
+          title: '剧本 → 时间线',
+        },
+      );
+
+      if (!picked) return;
+
+      const defaultUri = vscode.Uri.file(
+        path.join(
+          path.dirname(editor.document.fileName),
+          `${baseName}.neko`,
+        ),
+      );
+
+      const saveUri = await vscode.window.showSaveDialog({
+        defaultUri,
+        filters: { 'Neko Cut Project': ['neko'] },
+        title: '保存时间线项目',
+      });
+
+      if (!saveUri) return;
+
+      const json = JSON.stringify(result.project, null, 2);
+      await vscode.workspace.fs.writeFile(saveUri, Buffer.from(json, 'utf-8'));
+
+      await vscode.commands.executeCommand('vscode.openWith', saveUri, 'neko.cut.editor');
     }),
     vscode.commands.registerCommand('neko.story.generateStoryboard', () => {
       vscode.window.showInformationMessage('Generate storyboard - Coming soon');
