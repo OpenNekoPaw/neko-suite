@@ -808,13 +808,27 @@ export type StreamingDecodeResponse =
  * Kept separate from ExportSettings to avoid coupling with streaming/advanced fields.
  */
 export interface ExportPresetSettings {
+  /** Output container format */
   format: 'mp4' | 'webm' | 'mov' | 'mkv';
+  /**
+   * Video codec identifier. Intentionally `string` (not `VideoCodec`) because
+   * ExportPanel supports 'prores' and other codecs beyond the VideoCodec union.
+   */
   videoCodec: string;
+  /**
+   * Audio codec identifier. Intentionally `string` (not `AudioCodec`) because
+   * ExportPanel supports 'flac', 'vorbis', 'pcm' beyond the AudioCodec union.
+   */
   audioCodec: string;
+  /** Output width in pixels */
   width: number;
+  /** Output height in pixels */
   height: number;
+  /** Frame rate in fps */
   fps: number;
+  /** Quality preset level */
   quality: 'low' | 'medium' | 'high';
+  /** Audio bitrate in bits per second (e.g. 192000 = 192 kbps) */
   audioBitrate: number;
 }
 
