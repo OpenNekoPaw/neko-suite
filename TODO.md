@@ -36,6 +36,7 @@
 - [x] **导出预设管理**：内置预设（社交/Web/母版）+ 自定义保存，`workspaceState` 持久化，`ExportPresetService` + `ExportPanel` 下拉 + 保存按钮
 - [x] **更多编码格式支持**：ProRes 硬件加速（`prores_videotoolbox`）+ AVI / MPEG-TS 容器 + 硬件加速动态 badge（`nodes:hw_capabilities`）
 - [x] **neko-types 文档完善**：`src/README.md` + `src/types/README.md` 更新至 50+ 文件现状，12 个子目录全部覆盖
+- [x] **neko-story 非 AI 功能**（错误诊断 + 时间线生成 + PDF 导出）— 进度 55% → 75%
 
 </details>
 
@@ -66,9 +67,9 @@
 - [ ] **ChatViewProvider Handler 拆分** Phase 2-5（当前 Phase 1 完成 18%）— [engine.md §重构 #3](./docs/engine.md)
 
 ### neko-story
-- [ ] 错误诊断（LSP Diagnostics）：语法错误实时标红 — [lsp.md §Phase 1](./docs/lsp.md)
-- [ ] 时间线生成：`.nks` → `.jvi` 自动转换 — [engine.md §重构 #4: neko-story Phase 3.3](./docs/engine.md)
-- [ ] 导出 PDF（Fountain 标准格式）— [task-plan #12](./docs/task-plan.md)
+- [x] **错误诊断**：语法错误（未闭合 `[[`/`/*`）+ 语义警告（单次角色、孤立括注）— `DiagnosticsProvider`
+- [x] **时间线生成**：Fountain → neko-cut `.neko` ProjectData，QuickPick 预览 + SaveDialog — `TimelineConverter`
+- [x] **导出 PDF**：@media print 标准 Fountain 印刷规格 + 打印按钮 + `neko.story.exportPdf` 命令
 
 ### neko-assets（Phase 4）
 - [x] **External Media Library** Phase P0/P1（2026-03-04 完成）— [adr-external-media-library](./docs/architecture/adr-external-media-library.md)
@@ -183,4 +184,4 @@
 
 ---
 
-*最后更新：2026-03-05（Phase 1 全部归档，Phase 2 Current）*
+*最后更新：2026-03-06（neko-story 非 AI 功能完成，进度 75%）*
