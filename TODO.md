@@ -32,6 +32,10 @@
 - [x] **Diff 范围支持**：Video/Audio diff 支持 `start_time`/`end_time` 参数，FFmpeg `-ss`/`-to` 裁剪输入，性能提升 5-6x（长视频局部对比）— [diff-range-usage.md](./docs/diff-range-usage.md)
 - [x] **视频对比性能优化**：`sample_fps` 参数支持帧率降采样（Rust FFmpeg fps filter + TS 1fps 默认 + Webview 降采样至 500 帧），60 分钟视频对比时间 30s → 1-2s（15-30x 提升）
 - [x] **时长不匹配智能优化**：Video/Audio diff 自动检测时长差异 > 20%，限制对比范围至较短文件（probe + endTime），120s vs 5s 视频 50s → 5s（10x 提升）— [diff-duration-mismatch-optimization.md](./docs/diff-duration-mismatch-optimization.md)
+- [x] **多分辨率预览切换**：Full / High(1/2) / Medium(1/4) / Low(1/8) 质量档位，`PREVIEW_QUALITY` 缩放系数 → Rust `PreviewPipeline.update_config()`
+- [x] **导出预设管理**：内置预设（社交/Web/母版）+ 自定义保存，`workspaceState` 持久化，`ExportPresetService` + `ExportPanel` 下拉 + 保存按钮
+- [x] **更多编码格式支持**：ProRes 硬件加速（`prores_videotoolbox`）+ AVI / MPEG-TS 容器 + 硬件加速动态 badge（`nodes:hw_capabilities`）
+- [x] **neko-types 文档完善**：`src/README.md` + `src/types/README.md` 更新至 50+ 文件现状，12 个子目录全部覆盖
 
 </details>
 
@@ -83,9 +87,6 @@
 ## 🟢 P2 — 增强功能（可延后）
 
 ### neko-cut
-- [ ] 多分辨率预览切换（1/4、1/2、Full）— [task-plan #10](./docs/task-plan.md)
-- [ ] 导出预设管理（常用配置保存/加载）
-- [ ] 更多编码格式支持（ProRes、DNxHD）
 - [ ] 反向播放支持（需 neko-engine 配合）— [task-plan #9](./docs/task-plan.md)
 
 ### neko-engine
@@ -162,7 +163,7 @@
 | 中 | AI SDK 依赖倒置（`AISdkAdapter` 直接依赖 Vercel AI SDK，DIP 65/100） | 可替换性差 | [task-plan TD-1](./docs/task-plan.md) |
 | 中 | 规范化 git commit message（采用 Conventional Commits） | 追溯困难 | [task-plan TD-3](./docs/task-plan.md) |
 | 中 | neko-types 83 个 `as any` 需替换为判别联合 | 类型安全 | [engine.md](./docs/engine.md) |
-| 中 | neko-types 类型文档完善（JSDoc 覆盖率低） | 开发体验差 | |
+| 中 | neko-types JSDoc 覆盖率低（README 已更新，类型文件内注释仍不足） | 开发体验差 | |
 | 低 | 国际化扩展（neko-cut/neko-agent 已完成，其他包待补） | 国际化缺口 | [task-plan TD-5](./docs/task-plan.md) |
 
 ---
@@ -182,4 +183,4 @@
 
 ---
 
-*最后更新：2026-03-05*
+*最后更新：2026-03-05（Phase 1 全部归档，Phase 2 Current）*
