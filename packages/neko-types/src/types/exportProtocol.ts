@@ -798,3 +798,33 @@ export type StreamingDecodeResponse =
   | StreamingDecodeInitResponse
   | StreamingDecodeFrameResponse
   | StreamingDecodeStopResponse;
+
+// =============================================================================
+// Export Preset Types
+// =============================================================================
+
+/**
+ * Settings captured in a preset — matches the fields ExportPanel uses.
+ * Kept separate from ExportSettings to avoid coupling with streaming/advanced fields.
+ */
+export interface ExportPresetSettings {
+  format: 'mp4' | 'webm' | 'mov' | 'mkv';
+  videoCodec: string;
+  audioCodec: string;
+  width: number;
+  height: number;
+  fps: number;
+  quality: 'low' | 'medium' | 'high';
+  audioBitrate: number;
+}
+
+/**
+ * An export preset (built-in or user-defined)
+ */
+export interface ExportPreset {
+  /** Built-in IDs: 'builtin-social' | 'builtin-web' | 'builtin-master'. User: crypto.randomUUID() */
+  id: string;
+  name: string;
+  isBuiltin: boolean;
+  settings: ExportPresetSettings;
+}
