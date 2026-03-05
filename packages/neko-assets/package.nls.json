@@ -17,5 +17,18 @@
   "neko.assets.previewMedia": "Preview Media",
   "neko.assets.addToTimeline": "Add to Timeline",
   "neko.assets.addToCanvas": "Add to Canvas",
-  "neko.assets.importFile": "Import to Asset Library"
+  "neko.assets.importFile": "Import to Asset Library",
+  "neko.assets.validateAll": "Validate All Assets",
+  "neko.assets.relocateFile": "Relocate File...",
+  "neko.assets.showHealthReport": "Show Asset Health Report",
+  "neko.assets.addMediaLibrary": "Add Media Library...",
+  "neko.assets.removeMediaLibrary": "Remove Media Library",
+  "neko.assets.setLocalOverride": "Set Local Path Override...",
+  "neko.assets.importFromLibrary": "Import to Asset Library",
+  "neko.assets.revealFileInOS": "Reveal in Finder",
+  "neko.assets.copyFilePath": "Copy File Path",
+  "neko.assets.previewMediaLibraryFile": "Preview Media",
+  "neko.assets.addToTimelineFromLibrary": "Add to Timeline",
+  "neko.assets.addToCanvasFromLibrary": "Add to Canvas",
+  "neko.assets.refreshMediaLibraries": "Refresh Media Libraries"
 }

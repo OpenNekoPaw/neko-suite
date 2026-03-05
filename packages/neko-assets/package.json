@@ -129,74 +129,74 @@
       },
       {
         "command": "neko.assets.validateAll",
-        "title": "Validate All Assets",
+        "title": "%neko.assets.validateAll%",
         "category": "Neko Assets",
         "icon": "$(check-all)"
       },
       {
         "command": "neko.assets.relocateFile",
-        "title": "Relocate File...",
+        "title": "%neko.assets.relocateFile%",
         "category": "Neko Assets",
         "icon": "$(file-symlink-file)"
       },
       {
         "command": "neko.assets.showHealthReport",
-        "title": "Show Asset Health Report",
+        "title": "%neko.assets.showHealthReport%",
         "category": "Neko Assets",
         "icon": "$(pulse)"
       },
       {
         "command": "neko.assets.addMediaLibrary",
-        "title": "Add Media Library...",
+        "title": "%neko.assets.addMediaLibrary%",
         "category": "Neko Assets",
         "icon": "$(folder-add)"
       },
       {
         "command": "neko.assets.removeMediaLibrary",
-        "title": "Remove Media Library",
+        "title": "%neko.assets.removeMediaLibrary%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.setLocalOverride",
-        "title": "Set Local Path Override...",
+        "title": "%neko.assets.setLocalOverride%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.importFromLibrary",
-        "title": "Import to Asset Library",
+        "title": "%neko.assets.importFromLibrary%",
         "category": "Neko Assets",
         "icon": "$(add)"
       },
       {
         "command": "neko.assets.revealFileInOS",
-        "title": "Reveal in Finder",
+        "title": "%neko.assets.revealFileInOS%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.copyFilePath",
-        "title": "Copy File Path",
+        "title": "%neko.assets.copyFilePath%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.previewMediaLibraryFile",
-        "title": "Preview Media",
+        "title": "%neko.assets.previewMediaLibraryFile%",
         "category": "Neko Assets"
       },
       {
         "command": "neko.assets.addToTimelineFromLibrary",
-        "title": "Add to Timeline",
+        "title": "%neko.assets.addToTimelineFromLibrary%",
         "category": "Neko Assets",
         "icon": "$(play)"
       },
       {
         "command": "neko.assets.addToCanvasFromLibrary",
-        "title": "Add to Canvas",
+        "title": "%neko.assets.addToCanvasFromLibrary%",
         "category": "Neko Assets",
         "icon": "$(layout)"
       },
       {
         "command": "neko.assets.refreshMediaLibraries",
-        "title": "Refresh Media Libraries",
+        "title": "%neko.assets.refreshMediaLibraries%",
         "category": "Neko Assets",
         "icon": "$(refresh)"
       }

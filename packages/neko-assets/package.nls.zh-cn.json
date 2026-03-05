@@ -17,5 +17,18 @@
   "neko.assets.previewMedia": "预览媒体",
   "neko.assets.addToTimeline": "添加到时间线",
   "neko.assets.addToCanvas": "添加到画布",
-  "neko.assets.importFile": "导入到素材库"
+  "neko.assets.importFile": "导入到素材库",
+  "neko.assets.validateAll": "验证所有素材",
+  "neko.assets.relocateFile": "重新定位文件...",
+  "neko.assets.showHealthReport": "显示素材健康报告",
+  "neko.assets.addMediaLibrary": "添加媒体库...",
+  "neko.assets.removeMediaLibrary": "移除媒体库",
+  "neko.assets.setLocalOverride": "设置本地路径覆盖...",
+  "neko.assets.importFromLibrary": "导入到素材库",
+  "neko.assets.revealFileInOS": "在访达中显示",
+  "neko.assets.copyFilePath": "复制文件路径",
+  "neko.assets.previewMediaLibraryFile": "预览媒体",
+  "neko.assets.addToTimelineFromLibrary": "添加到时间线",
+  "neko.assets.addToCanvasFromLibrary": "添加到画布",
+  "neko.assets.refreshMediaLibraries": "刷新媒体库"
 }
