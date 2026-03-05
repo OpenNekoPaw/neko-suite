@@ -19,7 +19,7 @@ mod subtitle;
 mod timeline_diff;
 mod video_diff;
 
-pub use audio_diff::{diff_audio_content, AudioContentDiff, AudioDiffRegion};
+pub use audio_diff::{diff_audio_content, diff_audio_content_with_options, AudioContentDiff, AudioDiffOptions, AudioDiffRegion};
 pub use diff::{diff_media, ContentDiff, DiffCategory, DiffResult, FieldDiff};
 pub use image_diff::{diff_image_content, ImageContentDiff};
 pub use jpeg_encoder::encode_rgba_to_jpeg;

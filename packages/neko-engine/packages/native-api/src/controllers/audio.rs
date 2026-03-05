@@ -5,7 +5,7 @@ use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_native_core::domain::StreamConfig;
-use neko_native_core::media_service::{diff_media, DiffCategory};
+use neko_native_core::media_service::{diff_audio_content_with_options, diff_media, AudioDiffOptions, DiffCategory};
 use neko_native_core::services::{AudioService, IAudioService};
 use neko_types::registry;
 use neko_types::ActionResponse;
@@ -85,6 +85,12 @@ struct AudioDiffRequestOptions {
     source_a: Option<String>,
     /// Source B file path
     source_b: Option<String>,
+    /// Start time in seconds for range-based diff
+    #[serde(default)]
+    start_time: Option<f64>,
+    /// End time in seconds for range-based diff
+    #[serde(default)]
+    end_time: Option<f64>,
 }
 
 /// Options for audios:analyze_loudness
@@ -246,11 +252,29 @@ impl Controller for AudioController {
                     ApiError::InvalidRequest("sourceB path required for audios:diff".to_string())
                 })?;
 
+                let audio_opts = AudioDiffOptions {
+                    start_time: opts.start_time,
+                    end_time: opts.end_time,
+                };
+
                 // Run blocking diff on a dedicated thread pool
                 // to avoid starving the tokio async executor
                 let result = tokio::task::spawn_blocking(move || {
-                    diff_media(&source_a, &source_b, DiffCategory::Audio)
-                        .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))
+                    let mut result = diff_media(&source_a, &source_b, DiffCategory::Audio)
+                        .map_err(|e| ApiError::ServiceError(format!("Diff failed: {}", e)))?;
+
+                    match diff_audio_content_with_options(&source_a, &source_b, &audio_opts) {
+                        Ok(audio_diff) => {
+                            result.content = Some(
+                                neko_native_core::media_service::ContentDiff::Audio(audio_diff),
+                            );
+                        }
+                        Err(e) => {
+                            tracing::warn!("Audio content diff failed: {}", e);
+                        }
+                    }
+
+                    Ok::<_, ApiError>(result)
                 })
                 .await
                 .map_err(|e| ApiError::ServiceError(format!("Diff task failed: {}", e)))??;

@@ -185,6 +185,12 @@ struct DiffRequestOptions {
     diff_video_output: Option<String>,
     /// Whether to include audio comparison (default true)
     include_audio: Option<bool>,
+    /// Start time in seconds for range-based diff
+    #[serde(default)]
+    start_time: Option<f64>,
+    /// End time in seconds for range-based diff
+    #[serde(default)]
+    end_time: Option<f64>,
 }
 
 impl Controller for VideoController {
@@ -510,6 +516,8 @@ impl Controller for VideoController {
                     generate_diff_video: opts.generate_diff_video,
                     diff_video_output: opts.diff_video_output,
                     include_audio: opts.include_audio.unwrap_or(true),
+                    start_time: opts.start_time,
+                    end_time: opts.end_time,
                 };
 
                 // Run blocking FFmpeg diff operations on a dedicated thread pool

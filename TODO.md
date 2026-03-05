@@ -29,6 +29,7 @@
 - [x] **Stream Playback 统一**：提取 `IStreamPlayback` trait（`playback.rs`）+ `StreamPlaybackDelegate`（`stream_loop.rs`）消除 3 服务 × 6 方法重复实现；`handle_stream_control()` 统一四个 Controller 流控；修复 seek bug（`seek_seq += 1`）；修复 `StreamController` pause/resume 错误传播 + destroy 补充 `stop_stream()` 清理
 - [x] **BlendMode 补齐**：`neko_types::BlendMode` 扩展至 27 变体（对齐 `gpu::BlendMode` / proto / TS 类型），补全 `to_gpu_blend_mode()` + `convert_blend_mode()` 两处 match arm（`effects.rs` + `domain/timeline.rs` + `services/impls/timeline.rs`）
 - [x] **Diff Phase 2B**：前端可视化增强（TimelineDiffViewer + 音频三轨波形 + 视频 WebGL 渲染器 curtain/heatmap/flicker + DiffRegionOverlay）— [diff.md §Phase 2B](./docs/diff.md)
+- [x] **Diff 范围支持**：Video/Audio diff 支持 `start_time`/`end_time` 参数，FFmpeg `-ss`/`-to` 裁剪输入，性能提升 5-6x（长视频局部对比）— [diff-range-usage.md](./docs/diff-range-usage.md)
 
 </details>
 

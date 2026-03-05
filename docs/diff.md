@@ -59,9 +59,11 @@ neko-engine (Rust)
 - 分段窗口: 100ms
 - 差异阈值: SNR < 20dB
 - 波形降采样: 800 个峰值点
+- **范围 Diff**: 支持 `start_time`/`end_time` 参数（2026-03-05 新增）
 
 处理流程:
 1. FFmpeg 解码两个音频文件 → F32 Mono PCM (48kHz)
+   - 支持时间范围裁剪（内存 trim 实现，TODO: FFmpeg 原生 `-ss`/`-to`）
 2. 计算整体 SNR: `10 * log10(signal_power / noise_power)`
 3. 100ms 分段分析，SNR < 20dB 的段标记为差异
 4. 合并相邻差异区域
@@ -71,6 +73,11 @@ neko-engine (Rust)
 数据结构:
 
 ```rust
+AudioDiffOptions {
+    start_time: Option<f64>,  // 起始时间（秒），None = 从头开始
+    end_time: Option<f64>,    // 结束时间（秒），None = 到结尾
+}
+
 AudioContentDiff {
     snr: f64,                          // 整体信噪比 (dB)
     duration_a / duration_b: f64,      // 时长
@@ -94,6 +101,7 @@ AudioDiffRegion {
 基于 FFmpeg 的 SSIM/PSNR filter 实现逐帧对比:
 
 1. FFmpeg SSIM filter: `[1:v][0:v]scale2ref=flags=bicubic[scaled][ref];[ref][scaled]ssim`
+   - **范围 Diff**: 支持 `-ss`/`-to` 参数裁剪输入（2026-03-05 新增）
 2. FFmpeg PSNR filter: 同上结构，替换为 psnr filter
 3. 自动分辨率对齐: scale2ref 将 B 缩放到 A 的分辨率
 4. 合并 SSIM + PSNR 逐帧数据
@@ -101,9 +109,26 @@ AudioDiffRegion {
 6. 可选: 生成差异视频 (blend=difference)
 7. 可选: 同时执行音频 Diff
 
+FFmpeg 命令示例（范围 diff）:
+```bash
+# 对比 10-20s 时间段
+ffmpeg -ss 10 -i A.mp4 -ss 10 -i B.mp4 -t 10 \
+  -filter_complex "[1:v][0:v]scale2ref[scaled][ref];[ref][scaled]ssim=stats_file=/tmp/ssim.log" \
+  -f null -
+```
+
 数据结构:
 
 ```rust
+VideoDiffOptions {
+    ssim_threshold: f64,              // 默认 0.95
+    generate_diff_video: bool,
+    diff_video_output: Option<String>,
+    include_audio: bool,
+    start_time: Option<f64>,          // 起始时间（秒），None = 从头开始
+    end_time: Option<f64>,            // 结束时间（秒），None = 到结尾
+}
+
 VideoContentDiff {
     // 全局指标
     avg_ssim / min_ssim: f64,
@@ -593,3 +618,4 @@ React webview 包 + useMediaDiffProtocol hook + 展示组件 + 构建链路 — 
 - [ ] P2 — 无参考质量评估 (No-Reference VQA)
 - [ ] P3 — 伪影识别 (块效应/环状伪影)
 - [ ] P3 — 智能蒙版 SAM (主体分割后分层 Diff)
+

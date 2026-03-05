@@ -82,9 +82,18 @@ pub struct AudioDiffRegion {
 
 /// Compare two audio files at the waveform level
 pub fn diff_audio_content(source_a: &str, source_b: &str) -> Result<AudioContentDiff> {
+    diff_audio_content_with_options(source_a, source_b, &AudioDiffOptions::default())
+}
+
+/// Compare two audio files with optional time range
+pub fn diff_audio_content_with_options(
+    source_a: &str,
+    source_b: &str,
+    opts: &AudioDiffOptions,
+) -> Result<AudioContentDiff> {
     // Decode both files to F32 PCM (48kHz mono)
-    let samples_a = decode_to_f32_mono(source_a)?;
-    let samples_b = decode_to_f32_mono(source_b)?;
+    let samples_a = decode_to_f32_mono(source_a, opts.start_time, opts.end_time)?;
+    let samples_b = decode_to_f32_mono(source_b, opts.start_time, opts.end_time)?;
 
     let duration_a = samples_a.len() as f64 / COMPARE_SAMPLE_RATE as f64;
     let duration_b = samples_b.len() as f64 / COMPARE_SAMPLE_RATE as f64;
@@ -179,12 +188,35 @@ pub fn diff_audio_content(source_a: &str, source_b: &str) -> Result<AudioContent
     })
 }
 
-/// Decode an audio file to F32 mono samples at 48kHz
-fn decode_to_f32_mono(path: &str) -> Result<Vec<f32>> {
+/// Decode an audio file to F32 mono samples at 48kHz with optional time range
+fn decode_to_f32_mono(path: &str, start_time: Option<f64>, end_time: Option<f64>) -> Result<Vec<f32>> {
     let mut decoder = FfmpegAudioDecoder::new()
         .with_output_format(SampleFormat::F32)
         .with_output_sample_rate(COMPARE_SAMPLE_RATE)
         .with_output_channels(COMPARE_CHANNELS);
+
+    // Build FFmpeg command with time range if specified
+    let mut args = Vec::new();
+    if let Some(t) = start_time {
+        args.push("-ss".to_string());
+        args.push(t.to_string());
+    }
+    args.push("-i".to_string());
+    args.push(path.to_string());
+    if let Some(end) = end_time {
+        if let Some(start) = start_time {
+            let duration = (end - start).max(0.0);
+            args.push("-t".to_string());
+            args.push(duration.to_string());
+        } else {
+            args.push("-to".to_string());
+            args.push(end.to_string());
+        }
+    }
+
+    // Note: FfmpegAudioDecoder.open() doesn't support custom args yet
+    // For now, we'll decode the full file and trim in memory
+    // TODO: Extend FfmpegAudioDecoder to accept custom FFmpeg args
 
     decoder
         .open(path)
@@ -204,6 +236,25 @@ fn decode_to_f32_mono(path: &str) -> Result<Vec<f32>> {
                 tracing::warn!("Audio decode error (continuing): {}", e);
                 break;
             }
+        }
+    }
+
+    // Trim samples based on time range (in-memory fallback)
+    if start_time.is_some() || end_time.is_some() {
+        let start_sample = start_time
+            .map(|t| (t * COMPARE_SAMPLE_RATE as f64) as usize)
+            .unwrap_or(0);
+        let end_sample = end_time
+            .map(|t| (t * COMPARE_SAMPLE_RATE as f64) as usize)
+            .unwrap_or(all_samples.len());
+
+        let start_sample = start_sample.min(all_samples.len());
+        let end_sample = end_sample.min(all_samples.len());
+
+        if start_sample < end_sample {
+            all_samples = all_samples[start_sample..end_sample].to_vec();
+        } else {
+            all_samples.clear();
         }
     }
 
