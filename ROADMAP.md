@@ -132,7 +132,7 @@
 - [x] VSCode API 代理类型
 - [x] 并发池工具
 - [x] Proto 生成类型（timeline.engine.ts）
-- [ ] 类型文档完善
+- [x] 类型文档完善（src/README.md + types/README.md 更新至 50+ 文件现状）
 
 ---
 

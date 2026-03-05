@@ -1,123 +1,60 @@
 # shared/src
 
-共享类型定义源码根目录，提供跨包使用的 TypeScript 类型定义。
+Layer 0 主入口及各子模块。所有目录的设计原则见 [包级 README](../../README.md)。
 
-## 架构图
-
-```mermaid
-graph TB
-    subgraph "入口层"
-        Index[index.ts<br/>类型导出]
-    end
-
-    subgraph "类型层"
-        Types[types/<br/>类型定义]
-    end
-
-    subgraph "项目结构"
-        Project[project.ts<br/>项目类型]
-        Element[element.ts<br/>元素类型]
-        Track[track.ts<br/>轨道类型]
-    end
-
-    subgraph "通信协议"
-        Message[message.ts<br/>消息协议]
-        Config[config.ts<br/>配置类型]
-        Task[task.ts<br/>任务类型]
-    end
-
-    subgraph "视觉效果"
-        Effects[effects.ts<br/>特效]
-        Transition[transition.ts<br/>转场]
-        Animation[animation.ts<br/>动画]
-        Keyframe[keyframe.ts<br/>关键帧]
-    end
-
-    subgraph "媒体相关"
-        Audio[audio.ts<br/>音频]
-        Subtitle[subtitle.ts<br/>字幕]
-        Speed[speed.ts<br/>速度]
-    end
-
-    Index --> Types
-    Types --> Project
-    Types --> Element
-    Types --> Track
-    Types --> Message
-    Types --> Config
-    Types --> Effects
-    Types --> Transition
-    Types --> Animation
-    Types --> Audio
-    Types --> Subtitle
-```
-
-## 目录结构
+## 目录索引
 
 ```
 src/
-├── index.ts           # 入口，导出所有类型
+├── index.ts          # Layer 0 主入口（导出除 vscode/ 外的所有内容）
 │
-├── types/             # 类型定义（23个文件）
-│   ├── index.ts       # 类型汇总导出
-│   │
-│   ├── project.ts     # 项目结构
-│   ├── element.ts     # 元素类型
-│   ├── track.ts       # 轨道类型
-│   ├── timelineTrack.ts # 时间线轨道
-│   │
-│   ├── message.ts     # 消息协议
-│   ├── config.ts      # 配置类型
-│   ├── task.ts        # 任务类型
-│   │
-│   ├── animation.ts   # 动画类型
-│   ├── keyframe.ts    # 关键帧
-│   ├── easing.ts      # 缓动函数
-│   │
-│   ├── effects.ts     # 特效类型
-│   ├── transition.ts  # 转场类型
-│   ├── mask.ts        # 遮罩类型
-│   ├── shape.ts       # 形状类型
-│   │
-│   ├── colorCorrection.ts # 色彩校正
-│   ├── blendMode.ts   # 混合模式
-│   │
-│   ├── audio.ts       # 音频类型
-│   ├── subtitle.ts    # 字幕类型
-│   ├── speed.ts       # 速度控制
-│   │
-│   ├── transform.ts   # 变换类型
-│   ├── geometry.ts    # 几何类型
-│   │
-│   └── aiAction.ts    # AI 动作
+├── types/            # 核心类型定义（50+ 文件）
+│   ├── project / element / track / timelineTrack
+│   ├── animation / keyframe / easing
+│   ├── effects / transition / mask / shape / blendMode / colorCorrection
+│   ├── audio / subtitle / speed / transform / geometry
+│   ├── agent / skill / task / tool / mcp / canvas（Agent + AI 类型）
+│   ├── message / config / exportProtocol / mediaDiffProtocol（IPC 协议）
+│   ├── asset/        # 资产管理（manifest / entity / registry / protocol…）
+│   └── mediaEngine/  # 媒体引擎接口（engine / decoder / encoder / effects…）
 │
-└── __tests__/         # 测试文件
+├── operations/       # EditOperation 指令系统（apply / invert / helpers）
+│
+├── errors/           # 错误基础设施（BaseError + IErrorHandler）
+│
+├── logger/           # 日志接口（ILogger + ConsoleLogger + ILogTransport）
+│
+├── i18n/             # 国际化服务（II18nService / I18nService / react / webview）
+│
+├── theme/            # 主题（VSCode CSS Token + nekoTailwindPreset）
+│
+├── config/           # 统一配置（reader / adapter / normalizer）
+│
+├── core/             # 核心工具（ConcurrencyPool）
+│
+├── tools/            # Agent 工具基类（BaseTool）
+│
+├── utils/            # 通用工具函数（animation / media / colorCorrectionMapping）
+│
+├── generated/        # Protobuf 生成类型（timeline.engine / diff.engine）
+│
+└── vscode/           # Layer 1（Extension Host 专用，不从主入口导出）
+    └── extension/    # OutputChannelTransport / VSCodeErrorHandler / i18n-bridge
 ```
 
-## 类型分类
+## 子模块说明
 
-| 分类 | 文件 | 用途 |
+| 目录 | 层级 | 说明 |
 |------|------|------|
-| **项目结构** | project, element, track | 定义项目数据模型 |
-| **通信协议** | message, config, task | Extension ↔ Webview 通信 |
-| **视觉效果** | effects, transition, animation, keyframe | 特效和动画 |
-| **媒体相关** | audio, subtitle, speed | 音频和字幕 |
-| **几何变换** | transform, geometry, mask, shape | 空间变换 |
-
-## 使用方式
-
-```typescript
-// 导入类型
-import type {
-  VideoProject,
-  TimelineElement,
-  ExtensionToWebviewMessage
-} from '@neko/shared';
-```
-
-## 设计原则
-
-1. **纯类型**：不包含运行时代码
-2. **单一来源**：所有共享类型集中定义
-3. **向后兼容**：使用可选属性保持兼容
-4. **文档化**：每个类型都有 JSDoc 注释
+| `types/` | Layer 0 | 纯类型，零运行时代码 |
+| `operations/` | Layer 0 | EditOperation 指令序列，支持 apply / invert / undo |
+| `errors/` | Layer 0 | BaseError 抽象 + IErrorHandler 接口 |
+| `logger/` | Layer 0 | ILogger 接口 + ConsoleLogger 默认实现 |
+| `i18n/` | Layer 0/2 | Core 导出接口；`react.tsx` / `webview.ts` 含 DOM/React 依赖 |
+| `theme/` | Layer 0 | 设计 Token 常量 + Tailwind 预设 |
+| `config/` | Layer 0 | 三阶段配置管道（读取 → 适配 → 规范化） |
+| `core/` | Layer 0 | 并发池等通用运行时工具 |
+| `tools/` | Layer 0 | Agent 工具定义基类 |
+| `utils/` | Layer 0 | 动画插值 / 媒体类型检测 / 色彩映射 |
+| `generated/` | Layer 0 | 自动生成，勿手动修改（`pnpm generate:types`） |
+| `vscode/extension/` | Layer 1 | VSCode-only；通过 `@neko/shared/vscode/extension` 导入 |

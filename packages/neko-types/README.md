@@ -39,16 +39,17 @@ Layer 2 - React       import from '@neko/shared/i18n/react'
 ```
 src/
 ├── index.ts          # Layer 0 主入口
-├── types/            # 纯类型（project / element / track / message / animation...）
+├── types/            # 纯类型（50+ 文件：timeline / agent / AI / canvas / 协议 / 资产 / 媒体引擎）
+├── operations/       # EditOperation 指令系统（apply / invert / helpers）
 ├── errors/           # BaseError + IErrorHandler
 ├── logger/           # ILogger + ConsoleLogger + ILogTransport
 ├── i18n/             # II18nService + I18nService + webview/react 子模块
 ├── theme/            # VSCode CSS Token 映射 + nekoTailwindPreset
-├── utils/            # 工具函数
+├── config/           # 统一配置管道（reader / adapter / normalizer）
+├── utils/            # 工具函数（animation / media / colorCorrectionMapping）
 ├── core/             # ConcurrencyPool 等核心工具
-├── tools/            # Agent 工具基类
-├── operations/       # EditOperation 指令系统
-├── generated/        # Protobuf 生成类型
+├── tools/            # Agent 工具基类（BaseTool）
+├── generated/        # Protobuf 生成类型（勿手动修改）
 └── vscode/           # Layer 1（Extension Host 专用）
     └── extension/
         ├── logger.ts          # OutputChannelTransport + createVSCodeLogger()
