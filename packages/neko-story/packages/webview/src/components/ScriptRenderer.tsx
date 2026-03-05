@@ -130,7 +130,26 @@ export function ScriptRenderer({ document }: ScriptRendererProps) {
     i++;
   }
 
-  return <div className="screenplay">{rendered}</div>;
+  return (
+    <div className="screenplay">
+      {/* Print button — hidden during actual printing via .print-button class in print.css */}
+      <div className="print-button" style={{ textAlign: 'right', padding: '4px 8px' }}>
+        <button
+          onClick={() => window.print()}
+          style={{
+            cursor: 'pointer',
+            padding: '4px 12px',
+            fontSize: '12px',
+            opacity: 0.7,
+          }}
+          title="导出为 PDF（在打印对话框中选择「另存为 PDF」）"
+        >
+          打印 / PDF
+        </button>
+      </div>
+      {rendered}
+    </div>
+  );
 }
 
 // Simple inline renderers for less common elements
