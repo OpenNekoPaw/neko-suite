@@ -4,7 +4,7 @@ import { useTranslation } from '../../i18n/I18nContext';
 import { useToast } from './../Toast';
 import { useVSCodeMessaging } from '../../hooks/useVSCodeMessaging';
 import { postMessage as vscodePostMessage } from '../../utils/vscodeApi';
-import type { ProjectData } from '@neko/shared';
+import type { ProjectData, ExportPreset, ExportPresetSettings } from '@neko/shared';
 
 // =============================================================================
 // Types
@@ -233,6 +233,10 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
   // Global export status
   const [hasGlobalExport, setHasGlobalExport] = useState(false);
   const [queueStatus, setQueueStatus] = useState<{ active: number; pending: number }>({ active: 0, pending: 0 });
+  const [presets, setPresets] = useState<ExportPreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [isNamingPreset, setIsNamingPreset] = useState(false);
+  const [presetNameInput, setPresetNameInput] = useState('');
 
   // ---------------------------------------------------------------------------
   // Effects
@@ -303,11 +307,16 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
           setIsExporting(true);
           setExportProgress(message.progress);
           break;
+
+        case 'preset:list':
+          setPresets(message.presets as ExportPreset[]);
+          break;
       }
     };
 
     window.addEventListener('message', handleMessage);
     sendMessage({ type: 'export:queryGlobalStatus' });
+    sendMessage({ type: 'preset:list' });
 
     return () => {
       window.removeEventListener('message', handleMessage);
@@ -326,6 +335,7 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
   // ---------------------------------------------------------------------------
 
   const handleFormatChange = useCallback((newFormat: ExportFormat) => {
+    setSelectedPresetId(null);
     setFormat(newFormat);
     const defaults = DEFAULT_CODECS[newFormat];
     const videoOptions = CONTAINER_VIDEO_CODECS[newFormat] ?? [];
@@ -337,6 +347,30 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
       setAudioCodec(defaults?.audio ?? audioOptions[0] ?? 'aac');
     }
   }, [videoCodec, audioCodec]);
+
+  const applyPreset = useCallback((preset: ExportPreset) => {
+    const s = preset.settings;
+    const newFormat = s.format as ExportFormat;
+    setFormat(newFormat);
+    setVideoCodec(s.videoCodec);
+    setAudioCodec(s.audioCodec);
+    const res = RESOLUTIONS.find(r => r.width === s.width && r.height === s.height)
+      ?? { label: `${s.width}x${s.height}`, width: s.width, height: s.height };
+    setResolution(res);
+    setQuality(s.quality);
+    setFps(s.fps);
+    setAudioBitrate(s.audioBitrate);
+    setSelectedPresetId(preset.id);
+  }, []);
+
+  const handlePresetChange = useCallback((presetId: string) => {
+    if (presetId === '') {
+      setSelectedPresetId(null);
+      return;
+    }
+    const preset = presets.find(p => p.id === presetId);
+    if (preset) applyPreset(preset);
+  }, [presets, applyPreset]);
 
   const selectExportPath = useCallback(async (): Promise<string | null> => {
     const ext = format;
@@ -653,6 +687,85 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
 
         {/* Content */}
         <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Preset Selector */}
+          <div>
+            <label className="block text-sm font-medium text-vscode-foreground mb-2">{t('export.preset.label')}</label>
+            <div className="flex gap-2">
+              <select
+                value={selectedPresetId ?? ''}
+                onChange={(e) => { setSelectedPresetId(null); handlePresetChange(e.target.value); }}
+                className="flex-1 px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
+              >
+                {presets.filter(p => p.isBuiltin).length > 0 && (
+                  <optgroup label="内置预设">
+                    {presets.filter(p => p.isBuiltin).map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {presets.filter(p => !p.isBuiltin).length > 0 && (
+                  <optgroup label="我的预设">
+                    {presets.filter(p => !p.isBuiltin).map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                <option value="">{t('export.preset.custom')}</option>
+              </select>
+
+              {!isNamingPreset ? (
+                <button
+                  onClick={() => setIsNamingPreset(true)}
+                  className="px-2 py-2 bg-vscode-button-secondaryBackground hover:bg-vscode-button-secondaryHoverBackground rounded text-vscode-button-secondaryForeground transition-colors"
+                  title="保存为预设"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                  </svg>
+                </button>
+              ) : (
+                <div className="flex gap-1 items-center">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={presetNameInput}
+                    onChange={(e) => setPresetNameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && presetNameInput.trim()) {
+                        const settings: ExportPresetSettings = {
+                          format,
+                          videoCodec,
+                          audioCodec,
+                          width: resolution.width,
+                          height: resolution.height,
+                          fps,
+                          quality,
+                          audioBitrate,
+                        };
+                        vscodePostMessage({ type: 'preset:save', name: presetNameInput.trim(), settings });
+                        setPresetNameInput('');
+                        setIsNamingPreset(false);
+                      } else if (e.key === 'Escape') {
+                        setPresetNameInput('');
+                        setIsNamingPreset(false);
+                      }
+                    }}
+                    placeholder="预设名称"
+                    className="w-32 px-2 py-1 bg-vscode-input-background border border-vscode-focusBorder rounded text-vscode-input-foreground text-sm focus:outline-none"
+                  />
+                  <button
+                    onClick={() => { setPresetNameInput(''); setIsNamingPreset(false); }}
+                    className="px-1 py-1 text-vscode-foreground opacity-60 hover:opacity-100"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Global Export Warning — queuing is supported */}
           {hasGlobalExport && (
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 flex items-start gap-2">
@@ -687,7 +800,7 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             <label className="block text-sm font-medium text-vscode-foreground mb-2">视频编码</label>
             <select
               value={videoCodec}
-              onChange={(e) => setVideoCodec(e.target.value)}
+              onChange={(e) => { setSelectedPresetId(null); setVideoCodec(e.target.value); }}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
               {VIDEO_CODEC_OPTIONS
@@ -703,7 +816,7 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             <label className="block text-sm font-medium text-vscode-foreground mb-2">音频编码</label>
             <select
               value={audioCodec}
-              onChange={(e) => setAudioCodec(e.target.value)}
+              onChange={(e) => { setSelectedPresetId(null); setAudioCodec(e.target.value); }}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
               {AUDIO_CODEC_OPTIONS
@@ -720,6 +833,7 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             <select
               value={`${resolution.width}x${resolution.height}`}
               onChange={(e) => {
+                setSelectedPresetId(null);
                 const [w, h] = e.target.value.split('x').map(Number);
                 const res = RESOLUTIONS.find(r => r.width === w && r.height === h);
                 if (res) setResolution(res);
@@ -737,7 +851,7 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             <label className="block text-sm font-medium text-vscode-foreground mb-2">质量</label>
             <select
               value={quality}
-              onChange={(e) => setQuality(e.target.value as 'low' | 'medium' | 'high')}
+              onChange={(e) => { setSelectedPresetId(null); setQuality(e.target.value as 'low' | 'medium' | 'high'); }}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
               {QUALITY_OPTIONS.map((opt) => (
@@ -751,7 +865,7 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             <label className="block text-sm font-medium text-vscode-foreground mb-2">音频比特率</label>
             <select
               value={audioBitrate}
-              onChange={(e) => setAudioBitrate(Number(e.target.value))}
+              onChange={(e) => { setSelectedPresetId(null); setAudioBitrate(Number(e.target.value)); }}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
               <option value={96000}>96 kbps</option>
@@ -767,7 +881,7 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             <label className="block text-sm font-medium text-vscode-foreground mb-2">帧率: {fps} FPS</label>
             <select
               value={fps}
-              onChange={(e) => setFps(Number(e.target.value))}
+              onChange={(e) => { setSelectedPresetId(null); setFps(Number(e.target.value)); }}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
               {FPS_OPTIONS.map((fpsValue) => (
