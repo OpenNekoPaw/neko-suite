@@ -407,6 +407,10 @@ impl IVideoService for VideoService {
 
                 let mut current_speed = 1.0;
                 let mut last_seek_seq: u64 = 0;
+                // Consecutive decode error counter: flush+retry up to N times before
+                // treating the stream as unrecoverable and closing it.
+                let mut consecutive_decode_errors: u32 = 0;
+                const MAX_DECODE_ERRORS: u32 = 5;
 
                 loop {
                     if encode_cancel.is_cancelled() {
@@ -446,7 +450,10 @@ impl IVideoService for VideoService {
 
                     // Decode next GPU frame
                     let gpu_texture = match decoder.decode_next_gpu() {
-                        Ok(Some(t)) => t,
+                        Ok(Some(t)) => {
+                            consecutive_decode_errors = 0; // Reset on success
+                            t
+                        }
                         Ok(None) => {
                             let state = state_rx.borrow().clone();
                             if let Some(region) = &state.loop_region {
@@ -480,8 +487,27 @@ impl IVideoService for VideoService {
                             }
                         }
                         Err(e) => {
-                            tracing::warn!("Video stream decode error: {}", e);
-                            break;
+                            consecutive_decode_errors += 1;
+                            if consecutive_decode_errors > MAX_DECODE_ERRORS {
+                                tracing::warn!(
+                                    "Video stream closing after {} consecutive decode errors (last: {})",
+                                    consecutive_decode_errors,
+                                    e
+                                );
+                                break;
+                            }
+                            tracing::warn!(
+                                "Video stream decode error ({}/{}): {} — flushing decoder to recover",
+                                consecutive_decode_errors,
+                                MAX_DECODE_ERRORS,
+                                e
+                            );
+                            // Flush the hardware decoder by seeking to the current position.
+                            // This clears corrupt/misaligned NAL state so the next packet
+                            // is decoded cleanly from a keyframe boundary.
+                            let pos = decoder.position().max(0.0);
+                            let _ = decoder.seek(pos);
+                            continue;
                         }
                     };
 
