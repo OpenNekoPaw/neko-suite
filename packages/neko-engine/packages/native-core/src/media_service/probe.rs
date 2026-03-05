@@ -114,7 +114,15 @@ pub fn probe_media_info<P: AsRef<Path>>(path: P) -> Result<MediaInfo> {
 
     // Get format info
     info.format = input.format().name().to_string();
-    info.duration = input.duration() as f64 / ffmpeg::ffi::AV_TIME_BASE as f64;
+
+    // Container-level duration (AVFormatContext): can be wrong for improperly
+    // finalized recordings, MPEG-TS live captures, or files with edit lists.
+    let container_duration = if input.duration() > 0 {
+        input.duration() as f64 / ffmpeg::ffi::AV_TIME_BASE as f64
+    } else {
+        0.0
+    };
+    info.duration = container_duration;
 
     // Find video stream
     if let Some(stream) = input.streams().best(ffmpeg::media::Type::Video) {
@@ -140,6 +148,17 @@ pub fn probe_media_info<P: AsRef<Path>>(path: P) -> Result<MediaInfo> {
         let bit_rate = unsafe { (*codec_params.as_ptr()).bit_rate };
         if bit_rate > 0 {
             info.bitrate = Some(bit_rate as u64);
+        }
+
+        // Prefer stream-level duration (from trak/mdhd in MP4, more reliable than
+        // container duration which can be wrong for live recordings / edit lists).
+        if stream.duration() > 0 {
+            let tb = stream.time_base();
+            let stream_duration =
+                stream.duration() as f64 * tb.numerator() as f64 / tb.denominator() as f64;
+            if stream_duration > 0.0 {
+                info.duration = stream_duration;
+            }
         }
     }
 
