@@ -30,7 +30,7 @@ const logger = getLogger('ExportService');
 /** Export configuration from UI */
 export interface ExportConfig {
 	outputPath: string;
-	format: 'mp4' | 'webm' | 'mov' | 'mkv';
+	format: 'mp4' | 'webm' | 'mov' | 'mkv' | 'avi' | 'ts';
 	width: number;
 	height: number;
 	fps: number;
@@ -102,6 +102,8 @@ const FORMAT_TO_VIDEO_CODEC: Record<string, string> = {
 	mov: 'h264',
 	webm: 'vp9',
 	mkv: 'h264',
+	avi: 'h264',
+	ts: 'h264',
 };
 
 /** Default audio codec per container format (serde: rename_all = "lowercase") */
@@ -110,6 +112,8 @@ const FORMAT_TO_AUDIO_CODEC: Record<string, string> = {
 	mov: 'aac',
 	webm: 'opus',
 	mkv: 'aac',
+	avi: 'mp3',
+	ts: 'aac',
 };
 
 /** Map UI quality to Rust EncoderPreset and base bitrate (for 1080p) */
@@ -294,6 +298,24 @@ export class ExportService implements vscode.Disposable {
 	 */
 	getQueueStatus(): ExportQueueStatus {
 		return this.buildQueueStatus();
+	}
+
+	/**
+	 * Query hardware encoder availability for each video codec.
+	 * Returns a map of codec name → hw encoder name (or null if software-only).
+	 * Example: { h264: "h264_videotoolbox", vp9: null }
+	 * Returns empty object on error (engine not running).
+	 */
+	async queryHwCapabilities(): Promise<Record<string, string | null>> {
+		try {
+			const response = await this.dispatch({
+				group: 'nodes',
+				action: 'hw_capabilities',
+			});
+			return (response.data as Record<string, string | null>) ?? {};
+		} catch {
+			return {};
+		}
 	}
 
 	// =========================================================================
