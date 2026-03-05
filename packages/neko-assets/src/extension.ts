@@ -76,7 +76,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	logger.info('Activating extension...');
 
 	// 0. Initialize i18n
-	const { getVSCodeLocale } = await import('@neko/shared/src/vscode/extension/i18n-bridge');
+	const { getVSCodeLocale } = await import('@neko/shared/vscode/extension/i18n-bridge.ts');
 	const locale = getVSCodeLocale();
 	const { initI18n } = await import('./i18n');
 	initI18n(locale);
@@ -400,9 +400,9 @@ function registerMediaLibraryCommands(
 				}
 
 				if (results.length === 1) {
-					vscode.window.showInformationMessage(`Imported: ${results[0]}`);
+					vscode.window.showInformationMessage(t('mediaLibrary.import.success', { name: results[0] }));
 				} else {
-					vscode.window.showInformationMessage(`Imported ${results.length} files`);
+					vscode.window.showInformationMessage(t('mediaLibrary.import.successMultiple', { count: results.length }));
 				}
 				vscode.commands.executeCommand('neko.assets.refreshViews');
 			} catch (error) {
@@ -426,7 +426,7 @@ function registerMediaLibraryCommands(
 			const items = getMediaFileItems(item, undefined);
 			if (items.length === 0) return;
 			await vscode.env.clipboard.writeText(items[0].filePath);
-			vscode.window.showInformationMessage('File path copied to clipboard');
+			vscode.window.showInformationMessage(t('mediaLibrary.copyPath.success'));
 		}),
 	);
 

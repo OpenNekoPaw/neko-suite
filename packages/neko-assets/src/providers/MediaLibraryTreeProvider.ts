@@ -19,6 +19,7 @@ import type { ResolvedMediaLibrary } from '@neko/shared';
 import type { MediaLibrarySettingsService } from '../services/MediaLibrarySettingsService';
 import type { ThumbnailService } from '../services/ThumbnailService';
 import { formatDuration, formatResolution, buildMetadataTooltipLines } from '../utils/formatters';
+import { t } from '../i18n';
 
 // =============================================================================
 // Dependencies
@@ -53,7 +54,7 @@ class LibraryRootItem extends vscode.TreeItem {
 			`Path: ${library.resolvedPath}`,
 			`Variable: \${${library.variable}}`,
 			library.overridden ? `Overridden from: ${library.originalPath}` : null,
-			library.accessible ? 'Status: Online' : 'Status: Offline',
+			library.accessible ? t('mediaLibrary.status.online') : t('mediaLibrary.status.offline'),
 		].filter(Boolean).join('\n');
 	}
 }
@@ -66,7 +67,9 @@ class DirectoryItem extends vscode.TreeItem {
 		this.contextValue = 'mediaLibrary:directory';
 		this.iconPath = vscode.ThemeIcon.Folder;
 		if (fileCount !== undefined && fileCount > 0) {
-			this.description = `${fileCount} file${fileCount === 1 ? '' : 's'}`;
+			this.description = fileCount === 1
+				? t('mediaLibrary.fileCount', { count: fileCount })
+				: t('mediaLibrary.fileCount.plural', { count: fileCount });
 		}
 	}
 }
@@ -90,19 +93,19 @@ class MediaFileItem extends vscode.TreeItem {
 		if (mediaType === 'video') {
 			this.command = {
 				command: 'vscode.openWith',
-				title: 'Preview Video',
+				title: t('command.previewVideo'),
 				arguments: [vscode.Uri.file(filePath), 'neko.videoPreview'],
 			};
 		} else if (mediaType === 'audio') {
 			this.command = {
 				command: 'vscode.openWith',
-				title: 'Preview Audio',
+				title: t('command.previewAudio'),
 				arguments: [vscode.Uri.file(filePath), 'neko.audioPreview'],
 			};
 		} else {
 			this.command = {
 				command: 'vscode.open',
-				title: 'Open File',
+				title: t('command.openFile'),
 				arguments: [vscode.Uri.file(filePath)],
 			};
 		}
@@ -323,10 +326,10 @@ export class MediaLibraryTreeProvider
 	}
 
 	private createPlaceholder(): vscode.TreeItem {
-		const item = new vscode.TreeItem('No media libraries configured');
+		const item = new vscode.TreeItem(t('mediaLibrary.placeholder'));
 		item.command = {
 			command: 'neko.assets.addMediaLibrary',
-			title: 'Add Media Library',
+			title: t('mediaLibrary.placeholder.action'),
 		};
 		return item;
 	}

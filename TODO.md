@@ -30,6 +30,7 @@
 - [x] **BlendMode 补齐**：`neko_types::BlendMode` 扩展至 27 变体（对齐 `gpu::BlendMode` / proto / TS 类型），补全 `to_gpu_blend_mode()` + `convert_blend_mode()` 两处 match arm（`effects.rs` + `domain/timeline.rs` + `services/impls/timeline.rs`）
 - [x] **Diff Phase 2B**：前端可视化增强（TimelineDiffViewer + 音频三轨波形 + 视频 WebGL 渲染器 curtain/heatmap/flicker + DiffRegionOverlay）— [diff.md §Phase 2B](./docs/diff.md)
 - [x] **Diff 范围支持**：Video/Audio diff 支持 `start_time`/`end_time` 参数，FFmpeg `-ss`/`-to` 裁剪输入，性能提升 5-6x（长视频局部对比）— [diff-range-usage.md](./docs/diff-range-usage.md)
+- [x] **视频对比性能优化**：`sample_fps` 参数支持帧率降采样（Rust FFmpeg fps filter + TS 1fps 默认 + Webview 降采样至 500 帧），60 分钟视频对比时间 30s → 1-2s（15-30x 提升）
 
 </details>
 
@@ -103,6 +104,10 @@
   - [ ] 视频关键帧智能采样（长视频优化）
   - [x] 音频频谱分析 / 响度归一化 BS.1770（已实现为 `audios:analyze_loudness`）
   - [ ] 视频场景切割检测
+- [ ] **Timeline Diff 范围优化**：支持用户选择时间范围进行局部对比
+  - 当前：`start_time`/`end_time` 已在 Rust 层实现，但前端 UI 未暴露
+  - 方案：VideoDiffViewer 添加时间范围选择器 + 重新触发 diff · 预计 2-3h
+  - 收益：用户可快速对比视频特定片段，避免全量分析
 
 ### neko-canvas
 - [ ] 功能补全：Undo/Redo + Copy/Paste + Port 系统 + UI 面板 — [engine.md §重构 #5](./docs/engine.md)

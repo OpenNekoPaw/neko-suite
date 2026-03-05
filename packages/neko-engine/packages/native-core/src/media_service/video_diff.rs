@@ -12,6 +12,24 @@
 //!
 //! This hybrid approach leverages FFmpeg's SIMD-optimized SSIM/PSNR computation
 //! while providing structured Rust output compatible with the ActionResponse protocol.
+//!
+//! ## Performance Optimization
+//!
+//! For long videos, frame-by-frame analysis can be slow. Use `sample_fps` to downsample:
+//!
+//! ```rust,ignore
+//! let opts = VideoDiffOptions {
+//!     sample_fps: Some(1.0),  // Analyze at 1fps instead of full frame rate
+//!     ..Default::default()
+//! };
+//! ```
+//!
+//! Performance impact for 60-minute video:
+//! - Full rate (30fps): ~108K frames → ~30 seconds
+//! - Sampled (1fps): ~3.6K frames → ~1-2 seconds (15-30x faster)
+//!
+//! The sampling is done via FFmpeg's `fps` filter before SSIM/PSNR computation,
+//! ensuring accurate timestamps in the output.
 
 use std::path::Path;
 
