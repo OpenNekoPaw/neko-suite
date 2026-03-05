@@ -51,8 +51,6 @@
   - [x] 音频三轨波形（A/B/Diff + diff 区域高亮）
   - [x] 视频 H264+PCM 流 + WebGL 渲染器（curtain/heatmap/flicker）
   - [x] Diff 区域时间轴高亮（DiffRegionOverlay）
-- [ ] **Diff Phase 3**：Engine 流式帧指标返回（SSIM 每 N 帧回调，Rust 工作量大）
-  - 见 [diff.md §Phase 3](./docs/diff.md)
 - [ ] **Bug: 视频无早期预览**：音频有 ~500ms 早期波形，视频黑屏 5-60s
   - 方案：实现 `startEarlyFrameExtraction`（并行提取 t=0 帧）· 预计 1-2h
 

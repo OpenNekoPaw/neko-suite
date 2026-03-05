@@ -588,18 +588,27 @@ React webview 包 + useMediaDiffProtocol hook + 展示组件 + 构建链路 — 
 
 ### Phase 3: 后端算法增强
 
-- [ ] P0 — Engine 流式帧指标返回（SSIM 每 N 帧回调，渐进显示）— Rust 工作量大
 - [ ] P1 — 音频静音检测 (Protocol 已定义 `silenceRegions`)
 - [x] P1 — 视频关键帧智能采样 (长视频性能优化) — **已完成**
   - Rust: `VideoDiffOptions.sample_fps` 支持帧率降采样（FFmpeg fps filter）
   - TypeScript: `VideoDiffAnalyzer` 默认使用 1fps 采样
   - Webview: `downsampleKeyframeDiffs` 降采样至 500 帧渲染
   - 性能提升: 60 分钟视频 30s → 1-2s（15-30x）
+- [x] P1 — 时长不匹配智能优化 (自动范围裁剪) — **已完成**
+  - 自动检测时长差异 > 20%，限制对比范围至较短文件
+  - 性能提升: 120s vs 5s 视频 50s → 5s（10x）
+  - 详见 [diff-duration-mismatch-optimization.md](./diff-duration-mismatch-optimization.md)
 - [ ] P2 — 高精度波形 zoom（按需加载，800 点 → 更多）
 - [x] P2 — 音频频谱分析 (频域对比) — **已实现为 `audios:analyze_loudness`**
 - [x] P2 — 音频响度归一化 (BS.1770 标准) — **已实现为 `audios:analyze_loudness`**
 - [ ] P2 — 音频多声道对比
 - [ ] P2 — 视频场景切换检测
+- [ ] P2 — Engine 流式帧指标返回（渐进式 UI，长视频体验优化）
+  - **优先级降级原因**: 当前优化（sample_fps + endTime）已将大部分场景优化到 < 5s，投入产出比低
+  - 前置条件：用户反馈强烈需求 + 其他优化已完成
+  - 预计工作量：2-3 天（Rust 重构 FFmpeg 逐帧处理 + HTTP streaming）
+  - 收益：长视频（> 10min）渐进式显示，短视频无明显收益
+  - 替代方案：分段处理 / 预览模式（0.1fps 快速扫描）/ 智能关键帧采样
 
 ### Phase 4: AI 增强 — 语义分析
 
