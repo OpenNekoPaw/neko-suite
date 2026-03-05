@@ -1,6 +1,9 @@
 import { randomUUID } from 'crypto';
 import type * as vscode from 'vscode';
 import type { ExportPreset, ExportPresetSettings } from '@neko/shared';
+import { getLogger } from '../base';
+
+const logger = getLogger('ExportPresetService');
 
 const STORAGE_KEY = 'neko-cut.exportPresets';
 
@@ -52,15 +55,24 @@ const BUILTIN_PRESETS: ExportPreset[] = [
 	},
 ];
 
+/**
+ * ExportPresetService - Manages video export presets
+ *
+ * Responsibilities:
+ * - Provides 3 built-in presets (social media, web, master)
+ * - Persists user-created presets to VSCode workspace state
+ */
 export class ExportPresetService {
 	constructor(private readonly workspaceState: vscode.Memento) {}
 
+	/** Returns all presets: built-in first, then user-defined */
 	listPresets(): ExportPreset[] {
 		const userPresets = this.workspaceState.get<ExportPreset[]>(STORAGE_KEY, []);
 		return [...BUILTIN_PRESETS, ...userPresets];
 	}
 
-	savePreset(name: string, settings: ExportPresetSettings): ExportPreset {
+	/** Creates and persists a new user-defined preset */
+	async savePreset(name: string, settings: ExportPresetSettings): Promise<ExportPreset> {
 		const preset: ExportPreset = {
 			id: randomUUID(),
 			name,
@@ -68,7 +80,12 @@ export class ExportPresetService {
 			settings,
 		};
 		const existing = this.workspaceState.get<ExportPreset[]>(STORAGE_KEY, []);
-		void this.workspaceState.update(STORAGE_KEY, [...existing, preset]);
+		try {
+			await this.workspaceState.update(STORAGE_KEY, [...existing, preset]);
+		} catch (error) {
+			logger.error(`Failed to save preset "${name}":`, error);
+			throw new Error(`Failed to save export preset: ${error instanceof Error ? error.message : String(error)}`);
+		}
 		return preset;
 	}
 }
