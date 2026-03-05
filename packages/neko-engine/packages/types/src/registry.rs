@@ -26,7 +26,7 @@ pub mod groups {
 
 /// Action name constants — one slice per group.
 pub mod actions {
-    pub const NODES: &[&str] = &["health", "metric", "gpu"];
+    pub const NODES: &[&str] = &["health", "metric", "gpu", "hw_capabilities"];
 
     pub const TASKS: &[&str] = &["probe", "pause", "resume", "cancel", "list"];
 
