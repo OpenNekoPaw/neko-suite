@@ -6,6 +6,7 @@ import { FountainDefinitionProvider, FountainReferenceProvider } from './provide
 import { FountainHoverProvider } from './providers/hover';
 import { FountainWorkspaceSymbolProvider } from './providers/workspaceSymbol';
 import { FountainDocumentLinkProvider } from './providers/documentLink';
+import { FountainDiagnosticsProvider } from './providers/diagnostics';
 import { PreviewPanel } from './panels/PreviewPanel';
 import { getStoryTemplate } from './templates/storyTemplate';
 import { WorkspaceIndexService } from './services/WorkspaceIndexService';
@@ -65,6 +66,11 @@ export function activate(context: vscode.ExtensionContext) {
       new FountainDocumentLinkProvider()
     )
   );
+
+  // Register diagnostics provider (error underlining)
+  const diagnosticsProvider = new FountainDiagnosticsProvider(indexService);
+  diagnosticsProvider.activate();
+  context.subscriptions.push(diagnosticsProvider);
 
   // Register commands
   context.subscriptions.push(
