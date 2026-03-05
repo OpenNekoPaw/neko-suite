@@ -1,7 +1,7 @@
 # Export Codec Format Expansion + Hardware Acceleration Display
 
 **Date**: 2026-03-05
-**Status**: Approved
+**Status**: Implemented
 
 ## Problem
 
@@ -236,20 +236,30 @@ custom component — keeps the change minimal.
 
 ```
 视频编码
-┌──────────────────────────────┐
-│ H.264 (AVC)              ▼  │
-└──────────────────────────────┘
-⚡ h264_videotoolbox              ← green, below the select
+┌──────────────────────────────────────────┐
+│ H.264 (AVC)  ⚡ 硬件              ▼     │  ← each option shows inline tag
+│ H.265 (HEVC)  ⚡ 硬件                    │
+│ AV1  💻 软件                             │
+│ ProRes  ⚡ 硬件                           │
+└──────────────────────────────────────────┘
+⚡ h264_videotoolbox                         ← selected codec: green badge with encoder name
 
 视频编码 (VP9 selected)
-┌──────────────────────────────┐
-│ VP9                      ▼  │
-└──────────────────────────────┘
-💻 软件编码                       ← muted gray
+┌──────────────────────────────────────────┐
+│ VP9  💻 软件                      ▼     │
+└──────────────────────────────────────────┘
+💻 软件编码                                  ← muted gray
 
-容器格式 (loading)
-⚡ 检测中...                      ← while awaiting response
+视频编码 (loading, hwCapabilities === null)
+┌──────────────────────────────────────────┐
+│ H.264 (AVC)                      ▼     │  ← no tags while detecting
+└──────────────────────────────────────────┘
+检测硬件加速...                               ← loading state
 ```
+
+Two layers of HW info:
+- **Dropdown options**: inline `⚡ 硬件` / `💻 软件` tag — lets users compare at a glance
+- **Below select**: `HwBadge` showing the exact FFmpeg encoder name (e.g. `h264_videotoolbox`) for the selected codec
 
 ---
 

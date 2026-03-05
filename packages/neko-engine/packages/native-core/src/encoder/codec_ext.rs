@@ -65,6 +65,7 @@ impl HwEncoderTypeExt for HwEncoderType {
             // VideoToolbox (macOS)
             (HwEncoderType::VideoToolbox, VideoCodec::H264) => Some("h264_videotoolbox"),
             (HwEncoderType::VideoToolbox, VideoCodec::H265) => Some("hevc_videotoolbox"),
+            (HwEncoderType::VideoToolbox, VideoCodec::ProRes) => Some("prores_videotoolbox"),
             // NVENC (NVIDIA)
             (HwEncoderType::Nvenc, VideoCodec::H264) => Some("h264_nvenc"),
             (HwEncoderType::Nvenc, VideoCodec::H265) => Some("hevc_nvenc"),
@@ -79,7 +80,7 @@ impl HwEncoderTypeExt for HwEncoderType {
             (HwEncoderType::Amf, VideoCodec::H264) => Some("h264_amf"),
             (HwEncoderType::Amf, VideoCodec::H265) => Some("hevc_amf"),
             (HwEncoderType::Amf, VideoCodec::Av1) => Some("av1_amf"),
-            // ProRes, VP9, and other combos have no common hardware encoders
+            // VP9 and other combos have no hardware encoders
             _ => None,
         }
     }
@@ -275,12 +276,19 @@ mod tests {
         // None returns None
         assert_eq!(HwEncoderType::None.encoder_name(VideoCodec::H264), None);
 
-        // VP9 and ProRes have no hardware encoders
+        // ProRes: VideoToolbox supported, other platforms not
+        assert_eq!(
+            HwEncoderType::VideoToolbox.encoder_name(VideoCodec::ProRes),
+            Some("prores_videotoolbox")
+        );
+        assert_eq!(HwEncoderType::Nvenc.encoder_name(VideoCodec::ProRes), None);
+        assert_eq!(HwEncoderType::Amf.encoder_name(VideoCodec::ProRes), None);
+
+        // VP9 has no hardware encoders
         assert_eq!(
             HwEncoderType::VideoToolbox.encoder_name(VideoCodec::Vp9),
             None
         );
-        assert_eq!(HwEncoderType::Nvenc.encoder_name(VideoCodec::ProRes), None);
     }
 
     #[test]

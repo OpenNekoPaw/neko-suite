@@ -845,9 +845,13 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             >
               {VIDEO_CODEC_OPTIONS
                 .filter((opt) => (CONTAINER_VIDEO_CODECS[format] ?? []).includes(opt.value))
-                .map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
+                .map((opt) => {
+                  const hw = hwCapabilities?.[opt.value];
+                  const tag = hwCapabilities == null ? '' : hw != null ? '  ⚡ 硬件' : '  💻 软件';
+                  return (
+                    <option key={opt.value} value={opt.value}>{opt.label}{tag}</option>
+                  );
+                })}
             </select>
             {/* Hardware acceleration badge */}
             <div className="mt-1 h-5 flex items-center">
