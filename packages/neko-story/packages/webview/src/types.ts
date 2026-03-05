@@ -133,7 +133,8 @@ export interface FountainDocument {
 // Message types for VSCode communication
 export type MessageToWebview =
   | { type: 'update'; document: FountainDocument }
-  | { type: 'scrollTo'; line: number };
+  | { type: 'scrollTo'; line: number }
+  | { type: 'print' };
 
 export type MessageToExtension =
   | { type: 'ready' }

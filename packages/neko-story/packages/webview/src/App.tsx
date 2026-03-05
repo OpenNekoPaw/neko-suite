@@ -3,6 +3,7 @@ import { useVSCodeMessaging } from './hooks/useVSCodeMessaging';
 import { ScriptRenderer } from './components/ScriptRenderer';
 import type { FountainDocument, MessageToWebview } from './types';
 import './styles/screenplay.css';
+import './styles/print.css';
 
 export function App() {
   const [document, setDocument] = useState<FountainDocument | null>(null);
@@ -15,6 +16,9 @@ export function App() {
       case 'scrollTo':
         // Find element at line and scroll to it
         scrollToLine(message.line);
+        break;
+      case 'print':
+        window.print();
         break;
     }
   }, []);

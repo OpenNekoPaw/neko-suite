@@ -1,0 +1,119 @@
+/* Standard Fountain screenplay print layout (US Letter) */
+@media print {
+  /* Page setup */
+  @page {
+    size: letter;
+    margin: 1in 1in 1in 1.5in;
+  }
+
+  /* Base font: Courier 12pt (standard screenplay) */
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12pt;
+    line-height: 1.5;
+    color: #000;
+    background: #fff;
+  }
+
+  /* Title page: page break before first scene */
+  .title-page {
+    page-break-after: always;
+    border-bottom: none;
+    color: #000;
+  }
+
+  /* Scene heading: bold, uppercase, avoid orphan heading */
+  .scene-heading {
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-top: 1em;
+    color: #000;
+    page-break-after: avoid;
+  }
+
+  /* Scene number: clear float so it doesn't overlap */
+  .scene-heading .scene-number {
+    float: right;
+  }
+
+  /* Action: full width */
+  .action {
+    margin-left: 0;
+    margin-right: 0;
+    margin-bottom: 0.5em;
+    color: #000;
+  }
+
+  /* Character: ~2" from left, uppercase */
+  .character {
+    margin-left: 2.2in;
+    text-transform: uppercase;
+    margin-bottom: 0;
+    color: #000;
+    page-break-after: avoid;
+  }
+
+  /* Dialogue: indented block */
+  .dialogue {
+    margin-left: 1.0in;
+    margin-right: 1.5in;
+    margin-bottom: 0.5em;
+    color: #000;
+  }
+
+  /* Parenthetical */
+  .parenthetical {
+    margin-left: 1.6in;
+    margin-right: 2.0in;
+    margin-bottom: 0;
+    color: #000;
+    page-break-after: avoid;
+  }
+
+  /* Transition: right-aligned uppercase */
+  .transition {
+    text-align: right;
+    text-transform: uppercase;
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+    color: #000;
+  }
+
+  /* Section headers: internal use, not printed */
+  .section {
+    display: none;
+  }
+
+  /* Notes / synopsis / lyrics: not printed */
+  .note,
+  .synopsis,
+  .boneyard {
+    display: none;
+  }
+
+  /* Lyrics: include but use black text */
+  .lyrics {
+    color: #000;
+  }
+
+  /* Keep dialogue block together on page */
+  .dialogue-block {
+    page-break-inside: avoid;
+  }
+
+  /* Page break indicator: hidden in print (actual breaks are semantic) */
+  .page-break {
+    display: none;
+  }
+
+  /* Remove hover/interactive styling */
+  .element {
+    cursor: default;
+    padding: 0;
+    margin: 0;
+  }
+
+  .element:hover {
+    background-color: transparent;
+  }
+}
