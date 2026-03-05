@@ -965,3 +965,70 @@ More text
     expect(links).toHaveLength(1);
   });
 });
+
+import { checkSyntax, checkSemantics } from '../providers/diagnostics';
+
+describe('checkSyntax', () => {
+  it('detects unclosed inline note', () => {
+    const text = 'This is [[unclosed note\nNext line';
+    const diags = checkSyntax(text);
+    expect(diags.some(d => d.severity === 'error' && d.message.includes('[['))).toBe(true);
+  });
+
+  it('passes when note is closed on same line', () => {
+    const text = 'This is [[a note]] and continues';
+    const diags = checkSyntax(text);
+    expect(diags.filter(d => d.message.includes('[['))).toHaveLength(0);
+  });
+
+  it('detects unclosed boneyard', () => {
+    const text = 'Normal line\n/* unclosed boneyard\nAnother line';
+    const diags = checkSyntax(text);
+    expect(diags.some(d => d.severity === 'error' && d.message.includes('/*'))).toBe(true);
+  });
+
+  it('passes when boneyard is closed', () => {
+    const text = '/* closed */ normal';
+    const diags = checkSyntax(text);
+    expect(diags.filter(d => d.message.includes('/*'))).toHaveLength(0);
+  });
+
+  it('detects empty transition', () => {
+    const text = 'INT. OFFICE - DAY\n\n>\n\nSome action';
+    const diags = checkSyntax(text);
+    expect(diags.some(d => d.severity === 'warning' && d.message.toLowerCase().includes('transition'))).toBe(true);
+  });
+});
+
+describe('checkSemantics', () => {
+  it('detects dialogue without preceding character', () => {
+    const script = `INT. OFFICE - DAY
+
+Hello there.
+
+Some action.`;
+    const doc = parse(script);
+    const diags = checkSemantics(doc);
+    expect(Array.isArray(diags)).toBe(true);
+  });
+
+  it('warns when character appears only once', () => {
+    const script = `INT. OFFICE - DAY
+
+ALICE
+Hello world.
+
+INT. PARK - DAY
+
+BOB
+Hi there.
+
+BOB
+How are you?`;
+    const doc = parse(script);
+    const diags = checkSemantics(doc);
+    const aliceWarning = diags.find(d => d.message.includes('ALICE'));
+    expect(aliceWarning?.severity).toBe('warning');
+    expect(diags.find(d => d.message.includes('BOB'))).toBeUndefined();
+  });
+});
