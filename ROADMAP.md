@@ -8,7 +8,7 @@
 
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
-| **neko-types** | Alpha | 87% | 共享类型 + 横切关注点统一 + Operations 类型安全增强（WebviewElement） |
+| **neko-types** | Alpha | 90% | 共享类型 + 横切关注点统一 + Operations 类型安全增强（WebviewElement）+ 文档完善 |
 | **neko-engine** | Alpha | 80% | GPU 渲染 + 编解码 + FIFO 导出队列 + 统一 HTTP/WS 通信（EngineClient）+ 响度标准化 + 预加载优化（ProbeCache/DecoderPool/EncoderPool） |
 | **neko-cut** | Alpha | 82% | 时间线 + 预览 + FIFO 导出队列 + 拖拽竞态修复 + EditOperation 29 操作 + 响度标准化 UI + 导出预设管理 |
 | **neko-agent** | Alpha | 70% | Agent 引擎 + LLM 平台 + CLI + UI |
@@ -47,7 +47,7 @@
   - [x] blend modes（12 个 WGSL shader）
   - [x] color correction + transitions
   - [x] custom shader processor
-- [x] 编解码服务4
+- [x] 编解码服务
   - [x] 视频解码（含硬件加速、IDR scanner、decoder pool）
   - [x] 视频编码（含硬件加速、muxer、iframe）
   - [x] ffmpeg parser + media probe
