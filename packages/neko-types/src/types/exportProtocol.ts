@@ -809,7 +809,7 @@ export type StreamingDecodeResponse =
  */
 export interface ExportPresetSettings {
   /** Output container format */
-  format: 'mp4' | 'webm' | 'mov' | 'mkv';
+  format: 'mp4' | 'webm' | 'mov' | 'mkv' | 'avi' | 'ts';
   /**
    * Video codec identifier. Intentionally `string` (not `VideoCodec`) because
    * ExportPanel supports 'prores' and other codecs beyond the VideoCodec union.

@@ -10,7 +10,7 @@ import type { ProjectData, ExportPreset, ExportPresetSettings } from '@neko/shar
 // Types
 // =============================================================================
 
-type ExportFormat = 'mp4' | 'webm' | 'mov' | 'mkv';
+type ExportFormat = 'mp4' | 'webm' | 'mov' | 'mkv' | 'avi' | 'ts';
 
 interface ExportProgress {
   stage: 'initializing' | 'rendering' | 'encoding' | 'muxing' | 'finalizing' | 'completed' | 'error' | 'cancelled';
@@ -139,6 +139,32 @@ function formatElapsedTime(ms: number): string {
 }
 
 // =============================================================================
+// HwBadge Component
+// =============================================================================
+
+/** Shows hardware encoder name (green) or software fallback (muted) */
+function HwBadge({ encoder }: { encoder: string | null | undefined }) {
+  if (encoder == null) {
+    return (
+      <span className="text-xs text-vscode-descriptionForeground opacity-60">
+        💻 软件编码
+      </span>
+    );
+  }
+  return (
+    <span
+      className="text-xs px-1.5 py-0.5 rounded font-mono"
+      style={{
+        backgroundColor: 'color-mix(in srgb, var(--vscode-charts-green) 15%, transparent)',
+        color: 'var(--vscode-charts-green)',
+      }}
+    >
+      ⚡ {encoder}
+    </span>
+  );
+}
+
+// =============================================================================
 // ExportPanel Component
 // =============================================================================
 
@@ -175,6 +201,8 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
     { label: 'WebM', value: 'webm' },
     { label: 'MOV', value: 'mov' },
     { label: 'MKV', value: 'mkv' },
+    { label: 'AVI', value: 'avi' },
+    { label: 'MPEG-TS', value: 'ts' },
   ];
 
   const VIDEO_CODEC_OPTIONS = [
@@ -200,6 +228,8 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
     mov: ['h264', 'h265', 'av1', 'prores'],
     webm: ['vp9', 'av1'],
     mkv: ['h264', 'h265', 'vp9', 'av1', 'prores'],
+    avi: ['h264', 'h265'],
+    ts: ['h264', 'h265'],
   };
 
   /** Container → compatible audio codecs */
@@ -208,6 +238,8 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
     mov: ['aac', 'mp3', 'flac', 'pcm'],
     webm: ['opus', 'vorbis'],
     mkv: ['aac', 'opus', 'mp3', 'flac', 'vorbis', 'pcm'],
+    avi: ['mp3', 'aac'],
+    ts: ['aac', 'mp3'],
   };
 
   /** Container → default codecs */
@@ -216,6 +248,8 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
     mov: { video: 'h264', audio: 'aac' },
     webm: { video: 'vp9', audio: 'opus' },
     mkv: { video: 'h264', audio: 'aac' },
+    avi: { video: 'h264', audio: 'mp3' },
+    ts: { video: 'h264', audio: 'aac' },
   };
 
   const [format, setFormat] = useState<ExportFormat>('mp4');
@@ -237,6 +271,7 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [isNamingPreset, setIsNamingPreset] = useState(false);
   const [presetNameInput, setPresetNameInput] = useState('');
+  const [hwCapabilities, setHwCapabilities] = useState<Record<string, string | null> | null>(null);
 
   // ---------------------------------------------------------------------------
   // Effects
@@ -311,12 +346,17 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
         case 'preset:list':
           setPresets(message.presets as ExportPreset[]);
           break;
+
+        case 'export:hwCapabilities':
+          setHwCapabilities(message.codecs as Record<string, string | null>);
+          break;
       }
     };
 
     window.addEventListener('message', handleMessage);
     sendMessage({ type: 'export:queryGlobalStatus' });
     sendMessage({ type: 'preset:list' });
+    sendMessage({ type: 'export:queryHwCapabilities' });
 
     return () => {
       window.removeEventListener('message', handleMessage);
@@ -809,6 +849,17 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
             </select>
+            {/* Hardware acceleration badge */}
+            <div className="mt-1 h-5 flex items-center">
+              {hwCapabilities === null
+                ? (
+                  <span className="text-xs text-vscode-descriptionForeground opacity-40">
+                    检测硬件加速...
+                  </span>
+                )
+                : <HwBadge encoder={hwCapabilities[videoCodec]} />
+              }
+            </div>
           </div>
 
           {/* Audio Codec */}
