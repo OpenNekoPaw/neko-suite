@@ -3,13 +3,14 @@
 > 关联：[engine.md](./engine.md) · [adr-unified-engine.md](./adr-unified-engine.md)
 
 <details>
-<summary>✅ 已完成的优化（Phase 1-2.6）</summary>
+<summary>✅ 已完成的优化（Phase 1-2.8）</summary>
 
 **Phase 1（短期修复）** — 波形发送 bug 修复、进度报告、帧提取竞态修复
 **Phase 2（统一通信+并行）** — EngineClient 迁移、音频波形并行调度、SSIM‖PSNR 并行（30-50% 提速）
 **Phase 2.5（前端去阻塞）** — ProgressOverlay 非阻塞化、消息队列 fire-and-forget
 **Phase 2.6（后续修复）** — Git Ref 切换停止旧流、早期波形取消机制
 **Phase 2.7（性能优化）** — 视频对比帧率采样（`sample_fps` 参数 + Webview 降采样），60 分钟视频 30s → 1-2s（15-30x 提升）
+**Phase 2.8（智能范围）** — 时长不匹配自动优化（probe + endTime），120s vs 5s 视频 50s → 5s（10x 提升）— [diff-duration-mismatch-optimization.md](./diff-duration-mismatch-optimization.md)
 
 </details>
 

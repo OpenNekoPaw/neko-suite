@@ -31,6 +31,7 @@
 - [x] **Diff Phase 2B**：前端可视化增强（TimelineDiffViewer + 音频三轨波形 + 视频 WebGL 渲染器 curtain/heatmap/flicker + DiffRegionOverlay）— [diff.md §Phase 2B](./docs/diff.md)
 - [x] **Diff 范围支持**：Video/Audio diff 支持 `start_time`/`end_time` 参数，FFmpeg `-ss`/`-to` 裁剪输入，性能提升 5-6x（长视频局部对比）— [diff-range-usage.md](./docs/diff-range-usage.md)
 - [x] **视频对比性能优化**：`sample_fps` 参数支持帧率降采样（Rust FFmpeg fps filter + TS 1fps 默认 + Webview 降采样至 500 帧），60 分钟视频对比时间 30s → 1-2s（15-30x 提升）
+- [x] **时长不匹配智能优化**：Video/Audio diff 自动检测时长差异 > 20%，限制对比范围至较短文件（probe + endTime），120s vs 5s 视频 50s → 5s（10x 提升）— [diff-duration-mismatch-optimization.md](./docs/diff-duration-mismatch-optimization.md)
 
 </details>
 
