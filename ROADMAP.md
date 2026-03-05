@@ -51,7 +51,10 @@
   - [x] 视频解码（含硬件加速、IDR scanner、decoder pool）
   - [x] 视频编码（含硬件加速、muxer、iframe）
   - [x] ffmpeg parser + media probe
-  - [ ] 更多编码格式支持
+  - [x] 更多编码格式支持
+    - [x] ProRes 硬件加速（macOS VideoToolbox → `prores_videotoolbox`）
+    - [x] AVI / MPEG-TS 容器格式暴露（ExportPanel + ExportService）
+    - [x] 硬件加速动态显示（nodes:hw_capabilities API + ExportPanel badge）
 - [x] 导出管线
   - [x] GPU 导出 pipeline
   - [x] audio mixer
@@ -446,4 +449,4 @@
 
 ---
 
-*最后更新: 2026-03-04*
+*最后更新: 2026-03-05*
