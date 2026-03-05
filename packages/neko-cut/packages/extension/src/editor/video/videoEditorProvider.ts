@@ -571,6 +571,19 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 					return;
 				}
 
+				// Handle hardware capabilities query
+				if (message.type === 'export:queryHwCapabilities') {
+					const exportService = this.exportServices.get(docUri);
+					if (exportService) {
+						const codecs = await exportService.queryHwCapabilities();
+						webviewPanel.webview.postMessage({
+							type: 'export:hwCapabilities',
+							codecs,
+						});
+					}
+					return;
+				}
+
 				// Handle export global status query
 				if (message.type === 'export:queryGlobalStatus') {
 					let hasActiveExport = false;
