@@ -474,8 +474,10 @@ export function CanvasApp() {
     if (jsonData) {
       try {
         const data = JSON.parse(jsonData);
-        if (data.type === 'asset' || data.type === 'assets') {
-          const items = data.type === 'assets' ? data.items : [data];
+        if (data.type === 'asset' || data.type === 'assets' || data.type === 'media-file') {
+          const items = data.type === 'assets' ? data.items :
+                        data.type === 'media-file' ? data.files.map((f: any) => ({ files: [{ path: f.path }] })) :
+                        [data];
           const pos = dropPositionRef.current ?? { x: 0, y: 0 };
           for (let i = 0; i < items.length; i++) {
             const item = items[i];

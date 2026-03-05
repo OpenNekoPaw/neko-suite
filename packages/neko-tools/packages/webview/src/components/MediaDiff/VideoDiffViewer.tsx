@@ -6,10 +6,48 @@
  * via WebSocket H264 streams from neko-engine.
  */
 
-import { memo, useState, useCallback, useRef, useEffect } from 'react';
+import { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { VideoDiffViewerProps } from './types';
 import { StreamingVideoDiffViewer, type StreamingVideoDiffViewerHandle } from './streaming/StreamingVideoDiffViewer';
 import type { DiffMode } from './streaming/DiffRenderer';
+
+// =============================================================================
+// Keyframe Diff Downsampling
+// =============================================================================
+
+interface KeyframeDiff {
+	time: number;
+	similarity: number;
+}
+
+/**
+ * Downsample keyframe diffs to a maximum count for rendering performance.
+ * Merges adjacent keyframes by averaging their similarity scores.
+ */
+function downsampleKeyframeDiffs(
+	keyframeDiffs: KeyframeDiff[],
+	maxCount: number = 500
+): KeyframeDiff[] {
+	if (keyframeDiffs.length <= maxCount) {
+		return keyframeDiffs;
+	}
+
+	const bucketSize = Math.ceil(keyframeDiffs.length / maxCount);
+	const downsampled: KeyframeDiff[] = [];
+
+	for (let i = 0; i < keyframeDiffs.length; i += bucketSize) {
+		const bucket = keyframeDiffs.slice(i, i + bucketSize);
+		const avgSimilarity = bucket.reduce((sum, kf) => sum + kf.similarity, 0) / bucket.length;
+		const midTime = bucket[Math.floor(bucket.length / 2)]?.time ?? bucket[0]?.time ?? 0;
+
+		downsampled.push({
+			time: midTime,
+			similarity: avgSimilarity,
+		});
+	}
+
+	return downsampled;
+}
 
 // =============================================================================
 // Timeline Seek Controls
@@ -115,6 +153,12 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Downsample keyframe diffs for rendering performance
+  const displayKeyframeDiffs = useMemo(
+    () => downsampleKeyframeDiffs(details.keyframeDiffs ?? [], 500),
+    [details.keyframeDiffs]
+  );
+
   return (
     <div className="p-3 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)]">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
@@ -157,13 +201,18 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
           </div>
         )}
       </div>
-      {details.keyframeDiffs && details.keyframeDiffs.length > 0 && (
+      {displayKeyframeDiffs.length > 0 && (
         <div className="mt-3 pt-3 border-t border-[var(--vscode-panel-border)]">
           <div className="text-[var(--vscode-descriptionForeground)] mb-2 text-xs">
             Keyframe Similarities
+            {details.keyframeDiffs && details.keyframeDiffs.length > 500 && (
+              <span className="ml-2 text-[10px] opacity-60">
+                (showing {displayKeyframeDiffs.length} of {details.keyframeDiffs.length})
+              </span>
+            )}
           </div>
           <div className="flex gap-1">
-            {details.keyframeDiffs.map((kf, i) => {
+            {displayKeyframeDiffs.map((kf, i) => {
               const percentage = Math.round(kf.similarity * 100);
               let bgColor = 'bg-red-500';
               if (percentage >= 90) bgColor = 'bg-green-500';

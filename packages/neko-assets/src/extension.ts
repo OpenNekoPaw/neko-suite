@@ -75,6 +75,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 	logger.info('Activating extension...');
 
+	// 0. Initialize i18n
+	const { getVSCodeLocale } = await import('@neko/shared/src/vscode/extension/i18n-bridge');
+	const locale = getVSCodeLocale();
+	const { initI18n } = await import('./i18n');
+	initI18n(locale);
+	logger.info(`i18n initialized with locale: ${locale}`);
+
 	// 1. Initialize AssetLibrary
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 	if (workspaceRoot) {
@@ -180,7 +187,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		});
 
 		// Register Media Library TreeView
-		const mediaLibraryProvider = new MediaLibraryTreeProvider(settingsService);
+		const mediaLibraryProvider = new MediaLibraryTreeProvider({
+			settingsService,
+			thumbnailService: thumbnailService!,
+			metadataExtractor,
+		});
 		const mediaLibraryTree = vscode.window.createTreeView('neko.mediaLibraries', {
 			treeDataProvider: mediaLibraryProvider,
 			showCollapseAll: true,
@@ -273,6 +284,8 @@ function registerMediaLibraryCommands(
 	context: vscode.ExtensionContext,
 	settingsService: MediaLibrarySettingsService,
 ): void {
+	const { t } = require('./i18n');
+
 	// Add Media Library
 	context.subscriptions.push(
 		vscode.commands.registerCommand('neko.assets.addMediaLibrary', async () => {
@@ -280,22 +293,22 @@ function registerMediaLibraryCommands(
 				canSelectFiles: false,
 				canSelectFolders: true,
 				canSelectMany: false,
-				title: 'Select media library directory',
+				title: t('mediaLibrary.add.title'),
 			});
 			if (!dirUri?.[0]) return;
 
 			const name = await vscode.window.showInputBox({
-				prompt: 'Enter a name for this media library',
-				placeHolder: 'e.g., Team Footage',
+				prompt: t('mediaLibrary.add.namePrompt'),
+				placeHolder: t('mediaLibrary.add.namePlaceholder'),
 			});
 			if (!name) return;
 
 			const variable = await vscode.window.showInputBox({
-				prompt: 'Enter a variable name (used as ${VARIABLE} in paths)',
-				placeHolder: 'e.g., TEAM_FOOTAGE',
+				prompt: t('mediaLibrary.add.variablePrompt'),
+				placeHolder: t('mediaLibrary.add.variablePlaceholder'),
 				validateInput: (v) => {
 					if (!/^[A-Z_][A-Z0-9_]*$/.test(v)) {
-						return 'Variable must be UPPER_SNAKE_CASE';
+						return t('mediaLibrary.add.variableError');
 					}
 					return undefined;
 				},
@@ -308,10 +321,10 @@ function registerMediaLibraryCommands(
 					path: dirUri[0].fsPath,
 					variable,
 				});
-				vscode.window.showInformationMessage(`Media library "${name}" added`);
+				vscode.window.showInformationMessage(t('mediaLibrary.add.success', { name }));
 			} catch (error) {
 				const msg = error instanceof Error ? error.message : String(error);
-				vscode.window.showErrorMessage(`Failed to add library: ${msg}`);
+				vscode.window.showErrorMessage(t('mediaLibrary.add.error', { error: msg }));
 			}
 		}),
 	);
@@ -327,14 +340,14 @@ function registerMediaLibraryCommands(
 				const libraries = await settingsService.getResolvedLibraries();
 				const picked = await vscode.window.showQuickPick(
 					libraries.map(l => ({ label: l.name, description: `\${${l.variable}}`, variable: l.variable })),
-					{ title: 'Select library to remove' },
+					{ title: t('mediaLibrary.remove.selectTitle') },
 				);
 				variable = picked?.variable;
 			}
 			if (!variable) return;
 
 			await settingsService.removeLibrary(variable);
-			vscode.window.showInformationMessage('Media library removed');
+			vscode.window.showInformationMessage(t('mediaLibrary.remove.success'));
 		}),
 	);
 
@@ -348,7 +361,7 @@ function registerMediaLibraryCommands(
 				const libraries = await settingsService.getResolvedLibraries();
 				const picked = await vscode.window.showQuickPick(
 					libraries.map(l => ({ label: l.name, description: `\${${l.variable}}`, variable: l.variable })),
-					{ title: 'Select library to set local override' },
+					{ title: t('mediaLibrary.override.selectTitle') },
 				);
 				variable = picked?.variable;
 			}
@@ -358,34 +371,136 @@ function registerMediaLibraryCommands(
 				canSelectFiles: false,
 				canSelectFolders: true,
 				canSelectMany: false,
-				title: `Select local path for \${${variable}}`,
+				title: t('mediaLibrary.override.dialogTitle').replace('${variable}', variable),
 			});
 			if (!dirUri?.[0]) return;
 
 			await settingsService.setLocalOverride(variable, dirUri[0].fsPath);
-			vscode.window.showInformationMessage(`Local override set for \${${variable}}`);
+			vscode.window.showInformationMessage(t('mediaLibrary.override.success').replace('${variable}', variable));
 		}),
 	);
 
 	// Import from Library (context menu on media library files)
 	context.subscriptions.push(
-		vscode.commands.registerCommand('neko.assets.importFromLibrary', async (item?: unknown) => {
-			if (!library || !item || typeof item !== 'object' || !('filePath' in item)) return;
+		vscode.commands.registerCommand('neko.assets.importFromLibrary', async (item?: unknown, selectedItems?: unknown[]) => {
+			if (!library) return;
+
+			// Extract MediaFileItem objects from selection
+			const items = getMediaFileItems(item, selectedItems);
+			if (items.length === 0) return;
 
 			try {
-				const result = await library.importFile(
-					(item as { filePath: string }).filePath,
-					{ autoClassify: true },
-				);
-				vscode.window.showInformationMessage(
-					`Imported: ${result.entity.name}`,
-				);
+				const results: string[] = [];
+				for (const fileItem of items) {
+					const result = await library.importFile(
+						fileItem.filePath,
+						{ autoClassify: true },
+					);
+					results.push(result.entity.name);
+				}
+
+				if (results.length === 1) {
+					vscode.window.showInformationMessage(`Imported: ${results[0]}`);
+				} else {
+					vscode.window.showInformationMessage(`Imported ${results.length} files`);
+				}
 				vscode.commands.executeCommand('neko.assets.refreshViews');
 			} catch (error) {
 				await handleError(error, { showToUser: true });
 			}
 		}),
 	);
+
+	// Reveal File in OS
+	context.subscriptions.push(
+		vscode.commands.registerCommand('neko.assets.revealFileInOS', async (item?: unknown) => {
+			const items = getMediaFileItems(item, undefined);
+			if (items.length === 0) return;
+			vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(items[0].filePath));
+		}),
+	);
+
+	// Copy File Path
+	context.subscriptions.push(
+		vscode.commands.registerCommand('neko.assets.copyFilePath', async (item?: unknown) => {
+			const items = getMediaFileItems(item, undefined);
+			if (items.length === 0) return;
+			await vscode.env.clipboard.writeText(items[0].filePath);
+			vscode.window.showInformationMessage('File path copied to clipboard');
+		}),
+	);
+
+	// Preview Media Library File
+	context.subscriptions.push(
+		vscode.commands.registerCommand('neko.assets.previewMediaLibraryFile', async (item?: unknown) => {
+			const items = getMediaFileItems(item, undefined);
+			if (items.length === 0) return;
+
+			const filePath = items[0].filePath;
+			const mediaType = detectMediaType(filePath);
+			const uri = vscode.Uri.file(filePath);
+
+			if (mediaType === 'video') {
+				await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.videoPreview');
+			} else if (mediaType === 'audio') {
+				await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
+			} else {
+				await vscode.commands.executeCommand('vscode.open', uri);
+			}
+		}),
+	);
+
+	// Add to Timeline from Library
+	context.subscriptions.push(
+		vscode.commands.registerCommand('neko.assets.addToTimelineFromLibrary', async (item?: unknown, selectedItems?: unknown[]) => {
+			const items = getMediaFileItems(item, selectedItems);
+			if (items.length === 0) return;
+
+			for (const fileItem of items) {
+				await vscode.commands.executeCommand('neko.assets.addToTimeline', vscode.Uri.file(fileItem.filePath));
+			}
+		}),
+	);
+
+	// Add to Canvas from Library
+	context.subscriptions.push(
+		vscode.commands.registerCommand('neko.assets.addToCanvasFromLibrary', async (item?: unknown, selectedItems?: unknown[]) => {
+			const items = getMediaFileItems(item, selectedItems);
+			if (items.length === 0) return;
+
+			for (const fileItem of items) {
+				await vscode.commands.executeCommand('neko.assets.addToCanvas', vscode.Uri.file(fileItem.filePath));
+			}
+		}),
+	);
+
+	// Refresh Media Libraries
+	context.subscriptions.push(
+		vscode.commands.registerCommand('neko.assets.refreshMediaLibraries', () => {
+			vscode.commands.executeCommand('neko.assets.refreshViews');
+		}),
+	);
+}
+
+/**
+ * Extract MediaFileItem objects from tree selection.
+ * Handles both single-click (item) and multi-select (selectedItems).
+ */
+function getMediaFileItems(item: unknown, selectedItems?: unknown[]): Array<{ filePath: string }> {
+	const items: Array<{ filePath: string }> = [];
+
+	// Multi-select takes priority
+	if (selectedItems && selectedItems.length > 0) {
+		for (const selected of selectedItems) {
+			if (selected && typeof selected === 'object' && 'filePath' in selected) {
+				items.push(selected as { filePath: string });
+			}
+		}
+	} else if (item && typeof item === 'object' && 'filePath' in item) {
+		items.push(item as { filePath: string });
+	}
+
+	return items;
 }
 
 // =============================================================================

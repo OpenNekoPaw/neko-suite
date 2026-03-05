@@ -58,6 +58,11 @@ pub struct VideoDiffOptions {
     /// End time in seconds for range-based diff (None = to end)
     #[serde(default)]
     pub end_time: Option<f64>,
+
+    /// Sample frame rate for diff computation (None = full frame rate)
+    /// Example: 1.0 = sample 1 frame per second
+    #[serde(default)]
+    pub sample_fps: Option<f64>,
 }
 
 fn default_ssim_threshold() -> f64 {
@@ -76,6 +81,7 @@ impl Default for VideoDiffOptions {
             include_audio: true,
             start_time: None,
             end_time: None,
+            sample_fps: None,
         }
     }
 }
@@ -192,11 +198,11 @@ pub fn diff_video_content<P: AsRef<Path>>(
     // reduces analysis time by ~30-50%.
     let (ssim_result, psnr_result) = std::thread::scope(|s| {
         let ssim_handle = s.spawn(|| -> Result<Vec<_>> {
-            let log = run_ffmpeg_ssim(path_a, path_b, opts.start_time, opts.end_time)?;
+            let log = run_ffmpeg_ssim(path_a, path_b, opts.start_time, opts.end_time, opts.sample_fps)?;
             parse_ssim_log(&log)
         });
         let psnr_handle = s.spawn(|| -> Result<Vec<_>> {
-            let log = run_ffmpeg_psnr(path_a, path_b, opts.start_time, opts.end_time)?;
+            let log = run_ffmpeg_psnr(path_a, path_b, opts.start_time, opts.end_time, opts.sample_fps)?;
             parse_psnr_log(&log)
         });
         // scope blocks until both threads finish
@@ -213,7 +219,7 @@ pub fn diff_video_content<P: AsRef<Path>>(
     // Step 4: Merge SSIM + PSNR into FrameMetric list
     // Use the lower fps for timestamp calculation
     let base_fps = fps_a.min(fps_b);
-    let frame_metrics = build_frame_metrics(&ssim_entries, &psnr_entries, base_fps);
+    let frame_metrics = build_frame_metrics(&ssim_entries, &psnr_entries, base_fps, opts.sample_fps);
 
     // Step 5: Compute global metrics
     let total = frame_metrics.len() as u64;
@@ -321,11 +327,13 @@ pub fn diff_video_content<P: AsRef<Path>>(
 /// Run FFmpeg SSIM filter and return the log content.
 /// Uses scale2ref to scale input B to match input A's resolution when they differ.
 /// Supports optional time range via start_time/end_time parameters.
+/// Supports optional frame sampling via sample_fps parameter.
 fn run_ffmpeg_ssim(
     path_a: &Path,
     path_b: &Path,
     start_time: Option<f64>,
     end_time: Option<f64>,
+    sample_fps: Option<f64>,
 ) -> Result<String> {
     // Use SystemTime nanos as unique suffix to prevent concurrent collisions
     let nanos = std::time::SystemTime::now()
@@ -334,11 +342,20 @@ fn run_ffmpeg_ssim(
         .subsec_nanos();
     let tmp = std::env::temp_dir().join(format!("neko_ssim_{}_{}.log", std::process::id(), nanos));
 
-    // scale2ref scales [1:v] to match [0:v] dimensions automatically.
-    let filter = format!(
-        "[1:v][0:v]scale2ref=flags=bicubic[scaled][ref];[ref][scaled]ssim=stats_file={}",
-        tmp.display()
-    );
+    // Build filter chain with optional fps sampling
+    let filter = if let Some(fps) = sample_fps {
+        // Apply fps resampling before scale2ref and ssim
+        format!(
+            "[1:v]fps=fps={}:round=near[b_fps];[0:v]fps=fps={}:round=near[a_fps];[b_fps][a_fps]scale2ref=flags=bicubic[scaled][ref];[ref][scaled]ssim=stats_file={}",
+            fps, fps, tmp.display()
+        )
+    } else {
+        // Original filter without sampling
+        format!(
+            "[1:v][0:v]scale2ref=flags=bicubic[scaled][ref];[ref][scaled]ssim=stats_file={}",
+            tmp.display()
+        )
+    };
 
     let mut cmd = std::process::Command::new("ffmpeg");
 
@@ -400,11 +417,13 @@ fn run_ffmpeg_ssim(
 /// Run FFmpeg PSNR filter and return the log content.
 /// Uses scale2ref to scale input B to match input A's resolution when they differ.
 /// Supports optional time range via start_time/end_time parameters.
+/// Supports optional frame sampling via sample_fps parameter.
 fn run_ffmpeg_psnr(
     path_a: &Path,
     path_b: &Path,
     start_time: Option<f64>,
     end_time: Option<f64>,
+    sample_fps: Option<f64>,
 ) -> Result<String> {
     // Use SystemTime nanos as unique suffix to prevent concurrent collisions
     let nanos = std::time::SystemTime::now()
@@ -413,11 +432,20 @@ fn run_ffmpeg_psnr(
         .subsec_nanos();
     let tmp = std::env::temp_dir().join(format!("neko_psnr_{}_{}.log", std::process::id(), nanos));
 
-    // scale2ref scales [1:v] to match [0:v] dimensions automatically.
-    let filter = format!(
-        "[1:v][0:v]scale2ref=flags=bicubic[scaled][ref];[ref][scaled]psnr=stats_file={}",
-        tmp.display()
-    );
+    // Build filter chain with optional fps sampling
+    let filter = if let Some(fps) = sample_fps {
+        // Apply fps resampling before scale2ref and psnr
+        format!(
+            "[1:v]fps=fps={}:round=near[b_fps];[0:v]fps=fps={}:round=near[a_fps];[b_fps][a_fps]scale2ref=flags=bicubic[scaled][ref];[ref][scaled]psnr=stats_file={}",
+            fps, fps, tmp.display()
+        )
+    } else {
+        // Original filter without sampling
+        format!(
+            "[1:v][0:v]scale2ref=flags=bicubic[scaled][ref];[ref][scaled]psnr=stats_file={}",
+            tmp.display()
+        )
+    };
 
     let mut cmd = std::process::Command::new("ffmpeg");
 
@@ -515,9 +543,13 @@ fn build_frame_metrics(
     ssim_entries: &[super::ffmpeg_parser::SsimEntry],
     psnr_entries: &[super::ffmpeg_parser::PsnrEntry],
     fps: f64,
+    sample_fps: Option<f64>,
 ) -> Vec<FrameMetric> {
     let count = ssim_entries.len();
     let mut metrics = Vec::with_capacity(count);
+
+    // Use sample_fps for timestamp calculation if sampling is enabled
+    let effective_fps = sample_fps.unwrap_or(fps);
 
     for (i, ssim) in ssim_entries.iter().enumerate() {
         let psnr = psnr_entries
@@ -525,8 +557,8 @@ fn build_frame_metrics(
             .map(|p| p.psnr_avg)
             .unwrap_or(f64::INFINITY);
 
-        let timestamp = if fps > 0.0 {
-            (ssim.frame as f64 - 1.0) / fps
+        let timestamp = if effective_fps > 0.0 {
+            (ssim.frame as f64 - 1.0) / effective_fps
         } else {
             0.0
         };
@@ -646,9 +678,9 @@ mod tests {
             },
         ];
 
-        let metrics = build_frame_metrics(&ssim, &psnr, 30.0);
-        assert_eq!(metrics.len(), 2);
-        assert_eq!(metrics[0].frame, 1);
+        let metrics = build_frame_metrics(&ssim, &psnr, 30.0, None);
+     assert_eq!(metrics.len(), 2);
+    assert_eq!(metrics[0].frame, 1);
         assert!((metrics[0].timestamp - 0.0).abs() < 1e-6);
         assert!((metrics[0].ssim - 0.99).abs() < 1e-6);
         assert!((metrics[0].psnr - 48.0).abs() < 1e-6);
@@ -688,7 +720,7 @@ mod tests {
             psnr_avg: 48.0,
         }];
 
-        let metrics = build_frame_metrics(&ssim, &psnr, 30.0);
+        let metrics = build_frame_metrics(&ssim, &psnr, 30.0, None);
         assert_eq!(metrics.len(), 3);
         // Frame 2 and 3 should have INFINITY psnr (no matching PSNR entry)
         assert!(metrics[1].psnr.is_infinite());
@@ -842,5 +874,53 @@ mod tests {
             &VideoDiffOptions::default(),
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_video_diff_options_with_sample_fps() {
+        let json = r#"{"ssimThreshold": 0.90, "sampleFps": 1.0}"#;
+        let opts: VideoDiffOptions = serde_json::from_str(json).unwrap();
+        assert!((opts.ssim_threshold - 0.90).abs() < 1e-6);
+        assert_eq!(opts.sample_fps, Some(1.0));
+    }
+
+    #[test]
+    fn test_build_frame_metrics_with_sampling() {
+        use super::super::ffmpeg_parser::{PsnrEntry, SsimEntry};
+
+        let ssim = vec![
+            SsimEntry {
+                frame: 1,
+                y: 0.99,
+                u: 0.99,
+                v: 0.99,
+                all: 0.99,
+            },
+            SsimEntry {
+                frame: 2,
+                y: 0.85,
+                u: 0.86,
+                v: 0.87,
+                all: 0.86,
+            },
+        ];
+        let psnr = vec![
+            PsnrEntry {
+                frame: 1,
+                mse_avg: 0.1,
+                psnr_avg: 48.0,
+            },
+            PsnrEntry {
+                frame: 2,
+                mse_avg: 5.0,
+                psnr_avg: 31.0,
+            },
+        ];
+
+        // With 1fps sampling, frame 1 → 0s, frame 2 → 1s
+        let metrics = build_frame_metrics(&ssim, &psnr, 30.0, Some(1.0));
+        assert_eq!(metrics.len(), 2);
+        assert!((metrics[0].timestamp - 0.0).abs() < 1e-6);
+        assert!((metrics[1].timestamp - 1.0).abs() < 1e-6);
     }
 }

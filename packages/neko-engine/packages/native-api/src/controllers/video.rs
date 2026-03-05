@@ -190,7 +190,10 @@ struct DiffRequestOptions {
     start_time: Option<f64>,
     /// End time in seconds for range-based diff
     #[serde(default)]
-    end_time: Option<f64>,
+  end_time: Option<f64>,
+    /// Sample frame rate for diff computation (None = full frame rate)
+    #[serde(default)]
+    sample_fps: Option<f64>,
 }
 
 impl Controller for VideoController {
@@ -518,6 +521,7 @@ impl Controller for VideoController {
                     include_audio: opts.include_audio.unwrap_or(true),
                     start_time: opts.start_time,
                     end_time: opts.end_time,
+                    sample_fps: opts.sample_fps,
                 };
 
                 // Run blocking FFmpeg diff operations on a dedicated thread pool

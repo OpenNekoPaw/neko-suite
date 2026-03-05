@@ -110,8 +110,8 @@ export function createEngineMetadataExtractor(): MetadataExtractor {
 			mimeType,
 		};
 
-		// 2. Rich metadata for video/audio via engine probeMedia
-		if (mediaType === 'video' || mediaType === 'audio') {
+		// 2. Rich metadata for video/audio/image via engine probeMedia
+		if (mediaType === 'video' || mediaType === 'audio' || mediaType === 'image') {
 			const info = await probeViaEngine(filePath);
 			if (info) {
 				applyMediaInfo(metadata, info);

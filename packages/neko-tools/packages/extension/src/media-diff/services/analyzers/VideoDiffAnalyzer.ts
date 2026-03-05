@@ -90,10 +90,13 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 			}
 			this.throwIfAborted();
 
+			// Use 1fps sampling for initial diff to reduce computation time
+			// For 60min video: 108K frames → 3.6K frames → ~1-2s instead of 30s
 			const engineResult = await this.engineMediaService.diff(
 				'videos',
 				currentPath,
-				previousPath
+				previousPath,
+				{ sampleFps: 1.0 }
 			);
 
 			this.throwIfAborted();

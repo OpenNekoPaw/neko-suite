@@ -13,82 +13,7 @@ import * as vscode from 'vscode';
 import type { AssetLibrary } from '@neko/asset';
 import type { AssetEntity, AssetFile, AssetFileStatus, MediaFileMetadata } from '@neko/shared';
 import { isMediaFile } from '@neko/shared';
-
-// =============================================================================
-// Formatting Helpers
-// =============================================================================
-
-/**
- * Format duration in seconds to a short string.
- *
- * @example
- * formatDuration(90)   // "1:30"
- * formatDuration(3661) // "1:01:01"
- * formatDuration(5.5)  // "0:06"
- */
-function formatDuration(seconds: number): string {
-	const h = Math.floor(seconds / 3600);
-	const m = Math.floor((seconds % 3600) / 60);
-	const s = Math.round(seconds % 60);
-
-	if (h > 0) {
-		return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-	}
-	return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-/**
- * Format resolution to a short label.
- *
- * @example
- * formatResolution(3840, 2160) // "4K"
- * formatResolution(1920, 1080) // "1080p"
- * formatResolution(800, 600)   // "800x600"
- */
-function formatResolution(width: number, height: number): string {
-	if (width >= 3840) return '4K';
-	if (width >= 2560) return '1440p';
-	if (width >= 1920) return '1080p';
-	if (width >= 1280) return '720p';
-	if (width >= 640) return '480p';
-	return `${width}x${height}`;
-}
-
-/**
- * Build tooltip string from metadata.
- */
-function buildTooltip(metadata: MediaFileMetadata): string {
-	const lines: string[] = [];
-
-	if (metadata.width && metadata.height) {
-		lines.push(`Resolution: ${metadata.width}x${metadata.height}`);
-	}
-	if (metadata.duration) {
-		lines.push(`Duration: ${formatDuration(metadata.duration)}`);
-	}
-	if (metadata.frameRate) {
-		lines.push(`Frame Rate: ${metadata.frameRate} fps`);
-	}
-	if (metadata.codec) {
-		lines.push(`Codec: ${metadata.codec}`);
-	}
-	if (metadata.sampleRate) {
-		lines.push(`Sample Rate: ${metadata.sampleRate} Hz`);
-	}
-	if (metadata.channels) {
-		lines.push(`Channels: ${metadata.channels}`);
-	}
-	if (metadata.bitrate) {
-		const kbps = Math.round(metadata.bitrate / 1000);
-		lines.push(`Bitrate: ${kbps} kbps`);
-	}
-	if (metadata.fileSize) {
-		const sizeMB = (metadata.fileSize / (1024 * 1024)).toFixed(1);
-		lines.push(`Size: ${sizeMB} MB`);
-	}
-
-	return lines.join('\n');
-}
+import { formatDuration, formatResolution, buildMetadataTooltip } from '../utils/formatters';
 
 // =============================================================================
 // Provider
@@ -199,7 +124,7 @@ export class AssetFileDecorationProvider implements vscode.FileDecorationProvide
 
 		return {
 			badge,
-			tooltip: buildTooltip(metadata),
+			tooltip: buildMetadataTooltip(metadata),
 		};
 	}
 

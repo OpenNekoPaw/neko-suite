@@ -166,12 +166,50 @@
         "title": "Import to Asset Library",
         "category": "Neko Assets",
         "icon": "$(add)"
+      },
+      {
+        "command": "neko.assets.revealFileInOS",
+        "title": "Reveal in Finder",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.copyFilePath",
+        "title": "Copy File Path",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.previewMediaLibraryFile",
+        "title": "Preview Media",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.addToTimelineFromLibrary",
+        "title": "Add to Timeline",
+        "category": "Neko Assets",
+        "icon": "$(play)"
+      },
+      {
+        "command": "neko.assets.addToCanvasFromLibrary",
+        "title": "Add to Canvas",
+        "category": "Neko Assets",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "neko.assets.refreshMediaLibraries",
+        "title": "Refresh Media Libraries",
+        "category": "Neko Assets",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
       "view/title": [
         {
           "command": "neko.assets.addMediaLibrary",
+          "when": "view == neko.mediaLibraries",
+          "group": "navigation"
+        },
+        {
+          "command": "neko.assets.refreshMediaLibraries",
           "when": "view == neko.mediaLibraries",
           "group": "navigation"
         },
@@ -196,6 +234,31 @@
           "command": "neko.assets.importFromLibrary",
           "when": "viewItem == mediaLibrary:file",
           "group": "inline"
+        },
+        {
+          "command": "neko.assets.previewMediaLibraryFile",
+          "when": "viewItem == mediaLibrary:file",
+          "group": "2_preview"
+        },
+        {
+          "command": "neko.assets.addToTimelineFromLibrary",
+          "when": "viewItem == mediaLibrary:file",
+          "group": "3_actions"
+        },
+        {
+          "command": "neko.assets.addToCanvasFromLibrary",
+          "when": "viewItem == mediaLibrary:file",
+          "group": "3_actions"
+        },
+        {
+          "command": "neko.assets.revealFileInOS",
+          "when": "viewItem == mediaLibrary:file",
+          "group": "4_utils"
+        },
+        {
+          "command": "neko.assets.copyFilePath",
+          "when": "viewItem == mediaLibrary:file",
+          "group": "4_utils"
         },
         {
           "command": "neko.assets.relocateFile",
