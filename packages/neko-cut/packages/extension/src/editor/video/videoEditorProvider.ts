@@ -11,6 +11,7 @@ import { MessageHandler } from './messageHandler';
 import { MediaService } from '../../services/MediaService';
 import { EngineConnection } from '../../services/EngineConnection';
 import { ExportService } from '../../services/ExportService';
+import { ExportPresetService } from '../../services/ExportPresetService';
 import { getService, getLogger } from '../../base';
 
 const logger = getLogger('VideoEditorProvider');
@@ -49,6 +50,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 	private mediaServices: Map<string, MediaService> = new Map();
 	private engineConnection: EngineConnection = new EngineConnection();
 	private exportServices: Map<string, ExportService> = new Map();
+	private presetService: ExportPresetService | null = null;
 	/** Deferred cleanup subscriptions (cancelled when editor is reopened during export) */
 	private deferredCleanupSubs: Map<string, vscode.Disposable[]> = new Map();
 
@@ -475,6 +477,11 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		// Set up the webview HTML content
 		webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
 
+		// Initialize preset service (lazy, shared across documents)
+		if (!this.presetService) {
+			this.presetService = new ExportPresetService(this.context.workspaceState);
+		}
+
 		// Handle messages from the webview
 		webviewPanel.webview.onDidReceiveMessage(
 			async (message) => {
@@ -577,6 +584,28 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 						type: 'export:globalStatus',
 						hasActiveExport,
 					});
+					return;
+				}
+
+				// Handle preset list request
+				if (message.type === 'preset:list') {
+					const presets = this.presetService?.listPresets() ?? [];
+					webviewPanel.webview.postMessage({ type: 'preset:list', presets });
+					return;
+				}
+
+				// Handle preset save request
+				if (message.type === 'preset:save') {
+					const { name, settings } = message as { name: string; settings: import('@neko/shared').ExportPresetSettings };
+					if (this.presetService) {
+						try {
+							await this.presetService.savePreset(name, settings);
+							const presets = this.presetService.listPresets();
+							webviewPanel.webview.postMessage({ type: 'preset:list', presets });
+						} catch (error) {
+							logger.error('Failed to save preset:', error);
+						}
+					}
 					return;
 				}
 
