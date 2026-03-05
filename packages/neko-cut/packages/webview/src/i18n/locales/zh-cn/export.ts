@@ -31,6 +31,8 @@ export const exportBundle = {
   'export.audioBitrate': '音频比特率',
   'export.preset.label': '预设',
   'export.preset.custom': '自定义',
+  'export.preset.builtin': '内置预设',
+  'export.preset.user': '我的预设',
 
   'export.gifSettings.colors': '颜色数',
   'export.gifSettings.quality': '质量',

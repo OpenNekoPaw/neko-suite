@@ -610,6 +610,11 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 				// Handle preset save request
 				if (message.type === 'preset:save') {
 					const { name, settings } = message as { name: string; settings: import('@neko/shared').ExportPresetSettings };
+					// Defensive validation
+					if (typeof name !== 'string' || !name.trim() || typeof settings !== 'object' || settings === null) {
+						logger.warn('Received malformed preset:save message, ignoring');
+						return;
+					}
 					if (this.presetService) {
 						try {
 							await this.presetService.savePreset(name, settings);

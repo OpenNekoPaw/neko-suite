@@ -31,6 +31,8 @@ export const exportBundle = {
   'export.audioBitrate': 'Audio Bitrate',
   'export.preset.label': 'Preset',
   'export.preset.custom': 'Custom',
+  'export.preset.builtin': 'Built-in',
+  'export.preset.user': 'My Presets',
 
   'export.gifSettings.colors': 'Colors',
   'export.gifSettings.quality': 'Quality',

@@ -733,18 +733,18 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             <div className="flex gap-2">
               <select
                 value={selectedPresetId ?? ''}
-                onChange={(e) => { setSelectedPresetId(null); handlePresetChange(e.target.value); }}
+                onChange={(e) => handlePresetChange(e.target.value)}
                 className="flex-1 px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
               >
                 {presets.filter(p => p.isBuiltin).length > 0 && (
-                  <optgroup label="内置预设">
+                  <optgroup label={t('export.preset.builtin')}>
                     {presets.filter(p => p.isBuiltin).map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </optgroup>
                 )}
                 {presets.filter(p => !p.isBuiltin).length > 0 && (
-                  <optgroup label="我的预设">
+                  <optgroup label={t('export.preset.user')}>
                     {presets.filter(p => !p.isBuiltin).map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
