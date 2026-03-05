@@ -121,22 +121,46 @@ impl FfmpegAudioDecoder {
             if result.is_ok() {
                 output
             } else {
-                // Input format changed — rebuild resampler from actual decoded frame params
+                let frame_channels = decoded_frame.channels() as u16;
+                let output_channels = self.output_channels.unwrap_or(audio_info.channels);
+                let output_rate = self.output_sample_rate.unwrap_or(audio_info.sample_rate);
+
+                // Guard: AAC bitstream errors (e.g. "channel element N.M is not allocated")
+                // cause FFmpeg to report implausible channel counts (e.g. 43).
+                // ChannelLayout::default(N) for large N has no channel routing, so SWR
+                // cannot rematrix it → would error again. Return silence instead.
+                if frame_channels == 0 || frame_channels > 8 {
+                    tracing::warn!(
+                        "Corrupt audio frame at {:.3}s: {}ch (AAC bitstream error) — substituting silence",
+                        timestamp,
+                        frame_channels
+                    );
+                    let samples = decoded_frame.samples().max(1);
+                    let bytes = self.output_format.bytes_per_sample();
+                    return Ok(Some(DecodedAudioFrame {
+                        data: vec![0u8; samples * output_channels as usize * bytes],
+                        samples,
+                        timestamp,
+                        sample_rate: output_rate,
+                        channels: output_channels,
+                        format: self.output_format,
+                    }));
+                }
+
+                // Input format legitimately changed — rebuild resampler
                 let frame_layout = {
                     let layout = decoded_frame.channel_layout();
                     if layout.bits() != 0 {
                         layout
                     } else {
-                        Self::channel_layout_for_channels(decoded_frame.channels() as u16)
+                        Self::channel_layout_for_channels(frame_channels)
                     }
                 };
-                let output_channels = self.output_channels.unwrap_or(audio_info.channels);
-                let output_rate = self.output_sample_rate.unwrap_or(audio_info.sample_rate);
 
                 tracing::warn!(
                     "Resampler input changed, rebuilding: {:?}/{}ch/{} Hz -> {:?}/{}ch/{} Hz",
                     decoded_frame.format(),
-                    decoded_frame.channels(),
+                    frame_channels,
                     decoded_frame.rate(),
                     Self::to_ffmpeg_sample_format(self.output_format),
                     output_channels,
