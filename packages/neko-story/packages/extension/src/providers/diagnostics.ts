@@ -198,8 +198,14 @@ export class FountainDiagnosticsProvider implements vscode.Disposable {
 
   private analyzeDocument(doc: vscode.TextDocument): void {
     const text = doc.getText();
-    const fountainDoc =
-      this.indexService.getDocument(doc.uri) ?? parse(text);
+    let fountainDoc: FountainDocument;
+    try {
+      fountainDoc = this.indexService.getDocument(doc.uri) ?? parse(text);
+    } catch {
+      // parse failed — clear diagnostics and return silently
+      this.collection.delete(doc.uri);
+      return;
+    }
 
     const entries: DiagnosticEntry[] = [
       ...checkSyntax(text),
