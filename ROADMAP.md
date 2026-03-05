@@ -10,7 +10,7 @@
 |------|------|------|------|
 | **neko-types** | Alpha | 87% | 共享类型 + 横切关注点统一 + Operations 类型安全增强（WebviewElement） |
 | **neko-engine** | Alpha | 80% | GPU 渲染 + 编解码 + FIFO 导出队列 + 统一 HTTP/WS 通信（EngineClient）+ 响度标准化 + 预加载优化（ProbeCache/DecoderPool/EncoderPool） |
-| **neko-cut** | Alpha | 77% | 时间线 + 预览 + FIFO 导出队列 + 拖拽竞态修复 + EditOperation 29 操作 + 响度标准化 UI |
+| **neko-cut** | Alpha | 82% | 时间线 + 预览 + FIFO 导出队列 + 拖拽竞态修复 + EditOperation 29 操作 + 响度标准化 UI + 导出预设管理 |
 | **neko-agent** | Alpha | 70% | Agent 引擎 + LLM 平台 + CLI + UI |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
 | **neko-preview** | WIP | 60% | 视频/音频预览 Provider + 播放器 UI |
@@ -36,7 +36,7 @@
 
 ## Phase 1: 核心剪辑能力 (Current)
 
-> 目标：实现基础视频剪辑闭环 — **进度 ~80%**
+> 目标：实现基础视频剪辑闭环 — **进度 ~90%**
 
 ### neko-engine (媒体引擎 Sidecar)
 
@@ -88,7 +88,7 @@
   - [x] 帧精确定位
   - [x] 缩放/平移控制
   - [x] PreviewModeController
-  - [ ] 多分辨率预览切换
+  - [x] 多分辨率预览切换
 - [x] 媒体导入
   - [x] 视频/音频/图片导入
   - [x] 缩略图生成（ThumbnailService）
@@ -110,7 +110,7 @@
   - [x] MP4/WebM 导出
   - [x] 分辨率/码率设置
   - [x] FIFO 导出队列（enqueueExport + 多任务轮询 + 队列状态 UI）
-  - [ ] 导出预设管理
+  - [x] 导出预设管理（内置预设 + 自定义保存，workspaceState 持久化）
 - [x] 国际化（中英双语）
 
 ### neko-client (流媒体客户端)
@@ -383,12 +383,11 @@
 
 ## 里程碑计划
 
-### M1: 基础剪辑闭环 (Current)
+### M1: 基础剪辑闭环 ✅
 - neko-engine GPU 渲染 + 编解码稳定 + 统一 HTTP/WS 通信 + FIFO 导出队列 + 预加载优化 ✅
-- neko-cut 时间线 + 预览 + 导出队列 + 拖拽竞态修复 + EditOperation + Proto 对齐 ✅
+- neko-cut 时间线 + 预览 + 多分辨率切换 + 导出队列 + 导出预设 + 拖拽竞态修复 + EditOperation + Proto 对齐 ✅
 - neko-client 流媒体播放 + EngineClient ✅
 - neko-types 全域类型 + 横切关注点统一 + Operations 类型安全 ✅
-- 剩余：多分辨率预览
 
 ### M2: AI 集成
 - neko-agent 时间线操作 Skills 完成
