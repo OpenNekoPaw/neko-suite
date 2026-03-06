@@ -104,6 +104,10 @@ describe('AssetHealthService', () => {
 			// Last call should have checked=3
 			const lastCall = progressCalls[progressCalls.length - 1]!;
 			expect(lastCall[0]).toBe(3);
+			// Verify monotonically increasing progress
+			for (let i = 1; i < progressCalls.length; i++) {
+				expect(progressCalls[i]![0]).toBeGreaterThan(progressCalls[i-1]![0]);
+			}
 		});
 
 		it('should return empty array for empty library', async () => {
@@ -132,6 +136,8 @@ describe('AssetHealthService', () => {
 			await service.validateAll();
 
 			expect(maxActive).toBeLessThanOrEqual(2);
+			// Also verify genuine concurrency occurred (not just serial execution)
+			expect(maxActive).toBeGreaterThan(1);
 		});
 
 		it('should track previousStatus', async () => {

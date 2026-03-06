@@ -93,16 +93,34 @@ export class AssetHealthService {
 		};
 
 		// Correct concurrency pool: Set<Promise> + .finally() removal
+		// Errors are collected so all in-flight tasks complete before rethrowing,
+		// preventing orphaned tasks that still mutate results and call onProgress.
+		const errors: unknown[] = [];
+
+		const processEntrySafe = async (entry: typeof fileEntries[number]): Promise<void> => {
+			try {
+				await processEntry(entry);
+			} catch (err) {
+				errors.push(err);
+			}
+		};
+
 		const active = new Set<Promise<void>>();
 		for (const entry of fileEntries) {
+			// NOTE: task! uses definite assignment assertion because the .finally() closure
+			// captures `task` by reference — by the time .finally() runs, task is assigned.
 			let task!: Promise<void>;
-			task = processEntry(entry).finally(() => active.delete(task));
+			task = processEntrySafe(entry).finally(() => active.delete(task));
 			active.add(task);
 			if (active.size >= this.concurrency) {
 				await Promise.race(active);
 			}
 		}
 		await Promise.all(active);
+
+		if (errors.length > 0) {
+			throw errors[0];
+		}
 
 		return results;
 	}
