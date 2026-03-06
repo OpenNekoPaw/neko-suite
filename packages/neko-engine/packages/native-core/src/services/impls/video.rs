@@ -407,6 +407,10 @@ impl IVideoService for VideoService {
 
                 let mut current_speed = 1.0;
                 let mut last_seek_seq: u64 = 0;
+                // After seek, discard frames whose PTS is before the seek target.
+                // FFmpeg decode-seek lands on the nearest keyframe BEFORE the target,
+                // so without this we'd briefly show wrong-position frames.
+                let mut seek_skip_until: Option<f64> = None;
                 // Consecutive decode error counter: flush+retry up to N times before
                 // treating the stream as unrecoverable and closing it.
                 let mut consecutive_decode_errors: u32 = 0;
@@ -425,6 +429,10 @@ impl IVideoService for VideoService {
                         if state.seek_seq != last_seek_seq {
                             last_seek_seq = state.seek_seq;
                             did_seek = true;
+                            // Arm skip filter: discard decoded frames before target.
+                            // FFmpeg seeks to the keyframe BEFORE time; we skip-decode
+                            // to avoid sending pre-seek frames to the client.
+                            seek_skip_until = Some(time);
                             let _ = decoder.seek(time);
                             Encoder::close(&mut encoder);
                             if let Err(e) = Encoder::open(&mut encoder, &encoder_config) {
@@ -510,6 +518,17 @@ impl IVideoService for VideoService {
                             continue;
                         }
                     };
+
+                    // Skip pre-seek frames: after decode-seek, FFmpeg starts from the
+                    // keyframe before the target. Discard frames until we reach it.
+                    if let Some(target_secs) = seek_skip_until {
+                        let frame_secs = gpu_texture.pts as f64 * time_base;
+                        // Allow ≤2 frames tolerance (67ms at 30fps) for keyframe alignment
+                        if frame_secs < target_secs - 0.067 {
+                            continue; // Decode next without encoding
+                        }
+                        seek_skip_until = None; // Reached seek target — start sending
+                    }
 
                     let tex_width = gpu_texture.width;
                     let tex_height = gpu_texture.height;
