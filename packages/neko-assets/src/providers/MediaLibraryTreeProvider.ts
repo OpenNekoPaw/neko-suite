@@ -159,6 +159,10 @@ export class MediaLibraryTreeProvider
 	private metadataCache = new Map<string, MediaFileMetadata>();
 	private pendingThumbnails = new Set<string>();
 	private refreshDebounceTimer?: NodeJS.Timeout;
+	// Directory listing cache — keyed by absolute dir path
+	private directoryCache = new Map<string, MediaLibraryItem[]>();
+	// One FileSystemWatcher per watched directory
+	private directoryWatchers = new Map<string, vscode.FileSystemWatcher>();
 
 	private readonly settingsService: MediaLibrarySettingsService;
 	private readonly thumbnailService: ThumbnailService;
@@ -175,7 +179,13 @@ export class MediaLibraryTreeProvider
 	}
 
 	refresh(): void {
-		// Clear all caches
+		// Clear all caches including directory listings
+		this.directoryCache.clear();
+		// Dispose existing directory watchers (new ones register lazily on next expand)
+		for (const [, watcher] of this.directoryWatchers) {
+			watcher.dispose();
+		}
+		this.directoryWatchers.clear();
 		this.thumbnailCache.clear();
 		this.metadataCache.clear();
 		this.pendingThumbnails.clear();
@@ -240,6 +250,12 @@ export class MediaLibraryTreeProvider
 	}
 
 	private async listDirectory(dirPath: string): Promise<MediaLibraryItem[]> {
+		// Return cached listing if available
+		const cached = this.directoryCache.get(dirPath);
+		if (cached !== undefined) {
+			return cached;
+		}
+
 		try {
 			const entries = await fs.readdir(dirPath, { withFileTypes: true });
 			const items: MediaLibraryItem[] = [];
@@ -253,7 +269,6 @@ export class MediaLibraryTreeProvider
 				.filter(e => e.isFile() && isMediaFile(e.name))
 				.sort((a, b) => a.name.localeCompare(b.name));
 
-			// Count media files for directory description
 			const mediaFileCount = files.length;
 
 			for (const dir of dirs) {
@@ -264,23 +279,23 @@ export class MediaLibraryTreeProvider
 				const filePath = path.join(dirPath, file.name);
 				const mediaType = detectMediaType(filePath);
 
-				// Get cached metadata
 				let metadata = this.metadataCache.get(filePath);
 				if (!metadata) {
-					// Trigger async metadata extraction (don't block)
 					this.extractMetadata(filePath);
 				}
 
-				// Get cached thumbnail
 				let thumbnailPath: string | null | undefined = this.thumbnailCache.get(filePath);
 				if (thumbnailPath === undefined && mediaType === 'video') {
-					// Trigger async thumbnail generation (don't block)
 					this.generateThumbnail(filePath);
 					thumbnailPath = null;
 				}
 
 				items.push(new MediaFileItem(filePath, file.name, metadata, thumbnailPath));
 			}
+
+			// Cache result and start watching for changes
+			this.directoryCache.set(dirPath, items);
+			this.watchDirectory(dirPath);
 
 			return items;
 		} catch {
@@ -323,6 +338,37 @@ export class MediaLibraryTreeProvider
 		this.refreshDebounceTimer = setTimeout(() => {
 			this._onDidChangeTreeData.fire(undefined);
 		}, 100);
+	}
+
+	private watchDirectory(dirPath: string): void {
+		if (this.directoryWatchers.has(dirPath)) return; // already watching
+
+		const watcher = vscode.workspace.createFileSystemWatcher(
+			new vscode.RelativePattern(dirPath, '*'),
+		);
+
+		const invalidate = () => {
+			// Invalidate directory listing
+			this.directoryCache.delete(dirPath);
+			// Invalidate metadata/thumbnail for files in this dir
+			const prefix = dirPath + path.sep;
+			for (const key of this.metadataCache.keys()) {
+				if (key.startsWith(prefix)) this.metadataCache.delete(key);
+			}
+			for (const key of this.thumbnailCache.keys()) {
+				if (key.startsWith(prefix)) this.thumbnailCache.delete(key);
+			}
+			// Debounced tree refresh
+			this.debouncedRefresh(dirPath);
+		};
+
+		this.disposables.push(
+			watcher,
+			watcher.onDidCreate(invalidate),
+			watcher.onDidDelete(invalidate),
+			watcher.onDidChange(invalidate),
+		);
+		this.directoryWatchers.set(dirPath, watcher);
 	}
 
 	private createPlaceholder(): vscode.TreeItem {
