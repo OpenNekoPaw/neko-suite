@@ -163,6 +163,8 @@ export class MediaLibraryTreeProvider
 	private directoryCache = new Map<string, MediaLibraryItem[]>();
 	// One FileSystemWatcher per watched directory
 	private directoryWatchers = new Map<string, vscode.FileSystemWatcher>();
+	// Disposables for directory watchers — replaced on each refresh()
+	private watcherDisposables: vscode.Disposable[] = [];
 
 	private readonly settingsService: MediaLibrarySettingsService;
 	private readonly thumbnailService: ThumbnailService;
@@ -181,10 +183,11 @@ export class MediaLibraryTreeProvider
 	refresh(): void {
 		// Clear all caches including directory listings
 		this.directoryCache.clear();
-		// Dispose existing directory watchers (new ones register lazily on next expand)
-		for (const [, watcher] of this.directoryWatchers) {
-			watcher.dispose();
+		// Dispose all watcher-related disposables and start fresh
+		for (const d of this.watcherDisposables) {
+			d.dispose();
 		}
+		this.watcherDisposables = [];
 		this.directoryWatchers.clear();
 		this.thumbnailCache.clear();
 		this.metadataCache.clear();
@@ -362,7 +365,7 @@ export class MediaLibraryTreeProvider
 			this.debouncedRefresh(dirPath);
 		};
 
-		this.disposables.push(
+		this.watcherDisposables.push(
 			watcher,
 			watcher.onDidCreate(invalidate),
 			watcher.onDidDelete(invalidate),
@@ -385,6 +388,10 @@ export class MediaLibraryTreeProvider
 			clearTimeout(this.refreshDebounceTimer);
 		}
 		this._onDidChangeTreeData.dispose();
+		for (const d of this.watcherDisposables) {
+			d.dispose();
+		}
+		this.watcherDisposables = [];
 		for (const d of this.disposables) {
 			d.dispose();
 		}
