@@ -15,6 +15,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { AssetLibrary, JsonFileStorage, RuleClassifier, AssetDiffService } from '@neko/asset';
+import { LLMClassifier } from './services/LLMClassifier';
 import type { IFileSystem } from '@neko/asset';
 import { detectMediaType } from '@neko/shared';
 import { createEngineMetadataExtractor } from './services/EngineMetadataExtractor';
@@ -103,7 +104,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 			library = new AssetLibrary({
 				storage,
-				classifier: new RuleClassifier(),
+				classifier: new LLMClassifier(new RuleClassifier()),
 				metadataExtractor,
 				thumbnailGenerator: (filePath) => thumbnailService!.generate(filePath),
 				fileAccessChecker: createFileAccessChecker(),
