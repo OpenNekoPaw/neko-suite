@@ -8,7 +8,7 @@
 import * as vscode from 'vscode';
 import { ServiceCollection, setGlobalServices, setRootLogger, setErrorHandler, getRootLogger } from './base';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
-import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
+import { bootstrapCoreServices, logServicesStatus, IPlatform } from './bootstrap';
 import { ChatViewProvider } from './chat';
 import { createNekoCutTools, createNekoCanvasTools, createNekoEngineEffectsTools } from './tools/extensionTools';
 
@@ -51,7 +51,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   // Register commands
-  registerCommands(context, chatViewProvider);
+  registerCommands(context, chatViewProvider, services);
 
   // Listen for extension changes to update tools (register disposable + avoid duplicates)
   let extensionToolsRegistered = true; // Already registered above
@@ -91,7 +91,8 @@ function registerExtensionTools(toolRegistry: { register: (tool: unknown) => voi
  */
 function registerCommands(
   context: vscode.ExtensionContext,
-  chatViewProvider: ChatViewProvider
+  chatViewProvider: ChatViewProvider,
+  services: ServiceCollection,
 ): void {
   // Open AI Chat
   context.subscriptions.push(
@@ -206,6 +207,37 @@ function registerCommands(
         true
       );
     })
+  );
+
+  // Internal API: allows other Neko extensions to use the configured LLM
+  // without taking a direct dependency on @neko/platform.
+  // Returns null if no service is configured or on any error.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.agent.internalChat',
+      async (
+        messages: Array<{
+          role: 'system' | 'user' | 'assistant' | 'tool';
+          content: string | Array<{ type: string; [k: string]: unknown }>;
+          name?: string;
+          toolCallId?: string;
+        }>,
+        options?: { maxTokens?: number },
+      ): Promise<string | null> => {
+        try {
+          const platform = services.get(IPlatform);
+          if (!platform) return null;
+          const service = platform.createService();
+          const response = await service.chat(messages as import('@neko/platform').ChatMessage[], {
+            maxTokens: options?.maxTokens ?? 1000,
+          });
+          const content = response.message.content;
+          return typeof content === 'string' ? content : null;
+        } catch {
+          return null;
+        }
+      },
+    ),
   );
 }
 
