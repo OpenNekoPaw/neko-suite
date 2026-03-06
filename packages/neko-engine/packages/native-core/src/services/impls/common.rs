@@ -1,7 +1,7 @@
 //! Shared utilities for service implementations
 
 use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
-use crate::domain::LoudnessAnalysis;
+use crate::domain::{LoudnessAnalysis, SilenceAnalysis, SilenceRegion};
 use crate::error::{Error, Result};
 use crate::media_service::MediaInfo as InternalMediaInfo;
 use ebur128::{EbuR128, Mode};
@@ -202,6 +202,115 @@ pub fn analyze_loudness_blocking(path: &str, target_lufs: f64) -> Result<Loudnes
     })
 }
 
+/// Detect silence regions in an audio file.
+///
+/// This is a blocking function — call from `spawn_blocking`.
+///
+/// # Arguments
+/// * `path` - Path to the media file (audio or video — FFmpeg extracts the audio stream)
+/// * `threshold_dbfs` - Silence threshold in dBFS (e.g. -40.0). Windows quieter than this are silent.
+/// * `min_duration` - Minimum silence duration in seconds (e.g. 0.5). Shorter gaps are ignored.
+///
+/// # Algorithm
+/// 1. Decode audio to F32 PCM (stereo downmix for consistency)
+/// 2. Process in 100ms windows, compute RMS in dBFS per window
+/// 3. Mark windows below threshold as silent
+/// 4. Merge contiguous silent windows into regions
+/// 5. Filter regions shorter than min_duration
+pub fn detect_silence_blocking(
+    path: &str,
+    threshold_dbfs: f64,
+    min_duration: f64,
+) -> Result<SilenceAnalysis> {
+    // Decode to F32 stereo for consistent analysis
+    let mut decoder = FfmpegAudioDecoder::new()
+        .with_output_format(SampleFormat::F32)
+        .with_output_channels(2);
+    let audio_info = decoder.open(path)?;
+
+    let channels: usize = 2;
+    let sample_rate = audio_info.sample_rate as f64;
+    // 100ms analysis windows
+    let window_samples = (sample_rate * 0.1) as usize;
+    let threshold_linear = 10.0_f64.powf(threshold_dbfs / 20.0);
+    let threshold_sq = threshold_linear * threshold_linear;
+
+    // Accumulate samples for windowed RMS analysis
+    let mut window_buf: Vec<f32> = Vec::with_capacity(window_samples * channels);
+    let mut silent_windows: Vec<bool> = Vec::new();
+
+    while let Some(frame) = decoder.decode_next()? {
+        let samples: &[f32] = bytemuck::cast_slice(&frame.data);
+
+        for &sample in samples {
+            window_buf.push(sample);
+
+            if window_buf.len() >= window_samples * channels {
+                // Compute RMS across all samples in this window
+                let sum_sq: f64 = window_buf.iter().map(|&s| (s as f64) * (s as f64)).sum();
+                let rms_sq = sum_sq / window_buf.len() as f64;
+                silent_windows.push(rms_sq < threshold_sq);
+
+                window_buf.clear();
+            }
+        }
+    }
+
+    // Process remaining partial window
+    if !window_buf.is_empty() {
+        let sum_sq: f64 = window_buf.iter().map(|&s| (s as f64) * (s as f64)).sum();
+        let rms_sq = sum_sq / window_buf.len() as f64;
+        silent_windows.push(rms_sq < threshold_sq);
+    }
+
+    let total_duration = audio_info.duration;
+    let window_duration = 0.1; // 100ms
+
+    // Merge contiguous silent windows into regions
+    let mut raw_regions: Vec<SilenceRegion> = Vec::new();
+    let mut i = 0;
+    while i < silent_windows.len() {
+        if silent_windows[i] {
+            let start_idx = i;
+            while i < silent_windows.len() && silent_windows[i] {
+                i += 1;
+            }
+            let start = start_idx as f64 * window_duration;
+            let end = (i as f64 * window_duration).min(total_duration);
+            raw_regions.push(SilenceRegion {
+                start,
+                end,
+                duration: end - start,
+            });
+        } else {
+            i += 1;
+        }
+    }
+
+    // Filter by minimum duration
+    let regions: Vec<SilenceRegion> = raw_regions
+        .into_iter()
+        .filter(|r| r.duration >= min_duration)
+        .collect();
+
+    let silence_duration: f64 = regions.iter().map(|r| r.duration).sum();
+    let silence_ratio = if total_duration > 0.0 {
+        silence_duration / total_duration
+    } else {
+        0.0
+    };
+
+    Ok(SilenceAnalysis {
+        total_duration,
+        silence_duration,
+        silence_ratio,
+        region_count: regions.len(),
+        regions,
+        threshold_dbfs,
+        min_duration,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,6 +324,12 @@ mod tests {
     #[test]
     fn test_analyze_loudness_nonexistent_file() {
         let result = analyze_loudness_blocking("/nonexistent/file.mp3", -14.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_detect_silence_nonexistent_file() {
+        let result = detect_silence_blocking("/nonexistent/file.mp3", -40.0, 0.5);
         assert!(result.is_err());
     }
 }

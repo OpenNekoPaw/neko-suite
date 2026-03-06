@@ -6,12 +6,13 @@ use crate::audio::{
     AudioCodec as InternalAudioCodec, AudioDecoder, AudioEncoder, AudioEncoderConfig,
     FfmpegAudioDecoder, FfmpegAudioEncoder, SampleFormat,
 };
-use crate::domain::{AudioTranscodeOptions, FrameData, LoudnessAnalysis};
+use crate::domain::{AudioTranscodeOptions, FrameData, LoudnessAnalysis, SilenceAnalysis};
 use crate::error::{Error, Result};
 use crate::gpu::GpuContext;
 use crate::media_service::global_probe_cache;
 use crate::services::impls::common::{
-    analyze_loudness_blocking, convert_media_info, generate_waveform_blocking,
+    analyze_loudness_blocking, convert_media_info, detect_silence_blocking,
+    generate_waveform_blocking,
 };
 use crate::services::impls::stream_loop::{
     create_stream_channels, eof_idle_wait, pack_pcm_f32le_stream_frame, ActiveStreams,
@@ -368,6 +369,21 @@ impl IAudioService for AudioService {
             .await
             .map_err(|e| Error::Other(format!("Loudness analysis task failed: {}", e)))?
     }
+
+    async fn detect_silence(
+        &self,
+        path: &Path,
+        threshold_dbfs: f64,
+        min_duration: f64,
+    ) -> Result<SilenceAnalysis> {
+        let path = path.to_string_lossy().to_string();
+
+        tokio::task::spawn_blocking(move || {
+            detect_silence_blocking(&path, threshold_dbfs, min_duration)
+        })
+        .await
+        .map_err(|e| Error::Other(format!("Silence detection task failed: {}", e)))?
+    }
 }
 
 #[cfg(test)]
@@ -437,6 +453,15 @@ mod tests {
         let service = create_test_service();
         let result = service
             .analyze_loudness(Path::new("/nonexistent/file.mp3"), -14.0)
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_audio_service_detect_silence_nonexistent() {
+        let service = create_test_service();
+        let result = service
+            .detect_silence(Path::new("/nonexistent/file.mp3"), -40.0, 0.5)
             .await;
         assert!(result.is_err());
     }

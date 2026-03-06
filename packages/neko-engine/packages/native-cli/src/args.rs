@@ -274,6 +274,8 @@ define_actions!(AudioAction {
     Loop => "loop",
     /// Analyze audio loudness (ITU-R BS.1770-4 / EBU R128)
     AnalyzeLoudness => "analyze_loudness",
+    /// Detect silence regions in audio
+    DetectSilence => "detect_silence",
 });
 
 define_actions!(ImageAction {

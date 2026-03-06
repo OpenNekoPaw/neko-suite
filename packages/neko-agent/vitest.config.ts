@@ -15,8 +15,10 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       '**/packages/webview/**',
-      // Extension tests require vscode module (run via VSCode extension test runner)
-      'packages/extension/src/**/*.test.ts',
+      // Extension tests that depend on real vscode module (run via VSCode test runner).
+      // Handler and processor tests use vi.mock('vscode') and are included below.
+      'packages/extension/src/ai/**/*.test.ts',
+      'packages/extension/src/chat/chatProvider.test.ts',
       // Platform task-manager was deprecated and moved to @neko/agent
       'packages/platform/src/task/__test__/**',
       // media-generation-service depends on deprecated task-manager path
@@ -39,6 +41,8 @@ export default defineConfig({
       '@neko/shared': path.resolve(__dirname, '../neko-types/src'),
       '@neko/agent': path.resolve(__dirname, 'packages/agent/src'),
       '@neko/platform': path.resolve(__dirname, 'packages/platform/src'),
+      // Handler tests mock vscode via vi.mock('vscode') — alias ensures resolution
+      'vscode': path.resolve(__dirname, 'packages/extension/src/__mocks__/vscode.ts'),
     },
   },
 });

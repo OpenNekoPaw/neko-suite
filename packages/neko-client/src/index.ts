@@ -105,6 +105,9 @@ export type {
 	WaveformResult,
 	StreamHandle,
 	LoudnessAnalysis,
+	// Silence detection
+	SilenceAnalysis,
+	SilenceRegion,
 	// Effects types
 	ShaderParamDef,
 	EffectPresetInfo,

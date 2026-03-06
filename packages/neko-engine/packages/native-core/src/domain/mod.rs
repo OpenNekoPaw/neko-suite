@@ -11,6 +11,7 @@
 pub mod frame;
 pub mod loudness;
 pub mod operations;
+pub mod silence;
 pub mod options;
 pub mod resource;
 pub mod stream;
@@ -24,6 +25,7 @@ pub use frame::*;
 pub use loudness::*;
 pub use options::*;
 pub use resource::*;
+pub use silence::*;
 pub use stream::*;
 pub use task_handle::*;
 pub use timeline::*;

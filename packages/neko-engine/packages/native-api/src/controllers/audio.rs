@@ -103,6 +103,18 @@ struct AnalyzeLoudnessOptions {
     target_lufs: Option<f64>,
 }
 
+/// Options for audios:detect_silence
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct DetectSilenceOptions {
+    /// Source file path (audio or video)
+    source: Option<String>,
+    /// Silence threshold in dBFS (default: -40.0)
+    threshold_dbfs: Option<f64>,
+    /// Minimum silence duration in seconds (default: 0.5)
+    min_duration: Option<f64>,
+}
+
 impl Controller for AudioController {
     async fn handle(
         &self,
@@ -307,6 +319,32 @@ impl Controller for AudioController {
 
                 Ok(ActionResponse::ok("", response))
             }
+            "detect_silence" => {
+                let opts: DetectSilenceOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let (res_id, file_path) =
+                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
+                        .await?;
+
+                let threshold_dbfs = opts.threshold_dbfs.unwrap_or(-40.0);
+                let min_duration = opts.min_duration.unwrap_or(0.5);
+
+                let analysis = self
+                    .audio_service
+                    .detect_silence(&file_path, threshold_dbfs, min_duration)
+                    .await?;
+
+                let mut response = serde_json::to_value(&analysis)?;
+                if let Value::Object(ref mut map) = response {
+                    map.insert(
+                        "resourceId".to_string(),
+                        Value::String(res_id.as_str().to_string()),
+                    );
+                }
+
+                Ok(ActionResponse::ok("", response))
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "audios".to_string(),
                 action: action.to_string(),
@@ -396,6 +434,17 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[tokio::test]
+    async fn test_audio_controller_detect_silence_missing_source() {
+        let controller = create_test_controller();
+
+        let result = controller
+            .handle("detect_silence", None, Value::Null, None)
+            .await;
+
+        assert!(result.is_err());
+    }
+
     #[test]
     fn test_audio_controller_actions() {
         let controller = create_test_controller();
@@ -413,6 +462,7 @@ mod tests {
         assert!(actions.contains(&"seek"));
         assert!(actions.contains(&"loop"));
         assert!(actions.contains(&"analyze_loudness"));
-        assert_eq!(actions.len(), 12);
+        assert!(actions.contains(&"detect_silence"));
+        assert_eq!(actions.len(), 13);
     }
 }

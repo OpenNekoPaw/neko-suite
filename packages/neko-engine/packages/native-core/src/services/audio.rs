@@ -1,6 +1,6 @@
 //! Audio service trait
 
-use crate::domain::{AudioTranscodeOptions, LoudnessAnalysis};
+use crate::domain::{AudioTranscodeOptions, LoudnessAnalysis, SilenceAnalysis};
 use crate::error::Result;
 use crate::services::IStreamPlayback;
 use neko_types::{MediaInfo, StreamId, WaveformData};
@@ -42,4 +42,15 @@ pub trait IAudioService: IStreamPlayback {
     /// Returns integrated LUFS, true peak, loudness range,
     /// and recommended gain to reach `target_lufs`.
     async fn analyze_loudness(&self, path: &Path, target_lufs: f64) -> Result<LoudnessAnalysis>;
+
+    /// Detect silence regions in an audio file.
+    ///
+    /// Returns a list of contiguous silent regions where RMS is below
+    /// `threshold_dbfs` for at least `min_duration` seconds.
+    async fn detect_silence(
+        &self,
+        path: &Path,
+        threshold_dbfs: f64,
+        min_duration: f64,
+    ) -> Result<SilenceAnalysis>;
 }

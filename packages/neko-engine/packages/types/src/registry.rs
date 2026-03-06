@@ -61,6 +61,7 @@ pub mod actions {
         "seek",
         "loop",
         "analyze_loudness",
+        "detect_silence",
     ];
 
     pub const IMAGES: &[&str] = &["probe", "capture", "encode", "diff"];

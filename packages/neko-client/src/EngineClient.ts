@@ -25,6 +25,7 @@ import type {
 	DiffResult,
 	Resolution,
 	LoudnessAnalysis,
+	SilenceAnalysis,
 	EffectPresetInfo,
 	EffectApplyResult,
 	ShaderParamDef,
@@ -314,6 +315,29 @@ export class EngineClient {
 		});
 		this.assertOk(resp, 'audios:analyze_loudness');
 		return resp.data as LoudnessAnalysis;
+	}
+
+	// =========================================================================
+	// Silence detection
+	// =========================================================================
+
+	/**
+	 * Detect silence regions in an audio file.
+	 * Dispatches `audios:detect_silence`.
+	 * Returns regions where RMS is below the threshold for at least minDuration.
+	 */
+	async detectSilence(
+		source: string,
+		thresholdDbfs: number = -40,
+		minDuration: number = 0.5,
+	): Promise<SilenceAnalysis> {
+		const resp = await this.dispatch({
+			group: 'audios',
+			action: 'detect_silence',
+			options: { source, thresholdDbfs, minDuration },
+		});
+		this.assertOk(resp, 'audios:detect_silence');
+		return resp.data as SilenceAnalysis;
 	}
 
 	// =========================================================================

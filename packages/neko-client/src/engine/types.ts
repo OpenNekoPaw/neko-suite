@@ -370,6 +370,38 @@ export interface LoudnessAnalysis {
 }
 
 // =============================================================================
+// Silence Detection (from native-core/src/domain/silence.rs)
+// =============================================================================
+
+/** A contiguous region of silence in the audio */
+export interface SilenceRegion {
+	/** Start time in seconds */
+	start: number;
+	/** End time in seconds */
+	end: number;
+	/** Duration in seconds */
+	duration: number;
+}
+
+/** Result of silence detection for an audio source */
+export interface SilenceAnalysis {
+	/** Total duration of the audio in seconds */
+	totalDuration: number;
+	/** Total silence duration in seconds */
+	silenceDuration: number;
+	/** Ratio of silence to total duration (0.0 - 1.0) */
+	silenceRatio: number;
+	/** Number of silent regions detected */
+	regionCount: number;
+	/** Individual silence regions sorted by start time */
+	regions: SilenceRegion[];
+	/** Threshold used for detection in dBFS */
+	thresholdDbfs: number;
+	/** Minimum duration used for detection in seconds */
+	minDuration: number;
+}
+
+// =============================================================================
 // Effects types (from native-core/src/gpu/custom_shader_processor.rs)
 // =============================================================================
 
