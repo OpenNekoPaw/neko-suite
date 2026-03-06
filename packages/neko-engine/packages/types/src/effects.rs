@@ -176,6 +176,27 @@ impl Default for EffectParams {
     }
 }
 
+/// Type-keyed effect instance on a timeline element.
+/// Mirrors TypeScript `EffectInstance` from `@neko/shared`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementEffect {
+    /// Unique instance ID (e.g., "effect-1234-abc")
+    pub id: String,
+    /// Effect type string (e.g., "gaussian-blur", "pixelate", "custom")
+    #[serde(rename = "type")]
+    pub effect_type: String,
+    /// Whether the effect is currently active
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Static parameter values keyed by parameter name
+    #[serde(default)]
+    pub parameters: serde_json::Map<String, serde_json::Value>,
+    /// Effect stack order (lower = applied first)
+    #[serde(default)]
+    pub order: u32,
+}
+
 /// Transition type for clips
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

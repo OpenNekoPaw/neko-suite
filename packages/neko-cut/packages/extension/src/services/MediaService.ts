@@ -112,6 +112,20 @@ export class MediaService implements vscode.Disposable {
 				await this.handleStreamStats(msg);
 				return true;
 			}
+
+			// Effects / Shader API
+			if (type === 'effects:list') {
+				await this.handleEffectsList(msg);
+				return true;
+			}
+			if (type === 'effects:info') {
+				await this.handleEffectsInfo(msg);
+				return true;
+			}
+			if (type === 'effects:register') {
+				await this.handleEffectsRegister(msg);
+				return true;
+			}
 		} catch (error) {
 			logger.error(
 				'handleMessage error:',
@@ -873,6 +887,89 @@ export class MediaService implements vscode.Disposable {
 					error instanceof Error
 						? error.message
 						: 'Unknown error',
+			});
+		}
+	}
+
+	// =========================================================================
+	// Effects / Shader API
+	// =========================================================================
+
+	/**
+	 * effects:list → list all GPU shader presets
+	 */
+	private async handleEffectsList(
+		msg: Record<string, unknown>
+	): Promise<void> {
+		const requestId = msg.requestId as string | undefined;
+		try {
+			const presets = await this.client.listEffects();
+			this.sendResponse({
+				type: 'effects:response:list',
+				requestId,
+				payload: presets,
+			});
+		} catch (error) {
+			this.sendResponse({
+				type: 'effects:response:list',
+				requestId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+
+	/**
+	 * effects:info → get metadata for a specific shader
+	 */
+	private async handleEffectsInfo(
+		msg: Record<string, unknown>
+	): Promise<void> {
+		const requestId = msg.requestId as string | undefined;
+		const payload = msg.payload as { shaderId: string } | undefined;
+		const shaderId = payload?.shaderId ?? (msg.shaderId as string);
+		try {
+			const info = await this.client.getEffectInfo(shaderId);
+			this.sendResponse({
+				type: 'effects:response:info',
+				requestId,
+				payload: info,
+			});
+		} catch (error) {
+			this.sendResponse({
+				type: 'effects:response:info',
+				requestId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+
+	/**
+	 * effects:register → register a custom WGSL shader at runtime
+	 */
+	private async handleEffectsRegister(
+		msg: Record<string, unknown>
+	): Promise<void> {
+		const requestId = msg.requestId as string | undefined;
+		const payload = msg.payload as {
+			id: string;
+			code: string;
+			params?: Array<{ name: string; default: number; min: number; max: number }>;
+		} | undefined;
+		try {
+			const id = payload?.id ?? (msg.id as string);
+			const code = payload?.code ?? (msg.code as string);
+			const params = payload?.params ?? (msg.params as Array<{ name: string; default: number; min: number; max: number }> | undefined);
+			await this.client.registerShader(id, code, params);
+			this.sendResponse({
+				type: 'effects:response:register',
+				requestId,
+				payload: { id, registered: true },
+			});
+		} catch (error) {
+			this.sendResponse({
+				type: 'effects:response:register',
+				requestId,
+				error: error instanceof Error ? error.message : String(error),
 			});
 		}
 	}

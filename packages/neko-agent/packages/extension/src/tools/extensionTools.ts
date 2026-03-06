@@ -10,6 +10,8 @@ import type {
   NekoCutAPI,
   NekoCanvasAPI,
 } from '@neko/shared';
+import { EngineClient } from '@neko/neko-client';
+import type { EffectPresetInfo, ShaderParamDef } from '@neko/neko-client';
 import { getLogger } from '../base';
 
 const logger = getLogger('ExtensionTools');
@@ -329,6 +331,126 @@ export function createNekoCanvasTools(): Tool[] {
           fill: shape.fill as string | undefined,
           stroke: shape.stroke as string | undefined,
         });
+      },
+    },
+  ];
+}
+
+// =============================================================================
+// Neko Engine Effects Tools
+// =============================================================================
+
+const ENGINE_EXTENSION_ID = 'neko.neko-engine';
+
+/**
+ * Lazy-initialized EngineClient singleton for effects tools
+ */
+let cachedEngineClient: EngineClient | null = null;
+
+async function getEngineClient(): Promise<EngineClient> {
+  if (cachedEngineClient) {
+    return cachedEngineClient;
+  }
+
+  const ext = vscode.extensions.getExtension(ENGINE_EXTENSION_ID);
+  if (!ext) {
+    throw new Error(`Extension ${ENGINE_EXTENSION_ID} not installed`);
+  }
+
+  if (!ext.isActive) {
+    await ext.activate();
+  }
+
+  const result = await vscode.commands.executeCommand<{ port: number } | null>(
+    'neko.engine.ensureFrameServer'
+  );
+  if (!result) {
+    throw new Error('Failed to start neko-engine Frame Server');
+  }
+
+  cachedEngineClient = new EngineClient(result.port);
+  return cachedEngineClient;
+}
+
+/**
+ * Create tools for GPU shader/effects integration
+ * Allows AI to list, register, and apply visual effects via neko-engine
+ */
+export function createNekoEngineEffectsTools(): Tool[] {
+  return [
+    {
+      name: 'ListVideoEffects',
+      description:
+        'List all available GPU video effects/shaders. Returns preset IDs, descriptions, and tunable parameters.',
+      parameters: {},
+      execute: async (): Promise<EffectPresetInfo[]> => {
+        const client = await getEngineClient();
+        return client.listEffects();
+      },
+    },
+    {
+      name: 'GetVideoEffectInfo',
+      description:
+        'Get detailed info about a specific GPU video effect, including its tunable parameters with min/max/default values.',
+      parameters: {
+        type: 'object',
+        properties: {
+          shaderId: {
+            type: 'string',
+            description:
+              'ID of the shader/effect preset (e.g. "gaussian_blur", "noise", "pixelate")',
+          },
+        },
+        required: ['shaderId'],
+      },
+      execute: async (args): Promise<EffectPresetInfo> => {
+        const client = await getEngineClient();
+        return client.getEffectInfo(args.shaderId as string);
+      },
+    },
+    {
+      name: 'RegisterCustomShader',
+      description:
+        'Register a custom WGSL compute shader with the GPU engine. The shader will be available as a video effect. ' +
+        'The WGSL code must define an @compute @workgroup_size(16,16) entry point named "main". ' +
+        'Standard uniforms (width, height, time) and input/output textures are auto-injected.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            description:
+              'Unique ID for this shader (e.g. "my_custom_blur")',
+          },
+          code: {
+            type: 'string',
+            description: 'WGSL compute shader source code',
+          },
+          params: {
+            type: 'array',
+            description: 'Optional tunable parameter definitions',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                default: { type: 'number' },
+                min: { type: 'number' },
+                max: { type: 'number' },
+              },
+              required: ['name', 'default', 'min', 'max'],
+            },
+          },
+        },
+        required: ['id', 'code'],
+      },
+      execute: async (args): Promise<{ success: true; shaderId: string }> => {
+        const client = await getEngineClient();
+        await client.registerShader(
+          args.id as string,
+          args.code as string,
+          args.params as ShaderParamDef[] | undefined
+        );
+        return { success: true, shaderId: args.id as string };
       },
     },
   ];

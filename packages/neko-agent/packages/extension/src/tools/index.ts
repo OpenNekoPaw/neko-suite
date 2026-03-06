@@ -7,5 +7,6 @@
 export {
   createNekoCutTools,
   createNekoCanvasTools,
+  createNekoEngineEffectsTools,
   type Tool,
 } from './extensionTools';

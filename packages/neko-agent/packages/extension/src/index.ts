@@ -10,7 +10,7 @@ import { ServiceCollection, setGlobalServices, setRootLogger, setErrorHandler, g
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { ChatViewProvider } from './chat';
-import { createNekoCutTools, createNekoCanvasTools } from './tools/extensionTools';
+import { createNekoCutTools, createNekoCanvasTools, createNekoEngineEffectsTools } from './tools/extensionTools';
 
 /**
  * Activate the extension
@@ -68,7 +68,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 /**
- * Register tools from other Neko extensions (NekoCut, NekoCanvas)
+ * Register tools from other Neko extensions (NekoCut, NekoCanvas, Engine Effects)
  */
 function registerExtensionTools(toolRegistry: { register: (tool: unknown) => void }): void {
   // Register NekoCut tools
@@ -79,7 +79,11 @@ function registerExtensionTools(toolRegistry: { register: (tool: unknown) => voi
   const nekocanvasTools = createNekoCanvasTools();
   nekocanvasTools.forEach((tool) => toolRegistry.register(tool));
 
-  getRootLogger().info(`Registered ${nekocutTools.length + nekocanvasTools.length} extension tools`);
+  // Register Engine Effects tools (GPU shader management)
+  const effectsTools = createNekoEngineEffectsTools();
+  effectsTools.forEach((tool) => toolRegistry.register(tool));
+
+  getRootLogger().info(`Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length} extension tools`);
 }
 
 /**

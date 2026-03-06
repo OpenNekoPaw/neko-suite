@@ -79,6 +79,9 @@ pub struct ElementUpdates {
     /// Blend mode as string (TS sends camelCase: "colorDodge", "softLight", etc.)
     #[serde(default)]
     pub blend_mode: Option<String>,
+    /// Visual effects (replaces entire Vec when Some)
+    #[serde(default)]
+    pub effects: Option<Vec<neko_types::ElementEffect>>,
 }
 
 /// Payload for `track.toggle` — mute/lock/hide a track

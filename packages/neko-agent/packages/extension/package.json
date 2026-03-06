@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@neko/agent": "workspace:*",
+    "@neko/neko-client": "workspace:*",
     "@neko/platform": "workspace:*",
     "@neko/shared": "workspace:*"
   },

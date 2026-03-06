@@ -18,13 +18,188 @@ use crate::decoder::{global_pool, HwAccelDecoder, HwAccelType};
 use crate::domain::{Element, ElementType, Timeline};
 use crate::error::{Error, Result};
 use crate::gpu::{
-    GpuContext, GpuLayer, GpuLayerBuilder, Nv12OutputBuffers, Nv12RenderCache, Nv12TextureImporter,
-    RgbaToNv12Converter, TextRenderer, TextureCompositeResult, TextureCompositor,
+    BlurParams, BlurType, CustomShaderProcessor, GpuBlurProcessor, GpuContext, GpuLayer,
+    GpuLayerBuilder, GpuStyleProcessor, Nv12OutputBuffers, Nv12RenderCache, Nv12TextureImporter,
+    RgbaToNv12Converter, SharpenParams, TextRenderer, TextureCompositeResult, TextureCompositor,
+    VignetteParams, GlowParams, ChromaticAberrationParams,
 };
 use crate::telemetry::spans::span;
 use neko_types::TrackType;
 
 use super::types::ExportSettings;
+
+// =============================================================================
+// Effect Dispatcher — maps ElementEffect to GPU processors
+// =============================================================================
+
+/// Dispatches `ElementEffect` instances to the appropriate GPU processor.
+///
+/// Phase 2: operates on `&[u8]` RGBA buffers (CPU round-trip per effect).
+/// Future: GPU texture-to-texture pass for zero-copy effect chains.
+struct EffectDispatcher {
+    custom_shader: CustomShaderProcessor,
+    blur_processor: GpuBlurProcessor,
+    style_processor: GpuStyleProcessor,
+}
+
+impl EffectDispatcher {
+    fn new(ctx: Arc<GpuContext>) -> Result<Self> {
+        Ok(Self {
+            custom_shader: CustomShaderProcessor::new(ctx.clone())?,
+            blur_processor: GpuBlurProcessor::new(ctx.clone())?,
+            style_processor: GpuStyleProcessor::new(ctx)?,
+        })
+    }
+
+    /// Apply all enabled effects on an element in stack order.
+    /// Returns the processed RGBA pixel buffer.
+    fn apply_effects(
+        &self,
+        mut pixels: Vec<u8>,
+        width: u32,
+        height: u32,
+        effects: &[neko_types::ElementEffect],
+    ) -> Result<Vec<u8>> {
+        let mut sorted: Vec<&neko_types::ElementEffect> =
+            effects.iter().filter(|e| e.enabled).collect();
+        sorted.sort_by_key(|e| e.order);
+
+        for fx in sorted {
+            match self.apply_single(&pixels, width, height, fx) {
+                Ok(result) => pixels = result,
+                Err(e) => {
+                    tracing::warn!(
+                        "Effect '{}' ({}) failed, skipping: {}",
+                        fx.effect_type,
+                        fx.id,
+                        e
+                    );
+                    // Graceful degradation: continue with unmodified pixels
+                }
+            }
+        }
+        Ok(pixels)
+    }
+
+    fn apply_single(
+        &self,
+        pixels: &[u8],
+        width: u32,
+        height: u32,
+        fx: &neko_types::ElementEffect,
+    ) -> Result<Vec<u8>> {
+        let params = &fx.parameters;
+        match fx.effect_type.as_str() {
+            // Blur effects → GpuBlurProcessor
+            "gaussian-blur" => {
+                let radius = Self::get_f32(params, "radius", 10.0);
+                self.blur_processor.apply_blur(
+                    pixels, width, height,
+                    &BlurParams {
+                        blur_type: BlurType::Gaussian as u32,
+                        radius,
+                        strength: 1.0,
+                        samples: 32,
+                        ..Default::default()
+                    },
+                )
+            }
+            "motion-blur" => {
+                let distance = Self::get_f32(params, "distance", 20.0);
+                let angle = Self::get_f32(params, "angle", 0.0).to_radians();
+                self.blur_processor.apply_blur(
+                    pixels, width, height,
+                    &BlurParams {
+                        blur_type: BlurType::Directional as u32,
+                        radius: distance,
+                        direction_x: angle.cos(),
+                        direction_y: angle.sin(),
+                        ..Default::default()
+                    },
+                )
+            }
+            "radial-blur" => {
+                let amount = Self::get_f32(params, "amount", 20.0) / 100.0;
+                let center_x = Self::get_f32(params, "centerX", 50.0) / 100.0;
+                let center_y = Self::get_f32(params, "centerY", 50.0) / 100.0;
+                self.blur_processor.apply_blur(
+                    pixels, width, height,
+                    &BlurParams {
+                        blur_type: BlurType::Radial as u32,
+                        center_x,
+                        center_y,
+                        strength: amount,
+                        ..Default::default()
+                    },
+                )
+            }
+            "sharpen" => {
+                let amount = Self::get_f32(params, "amount", 1.0);
+                let radius = Self::get_f32(params, "radius", 1.0);
+                let threshold = Self::get_f32(params, "threshold", 0.0);
+                self.blur_processor.apply_sharpen(
+                    pixels, width, height,
+                    &SharpenParams::with_options(amount, radius, threshold),
+                )
+            }
+
+            // Style effects → GpuStyleProcessor
+            "vignette" => {
+                let amount = Self::get_f32(params, "amount", 0.5);
+                let radius = Self::get_f32(params, "radius", 0.5);
+                let softness = Self::get_f32(params, "softness", 0.5);
+                let roundness = Self::get_f32(params, "roundness", 1.0);
+                self.style_processor.apply_vignette(
+                    pixels, width, height,
+                    &VignetteParams::with_options(amount, radius, softness, roundness),
+                )
+            }
+            "glow" => {
+                let intensity = Self::get_f32(params, "intensity", 0.5);
+                let threshold = Self::get_f32(params, "threshold", 0.5);
+                let radius = Self::get_f32(params, "radius", 10.0);
+                self.style_processor.apply_glow(
+                    pixels, width, height,
+                    &GlowParams::with_options(intensity, threshold, radius),
+                )
+            }
+            "chromatic-aberration" => {
+                let amount = Self::get_f32(params, "amount", 0.01);
+                let angle = Self::get_f32(params, "angle", 0.0);
+                let center_x = Self::get_f32(params, "centerX", 0.5);
+                let center_y = Self::get_f32(params, "centerY", 0.5);
+                self.style_processor.apply_chromatic_aberration(
+                    pixels, width, height,
+                    &ChromaticAberrationParams::with_options(amount, angle, center_x, center_y),
+                )
+            }
+
+            // Preset shaders → CustomShaderProcessor (noise, pixelate, etc.)
+            "noise" | "pixelate" | "edge-detect" | "posterize" | "rgb-split" | "wave-distort" => {
+                // Map TS kebab-case to Rust snake_case shader IDs
+                let shader_id = fx.effect_type.replace('-', "_");
+                let json_params = serde_json::Value::Object(params.clone());
+                self.custom_shader.apply(pixels, width, height, &shader_id, &json_params)
+            }
+
+            // Custom user-registered shaders
+            _ => {
+                // Try as custom shader ID (registered via effects:register)
+                let json_params = serde_json::Value::Object(params.clone());
+                self.custom_shader.apply(pixels, width, height, &fx.effect_type, &json_params)
+            }
+        }
+    }
+
+    /// Extract an f32 parameter from the JSON map, with a default value.
+    fn get_f32(params: &serde_json::Map<String, serde_json::Value>, key: &str, default: f32) -> f32 {
+        params
+            .get(key)
+            .and_then(|v| v.as_f64())
+            .map(|v| v as f32)
+            .unwrap_or(default)
+    }
+}
 
 // =============================================================================
 // GPU Pipeline Timing
@@ -200,6 +375,8 @@ pub struct GpuExportPipeline {
     layer_texture_pool: LayerTexturePool,
     /// Text renderer for text elements (lazy-initialized)
     text_renderer: Option<TextRenderer>,
+    /// Effect dispatcher for per-element GPU effects (None when GPU unavailable)
+    effect_dispatcher: Option<EffectDispatcher>,
     /// Zero-copy RGBA→NV12 converter (macOS only, outputs to IOSurface)
     #[cfg(target_os = "macos")]
     zerocopy_converter: Option<crate::gpu::RgbaToNv12TextureConverter>,
@@ -216,6 +393,7 @@ impl GpuExportPipeline {
         let nv12_renderer = Nv12RenderCache::new(ctx.clone())?;
         let compositor = TextureCompositor::new(ctx.clone())?;
         let rgba_to_nv12 = RgbaToNv12Converter::new(ctx.clone())?;
+        let effect_dispatcher = EffectDispatcher::new(ctx.clone()).ok();
 
         Ok(Self {
             ctx,
@@ -232,6 +410,7 @@ impl GpuExportPipeline {
             nv12_output_cache: None,
             layer_texture_pool: LayerTexturePool::new(),
             text_renderer: None,
+            effect_dispatcher,
             #[cfg(target_os = "macos")]
             zerocopy_converter: None,
         })
@@ -802,6 +981,65 @@ impl GpuExportPipeline {
             result
         };
 
+        // Step 3.5: Apply per-element visual effects (CPU round-trip, Phase 2)
+        let effects_applied_texture: Option<wgpu::Texture> =
+            if !element.effects.is_empty() {
+                if let Some(ref dispatcher) = self.effect_dispatcher {
+                    let _span = tracing::trace_span!("EFFECT_DISPATCH", effects = element.effects.len()).entered();
+                    // Read RGBA from GPU texture to CPU
+                    match self.ctx.read_texture_sync(rgba_texture, width, height) {
+                        Ok(pixels) => {
+                            match dispatcher.apply_effects(pixels, width, height, &element.effects) {
+                                Ok(processed) => {
+                                    // Upload processed pixels back as a new texture
+                                    let tex = self.ctx.device().create_texture(&wgpu::TextureDescriptor {
+                                        label: Some("Effects Output"),
+                                        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                                        mip_level_count: 1,
+                                        sample_count: 1,
+                                        dimension: wgpu::TextureDimension::D2,
+                                        format: wgpu::TextureFormat::Rgba8Unorm,
+                                        usage: wgpu::TextureUsages::COPY_SRC
+                                            | wgpu::TextureUsages::COPY_DST
+                                            | wgpu::TextureUsages::TEXTURE_BINDING,
+                                        view_formats: &[],
+                                    });
+                                    self.ctx.queue().write_texture(
+                                        wgpu::ImageCopyTexture {
+                                            texture: &tex,
+                                            mip_level: 0,
+                                            origin: wgpu::Origin3d::ZERO,
+                                            aspect: wgpu::TextureAspect::All,
+                                        },
+                                        &processed,
+                                        wgpu::ImageDataLayout {
+                                            offset: 0,
+                                            bytes_per_row: Some(width * 4),
+                                            rows_per_image: Some(height),
+                                        },
+                                        wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                                    );
+                                    Some(tex)
+                                }
+                                Err(e) => {
+                                    tracing::error!("Effect dispatch failed: {}, using original frame", e);
+                                    None
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Texture readback failed: {}, using original frame", e);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+        let effective_rgba = effects_applied_texture.as_ref().unwrap_or(rgba_texture);
+
         // Step 4: Copy to pooled texture (avoids per-frame allocation)
         let tex_idx = self.layer_texture_pool.acquire(&self.ctx, width, height);
         {
@@ -816,7 +1054,7 @@ impl GpuExportPipeline {
 
             encoder.copy_texture_to_texture(
                 wgpu::ImageCopyTexture {
-                    texture: rgba_texture,
+                    texture: effective_rgba,
                     mip_level: 0,
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,

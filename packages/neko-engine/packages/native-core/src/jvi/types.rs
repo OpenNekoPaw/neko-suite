@@ -173,6 +173,9 @@ pub struct JviMediaElement {
     pub linked_audio_id: Option<String>,
     #[serde(default)]
     pub media_type: Option<String>,
+    /// Visual effects applied to this element
+    #[serde(default)]
+    pub effects: Vec<neko_types::ElementEffect>,
 }
 
 /// Audio element data
@@ -236,6 +239,9 @@ pub struct JviTextElement {
     pub rotation: f32,
     #[serde(default = "default_opacity")]
     pub opacity: f32,
+    /// Visual effects applied to this element
+    #[serde(default)]
+    pub effects: Vec<neko_types::ElementEffect>,
 }
 
 /// Shape element data
@@ -251,6 +257,9 @@ pub struct JviShapeElement {
     pub trim_start: f64,
     #[serde(default)]
     pub trim_end: f64,
+    /// Visual effects applied to this element
+    #[serde(default)]
+    pub effects: Vec<neko_types::ElementEffect>,
 }
 
 /// Subtitle element data

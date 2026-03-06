@@ -3,7 +3,7 @@
 //! The single source of truth for timeline data structures.
 //! Used by all modules: export, jvi, preview, services.
 
-use neko_types::{BlendMode, EffectParams, Resolution, TrackType};
+use neko_types::{BlendMode, ElementEffect, Resolution, TrackType};
 use serde::{Deserialize, Serialize};
 
 use super::Transform;
@@ -348,6 +348,9 @@ impl Timeline {
         }
         if let Some(ref bm) = u.blend_mode {
             element.blend_mode = super::operations::parse_blend_mode(bm);
+        }
+        if let Some(ref effects) = u.effects {
+            element.effects = effects.clone();
         }
 
         self.recalculate_duration();
@@ -913,9 +916,9 @@ pub struct Element {
     /// Blend mode
     #[serde(default)]
     pub blend_mode: BlendMode,
-    /// Applied effects
+    /// Applied visual effects (type-keyed, mirrors TS EffectInstance)
     #[serde(default)]
-    pub effects: Vec<EffectParams>,
+    pub effects: Vec<ElementEffect>,
     /// Whether element is muted
     #[serde(default)]
     pub muted: bool,

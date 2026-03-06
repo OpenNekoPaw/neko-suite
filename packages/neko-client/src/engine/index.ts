@@ -34,5 +34,9 @@ export type {
 	ProbeResult,
 	WaveformResult,
 	StreamHandle,
+	// Effects types
+	ShaderParamDef,
+	EffectPresetInfo,
+	EffectApplyResult,
 } from './types';
 export { transformDiffResponse } from './responseTransform';

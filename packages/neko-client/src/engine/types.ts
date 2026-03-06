@@ -369,6 +369,35 @@ export interface LoudnessAnalysis {
 	targetLufs: number;
 }
 
+// =============================================================================
+// Effects types (from native-core/src/gpu/custom_shader_processor.rs)
+// =============================================================================
+
+/** Shader parameter definition */
+export interface ShaderParamDef {
+	name: string;
+	default: number;
+	min: number;
+	max: number;
+}
+
+/** Preset shader metadata returned by `effects:list` / `effects:info` */
+export interface EffectPresetInfo {
+	id: string;
+	description: string;
+	params: ShaderParamDef[];
+}
+
+/** Result of `effects:apply` — processed RGBA frame */
+export interface EffectApplyResult {
+	width: number;
+	height: number;
+	shaderId: string;
+	size: number;
+	/** Base64-encoded RGBA pixel data */
+	data: string;
+}
+
 /** Stream handle with convenience WebSocket URL */
 export interface StreamHandle {
 	streamId: string;

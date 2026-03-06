@@ -25,6 +25,9 @@ import type {
 	DiffResult,
 	Resolution,
 	LoudnessAnalysis,
+	EffectPresetInfo,
+	EffectApplyResult,
+	ShaderParamDef,
 } from './engine/types';
 import { transformDiffResponse } from './engine/responseTransform';
 
@@ -311,6 +314,76 @@ export class EngineClient {
 		});
 		this.assertOk(resp, 'audios:analyze_loudness');
 		return resp.data as LoudnessAnalysis;
+	}
+
+	// =========================================================================
+	// Effects / Shader API
+	// =========================================================================
+
+	/**
+	 * List all available GPU shader presets (built-in + custom registered).
+	 * Dispatches `effects:list`.
+	 */
+	async listEffects(): Promise<EffectPresetInfo[]> {
+		const resp = await this.dispatch({
+			group: 'effects',
+			action: 'list',
+			options: {},
+		});
+		this.assertOk(resp, 'effects:list');
+		return (resp.data as EffectPresetInfo[] | undefined) ?? [];
+	}
+
+	/**
+	 * Get metadata for a specific shader preset.
+	 * Dispatches `effects:info`.
+	 */
+	async getEffectInfo(shaderId: string): Promise<EffectPresetInfo> {
+		const resp = await this.dispatch({
+			group: 'effects',
+			action: 'info',
+			options: { shaderId },
+		});
+		this.assertOk(resp, 'effects:info');
+		return resp.data as EffectPresetInfo;
+	}
+
+	/**
+	 * Apply a shader effect to a raw RGBA frame (base64-encoded).
+	 * Dispatches `effects:apply`.
+	 */
+	async applyEffect(
+		data: string,
+		width: number,
+		height: number,
+		shaderId: string,
+		params?: Record<string, unknown>,
+	): Promise<EffectApplyResult> {
+		const resp = await this.dispatch({
+			group: 'effects',
+			action: 'apply',
+			options: { data, width, height, shaderId, params: params ?? {} },
+		});
+		this.assertOk(resp, 'effects:apply');
+		return resp.data as EffectApplyResult;
+	}
+
+	/**
+	 * Register a custom WGSL compute shader at runtime.
+	 * Dispatches `effects:register`.
+	 * The shader must have entry point `main` and use 16x16 workgroups.
+	 */
+	async registerShader(
+		id: string,
+		code: string,
+		params?: ShaderParamDef[],
+	): Promise<void> {
+		const resp = await this.dispatch({
+			group: 'effects',
+			action: 'register',
+			options: { id, code, params: params ?? [] },
+		});
+		this.assertOk(resp, 'effects:register');
 	}
 
 	// =========================================================================

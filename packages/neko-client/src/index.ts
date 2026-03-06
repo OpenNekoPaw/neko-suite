@@ -105,6 +105,10 @@ export type {
 	WaveformResult,
 	StreamHandle,
 	LoudnessAnalysis,
+	// Effects types
+	ShaderParamDef,
+	EffectPresetInfo,
+	EffectApplyResult,
 } from './engine/types';
 
 export { transformDiffResponse } from './engine/responseTransform';
