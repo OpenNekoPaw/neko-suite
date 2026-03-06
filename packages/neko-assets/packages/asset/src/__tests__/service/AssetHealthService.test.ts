@@ -111,6 +111,29 @@ describe('AssetHealthService', () => {
 			expect(results).toHaveLength(0);
 		});
 
+		it('respects concurrency limit during validateAll', async () => {
+			// Create 10 files, concurrency = 2
+			for (let i = 0; i < 10; i++) {
+				await createEntityWithFiles(`Entity${i}`, [`/valid/file${i}.mp4`]);
+			}
+
+			let activeCount = 0;
+			let maxActive = 0;
+
+			const checker: FileAccessChecker = async () => {
+				activeCount++;
+				maxActive = Math.max(maxActive, activeCount);
+				await new Promise(r => setTimeout(r, 10));
+				activeCount--;
+				return 'online' as const;
+			};
+
+			const service = new AssetHealthService({ storage, fileAccessChecker: checker, concurrency: 2 });
+			await service.validateAll();
+
+			expect(maxActive).toBeLessThanOrEqual(2);
+		});
+
 		it('should track previousStatus', async () => {
 			const { variant } = await createEntityWithFiles('Test', ['/valid/file.mp4']);
 

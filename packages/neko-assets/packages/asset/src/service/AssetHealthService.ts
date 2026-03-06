@@ -67,57 +67,42 @@ export class AssetHealthService {
 		const total = fileEntries.length;
 		if (total === 0) return [];
 
-		let checked = 0;
+		// Process single entry and update storage
+		const processEntry = async (entry: (typeof fileEntries)[number]): Promise<void> => {
+			const status = await this.checker(entry.path);
 
-		// Concurrent checking with pool
-		const pool: Promise<void>[] = [];
+			// Update file in storage
+			const file = await this.storage.getFile(entry.variantId, entry.fileId);
+			if (file) {
+				file.status = status;
+				file.lastCheckedAt = Date.now();
+				await this.storage.saveFile(entry.variantId, file);
+			}
 
+			results.push({
+				fileId: entry.fileId,
+				variantId: entry.variantId,
+				entityId: entry.entityId,
+				entityName: entry.entityName,
+				path: entry.path,
+				status,
+				previousStatus: entry.previousStatus,
+			});
+
+			onProgress?.(results.length, total);
+		};
+
+		// Correct concurrency pool: Set<Promise> + .finally() removal
+		const active = new Set<Promise<void>>();
 		for (const entry of fileEntries) {
-			const task = (async () => {
-				const status = await this.checker(entry.path);
-
-				// Update file in storage
-				const file = await this.storage.getFile(entry.variantId, entry.fileId);
-				if (file) {
-					file.status = status;
-					file.lastCheckedAt = Date.now();
-					await this.storage.saveFile(entry.variantId, file);
-				}
-
-				results.push({
-					fileId: entry.fileId,
-					variantId: entry.variantId,
-					entityId: entry.entityId,
-					entityName: entry.entityName,
-					path: entry.path,
-					status,
-					previousStatus: entry.previousStatus,
-				});
-
-				checked++;
-				onProgress?.(checked, total);
-			})();
-
-			pool.push(task);
-
-			// Limit concurrency
-			if (pool.length >= this.concurrency) {
-				await Promise.race(pool);
-				// Remove settled promises
-				for (let i = pool.length - 1; i >= 0; i--) {
-					const settled = await Promise.race([
-						pool[i]!.then(() => true),
-						Promise.resolve(false),
-					]);
-					if (settled) {
-						pool.splice(i, 1);
-					}
-				}
+			let task!: Promise<void>;
+			task = processEntry(entry).finally(() => active.delete(task));
+			active.add(task);
+			if (active.size >= this.concurrency) {
+				await Promise.race(active);
 			}
 		}
-
-		// Wait for remaining tasks
-		await Promise.all(pool);
+		await Promise.all(active);
 
 		return results;
 	}
