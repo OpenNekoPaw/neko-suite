@@ -64,7 +64,7 @@
 - [ ] 剧本解析 → 时间线自动生成 Skill（neko-story 联动）
 - [ ] AI 字幕生成 Skill（调用 Whisper / 云端 ASR）
 - [ ] 智能素材推荐（根据剧本自动检索资产库）
-- [ ] **ChatViewProvider Handler 拆分** Phase 2-5（当前 Phase 1 完成 18%）— [engine.md §重构 #3](./docs/engine.md)
+- [ ] **ChatViewProvider Handler 拆分** Phase 3-5（Phase 1-2 完成，1,066→735 行）— [refactoring-chat-cli.md](./packages/neko-agent/docs/refactoring-chat-cli.md)
 
 ### neko-story
 - [x] **错误诊断**：语法错误（未闭合 `[[`/`/*`）+ 语义警告（单次角色、孤立括注）— `DiagnosticsProvider`

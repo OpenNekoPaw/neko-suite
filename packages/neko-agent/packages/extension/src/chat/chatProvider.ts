@@ -25,7 +25,7 @@ import { SystemPromptManager } from './systemPromptManager';
 import { WebviewMessage, MessageAttachment, TabState, OpenTab } from './types';
 import { GenericConfigService } from '../services/genericConfigService';
 import { ConfigBridge } from '../services/configBridge';
-import { TaskHandler, ModelPresetHandler, SkillHandler, FileOperationHandler, PlanModeHandler, ProviderHandler, IntegrationHandler } from './handlers';
+import { TaskHandler, ModelPresetHandler, SkillHandler, FileOperationHandler, PlanModeHandler, ProviderHandler, IntegrationHandler, SettingsHandler, ContextHandler, SlashCommandHandler } from './handlers';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'neko.aiAssistant';
@@ -51,6 +51,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private readonly _planModeHandler: PlanModeHandler;
   private readonly _providerHandler: ProviderHandler;
   private readonly _integrationHandler: IntegrationHandler;
+  private readonly _settingsHandler: SettingsHandler;
+  private readonly _contextHandler: ContextHandler;
+  private readonly _slashCommandHandler: SlashCommandHandler;
 
   // Services
   private _agentManager?: IAgentManager;
@@ -83,12 +86,37 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
     this._providerHandler = new ProviderHandler({
       settings: this._settings,
-      sendSettings: () => this._sendSettings(),
+      sendSettings: () => {
+        if (this._view?.webview) {
+          this._settingsHandler.sendSettings(this._view.webview);
+        }
+      },
       getWebview: () => this._view?.webview,
     });
     this._integrationHandler = new IntegrationHandler({
       context: this._context,
-      sendSettings: () => this._sendSettings(),
+      sendSettings: () => {
+        if (this._view?.webview) {
+          this._settingsHandler.sendSettings(this._view.webview);
+        }
+      },
+    });
+    this._settingsHandler = new SettingsHandler({
+      settings: this._settings,
+    });
+    this._contextHandler = new ContextHandler({
+      conversations: this._conversations,
+    });
+    this._slashCommandHandler = new SlashCommandHandler({
+      conversations: this._conversations,
+      settings: this._settings,
+      systemPrompt: this._systemPrompt,
+      skillHandler: this._skillHandler,
+      taskHandler: this._taskHandler,
+      contextHandler: this._contextHandler,
+      planModeHandler: this._planModeHandler,
+      sendConversationList: () => this._sendConversationList(),
+      sendActiveConversation: () => this._sendActiveConversation(),
     });
 
     // Get services - deferred initialization
@@ -152,6 +180,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         (this._providerHandler as any).deps = {
           ...this._providerHandler['deps'],
           providers: this._providers,
+        };
+        (this._settingsHandler as any).deps = {
+          ...this._settingsHandler['deps'],
+          providers: this._providers,
+          platform: this._platform,
+        };
+        (this._contextHandler as any).deps = {
+          ...this._contextHandler['deps'],
+          agentManager: this._agentManager,
+        };
+        (this._slashCommandHandler as any).deps = {
+          ...this._slashCommandHandler['deps'],
+          agentManager: this._agentManager,
         };
       }
     } catch (error) {
@@ -370,10 +411,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         // Settings handling
         case 'getSettings':
-          this._sendSettings();
+          this._settingsHandler.sendSettings(webview);
           break;
         case 'updateSettings':
-          this._handleUpdateSettings(message.settings as Record<string, unknown>);
+          this._settingsHandler.handleUpdateSettings(webview, message.settings as Record<string, unknown>);
           break;
 
         // Tab state handling
@@ -522,15 +563,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         // Slash command invocation
         case 'invokeSlashCommand':
-          this._handleInvokeSlashCommand(webview, message.command as string, message.args as string | undefined);
+          this._slashCommandHandler.handleCommand(webview, message.command as string, message.args as string | undefined);
           break;
 
         // Context management
         case 'getContextTokenCount':
-          this._handleGetContextTokenCount(webview, message.conversationId as string | undefined);
+          this._contextHandler.getTokenCount(webview, message.conversationId as string | undefined);
           break;
         case 'compressContext':
-          this._handleCompressContext(webview, message.conversationId as string | undefined);
+          this._contextHandler.compressContext(webview, message.conversationId as string | undefined);
           break;
       }
     });
@@ -598,71 +639,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   // ============================================================================
-  // Settings Methods
-  // ============================================================================
-
-  private _sendSettings(): void {
-    if (!this._view || !this._providers) return;
-
-    const providers = this._providers.getAllProviders();
-    const configuredProviders = this._providers.getConfiguredProviders();
-    const providerTemplates = this._providers.getProviderTemplates();
-
-    if (!this._settings.selectedProviderId) {
-      const defaultProvider = this._providers.getDefaultProvider();
-      if (defaultProvider) {
-        this._settings.selectedProviderId = defaultProvider.id;
-        this._settings.selectedModelId = defaultProvider.getDefaultModel();
-      }
-    }
-
-    // Get chat model options from Platform ConfigManager
-    const chatModelOptions = this._platform?.config.getChatModelOptions() ?? [];
-
-    this._view.webview.postMessage({
-      type: 'settingsData',
-      providers,
-      configuredProviders,
-      providerTemplates,
-      selectedProviderId: this._settings.selectedProviderId,
-      selectedModelId: this._settings.selectedModelId,
-      systemPrompt: this._settings.customSystemPrompt,
-      autoExecuteTools: this._settings.get('autoExecuteTools'),
-      streamResponses: this._settings.get('streamResponses'),
-      showToolCalls: this._settings.get('showToolCalls'),
-      temperature: this._settings.temperature,
-      maxTokens: this._settings.maxTokens,
-      executionMode: this._settings.executionMode,
-      chatModelOptions,
-    });
-  }
-
-  private _handleUpdateSettings(settings: Record<string, any>): void {
-    if (settings.providerId !== undefined) this._settings.selectedProviderId = settings.providerId;
-    if (settings.modelId !== undefined) this._settings.selectedModelId = settings.modelId;
-    if (settings.systemPrompt !== undefined) this._settings.customSystemPrompt = settings.systemPrompt;
-    if (settings.autoExecuteTools !== undefined) this._settings.set('autoExecuteTools', settings.autoExecuteTools);
-    if (settings.streamResponses !== undefined) this._settings.set('streamResponses', settings.streamResponses);
-    if (settings.showToolCalls !== undefined) this._settings.set('showToolCalls', settings.showToolCalls);
-    if (settings.temperature !== undefined) this._settings.set('temperature', settings.temperature);
-    if (settings.maxTokens !== undefined) this._settings.set('maxTokens', settings.maxTokens);
-    if (settings.executionMode !== undefined) this._settings.executionMode = settings.executionMode;
-
-    if (this._view) {
-      this._view.webview.postMessage({ type: 'settingsUpdated', success: true });
-    }
-  }
-
-  // ============================================================================
   // State Methods
   // ============================================================================
 
   private _restoreState(): void {
     this._sendConversationList();
     this._sendActiveConversation();
-    this._sendSettings();
-    this._sendTabState();
     if (this._view) {
+      this._settingsHandler.sendSettings(this._view.webview);
+      this._sendTabState();
       this._taskHandler.sendTasks(this._view.webview);
       this._sendAgentStateSnapshot(this._view.webview);
     }
@@ -702,323 +687,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _updateTabState(openTabs: OpenTab[], activeTabId: string | null): void {
     this._tabState = { openTabs, activeTabId };
     this._saveTabState();
-  }
-
-  // ============================================================================
-  // Context Management Methods
-  // ============================================================================
-
-  /**
-   * Get context token count for a conversation
-   */
-  private _handleGetContextTokenCount(webview: vscode.Webview, conversationId?: string): void {
-    const activeId = conversationId || this._conversations.getActiveId();
-    if (!activeId || !this._agentManager) {
-      webview.postMessage({
-        type: 'contextTokenCount',
-        conversationId: activeId,
-        tokenCount: 0,
-      });
-      return;
-    }
-
-    const tokenCount = this._agentManager.getContextTokenCount(activeId);
-    webview.postMessage({
-      type: 'contextTokenCount',
-      conversationId: activeId,
-      tokenCount,
-    });
-  }
-
-  /**
-   * Trigger context compression for a conversation
-   */
-  private async _handleCompressContext(webview: vscode.Webview, conversationId?: string): Promise<void> {
-    const activeId = conversationId || this._conversations.getActiveId();
-    if (!activeId || !this._agentManager) {
-      webview.postMessage({
-        type: 'compressionError',
-        conversationId: activeId,
-        error: 'No active conversation or agent manager',
-      });
-      return;
-    }
-
-    try {
-      const result = await this._agentManager.compressContext(activeId);
-      webview.postMessage({
-        type: 'compressionResult',
-        conversationId: activeId,
-        originalTokens: result.originalTokens,
-        compressedTokens: result.compressedTokens,
-        ratio: result.ratio,
-      });
-    } catch (error) {
-      webview.postMessage({
-        type: 'compressionError',
-        conversationId: activeId,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }
-
-  // ============================================================================
-  // Slash Command Handling
-  // ============================================================================
-
-  /**
-   * Handle slash command invocation from webview
-   * Supports both builtin commands and skill-based commands
-   */
-  private _handleInvokeSlashCommand(
-    webview: vscode.Webview,
-    command: string,
-    args?: string
-  ): void {
-    // Remove leading / if present
-    const cmdName = command.startsWith('/') ? command.slice(1) : command;
-
-    // Handle builtin commands first
-    switch (cmdName) {
-      case 'clear':
-      case 'cls':
-        // Clear current conversation history
-        const currentConversationId = this._conversations.getActiveId();
-        if (currentConversationId) {
-          this._agentManager?.clearHistory(currentConversationId);
-        }
-        this._conversations.clearCurrent();
-        webview.postMessage({ type: 'historyCleared' });
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          message: 'Conversation cleared',
-        });
-        return;
-
-      case 'exit':
-      case 'quit':
-      case 'q':
-        // Exit/close the assistant panel
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          message: 'Goodbye!',
-          action: 'exit',
-        });
-        return;
-
-      case 'help':
-      case 'h':
-        // Show help information
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'showHelp',
-        });
-        return;
-
-      case 'new':
-        // Create new conversation
-        this._conversations.create();
-        this._sendConversationList();
-        this._sendActiveConversation();
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          message: 'New conversation created',
-        });
-        return;
-
-      case 'status':
-      case 's':
-        // Show status information
-        this._sendStatusInfo(webview);
-        return;
-
-      case 'compact':
-        // Compress context
-        this._handleCompressContext(webview, this._conversations.getActiveId() ?? undefined);
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          message: 'Context compression initiated',
-        });
-        return;
-
-      case 'model':
-        // Show model selection or info
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'showModelSelector',
-        });
-        return;
-
-      case 'settings':
-        // Show settings
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'showSettings',
-        });
-        return;
-
-      case 'plan':
-        // Toggle plan mode
-        this._planModeHandler.handleTogglePlanMode(webview);
-        const newPlanMode = this._systemPrompt.isPlanMode();
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'togglePlanMode',
-          data: { planMode: newPlanMode },
-          message: `Plan mode ${newPlanMode ? 'enabled' : 'disabled'}`,
-        });
-        return;
-
-      case 'tasks':
-      case 'todos':
-        // Show tasks
-        this._taskHandler.sendTasks(webview);
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'showTasks',
-        });
-        return;
-
-      case 'mcp':
-        // Show MCP servers info
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'showMCPServers',
-        });
-        return;
-
-      case 'permissions':
-        // Show permissions info
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'showPermissions',
-        });
-        return;
-
-      case 'init':
-        // Initialize project
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'initProject',
-        });
-        return;
-
-      case 'resume':
-        // Resume last conversation - send conversation list
-        const conversations = this._conversations.list();
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'resumeConversation',
-          data: {
-            conversations: conversations.map(c => {
-              const conv = this._conversations.manager.get(c.id);
-              return {
-                id: c.id,
-                title: c.title,
-                messageCount: conv?.messages.length ?? 0,
-              };
-            }),
-          },
-        });
-        return;
-    }
-
-    // If not a builtin command, try skill-based slash command
-    const result = this._skillHandler.handleSlashCommand(webview, cmdName, args);
-
-    if (result) {
-      if (result.applied) {
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          message: `Command /${cmdName} activated`,
-          injection: result.injection,
-        });
-      } else {
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: false,
-          error: result.error || `Failed to execute command: /${cmdName}`,
-        });
-      }
-    } else {
-      // Command not found
-      webview.postMessage({
-        type: 'slashCommandResult',
-        command: cmdName,
-        success: false,
-        error: `Unknown command: /${cmdName}. Type /help for available commands.`,
-      });
-    }
-  }
-
-  /**
-   * Send status information to webview
-   */
-  private _sendStatusInfo(webview: vscode.Webview): void {
-    const activeConversationId = this._conversations.getActiveId();
-    const conversations = this._conversations.list();
-    const activeConversation = activeConversationId
-      ? this._conversations.manager.get(activeConversationId)
-      : null;
-
-    // Get provider and model info
-    const providerId = this._settings.selectedProviderId;
-    const modelId = this._settings.selectedModelId;
-
-    // Get skill info
-    const activeSkill = this._skillHandler.getActiveSkill();
-
-    // Get context token count
-    const tokenCount = activeConversationId
-      ? this._agentManager?.getContextTokenCount(activeConversationId) ?? 0
-      : 0;
-
-    webview.postMessage({
-      type: 'slashCommandResult',
-      command: 'status',
-      success: true,
-      action: 'showStatus',
-      data: {
-        provider: providerId,
-        model: modelId,
-        conversationCount: conversations.length,
-        activeConversationId,
-        messageCount: activeConversation?.messages.length ?? 0,
-        tokenCount,
-        activeSkill: activeSkill?.skill.name,
-        planMode: this._systemPrompt.isPlanMode(),
-        executionMode: this._settings.executionMode,
-      },
-    });
   }
 
   // ============================================================================

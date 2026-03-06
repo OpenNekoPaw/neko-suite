@@ -12,3 +12,6 @@ export { FileOperationHandler, type FileOperationHandlerDeps } from './fileOpera
 export { PlanModeHandler, type PlanModeHandlerDeps } from './planModeHandler';
 export { ProviderHandler, type ProviderHandlerDeps } from './providerHandler';
 export { IntegrationHandler, type IntegrationHandlerDeps } from './integrationHandler';
+export { SettingsHandler, type SettingsHandlerDeps } from './settingsHandler';
+export { ContextHandler, type ContextHandlerDeps } from './contextHandler';
+export { SlashCommandHandler, type SlashCommandHandlerDeps } from './slashCommandHandler';

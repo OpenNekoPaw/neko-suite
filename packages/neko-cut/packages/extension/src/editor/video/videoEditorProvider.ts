@@ -823,6 +823,14 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 		const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(
 			(e) => {
 				if (e.document.uri.toString() === document.uri.toString()) {
+					// Skip events with no content changes (e.g., dirty state cleanup on save).
+					// VSCode fires onDidChangeTextDocument with empty contentChanges when
+					// document.save() clears the dirty flag. Without this guard, the handler
+					// would reload stale TextDocument content and overwrite webview state.
+					if (e.contentChanges.length === 0) {
+						return;
+					}
+
 					// Skip reload if this is an internal save (from webview)
 					// This prevents the save operation from overwriting webview state
 					if (model!.isInternalSave) {

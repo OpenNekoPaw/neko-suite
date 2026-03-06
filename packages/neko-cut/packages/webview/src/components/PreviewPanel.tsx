@@ -418,13 +418,13 @@ export const PreviewPanel = memo(function PreviewPanel({
   }, [frameServerPort, isPlaying]);
 
   // ==========================================================================
-  // Scrubbing (Seek when paused)
+  // Scrubbing & Seek (paused or during playback)
   // ==========================================================================
 
   const lastRenderedTimeRef = useRef<number>(-1);
 
   useEffect(() => {
-    if (!frameServerPort || !project || isPlaying) return;
+    if (!frameServerPort || !project) return;
 
     const TIME_TOLERANCE = 0.001;
     if (Math.abs(currentTime - lastRenderedTimeRef.current) < TIME_TOLERANCE) return;
@@ -435,13 +435,28 @@ export const PreviewPanel = memo(function PreviewPanel({
     audioClientRef.current?.resetClock();
     clockSourceRef.current = 'wall';
 
-    postMessage({
-      type: 'media:frameServer:projectPlayback:seek',
-      payload: {
-        projectData: project,
-        seekTime: currentTime,
-      },
-    });
+    if (isPlaying) {
+      // Seek during playback: restart stream from new position
+      playStartTimeRef.current = currentTime;
+      playWallTimeRef.current = performance.now();
+
+      postMessage({
+        type: 'media:frameServer:projectPlayback:resume',
+        payload: {
+          startTime: currentTime,
+          speed: 1.0,
+        },
+      });
+    } else {
+      // Seek when paused: request single frame at target time
+      postMessage({
+        type: 'media:frameServer:projectPlayback:seek',
+        payload: {
+          projectData: project,
+          seekTime: currentTime,
+        },
+      });
+    }
 
     lastRenderedTimeRef.current = currentTime;
   }, [currentTime, isPlaying, isInitialized, project]);
