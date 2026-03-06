@@ -846,7 +846,43 @@ interface IAssetHandler<T extends AssetType = AssetType> {
 | Shader 需要热重载 | 编辑体验 | ShaderHandler 需要 file watcher |
 | 多包共享资产库 | 避免重复 | AssetRegistry 必须是单例服务 |
 | Git LFS 大文件 | 版本控制 | 媒体文件需要 LFS 策略 |
+| neko-assets 与 neko-engine 完全独立 | 架构隔离 | 见下方说明 |
 
 ---
 
-*基于 2026-02-25 代码分析，2026-02-26 Phase 1+2 完成更新*
+## 附录：neko-engine 与 neko-assets 的关系
+
+### neko-engine 不依赖 neko-assets
+
+neko-engine 是独立的媒体处理 Sidecar，**直接通过本地绝对路径**访问媒体文件，与 neko-assets 零耦合：
+
+```
+MediaElement.src: string          // 本地绝对路径，neko-engine 直接读取
+AudioElement.src: string          // 同上
+resourceId?: string               // 可选，引擎内部 hash 缓存（非 AssetRegistry ID）
+```
+
+引擎内部的"自愈"资源解析（`resolve_resource`）：
+
+```
+调用时：resource_id 存在 → 从 ResourceRegistry 查路径
+       resource_id 不存在 → 用 source_path 重新注册（自愈）
+       → 最终以本地文件路径为真实来源，不经过 neko-assets
+```
+
+### "导入导出"的含义澄清
+
+neko-assets 是**非破坏性引用库**，只登记路径引用，不复制文件。因此"导入导出"有四种不同语义：
+
+| 操作 | 含义 | 状态 |
+|------|------|------|
+| **导入**（注册） | 将本地文件路径登记到 AssetLibrary，提取元数据 + 缩略图 | ✅ Phase 1 已完成 (`importFile`) |
+| **导出到编辑器** | 从资产库拖拽/右键 → 添加到 neko-cut 时间线或 neko-canvas 画布 | ✅ Phase 2 已完成 (`AssetDragData` 协议) |
+| **导出为 .neko 包** | 打包 shader/预设/模板，分享给他人或上传社区注册表 | ⏳ Phase 5（产品成熟后） |
+| **安装 .neko 包** | 从社区注册表下载并安装资产 | ⏳ Phase 5（产品成熟后） |
+
+**当前迭代（Phase 4）无需新增"导入导出"功能**，基础能力已就绪，Phase 5 的包分发机制依赖 Handler 体系成熟后���实现。
+
+---
+
+*基于 2026-02-25 代码分析，2026-02-26 Phase 1+2 完成，2026-03-06 补充 neko-engine 独立性说明*

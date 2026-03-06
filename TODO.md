@@ -72,6 +72,9 @@
 - [x] **导出 PDF**：@media print 标准 Fountain 印刷规格 + 打印按钮 + `neko.story.exportPdf` 命令
 
 ### neko-assets（Phase 4）
+
+> **设计说明**：neko-assets 是非破坏性引用库，只登记路径引用不复制文件。neko-engine 直接通过本地绝对路径访问媒体，与 neko-assets 完全独立。"导入"（注册文件）和"导出到编辑器"（拖拽协议）均已在 Phase 1-2 完成，**无需新增导入导出功能**，Phase 5 的 `.neko` 包分发另行实现。— [asset-management-design.md §neko-engine 关系](./docs/architecture/asset-management-design.md)
+
 - [x] **External Media Library** Phase P0/P1（2026-03-04 完成）— [adr-external-media-library](./docs/architecture/adr-external-media-library.md)
   - [x] P0: 路径韧性（健康检查 + 离线检测 + 重定位 UI + 状态装饰）
   - [x] P1: 媒体库管理（settings.json + 路径变量 + TreeView + 拖拽导入）
@@ -184,4 +187,4 @@
 
 ---
 
-*最后更新：2026-03-06（neko-story 非 AI 功能完成，进度 75%）*
+*最后更新：2026-03-06（neko-story 非 AI 功能完成，进度 75%；neko-assets 导入导出设计澄清）*
