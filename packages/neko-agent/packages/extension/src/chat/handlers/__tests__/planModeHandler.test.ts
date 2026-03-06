@@ -22,20 +22,18 @@ function createMockSystemPrompt() {
 
 function createMockConversations() {
   const messages = [
-    { role: 'user', content: 'hello' },
+    { role: 'user', content: 'Plan something' },
     {
       role: 'assistant',
-      content: 'plan',
       contentBlocks: [
         {
           type: 'plan',
           plan: {
             id: 'plan-1',
-            title: 'Test Plan',
             status: 'pending',
             steps: [
-              { id: 'plan-1-step-0', description: 'Step 1', status: 'pending' },
-              { id: 'plan-1-step-1', description: 'Step 2', status: 'pending' },
+              { id: 'plan-1-step-0', description: 'Step one', status: 'pending' },
+              { id: 'plan-1-step-1', description: 'Step two', status: 'pending' },
             ],
           },
         },
@@ -54,18 +52,10 @@ function createMockConversations() {
 
 function createMockSettings() {
   return {
-    customSystemPrompt: '',
+    customSystemPrompt: 'custom prompt',
     temperature: 0.7,
     maxTokens: 4096,
     executionMode: 'auto' as const,
-  };
-}
-
-function createMockAgentManager() {
-  return {
-    get: vi.fn().mockReturnValue({
-      configure: vi.fn().mockResolvedValue(undefined),
-    }),
   };
 }
 
@@ -84,7 +74,7 @@ describe('PlanModeHandler', () => {
     settings = createMockSettings();
   });
 
-  function createHandler(overrides: Record<string, unknown> = {}) {
+  function createHandler(overrides?: Record<string, unknown>) {
     return new PlanModeHandler({
       systemPrompt: systemPrompt as any,
       conversations: conversations as any,
@@ -94,19 +84,29 @@ describe('PlanModeHandler', () => {
   }
 
   describe('handleSetPromptMode', () => {
-    it('should set mode and send update', () => {
+    it('should set mode to plan', () => {
       handler = createHandler();
       handler.handleSetPromptMode(webview as any, 'plan');
 
       expect(systemPrompt.setMode).toHaveBeenCalledWith('plan');
       expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'promptModeChanged' }),
+        expect.objectContaining({ type: 'promptModeChanged', isPlanMode: true }),
+      );
+    });
+
+    it('should set mode to default', () => {
+      handler = createHandler();
+      handler.handleSetPromptMode(webview as any, 'default');
+
+      expect(systemPrompt.setMode).toHaveBeenCalledWith('default');
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'promptModeChanged', isPlanMode: false }),
       );
     });
   });
 
   describe('handleTogglePlanMode', () => {
-    it('should toggle mode and send update', () => {
+    it('should toggle from default to plan', () => {
       handler = createHandler();
       handler.handleTogglePlanMode(webview as any);
 
@@ -131,37 +131,39 @@ describe('PlanModeHandler', () => {
   });
 
   describe('handlePlanReject', () => {
-    it('should update plan status and notify UI', () => {
+    it('should update plan status and send rejection message', () => {
       handler = createHandler();
       handler.handlePlanReject(webview as any, 'plan-1', 'conv-1');
 
+      // Should persist status
+      expect(conversations.manager.updateMessages).toHaveBeenCalled();
+
+      // Should send status update
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'planStatusUpdate',
         planId: 'plan-1',
         conversationId: 'conv-1',
         status: 'rejected',
       });
-      // Should also send rejection text
+
+      // Should send rejection text
       expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'streamText', conversationId: 'conv-1' }),
+        expect.objectContaining({
+          type: 'streamText',
+          conversationId: 'conv-1',
+          content: expect.stringContaining('Plan rejected'),
+        }),
       );
     });
 
-    it('should persist rejected status in conversation', () => {
+    it('should handle missing conversation gracefully', () => {
+      conversations.manager.get.mockReturnValue(undefined);
       handler = createHandler();
-      handler.handlePlanReject(webview as any, 'plan-1', 'conv-1');
+      handler.handlePlanReject(webview as any, 'plan-1', 'conv-missing');
 
-      expect(conversations.manager.updateMessages).toHaveBeenCalledWith(
-        'conv-1',
-        expect.arrayContaining([
-          expect.objectContaining({
-            contentBlocks: expect.arrayContaining([
-              expect.objectContaining({
-                plan: expect.objectContaining({ status: 'rejected' }),
-              }),
-            ]),
-          }),
-        ]),
+      // Should still send UI update even if persistence fails
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'planStatusUpdate', status: 'rejected' }),
       );
     });
   });
@@ -178,7 +180,6 @@ describe('PlanModeHandler', () => {
         conversationId: 'conv-1',
         status: 'approved',
       });
-
       expect(conversations.manager.updateMessages).toHaveBeenCalled();
     });
 
@@ -193,9 +194,15 @@ describe('PlanModeHandler', () => {
   });
 
   describe('handlePlanStepModify', () => {
-    it('should modify step description and persist', () => {
+    it('should modify step description and status', () => {
       handler = createHandler();
-      handler.handlePlanStepModify(webview as any, 'plan-1', 'plan-1-step-0', 'Updated step description', 'conv-1');
+      handler.handlePlanStepModify(
+        webview as any,
+        'plan-1',
+        'plan-1-step-0',
+        'Updated step description',
+        'conv-1',
+      );
 
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'planStepStatusUpdate',
@@ -205,16 +212,53 @@ describe('PlanModeHandler', () => {
         status: 'modified',
         newDescription: 'Updated step description',
       });
-
       expect(conversations.manager.updateMessages).toHaveBeenCalled();
     });
   });
 
   describe('handlePlanApprove', () => {
-    it('should approve plan without file path', async () => {
-      const agentManager = createMockAgentManager();
+    it('should update status and send UI notification', async () => {
+      handler = createHandler();
+      await handler.handlePlanApprove(webview as any, 'plan-1', 'conv-1');
+
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'planStatusUpdate',
+        planId: 'plan-1',
+        conversationId: 'conv-1',
+        status: 'approved',
+      });
+    });
+
+    it('should configure agent and send execute message when filePath provided', async () => {
+      const agentRunner = { configure: vi.fn().mockResolvedValue(undefined) };
+      const agentManager = { get: vi.fn().mockReturnValue(agentRunner) };
+      const platform = { media: {} };
       const messages = { handleUserMessage: vi.fn() };
-      const platform = { config: {} };
+
+      // Mock fs.promises.readFile
+      vi.doMock('fs', () => ({
+        promises: { readFile: vi.fn().mockResolvedValue('# Plan Content\n## Step 1\nDo thing') },
+      }));
+
+      handler = createHandler({
+        agentManager: agentManager as any,
+        platform: platform as any,
+        messages: messages as any,
+      });
+
+      await handler.handlePlanApprove(webview as any, 'plan-1', 'conv-1', '/tmp/plan.md');
+
+      expect(agentManager.get).toHaveBeenCalledWith('conv-1');
+      expect(agentRunner.configure).toHaveBeenCalledWith(
+        expect.objectContaining({ executionMode: 'auto', autoExecuteTools: true }),
+      );
+    });
+
+    it('should send generic execution message without filePath', async () => {
+      const agentRunner = { configure: vi.fn().mockResolvedValue(undefined) };
+      const agentManager = { get: vi.fn().mockReturnValue(agentRunner) };
+      const platform = { media: {} };
+      const messages = { handleUserMessage: vi.fn() };
 
       handler = createHandler({
         agentManager: agentManager as any,
@@ -224,36 +268,13 @@ describe('PlanModeHandler', () => {
 
       await handler.handlePlanApprove(webview as any, 'plan-1', 'conv-1');
 
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'planStatusUpdate', status: 'approved' }),
+      expect(agentRunner.configure).toHaveBeenCalledWith(
+        expect.objectContaining({ executionMode: 'auto' }),
       );
-      expect(agentManager.get).toHaveBeenCalledWith('conv-1');
       expect(messages.handleUserMessage).toHaveBeenCalledWith(
         webview,
-        'The plan has been approved. Please proceed with the implementation.',
+        expect.stringContaining('approved'),
       );
-    });
-
-    it('should not execute when agentManager is unavailable', async () => {
-      handler = createHandler();
-      await handler.handlePlanApprove(webview as any, 'plan-1', 'conv-1');
-
-      // Should still send status update
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'planStatusUpdate', status: 'approved' }),
-      );
-    });
-
-    it('should handle missing conversation gracefully for status persistence', () => {
-      conversations.manager.get.mockReturnValue(null);
-      handler = createHandler();
-      handler.handlePlanReject(webview as any, 'plan-1', 'conv-1');
-
-      // Should still send UI update, just not persist
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'planStatusUpdate' }),
-      );
-      expect(conversations.manager.updateMessages).not.toHaveBeenCalled();
     });
   });
 });

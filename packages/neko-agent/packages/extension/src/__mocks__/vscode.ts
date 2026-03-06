@@ -11,6 +11,10 @@ import { vi } from 'vitest';
 export const Uri = {
   file: (path: string) => ({ scheme: 'file', fsPath: path, path, toString: () => `file://${path}` }),
   parse: (value: string) => ({ scheme: 'https', path: value, toString: () => value }),
+  joinPath: (base: any, ...segments: string[]) => {
+    const joined = [base.fsPath || base.path, ...segments].join('/');
+    return { scheme: 'file', fsPath: joined, path: joined, toString: () => `file://${joined}` };
+  },
 };
 
 // commands mock
@@ -30,6 +34,7 @@ export const window = {
   showWarningMessage: vi.fn().mockResolvedValue(undefined),
   showErrorMessage: vi.fn().mockResolvedValue(undefined),
   showQuickPick: vi.fn().mockResolvedValue(undefined),
+  showSaveDialog: vi.fn().mockResolvedValue(undefined),
 };
 
 // workspace mock
@@ -39,6 +44,11 @@ export const workspace = {
     update: vi.fn().mockResolvedValue(undefined),
   }),
   workspaceFolders: [],
+  fs: {
+    writeFile: vi.fn().mockResolvedValue(undefined),
+    readFile: vi.fn().mockResolvedValue(new Uint8Array()),
+    stat: vi.fn().mockResolvedValue({ type: 1 }),
+  },
 };
 
 // Disposable mock
