@@ -185,14 +185,18 @@ export function VideoPlayer() {
 	const onFrame = useCallback((frame: VideoFrame) => {
 		// Filter stale pre-seek frames: old keyframes in the WebSocket buffer
 		// can corrupt the scheduler's A/V offset if enqueued after flush.
+		// Directional filter: reject frames that arrived before the seek target.
+		// The backend skips pre-target frames, but a few may arrive from the
+		// WebSocket buffer (in-flight before the seek was processed).
+		// Allow up to 0.5s tolerance for keyframe alignment.
 		const seekTarget = seekFilterRef.current;
 		if (seekTarget !== null) {
 			const frameSec = frame.timestamp / 1_000_000;
-			if (Math.abs(frameSec - seekTarget) > 2.0) {
+			if (frameSec < seekTarget - 0.5) {
 				frame.close();
 				return;
 			}
-			// First valid frame near seek target arrived — disable filter
+			// First valid frame at or near seek target arrived — disable filter
 			seekFilterRef.current = null;
 		}
 
