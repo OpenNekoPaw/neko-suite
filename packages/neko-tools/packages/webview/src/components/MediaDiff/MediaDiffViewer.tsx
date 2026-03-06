@@ -3,8 +3,8 @@
  * Main coordinator — dispatches to type-specific viewers based on media type
  */
 
-import { memo, useState, useCallback } from 'react';
-import type { DiffViewMode, MediaType } from '@neko/shared';
+import { memo, useState, useCallback, useMemo } from 'react';
+import type { DiffViewMode, MediaType, VideoDiffDetails, AudioDiffDetails } from '@neko/shared';
 import type { MediaDiffViewerProps } from './types';
 import { DiffControls } from './DiffControls';
 import { ImageDiffViewer } from './ImageDiffViewer';
@@ -75,6 +75,7 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
   onStreamControl,
   audioStreamConfig,
   onAudioStreamControl,
+  onSetTimeRange,
 }: MediaDiffViewerProps) {
   const [viewMode, setViewMode] = useState<DiffViewMode>('side-by-side');
   const [sliderPosition, setSliderPosition] = useState(0.5);
@@ -84,6 +85,20 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
   const [playingVersion, setPlayingVersion] = useState<'current' | 'previous' | 'both'>('current');
 
   const mediaType = diffResult?.mediaType ?? 'image';
+
+  // Extract duration from diff details for time range controls
+  const duration = useMemo(() => {
+    if (!diffResult?.details) return undefined;
+    if (mediaType === 'video') {
+      const d = diffResult.details as VideoDiffDetails;
+      if (d.duration) return Math.max(d.duration.current, d.duration.previous);
+    }
+    if (mediaType === 'audio') {
+      const d = diffResult.details as AudioDiffDetails;
+      if (d.duration) return Math.max(d.duration.current, d.duration.previous);
+    }
+    return undefined;
+  }, [diffResult, mediaType]);
 
   const handleViewModeChange = useCallback((mode: DiffViewMode) => {
     setViewMode(mode);
@@ -206,6 +221,8 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
         onZoomChange={mediaType === 'image' ? setZoom : undefined}
         opacity={viewMode === 'overlay' ? overlayOpacity : undefined}
         onOpacityChange={viewMode === 'overlay' ? setOverlayOpacity : undefined}
+        duration={duration}
+        onSetTimeRange={onSetTimeRange}
       />
       {renderViewer()}
     </div>

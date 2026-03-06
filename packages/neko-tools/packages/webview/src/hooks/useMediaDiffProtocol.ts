@@ -106,6 +106,7 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
   sendStartAudioStreaming: () => void;
   sendStopAudioStreaming: () => void;
   sendAudioStreamControl: (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => void;
+  sendSetTimeRange: (startTime?: number, endTime?: number) => void;
 } {
   const [state, setState] = useState<MediaDiffProtocolState>(() => ({
     diffResult: null,
@@ -446,6 +447,19 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     []
   );
 
+  const sendSetTimeRange = useCallback(
+    (startTime?: number, endTime?: number) => {
+      setState((prev) => ({ ...prev, isLoading: true, error: null }));
+      vscode.postMessage({
+        type: 'mediaDiff:setTimeRange',
+        requestId: nextRequestId(),
+        timestamp: Date.now(),
+        payload: { startTime, endTime },
+      });
+    },
+    []
+  );
+
   return {
     ...state,
     sendInit,
@@ -462,5 +476,6 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     sendStartAudioStreaming,
     sendStopAudioStreaming,
     sendAudioStreamControl,
+    sendSetTimeRange,
   };
 }

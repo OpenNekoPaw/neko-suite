@@ -43,6 +43,15 @@
 - [x] **AgentExecutor 流式化 Phase 3**：`thinkStream()` + `content_delta`/`text_delta` 全链路流式 — [refactoring-chat-cli.md](./packages/neko-agent/docs/refactoring-chat-cli.md)
 - [x] **ChatViewProvider Handler 拆分 Phase 1-2**：10 handler + 2 processor，ChatViewProvider -61%，MessageHandler -60%
 - [x] **External Media Library P0/P1**：路径韧性 + 媒体库管理（settings.json + 路径变量 + TreeView + 拖拽导入）— [adr-external-media-library](./docs/architecture/adr-external-media-library.md)
+- [x] **neko-canvas Undo/Redo + Copy/Paste**：`historyStore`（snapshot undoStack/redoStack）+ `clipboardStore`（序列化节点+连接、ID 重映射、自动偏移）
+- [x] **统一错误处理框架**：`BaseError` + `IErrorHandler` + `ErrorDisplayOptions` + `VSCodeErrorHandler`（@neko/shared errors/）
+- [x] **neko-types `as any` 清理**：主库零 `as any`，仅剩 2 处测试代码中合理用法（83 → 2）
+- [x] **视频关键帧智能采样**：Rust `sample_fps` + TS 1fps 默认 + Webview 降采样至 500 帧（60 分钟视频 30s → 1-2s）
+- [x] **Effects + Subtitles 渲染**：EffectDispatcher（blur/sharpen/vignette/glow）+ TextRenderer（13 字段）接入 GPU export pipeline
+- [x] **Media LSP Phase 1+2**：JVI 诊断（9 规则）+ Hover（probe 元数据）+ DocumentSymbol（三级 Outline）+ Definition（src/linkedId 跳转）+ References（跨文件媒体引用）+ WorkspaceIndex（`**/*.jvi` 监听）— [lsp.md](./docs/lsp.md)
+- [x] **Probe 冗余修复**：`handleStartStreaming` / `handleStartAudioStreaming` 缓存 `lastDiffResult` metadata，消除每次 streaming 重复 ~400ms probe
+- [x] **反向播放前端 UI**：SpeedControl.tsx 反向切换按钮 + PropertyPanel SpeedProperties.reverse + 时间映射工具（已在之前迭代完成）
+- [x] **Timeline Diff 范围 UI**：DiffControls TimeRangeControl（时间输入 + Apply/Reset）+ `mediaDiff:setTimeRange` 协议 + `DiffOptions.startTime/endTime` 全链路传递
 
 </details>
 
@@ -83,30 +92,26 @@
 ## 🟢 P2 — 增强功能（可延后）
 
 ### neko-cut
-- [ ] 反向播放支持（需 neko-engine 配合）— [task-plan #9](./docs/task-plan.md)
+- [x] ~~反向播放前端 UI~~ ✅ 已完成（SpeedControl.tsx 已有反向切换按钮 + PropertyPanel 集成 + 时间映射工具）— [task-plan #9](./docs/task-plan.md)
 
 ### neko-engine
 - [ ] WebGPU 实时预览优化（降低 GPU→CPU 回读延迟）
 - [ ] 高精度波形 Zoom（按需加载超过 800 点的精细波形）
   - 见 [diff.md §Phase 3](./docs/diff.md)
-- [ ] 渲染能力补齐：shapes / effects / keyframes / subtitles / letter_spacing — [timeline-alignment.md §Known Issues](./docs/timeline-alignment.md)
+- [ ] 渲染能力补齐：shapes / keyframes（effects ✅ subtitles ✅ letter_spacing ⚠️ cosmic-text 限制）— [timeline-alignment.md §Known Issues](./docs/timeline-alignment.md)
 - [ ] 转场系统接入 export pipeline（buffer→texture 架构 mismatch）— [timeline-alignment.md §Phase 2](./docs/timeline-alignment.md)
 
 ### neko-tools（媒体 Diff）
-- [ ] **Probe 冗余执行修复**：`videos:diff` 已返回 metadata，`handleStartStreaming` 重复 probe
-  - 方案：Extension 侧缓存 diff 结果 metadata · 预计 1h
+- [x] ~~**Probe 冗余执行修复**~~：缓存 `lastDiffResult`，streaming 启动时直接提取 metadata（~400ms 节省/次）
 - [ ] Diff 后端增强（Phase 3）— [diff.md §Phase 3](./docs/diff.md)
   - [ ] 音频静音检测（协议已定义，未实现）
-  - [ ] 视频关键帧智能采样（长视频优化）
+  - [x] 视频关键帧智能采样（长视频优化）— ✅ 已完成（sample_fps + 降采样）
   - [x] 音频频谱分析 / 响度归一化 BS.1770（已实现为 `audios:analyze_loudness`）
   - [ ] 视频场景切割检测
-- [ ] **Timeline Diff 范围优化**：支持用户选择时间范围进行局部对比
-  - 当前：`start_time`/`end_time` 已在 Rust 层实现，但前端 UI 未暴露
-  - 方案：VideoDiffViewer 添加时间范围选择器 + 重新触发 diff · 预计 2-3h
-  - 收益：用户可快速对比视频特定片段，避免全量分析
+- [x] ~~**Timeline Diff 范围优化**~~：DiffControls 新增 TimeRangeControl（时间范围输入 + Apply/Reset）→ `mediaDiff:setTimeRange` 消息 → 重新触发局部 diff
 
 ### neko-canvas
-- [ ] 功能补全：Undo/Redo + Copy/Paste + Port 系统 + UI 面板 — [engine.md §重构 #5](./docs/engine.md)
+- [ ] 功能补全：Port 系统 + UI 面板（Undo/Redo ✅ Copy/Paste ✅ 已完成）— [engine.md §重构 #5](./docs/engine.md)
 - [ ] WebGPU 渲染管线（当前 Canvas 2D 降级实现）
 - [ ] 特效系统（复用 neko-engine WGSL shaders）
 - [ ] 自定义转场（复用 engine 转场类型）
@@ -133,7 +138,8 @@
 - [ ] AI 素材筛选（批量 CLIP 打分 + 语义一致性过滤 + 视觉聚类去重）
 
 ### LSP 完整实现 — [lsp.md](./docs/lsp.md)
-- [ ] Phase 2：符号 & 导航（DocumentSymbol / Definition / References）
+- [x] Phase 1：基础诊断 + Hover（9 个诊断规则 + 媒体元数据悬停 + ProbeCache + 34 个单元测试）
+- [x] Phase 2：符号 & 导航（DocumentSymbol / Definition / References + WorkspaceIndex 跨文件索引）
 - [ ] Phase 3：AI 增强（CLIP / Whisper / Demucs / Grounding DINO）
 - [ ] Phase 4：AI 素材审查
 - [ ] Phase 5：质量评估（黑帧检测 / VQA / SAM 智能蒙版）
@@ -153,12 +159,12 @@
 
 | 优先级 | 问题 | 影响 | 来源 |
 |--------|------|------|------|
-| 高 | 统一错误处理机制（各包自行 catch，不统一） | 调试困难 | [task-plan TD-2](./docs/task-plan.md) |
+| ~~高~~ | ~~统一错误处理机制~~ ✅ 框架已建立（`BaseError` + `IErrorHandler` + `VSCodeErrorHandler`），各包接入推进中 | ~~调试困难~~ | [task-plan TD-2](./docs/task-plan.md) |
 | 高 | 单元测试覆盖率（neko-agent 47 个最多，其他包偏少） | 回归风险 | [task-plan TD-4](./docs/task-plan.md) |
 | 高 | neko-engine 性能监控（telemetry 基础已有，需接入指标面板） | 性能盲区 | |
 | 中 | AI SDK 依赖倒置（`AISdkAdapter` 直接依赖 Vercel AI SDK，DIP 65/100） | 可替换性差 | [task-plan TD-1](./docs/task-plan.md) |
 | 中 | 规范化 git commit message（采用 Conventional Commits） | 追溯困难 | [task-plan TD-3](./docs/task-plan.md) |
-| 中 | neko-types 83 个 `as any` 需替换为判别联合 | 类型安全 | [engine.md](./docs/engine.md) |
+| ~~中~~ | ~~neko-types 83 个 `as any`~~ ✅ 已清理至 2 处（仅测试代码） | ~~类型安全~~ | [engine.md](./docs/engine.md) |
 | 中 | neko-types JSDoc 覆盖率低（README 已更新，类型文件内注释仍不足） | 开发体验差 | |
 | 低 | 国际化扩展（neko-cut/neko-agent 已完成，其他包待补） | 国际化缺口 | [task-plan TD-5](./docs/task-plan.md) |
 
@@ -179,4 +185,4 @@
 
 ---
 
-*最后更新：2026-03-06（Quick Wins 完成：AgentExecutor 流式化 Phase 3 ✅ + 视频早期预览 ✅ + 剧本→时间线 Skill ✅）*
+*最后更新：2026-03-06（文档同步：Media LSP Phase 1+2 ✅ + Probe 冗余修复 ✅ + 反向播放 UI ✅ + Timeline Diff 范围 UI ✅）*

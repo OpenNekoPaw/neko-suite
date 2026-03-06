@@ -19,6 +19,8 @@ import type {
 	MediaDiffRequest,
 	MediaDiffResponse,
 	DiffResult,
+	VideoDiffDetails,
+	AudioDiffDetails,
 	StreamConfig,
 	AudioStreamConfig,
 } from '@neko/shared';
@@ -65,6 +67,12 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	private previousAudioOnlyStreamId: string | null = null;
 	/** Session ID for grouping streams from this handler */
 	private readonly sessionId = `diff-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+	/** Cached diff result — used to avoid redundant probe calls in handleStartStreaming */
+	private lastDiffResult: DiffResult | null = null;
+	/** Last ref used for diff (for re-analysis with time range) */
+	private lastRef: string = 'HEAD';
+	/** User-specified time range for analysis (video/audio only) */
+	private timeRange: { startTime?: number; endTime?: number } = {};
 
 	constructor(
 		private readonly webview: vscode.Webview,
@@ -88,6 +96,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 	 * Initialize diff analysis
 	 */
 	async initializeDiff(ref: string = 'HEAD'): Promise<void> {
+		this.lastRef = ref;
+
 		// If previousUri is set, this is a local file comparison
 		if (this.previousUri) {
 			return this.initializeLocalDiff();
@@ -318,6 +328,8 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 					diffOptions.currentPath = this.fileUri.fsPath;
 					diffOptions.previousPath = previousPath;
 				}
+				if (this.timeRange.startTime !== undefined) diffOptions.startTime = this.timeRange.startTime;
+				if (this.timeRange.endTime !== undefined) diffOptions.endTime = this.timeRange.endTime;
 
 				parallelTasks.push(
 					this.diffService.analyze(
@@ -333,6 +345,7 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 						abortController.signal
 					).then(result => {
 						if (this.isDisposed) return;
+						this.lastDiffResult = result;
 						this.sendMessage({ type: 'mediaDiff:result', payload: result });
 						this.sendWaveformFromResult(result);
 					})
@@ -383,11 +396,15 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				}
 
 				// Task C: Full diff analysis
+				const localDiffOptions: Record<string, unknown> = { generateHeatmap: true };
+				if (this.timeRange.startTime !== undefined) localDiffOptions.startTime = this.timeRange.startTime;
+				if (this.timeRange.endTime !== undefined) localDiffOptions.endTime = this.timeRange.endTime;
+
 				parallelTasks.push(
 					this.diffService.analyzeLocalFiles(
 						this.fileUri,
 						previousUri,
-						{ generateHeatmap: true },
+						localDiffOptions,
 						(progress, stage) => {
 							this.sendMessage({
 								type: 'mediaDiff:progress',
@@ -397,6 +414,7 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 						abortController.signal
 					).then(result => {
 						if (this.isDisposed) return;
+						this.lastDiffResult = result;
 						this.sendMessage({ type: 'mediaDiff:result', payload: result });
 						this.sendWaveformFromResult(result);
 					})
@@ -479,6 +497,17 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 					await this.handleStopStreaming();
 					await this.handleStopAudioStreaming();
 					await this.initializeDiff(message.payload.ref);
+					break;
+
+				case 'mediaDiff:setTimeRange':
+					// Re-run diff with new time range (stop streams first)
+					await this.handleStopStreaming();
+					await this.handleStopAudioStreaming();
+					this.timeRange = {
+						startTime: message.payload.startTime,
+						endTime: message.payload.endTime,
+					};
+					await this.initializeDiff(this.lastRef);
 					break;
 
 				// ── Streaming lifecycle ──────────────────────────────
@@ -905,19 +934,36 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				throw new Error('No previous file available for streaming');
 			}
 
-			// 2. Probe both files in parallel to get resolution, fps, duration, hasAudio
-			const [currentInfo, previousInfo] = await Promise.all([
-				engine.probe('videos', currentPath),
-				engine.probe('videos', previousPath),
-			]);
+			// 2. Extract resolution/fps/duration from cached diff result (avoids ~400ms redundant probes).
+			//    The diff analysis always runs before streaming, so lastDiffResult should be populated.
+			//    Falls back to probing only if the cache is empty (shouldn't happen in normal flow).
+			let width: number;
+			let height: number;
+			let fps: number;
+			let duration: number;
 
-			console.log('[MediaDiffMessageHandler] Probe results:', JSON.stringify({ currentInfo, previousInfo }));
+			const videoDetails = this.lastDiffResult?.mediaType === 'video'
+				? this.lastDiffResult.details as VideoDiffDetails
+				: null;
 
-			// Use the larger dimensions (to avoid clipping) and current file's fps
-			const width = Math.max(currentInfo.width, previousInfo.width);
-			const height = Math.max(currentInfo.height, previousInfo.height);
-			const fps = currentInfo.fps || 30;
-			const duration = Math.max(currentInfo.duration, previousInfo.duration);
+			if (videoDetails) {
+				width = Math.max(videoDetails.resolution.current.width, videoDetails.resolution.previous.width);
+				height = Math.max(videoDetails.resolution.current.height, videoDetails.resolution.previous.height);
+				fps = videoDetails.fps.current || 30;
+				duration = Math.max(videoDetails.duration.current, videoDetails.duration.previous);
+				console.log('[MediaDiffMessageHandler] Using cached diff metadata:', { width, height, fps, duration });
+			} else {
+				// Fallback: probe if diff result is not cached (e.g., streaming started without prior diff)
+				console.warn('[MediaDiffMessageHandler] No cached diff result — falling back to probe');
+				const [currentInfo, previousInfo] = await Promise.all([
+					engine.probe('videos', currentPath),
+					engine.probe('videos', previousPath),
+				]);
+				width = Math.max(currentInfo.width, previousInfo.width);
+				height = Math.max(currentInfo.height, previousInfo.height);
+				fps = currentInfo.fps || 30;
+				duration = Math.max(currentInfo.duration, previousInfo.duration);
+			}
 
 			// 3. Start streams for both files via videos:stream
 			const [currentHandle, previousHandle] = await Promise.all([
@@ -928,12 +974,11 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			this.currentStreamId = currentHandle.streamId;
 			this.previousStreamId = previousHandle.streamId;
 
-			// 4. Always try to create audio streams — don't rely on hasAudio probe
+			// 4. Always try to create audio streams — don't rely on metadata.
 			// If the file has no audio track, the engine returns an error which we catch.
-			console.log('[MediaDiffMessageHandler] Audio probe:', {
-				currentHasAudio: currentInfo.hasAudio,
-				previousHasAudio: previousInfo.hasAudio,
-			});
+			if (videoDetails) {
+				console.log('[MediaDiffMessageHandler] Audio track changed:', videoDetails.audioTrackChanged);
+			}
 			try {
 				const [curAudioResult, prevAudioResult] = await Promise.allSettled([
 					engine.createStream('audios', currentPath, { sessionId: this.sessionId }),
@@ -1116,16 +1161,24 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 				throw new Error('No previous file available for audio streaming');
 			}
 
-			// 2. Probe duration
-			const [currentInfo, previousInfo] = await Promise.all([
-				engine.probe('audios', currentPath),
-				engine.probe('audios', previousPath),
-			]);
+			// 2. Extract duration from cached diff result (avoids ~400ms redundant probes).
+			let duration: number;
 
-			const duration = Math.max(
-				currentInfo.duration ?? 0,
-				previousInfo.duration ?? 0
-			);
+			const audioDetails = this.lastDiffResult?.mediaType === 'audio'
+				? this.lastDiffResult.details as AudioDiffDetails
+				: null;
+
+			if (audioDetails) {
+				duration = Math.max(audioDetails.duration.current, audioDetails.duration.previous);
+				console.log('[MediaDiffMessageHandler] Using cached audio diff metadata:', { duration });
+			} else {
+				console.warn('[MediaDiffMessageHandler] No cached audio diff result — falling back to probe');
+				const [currentInfo, previousInfo] = await Promise.all([
+					engine.probe('audios', currentPath),
+					engine.probe('audios', previousPath),
+				]);
+				duration = Math.max(currentInfo.duration ?? 0, previousInfo.duration ?? 0);
+			}
 
 			// 3. Create audio streams
 			const [curHandle, prevHandle] = await Promise.all([

@@ -127,6 +127,10 @@ export interface DiffControlsProps {
   onZoomChange?: (zoom: number) => void;
   opacity?: number;
   onOpacityChange?: (opacity: number) => void;
+  /** Total duration in seconds (for time range controls, video/audio only) */
+  duration?: number;
+  /** Callback to apply a new time range and re-run diff */
+  onSetTimeRange?: (startTime?: number, endTime?: number) => void;
 }
 
 // =============================================================================
@@ -161,6 +165,8 @@ export interface MediaDiffViewerProps {
   onInspectElement?: (src: string) => void;
   onStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
   onAudioStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => void;
+  /** Callback to apply a new time range and re-run diff */
+  onSetTimeRange?: (startTime?: number, endTime?: number) => void;
 }
 
 // =============================================================================

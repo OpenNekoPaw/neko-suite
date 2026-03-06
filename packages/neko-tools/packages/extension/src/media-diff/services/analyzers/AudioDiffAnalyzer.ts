@@ -68,10 +68,15 @@ export class AudioDiffAnalyzer extends BaseMediaDiffAnalyzer {
 			const maxDur = Math.max(probeDurA, probeDurB);
 			const durRatio = maxDur > 0 ? minDur / maxDur : 1;
 
-			let diffOptions: { endTime?: number } = {};
+			let diffOptions: { startTime?: number; endTime?: number } = {};
 
-			// If duration difference > 20%, limit comparison to shorter audio's length
-			if (durRatio < 0.8 && minDur > 0) {
+			// User-specified time range takes priority over auto-detection
+			if (options?.startTime !== undefined || options?.endTime !== undefined) {
+				if (options.startTime !== undefined) diffOptions.startTime = options.startTime;
+				if (options.endTime !== undefined) diffOptions.endTime = options.endTime;
+				console.log(`[AudioDiffAnalyzer] User-specified time range: ${diffOptions.startTime ?? 0}s - ${diffOptions.endTime ?? 'end'}s`);
+			} else if (durRatio < 0.8 && minDur > 0) {
+				// Auto-detect: if duration difference > 20%, limit comparison to shorter audio's length
 				diffOptions.endTime = minDur;
 				console.log(`[AudioDiffAnalyzer] Duration mismatch detected (${probeDurA.toFixed(1)}s vs ${probeDurB.toFixed(1)}s), limiting comparison to ${minDur.toFixed(1)}s`);
 			}

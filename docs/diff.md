@@ -3,7 +3,7 @@
 > 关联：[engine.md](./engine.md) · [adr-unified-engine.md](./adr-unified-engine.md)
 
 <details>
-<summary>✅ 已完成的优化（Phase 1-2.8）</summary>
+<summary>✅ 已完成的优化（Phase 1-2B）</summary>
 
 **Phase 1（短期修复）** — 波形发送 bug 修复、进度报告、帧提取竞态修复
 **Phase 2（统一通信+并行）** — EngineClient 迁移、音频波形并行调度、SSIM‖PSNR 并行（30-50% 提速）
@@ -11,6 +11,9 @@
 **Phase 2.6（后续修复）** — Git Ref 切换停止旧流、早期波形取消机制
 **Phase 2.7（性能优化）** — 视频对比帧率采样（`sample_fps` 参数 + Webview 降采样），60 分钟视频 30s → 1-2s（15-30x 提升）
 **Phase 2.8（智能范围）** — 时长不匹配自动优化（probe + endTime），120s vs 5s 视频 50s → 5s（10x 提升）— [diff-duration-mismatch-optimization.md](./diff-duration-mismatch-optimization.md)
+**Phase 2B（前端可视化增强）** — TimelineDiffViewer + 音频三轨波形（A/B/Diff）+ 视频 H264+PCM 双流 WebGL 渲染器（curtain/heatmap/flicker/side-by-side）+ DiffRegionOverlay + FramePairBuffer PTS 配对 + 波形 64x 缩放
+**Probe 冗余修复** — `handleStartStreaming`/`handleStartAudioStreaming` 缓存 `lastDiffResult` metadata，消除每次 streaming 启动时冗余的 2×probe 调用（~400ms 节省/次）
+**Timeline Diff 范围 UI** — DiffControls 新增 TimeRangeControl（时间输入 + Apply/Reset）+ `mediaDiff:setTimeRange` 协议 + `DiffOptions.startTime/endTime` 全链路传递（用户可选择时间范围进行局部 diff）
 
 </details>
 
@@ -181,6 +184,7 @@ VideoDiffRegion {
 - SNR → 相似度转换: `min(1, snr / 60)` (60dB+ 视为基本相同)
 - 时长差异惩罚: `similarity *= 1 - (durationDiff / maxDuration) * 0.5`
 - 波形数据通过 `mediaDiff:waveformData` 消息传给 Webview
+- **时间范围**: 用户指定 `DiffOptions.startTime/endTime` 优先于自动时长检测
 
 ### 3.2 视频 (`VideoDiffAnalyzer.ts`)
 
@@ -189,6 +193,7 @@ VideoDiffRegion {
   - 时长差异: `similarity *= 1 - (durationDiff / maxDuration) * 0.3`
   - 分辨率差异: `similarity *= 0.9`
 - 帧提取通过 `neko.engine.extractFrame` 命令
+- **时间范围**: 用户指定 `DiffOptions.startTime/endTime` 优先于自动时长检测
 
 ### 3.3 通信协议 (`mediaDiffProtocol.ts`)
 
@@ -201,6 +206,8 @@ VideoDiffRegion {
 | `mediaDiff:getFrame` | 视频帧提取 (time + version) |
 | `mediaDiff:streamControl` | 流控制 (play/pause/seek) |
 | `mediaDiff:audioStreamControl` | 音频流控制 |
+| `mediaDiff:setTimeRange` | 设置时间范围并重新 diff (startTime + endTime) |
+| `mediaDiff:changeRef` | 切换 Git ref 并重新 diff |
 
 响应消息:
 
@@ -236,7 +243,7 @@ packages/neko-tools/packages/webview/
         ├── types.ts                         # 组件 Props 类型
         ├── MediaDiffApp.tsx                 # 顶层组件 (状态管理 + GitRefSelector + ProgressOverlay)
         ├── MediaDiffViewer.tsx              # 媒体类型分发器
-        ├── DiffControls.tsx                 # 模式切换 + 相似度显示
+        ├── DiffControls.tsx                 # 模式切换 + 相似度 + 时间范围选择器
         ├── ImageDiffViewer.tsx              # side-by-side/slider/overlay/onion-skin
         ├── AudioDiffViewer.tsx              # 波形 Canvas 渲染
         ├── VideoDiffViewer.tsx              # 帧图片模式 (Blob URL from engine)
@@ -261,6 +268,7 @@ MediaDiffMessageHandler                 useMediaDiffProtocol hook
   │←── mediaDiff:init ─────────────────── sendInit()
   │←── mediaDiff:getFrame ─────────────── sendGetFrame(time, version)
   │←── mediaDiff:changeRef ────────────── sendChangeRef(ref)
+  │←── mediaDiff:setTimeRange ─────────── sendSetTimeRange(start, end)
   │←── mediaDiff:streamControl ────────── sendStreamControl(action)
 ```
 
@@ -545,17 +553,20 @@ AI 绘画 (Midjourney/Stable Diffusion) 抽卡面临海量、同质化、随机�
 - `webview/src/hooks/useMediaDiffProtocol.ts` — `isFetchingPrevious` 状态
 - `webview/src/components/MediaDiff/types.ts` / `MediaDiffApp.tsx` / `MediaDiffViewer.tsx` / `VideoDiffViewer.tsx` / `AudioDiffViewer.tsx` — prop 链路
 
-### Bug #2: 视频无早期预览 (P1)
+### Bug #2: 视频无早期预览 ✅ 已修复
 
 音频有 ~500ms 早期波形，视频黑屏 5-60s。
 
-**推荐方案**：实现 `startEarlyFrameExtraction`（参考 `startEarlyWaveform`），并行提取 t=0 帧，200ms 内送达预览。预计 1-2h。
+**修复方案**：`startEarlyFrameExtraction`（复用 `startEarlyWaveform` 模式），并行提取 t=0 帧，200ms 内送达预览。
 
-### Bug #3: Probe 重复执行 (P2)
+### Bug #3: Probe 重复执行 ✅ 已修复
 
-`videos:diff` 已返回 duration/width/fps，`handleStartStreaming` 重复 probe (~200ms)。
+`videos:diff` 已返回 duration/width/fps，`handleStartStreaming` 重复 probe (~200ms×2)。
 
-**推荐方案**：Extension 侧缓存 diff 结果 metadata。预计 1h。
+**修复方案**：`lastDiffResult` 缓存 — `handleStartStreaming` 从 `VideoDiffDetails` 提取 width/height/fps/duration，`handleStartAudioStreaming` 从 `AudioDiffDetails` 提取 duration。回退到 probe 仅在缓存为空时触发。
+
+**涉及文件**：
+- `extension/src/media-diff/editor/MediaDiffMessageHandler.ts` — `lastDiffResult` 字段 + 两个 handler 缓存读取逻辑
 
 ### Bug #4: 早期波形覆盖权威波形 (P3)
 
@@ -573,18 +584,18 @@ AI 绘画 (Midjourney/Stable Diffusion) 抽卡面临海量、同质化、随机�
 
 React webview 包 + useMediaDiffProtocol hook + 展示组件 + 构建链路 — 全部完成。
 
-### Phase 2B: 前端可视化增强 (进行中)
+### Phase 2B: 前端可视化增强 ✅ 已完成
 
-- [ ] P0 — TimelineDiffViewer 组件 (Summary + Track/Element 变更树)
-- [ ] P0 — 音频三轨波形 (A/B/Diff 轨 + 差异区域高亮)
-- [ ] P0 — 视频 H264+PCM 流 + WebGL 渲染器
-  - [ ] neko-client 适配: H264StreamClient.feedPacket() 支持 postMessage/WebSocket 双输入
-  - [ ] 双流 FramePairBuffer: 按 PTS 配对 A/B VideoFrame
-  - [ ] WebGL shader: curtain/heatmap/flicker (VideoFrame 作为纹理源)
-  - [ ] 音频播放: AudioStreamClient + Web Audio API
-- [ ] P1 — 差异区域时间轴高亮 (DiffRegionOverlay)
+- [x] P0 — TimelineDiffViewer 组件 (Summary + Track/Element 变更树 + 属性 diff)
+- [x] P0 — 音频三轨波形 (A 红/B 绿/Diff 黄 + 差异区域红色高亮 + 64x 缩放)
+- [x] P0 — 视频 H264+PCM 流 + WebGL2 渲染器
+  - [x] neko-client: H264StreamClient WebSocket + WebCodecs 硬件解码，双实例独立喂入 FramePairBuffer
+  - [x] FramePairBuffer: PTS 配对 A/B VideoFrame，容差匹配 + 内存自动淘汰
+  - [x] WebGL2 shader: curtain/heatmap/flicker/side-by-side (VideoFrame 零拷贝纹理)
+  - [x] 音频播放: AudioStreamClient + Web Audio API (autoplay policy 合规)
+- [x] P1 — 差异区域时间轴高亮 (DiffRegionOverlay，音频 SVG overlay + 视频 seek bar)
 - [ ] P1 — Timeline 多轨道布局 + 全局鸟瞰图
-- [ ] P2 — 波形缩放与视频帧同步跳转
+- [x] P2 — 波形缩放 (Ctrl+wheel 1x-64x + 中键拖拽平移)
 
 ### Phase 3: 后端算法增强
 

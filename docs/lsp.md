@@ -115,17 +115,27 @@ L3 - LSP Indexer
 
 ## 实现路线图
 
-### Phase 1：基础诊断 (基于现有 Diff 基础设施)
+### Phase 1：基础诊断 ✅ 已完成
 
-- 复用 Rust 侧 SSIM/PSNR/SNR 算法
-- 实现 Diagnostics Provider，在 VSCode Problems 面板显示媒体问题
-- 实现 Hover Provider，显示媒体元数据
+- [x] JviParser — jsonc-parser AST 解析 .jvi 文件，带位置信息
+- [x] JviDiagnosticAnalyzer — 9 个诊断规则（结构检查 + 引用检查）
+  - `invalid-fps` / `invalid-resolution` / `duplicate-track-name` / `duplicate-element-id`
+  - `broken-element-link` / `empty-track` / `missing-media-ref` / `duration-mismatch` / `resolution-mismatch`
+- [x] JviDiagnosticsProvider — VSCode DiagnosticCollection + 300ms debounce
+- [x] JviHoverProvider — 悬停 `src` 值 → probe 元数据 Markdown 表格
+- [x] MediaProbeCache — TTL 缓存（60s）避免重复 probe
+- [x] 34 个单元测试（JviParser 16 + JviDiagnosticAnalyzer 12 + MediaProbeCache 6）
 
-### Phase 2：符号与导航
+涉及文件：`packages/neko-tools/packages/extension/src/media-lsp/`
 
-- 实现 DocumentSymbol Provider (媒体文件结构化)
-- 实现 Definition Provider (剧本 → Timeline 跳转)
-- 实现 References Provider (素材引用查找)
+### Phase 2：符号与导航 ✅ 已完成
+
+- [x] MediaWorkspaceIndex — 跨文件索引（`**/*.jvi` watcher + 媒体引用 + 元素 ID 派生索引）
+- [x] JviDocumentSymbolProvider — Outline 视图（Project → Track → Element 三级层次）
+- [x] JviDefinitionProvider — `src` → 打开媒体文件，`linkedId` → 跳转元素
+- [x] JviReferenceProvider — Find All References（查找引用相同媒体的所有 .jvi 位置）
+- [x] 集成入 extension.ts（共享 EngineMediaService + initializeMediaLsp）
+- [x] package.json 注册 `.jvi` 语言（`nekotools-jvi`）+ language-configuration.json
 
 ### Phase 3：AI 增强
 

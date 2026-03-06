@@ -156,6 +156,10 @@ export interface DiffOptions {
 	currentPath?: string;
 	/** Original file path for previous version (skip temp file when available) */
 	previousPath?: string;
+	/** Start time in seconds for range-limited analysis (video/audio only) */
+	startTime?: number;
+	/** End time in seconds for range-limited analysis (video/audio only) */
+	endTime?: number;
 }
 
 /**
@@ -504,6 +508,19 @@ export interface ChangeRefRequest extends BaseMediaDiffRequest {
 }
 
 /**
+ * Re-run diff with a specific time range (video/audio only)
+ */
+export interface SetTimeRangeRequest extends BaseMediaDiffRequest {
+	type: 'mediaDiff:setTimeRange';
+	payload: {
+		/** Start time in seconds (inclusive). Omit or 0 for beginning. */
+		startTime?: number;
+		/** End time in seconds (inclusive). Omit for full duration. */
+		endTime?: number;
+	};
+}
+
+/**
  * Inspect element request (lazy content diff for timeline media elements)
  */
 export interface InspectElementRequest extends BaseMediaDiffRequest {
@@ -584,6 +601,7 @@ export type MediaDiffRequest =
 	| CancelAnalysisRequest
 	| GetFileHistoryRequest
 	| ChangeRefRequest
+	| SetTimeRangeRequest
 	| InspectElementRequest
 	| StartStreamingRequest
 	| StopStreamingRequest

@@ -103,10 +103,15 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
 			const maxDur = Math.max(probeDurA, probeDurB);
 			const durRatio = maxDur > 0 ? minDur / maxDur : 1;
 
-			let diffOptions: { sampleFps: number; endTime?: number } = { sampleFps: 1.0 };
+			let diffOptions: { sampleFps: number; startTime?: number; endTime?: number } = { sampleFps: 1.0 };
 
-			// If duration difference > 20%, limit comparison to shorter video's length
-			if (durRatio < 0.8 && minDur > 0) {
+			// User-specified time range takes priority over auto-detection
+			if (options?.startTime !== undefined || options?.endTime !== undefined) {
+				if (options.startTime !== undefined) diffOptions.startTime = options.startTime;
+				if (options.endTime !== undefined) diffOptions.endTime = options.endTime;
+				console.log(`[VideoDiffAnalyzer] User-specified time range: ${diffOptions.startTime ?? 0}s - ${diffOptions.endTime ?? 'end'}s`);
+			} else if (durRatio < 0.8 && minDur > 0) {
+				// Auto-detect: if duration difference > 20%, limit comparison to shorter video's length
 				diffOptions.endTime = minDur;
 				console.log(`[VideoDiffAnalyzer] Duration mismatch detected (${probeDurA.toFixed(1)}s vs ${probeDurB.toFixed(1)}s), limiting comparison to ${minDur.toFixed(1)}s`);
 			}

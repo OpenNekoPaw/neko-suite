@@ -3,7 +3,7 @@
  * View mode switching and control panel
  */
 
-import { memo } from 'react';
+import { memo, useState, useCallback } from 'react';
 import type { DiffViewMode } from '@neko/shared';
 import type { DiffControlsProps } from './types';
 
@@ -139,6 +139,118 @@ const SliderControl = memo(function SliderControl({
 });
 
 // =============================================================================
+// Time Range Control
+// =============================================================================
+
+/** Format seconds as m:ss.s */
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toFixed(1).padStart(4, '0')}`;
+}
+
+/** Parse time string (m:ss.s or plain seconds) to seconds */
+function parseTime(input: string): number | null {
+  const trimmed = input.trim();
+  // Try m:ss.s format
+  const colonMatch = trimmed.match(/^(\d+):(\d+(?:\.\d+)?)$/);
+  if (colonMatch) {
+    return parseInt(colonMatch[1]!, 10) * 60 + parseFloat(colonMatch[2]!);
+  }
+  // Try plain seconds
+  const num = parseFloat(trimmed);
+  return isNaN(num) ? null : num;
+}
+
+interface TimeRangeControlProps {
+  duration: number;
+  isLoading?: boolean;
+  onApply: (startTime?: number, endTime?: number) => void;
+}
+
+const TimeRangeControl = memo(function TimeRangeControl({
+  duration,
+  isLoading,
+  onApply,
+}: TimeRangeControlProps) {
+  const [startInput, setStartInput] = useState('');
+  const [endInput, setEndInput] = useState('');
+  const [isActive, setIsActive] = useState(false);
+
+  const handleApply = useCallback(() => {
+    const start = startInput ? parseTime(startInput) : undefined;
+    const end = endInput ? parseTime(endInput) : undefined;
+
+    // Validate
+    if (start !== undefined && start !== null && start < 0) return;
+    if (end !== undefined && end !== null && end > duration) return;
+    if (start !== null && end !== null && start !== undefined && end !== undefined && start >= end) return;
+
+    setIsActive(true);
+    onApply(
+      start !== null ? start : undefined,
+      end !== null ? end : undefined,
+    );
+  }, [startInput, endInput, duration, onApply]);
+
+  const handleReset = useCallback(() => {
+    setStartInput('');
+    setEndInput('');
+    setIsActive(false);
+    onApply(undefined, undefined);
+  }, [onApply]);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-xs text-[var(--vscode-descriptionForeground)]">Range:</span>
+      <input
+        type="text"
+        placeholder={formatTime(0)}
+        value={startInput}
+        onChange={(e) => setStartInput(e.target.value)}
+        className="w-14 px-1 py-0.5 text-xs bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded text-center"
+        title="Start time (e.g. 0:05.0 or 5)"
+      />
+      <span className="text-xs text-[var(--vscode-descriptionForeground)]">–</span>
+      <input
+        type="text"
+        placeholder={formatTime(duration)}
+        value={endInput}
+        onChange={(e) => setEndInput(e.target.value)}
+        className="w-14 px-1 py-0.5 text-xs bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded text-center"
+        title="End time (e.g. 1:30.0 or 90)"
+      />
+      <button
+        type="button"
+        onClick={handleApply}
+        disabled={isLoading}
+        className={`
+          px-2 py-0.5 text-xs rounded font-medium transition-colors
+          ${isLoading
+            ? 'opacity-50 cursor-not-allowed bg-[var(--vscode-input-background)] text-[var(--vscode-descriptionForeground)]'
+            : 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] cursor-pointer'
+          }
+        `}
+        title="Re-analyze with selected time range"
+      >
+        Apply
+      </button>
+      {isActive && (
+        <button
+          type="button"
+          onClick={handleReset}
+          disabled={isLoading}
+          className="px-1.5 py-0.5 text-xs text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] cursor-pointer"
+          title="Reset to full duration"
+        >
+          Reset
+        </button>
+      )}
+    </div>
+  );
+});
+
+// =============================================================================
 // Main DiffControls Component
 // =============================================================================
 
@@ -152,6 +264,8 @@ export const DiffControls = memo(function DiffControls({
   onZoomChange,
   opacity,
   onOpacityChange,
+  duration,
+  onSetTimeRange,
 }: DiffControlsProps) {
   const viewModes: { mode: DiffViewMode; label: string; icon: string }[] = [
     { mode: 'side-by-side', label: 'Side by Side', icon: '⬜⬜' },
@@ -210,6 +324,17 @@ export const DiffControls = memo(function DiffControls({
             step={0.05}
             onChange={onOpacityChange}
             formatValue={(v) => `${Math.round(v * 100)}%`}
+          />
+        </>
+      )}
+
+      {(mediaType === 'video' || mediaType === 'audio') && duration !== undefined && duration > 0 && onSetTimeRange && (
+        <>
+          <div className="w-px h-6 bg-[var(--vscode-panel-border)]" />
+          <TimeRangeControl
+            duration={duration}
+            isLoading={isLoading}
+            onApply={onSetTimeRange}
           />
         </>
       )}

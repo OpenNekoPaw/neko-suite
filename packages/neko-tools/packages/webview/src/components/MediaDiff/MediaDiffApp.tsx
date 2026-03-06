@@ -159,6 +159,7 @@ export default function MediaDiffApp() {
     sendStreamControl,
     audioStreamConfig,
     sendAudioStreamControl,
+    sendSetTimeRange,
   } = protocol;
 
   // Auto-init on mount
@@ -247,6 +248,7 @@ export default function MediaDiffApp() {
           onStreamControl={sendStreamControl}
           audioStreamConfig={audioStreamConfig}
           onAudioStreamControl={sendAudioStreamControl}
+          onSetTimeRange={sendSetTimeRange}
         />
       </div>
 

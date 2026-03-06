@@ -19,6 +19,8 @@ import {
 	disposeMediaDiffService,
 } from '../packages/extension/src/media-diff';
 import { initializeAssetDiff } from '../packages/extension/src/asset-diff';
+import { initializeMediaLsp } from '../packages/extension/src/media-lsp';
+import { EngineMediaService } from '../packages/extension/src/services/EngineMediaService';
 
 // =============================================================================
 // Activation
@@ -27,9 +29,15 @@ import { initializeAssetDiff } from '../packages/extension/src/asset-diff';
 export function activate(context: vscode.ExtensionContext) {
 	console.log('[Neko Tools] Activating extension...');
 
+	// 0. Shared EngineMediaService (lazy-init, used by MediaDiff + MediaLsp)
+	const engineMediaService = new EngineMediaService();
+
 	// 1. Initialize MediaDiff module (analyzers + custom editor + compare command)
-	const mediaDiffEditor = initializeMediaDiff(context);
+	const mediaDiffEditor = initializeMediaDiff(context, engineMediaService);
 	const mediaDiffService = getMediaDiffService();
+
+	// 1b. Initialize Media LSP module (JVI diagnostics + hover + symbols + navigation)
+	initializeMediaLsp(context, engineMediaService);
 
 	// 2. Initialize AssetDiff module (variant comparison editor)
 	//    Delegates entity/variant lookups to neko-assets via vscode commands
