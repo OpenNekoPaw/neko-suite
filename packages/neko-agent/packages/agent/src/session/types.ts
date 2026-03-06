@@ -106,7 +106,8 @@ export interface AgentSessionConfig {
 export type AgentEventType =
   | 'thinking'           // Agent is in thinking phase
   | 'thinking_content'   // Extended thinking content (Claude)
-  | 'text'               // Text output
+  | 'text'               // Text output (complete)
+  | 'text_delta'         // Streaming text chunk (incremental)
   | 'tool_call'          // Tool invocation
   | 'tool_result'        // Tool execution result
   | 'tool_confirmation'  // Tool requires confirmation

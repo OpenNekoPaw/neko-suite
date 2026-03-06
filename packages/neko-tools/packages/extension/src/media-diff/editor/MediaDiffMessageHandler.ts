@@ -303,9 +303,13 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 						.catch(err => console.warn('[MediaDiffMessageHandler] Frame extraction failed:', err))
 				);
 
-				// Task B: Early waveform extraction (audio only, ~500ms)
-				if (mediaType === 'audio' && this.engineClient && previousPath) {
-					this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, previousPath, abortController.signal);
+				// Task B: Early waveform (audio) or early frame extraction (video), ~200-500ms
+				if (this.engineClient && previousPath) {
+					if (mediaType === 'audio') {
+						this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, previousPath, abortController.signal);
+					} else if (mediaType === 'video') {
+						this.startEarlyFrameExtraction(this.engineClient, this.fileUri.fsPath, previousPath, abortController.signal);
+					}
 				}
 
 				// Task C: Full diff analysis (SSIM/PSNR, 5-30s)
@@ -369,9 +373,13 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 						.catch(err => console.warn('[MediaDiffMessageHandler] Local frame extraction failed:', err))
 				);
 
-				// Task B: Early waveform (audio only)
-				if (mediaType === 'audio' && this.engineClient) {
-					this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, previousUri.fsPath, abortController.signal);
+				// Task B: Early waveform (audio) or early frame extraction (video)
+				if (this.engineClient) {
+					if (mediaType === 'audio') {
+						this.startEarlyWaveform(this.engineClient, this.fileUri.fsPath, previousUri.fsPath, abortController.signal);
+					} else if (mediaType === 'video') {
+						this.startEarlyFrameExtraction(this.engineClient, this.fileUri.fsPath, previousUri.fsPath, abortController.signal);
+					}
 				}
 
 				// Task C: Full diff analysis
@@ -564,6 +572,39 @@ export class MediaDiffMessageHandler implements vscode.Disposable {
 			if (signal.aborted) return; // Silently ignore cancelled requests
 			console.warn('[MediaDiffMessageHandler] Early waveform extraction failed (non-fatal):', err);
 		});
+	}
+
+	/**
+	 * Start early frame extraction in parallel with diff analysis.
+	 *
+	 * Dispatches `extractFrame` at t=0 for both video files — resolves in ~200ms,
+	 * well before the full `videos:diff` completes (5-60s). Sends frames to
+	 * webview immediately so the user sees a preview instead of a black screen.
+	 *
+	 * Fire-and-forget: errors are logged but never propagate.
+	 * Supports cancellation via AbortSignal.
+	 */
+	private startEarlyFrameExtraction(
+		engine: EngineClient,
+		currentPath: string,
+		previousPath: string,
+		signal: AbortSignal,
+	): void {
+		const extract = async (filePath: string, version: 'current' | 'previous') => {
+			try {
+				const imageBuffer = await engine.extractFrame(filePath, 0);
+				if (this.isDisposed || signal.aborted || !imageBuffer) return;
+				this.sendMessage({
+					type: 'mediaDiff:frameData',
+					payload: { time: 0, version, imageBuffer },
+				});
+			} catch (err) {
+				if (signal.aborted) return;
+				console.warn(`[MediaDiffMessageHandler] Early frame extraction (${version}) failed (non-fatal):`, err);
+			}
+		};
+		void extract(currentPath, 'current');
+		void extract(previousPath, 'previous');
 	}
 
 	/**

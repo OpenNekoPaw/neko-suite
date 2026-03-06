@@ -97,6 +97,8 @@ export class AgentSession implements IAgentSession {
   // State
   private _history: ChatMessage[] = [];
   private _isRunning = false;
+  /** Tracks whether content_delta steps were emitted for current think cycle */
+  private _hasStreamedDeltas = false;
   private _pendingConfirmations = new Map<string, {
     request: ToolConfirmationRequest;
   }>();
@@ -439,22 +441,33 @@ export class AgentSession implements IAgentSession {
     iteration: number,
     maxIterations: number
   ): Generator<AgentEvent> {
-    // Emit iteration info
-    yield {
-      type: 'iteration',
-      iteration: { current: iteration, max: maxIterations },
-    };
+    // Skip iteration event for streaming deltas (sub-events within a think cycle)
+    if (step.type !== 'content_delta') {
+      yield {
+        type: 'iteration',
+        iteration: { current: iteration, max: maxIterations },
+      };
+    }
 
     switch (step.type) {
+      case 'content_delta':
+        // Streaming text chunk
+        if (step.content) {
+          yield { type: 'text_delta', content: step.content };
+          this._hasStreamedDeltas = true;
+        }
+        break;
+
       case 'think':
         // Extended thinking content
         if (step.thinking) {
           yield { type: 'thinking_content', thinking: step.thinking };
         }
-        // Text content
-        if (step.content) {
+        // Only emit full text if we didn't already stream deltas
+        if (step.content && !this._hasStreamedDeltas) {
           yield { type: 'text', content: step.content };
         }
+        this._hasStreamedDeltas = false; // Reset for next think cycle
         // Tool calls — add assistant message (with toolCalls) to history
         if (step.toolCalls && step.toolCalls.length > 0) {
           this._history.push({

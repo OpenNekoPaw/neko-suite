@@ -24,6 +24,7 @@ import type {
   IToolSkillRegistry,
   ToolFilterOptions,
   IToolInjectionManager,
+  StreamChunk,
 } from '@neko/shared';
 import { AgentError } from '../errors';
 
@@ -222,11 +223,23 @@ export class AgentExecutor implements IAgentExecutor {
       agentContext.iteration++;
 
       try {
-        // THINK
+        // THINK (streaming — yields content_delta then final think step)
         this.setState('think');
-        const thinkStep = await this.think(agentContext);
-        steps.push(thinkStep);
-        yield thinkStep;
+        let thinkStep: AgentStep | undefined;
+        for await (const step of this.thinkStream(agentContext)) {
+          if (step.type === 'content_delta') {
+            yield step; // Stream delta to consumer
+          } else {
+            thinkStep = step;
+            steps.push(step);
+            yield step;
+          }
+        }
+
+        if (!thinkStep) {
+          yield { type: 'respond', content: 'No response from model', timestamp: Date.now() };
+          return;
+        }
 
         if (thinkStep.toolCalls && thinkStep.toolCalls.length > 0) {
           // ACT
@@ -541,6 +554,128 @@ export class AgentExecutor implements IAgentExecutor {
     await this.runHooks('afterThink', step, context);
 
     return step;
+  }
+
+  /**
+   * Think step with streaming — yields content_delta steps then final think step.
+   *
+   * Uses service.chatStream() for token-by-token output. Falls back to
+   * non-streaming think() if chatStream is not available.
+   */
+  private async *thinkStream(context: AgentContext): AsyncGenerator<AgentStep> {
+    // Hook: beforeThink - can modify context
+    let modifiedContext = context;
+    for (const hook of this.hooks) {
+      if (hook.beforeThink) {
+        modifiedContext = (await hook.beforeThink(modifiedContext)) || modifiedContext;
+      }
+    }
+
+    // Get tool filter and definitions
+    const lastUserMessage = modifiedContext.messages
+      .filter(m => m.role === 'user')
+      .pop();
+    const userInput = typeof lastUserMessage?.content === 'string'
+      ? lastUserMessage.content
+      : '';
+    const toolFilter = this.getToolFilter(userInput);
+    const tools = this.toolRegistry.toToolDefinitions(toolFilter);
+
+    const options = {
+      ...this.config.serviceOptions,
+      tools: tools.length > 0 ? tools : undefined,
+      toolChoice: tools.length > 0 ? 'auto' : undefined,
+      signal: this.abortController?.signal,
+    };
+
+    // Accumulate streaming response
+    let content = '';
+    const toolCallMap = new Map<string, { id: string; name: string; arguments: string }>();
+    let finishReason: string | undefined;
+
+    for await (const chunk of this.service.chatStream(modifiedContext.messages, options)) {
+      if (this.abortController?.signal.aborted) break;
+
+      switch (chunk.type) {
+        case 'content':
+          if (chunk.content) {
+            content += chunk.content;
+            yield {
+              type: 'content_delta',
+              content: chunk.content,
+              timestamp: Date.now(),
+            };
+          }
+          break;
+
+        case 'tool_call':
+          if (chunk.toolCall) {
+            const tc = chunk.toolCall;
+            const id = tc.id ?? `auto_${toolCallMap.size}`;
+            const existing = toolCallMap.get(id);
+            if (existing) {
+              // Append incremental arguments
+              if (tc.function?.arguments) {
+                existing.arguments += tc.function.arguments;
+              }
+            } else {
+              toolCallMap.set(id, {
+                id,
+                name: tc.function?.name ?? '',
+                arguments: tc.function?.arguments ?? '',
+              });
+            }
+          }
+          break;
+
+        case 'done':
+          finishReason = chunk.finishReason;
+          break;
+      }
+    }
+
+    // Warn if truncated
+    if (finishReason === 'length') {
+      console.warn('[AgentExecutor] Response truncated due to max_tokens limit.');
+    }
+
+    // Parse tool calls from accumulated data
+    const toolCalls = [...toolCallMap.values()].map((tc) => {
+      let parsedArgs: Record<string, unknown> = {};
+      try {
+        parsedArgs = JSON.parse(tc.arguments);
+      } catch {
+        parsedArgs = { _raw: tc.arguments };
+      }
+      return { id: tc.id, name: tc.name, arguments: parsedArgs };
+    });
+
+    // Build assistant message and add to context
+    const assistantMessage: ChatMessage = {
+      role: 'assistant',
+      content,
+      toolCalls: toolCalls.length > 0
+        ? toolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+          }))
+        : undefined,
+    };
+    context.messages.push(assistantMessage);
+
+    // Yield final think step
+    const step: AgentStep = {
+      type: 'think',
+      content,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      timestamp: Date.now(),
+    };
+
+    // Hook: afterThink
+    await this.runHooks('afterThink', step, context);
+
+    yield step;
   }
 
   /**

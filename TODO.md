@@ -37,6 +37,12 @@
 - [x] **更多编码格式支持**：ProRes 硬件加速（`prores_videotoolbox`）+ AVI / MPEG-TS 容器 + 硬件加速动态 badge（`nodes:hw_capabilities`）
 - [x] **neko-types 文档完善**：`src/README.md` + `src/types/README.md` 更新至 50+ 文件现状，12 个子目录全部覆盖
 - [x] **neko-story 非 AI 功能**（错误诊断 + 时间线生成 + PDF 导出）— 进度 55% → 75%
+- [x] **Diff Phase 2B 前端可视化**：TimelineDiffViewer + 音频三轨波形 + 视频 WebGL 渲染器 + DiffRegionOverlay — [diff.md §Phase 2B](./docs/diff.md)
+- [x] **视频早期预览修复**：`startEarlyFrameExtraction` 并行提取 t=0 帧（复用 `startEarlyWaveform` 模式）
+- [x] **剧本→时间线 Skill**：Fountain → ProjectData JSON 语义 Skill（neko-story 联动）
+- [x] **AgentExecutor 流式化 Phase 3**：`thinkStream()` + `content_delta`/`text_delta` 全链路流式 — [refactoring-chat-cli.md](./packages/neko-agent/docs/refactoring-chat-cli.md)
+- [x] **ChatViewProvider Handler 拆分 Phase 1-2**：10 handler + 2 processor，ChatViewProvider -61%，MessageHandler -60%
+- [x] **External Media Library P0/P1**：路径韧性 + 媒体库管理（settings.json + 路径变量 + TreeView + 拖拽导入）— [adr-external-media-library](./docs/architecture/adr-external-media-library.md)
 
 </details>
 
@@ -50,35 +56,21 @@
 
 ## 🟡 P1 — 核心功能（当前迭代）
 
-### neko-tools（媒体 Diff）
-- [x] **Diff Phase 2B**：前端可视化增强 — [diff.md §Phase 2B](./docs/diff.md)
-  - [x] TimelineDiffViewer 组件（Summary + Track/Element 树）
-  - [x] 音频三轨波形（A/B/Diff + diff 区域高亮）
-  - [x] 视频 H264+PCM 流 + WebGL 渲染器（curtain/heatmap/flicker）
-  - [x] Diff 区域时间轴高亮（DiffRegionOverlay）
-- [ ] **Bug: 视频无早期预览**：音频有 ~500ms 早期波形，视频黑屏 5-60s
-  - 方案：实现 `startEarlyFrameExtraction`（并行提取 t=0 帧）· 预计 1-2h
-
 ### neko-agent（AI Skills）
 - [ ] 批量时间线操作 Skill（当前仅支持单元素操作）— [task-plan #11](./docs/task-plan.md)
-- [ ] 剧本解析 → 时间线自动生成 Skill（neko-story 联动）
 - [ ] AI 字幕生成 Skill（调用 Whisper / 云端 ASR）
 - [ ] 智能素材推荐（根据剧本自动检索资产库）
-- [ ] **ChatViewProvider Handler 拆分** Phase 3-5（Phase 1-2 完成，1,066→735 行）— [refactoring-chat-cli.md](./packages/neko-agent/docs/refactoring-chat-cli.md)
-
-### neko-story
-- [x] **错误诊断**：语法错误（未闭合 `[[`/`/*`）+ 语义警告（单次角色、孤立括注）— `DiagnosticsProvider`
-- [x] **时间线生成**：Fountain → neko-cut `.neko` ProjectData，QuickPick 预览 + SaveDialog — `TimelineConverter`
-- [x] **导出 PDF**：@media print 标准 Fountain 印刷规格 + 打印按钮 + `neko.story.exportPdf` 命令
+- [ ] **ChatViewProvider 拆分 + AgentExecutor 流式化** Phase 4-5（Phase 1-3 ✅ 完成）— [refactoring-chat-cli.md](./packages/neko-agent/docs/refactoring-chat-cli.md)
+  - Phase 1-2 ✅: Handler 拆分（ChatViewProvider 1,885→734 行 -61%，MessageHandler 1,153→466 行 -60%）
+  - Phase 3 ✅: `AgentExecutor.thinkStream()` + `content_delta`/`text_delta` 全链路流式
+  - Phase 4: Handler 单元测试（10 handler + 2 processor）
+  - Phase 5: 可选优化（会话操作提取 + deps 类型安全）
 
 ### neko-assets（Phase 4）
 
 > **设计说明**：neko-assets 是非破坏性引用库，只登记路径引用不复制文件。neko-engine 直接通过本地绝对路径访问媒体，与 neko-assets 完全独立。"导入"（注册文件）和"导出到编辑器"（拖拽协议）均已在 Phase 1-2 完成，**无需新增导入导出功能**，Phase 5 的 `.neko` 包分发另行实现。— [asset-management-design.md §neko-engine 关系](./docs/architecture/asset-management-design.md)
 
-- [x] **External Media Library** Phase P0/P1（2026-03-04 完成）— [adr-external-media-library](./docs/architecture/adr-external-media-library.md)
-  - [x] P0: 路径韧性（健康检查 + 离线检测 + 重定位 UI + 状态装饰）
-  - [x] P1: 媒体库管理（settings.json + 路径变量 + TreeView + 拖拽导入）
-  - [ ] P2: 性能优化（元数据缓存 + 增量索引 + 搜索 + 代理文件 + 批量导入）
+- [ ] External Media Library P2: 性能优化（元数据缓存 + 增量索引 + 搜索 + 代理文件 + 批量导入）
 - [ ] ShaderAssetHandler（编译验证 + 预览 + 热重载）
 - [ ] PresetAssetHandler（LUT / 转场预设 / 导出预设）
 - [ ] ModelAssetHandler（AI 模型下载 + 校验 + 量化选择）
@@ -187,4 +179,4 @@
 
 ---
 
-*最后更新：2026-03-06（neko-story 非 AI 功能完成，进度 75%；neko-assets 导入导出设计澄清）*
+*最后更新：2026-03-06（Quick Wins 完成：AgentExecutor 流式化 Phase 3 ✅ + 视频早期预览 ✅ + 剧本→时间线 Skill ✅）*

@@ -319,6 +319,98 @@ You are a professional subtitler. Help users create accessible, well-timed capti
   enabled: true,
 };
 
+/**
+ * Script to Timeline Assistant - Convert Fountain scripts to neko-cut projects
+ *
+ * Triggered when user mentions: convert script, fountain to timeline, screenplay to project
+ *
+ * Leverages neko-story's TimelineConverter format:
+ *   Track 0 (text):     one TextElement per scene heading
+ *   Track 1 (subtitle): one SubtitleElement per dialogue line
+ */
+export const scriptToTimelineSkill: Skill = {
+  name: 'script-to-timeline',
+  description:
+    'Script to timeline conversion assistant. Use when user mentions: convert script to timeline, fountain to video project, screenplay to neko-cut, script to editing project, import fountain.',
+  content: `# Script to Timeline Converter
+
+You help users convert Fountain format screenplays into neko-cut timeline projects.
+
+## Quick Method
+
+Run the built-in VSCode command on an active .fountain file:
+\`\`\`
+neko.story.toTimeline
+\`\`\`
+This opens a QuickPick preview and SaveDialog for the active .fountain file.
+
+## Manual Method
+
+If the user wants programmatic or customized conversion, read the .fountain file and create a .neko project JSON following the format below.
+
+### Fountain Format Reference
+
+Fountain is a plain-text screenplay format:
+- **Scene Heading**: Lines starting with INT. / EXT. / INT./EXT.
+- **Character**: All-caps line before dialogue
+- **Dialogue**: Lines after a character cue
+- **Action**: Regular paragraphs
+- **Parenthetical**: Lines in (parentheses) between character and dialogue
+- **Transition**: Lines ending with TO: or starting with >
+
+### ProjectData JSON Format
+
+\`\`\`json
+{
+  "version": "2.0",
+  "name": "Project Name",
+  "resolution": { "width": 1920, "height": 1080 },
+  "fps": 24,
+  "tracks": [
+    {
+      "id": "<unique-id>", "name": "Scenes", "type": "text",
+      "elements": [{
+        "id": "<id>", "type": "text", "name": "Scene 1",
+        "content": "INT. OFFICE - DAY",
+        "startTime": 0, "duration": 5.0,
+        "fontSize": 36, "color": "#ffffff",
+        "backgroundColor": "rgba(0,0,0,0.5)", "textAlign": "center"
+      }]
+    },
+    {
+      "id": "<unique-id>", "name": "Dialogue", "type": "subtitle",
+      "elements": [{
+        "id": "<id>", "type": "subtitle", "name": "Dialogue 1",
+        "text": "Hello, world!",
+        "startTime": 0, "duration": 1.5,
+        "fontSize": 48, "color": "#ffffff"
+      }]
+    }
+  ]
+}
+\`\`\`
+
+### Duration Estimation
+
+| Element | Duration |
+|---------|----------|
+| Dialogue line | 1.5 seconds |
+| Action paragraph | 2.0 seconds |
+| Minimum scene | 3.0 seconds |
+`,
+  allowedTools: [
+    'Read',
+    'Write',
+    'ListDirectory',
+    'Glob',
+    'GetTimelineInfo',
+    'ListElements',
+  ],
+  icon: '📜',
+  source: 'builtin',
+  enabled: true,
+};
+
 // =============================================================================
 // Slash Commands - REMOVED
 // =============================================================================
@@ -339,7 +431,7 @@ You are a professional subtitler. Help users create accessible, well-timed capti
 /**
  * All builtin skills (semantic discovery)
  *
- * Core video editing skills only. System operation skills (file-operations, git, shell)
+ * Creative media skills only. System operation skills (file-operations, git, shell)
  * have been removed as they are too generic.
  */
 export const builtinSkills: Skill[] = [
@@ -350,6 +442,8 @@ export const builtinSkills: Skill[] = [
   colorGradingSkill,
   audioMixingSkill,
   subtitleSkill,
+  // Script Conversion
+  scriptToTimelineSkill,
 ];
 
 /**

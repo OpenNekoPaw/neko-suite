@@ -68,8 +68,8 @@ export interface AgentContext {
  * Agent execution step
  */
 export interface AgentStep {
-  /** Step type */
-  type: 'think' | 'act' | 'observe' | 'respond';
+  /** Step type ('content_delta' for streaming text chunks) */
+  type: 'think' | 'act' | 'observe' | 'respond' | 'content_delta';
   /** Step content */
   content: string;
   /** Extended thinking content (Claude only) */

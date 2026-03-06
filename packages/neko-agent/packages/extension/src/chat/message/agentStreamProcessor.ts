@@ -205,6 +205,7 @@ export class AgentStreamProcessor {
           break;
 
         case 'text':
+        case 'text_delta':
           sendPhaseChange('streaming');
           accumulatedResponse += event.content || '';
 

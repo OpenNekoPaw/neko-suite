@@ -11,12 +11,12 @@
 | **neko-types** | Alpha | 90% | 共享类型 + 横切关注点统一 + Operations 类型安全增强（WebviewElement）+ 文档完善 |
 | **neko-engine** | Alpha | 80% | GPU 渲染 + 编解码 + FIFO 导出队列 + 统一 HTTP/WS 通信（EngineClient）+ 响度标准化 + 预加载优化（ProbeCache/DecoderPool/EncoderPool） |
 | **neko-cut** | Alpha | 82% | 时间线 + 预览 + FIFO 导出队列 + 拖拽竞态修复 + EditOperation 29 操作 + 响度标准化 UI + 导出预设管理 |
-| **neko-agent** | Alpha | 70% | Agent 引擎 + LLM 平台 + CLI + UI |
+| **neko-agent** | Alpha | 75% | Agent 引擎 + LLM 平台 + CLI + UI + Handler 拆分（Phase 1-2 ✅）+ AgentExecutor 流式化（Phase 3 ✅）+ 剧本→时间线 Skill |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
 | **neko-preview** | WIP | 60% | 视频/音频预览 Provider + 播放器 UI |
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP（补全/定义/悬停/符号）+ 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
 | **neko-assets** | Alpha | 65% | Phase 1-3 ✅ + Phase 3.5 ✅（外部媒体库 P0/P1：健康检查 + 路径变量 + 媒体库 TreeView），Phase 4-5 待开发 |
-| **neko-tools** | WIP | 60% | 媒体 Diff + EngineClient + 并行优化 + 协议增强 + 资产变体对比 |
+| **neko-tools** | WIP | 62% | 媒体 Diff + EngineClient + 并行优化 + 协议增强 + 资产变体对比 + 视频早期预览 |
 | **neko-canvas** | WIP | 40% | 节点系统 + 连线 + 视口裁剪 + 画布操作 |
 | **neko-proto** | Early | 30% | timeline.proto 定义，生成类型在 neko-types |
 | **neko-model** | Planned | 0% | 3D 编辑器，架构设计已完成（见 docs/architecture/3d-capability-analysis.md） |
@@ -49,7 +49,7 @@
 
 ## Phase 2: AI 驱动创作 (Current)
 
-> 目标：实现 AI Agent 驱动的智能剪辑 — **进度 ~65%**
+> 目标：实现 AI Agent 驱动的智能剪辑 — **进度 ~70%**
 
 ### neko-agent (AI Agent)
 
@@ -84,12 +84,20 @@
 - [x] Agent CLI
   - [x] 交互式 CLI（/plan /auto /ask /clear /compact）
   - [x] MCP 集成 + 文件引用处理
+- [x] ChatViewProvider Handler 拆分（Phase 1-2）
+  - [x] 10 个独立 Handler + 2 个 Message 处理器
+  - [x] ChatViewProvider 1,885→734 行（-61%），MessageHandler 1,153→466 行（-60%）
+- [x] AgentExecutor 流式化（Phase 3）
+  - [x] `thinkStream()` + `content_delta`/`text_delta` 全链路逐 token 输出
+- [ ] Handler 单元测试 + 可选优化（Phase 4-5）
+  - [ ] 10 handler + 2 processor 单元测试
+  - [ ] 可选：会话操作提取 + deps 类型安全
 - [ ] 时间线操作 Skills
   - [x] 基础时间线查询
   - [ ] 批量操作支持
   - [ ] 智能素材推荐
 - [ ] 创作辅助 Skills
-  - [ ] 剧本解析 → 时间线
+  - [x] 剧本解析 → 时间线（Fountain → ProjectData JSON 语义 Skill）
   - [ ] 自动配乐
   - [ ] AI 字幕生成
   - [ ] 画面描述
@@ -287,7 +295,7 @@
 - [x] Diff 协议增强（fetchState 协议 + Git fetch 阻塞播放修复 + MessageHandler 重构）
 - [x] 资产变体对比（asset-diff，委托 neko-assets）
 - [x] EngineClient 迁移（统一 HTTP 通信）
-- [ ] Diff 前端可视化增强（Phase 2B）— [详见 diff.md](./docs/diff.md)
+- [x] Diff 前端可视化增强（Phase 2B）+ 视频早期预览
 - [ ] 批量处理
 
 ---

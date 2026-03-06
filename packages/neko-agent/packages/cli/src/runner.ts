@@ -266,6 +266,13 @@ function handleAgentEvent(
       }
       break;
 
+    case 'text_delta':
+      // Streaming text chunk — write incrementally
+      if (event.content) {
+        onOutput?.(event.content);
+      }
+      break;
+
     case 'thinking_content':
       if (event.thinking) {
         onThinking?.(event.thinking);

@@ -331,9 +331,9 @@ export interface StreamChunk {
 | Phase 2 | 更新 handlers/index.ts | ✅ 完成 |
 | Phase 2b | 重构 ChatViewProvider 委托 | ✅ 完成 (1,885→734行, -61%) |
 
-### Phase 3: AgentExecutor 流式化 ⏳ 待开始
+### Phase 3: AgentExecutor 流式化 ✅ 已完成
 
-**前置发现**：流式基础设施已就绪（LLMStreamChunk/BuiltinLLMClient.chatStream/LLMServiceAdapter.chatStream），瓶颈在 AgentExecutor。
+**实施摘要**：流式基础设施已全部打通，从 LLM API → AgentExecutor → AgentSession → CLI/Extension 全链路逐 token 输出。
 
 | Phase | 任务 | 状态 | 说明 |
 |-------|------|------|------|
@@ -341,9 +341,17 @@ export interface StreamChunk {
 | Phase 3 | ~~BuiltinLLMClient.chatStream~~ | ✅ 已实现 | Anthropic/OpenAI SSE 解析 → AsyncGenerator |
 | Phase 3 | ~~LLMServiceAdapter.chatStream~~ | ✅ 已实现 | LLMStreamChunk → StreamChunk 适配 |
 | Phase 3 | ~~PlatformLLMClient.chatStream~~ | ✅ 已删除 | 由 SharedServiceAdapter 替代 |
-| Phase 3 | `AgentExecutor.thinkStream()` | ⏳ 待开始 | 新方法，调用 `service.chatStream()` 替代 `service.chat()`，~60 行 |
-| Phase 3 | `executeStream()` 改用 `thinkStream` | ⏳ 待开始 | 在 think 循环中使用流式方法，~20 行 |
-| Phase 3 | `AgentSession` delta 事件传播 | ⏳ 待开始 | 新增 `content_delta` AgentEvent，传播到 CLI/Extension，~10 行 |
+| Phase 3 | `AgentExecutor.thinkStream()` | ✅ 完成 | 新方法，`service.chatStream()` → content_delta steps → final think step |
+| Phase 3 | `executeStream()` 改用 `thinkStream` | ✅ 完成 | 循环中 yield content_delta 再 yield 最终 think step |
+| Phase 3 | `AgentSession` delta 事件传播 | ✅ 完成 | `content_delta` → `text_delta` AgentEvent，CLI/Extension 均已处理 |
+
+**改动文件**：
+- `@neko/shared` agent.ts: `AgentStep.type` += `'content_delta'`
+- `agent-executor.ts`: 新增 `thinkStream()` (~80 行)，`executeStream()` 改用流式
+- `session/types.ts`: `AgentEventType` += `'text_delta'`
+- `agent-session.ts`: `_convertStepToEvents()` 处理 `content_delta`，`_hasStreamedDeltas` 标志抑制重复
+- `runner.ts`: `handleAgentEvent()` 处理 `text_delta`
+- `agentStreamProcessor.ts`: `'text'|'text_delta'` 统一处理
 
 ### Phase 4: 单元测试 ⏳ 待开始
 
