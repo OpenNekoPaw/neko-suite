@@ -43,13 +43,33 @@ export const workspace = {
     get: vi.fn(),
     update: vi.fn().mockResolvedValue(undefined),
   }),
-  workspaceFolders: [],
+  workspaceFolders: [{ uri: { fsPath: '/mock/workspace' }, name: 'mock', index: 0 }],
   fs: {
     writeFile: vi.fn().mockResolvedValue(undefined),
     readFile: vi.fn().mockResolvedValue(new Uint8Array()),
     stat: vi.fn().mockResolvedValue({ type: 1 }),
   },
+  findFiles: vi.fn().mockResolvedValue([]),
+  asRelativePath: vi.fn((uri: { fsPath: string } | string) =>
+    typeof uri === 'string' ? uri : uri.fsPath,
+  ),
 };
+
+// FileType enum
+export const FileType = { File: 1, Directory: 2, SymbolicLink: 64, Unknown: 0 };
+
+// RelativePattern mock
+export const RelativePattern = vi.fn();
+
+// LogLevel enum
+export enum LogLevel {
+  Off = 0,
+  Trace = 1,
+  Debug = 2,
+  Info = 3,
+  Warning = 4,
+  Error = 5,
+}
 
 // Disposable mock
 export class Disposable {
