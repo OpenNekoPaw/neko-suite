@@ -17,6 +17,7 @@ graph TB
         AddElement[AddElementTool]
         UpdateElement[UpdateElementTool]
         DeleteElement[DeleteElementTool]
+        BatchTimelineOps[BatchTimelineOpsTool]
     end
 
     subgraph "生成工具 generation/"
@@ -46,6 +47,7 @@ graph TB
     ProjectAdapter --> AddElement
     ProjectAdapter --> UpdateElement
     ProjectAdapter --> DeleteElement
+    ProjectAdapter --> BatchTimelineOps
     MediaAdapter --> GenImage
     MediaAdapter --> GenVideo
     MediaAdapter --> GenTTS
@@ -163,6 +165,7 @@ interface MediaServiceAdapter {
 | `AddElementTool` | 类 | 添加元素 |
 | `UpdateElementTool` | 类 | 更新元素 |
 | `DeleteElementTool` | 类 | 删除元素 |
+| `BatchTimelineOpsTool` | 类 | 批量执行时间线操作（best-effort） |
 | `GenerateImageTool` | 类 | 生成图片 |
 | `GenerateVideoTool` | 类 | 生成视频 |
 | `GenerateTTSTool` | 类 | 生成 TTS |
@@ -191,6 +194,7 @@ interface MediaServiceAdapter {
 | | AddElement | 添加元素到时间线 |
 | | UpdateElement | 更新元素属性 |
 | | DeleteElement | 删除元素 |
+| | BatchTimelineOps | 批量操作（AddElement/UpdateElement/DeleteElement/TrimElement/SetAudioProperties/SetColorCorrection），best-effort |
 | **生成工具** | GenerateImage | 文生图 / 图生图 |
 | | GenerateVideo | 文生视频 / 图生视频 |
 | | GenerateTTS | 文本转语音 |
