@@ -32,11 +32,21 @@ components/
 | 组件 | 用途 |
 |------|------|
 | `Timeline` | 多轨道时间线编辑器 |
-| `PreviewPanel` | 视频预览画布 |
+| `PreviewPanel` | 视频预览画布（见下方说明） |
 | `PropertyPanel` | 元素属性编辑 |
 | `Effects` | 特效参数编辑 |
 | `Subtitles` | 字幕编辑器 |
 | `TransitionPicker` | 转场效果选择 |
+
+### PreviewPanel 播放/Seek 设计
+
+`App.tsx` 的 rAF tick 在播放期间每帧（~33ms）调用 `seek(newTime)` 来推进播放头显示。
+`PreviewPanel` 监听 `currentTime` 变化：
+
+- **小幅正向增量**（`delta > 0 && delta ≤ 0.5s`，播放中）→ 跳过解码器重置和流重启，服务器已在按 PTS 推送帧
+- **实际 Seek**（后退、大幅前进 >0.5s、或暂停时任意变化）→ `resetDecoder()` + 向服务器发送 `resume`/`seek` 消息
+
+不遵守此规则会导致每帧触发解码器重置和流重启（30fps Seek 循环），视频永远无法播放。
 
 ## 依赖
 
