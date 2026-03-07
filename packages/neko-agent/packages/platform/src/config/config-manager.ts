@@ -157,7 +157,6 @@ export class ConfigManager {
       mcpServerOverrides: {},
       workflowOverrides: {},
       promptOverrides: {},
-      taskDefaults: undefined,
     };
   }
 

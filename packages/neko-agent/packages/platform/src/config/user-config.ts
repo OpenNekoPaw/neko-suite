@@ -75,7 +75,6 @@ const DEFAULT_USER_CONFIG: UserConfig = {
   mcpServerOverrides: {},
   workflowOverrides: {},
   promptOverrides: {},
-  taskDefaults: undefined,
 };
 
 // =============================================================================
