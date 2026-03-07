@@ -142,6 +142,13 @@ export function AIAssistant() {
     }
   }, [isAiConfigured]);
 
+  // Auto-dismiss onboarding when AI becomes configured (e.g. user adds key to config file)
+  useEffect(() => {
+    if (isAiConfigured && showOnboarding) {
+      setShowOnboarding(false);
+    }
+  }, [isAiConfigured, showOnboarding]);
+
   // Derived state for current conversation
   const contextTokenCount = activeConversationId
     ? (conversationTokenCountRef.current.get(activeConversationId) ?? 0)
@@ -987,7 +994,6 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
       ) : null}
       {showOnboarding && (
         <OnboardingFlow
-          providerTemplates={settings.providerTemplates}
           onComplete={() => setShowOnboarding(false)}
         />
       )}

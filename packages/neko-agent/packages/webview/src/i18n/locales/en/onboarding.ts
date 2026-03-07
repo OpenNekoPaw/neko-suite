@@ -7,9 +7,8 @@ export const onboarding = {
   'onboarding.or': 'or',
   'onboarding.customKeyButton': 'Use my own API key',
   'onboarding.back': 'Back',
-  'onboarding.selectProvider': 'Select a provider',
-  'onboarding.enterKey': 'Enter your API key below.',
-  'onboarding.testing': 'Testing…',
-  'onboarding.testAndStart': 'Test & Start',
-  'onboarding.testFailed': 'Connection test failed. Please check your key.',
+  'onboarding.openConfigButton': 'Open Config File',
+  'onboarding.fileOpenedTitle': 'Config file opened',
+  'onboarding.fileOpenedHint': 'Add your API key to the config file. The changes will be detected automatically.',
+  'onboarding.gotIt': 'Got it',
 } as const satisfies MessageBundle;
