@@ -427,9 +427,25 @@ export const PreviewPanel = memo(function PreviewPanel({
     if (!frameServerPort || !project) return;
 
     const TIME_TOLERANCE = 0.001;
-    if (Math.abs(currentTime - lastRenderedTimeRef.current) < TIME_TOLERANCE) return;
+    const delta = currentTime - lastRenderedTimeRef.current;
+    if (Math.abs(delta) < TIME_TOLERANCE) return;
 
-    // Flush stale frames and reset decoders on seek
+    // During live playback, App.tsx advances currentTime by ~1 frame (~33ms) every
+    // rAF tick for playhead display. These small forward increments must NOT reset
+    // the decoder or restart the stream — the server is already pushing frames at
+    // the correct PTS and resetting would cause perpetual seek loops.
+    //
+    // Only treat the change as a real seek (reset + restart) when:
+    //   - paused (any change is a user scrub), OR
+    //   - playing but delta is negative (backward seek), OR
+    //   - playing but delta is large (>0.5 s: user jumped to a new position)
+    const isNormalPlaybackAdvance = isPlaying && delta > 0 && delta <= 0.5;
+
+    lastRenderedTimeRef.current = currentTime;
+
+    if (isNormalPlaybackAdvance) return;
+
+    // Actual seek: flush stale frames and reset decoders
     schedulerRef.current?.flush();
     h264ClientRef.current?.resetDecoder();
     audioClientRef.current?.resetClock();
@@ -457,8 +473,6 @@ export const PreviewPanel = memo(function PreviewPanel({
         },
       });
     }
-
-    lastRenderedTimeRef.current = currentTime;
   }, [currentTime, isPlaying, isInitialized, project]);
 
   // ==========================================================================
