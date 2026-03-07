@@ -9,7 +9,6 @@
  */
 
 import type { Provider, Model } from '../types/provider';
-import type { Group } from '../types/group';
 import type { MCPServerPreset, WorkflowPreset, PromptPreset } from '../types/config';
 import type { UnifiedConfig, TaskDefaults } from '@neko/shared';
 // Node.js config reader - direct import
@@ -28,8 +27,6 @@ export interface UserConfig {
   providers: Provider[];
   /** Custom models */
   models: Model[];
-  /** Custom groups */
-  groups: Group[];
   /** Custom MCP servers */
   mcpServers: MCPServerPreset[];
   /** Custom workflows */
@@ -40,8 +37,6 @@ export interface UserConfig {
   providerOverrides: Record<string, Partial<Provider>>;
   /** Model overrides */
   modelOverrides: Record<string, Partial<Model>>;
-  /** Group overrides */
-  groupOverrides: Record<string, Partial<Group>>;
   /** MCP server overrides */
   mcpServerOverrides: Record<string, Partial<MCPServerPreset>>;
   /** Workflow overrides */
@@ -65,13 +60,11 @@ const USER_CONFIG_KEY = 'neko.platform.userConfig';
 const DEFAULT_USER_CONFIG: UserConfig = {
   providers: [],
   models: [],
-  groups: [],
   mcpServers: [],
   workflows: [],
   prompts: [],
   providerOverrides: {},
   modelOverrides: {},
-  groupOverrides: {},
   mcpServerOverrides: {},
   workflowOverrides: {},
   promptOverrides: {},
@@ -92,13 +85,11 @@ function unifiedToUserConfig(unified: UnifiedConfig | null): UserConfig {
   return {
     providers: (unified.providers as Provider[]) ?? [],
     models: (unified.models as Model[]) ?? [],
-    groups: (unified.groups as Group[]) ?? [],
     mcpServers: (unified.mcpServers as MCPServerPreset[]) ?? [],
     workflows: (unified.workflows as WorkflowPreset[]) ?? [],
     prompts: (unified.prompts as PromptPreset[]) ?? [],
     providerOverrides: (unified.providerOverrides as Record<string, Partial<Provider>>) ?? {},
     modelOverrides: (unified.modelOverrides as Record<string, Partial<Model>>) ?? {},
-    groupOverrides: (unified.groupOverrides as Record<string, Partial<Group>>) ?? {},
     mcpServerOverrides: (unified.mcpServerOverrides as Record<string, Partial<MCPServerPreset>>) ?? {},
     workflowOverrides: (unified.workflowOverrides as Record<string, Partial<WorkflowPreset>>) ?? {},
     promptOverrides: (unified.promptOverrides as Record<string, Partial<PromptPreset>>) ?? {},
@@ -113,13 +104,11 @@ function userToUnifiedConfig(user: UserConfig): UnifiedConfig {
   return {
     providers: user.providers,
     models: user.models,
-    groups: user.groups,
     mcpServers: user.mcpServers,
     workflows: user.workflows,
     prompts: user.prompts,
     providerOverrides: user.providerOverrides,
     modelOverrides: user.modelOverrides,
-    groupOverrides: user.groupOverrides,
     mcpServerOverrides: user.mcpServerOverrides,
     workflowOverrides: user.workflowOverrides,
     promptOverrides: user.promptOverrides,
@@ -142,8 +131,6 @@ export interface IUserConfigManager {
   removeProvider(providerId: string): Promise<void>;
   addModel(model: Model): Promise<void>;
   removeModel(modelId: string): Promise<void>;
-  addGroup(group: Group): Promise<void>;
-  removeGroup(groupId: string): Promise<void>;
   updateMCPServerOverride(serverId: string, override: Partial<MCPServerPreset>): Promise<void>;
   addMCPServer(server: MCPServerPreset): Promise<void>;
   removeMCPServer(serverId: string): Promise<void>;
@@ -254,28 +241,6 @@ export class UserConfigManager implements IUserConfigManager {
     const config = this.load();
     config.models = config.models.filter((m) => m.id !== modelId);
     delete config.modelOverrides[modelId];
-    await this.save(config);
-  }
-
-  // ==========================================================================
-  // Group Methods
-  // ==========================================================================
-
-  async addGroup(group: Group): Promise<void> {
-    const config = this.load();
-    const existing = config.groups.findIndex((g) => g.id === group.id);
-    if (existing >= 0) {
-      config.groups[existing] = group;
-    } else {
-      config.groups.push(group);
-    }
-    await this.save(config);
-  }
-
-  async removeGroup(groupId: string): Promise<void> {
-    const config = this.load();
-    config.groups = config.groups.filter((g) => g.id !== groupId);
-    delete config.groupOverrides[groupId];
     await this.save(config);
   }
 
@@ -518,28 +483,6 @@ export class FileUserConfigManager implements IUserConfigManager {
     const config = this.load();
     config.models = config.models.filter((m) => m.id !== modelId);
     delete config.modelOverrides[modelId];
-    await this.save(config);
-  }
-
-  // ==========================================================================
-  // Group Methods
-  // ==========================================================================
-
-  async addGroup(group: Group): Promise<void> {
-    const config = this.load();
-    const existing = config.groups.findIndex((g) => g.id === group.id);
-    if (existing >= 0) {
-      config.groups[existing] = group;
-    } else {
-      config.groups.push(group);
-    }
-    await this.save(config);
-  }
-
-  async removeGroup(groupId: string): Promise<void> {
-    const config = this.load();
-    config.groups = config.groups.filter((g) => g.id !== groupId);
-    delete config.groupOverrides[groupId];
     await this.save(config);
   }
 

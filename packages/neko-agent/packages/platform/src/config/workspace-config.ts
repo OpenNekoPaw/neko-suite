@@ -7,7 +7,6 @@
  */
 
 import type { Provider, Model } from '../types/provider';
-import type { Group } from '../types/group';
 import type { MCPServerPreset, WorkflowPreset, PromptPreset, TemplatePreset } from '../types/config';
 import type { UnifiedConfig } from '@neko/shared';
 // Node.js config reader - direct import
@@ -28,8 +27,6 @@ export interface WorkspaceConfig {
   providers?: Provider[];
   /** Workspace-specific models */
   models?: Model[];
-  /** Workspace-specific groups */
-  groups?: Group[];
   /** Workspace-specific MCP servers */
   mcpServers?: MCPServerPreset[];
   /** Workspace-specific workflows */
@@ -42,8 +39,6 @@ export interface WorkspaceConfig {
   providerOverrides?: Record<string, Partial<Provider>>;
   /** Model overrides */
   modelOverrides?: Record<string, Partial<Model>>;
-  /** Group overrides */
-  groupOverrides?: Record<string, Partial<Group>>;
   /** MCP server overrides */
   mcpServerOverrides?: Record<string, Partial<MCPServerPreset>>;
   /** Workflow overrides */
@@ -52,6 +47,8 @@ export interface WorkspaceConfig {
   promptOverrides?: Record<string, Partial<PromptPreset>>;
   /** Template overrides */
   templateOverrides?: Record<string, Partial<TemplatePreset>>;
+  /** Task-type to model defaults */
+  taskDefaults?: import('@neko/shared').TaskDefaults;
 }
 
 /**
@@ -66,18 +63,17 @@ function unifiedToWorkspaceConfig(unified: UnifiedConfig | null): WorkspaceConfi
   return {
     providers: unified.providers as Provider[] | undefined,
     models: unified.models as Model[] | undefined,
-    groups: unified.groups as Group[] | undefined,
     mcpServers: unified.mcpServers as MCPServerPreset[] | undefined,
     workflows: unified.workflows as WorkflowPreset[] | undefined,
     prompts: unified.prompts as PromptPreset[] | undefined,
     templates: unified.templates as TemplatePreset[] | undefined,
     providerOverrides: unified.providerOverrides as Record<string, Partial<Provider>> | undefined,
     modelOverrides: unified.modelOverrides as Record<string, Partial<Model>> | undefined,
-    groupOverrides: unified.groupOverrides as Record<string, Partial<Group>> | undefined,
     mcpServerOverrides: unified.mcpServerOverrides as Record<string, Partial<MCPServerPreset>> | undefined,
     workflowOverrides: unified.workflowOverrides as Record<string, Partial<WorkflowPreset>> | undefined,
     promptOverrides: unified.promptOverrides as Record<string, Partial<PromptPreset>> | undefined,
     templateOverrides: unified.templateOverrides as Record<string, Partial<TemplatePreset>> | undefined,
+    taskDefaults: unified.taskDefaults,
   };
 }
 
@@ -88,18 +84,17 @@ function workspaceToUnifiedConfig(workspace: WorkspaceConfig): UnifiedConfig {
   return {
     providers: workspace.providers,
     models: workspace.models,
-    groups: workspace.groups,
     mcpServers: workspace.mcpServers,
     workflows: workspace.workflows,
     prompts: workspace.prompts,
     templates: workspace.templates,
     providerOverrides: workspace.providerOverrides,
     modelOverrides: workspace.modelOverrides,
-    groupOverrides: workspace.groupOverrides,
     mcpServerOverrides: workspace.mcpServerOverrides,
     workflowOverrides: workspace.workflowOverrides,
     promptOverrides: workspace.promptOverrides,
     templateOverrides: workspace.templateOverrides,
+    taskDefaults: workspace.taskDefaults,
   };
 }
 

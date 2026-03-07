@@ -4,7 +4,7 @@
 
 export { Service, type ServiceConfig } from './service';
 export { SharedServiceAdapter, toSharedService } from './shared-service-adapter';
-// ToolRegistry is now in @neko/agent, re-exported from platform/index.ts
+export { ModelSelector, type ModelTaskType, type ResolvedModel } from './model-selector';
 
 // PromptManager - local implementation
 export {
@@ -35,36 +35,4 @@ export {
   type TTSOptions,
   type MusicGenerationOptions,
   type GeneratedMedia,
-} from '../tools';
-export {
-  MediaServiceAdapter,
-  createMediaServiceAdapter,
-  type MediaServiceAdapterOptions,
-} from '../tools';
-export {
-  AnalyzeImageTool,
-  ExtractImageTextTool,
-  AnalyzeVideoTool,
-  ExtractVideoSummaryTool,
-  registerAnalysisTools,
-  type VisionAnalysisService,
-  type ImageAnalysisOptions,
-  type VideoAnalysisOptions,
-  type AnalysisResult,
-  type VideoAnalysisResult,
-  type TextExtractionResult,
-} from '../tools';
-export {
-  GenerateScriptTool,
-  OptimizeScriptTool,
-  GenerateStoryboardTool,
-  GenerateSubtitlesTool,
-  registerDocumentTools,
-  type DocumentGenerationService,
-  type ScriptGenerationOptions,
-  type ScriptResult,
-  type StoryboardOptions,
-  type StoryboardResult,
-  type SubtitleOptions,
-  type SubtitleResult,
 } from '../tools';

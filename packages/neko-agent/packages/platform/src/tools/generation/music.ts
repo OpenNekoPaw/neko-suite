@@ -4,7 +4,6 @@
 
 import type { ToolResult } from '../../types/tool';
 import { RoutedGenerationTool } from './base';
-import { ROUTING_PARAMETER_SCHEMA } from './types';
 
 export class GenerateMusicTool extends RoutedGenerationTool {
   readonly name = 'GenerateMusic';
@@ -30,7 +29,6 @@ export class GenerateMusicTool extends RoutedGenerationTool {
         type: 'string',
         description: 'Music mood (e.g., upbeat, calm, dramatic)',
       },
-      ...ROUTING_PARAMETER_SCHEMA,
     },
     required: ['prompt'],
   };

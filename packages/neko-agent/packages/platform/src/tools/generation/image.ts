@@ -4,7 +4,6 @@
 
 import type { ToolResult } from '../../types/tool';
 import { RoutedGenerationTool } from './base';
-import { ROUTING_PARAMETER_SCHEMA } from './types';
 
 export class GenerateImageTool extends RoutedGenerationTool {
   readonly name = 'GenerateImage';
@@ -37,7 +36,6 @@ export class GenerateImageTool extends RoutedGenerationTool {
         minimum: 1,
         maximum: 4,
       },
-      ...ROUTING_PARAMETER_SCHEMA,
     },
     required: ['prompt'],
   };

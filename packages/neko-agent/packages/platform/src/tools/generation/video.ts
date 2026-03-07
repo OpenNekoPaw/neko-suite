@@ -4,7 +4,6 @@
 
 import type { ToolResult } from '../../types/tool';
 import { RoutedGenerationTool } from './base';
-import { ROUTING_PARAMETER_SCHEMA } from './types';
 
 export class GenerateVideoTool extends RoutedGenerationTool {
   readonly name = 'GenerateVideo';
@@ -32,7 +31,6 @@ export class GenerateVideoTool extends RoutedGenerationTool {
         description: 'Frames per second (default: 24)',
         enum: [24, 30, 60],
       },
-      ...ROUTING_PARAMETER_SCHEMA,
     },
     required: ['prompt'],
   };

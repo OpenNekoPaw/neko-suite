@@ -25,7 +25,20 @@ import { SystemPromptManager } from './systemPromptManager';
 import { WebviewMessage, MessageAttachment, TabState, OpenTab } from './types';
 import { GenericConfigService } from '../services/genericConfigService';
 import { ConfigBridge } from '../services/configBridge';
-import { TaskHandler, ModelPresetHandler, SkillHandler, FileOperationHandler, PlanModeHandler, ProviderHandler, IntegrationHandler, SettingsHandler, ContextHandler, SlashCommandHandler } from './handlers';
+import {
+  TaskHandler, type TaskHandlerDeps,
+  ModelPresetHandler,
+  SkillHandler,
+  FileOperationHandler, type FileOperationHandlerDeps,
+  PlanModeHandler, type PlanModeHandlerDeps,
+  ProviderHandler, type ProviderHandlerDeps,
+  IntegrationHandler,
+  SettingsHandler, type SettingsHandlerDeps,
+  ContextHandler, type ContextHandlerDeps,
+  SlashCommandHandler, type SlashCommandHandlerDeps,
+} from './handlers';
+import { createSkillService, builtinSkills, builtinCommands } from '@neko/agent';
+import { getSkillFileService, type SkillScanResult } from '../services/SkillFileService';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'neko.aiAssistant';
@@ -54,6 +67,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private readonly _settingsHandler: SettingsHandler;
   private readonly _contextHandler: ContextHandler;
   private readonly _slashCommandHandler: SlashCommandHandler;
+
+  // Lifecycle
+  private readonly _disposables: vscode.Disposable[] = [];
 
   // Services
   private _agentManager?: IAgentManager;
@@ -123,6 +139,30 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this._initializeServices();
   }
 
+  /**
+   * Populate the skill registry from builtin skills/commands and a disk scan result.
+   * Called once on startup and again whenever the file watcher fires.
+   */
+  private _populateSkillRegistry(
+    skillService: ReturnType<typeof createSkillService>,
+    scanResult: SkillScanResult
+  ): void {
+    skillService.registry.clear();
+
+    for (const skill of builtinSkills) {
+      skillService.registry.registerSkill({ ...skill, source: 'builtin' as const, enabled: true });
+    }
+    for (const command of builtinCommands) {
+      skillService.registry.registerCommand({ ...command, source: 'builtin' as const, enabled: true });
+    }
+    for (const skill of [...scanResult.personal.skills, ...scanResult.project.skills]) {
+      skillService.registry.registerSkill(skill);
+    }
+    for (const command of [...scanResult.personal.commands, ...scanResult.project.commands]) {
+      skillService.registry.registerCommand(command);
+    }
+  }
+
   private _initializeServices(): void {
     try {
       this._agentManager = getService(IAgentManagerId);
@@ -160,40 +200,41 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._platform
         );
 
-        // Update handler dependencies
-        (this._taskHandler as any).deps = {
-          platform: this._platform,
-          taskManager: this._taskManager,
-        };
-        (this._skillHandler as any).deps = {
-          platform: this._platform,
-        };
-        (this._fileOperationHandler as any).deps = {
-          platform: this._platform,
-        };
-        (this._planModeHandler as any).deps = {
-          ...this._planModeHandler['deps'],
-          agentManager: this._agentManager,
-          platform: this._platform,
-          messages: this._messages,
-        };
-        (this._providerHandler as any).deps = {
-          ...this._providerHandler['deps'],
-          providers: this._providers,
-        };
-        (this._settingsHandler as any).deps = {
-          ...this._settingsHandler['deps'],
-          providers: this._providers,
-          platform: this._platform,
-        };
-        (this._contextHandler as any).deps = {
-          ...this._contextHandler['deps'],
-          agentManager: this._agentManager,
-        };
-        (this._slashCommandHandler as any).deps = {
-          ...this._slashCommandHandler['deps'],
-          agentManager: this._agentManager,
-        };
+        // Wire up SkillService: create instance, populate from disk, keep in sync.
+        const skillFileService = getSkillFileService();
+        const skillService = createSkillService();
+        skillFileService.getSkills().then((result) => {
+          this._populateSkillRegistry(skillService, result);
+        }).catch((err: unknown) => {
+          logger.warn('Failed to load initial skills into SkillService:', err);
+        });
+        this._disposables.push(
+          skillFileService.onSkillsChanged((result) => this._populateSkillRegistry(skillService, result))
+        );
+        this._skillHandler.setDependencies({ skillService });
+
+        // Update remaining handler dependencies via typed casts.
+        // All target handlers store deps as `this.deps` (constructor private shorthand),
+        // so runtime assignment is valid despite the compile-time private access check.
+        // The `unknown` intermediate is required because TypeScript's `private` modifier
+        // prevents direct narrowing — casting through `unknown` bypasses the structural check.
+        (this._taskHandler as unknown as { deps: TaskHandlerDeps }).deps.platform = this._platform;
+        (this._taskHandler as unknown as { deps: TaskHandlerDeps }).deps.taskManager = this._taskManager;
+
+        (this._fileOperationHandler as unknown as { deps: FileOperationHandlerDeps }).deps.platform = this._platform;
+
+        (this._planModeHandler as unknown as { deps: PlanModeHandlerDeps }).deps.agentManager = this._agentManager;
+        (this._planModeHandler as unknown as { deps: PlanModeHandlerDeps }).deps.platform = this._platform;
+        (this._planModeHandler as unknown as { deps: PlanModeHandlerDeps }).deps.messages = this._messages;
+
+        (this._providerHandler as unknown as { deps: ProviderHandlerDeps }).deps.providers = this._providers;
+
+        (this._settingsHandler as unknown as { deps: SettingsHandlerDeps }).deps.providers = this._providers;
+        (this._settingsHandler as unknown as { deps: SettingsHandlerDeps }).deps.platform = this._platform;
+
+        (this._contextHandler as unknown as { deps: ContextHandlerDeps }).deps.agentManager = this._agentManager;
+
+        (this._slashCommandHandler as unknown as { deps: SlashCommandHandlerDeps }).deps.agentManager = this._agentManager;
       }
     } catch (error) {
       logger.error('Failed to get services:', error);
@@ -216,7 +257,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       // Configure it to initialize ToolSkillRegistry
       await tempRunner.configure({
         platform: this._platform,
-        groupId: 'default',
         systemPrompt: '',
         maxIterations: 1,
         autoExecuteTools: false,

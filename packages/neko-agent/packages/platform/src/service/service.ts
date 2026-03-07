@@ -21,7 +21,7 @@ import type { RetryPolicy, TimeoutPolicy } from '../types/error';
 import type { IMediaGenerationService, IService } from '../types/interfaces';
 import { ConfigManager } from '../config/config-manager';
 import { ProviderRegistry } from '../provider/provider-registry';
-import { GroupManager } from '../provider/group-manager';
+import { ModelSelector } from './model-selector';
 import { PlatformError } from '../provider/platform-error';
 import { executeWithRetry, withStreamTimeout } from '../provider/retry-executor';
 import { createStreamCollector } from '../llm/adapter/stream-aggregator';
@@ -32,8 +32,6 @@ import { createStreamCollector } from '../llm/adapter/stream-aggregator';
 export interface ServiceConfig {
   configManager: ConfigManager;
   providerRegistry: ProviderRegistry;
-  groupManager: GroupManager;
-  defaultGroupId?: string;
   defaultRetryPolicy?: RetryPolicy;
   defaultTimeoutPolicy?: TimeoutPolicy;
   /** Optional media generation service for async image/video/audio generation */
@@ -41,13 +39,12 @@ export interface ServiceConfig {
 }
 
 /**
- * Routing result from route resolution
+ * Resolved model for a request
  */
 interface RoutingResult {
   modelId: string;
   providerId: string;
   attempt: number;
-  reason: string;
 }
 
 /**
@@ -66,97 +63,26 @@ interface ResolvedResources {
  */
 export class Service implements IService {
   private config: ServiceConfig;
-  private defaultGroupId: string;
+  private selector: ModelSelector;
 
   constructor(config: ServiceConfig) {
     this.config = config;
-    this.defaultGroupId = config.defaultGroupId || 'default';
+    this.selector = new ModelSelector(config.configManager, config.providerRegistry);
   }
 
   // ==========================================================================
-  // Private Routing Helpers (extracted to reduce duplication)
+  // Private Routing Helpers
   // ==========================================================================
 
   /**
-   * Resolve routing for a request - handles both direct model selection and group routing
+   * Resolve model for a chat or embedding request
    */
   private resolveRouting(
-    groupId: string,
     modelId?: string,
-    excludeModels: string[] = []
+    excludeModels: string[] = [],
+    taskType: 'chat' | 'embedding' = 'chat'
   ): RoutingResult {
-    if (modelId) {
-      // Direct model selection
-      const model = this.config.configManager.getModel(modelId);
-      if (!model) {
-        throw new PlatformError({
-          category: 'not_found',
-          code: 'MODEL_NOT_FOUND',
-          message: `Model ${modelId} not found`,
-          retryable: false,
-        });
-      }
-
-      const provider = this.config.configManager.getProvider(model.providerId);
-      if (!provider || !provider.enabled) {
-        throw new PlatformError({
-          category: 'not_found',
-          code: 'PROVIDER_DISABLED',
-          message: `Provider ${model.providerId} is disabled or not found`,
-          retryable: false,
-        });
-      }
-
-      if (!model.enabled) {
-        throw new PlatformError({
-          category: 'not_found',
-          code: 'MODEL_DISABLED',
-          message: `Model ${modelId} is disabled`,
-          retryable: false,
-        });
-      }
-
-      return {
-        modelId,
-        providerId: model.providerId,
-        attempt: excludeModels.length + 1,
-        reason: 'Direct model selection',
-      };
-    }
-
-    // Group-based routing
-    const routing = this.config.groupManager.route(groupId, excludeModels);
-    if (routing) {
-      return routing;
-    }
-
-    // Fallback: Select any available chat model with API key configured
-    // This handles the case where group only has builtin models without API keys
-    // but user has configured custom providers with valid API keys
-    const chatModelOptions = this.config.configManager.getChatModelOptions();
-    const availableModels = chatModelOptions.filter(
-      (m) =>
-        m.id !== 'auto' &&
-        m.category === 'chat' &&
-        !excludeModels.includes(m.modelId)
-    );
-
-    if (availableModels.length > 0) {
-      const selected = availableModels[0];
-      return {
-        modelId: selected.modelId,
-        providerId: selected.providerId,
-        attempt: excludeModels.length + 1,
-        reason: 'Fallback: selected from available configured models',
-      };
-    }
-
-    throw new PlatformError({
-      category: 'not_found',
-      code: 'NO_AVAILABLE_MODEL',
-      message: 'No available model found',
-      retryable: false,
-    });
+    return this.selector.resolve(taskType, { modelId, excludeModels });
   }
 
   /**
@@ -202,14 +128,12 @@ export class Service implements IService {
    * Build response metadata with routing and timing info
    */
   private buildResponseMeta(
-    groupId: string,
     routing: RoutingResult,
     startTime: number
   ): { routing: ServiceResponse['routing']; timing: ServiceResponse['timing'] } {
     const endTime = Date.now();
     return {
       routing: {
-        groupId,
         modelId: routing.modelId,
         providerId: routing.providerId,
         attempts: routing.attempt,
@@ -234,12 +158,11 @@ export class Service implements IService {
     options: ServiceOptions = {}
   ): Promise<ServiceResponse> {
     const startTime = Date.now();
-    const groupId = options.groupId || this.defaultGroupId;
     const sessionId = options.sessionId;
     const excludeModels: string[] = [];
 
     while (true) {
-      const routing = this.resolveRouting(groupId, options.modelId, excludeModels);
+      const routing = this.resolveRouting(options.modelId, excludeModels, 'chat');
 
       try {
         const { model, provider, adapter } = this.resolveResources(routing);
@@ -271,7 +194,7 @@ export class Service implements IService {
           sessionId
         );
 
-        return { ...response, ...this.buildResponseMeta(groupId, routing, startTime) };
+        return { ...response, ...this.buildResponseMeta(routing, startTime) };
       } catch (error) {
         const platformError = PlatformError.fromError(error as Error);
 
@@ -285,16 +208,18 @@ export class Service implements IService {
         }
 
         excludeModels.push(routing.modelId);
-        const fallback = this.config.groupManager.routeFallback(
-          groupId,
-          platformError.category,
-          excludeModels
-        );
 
-        if (!fallback) {
+        if (!this.selector.shouldFallback(platformError)) {
           throw platformError;
         }
-        // Continue loop with fallback
+
+        // Try resolving next model; if none available this will throw
+        try {
+          this.selector.resolve('chat', { excludeModels });
+        } catch {
+          throw platformError;
+        }
+        // Continue loop with next model
       }
     }
   }
@@ -307,7 +232,6 @@ export class Service implements IService {
     options: ServiceOptions = {}
   ): ServiceStreamResponse {
     const startTime = Date.now();
-    const groupId = options.groupId || this.defaultGroupId;
     const sessionId = options.sessionId;
     const excludeModels: string[] = [];
 
@@ -319,7 +243,7 @@ export class Service implements IService {
     let providerId: string;
 
     while (true) {
-      routing = this.resolveRouting(groupId, options.modelId, excludeModels);
+      routing = this.resolveRouting(options.modelId, excludeModels, 'chat');
       const resources = this.resolveResources(routing);
       model = resources.model;
       provider = resources.provider;
@@ -329,8 +253,15 @@ export class Service implements IService {
       // Check if provider is available (circuit breaker + health, session-scoped)
       if (!this.config.providerRegistry.isProviderAvailable(providerId, sessionId)) {
         excludeModels.push(routing.modelId);
-        const fallback = this.config.groupManager.routeFallback(groupId, 'server', excludeModels);
-        if (!fallback) {
+        if (!this.selector.shouldFallback(new PlatformError({ category: 'server', code: 'PROVIDER_UNAVAILABLE', message: '', retryable: true }))) {
+          throw new PlatformError({
+            category: 'server',
+            code: 'PROVIDER_UNAVAILABLE',
+            message: `Provider ${providerId} is currently unavailable`,
+            retryable: true,
+          });
+        }
+        try { this.selector.resolve('chat', { excludeModels }); } catch {
           throw new PlatformError({
             category: 'server',
             code: 'PROVIDER_UNAVAILABLE',
@@ -345,8 +276,7 @@ export class Service implements IService {
       const rateLimitResult = this.config.providerRegistry.tryAcquireRateLimit(providerId);
       if (!rateLimitResult.allowed) {
         excludeModels.push(routing.modelId);
-        const fallback = this.config.groupManager.routeFallback(groupId, 'rate_limit', excludeModels);
-        if (!fallback) {
+        try { this.selector.resolve('chat', { excludeModels }); } catch {
           throw new PlatformError({
             category: 'rate_limit',
             code: 'RATE_LIMIT_EXCEEDED',
@@ -379,7 +309,7 @@ export class Service implements IService {
           this.config.providerRegistry.recordSuccess(providerId, sessionId);
           return {
             ...response,
-            ...this.buildResponseMeta(groupId, routing, startTime),
+            ...this.buildResponseMeta(routing, startTime),
           };
         })
         .catch((error) => {
@@ -449,8 +379,7 @@ export class Service implements IService {
     input: string | string[],
     options: EmbeddingOptions = {}
   ): Promise<EmbeddingResponse> {
-    const groupId = options.groupId || 'embedding';
-    const routing = this.resolveRouting(groupId, options.modelId);
+    const routing = this.resolveRouting(options.modelId, [], 'embedding');
     const { model, provider, adapter } = this.resolveResources(routing);
 
     if (!adapter.embed) {

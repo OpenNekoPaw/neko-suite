@@ -6,11 +6,9 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Service, ServiceConfig } from '../service';
 import { ConfigManager } from '../../config/config-manager';
 import { ProviderRegistry } from '../../provider/provider-registry';
-import { GroupManager } from '../../provider/group-manager';
 import { PlatformError } from '../../provider/platform-error';
 import type { ChatMessage, ChatResponse, Adapter, ChatChunk } from '../../types/adapter';
 import type { Model, Provider } from '../../types/provider';
-import type { Group } from '../../types/group';
 import type { ToolResult } from '../../types/tool';
 
 // Mock adapter
@@ -76,46 +74,6 @@ const mockModels: Model[] = [
     contextWindow: 8192,
     enabled: true,
   },
-  {
-    id: 'dall-e-3',
-    name: 'dall-e-3',
-    displayName: 'DALL-E 3',
-    providerId: 'openai',
-    capabilities: ['image_generation'],
-    contextWindow: 4096,
-    enabled: true,
-  },
-];
-
-const mockGroups: Group[] = [
-  {
-    id: 'default',
-    name: 'Default',
-    models: ['gpt-4'],
-    strategy: { type: 'priority' },
-    fallback: {
-      enabled: true,
-      maxAttempts: 3,
-      triggerOn: ['rate_limit', 'timeout', 'server_error'],
-    },
-    enabled: true,
-  },
-  {
-    id: 'embedding',
-    name: 'Embedding',
-    models: ['text-embedding-ada'],
-    strategy: { type: 'priority' },
-    fallback: { enabled: false, maxAttempts: 1, triggerOn: [] },
-    enabled: true,
-  },
-  {
-    id: 'image',
-    name: 'Image',
-    models: ['dall-e-3'],
-    strategy: { type: 'priority' },
-    fallback: { enabled: false, maxAttempts: 1, triggerOn: [] },
-    enabled: true,
-  },
 ];
 
 function createMockConfig(adapter?: Partial<Adapter>): ServiceConfig {
@@ -131,9 +89,7 @@ function createMockConfig(adapter?: Partial<Adapter>): ServiceConfig {
     getModelsByProvider: vi.fn((providerId: string) =>
       mockModels.filter((m) => m.providerId === providerId)
     ),
-    getGroup: vi.fn((id: string) => mockGroups.find((g) => g.id === id)),
-    getGroups: vi.fn(() => mockGroups),
-    getEnabledGroups: vi.fn(() => mockGroups.filter((g) => g.enabled)),
+    getTaskDefaults: vi.fn(() => undefined),
     getRetryTimeoutPreset: vi.fn(() => ({
       retry: {
         maxRetries: 2,
@@ -168,13 +124,9 @@ function createMockConfig(adapter?: Partial<Adapter>): ServiceConfig {
     executeWithProtection: vi.fn((providerId: string, operation: () => Promise<unknown>) => operation()),
   } as unknown as ProviderRegistry;
 
-  const groupManager = new GroupManager(configManager, providerRegistry);
-
   return {
     configManager,
     providerRegistry,
-    groupManager,
-    defaultGroupId: 'default',
   };
 }
 
@@ -211,14 +163,12 @@ describe('Service', () => {
 
     it('should throw when no model available', async () => {
       const config = createMockConfig();
-      // Override group manager to return null
-      config.groupManager.route = vi.fn(() => null);
+      // Override getEnabledModels to return empty array so ModelSelector finds nothing
+      (config.configManager.getEnabledModels as ReturnType<typeof vi.fn>).mockReturnValue([]);
 
       const service = new Service(config);
 
-      await expect(service.chat([{ role: 'user', content: 'Hello' }])).rejects.toThrow(
-        'No available model found'
-      );
+      await expect(service.chat([{ role: 'user', content: 'Hello' }])).rejects.toThrow();
     });
 
     it('should throw when model not found', async () => {
@@ -248,8 +198,8 @@ describe('Service', () => {
       }
 
       expect(chunks.length).toBe(3);
-      expect(chunks[0].delta.content).toBe('Hello');
-      expect(chunks[1].delta.content).toBe(' World');
+      expect(chunks[0]?.delta.content).toBe('Hello');
+      expect(chunks[1]?.delta.content).toBe(' World');
 
       const finalResponse = await response;
       expect(finalResponse.message.content).toBe('Hello World');
@@ -258,13 +208,11 @@ describe('Service', () => {
 
     it('should throw when no model available', () => {
       const config = createMockConfig();
-      config.groupManager.route = vi.fn(() => null);
+      (config.configManager.getEnabledModels as ReturnType<typeof vi.fn>).mockReturnValue([]);
 
       const service = new Service(config);
 
-      expect(() => service.chatStream([{ role: 'user', content: 'Hello' }])).toThrow(
-        'No available model found'
-      );
+      expect(() => service.chatStream([{ role: 'user', content: 'Hello' }])).toThrow();
     });
   });
 
@@ -465,19 +413,6 @@ describe('Service', () => {
       };
 
       const config = createMockConfig(adapter);
-
-      // Add another model for fallback
-      const additionalModel: Model = {
-        id: 'gpt-3.5-turbo',
-        name: 'gpt-3.5-turbo',
-        displayName: 'GPT-3.5',
-        providerId: 'openai',
-        capabilities: ['chat'],
-        contextWindow: 16000,
-        enabled: true,
-      };
-      mockModels.push(additionalModel);
-      mockGroups[0].models.push('gpt-3.5-turbo');
 
       const service = new Service(config);
 

@@ -5,33 +5,11 @@
  * the platform, including:
  *
  * - BaseRegistry: Generic registry for adapters
- * - SelectionStrategy: Unified selection algorithms
  * - Router: Routing interfaces and base classes
- * - HealthMonitor: Centralized health monitoring
  */
 
 // Base Registry
 export { BaseRegistry, type IRegistry } from './base-registry';
-
-// Selection Strategies
-export {
-  type SelectionContext,
-  type ISelectionStrategy,
-  type ItemIdGetter,
-  type CostInfo,
-  type QualityInfo,
-  type LatencyInfo,
-  type CapabilityInfo,
-  PrioritySelectionStrategy,
-  RoundRobinSelectionStrategy,
-  WeightedSelectionStrategy,
-  CostOptimalSelectionStrategy,
-  QualityOptimalSelectionStrategy,
-  LatencyOptimalSelectionStrategy,
-  CapabilityMatchSelectionStrategy,
-  SelectionStrategyFactory,
-  createDefaultStrategyFactory,
-} from './selection-strategy';
 
 // Router
 export {
@@ -46,16 +24,6 @@ export {
   createCandidate,
   addScore,
 } from './router';
-
-// Health Monitor
-export {
-  type HealthStatus,
-  type HealthChecker,
-  type HealthChangeListener,
-  type HealthMonitorConfig,
-  HealthMonitor,
-  createHttpHealthChecker,
-} from './health-monitor';
 
 // HTTP Client
 export {

@@ -6,11 +6,9 @@
  */
 
 import type { Provider, Model } from '../types/provider';
-import type { Group } from '../types/group';
-import type { ExecutionGroup } from '../types/execution-group';
 import type { RetryTimeoutPreset, BuiltinPresetName } from '../types/error';
 import type { MCPServerPreset, WorkflowPreset, PromptPreset } from '../types/config';
-import type { ChatModelOption } from '@neko/shared';
+import type { ChatModelOption, TaskDefaults } from '@neko/shared';
 import { loadBuiltinPresets, setLocale, type BuiltinPresets } from './builtin-presets';
 import { UserConfigManager, type UserConfig, type UserConfigStorage } from './user-config';
 import { loadWorkspaceConfig, watchWorkspaceConfig, type WorkspaceConfig } from './workspace-config';
@@ -35,8 +33,6 @@ import {
 export interface MergedConfig {
   providers: Map<string, Provider>;
   models: Map<string, Model>;
-  groups: Map<string, Group>;
-  executionGroups: Map<string, ExecutionGroup>;
   retryTimeoutPresets: Map<string, RetryTimeoutPreset>;
   mcpServers: Map<string, MCPServerPreset>;
   workflows: Map<string, WorkflowPreset>;
@@ -47,7 +43,7 @@ export interface MergedConfig {
  * Configuration change event
  */
 export interface ConfigChangeEvent {
-  type: 'provider' | 'model' | 'group' | 'executionGroup' | 'mcpServer' | 'workflow' | 'prompt' | 'all';
+  type: 'provider' | 'model' | 'mcpServer' | 'workflow' | 'prompt' | 'all';
   ids?: string[];
 }
 
@@ -130,8 +126,6 @@ export class ConfigManager {
     this.cachedConfig = {
       providers: new Map(this.sections.providers.getAll().map((p) => [p.id, p])),
       models: new Map(this.sections.models.getAll().map((m) => [m.id, m])),
-      groups: new Map(this.sections.groups.getAll().map((g) => [g.id, g])),
-      executionGroups: new Map(this.sections.executionGroups.getAll().map((e) => [e.id, e])),
       retryTimeoutPresets: this.retryTimeoutPresets,
       mcpServers: new Map(this.sections.mcpServers.getAll().map((s) => [s.id, s])),
       workflows: new Map(this.sections.workflows.getAll().map((w) => [w.id, w])),
@@ -147,17 +141,24 @@ export class ConfigManager {
     return this.userConfigManager?.load() ?? {
       providers: [],
       models: [],
-      groups: [],
       mcpServers: [],
       workflows: [],
       prompts: [],
       providerOverrides: {},
       modelOverrides: {},
-      groupOverrides: {},
       mcpServerOverrides: {},
       workflowOverrides: {},
       promptOverrides: {},
     };
+  }
+
+  /**
+   * Get task defaults (workspace config takes priority over user config)
+   */
+  getTaskDefaults(): TaskDefaults | undefined {
+    const user = this.userConfigManager?.load().taskDefaults;
+    const workspace = this.workspaceConfig?.taskDefaults;
+    return workspace ?? user;
   }
 
   /**
@@ -253,48 +254,6 @@ export class ConfigManager {
 
   async updateModelOverride(modelId: string, override: Partial<Model>): Promise<void> {
     await this.sections.models.updateOverride(modelId, override);
-  }
-
-  // ==========================================================================
-  // Group Methods
-  // ==========================================================================
-
-  getGroup(id: string): Group | undefined {
-    this.ensureMerged();
-    return this.sections.groups.get(id);
-  }
-
-  getGroups(): Group[] {
-    this.ensureMerged();
-    return this.sections.groups.getAll();
-  }
-
-  getEnabledGroups(): Group[] {
-    this.ensureMerged();
-    return this.sections.groups.getEnabled();
-  }
-
-  async setGroup(group: Group): Promise<void> {
-    await this.sections.groups.set(group);
-  }
-
-  // ==========================================================================
-  // Execution Group Methods
-  // ==========================================================================
-
-  getExecutionGroup(id: string): ExecutionGroup | undefined {
-    this.ensureMerged();
-    return this.sections.executionGroups.get(id);
-  }
-
-  getExecutionGroups(): ExecutionGroup[] {
-    this.ensureMerged();
-    return this.sections.executionGroups.getAll();
-  }
-
-  getEnabledExecutionGroups(): ExecutionGroup[] {
-    this.ensureMerged();
-    return this.sections.executionGroups.getEnabled();
   }
 
   // ==========================================================================
@@ -512,18 +471,6 @@ export class ConfigManager {
       workspace?.models,
       workspace?.modelOverrides
     ));
-
-    this.sections.groups.merge(this.builtinPresets.groups, this.createMergeContext(
-      userConfig?.groups ?? [],
-      userConfig?.groupOverrides ?? {},
-      workspace?.groups,
-      workspace?.groupOverrides
-    ));
-
-    this.sections.executionGroups.merge(this.builtinPresets.executionGroups ?? [], {
-      userItems: [],
-      userOverrides: {},
-    });
 
     this.sections.mcpServers.merge(this.builtinPresets.mcpServers, this.createMergeContext(
       userConfig?.mcpServers ?? [],

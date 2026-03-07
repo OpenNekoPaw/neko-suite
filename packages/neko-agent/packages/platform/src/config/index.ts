@@ -9,7 +9,6 @@ export {
   getBuiltinProviderTemplates,
   getBuiltinProviderTemplate,
   getBuiltinModel,
-  getBuiltinGroup,
   getBuiltinRetryTimeoutPreset,
   getBuiltinMCPServer,
   getBuiltinWorkflow,

@@ -7,7 +7,6 @@ import { ConfigManager } from '../config-manager';
 import { loadBuiltinPresets } from '../builtin-presets';
 import type { UserConfigStorage } from '../user-config';
 import type { Provider, Model } from '../../types/provider';
-import type { Group } from '../../types/group';
 
 // Mock user config storage
 function createMockStorage(): UserConfigStorage & { data: Record<string, unknown> } {
@@ -30,7 +29,6 @@ describe('ConfigManager', () => {
 
       expect(presets.providers.length).toBeGreaterThan(0);
       expect(presets.models.length).toBeGreaterThan(0);
-      expect(presets.groups.length).toBeGreaterThan(0);
     });
 
     it('should include expected providers', () => {
@@ -51,15 +49,6 @@ describe('ConfigManager', () => {
       expect(modelIds).toContain('anthropic-claude-3-5-sonnet');
       expect(modelIds).toContain('google-gemini-2-flash');
     });
-
-    it('should include expected groups', () => {
-      const presets = loadBuiltinPresets();
-      const groupIds = presets.groups.map((g) => g.id);
-
-      expect(groupIds).toContain('default');
-      expect(groupIds).toContain('fast');
-      expect(groupIds).toContain('vision');
-    });
   });
 
   describe('ConfigManager initialization', () => {
@@ -69,7 +58,6 @@ describe('ConfigManager', () => {
 
       expect(config.providers.size).toBeGreaterThan(0);
       expect(config.models.size).toBeGreaterThan(0);
-      expect(config.groups.size).toBeGreaterThan(0);
     });
 
     it('should get provider by ID', () => {
@@ -94,21 +82,11 @@ describe('ConfigManager', () => {
       expect(model?.providerId).toBe('openai');
     });
 
-    it('should get group by ID', () => {
-      const manager = new ConfigManager();
-      const group = manager.getGroup('default');
-
-      expect(group).toBeDefined();
-      expect(group?.id).toBe('default');
-      expect(group?.models.length).toBeGreaterThan(0);
-    });
-
     it('should return undefined for non-existent items', () => {
       const manager = new ConfigManager();
 
       expect(manager.getProvider('non-existent')).toBeUndefined();
       expect(manager.getModel('non-existent')).toBeUndefined();
-      expect(manager.getGroup('non-existent')).toBeUndefined();
     });
   });
 
@@ -162,24 +140,6 @@ describe('ConfigManager', () => {
 
       expect(model).toBeDefined();
       expect(model?.displayName).toBe('Custom Model');
-    });
-
-    it('should add custom group', async () => {
-      const customGroup: Group = {
-        id: 'custom-group',
-        name: 'Custom Group',
-        models: ['openai-gpt-4o', 'anthropic-claude-3-5-sonnet'],
-        strategy: { type: 'round-robin' },
-        fallback: { enabled: true, maxAttempts: 2, triggerOn: ['timeout'] },
-        enabled: true,
-      };
-
-      await manager.setGroup(customGroup);
-      const group = manager.getGroup('custom-group');
-
-      expect(group).toBeDefined();
-      expect(group?.name).toBe('Custom Group');
-      expect(group?.strategy.type).toBe('round-robin');
     });
 
     it('should remove custom provider', async () => {
@@ -284,16 +244,6 @@ describe('ConfigManager', () => {
       const models = manager.getModelsByProvider('openai');
       expect(models.length).toBeGreaterThan(0);
       expect(models.every((m) => m.providerId === 'openai')).toBe(true);
-    });
-
-    it('should get all groups', () => {
-      const groups = manager.getGroups();
-      expect(groups.length).toBeGreaterThan(0);
-    });
-
-    it('should get enabled groups', () => {
-      const groups = manager.getEnabledGroups();
-      expect(groups.every((g) => g.enabled)).toBe(true);
     });
 
     it('should get retry/timeout preset', () => {

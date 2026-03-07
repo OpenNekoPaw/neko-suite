@@ -8,14 +8,10 @@ import {
   GenerateVideoTool,
   GenerateTTSTool,
   GenerateMusicTool,
-  GenerateCharacterTool,
-  TransferStyleTool,
-  EnhanceVideoTool,
-  OptimizeAudioTool,
   registerGenerationTools,
   type AIGenerationService,
   type GeneratedMedia,
-} from '../generation-tools';
+} from '../generation';
 import { ToolRegistry } from '@neko/agent';
 
 // Create a mock AI generation service
@@ -37,10 +33,6 @@ function createMockAIService(): AIGenerationService {
     generateVideo: vi.fn().mockResolvedValue(mockVideoMedia),
     generateTTS: vi.fn().mockResolvedValue({ ...mockMedia, mimeType: 'audio/mp3' }),
     generateMusic: vi.fn().mockResolvedValue({ ...mockMedia, mimeType: 'audio/mp3' }),
-    generateCharacter: vi.fn().mockResolvedValue(mockMedia),
-    transferStyle: vi.fn().mockResolvedValue(mockMedia),
-    enhanceVideo: vi.fn().mockResolvedValue(mockVideoMedia),
-    optimizeAudio: vi.fn().mockResolvedValue({ ...mockMedia, mimeType: 'audio/wav' }),
   };
 }
 
@@ -239,214 +231,6 @@ describe('GenerateMusicTool', () => {
   });
 });
 
-describe('GenerateCharacterTool', () => {
-  let tool: GenerateCharacterTool;
-  let mockService: AIGenerationService;
-
-  beforeEach(() => {
-    mockService = createMockAIService();
-    tool = new GenerateCharacterTool(mockService);
-  });
-
-  it('should have correct metadata', () => {
-    expect(tool.name).toBe('GenerateCharacter');
-    expect(tool.category).toBe('generation');
-    expect(tool.requiresConfirmation).toBe(true);
-  });
-
-  it('should require prompt parameter', async () => {
-    const result = await tool.execute({});
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('prompt');
-  });
-
-  it('should generate character successfully', async () => {
-    const result = await tool.execute({
-      prompt: 'A young warrior with blue eyes',
-      referenceImageUrl: 'https://example.com/ref.png',
-      style: 'anime',
-      pose: 'standing',
-      expression: 'determined',
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.data).toHaveProperty('mediaId');
-    expect(mockService.generateCharacter).toHaveBeenCalledWith({
-      prompt: 'A young warrior with blue eyes',
-      referenceImageUrl: 'https://example.com/ref.png',
-      style: 'anime',
-      pose: 'standing',
-      expression: 'determined',
-    });
-  });
-
-  it('should return error if generateCharacter not configured', async () => {
-    const limitedService = { ...mockService, generateCharacter: undefined };
-    const limitedTool = new GenerateCharacterTool(limitedService as AIGenerationService);
-
-    const result = await limitedTool.execute({ prompt: 'test' });
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('not configured');
-  });
-});
-
-describe('TransferStyleTool', () => {
-  let tool: TransferStyleTool;
-  let mockService: AIGenerationService;
-
-  beforeEach(() => {
-    mockService = createMockAIService();
-    tool = new TransferStyleTool(mockService);
-  });
-
-  it('should have correct metadata', () => {
-    expect(tool.name).toBe('TransferStyle');
-    expect(tool.category).toBe('generation');
-    expect(tool.requiresConfirmation).toBe(true);
-  });
-
-  it('should require sourceImageUrl and stylePrompt', async () => {
-    const result = await tool.execute({ stylePrompt: 'oil painting' });
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('sourceImageUrl');
-  });
-
-  it('should transfer style successfully', async () => {
-    const result = await tool.execute({
-      sourceImageUrl: 'https://example.com/photo.jpg',
-      stylePrompt: 'Van Gogh starry night style',
-      styleStrength: 0.8,
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.data).toHaveProperty('mediaId');
-    expect(mockService.transferStyle).toHaveBeenCalledWith({
-      sourceImageUrl: 'https://example.com/photo.jpg',
-      stylePrompt: 'Van Gogh starry night style',
-      styleStrength: 0.8,
-    });
-  });
-
-  it('should return error if transferStyle not configured', async () => {
-    const limitedService = { ...mockService, transferStyle: undefined };
-    const limitedTool = new TransferStyleTool(limitedService as AIGenerationService);
-
-    const result = await limitedTool.execute({
-      sourceImageUrl: 'https://example.com/photo.jpg',
-      stylePrompt: 'oil painting',
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('not configured');
-  });
-});
-
-describe('EnhanceVideoTool', () => {
-  let tool: EnhanceVideoTool;
-  let mockService: AIGenerationService;
-
-  beforeEach(() => {
-    mockService = createMockAIService();
-    tool = new EnhanceVideoTool(mockService);
-  });
-
-  it('should have correct metadata', () => {
-    expect(tool.name).toBe('EnhanceVideo');
-    expect(tool.category).toBe('generation');
-    expect(tool.requiresConfirmation).toBe(true);
-  });
-
-  it('should require videoUrl parameter', async () => {
-    const result = await tool.execute({});
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('videoUrl');
-  });
-
-  it('should enhance video successfully', async () => {
-    const result = await tool.execute({
-      videoUrl: 'https://example.com/video.mp4',
-      targetResolution: '4k',
-      denoise: true,
-      stabilize: true,
-      interpolateFps: 60,
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.data).toHaveProperty('taskId');
-    expect(result.data).toHaveProperty('mediaId');
-    expect(mockService.enhanceVideo).toHaveBeenCalledWith({
-      videoUrl: 'https://example.com/video.mp4',
-      targetResolution: '4k',
-      denoise: true,
-      stabilize: true,
-      interpolateFps: 60,
-    });
-  });
-
-  it('should return error if enhanceVideo not configured', async () => {
-    const limitedService = { ...mockService, enhanceVideo: undefined };
-    const limitedTool = new EnhanceVideoTool(limitedService as AIGenerationService);
-
-    const result = await limitedTool.execute({ videoUrl: 'https://example.com/video.mp4' });
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('not configured');
-  });
-});
-
-describe('OptimizeAudioTool', () => {
-  let tool: OptimizeAudioTool;
-  let mockService: AIGenerationService;
-
-  beforeEach(() => {
-    mockService = createMockAIService();
-    tool = new OptimizeAudioTool(mockService);
-  });
-
-  it('should have correct metadata', () => {
-    expect(tool.name).toBe('OptimizeAudio');
-    expect(tool.category).toBe('generation');
-    expect(tool.requiresConfirmation).toBe(true);
-  });
-
-  it('should require audioUrl parameter', async () => {
-    const result = await tool.execute({});
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('audioUrl');
-  });
-
-  it('should optimize audio successfully', async () => {
-    const result = await tool.execute({
-      audioUrl: 'https://example.com/audio.wav',
-      denoise: true,
-      normalize: true,
-      enhanceVoice: true,
-      removeBackground: false,
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.data).toHaveProperty('mediaId');
-    expect(mockService.optimizeAudio).toHaveBeenCalledWith({
-      audioUrl: 'https://example.com/audio.wav',
-      denoise: true,
-      normalize: true,
-      enhanceVoice: true,
-      removeBackground: false,
-    });
-  });
-
-  it('should return error if optimizeAudio not configured', async () => {
-    const limitedService = { ...mockService, optimizeAudio: undefined };
-    const limitedTool = new OptimizeAudioTool(limitedService as AIGenerationService);
-
-    const result = await limitedTool.execute({ audioUrl: 'https://example.com/audio.wav' });
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('not configured');
-  });
-});
-
 describe('registerGenerationTools', () => {
   it('should register all generation tools', () => {
     const registry = new ToolRegistry();
@@ -459,13 +243,9 @@ describe('registerGenerationTools', () => {
     expect(registry.get('GenerateVideo')).toBeDefined();
     expect(registry.get('GenerateTTS')).toBeDefined();
     expect(registry.get('GenerateMusic')).toBeDefined();
-    expect(registry.get('GenerateCharacter')).toBeDefined();
-    expect(registry.get('TransferStyle')).toBeDefined();
-    expect(registry.get('EnhanceVideo')).toBeDefined();
-    expect(registry.get('OptimizeAudio')).toBeDefined();
 
     // Verify count
     const tools = registry.listByCategory('generation');
-    expect(tools.length).toBe(8);
+    expect(tools.length).toBe(4);
   });
 });

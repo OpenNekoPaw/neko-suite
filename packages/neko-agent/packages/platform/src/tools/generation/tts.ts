@@ -4,7 +4,6 @@
 
 import type { ToolResult } from '../../types/tool';
 import { RoutedGenerationTool } from './base';
-import { ROUTING_PARAMETER_SCHEMA } from './types';
 
 export class GenerateTTSTool extends RoutedGenerationTool {
   readonly name = 'GenerateTTS';
@@ -30,7 +29,6 @@ export class GenerateTTSTool extends RoutedGenerationTool {
         minimum: 0.5,
         maximum: 2.0,
       },
-      ...ROUTING_PARAMETER_SCHEMA,
     },
     required: ['text'],
   };

@@ -4,8 +4,7 @@
  * A unified AI service layer providing:
  * - Multi-provider support (OpenAI, Anthropic, Google, Azure, Ollama)
  * - Configuration management with three-tier priority
- * - Model groups with routing strategies
- * - ReAct pattern agent execution
+ * - Model selection driven by taskDefaults config
  * - Tool integration and memory management
  */
 
@@ -23,17 +22,6 @@ export {
   // Base Registry
   BaseRegistry,
   type IRegistry,
-  // Selection Strategies
-  type SelectionContext,
-  type ISelectionStrategy,
-  PrioritySelectionStrategy,
-  RoundRobinSelectionStrategy,
-  WeightedSelectionStrategy,
-  CostOptimalSelectionStrategy,
-  QualityOptimalSelectionStrategy,
-  LatencyOptimalSelectionStrategy,
-  CapabilityMatchSelectionStrategy,
-  SelectionStrategyFactory,
   // Router
   type IRouter,
   type RoutingCandidate,
@@ -43,12 +31,6 @@ export {
   BaseRoutingManager,
   createCandidate,
   addScore,
-  // Health Monitor
-  type HealthStatus,
-  type HealthChecker,
-  type HealthMonitorConfig,
-  HealthMonitor,
-  createHttpHealthChecker,
   // Concurrency Control
   type ConcurrencyPoolOptions,
   type PoolStats,
@@ -71,28 +53,6 @@ export {
   KeyedRateLimiter,
   AdaptiveRateLimiter,
 } from './core';
-
-// =============================================================================
-// LLM Routing Layer
-// =============================================================================
-
-export {
-  // LLM Routing Manager
-  LLMRoutingManager,
-  // LLM Routing Types
-  type LLMRoutingContext,
-  type LLMRoutingPreference,
-  type LLMRoutingCandidate,
-  type LLMRoutingResult,
-  type LLMRoutingStrategy,
-  // LLM Routing Strategies
-  LLMUserPreferenceStrategy,
-  LLMHealthFilterStrategy,
-  LLMCapabilityFilterStrategy,
-  LLMContextWindowStrategy,
-  LLMCostOptimizationStrategy,
-  LLMLoadBalancingStrategy,
-} from './llm';
 
 // =============================================================================
 // Configuration Layer
@@ -157,7 +117,6 @@ export {
   type ProviderRegistryOptions,
   type ExtendedProviderStatus,
 } from './provider/provider-registry';
-export { GroupManager } from './provider/group-manager';
 export { PlatformError } from './provider/platform-error';
 export {
   executeWithRetry,
@@ -170,6 +129,7 @@ export {
 // =============================================================================
 
 export { Service, type ServiceConfig } from './service/service';
+export { ModelSelector, type ModelTaskType, type ResolvedModel } from './service/model-selector';
 export { SharedServiceAdapter, toSharedService } from './service/shared-service-adapter';
 // ToolRegistry implementation is now in @neko/agent.
 // Platform uses IToolRegistry interface from @neko/shared.
@@ -224,56 +184,13 @@ export {
   GenerateVideoTool,
   GenerateTTSTool,
   GenerateMusicTool,
-  GenerateCharacterTool,
-  TransferStyleTool,
-  EnhanceVideoTool,
-  OptimizeAudioTool,
   registerGenerationTools,
   type AIGenerationService,
   type ImageGenerationOptions,
   type VideoGenerationOptions,
   type TTSOptions,
   type MusicGenerationOptions,
-  type CharacterGenerationOptions,
-  type StyleTransferOptions,
-  type VideoEnhanceOptions,
-  type AudioOptimizeOptions,
   type GeneratedMedia,
-} from './tools';
-// Media Service Adapter
-export {
-  MediaServiceAdapter,
-  createMediaServiceAdapter,
-  type MediaServiceAdapterOptions,
-} from './tools';
-// AI Analysis Tools
-export {
-  AnalyzeImageTool,
-  ExtractImageTextTool,
-  AnalyzeVideoTool,
-  ExtractVideoSummaryTool,
-  registerAnalysisTools,
-  type VisionAnalysisService,
-  type ImageAnalysisOptions,
-  type VideoAnalysisOptions,
-  type AnalysisResult,
-  type VideoAnalysisResult,
-  type TextExtractionResult,
-} from './tools';
-// Document Tools
-export {
-  GenerateScriptTool,
-  OptimizeScriptTool,
-  GenerateStoryboardTool,
-  GenerateSubtitlesTool,
-  registerDocumentTools,
-  type DocumentGenerationService,
-  type ScriptGenerationOptions,
-  type ScriptResult,
-  type StoryboardOptions,
-  type StoryboardResult,
-  type SubtitleOptions,
-  type SubtitleResult,
 } from './tools';
 
 // =============================================================================
@@ -359,23 +276,16 @@ export {
 // Factory Functions
 // =============================================================================
 
-import { loadBuiltinPresets } from './config/builtin-presets';
 import { UserConfigManager, type UserConfigStorage } from './config/user-config';
-import { loadWorkspaceConfig, watchWorkspaceConfig } from './config/workspace-config';
 import { ConfigManager, type ConfigManagerOptions } from './config/config-manager';
 import { ProviderRegistry } from './provider/provider-registry';
-import { GroupManager } from './provider/group-manager';
 import { Service } from './service/service';
 import type { IToolRegistry } from '@neko/shared';
-// TaskManager is now in @neko/agent, but we need it for createPlatform
-// Import from agent package (optional peer dependency)
-import type { ITaskManager, ITaskStorage } from '@neko/shared';
+import type { ITaskManager } from '@neko/shared';
 import { PromptManager } from './service/prompt-manager';
 // Media Generation imports
 import { MediaGenerationService } from './media/media-generation-service';
 import { createMediaPlatform } from './media';
-// LLM Routing imports
-import { LLMRoutingManager } from './llm/routing/llm-routing-manager';
 
 /**
  * Platform initialization options
@@ -385,8 +295,6 @@ export interface PlatformOptions {
   userConfigStorage?: UserConfigStorage;
   /** Workspace path for .neko/config.json */
   workspacePath?: string;
-  /** Default group ID for routing */
-  defaultGroupId?: string;
   /** Locale for i18n (e.g., 'en', 'zh-cn') */
   locale?: string;
   /**
@@ -419,10 +327,6 @@ export interface Platform {
   config: ConfigManager;
   /** Provider registry */
   providers: ProviderRegistry;
-  /** Group manager */
-  groups: GroupManager;
-  /** LLM routing manager for intelligent provider selection */
-  llmRouter: LLMRoutingManager;
   /** Tool registry */
   tools: IToolRegistry;
   /** Prompt manager */
@@ -430,7 +334,7 @@ export interface Platform {
   /** Media generation service */
   media: MediaGenerationService;
   /** Create a service instance */
-  createService: (defaultGroupId?: string) => Service;
+  createService: () => Service;
   /** Dispose resources */
   dispose: () => void;
 }
@@ -450,22 +354,15 @@ export function createPlatform(options: PlatformOptions): Platform {
   // Initialize provider registry
   const providerRegistry = new ProviderRegistry(configManager);
 
-  // Initialize group manager
-  const groupManager = new GroupManager(configManager, providerRegistry);
-
-  // Initialize LLM routing manager for intelligent provider selection
-  const llmRoutingManager = new LLMRoutingManager(providerRegistry, configManager);
-
-  // Use injected tool registry (from @neko/agent) or undefined
+  // Use injected tool registry (from @neko/agent)
   const toolRegistry = options.toolRegistry;
 
-  // Initialize prompt manager
+  // Initialize prompt manager (extension registers prompts via platform.prompts.register())
   const promptManager = new PromptManager();
 
   // ==========================================================================
   // Initialize Media Generation Service
   // ==========================================================================
-  // Use provided TaskManager or throw if not provided
   const mediaTaskManager = options.taskManager;
   if (!mediaTaskManager) {
     throw new Error(
@@ -488,16 +385,13 @@ export function createPlatform(options: PlatformOptions): Platform {
     taskManager: mediaTaskManager,
   });
 
-  // Use the service from mediaPlatform
   const mediaGenerationService = mediaPlatform.service;
 
-  // Factory functions
-  const createService = (defaultGroupId?: string): Service => {
+  // Factory function — model selection is handled inside Service via ModelSelector
+  const createService = (): Service => {
     return new Service({
       configManager,
       providerRegistry,
-      groupManager,
-      defaultGroupId: defaultGroupId || options.defaultGroupId,
       mediaGenerationService,
     });
   };
@@ -513,8 +407,6 @@ export function createPlatform(options: PlatformOptions): Platform {
   return {
     config: configManager,
     providers: providerRegistry,
-    groups: groupManager,
-    llmRouter: llmRoutingManager,
     tools: toolRegistry,
     prompts: promptManager,
     media: mediaGenerationService,

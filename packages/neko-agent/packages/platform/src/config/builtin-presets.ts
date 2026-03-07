@@ -4,16 +4,12 @@
 
 import type { Provider, Model } from '../types/provider';
 import type { ProviderTemplate } from '@neko/shared';
-import type { Group } from '../types/group';
-import type { ExecutionGroup } from '../types/execution-group';
 import type { RetryTimeoutPreset, BuiltinPresetName } from '../types/error';
 import type { MCPServerPreset, WorkflowPreset, PromptPreset } from '../types/config';
 
 // English (default) presets
 import providersDataEn from './presets/en/providers.json';
 import modelsDataEn from './presets/en/models.json';
-import groupsDataEn from './presets/en/groups.json';
-import executionGroupsDataEn from './presets/en/execution-groups.json';
 import retryTimeoutDataEn from './presets/en/retry-timeout.json';
 import mcpServersDataEn from './presets/en/mcp-servers.json';
 import workflowsDataEn from './presets/en/workflows.json';
@@ -22,7 +18,6 @@ import promptsDataEn from './presets/en/prompts.json';
 // Chinese presets
 import providersDataZh from './presets/zh-cn/providers.json';
 import modelsDataZh from './presets/zh-cn/models.json';
-import groupsDataZh from './presets/zh-cn/groups.json';
 import retryTimeoutDataZh from './presets/zh-cn/retry-timeout.json';
 import mcpServersDataZh from './presets/zh-cn/mcp-servers.json';
 import workflowsDataZh from './presets/zh-cn/workflows.json';
@@ -35,8 +30,6 @@ const LOCALE_DATA = {
   'en': {
     providers: providersDataEn,
     models: modelsDataEn,
-    groups: groupsDataEn,
-    executionGroups: executionGroupsDataEn,
     retryTimeout: retryTimeoutDataEn,
     mcpServers: mcpServersDataEn,
     workflows: workflowsDataEn,
@@ -45,8 +38,6 @@ const LOCALE_DATA = {
   'zh-cn': {
     providers: providersDataZh,
     models: modelsDataZh,
-    groups: groupsDataZh,
-    executionGroups: executionGroupsDataEn, // Use English for now, add zh-cn later
     retryTimeout: retryTimeoutDataZh,
     mcpServers: mcpServersDataZh,
     workflows: workflowsDataZh,
@@ -92,8 +83,6 @@ export interface BuiltinPresets {
   providers: Provider[];
   providerTemplates: ProviderTemplate[];
   models: Model[];
-  groups: Group[];
-  executionGroups?: ExecutionGroup[];
   retryTimeoutPresets: Record<BuiltinPresetName, RetryTimeoutPreset>;
   mcpServers: MCPServerPreset[];
   workflows: WorkflowPreset[];
@@ -111,8 +100,6 @@ export function loadBuiltinPresets(): BuiltinPresets {
     providers: providersData.providers,
     providerTemplates: providersData.templates || [],
     models: data.models.models as Model[],
-    groups: data.groups.groups as Group[],
-    executionGroups: data.executionGroups.executionGroups as ExecutionGroup[],
     retryTimeoutPresets: data.retryTimeout.presets as Record<BuiltinPresetName, RetryTimeoutPreset>,
     mcpServers: data.mcpServers.mcpServers as MCPServerPreset[],
     workflows: data.workflows.workflows as WorkflowPreset[],
@@ -150,14 +137,6 @@ export function getBuiltinProviderTemplate(id: string): ProviderTemplate | undef
 export function getBuiltinModel(id: string): Model | undefined {
   const data = LOCALE_DATA[currentLocale];
   return (data.models.models as Model[]).find((m) => m.id === id);
-}
-
-/**
- * Get builtin group by ID (i18n aware)
- */
-export function getBuiltinGroup(id: string): Group | undefined {
-  const data = LOCALE_DATA[currentLocale];
-  return (data.groups.groups as Group[]).find((g) => g.id === id);
 }
 
 /**

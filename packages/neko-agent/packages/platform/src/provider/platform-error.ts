@@ -11,6 +11,9 @@ import type {
   RetryEvent,
   TimeoutEvent,
 } from '../types/error';
+import { calculateBackoff, sleep } from '@neko/shared';
+
+export { calculateBackoff, sleep };
 
 /**
  * Platform error with classification
@@ -227,40 +230,6 @@ function parseRetryAfter(body: string): number | undefined {
 }
 
 /**
- * Calculate backoff delay
- */
-export function calculateBackoff(
-  strategy: BackoffStrategy,
-  attempt: number
-): number {
-  switch (strategy.type) {
-    case 'fixed':
-      return strategy.delayMs;
-
-    case 'linear':
-      return Math.min(
-        strategy.initialDelayMs + strategy.incrementMs * attempt,
-        strategy.maxDelayMs
-      );
-
-    case 'exponential':
-      return Math.min(
-        strategy.initialDelayMs * Math.pow(strategy.multiplier, attempt),
-        strategy.maxDelayMs
-      );
-
-    case 'jitter': {
-      const baseDelay = calculateBackoff(strategy.baseStrategy, attempt);
-      const jitter = baseDelay * strategy.jitterFactor * Math.random();
-      return baseDelay + jitter;
-    }
-
-    default:
-      return 1000;
-  }
-}
-
-/**
  * Check if error should trigger retry
  */
 export function shouldRetry(
@@ -279,9 +248,3 @@ export function shouldRetry(
   return policy.retryableCategories.includes(error.category);
 }
 
-/**
- * Sleep for specified milliseconds
- */
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}

@@ -4,8 +4,6 @@
 
 export * from './provider';
 export * from './adapter';
-export * from './group';
-export * from './execution-group';
 export * from './service';
 export * from './tool';
 export * from './prompt';

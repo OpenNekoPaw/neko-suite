@@ -6,8 +6,8 @@
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
 import { getLogger } from '../../base';
+import { getMimeType } from '@neko/shared';
 import type { MessageAttachment } from '../types';
 
 const logger = getLogger('AttachmentProcessor');
@@ -99,16 +99,9 @@ export class AttachmentProcessor {
   } | null> {
     try {
       const buffer = await fs.promises.readFile(filePath);
-      const ext = path.extname(filePath).toLowerCase();
-      const mimeTypes: Record<string, string> = {
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp',
-        '.bmp': 'image/bmp',
-      };
-      const mediaType = mimeTypes[ext] || 'image/png';
+      const mimeFromExt = getMimeType(filePath);
+      // Fall back to image/png for unrecognised image extensions
+      const mediaType = mimeFromExt !== 'application/octet-stream' ? mimeFromExt : 'image/png';
       return {
         type: 'base64',
         media_type: mediaType,

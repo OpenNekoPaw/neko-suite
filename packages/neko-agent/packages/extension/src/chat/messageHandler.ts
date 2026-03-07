@@ -275,7 +275,6 @@ export class MessageHandler {
 
       await agentRunner.configure({
         platform: this._platform,
-        groupId: 'default',
         systemPrompt,
         maxIterations: Infinity,
         autoExecuteTools: this._settings.autoExecuteTools,

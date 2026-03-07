@@ -9,8 +9,7 @@ import type { ToolResult } from './tool';
  * Service options extending chat options
  */
 export interface ServiceOptions extends ChatOptions {
-  /** Group ID for routing */
-  groupId?: string;
+
   /** Specific model ID (overrides group routing) */
   modelId?: string;
   /** Timeout in milliseconds */
@@ -27,7 +26,7 @@ export interface ServiceOptions extends ChatOptions {
 export interface ServiceResponse extends ChatResponse {
   /** Routing information */
   routing: {
-    groupId?: string;
+  
     modelId: string;
     providerId: string;
     attempts: number;
@@ -64,8 +63,7 @@ export interface ChatWithToolsOptions extends ServiceOptions {
  * Embedding options
  */
 export interface EmbeddingOptions {
-  /** Group ID for routing */
-  groupId?: string;
+
   /** Specific model ID */
   modelId?: string;
 }
@@ -86,8 +84,7 @@ export interface EmbeddingResponse {
  * Image generation service options
  */
 export interface ImageGenerationServiceOptions {
-  /** Group ID for routing */
-  groupId?: string;
+
   /** Specific model ID */
   modelId?: string;
   /** Image size */
@@ -104,8 +101,7 @@ export interface ImageGenerationServiceOptions {
  * Video generation service options
  */
 export interface VideoGenerationServiceOptions {
-  /** Group ID for routing */
-  groupId?: string;
+
   /** Specific model ID */
   modelId?: string;
   /** Video duration in seconds */

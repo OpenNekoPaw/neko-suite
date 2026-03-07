@@ -5,8 +5,6 @@
  */
 
 import type { Provider, Model } from '../types/provider';
-import type { Group } from '../types/group';
-import type { ExecutionGroup } from '../types/execution-group';
 import type { MCPServerPreset, WorkflowPreset, PromptPreset } from '../types/config';
 import { BaseConfigSection, type ConfigSectionOptions } from './base-config-section';
 import type { UserConfigManager } from './user-config';
@@ -91,81 +89,6 @@ export class ModelSection extends BaseConfigSection<Model> {
     const config = this.userConfigManager!.load();
     delete config.modelOverrides[id];
     await this.userConfigManager!.save(config);
-  }
-}
-
-// =============================================================================
-// Group Section
-// =============================================================================
-
-export class GroupSection extends BaseConfigSection<Group> {
-  constructor(options: Omit<ConfigSectionOptions<Group>, 'name' | 'builtinOverridableFields'>) {
-    super({
-      ...options,
-      name: 'group',
-      builtinOverridableFields: ['enabled', 'models', 'strategy'] as (keyof Group)[],
-    });
-  }
-
-  protected async doSet(item: Group): Promise<void> {
-    await this.userConfigManager!.addGroup(item);
-  }
-
-  protected async doRemove(id: string): Promise<void> {
-    const config = this.userConfigManager!.load();
-    const index = config.groups.findIndex((g) => g.id === id);
-    if (index !== -1) {
-      config.groups.splice(index, 1);
-    }
-    await this.userConfigManager!.save(config);
-  }
-
-  protected async doUpdateOverride(id: string, override: Partial<Group>): Promise<void> {
-    const config = this.userConfigManager!.load();
-    config.groupOverrides[id] = {
-      ...config.groupOverrides[id],
-      ...override,
-    };
-    await this.userConfigManager!.save(config);
-  }
-
-  protected async doRemoveOverride(id: string): Promise<void> {
-    const config = this.userConfigManager!.load();
-    delete config.groupOverrides[id];
-    await this.userConfigManager!.save(config);
-  }
-}
-
-// =============================================================================
-// Execution Group Section
-// =============================================================================
-
-export class ExecutionGroupSection extends BaseConfigSection<ExecutionGroup> {
-  constructor(
-    options: Omit<ConfigSectionOptions<ExecutionGroup>, 'name' | 'builtinOverridableFields'>
-  ) {
-    super({
-      ...options,
-      name: 'executionGroup',
-      builtinOverridableFields: ['enabled'] as (keyof ExecutionGroup)[],
-    });
-  }
-
-  // ExecutionGroups are currently read-only from ConfigManager perspective
-  protected async doSet(_item: ExecutionGroup): Promise<void> {
-    throw new Error('ExecutionGroups are read-only');
-  }
-
-  protected async doRemove(_id: string): Promise<void> {
-    throw new Error('ExecutionGroups are read-only');
-  }
-
-  protected async doUpdateOverride(_id: string, _override: Partial<ExecutionGroup>): Promise<void> {
-    throw new Error('ExecutionGroups are read-only');
-  }
-
-  protected async doRemoveOverride(_id: string): Promise<void> {
-    throw new Error('ExecutionGroups are read-only');
   }
 }
 
@@ -287,8 +210,6 @@ export class PromptSection extends BaseConfigSection<PromptPreset> {
 export interface ConfigSections {
   providers: ProviderSection;
   models: ModelSection;
-  groups: GroupSection;
-  executionGroups: ExecutionGroupSection;
   mcpServers: MCPServerSection;
   workflows: WorkflowSection;
   prompts: PromptSection;
@@ -315,8 +236,6 @@ export function createConfigSections(options: CreateConfigSectionsOptions): Conf
   return {
     providers: new ProviderSection(createOptions('provider')),
     models: new ModelSection(createOptions('model')),
-    groups: new GroupSection(createOptions('group')),
-    executionGroups: new ExecutionGroupSection(createOptions('executionGroup')),
     mcpServers: new MCPServerSection(createOptions('mcpServer')),
     workflows: new WorkflowSection(createOptions('workflow')),
     prompts: new PromptSection(createOptions('prompt')),

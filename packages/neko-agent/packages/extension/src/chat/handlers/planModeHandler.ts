@@ -84,17 +84,7 @@ export class PlanModeHandler {
         const agentRunner = this.deps.agentManager?.get(conversationId);
         if (agentRunner && this.deps.platform) {
           // Temporarily switch to auto mode for plan execution
-          await agentRunner.configure({
-            platform: this.deps.platform,
-            groupId: 'default',
-            systemPrompt: this.deps.settings.customSystemPrompt || this.deps.systemPrompt.getPrompt(),
-            maxIterations: Infinity,
-            autoExecuteTools: true,
-            temperature: this.deps.settings.temperature,
-            maxTokens: this.deps.settings.maxTokens,
-            executionMode: 'auto', // Execute in auto mode
-            thinkingBudget: 10000,
-          });
+          await agentRunner.configure(this._buildAgentConfig());
 
           // Send message to execute the approved plan
           const executeMessage = `The plan has been approved. Please execute the following plan:\n\n${planContent}`;
@@ -111,17 +101,7 @@ export class PlanModeHandler {
       // No file path - just notify the agent
       const agentRunner = this.deps.agentManager?.get(conversationId);
       if (agentRunner && this.deps.platform) {
-        await agentRunner.configure({
-          platform: this.deps.platform,
-          groupId: 'default',
-          systemPrompt: this.deps.settings.customSystemPrompt || this.deps.systemPrompt.getPrompt(),
-          maxIterations: Infinity,
-          autoExecuteTools: true,
-          temperature: this.deps.settings.temperature,
-          maxTokens: this.deps.settings.maxTokens,
-          executionMode: 'auto',
-          thinkingBudget: 10000,
-        });
+        await agentRunner.configure(this._buildAgentConfig());
 
         this.deps.messages?.handleUserMessage(webview, 'The plan has been approved. Please proceed with the implementation.');
       }
@@ -207,6 +187,21 @@ export class PlanModeHandler {
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
+
+  /** Build the common agent config used for all plan execution branches. */
+  private _buildAgentConfig() {
+    return {
+      platform: this.deps.platform!,
+      systemPrompt: this.deps.settings.customSystemPrompt || this.deps.systemPrompt.getPrompt(),
+      maxIterations: Infinity,
+      autoExecuteTools: true,
+      temperature: this.deps.settings.temperature,
+      maxTokens: this.deps.settings.maxTokens,
+      executionMode: 'auto' as const,
+      thinkingBudget: 10000,
+    };
+  }
+
 
   private _updatePlanStepInConversation(
     conversationId: string,

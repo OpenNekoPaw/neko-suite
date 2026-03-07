@@ -164,15 +164,18 @@ export class SkillLoader {
         const isDir = await this.fs.isDirectory(entryPath);
 
         if (isDir) {
-          // Directory-based skill: look for SKILL.md
-          const skillFilePath = `${entryPath}/SKILL.md`;
-          const skillFileExists = await this.fs.exists(skillFilePath);
-
-          if (skillFileExists) {
+          // Directory-based skill: attempt load directly, skip if SKILL.md is absent (avoids TOCTOU).
+          try {
             const skill = await this.loadSkillFromDirectory(entryPath, source);
             if (skill) {
               result.skills.push(skill);
             }
+          } catch (err) {
+            const code = (err as NodeJS.ErrnoException | undefined)?.code;
+            if (code !== 'ENOENT') {
+              throw err; // Re-throw unexpected errors to outer catch
+            }
+            // SKILL.md simply doesn't exist — skip silently
           }
         } else if (entry.endsWith('.md') && entry !== 'README.md') {
           // Single file: check if it's a slash command
@@ -223,21 +226,24 @@ export class SkillLoader {
     // Progressive Disclosure: Only extract support file references
     const supportFileRefs = extractSupportFileRefs(parsed.content);
 
-    // Validate that referenced files exist
-    const validRefs: string[] = [];
-    for (const ref of supportFileRefs) {
-      const supportFilePath = `${directoryPath}/${ref}`;
-      try {
-        const fileExists = await this.fs.exists(supportFilePath);
-        if (fileExists) {
-          validRefs.push(ref);
-        } else {
-          console.warn(`[SkillLoader] Support file not found: ${supportFilePath}`);
-        }
-      } catch {
-        // Ignore errors, file just won't be in validRefs
-      }
-    }
+    // Validate that referenced files exist — check all refs in parallel.
+    const validRefs: string[] = (
+      await Promise.all(
+        supportFileRefs.map(async (ref) => {
+          const supportFilePath = `${directoryPath}/${ref}`;
+          try {
+            const fileExists = await this.fs.exists(supportFilePath);
+            if (!fileExists) {
+              console.warn(`[SkillLoader] Support file not found: ${supportFilePath}`);
+            }
+            return fileExists ? ref : null;
+          } catch {
+            // Ignore errors, file just won't be in validRefs
+            return null;
+          }
+        })
+      )
+    ).filter((ref): ref is string => ref !== null);
 
     // Load tool definitions from tools-ref if specified
     let toolDefinitions: SkillToolDefinition[] | undefined;
@@ -373,8 +379,7 @@ export class SkillLoader {
         // Try to read first line as description (optional)
         let description: string | undefined;
         try {
-          const content = await this.fs.readFile(filePath);
-          const firstLine = content.split('\n')[0];
+          const firstLine = await this.readFirstLine(filePath);
           // If first line is a markdown heading, use it as description
           if (firstLine?.startsWith('# ')) {
             description = firstLine.substring(2).trim();
@@ -444,15 +449,15 @@ export class SkillLoader {
         // Try to read first comment as description (optional)
         let description: string | undefined;
         try {
-          const content = await this.fs.readFile(filePath);
-          const firstLine = content.split('\n')[0];
-          // Check for common comment patterns
+          const firstLine = await this.readFirstLine(filePath);
+          // Check for common single-line comment patterns
           if (firstLine?.startsWith('# ') && language !== 'typescript' && language !== 'javascript') {
             description = firstLine.substring(2).trim();
           } else if (firstLine?.startsWith('// ')) {
             description = firstLine.substring(3).trim();
           } else if (firstLine?.startsWith('"""') || firstLine?.startsWith("'''")) {
-            // Python docstring - try to get first line
+            // Python docstring may span multiple lines — requires full file content
+            const content = await this.fs.readFile(filePath);
             const match = content.match(/^(?:"""|''')(.*?)(?:"""|''')/s);
             if (match?.[1]) {
               description = match[1].split('\n')[0]?.trim();
@@ -578,6 +583,20 @@ export class SkillLoader {
    */
   parseMarkdown(content: string): ParsedSkillFile | null {
     return this.parser.parseMarkdown(content);
+  }
+
+  // ===========================================================================
+  // Private Helpers
+  // ===========================================================================
+
+  /**
+   * Read the first line of a file for use as a description.
+   * NOTE: Reads the full file because ISkillFileSystem has no partial-read API.
+   * These are small metadata files so the overhead is acceptable.
+   */
+  private async readFirstLine(filePath: string): Promise<string | undefined> {
+    const content = await this.fs.readFile(filePath);
+    return content.split('\n')[0];
   }
 
   // ===========================================================================

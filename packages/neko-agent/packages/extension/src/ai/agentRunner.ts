@@ -70,9 +70,6 @@ export interface IAgentConfig {
   /** Platform instance */
   platform: Platform;
 
-  /** Group ID */
-  groupId?: string;
-
   /** System prompt */
   systemPrompt?: string;
 
@@ -388,7 +385,7 @@ export class AgentRunner implements IAgentRunner {
     this._session?.dispose();
 
     // Create service from platform, adapted to @neko/shared IService
-    const service = toSharedService(config.platform.createService(config.groupId));
+    const service = toSharedService(config.platform.createService());
 
     // Create agent session
     this._session = createAgentSession({
