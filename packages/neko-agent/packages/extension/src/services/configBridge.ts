@@ -20,7 +20,12 @@ import type {
   ConfiguredSlashCommand,
   ConfiguredHook,
   ConfiguredToolSkill,
+  TaskDefaults,
 } from '@neko/shared';
+import type { UnifiedConfig } from '@neko/shared';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import type {
   ConnectionStateManager,
   ConnectionStateChangeEvent,
@@ -93,6 +98,9 @@ export class ConfigBridge implements vscode.Disposable {
   private static readonly TOOL_SKILL_ENABLED_STATE_KEY = 'toolSkillEnabledState';
   private toolSkillEnabledState: Map<string, boolean> = new Map();
 
+  // Config file watcher cleanup functions
+  private configFileWatcherCleanups: Array<() => void> = [];
+
   constructor(
     private readonly platform: Platform,
     private readonly connectionStateManager?: ConnectionStateManager,
@@ -143,6 +151,10 @@ export class ConfigBridge implements vscode.Disposable {
 
     // Initialize hook file sync
     this.initHookFileSync();
+
+    // Initialize config file import and watching
+    void this.initConfigFileImport();
+    this.watchConfigFiles();
   }
 
   /**
@@ -877,11 +889,162 @@ export class ConfigBridge implements vscode.Disposable {
     }
   }
 
+  // ==========================================================================
+  // Config File Import Methods
+  // ==========================================================================
+
+  /**
+   * Import providers with API keys from config file data into the platform.
+   * Workspace config overrides user config (last entry in array wins).
+   */
+  private async importProvidersFromConfigs(configs: Array<UnifiedConfig>): Promise<void> {
+    const cm = this.platform.config;
+
+    // Build merged set: later entries override earlier (workspace > user)
+    const keyMap = new Map<string, { apiKey: string; raw: Record<string, unknown> }>();
+    for (const config of configs) {
+      for (const provider of config.providers ?? []) {
+        if (provider.apiKey) {
+          keyMap.set(provider.id, {
+            apiKey: provider.apiKey,
+            raw: provider as unknown as Record<string, unknown>,
+          });
+        }
+      }
+    }
+
+    for (const [id, { apiKey, raw }] of keyMap) {
+      try {
+        if (cm.getProvider(id)) {
+          // Builtin provider: just update the API key
+          await cm.setProviderApiKey(id, apiKey);
+        } else {
+          // Custom provider: add it fully
+          await cm.setProvider(raw as unknown as Parameters<typeof cm.setProvider>[0]);
+        }
+      } catch (error) {
+        logger.error(`Failed to import provider ${id} from config file:`, error);
+      }
+    }
+
+    // Import taskDefaults from the last (highest priority) config that has them
+    const lastConfig = configs.at(-1);
+    if (lastConfig?.taskDefaults) {
+      const userCfg = cm.getUserConfig();
+      userCfg.taskDefaults = lastConfig.taskDefaults as TaskDefaults;
+      await cm.saveUserConfig(userCfg);
+    }
+  }
+
+  /**
+   * Read a config.json file from the given path.
+   * Returns null if the file does not exist or cannot be parsed.
+   */
+  private readConfigFile(filePath: string): UnifiedConfig | null {
+    try {
+      if (!fs.existsSync(filePath)) return null;
+      const content = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(content) as UnifiedConfig;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Watch a config.json file for changes.
+   * Returns a cleanup function to stop watching.
+   */
+  private watchConfigFile(
+    filePath: string,
+    callback: (config: UnifiedConfig | null) => void
+  ): () => void {
+    let watcher: fs.FSWatcher | null = null;
+    try {
+      watcher = fs.watch(filePath, (eventType) => {
+        if (eventType === 'change') {
+          callback(this.readConfigFile(filePath));
+        }
+      });
+    } catch {
+      // File doesn't exist yet — watch parent directory instead
+      const dir = path.dirname(filePath);
+      const filename = path.basename(filePath);
+      if (fs.existsSync(dir)) {
+        watcher = fs.watch(dir, (_eventType, changedFilename) => {
+          if (changedFilename === filename) {
+            callback(this.readConfigFile(filePath));
+          }
+        });
+      }
+    }
+    return () => {
+      watcher?.close();
+    };
+  }
+
+  /**
+   * Read provider API keys from ~/.neko/config.json and workspace .neko/config.json.
+   * Imports into platform ConfigManager so the webview sees them immediately.
+   */
+  private async initConfigFileImport(): Promise<void> {
+    const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+    const userConfigPath = path.join(os.homedir(), '.neko', 'config.json');
+    const configs: Array<UnifiedConfig> = [];
+    const userConfig = this.readConfigFile(userConfigPath);
+    if (userConfig) configs.push(userConfig);
+
+    if (workspacePath) {
+      const wsConfigPath = path.join(workspacePath, '.neko', 'config.json');
+      const wsConfig = this.readConfigFile(wsConfigPath);
+      if (wsConfig) configs.push(wsConfig);
+    }
+
+    if (configs.length > 0) {
+      await this.importProvidersFromConfigs(configs);
+    }
+  }
+
+  /**
+   * Watch ~/.neko/config.json and workspace .neko/config.json for changes.
+   * Re-imports providers and broadcasts updated config to all webviews.
+   */
+  private watchConfigFiles(): void {
+    const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+    const handleChange = (_config: UnifiedConfig | null) => {
+      void this.initConfigFileImport().then(() => {
+        for (const postMessage of this.activeWebviews) {
+          try {
+            postMessage({ type: 'configChanged', source: 'configFile' });
+          } catch (error) {
+            logger.error('Failed to broadcast config file change:', error);
+          }
+        }
+      });
+    };
+
+    const userConfigPath = path.join(os.homedir(), '.neko', 'config.json');
+    const userWatcherCleanup = this.watchConfigFile(userConfigPath, handleChange);
+    this.configFileWatcherCleanups.push(userWatcherCleanup);
+
+    if (workspacePath) {
+      const wsConfigPath = path.join(workspacePath, '.neko', 'config.json');
+      const wsWatcherCleanup = this.watchConfigFile(wsConfigPath, handleChange);
+      this.configFileWatcherCleanups.push(wsWatcherCleanup);
+    }
+  }
+
   dispose(): void {
     for (const disposable of this.disposables) {
       disposable.dispose();
     }
     this.disposables = [];
     this.activeWebviews.clear();
+    // Clean up config file watchers
+    for (const cleanup of this.configFileWatcherCleanups) {
+      cleanup();
+    }
+    this.configFileWatcherCleanups = [];
   }
 }
