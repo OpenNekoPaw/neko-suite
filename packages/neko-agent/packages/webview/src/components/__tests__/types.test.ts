@@ -6,7 +6,7 @@ import type {
   ConversationSummary,
   OpenTab,
   TabType,
-  SettingsSubTab,
+  SsoSession,
   ShellExecutionMode,
   SettingsState,
   ConfiguredProvider,
@@ -156,19 +156,31 @@ describe('types validation', () => {
     });
   });
 
-  describe('TabType and SettingsSubTab', () => {
+  describe('TabType', () => {
     it('should accept valid tab types', () => {
-      const tabTypes: TabType[] = ['chat', 'settings', 'tasks'];
+      const tabTypes: TabType[] = ['chat', 'tasks', 'agents'];
       tabTypes.forEach((type) => {
-        expect(['chat', 'settings', 'tasks']).toContain(type);
+        expect(['chat', 'tasks', 'agents']).toContain(type);
       });
     });
+  });
 
-    it('should accept valid settings sub tabs', () => {
-      const subTabs: SettingsSubTab[] = ['provider', 'mcp', 'models', 'skills'];
-      subTabs.forEach((tab) => {
-        expect(['provider', 'mcp', 'models', 'skills']).toContain(tab);
-      });
+  describe('SsoSession type', () => {
+    it('should accept full SSO session', () => {
+      const session: SsoSession = {
+        user: 'user@studio.com',
+        plan: 'Pro',
+        usage: 12400,
+      };
+      expect(session.user).toBe('user@studio.com');
+      expect(session.plan).toBe('Pro');
+      expect(session.usage).toBe(12400);
+    });
+
+    it('should accept minimal SSO session', () => {
+      const session: SsoSession = { user: 'user@example.com' };
+      expect(session.plan).toBeUndefined();
+      expect(session.usage).toBeUndefined();
     });
   });
 
@@ -269,6 +281,7 @@ describe('types validation', () => {
         executionMode: 'ask',
         promptMode: 'default',
         chatModelOptions: [],
+        ssoSession: null,
       };
       expect(settings.executionMode).toBe('ask');
       expect(settings.temperature).toBe(0.7);
@@ -309,6 +322,7 @@ describe('types validation', () => {
         executionMode: 'auto',
         promptMode: 'default',
         chatModelOptions: [],
+        ssoSession: null,
       };
       // Both should reference the same prompt system
       expect(settings.selectedPromptId).toBe('p1');
