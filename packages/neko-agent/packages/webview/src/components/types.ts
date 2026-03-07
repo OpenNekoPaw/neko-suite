@@ -162,7 +162,7 @@ export interface SsoSession {
   user: string;
   /** Plan tier, e.g. 'Pro' */
   plan?: string;
-  /** Token usage this period */
+  /** Token usage this period. TODO: add usageLimit/usagePeriod when SSO API shape is finalized */
   usage?: number;
 }
 
