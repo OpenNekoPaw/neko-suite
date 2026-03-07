@@ -2,16 +2,15 @@ import { useEffect, useCallback, useState, useRef, useMemo } from 'react';
 import {
   Message,
   OpenTab,
-  ConfiguredMCPServer,
-  ConfiguredProvider,
   ShellExecutionMode,
   PromptMode,
   AgentState,
+  SsoSession,
 } from '@/components/types';
 import { VSCodeMessages, postMessage } from '@/components/hooks/useVSCode';
 import { Header } from '@/components/Header';
 import { ChatView } from '@/components/ChatView';
-import { SettingsView } from '@/components/SettingsView';
+import { OnboardingFlow } from '@/components/OnboardingFlow';
 import { AgentsPanel } from '@/components/AgentsPanel';
 import { AgentControlCenter, type AgentSessionInfo, getActiveSessions } from '@/components/AgentControlCenter';
 import { AttachedFile } from '@/components/ChatView/InputArea';
@@ -87,12 +86,14 @@ export function AIAssistant() {
   const {
     settings,
     setSettings,
-    modelPresets,
-    setModelPresets,
     projectFiles,
     setProjectFiles,
     updateSettings,
   } = config;
+
+  // Local model presets setter (no longer in useConfigState but still required by useMessageHandler)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [, setModelPresets] = useState<any[]>([]);
 
   const {
     backgroundTasks,
@@ -130,6 +131,17 @@ export function AIAssistant() {
   const forceAgentStateUpdate = useCallback(() => {
     setAgentStateVersion(v => v + 1);
   }, []);
+
+  // Onboarding overlay state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Auto-show onboarding when no AI service is configured
+  const isAiConfigured = !!(settings.ssoSession ?? settings.configuredProviders.find(p => p.enabled !== false && p.apiKey));
+  useEffect(() => {
+    if (!isAiConfigured) {
+      setShowOnboarding(true);
+    }
+  }, [isAiConfigured]);
 
   // Derived state for current conversation
   const contextTokenCount = activeConversationId
@@ -272,6 +284,19 @@ export function AIAssistant() {
     window.addEventListener('message', handleSkillsMessage);
     return () => window.removeEventListener('message', handleSkillsMessage);
   }, []);
+
+  // Listen for SSO session changes from extension
+  useEffect(() => {
+    const handleSsoMessage = (event: MessageEvent) => {
+      const message = event.data;
+      if (message.type === 'ssoSessionChanged') {
+        updateSettings({ ssoSession: (message.session as SsoSession | null) ?? null });
+        setShowOnboarding(false);
+      }
+    };
+    window.addEventListener('message', handleSsoMessage);
+    return () => window.removeEventListener('message', handleSsoMessage);
+  }, [updateSettings]);
 
   // Listen for context management messages from extension
   useEffect(() => {
@@ -513,9 +538,6 @@ export function AIAssistant() {
         VSCodeMessages.newConversation();
         setActiveTab('chat');
       }),
-      COMMON_SHORTCUTS.settings(() => {
-        setActiveTab(activeTab === 'settings' ? 'chat' : 'settings');
-      }),
       COMMON_SHORTCUTS.copyLastResponse(copyLastResponse),
       // ESC to cancel current message generation
       COMMON_SHORTCUTS.cancel(handleCancelMessage),
@@ -692,10 +714,6 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
         ]);
         break;
       }
-      case 'settings':
-        setActiveTab('settings');
-        clearInput();
-        break;
       case 'resume': {
         clearInput();
         // Show recent conversations that can be resumed
@@ -800,307 +818,6 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
     VSCodeMessages.setPromptMode(mode);
   };
 
-  // Settings handlers
-  // Helper: Get adapter type from Platform data (builtin providers)
-  const getAdapterType = (providerTypeId: string): string => {
-    // Find builtin provider with this ID and get its adapter type
-    const builtinProvider = settings.configuredProviders.find(
-      p => p.builtin && (p.id === providerTypeId || p.type === providerTypeId)
-    );
-    return builtinProvider?.type || providerTypeId;
-  };
-
-  const handleAddProvider = (provider: {
-    id?: string; // Optional: provided when editing, undefined when creating new
-    type: string;
-    name?: string;
-    apiKey?: string;
-    baseUrl?: string;
-  }) => {
-    // Use existing ID when editing, generate new ID when creating
-    const providerId = provider.id || `${provider.type}-${Date.now()}`;
-    const isEditing = !!provider.id;
-
-    // Get the correct adapter type from Platform builtin providers
-    const adapterType = getAdapterType(provider.type);
-
-    // Convert to ProviderConfig and use new API
-    const providerConfig: import('@neko/shared').ProviderConfig = {
-      id: providerId,
-      name: provider.name || provider.type,
-      displayName: provider.name || provider.type,
-      type: adapterType as import('@neko/shared').ProviderType,
-      apiUrl: provider.baseUrl || '',
-      apiKey: provider.apiKey,
-      enabled: true,
-    };
-    VSCodeMessages.updateProvider(providerConfig);
-
-    // Also update local state immediately for responsiveness
-    const newConfiguredProvider: ConfiguredProvider = {
-      id: providerId,
-      type: provider.type,
-      name: provider.name || provider.type,
-      apiKey: provider.apiKey,
-      baseUrl: provider.baseUrl,
-      enabled: true,
-    };
-
-    if (isEditing) {
-      // Update existing provider
-      setSettings(prev => ({
-        ...prev,
-        configuredProviders: prev.configuredProviders.map(p =>
-          p.id === providerId ? newConfiguredProvider : p
-        ),
-      }));
-    } else {
-      // Add new provider
-      setSettings(prev => ({
-        ...prev,
-        configuredProviders: [...prev.configuredProviders, newConfiguredProvider],
-      }));
-    }
-  };
-
-  const handleRemoveProvider = (providerId: string) => {
-    // Use new API
-    VSCodeMessages.deleteProvider(providerId);
-    // Update local state
-    setSettings(prev => ({
-      ...prev,
-      configuredProviders: prev.configuredProviders.filter(p => p.id !== providerId),
-    }));
-  };
-
-  const handleToggleProvider = (providerId: string, enabled: boolean) => {
-    // Find the provider and update it
-    const provider = settings.configuredProviders.find(p => p.id === providerId);
-    if (provider) {
-      // Get the correct adapter type from Platform builtin providers
-      const adapterType = getAdapterType(provider.type);
-
-      const providerConfig: import('@neko/shared').ProviderConfig = {
-        id: provider.id,
-        name: provider.name,
-        displayName: provider.name,
-        type: adapterType as import('@neko/shared').ProviderType,
-        apiUrl: provider.baseUrl || '',
-        apiKey: provider.apiKey,
-        enabled: enabled,
-      };
-      VSCodeMessages.updateProvider(providerConfig);
-      // Update local state
-      setSettings(prev => ({
-        ...prev,
-        configuredProviders: prev.configuredProviders.map(p =>
-          p.id === providerId ? { ...p, enabled } : p
-        ),
-      }));
-    }
-  };
-
-  const handleUpdateMCPServers = (servers: ConfiguredMCPServer[]) => {
-    setSettings(prev => ({ ...prev, configuredMCPServers: servers }));
-    // Persist each server to backend
-    servers.forEach(server => {
-      VSCodeMessages.updateMCPServer(server);
-    });
-  };
-
-  const handleDeleteMCPServer = (serverId: string) => {
-    setSettings(prev => ({
-      ...prev,
-      configuredMCPServers: prev.configuredMCPServers.filter(s => s.id !== serverId),
-    }));
-    VSCodeMessages.deleteMCPServer(serverId);
-  };
-
-  // Provider handlers for Platform ConfigManager
-  const handleUpdateProviders = (providers: ConfiguredProvider[]) => {
-    setSettings(prev => ({ ...prev, configuredProviders: providers }));
-    // Persist each provider to backend
-    providers.forEach(provider => {
-      // Get the correct adapter type from Platform builtin providers
-      const adapterType = getAdapterType(provider.type);
-
-      const providerConfig: import('@neko/shared').ProviderConfig = {
-        id: provider.id,
-        name: provider.name,
-        displayName: provider.name,
-        type: adapterType as import('@neko/shared').ProviderType,
-        apiUrl: provider.baseUrl || '',
-        apiKey: provider.apiKey,
-        enabled: provider.enabled ?? true,
-      };
-      VSCodeMessages.updateProvider(providerConfig);
-    });
-  };
-
-  const handleDeleteProvider = (providerId: string) => {
-    setSettings(prev => ({
-      ...prev,
-      configuredProviders: prev.configuredProviders.filter(p => p.id !== providerId),
-    }));
-    VSCodeMessages.deleteProvider(providerId);
-  };
-
-  // Model CRUD handlers
-  const handleAddModel = (model: Omit<import('@neko/shared').ModelConfig, 'id'>) => {
-    const newModel: import('@neko/shared').ModelConfig = {
-      ...model,
-      id: `model-${Date.now()}`,
-    };
-    setSettings(prev => ({
-      ...prev,
-      configuredModels: [...prev.configuredModels, newModel],
-    }));
-    VSCodeMessages.updateModel(newModel);
-  };
-
-  const handleUpdateModel = (model: import('@neko/shared').ModelConfig) => {
-    setSettings(prev => ({
-      ...prev,
-      configuredModels: prev.configuredModels.map(m => m.id === model.id ? model : m),
-    }));
-    VSCodeMessages.updateModel(model);
-  };
-
-  const handleDeleteModel = (modelId: string) => {
-    setSettings(prev => ({
-      ...prev,
-      configuredModels: prev.configuredModels.filter(m => m.id !== modelId),
-    }));
-    VSCodeMessages.deleteModel(modelId);
-  };
-
-  // Skill handlers
-  const handleUpdateSkill = (skill: import('@neko/shared').ConfiguredSkill) => {
-    setSettings(prev => ({
-      ...prev,
-      configuredSkills: prev.configuredSkills.map(s => s.name === skill.name ? skill : s),
-    }));
-    VSCodeMessages.updateSkill(skill);
-  };
-
-  const handleDeleteSkill = (skillName: string) => {
-    setSettings(prev => ({
-      ...prev,
-      configuredSkills: prev.configuredSkills.filter(s => s.name !== skillName),
-    }));
-    VSCodeMessages.deleteSkill(skillName);
-  };
-
-  const handleUpdateCommand = (command: import('@neko/shared').ConfiguredSlashCommand) => {
-    setSettings(prev => ({
-      ...prev,
-      configuredCommands: prev.configuredCommands.map(c => c.command === command.command ? command : c),
-    }));
-    VSCodeMessages.updateCommand(command);
-  };
-
-  const handleDeleteCommand = (commandName: string) => {
-    setSettings(prev => ({
-      ...prev,
-      configuredCommands: prev.configuredCommands.filter(c => c.command !== commandName),
-    }));
-    VSCodeMessages.deleteCommand(commandName);
-  };
-
-  const handleDuplicateSkill = (skill: import('@neko/shared').ConfiguredSkill) => {
-    // Determine target source:
-    // - personal stays personal
-    // - builtin/project go to project
-    const targetSource = skill.source === 'personal' ? 'personal' : 'project';
-    
-    // Generate unique name by checking existing skills
-    const baseName = skill.name.replace(/-copy(-\d+)?$/, ''); // Remove existing -copy suffix
-    let newName = `${baseName}-copy`;
-    let counter = 1;
-    
-    // Check if name already exists and increment counter
-    while (settings.configuredSkills.some(s => s.name === newName)) {
-      counter++;
-      newName = `${baseName}-copy-${counter}`;
-    }
-
-    // Use duplicateSkill to copy the entire directory (including references, scripts, etc.)
-    VSCodeMessages.duplicateSkill(skill, newName, targetSource);
-    // Note: The skill list will be updated via the broadcast from ConfigBridge after scanning
-  };
-
-  const handleDuplicateCommand = (command: import('@neko/shared').ConfiguredSlashCommand) => {
-    // Generate unique name by checking existing commands
-    const baseName = command.command.replace(/-copy(-\d+)?$/, ''); // Remove existing -copy suffix
-    let newCommandName = `${baseName}-copy`;
-    let counter = 1;
-    
-    // Check if name already exists and increment counter
-    while (settings.configuredCommands.some(c => c.command === newCommandName)) {
-      counter++;
-      newCommandName = `${baseName}-copy-${counter}`;
-    }
-
-    // Create a copy with a new command name
-    // Use the source from the passed command (already computed in SkillSettings):
-    // - personal stays personal
-    // - builtin/project go to project
-    const newCommand: import('@neko/shared').ConfiguredSlashCommand = {
-      ...command,
-      command: newCommandName,
-    };
-    setSettings(prev => ({
-      ...prev,
-      configuredCommands: [...prev.configuredCommands, newCommand],
-    }));
-    VSCodeMessages.updateCommand(newCommand);
-  };
-
-  const handleCreateSkill = (source: 'personal' | 'project') => {
-    // Generate a unique name for the new skill
-    const timestamp = Date.now();
-    const newName = `new-skill-${timestamp}`;
-    
-    // Create the skill via VSCodeMessages
-    VSCodeMessages.createSkill(newName, source);
-    // Note: The skill list will be updated via the broadcast from ConfigBridge after scanning
-  };
-
-  // Test MCP server connection - returns Promise for async result
-  const handleTestMCPServer = (server: ConfiguredMCPServer): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      const requestId = `mcp-test-${Date.now()}`;
-
-      const handleTestResult = (event: MessageEvent) => {
-        const message = event.data;
-        if (message.type === 'mcpServerTestResult' && message.requestId === requestId) {
-          window.removeEventListener('message', handleTestResult);
-          resolve({
-            success: message.success,
-            error: message.error,
-          });
-        }
-      };
-
-      window.addEventListener('message', handleTestResult);
-
-      // Send test request
-      VSCodeMessages.testMCPServer({
-        ...server,
-        requestId,
-      } as any);
-
-      // Timeout after 30 seconds
-      setTimeout(() => {
-        window.removeEventListener('message', handleTestResult);
-        resolve({
-          success: false,
-          error: 'Connection timeout (30s)',
-        });
-      }, 30000);
-    });
-  };
-
   // Background task handlers
   const handleCancelTask = (taskId: string) => {
     VSCodeMessages.cancelTask(taskId);
@@ -1137,82 +854,6 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
 
   const handleRejectAllPlanSteps = (planId: string) => {
     VSCodeMessages.rejectAllPlanSteps(planId, activeConversationId || undefined);
-  };
-
-  // Model preset handlers
-  const handleConfigureModelPreset = (modelId: string, apiKey: string, baseUrl?: string) => {
-    VSCodeMessages.configureModelPreset(modelId, apiKey, baseUrl);
-  };
-
-  const handleToggleModelPreset = (modelId: string, enabled: boolean) => {
-    VSCodeMessages.toggleModelPreset(modelId, enabled);
-  };
-
-  const handleRemoveModelPresetConfig = (modelId: string) => {
-    VSCodeMessages.removeModelPresetConfig(modelId);
-  };
-
-  // Export model config
-  const handleExportModelConfig = (includeSecrets: boolean) => {
-    VSCodeMessages.exportModelConfig(includeSecrets);
-  };
-
-  // Import model config - returns a promise for async handling
-  const handleImportModelConfig = async (
-    jsonString: string,
-    options: { overwrite?: boolean; includeSecrets?: boolean }
-  ): Promise<{ success: boolean; message: string }> => {
-    return new Promise((resolve) => {
-      // Set up one-time listener for response
-      const handleResponse = (event: MessageEvent) => {
-        if (event.data.type === 'modelConfigImported') {
-          window.removeEventListener('message', handleResponse);
-          resolve({
-            success: event.data.success,
-            message: event.data.message,
-          });
-        }
-      };
-      window.addEventListener('message', handleResponse);
-
-      // Send import request
-      VSCodeMessages.importModelConfig(jsonString, options);
-
-      // Timeout fallback
-      setTimeout(() => {
-        window.removeEventListener('message', handleResponse);
-        resolve({ success: false, message: 'Request timed out' });
-      }, 30000);
-    });
-  };
-
-  // Add custom model
-  const handleAddCustomModel = async (
-    configJson: string,
-    apiKey?: string
-  ): Promise<{ success: boolean; message: string }> => {
-    return new Promise((resolve) => {
-      // Set up one-time listener for response
-      const handleResponse = (event: MessageEvent) => {
-        if (event.data.type === 'customModelAdded') {
-          window.removeEventListener('message', handleResponse);
-          resolve({
-            success: event.data.success,
-            message: event.data.message,
-          });
-        }
-      };
-      window.addEventListener('message', handleResponse);
-
-      // Send add request
-      VSCodeMessages.addCustomModel(configJson, apiKey);
-
-      // Timeout fallback
-      setTimeout(() => {
-        window.removeEventListener('message', handleResponse);
-        resolve({ success: false, message: 'Request timed out' });
-      }, 30000);
-    });
   };
 
   // Get active tasks count for header badge
@@ -1269,9 +910,12 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
         onOpenConversation={handleOpenTab}
         onDeleteConversation={handleDeleteConversation}
         onClearAllConversations={handleClearAllConversations}
-        onToggleSettings={() => setActiveTab(activeTab === 'settings' ? 'chat' : 'settings')}
         onToggleTasks={() => setActiveTab(activeTab === 'tasks' ? 'chat' : 'tasks')}
         onToggleAgents={() => setActiveTab(activeTab === 'agents' ? 'chat' : 'agents')}
+        ssoSession={settings.ssoSession}
+        configuredProviders={settings.configuredProviders}
+        selectedModelId={settings.selectedModelId}
+        onOpenOnboarding={() => setShowOnboarding(true)}
       />
 
       {/* Content Area */}
@@ -1333,36 +977,11 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
           onNavigateToConversation={handleNavigateToAgent}
           onStopAgent={handleStopAgent}
         />
-      ) : (
-        <SettingsView
-          settings={settings}
-          onAddProvider={handleAddProvider}
-          onRemoveProvider={handleRemoveProvider}
-          onToggleProvider={handleToggleProvider}
-          onUpdateProviders={handleUpdateProviders}
-          onDeleteProvider={handleDeleteProvider}
-          onAddModel={handleAddModel}
-          onUpdateModel={handleUpdateModel}
-          onDeleteModel={handleDeleteModel}
-          onUpdateMCPServers={handleUpdateMCPServers}
-          onDeleteMCPServer={handleDeleteMCPServer}
-          onTestMCPServer={handleTestMCPServer}
-          models={modelPresets}
-          onConfigureModel={handleConfigureModelPreset}
-          onToggleModel={handleToggleModelPreset}
-          onRemoveModelConfig={handleRemoveModelPresetConfig}
-          onExportConfig={handleExportModelConfig}
-          onImportConfig={handleImportModelConfig}
-          onAddCustomModel={handleAddCustomModel}
-          skills={settings.configuredSkills}
-          commands={settings.configuredCommands}
-          onUpdateSkill={handleUpdateSkill}
-          onDeleteSkill={handleDeleteSkill}
-          onUpdateCommand={handleUpdateCommand}
-          onDeleteCommand={handleDeleteCommand}
-          onDuplicateSkill={handleDuplicateSkill}
-          onDuplicateCommand={handleDuplicateCommand}
-          onCreateSkill={handleCreateSkill}
+      ) : null}
+      {showOnboarding && (
+        <OnboardingFlow
+          providerTemplates={settings.providerTemplates}
+          onComplete={() => setShowOnboarding(false)}
         />
       )}
     </div>
