@@ -5,7 +5,6 @@ export const onboarding = {
   'onboarding.subtitle': '连接 AI 服务以开始对话。',
   'onboarding.ssoButton': '使用 Neko Studio 账号登录',
   'onboarding.or': '或',
-  'onboarding.customKeyButton': '使用我自己的 API Key',
   'onboarding.back': '返回',
   'onboarding.openConfigButton': '打开配置文件',
   'onboarding.fileOpenedTitle': '配置文件已打开',

@@ -57,7 +57,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
               onClick={handleOpenConfigFile}
               className="w-full py-2 text-[12px] rounded border border-[var(--vscode-button-border,var(--vscode-panel-border))] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
             >
-              {t('onboarding.customKeyButton')}
+              {t('onboarding.openConfigButton')}
             </button>
           </>
         )}
