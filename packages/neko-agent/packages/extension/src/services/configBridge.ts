@@ -21,12 +21,15 @@ import type {
   ConfiguredHook,
   ConfiguredToolSkill,
   UnifiedConfig,
+  TaskDefaults,
 } from '@neko/shared';
 import {
   readUserConfig,
   readWorkspaceConfig,
   watchUserConfig,
   watchWorkspaceConfig,
+  getUserConfigPath,
+  writeUserConfig,
 } from '@neko/shared/config/config-reader.ts';
 import type {
   ConnectionStateManager,
@@ -317,6 +320,19 @@ export class ConfigBridge implements vscode.Disposable {
           return true;
         }
 
+        case 'updateTaskDefaults': {
+          const userCfg = cm.getUserConfig();
+          userCfg.taskDefaults = message.taskDefaults as TaskDefaults | undefined;
+          await cm.saveUserConfig(userCfg);
+          this.notifyChange(postMessage, 'all', 'taskDefaults');
+          return true;
+        }
+
+        case 'openUserConfigFile': {
+          await this.handleOpenUserConfigFile();
+          return true;
+        }
+
         default:
           return false;
       }
@@ -344,6 +360,7 @@ export class ConfigBridge implements vscode.Disposable {
       prompts: cm.getPrompts(),
       skills: this.cachedSkills,
       commands: this.cachedCommands,
+      taskDefaults: cm.getUserConfig().taskDefaults,
     };
   }
 
@@ -362,7 +379,7 @@ export class ConfigBridge implements vscode.Disposable {
    */
   private notifyChange(
     postMessage: PostMessageFn,
-    changeType: 'provider' | 'model' | 'mcp' | 'workflow' | 'prompt', // TODO: remove 'workflow' when ConfigState.workflows is removed
+    changeType: 'provider' | 'model' | 'mcp' | 'workflow' | 'prompt' | 'all' | 'taskDefaults', // TODO: remove 'workflow' when ConfigState.workflows is removed
     id: string
   ): void {
     postMessage({ type: 'configChanged', changeType, id });
@@ -977,6 +994,36 @@ export class ConfigBridge implements vscode.Disposable {
       const wsWatcherCleanup = watchWorkspaceConfig(workspacePath, handleChange);
       this.configFileWatcherCleanups.push(wsWatcherCleanup);
     }
+  }
+
+  /**
+   * Open ~/.neko/config.json in the VS Code editor.
+   * Creates the file with a provider template if it doesn't exist.
+   */
+  private async handleOpenUserConfigFile(): Promise<void> {
+    const configPath = getUserConfigPath();
+
+    // Create template if file doesn't exist
+    const fsModule = await import('fs');
+    if (!fsModule.existsSync(configPath)) {
+      writeUserConfig({
+        providers: [
+          {
+            id: 'anthropic',
+            name: 'anthropic',
+            displayName: 'Anthropic',
+            type: 'anthropic',
+            apiUrl: 'https://api.anthropic.com',
+            apiKey: 'YOUR_ANTHROPIC_API_KEY',
+            enabled: true,
+          },
+        ],
+      } as Parameters<typeof writeUserConfig>[0]);
+    }
+
+    // Open in editor
+    const doc = await vscode.workspace.openTextDocument(configPath);
+    await vscode.window.showTextDocument(doc, { preview: false });
   }
 
   dispose(): void {
