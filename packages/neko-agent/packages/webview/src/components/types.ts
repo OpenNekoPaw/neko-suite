@@ -121,9 +121,7 @@ export interface OpenTab {
   conversationId: string;
 }
 
-export type TabType = 'chat' | 'settings' | 'tasks' | 'agents';
-
-export type SettingsSubTab = 'provider' | 'mcp' | 'models' | 'skills';
+export type TabType = 'chat' | 'tasks' | 'agents';
 
 // Shell execution mode for tool confirmation
 export type ShellExecutionMode = 'plan' | 'ask' | 'auto';
@@ -158,6 +156,15 @@ export type {
   PromptPresetType,
   ChatModelOption,
 } from '@neko/shared';
+
+export interface SsoSession {
+  /** Display name or email */
+  user: string;
+  /** Plan tier, e.g. 'Pro' */
+  plan?: string;
+  /** Token usage this period */
+  usage?: number;
+}
 
 // Settings state interface
 export interface SettingsState {
@@ -209,6 +216,8 @@ export interface SettingsState {
   promptMode: PromptMode;
   // Chat model options for UI model selector (from Platform ConfigManager)
   chatModelOptions: Array<import('@neko/shared').ChatModelOption>;
+  // SSO session info (null when using custom key or not logged in)
+  ssoSession: SsoSession | null;
 }
 
 export interface ConfiguredProvider {
