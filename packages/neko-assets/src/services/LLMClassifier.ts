@@ -17,11 +17,51 @@ import type {
 	EntityCategory,
 	ClassifierOptions,
 } from '@neko/shared';
+import { getLogger } from '../utils/logger';
 
-// Image extensions that support vision analysis
-const IMAGE_EXTENSIONS = new Set([
-	'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.svg',
+const logger = getLogger('LLMClassifier');
+
+// Image extensions and their MIME types — serves as both membership test and MIME lookup
+const IMAGE_MIME_TYPES = new Map<string, string>([
+	['.png', 'image/png'],
+	['.jpg', 'image/jpeg'],
+	['.jpeg', 'image/jpeg'],
+	['.gif', 'image/gif'],
+	['.webp', 'image/webp'],
+	['.bmp', 'image/bmp'],
+	['.tiff', 'image/tiff'],
+	['.tif', 'image/tiff'],
+	['.svg', 'image/svg+xml'],
 ]);
+
+const MAX_IMAGE_SIZE = 4 * 1024 * 1024; // 4MB
+
+// ---------------------------------------------------------------------------
+// Runtime guards for JSON.parse results
+// ---------------------------------------------------------------------------
+
+function isValidClassifyResult(val: unknown): val is {
+	category: EntityCategory;
+	name: string;
+	description: string;
+	tags: string[];
+	attributes: Record<string, string | undefined>;
+	confidence: number;
+} {
+	if (typeof val !== 'object' || val === null) return false;
+	const v = val as Record<string, unknown>;
+	return (
+		typeof v['category'] === 'string' &&
+		typeof v['name'] === 'string' &&
+		typeof v['description'] === 'string' &&
+		Array.isArray(v['tags']) &&
+		typeof v['confidence'] === 'number'
+	);
+}
+
+function isVariantAttributesShape(val: unknown): val is Record<string, string | undefined> {
+	return typeof val === 'object' && val !== null && !Array.isArray(val);
+}
 
 const SYSTEM_PROMPT_CLASSIFY = `\
 You are a creative asset classifier for a video/game production pipeline.
@@ -50,6 +90,9 @@ You are a creative asset analyzer. Given a file name, return ONLY a JSON object 
 Schema: { "view"?: string, "expression"?: string, "action"?: string }
 Return only the JSON object, no markdown, no explanation.`;
 
+// Local message type mirrors ChatMessage from @neko/platform without introducing
+// a cross-extension dependency. The neko.agent.internalChat command accepts any
+// structurally-compatible message shape via VSCode's dynamically-typed command API.
 type InternalMessage = {
 	role: 'system' | 'user' | 'assistant';
 	content: string | Array<{ type: string; [k: string]: unknown }>;
@@ -65,8 +108,8 @@ export class LLMClassifier implements IAssetClassifier {
 		try {
 			const result = await this.callLLMForClassification(filePath);
 			if (result) return result;
-		} catch {
-			// Fall through to fallback
+		} catch (err) {
+			logger.debug('LLM classification failed, falling back:', err);
 		}
 		return this.fallback.analyze(filePath, _options);
 	}
@@ -85,11 +128,14 @@ export class LLMClassifier implements IAssetClassifier {
 				{ maxTokens: 200 },
 			);
 			if (content) {
-				const parsed = JSON.parse(this.stripJsonFences(content)) as VariantAttributes;
-				return parsed;
+				const parsed: unknown = JSON.parse(this.stripJsonFences(content));
+				if (!isVariantAttributesShape(parsed)) {
+					throw new Error('Invalid variant attributes response');
+				}
+				return parsed as VariantAttributes;
 			}
-		} catch {
-			// Fall through
+		} catch (err) {
+			logger.debug('LLM suggestVariantAttributes failed, falling back:', err);
 		}
 		return this.fallback.suggestVariantAttributes(_entityId, filePath);
 	}
@@ -105,11 +151,14 @@ export class LLMClassifier implements IAssetClassifier {
 				{ maxTokens: 200 },
 			);
 			if (content) {
-				const parsed = JSON.parse(this.stripJsonFences(content)) as string[];
-				if (Array.isArray(parsed)) return parsed;
+				const parsed: unknown = JSON.parse(this.stripJsonFences(content));
+				if (!Array.isArray(parsed) || !parsed.every(t => typeof t === 'string')) {
+					throw new Error('Invalid tags response');
+				}
+				return parsed;
 			}
-		} catch {
-			// Fall through
+		} catch (err) {
+			logger.debug('LLM suggestTags failed, falling back:', err);
 		}
 		return this.fallback.suggestTags(filePath);
 	}
@@ -131,22 +180,29 @@ export class LLMClassifier implements IAssetClassifier {
 	): Promise<ClassificationResult | null> {
 		const fileName = path.basename(filePath);
 		const ext = path.extname(filePath).toLowerCase();
-		const isImage = IMAGE_EXTENSIONS.has(ext);
+		const isImage = IMAGE_MIME_TYPES.has(ext);
 
 		const userContent: Array<{ type: string; [k: string]: unknown }> = [];
 
 		if (isImage) {
 			try {
-				const buffer = await fs.readFile(filePath);
-				const mimeType = this.getMimeType(ext);
-				const base64 = buffer.toString('base64');
-				userContent.push({
-					type: 'image',
-					imageUrl: `data:${mimeType};base64,${base64}`,
-					detail: 'low',
-				});
-			} catch {
+				const stat = await fs.stat(filePath);
+				if (stat.size > MAX_IMAGE_SIZE) {
+					// Skip image loading for oversized files, fall through to text-only
+					logger.debug(`Skipping image load for oversized file (${stat.size} bytes): ${fileName}`);
+				} else {
+					const buffer = await fs.readFile(filePath);
+					const mimeType = IMAGE_MIME_TYPES.get(ext)!;
+					const base64 = buffer.toString('base64');
+					userContent.push({
+						type: 'image',
+						imageUrl: `data:${mimeType};base64,${base64}`,
+						detail: 'low',
+					});
+				}
+			} catch (err) {
 				// Image read failed — fall back to text-only
+				logger.debug('Image read failed, continuing text-only:', err);
 			}
 		}
 
@@ -165,14 +221,8 @@ export class LLMClassifier implements IAssetClassifier {
 
 		if (!content) return null;
 
-		const parsed = JSON.parse(this.stripJsonFences(content)) as {
-			category: EntityCategory;
-			name: string;
-			description: string;
-			tags: string[];
-			attributes: Partial<VariantAttributes>;
-			confidence: number;
-		};
+		const parsed: unknown = JSON.parse(this.stripJsonFences(content));
+		if (!isValidClassifyResult(parsed)) return null;  // triggers fallback
 
 		return {
 			suggestedCategory: parsed.category,
@@ -196,21 +246,6 @@ export class LLMClassifier implements IAssetClassifier {
 	}
 
 	private stripJsonFences(text: string): string {
-		return text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-	}
-
-	private getMimeType(ext: string): string {
-		const map: Record<string, string> = {
-			'.png': 'image/png',
-			'.jpg': 'image/jpeg',
-			'.jpeg': 'image/jpeg',
-			'.gif': 'image/gif',
-			'.webp': 'image/webp',
-			'.bmp': 'image/bmp',
-			'.tiff': 'image/tiff',
-			'.tif': 'image/tiff',
-			'.svg': 'image/svg+xml',
-		};
-		return map[ext] ?? 'image/png';
+		return text.trim().replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
 	}
 }
