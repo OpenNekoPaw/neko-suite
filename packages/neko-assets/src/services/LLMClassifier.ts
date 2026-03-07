@@ -20,7 +20,7 @@ import type {
 
 // Image extensions that support vision analysis
 const IMAGE_EXTENSIONS = new Set([
-	'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.tif',
+	'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.svg',
 ]);
 
 const SYSTEM_PROMPT_CLASSIFY = `\
@@ -115,11 +115,11 @@ export class LLMClassifier implements IAssetClassifier {
 	}
 
 	async findSimilarEntities(
-		filePath: string,
-		options?: ClassifierOptions,
+		_filePath: string,
+		_options?: ClassifierOptions,
 	): Promise<SuggestedEntity[]> {
-		// Vector/semantic search is out of scope — delegate to fallback (returns [])
-		return this.fallback.findSimilarEntities(filePath, options);
+		// Vector/semantic search is out of scope
+		return [];
 	}
 
 	// =========================================================================
@@ -160,7 +160,7 @@ export class LLMClassifier implements IAssetClassifier {
 				{ role: 'system', content: SYSTEM_PROMPT_CLASSIFY },
 				{ role: 'user', content: userContent },
 			],
-			{ maxTokens: 400 },
+			{ maxTokens: 800 },
 		);
 
 		if (!content) return null;
@@ -209,6 +209,7 @@ export class LLMClassifier implements IAssetClassifier {
 			'.bmp': 'image/bmp',
 			'.tiff': 'image/tiff',
 			'.tif': 'image/tiff',
+			'.svg': 'image/svg+xml',
 		};
 		return map[ext] ?? 'image/png';
 	}
