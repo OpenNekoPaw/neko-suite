@@ -6,7 +6,6 @@
 
 import { useState, useCallback } from 'react';
 import type { SettingsState, ShellExecutionMode, PromptMode } from '@/components/types';
-import type { UIModelConfig } from '@/components/SettingsView/ModelSettings';
 
 /**
  * Project file info
@@ -46,6 +45,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   executionMode: 'ask' as ShellExecutionMode,
   promptMode: 'default' as PromptMode,
   chatModelOptions: [],
+  ssoSession: null,
 };
 
 /**
@@ -53,7 +53,6 @@ export const DEFAULT_SETTINGS: SettingsState = {
  */
 export interface ConfigState {
   settings: SettingsState;
-  modelPresets: UIModelConfig[];
   projectFiles: ProjectFileInfo[];
 }
 
@@ -62,7 +61,6 @@ export interface ConfigState {
  */
 export interface ConfigStateActions {
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
-  setModelPresets: React.Dispatch<React.SetStateAction<UIModelConfig[]>>;
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
   updateSettings: (updates: Partial<SettingsState>) => void;
   resetSettings: () => void;
@@ -81,7 +79,6 @@ export function useConfigState(initialSettings?: Partial<SettingsState>): UseCon
     ...DEFAULT_SETTINGS,
     ...initialSettings,
   });
-  const [modelPresets, setModelPresets] = useState<UIModelConfig[]>([]);
   const [projectFiles, setProjectFiles] = useState<ProjectFileInfo[]>([]);
 
   // Helper: partial update settings
@@ -97,11 +94,9 @@ export function useConfigState(initialSettings?: Partial<SettingsState>): UseCon
   return {
     // State
     settings,
-    modelPresets,
     projectFiles,
     // Actions
     setSettings,
-    setModelPresets,
     setProjectFiles,
     updateSettings,
     resetSettings,
