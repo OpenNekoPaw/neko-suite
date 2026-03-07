@@ -6,12 +6,50 @@ use crate::error::{Error, Result};
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::format::input;
 use ffmpeg_next::format::Sample;
+use ffmpeg_next::ffi;
 use ffmpeg_next::media::Type;
 use ffmpeg_next::software::resampling::Context as ResamplerContext;
 use ffmpeg_next::util::frame::audio::Audio as AudioFrame;
 use ffmpeg_next::ChannelLayout;
 
 use std::path::Path;
+
+/// Open a media file using only `avformat_open_input`, skipping the expensive
+/// (and sometimes error-prone) `avformat_find_stream_info` call.
+///
+/// For container formats (MP4/M4A/MOV/MKV) all codec parameters are stored in
+/// the container header and are available immediately after `avformat_open_input`.
+/// `avformat_find_stream_info` is mainly needed for raw bitstream formats (ADTS
+/// AAC, MP3) that lack a container. Using it on AAC streams with non-standard
+/// channel configurations (e.g. "channel element 2.7") can cause
+/// `AVERROR_INVALIDDATA`, aborting the open entirely.
+///
+/// # Safety
+/// Calls the FFmpeg C API directly. The returned `Input` takes ownership of
+/// the allocated `AVFormatContext` and will free it on drop.
+unsafe fn open_input_no_probe(
+    path: &str,
+) -> std::result::Result<ffmpeg::format::context::Input, ffmpeg::Error> {
+    use std::ffi::CString;
+
+    let c_path = CString::new(path).map_err(|_| ffmpeg::Error::InvalidData)?;
+    let mut ps: *mut ffi::AVFormatContext = std::ptr::null_mut();
+
+    let ret = ffi::avformat_open_input(
+        &mut ps,
+        c_path.as_ptr(),
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+    );
+
+    if ret < 0 {
+        return Err(ffmpeg::Error::from(ret));
+    }
+
+    // Wrap without calling avformat_find_stream_info — container header provides
+    // the codec parameters we need (sample_rate, channels, codec_id).
+    Ok(ffmpeg::format::context::Input::wrap(ps))
+}
 
 /// FFmpeg audio decoder
 pub struct FfmpegAudioDecoder {
@@ -224,8 +262,31 @@ impl AudioDecoder for FfmpegAudioDecoder {
             return Err(Error::FileNotFound(path.to_string()));
         }
 
-        // Open input
-        let input_ctx = input(&path)?;
+        // Open input.
+        // Full probe (avformat_open_input + avformat_find_stream_info) works for
+        // most files. However, find_stream_info decodes probe packets from every
+        // stream; for AAC with non-standard channel configs (e.g. "channel element
+        // 2.7 is not allocated") this returns AVERROR_INVALIDDATA, preventing the
+        // decoder from opening at all.
+        //
+        // For container formats (MP4/M4A/MOV/MKV) the codec parameters already
+        // exist in the container header, so we can safely skip find_stream_info
+        // and still get a working decoder.  The per-frame resampler-rebuild logic
+        // in convert_frame() handles any remaining format surprises.
+        let input_ctx = match input(&path) {
+            Ok(ctx) => ctx,
+            Err(ffmpeg::Error::InvalidData) => {
+                tracing::warn!(
+                    "avformat_find_stream_info failed (AVERROR_INVALIDDATA) for '{}'; \
+                     retrying with container-header-only open (skipping probe)",
+                    path
+                );
+                // SAFETY: wraps the AVFormatContext returned by avformat_open_input;
+                // ownership transfers to the returned Input which frees it on drop.
+                unsafe { open_input_no_probe(path) }?
+            }
+            Err(e) => return Err(Error::from(e)),
+        };
 
         // Find audio stream
         let stream = input_ctx
