@@ -20,12 +20,14 @@ import type {
   ConfiguredSlashCommand,
   ConfiguredHook,
   ConfiguredToolSkill,
-  TaskDefaults,
 } from '@neko/shared';
 import type { UnifiedConfig } from '@neko/shared';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import {
+  readUserConfig,
+  readWorkspaceConfig,
+  watchUserConfig,
+  watchWorkspaceConfig,
+} from '@neko/shared/config/config-reader.ts';
 import type {
   ConnectionStateManager,
   ConnectionStateChangeEvent,
@@ -926,60 +928,6 @@ export class ConfigBridge implements vscode.Disposable {
         logger.error(`Failed to import provider ${id} from config file:`, error);
       }
     }
-
-    // Import taskDefaults from the last (highest priority) config that has them
-    const lastConfig = configs.at(-1);
-    if (lastConfig?.taskDefaults) {
-      const userCfg = cm.getUserConfig();
-      userCfg.taskDefaults = lastConfig.taskDefaults as TaskDefaults;
-      await cm.saveUserConfig(userCfg);
-    }
-  }
-
-  /**
-   * Read a config.json file from the given path.
-   * Returns null if the file does not exist or cannot be parsed.
-   */
-  private readConfigFile(filePath: string): UnifiedConfig | null {
-    try {
-      if (!fs.existsSync(filePath)) return null;
-      const content = fs.readFileSync(filePath, 'utf-8');
-      return JSON.parse(content) as UnifiedConfig;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Watch a config.json file for changes.
-   * Returns a cleanup function to stop watching.
-   */
-  private watchConfigFile(
-    filePath: string,
-    callback: (config: UnifiedConfig | null) => void
-  ): () => void {
-    let watcher: fs.FSWatcher | null = null;
-    try {
-      watcher = fs.watch(filePath, (eventType) => {
-        if (eventType === 'change') {
-          callback(this.readConfigFile(filePath));
-        }
-      });
-    } catch {
-      // File doesn't exist yet — watch parent directory instead
-      const dir = path.dirname(filePath);
-      const filename = path.basename(filePath);
-      if (fs.existsSync(dir)) {
-        watcher = fs.watch(dir, (_eventType, changedFilename) => {
-          if (changedFilename === filename) {
-            callback(this.readConfigFile(filePath));
-          }
-        });
-      }
-    }
-    return () => {
-      watcher?.close();
-    };
   }
 
   /**
@@ -989,14 +937,12 @@ export class ConfigBridge implements vscode.Disposable {
   private async initConfigFileImport(): Promise<void> {
     const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
-    const userConfigPath = path.join(os.homedir(), '.neko', 'config.json');
     const configs: Array<UnifiedConfig> = [];
-    const userConfig = this.readConfigFile(userConfigPath);
+    const userConfig = readUserConfig();
     if (userConfig) configs.push(userConfig);
 
     if (workspacePath) {
-      const wsConfigPath = path.join(workspacePath, '.neko', 'config.json');
-      const wsConfig = this.readConfigFile(wsConfigPath);
+      const wsConfig = readWorkspaceConfig(workspacePath);
       if (wsConfig) configs.push(wsConfig);
     }
 
@@ -1024,13 +970,11 @@ export class ConfigBridge implements vscode.Disposable {
       });
     };
 
-    const userConfigPath = path.join(os.homedir(), '.neko', 'config.json');
-    const userWatcherCleanup = this.watchConfigFile(userConfigPath, handleChange);
+    const userWatcherCleanup = watchUserConfig(handleChange);
     this.configFileWatcherCleanups.push(userWatcherCleanup);
 
     if (workspacePath) {
-      const wsConfigPath = path.join(workspacePath, '.neko', 'config.json');
-      const wsWatcherCleanup = this.watchConfigFile(wsConfigPath, handleChange);
+      const wsWatcherCleanup = watchWorkspaceConfig(workspacePath, handleChange);
       this.configFileWatcherCleanups.push(wsWatcherCleanup);
     }
   }
