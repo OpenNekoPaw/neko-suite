@@ -1,6 +1,15 @@
 # neko-agent Settings Redesign Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **Status: ✅ COMPLETED** — 2026-03-07
+>
+> Commits: `9c4b012` (Task 1-4), `3a6f5e1` (Task 5), `d8c24ab` (Task 6),
+> `b1e9072` (Task 7), `a4fc3d8` (Task 8), `136ca73` (Tasks 9-11).
+>
+> **Deviations from plan:**
+> - Task 9: Also removed `updateToolSkill` handler (missed in original plan list but in scope).
+> - Task 10: i18n added to webview locale files (`src/i18n/locales/en/` + `zh-cn/`), **not** to `l10n/bundle.l10n.json`. The l10n files are for VSCode extension commands only; webview strings use the locale TS module system.
+> - Task 11: `handlers/types.ts` and `handlers/useMessageHandler.ts` also needed cleanup (broken import of `UIModelConfig` from deleted `SettingsView/ModelSettings`); fixed inline. `handlers/command-handlers.ts` had four `setActiveTab('settings')` calls updated to `'chat'`.
+> - Post-review fix: `ssoSessionChanged` handler now guards `setShowOnboarding(false)` with `if (session)` to avoid dismissing onboarding on logout.
 
 **Goal:** Replace the SettingsView tab with a lightweight AccountBar (in Header) and OnboardingFlow (first-run overlay) for video creator users.
 
