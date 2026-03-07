@@ -15,6 +15,7 @@ import { exportBundle } from './export';
 import { header } from './header';
 import { history } from './history';
 import { mask } from './mask';
+import { onboarding } from './onboarding';
 import { preview } from './preview';
 import { promptTemplates } from './promptTemplates';
 import { propertyPanel } from './propertyPanel';
@@ -26,7 +27,6 @@ import { subtitles } from './subtitles';
 import { tasks } from './tasks';
 import { timeline } from './timeline';
 import { toolCalls } from './toolCalls';
-import { onboarding } from './onboarding';
 import { transition } from './transition';
 
 export const bundles: Record<string, MessageBundle> = {
