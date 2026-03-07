@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import { ServiceCollection, setGlobalServices, setRootLogger, setErrorHandler, getRootLogger } from './base';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus, IPlatform } from './bootstrap';
+import type { ChatMessage } from '@neko/platform';
 import { ChatViewProvider } from './chat';
 import { createNekoCutTools, createNekoCanvasTools, createNekoEngineEffectsTools } from './tools/extensionTools';
 
@@ -85,6 +86,9 @@ function registerExtensionTools(toolRegistry: { register: (tool: unknown) => voi
 
   getRootLogger().info(`Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length} extension tools`);
 }
+
+/** Default max tokens for the internal chat command. */
+const INTERNAL_CHAT_DEFAULT_MAX_TOKENS = 1000;
 
 /**
  * Register extension commands
@@ -216,24 +220,20 @@ function registerCommands(
     vscode.commands.registerCommand(
       'neko.agent.internalChat',
       async (
-        messages: Array<{
-          role: 'system' | 'user' | 'assistant' | 'tool';
-          content: string | Array<{ type: string; [k: string]: unknown }>;
-          name?: string;
-          toolCallId?: string;
-        }>,
+        messages: ChatMessage[],
         options?: { maxTokens?: number },
       ): Promise<string | null> => {
         try {
           const platform = services.get(IPlatform);
           if (!platform) return null;
           const service = platform.createService();
-          const response = await service.chat(messages as import('@neko/platform').ChatMessage[], {
-            maxTokens: options?.maxTokens ?? 1000,
+          const response = await service.chat(messages, {
+            maxTokens: options?.maxTokens ?? INTERNAL_CHAT_DEFAULT_MAX_TOKENS,
           });
           const content = response.message.content;
           return typeof content === 'string' ? content : null;
-        } catch {
+        } catch (err) {
+          getRootLogger().warn('neko.agent.internalChat failed', { error: err });
           return null;
         }
       },
