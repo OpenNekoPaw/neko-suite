@@ -10,9 +10,9 @@
 
 ## Quick Reference
 
-- **职责**：素材实体管理、变体管理、文件管理、搜索、AI 分类
+- **职责**：素材实体管理、变体管理、文件管理、搜索、AI 分类、健康检查
 - **入口**：`AssetLibrary` facade
-- **依赖**：`@neko/shared`（类型）, `@neko/platform`（可选，AI 分类）
+- **依赖**：`@neko/shared`（类型）；AI 分类通过跨扩展命令调用，无平台层依赖
 
 ## 核心概念
 
@@ -77,11 +77,12 @@ src/
 │   ├── AssetLibrary.ts     # 主 Facade
 │   ├── EntityService.ts    # 实体 CRUD
 │   ├── VariantService.ts   # 变体管理
-│   └── FileService.ts      # 文件管理
+│   ├── FileService.ts      # 文件管理
+│   └── AssetHealthService.ts  # 文件健康检查（有界并发池）
 │
 ├── classifier/             # 分类器
 │   ├── IClassifier.ts      # 分类器接口
-│   └── RuleClassifier.ts   # 规则分类器
+│   └── RuleClassifier.ts   # 规则分类器（基于文件名/扩展名）
 │
 └── __tests__/              # 单元测试
 ```
@@ -128,6 +129,24 @@ interface VariantAttributes {
 pnpm test        # 运行测试
 pnpm build       # 构建
 ```
+
+## AssetHealthService
+
+检查素材库中所有文件的可访问性，支持有界并发以避免 I/O 风暴：
+
+```typescript
+const healthService = new AssetHealthService({
+  storage,
+  fileAccessChecker: async (path) => { /* 返回 'online' | 'offline' | 'missing' */ },
+  concurrency: 4,  // 最多同时检查 4 个文件
+});
+
+const results = await healthService.validateAll({
+  onProgress: (checked, total) => console.log(`${checked}/${total}`),
+});
+```
+
+**并发池实现**：使用 `Set<Promise<void>> + .finally()` 自动移除模式，确保任何时刻活跃任务数不超过 `concurrency` 上限。
 
 ## 设计文档
 

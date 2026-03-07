@@ -22,13 +22,23 @@
   │
   ▼
 Extension Host
-  ├── Git LFS      → 大文件版本追踪（视频/图片/音频）
-  ├── 云同步服务   → GitHub / GitLab / S3 / rclone
-  └── CI/CD 触发   → 提交后自动渲染
+  ├── Git LFS           → 大文件版本追踪（视频/图片/音频）
+  ├── 云同步服务        → GitHub / GitLab / S3 / rclone
+  ├── AI 分类器         → LLMClassifier（调用 neko-agent）→ RuleClassifier（降级）
+  ├── MediaLibrary      → 增量目录缓存 + FileSystemWatcher
+  └── CI/CD 触发        → 提交后自动渲染
         │
         └── GitHub Actions / GitLab CI
               └── neko-cli render project.jvi -o output.mp4
 ```
+
+### AI 分类器
+
+`LLMClassifier` 通过 `neko.agent.internalChat` 跨扩展命令调用已配置的 LLM 对素材进行分类。图片文件（PNG/JPG/GIF/WebP/BMP/TIFF/SVG，≤4MB）附带 base64 视觉内容，其他文件仅发送文件名。neko-agent 未激活时自动降级到基于规则的 `RuleClassifier`。
+
+### 媒体库增量索引
+
+`MediaLibraryTreeProvider` 对展开过的目录建立内存缓存，并注册 `FileSystemWatcher` 监听文件创建/删除/修改事件，自动失效缓存并触发防抖刷新，避免每次展开/折叠重复扫描磁盘。
 
 ### 云存储支持
 

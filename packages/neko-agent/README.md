@@ -75,3 +75,22 @@ packages/
 ### AI 生成能力
 
 图像生成、视频生成、TTS 语音、音乐生成、字幕生成、分镜脚本自动生成
+
+### 内部 API（跨扩展命令）
+
+`neko.agent.internalChat` — 允许其他 Neko 扩展借用已配置的 LLM，无需重复引入 `@neko/platform` 依赖。
+
+```typescript
+// 其他扩展调用示例
+const result = await vscode.commands.executeCommand<string | null>(
+  'neko.agent.internalChat',
+  [
+    { role: 'system', content: 'You are a classifier.' },
+    { role: 'user', content: 'Classify: warrior.png' },
+  ],
+  { maxTokens: 800 },
+);
+// neko-agent 未激活时返回 null，调用方自行降级处理
+```
+
+**合约**：`messages` 参数为 `ChatMessage[]`，`options.maxTokens` 可选（默认 1000）。返回模型第一条文本回复，非文本内容或任何错误均返回 `null`。
