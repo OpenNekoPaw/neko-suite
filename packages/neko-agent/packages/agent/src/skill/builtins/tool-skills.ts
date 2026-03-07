@@ -145,6 +145,7 @@ export const elementEditingToolSkill: ToolSkill = {
     'DeleteElement',
     'TrimElement',
     'SplitElement',
+    'BatchTimelineOps',
   ],
   triggerKeywords: [
     '添加', '修改', '删除', '裁剪', '分割', '剪辑', '元素', '视频', '音频', '图片',
