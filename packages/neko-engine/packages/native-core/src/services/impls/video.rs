@@ -429,6 +429,10 @@ impl IVideoService for VideoService {
                         if state.seek_seq != last_seek_seq {
                             last_seek_seq = state.seek_seq;
                             did_seek = true;
+                            // Reset error counter: each seek gets a fresh error budget.
+                            // Without this, errors from a previous seek accumulate and
+                            // can prematurely close the stream on rapid seeking.
+                            consecutive_decode_errors = 0;
                             // Arm skip filter: discard decoded frames before target.
                             // FFmpeg seeks to the keyframe BEFORE time; we skip-decode
                             // to avoid sending pre-seek frames to the client.

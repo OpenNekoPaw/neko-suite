@@ -287,19 +287,31 @@ impl AudioDecoder for FfmpegAudioDecoder {
             || output_format != input_format;
 
         if needs_resampling {
-            let input_layout = Self::channel_layout_for_channels(channels);
-            let output_layout = Self::channel_layout_for_channels(output_channels);
+            // Some AAC files (e.g. unusual channel configurations) report channels=0
+            // in the container header; the real channel count only becomes known after
+            // decoding the first packet. Creating a resampler with a 0-channel source
+            // layout is invalid and returns AVERROR_INVALIDDATA.
+            // Defer resampler construction to convert_frame() in that case — it already
+            // rebuilds the resampler lazily when input format changes.
+            if channels == 0 {
+                tracing::warn!(
+                    "Audio stream reports 0 channels at open time — deferring resampler creation"
+                );
+            } else {
+                let input_layout = Self::channel_layout_for_channels(channels);
+                let output_layout = Self::channel_layout_for_channels(output_channels);
 
-            let resampler = ResamplerContext::get(
-                input_format,
-                input_layout,
-                sample_rate,
-                output_format,
-                output_layout,
-                output_sample_rate,
-            )?;
+                let resampler = ResamplerContext::get(
+                    input_format,
+                    input_layout,
+                    sample_rate,
+                    output_format,
+                    output_layout,
+                    output_sample_rate,
+                )?;
 
-            self.resampler = Some(resampler);
+                self.resampler = Some(resampler);
+            }
         }
 
         self.input_ctx = Some(input_ctx);
