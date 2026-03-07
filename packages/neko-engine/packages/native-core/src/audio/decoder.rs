@@ -461,7 +461,22 @@ impl AudioDecoder for FfmpegAudioDecoder {
             match packet_result {
                 Some(packet) => {
                     let decoder = self.decoder.as_mut().unwrap();
-                    decoder.send_packet(&packet)?;
+
+                    // AVERROR_INVALIDDATA from send_packet means a corrupt or
+                    // non-standard bitstream packet (e.g. AAC "channel element
+                    // 2.7 is not allocated").  Skip the packet rather than
+                    // propagating the error — the rest of the stream is fine.
+                    match decoder.send_packet(&packet) {
+                        Ok(()) => {}
+                        Err(ffmpeg::Error::InvalidData) => {
+                            tracing::warn!(
+                                "Skipping corrupt audio packet at {:.3}s (AVERROR_INVALIDDATA)",
+                                self.current_position
+                            );
+                            continue;
+                        }
+                        Err(e) => return Err(Error::from(e)),
+                    }
 
                     let mut decoded_frame = AudioFrame::empty();
                     match decoder.receive_frame(&mut decoded_frame) {
