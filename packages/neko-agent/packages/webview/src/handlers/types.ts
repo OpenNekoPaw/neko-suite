@@ -13,7 +13,6 @@ import type {
   SettingsState,
   AgentState,
 } from '@/components/types';
-import type { UIModelConfig } from '@/components/SettingsView/ModelSettings';
 import type { BackgroundTask } from '@/components/TaskListView';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
 
@@ -72,8 +71,8 @@ export interface MessageHandlerContext {
   // Background tasks
   setBackgroundTasks: React.Dispatch<React.SetStateAction<BackgroundTask[]>>;
 
-  // Model presets
-  setModelPresets: React.Dispatch<React.SetStateAction<UIModelConfig[]>>;
+  // Model presets (kept for backward compatibility; setter is a no-op in current UI)
+  setModelPresets: React.Dispatch<React.SetStateAction<unknown[]>>;
 
   // Project files
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;

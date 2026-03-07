@@ -8,7 +8,8 @@
 |------|------|
 | `AIAssistant` | 主入口组件，管理状态和消息处理 |
 | `ChatView` | 聊天界面（消息列表、输入框）|
-| `SettingsView` | 配置界面（Provider、Model）|
+| `AccountBar` | 账户状态栏（SSO / 自定义 Key / 未配置）|
+| `OnboardingFlow` | 首次配置 AI 服务的引导流程 |
 | `Header` | 顶部导航栏 |
 | `TaskListView` | 后台任务状态展示 |
 
@@ -18,7 +19,8 @@ components/
 ├── index.tsx             # 主组件入口（AIAssistant）
 ├── types.ts              # 类型定义
 ├── ChatView/             # 聊天视图
-├── SettingsView/         # 设置视图
+├── AccountBar/           # 账户状态栏（替代设置齿轮）
+├── OnboardingFlow/       # 首次配置引导
 ├── Header/               # 顶部导航
 ├── TaskListView.tsx      # 后台任务列表
 └── hooks/                # 组件级 Hooks

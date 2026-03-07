@@ -92,8 +92,7 @@ export function AIAssistant() {
   } = config;
 
   // Local model presets setter (no longer in useConfigState but still required by useMessageHandler)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [, setModelPresets] = useState<any[]>([]);
+  const [, setModelPresets] = useState<unknown[]>([]);
 
   const {
     backgroundTasks,
@@ -290,8 +289,12 @@ export function AIAssistant() {
     const handleSsoMessage = (event: MessageEvent) => {
       const message = event.data;
       if (message.type === 'ssoSessionChanged') {
-        updateSettings({ ssoSession: (message.session as SsoSession | null) ?? null });
-        setShowOnboarding(false);
+        const session = (message.session as SsoSession | null) ?? null;
+        updateSettings({ ssoSession: session });
+        // Only dismiss onboarding when a real session arrives (not on logout)
+        if (session) {
+          setShowOnboarding(false);
+        }
       }
     };
     window.addEventListener('message', handleSsoMessage);
@@ -695,7 +698,7 @@ export function AIAssistant() {
 - \`/video\` - Generate a video
 - \`/script\` - Write a script
 - \`/storyboard\` - Create a storyboard
-- \`/settings\` - Open settings
+- \`/configure\` - Configure AI service
 ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
 
 **Tips:**
@@ -752,6 +755,10 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
       case 'storyboard':
         // Pre-fill for storyboard creation
         setInputValue('/storyboard ');
+        break;
+      case 'configure':
+        clearInput();
+        setShowOnboarding(true);
         break;
       default:
         // For unhandled builtin commands, delegate to extension host

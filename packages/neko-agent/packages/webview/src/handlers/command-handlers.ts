@@ -77,7 +77,8 @@ const handleSlashCommandResult: MessageHandler = (message, context) => {
         break;
 
       case 'showSettings':
-        context.setActiveTab('settings');
+        // Settings tab removed; stay on chat tab
+        context.setActiveTab('chat');
         break;
 
       case 'showTasks':
@@ -85,22 +86,18 @@ const handleSlashCommandResult: MessageHandler = (message, context) => {
         break;
 
       case 'showModelSelector':
-        // Switch to settings tab and show model selector
-        context.setActiveTab('settings');
-        // Send message to scroll to model section (handled by SettingsView)
-        // The settings view should listen for this and scroll to the model section
+        // Settings tab removed; model selector is in AccountBar
+        context.setActiveTab('chat');
         break;
 
       case 'showMCPServers':
-        // Switch to settings tab (MCP servers section)
-        context.setActiveTab('settings');
-        // Settings view should scroll to MCP section
+        // MCP config is now file-based; no dedicated UI tab
+        context.setActiveTab('chat');
         break;
 
       case 'showPermissions':
-        // Switch to settings tab (permissions section)
-        context.setActiveTab('settings');
-        // Settings view should scroll to permissions section
+        // Settings tab removed; stay on chat tab
+        context.setActiveTab('chat');
         break;
 
       case 'showHelp':

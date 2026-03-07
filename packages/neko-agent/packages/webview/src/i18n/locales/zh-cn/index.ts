@@ -1,5 +1,6 @@
 import type { MessageBundle } from '@neko/shared';
 
+import { accountBar } from './accountBar';
 import { agentControl } from './agentControl';
 import { agents } from './agents';
 import { animation } from './animation';
@@ -25,9 +26,11 @@ import { subtitles } from './subtitles';
 import { tasks } from './tasks';
 import { timeline } from './timeline';
 import { toolCalls } from './toolCalls';
+import { onboarding } from './onboarding';
 import { transition } from './transition';
 
 export const bundles: Record<string, MessageBundle> = {
+  accountBar,
   agentControl,
   agents,
   animation,
@@ -42,6 +45,7 @@ export const bundles: Record<string, MessageBundle> = {
   header,
   history,
   mask,
+  onboarding,
   preview,
   promptTemplates,
   propertyPanel,

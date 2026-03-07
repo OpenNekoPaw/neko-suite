@@ -13,7 +13,6 @@ import type { Platform } from '@neko/platform';
 import { getLogger } from '../base';
 import type {
   ConfigState,
-  MCPServerConfig,
   PromptPresetConfig,
   ProviderConfig,
   ModelConfig,
@@ -211,180 +210,6 @@ export class ConfigBridge implements vscode.Disposable {
           });
           return true;
 
-        case 'createSkill': {
-          const skillName = message.skillName as string;
-          const source = message.source as 'personal' | 'project';
-          
-          try {
-            // Create the skill file
-            await this.skillFileService.createSkillFile(skillName, source);
-            
-            // Rescan skills to pick up the new skill and update cache
-            const scanResult = await this.skillFileService.scanSkills();
-            const { skills, commands } = this.skillFileService.toConfigured(scanResult);
-            const merged = this.mergeSkillsWithEnabledState(skills, commands);
-            this.cachedSkills = merged.skills;
-            this.cachedCommands = merged.commands;
-            this.broadcastSkillsUpdate();
-          } catch (err) {
-            logger.error('Failed to create skill:', err);
-          }
-          return true;
-        }
-
-        case 'updateSkill': {
-          const skill = message.skill as ConfiguredSkill;
-          // Store enabled state in the map and persist
-          this.skillEnabledState.set(`skill:${skill.name}`, skill.enabled !== false);
-          this.saveSkillEnabledState();
-          // Update cached skill
-          const skillIndex = this.cachedSkills.findIndex(s => s.name === skill.name);
-          if (skillIndex >= 0) {
-            this.cachedSkills[skillIndex] = skill;
-          } else {
-            this.cachedSkills.push(skill);
-          }
-
-          // Create file for non-builtin skills (personal or project)
-          if (skill.source !== 'builtin') {
-            try {
-              await this.skillFileService.createSkillFile(
-                skill.name,
-                skill.source as 'personal' | 'project',
-                skill.content,
-                skill.description
-              );
-            } catch (err) {
-              logger.error('Failed to create skill file:', err);
-            }
-          }
-
-          // Broadcast update
-          this.broadcastSkillsUpdate();
-          return true;
-        }
-
-        case 'deleteSkill': {
-          const skillName = message.skillName as string;
-          
-          // Find the skill to get its source and directory path
-          const skillToDelete = this.cachedSkills.find(s => s.name === skillName);
-          
-          // Delete the skill directory if it exists
-          if (skillToDelete && skillToDelete.source !== 'builtin') {
-            const source = skillToDelete.source as 'personal' | 'project';
-            try {
-              await this.skillFileService.deleteSkillDirectory(skillName, source);
-            } catch (err) {
-              logger.error('Failed to delete skill directory:', err);
-            }
-          }
-          
-          // Update enabled state and cache
-          this.skillEnabledState.delete(`skill:${skillName}`);
-          this.saveSkillEnabledState();
-          this.cachedSkills = this.cachedSkills.filter(s => s.name !== skillName);
-          this.broadcastSkillsUpdate();
-          return true;
-        }
-
-        case 'duplicateSkill': {
-          const skill = message.skill as ConfiguredSkill;
-          const newName = message.newName as string;
-          const targetSource = message.targetSource as 'personal' | 'project';
-
-          // Check if source skill has a directory path
-          if (!skill.directoryPath) {
-            // Fallback to createSkillFile for skills without directory
-            logger.info('Skill has no directoryPath, using createSkillFile');
-            try {
-              await this.skillFileService.createSkillFile(
-                newName,
-                targetSource,
-                skill.content,
-                skill.description
-              );
-            } catch (err) {
-              logger.error('Failed to create skill file:', err);
-            }
-          } else {
-            // Duplicate the entire skill directory
-            try {
-              await this.skillFileService.duplicateSkillDirectory(
-                skill.directoryPath,
-                newName,
-                targetSource
-              );
-            } catch (err) {
-              logger.error('Failed to duplicate skill directory:', err);
-            }
-          }
-
-          // Rescan skills to pick up the new skill and update cache
-          const scanResult = await this.skillFileService.scanSkills();
-          const { skills, commands } = this.skillFileService.toConfigured(scanResult);
-          const merged = this.mergeSkillsWithEnabledState(skills, commands);
-          this.cachedSkills = merged.skills;
-          this.cachedCommands = merged.commands;
-          this.broadcastSkillsUpdate();
-          return true;
-        }
-
-        case 'updateCommand': {
-          const command = message.command as ConfiguredSlashCommand;
-          // Store enabled state in the map and persist
-          this.skillEnabledState.set(`command:${command.command}`, command.enabled !== false);
-          this.saveSkillEnabledState();
-          // Update cached command
-          const commandIndex = this.cachedCommands.findIndex(c => c.command === command.command);
-          if (commandIndex >= 0) {
-            this.cachedCommands[commandIndex] = command;
-          } else {
-            this.cachedCommands.push(command);
-          }
-
-          // Create file for non-builtin commands (personal or project)
-          if (command.source !== 'builtin') {
-            try {
-              await this.skillFileService.createCommandFile(
-                command.command,
-                command.source as 'personal' | 'project',
-                command.content
-              );
-            } catch (err) {
-              logger.error('Failed to create command file:', err);
-            }
-          }
-
-          // Broadcast update
-          this.broadcastSkillsUpdate();
-          return true;
-        }
-
-        case 'deleteCommand': {
-          const commandName = message.commandName as string;
-          
-          // Find the command to get its source
-          const commandToDelete = this.cachedCommands.find(c => c.command === commandName);
-          
-          // Delete the command file if it exists
-          if (commandToDelete && commandToDelete.source !== 'builtin') {
-            const source = commandToDelete.source as 'personal' | 'project';
-            try {
-              await this.skillFileService.deleteCommandFile(commandName, source);
-            } catch (err) {
-              logger.error('Failed to delete command file:', err);
-            }
-          }
-          
-          // Update enabled state and cache
-          this.skillEnabledState.delete(`command:${commandName}`);
-          this.saveSkillEnabledState();
-          this.cachedCommands = this.cachedCommands.filter(c => c.command !== commandName);
-          this.broadcastSkillsUpdate();
-          return true;
-        }
-
         case 'getConnectionStates':
           if (this.connectionStateManager) {
             postMessage({
@@ -399,26 +224,6 @@ export class ConfigBridge implements vscode.Disposable {
             type: 'toolSkillsData',
             toolSkills: this.cachedToolSkills,
           });
-          return true;
-
-        case 'updateToolSkill': {
-          const toolSkill = message.toolSkill as ConfiguredToolSkill;
-          // Store enabled state in the map and persist
-          this.toolSkillEnabledState.set(toolSkill.name, toolSkill.enabled !== false);
-          this.saveToolSkillEnabledState();
-          // Update cached ToolSkill
-          const tsIndex = this.cachedToolSkills.findIndex(ts => ts.name === toolSkill.name);
-          if (tsIndex >= 0) {
-            this.cachedToolSkills[tsIndex] = toolSkill;
-          }
-          // Broadcast update
-          this.broadcastToolSkillsUpdate();
-          return true;
-        }
-
-        case 'updateMCPServer':
-          await cm.setMCPServer(message.server as MCPServerConfig);
-          this.notifyChange(postMessage, 'mcp', (message.server as MCPServerConfig).id);
           return true;
 
         case 'updatePrompt': {
@@ -455,11 +260,6 @@ export class ConfigBridge implements vscode.Disposable {
         case 'updateModel':
           await cm.setModel(message.model as ModelConfig);
           this.notifyChange(postMessage, 'model', (message.model as ModelConfig).id);
-          return true;
-
-        case 'deleteMCPServer':
-          await cm.removeMCPServer((message.serverId || message.id) as string);
-          this.notifyChange(postMessage, 'mcp', (message.serverId || message.id) as string);
           return true;
 
         case 'deletePrompt': {

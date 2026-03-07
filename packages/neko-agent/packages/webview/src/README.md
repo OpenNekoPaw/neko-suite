@@ -6,7 +6,7 @@
 
 | 模块 | 职责 | 主要导出 |
 |------|------|----------|
-| `components/` | UI 渲染 | `AIAssistant`, `ChatView`, `SettingsView` |
+| `components/` | UI 渲染 | `AIAssistant`, `ChatView`, `AccountBar`, `OnboardingFlow` |
 | `handlers/` | 消息分发 | `createConfiguredRegistry`, `useMessageHandler` |
 | `hooks/` | 状态管理 | `useConversationState`, `useConfigState` |
 | `config/` | 预设数据 | `PROVIDER_PRESETS`, `PROMPT_PRESETS` |
@@ -35,7 +35,7 @@ graph TB
     subgraph "组件层"
         Components[components/]
         Components --> AIAssistant[index.tsx]
-        AIAssistant --> Views[ChatView / SettingsView / TaskListView]
+        AIAssistant --> Views[ChatView / TaskListView / OnboardingFlow]
     end
 
     subgraph "状态层"
