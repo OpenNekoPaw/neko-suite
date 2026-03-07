@@ -20,8 +20,8 @@ import type {
   ConfiguredSlashCommand,
   ConfiguredHook,
   ConfiguredToolSkill,
+  UnifiedConfig,
 } from '@neko/shared';
-import type { UnifiedConfig } from '@neko/shared';
 import {
   readUserConfig,
   readWorkspaceConfig,
@@ -962,7 +962,7 @@ export class ConfigBridge implements vscode.Disposable {
       void this.initConfigFileImport().then(() => {
         for (const postMessage of this.activeWebviews) {
           try {
-            postMessage({ type: 'configChanged', source: 'configFile' });
+            postMessage({ type: 'configChanged', changeType: 'all' });
           } catch (error) {
             logger.error('Failed to broadcast config file change:', error);
           }
