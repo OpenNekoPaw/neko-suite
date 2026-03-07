@@ -157,7 +157,15 @@ export class ConfigManager {
       mcpServerOverrides: {},
       workflowOverrides: {},
       promptOverrides: {},
+      taskDefaults: undefined,
     };
+  }
+
+  /**
+   * Save user configuration (for taskDefaults and other direct user config updates)
+   */
+  async saveUserConfig(config: UserConfig): Promise<void> {
+    await this.userConfigManager?.save(config);
   }
 
   // ==========================================================================

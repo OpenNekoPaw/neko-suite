@@ -11,7 +11,7 @@
 import type { Provider, Model } from '../types/provider';
 import type { Group } from '../types/group';
 import type { MCPServerPreset, WorkflowPreset, PromptPreset } from '../types/config';
-import type { UnifiedConfig } from '@neko/shared';
+import type { UnifiedConfig, TaskDefaults } from '@neko/shared';
 // Node.js config reader - direct import
 import {
   readUserConfig as readUserConfigFile,
@@ -48,6 +48,8 @@ export interface UserConfig {
   workflowOverrides: Record<string, Partial<WorkflowPreset>>;
   /** Prompt overrides */
   promptOverrides: Record<string, Partial<PromptPreset>>;
+  /** Task-type to model defaults */
+  taskDefaults?: TaskDefaults;
 }
 
 /**
@@ -73,6 +75,7 @@ const DEFAULT_USER_CONFIG: UserConfig = {
   mcpServerOverrides: {},
   workflowOverrides: {},
   promptOverrides: {},
+  taskDefaults: undefined,
 };
 
 // =============================================================================
@@ -100,6 +103,7 @@ function unifiedToUserConfig(unified: UnifiedConfig | null): UserConfig {
     mcpServerOverrides: (unified.mcpServerOverrides as Record<string, Partial<MCPServerPreset>>) ?? {},
     workflowOverrides: (unified.workflowOverrides as Record<string, Partial<WorkflowPreset>>) ?? {},
     promptOverrides: (unified.promptOverrides as Record<string, Partial<PromptPreset>>) ?? {},
+    taskDefaults: unified.taskDefaults,
   };
 }
 
@@ -120,6 +124,7 @@ function userToUnifiedConfig(user: UserConfig): UnifiedConfig {
     mcpServerOverrides: user.mcpServerOverrides,
     workflowOverrides: user.workflowOverrides,
     promptOverrides: user.promptOverrides,
+    taskDefaults: user.taskDefaults,
   };
 }
 
@@ -149,6 +154,7 @@ export interface IUserConfigManager {
   updatePromptOverride(promptId: string, override: Partial<PromptPreset>): Promise<void>;
   addPrompt(prompt: PromptPreset): Promise<void>;
   removePrompt(promptId: string): Promise<void>;
+  updateTaskDefaults(defaults: TaskDefaults | undefined): Promise<void>;
   clear(): Promise<void>;
   migrateProviders(currentBuiltinIds: Set<string>): Promise<void>;
 }
@@ -188,6 +194,12 @@ export class UserConfigManager implements IUserConfigManager {
    */
   async save(config: UserConfig): Promise<void> {
     await this.storage.update(USER_CONFIG_KEY, config);
+  }
+
+  async updateTaskDefaults(defaults: TaskDefaults | undefined): Promise<void> {
+    const config = this.load();
+    config.taskDefaults = defaults;
+    await this.save(config);
   }
 
   // ==========================================================================
@@ -446,6 +458,12 @@ export class FileUserConfigManager implements IUserConfigManager {
     const unified = userToUnifiedConfig(config);
     writeUserConfigFile(unified);
     this.cachedConfig = config;
+  }
+
+  async updateTaskDefaults(defaults: TaskDefaults | undefined): Promise<void> {
+    const config = this.load();
+    config.taskDefaults = defaults;
+    await this.save(config);
   }
 
   // ==========================================================================
