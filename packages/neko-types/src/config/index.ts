@@ -33,6 +33,7 @@ export type {
   NormalizedConfig,
   GroupConfig,
   TemplatePresetConfig,
+  TaskDefaults,
 } from './types';
 
 export {

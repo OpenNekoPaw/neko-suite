@@ -355,6 +355,22 @@ export interface PromptPresetConfig {
 // Aggregated Configuration State
 // =============================================================================
 
+/**
+ * Task-type to model mapping for explicit routing
+ */
+export interface TaskDefaults {
+  /** Model ID for text chat tasks */
+  chat?: { modelId: string };
+  /** Model ID for vision/multimodal tasks */
+  vision?: { modelId: string };
+  /** Model ID for video generation tasks */
+  videoGeneration?: { modelId: string };
+  /** Model ID for audio generation tasks */
+  audioGeneration?: { modelId: string };
+  /** Model ID for image generation tasks */
+  imageGeneration?: { modelId: string };
+}
+
 export interface ConfigState {
   providers: ProviderConfig[];
   models: ModelConfig[];
@@ -365,6 +381,8 @@ export interface ConfigState {
   skills?: import('./skill').ConfiguredSkill[];
   /** Configured slash commands */
   commands?: import('./skill').ConfiguredSlashCommand[];
+  /** Task-type to model defaults */
+  taskDefaults?: TaskDefaults;
 }
 
 // =============================================================================

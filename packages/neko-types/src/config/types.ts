@@ -13,6 +13,7 @@ import type {
   MCPServerConfig,
   WorkflowConfig,
   PromptPresetConfig,
+  TaskDefaults,
 } from '../types/config';
 
 // =============================================================================
@@ -170,6 +171,9 @@ export interface UnifiedConfig {
 
   /** Template overrides (keyed by template ID) */
   templateOverrides?: Record<string, Partial<TemplatePresetConfig>>;
+
+  /** Task-type to model defaults */
+  taskDefaults?: TaskDefaults;
 
   // ==========================================================================
   // Legacy Fields (for backward compatibility)
