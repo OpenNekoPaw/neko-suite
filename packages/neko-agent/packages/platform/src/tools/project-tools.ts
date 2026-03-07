@@ -374,6 +374,159 @@ export class GetMediaInfoTool extends BuiltinTool {
   }
 }
 
+// ── BatchOp types ──────────────────────────────────────────────────────────
+
+type BatchOp =
+  | { type: 'AddElement'; trackId: string; elementType: string; startTime: number; duration: number; src?: string; properties?: Record<string, unknown> }
+  | { type: 'UpdateElement'; id: string; updates: Record<string, unknown> }
+  | { type: 'DeleteElement'; id: string }
+  | { type: 'TrimElement'; id: string; trimStart?: number; trimEnd?: number }
+  | { type: 'SetAudioProperties'; id: string; volume?: number; muted?: boolean }
+  | { type: 'SetColorCorrection'; id: string; brightness?: number; contrast?: number; saturation?: number };
+
+interface BatchOpResult {
+  index: number;
+  type: string;
+  success: boolean;
+  data?: unknown;
+  error?: string;
+}
+
+interface BatchResult {
+  succeeded: number;
+  failed: number;
+  results: BatchOpResult[];
+}
+
+/**
+ * Execute multiple timeline operations in one call (best-effort: collect errors, continue)
+ */
+export class BatchTimelineOpsTool extends BuiltinTool {
+  readonly name = 'BatchTimelineOps';
+  readonly description =
+    'Execute multiple timeline operations in one call. Best-effort: failed ops are reported but do not block subsequent ops.';
+  readonly category: ToolCategory = 'timeline';
+  readonly requiresConfirmation = true;
+  readonly parameters = {
+    type: 'object',
+    properties: {
+      operations: {
+        type: 'array',
+        description: 'Array of timeline operations to execute in order',
+        items: {
+          type: 'object',
+          properties: {
+            type: {
+              type: 'string',
+              enum: ['AddElement', 'UpdateElement', 'DeleteElement', 'TrimElement', 'SetAudioProperties', 'SetColorCorrection'],
+              description: 'Operation type',
+            },
+            trackId: { type: 'string', description: 'Track ID (AddElement)' },
+            elementType: { type: 'string', description: 'Element type: video|audio|image|text (AddElement)' },
+            startTime: { type: 'number', description: 'Start time in seconds (AddElement)' },
+            duration: { type: 'number', description: 'Duration in seconds (AddElement)' },
+            src: { type: 'string', description: 'Source file path (AddElement)' },
+            id: { type: 'string', description: 'Element ID (UpdateElement/DeleteElement/Trim/etc.)' },
+            updates: { type: 'object', description: 'Properties to update (UpdateElement)' },
+            trimStart: { type: 'number', description: 'New trim start offset in seconds' },
+            trimEnd: { type: 'number', description: 'New trim end offset in seconds' },
+            volume: { type: 'number', description: 'Volume 0-1 (SetAudioProperties)' },
+            muted: { type: 'boolean', description: 'Muted flag (SetAudioProperties)' },
+            brightness: { type: 'number' },
+            contrast: { type: 'number' },
+            saturation: { type: 'number' },
+          },
+          required: ['type'],
+        },
+      },
+    },
+    required: ['operations'],
+  };
+
+  private context: ProjectContext;
+
+  constructor(context: ProjectContext) {
+    super();
+    this.context = context;
+  }
+
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    if (!Array.isArray(args['operations'])) {
+      return this.error('operations must be an array of BatchOp objects');
+    }
+
+    const ops = args['operations'] as BatchOp[];
+    const results: BatchOpResult[] = [];
+
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i] as BatchOp;
+      try {
+        const data = await this._executeOp(op);
+        results.push({ index: i, type: op.type, success: true, data });
+      } catch (err) {
+        results.push({
+          index: i,
+          type: op.type,
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    const succeeded = results.filter(r => r.success).length;
+    const failed = results.length - succeeded;
+
+    const batchResult: BatchResult = { succeeded, failed, results };
+    return this.success(batchResult);
+  }
+
+  private async _executeOp(op: BatchOp): Promise<unknown> {
+    switch (op.type) {
+      case 'AddElement': {
+        const properties: Record<string, unknown> = op.src
+          ? { src: op.src, ...op.properties }
+          : { ...op.properties };
+        const elementId = await this.context.addElement(op.trackId, {
+          type: op.elementType as ElementInput['type'],
+          startTime: op.startTime,
+          duration: op.duration,
+          properties,
+        });
+        return { elementId };
+      }
+      case 'UpdateElement':
+        await this.context.updateElement(op.id, op.updates as Partial<ElementInput>);
+        return undefined;
+      case 'DeleteElement':
+        await this.context.deleteElement(op.id);
+        return undefined;
+      case 'TrimElement':
+        await this.context.updateElement(op.id, {
+          ...(op.trimStart !== undefined && { trimStart: op.trimStart }),
+          ...(op.trimEnd !== undefined && { trimEnd: op.trimEnd }),
+        } as Partial<ElementInput>);
+        return undefined;
+      case 'SetAudioProperties':
+        await this.context.updateElement(op.id, {
+          ...(op.volume !== undefined && { volume: op.volume }),
+          ...(op.muted !== undefined && { muted: op.muted }),
+        } as Partial<ElementInput>);
+        return undefined;
+      case 'SetColorCorrection':
+        await this.context.updateElement(op.id, {
+          ...(op.brightness !== undefined && { brightness: op.brightness }),
+          ...(op.contrast !== undefined && { contrast: op.contrast }),
+          ...(op.saturation !== undefined && { saturation: op.saturation }),
+        } as Partial<ElementInput>);
+        return undefined;
+      default: {
+        const exhaustiveCheck: never = op;
+        throw new Error(`Unknown operation type: ${(exhaustiveCheck as BatchOp).type}`);
+      }
+    }
+  }
+}
+
 /**
  * Register all project tools with a tool registry
  */
@@ -388,6 +541,7 @@ export function registerProjectTools(
   registry.register(new UpdateElementTool(context));
   registry.register(new DeleteElementTool(context));
   registry.register(new GetMediaInfoTool(context));
+  registry.register(new BatchTimelineOpsTool(context));
 }
 
 // Alias for backwards compatibility
