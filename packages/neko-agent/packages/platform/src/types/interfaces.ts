@@ -14,7 +14,6 @@ import type {
   ServiceOptions,
   ServiceResponse,
   ServiceStreamResponse,
-  ChatWithToolsOptions,
   EmbeddingOptions,
   EmbeddingResponse,
 } from './service';
@@ -56,28 +55,9 @@ export interface IService {
   ): ServiceStreamResponse;
 
   /**
-   * Chat with tool execution loop
-   */
-  chatWithTools(
-    messages: ChatMessage[],
-    options: ChatWithToolsOptions
-  ): Promise<ServiceResponse>;
-
-  /**
    * Generate embeddings for text
    */
   embed(texts: string[], options?: EmbeddingOptions): Promise<EmbeddingResponse>;
-
-  /**
-   * Check if media generation service is available
-   */
-  hasMediaGenerationService(): boolean;
-
-  /**
-   * Get the media generation service
-   * @throws Error if not configured
-   */
-  getMediaGenerationService(): IMediaGenerationService;
 
   /**
    * List models for a provider

@@ -2,22 +2,18 @@
  * Service Types - Unified service interface
  */
 
-import type { ChatMessage, ChatOptions, ChatResponse, ChatChunk } from './adapter';
-import type { ToolResult } from './tool';
+import type { ChatOptions, ChatResponse, ChatChunk } from './adapter';
 
 /**
  * Service options extending chat options
  */
 export interface ServiceOptions extends ChatOptions {
-
   /** Specific model ID (overrides group routing) */
   modelId?: string;
   /** Timeout in milliseconds */
   timeout?: number;
   /** Abort signal */
   signal?: AbortSignal;
-  /** Session ID for session-scoped circuit breaker isolation */
-  sessionId?: string;
 }
 
 /**
@@ -26,7 +22,6 @@ export interface ServiceOptions extends ChatOptions {
 export interface ServiceResponse extends ChatResponse {
   /** Routing information */
   routing: {
-  
     modelId: string;
     providerId: string;
     attempts: number;
@@ -50,20 +45,9 @@ export interface ServiceStreamResponse {
 }
 
 /**
- * Chat with tools options
- */
-export interface ChatWithToolsOptions extends ServiceOptions {
-  /** Maximum tool call iterations */
-  maxIterations?: number;
-  /** Tool execution handler */
-  onToolCall?: (toolCall: { name: string; arguments: Record<string, unknown> }) => Promise<ToolResult>;
-}
-
-/**
  * Embedding options
  */
 export interface EmbeddingOptions {
-
   /** Specific model ID */
   modelId?: string;
 }
@@ -84,7 +68,6 @@ export interface EmbeddingResponse {
  * Image generation service options
  */
 export interface ImageGenerationServiceOptions {
-
   /** Specific model ID */
   modelId?: string;
   /** Image size */
@@ -101,7 +84,6 @@ export interface ImageGenerationServiceOptions {
  * Video generation service options
  */
 export interface VideoGenerationServiceOptions {
-
   /** Specific model ID */
   modelId?: string;
   /** Video duration in seconds */

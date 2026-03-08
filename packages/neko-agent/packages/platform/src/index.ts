@@ -5,7 +5,6 @@
  * - Multi-provider support (OpenAI, Anthropic, Google, Azure, Ollama)
  * - Configuration management with three-tier priority
  * - Model selection driven by taskDefaults config
- * - Tool integration and memory management
  */
 
 // =============================================================================
@@ -22,36 +21,12 @@ export {
   // Base Registry
   BaseRegistry,
   type IRegistry,
-  // Router
-  type IRouter,
-  type RoutingCandidate,
-  type IRoutingStrategy,
-  type ErrorCategory,
-  type FallbackConfig,
-  BaseRoutingManager,
-  createCandidate,
-  addScore,
   // Concurrency Control
   type ConcurrencyPoolOptions,
   type PoolStats,
   ConcurrencyPool,
   KeyedConcurrencyPool,
   withConcurrencyLimit,
-  // Circuit Breaker
-  type CircuitState,
-  type CircuitBreakerOptions,
-  type CircuitBreakerStats,
-  CircuitBreaker,
-  CircuitOpenError,
-  KeyedCircuitBreaker,
-  // Rate Limiter
-  type RateLimiterOptions,
-  type RateLimiterStats,
-  type RateLimitResult,
-  RateLimiter,
-  RateLimitError,
-  KeyedRateLimiter,
-  AdaptiveRateLimiter,
 } from './core';
 
 // =============================================================================
@@ -112,17 +87,8 @@ export { createStreamCollector } from './llm/adapter/stream-aggregator';
 // Provider Layer
 // =============================================================================
 
-export {
-  ProviderRegistry,
-  type ProviderRegistryOptions,
-  type ExtendedProviderStatus,
-} from './provider/provider-registry';
+export { ProviderRegistry } from './provider/provider-registry';
 export { PlatformError } from './provider/platform-error';
-export {
-  executeWithRetry,
-  withStreamTimeout,
-  type RetryExecutorOptions,
-} from './provider/retry-executor';
 
 // =============================================================================
 // Service Layer
@@ -131,8 +97,6 @@ export {
 export { Service, type ServiceConfig } from './service/service';
 export { ModelSelector, type ModelTaskType, type ResolvedModel } from './service/model-selector';
 export { SharedServiceAdapter, toSharedService } from './service/shared-service-adapter';
-// ToolRegistry implementation is now in @neko/agent.
-// Platform uses IToolRegistry interface from @neko/shared.
 
 // PromptManager - local implementation
 export {
@@ -155,43 +119,6 @@ export type {
   SerializableTask,
   TaskExecutor,
 } from '@neko/shared';
-
-// Task storage implementations (still available in platform)
-export {
-  MemoryTaskStorage,
-  MemoryTaskRecoveryStorage,
-  FileTaskRecoveryStorage,
-  createFileRecoveryStorage,
-  type FileTaskRecoveryStorageOptions,
-} from './task';
-
-// =============================================================================
-// Tools Layer
-// =============================================================================
-
-export {
-  BuiltinTool,
-  registerBuiltinTools,
-} from './tools';
-export {
-  BaseProjectContextAdapter,
-  MockProjectContextAdapter,
-  createContextSummary,
-} from './tools';
-// AI Generation Tools
-export {
-  GenerateImageTool,
-  GenerateVideoTool,
-  GenerateTTSTool,
-  GenerateMusicTool,
-  registerGenerationTools,
-  type AIGenerationService,
-  type ImageGenerationOptions,
-  type VideoGenerationOptions,
-  type TTSOptions,
-  type MusicGenerationOptions,
-  type GeneratedMedia,
-} from './tools';
 
 // =============================================================================
 // Media Layer
@@ -226,12 +153,6 @@ export {
   SunoMediaAdapter,
   // Media Generation - Routing
   MediaRoutingManager,
-  UserPreferenceStrategy,
-  HealthFilterStrategy,
-  CapabilityFilterStrategy,
-  LoadBalancingStrategy,
-  CostOptimizationStrategy,
-  LatencyOptimizationStrategy,
   // Media Generation - Executor & Service
   MediaTaskExecutor,
   createMediaTaskInput,
@@ -260,9 +181,6 @@ export {
   type MediaAdapterError,
   type MediaAdapter,
   type MediaRoutingResult,
-  type MediaRoutingStrategy,
-  type MediaRoutingCandidate,
-  type MediaRoutingContext,
   type MediaTask,
   type MediaProgressCallback,
   type MediaTaskPayload,
@@ -351,7 +269,7 @@ export function createPlatform(options: PlatformOptions): Platform {
   };
   const configManager = new ConfigManager(configOptions);
 
-  // Initialize provider registry
+  // Initialize provider registry (simplified: adapter routing only)
   const providerRegistry = new ProviderRegistry(configManager);
 
   // Use injected tool registry (from @neko/agent)
@@ -392,7 +310,6 @@ export function createPlatform(options: PlatformOptions): Platform {
     return new Service({
       configManager,
       providerRegistry,
-      mediaGenerationService,
     });
   };
 

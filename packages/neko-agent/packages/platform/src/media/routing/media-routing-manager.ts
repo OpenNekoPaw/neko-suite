@@ -1,54 +1,58 @@
 /**
  * Media Routing Manager
  *
- * Manages provider and model selection for media generation requests
+ * Selects provider and model for media generation requests.
+ * Simplified: capability filtering and preference exclusion are inlined.
  */
 
-import type { Provider, Model } from '../../types/provider';
+import type { Provider, Model, ModelCapability } from '../../types/provider';
 import type {
   MediaGenerationType,
   MediaRoutingResult,
-  MediaRoutingStrategy,
-  MediaRoutingCandidate,
-  MediaRoutingContext,
   RoutingPreference,
 } from '../types';
-import type { ProviderRegistry } from '../../provider/provider-registry';
 import type { ConfigManager } from '../../config/config-manager';
 import { getMediaAdapterRegistry } from '../adapters/media-adapter-registry';
-import {
-  UserPreferenceStrategy,
-  HealthFilterStrategy,
-  CapabilityFilterStrategy,
-  LoadBalancingStrategy,
-} from './strategies';
+
+/**
+ * Internal candidate type
+ */
+interface Candidate {
+  provider: Provider;
+  model: Model;
+}
+
+/**
+ * Map generation type to model capability
+ */
+const GENERATION_TYPE_TO_CAPABILITY: Record<MediaGenerationType, ModelCapability> = {
+  'text-to-image': 'text_to_image',
+  'image-to-image': 'image_to_image',
+  'text-to-video': 'text_to_video',
+  'image-to-video': 'image_to_video',
+  'video-to-video': 'video_to_video',
+  'text-to-audio': 'text_to_audio',
+  'text-to-music': 'text_to_music',
+  'workflow': 'workflow',
+};
+
+/**
+ * Alternative capability names for backwards compatibility
+ */
+const CAPABILITY_ALIASES: Partial<Record<ModelCapability, string[]>> = {
+  text_to_image: ['image_generation', 'image-generation', 'text-to-image'],
+  text_to_video: ['video_generation', 'video-generation', 'text-to-video'],
+  text_to_audio: ['audio_generation', 'audio-generation', 'text-to-audio', 'tts'],
+};
 
 /**
  * Media routing manager
  */
 export class MediaRoutingManager {
-  private providerRegistry: ProviderRegistry;
   private configManager: ConfigManager;
-  private strategies: MediaRoutingStrategy[] = [];
 
-  constructor(providerRegistry: ProviderRegistry, configManager: ConfigManager) {
-    this.providerRegistry = providerRegistry;
+  constructor(_providerRegistry: unknown, configManager: ConfigManager) {
     this.configManager = configManager;
-
-    // Register default strategies
-    this.registerStrategy(new UserPreferenceStrategy());
-    this.registerStrategy(new HealthFilterStrategy());
-    this.registerStrategy(new CapabilityFilterStrategy());
-    this.registerStrategy(new LoadBalancingStrategy());
-  }
-
-  /**
-   * Register a routing strategy
-   */
-  registerStrategy(strategy: MediaRoutingStrategy): void {
-    this.strategies.push(strategy);
-    // Sort by priority (higher first)
-    this.strategies.sort((a, b) => b.priority - a.priority);
   }
 
   /**
@@ -60,19 +64,11 @@ export class MediaRoutingManager {
     providerId?: string,
     modelId?: string
   ): Promise<MediaRoutingResult | null> {
-    console.log('[MediaRouting] selectProvider called:', {
-      generationType,
-      providerId,
-      modelId,
-      hasPreference: !!preference,
-    });
-
-    // If specific provider and model are specified, use them directly
+    // Short-circuit: if specific provider and model are given, use directly
     if (providerId && modelId) {
       const provider = this.configManager.getProvider(providerId);
       const model = this.configManager.getModel(modelId);
       if (provider && model) {
-        console.log('[MediaRouting] Using specified provider/model:', { providerId, modelId });
         return {
           providerId,
           modelId,
@@ -82,56 +78,31 @@ export class MediaRoutingManager {
       }
     }
 
-    // Build routing context
-    const context = await this.buildContext(generationType, preference);
-
     // Get initial candidates
     let candidates = this.getCandidates(providerId, modelId);
 
-    console.log('[MediaRouting] Initial candidates:', {
-      count: candidates.length,
-      candidates: candidates.map(c => ({
-        provider: c.provider.id,
-        providerType: c.provider.type,
-        model: c.model.id,
-        modelCapabilities: c.model.capabilities,
-      })),
-    });
+    // Filter: exclude providers from preference
+    if (preference?.excludeProviders?.length) {
+      candidates = candidates.filter(
+        (c) => !preference.excludeProviders!.includes(c.provider.id)
+      );
+    }
+
+    // Filter: match generation type to model capabilities
+    const requiredCapability = GENERATION_TYPE_TO_CAPABILITY[generationType] || 'text_to_image';
+    candidates = candidates.filter((c) => this.hasCapability(c.model, requiredCapability));
 
     if (candidates.length === 0) {
-      console.log('[MediaRouting] No candidates found. Checking enabled providers...');
-      const enabledProviders = this.configManager.getEnabledProviders();
-      const adapterRegistry = getMediaAdapterRegistry();
-      console.log('[MediaRouting] Enabled providers:', enabledProviders.map(p => ({
-        id: p.id,
-        type: p.type,
-        hasMediaAdapter: adapterRegistry.has(p.type),
-      })));
-      console.log('[MediaRouting] Registered adapter types:', adapterRegistry.listTypes());
       return null;
     }
 
-    // Apply strategies in order
-    for (const strategy of this.strategies) {
-      // Filter phase
-      candidates = strategy.filter(candidates, context);
-      if (candidates.length === 0) {
-        return null;
-      }
-
-      // Score phase
-      candidates = strategy.score(candidates, context);
-    }
-
-    // Sort by score and select best
-    candidates.sort((a, b) => b.score - a.score);
-    const best = candidates[0];
-
+    // Select first matching candidate
+    const best = candidates[0]!;
     return {
       providerId: best.provider.id,
       modelId: best.model.id,
-      score: best.score,
-      reason: this.buildSelectionReason(best),
+      score: 50,
+      reason: 'Default selection',
     };
   }
 
@@ -159,39 +130,16 @@ export class MediaRoutingManager {
   }
 
   /**
-   * Build routing context
-   */
-  private async buildContext(
-    generationType: MediaGenerationType,
-    preference?: RoutingPreference
-  ): Promise<MediaRoutingContext> {
-    // Get provider health status (uses providerRegistry for health checks)
-    const providerHealth = new Map<string, boolean>();
-    const providers = this.configManager.getEnabledProviders();
-
-    for (const provider of providers) {
-      const status = this.providerRegistry.getProviderStatus(provider.id);
-      providerHealth.set(provider.id, status?.available ?? true);
-    }
-
-    return {
-      generationType,
-      preference,
-      providerHealth,
-    };
-  }
-
-  /**
-   * Get initial candidates
+   * Get initial candidates (providers with media adapters × enabled models)
    */
   private getCandidates(
     providerId?: string,
     modelId?: string
-  ): MediaRoutingCandidate[] {
-    const candidates: MediaRoutingCandidate[] = [];
+  ): Candidate[] {
+    const candidates: Candidate[] = [];
     const adapterRegistry = getMediaAdapterRegistry();
 
-    // Get enabled providers
+    // Get providers
     let providers: Provider[];
     if (providerId) {
       const provider = this.configManager.getProvider(providerId);
@@ -200,11 +148,10 @@ export class MediaRoutingManager {
       providers = this.configManager.getEnabledProviders();
     }
 
-    // Filter to providers that have media adapters
+    // Filter to providers with media adapters
     providers = providers.filter((p) => adapterRegistry.has(p.type));
 
     for (const provider of providers) {
-      // Get models for this provider
       let models: Model[];
       if (modelId) {
         const model = this.configManager.getModel(modelId);
@@ -216,12 +163,7 @@ export class MediaRoutingManager {
       }
 
       for (const model of models) {
-        candidates.push({
-          provider,
-          model,
-          score: 0,
-          scoreBreakdown: {},
-        });
+        candidates.push({ provider, model });
       }
     }
 
@@ -229,19 +171,21 @@ export class MediaRoutingManager {
   }
 
   /**
-   * Build human-readable selection reason
+   * Check if model has the required capability (with alias support)
    */
-  private buildSelectionReason(candidate: MediaRoutingCandidate): string {
-    const parts: string[] = [];
+  private hasCapability(model: Model, capability: ModelCapability): boolean {
+    const capabilities = model.capabilities as string[] || [];
 
-    for (const [strategy, score] of Object.entries(candidate.scoreBreakdown)) {
-      if (score > 0) {
-        parts.push(`${strategy}: +${score.toFixed(1)}`);
-      }
+    if (capabilities.includes(capability)) {
+      return true;
     }
 
-    return parts.length > 0
-      ? `Selected based on: ${parts.join(', ')}`
-      : 'Default selection';
+    // Check alternative names
+    const aliases = CAPABILITY_ALIASES[capability];
+    if (aliases) {
+      return aliases.some((alias) => capabilities.includes(alias));
+    }
+
+    return false;
   }
 }

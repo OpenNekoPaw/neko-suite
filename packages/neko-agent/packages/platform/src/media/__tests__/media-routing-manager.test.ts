@@ -2,11 +2,11 @@
  * Media Routing Manager Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { MediaRoutingManager } from '../routing/media-routing-manager';
 import { ProviderRegistry } from '../../provider/provider-registry';
 import { ConfigManager } from '../../config/config-manager';
-import { getMediaAdapterRegistry, createMediaAdapterRegistry } from '../adapters/media-adapter-registry';
+import { getMediaAdapterRegistry } from '../adapters/media-adapter-registry';
 import { OpenAICompatMediaAdapter } from '../adapters/openai-compat-media-adapter';
 import { RunwayMediaAdapter } from '../adapters/runway-media-adapter';
 import type { Provider, Model } from '../../types/provider';
@@ -197,27 +197,4 @@ describe('MediaRoutingManager', () => {
     });
   });
 
-  describe('registerStrategy', () => {
-    it('should allow registering custom strategies', async () => {
-      const customStrategy = {
-        name: 'custom-strategy',
-        priority: 1000, // Highest priority
-        filter: vi.fn((candidates) => candidates),
-        score: vi.fn((candidates) =>
-          candidates.map((c: { scoreBreakdown: Record<string, number> }) => ({
-            ...c,
-            score: 1000,
-            scoreBreakdown: { ...c.scoreBreakdown, custom: 1000 },
-          }))
-        ),
-      };
-
-      routingManager.registerStrategy(customStrategy);
-
-      await routingManager.selectProvider('text-to-video');
-
-      expect(customStrategy.filter).toHaveBeenCalled();
-      expect(customStrategy.score).toHaveBeenCalled();
-    });
-  });
 });

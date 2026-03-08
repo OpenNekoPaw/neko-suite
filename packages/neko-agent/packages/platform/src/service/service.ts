@@ -1,29 +1,27 @@
 /**
  * AI Service - Unified interface for AI operations
+ *
+ * Simplified to direct adapter calls. Vercel AI SDK handles retries internally.
+ * Circuit breaker, rate limiting, and multi-model fallback have been removed
+ * as they are unnecessary for a single-user desktop application.
  */
 
 import type {
   ChatMessage,
   ChatOptions,
-  ChatResponse,
-  ChatChunk,
 } from '../types/adapter';
 import type {
   ServiceOptions,
   ServiceResponse,
   ServiceStreamResponse,
-  ChatWithToolsOptions,
   EmbeddingOptions,
   EmbeddingResponse,
 } from '../types/service';
-import type { ToolResult } from '../types/tool';
-import type { RetryPolicy, TimeoutPolicy } from '../types/error';
-import type { IMediaGenerationService, IService } from '../types/interfaces';
+import type { IService } from '../types/interfaces';
 import { ConfigManager } from '../config/config-manager';
 import { ProviderRegistry } from '../provider/provider-registry';
 import { ModelSelector } from './model-selector';
 import { PlatformError } from '../provider/platform-error';
-import { executeWithRetry, withStreamTimeout } from '../provider/retry-executor';
 import { createStreamCollector } from '../llm/adapter/stream-aggregator';
 
 /**
@@ -32,10 +30,6 @@ import { createStreamCollector } from '../llm/adapter/stream-aggregator';
 export interface ServiceConfig {
   configManager: ConfigManager;
   providerRegistry: ProviderRegistry;
-  defaultRetryPolicy?: RetryPolicy;
-  defaultTimeoutPolicy?: TimeoutPolicy;
-  /** Optional media generation service for async image/video/audio generation */
-  mediaGenerationService?: IMediaGenerationService;
 }
 
 /**
@@ -109,7 +103,6 @@ export class Service implements IService {
       });
     }
 
-    // getAdapter uses providerRegistry (has actual adapter lookup logic)
     // Pass model to allow model-specific protocol override
     const adapter = this.config.providerRegistry.getAdapter(routing.providerId, model);
     if (!adapter) {
@@ -158,70 +151,12 @@ export class Service implements IService {
     options: ServiceOptions = {}
   ): Promise<ServiceResponse> {
     const startTime = Date.now();
-    const sessionId = options.sessionId;
-    const excludeModels: string[] = [];
+    const routing = this.resolveRouting(options.modelId, [], 'chat');
+    const { model, provider, adapter } = this.resolveResources(routing);
 
-    while (true) {
-      const routing = this.resolveRouting(options.modelId, excludeModels, 'chat');
-
-      try {
-        const { model, provider, adapter } = this.resolveResources(routing);
-        const providerId = routing.providerId;
-
-        // Check if provider is available (circuit breaker + health, session-scoped)
-        if (!this.config.providerRegistry.isProviderAvailable(providerId, sessionId)) {
-          throw new PlatformError({
-            category: 'server',
-            code: 'PROVIDER_UNAVAILABLE',
-            message: `Provider ${providerId} is currently unavailable`,
-            retryable: true,
-          });
-        }
-
-        const retryPolicy = this.config.defaultRetryPolicy || this.getDefaultRetryPolicy();
-        const timeoutPolicy = this.config.defaultTimeoutPolicy || this.getDefaultTimeoutPolicy();
-
-        // Execute with rate limiting and circuit breaker protection (session-scoped)
-        const response = await this.config.providerRegistry.executeWithProtection(
-          providerId,
-          () => executeWithRetry(
-            async () => {
-              const chatOptions: ChatOptions = { ...options, model: model.name };
-              return adapter.chat(messages, chatOptions, model, provider);
-            },
-            { retryPolicy, timeoutPolicy }
-          ),
-          sessionId
-        );
-
-        return { ...response, ...this.buildResponseMeta(routing, startTime) };
-      } catch (error) {
-        const platformError = PlatformError.fromError(error as Error);
-
-        // Record failure for circuit breaker (if not a rate limit error, session-scoped)
-        if (platformError.category !== 'rate_limit') {
-          this.config.providerRegistry.recordFailure(
-            routing.providerId,
-            error as Error,
-            sessionId
-          );
-        }
-
-        excludeModels.push(routing.modelId);
-
-        if (!this.selector.shouldFallback(platformError)) {
-          throw platformError;
-        }
-
-        // Try resolving next model; if none available this will throw
-        try {
-          this.selector.resolve('chat', { excludeModels });
-        } catch {
-          throw platformError;
-        }
-        // Continue loop with next model
-      }
-    }
+    const chatOptions: ChatOptions = { ...options, model: model.name };
+    const response = await adapter.chat(messages, chatOptions, model, provider);
+    return { ...response, ...this.buildResponseMeta(routing, startTime) };
   }
 
   /**
@@ -232,144 +167,25 @@ export class Service implements IService {
     options: ServiceOptions = {}
   ): ServiceStreamResponse {
     const startTime = Date.now();
-    const sessionId = options.sessionId;
-    const excludeModels: string[] = [];
-
-    // Pre-flight fallback loop: find an available provider before starting stream
-    let routing;
-    let model;
-    let provider;
-    let adapter;
-    let providerId: string;
-
-    while (true) {
-      routing = this.resolveRouting(options.modelId, excludeModels, 'chat');
-      const resources = this.resolveResources(routing);
-      model = resources.model;
-      provider = resources.provider;
-      adapter = resources.adapter;
-      providerId = routing.providerId;
-
-      // Check if provider is available (circuit breaker + health, session-scoped)
-      if (!this.config.providerRegistry.isProviderAvailable(providerId, sessionId)) {
-        excludeModels.push(routing.modelId);
-        if (!this.selector.shouldFallback(new PlatformError({ category: 'server', code: 'PROVIDER_UNAVAILABLE', message: '', retryable: true }))) {
-          throw new PlatformError({
-            category: 'server',
-            code: 'PROVIDER_UNAVAILABLE',
-            message: `Provider ${providerId} is currently unavailable`,
-            retryable: true,
-          });
-        }
-        try { this.selector.resolve('chat', { excludeModels }); } catch {
-          throw new PlatformError({
-            category: 'server',
-            code: 'PROVIDER_UNAVAILABLE',
-            message: `Provider ${providerId} is currently unavailable`,
-            retryable: true,
-          });
-        }
-        continue;
-      }
-
-      // Try to acquire rate limit synchronously
-      const rateLimitResult = this.config.providerRegistry.tryAcquireRateLimit(providerId);
-      if (!rateLimitResult.allowed) {
-        excludeModels.push(routing.modelId);
-        try { this.selector.resolve('chat', { excludeModels }); } catch {
-          throw new PlatformError({
-            category: 'rate_limit',
-            code: 'RATE_LIMIT_EXCEEDED',
-            message: `Rate limit exceeded for provider ${providerId}`,
-            retryable: true,
-            retryAfter: rateLimitResult.retryAfterMs,
-          });
-        }
-        continue;
-      }
-
-      break; // Found an available provider
-    }
+    const routing = this.resolveRouting(options.modelId, [], 'chat');
+    const { model, provider, adapter } = this.resolveResources(routing);
 
     const chatOptions: ChatOptions = { ...options, model: model.name, stream: true };
     const rawStream = adapter.chatStream(messages, chatOptions, model, provider);
 
-    const timeoutPolicy = this.config.defaultTimeoutPolicy || this.getDefaultTimeoutPolicy();
-    const stream = timeoutPolicy.streamTimeout
-      ? withStreamTimeout(rawStream, timeoutPolicy.streamTimeout)
-      : rawStream;
+    // Apply stream timeout if configured
+    const timeoutMs = this.getStreamTimeout();
+    const stream = timeoutMs ? this.withStreamTimeout(rawStream, timeoutMs) : rawStream;
 
     const { stream: collectedStream, response: responsePromise } = createStreamCollector(stream);
 
     return {
       stream: collectedStream,
-      response: responsePromise
-        .then((response) => {
-          // Record success for circuit breaker (session-scoped)
-          this.config.providerRegistry.recordSuccess(providerId, sessionId);
-          return {
-            ...response,
-            ...this.buildResponseMeta(routing, startTime),
-          };
-        })
-        .catch((error) => {
-          // Record failure for circuit breaker (session-scoped)
-          this.config.providerRegistry.recordFailure(providerId, error, sessionId);
-          throw error;
-        }),
+      response: responsePromise.then((response) => ({
+        ...response,
+        ...this.buildResponseMeta(routing, startTime),
+      })),
     };
-  }
-
-  /**
-   * Chat with tool calling support
-   */
-  async chatWithTools(
-    messages: ChatMessage[],
-    options: ChatWithToolsOptions
-  ): Promise<ServiceResponse> {
-    const maxIterations = options.maxIterations || 10;
-    let currentMessages = [...messages];
-    let iterations = 0;
-    let lastResponse: ServiceResponse | null = null;
-
-    while (iterations < maxIterations) {
-      iterations++;
-
-      const response = await this.chat(currentMessages, options);
-      lastResponse = response;
-
-      // Check for tool calls
-      if (!response.message.toolCalls || response.message.toolCalls.length === 0) {
-        return response;
-      }
-
-      // Execute tool calls
-      currentMessages.push(response.message);
-
-      for (const toolCall of response.message.toolCalls) {
-        if (!options.onToolCall) {
-          throw new PlatformError({
-            category: 'validation',
-            code: 'NO_TOOL_HANDLER',
-            message: 'Tool call received but no handler provided',
-            retryable: false,
-          });
-        }
-
-        const result = await options.onToolCall({
-          name: toolCall.function.name,
-          arguments: JSON.parse(toolCall.function.arguments),
-        });
-
-        currentMessages.push({
-          role: 'tool',
-          toolCallId: toolCall.id,
-          content: JSON.stringify(result.data || result.error),
-        });
-      }
-    }
-
-    return lastResponse || await this.chat(currentMessages, options);
   }
 
   /**
@@ -404,67 +220,12 @@ export class Service implements IService {
     };
   }
 
-  private getDefaultRetryPolicy(): RetryPolicy {
-    const preset = this.config.configManager.getRetryTimeoutPreset('modelCall');
-    return preset?.retry || {
-      maxRetries: 3,
-      backoffStrategy: {
-        type: 'exponential',
-        initialDelayMs: 1000,
-        multiplier: 2,
-        maxDelayMs: 30000,
-      },
-      retryableCategories: ['rate_limit', 'timeout', 'network', 'server'],
-    };
-  }
-
-  private getDefaultTimeoutPolicy(): TimeoutPolicy {
-    const preset = this.config.configManager.getRetryTimeoutPreset('modelCall');
-    return preset?.timeout || {
-      requestTimeout: 60000,
-      totalTimeout: 180000,
-      streamTimeout: 30000,
-    };
-  }
-
-  // ==========================================================================
-  // Media Generation Service Integration (Async APIs)
-  // ==========================================================================
-
-  /**
-   * Check if MediaGenerationService is available
-   */
-  hasMediaGenerationService(): boolean {
-    return !!this.config.mediaGenerationService;
-  }
-
-  /**
-   * Get MediaGenerationService instance
-   * @throws Error if not configured
-   */
-  getMediaGenerationService(): IMediaGenerationService {
-    if (!this.config.mediaGenerationService) {
-      throw new PlatformError({
-        category: 'validation',
-        code: 'MEDIA_SERVICE_NOT_CONFIGURED',
-        message: 'MediaGenerationService is not configured',
-        retryable: false,
-      });
-    }
-    return this.config.mediaGenerationService;
-  }
-
   // ==========================================================================
   // Provider Model Discovery
   // ==========================================================================
 
   /**
    * List available models from a provider's API
-   * This queries the provider's API directly to get the list of available models.
-   *
-   * @param providerId The provider ID to query
-   * @returns List of model IDs available from the provider
-   * @throws PlatformError if provider not found or doesn't support model listing
    */
   async listProviderModels(providerId: string): Promise<string[]> {
     const models = await this.listProviderModelsDetailed(providerId);
@@ -473,10 +234,6 @@ export class Service implements IService {
 
   /**
    * List available models with detailed capability information
-   *
-   * @param providerId The provider ID to query
-   * @returns List of models with their capabilities
-   * @throws PlatformError if provider not found or doesn't support model listing
    */
   async listProviderModelsDetailed(
     providerId: string
@@ -491,7 +248,6 @@ export class Service implements IService {
       });
     }
 
-    // getAdapter uses providerRegistry (has actual adapter lookup logic)
     const adapter = this.config.providerRegistry.getAdapter(providerId);
     if (!adapter) {
       throw new PlatformError({
@@ -538,9 +294,6 @@ export class Service implements IService {
 
   /**
    * Validate a provider's API key
-   * Makes a test request to check if the key is valid
-   * @param providerId Provider ID to validate
-   * @param modelId Optional model ID - when specified, uses this model for validation test
    */
   async validateProviderApiKey(
     providerId: string,
@@ -567,7 +320,6 @@ export class Service implements IService {
       if (model) {
         modelName = model.name;
       } else {
-        // If modelId not found in config, use it directly as model name
         modelName = modelId;
       }
     }
@@ -586,5 +338,44 @@ export class Service implements IService {
   supportsApiKeyValidation(providerId: string): boolean {
     const adapter = this.config.providerRegistry.getAdapter(providerId);
     return !!adapter?.validateApiKey;
+  }
+
+  // ==========================================================================
+  // Private Helpers
+  // ==========================================================================
+
+  /**
+   * Get stream timeout from config
+   */
+  private getStreamTimeout(): number | undefined {
+    const preset = this.config.configManager.getRetryTimeoutPreset('modelCall');
+    return preset?.timeout?.streamTimeout;
+  }
+
+  /**
+   * Wrap stream with timeout detection (detects stalled streams)
+   */
+  private async *withStreamTimeout<T>(
+    stream: AsyncIterable<T>,
+    timeoutMs: number
+  ): AsyncIterable<T> {
+    let lastChunkTime = Date.now();
+
+    for await (const chunk of stream) {
+      const now = Date.now();
+      const sinceLastChunk = now - lastChunkTime;
+
+      if (sinceLastChunk > timeoutMs) {
+        throw new PlatformError({
+          category: 'timeout',
+          code: 'STREAM_TIMEOUT',
+          message: `No data received for ${timeoutMs}ms`,
+          retryable: true,
+        });
+      }
+
+      lastChunkTime = now;
+      yield chunk;
+    }
   }
 }

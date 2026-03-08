@@ -76,9 +76,6 @@ export type {
   MediaAdapterError,
   MediaAdapter,
   MediaRoutingResult,
-  MediaRoutingStrategy,
-  MediaRoutingCandidate,
-  MediaRoutingContext,
   MediaTask,
   MediaProgressCallback,
 } from './types';
@@ -98,15 +95,7 @@ export {
 } from './adapters';
 
 // Routing
-export {
-  MediaRoutingManager,
-  UserPreferenceStrategy,
-  HealthFilterStrategy,
-  CapabilityFilterStrategy,
-  LoadBalancingStrategy,
-  CostOptimizationStrategy,
-  LatencyOptimizationStrategy,
-} from './routing';
+export { MediaRoutingManager } from './routing';
 
 // Task Executor
 export {
@@ -122,7 +111,6 @@ export type { MediaGenerationServiceOptions } from './media-generation-service';
 // Factory
 import { ConfigManager } from '../config/config-manager';
 import { ProviderRegistry } from '../provider/provider-registry';
-import type { ITaskManager } from '@neko/shared';
 import type { IMediaTaskManager } from './media-generation-service';
 import { MediaAdapterRegistry, getMediaAdapterRegistry } from './adapters/media-adapter-registry';
 import { OpenAICompatMediaAdapter } from './adapters/openai-compat-media-adapter';
@@ -134,8 +122,6 @@ import { SunoMediaAdapter } from './adapters/suno-media-adapter';
 import { ViduMediaAdapter } from './adapters/vidu-media-adapter';
 import { MidjourneyMediaAdapter } from './adapters/midjourney-media-adapter';
 import { MediaRoutingManager } from './routing/media-routing-manager';
-import { CostOptimizationStrategy } from './routing/strategies/cost-optimization-strategy';
-import { LatencyOptimizationStrategy } from './routing/strategies/latency-optimization-strategy';
 import { MediaTaskExecutor } from './media-task-executor';
 import { MediaGenerationService } from './media-generation-service';
 
@@ -193,10 +179,8 @@ export function createMediaPlatform(deps: MediaPlatformDeps): MediaPlatform {
   adapterRegistry.registerBuiltin('vidu', new ViduMediaAdapter());
   adapterRegistry.registerBuiltin('midjourney', new MidjourneyMediaAdapter());
 
-  // Create routing manager with all strategies
+  // Create routing manager
   const routingManager = new MediaRoutingManager(deps.providerRegistry, deps.configManager);
-  routingManager.registerStrategy(new CostOptimizationStrategy());
-  routingManager.registerStrategy(new LatencyOptimizationStrategy());
 
   // Create task executor
   const taskExecutor = new MediaTaskExecutor(deps.providerRegistry, deps.configManager);

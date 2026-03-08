@@ -262,62 +262,6 @@ export interface MediaRoutingResult {
   reason: string;
 }
 
-/**
- * Routing strategy interface
- */
-export interface MediaRoutingStrategy {
-  /** Strategy name */
-  readonly name: string;
-  /** Strategy priority (higher = executed first) */
-  readonly priority: number;
-
-  /**
-   * Filter candidates
-   * @returns Filtered list of candidates
-   */
-  filter(
-    candidates: MediaRoutingCandidate[],
-    context: MediaRoutingContext
-  ): MediaRoutingCandidate[];
-
-  /**
-   * Score candidates
-   * @returns Candidates with updated scores
-   */
-  score(
-    candidates: MediaRoutingCandidate[],
-    context: MediaRoutingContext
-  ): MediaRoutingCandidate[];
-}
-
-/**
- * Routing candidate
- */
-export interface MediaRoutingCandidate {
-  /** Provider */
-  provider: Provider;
-  /** Model */
-  model: Model;
-  /** Current score */
-  score: number;
-  /** Score breakdown by strategy */
-  scoreBreakdown: Record<string, number>;
-}
-
-/**
- * Routing context
- */
-export interface MediaRoutingContext {
-  /** Generation type */
-  generationType: MediaGenerationType;
-  /** User routing preference */
-  preference?: RoutingPreference;
-  /** Required capabilities */
-  requiredCapabilities?: string[];
-  /** Provider health status */
-  providerHealth: Map<string, boolean>;
-}
-
 // =============================================================================
 // Service Interfaces
 // =============================================================================

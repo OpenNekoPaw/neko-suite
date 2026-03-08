@@ -3,9 +3,7 @@
  */
 
 import type { MediaDownloadOptions } from '../types/media';
-import type { RetryPolicy, BackoffStrategy } from '../types/error';
-import { PlatformError } from '../provider/platform-error';
-import { executeWithRetry, type RetryExecutorOptions } from '../provider/retry-executor';
+import { PlatformError, sleep } from '../provider/platform-error';
 
 /**
  * HTTP downloader options
@@ -45,91 +43,96 @@ export function createHttpDownloader(options: HttpDownloaderOptions = {}) {
     url: string,
     downloadOptions?: MediaDownloadOptions
   ): Promise<DownloadResult> {
-    const backoffStrategy: BackoffStrategy = {
-      type: 'exponential',
-      initialDelayMs: 1000,
-      multiplier: 2,
-      maxDelayMs: 30000,
-    };
+    let lastError: Error | undefined;
 
-    const retryPolicy: RetryPolicy = {
-      maxRetries,
-      backoffStrategy,
-      retryableCategories: ['timeout', 'rate_limit', 'server', 'network'],
-    };
-
-    const retryOptions: RetryExecutorOptions = {
-      retryPolicy,
-      timeoutPolicy: {
-        requestTimeout: downloadOptions?.timeout || timeout,
-      },
-    };
-
-    return executeWithRetry(async () => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(
-        () => controller.abort(),
-        downloadOptions?.timeout || timeout
-      );
-
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const response = await fetchFn(url, {
-          method: 'GET',
-          headers: downloadOptions?.headers,
-          signal: controller.signal,
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(
+          () => controller.abort(),
+          downloadOptions?.timeout || timeout
+        );
 
-        if (!response.ok) {
-          throw createDownloadError(response.status, url);
-        }
+        try {
+          const response = await fetchFn(url, {
+            method: 'GET',
+            headers: downloadOptions?.headers,
+            signal: controller.signal,
+          });
 
-        const contentType = response.headers.get('content-type') || undefined;
-        const contentLengthHeader = response.headers.get('content-length');
-        const contentLength = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
-
-        // Stream with progress if callback provided
-        if (downloadOptions?.onProgress && response.body && contentLength > 0) {
-          const reader = response.body.getReader();
-          const chunks: Uint8Array[] = [];
-          let received = 0;
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            chunks.push(value);
-            received += value.length;
-            downloadOptions.onProgress(received / contentLength);
+          if (!response.ok) {
+            throw createDownloadError(response.status, url);
           }
 
-          // Combine chunks
-          const content = new Uint8Array(received);
-          let offset = 0;
-          for (const chunk of chunks) {
-            content.set(chunk, offset);
-            offset += chunk.length;
+          const contentType = response.headers.get('content-type') || undefined;
+          const contentLengthHeader = response.headers.get('content-length');
+          const contentLength = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
+
+          // Stream with progress if callback provided
+          if (downloadOptions?.onProgress && response.body && contentLength > 0) {
+            const reader = response.body.getReader();
+            const chunks: Uint8Array[] = [];
+            let received = 0;
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              chunks.push(value);
+              received += value.length;
+              downloadOptions.onProgress(received / contentLength);
+            }
+
+            // Combine chunks
+            const content = new Uint8Array(received);
+            let offset = 0;
+            for (const chunk of chunks) {
+              content.set(chunk, offset);
+              offset += chunk.length;
+            }
+
+            return {
+              content: content.buffer,
+              contentType,
+              contentLength: received,
+            };
           }
+
+          // Simple download without progress
+          const content = await response.arrayBuffer();
+          downloadOptions?.onProgress?.(1);
 
           return {
-            content: content.buffer,
+            content,
             contentType,
-            contentLength: received,
+            contentLength: content.byteLength,
           };
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      } catch (error) {
+        lastError = error as Error;
+        const platformError = error instanceof PlatformError ? error : undefined;
+
+        // Don't retry non-retryable errors
+        if (platformError && !platformError.retryable) {
+          throw error;
         }
 
-        // Simple download without progress
-        const content = await response.arrayBuffer();
-        downloadOptions?.onProgress?.(1);
-
-        return {
-          content,
-          contentType,
-          contentLength: content.byteLength,
-        };
-      } finally {
-        clearTimeout(timeoutId);
+        // Don't retry on last attempt
+        if (attempt < maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+          await sleep(delay);
+        }
       }
-    }, retryOptions);
+    }
+
+    throw lastError || new PlatformError({
+      category: 'network',
+      code: 'DOWNLOAD_FAILED',
+      message: `Download failed after ${maxRetries + 1} attempts: ${url}`,
+      retryable: false,
+    });
   };
 }
 

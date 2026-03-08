@@ -2,14 +2,12 @@
  * Service Unit Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Service, ServiceConfig } from '../service';
 import { ConfigManager } from '../../config/config-manager';
 import { ProviderRegistry } from '../../provider/provider-registry';
-import { PlatformError } from '../../provider/platform-error';
 import type { ChatMessage, ChatResponse, Adapter, ChatChunk } from '../../types/adapter';
 import type { Model, Provider } from '../../types/provider';
-import type { ToolResult } from '../../types/tool';
 
 // Mock adapter
 const createMockAdapter = (responses: ChatResponse[] = []): Partial<Adapter> => {
@@ -106,22 +104,8 @@ function createMockConfig(adapter?: Partial<Adapter>): ServiceConfig {
   } as unknown as ConfigManager;
 
   const providerRegistry = {
-    getProvider: (id: string) => configManager.getProvider(id),
-    getModel: (id: string) => configManager.getModel(id),
     getAdapter: vi.fn(() => mockAdapter as Adapter),
     isProviderAvailable: vi.fn(() => true),
-    // Circuit breaker methods
-    recordSuccess: vi.fn(),
-    recordFailure: vi.fn(),
-    isCircuitOpen: vi.fn(() => false),
-    canExecute: vi.fn(() => true),
-    executeWithCircuitBreaker: vi.fn((providerId: string, operation: () => Promise<unknown>) => operation()),
-    // Rate limiter methods
-    tryAcquireRateLimit: vi.fn(() => ({ allowed: true, retryAfterMs: 0, remaining: 59 })),
-    acquireRateLimit: vi.fn().mockResolvedValue(undefined),
-    executeWithRateLimit: vi.fn((providerId: string, operation: () => Promise<unknown>) => operation()),
-    // Combined protection
-    executeWithProtection: vi.fn((providerId: string, operation: () => Promise<unknown>) => operation()),
   } as unknown as ProviderRegistry;
 
   return {
@@ -163,7 +147,6 @@ describe('Service', () => {
 
     it('should throw when no model available', async () => {
       const config = createMockConfig();
-      // Override getEnabledModels to return empty array so ModelSelector finds nothing
       (config.configManager.getEnabledModels as ReturnType<typeof vi.fn>).mockReturnValue([]);
 
       const service = new Service(config);
@@ -216,135 +199,6 @@ describe('Service', () => {
     });
   });
 
-  describe('chatWithTools', () => {
-    it('should handle chat without tool calls', async () => {
-      const config = createMockConfig();
-      const service = new Service(config);
-
-      const response = await service.chatWithTools(
-        [{ role: 'user', content: 'Hello' }],
-        { onToolCall: vi.fn() }
-      );
-
-      expect(response.message.content).toBe('Test response');
-    });
-
-    it('should execute tool calls', async () => {
-      const toolCallResponse: ChatResponse = {
-        id: 'response-1',
-        model: 'gpt-4',
-        message: {
-          role: 'assistant',
-          content: '',
-          toolCalls: [
-            {
-              id: 'call-1',
-              type: 'function',
-              function: {
-                name: 'get_weather',
-                arguments: '{"city":"NYC"}',
-              },
-            },
-          ],
-        },
-        finishReason: 'tool_calls',
-        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-      };
-
-      const finalResponse: ChatResponse = {
-        id: 'response-2',
-        model: 'gpt-4',
-        message: {
-          role: 'assistant',
-          content: 'The weather in NYC is sunny.',
-        },
-        finishReason: 'stop',
-        usage: { promptTokens: 20, completionTokens: 10, totalTokens: 30 },
-      };
-
-      const adapter = createMockAdapter([toolCallResponse, finalResponse]);
-      const config = createMockConfig(adapter);
-      const service = new Service(config);
-
-      const onToolCall = vi.fn().mockResolvedValue({
-        data: { temperature: 72, condition: 'sunny' },
-      } as ToolResult);
-
-      const response = await service.chatWithTools(
-        [{ role: 'user', content: 'What is the weather in NYC?' }],
-        { onToolCall }
-      );
-
-      expect(onToolCall).toHaveBeenCalledWith({
-        name: 'get_weather',
-        arguments: { city: 'NYC' },
-      });
-      expect(response.message.content).toBe('The weather in NYC is sunny.');
-    });
-
-    it('should throw if no tool handler provided', async () => {
-      const toolCallResponse: ChatResponse = {
-        id: 'response-1',
-        model: 'gpt-4',
-        message: {
-          role: 'assistant',
-          content: '',
-          toolCalls: [
-            {
-              id: 'call-1',
-              type: 'function',
-              function: { name: 'get_weather', arguments: '{}' },
-            },
-          ],
-        },
-        finishReason: 'tool_calls',
-        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-      };
-
-      const adapter = createMockAdapter([toolCallResponse]);
-      const config = createMockConfig(adapter);
-      const service = new Service(config);
-
-      await expect(
-        service.chatWithTools([{ role: 'user', content: 'Hello' }], {})
-      ).rejects.toThrow('Tool call received but no handler provided');
-    });
-
-    it('should respect max iterations', async () => {
-      const toolCallResponse: ChatResponse = {
-        id: 'response-1',
-        model: 'gpt-4',
-        message: {
-          role: 'assistant',
-          content: '',
-          toolCalls: [
-            {
-              id: 'call-1',
-              type: 'function',
-              function: { name: 'test', arguments: '{}' },
-            },
-          ],
-        },
-        finishReason: 'tool_calls',
-        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-      };
-
-      const adapter = createMockAdapter([toolCallResponse]);
-      const config = createMockConfig(adapter);
-      const service = new Service(config);
-
-      const onToolCall = vi.fn().mockResolvedValue({ data: {} } as ToolResult);
-
-      // Should stop after max iterations
-      const response = await service.chatWithTools(
-        [{ role: 'user', content: 'Hello' }],
-        { onToolCall, maxIterations: 2 }
-      );
-
-      expect(onToolCall).toHaveBeenCalledTimes(2);
-    });
-  });
-
   describe('embed', () => {
     it('should generate embeddings', async () => {
       const config = createMockConfig();
@@ -385,46 +239,17 @@ describe('Service', () => {
     });
   });
 
-  describe('fallback behavior', () => {
-    it('should attempt fallback on retryable error', async () => {
-      let callCount = 0;
-      const adapter: Partial<Adapter> = {
-        type: 'mock',
-        supportsStreaming: () => true,
-        supportsCapability: () => true,
-        chat: vi.fn().mockImplementation(async () => {
-          callCount++;
-          if (callCount === 1) {
-            throw new PlatformError({
-              category: 'rate_limit',
-              code: 'RATE_LIMITED',
-              message: 'Rate limited',
-              retryable: true,
-            });
-          }
-          return {
-            id: 'response-1',
-            model: 'gpt-4',
-            message: { role: 'assistant', content: 'Success after retry' },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-          };
-        }),
-      };
+  describe('error handling', () => {
+    it('should propagate adapter errors', async () => {
+      const adapter = createMockAdapter();
+      (adapter.chat as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('API error'));
 
       const config = createMockConfig(adapter);
-
       const service = new Service(config);
 
-      // Note: The actual fallback behavior depends on the retry executor
-      // which may exhaust retries before fallback kicks in
-      try {
-        await service.chat([{ role: 'user', content: 'Hello' }]);
-      } catch {
-        // Expected if retries exhausted
-      }
-
-      expect(callCount).toBeGreaterThanOrEqual(1);
+      await expect(
+        service.chat([{ role: 'user', content: 'Hello' }])
+      ).rejects.toThrow('API error');
     });
   });
 });
