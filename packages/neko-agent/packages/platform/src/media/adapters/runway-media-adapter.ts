@@ -8,6 +8,7 @@ import type { Model, Provider } from '../../types/provider';
 import type {
   MediaGenerationType,
   MediaAdapterResult,
+  MediaTaskStatus,
   VideoGenerationRequest,
   MediaOutput,
 } from '../types';
@@ -32,6 +33,20 @@ export class RunwayMediaAdapter extends BaseMediaAdapter {
   readonly type = 'runway';
 
   private readonly apiVersion = '2024-11-06';
+
+  private static readonly STATUS_MAP: Record<string, MediaTaskStatus> = {
+    PENDING: 'pending',
+    RUNNING: 'processing',
+    SUCCEEDED: 'completed',
+    FAILED: 'failed',
+  };
+
+  private static readonly PROGRESS_MAP: Record<string, number> = {
+    PENDING: 0,
+    RUNNING: 50,
+    SUCCEEDED: 100,
+    FAILED: 0,
+  };
 
   getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-video', 'image-to-video'];
@@ -92,8 +107,8 @@ export class RunwayMediaAdapter extends BaseMediaAdapter {
 
     return {
       externalTaskId: data?.id,
-      status: this.mapStatus(data?.status),
-      progress: data?.progress ?? this.estimateProgress(data?.status),
+      status: this.mapStatusFrom(data?.status, RunwayMediaAdapter.STATUS_MAP),
+      progress: data?.progress ?? this.estimateProgressFrom(data?.status, RunwayMediaAdapter.PROGRESS_MAP),
     };
   }
 
@@ -135,8 +150,8 @@ export class RunwayMediaAdapter extends BaseMediaAdapter {
 
     return {
       externalTaskId,
-      status: this.mapStatus(data?.status),
-      progress: data?.progress ?? this.estimateProgress(data?.status),
+      status: this.mapStatusFrom(data?.status, RunwayMediaAdapter.STATUS_MAP),
+      progress: data?.progress ?? this.estimateProgressFrom(data?.status, RunwayMediaAdapter.PROGRESS_MAP),
       outputs: data?.status === 'SUCCEEDED' ? outputs : undefined,
     };
   }
@@ -145,45 +160,6 @@ export class RunwayMediaAdapter extends BaseMediaAdapter {
    * Cancel a running task
    */
   async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
-    const url = `${provider.apiUrl}/v1/tasks/${externalTaskId}/cancel`;
-    await this.request(url, { method: 'POST' }, provider);
-  }
-
-  /**
-   * Map Runway status to our status
-   */
-  private mapStatus(
-    status?: string
-  ): 'pending' | 'processing' | 'completed' | 'failed' {
-    switch (status) {
-      case 'PENDING':
-        return 'pending';
-      case 'RUNNING':
-        return 'processing';
-      case 'SUCCEEDED':
-        return 'completed';
-      case 'FAILED':
-        return 'failed';
-      default:
-        return 'pending';
-    }
-  }
-
-  /**
-   * Estimate progress from status
-   */
-  private estimateProgress(status?: string): number {
-    switch (status) {
-      case 'PENDING':
-        return 0;
-      case 'RUNNING':
-        return 50;
-      case 'SUCCEEDED':
-        return 100;
-      case 'FAILED':
-        return 0;
-      default:
-        return 0;
-    }
+    await this.cancelViaEndpoint(`${provider.apiUrl}/v1/tasks/${externalTaskId}/cancel`, provider);
   }
 }

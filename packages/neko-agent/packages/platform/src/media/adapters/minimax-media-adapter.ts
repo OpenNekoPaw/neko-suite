@@ -8,6 +8,7 @@ import type { Model, Provider } from '../../types/provider';
 import type {
   MediaGenerationType,
   MediaAdapterResult,
+  MediaTaskStatus,
   VideoGenerationRequest,
   MediaOutput,
 } from '../types';
@@ -54,6 +55,20 @@ interface MiniMaxFileResponse {
  */
 export class MiniMaxMediaAdapter extends BaseMediaAdapter {
   readonly type = 'minimax';
+
+  private static readonly STATUS_MAP: Record<string, MediaTaskStatus> = {
+    Queueing: 'pending',
+    Processing: 'processing',
+    Success: 'completed',
+    Fail: 'failed',
+  };
+
+  private static readonly PROGRESS_MAP: Record<string, number> = {
+    Queueing: 0,
+    Processing: 50,
+    Success: 100,
+    Fail: 0,
+  };
 
   getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-video'];
@@ -132,7 +147,7 @@ export class MiniMaxMediaAdapter extends BaseMediaAdapter {
       };
     }
 
-    const status = this.mapStatus(data?.status);
+    const status = this.mapStatusFrom(data?.status, MiniMaxMediaAdapter.STATUS_MAP);
 
     // If completed, get the download URL
     if (status === 'completed' && data?.file_id) {
@@ -148,7 +163,7 @@ export class MiniMaxMediaAdapter extends BaseMediaAdapter {
     return {
       externalTaskId,
       status,
-      progress: this.estimateProgress(data?.status),
+      progress: this.estimateProgressFrom(data?.status, MiniMaxMediaAdapter.PROGRESS_MAP),
     };
   }
 
@@ -188,41 +203,4 @@ export class MiniMaxMediaAdapter extends BaseMediaAdapter {
     // MiniMax does not support task cancellation
   }
 
-  /**
-   * Map MiniMax status to our status
-   */
-  private mapStatus(
-    status?: string
-  ): 'pending' | 'processing' | 'completed' | 'failed' {
-    switch (status) {
-      case 'Queueing':
-        return 'pending';
-      case 'Processing':
-        return 'processing';
-      case 'Success':
-        return 'completed';
-      case 'Fail':
-        return 'failed';
-      default:
-        return 'pending';
-    }
-  }
-
-  /**
-   * Estimate progress from status
-   */
-  private estimateProgress(status?: string): number {
-    switch (status) {
-      case 'Queueing':
-        return 0;
-      case 'Processing':
-        return 50;
-      case 'Success':
-        return 100;
-      case 'Fail':
-        return 0;
-      default:
-        return 0;
-    }
-  }
 }

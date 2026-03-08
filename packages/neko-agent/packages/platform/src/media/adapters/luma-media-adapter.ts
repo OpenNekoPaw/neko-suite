@@ -8,6 +8,7 @@ import type { Model, Provider } from '../../types/provider';
 import type {
   MediaGenerationType,
   MediaAdapterResult,
+  MediaTaskStatus,
   VideoGenerationRequest,
   MediaOutput,
 } from '../types';
@@ -38,6 +39,20 @@ interface LumaGenerationResponse {
  */
 export class LumaMediaAdapter extends BaseMediaAdapter {
   readonly type = 'luma';
+
+  private static readonly STATUS_MAP: Record<string, MediaTaskStatus> = {
+    queued: 'pending',
+    dreaming: 'processing',
+    completed: 'completed',
+    failed: 'failed',
+  };
+
+  private static readonly PROGRESS_MAP: Record<string, number> = {
+    queued: 0,
+    dreaming: 50,
+    completed: 100,
+    failed: 0,
+  };
 
   getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-video', 'image-to-video'];
@@ -87,8 +102,8 @@ export class LumaMediaAdapter extends BaseMediaAdapter {
 
     return {
       externalTaskId: data?.id,
-      status: this.mapStatus(data?.state),
-      progress: this.estimateProgress(data?.state),
+      status: this.mapStatusFrom(data?.state, LumaMediaAdapter.STATUS_MAP),
+      progress: this.estimateProgressFrom(data?.state, LumaMediaAdapter.PROGRESS_MAP),
     };
   }
 
@@ -136,8 +151,8 @@ export class LumaMediaAdapter extends BaseMediaAdapter {
 
     return {
       externalTaskId,
-      status: this.mapStatus(data?.state),
-      progress: this.estimateProgress(data?.state),
+      status: this.mapStatusFrom(data?.state, LumaMediaAdapter.STATUS_MAP),
+      progress: this.estimateProgressFrom(data?.state, LumaMediaAdapter.PROGRESS_MAP),
       outputs: data?.state === 'completed' ? outputs : undefined,
     };
   }
@@ -146,45 +161,10 @@ export class LumaMediaAdapter extends BaseMediaAdapter {
    * Cancel a running task
    */
   async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
-    const url = `${provider.apiUrl}/dream-machine/v1/generations/${externalTaskId}`;
-    await this.request(url, { method: 'DELETE' }, provider);
-  }
-
-  /**
-   * Map Luma status to our status
-   */
-  private mapStatus(
-    state?: string
-  ): 'pending' | 'processing' | 'completed' | 'failed' {
-    switch (state) {
-      case 'queued':
-        return 'pending';
-      case 'dreaming':
-        return 'processing';
-      case 'completed':
-        return 'completed';
-      case 'failed':
-        return 'failed';
-      default:
-        return 'pending';
-    }
-  }
-
-  /**
-   * Estimate progress from state
-   */
-  private estimateProgress(state?: string): number {
-    switch (state) {
-      case 'queued':
-        return 0;
-      case 'dreaming':
-        return 50;
-      case 'completed':
-        return 100;
-      case 'failed':
-        return 0;
-      default:
-        return 0;
-    }
+    await this.cancelViaEndpoint(
+      `${provider.apiUrl}/dream-machine/v1/generations/${externalTaskId}`,
+      provider,
+      'DELETE'
+    );
   }
 }

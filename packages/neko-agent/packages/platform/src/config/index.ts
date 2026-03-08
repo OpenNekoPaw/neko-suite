@@ -2,7 +2,7 @@
  * Configuration Module - Public API
  */
 
-export { ConfigManager, type ConfigManagerOptions, type MergedConfig, type ConfigChangeEvent, type ConfigChangeListener } from './config-manager';
+export { ConfigManager, type ConfigManagerOptions, type MergedConfig } from './config-manager';
 export {
   loadBuiltinPresets,
   getBuiltinProvider,

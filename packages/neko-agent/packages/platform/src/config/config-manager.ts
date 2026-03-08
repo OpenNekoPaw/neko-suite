@@ -40,19 +40,6 @@ export interface MergedConfig {
 }
 
 /**
- * Configuration change event
- */
-export interface ConfigChangeEvent {
-  type: 'provider' | 'model' | 'mcpServer' | 'workflow' | 'prompt' | 'all';
-  ids?: string[];
-}
-
-/**
- * Configuration change listener
- */
-export type ConfigChangeListener = (event: ConfigChangeEvent) => void;
-
-/**
  * Configuration manager options
  */
 export interface ConfigManagerOptions {
@@ -75,7 +62,6 @@ export class ConfigManager {
   private workspaceConfig: WorkspaceConfig | null = null;
   private workspacePath: string | null = null;
   private stopWatching: (() => void) | null = null;
-  private listeners: Set<ConfigChangeListener> = new Set();
   private sections: ConfigSections;
   private retryTimeoutPresets: Map<string, RetryTimeoutPreset> = new Map();
   private configMerged = false;
@@ -101,7 +87,6 @@ export class ConfigManager {
       this.stopWatching = watchWorkspaceConfig(options.workspacePath, (config) => {
         this.workspaceConfig = config;
         this.invalidateCache();
-        this.notifyListeners({ type: 'all' });
       });
     }
 
@@ -109,7 +94,7 @@ export class ConfigManager {
     this.sections = createConfigSections({
       userConfigManager: this.userConfigManager,
       onInvalidate: () => this.invalidateCache(),
-      onNotify: (type, ids) => this.notifyListeners({ type: type as ConfigChangeEvent['type'], ids }),
+      onNotify: () => {}, // Listener infrastructure removed; onNotify kept as no-op for config section contract
     });
   }
 
@@ -396,7 +381,6 @@ export class ConfigManager {
 
   reloadConfig(): void {
     this.invalidateCache();
-    this.notifyListeners({ type: 'all' });
   }
 
   dispose(): void {
@@ -404,7 +388,6 @@ export class ConfigManager {
       this.stopWatching();
       this.stopWatching = null;
     }
-    this.listeners.clear();
     this.configMerged = false;
     this.cachedConfig = null;
   }
@@ -416,16 +399,6 @@ export class ConfigManager {
   private invalidateCache(): void {
     this.configMerged = false;
     this.cachedConfig = null;
-  }
-
-  private notifyListeners(event: ConfigChangeEvent): void {
-    for (const listener of this.listeners) {
-      try {
-        listener(event);
-      } catch (error) {
-        console.error('Config change listener error:', error);
-      }
-    }
   }
 
   /**

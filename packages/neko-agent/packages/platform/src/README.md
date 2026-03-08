@@ -227,7 +227,6 @@ src/
 |------|------|------|
 | `ConfigManager` | 类 | 三层配置统一管理 |
 | `loadBuiltinPresets()` | 函数 | 加载内置预设 |
-| `UserConfigManager` | 类 | 用户配置管理（VSCode globalState） |
 | `FileUserConfigManager` | 类 | 用户配置管理（文件） |
 
 ### LLM 层 (llm/)

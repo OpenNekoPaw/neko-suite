@@ -9,8 +9,8 @@
  */
 
 import * as vscode from 'vscode';
-import type { Platform, TaskManager, Task } from '@neko/platform';
-import type { TaskView } from '@neko/shared';
+import type { Platform } from '@neko/platform';
+import type { ITaskManager as TaskManager, Task, TaskView } from '@neko/shared';
 
 /**
  * Dependencies for TaskHandler

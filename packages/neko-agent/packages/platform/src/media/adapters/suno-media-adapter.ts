@@ -8,6 +8,7 @@ import type { Model, Provider } from '../../types/provider';
 import type {
   MediaGenerationType,
   MediaAdapterResult,
+  MediaTaskStatus,
   AudioGenerationRequest,
   MediaOutput,
 } from '../types';
@@ -51,6 +52,20 @@ interface SunoStatusResponse {
  */
 export class SunoMediaAdapter extends BaseMediaAdapter {
   readonly type = 'suno';
+
+  private static readonly STATUS_MAP: Record<string, MediaTaskStatus> = {
+    queued: 'pending',
+    streaming: 'processing',
+    complete: 'completed',
+    error: 'failed',
+  };
+
+  private static readonly PROGRESS_MAP: Record<string, number> = {
+    queued: 0,
+    streaming: 50,
+    complete: 100,
+    error: 0,
+  };
 
   getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-music', 'text-to-audio'];
@@ -105,8 +120,8 @@ export class SunoMediaAdapter extends BaseMediaAdapter {
 
     return {
       externalTaskId: data.id,
-      status: this.mapStatus(data.status),
-      progress: this.estimateProgress(data.status),
+      status: this.mapStatusFrom(data.status, SunoMediaAdapter.STATUS_MAP),
+      progress: this.estimateProgressFrom(data.status, SunoMediaAdapter.PROGRESS_MAP),
     };
   }
 
@@ -154,7 +169,7 @@ export class SunoMediaAdapter extends BaseMediaAdapter {
       };
     }
 
-    const status = this.mapStatus(task.status);
+    const status = this.mapStatusFrom(task.status, SunoMediaAdapter.STATUS_MAP);
 
     // Build outputs if completed
     let outputs: MediaOutput[] | undefined;
@@ -173,7 +188,7 @@ export class SunoMediaAdapter extends BaseMediaAdapter {
     return {
       externalTaskId,
       status,
-      progress: this.estimateProgress(task.status),
+      progress: this.estimateProgressFrom(task.status, SunoMediaAdapter.PROGRESS_MAP),
       outputs,
     };
   }
@@ -185,41 +200,4 @@ export class SunoMediaAdapter extends BaseMediaAdapter {
     // Suno does not support task cancellation
   }
 
-  /**
-   * Map Suno status to our status
-   */
-  private mapStatus(
-    status?: string
-  ): 'pending' | 'processing' | 'completed' | 'failed' {
-    switch (status) {
-      case 'queued':
-        return 'pending';
-      case 'streaming':
-        return 'processing';
-      case 'complete':
-        return 'completed';
-      case 'error':
-        return 'failed';
-      default:
-        return 'pending';
-    }
-  }
-
-  /**
-   * Estimate progress from status
-   */
-  private estimateProgress(status?: string): number {
-    switch (status) {
-      case 'queued':
-        return 0;
-      case 'streaming':
-        return 50;
-      case 'complete':
-        return 100;
-      case 'error':
-        return 0;
-      default:
-        return 0;
-    }
-  }
 }

@@ -8,6 +8,7 @@ import type { Model, Provider } from '../../types/provider';
 import type {
   MediaGenerationType,
   MediaAdapterResult,
+  MediaTaskStatus,
   ImageGenerationRequest,
   VideoGenerationRequest,
   MediaOutput,
@@ -48,6 +49,20 @@ interface OpenAIVideoResponse {
  */
 export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
   readonly type = 'openai-compat';
+
+  private static readonly STATUS_MAP: Record<string, MediaTaskStatus> = {
+    queued: 'pending',
+    in_progress: 'processing',
+    completed: 'completed',
+    failed: 'failed',
+  };
+
+  private static readonly PROGRESS_MAP: Record<string, number> = {
+    queued: 0,
+    in_progress: 50,
+    completed: 100,
+    failed: 0,
+  };
 
   getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-image', 'text-to-video', 'image-to-video'];
@@ -141,8 +156,8 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
     // Video generation is async, return task ID for polling
     return {
       externalTaskId: data?.id,
-      status: this.mapStatus(data?.status),
-      progress: this.estimateProgress(data?.status),
+      status: this.mapStatusFrom(data?.status, OpenAICompatMediaAdapter.STATUS_MAP),
+      progress: this.estimateProgressFrom(data?.status, OpenAICompatMediaAdapter.PROGRESS_MAP),
     };
   }
 
@@ -191,8 +206,8 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
 
     return {
       externalTaskId,
-      status: this.mapStatus(data?.status),
-      progress: this.estimateProgress(data?.status),
+      status: this.mapStatusFrom(data?.status, OpenAICompatMediaAdapter.STATUS_MAP),
+      progress: this.estimateProgressFrom(data?.status, OpenAICompatMediaAdapter.PROGRESS_MAP),
       outputs,
     };
   }
@@ -201,8 +216,10 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
    * Cancel a running task
    */
   async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
-    const url = `${this.getBaseUrl(provider)}/v1/videos/${externalTaskId}/cancel`;
-    await this.request(url, { method: 'POST' }, provider);
+    await this.cancelViaEndpoint(
+      `${this.getBaseUrl(provider)}/v1/videos/${externalTaskId}/cancel`,
+      provider
+    );
   }
 
   /**
@@ -219,43 +236,5 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
     if (aspectRatio === '16:9') return '1792x1024';
     if (aspectRatio === '9:16') return '1024x1792';
     return '1024x1024';
-  }
-
-  /**
-   * Map platform status to our status
-   */
-  private mapStatus(
-    status?: string
-  ): 'pending' | 'processing' | 'completed' | 'failed' {
-    switch (status) {
-      case 'queued':
-        return 'pending';
-      case 'in_progress':
-        return 'processing';
-      case 'completed':
-        return 'completed';
-      case 'failed':
-        return 'failed';
-      default:
-        return 'pending';
-    }
-  }
-
-  /**
-   * Estimate progress from status
-   */
-  private estimateProgress(status?: string): number {
-    switch (status) {
-      case 'queued':
-        return 0;
-      case 'in_progress':
-        return 50;
-      case 'completed':
-        return 100;
-      case 'failed':
-        return 0;
-      default:
-        return 0;
-    }
   }
 }

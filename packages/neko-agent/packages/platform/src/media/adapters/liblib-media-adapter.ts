@@ -8,6 +8,7 @@ import type { Model, Provider } from '../../types/provider';
 import type {
   MediaGenerationType,
   MediaAdapterResult,
+  MediaTaskStatus,
   ImageGenerationRequest,
   VideoGenerationRequest,
   MediaOutput,
@@ -49,6 +50,13 @@ interface LiblibStatusResponse {
  */
 export class LiblibMediaAdapter extends BaseMediaAdapter {
   readonly type = 'liblib';
+
+  private static readonly STATUS_MAP: Record<number, MediaTaskStatus> = {
+    2: 'pending',    // queued
+    1: 'processing', // running
+    5: 'completed',  // success
+    4: 'failed',     // failed
+  };
 
   getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-image', 'image-to-image', 'text-to-video', 'image-to-video'];
@@ -244,7 +252,7 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
       };
     }
 
-    const status = this.mapStatus(data?.data.generateStatus);
+    const status = this.mapStatusFrom(data?.data.generateStatus, LiblibMediaAdapter.STATUS_MAP);
     const progress = data?.data.percentCompleted || 0;
 
     // Build outputs
@@ -288,26 +296,6 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
       },
       provider
     );
-  }
-
-  /**
-   * Map LiblibAI status to our status
-   */
-  private mapStatus(
-    status?: number
-  ): 'pending' | 'processing' | 'completed' | 'failed' {
-    switch (status) {
-      case 2: // queued
-        return 'pending';
-      case 1: // running
-        return 'processing';
-      case 5: // success
-        return 'completed';
-      case 4: // failed
-        return 'failed';
-      default:
-        return 'pending';
-    }
   }
 
   /**

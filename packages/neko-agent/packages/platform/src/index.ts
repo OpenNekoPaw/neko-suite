@@ -56,8 +56,6 @@ export {
 export {
   ConfigManager,
   type MergedConfig,
-  type ConfigChangeEvent,
-  type ConfigChangeListener,
   type ConfigManagerOptions,
 } from './config/config-manager';
 export {

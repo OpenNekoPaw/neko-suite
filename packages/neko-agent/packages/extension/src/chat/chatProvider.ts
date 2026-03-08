@@ -12,7 +12,8 @@ import * as vscode from 'vscode';
 import { getService, getLogger } from '../base';
 
 const logger = getLogger('ChatProvider');
-import type { Platform, TaskManager } from '@neko/platform';
+import type { Platform } from '@neko/platform';
+import type { ITaskManager as TaskManager } from '@neko/shared';
 import type { ProviderConfig } from '@neko/shared';
 import type { IAgentManager } from '../ai/agentManager';
 import { IEditorRegistry } from '../editor/common/editorRegistry';

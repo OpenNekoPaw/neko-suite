@@ -58,8 +58,8 @@ class ConfigManager {
   setModel(model: Model): Promise<void>;
   setMCPServer(server: MCPServerPreset): Promise<void>;
 
-  // 变化监听
-  onChange(listener: ConfigChangeListener): () => void;
+  // 生命周期
+  reloadConfig(): void;
   dispose(): void;
 }
 
@@ -134,4 +134,4 @@ interface WorkspaceConfig {
 
 - **分区模式**：BaseConfigSection 封装各类型 CRUD + 三层合并
 - **策略模式**：IUserConfigManager 接口，可替换实现（测试用 mock）
-- **观察者模式**：onChange 监听配置变化
+- **缓存失效**：写入操作自动 invalidateCache，下次读取重新合并

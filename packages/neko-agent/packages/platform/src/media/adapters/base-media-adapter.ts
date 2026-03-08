@@ -8,6 +8,7 @@ import type { Model, Provider } from '../../types/provider';
 import type {
   MediaAdapter,
   MediaGenerationType,
+  MediaTaskStatus,
   MediaAdapterResult,
   MediaAdapterError,
   ImageGenerationRequest,
@@ -205,5 +206,84 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
         retryAfterMs: result.error.retryAfterMs,
       },
     };
+  }
+
+  // ==========================================================================
+  // Shared Helpers for Subclass Deduplication
+  // ==========================================================================
+
+  /**
+   * Map platform-specific status string/number to standard MediaTaskStatus
+   */
+  protected mapStatusFrom(
+    rawStatus: string | number | undefined,
+    statusMap: Record<string | number, MediaTaskStatus>
+  ): MediaTaskStatus {
+    if (rawStatus === undefined) return 'pending';
+    return statusMap[rawStatus] ?? 'pending';
+  }
+
+  /**
+   * Estimate progress from platform-specific status string/number
+   */
+  protected estimateProgressFrom(
+    rawStatus: string | number | undefined,
+    progressMap: Record<string | number, number>
+  ): number {
+    if (rawStatus === undefined) return 0;
+    return progressMap[rawStatus] ?? 0;
+  }
+
+  /**
+   * Submit a generation request and return task ID
+   * Common pattern: POST body → extract task ID from response
+   */
+  protected async submitGeneration<T>(
+    url: string,
+    body: Record<string, unknown>,
+    provider: Provider,
+    extractTaskId: (data: T) => string | undefined
+  ): Promise<MediaAdapterResult> {
+    const { data, error } = await this.request<T>(
+      url,
+      { method: 'POST', body: JSON.stringify(body) },
+      provider
+    );
+    if (error) return { status: 'failed', error };
+    return {
+      externalTaskId: data ? extractTaskId(data) : undefined,
+      status: 'pending',
+      progress: 0,
+    };
+  }
+
+  /**
+   * Poll task status with GET and transform response
+   * Common pattern: GET → check error → transform data
+   */
+  protected async pollTaskStatus<T>(
+    url: string,
+    provider: Provider,
+    transform: (data: T) => MediaAdapterResult
+  ): Promise<MediaAdapterResult> {
+    const { data, error } = await this.request<T>(
+      url,
+      { method: 'GET' },
+      provider
+    );
+    if (error) return { status: 'failed', error };
+    if (!data) return this.createErrorResult('NO_DATA', 'No response data');
+    return transform(data);
+  }
+
+  /**
+   * Cancel a task via HTTP endpoint
+   */
+  protected async cancelViaEndpoint(
+    url: string,
+    provider: Provider,
+    method: 'POST' | 'DELETE' = 'POST'
+  ): Promise<void> {
+    await this.request(url, { method }, provider);
   }
 }
