@@ -7,7 +7,8 @@
 | 模块 | 职责 | 主要导出 |
 |------|------|----------|
 | `components/` | UI 渲染 | `AIAssistant`, `ChatView`, `AccountBar`, `OnboardingFlow` |
-| `handlers/` | 消息分发 | `createConfiguredRegistry`, `useMessageHandler`（含 skill/SSO/context） |
+| `handlers/` | 消息分发 | `createConfiguredRegistry`, `useMessageHandler`, `updateConversation`（含 skill/SSO/context） |
+| `utils/` | 工具函数 | `message-helpers`（deriveToolCalls, updateToolCallInBlocks）, `logger` |
 | `hooks/` | 状态管理 | `useConversationState`, `useConfigState`, `useConversationSession`, `useTabManager`, `useSlashCommands` |
 | `config/` | 预设数据 | `PROVIDER_PRESETS`, `PROMPT_PRESETS` |
 | `i18n/` | 多语言 | `useI18n`, `t()` |
@@ -18,8 +19,9 @@ src/
 ├── main.tsx              # React 渲染入口
 ├── index.css             # Tailwind + 全局样式
 ├── components/           # UI 组件库
-├── handlers/             # 消息处理器（注册表模式）
+├── handlers/             # 消息处理器（注册表模式 + message-updater）
 ├── hooks/                # 全局状态 Hooks
+├── utils/                # 工具函数（message-helpers, logger）
 ├── config/               # 预设配置
 └── i18n/                 # 国际化
 ```
@@ -81,8 +83,8 @@ interface Message {
   timestamp: number;
   isStreaming?: boolean;
   thinking?: string;              // Claude 扩展思考
-  toolCalls?: ToolCall[];         // 工具调用
-  contentBlocks?: ContentBlock[]; // 按顺序渲染的内容块
+  toolCalls?: ToolCall[];         // @deprecated — 由 contentBlocks 自动派生
+  contentBlocks?: ContentBlock[]; // 按顺序渲染的内容块（单一数据源）
 }
 
 type ContentBlock =

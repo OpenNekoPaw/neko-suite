@@ -15,7 +15,7 @@
 |------|------|
 | 入口 | `src/main.tsx` → `AIAssistant` 主组件 |
 | 状态 | `hooks/` 分离式状态管理（conversation/config/ui/resource/session/tab/command）|
-| 消息 | `handlers/` 注册表模式处理 Extension 消息（含 skill/SSO/context） |
+| 消息 | `handlers/` 注册表模式处理 Extension 消息（含 skill/SSO/context/message-updater） |
 | 视图 | ChatView / SettingsView / TaskListView |
 | 依赖 | `@neko/shared` 类型定义 |
 
@@ -47,8 +47,12 @@ graph TB
         ChatView --> MessageList[MessageList]
         ChatView --> InputArea[InputArea]
         MessageList --> MessageItem[MessageItem]
-        MessageItem --> ToolCallDisplay[ToolCallDisplay]
+        MessageList --> ContentBlockItem[ContentBlockItem]
+        MessageItem --> ToolCallDisplay[ToolCallDisplay/]
+        ContentBlockItem --> ToolCallDisplay
         MessageItem --> MermaidBlock[MermaidBlock]
+
+        ChatView --> MessageActionsCtx[MessageActionsContext]
     end
 
     subgraph "状态管理"
@@ -86,7 +90,9 @@ graph TB
 |------|------|
 | `ChatView` | 聊天主视图，管理消息列表和输入区域 |
 | `MessageItem` | 单条消息渲染，支持 ContentBlock 模式 |
-| `ToolCallDisplay` | 工具调用卡片，支持媒体预览 |
+| `ContentBlockItem` | 单个 ContentBlock 渲染（thinking/text/tool_call/diff/plan）|
+| `ToolCallDisplay/` | 工具调用卡片（拆分为 5 个子模块：组件、图标、媒体提取、常量）|
+| `MessageActionsContext` | React Context 提供 task/diff/plan 回调，消除 prop drilling |
 | `MermaidBlock` | Mermaid 图表渲染，自定义高对比度主题，支持复制/导出/错误反馈 |
 | `InputArea` | 输入框，支持 @ 引用、斜杠命令、附件 |
 
@@ -145,6 +151,7 @@ registry.handle(message, context);
 2. **资源路径**：使用 `webview.asWebviewUri()` 转换本地文件路径
 3. **流式状态同步**：发送新消息前必须清除 `streamingMessageId`，防止工具卡片添加到错误消息
 4. **ContentBlock 模式**：消息内容按块渲染，保持思考、文本、工具调用的顺序
+5. **toolCalls 派生**：`Message.toolCalls` 已 deprecated，由 `contentBlocks[].toolCall` 自动派生，仅更新 contentBlocks
 
 ## 依赖
 
