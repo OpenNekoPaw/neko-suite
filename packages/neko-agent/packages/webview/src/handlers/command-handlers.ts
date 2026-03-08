@@ -82,7 +82,8 @@ const handleSlashCommandResult: MessageHandler = (message, context) => {
         break;
 
       case 'showTasks':
-        context.setActiveTab('tasks');
+        // Tasks panel removed; stay on chat tab
+        context.setActiveTab('chat');
         break;
 
       case 'showModelSelector':

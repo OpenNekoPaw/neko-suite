@@ -1,22 +1,17 @@
 import { useEffect, useCallback, useState, useRef, useMemo } from 'react';
 import {
   Message,
-  OpenTab,
   ShellExecutionMode,
   PromptMode,
   AgentState,
-  SsoSession,
 } from '@/components/types';
 import { VSCodeMessages, postMessage } from '@/components/hooks/useVSCode';
 import { Header } from '@/components/Header';
 import { ChatView } from '@/components/ChatView';
 import { OnboardingFlow } from '@/components/OnboardingFlow';
-import { AgentsPanel } from '@/components/AgentsPanel';
 import { AgentControlCenter, type AgentSessionInfo, getActiveSessions } from '@/components/AgentControlCenter';
 import { AttachedFile } from '@/components/ChatView/InputArea';
-import type { SlashCommand, SkillSummary } from '@/components/ChatView/InputArea/types';
-import type { SkillConfirmRequest, ActiveSkillIndicator } from '@/components/ChatView/SkillConfirmBanner';
-
+import type { SkillSummary } from '@/components/ChatView/InputArea/types';
 // Import custom hooks
 import {
   useUIState,
@@ -24,24 +19,14 @@ import {
   useConfigState,
   useResourceState,
   useMessageQueue,
+  useConversationSession,
+  useTabManager,
+  useSlashCommands,
 } from '@/hooks';
 import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
 
 // Import message handler
-import { useMessageHandler, setExternalMessageContext } from '@/handlers';
-import { getLogger } from '../utils/logger';
-
-const logger = getLogger('AIAssistant');
-
-// Extended skill confirm request with conversation binding
-interface BoundSkillConfirmRequest extends SkillConfirmRequest {
-  conversationId: string;
-}
-
-// Extended active skill indicator with conversation binding
-interface BoundActiveSkillIndicator extends ActiveSkillIndicator {
-  conversationId: string;
-}
+import { useMessageHandler, setExternalMessageContext, type BoundSkillConfirmRequest, type BoundActiveSkillIndicator } from '@/handlers';
 
 export function AIAssistant() {
   // Use custom hooks for state management
@@ -102,13 +87,6 @@ export function AIAssistant() {
   // Message queue for queuing messages while agent is thinking
   const messageQueue = useMessageQueue();
 
-  // Session-bound state caches (for P0/P1 fixes)
-  const conversationInputRef = useRef<Map<string, string>>(new Map());
-  const conversationAttachmentsRef = useRef<Map<string, AttachedFile[]>>(new Map());
-
-  // Attachments state (managed at conversation level)
-  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
-
   // Skills state
   const [skills, setSkills] = useState<SkillSummary[]>([]);
 
@@ -130,6 +108,19 @@ export function AIAssistant() {
   const forceAgentStateUpdate = useCallback(() => {
     setAgentStateVersion(v => v + 1);
   }, []);
+
+  // Session-bound state: input/attachment isolation per conversation
+  const { attachedFiles, setAttachedFiles, cleanupConversation, cleanupAllConversations } = useConversationSession({
+    activeConversationId,
+    inputValue,
+    setInputValue,
+    conversationMessagesRef,
+    conversationStreamingRef,
+    conversationTokenCountRef,
+    conversationCompressingRef,
+    conversationAgentStateRef,
+    messageQueue,
+  });
 
   // Onboarding overlay state
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -157,6 +148,9 @@ export function AIAssistant() {
     ? (conversationCompressingRef.current.get(activeConversationId) ?? false)
     : false;
 
+  // Force update function for context handlers
+  const triggerForceUpdate = useCallback(() => forceUpdate(n => n + 1), []);
+
   // Use message handler hook
   const { handleMessage } = useMessageHandler({
     activeConversationId,
@@ -182,6 +176,14 @@ export function AIAssistant() {
     setAgentState,
     conversationAgentStateRef,
     forceAgentStateUpdate,
+    setSkills,
+    setPendingSkillConfirm,
+    setActiveSkill,
+    updateSettings,
+    setShowOnboarding,
+    conversationTokenCountRef,
+    conversationCompressingRef,
+    forceContextUpdate: triggerForceUpdate,
   });
 
   // Listen for messages from extension
@@ -204,154 +206,9 @@ export function AIAssistant() {
     VSCodeMessages.getTabState(); // Load persisted tab state
   }, []);
 
-  // Session-bound state: save/restore inputValue and attachedFiles on conversation switch
-  const prevConversationIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    const prevId = prevConversationIdRef.current;
-    const newId = activeConversationId;
-
-    // Save previous conversation's state before switching
-    if (prevId && prevId !== newId) {
-      conversationInputRef.current.set(prevId, inputValue);
-      conversationAttachmentsRef.current.set(prevId, attachedFiles);
-    }
-
-    // Restore new conversation's state
-    if (newId && newId !== prevId) {
-      const savedInput = conversationInputRef.current.get(newId) || '';
-      const savedAttachments = conversationAttachmentsRef.current.get(newId) || [];
-      setInputValue(savedInput);
-      setAttachedFiles(savedAttachments);
-    }
-
-    prevConversationIdRef.current = newId;
-  }, [activeConversationId]); // Only depend on activeConversationId to avoid loops
-
-  // Sync tab state to extension for persistence across panel close/reopen
-  const isInitialTabStateRef = useRef(true);
-  useEffect(() => {
-    // Skip initial render to avoid overwriting restored state
-    if (isInitialTabStateRef.current) {
-      isInitialTabStateRef.current = false;
-      return;
-    }
-    VSCodeMessages.updateTabState(openTabs, activeTabId);
-  }, [openTabs, activeTabId]);
-
-  // Listen for skill-related messages from extension
-  useEffect(() => {
-    const handleSkillsMessage = (event: MessageEvent) => {
-      const message = event.data;
-
-      switch (message.type) {
-        case 'skillsList':
-          // Update available skills list
-          setSkills(message.skills || []);
-          break;
-
-        case 'skillConfirmRequest':
-          // Show skill confirmation banner (bound to conversation)
-          setPendingSkillConfirm({
-            skillName: message.skillName,
-            skillDescription: message.skillDescription,
-            relevance: message.relevance,
-            reason: message.reason,
-            conversationId: message.conversationId || activeConversationIdRef.current || '',
-          });
-          break;
-
-        case 'skillInjection':
-          // Skill has been applied - show indicator (bound to conversation)
-          setActiveSkill({
-            skillName: message.skillName,
-            allowedTools: message.allowedTools,
-            conversationId: message.conversationId || activeConversationIdRef.current || '',
-          });
-          // Clear any pending confirmation for this conversation
-          setPendingSkillConfirm(prev => {
-            if (prev && prev.conversationId === (message.conversationId || activeConversationIdRef.current)) {
-              return null;
-            }
-            return prev;
-          });
-          break;
-
-        case 'skillCleared':
-          // Skill has been cleared for a conversation
-          setActiveSkill(prev => {
-            if (prev && prev.conversationId === (message.conversationId || activeConversationIdRef.current)) {
-              return null;
-            }
-            return prev;
-          });
-          break;
-      }
-    };
-    window.addEventListener('message', handleSkillsMessage);
-    return () => window.removeEventListener('message', handleSkillsMessage);
-  }, []);
-
-  // Listen for SSO session changes from extension
-  useEffect(() => {
-    const handleSsoMessage = (event: MessageEvent) => {
-      const message = event.data;
-      if (message.type === 'ssoSessionChanged') {
-        const session = (message.session as SsoSession | null) ?? null;
-        updateSettings({ ssoSession: session });
-        // Only dismiss onboarding when a real session arrives (not on logout)
-        if (session) {
-          setShowOnboarding(false);
-        }
-      }
-    };
-    window.addEventListener('message', handleSsoMessage);
-    return () => window.removeEventListener('message', handleSsoMessage);
-  }, [updateSettings]);
-
-  // Listen for context management messages from extension
-  useEffect(() => {
-    const handleContextMessage = (event: MessageEvent) => {
-      const message = event.data;
-
-      switch (message.type) {
-        case 'contextTokenCount':
-          // Update token count for the specific conversation (session-isolated)
-          if (message.conversationId) {
-            conversationTokenCountRef.current.set(message.conversationId, message.tokenCount || 0);
-            // Trigger re-render if it's the current conversation
-            if (message.conversationId === activeConversationIdRef.current) {
-              forceUpdate(n => n + 1);
-            }
-          }
-          break;
-
-        case 'compressionResult':
-          // Compression completed for specific conversation
-          if (message.conversationId) {
-            conversationCompressingRef.current.set(message.conversationId, false);
-            conversationTokenCountRef.current.set(message.conversationId, message.compressedTokens || 0);
-            // Trigger re-render if it's the current conversation
-            if (message.conversationId === activeConversationIdRef.current) {
-              forceUpdate(n => n + 1);
-            }
-          }
-          break;
-
-        case 'compressionError':
-          // Compression failed for specific conversation
-          if (message.conversationId) {
-            conversationCompressingRef.current.set(message.conversationId, false);
-            if (message.conversationId === activeConversationIdRef.current) {
-              forceUpdate(n => n + 1);
-            }
-          }
-          logger.error('Compression failed:', message.error);
-          break;
-      }
-    };
-    window.addEventListener('message', handleContextMessage);
-    return () => window.removeEventListener('message', handleContextMessage);
-  }, []);
+  // Note: save/restore inputValue/attachedFiles is now handled by useConversationSession
+  // Note: tab state persistence is now handled by useTabManager
+  // Note: skill/SSO/context messages are now handled by unified handler registry
 
   // Request context token count when conversation changes (if not cached)
   useEffect(() => {
@@ -562,14 +419,7 @@ export function AIAssistant() {
 
   const handleDeleteConversation = (conversationId: string) => {
     // Clean up conversation-level resources to prevent memory leaks
-    conversationMessagesRef.current.delete(conversationId);
-    conversationStreamingRef.current.delete(conversationId);
-    conversationInputRef.current.delete(conversationId);
-    conversationAttachmentsRef.current.delete(conversationId);
-    conversationTokenCountRef.current.delete(conversationId);
-    conversationCompressingRef.current.delete(conversationId);
-    conversationAgentStateRef.current.delete(conversationId);
-    messageQueue.clearForConversation(conversationId);
+    cleanupConversation(conversationId);
 
     // Close tab if open (without switching to it first)
     const tab = openTabs.find(t => t.conversationId === conversationId);
@@ -593,15 +443,7 @@ export function AIAssistant() {
   };
 
   const handleClearAllConversations = () => {
-    // Clean up all conversation-level resources
-    conversationMessagesRef.current.clear();
-    conversationStreamingRef.current.clear();
-    conversationInputRef.current.clear();
-    conversationAttachmentsRef.current.clear();
-    conversationTokenCountRef.current.clear();
-    conversationCompressingRef.current.clear();
-    conversationAgentStateRef.current.clear();
-    messageQueue.clear();
+    cleanupAllConversations();
 
     // Close all tabs
     setOpenTabs([]);
@@ -614,166 +456,29 @@ export function AIAssistant() {
     VSCodeMessages.clearAllConversations();
   };
 
-  const handleOpenTab = (conversationId: string, title: string) => {
-    const existingTab = openTabs.find(t => t.conversationId === conversationId);
-    if (existingTab) {
-      setActiveTabId(existingTab.id);
-    } else {
-      const newTab: OpenTab = {
-        id: `tab-${Date.now()}`,
-        title: title || 'New Chat',
-        conversationId,
-      };
-      setOpenTabs(prev => [...prev, newTab]);
-      setActiveTabId(newTab.id);
-    }
-    VSCodeMessages.switchConversation(conversationId);
-    setActiveTab('chat');
-  };
+  // Tab management (extracted hook)
+  const { handleOpenTab, handleCloseTab, handleSwitchTab } = useTabManager({
+    openTabs,
+    setOpenTabs,
+    activeTabId,
+    setActiveTabId,
+    conversations,
+    setActiveTab,
+    onNewChat: handleNewChat,
+  });
 
-  const handleCloseTab = (tabId: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-
-    const tab = openTabs.find(t => t.id === tabId);
-    if (!tab) return;
-
-    const conversation = conversations.find(c => c.id === tab.conversationId);
-    const hasMessages = conversation && conversation.messageCount > 0;
-
-    if (!hasMessages) {
-      VSCodeMessages.deleteConversation(tab.conversationId);
-    }
-
-    const tabIndex = openTabs.findIndex(t => t.id === tabId);
-    const newTabs = openTabs.filter(t => t.id !== tabId);
-    setOpenTabs(newTabs);
-
-    if (activeTabId === tabId && newTabs.length > 0) {
-      const newActiveIndex = Math.min(tabIndex, newTabs.length - 1);
-      const newActiveTab = newTabs[newActiveIndex];
-      setActiveTabId(newActiveTab.id);
-      VSCodeMessages.switchConversation(newActiveTab.conversationId);
-    } else if (newTabs.length === 0) {
-      setActiveTabId(null);
-      handleNewChat();
-    }
-  };
-
-  const handleSwitchTab = (tabId: string) => {
-    const tab = openTabs.find(t => t.id === tabId);
-    if (tab) {
-      setActiveTabId(tabId);
-      VSCodeMessages.switchConversation(tab.conversationId);
-      setActiveTab('chat');
-    }
-  };
-
-  // Slash command handler - supports both builtin and skill commands
-  const handleSlashCommand = (command: SlashCommand) => {
-    // Handle skill commands
-    if (command.source === 'skill' && command.skillId) {
-      clearInput();
-      VSCodeMessages.executeSkill(command.skillId, { userInput: inputValue });
-      return;
-    }
-
-    // Handle builtin commands
-    switch (command.id) {
-      case 'clear':
-        VSCodeMessages.clearHistory();
-        clearMessages();
-        clearInput();
-        break;
-      case 'new':
-        handleNewChat();
-        clearInput();
-        break;
-      case 'help': {
-        clearInput();
-        // Build help text including skill commands
-        const skillCommands = skills
-          .filter(s => s.slashCommand && s.enabled)
-          .map(s => `- \`/${s.slashCommand}\` - ${s.description}`)
-          .join('\n');
-
-        const helpContent = `**Available Commands:**
-- \`/clear\` - Clear conversation history
-- \`/new\` - Start a new conversation
-- \`/resume\` - Show recent conversations to resume
-- \`/help\` - Show this help message
-- \`/image\` - Generate an image
-- \`/video\` - Generate a video
-- \`/script\` - Write a script
-- \`/storyboard\` - Create a storyboard
-- \`/configure\` - Configure AI service
-${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
-
-**Tips:**
-- Use \`@\` to reference files
-- Attach files using the 📎 button
-- Press Enter to send, Shift+Enter for new line`;
-
-        setMessages(prev => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            role: 'assistant',
-            content: helpContent,
-            timestamp: Date.now(),
-          },
-        ]);
-        break;
-      }
-      case 'resume': {
-        clearInput();
-        // Show recent conversations that can be resumed
-        const recentConversations = conversations
-          .slice(0, 5)
-          .map((c, i) => `${i + 1}. **${c.title}** (${c.messageCount} messages)`)
-          .join('\n');
-
-        const resumeContent = recentConversations
-          ? `**Recent Conversations:**\n${recentConversations}\n\nUse the History button (📋) in the header to open a conversation.`
-          : `No conversations yet. Start a new chat!`;
-
-        setMessages(prev => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            role: 'assistant',
-            content: resumeContent,
-            timestamp: Date.now(),
-          },
-        ]);
-        break;
-      }
-      case 'image':
-        // Pre-fill for image generation
-        setInputValue('/image ');
-        break;
-      case 'video':
-        // Pre-fill for video generation
-        setInputValue('/video ');
-        break;
-      case 'script':
-        // Pre-fill for script writing
-        setInputValue('/script ');
-        break;
-      case 'storyboard':
-        // Pre-fill for storyboard creation
-        setInputValue('/storyboard ');
-        break;
-      case 'configure':
-        clearInput();
-        setShowOnboarding(true);
-        break;
-      default:
-        // For unhandled builtin commands, delegate to extension host
-        clearInput();
-        VSCodeMessages.invokeSlashCommand(command.id);
-        break;
-    }
-  };
+  // Slash command routing (extracted hook)
+  const { handleSlashCommand } = useSlashCommands({
+    skills,
+    inputValue,
+    setInputValue,
+    setMessages,
+    clearInput,
+    clearMessages,
+    setShowOnboarding,
+    onNewChat: handleNewChat,
+    conversations,
+  });
 
   // Request project files for @ reference
   const handleRequestFiles = (filter: string) => {
@@ -832,21 +537,13 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
     VSCodeMessages.setPromptMode(mode);
   };
 
-  // Background task handlers
+  // Background task handlers (used by inline TaskCards in ChatView)
   const handleCancelTask = (taskId: string) => {
     VSCodeMessages.cancelTask(taskId);
   };
 
-  const handleRemoveTask = (taskId: string) => {
-    VSCodeMessages.removeTask(taskId);
-  };
-
   const handleViewTaskResult = (taskId: string) => {
     VSCodeMessages.viewTaskResult(taskId);
-  };
-
-  const handleClearCompletedTasks = () => {
-    VSCodeMessages.clearCompletedTasks();
   };
 
   // Plan review handlers
@@ -869,9 +566,6 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
   const handleRejectAllPlanSteps = (planId: string) => {
     VSCodeMessages.rejectAllPlanSteps(planId, activeConversationId || undefined);
   };
-
-  // Get active tasks count for header badge
-  const activeTasksCount = backgroundTasks.filter(t => t.status === 'queued' || t.status === 'processing').length;
 
   // Compute agent sessions for AgentControlCenter (only open tabs)
   const agentSessions: AgentSessionInfo[] = useMemo(() => {
@@ -916,7 +610,6 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
         activeView={activeTab}
         conversations={conversations}
         activeConversationId={activeConversationId}
-        activeTasksCount={activeTasksCount}
         activeAgentsCount={activeAgentsCount}
         onSwitchTab={handleSwitchTab}
         onCloseTab={handleCloseTab}
@@ -924,7 +617,6 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
         onOpenConversation={handleOpenTab}
         onDeleteConversation={handleDeleteConversation}
         onClearAllConversations={handleClearAllConversations}
-        onToggleTasks={() => setActiveTab(activeTab === 'tasks' ? 'chat' : 'tasks')}
         onToggleAgents={() => setActiveTab(activeTab === 'agents' ? 'chat' : 'agents')}
         ssoSession={settings.ssoSession}
         configuredProviders={settings.configuredProviders}
@@ -975,14 +667,6 @@ ${skillCommands ? `\n**Skill Commands:**\n${skillCommands}` : ''}
           onModifyPlanStep={handleModifyPlanStep}
           onApproveAllPlanSteps={handleApproveAllPlanSteps}
           onRejectAllPlanSteps={handleRejectAllPlanSteps}
-        />
-      ) : activeTab === 'tasks' ? (
-        <AgentsPanel
-          tasks={backgroundTasks}
-          onCancelTask={handleCancelTask}
-          onRemoveTask={handleRemoveTask}
-          onViewResult={handleViewTaskResult}
-          onClearCompleted={handleClearCompletedTasks}
         />
       ) : activeTab === 'agents' ? (
         <AgentControlCenter

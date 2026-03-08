@@ -24,6 +24,8 @@ import type {
 } from '@/components/types';
 import type { BackgroundTask } from '@/components/TaskListView';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
+import type { SkillSummary } from '@/components/ChatView/InputArea/types';
+import type { BoundSkillConfirmRequest, BoundActiveSkillIndicator } from './types';
 
 /**
  * Props for useMessageHandler hook
@@ -72,6 +74,20 @@ export interface UseMessageHandlerProps {
   conversationAgentStateRef: MutableRefObject<Map<string, AgentState>>;
   // Force re-render when agent state changes (for useMemo recalculation)
   forceAgentStateUpdate: () => void;
+
+  // State setters - Skills
+  setSkills: React.Dispatch<React.SetStateAction<SkillSummary[]>>;
+  setPendingSkillConfirm: React.Dispatch<React.SetStateAction<BoundSkillConfirmRequest | null>>;
+  setActiveSkill: React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>;
+
+  // State setters - SSO/Onboarding
+  updateSettings: (partial: Partial<SettingsState>) => void;
+  setShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
+
+  // Refs - Context management
+  conversationTokenCountRef: MutableRefObject<Map<string, number>>;
+  conversationCompressingRef: MutableRefObject<Map<string, boolean>>;
+  forceContextUpdate: () => void;
 }
 
 /**
@@ -110,6 +126,14 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setAgentState,
     conversationAgentStateRef,
     forceAgentStateUpdate,
+    setSkills,
+    setPendingSkillConfirm,
+    setActiveSkill,
+    updateSettings,
+    setShowOnboarding,
+    conversationTokenCountRef,
+    conversationCompressingRef,
+    forceContextUpdate,
   } = props;
 
   // Create registry once
@@ -168,6 +192,14 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setAgentState,
       conversationAgentStateRef,
       forceAgentStateUpdate,
+      setSkills,
+      setPendingSkillConfirm,
+      setActiveSkill,
+      updateSettings,
+      setShowOnboarding,
+      conversationTokenCountRef,
+      conversationCompressingRef,
+      forceUpdate: forceContextUpdate,
       isCurrentConversation,
       updateNonCurrentConversation,
     }),
@@ -195,6 +227,14 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setAgentState,
       conversationAgentStateRef,
       forceAgentStateUpdate,
+      setSkills,
+      setPendingSkillConfirm,
+      setActiveSkill,
+      updateSettings,
+      setShowOnboarding,
+      conversationTokenCountRef,
+      conversationCompressingRef,
+      forceContextUpdate,
       isCurrentConversation,
       updateNonCurrentConversation,
     ]

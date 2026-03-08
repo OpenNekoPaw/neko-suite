@@ -14,17 +14,17 @@
 | 项目 | 说明 |
 |------|------|
 | 入口 | `src/main.tsx` → `AIAssistant` 主组件 |
-| 状态 | `hooks/` 分离式状态管理（conversation/config/ui/resource）|
-| 消息 | `handlers/` 注册表模式处理 Extension 消息 |
+| 状态 | `hooks/` 分离式状态管理（conversation/config/ui/resource/session/tab/command）|
+| 消息 | `handlers/` 注册表模式处理 Extension 消息（含 skill/SSO/context） |
 | 视图 | ChatView / SettingsView / TaskListView |
 | 依赖 | `@neko/shared` 类型定义 |
 
 **目录结构**：
 ```
 src/
-├── components/       # UI 组件（ChatView、SettingsView、Header）
-├── handlers/         # 消息处理器（streaming、tool、conversation）
-├── hooks/            # 全局状态 Hooks
+├── components/       # UI 组件（ChatView、SettingsView、Header、AgentControlCenter）
+├── handlers/         # 消息处理器（streaming、tool、conversation、skill、sso、context）
+├── hooks/            # 状态管理 Hooks（含会话隔离、Tab 管理、斜杠命令）
 ├── config/           # 预设配置（providers、prompts、mcp-servers）
 └── i18n/             # 国际化
 ```
@@ -43,7 +43,6 @@ graph TB
         Main[main.tsx] --> AIAssistant[AIAssistant]
         AIAssistant --> ChatView[ChatView]
         AIAssistant --> SettingsView[SettingsView]
-        AIAssistant --> TaskListView[TaskListView]
 
         ChatView --> MessageList[MessageList]
         ChatView --> InputArea[InputArea]
@@ -56,12 +55,18 @@ graph TB
         Hooks[hooks/] --> useConversationState
         Hooks --> useConfigState
         Hooks --> useUIState
+        Hooks --> useConversationSession
+        Hooks --> useTabManager
+        Hooks --> useSlashCommands
     end
 
     subgraph "消息处理"
         Handlers[handlers/] --> StreamingHandlers
         Handlers --> ToolHandlers
         Handlers --> ConversationHandlers
+        Handlers --> SkillHandlers
+        Handlers --> SsoHandlers
+        Handlers --> ContextHandlers
     end
 
     AIAssistant --> Hooks
@@ -82,17 +87,22 @@ graph TB
 | `ChatView` | 聊天主视图，管理消息列表和输入区域 |
 | `MessageItem` | 单条消息渲染，支持 ContentBlock 模式 |
 | `ToolCallDisplay` | 工具调用卡片，支持媒体预览 |
-| `MermaidBlock` | Mermaid 图表渲染，自定义高对比度主题，支持全屏/缩放/导出 |
+| `MermaidBlock` | Mermaid 图表渲染，自定义高对比度主题，支持复制/导出/错误反馈 |
 | `InputArea` | 输入框，支持 @ 引用、斜杠命令、附件 |
 
 ### 状态管理
 
 ```typescript
-// 分离式 Hooks
+// 分离式 Hooks — 状态管理
 const ui = useUIState();               // activeTab, inputValue, selectedModel
 const conversation = useConversationState(); // messages, isThinking, streamingMessageId
 const config = useConfigState();       // settings, modelPresets, projectFiles
 const resource = useResourceState();   // backgroundTasks
+
+// 分离式 Hooks — 行为逻辑
+const session = useConversationSession(...);  // 会话级 input/attachment 隔离
+const tab = useTabManager(...);               // Tab 生命周期管理
+const command = useSlashCommands(...);        // 斜杠命令路由
 ```
 
 ### 消息处理

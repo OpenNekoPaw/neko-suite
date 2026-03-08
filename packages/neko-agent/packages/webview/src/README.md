@@ -7,8 +7,8 @@
 | 模块 | 职责 | 主要导出 |
 |------|------|----------|
 | `components/` | UI 渲染 | `AIAssistant`, `ChatView`, `AccountBar`, `OnboardingFlow` |
-| `handlers/` | 消息分发 | `createConfiguredRegistry`, `useMessageHandler` |
-| `hooks/` | 状态管理 | `useConversationState`, `useConfigState` |
+| `handlers/` | 消息分发 | `createConfiguredRegistry`, `useMessageHandler`（含 skill/SSO/context） |
+| `hooks/` | 状态管理 | `useConversationState`, `useConfigState`, `useConversationSession`, `useTabManager`, `useSlashCommands` |
 | `config/` | 预设数据 | `PROVIDER_PRESETS`, `PROMPT_PRESETS` |
 | `i18n/` | 多语言 | `useI18n`, `t()` |
 
@@ -35,7 +35,7 @@ graph TB
     subgraph "组件层"
         Components[components/]
         Components --> AIAssistant[index.tsx]
-        AIAssistant --> Views[ChatView / TaskListView / OnboardingFlow]
+        AIAssistant --> Views[ChatView / OnboardingFlow]
     end
 
     subgraph "状态层"
@@ -95,6 +95,6 @@ type ContentBlock =
 
 | 场景 | 步骤 |
 |------|------|
-| 添加新消息类型 | 1. `*-handlers.ts` 添加处理函数 → 2. `handlers/index.ts` 注册 → 3. 更新 `types.ts` |
-| 添加新状态 | 1. 选择 Hook（UI/Conversation/Config/Resource）→ 2. 添加 state → 3. `components/index.tsx` 使用 |
+| 添加新消息类型 | 1. `*-handlers.ts` 添加处理函数 → 2. `handlers/index.ts` 注册 → 3. 更新 `types.ts` context |
+| 添加新状态 | 1. 选择 Hook（UI/Conversation/Config/Resource/Session/Tab）→ 2. 添加 state → 3. `components/index.tsx` 使用 |
 | 调试 | Extension: `console.log('[Extension]', ...)` / Webview: `Cmd+Shift+P → Open Webview Developer Tools` |

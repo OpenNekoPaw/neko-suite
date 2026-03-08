@@ -158,9 +158,9 @@ describe('types validation', () => {
 
   describe('TabType', () => {
     it('should accept valid tab types', () => {
-      const tabTypes: TabType[] = ['chat', 'tasks', 'agents'];
+      const tabTypes: TabType[] = ['chat', 'agents'];
       tabTypes.forEach((type) => {
-        expect(['chat', 'tasks', 'agents']).toContain(type);
+        expect(['chat', 'agents']).toContain(type);
       });
     });
   });

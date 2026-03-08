@@ -20,6 +20,9 @@ export {
   setExternalMessageContext,
   type ExternalMessageContext,
 } from './external-handlers';
+export { skillHandlers } from './skill-handlers';
+export { ssoHandlers } from './sso-handlers';
+export { contextHandlers } from './context-handlers';
 
 import { MessageHandlerRegistry } from './registry';
 import { streamingHandlers } from './streaming-handlers';
@@ -30,6 +33,9 @@ import { taskHandlers } from './task-handlers';
 import { tabHandlers } from './tab-handlers';
 import { commandHandlers } from './command-handlers';
 import { externalHandlers } from './external-handlers';
+import { skillHandlers } from './skill-handlers';
+import { ssoHandlers } from './sso-handlers';
+import { contextHandlers } from './context-handlers';
 
 /**
  * Create a fully configured message handler registry
@@ -46,6 +52,9 @@ export function createConfiguredRegistry(): MessageHandlerRegistry {
   registry.registerAll(tabHandlers);
   registry.registerAll(commandHandlers);
   registry.registerAll(externalHandlers);
+  registry.registerAll(skillHandlers);
+  registry.registerAll(ssoHandlers);
+  registry.registerAll(contextHandlers);
 
   return registry;
 }

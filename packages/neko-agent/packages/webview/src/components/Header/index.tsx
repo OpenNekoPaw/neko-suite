@@ -11,7 +11,6 @@ interface HeaderProps {
   activeView: TabType;
   conversations: ConversationSummary[];
   activeConversationId: string | null;
-  activeTasksCount?: number;
   activeAgentsCount?: number;
   onSwitchTab: (tabId: string) => void;
   onCloseTab: (tabId: string, e?: React.MouseEvent) => void;
@@ -19,7 +18,6 @@ interface HeaderProps {
   onOpenConversation: (conversationId: string, title: string) => void;
   onDeleteConversation: (conversationId: string) => void;
   onClearAllConversations?: () => void;
-  onToggleTasks?: () => void;
   onToggleAgents?: () => void;
   // AccountBar props (replaces settings gear)
   ssoSession: SsoSession | null;
@@ -34,7 +32,6 @@ export function Header({
   activeView,
   conversations,
   activeConversationId,
-  activeTasksCount = 0,
   activeAgentsCount = 0,
   onSwitchTab,
   onCloseTab,
@@ -42,7 +39,6 @@ export function Header({
   onOpenConversation,
   onDeleteConversation,
   onClearAllConversations,
-  onToggleTasks,
   onToggleAgents,
   ssoSession,
   configuredProviders,
@@ -99,26 +95,6 @@ export function Header({
             {activeAgentsCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] flex items-center justify-center text-[9px] font-medium bg-[var(--vscode-charts-purple)] text-white rounded-full px-0.5">
                 {activeAgentsCount > 99 ? '99+' : activeAgentsCount}
-              </span>
-            )}
-          </button>
-        )}
-
-        {/* Tasks button */}
-        {onToggleTasks && (
-          <button
-            onClick={onToggleTasks}
-            className={`p-1.5 hover:bg-[var(--vscode-list-hoverBackground)] rounded transition-colors relative ${
-              activeView === 'tasks' ? 'bg-[var(--vscode-button-background)]/20' : ''
-            }`}
-            title={`${t('header.tasks')}${activeTasksCount > 0 ? ` (${activeTasksCount})` : ''}`}
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
-            {activeTasksCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] flex items-center justify-center text-[9px] font-medium bg-[var(--vscode-charts-blue)] text-white rounded-full px-0.5">
-                {activeTasksCount > 99 ? '99+' : activeTasksCount}
               </span>
             )}
           </button>

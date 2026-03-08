@@ -15,6 +15,18 @@ import type {
 } from '@/components/types';
 import type { BackgroundTask } from '@/components/TaskListView';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
+import type { SkillSummary } from '@/components/ChatView/InputArea/types';
+import type { SkillConfirmRequest, ActiveSkillIndicator } from '@/components/ChatView/SkillConfirmBanner';
+
+/** Skill confirm request bound to a specific conversation */
+export interface BoundSkillConfirmRequest extends SkillConfirmRequest {
+  conversationId: string;
+}
+
+/** Active skill indicator bound to a specific conversation */
+export interface BoundActiveSkillIndicator extends ActiveSkillIndicator {
+  conversationId: string;
+}
 
 /**
  * Streaming state for a conversation
@@ -83,6 +95,20 @@ export interface MessageHandlerContext {
   conversationAgentStateRef: MutableRefObject<Map<string, AgentState>>;
   // Force re-render when agent state changes (for useMemo recalculation)
   forceAgentStateUpdate: () => void;
+
+  // Skill state
+  setSkills: React.Dispatch<React.SetStateAction<SkillSummary[]>>;
+  setPendingSkillConfirm: React.Dispatch<React.SetStateAction<BoundSkillConfirmRequest | null>>;
+  setActiveSkill: React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>;
+
+  // SSO/Onboarding state
+  updateSettings: (partial: Partial<SettingsState>) => void;
+  setShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
+
+  // Context management state
+  conversationTokenCountRef: MutableRefObject<Map<string, number>>;
+  conversationCompressingRef: MutableRefObject<Map<string, boolean>>;
+  forceUpdate: () => void;
 
   // Helper functions
   isCurrentConversation: (conversationId?: string) => boolean;
