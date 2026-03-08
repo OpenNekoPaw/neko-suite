@@ -5,7 +5,6 @@ export const header = {
   'header.history': 'History',
   'header.settings': 'Settings',
   'header.tasks': 'Tasks',
-  'header.agents': 'Agents',
   'header.noConversations': 'No conversations yet',
   'header.deleteConversation': 'Delete conversation',
 } as const satisfies MessageBundle;

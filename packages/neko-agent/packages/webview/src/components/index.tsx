@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, useRef, useMemo } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import {
   Message,
   ShellExecutionMode,
@@ -9,7 +9,6 @@ import { VSCodeMessages, postMessage } from '@/components/hooks/useVSCode';
 import { Header } from '@/components/Header';
 import { ChatView } from '@/components/ChatView';
 import { OnboardingFlow } from '@/components/OnboardingFlow';
-import { AgentControlCenter, type AgentSessionInfo, getActiveSessions } from '@/components/AgentControlCenter';
 import { AttachedFile } from '@/components/ChatView/InputArea';
 import type { SkillSummary } from '@/components/ChatView/InputArea/types';
 // Import custom hooks
@@ -103,10 +102,9 @@ export function AIAssistant() {
   // Agent state (session-bound, per-conversation indicator: idle/thinking/acting/streaming)
   const [agentState, setAgentState] = useState<AgentState | null>(null);
   const conversationAgentStateRef = useRef<Map<string, AgentState>>(new Map());
-  // Version counter to force useMemo recalculation when ref changes
-  const [agentStateVersion, setAgentStateVersion] = useState(0);
+  // Force re-render counter for agent state changes (used by streaming-handlers)
   const forceAgentStateUpdate = useCallback(() => {
-    setAgentStateVersion(v => v + 1);
+    forceUpdate(n => n + 1);
   }, []);
 
   // Session-bound state: input/attachment isolation per conversation
@@ -567,34 +565,6 @@ export function AIAssistant() {
     VSCodeMessages.rejectAllPlanSteps(planId, activeConversationId || undefined);
   };
 
-  // Compute agent sessions for AgentControlCenter (only open tabs)
-  const agentSessions: AgentSessionInfo[] = useMemo(() => {
-    return openTabs.map(tab => ({
-      conversationId: tab.conversationId,
-      conversationTitle: tab.title,
-      agentState: conversationAgentStateRef.current.get(tab.conversationId) ?? null,
-      tokenCount: conversationTokenCountRef.current.get(tab.conversationId),
-      queuedMessagesCount: messageQueue.getQueueForConversation(tab.conversationId).length,
-      lastActivity: conversations.find(c => c.id === tab.conversationId)?.updatedAt,
-    }));
-  }, [openTabs, conversations, messageQueue.queue, agentStateVersion]); // Re-compute when open tabs, queue, or agent state changes
-
-  // Get active agents count for header badge
-  const activeAgentsCount = useMemo(() => getActiveSessions(agentSessions).length, [agentSessions]);
-
-  // Handle stop agent for a conversation
-  const handleStopAgent = useCallback((conversationId: string) => {
-    VSCodeMessages.stopAgent(conversationId);
-  }, []);
-
-  // Handle navigate to conversation from agent control center (switch to existing tab)
-  const handleNavigateToAgent = useCallback((conversationId: string) => {
-    const tab = openTabs.find(t => t.conversationId === conversationId);
-    if (tab) {
-      handleSwitchTab(tab.id);
-    }
-  }, [openTabs, handleSwitchTab]);
-
   // Get available models from Platform ConfigManager (via settings.chatModelOptions)
   // Fallback to default 'auto' option if not yet received from extension
   const availableModels = settings.chatModelOptions.length > 0
@@ -610,14 +580,12 @@ export function AIAssistant() {
         activeView={activeTab}
         conversations={conversations}
         activeConversationId={activeConversationId}
-        activeAgentsCount={activeAgentsCount}
         onSwitchTab={handleSwitchTab}
         onCloseTab={handleCloseTab}
         onNewChat={handleNewChat}
         onOpenConversation={handleOpenTab}
         onDeleteConversation={handleDeleteConversation}
         onClearAllConversations={handleClearAllConversations}
-        onToggleAgents={() => setActiveTab(activeTab === 'agents' ? 'chat' : 'agents')}
         ssoSession={settings.ssoSession}
         configuredProviders={settings.configuredProviders}
         selectedModelId={settings.selectedModelId}
@@ -667,13 +635,6 @@ export function AIAssistant() {
           onModifyPlanStep={handleModifyPlanStep}
           onApproveAllPlanSteps={handleApproveAllPlanSteps}
           onRejectAllPlanSteps={handleRejectAllPlanSteps}
-        />
-      ) : activeTab === 'agents' ? (
-        <AgentControlCenter
-          sessions={agentSessions}
-          activeConversationId={activeConversationId}
-          onNavigateToConversation={handleNavigateToAgent}
-          onStopAgent={handleStopAgent}
         />
       ) : null}
       {showOnboarding && (

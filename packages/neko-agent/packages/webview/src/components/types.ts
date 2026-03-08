@@ -122,7 +122,7 @@ export interface OpenTab {
   conversationId: string;
 }
 
-export type TabType = 'chat' | 'agents';
+export type TabType = 'chat';
 
 // Shell execution mode for tool confirmation
 export type ShellExecutionMode = 'plan' | 'ask' | 'auto';

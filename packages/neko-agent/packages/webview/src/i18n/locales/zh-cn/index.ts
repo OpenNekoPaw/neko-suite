@@ -1,8 +1,6 @@
 import type { MessageBundle } from '@neko/shared';
 
 import { accountBar } from './accountBar';
-import { agentControl } from './agentControl';
-import { agents } from './agents';
 import { animation } from './animation';
 import { audio } from './audio';
 import { blendMode } from './blendMode';
@@ -22,7 +20,6 @@ import { propertyPanel } from './propertyPanel';
 import { settings } from './settings';
 import { shape } from './shape';
 import { speed } from './speed';
-import { subAgent } from './subAgent';
 import { subtitles } from './subtitles';
 import { tasks } from './tasks';
 import { timeline } from './timeline';
@@ -31,8 +28,6 @@ import { transition } from './transition';
 
 export const bundles: Record<string, MessageBundle> = {
   accountBar,
-  agentControl,
-  agents,
   animation,
   audio,
   blendMode,
@@ -52,7 +47,6 @@ export const bundles: Record<string, MessageBundle> = {
   settings,
   shape,
   speed,
-  subAgent,
   subtitles,
   tasks,
   timeline,

@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react';
-import type { OpenTab, ConversationSummary } from '@/components/types';
+import type { OpenTab, ConversationSummary, TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 
 export interface UseTabManagerProps {
@@ -15,7 +15,7 @@ export interface UseTabManagerProps {
   activeTabId: string | null;
   setActiveTabId: React.Dispatch<React.SetStateAction<string | null>>;
   conversations: ConversationSummary[];
-  setActiveTab: (tab: 'chat' | 'agents') => void;
+  setActiveTab: (tab: TabType) => void;
   onNewChat: () => void;
 }
 
