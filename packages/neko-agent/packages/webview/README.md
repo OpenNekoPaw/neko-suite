@@ -16,13 +16,13 @@
 | 入口 | `src/main.tsx` → `AIAssistant` 主组件 |
 | 状态 | `hooks/` 分离式状态管理（conversation/config/ui/resource/session/tab/command）|
 | 消息 | `handlers/` 注册表模式处理 Extension 消息（含 skill/SSO/context/message-updater） |
-| 视图 | ChatView / SettingsView / TaskListView |
+| 视图 | ChatView / OnboardingFlow |
 | 依赖 | `@neko/shared` 类型定义 |
 
 **目录结构**：
 ```
 src/
-├── components/       # UI 组件（ChatView、SettingsView、Header、AgentControlCenter）
+├── components/       # UI 组件（ChatView、Header、OnboardingFlow、AccountBar）
 ├── handlers/         # 消息处理器（streaming、tool、conversation、skill、sso、context）
 ├── hooks/            # 状态管理 Hooks（含会话隔离、Tab 管理、斜杠命令）
 ├── config/           # 预设配置（providers、prompts、mcp-servers）
@@ -42,7 +42,6 @@ graph TB
     subgraph "Webview - React"
         Main[main.tsx] --> AIAssistant[AIAssistant]
         AIAssistant --> ChatView[ChatView]
-        AIAssistant --> SettingsView[SettingsView]
 
         ChatView --> MessageList[MessageList]
         ChatView --> InputArea[InputArea]
