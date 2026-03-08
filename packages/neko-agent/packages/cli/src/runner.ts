@@ -26,14 +26,17 @@ import {
   getDefaultPersonalPath,
   createInputProcessor,
   createCoreTools,
-  type ExecutionMode,
   type InputProcessor,
 } from '@neko/agent';
+
+type ExecutionMode = 'plan' | 'ask' | 'auto';
 import type { IService } from '@neko/shared';
 import type { SkillService } from '@neko/agent';
 import type { CLIConfig, RunOptions, CLIResult } from './types';
 import { PROVIDERS } from './types';
 import { createLLMServiceAdapter } from './llm-service-adapter';
+import { theme, TOOL_ICONS } from './theme';
+import { formatToolCall } from './formatter';
 import {
   isSlashCommand,
   handleSlashCommand,
@@ -522,13 +525,9 @@ async function initializeInteractiveSession(
       }
 
       // Prompt user via shared readline (no stdin contention)
-      console.log(`\n[Tool] ${request.toolCall.name}`);
-      const argsStr = JSON.stringify(request.toolCall.arguments, null, 2);
-      if (argsStr.length < 500) {
-        console.log(argsStr);
-      } else {
-        console.log(argsStr.slice(0, 500) + '...');
-      }
+      // Two-tier display: collapsed summary + full args in verbose mode
+      process.stdout.write('\n');
+      console.log(formatToolCall(request.toolCall.name, request.toolCall.arguments, 'pending', true));
 
       const answer = await askToolConfirmation('Approve? (y)es / (n)o / (a)lways: ');
       if (answer === 'a' || answer === 'always') {
@@ -607,9 +606,9 @@ export async function runInteractive(
       },
     };
 
-    console.log('NekoAgent CLI - Interactive Mode');
-    console.log(`Provider: ${sessionConfig.provider}, Model: ${sessionConfig.model}`);
-    console.log('Type /help for commands, /exit to quit.\n');
+    console.log(theme.bold('NekoAgent CLI - Interactive Mode'));
+    console.log(theme.muted(`Provider: ${sessionConfig.provider}, Model: ${sessionConfig.model}`));
+    console.log(theme.muted('Type /help for commands, /exit to quit.\n'));
 
     const prompt = (): void => {
       rl.question('> ', async (input) => {
@@ -626,7 +625,7 @@ export async function runInteractive(
           if (trimmed === '/plan') {
             state!.promptBuilder.setMode('plan');
             state!.session.setExecutionMode('plan');
-            console.log('Switched to plan mode');
+            console.log(theme.info('Switched to plan mode'));
             prompt();
             return;
           }
@@ -634,7 +633,7 @@ export async function runInteractive(
           if (trimmed === '/auto') {
             state!.promptBuilder.setMode('default');
             state!.session.setExecutionMode('auto');
-            console.log('Switched to auto mode');
+            console.log(theme.info('Switched to auto mode'));
             prompt();
             return;
           }
@@ -642,7 +641,7 @@ export async function runInteractive(
           if (trimmed === '/ask') {
             state!.promptBuilder.setMode('default');
             state!.session.setExecutionMode('ask');
-            console.log('Switched to ask mode');
+            console.log(theme.info('Switched to ask mode'));
             prompt();
             return;
           }
@@ -654,20 +653,21 @@ export async function runInteractive(
               // List available models
               const provider = PROVIDERS[sessionConfig.provider];
               if (provider) {
-                console.log(`\nCurrent: ${sessionConfig.model}`);
-                console.log(`Available (${provider.name}):`);
+                console.log(`\n${theme.muted('Current:')} ${sessionConfig.model}`);
+                console.log(theme.muted(`Available (${provider.name}):`));
                 for (const m of provider.models) {
-                  console.log(`  ${m === sessionConfig.model ? '* ' : '  '}${m}`);
+                  const marker = m === sessionConfig.model ? theme.success('* ') : '  ';
+                  console.log(`  ${marker}${m}`);
                 }
               } else {
-                console.log(`Current model: ${sessionConfig.model}`);
+                console.log(`${theme.muted('Current model:')} ${sessionConfig.model}`);
               }
             } else {
               sessionConfig = { ...sessionConfig, model: newModel };
               slashContext.config = sessionConfig;
               // Rebuild LLM service so the model change takes effect
               state!.rebuildService(sessionConfig, service);
-              console.log(`Model switched to: ${newModel}`);
+              console.log(theme.info(`Model switched to: ${newModel}`));
             }
             prompt();
             return;
@@ -675,14 +675,14 @@ export async function runInteractive(
 
           if (trimmed === '/clear') {
             state!.session.clearHistory();
-            console.log('Conversation history cleared');
+            console.log(theme.info('Conversation history cleared'));
             prompt();
             return;
           }
 
           if (trimmed === '/compact') {
             const result = await state!.session.compressContext();
-            console.log(`Context compressed: ${result.originalTokens} -> ${result.compressedTokens} tokens (${(result.ratio * 100).toFixed(1)}%)`);
+            console.log(theme.info(`Context compressed: ${result.originalTokens} -> ${result.compressedTokens} tokens (${(result.ratio * 100).toFixed(1)}%)`));
             prompt();
             return;
           }
@@ -693,7 +693,7 @@ export async function runInteractive(
             console.log(result.output);
           }
           if (result.error) {
-            console.error('Error:', result.error);
+            console.error(theme.error(`Error: ${result.error}`));
           }
 
           if (!result.continueExecution) {
@@ -735,7 +735,7 @@ export async function runInteractive(
           const errorMessages = processedInput.errors
             .map(e => `- ${e.reference}: ${e.error}`)
             .join('\n');
-          console.log(`\n[Warning] Some files could not be loaded:\n${errorMessages}\n`);
+          console.log(theme.warning(`\n[Warning] Some files could not be loaded:\n${errorMessages}\n`));
         }
 
         // Execute via session
@@ -745,13 +745,17 @@ export async function runInteractive(
           })) {
             handleAgentEvent(event, {
               onOutput: (text) => process.stdout.write(text),
-              onToolCall: (name, args) => console.log(`\n[Tool] ${name}:`, args),
-              onThinking: (thought) => console.log(`\n[Thinking] ${thought}`),
+              onToolCall: (name, args) => {
+                const argsRecord = args as Record<string, unknown>;
+                process.stdout.write('\n');
+                console.log(formatToolCall(name, argsRecord, 'pending'));
+              },
+              onThinking: (thought) => console.log(theme.muted(`\n[Thinking] ${thought}`)),
             });
           }
           console.log('\n');
         } catch (error) {
-          console.error('Error:', error instanceof Error ? error.message : String(error));
+          console.error(theme.error(`Error: ${error instanceof Error ? error.message : String(error)}`));
         }
 
         prompt();

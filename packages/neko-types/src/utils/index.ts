@@ -30,3 +30,12 @@ export {
 	isSubtitleFile,
 	getExtensionsForType,
 } from './media';
+
+// Diff utilities (LCS-based line diff, zero dependencies)
+export {
+	computeDiff,
+	computeDiffStats,
+	type DiffLine,
+	type DiffLineType,
+	type DiffStats,
+} from './diff';

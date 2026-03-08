@@ -94,6 +94,23 @@ export const vscodeCSSTokens = {
     'vscode-scrollbar-active':
       'var(--vscode-scrollbarSlider-activeBackground)',
 
+    // Diff editor
+    'vscode-diff-inserted': 'var(--vscode-diffEditor-insertedLineBackground)',
+    'vscode-diff-removed': 'var(--vscode-diffEditor-removedLineBackground)',
+    'vscode-diff-inserted-fg':
+      'var(--vscode-gitDecoration-addedResourceForeground)',
+    'vscode-diff-removed-fg':
+      'var(--vscode-gitDecoration-deletedResourceForeground)',
+    'vscode-diff-modified-fg':
+      'var(--vscode-gitDecoration-modifiedResourceForeground)',
+
+    // Charts (status color encoding, aligned with opencode TUI semantic tokens)
+    'vscode-chart-green': 'var(--vscode-charts-green)',
+    'vscode-chart-red': 'var(--vscode-charts-red)',
+    'vscode-chart-blue': 'var(--vscode-charts-blue)',
+    'vscode-chart-yellow': 'var(--vscode-charts-yellow)',
+    'vscode-chart-purple': 'var(--vscode-charts-purple)',
+
     // Legacy alias
     'vscode-border': 'var(--vscode-panel-border)',
   },

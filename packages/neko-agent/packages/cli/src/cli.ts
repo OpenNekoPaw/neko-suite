@@ -11,12 +11,12 @@
  */
 
 import { Command } from 'commander';
-import chalk from 'chalk';
 import ora from 'ora';
 import * as fs from 'node:fs';
 import { loadConfig, saveGlobalConfig, validateConfig, listProviders } from './config';
 import { runAgent, runInteractive } from './runner';
 import { formatResult } from './formatter';
+import { theme, BRAILLE_SPINNER } from './theme';
 import type { CLIConfig, RunOptions } from './types';
 import { PROVIDERS } from './types';
 
@@ -121,9 +121,9 @@ async function handleRun(
   // Validate configuration
   const validation = validateConfig(config);
   if (!validation.valid) {
-    console.error(chalk.red('Configuration errors:'));
+    console.error(theme.error('Configuration errors:'));
     for (const error of validation.errors) {
-      console.error(chalk.red(`  - ${error}`));
+      console.error(theme.error(`  - ${error}`));
     }
     process.exit(1);
   }
@@ -134,7 +134,7 @@ async function handleRun(
     try {
       finalPrompt = fs.readFileSync(options.input as string, 'utf-8');
     } catch (error) {
-      console.error(chalk.red(`Failed to read input file: ${options.input}`));
+      console.error(theme.error(`Failed to read input file: ${options.input}`));
       process.exit(1);
     }
   }
@@ -150,8 +150,9 @@ async function handleRun(
     outputFile: options.output as string | undefined,
   };
 
-  // Show spinner
+  // Show spinner with braille frames (aligned with opencode TUI)
   const spinner = ora({
+    spinner: BRAILLE_SPINNER,
     text: 'Running agent...',
     isEnabled: !config.verbose && config.outputFormat === 'text',
   }).start();
@@ -162,10 +163,10 @@ async function handleRun(
     runOptions,
     onOutput: config.verbose ? (text) => console.log(text) : undefined,
     onToolCall: config.verbose
-      ? (name, args) => console.log(chalk.cyan(`[Tool] ${name}`), args)
+      ? (name, args) => console.log(theme.info(`[Tool] ${name}`), args)
       : undefined,
     onThinking: config.verbose
-      ? (thought) => console.log(chalk.gray(`[Thinking] ${thought}`))
+      ? (thought) => console.log(theme.muted(`[Thinking] ${thought}`))
       : undefined,
   });
 
@@ -176,7 +177,7 @@ async function handleRun(
 
   if (options.output) {
     fs.writeFileSync(options.output as string, formatted);
-    console.log(chalk.green(`Result written to ${options.output}`));
+    console.log(theme.success(`Result written to ${options.output}`));
   } else {
     console.log(formatted);
   }
@@ -198,9 +199,9 @@ async function handleInteractive(options: Record<string, unknown>): Promise<void
 
   const validation = validateConfig(config);
   if (!validation.valid) {
-    console.error(chalk.red('Configuration errors:'));
+    console.error(theme.error('Configuration errors:'));
     for (const error of validation.errors) {
-      console.error(chalk.red(`  - ${error}`));
+      console.error(theme.error(`  - ${error}`));
     }
     process.exit(1);
   }
@@ -214,10 +215,10 @@ async function handleInteractive(options: Record<string, unknown>): Promise<void
 function handleConfigShow(): void {
   const config = loadConfig();
 
-  console.log(chalk.bold('\nCurrent Configuration:\n'));
+  console.log(theme.bold('\nCurrent Configuration:\n'));
   console.log(`  Provider:    ${config.provider}`);
   console.log(`  Model:       ${config.model}`);
-  console.log(`  API Key:     ${config.apiKey ? '***' + config.apiKey.slice(-4) : chalk.red('Not set')}`);
+  console.log(`  API Key:     ${config.apiKey ? '***' + config.apiKey.slice(-4) : theme.error('Not set')}`);
   console.log(`  Base URL:    ${config.baseUrl ?? 'Default'}`);
   console.log(`  Max Tokens:  ${config.maxTokens}`);
   console.log(`  Temperature: ${config.temperature}`);
@@ -234,7 +235,7 @@ function handleConfigSet(key: string, value: string): void {
   const validKeys = ['provider', 'model', 'apiKey', 'baseUrl', 'maxTokens', 'temperature', 'skillsDir'];
 
   if (!validKeys.includes(key)) {
-    console.error(chalk.red(`Invalid config key: ${key}`));
+    console.error(theme.error(`Invalid config key: ${key}`));
     console.error(`Valid keys: ${validKeys.join(', ')}`);
     process.exit(1);
   }
@@ -247,18 +248,18 @@ function handleConfigSet(key: string, value: string): void {
   }
 
   saveGlobalConfig({ [key]: parsedValue });
-  console.log(chalk.green(`Set ${key} = ${value}`));
+  console.log(theme.success(`Set ${key} = ${value}`));
 }
 
 /**
  * Handle list providers command
  */
 function handleListProviders(): void {
-  console.log(chalk.bold('\nAvailable Providers:\n'));
+  console.log(theme.bold('\nAvailable Providers:\n'));
 
   for (const provider of listProviders()) {
-    const envSet = process.env[provider.envKey] ? chalk.green('✓') : chalk.red('✗');
-    console.log(`  ${chalk.cyan(provider.id)} (${provider.name})`);
+    const envSet = process.env[provider.envKey] ? theme.success('✓') : theme.error('✗');
+    console.log(`  ${theme.info(provider.id)} (${provider.name})`);
     console.log(`    Default Model: ${provider.defaultModel}`);
     console.log(`    Env Key: ${provider.envKey} ${envSet}`);
     console.log(`    Models: ${provider.models.join(', ')}`);
@@ -272,7 +273,7 @@ const program = createProgram();
 // Default to interactive mode if no command specified
 if (process.argv.length <= 2) {
   handleInteractive({}).catch((error) => {
-    console.error(chalk.red('Error:'), error.message);
+    console.error(theme.error(`Error: ${error.message}`));
     process.exit(1);
   });
 } else {
