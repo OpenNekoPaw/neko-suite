@@ -17,17 +17,6 @@ interface MessageListProps {
   isThinking: boolean;
   streamingMessageId: string | null;
   backgroundTasks?: BackgroundTask[];
-  onCancelTask?: (taskId: string) => void;
-  onViewTaskResult?: (taskId: string) => void;
-  // P1: Code diff actions
-  onAcceptDiff?: (filePath: string) => void;
-  onRejectDiff?: (filePath: string) => void;
-  // P1: Plan review actions
-  onApprovePlanStep?: (planId: string, stepId: string) => void;
-  onRejectPlanStep?: (planId: string, stepId: string) => void;
-  onModifyPlanStep?: (planId: string, stepId: string, newDescription: string) => void;
-  onApproveAllPlanSteps?: (planId: string) => void;
-  onRejectAllPlanSteps?: (planId: string) => void;
 }
 
 // Estimated heights for different message types
@@ -101,15 +90,6 @@ export function MessageList({
   isThinking,
   streamingMessageId,
   backgroundTasks,
-  onCancelTask,
-  onViewTaskResult,
-  onAcceptDiff,
-  onRejectDiff,
-  onApprovePlanStep,
-  onRejectPlanStep,
-  onModifyPlanStep,
-  onApproveAllPlanSteps,
-  onRejectAllPlanSteps,
 }: MessageListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const prevItemCountRef = useRef(0);
@@ -232,27 +212,11 @@ export function MessageList({
                     isFirst={item.isFirst}
                     isLast={item.isLast}
                     isStreaming={item.isStreaming}
-                    onAcceptDiff={onAcceptDiff}
-                    onRejectDiff={onRejectDiff}
-                    onApprovePlanStep={onApprovePlanStep}
-                    onRejectPlanStep={onRejectPlanStep}
-                    onModifyPlanStep={onModifyPlanStep}
-                    onApproveAllPlanSteps={onApproveAllPlanSteps}
-                    onRejectAllPlanSteps={onRejectAllPlanSteps}
                   />
                 ) : (
                   <MessageItem
                     message={item.message}
                     backgroundTasks={backgroundTasks}
-                    onCancelTask={onCancelTask}
-                    onViewTaskResult={onViewTaskResult}
-                    onAcceptDiff={onAcceptDiff}
-                    onRejectDiff={onRejectDiff}
-                    onApprovePlanStep={onApprovePlanStep}
-                    onRejectPlanStep={onRejectPlanStep}
-                    onModifyPlanStep={onModifyPlanStep}
-                    onApproveAllPlanSteps={onApproveAllPlanSteps}
-                    onRejectAllPlanSteps={onRejectAllPlanSteps}
                     isGrouped={item.isGrouped}
                   />
                 )}

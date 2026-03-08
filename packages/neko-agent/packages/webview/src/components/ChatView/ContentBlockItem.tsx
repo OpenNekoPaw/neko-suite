@@ -11,6 +11,7 @@ import { ToolCallDisplay } from '@/components/ChatView/ToolCallDisplay';
 import { DiffBlock } from '@/components/ChatView/DiffBlock';
 import { PlanReview } from '@/components/ChatView/PlanReview';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
+import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 
 interface ContentBlockItemProps {
   /** The content block to render */
@@ -21,15 +22,6 @@ interface ContentBlockItemProps {
   isLast: boolean;
   /** Whether the parent message is streaming */
   isStreaming: boolean;
-  // P1: Code diff actions
-  onAcceptDiff?: (filePath: string) => void;
-  onRejectDiff?: (filePath: string) => void;
-  // P1: Plan review actions
-  onApprovePlanStep?: (planId: string, stepId: string) => void;
-  onRejectPlanStep?: (planId: string, stepId: string) => void;
-  onModifyPlanStep?: (planId: string, stepId: string, newDescription: string) => void;
-  onApproveAllPlanSteps?: (planId: string) => void;
-  onRejectAllPlanSteps?: (planId: string) => void;
 }
 
 // Assistant avatar component - compact size (20px)
@@ -82,15 +74,9 @@ export const ContentBlockItem = memo(function ContentBlockItem({
   block,
   isFirst,
   isStreaming,
-  onAcceptDiff,
-  onRejectDiff,
-  onApprovePlanStep,
-  onRejectPlanStep,
-  onModifyPlanStep,
-  onApproveAllPlanSteps,
-  onRejectAllPlanSteps,
 }: ContentBlockItemProps) {
   const config = blockTypeConfig[block.type];
+  const actions = useMessageActions();
 
   return (
     <div className="group hover:bg-[var(--vscode-list-hoverBackground)] transition-colors">
@@ -118,15 +104,7 @@ export const ContentBlockItem = memo(function ContentBlockItem({
           </div>
 
           {/* Block content */}
-          {renderBlockContent(block, isStreaming, {
-            onAcceptDiff,
-            onRejectDiff,
-            onApprovePlanStep,
-            onRejectPlanStep,
-            onModifyPlanStep,
-            onApproveAllPlanSteps,
-            onRejectAllPlanSteps,
-          })}
+          {renderBlockContent(block, isStreaming, actions)}
         </div>
       </div>
     </div>
@@ -139,15 +117,10 @@ export const ContentBlockItem = memo(function ContentBlockItem({
 function renderBlockContent(
   block: ContentBlock,
   isStreaming: boolean,
-  callbacks: {
-    onAcceptDiff?: (filePath: string) => void;
-    onRejectDiff?: (filePath: string) => void;
-    onApprovePlanStep?: (planId: string, stepId: string) => void;
-    onRejectPlanStep?: (planId: string, stepId: string) => void;
-    onModifyPlanStep?: (planId: string, stepId: string, newDescription: string) => void;
-    onApproveAllPlanSteps?: (planId: string) => void;
-    onRejectAllPlanSteps?: (planId: string) => void;
-  }
+  callbacks: Pick<
+    import('@/components/ChatView/MessageActionsContext').MessageActionsContextValue,
+    'onAcceptDiff' | 'onRejectDiff' | 'onApprovePlanStep' | 'onRejectPlanStep' | 'onModifyPlanStep' | 'onApproveAllPlanSteps' | 'onRejectAllPlanSteps'
+  >
 ) {
   switch (block.type) {
     case 'thinking':

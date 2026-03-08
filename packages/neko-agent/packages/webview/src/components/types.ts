@@ -9,6 +9,7 @@ export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
+  /** @deprecated Derived from contentBlocks[].toolCall — do not update directly */
   toolCalls?: ToolCall[];
   isStreaming?: boolean;
   attachments?: MessageAttachment[];

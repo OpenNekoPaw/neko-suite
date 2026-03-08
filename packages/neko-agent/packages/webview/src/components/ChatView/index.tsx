@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { Message, ShellExecutionMode, PromptMode, AgentState } from '@/components/types';
 import type { ChatModelOption } from '@neko/shared';
 import { MessageList } from '@/components/ChatView/MessageList';
+import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { InputArea, ProjectFile, AttachedFile } from '@/components/ChatView/InputArea';
 import { EmptyState } from '@/components/ChatView/EmptyState';
 import { DropZone } from '@/components/ChatView/DropZone';
@@ -172,11 +173,7 @@ export function ChatView({
             <EmptyState />
           </div>
         ) : (
-          <MessageList
-            messages={messages}
-            isThinking={isThinking}
-            streamingMessageId={streamingMessageId}
-            backgroundTasks={backgroundTasks}
+          <MessageActionsProvider
             onCancelTask={onCancelTask}
             onViewTaskResult={onViewTaskResult}
             onAcceptDiff={onAcceptDiff}
@@ -186,7 +183,14 @@ export function ChatView({
             onModifyPlanStep={onModifyPlanStep}
             onApproveAllPlanSteps={onApproveAllPlanSteps}
             onRejectAllPlanSteps={onRejectAllPlanSteps}
-          />
+          >
+            <MessageList
+              messages={messages}
+              isThinking={isThinking}
+              streamingMessageId={streamingMessageId}
+              backgroundTasks={backgroundTasks}
+            />
+          </MessageActionsProvider>
         )}
 
         {/* Input Area */}

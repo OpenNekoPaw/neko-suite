@@ -8,29 +8,19 @@ import { MessageActions } from '@/components/ChatView/MessageActions';
 import { BackgroundTask } from '@/components/TaskListView';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
 import { ImagePreview, AudioPlayer, VideoPlayer } from '@/components/ChatView/MediaPreview';
+import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 
 interface MessageItemProps {
   message: Message;
-  // 用于显示关联的后台任务
+  // Background tasks for inline task cards
   backgroundTasks?: BackgroundTask[];
-  onCancelTask?: (taskId: string) => void;
-  onViewTaskResult?: (taskId: string) => void;
-  // P1: Code diff actions
-  onAcceptDiff?: (filePath: string) => void;
-  onRejectDiff?: (filePath: string) => void;
-  // P1: Plan review actions
-  onApprovePlanStep?: (planId: string, stepId: string) => void;
-  onRejectPlanStep?: (planId: string, stepId: string) => void;
-  onModifyPlanStep?: (planId: string, stepId: string, newDescription: string) => void;
-  onApproveAllPlanSteps?: (planId: string) => void;
-  onRejectAllPlanSteps?: (planId: string) => void;
   // P2: Message operations
   onEditMessage?: (messageId: string) => void;
   onResendFrom?: (messageId: string) => void;
   onFeedback?: (messageId: string, feedback: 'positive' | 'negative') => void;
   // Layout options
   showAvatar?: boolean;
-  isGrouped?: boolean; // If true, hide avatar (consecutive same-role messages)
+  isGrouped?: boolean;
 }
 
 // Format timestamp
@@ -295,21 +285,23 @@ function AssistantContentBlocks({
 export const MessageItem = memo(function MessageItem({
   message,
   backgroundTasks,
-  onCancelTask,
-  onViewTaskResult,
-  onAcceptDiff,
-  onRejectDiff,
-  onApprovePlanStep,
-  onRejectPlanStep,
-  onModifyPlanStep,
-  onApproveAllPlanSteps,
-  onRejectAllPlanSteps,
   onEditMessage,
   onResendFrom,
   onFeedback,
   showAvatar = true,
   isGrouped = false,
 }: MessageItemProps) {
+  const {
+    onCancelTask,
+    onViewTaskResult,
+    onAcceptDiff,
+    onRejectDiff,
+    onApprovePlanStep,
+    onRejectPlanStep,
+    onModifyPlanStep,
+    onApproveAllPlanSteps,
+    onRejectAllPlanSteps,
+  } = useMessageActions();
   // 找出与这条消息关联的任务
   const relatedTasks = message.backgroundTaskIds
     ? backgroundTasks?.filter((t) => message.backgroundTaskIds!.includes(t.id)) || []
