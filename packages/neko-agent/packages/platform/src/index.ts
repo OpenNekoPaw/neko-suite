@@ -125,21 +125,6 @@ export type {
 // =============================================================================
 
 export {
-  // Media Management
-  MediaManager,
-  createHttpDownloader,
-  MediaCache,
-  InMemoryCacheStorage,
-  ThumbnailGenerator,
-  MockFrameExtractor,
-  MockImageProcessor,
-  ImportMediaTool,
-  GetMediaTool,
-  ListMediaTool,
-  DeleteMediaTool,
-  GetThumbnailTool,
-  GetMetadataTool,
-  createMediaTools,
   // Media Generation - Adapters
   BaseMediaAdapter,
   MediaAdapterRegistry,
@@ -159,15 +144,6 @@ export {
   MediaGenerationService,
   createMediaPlatform,
   // Types
-  type MediaManagerConfig,
-  type HttpDownloaderOptions,
-  type DownloadResult,
-  type CacheEntry,
-  type CacheStorage,
-  type ThumbnailResult,
-  type ThumbnailGeneratorConfig,
-  type FrameExtractor,
-  type ImageProcessor,
   type MediaGenerationType,
   type MediaTaskStatus,
   type MediaOutputType,

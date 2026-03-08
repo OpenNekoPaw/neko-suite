@@ -391,25 +391,8 @@ export class ConfigManager {
   }
 
   // ==========================================================================
-  // Listener Methods
-  // ==========================================================================
-
-  onChange(listener: ConfigChangeListener): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  // ==========================================================================
   // Utility Methods
   // ==========================================================================
-
-  reloadWorkspaceConfig(): void {
-    if (this.workspacePath) {
-      this.workspaceConfig = loadWorkspaceConfig(this.workspacePath);
-    }
-    this.invalidateCache();
-    this.notifyListeners({ type: 'all' });
-  }
 
   reloadConfig(): void {
     this.invalidateCache();

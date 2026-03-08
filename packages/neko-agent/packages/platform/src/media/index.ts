@@ -1,64 +1,9 @@
 /**
- * Media Module - Media management and AI generation
+ * Media Module - AI media generation
  */
 
 // =============================================================================
-// Media Management (existing)
-// =============================================================================
-
-export {
-  MediaManager,
-  type MediaManagerConfig,
-  type MediaDownloader,
-  type ThumbnailGenerator as ThumbnailGeneratorFn,
-  type MetadataExtractor,
-  type MediaFileSystem,
-} from './media-manager';
-
-export {
-  createHttpDownloader,
-  MediaCache,
-  InMemoryCacheStorage,
-  type HttpDownloaderOptions,
-  type DownloadResult,
-  type CacheEntry,
-  type CacheStorage,
-} from './media-cache';
-
-export {
-  ThumbnailGenerator,
-  MockFrameExtractor,
-  MockImageProcessor,
-  type ThumbnailResult,
-  type ThumbnailGeneratorConfig,
-  type FrameExtractor,
-  type ImageProcessor,
-} from './thumbnail';
-
-export {
-  ImportMediaTool,
-  GetMediaTool,
-  ListMediaTool,
-  DeleteMediaTool,
-  GetThumbnailTool,
-  GetMetadataTool,
-  createMediaTools,
-} from './media-tool';
-
-// Re-export types
-export type {
-  MediaType,
-  MediaStatus,
-  MediaMetadata,
-  MediaItem,
-  MediaDownloadOptions,
-  ThumbnailOptions,
-  MediaCacheConfig,
-  IMediaManager,
-} from '../types/media';
-
-// =============================================================================
-// AI Media Generation (new)
+// AI Media Generation
 // =============================================================================
 
 // Generation Types

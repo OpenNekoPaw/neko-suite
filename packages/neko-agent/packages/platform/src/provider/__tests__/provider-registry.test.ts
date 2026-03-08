@@ -171,25 +171,6 @@ describe('ProviderRegistry', () => {
     expect(adapter?.type).toBe('openai');
   });
 
-  describe('getModelsWithCapability', () => {
-    it('should get models with specific capability', () => {
-      const configManager = createMockConfigManager();
-      const registry = new ProviderRegistry(configManager);
-
-      const models = registry.getModelsWithCapability('vision');
-      expect(models.length).toBe(2);
-      expect(models.every((m) => m.capabilities.includes('vision'))).toBe(true);
-    });
-
-    it('should return empty array for unknown capability', () => {
-      const configManager = createMockConfigManager();
-      const registry = new ProviderRegistry(configManager);
-
-      const models = registry.getModelsWithCapability('unknown-capability');
-      expect(models.length).toBe(0);
-    });
-  });
-
   describe('isProviderAvailable', () => {
     it('should always return true', () => {
       const configManager = createMockConfigManager();

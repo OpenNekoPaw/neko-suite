@@ -6,7 +6,7 @@
  * unnecessary for a single-user desktop application.
  */
 
-import type { Model, ModelCapability, ProviderType } from '../types/provider';
+import type { Model, ProviderType } from '../types/provider';
 import type { Adapter } from '../types/adapter';
 import type { ConfigManager } from '../config/config-manager';
 import { getAdapterRegistry } from '../llm/adapter/adapter-registry';
@@ -63,15 +63,6 @@ export class ProviderRegistry {
     }
 
     return undefined;
-  }
-
-  /**
-   * Get models with specific capability
-   */
-  getModelsWithCapability(capability: ModelCapability | string): Model[] {
-    return this.configManager.getEnabledModels().filter((m) =>
-      (m.capabilities as (ModelCapability | string)[]).includes(capability)
-    );
   }
 
   /**

@@ -145,65 +145,6 @@ export abstract class BaseAdapter implements Adapter {
   }
 
   // ==========================================================================
-  // Stream Aggregation
-  // ==========================================================================
-
-  /**
-   * Aggregate streaming response into complete response
-   */
-  protected async aggregateStream(
-    stream: AsyncIterable<ChatChunk>
-  ): Promise<ChatResponse> {
-    let content = '';
-    let id = '';
-    let modelName = '';
-    let finishReason: ChatResponse['finishReason'] = 'stop';
-    const toolCalls: ChatResponse['message']['toolCalls'] = [];
-
-    for await (const chunk of stream) {
-      id = chunk.id;
-      modelName = chunk.model;
-
-      if (chunk.delta.content) {
-        if (typeof chunk.delta.content === 'string') {
-          content += chunk.delta.content;
-        }
-      }
-
-      if (chunk.delta.toolCalls) {
-        for (const tc of chunk.delta.toolCalls) {
-          const existing = toolCalls.find((t) => t.id === tc.id);
-          if (existing) {
-            existing.function.arguments += tc.function.arguments;
-          } else {
-            toolCalls.push({ ...tc });
-          }
-        }
-      }
-
-      if (chunk.finishReason) {
-        finishReason = chunk.finishReason;
-      }
-    }
-
-    return {
-      id,
-      model: modelName,
-      message: {
-        role: 'assistant',
-        content,
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      },
-      finishReason,
-      usage: {
-        promptTokens: 0,
-        completionTokens: 0,
-        totalTokens: 0,
-      },
-    };
-  }
-
-  // ==========================================================================
   // API Key Validation
   // ==========================================================================
 

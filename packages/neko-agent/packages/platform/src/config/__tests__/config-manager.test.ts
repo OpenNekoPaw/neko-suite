@@ -2,7 +2,7 @@
  * ConfigManager Unit Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ConfigManager } from '../config-manager';
 import { loadBuiltinPresets } from '../builtin-presets';
 import type { IUserConfigManager, UserConfig } from '../user-config';
@@ -232,57 +232,6 @@ describe('ConfigManager', () => {
     });
   });
 
-  describe('ConfigManager change listeners', () => {
-    let manager: ConfigManager;
-
-    beforeEach(() => {
-      manager = new ConfigManager({ userConfigManager: createMockUserConfigManager() });
-    });
-
-    it('should notify listeners on provider change', async () => {
-      const listener = vi.fn();
-      manager.onChange(listener);
-
-      await manager.setProviderApiKey('openai', 'new-key');
-
-      expect(listener).toHaveBeenCalledWith({
-        type: 'provider',
-        ids: ['openai'],
-      });
-    });
-
-    it('should notify listeners on model change', async () => {
-      const listener = vi.fn();
-      manager.onChange(listener);
-
-      const model: Model = {
-        id: 'test-model',
-        name: 'test-model',
-        displayName: 'Test',
-        providerId: 'openai',
-        capabilities: ['chat'],
-        contextWindow: 4000,
-        enabled: true,
-      };
-      await manager.setModel(model);
-
-      expect(listener).toHaveBeenCalledWith({
-        type: 'model',
-        ids: ['test-model'],
-      });
-    });
-
-    it('should unsubscribe listener', async () => {
-      const listener = vi.fn();
-      const unsubscribe = manager.onChange(listener);
-
-      unsubscribe();
-      await manager.setProviderApiKey('openai', 'new-key');
-
-      expect(listener).not.toHaveBeenCalled();
-    });
-  });
-
   describe('ConfigManager helper methods', () => {
     let manager: ConfigManager;
 
@@ -346,13 +295,10 @@ describe('ConfigManager', () => {
   describe('ConfigManager disposal', () => {
     it('should dispose resources', () => {
       const manager = new ConfigManager();
-      const listener = vi.fn();
-      manager.onChange(listener);
 
       manager.dispose();
 
-      // After dispose, listeners should be cleared
-      // Internal state should be cleaned up
+      // After dispose, internal state should be cleaned up
       expect(manager.getConfig()).toBeDefined(); // Should still work but create new cache
     });
   });
