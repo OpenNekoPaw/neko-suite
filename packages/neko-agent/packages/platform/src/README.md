@@ -285,8 +285,8 @@ src/
 ```
 内置预设 (presets/en.ts)
     ↓ loadBuiltinPresets()
-用户配置 (VSCode globalState / ~/.neko/config.json)
-    ↓ UserConfigManager / FileUserConfigManager
+用户配置 (~/.neko/config.json)
+    ↓ FileUserConfigManager
 工作区配置 (.neko/config.json)
     ↓ WorkspaceConfigManager
 ConfigManager (三层合并)
