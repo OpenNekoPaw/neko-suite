@@ -2,61 +2,36 @@
 
 三层配置管理模块，支持内置预设、用户配置和工作区配置。
 
-## 架构图
+## 架构
 
-```mermaid
-graph TB
-    subgraph "配置源"
-        Builtin[BuiltinPresets<br/>内置预设 en/zh-cn]
-        User[UserConfigManager<br/>用户配置 globalState]
-        Workspace[WorkspaceConfig<br/>工作区 .neko/config.json]
-    end
-
-    subgraph "配置分区"
-        Provider[ProviderSection<br/>提供商配置]
-        Group[GroupSection<br/>模型组配置]
-        MCP[MCPSection<br/>MCP 服务器配置]
-        Media[MediaSection<br/>媒体生成配置]
-    end
-
-    subgraph "配置管理"
-        Manager[ConfigManager<br/>三层合并]
-    end
-
-    Builtin --> Manager
-    User --> Manager
-    Workspace --> Manager
-
-    Manager --> Provider
-    Manager --> Group
-    Manager --> MCP
-    Manager --> Media
+```
+内置预设 (presets/*.json)
+    ↓ 覆盖
+用户配置 (~/.neko/config.json)   ← FileUserConfigManager
+    ↓ 覆盖（仅 MCP/Workflow/Prompt/taskDefaults）
+工作区配置 (.neko/config.json)   ← WorkspaceConfig
+    ↓
+ConfigManager（三层合并，含 ConfigSection 分区）
 ```
 
-## 职责
-
-管理平台配置的加载、合并和热更新，实现配置优先级：工作区 > 用户 > 内置。
+**提供商/模型**仅支持用户级配置（不支持工作区覆盖），工作区配置仅覆盖 MCP、Workflow、Prompt 和 `taskDefaults`。
 
 ## 结构
 
 ```
 config/
 ├── index.ts                  # 模块导出
-├── config-manager.ts         # 配置管理器（分区架构）
+├── config-manager.ts         # 配置管理器（三层合并）
 ├── base-config-section.ts    # 配置分区基类
-├── config-section-impls.ts   # 配置分区实现
+├── config-section-impls.ts   # 5 个分区实现
+├── chat-model-service.ts     # ChatModelOption 生成
+├── config-export-service.ts  # 导入/导出服务
 ├── builtin-presets.ts        # 内置预设加载
-├── user-config.ts            # 用户配置管理
-├── workspace-config.ts       # 工作区配置管理
+├── user-config.ts            # 用户配置（FileUserConfigManager）
+├── workspace-config.ts       # 工作区配置
 └── presets/                  # 预设配置文件
     ├── en/                   # 英文预设
-    │   ├── providers.json
-    │   ├── groups.json
-    │   └── ...
     └── zh-cn/                # 中文预设
-        ├── providers.json
-        ├── groups.json
-        └── ...
 ```
 
 ## 核心接口
@@ -65,43 +40,59 @@ config/
 
 ```typescript
 class ConfigManager {
-  // 获取配置分区
-  getSection<T extends ConfigSection>(name: string): T;
+  constructor(options: ConfigManagerOptions);
 
-  // 提供商配置
-  readonly providers: ProviderSection;
-  readonly groups: GroupSection;
+  // 读取
+  getConfig(): MergedConfig;
+  getProvider(id: string): Provider | undefined;
+  getProviders(): Provider[];
+  getEnabledProviders(): Provider[];
+  getModels(): Model[];
+  getChatModelOptions(): ChatModelOption[];
+  getEnabledMCPServers(): MCPServerPreset[];
+  getTaskDefaults(): TaskDefaults | undefined;
 
-  // 扩展配置
-  readonly mcp: MCPSection;
-  readonly media: MediaSection;
+  // 写入（持久化到 ~/.neko/config.json）
+  setProviderApiKey(providerId: string, apiKey: string): Promise<void>;
+  setProvider(provider: Provider): Promise<void>;
+  setModel(model: Model): Promise<void>;
+  setMCPServer(server: MCPServerPreset): Promise<void>;
 
-  // 合并配置
-  getMergedConfig(): PlatformConfig;
+  // 变化监听
+  onChange(listener: ConfigChangeListener): () => void;
+  dispose(): void;
+}
 
-  // 热更新
-  reload(): Promise<void>;
-  onConfigChange(callback: ConfigChangeCallback): Disposable;
+interface ConfigManagerOptions {
+  userConfigManager?: IUserConfigManager;  // 默认为 null（只读内置）
+  workspacePath?: string;                  // .neko/config.json 所在目录
+  locale?: string;                         // 'en' | 'zh-cn'
 }
 ```
 
-### 配置分区接口
+### FileUserConfigManager
+
+唯一的用户配置后端，读写 `~/.neko/config.json`，与 CLI 共享：
 
 ```typescript
-interface ConfigSection<T> {
-  // 获取配置
-  get(id: string): T | undefined;
-  getAll(): T[];
-  has(id: string): boolean;
+const manager = new FileUserConfigManager();
+manager.onChange(config => { /* 文件变化时回调 */ });
+manager.dispose(); // 停止文件监听
+```
 
-  // 修改配置
-  set(id: string, config: T): void;
-  remove(id: string): boolean;
-  clear(): void;
+### WorkspaceConfig
 
-  // 持久化
-  save(): Promise<void>;
-  load(): Promise<void>;
+工作区级别的配置覆盖（providers/models 字段已移除，仅保留以下字段）：
+
+```typescript
+interface WorkspaceConfig {
+  mcpServers?: MCPServerPreset[];
+  workflows?: WorkflowPreset[];
+  prompts?: PromptPreset[];
+  mcpServerOverrides?: Record<string, Partial<MCPServerPreset>>;
+  workflowOverrides?: Record<string, Partial<WorkflowPreset>>;
+  promptOverrides?: Record<string, Partial<PromptPreset>>;
+  taskDefaults?: TaskDefaults;
 }
 ```
 
@@ -109,86 +100,38 @@ interface ConfigSection<T> {
 
 | 导出 | 类型 | 用途 |
 |------|------|------|
-| `ConfigManager` | 类 | 统一配置管理 |
-| `BaseConfigSection` | 抽象类 | 配置分区基类 |
-| `ProviderSection` | 类 | 提供商配置分区 |
-| `GroupSection` | 类 | 模型组配置分区 |
+| `ConfigManager` | 类 | 三层配置管理 |
+| `FileUserConfigManager` | 类 | 用户配置（文件后端） |
+| `type IUserConfigManager` | 接口 | 用户配置管理器接口 |
+| `type UserConfig` | 类型 | 用户配置结构 |
 | `loadBuiltinPresets()` | 函数 | 加载内置预设 |
-| `UserConfigManager` | 类 | 用户配置管理 |
 | `loadWorkspaceConfig()` | 函数 | 加载工作区配置 |
-| `watchWorkspaceConfig()` | 函数 | 监听配置变化 |
+| `watchWorkspaceConfig()` | 函数 | 监听工作区配置变化 |
+| `type WorkspaceConfig` | 类型 | 工作区配置结构 |
+| `type ConfigExportData` | 类型 | 导出数据格式 |
 
 ## 依赖
 
 ```
-→ types/config    # 配置类型定义
-← index.ts        # 平台入口
-← provider/       # 提供商初始化
-← llm/            # LLM 配置
-← mcp/            # MCP 配置
-← media/          # 媒体配置
+→ types/config    # MCPServerPreset, WorkflowPreset, PromptPreset 等类型
+→ @neko/shared    # UnifiedConfig, TaskDefaults, config-reader
+← service/        # ModelSelector 读取 taskDefaults
+← index.ts        # 平台入口 createPlatform()
 ```
 
-## 配置优先级
+## 配置分区覆盖范围
 
-```
-工作区配置（.neko/config.json）
-    ↓ 覆盖
-用户配置（VSCode globalState）
-    ↓ 覆盖
-内置预设（presets/*.json）
-```
-
-> **注意**：工作区配置目录 `.neko/` 与 cli 共享，实现统一配置管理。
-
-## 使用示例
-
-### 获取配置
-
-```typescript
-import { ConfigManager } from '@neko/platform';
-
-const config = new ConfigManager({ locale: 'zh-cn' });
-
-// 获取提供商配置
-const provider = config.providers.get('anthropic');
-
-// 获取所有模型组
-const groups = config.groups.getAll();
-
-// 获取 MCP 服务器配置
-const mcpServers = config.mcp.getAll();
-```
-
-### 修改配置
-
-```typescript
-// 添加提供商
-config.providers.set('my-provider', {
-  id: 'my-provider',
-  name: 'My Provider',
-  type: 'openai-compatible',
-  apiUrl: 'https://api.example.com',
-  apiKey: 'sk-xxx',
-});
-
-// 保存到用户配置
-await config.providers.save();
-```
-
-### 监听变化
-
-```typescript
-const disposable = config.onConfigChange((section, changes) => {
-  console.log(`Config section ${section} changed:`, changes);
-});
-
-// 清理
-disposable.dispose();
-```
+| 分区 | 内置 | 用户级 | 工作区级 |
+|------|------|--------|----------|
+| providers | ✅ | ✅ | ❌ |
+| models | ✅ | ✅ | ❌ |
+| mcpServers | ✅ | ✅ | ✅ |
+| workflows | ✅ | ✅ | ✅ |
+| prompts | ✅ | ✅ | ✅ |
+| taskDefaults | ❌ | ✅ | ✅（优先） |
 
 ## 设计模式
 
-- **分区模式**：配置按功能分区管理
-- **三层覆盖**：支持多来源配置合并
-- **观察者模式**：配置变化通知
+- **分区模式**：BaseConfigSection 封装各类型 CRUD + 三层合并
+- **策略模式**：IUserConfigManager 接口，可替换实现（测试用 mock）
+- **观察者模式**：onChange 监听配置变化

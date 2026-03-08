@@ -7,7 +7,7 @@
 import type { Provider, Model } from '../types/provider';
 import type { MCPServerPreset, WorkflowPreset, PromptPreset } from '../types/config';
 import { BaseConfigSection, type ConfigSectionOptions } from './base-config-section';
-import type { UserConfigManager } from './user-config';
+import type { IUserConfigManager } from './user-config';
 
 // =============================================================================
 // Provider Section
@@ -216,7 +216,7 @@ export interface ConfigSections {
 }
 
 export interface CreateConfigSectionsOptions {
-  userConfigManager: UserConfigManager | null;
+  userConfigManager: IUserConfigManager | null;
   onInvalidate: () => void;
   onNotify: (type: string, ids: string[]) => void;
 }

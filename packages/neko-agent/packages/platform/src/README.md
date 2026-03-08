@@ -1,6 +1,6 @@
 # platform/src
 
-Neko Suite AI 服务平台源码根目录，提供多提供商 AI 服务、智能路由、Agent 执行等核心能力。
+Neko Suite AI 服务平台源码根目录，提供多提供商 AI 服务、模型自动选择、Agent 执行等核心能力。
 
 ## 架构图
 
@@ -13,9 +13,7 @@ graph TB
 
     subgraph "核心抽象层 core/"
         Registry[BaseRegistry<br/>通用注册表]
-        Strategy[SelectionStrategy<br/>7种选择策略]
         Router[BaseRoutingManager<br/>路由管理]
-        Health[HealthMonitor<br/>健康监控]
         Circuit[CircuitBreaker<br/>熔断器]
         RateLimit[RateLimiter<br/>速率限制]
     end
@@ -29,17 +27,16 @@ graph TB
 
     subgraph "LLM 层 llm/"
         Adapters[Adapters<br/>OpenAI/Anthropic/Google...]
-        LLMRouting[LLMRoutingManager<br/>6种路由策略]
     end
 
     subgraph "提供商层 provider/"
         ProviderReg[ProviderRegistry<br/>提供商注册]
-        GroupMgr[GroupManager<br/>模型分组]
         Retry[RetryExecutor<br/>重试执行]
     end
 
     subgraph "服务层 service/"
         Service[Service<br/>chat/chatStream]
+        ModelSel[ModelSelector<br/>三优先级选择]
         ToolReg[ToolRegistry<br/>工具注册]
         PromptMgr[PromptManager<br/>提示词管理]
     end
@@ -58,9 +55,8 @@ graph TB
     end
 
     subgraph "工具层 tools/"
-        Generation[generation/<br/>图片/视频/音频生成]
-        Analysis[analysis-tools.ts<br/>图片/视频分析]
-        Document[document-tools.ts<br/>脚本/字幕生成]
+        Generation[generation/<br/>图片/视频/TTS/音乐生成]
+        ProjectTools[project-tools.ts<br/>时间线操作]
     end
 
     subgraph "扩展层"
@@ -77,10 +73,9 @@ graph TB
 
     Platform --> ProviderReg
     ProviderReg --> Adapters
-    ProviderReg --> LLMRouting
-    ProviderReg --> GroupMgr
 
     Platform --> Service
+    Service --> ModelSel
     Service --> ToolReg
     Service --> PromptMgr
 
@@ -88,8 +83,7 @@ graph TB
     Executor --> Hooks
     Executor --> Memory
     Executor --> Generation
-    Executor --> Analysis
-    Executor --> Document
+    Executor --> ProjectTools
 
     Platform --> SkillService
     SkillService --> SkillRegistry
@@ -99,9 +93,7 @@ graph TB
     Executor --> MCP
     Executor --> Media
 
-    Registry --> Strategy
-    Strategy --> Router
-    Router --> Health
+    Registry --> Router
     Router --> Circuit
     Router --> RateLimit
 ```
@@ -114,18 +106,16 @@ src/
 │
 ├── core/                 # 核心抽象层
 │   ├── base-registry.ts      # 通用注册表基类
-│   ├── selection-strategy.ts # 7种选择策略
 │   ├── router.ts             # 路由管理基类
-│   ├── health-monitor.ts     # 健康状态监控
 │   ├── circuit-breaker.ts    # 熔断器
 │   ├── rate-limiter.ts       # 速率限制器
-│   └── concurrency-pool.ts   # 并发控制
+│   └── http-client.ts        # 共享 HTTP 客户端
 │
-├── types/                # 类型定义（18个类型文件）
-│   ├── agent.ts              # Agent 相关类型
+├── types/                # 类型定义
 │   ├── provider.ts           # Provider 类型
-│   ├── message.ts            # 消息格式
+│   ├── adapter.ts            # Adapter 类型
 │   ├── tool.ts               # 工具定义
+│   ├── service.ts            # 服务接口
 │   └── ...
 │
 ├── config/               # 三层配置管理
@@ -136,36 +126,31 @@ src/
 │   └── presets/              # 预设数据 (en/zh-cn)
 │
 ├── llm/                  # LLM 适配器层
-│   ├── adapter/              # 提供商适配器
-│   │   ├── base-adapter.ts       # 适配器基类
-│   │   ├── openai-adapter.ts     # OpenAI
-│   │   ├── anthropic-adapter.ts  # Claude
-│   │   ├── google-adapter.ts     # Gemini
-│   │   ├── azure-adapter.ts      # Azure OpenAI
-│   │   ├── ollama-adapter.ts     # Ollama
-│   │   └── generic-adapter.ts    # 通用适配器
-│   └── routing/              # LLM 路由策略
-│       ├── llm-routing-manager.ts
-│       └── strategies/       # 6种路由策略
+│   └── adapter/              # 提供商适配器
+│       ├── base-adapter.ts       # 适配器基类
+│       ├── openai-adapter.ts     # OpenAI
+│       ├── anthropic-adapter.ts  # Claude（支持 Extended Thinking）
+│       ├── google-adapter.ts     # Gemini
+│       ├── azure-adapter.ts      # Azure OpenAI
+│       ├── ollama-adapter.ts     # Ollama
+│       └── generic-adapter.ts    # 通用适配器
 │
 ├── provider/             # 提供商管理
-│   ├── provider-registry.ts  # 提供商注册表
-│   ├── group-manager.ts      # 模型分组管理
+│   ├── provider-registry.ts  # 提供商注册表（含熔断器/限流）
 │   ├── platform-error.ts     # 统一错误类型
 │   └── retry-executor.ts     # 重试执行器
 │
 ├── service/              # 统一服务接口
-│   ├── service.ts            # chat/chatStream
+│   ├── service.ts            # chat/chatStream/embed
+│   ├── model-selector.ts     # 三优先级模型选择器
 │   ├── tool-registry.ts      # 工具注册表
-│   └── prompt-manager.ts     # 提示词/链式执行
+│   └── prompt-manager.ts     # 提示词管理
 │
 ├── agent/                # ReAct 模式 Agent
 │   ├── agent-executor.ts     # Agent 执行器
 │   ├── hooks.ts              # 钩子系统
-│   ├── execution-monitor.ts  # 执行监控
 │   └── memory/               # 上下文管理
-│       ├── context.ts            # 上下文管理器
-│       └── compressors/          # 压缩策略
+│       └── context.ts
 │
 ├── skill/                # Skill 系统（Claude Code 兼容）
 │   ├── skill-service.ts      # 统一服务（发现+执行）
@@ -177,29 +162,17 @@ src/
 │   └── builtins/             # 内置技能
 │
 ├── tools/                # AI 工具
-│   ├── builtin-tools.ts      # 内置工具注册
-│   ├── generation/           # 生成类工具
-│   ├── analysis-tools.ts     # 分析工具
-│   └── document-tools.ts     # 文档工具
+│   ├── project-tools.ts      # 时间线/轨道操作
+│   ├── project-adapter.ts    # 项目上下文适配器
+│   └── generation/           # 媒体生成工具
+│       ├── image.ts              # 图片生成
+│       ├── video.ts              # 视频生成
+│       ├── tts.ts                # TTS 生成
+│       └── music.ts              # 音乐生成
 │
 ├── mcp/                  # MCP 协议集成
-│   ├── stdio-client.ts       # Stdio 传输
-│   ├── http-client.ts        # HTTP 传输
-│   ├── mcp-manager.ts        # MCP 管理器
-│   └── mcp-tool.ts           # MCP 工具包装
-│
 ├── media/                # 媒体生成服务
-│   ├── adapters/             # 媒体服务适配器
-│   │   ├── runway-adapter.ts     # Runway
-│   │   ├── luma-adapter.ts       # Luma
-│   │   ├── suno-adapter.ts       # Suno
-│   │   └── ...
-│   ├── routing/              # 媒体路由策略
-│   ├── media-task-executor.ts
-│   └── media-generation-service.ts
-│
 └── task/                 # 任务调度
-    └── task-manager.ts       # 任务管理器
 ```
 
 ## 模块依赖
@@ -211,13 +184,13 @@ src/
 │  入口层: index.ts (createPlatform)                           │
 ├──────────────────────────────────────────────────────────────┤
 │  配置层: config/ ────────────────────────→ 核心抽象层: core/ │
-│  (三层配置合并)                             (注册表/策略/路由) │
+│  (三层配置合并)                             (注册表/路由/熔断) │
 ├──────────────────────────────────────────────────────────────┤
 │  提供商层: provider/ ──→ LLM层: llm/ ──→ 服务层: service/    │
-│  (注册/分组/重试)        (适配器/路由)     (chat/tools/prompt) │
+│  (注册/重试/熔断)        (适配器)          (chat/模型选择)    │
 ├──────────────────────────────────────────────────────────────┤
 │  Agent层: agent/ ──────────────────────→ 工具层: tools/      │
-│  (ReAct执行/Hooks/Memory)                 (生成/分析/文档)    │
+│  (ReAct执行/Hooks/Memory)                 (项目操作/媒体生成) │
 ├──────────────────────────────────────────────────────────────┤
 │  Skill层: skill/                                             │
 │  (技能发现/注册/注入/工具限制)                                 │
@@ -241,13 +214,12 @@ src/
 
 | 导出 | 类型 | 用途 |
 |------|------|------|
-| `BaseRegistry` | 类 | 通用注册表基类 |
-| `SelectionStrategyFactory` | 工厂 | 创建选择策略 |
+| `BaseRegistry<T>` | 类 | 通用注册表基类 |
 | `BaseRoutingManager` | 类 | 路由管理基类 |
-| `HealthMonitor` | 类 | 健康状态监控 |
 | `CircuitBreaker` | 类 | 熔断器 |
 | `RateLimiter` | 类 | 速率限制器 |
-| `ConcurrencyPool` | 类 | 并发控制池 |
+| `ConcurrencyPool` | 类 | 并发控制池（re-export from @neko/shared） |
+| `HttpClient` | 类 | 共享 HTTP 客户端 |
 
 ### 配置层 (config/)
 
@@ -255,8 +227,8 @@ src/
 |------|------|------|
 | `ConfigManager` | 类 | 三层配置统一管理 |
 | `loadBuiltinPresets()` | 函数 | 加载内置预设 |
-| `UserConfigManager` | 类 | 用户配置管理 |
-| `loadWorkspaceConfig()` | 函数 | 加载工作区配置 |
+| `UserConfigManager` | 类 | 用户配置管理（VSCode globalState） |
+| `FileUserConfigManager` | 类 | 用户配置管理（文件） |
 
 ### LLM 层 (llm/)
 
@@ -265,17 +237,17 @@ src/
 | `BaseAdapter` | 抽象类 | LLM 适配器基类 |
 | `OpenAIAdapter` | 类 | OpenAI 适配器 |
 | `AnthropicAdapter` | 类 | Claude 适配器（支持 Extended Thinking） |
-| `LLMRoutingManager` | 类 | LLM 智能路由 |
 | `AdapterRegistry` | 类 | 适配器注册表 |
+| `createStreamCollector()` | 函数 | 创建流聚合器 |
 
 ### 服务层 (service/)
 
 | 导出 | 类型 | 用途 |
 |------|------|------|
-| `Service` | 类 | 统一服务接口 (chat/chatStream) |
+| `Service` | 类 | 统一服务接口 (chat/chatStream/embed) |
+| `ModelSelector` | 类 | 三优先级模型选择器 |
 | `ToolRegistry` | 类 | 工具注册表 |
 | `PromptManager` | 类 | 提示词管理 |
-| `ChainPromptExecutor` | 类 | 链式提示词执行 |
 
 ### Agent 层 (agent/)
 
@@ -298,14 +270,13 @@ src/
 | `SkillInjector` | 类 | 提示注入器 |
 | `KeywordSkillMatcher` | 类 | 关键词匹配器 |
 | `ToolGuard` | 类 | 工具限制运行时 |
-| `createToolGuard()` | 函数 | 创建工具守卫 |
 
 ### 扩展层
 
 | 模块 | 主要导出 | 用途 |
 |------|----------|------|
 | `mcp/` | `MCPManager`, `MCPTool` | MCP 协议集成 |
-| `media/` | `MediaGenerationService`, `MediaRoutingManager` | 媒体生成 |
+| `media/` | `MediaGenerationService` | 媒体生成 |
 | `task/` | `TaskManager` | 任务调度 |
 
 ## 数据流
@@ -315,12 +286,12 @@ src/
 ```
 内置预设 (presets/en.ts)
     ↓ loadBuiltinPresets()
-用户配置 (VSCode globalState)
-    ↓ UserConfigManager
+用户配置 (VSCode globalState / ~/.neko/config.json)
+    ↓ UserConfigManager / FileUserConfigManager
 工作区配置 (.neko/config.json)
-    ↓ loadWorkspaceConfig()
+    ↓ WorkspaceConfigManager
 ConfigManager (三层合并)
-    ↓ getMergedConfig()
+    ↓ getConfig()
 最终配置
 ```
 
@@ -331,13 +302,16 @@ ConfigManager (三层合并)
     ↓
 Service.chat() / chatStream()
     ↓
-LLMRoutingManager.route()
-    ↓ 选择最优 Provider
-ProviderRegistry.get()
+ModelSelector.resolve()
+  Priority 1: options.modelId
+  Priority 2: config.getTaskDefaults()?.chat?.modelId
+  Priority 3: 第一个有 apiKey 且能力匹配的模型
+    ↓ 找到 modelId + providerId
+ProviderRegistry.executeWithProtection()  (熔断器 + 限流)
     ↓
 Adapter.chat() / chatStream()
     ↓ 调用 AI API
-返回响应
+返回响应；失败则自动 fallback 到下一个模型
 ```
 
 ### 3. Agent 执行流程
@@ -362,69 +336,7 @@ AgentExecutor.executeStream(input)
 |------|----------|------|
 | **工厂模式** | `createPlatform()` | 统一创建平台实例 |
 | **适配器模式** | `llm/adapter/` | 统一不同 AI 提供商接口 |
-| **策略模式** | `core/selection-strategy.ts` | 可插拔的选择策略 |
 | **注册表模式** | `BaseRegistry` | 动态注册和查找组件 |
 | **钩子模式** | `agent/hooks.ts` | AOP 扩展执行流程 |
-| **责任链模式** | `LLMRoutingManager` | 多策略链式路由 |
 | **熔断器模式** | `CircuitBreaker` | 故障隔离和恢复 |
-
-## 扩展点
-
-### 1. 添加新的 LLM 提供商
-
-```typescript
-// 1. 创建适配器
-class MyProviderAdapter extends BaseAdapter {
-  async chat(messages, options) { /* ... */ }
-  async *chatStream(messages, options) { /* ... */ }
-}
-
-// 2. 注册到 AdapterRegistry
-const registry = getAdapterRegistry();
-registry.register('my-provider', new MyProviderAdapter());
-```
-
-### 2. 添加自定义工具
-
-```typescript
-// 1. 定义工具
-const myTool: Tool = {
-  name: 'my_tool',
-  description: 'My custom tool',
-  parameters: { /* JSON Schema */ },
-  execute: async (args) => { /* ... */ },
-};
-
-// 2. 注册到 ToolRegistry
-platform.tools.register(myTool);
-```
-
-### 3. 添加 Agent 钩子
-
-```typescript
-// 1. 实现 ExecutorHooks 接口
-const myHooks: ExecutorHooks = {
-  onToolCall: async (info) => { /* 工具调用前 */ },
-  onToolResult: async (result) => { /* 工具调用后 */ },
-  onIteration: async (step) => { /* 每次迭代 */ },
-};
-
-// 2. 创建 Agent 时传入
-const agent = platform.createAgent(config, [myHooks]);
-```
-
-### 4. 添加路由策略
-
-```typescript
-// 1. 实现 LLMRoutingStrategy 接口
-class MyRoutingStrategy implements LLMRoutingStrategy {
-  name = 'my-strategy';
-  async score(candidates, context) {
-    // 为每个候选者打分
-    return candidates.map(c => ({ ...c, score: /* ... */ }));
-  }
-}
-
-// 2. 注册到 LLMRoutingManager
-llmRouter.addStrategy(new MyRoutingStrategy());
-```
+| **策略模式** | `ModelSelector` | 三优先级模型选择 |

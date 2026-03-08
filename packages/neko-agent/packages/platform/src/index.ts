@@ -67,9 +67,9 @@ export {
 } from './config/builtin-presets';
 
 export {
-  UserConfigManager,
+  FileUserConfigManager,
   type UserConfig,
-  type UserConfigStorage,
+  type IUserConfigManager,
 } from './config/user-config';
 
 export {
@@ -276,7 +276,7 @@ export {
 // Factory Functions
 // =============================================================================
 
-import { UserConfigManager, type UserConfigStorage } from './config/user-config';
+import { type IUserConfigManager } from './config/user-config';
 import { ConfigManager, type ConfigManagerOptions } from './config/config-manager';
 import { ProviderRegistry } from './provider/provider-registry';
 import { Service } from './service/service';
@@ -291,8 +291,8 @@ import { createMediaPlatform } from './media';
  * Platform initialization options
  */
 export interface PlatformOptions {
-  /** User config storage (VS Code globalState) */
-  userConfigStorage?: UserConfigStorage;
+  /** User config manager (file-based) */
+  userConfigManager?: IUserConfigManager;
   /** Workspace path for .neko/config.json */
   workspacePath?: string;
   /** Locale for i18n (e.g., 'en', 'zh-cn') */
@@ -345,7 +345,7 @@ export interface Platform {
 export function createPlatform(options: PlatformOptions): Platform {
   // Initialize configuration manager with locale support
   const configOptions: ConfigManagerOptions = {
-    userConfigStorage: options.userConfigStorage,
+    userConfigManager: options.userConfigManager,
     workspacePath: options.workspacePath,
     locale: options.locale,
   };

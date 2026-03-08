@@ -9,7 +9,7 @@
 
 import * as vscode from 'vscode';
 import type { Platform, ConfigManager, ConfigExportData, ConfigImportResult } from '@neko/platform';
-import { VSCodeConfigStorage, createConfigWatcher } from './vscodeConfigStorage';
+import { createConfigWatcher } from './vscodeConfigStorage';
 
 /**
  * Merged model config (simplified view for UI)

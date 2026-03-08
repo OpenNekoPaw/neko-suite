@@ -1,34 +1,10 @@
 /**
- * VS Code Configuration Storage Adapter
+ * VS Code Configuration Utilities
  *
- * Implements UserConfigStorage interface for VS Code environment.
- * Uses VS Code globalState for persistent storage.
+ * Utilities for VS Code configuration integration and legacy migration.
  */
 
 import * as vscode from 'vscode';
-import type { UserConfigStorage } from '@neko/platform';
-
-/**
- * VS Code configuration storage implementation
- * Adapts VS Code's globalState to the platform's UserConfigStorage interface
- */
-export class VSCodeConfigStorage implements UserConfigStorage {
-  constructor(private readonly context: vscode.ExtensionContext) {}
-
-  /**
-   * Get a value from globalState
-   */
-  get<T>(key: string): T | undefined {
-    return this.context.globalState.get<T>(key);
-  }
-
-  /**
-   * Update a value in globalState
-   */
-  async update(key: string, value: unknown): Promise<void> {
-    await this.context.globalState.update(key, value);
-  }
-}
 
 /**
  * Create configuration change watcher

@@ -6,7 +6,7 @@
  */
 
 import * as vscode from 'vscode';
-import { Platform, createPlatform } from '@neko/platform';
+import { Platform, createPlatform, FileUserConfigManager } from '@neko/platform';
 import { MCPManager, TaskManager, ToolRegistry } from '@neko/agent';
 import { ServiceCollection, createServiceId, getLogger } from '../base';
 
@@ -151,12 +151,16 @@ export async function bootstrapCoreServices(
   services.set(IToolRegistry, toolRegistry);
 
   // ==========================================================================
-  // 3. Create Platform (with injected toolRegistry)
+  // 3. Create Platform (with injected toolRegistry and file-based user config)
   // ==========================================================================
+  const userConfigManager = new FileUserConfigManager();
+  context.subscriptions.push({ dispose: () => userConfigManager.dispose() });
+
   const platform = createPlatform({
     workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     taskManager,
     toolRegistry,
+    userConfigManager,
   });
   services.set(IPlatform, platform);
 

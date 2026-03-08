@@ -16,10 +16,8 @@ export {
   type BuiltinPresets,
 } from './builtin-presets';
 export {
-  UserConfigManager,
   FileUserConfigManager,
   type UserConfig,
-  type UserConfigStorage,
   type IUserConfigManager,
   getUserConfigPath,
 } from './user-config';

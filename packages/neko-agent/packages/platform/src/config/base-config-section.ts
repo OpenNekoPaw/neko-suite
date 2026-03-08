@@ -5,7 +5,7 @@
  * reducing code duplication in ConfigManager.
  */
 
-import type { UserConfigManager } from './user-config';
+import type { IUserConfigManager } from './user-config';
 
 /**
  * Base interface for all config items
@@ -33,7 +33,7 @@ export interface ConfigSectionOptions<T extends ConfigItem> {
   /** Section name for event notifications */
   name: string;
   /** User config manager (optional - if not provided, write operations will fail) */
-  userConfigManager?: UserConfigManager | null;
+  userConfigManager?: IUserConfigManager | null;
   /** Callbacks for config change notifications */
   onInvalidate?: () => void;
   onNotify?: (ids: string[]) => void;
@@ -55,7 +55,7 @@ export interface ConfigSectionOptions<T extends ConfigItem> {
 export abstract class BaseConfigSection<T extends ConfigItem> {
   protected items: Map<string, T> = new Map();
   protected readonly name: string;
-  protected readonly userConfigManager: UserConfigManager | null;
+  protected readonly userConfigManager: IUserConfigManager | null;
   protected readonly onInvalidate?: () => void;
   protected readonly onNotify?: (ids: string[]) => void;
   protected readonly builtinProtectedFields: Set<keyof T>;
@@ -103,14 +103,14 @@ export abstract class BaseConfigSection<T extends ConfigItem> {
   }
 
   // ==========================================================================
-  // Write Operations (require UserConfigManager)
+  // Write Operations (require IUserConfigManager)
   // ==========================================================================
 
   /**
    * Add or update item in user config
    */
   async set(item: T): Promise<void> {
-    this.ensureUserConfigManager();
+    this.ensureIUserConfigManager();
     await this.doSet(item);
     this.invalidateAndNotify([item.id]);
   }
@@ -119,7 +119,7 @@ export abstract class BaseConfigSection<T extends ConfigItem> {
    * Remove item from user config
    */
   async remove(id: string): Promise<void> {
-    this.ensureUserConfigManager();
+    this.ensureIUserConfigManager();
     await this.doRemove(id);
     this.invalidateAndNotify([id]);
   }
@@ -128,7 +128,7 @@ export abstract class BaseConfigSection<T extends ConfigItem> {
    * Update override for an existing item
    */
   async updateOverride(id: string, override: Partial<T>): Promise<void> {
-    this.ensureUserConfigManager();
+    this.ensureIUserConfigManager();
     await this.doUpdateOverride(id, override);
     this.invalidateAndNotify([id]);
   }
@@ -137,7 +137,7 @@ export abstract class BaseConfigSection<T extends ConfigItem> {
    * Remove override for an item
    */
   async removeOverride(id: string): Promise<void> {
-    this.ensureUserConfigManager();
+    this.ensureIUserConfigManager();
     await this.doRemoveOverride(id);
     this.invalidateAndNotify([id]);
   }
@@ -265,7 +265,7 @@ export abstract class BaseConfigSection<T extends ConfigItem> {
   // Helper Methods
   // ==========================================================================
 
-  protected ensureUserConfigManager(): asserts this is { userConfigManager: UserConfigManager } {
+  protected ensureIUserConfigManager(): asserts this is { userConfigManager: IUserConfigManager } {
     if (!this.userConfigManager) {
       throw new Error('User config storage not available');
     }

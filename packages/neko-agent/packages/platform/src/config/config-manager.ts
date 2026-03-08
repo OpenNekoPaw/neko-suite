@@ -10,7 +10,7 @@ import type { RetryTimeoutPreset, BuiltinPresetName } from '../types/error';
 import type { MCPServerPreset, WorkflowPreset, PromptPreset } from '../types/config';
 import type { ChatModelOption, TaskDefaults } from '@neko/shared';
 import { loadBuiltinPresets, setLocale, type BuiltinPresets } from './builtin-presets';
-import { UserConfigManager, type UserConfig, type UserConfigStorage } from './user-config';
+import { type UserConfig, type IUserConfigManager } from './user-config';
 import { loadWorkspaceConfig, watchWorkspaceConfig, type WorkspaceConfig } from './workspace-config';
 import {
   createConfigSections,
@@ -56,7 +56,7 @@ export type ConfigChangeListener = (event: ConfigChangeEvent) => void;
  * Configuration manager options
  */
 export interface ConfigManagerOptions {
-  userConfigStorage?: UserConfigStorage;
+  userConfigManager?: IUserConfigManager;
   workspacePath?: string;
   locale?: string;
 }
@@ -66,12 +66,12 @@ export interface ConfigManagerOptions {
  *
  * Priority (highest to lowest):
  * 1. Workspace config (.neko/config.json)
- * 2. User config (VS Code globalState)
+ * 2. User config (~/.neko/config.json)
  * 3. Builtin presets
  */
 export class ConfigManager {
   private builtinPresets: BuiltinPresets;
-  private userConfigManager: UserConfigManager | null = null;
+  private userConfigManager: IUserConfigManager | null = null;
   private workspaceConfig: WorkspaceConfig | null = null;
   private workspacePath: string | null = null;
   private stopWatching: (() => void) | null = null;
@@ -93,9 +93,7 @@ export class ConfigManager {
 
     this.builtinPresets = loadBuiltinPresets();
 
-    if (options.userConfigStorage) {
-      this.userConfigManager = new UserConfigManager(options.userConfigStorage);
-    }
+    this.userConfigManager = options.userConfigManager ?? null;
 
     if (options.workspacePath) {
       this.workspacePath = options.workspacePath;
@@ -149,6 +147,7 @@ export class ConfigManager {
       mcpServerOverrides: {},
       workflowOverrides: {},
       promptOverrides: {},
+      taskDefaults: undefined,
     };
   }
 
@@ -457,19 +456,15 @@ export class ConfigManager {
     const userConfig = this.userConfigManager?.load();
     const workspace = this.workspaceConfig;
 
-    // Merge each section
+    // Merge each section (providers/models: user config only, no workspace override)
     this.sections.providers.merge(this.builtinPresets.providers, this.createMergeContext(
       userConfig?.providers ?? [],
-      userConfig?.providerOverrides ?? {},
-      workspace?.providers,
-      workspace?.providerOverrides
+      userConfig?.providerOverrides ?? {}
     ));
 
     this.sections.models.merge(this.builtinPresets.models, this.createMergeContext(
       userConfig?.models ?? [],
-      userConfig?.modelOverrides ?? {},
-      workspace?.models,
-      workspace?.modelOverrides
+      userConfig?.modelOverrides ?? {}
     ));
 
     this.sections.mcpServers.merge(this.builtinPresets.mcpServers, this.createMergeContext(

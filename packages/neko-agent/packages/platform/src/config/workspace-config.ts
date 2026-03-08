@@ -6,7 +6,6 @@
  * Uses shared configuration module from @neko/shared.
  */
 
-import type { Provider, Model } from '../types/provider';
 import type { MCPServerPreset, WorkflowPreset, PromptPreset, TemplatePreset } from '../types/config';
 import type { UnifiedConfig } from '@neko/shared';
 // Node.js config reader - direct import
@@ -20,13 +19,10 @@ import {
 /**
  * Workspace configuration structure
  *
- * This interface extends the unified config format with platform-specific types.
+ * Workspace config supports per-project overrides for MCP, workflows, prompts,
+ * and task defaults. Provider/model configuration is user-level only.
  */
 export interface WorkspaceConfig {
-  /** Workspace-specific providers */
-  providers?: Provider[];
-  /** Workspace-specific models */
-  models?: Model[];
   /** Workspace-specific MCP servers */
   mcpServers?: MCPServerPreset[];
   /** Workspace-specific workflows */
@@ -35,10 +31,6 @@ export interface WorkspaceConfig {
   prompts?: PromptPreset[];
   /** Workspace-specific templates */
   templates?: TemplatePreset[];
-  /** Provider overrides */
-  providerOverrides?: Record<string, Partial<Provider>>;
-  /** Model overrides */
-  modelOverrides?: Record<string, Partial<Model>>;
   /** MCP server overrides */
   mcpServerOverrides?: Record<string, Partial<MCPServerPreset>>;
   /** Workflow overrides */
@@ -54,21 +46,17 @@ export interface WorkspaceConfig {
 /**
  * Convert unified config to workspace config
  *
- * The unified config format is compatible with workspace config,
- * but we need to ensure proper type casting.
+ * Provider/model fields from the unified file are intentionally ignored —
+ * those belong to user-level config (~/.neko/config.json).
  */
 function unifiedToWorkspaceConfig(unified: UnifiedConfig | null): WorkspaceConfig | null {
   if (!unified) return null;
 
   return {
-    providers: unified.providers as Provider[] | undefined,
-    models: unified.models as Model[] | undefined,
     mcpServers: unified.mcpServers as MCPServerPreset[] | undefined,
     workflows: unified.workflows as WorkflowPreset[] | undefined,
     prompts: unified.prompts as PromptPreset[] | undefined,
     templates: unified.templates as TemplatePreset[] | undefined,
-    providerOverrides: unified.providerOverrides as Record<string, Partial<Provider>> | undefined,
-    modelOverrides: unified.modelOverrides as Record<string, Partial<Model>> | undefined,
     mcpServerOverrides: unified.mcpServerOverrides as Record<string, Partial<MCPServerPreset>> | undefined,
     workflowOverrides: unified.workflowOverrides as Record<string, Partial<WorkflowPreset>> | undefined,
     promptOverrides: unified.promptOverrides as Record<string, Partial<PromptPreset>> | undefined,
@@ -82,14 +70,10 @@ function unifiedToWorkspaceConfig(unified: UnifiedConfig | null): WorkspaceConfi
  */
 function workspaceToUnifiedConfig(workspace: WorkspaceConfig): UnifiedConfig {
   return {
-    providers: workspace.providers,
-    models: workspace.models,
     mcpServers: workspace.mcpServers,
     workflows: workspace.workflows,
     prompts: workspace.prompts,
     templates: workspace.templates,
-    providerOverrides: workspace.providerOverrides,
-    modelOverrides: workspace.modelOverrides,
     mcpServerOverrides: workspace.mcpServerOverrides,
     workflowOverrides: workspace.workflowOverrides,
     promptOverrides: workspace.promptOverrides,
