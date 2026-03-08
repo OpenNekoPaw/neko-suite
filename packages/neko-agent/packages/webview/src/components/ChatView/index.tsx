@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Message, ShellExecutionMode, PromptMode, AgentState } from '@/components/types';
-import type { ChatModelOption } from '@neko/shared';
+import { Message, AgentState } from '@/components/types';
 import { MessageList } from '@/components/ChatView/MessageList';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { InputArea, ProjectFile, AttachedFile } from '@/components/ChatView/InputArea';
@@ -14,7 +13,6 @@ import {
   type ActiveSkillIndicator,
 } from '@/components/ChatView/SkillConfirmBanner';
 import { AgentStateIndicatorCompact } from '@/components/ChatView/AgentStateIndicator';
-import type { SlashCommand, SkillSummary } from '@/components/ChatView/InputArea/types';
 import type { QueuedMessage } from '@/hooks/useMessageQueue';
 
 interface ChatViewProps {
@@ -22,13 +20,7 @@ interface ChatViewProps {
   inputValue: string;
   isThinking: boolean;
   streamingMessageId: string | null;
-  selectedModel: string;
-  availableModels: ChatModelOption[];
   projectFiles?: ProjectFile[];
-  executionMode: ShellExecutionMode;
-  promptMode: PromptMode;
-  /** Skills loaded from Extension Host */
-  skills?: SkillSummary[];
   /** Pending skill confirmation request */
   pendingSkillConfirm?: SkillConfirmRequest | null;
   /** Active skill indicator */
@@ -37,29 +29,23 @@ interface ChatViewProps {
   onConfirmSkill?: () => void;
   onDeclineSkill?: () => void;
   onClearActiveSkill?: () => void;
-  // 后台任务相关
+  // Background tasks
   backgroundTasks?: BackgroundTask[];
   onCancelTask?: (taskId: string) => void;
   onViewTaskResult?: (taskId: string) => void;
-  // P1: Code diff actions
+  // Code diff actions
   onAcceptDiff?: (filePath: string) => void;
   onRejectDiff?: (filePath: string) => void;
-  // P1: Plan review actions
+  // Plan review actions
   onApprovePlanStep?: (planId: string, stepId: string) => void;
   onRejectPlanStep?: (planId: string, stepId: string) => void;
   onModifyPlanStep?: (planId: string, stepId: string, newDescription: string) => void;
   onApproveAllPlanSteps?: (planId: string) => void;
   onRejectAllPlanSteps?: (planId: string) => void;
-  // 其他回调
+  // Input callbacks
   onInputChange: (value: string) => void;
   onSend: (attachments?: AttachedFile[]) => void;
-  // P2: Cancel current message generation
   onCancel?: () => void;
-  onModelSelect: (modelId: string) => void;
-  onSlashCommand?: (command: SlashCommand) => void;
-  onRequestFiles?: (filter: string) => void;
-  onExecutionModeChange: (mode: ShellExecutionMode) => void;
-  onPromptModeChange: (mode: PromptMode) => void;
   /** Queued messages for preview */
   queuedMessages?: QueuedMessage[];
   /** Remove a queued message */
@@ -70,12 +56,6 @@ interface ChatViewProps {
   attachedFiles?: AttachedFile[];
   /** Callback to update attached files */
   onAttachedFilesChange?: (files: AttachedFile[]) => void;
-  /** Current context token count */
-  contextTokenCount?: number;
-  /** Whether context compression is in progress */
-  isCompressing?: boolean;
-  /** Callback to trigger context compression */
-  onCompressContext?: () => Promise<void>;
   /** Current agent execution state (null when idle) */
   agentState?: AgentState | null;
 }
@@ -85,12 +65,7 @@ export function ChatView({
   inputValue,
   isThinking,
   streamingMessageId,
-  selectedModel,
-  availableModels,
   projectFiles,
-  executionMode,
-  promptMode,
-  skills,
   pendingSkillConfirm,
   activeSkill,
   onConfirmSkill,
@@ -109,19 +84,11 @@ export function ChatView({
   onInputChange,
   onSend,
   onCancel,
-  onModelSelect,
-  onSlashCommand,
-  onRequestFiles,
-  onExecutionModeChange,
-  onPromptModeChange,
   queuedMessages,
   onRemoveQueuedMessage,
   onClearQueue,
   attachedFiles,
   onAttachedFilesChange,
-  contextTokenCount,
-  isCompressing,
-  onCompressContext,
   agentState,
 }: ChatViewProps) {
   const isEmpty = messages.length === 0 && !isThinking;
@@ -197,31 +164,17 @@ export function ChatView({
         <InputArea
           inputValue={inputValue}
           isThinking={isThinking}
-          messageCount={messages.length}
-          selectedModel={selectedModel}
-          availableModels={availableModels}
           projectFiles={projectFiles}
-          executionMode={executionMode}
-          promptMode={promptMode}
-          skills={skills}
           droppedFiles={droppedFiles}
           onDroppedFilesProcessed={handleDroppedFilesProcessed}
           onInputChange={onInputChange}
           onSend={onSend}
           onCancel={onCancel}
-          onModelSelect={onModelSelect}
-          onSlashCommand={onSlashCommand}
-          onRequestFiles={onRequestFiles}
-          onExecutionModeChange={onExecutionModeChange}
-          onPromptModeChange={onPromptModeChange}
           queuedMessages={queuedMessages}
           onRemoveQueuedMessage={onRemoveQueuedMessage}
           onClearQueue={onClearQueue}
           attachedFiles={attachedFiles}
           onAttachedFilesChange={onAttachedFilesChange}
-          contextTokenCount={contextTokenCount}
-          isCompressing={isCompressing}
-          onCompressContext={onCompressContext}
         />
       </div>
     </DropZone>

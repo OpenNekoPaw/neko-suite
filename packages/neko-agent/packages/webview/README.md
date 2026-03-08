@@ -14,7 +14,7 @@
 | 项目 | 说明 |
 |------|------|
 | 入口 | `src/main.tsx` → `AIAssistant` 主组件 |
-| 状态 | `hooks/` 分离式状态管理（conversation/config/ui/resource/session/tab/command）|
+| 状态 | `hooks/` 分离式状态管理（conversation/config/ui/resource/session/tab/command/chat-actions/plan/skill）|
 | 消息 | `handlers/` 注册表模式处理 Extension 消息（含 skill/SSO/context/message-updater） |
 | 视图 | ChatView / OnboardingFlow |
 | 依赖 | `@neko/shared` 类型定义 |
@@ -92,6 +92,8 @@ graph TB
 | `ContentBlockItem` | 单个 ContentBlock 渲染（thinking/text/tool_call/diff/plan）|
 | `ToolCallDisplay/` | 工具调用卡片（拆分为 5 个子模块：组件、图标、媒体提取、常量）|
 | `MessageActionsContext` | React Context 提供 task/diff/plan 回调，消除 prop drilling |
+| `InputAreaContext` | React Context 提供 model/mode/compression/skills 配置，消除 ChatView→InputArea 透传 |
+| `TaskCard/` | 任务卡片目录（TaskCard、TaskCardMini、BatchTaskCard、TaskSteps、task-utils） |
 | `MermaidBlock` | Mermaid 图表渲染，自定义高对比度主题，支持复制/导出/错误反馈 |
 | `InputArea` | 输入框，支持 @ 引用、斜杠命令、附件 |
 
@@ -108,6 +110,9 @@ const resource = useResourceState();   // backgroundTasks
 const session = useConversationSession(...);  // 会话级 input/attachment 隔离
 const tab = useTabManager(...);               // Tab 生命周期管理
 const command = useSlashCommands(...);        // 斜杠命令路由
+const chat = useChatActions(...);             // 消息发送/取消/复制
+const plan = usePlanActions(...);             // Plan 审批回调
+const skill = useSkillActions(...);           // Skill 确认回调
 ```
 
 ### 消息处理

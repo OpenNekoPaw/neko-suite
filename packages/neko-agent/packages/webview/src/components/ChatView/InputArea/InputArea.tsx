@@ -4,8 +4,6 @@
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { ShellExecutionMode, PromptMode } from '@/components/types';
-import type { ChatModelOption } from '@neko/shared';
 import { ModelSelector } from './ModelSelector';
 import { ModeSelector } from './ModeSelector';
 import { PromptModeToggle } from './PromptModeToggle';
@@ -13,33 +11,21 @@ import { AttachmentPreview } from './FileAttachment';
 import { SlashCommandMenu, getFilteredCommands } from './SlashCommandMenu';
 import { FileReferenceMenu, getFilteredFiles, parseFileReference } from './FileReferenceMenu';
 import { AttachedFile, ProjectFile, SlashCommand } from './types';
-import type { SkillSummary } from './types';
 import { UsageIndicator } from './UsageIndicator';
 import { useTranslation } from '@/i18n/I18nContext';
 import type { QueuedMessage } from '@/hooks/useMessageQueue';
 import { useInputHistory } from '@/hooks/useInputHistory';
+import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
 
 interface InputAreaProps {
   inputValue: string;
   isThinking: boolean;
-  messageCount: number;
-  selectedModel: string;
-  availableModels: ChatModelOption[];
   projectFiles?: ProjectFile[];
-  executionMode: ShellExecutionMode;
-  promptMode: PromptMode;
   droppedFiles?: AttachedFile[];
   onDroppedFilesProcessed?: () => void;
   onInputChange: (value: string) => void;
   onSend: (attachments?: AttachedFile[]) => void;
   onCancel?: () => void;
-  onModelSelect: (modelId: string) => void;
-  onSlashCommand?: (command: SlashCommand) => void;
-  /** Skills loaded from Extension Host */
-  skills?: SkillSummary[];
-  onRequestFiles?: (filter: string) => void;
-  onExecutionModeChange: (mode: ShellExecutionMode) => void;
-  onPromptModeChange: (mode: PromptMode) => void;
   /** Queued messages for preview */
   queuedMessages?: QueuedMessage[];
   /** Remove a queued message */
@@ -50,42 +36,31 @@ interface InputAreaProps {
   attachedFiles?: AttachedFile[];
   /** Callback to update attached files (when managed externally) */
   onAttachedFilesChange?: (files: AttachedFile[]) => void;
-  /** Current context token count (for usage indicator) */
-  contextTokenCount?: number;
-  /** Whether context compression is in progress */
-  isCompressing?: boolean;
-  /** Callback to trigger context compression */
-  onCompressContext?: () => Promise<void>;
 }
 
 export function InputArea({
   inputValue,
   isThinking,
-  selectedModel,
-  availableModels,
   projectFiles = [],
-  executionMode,
-  promptMode,
   droppedFiles,
   onDroppedFilesProcessed,
   onInputChange,
   onSend,
   onCancel,
-  onModelSelect,
-  onSlashCommand,
-  skills = [],
-  onRequestFiles,
-  onExecutionModeChange,
-  onPromptModeChange,
   queuedMessages = [],
   onRemoveQueuedMessage,
   onClearQueue,
   attachedFiles: externalAttachedFiles,
   onAttachedFilesChange,
-  contextTokenCount = 0,
-  isCompressing = false,
-  onCompressContext,
 }: InputAreaProps) {
+  // Global configuration from context (model, modes, compression, skills)
+  const {
+    selectedModel, availableModels, onModelSelect,
+    executionMode, onExecutionModeChange,
+    promptMode, onPromptModeChange,
+    contextTokenCount, isCompressing, onCompressContext,
+    skills, onSlashCommand, onRequestFiles,
+  } = useInputAreaContext();
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

@@ -9,7 +9,7 @@
 | `components/` | UI 渲染 | `AIAssistant`, `ChatView`, `AccountBar`, `OnboardingFlow` |
 | `handlers/` | 消息分发 | `createConfiguredRegistry`, `useMessageHandler`, `updateConversation`（含 skill/SSO/context） |
 | `utils/` | 工具函数 | `message-helpers`（deriveToolCalls, updateToolCallInBlocks）, `logger` |
-| `hooks/` | 状态管理 | `useConversationState`, `useConfigState`, `useConversationSession`, `useTabManager`, `useSlashCommands` |
+| `hooks/` | 状态管理 | `useConversationState`, `useConfigState`, `useConversationSession`, `useTabManager`, `useSlashCommands`, `useChatActions`, `usePlanActions`, `useSkillActions` |
 | `config/` | 预设数据 | `PROVIDER_PRESETS`, `PROMPT_PRESETS` |
 | `i18n/` | 多语言 | `useI18n`, `t()` |
 

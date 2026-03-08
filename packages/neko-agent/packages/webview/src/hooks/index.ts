@@ -55,3 +55,21 @@ export {
   type UseSlashCommandsProps,
   type UseSlashCommandsReturn,
 } from './useSlashCommands';
+
+export {
+  useChatActions,
+  type UseChatActionsProps,
+  type UseChatActionsReturn,
+} from './useChatActions';
+
+export {
+  usePlanActions,
+  type UsePlanActionsProps,
+  type UsePlanActionsReturn,
+} from './usePlanActions';
+
+export {
+  useSkillActions,
+  type UseSkillActionsProps,
+  type UseSkillActionsReturn,
+} from './useSkillActions';
