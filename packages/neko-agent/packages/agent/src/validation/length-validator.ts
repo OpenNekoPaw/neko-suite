@@ -4,7 +4,7 @@
  * Validates content length against constraints
  */
 
-import type { ValidationWarning, ValidationResult } from '../types';
+import type { ValidationWarning, ValidationResult } from './types';
 
 /**
  * Length validation options

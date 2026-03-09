@@ -694,45 +694,24 @@ export class AgentExecutor implements IAgentExecutor {
     // Hook: beforeAct
     await this.runHooks('beforeAct', toolCallInfos);
 
-    const results: ToolResultWithMeta[] = [];
+    // Execute all tool calls in parallel for better performance
+    const signal = this.abortController?.signal;
+    const settled = await Promise.allSettled(
+      toolCallInfos.map((info) => this.executeToolCall(info, signal))
+    );
 
-    for (const info of toolCallInfos) {
-      // Check abort signal before each tool execution
-      if (this.abortController?.signal.aborted) {
-        results.push({
-          success: false,
-          error: 'Execution aborted',
-          callId: info.id,
-          name: info.name,
-        });
-        break;
+    const results: ToolResultWithMeta[] = settled.map((s, i) => {
+      if (s.status === 'fulfilled') {
+        return s.value;
       }
-
-      // Create the execute function
-      const execute = () => this.toolRegistry.execute(info.name, info.arguments);
-
-      // Check if any hook wants to handle the tool call
-      let result: ToolResultWithMeta | null = null;
-
-      for (const hook of this.hooks) {
-        if (hook.onToolCall) {
-          result = await hook.onToolCall(info, execute);
-          if (result !== null) break; // Only break when hook actually handled it
-        }
-      }
-
-      // If no hook handled it, execute directly
-      if (!result) {
-        const toolResult = await execute();
-        result = {
-          ...toolResult,
-          callId: info.id,
-          name: info.name,
-        };
-      }
-
-      results.push(result);
-    }
+      const info = toolCallInfos[i]!;
+      return {
+        success: false,
+        error: (s.reason as Error).message ?? 'Unknown error',
+        callId: info.id,
+        name: info.name,
+      };
+    });
 
     // Hook: afterAct
     await this.runHooks('afterAct', results);
@@ -748,6 +727,33 @@ export class AgentExecutor implements IAgentExecutor {
       toolResults: results,
       timestamp: Date.now(),
     };
+  }
+
+  /**
+   * Execute a single tool call through the hook chain
+   */
+  private async executeToolCall(
+    info: ToolCallInfo,
+    signal?: AbortSignal
+  ): Promise<ToolResultWithMeta> {
+    // Check abort signal before execution
+    if (signal?.aborted) {
+      return { success: false, error: 'Execution aborted', callId: info.id, name: info.name };
+    }
+
+    const execute = () => this.toolRegistry.execute(info.name, info.arguments);
+
+    // Check if any hook wants to handle the tool call
+    for (const hook of this.hooks) {
+      if (hook.onToolCall) {
+        const result = await hook.onToolCall(info, execute);
+        if (result !== null) return result;
+      }
+    }
+
+    // No hook handled it, execute directly
+    const toolResult = await execute();
+    return { ...toolResult, callId: info.id, name: info.name };
   }
 
   /**

@@ -17,12 +17,12 @@ import type {
 import { DEFAULT_OUTPUT_CONSTRAINTS } from './types';
 
 // Import specialized components
-import { MermaidExtractor } from './extractors/mermaid-extractor';
-import { JsonExtractor } from './extractors/json-extractor';
-import { MermaidValidator } from './validators/mermaid-validator';
-import { JsonSchemaValidator } from './validators/json-schema-validator';
-import { LengthValidator } from './validators/length-validator';
-import { MermaidBlockChecker } from './checkers/mermaid-block-checker';
+import { MermaidExtractor } from './mermaid-validator';
+import { MermaidValidator } from './mermaid-validator';
+import { MermaidBlockChecker } from './mermaid-validator';
+import { JsonExtractor } from './json-validator';
+import { JsonSchemaValidator } from './json-validator';
+import { LengthValidator } from './length-validator';
 
 /**
  * OutputValidator - Orchestrates LLM output validation

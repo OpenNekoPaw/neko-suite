@@ -50,6 +50,13 @@ export type SpecializedAgentType =
  */
 export type ModelTier = 'fast' | 'balanced' | 'powerful';
 
+/**
+ * Resolves a ModelTier to a concrete model ID.
+ * Allows external configuration (e.g., from Platform ConfigManager)
+ * to override hardcoded defaults.
+ */
+export type ModelTierResolver = (tier: ModelTier) => string | undefined;
+
 // =============================================================================
 // Configuration
 // =============================================================================
@@ -228,6 +235,8 @@ export interface SubAgentManagerDeps {
   skillService?: ISkillService;
   /** ToolSkill registry (optional - for toolskill injection) */
   toolSkillRegistry?: IToolSkillRegistry;
+  /** Custom model tier resolver (overrides hardcoded defaults) */
+  modelTierResolver?: ModelTierResolver;
 }
 
 /**

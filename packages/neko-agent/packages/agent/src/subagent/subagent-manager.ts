@@ -481,7 +481,13 @@ Focus on completing this specific task efficiently and report your findings clea
    * Resolve model tier to actual model ID
    */
   private resolveModelId(tier: ModelTier): string | undefined {
-    // These are reasonable defaults, but in production should come from ConfigManager
+    // Try custom resolver first (e.g., from Platform ConfigManager)
+    if (this.deps.modelTierResolver) {
+      const resolved = this.deps.modelTierResolver(tier);
+      if (resolved) return resolved;
+    }
+
+    // Fallback to hardcoded defaults
     const modelMap: Record<ModelTier, string> = {
       fast: 'claude-3-haiku-20240307',
       balanced: 'claude-sonnet-4-20250514',
