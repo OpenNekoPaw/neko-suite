@@ -13,7 +13,7 @@
 - **职责**：定义跨语言（Rust ↔ TypeScript）共享的数据结构契约
 - **包名**：`@neko/proto`（目录名 `neko-proto`）
 - **文件**：`timeline.proto`、`diff.proto`
-- **零依赖**：仅 `.proto` IDL 文件，不产生运行时代码（暂手动维护）
+- **零依赖**：仅 `.proto` IDL 文件，不产生运行时代码
 - **被依赖**：`@neko/shared/generated/`（生成的 TS 类型）、neko-engine（Rust 域模型）
 
 ## Architecture
@@ -27,7 +27,7 @@ neko-proto（IDL 唯一来源）
         │     native-core/src/domain/timeline.rs 等（手动保持一致）
         │
         └── → @neko/shared/src/generated/ (TypeScript)
-              pnpm generate:types → protoc 生成 TS 类型
+              pnpm generate:types → scripts/proto-gen-ts.mjs 自动生成
 ```
 
 ### 关键 Proto 定义（timeline.proto）
@@ -49,5 +49,5 @@ neko-proto（IDL 唯一来源）
 pnpm generate:types   # 在 monorepo 根目录运行
 ```
 
-> **注意**：当前手动维护，protoc/buf 自动生成在未来迭代实现。
-> 修改 `.proto` 文件后，必须同步更新对应的 Rust 域模型和 TS 生成类型。
+> 生成器特性：内容哈希幂等输出、enum 前缀自动推断、proto 注释 → JSDoc、oneof 字段支持、.proto 文件自动发现。
+> 修改 `.proto` 文件后，运行 `pnpm generate:types` 重新生成 TS 类型，并同步更新对应的 Rust 域模型。

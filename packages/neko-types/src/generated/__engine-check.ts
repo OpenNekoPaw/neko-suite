@@ -54,3 +54,53 @@ const _a: _AudioDrift = true;
 // ---------------------------------------------------------------------------
 type _TrackDrift = AssertKeysSubset<Omit<EngineTrack, 'trackType'>, TimelineTrack>;
 const _tr: _TrackDrift = true;
+
+// ---------------------------------------------------------------------------
+// Diff types — verify all generated types are importable.
+// Since diff types are consumed via re-export (no hand-written mapping),
+// we validate re-export completeness rather than field-level drift.
+// ---------------------------------------------------------------------------
+import type {
+  EngineDiffCategory,
+  EngineDiffResult,
+  EngineFieldDiff,
+  EngineMediaInfo,
+  EngineSubtitleStream,
+  EngineImageContentDiff,
+  EngineAudioContentDiff,
+  EngineAudioDiffRegion,
+  EngineVideoContentDiff,
+  EngineVideoDiffRegion,
+  EngineFrameMetric,
+  EngineTimelineContentDiff,
+  EngineTimelineChangeType,
+  EngineTimelineDiffSummary,
+  EngineTimelineProjectMeta,
+  EngineTrackChange,
+  EngineElementChange,
+  EnginePropertyChange,
+  EngineElementContentDiff,
+} from './diff.engine';
+
+// Tuple check: if any type above fails to resolve, tsc will error.
+type _DiffTypeCheck = [
+  EngineDiffCategory,
+  EngineDiffResult,
+  EngineFieldDiff,
+  EngineMediaInfo,
+  EngineSubtitleStream,
+  EngineImageContentDiff,
+  EngineAudioContentDiff,
+  EngineAudioDiffRegion,
+  EngineVideoContentDiff,
+  EngineVideoDiffRegion,
+  EngineFrameMetric,
+  EngineTimelineContentDiff,
+  EngineTimelineChangeType,
+  EngineTimelineDiffSummary,
+  EngineTimelineProjectMeta,
+  EngineTrackChange,
+  EngineElementChange,
+  EnginePropertyChange,
+  EngineElementContentDiff,
+];

@@ -38,6 +38,7 @@ export type {
   EngineTrackChange,
   EngineElementChange,
   EnginePropertyChange,
+  EngineElementContentDiff,
 } from '../generated/diff.engine';
 
 // =============================================================================

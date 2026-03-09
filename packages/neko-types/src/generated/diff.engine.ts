@@ -2,7 +2,7 @@
 // AUTO-GENERATED — DO NOT EDIT
 //
 // Source: packages/neko-proto/diff.proto
-// Generated: 2026-02-26T08:16:32.115Z
+// Source hash: 49392c6f88731d64
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 
@@ -45,69 +45,111 @@ export interface EngineSubtitleStream {
 }
 
 export interface EngineFieldDiff {
+  /** Field name (e.g. "duration", "codec", "width") */
   field: string;
+  /** JSON-encoded value from source A */
   valueA: string;
+  /** JSON-encoded value from source B */
   valueB: string;
+  /** Whether the values differ */
   changed: boolean;
 }
 
 export interface EngineImageContentDiff {
+  /** Structural Similarity Index (0.0 - 1.0, 1.0 = identical) */
   ssim: number;
+  /** Peak Signal-to-Noise Ratio (dB, higher = more similar) */
   psnr: number;
+  /** Mean Squared Error (0.0 = identical) */
   mse: number;
+  /** Percentage of pixels that differ (0.0 - 1.0) */
   diffPixelPercent: number;
+  /** Absolute count of differing pixels */
   diffPixelCount: number;
+  /** Total pixel count */
   totalPixels: number;
+  /** Source A dimensions */
   widthA: number;
   heightA: number;
+  /** Source B dimensions */
   widthB: number;
   heightB: number;
+  /** Heatmap image as JPEG base64 string */
   heatmap: string;
   heatmapWidth: number;
   heatmapHeight: number;
 }
 
 export interface EngineAudioDiffRegion {
+  /** Region start time (seconds) */
   start: number;
+  /** Region end time (seconds) */
   end: number;
+  /** Signal-to-Noise Ratio for this region (dB) */
   snr: number;
+  /** RMS difference for this region */
   rmsDiff: number;
 }
 
 export interface EngineAudioContentDiff {
+  /** Global Signal-to-Noise Ratio (dB, higher = more similar) */
   snr: number;
+  /** Duration of source A (seconds) */
   durationA: number;
+  /** Duration of source B (seconds) */
   durationB: number;
+  /** Sample rate used for comparison (typically 48000) */
   compareSampleRate: number;
+  /** Total samples compared */
   totalSamples: number;
+  /** Number of segments that differ */
   diffSegmentCount: number;
+  /** Total number of segments */
   totalSegments: number;
+  /** Percentage of segments that differ (0.0 - 1.0) */
   diffPercent: number;
+  /** Regions where audio differs significantly */
   diffRegions: EngineAudioDiffRegion[];
+  /** Waveform peak data for source A (downsampled to ~800 points, values 0.0-1.0) */
   waveformPeaksA: number[];
+  /** Waveform peak data for source B (downsampled to ~800 points, values 0.0-1.0) */
   waveformPeaksB: number[];
 }
 
 export interface EngineFrameMetric {
+  /** Frame number (0-based) */
   frame: number;
+  /** Timestamp in seconds */
   timestamp: number;
+  /** SSIM for this frame (0.0 - 1.0) */
   ssim: number;
+  /** PSNR for this frame (dB) */
   psnr: number;
 }
 
 export interface EngineVideoDiffRegion {
+  /** Region start time (seconds) */
   start: number;
+  /** Region end time (seconds) */
   end: number;
+  /** Average SSIM across frames in this region */
   avgSsim: number;
+  /** Minimum SSIM in this region */
   minSsim: number;
+  /** Number of frames in this region */
   frameCount: number;
 }
 
 export interface EngineVideoContentDiff {
+  /** Global average SSIM across all compared frames */
   avgSsim: number;
+  /** Minimum SSIM across all compared frames */
   minSsim: number;
+  /** Global average PSNR (dB) */
   avgPsnr: number;
+  /** Minimum PSNR (dB) */
   minPsnr: number;
+  /** Source A metadata */
   durationA: number;
   durationB: number;
   fpsA: number;
@@ -116,18 +158,25 @@ export interface EngineVideoContentDiff {
   heightA: number;
   widthB: number;
   heightB: number;
+  /** Frame-level metrics */
   totalFramesCompared: number;
   diffFrameCount: number;
   diffFramePercent: number;
   frameMetrics: EngineFrameMetric[];
+  /** Temporal diff regions (contiguous frames below SSIM threshold) */
   diffRegions: EngineVideoDiffRegion[];
+  /** Optional audio diff (when video contains audio tracks) */
   audioDiff?: EngineAudioContentDiff;
+  /** Optional path to generated difference visualization video */
   diffVideoPath?: string;
 }
 
 export interface EnginePropertyChange {
+  /** Property name (e.g. "name", "muted", "src") */
   property: string;
+  /** JSON-encoded previous value */
   previous: string;
+  /** JSON-encoded current value */
   current: string;
 }
 
@@ -137,8 +186,10 @@ export interface EngineElementChange {
   elementType: string;
   changeType: EngineTimelineChangeType;
   propertyChanges: EnginePropertyChange[];
+  /** Media source path (for media/audio elements) */
   src?: string;
   previousSrc?: string;
+  /** Timeline position */
   startTime?: number;
   duration?: number;
 }
@@ -170,14 +221,18 @@ export interface EngineTimelineProjectMeta {
 }
 
 export interface EngineTimelineContentDiff {
+  /** Project metadata (current vs previous) */
   currentProject?: EngineTimelineProjectMeta;
   previousProject?: EngineTimelineProjectMeta;
+  /** Track-level changes */
   trackChanges: EngineTrackChange[];
+  /** Summary statistics */
   summary?: EngineTimelineDiffSummary;
+  /** Duration comparison */
   durationCurrent: number;
   durationPrevious: number;
   /** Per-element content diffs (only when includeContentDiff=true) */
-  elementContentDiffs?: EngineElementContentDiff[];
+  elementContentDiffs: EngineElementContentDiff[];
 }
 
 /** Content diff for a single element whose media source changed */
@@ -186,7 +241,7 @@ export interface EngineElementContentDiff {
   elementType: string;
   currentSrc: string;
   previousSrc: string;
-  /** "image" | "audio" | "video" | "error" */
+  /** One of the following content diff results ("image" | "audio" | "video" | "error") */
   contentType: string;
   imageDiff?: EngineImageContentDiff;
   audioDiff?: EngineAudioContentDiff;
@@ -195,15 +250,21 @@ export interface EngineElementContentDiff {
 }
 
 export interface EngineDiffResult {
+  /** Source file paths */
   sourceA: string;
   sourceB: string;
+  /** Category of media being compared */
   category: EngineDiffCategory;
+  /** Whether the files are identical */
   identical: boolean;
+  /** Metadata field comparison */
   diffCount: number;
   totalFields: number;
   fields: EngineFieldDiff[];
+  /** Probe info for both sources (JSON-encoded MediaInfo) */
   infoA: string;
   infoB: string;
+  /** Content-level diff (one of, based on category) */
   imageDiff?: EngineImageContentDiff;
   audioDiff?: EngineAudioContentDiff;
   videoDiff?: EngineVideoContentDiff;

@@ -34,7 +34,12 @@ type AssertKeysSubset<A, B> =
         fields: Exclude<keyof A, keyof B>;
       };
 
-type _CheckBaseElement = AssertKeysSubset<EngineElement, BaseTimelineElement>;
+// Omit oneof fields (media/audio/text/shape/subtitle) — these are
+// element-type-specific data, not base element properties.
+type _CheckBaseElement = AssertKeysSubset<
+  Omit<EngineElement, 'media' | 'audio' | 'text' | 'shape' | 'subtitle'>,
+  BaseTimelineElement
+>;
 type _CheckSubtitle = AssertKeysSubset<EngineSubtitleElementData, SubtitleElement>;
 
 // Compile-time drift detection: assignment fails if engine type has new fields.

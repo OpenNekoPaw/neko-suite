@@ -2,7 +2,7 @@
 // AUTO-GENERATED — DO NOT EDIT
 //
 // Source: packages/neko-proto/timeline.proto
-// Generated: 2026-02-26T08:16:32.111Z
+// Source hash: 1e3923b4831dbb2b
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 
@@ -124,109 +124,183 @@ export type EngineEffectType =
 // =============================================================================
 
 export interface EngineTransform {
+  /** Position X (pixels or normalized, depends on context) (default: 0.0) */
   x: number;
+  /** Position Y (pixels or normalized) (default: 0.0) */
   y: number;
+  /** Scale X (1.0 = 100%) (default: 1.0) */
   scaleX: number;
+  /** Scale Y (1.0 = 100%) (default: 1.0) */
   scaleY: number;
+  /** Rotation in degrees (default: 0.0) */
   rotation: number;
+  /** Anchor point X (0.0 = left, 0.5 = center, 1.0 = right) (default: 0.0) */
   anchorX: number;
+  /** Anchor point Y (0.0 = top, 0.5 = center, 1.0 = bottom) (default: 0.0) */
   anchorY: number;
 }
 
 export interface EngineEffectParams {
+  /** Effect type */
   effectType: EngineEffectType;
+  /** Effect intensity (0.0 - 1.0) (default: 1.0) */
   intensity: number;
+  /** Effect-specific parameters (JSON blob) */
   paramsJson: string;
+  /** Whether effect is enabled (default: true) */
   enabled: boolean;
 }
 
 export interface EngineAudioProperties {
+  /** Volume (0.0 - 1.0) (default: 1.0) */
   volume: number;
+  /** Pan (-1.0 = left, 0.0 = center, 1.0 = right) (default: 0.0) */
   pan: number;
+  /** Whether audio is muted (default: false) */
   muted: boolean;
+  /** Fade in duration (seconds) (default: 0.0) */
   fadeIn: number;
+  /** Fade out duration (seconds) (default: 0.0) */
   fadeOut: number;
+  /** Fade in easing curve (Phase 3) (default: LINEAR) */
   fadeInCurve: EngineEasingType;
+  /** Fade out easing curve (Phase 3) (default: LINEAR) */
   fadeOutCurve: EngineEasingType;
+  /** Gain adjustment in dB (Phase 3), -20 to +20 (default: 0.0) */
   gain: number;
 }
 
 export interface EngineMediaElementData {
+  /** Source file path */
   src: string;
+  /** Resource ID (deterministic hash) */
   resourceId?: string;
+  /** Audio properties (for video with audio) */
   audio?: EngineAudioProperties;
+  /** Media type (video/image) */
   mediaType?: string;
+  /** Linked audio element ID */
   linkedAudioId?: string;
+  /** DEPRECATED: use AudioProperties audio field instead (default: 1.0) */
   volume: number;
 }
 
 export interface EngineAudioElementData {
+  /** Source file path */
   src: string;
+  /** Resource ID */
   resourceId?: string;
+  /** Audio properties (legacy nested format) */
   audio?: EngineAudioProperties;
+  /** Linked video element ID */
   linkedVideoId?: string;
+  /** Audio settings (JVI nested format with baseValue) */
   audioSettings?: EngineAudioSettings;
+  /** DEPRECATED: use AudioProperties audio field instead (default: 1.0) */
   volume: number;
+  /** DEPRECATED: use AudioProperties audio field instead (default: 0.0) */
   pan: number;
+  /** DEPRECATED: use AudioProperties audio field instead (default: 0.0) */
   fadeIn: number;
+  /** DEPRECATED: use AudioProperties audio field instead (default: 0.0) */
   fadeOut: number;
 }
 
+/** Audio settings (JVI nested format with baseValue) */
 export interface EngineAudioSettings {
+  /** Volume setting */
   volume?: EngineAudioValue;
+  /** Pan setting */
   pan?: EngineAudioValue;
+  /** Whether audio is muted (default: false) */
   muted: boolean;
 }
 
+/** Audio value with baseValue (JVI format) */
 export interface EngineAudioValue {
+  /** Base value */
   baseValue: number;
 }
 
 export interface EngineTextElementData {
+  /** Text content */
   content: string;
+  /** Font family (default: "Arial") */
   fontFamily: string;
+  /** Font size in pixels (default: 48.0) */
   fontSize: number;
+  /** Text color (hex) (default: "#ffffff") */
   color: string;
+  /** Background color (default: "transparent") */
   backgroundColor: string;
+  /** Text alignment (default: "center") */
   textAlign: string;
+  /** Font weight (default: "normal") */
   fontWeight: string;
+  /** Font style (default: "normal") */
   fontStyle: string;
+  /** Text decoration (Phase 2): "none" | "underline" | "line-through" (default: "none") */
   textDecoration: string;
+  /** Line height multiplier (Phase 2) (default: 1.2) */
   lineHeight: number;
+  /** Letter spacing in pixels (Phase 2) (default: 0.0) */
   letterSpacing: number;
+  /** Stroke color hex (Phase 2) (default: "transparent") */
   strokeColor: string;
+  /** Stroke width in pixels (Phase 2) (default: 0.0) */
   strokeWidth: number;
+  /** Drop shadow (Phase 2) */
   shadow?: EngineTextShadow;
 }
 
+/** Text shadow properties (Phase 2) */
 export interface EngineTextShadow {
+  /** Shadow color (default: "rgba(0,0,0,0.5)") */
   color: string;
+  /** Horizontal offset (default: 0.0) */
   offsetX: number;
+  /** Vertical offset (default: 0.0) */
   offsetY: number;
+  /** Blur radius (default: 0.0) */
   blur: number;
 }
 
 export interface EngineShapeElementData {
+  /** Shape type */
   shapeType: string;
+  /** Fill color */
   fill: string;
+  /** Stroke color */
   stroke: string;
+  /** Stroke width */
   strokeWidth: number;
 }
 
 export interface EngineSubtitleElementData {
+  /** Subtitle text */
   text: string;
+  /** Font size (default: 48.0) */
   fontSize: number;
+  /** Text color (default: "#ffffff") */
   color: string;
+  /** Font family (Phase 2) (default: "Arial") */
   fontFamily: string;
+  /** Background color (Phase 2) (default: "transparent") */
   backgroundColor: string;
+  /** Text alignment (Phase 2) (default: "center") */
   textAlign: string;
+  /** Stroke color hex (Phase 2) (default: "transparent") */
   strokeColor: string;
+  /** Stroke width in pixels (Phase 2) (default: 0.0) */
   strokeWidth: number;
+  /** Drop shadow (Phase 2) */
   shadow?: EngineTextShadow;
 }
 
 export interface EngineElement {
+  /** Element ID */
   id: string;
+  /** Element name */
   name: string;
   startTime: number;
   duration: number;
@@ -242,50 +316,86 @@ export interface EngineElement {
   speed?: EngineSpeedProperties;
   transitionIn?: EngineTransition;
   transitionOut?: EngineTransition;
+  media?: EngineMediaElementData;
+  audio?: EngineAudioElementData;
+  text?: EngineTextElementData;
+  shape?: EngineShapeElementData;
+  subtitle?: EngineSubtitleElementData;
 }
 
 export interface EngineSpeedProperties {
+  /**
+   * Playback speed (0.1 - 4.0, default: 1.0)
+   * When speed != 1.0, element.duration represents timeline duration (what viewer sees).
+   * Source media range = duration * speed. (default: 1.0)
+   */
   speed: number;
+  /** Whether playback is reversed (default: false) */
   reverse: boolean;
+  /** Whether to preserve audio pitch when changing speed (default: true) */
   preservePitch: boolean;
+  /** Time remap data (for complex speed changes) */
   timeRemap?: EngineTimeRemapData;
 }
 
 export interface EngineTimeRemapData {
+  /** Whether time remapping is enabled */
   enabled: boolean;
+  /** Keyframes for time remapping */
   keyframes: EngineTimeRemapKeyframe[];
 }
 
 export interface EngineTimeRemapKeyframe {
+  /** Unique identifier */
   id: string;
+  /** Output time (position on timeline) */
   outputTime: number;
+  /** Input time (position in source media) */
   inputTime: number;
+  /** Easing to next keyframe */
   easing: EngineEasingType;
 }
 
 export interface EngineTransition {
+  /** Transition type */
   transitionType: EngineTransitionType;
+  /** Duration in seconds */
   duration: number;
+  /** Easing function for progress */
   easing: EngineEasingType;
+  /** Edge feather/softness (0.0 - 1.0) (default: 0.0) */
   feather: number;
 }
 
 export interface EngineTrack {
+  /** Track ID */
   id: string;
+  /** Track name */
   name: string;
+  /** Track type */
   trackType: EngineTrackType;
+  /** Elements in the track */
   elements: EngineElement[];
+  /** Whether track is muted (default: false) */
   muted: boolean;
+  /** Whether track is locked (default: false) */
   locked: boolean;
+  /** Whether track is hidden (default: false) */
   hidden: boolean;
+  /** Whether this is the main track (default: false) */
   isMain: boolean;
 }
 
 export interface EngineTimeline {
+  /** Total duration in seconds */
   duration: number;
+  /** Output resolution */
   resolution?: EngineResolution;
+  /** Frame rate */
   fps: number;
+  /** Tracks in the timeline */
   tracks: EngineTrack[];
+  /** Project defaults */
   defaults?: EngineProjectDefaults;
 }
 
@@ -301,27 +411,39 @@ export interface EngineProjectDefaults {
 }
 
 export interface EngineTextDefaults {
+  /** default: 48.0 */
   fontSize: number;
+  /** default: "Arial" */
   fontFamily: string;
+  /** default: "#ffffff" */
   color: string;
 }
 
 export interface EngineTransformDefaults {
   x: number;
   y: number;
+  /** default: 1.0 */
   scaleX: number;
+  /** default: 1.0 */
   scaleY: number;
   rotation: number;
 }
 
 export interface EngineAudioDefaults {
+  /** default: 1.0 */
   volume: number;
   pan: number;
   fadeIn: number;
   fadeOut: number;
 }
 
-export interface EngineAnimatableValue {}
+export interface EngineAnimatableValue {
+  number?: number;
+  point2d?: EnginePoint2D;
+  point3d?: EnginePoint3D;
+  color?: EngineColorValue;
+  boolValue?: boolean;
+}
 
 export interface EnginePoint2D {
   x: number;
@@ -342,15 +464,22 @@ export interface EngineColorValue {
 }
 
 export interface EngineKeyframe {
+  /** Time in seconds from clip/animation start */
   time: number;
+  /** Value at this keyframe */
   value?: EngineAnimatableValue;
+  /** Easing to next keyframe */
   easing: EngineEasingType;
+  /** Interpolation mode */
   interpolation: EngineInterpolationMode;
 }
 
 export interface EngineKeyframeTrack {
+  /** Property name (e.g., "opacity", "positionX", "scale") */
   property: string;
+  /** Keyframes sorted by time */
   keyframes: EngineKeyframe[];
+  /** Default value when no keyframes */
   defaultValue?: EngineAnimatableValue;
 }
 

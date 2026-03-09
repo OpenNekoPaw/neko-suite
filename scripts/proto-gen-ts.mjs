@@ -6,11 +6,20 @@
 // for @neko/shared. Uses protobufjs parser for AST extraction, custom codegen
 // for TS output.
 //
+// Improvements over v1:
+//   1. Content hash (not timestamp) — idempotent output, no spurious diffs
+//   2. Enum prefix auto-inference — only style overrides needed
+//   3. Proto comments → JSDoc — better IDE experience
+//   4. oneof fields → optional TS properties (not skipped)
+//   5. Proto file auto-discovery from packages/neko-proto/*.proto
+//   6. oneof keys excluded from key constants (backward compat)
+//
 // Usage: node scripts/proto-gen-ts.mjs
 // Output: packages/neko-types/src/generated/*.engine.ts
 // =============================================================================
 
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { createHash } from 'crypto';
+import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import protobuf from 'protobufjs';
@@ -21,22 +30,17 @@ const PROTO_DIR = resolve(ROOT, 'packages/neko-proto');
 const OUT_DIR = resolve(ROOT, 'packages/neko-types/src/generated');
 
 // =============================================================================
-// Proto file definitions — each entry describes one .proto → one .engine.ts
+// Per-proto overrides — only non-default config needs to be specified
 // =============================================================================
 
-/** @type {Array<{ proto: string, package: string, output: string, enumRules: Record<string, { prefix: string, style: string }>, keyConstants?: Array<[string, string]> }>} */
-const PROTO_FILES = [
-  {
-    proto: 'timeline.proto',
-    package: 'neko.timeline',
-    output: 'timeline.engine.ts',
-    enumRules: {
-      BlendMode:         { prefix: 'BLEND_MODE_',         style: 'camelCase' },
-      EasingType:        { prefix: 'EASING_TYPE_',        style: 'kebab-case' },
-      TransitionType:    { prefix: 'TRANSITION_TYPE_',    style: 'kebab-case' },
-      TrackType:         { prefix: 'TRACK_TYPE_',         style: 'lowerCase' },
-      EffectType:        { prefix: 'EFFECT_TYPE_',        style: 'camelCase' },
-      InterpolationMode: { prefix: 'INTERPOLATION_MODE_', style: 'lowerCase' },
+/** @type {Record<string, { enumStyleOverrides?: Record<string, string>, keyConstants?: Array<[string, string]> }>} */
+const PROTO_CONFIG = {
+  'timeline.proto': {
+    enumStyleOverrides: {
+      BlendMode: 'camelCase',
+      EasingType: 'kebab-case',
+      TransitionType: 'kebab-case',
+      EffectType: 'camelCase',
     },
     keyConstants: [
       ['Element', 'ENGINE_BASE_ELEMENT_KEYS'],
@@ -48,24 +52,47 @@ const PROTO_FILES = [
       ['Track', 'ENGINE_TRACK_KEYS'],
     ],
   },
-  {
-    proto: 'diff.proto',
-    package: 'neko.diff',
-    output: 'diff.engine.ts',
-    enumRules: {
-      DiffCategory:       { prefix: 'DIFF_CATEGORY_',        style: 'lowerCase' },
-      TimelineChangeType: { prefix: 'TIMELINE_CHANGE_TYPE_', style: 'lowerCase' },
-    },
+  'diff.proto': {
+    enumStyleOverrides: {},
     keyConstants: [],
   },
-];
+};
+
+// =============================================================================
+// Proto file auto-discovery
+// =============================================================================
+
+/**
+ * Discover .proto files and extract package declarations.
+ * @returns {Array<{ proto: string, package: string, output: string, enumStyleOverrides: Record<string, string>, keyConstants: Array<[string, string]> }>}
+ */
+function discoverProtoFiles() {
+  const files = readdirSync(PROTO_DIR).filter(f => f.endsWith('.proto')).sort();
+  return files.map(proto => {
+    const content = readFileSync(resolve(PROTO_DIR, proto), 'utf-8');
+    const pkgMatch = content.match(/^package\s+([\w.]+)\s*;/m);
+    if (!pkgMatch) {
+      console.error(`ERROR: No package declaration in ${proto}`);
+      process.exit(1);
+    }
+    const stem = proto.replace('.proto', '');
+    const overrides = PROTO_CONFIG[proto] || {};
+    return {
+      proto,
+      package: pkgMatch[1],
+      output: `${stem}.engine.ts`,
+      enumStyleOverrides: overrides.enumStyleOverrides || {},
+      keyConstants: overrides.keyConstants || [],
+    };
+  });
+}
 
 // =============================================================================
 // Proto type → TS type mapping
 // =============================================================================
 
-/** @param {string} protoType @param {Set<string>} knownEnums */
-function mapType(protoType, knownEnums) {
+/** @param {string} protoType */
+function mapType(protoType) {
   switch (protoType) {
     case 'float': case 'double': case 'int32': case 'int64':
     case 'uint32': case 'uint64': case 'sint32': case 'sint64':
@@ -90,12 +117,26 @@ function isScalarType(protoType) {
 }
 
 // =============================================================================
-// snake_case → camelCase conversion
+// snake_case → camelCase (handles digits: point_2d → point2d)
 // =============================================================================
 
 /** @param {string} s */
 function snakeToCamel(s) {
-  return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+  return s.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
+}
+
+// =============================================================================
+// Enum prefix auto-inference: PascalCase → SCREAMING_SNAKE_
+// =============================================================================
+
+/**
+ * Infer the SCREAMING_SNAKE prefix from a PascalCase enum name.
+ * e.g. BlendMode → BLEND_MODE_, EasingType → EASING_TYPE_
+ * @param {string} enumName
+ * @returns {string}
+ */
+function inferEnumPrefix(enumName) {
+  return enumName.replace(/([A-Z])/g, '_$1').toUpperCase().slice(1) + '_';
 }
 
 // =============================================================================
@@ -122,31 +163,120 @@ function convertEnumValue(value, style) {
 }
 
 // =============================================================================
+// Proto comment parser (protobufjs doesn't preserve comments)
+// =============================================================================
+
+/**
+ * Parse proto source to extract comments for messages and fields.
+ * Returns a Map with keys like "MessageName" or "MessageName.field_name".
+ * @param {string} source
+ * @returns {Map<string, string>}
+ */
+function parseProtoComments(source) {
+  /** @type {Map<string, string>} */
+  const comments = new Map();
+  const lines = source.split('\n');
+
+  let currentMessage = '';
+  let pendingComment = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Collect preceding comment lines
+    if (trimmed.startsWith('//') && !trimmed.startsWith('// ====')) {
+      pendingComment.push(trimmed.replace(/^\/\/\s?/, ''));
+      continue;
+    }
+
+    // Message declaration
+    const msgMatch = trimmed.match(/^message\s+(\w+)\s*\{/);
+    if (msgMatch) {
+      if (pendingComment.length > 0) {
+        comments.set(msgMatch[1], pendingComment.join('\n'));
+      }
+      currentMessage = msgMatch[1];
+      pendingComment = [];
+      continue;
+    }
+
+    // Closing brace — exit message scope
+    if (trimmed === '}') {
+      currentMessage = '';
+      pendingComment = [];
+      continue;
+    }
+
+    // Field declaration inside a message
+    if (currentMessage && trimmed.match(/^\w/) && trimmed.includes('=')) {
+      // Extract field name (handles: "type field_name = N;" and "repeated type field_name = N;")
+      const fieldMatch = trimmed.match(/(?:repeated\s+|optional\s+)?(?:\w+\.?\w*)\s+(\w+)\s*=/);
+      if (fieldMatch) {
+        const fieldName = fieldMatch[1];
+        // Check for inline trailing comment
+        const inlineMatch = trimmed.match(/;\s*\/\/\s*(.+)/);
+
+        if (pendingComment.length > 0) {
+          const comment = pendingComment.join('\n');
+          // Append inline comment if present
+          if (inlineMatch) {
+            comments.set(`${currentMessage}.${fieldName}`, comment + ' (' + inlineMatch[1].trim() + ')');
+          } else {
+            comments.set(`${currentMessage}.${fieldName}`, comment);
+          }
+        } else if (inlineMatch) {
+          comments.set(`${currentMessage}.${fieldName}`, inlineMatch[1].trim());
+        }
+      }
+      pendingComment = [];
+      continue;
+    }
+
+    // Enum field or other non-comment line
+    pendingComment = [];
+  }
+
+  return comments;
+}
+
+/**
+ * Format a comment string as JSDoc.
+ * @param {string} comment
+ * @param {string} indent
+ * @returns {string}
+ */
+function formatJSDoc(comment, indent = '') {
+  const lines = comment.split('\n');
+  if (lines.length === 1) {
+    return `${indent}/** ${lines[0]} */\n`;
+  }
+  return `${indent}/**\n${lines.map(l => `${indent} * ${l}`).join('\n')}\n${indent} */\n`;
+}
+
+// =============================================================================
 // AST Processing
 // =============================================================================
 
 /**
  * Generate TS enum type union from a protobuf Enum.
  * @param {protobuf.Enum} enumObj
- * @param {Record<string, { prefix: string, style: string }>} enumRules
+ * @param {Record<string, string>} styleOverrides
  * @param {Set<string>} knownEnums
- * @returns {{ typeDef: string, name: string } | null}
+ * @param {Map<string, string>} commentMap
+ * @returns {{ typeDef: string, name: string }}
  */
-function generateEnum(enumObj, enumRules, knownEnums) {
-  const rule = enumRules[enumObj.name];
-  if (!rule) {
-    console.warn(`  ⚠ No conversion rule for enum ${enumObj.name}, skipping`);
-    return null;
-  }
-
+function generateEnum(enumObj, styleOverrides, knownEnums, commentMap) {
+  const prefix = inferEnumPrefix(enumObj.name);
+  const style = styleOverrides[enumObj.name] || 'lowerCase';
   const tsName = `Engine${enumObj.name}`;
   knownEnums.add(enumObj.name);
 
   const values = Object.keys(enumObj.values)
-    .filter(v => v !== `${rule.prefix}UNSPECIFIED`)
+    .filter(v => v !== `${prefix}UNSPECIFIED`)
     .map(v => {
-      const stripped = v.startsWith(rule.prefix) ? v.slice(rule.prefix.length) : v;
-      return `'${convertEnumValue(stripped, rule.style)}'`;
+      const stripped = v.startsWith(prefix) ? v.slice(prefix.length) : v;
+      return `'${convertEnumValue(stripped, style)}'`;
     });
 
   const typeDef = `export type ${tsName} =\n  | ${values.join('\n  | ')};\n`;
@@ -168,53 +298,93 @@ function isFieldOptional(field, knownEnums) {
 
 /**
  * Generate TS interface from a protobuf Type (message).
+ * oneof fields are included as optional properties.
  * @param {protobuf.Type} msgType
  * @param {Set<string>} knownEnums
- * @returns {{ interfaceDef: string, name: string, keys: string[] }}
+ * @param {Map<string, string>} commentMap
+ * @returns {{ interfaceDef: string, name: string, keys: string[], oneofKeys: Set<string> }}
  */
-function generateMessage(msgType, knownEnums) {
+function generateMessage(msgType, knownEnums, commentMap) {
   const tsName = `Engine${msgType.name}`;
   const lines = [];
   const keys = [];
+  /** @type {Set<string>} */
+  const oneofKeys = new Set();
 
-  const oneofFields = new Set();
+  // Collect oneof field names (non-synthetic)
+  const oneofFieldNames = new Set();
   if (msgType.oneofs) {
     for (const oneofName of Object.keys(msgType.oneofs)) {
       if (oneofName.startsWith('_')) continue;
       const oneof = msgType.oneofs[oneofName];
       for (const f of oneof.fieldsArray) {
-        oneofFields.add(f.name);
+        oneofFieldNames.add(f.name);
       }
     }
   }
 
+  // Regular fields (excluding oneof)
   for (const field of msgType.fieldsArray) {
-    if (oneofFields.has(field.name)) continue;
+    if (oneofFieldNames.has(field.name)) continue;
 
     const camelName = snakeToCamel(field.name);
     const optional = isFieldOptional(field, knownEnums);
     const isRepeated = field.repeated;
-    const tsType = mapType(field.type, knownEnums);
+    const tsType = mapType(field.type);
     const suffix = isRepeated ? '[]' : '';
     const opt = optional ? '?' : '';
+
+    // Add JSDoc comment if available
+    const comment = commentMap.get(`${msgType.name}.${field.name}`);
+    if (comment) {
+      lines.push(formatJSDoc(comment, '  ').trimEnd());
+    }
 
     lines.push(`  ${camelName}${opt}: ${tsType}${suffix};`);
     keys.push(camelName);
   }
 
-  const interfaceDef = `export interface ${tsName} {\n${lines.join('\n')}\n}\n`;
-  return { interfaceDef, name: tsName, keys };
+  // oneof fields as optional properties
+  if (msgType.oneofs) {
+    for (const oneofName of Object.keys(msgType.oneofs)) {
+      if (oneofName.startsWith('_')) continue;
+      const oneof = msgType.oneofs[oneofName];
+      for (const field of oneof.fieldsArray) {
+        const camelName = snakeToCamel(field.name);
+        const tsType = mapType(field.type);
+
+        const comment = commentMap.get(`${msgType.name}.${field.name}`);
+        if (comment) {
+          lines.push(formatJSDoc(comment, '  ').trimEnd());
+        }
+
+        lines.push(`  ${camelName}?: ${tsType};`);
+        keys.push(camelName);
+        oneofKeys.add(camelName);
+      }
+    }
+  }
+
+  // Add message-level JSDoc
+  const msgComment = commentMap.get(msgType.name);
+  let prefix = '';
+  if (msgComment) {
+    prefix = formatJSDoc(msgComment);
+  }
+
+  const interfaceDef = `${prefix}export interface ${tsName} {\n${lines.join('\n')}\n}\n`;
+  return { interfaceDef, name: tsName, keys, oneofKeys };
 }
 
 /**
- * Generate a readonly key array constant.
+ * Generate a readonly key array constant (excludes oneof keys for backward compat).
  * @param {string} constName
  * @param {string[]} keys
  * @returns {string}
  */
 function generateKeyConst(constName, keys) {
-  const items = keys.map(k => `'${k}'`).join(', ');
-  return `export const ${constName} = [${items}] as const;\n`;
+  const formatted = keys.map(k => `  '${k}',`).join('\n');
+  return `export const ${constName} = [\n${formatted}\n] as const;\n`;
 }
 
 // =============================================================================
@@ -222,7 +392,7 @@ function generateKeyConst(constName, keys) {
 // =============================================================================
 
 /**
- * @param {{ proto: string, package: string, output: string, enumRules: Record<string, { prefix: string, style: string }>, keyConstants?: Array<[string, string]> }} config
+ * @param {{ proto: string, package: string, output: string, enumStyleOverrides: Record<string, string>, keyConstants: Array<[string, string]> }} config
  */
 function processProto(config) {
   const protoPath = resolve(PROTO_DIR, config.proto);
@@ -232,8 +402,11 @@ function processProto(config) {
   console.log(`  Input:  ${protoPath}`);
   console.log(`  Output: ${outPath}`);
 
-  const root = new protobuf.Root();
   const protoContent = readFileSync(protoPath, 'utf-8');
+  const hash = createHash('sha256').update(protoContent).digest('hex').slice(0, 16);
+
+  // Parse AST
+  const root = new protobuf.Root();
   protobuf.parse(protoContent, root, { keepCase: true });
 
   const pkg = root.lookup(config.package);
@@ -241,6 +414,9 @@ function processProto(config) {
     console.error(`ERROR: Could not find package ${config.package}`);
     process.exit(1);
   }
+
+  // Parse comments from raw source (protobufjs doesn't preserve them)
+  const commentMap = parseProtoComments(protoContent);
 
   /** @type {Set<string>} */
   const knownEnums = new Set();
@@ -250,7 +426,7 @@ function processProto(config) {
   output.push('// AUTO-GENERATED — DO NOT EDIT');
   output.push('//');
   output.push(`// Source: packages/neko-proto/${config.proto}`);
-  output.push(`// Generated: ${new Date().toISOString()}`);
+  output.push(`// Source hash: ${hash}`);
   output.push('// Command: node scripts/proto-gen-ts.mjs');
   output.push('// =============================================================================');
   output.push('');
@@ -263,11 +439,9 @@ function processProto(config) {
 
   for (const child of pkg.nestedArray) {
     if (child instanceof protobuf.Enum) {
-      const result = generateEnum(child, config.enumRules, knownEnums);
-      if (result) {
-        output.push(result.typeDef);
-        console.log(`  ✓ Enum: ${result.name}`);
-      }
+      const result = generateEnum(child, config.enumStyleOverrides, knownEnums, commentMap);
+      output.push(result.typeDef);
+      console.log(`  ✓ Enum: ${result.name}`);
     }
   }
 
@@ -277,19 +451,19 @@ function processProto(config) {
   output.push('// =============================================================================');
   output.push('');
 
-  /** @type {Map<string, string[]>} */
-  const messageKeys = new Map();
+  /** @type {Map<string, { keys: string[], oneofKeys: Set<string> }>} */
+  const messageInfo = new Map();
 
   for (const child of pkg.nestedArray) {
     if (child instanceof protobuf.Type) {
-      const result = generateMessage(child, knownEnums);
+      const result = generateMessage(child, knownEnums, commentMap);
       output.push(result.interfaceDef);
-      messageKeys.set(child.name, result.keys);
-      console.log(`  ✓ Message: ${result.name} (${result.keys.length} fields)`);
+      messageInfo.set(child.name, { keys: result.keys, oneofKeys: result.oneofKeys });
+      console.log(`  ✓ Message: ${result.name} (${result.keys.length} fields, ${result.oneofKeys.size} oneof)`);
     }
   }
 
-  // --- Key constants ---
+  // --- Key constants (oneof keys excluded for backward compat) ---
   if (config.keyConstants && config.keyConstants.length > 0) {
     output.push('// =============================================================================');
     output.push('// Key Constants (for whitelist-based engine field extraction)');
@@ -297,9 +471,10 @@ function processProto(config) {
     output.push('');
 
     for (const [msgName, constName] of config.keyConstants) {
-      const keys = messageKeys.get(msgName);
-      if (keys) {
-        output.push(generateKeyConst(constName, keys));
+      const info = messageInfo.get(msgName);
+      if (info) {
+        const filteredKeys = info.keys.filter(k => !info.oneofKeys.has(k));
+        output.push(generateKeyConst(constName, filteredKeys));
       }
     }
   }
@@ -319,11 +494,14 @@ async function main() {
   console.log(`  Proto dir: ${PROTO_DIR}`);
   console.log(`  Output dir: ${OUT_DIR}`);
 
-  for (const config of PROTO_FILES) {
+  const configs = discoverProtoFiles();
+  console.log(`  Discovered: ${configs.map(c => c.proto).join(', ')}`);
+
+  for (const config of configs) {
     processProto(config);
   }
 
-  console.log(`\n✓ All ${PROTO_FILES.length} proto files processed`);
+  console.log(`\n✓ All ${configs.length} proto files processed`);
 }
 
 main().catch(err => {
