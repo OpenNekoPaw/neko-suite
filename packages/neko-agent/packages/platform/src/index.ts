@@ -14,31 +14,13 @@
 export * from './types';
 
 // =============================================================================
-// Core Layer - Shared abstractions
-// =============================================================================
-
-export {
-  // Base Registry
-  BaseRegistry,
-  type IRegistry,
-  // Concurrency Control
-  type ConcurrencyPoolOptions,
-  type PoolStats,
-  ConcurrencyPool,
-  KeyedConcurrencyPool,
-  withConcurrencyLimit,
-} from './core';
-
-// =============================================================================
 // Configuration Layer
 // =============================================================================
 
 export {
-  loadBuiltinPresets,
   getBuiltinProviderTemplates,
   getBuiltinProviderTemplate,
   getBuiltinPrompt,
-  type BuiltinPresets,
 } from './config/builtin-presets';
 
 export {
@@ -48,7 +30,6 @@ export {
 } from './config/user-config';
 
 export {
-  loadWorkspaceConfig,
   watchWorkspaceConfig,
   type WorkspaceConfig,
 } from './config/workspace-config';
@@ -65,23 +46,6 @@ export {
 } from './config/config-export-service';
 
 // =============================================================================
-// Adapter Layer
-// =============================================================================
-
-export { BaseAdapter } from './llm/adapter/base-adapter';
-export { OpenAIAdapter } from './llm/adapter/openai-adapter';
-export { AnthropicAdapter } from './llm/adapter/anthropic-adapter';
-export { GoogleAdapter } from './llm/adapter/google-adapter';
-export { AzureAdapter } from './llm/adapter/azure-adapter';
-export { OllamaAdapter } from './llm/adapter/ollama-adapter';
-export { GenericAdapter } from './llm/adapter/generic-adapter';
-export {
-  getAdapterRegistry,
-  AdapterRegistry,
-} from './llm/adapter/adapter-registry';
-export { createStreamCollector } from './llm/adapter/stream-aggregator';
-
-// =============================================================================
 // Provider Layer
 // =============================================================================
 
@@ -93,76 +57,31 @@ export { PlatformError } from './provider/platform-error';
 // =============================================================================
 
 export { Service, type ServiceConfig } from './service/service';
-export { ModelSelector, type ModelTaskType, type ResolvedModel } from './service/model-selector';
-export { SharedServiceAdapter, toSharedService } from './service/shared-service-adapter';
+export { toSharedService } from './service/shared-service-adapter';
+export { PromptManager } from './service/prompt-manager';
 
-// PromptManager - local implementation
-export {
-  PromptManager,
-  createPromptManager,
-} from './service/prompt-manager';
+// =============================================================================
+// Media Layer (service + types only; adapters are internal)
+// =============================================================================
 
-// Task types - re-exported from shared (TaskManager implementation is in @neko/agent)
+export { MediaGenerationService } from './media/media-generation-service';
 export type {
-  Task,
-  TaskType,
-  TaskStatus,
-  TaskInput,
-  TaskOutput,
-  TaskProgressCallback,
-  ITaskManager,
-  ITaskStorage,
-  ITaskRecoveryStorage,
-  TaskRecoveryInfo,
-  SerializableTask,
-  TaskExecutor,
-} from '@neko/shared';
-
-// =============================================================================
-// Media Layer
-// =============================================================================
-
-export {
-  // Media Generation - Adapters
-  BaseMediaAdapter,
-  MediaAdapterRegistry,
-  getMediaAdapterRegistry,
-  createMediaAdapterRegistry,
-  OpenAICompatMediaAdapter,
-  RunwayMediaAdapter,
-  LumaMediaAdapter,
-  MiniMaxMediaAdapter,
-  LiblibMediaAdapter,
-  SunoMediaAdapter,
-  // Media Generation - Routing
-  MediaRoutingManager,
-  // Media Generation - Executor & Service
-  MediaTaskExecutor,
-  createMediaTaskInput,
-  MediaGenerationService,
-  createMediaPlatform,
-  // Types
-  type MediaGenerationType,
-  type MediaTaskStatus,
-  type MediaOutputType,
-  type MediaGenerationRequestBase,
-  type RoutingPreference,
-  type ImageGenerationRequest,
-  type VideoGenerationRequest,
-  type AudioGenerationRequest,
-  type MediaOutput,
-  type MediaAdapterResult,
-  type MediaAdapterError,
-  type MediaAdapter,
-  type MediaRoutingResult,
-  type MediaTask,
-  type MediaProgressCallback,
-  type MediaTaskPayload,
-  type MediaTaskExecutorOptions,
-  type MediaGenerationServiceOptions,
-  type MediaPlatformDeps,
-  type MediaPlatform,
-} from './media';
+  MediaGenerationType,
+  MediaTaskStatus,
+  MediaOutputType,
+  MediaGenerationRequestBase,
+  RoutingPreference,
+  ImageGenerationRequest,
+  VideoGenerationRequest,
+  AudioGenerationRequest,
+  MediaOutput,
+  MediaAdapterResult,
+  MediaAdapterError,
+  MediaAdapter,
+  MediaRoutingResult,
+  MediaTask,
+  MediaProgressCallback,
+} from './media/types';
 
 // =============================================================================
 // Factory Functions

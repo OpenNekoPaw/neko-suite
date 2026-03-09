@@ -1,12 +1,14 @@
 /**
  * Media Module - AI media generation
+ *
+ * Public API: MediaGenerationService + types + createMediaPlatform factory.
+ * Adapter classes, registries, routing, and executors are internal implementation details.
  */
 
 // =============================================================================
-// AI Media Generation
+// Public Types
 // =============================================================================
 
-// Generation Types
 export type {
   MediaGenerationType,
   MediaTaskStatus,
@@ -25,33 +27,11 @@ export type {
   MediaProgressCallback,
 } from './types';
 
-// Adapters
-export {
-  BaseMediaAdapter,
-  MediaAdapterRegistry,
-  getMediaAdapterRegistry,
-  createMediaAdapterRegistry,
-  OpenAICompatMediaAdapter,
-  RunwayMediaAdapter,
-  LumaMediaAdapter,
-  MiniMaxMediaAdapter,
-  LiblibMediaAdapter,
-  SunoMediaAdapter,
-} from './adapters';
+// =============================================================================
+// Public Service
+// =============================================================================
 
-// Routing
-export { MediaRoutingManager } from './routing';
-
-// Task Executor
-export {
-  MediaTaskExecutor,
-  createMediaTaskInput,
-} from './media-task-executor';
-export type { MediaTaskPayload, MediaTaskExecutorOptions } from './media-task-executor';
-
-// Service
 export { MediaGenerationService } from './media-generation-service';
-export type { MediaGenerationServiceOptions } from './media-generation-service';
 
 // Factory
 import { ConfigManager } from '../config/config-manager';

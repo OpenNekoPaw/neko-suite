@@ -7,7 +7,4 @@ export { SharedServiceAdapter, toSharedService } from './shared-service-adapter'
 export { ModelSelector, type ModelTaskType, type ResolvedModel } from './model-selector';
 
 // PromptManager - local implementation
-export {
-  PromptManager,
-  createPromptManager,
-} from './prompt-manager';
+export { PromptManager } from './prompt-manager';

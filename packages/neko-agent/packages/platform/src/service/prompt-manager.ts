@@ -137,9 +137,3 @@ export class PromptManager implements IPromptManager {
   }
 }
 
-/**
- * Create a prompt manager instance
- */
-export function createPromptManager(): PromptManager {
-  return new PromptManager();
-}
