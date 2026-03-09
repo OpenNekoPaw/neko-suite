@@ -31,3 +31,29 @@ export type { UseViewportCullingOptions, UseViewportCullingReturn } from './useV
 
 export { useSnap } from './useSnap';
 export type { UseSnapOptions, UseSnapReturn } from './useSnap';
+
+export { useVSCodeMessages } from './useVSCodeMessages';
+export type {
+  VSCodeAPI,
+  UseVSCodeMessagesOptions,
+  UseVSCodeMessagesReturn,
+} from './useVSCodeMessages';
+
+export { useNodeHelpers } from './useNodeHelpers';
+export type { UseNodeHelpersOptions, UseNodeHelpersReturn } from './useNodeHelpers';
+
+export { useClipboard } from './useClipboard';
+export type { UseClipboardOptions, UseClipboardReturn } from './useClipboard';
+
+export { useKeyboardActions } from './useKeyboardActions';
+export type { UseKeyboardActionsOptions, UseKeyboardActionsReturn } from './useKeyboardActions';
+
+export { useDragDrop } from './useDragDrop';
+export type { UseDragDropOptions, UseDragDropReturn } from './useDragDrop';
+
+export { useContextMenu } from './useContextMenu';
+export type {
+  ContextMenuState,
+  UseContextMenuOptions,
+  UseContextMenuReturn,
+} from './useContextMenu';
