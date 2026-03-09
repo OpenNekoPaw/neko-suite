@@ -159,29 +159,86 @@
 
 ### CI/CD 基础设施（Phase 1-2 ✅ 已完成）
 
-- [x] GitHub Actions CI（`.github/workflows/ci.yml`）— build + lint + test-ts + test-rust（路径过滤）
+- [x] GitHub Actions CI — 路径过滤（ts/rust/proto）+ build + lint + test + coverage artifact
 - [x] Prettier 统一格式化（`.prettierrc.json`）— 835 个文件已格式化
 - [x] Pre-commit hooks（Husky + lint-staged）— ESLint --fix + Prettier 自动格式化
 - [x] 根 tsconfig 强化（`strict` + `noUncheckedIndexedAccess` + `noImplicitOverride`）
 - [x] ESLint 统一配置（`eslint.config.mjs` flat config v9 + typescript-eslint + react-hooks，warn 模式）
 - [x] 测试覆盖率收集（vitest v8 coverage + CI artifact 上传，13 个 vitest.config 已配置）
+- [x] Rust CI 增强 — `cargo fmt --check` + `cargo clippy` + `cargo test` + cargo-deny 依赖审计
+- [x] Proto 类型同步检查 — `pnpm generate:types` + git diff 检测未提交变更
+- [x] 依赖安全审查 — `actions/dependency-review-action`（PR only）
 - [ ] Release workflow（`.github/workflows/release.yml`，tag 触发 vsix 打包）— Phase 3
 - [ ] ESLint warn → error 升级（`no-console` + `no-explicit-any`，待清理完成后）— Phase 3
 
-### 代码质量
+### 代码质量（Phase 3 — 2026-03-09 审计）
+
+**`as any`：541 处（生产代码 89 处 + 测试代码 452 处）**
+
+| 包 | 生产 | 测试 | 热点文件 |
+|----|------|------|----------|
+| neko-cut | 16 | 242 | shapeOpsSlice.ts (16), render-handlers.ts (9), elementOpsSlice.ts (8) |
+| neko-agent | 14 | 216 | slashCommandHandler.test.ts (47) 等测试文件 |
+| neko-tools | 5 | 5 | MediaDiffViewer.tsx (5) |
+| 其他 | 5 | 4 | 低债务，已基本清零 |
+
+**`console.*`：219 处（log 174 + error 36 + warn 8）**
+
+| 包 | 数量 | 状态 |
+|----|------|------|
+| neko-agent | 117（log 98） | 🔴 CLI + extension 混合使用 |
+| neko-engine | 70（log 53） | 🔴 Sidecar 调试日志 |
+| neko-tools | 21 | 🟡 中等 |
+| 其他 | 11 | 🟢 低 |
+
+**大文件（>1000 LOC）：12 个**
+
+| 文件 | LOC | 拆分方案 |
+|------|-----|----------|
+| TimelineToolExecutor.ts | 2138 | P0：按工具类型拆分 Strategy |
+| MediaDiffMessageHandler.ts | 1480 | P1：按消息类型提取 Handler |
+| mediaProtocol.ts | 1459 | P1：按领域拆分类型子模块 |
+| MediaRequestProxy.ts | 1234 | P1：按请求类型拆分 |
+| CanvasApp.tsx | 1186 | P0：提取 Context/Provider + 子组件 |
+| ShapePanel.tsx | 1133 | P1：提取子组件和 hooks |
+| PreviewPanel.tsx | 1116 | P1：提取子组件和 hooks |
+| ExportPanel.tsx | 1112 | P1：提取子组件和 hooks |
+| AudioDiffViewer.tsx | 1081 | P1：分离波形渲染和交互逻辑 |
+| AssetVariantDiffEditorProvider.ts | 1071 | P1：重构 |
+| videoEditorProvider.ts | 1062 | P1：重构 |
+| MediaService.ts | 1038 | P1：模块化 |
+
+**其他指标**
+
+| 指标 | 数量 | 状态 |
+|------|------|------|
+| eslint-disable 注释 | 17 | 🟢 低，分散在各包 |
+| @deprecated 标记 | 59（neko-types 29 + neko-agent 27） | 🟡 需清理废弃 API |
+| TODO/FIXME | 16（无 P0 阻塞） | 🟢 全部是功能导向 |
+| 测试文件比例 | neko-cut 6%、neko-canvas 6%、neko-agent 10% | 🔴 neko-cut 最需补充 |
+
+**Phase 3 清理优先级**
+
+| 优先级 | 任务 | 预期收益 |
+|--------|------|----------|
+| P0 | TimelineToolExecutor（2138 LOC）拆分 | 可维护性 + 可测试性 |
+| P0 | neko-cut stores 16 处 `as any` → discriminated unions | 类型安全 |
+| P1 | console.log → Logger 迁移（neko-agent 98 处 + neko-engine 53 处） | 日志规范 |
+| P1 | 4 个 1100+ LOC 面板组件 hooks 提取 | 可维护性 |
+| P2 | @deprecated API 清理（59 处） | 减少混淆 |
+| P2 | neko-cut 测试补充（6% → 15%，需 ~30 个测试文件） | 回归保护 |
+| P3 | ESLint warn → error 升级 | 质量守门 |
+| P3 | Release workflow（vsix 打包发布） | 自动化发布 |
+
+**其他技术债务**
 
 | 优先级 | 问题 | 影响 | 来源 |
 |--------|------|------|------|
-| ~~高~~ | ~~统一错误处理机制~~ ✅ 框架已建立（`BaseError` + `IErrorHandler` + `VSCodeErrorHandler`），各包接入推进中 | ~~调试困难~~ | [task-plan TD-2](./docs/task-plan.md) |
-| 高 | 单元测试覆盖率（neko-agent 47 个最多，其他包偏少，~10.9%） | 回归风险 | [task-plan TD-4](./docs/task-plan.md) |
-| 高 | `console.log` 清理（213 处：neko-agent ~123, neko-engine ~53, neko-tools ~29） | 日志混乱 | |
-| 高 | `as any` 清理（545 处：neko-cut ~261, neko-agent ~230） | 类型安全 | |
+| ~~高~~ | ~~统一错误处理机制~~ ✅ 框架已建立 | ~~调试困难~~ | [task-plan TD-2](./docs/task-plan.md) |
 | 高 | neko-engine 性能监控（telemetry 基础已有，需接入指标面板） | 性能盲区 | |
-| 中 | 大文件拆分（14 文件 >1000 LOC，最大 TimelineToolExecutor 1823 LOC） | 可维护性 | |
 | 中 | AI SDK 依赖倒置（`AISdkAdapter` 直接依赖 Vercel AI SDK，DIP 65/100） | 可替换性差 | [task-plan TD-1](./docs/task-plan.md) |
-| 中 | 规范化 git commit message（采用 Conventional Commits） | 追溯困难 | [task-plan TD-3](./docs/task-plan.md) |
 | ~~中~~ | ~~neko-types 83 个 `as any`~~ ✅ 已清理至 2 处（仅测试代码） | ~~类型安全~~ | [engine.md](./docs/engine.md) |
-| 中 | neko-types JSDoc 覆盖率低（README 已更新，类型文件内注释仍不足） | 开发体验差 | |
+| 中 | neko-types JSDoc 覆盖率低 | 开发体验差 | |
 | 低 | 国际化扩展（neko-cut/neko-agent 已完成，其他包待补） | 国际化缺口 | [task-plan TD-5](./docs/task-plan.md) |
 
 ---
@@ -201,4 +258,4 @@
 
 ---
 
-*最后更新：2026-03-09（CI/CD Phase 1-2 ✅：GitHub Actions + Prettier + Husky + tsconfig strict + ESLint + Coverage）*
+*最后更新：2026-03-09（CI/CD Phase 1-2 ✅ + Phase 3 技术债务审计：541 as any / 219 console / 12 大文件）*
