@@ -133,6 +133,29 @@ pnpm generate:types         # 重新生成 Protobuf TS 类型
 
 ---
 
+## 代码质量工具
+
+### 格式化（Prettier）
+
+项目使用 Prettier 统一代码风格，配置见 `.prettierrc.json`。
+
+```bash
+pnpm format          # 格式化所有源文件
+pnpm format:check    # 检查格式（CI 使用）
+```
+
+Pre-commit hook 会自动对暂存文件执行格式化（Husky + lint-staged）。
+
+### CI/CD
+
+PR 和主分支推送会自动触发 GitHub Actions CI（`.github/workflows/ci.yml`）：
+
+1. **Build & Format Check** — `pnpm format:check` + `pnpm build`
+2. **TypeScript Tests** — `pnpm test`
+3. **Rust Tests**（仅 `packages/neko-engine/` 变更时）— `cargo test` + `cargo clippy`
+
+---
+
 ## 代码规范
 
 详细规范见 [CLAUDE.md](./CLAUDE.md)，以下是核心要点：

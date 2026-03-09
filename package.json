@@ -28,7 +28,18 @@
     "test": "turbo run test",
     "clean": "turbo run clean && rm -rf .turbo node_modules/.cache",
     "generate:types": "node scripts/proto-gen-ts.mjs",
-    "nekoagent": "pnpm dlx tsx packages/neko-agent/packages/cli/src/cli.ts"
+    "nekoagent": "pnpm dlx tsx packages/neko-agent/packages/cli/src/cli.ts",
+    "format": "prettier --write \"packages/**/src/**/*.{ts,tsx,json}\"",
+    "format:check": "prettier --check \"packages/**/src/**/*.{ts,tsx,json}\"",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "packages/**/src/**/*.{ts,tsx}": [
+      "prettier --write"
+    ],
+    "packages/**/src/**/*.{json,md}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "@img/sharp-wasm32": "^0.34.5",
@@ -38,6 +49,9 @@
   },
   "devDependencies": {
     "@vscode/vsce": "^3.7.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.2",
+    "prettier": "^3.8.1",
     "protobufjs": "^8.0.0",
     "turbo": "^2.8.3"
   }

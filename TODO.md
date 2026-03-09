@@ -157,11 +157,26 @@
 
 ## 📋 技术债务
 
+### CI/CD 基础设施（Phase 1 ✅ 已完成）
+
+- [x] GitHub Actions CI（`.github/workflows/ci.yml`）— build + test-ts + test-rust（路径过滤）
+- [x] Prettier 统一格式化（`.prettierrc.json`）— 835 个文件已格式化
+- [x] Pre-commit hooks（Husky + lint-staged）— 自动格式化暂存文件
+- [x] 根 tsconfig 强化（`strict` + `noUncheckedIndexedAccess` + `noImplicitOverride`）
+- [ ] ESLint 统一配置（`eslint.config.mjs` flat config v9+，warn 模式）— Phase 2
+- [ ] 测试覆盖率收集（vitest coverage + CI artifact 上传）— Phase 2
+- [ ] Release workflow（`.github/workflows/release.yml`，tag 触发 vsix 打包）— Phase 3
+
+### 代码质量
+
 | 优先级 | 问题 | 影响 | 来源 |
 |--------|------|------|------|
 | ~~高~~ | ~~统一错误处理机制~~ ✅ 框架已建立（`BaseError` + `IErrorHandler` + `VSCodeErrorHandler`），各包接入推进中 | ~~调试困难~~ | [task-plan TD-2](./docs/task-plan.md) |
-| 高 | 单元测试覆盖率（neko-agent 47 个最多，其他包偏少） | 回归风险 | [task-plan TD-4](./docs/task-plan.md) |
+| 高 | 单元测试覆盖率（neko-agent 47 个最多，其他包偏少，~10.9%） | 回归风险 | [task-plan TD-4](./docs/task-plan.md) |
+| 高 | `console.log` 清理（213 处：neko-agent ~123, neko-engine ~53, neko-tools ~29） | 日志混乱 | |
+| 高 | `as any` 清理（545 处：neko-cut ~261, neko-agent ~230） | 类型安全 | |
 | 高 | neko-engine 性能监控（telemetry 基础已有，需接入指标面板） | 性能盲区 | |
+| 中 | 大文件拆分（14 文件 >1000 LOC，最大 TimelineToolExecutor 1823 LOC） | 可维护性 | |
 | 中 | AI SDK 依赖倒置（`AISdkAdapter` 直接依赖 Vercel AI SDK，DIP 65/100） | 可替换性差 | [task-plan TD-1](./docs/task-plan.md) |
 | 中 | 规范化 git commit message（采用 Conventional Commits） | 追溯困难 | [task-plan TD-3](./docs/task-plan.md) |
 | ~~中~~ | ~~neko-types 83 个 `as any`~~ ✅ 已清理至 2 处（仅测试代码） | ~~类型安全~~ | [engine.md](./docs/engine.md) |
@@ -185,4 +200,4 @@
 
 ---
 
-*最后更新：2026-03-06（文档同步：Media LSP Phase 1+2 ✅ + Probe 冗余修复 ✅ + 反向播放 UI ✅ + Timeline Diff 范围 UI ✅）*
+*最后更新：2026-03-09（CI/CD Phase 1 ✅：GitHub Actions + Prettier + Husky + tsconfig strict）*
