@@ -168,10 +168,19 @@
 - [x] Rust CI 增强 — `cargo fmt --check` + `cargo clippy` + `cargo test` + cargo-deny 依赖审计
 - [x] Proto 类型同步检查 — `pnpm generate:types` + git diff 检测未提交变更
 - [x] 依赖安全审查 — `actions/dependency-review-action`（PR only）
+- [x] Knip 僵尸代码检测 — `knip.config.ts` + `pnpm check:unused`（CI code-quality job，continue-on-error）
+- [x] dependency-cruiser 架构规则 — `.dependency-cruiser.cjs` 5 条规则 + `pnpm check:deps`（CI code-quality job）
+- [x] Vitest 覆盖率标准化 — `vitest.shared.ts` 统一 13 个 vitest.config.ts 的 reporters + excludes
+- [ ] 覆盖率阈值启用 — 需先统一 vitest 版本（当前混合 v1/v2/v3/v4），然后取消 `vitest.shared.ts` 中注释的 thresholds
+- [ ] CI code-quality 移除 `continue-on-error` — 本地稳定后使其成为阻塞门禁
 - [ ] Release workflow（`.github/workflows/release.yml`，tag 触发 vsix 打包）— Phase 3
 - [ ] ESLint warn → error 升级（`no-console` + `no-explicit-any`，待清理完成后）— Phase 3
 
 ### 代码质量（Phase 3 — 2026-03-09 审计）
+
+**Knip 首次扫描结果**（2026-03-09）：132 未使用文件 | 421 未使用导出 | 22 未使用依赖
+
+**dependency-cruiser 首次扫描结果**（2026-03-09）：7 个循环依赖（neko-types 2 + neko-cut 3 + neko-agent 2）
 
 **`as any`：541 处（生产代码 89 处 + 测试代码 452 处）**
 

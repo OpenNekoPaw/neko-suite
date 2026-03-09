@@ -494,6 +494,7 @@ export { ConcreteService, type IService, type Options }
 ```bash
 pnpm build         # 1. 编译构建
 pnpm test          # 2. 单元测试（Vitest）
+pnpm check         # 3. 代码质量（Knip + dependency-cruiser）
 # Rust: cd packages/neko-engine && cargo test
 ```
 
@@ -502,6 +503,25 @@ pnpm test          # 2. 单元测试（Vitest）
 - **单元测试**：模块独立测试，Mock 外部依赖
 - **集成测试**：验证模块交互和接口契约
 - **架构测试**：检查依赖方向和循环依赖
+
+### 覆盖率配置
+
+所有包的 Vitest 覆盖率通过 `vitest.shared.ts` 统一管理（reporters + exclude 模式）。各包 `vitest.config.ts` 引用 `sharedCoverage()` 函数，可按需传入 overrides。
+
+### 代码质量工具
+
+```bash
+pnpm check:unused    # Knip — 检测未使用文件/导出/依赖（配置: knip.config.ts）
+pnpm check:deps      # dependency-cruiser — 架构规则校验（配置: .dependency-cruiser.cjs）
+pnpm check           # 两者同时运行
+```
+
+**dependency-cruiser 强制规则**（详见 `.dependency-cruiser.cjs`）：
+- `no-circular`: 禁止循环依赖
+- `layer0-no-internal-deps`: Layer 0 包零内部依赖
+- `webview-no-vscode`: Webview 禁止导入 vscode
+- `extension-no-react`: Extension 禁止导入 React
+- `no-cross-extension-deps-*`: 扩展包间不互相依赖
 
 ---
 

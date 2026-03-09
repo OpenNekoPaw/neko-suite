@@ -33,6 +33,10 @@
     "nekoagent": "pnpm dlx tsx packages/neko-agent/packages/cli/src/cli.ts",
     "format": "prettier --write \"packages/**/src/**/*.{ts,tsx,json}\"",
     "format:check": "prettier --check \"packages/**/src/**/*.{ts,tsx,json}\"",
+    "check:unused": "knip",
+    "check:unused:fix": "knip --fix",
+    "check:deps": "depcruise packages/neko-types/src packages/neko-client/src packages/neko-cut/packages/extension/src packages/neko-cut/packages/webview/src packages/neko-agent/packages/extension/src packages/neko-agent/packages/platform/src packages/neko-agent/packages/agent/src packages/neko-canvas/packages/webview/src packages/neko-story/packages/extension/src packages/neko-story/packages/parser/src packages/neko-preview/packages/extension/src --config",
+    "check": "pnpm check:unused && pnpm check:deps",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -58,6 +62,7 @@
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "husky": "^9.1.7",
+    "knip": "^5.86.0",
     "lint-staged": "^16.3.2",
     "prettier": "^3.8.1",
     "protobufjs": "^8.0.0",

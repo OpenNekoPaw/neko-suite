@@ -157,6 +157,43 @@ pnpm lint:fix        # 自动修复可修复问题
 
 Pre-commit hook 会自动执行 `eslint --fix` + `prettier --write`。
 
+### 僵尸代码检测（Knip）
+
+[Knip](https://knip.dev) 检测未使用的文件、导出和依赖项，配置见 `knip.config.ts`。
+
+```bash
+pnpm check:unused        # 检测未使用代码
+pnpm check:unused:fix    # 自动移除未使用的导出和依赖
+```
+
+### 架构规则校验（dependency-cruiser）
+
+[dependency-cruiser](https://github.com/sverweij/dependency-cruiser) 自动校验架构约束，配置见 `.dependency-cruiser.cjs`。
+
+```bash
+pnpm check:deps          # 检查架构规则违反
+```
+
+当前强制执行的规则：
+
+| 规则 | 级别 | 说明 |
+|------|------|------|
+| `no-circular` | error | 禁止循环依赖 |
+| `layer0-no-internal-deps` | error | Layer 0（@neko/shared, @neko/neko-client）不依赖其他内部包 |
+| `webview-no-vscode` | error | Webview 包禁止导入 `vscode` 模块 |
+| `extension-no-react` | error | Extension 包禁止导入 React/ReactDOM |
+| `no-cross-extension-deps-*` | warn | 扩展包之间不能直接互相依赖 |
+
+### 覆盖率配置
+
+所有包的 vitest 覆盖率配置通过 `vitest.shared.ts` 统一管理（reporters、exclude 模式）。覆盖率阈值待 vitest 版本统一后启用。
+
+### 一键质量检查
+
+```bash
+pnpm check               # 同时运行 Knip + dependency-cruiser
+```
+
 ### CI/CD
 
 PR 和主分支推送会自动触发 GitHub Actions CI（`.github/workflows/ci.yml`），通过路径过滤按需运行：
@@ -165,6 +202,7 @@ PR 和主分支推送会自动触发 GitHub Actions CI（`.github/workflows/ci.y
 |-----|---------|------|
 | **Build & Lint** | TS/配置文件变更 | `format:check` + `lint` + `build` |
 | **TypeScript Tests** | 同上 | `pnpm test --coverage` + coverage artifact |
+| **Code Quality** | 同上 | Knip 僵尸代码检测 + dependency-cruiser 架构规则 |
 | **Rust Tests** | `packages/neko-engine/**` 变更 | `cargo fmt --check` + `clippy` + `cargo test` |
 | **Cargo Deny** | 同上 | Rust 依赖审计 |
 | **Proto Types Sync** | `packages/neko-proto/**` 变更 | 检查生成类型是否同步 |
