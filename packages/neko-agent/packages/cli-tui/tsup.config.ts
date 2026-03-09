@@ -1,15 +1,17 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/cli.ts'],
+  entry: ['src/cli.tsx'],
   format: ['esm'],
-  dts: true,
+  dts: false,
   clean: true,
-  minify: true,
   target: 'node18',
   outDir: 'dist',
   // Bundle workspace packages since they export raw .ts files
   noExternal: ['@neko/shared', '@neko/agent'],
-  // Keep optional/heavy deps external — loaded dynamically if available
-  external: ['mermaid', 'ajv'],
+  // Keep heavy/optional deps external
+  external: ['ink', 'react', 'yoga-wasm-web', 'mermaid', 'ajv'],
+  banner: {
+    js: '#!/usr/bin/env node',
+  },
 });

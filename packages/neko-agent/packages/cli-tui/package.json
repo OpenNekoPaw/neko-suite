@@ -1,0 +1,45 @@
+{
+  "name": "@neko/cli",
+  "version": "0.0.1",
+  "description": "CLI for Neko AI Agent - Professional TUI with streaming, markdown, and rich interactions",
+  "type": "module",
+  "bin": {
+    "nekoagent": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "build": "tsup",
+    "build:bundle": "esbuild src/cli.tsx --bundle --platform=node --target=node18 --format=esm --outfile=dist/cli.bundle.js --minify --external:fsevents --external:ink --external:react --external:yoga-wasm-web",
+    "build:exe": "npm run build:bundle && pkg dist/cli.bundle.js --targets node20-macos-arm64,node20-macos-x64,node20-linux-x64,node20-win-x64 --output ../../nekoagent --compress GZip",
+    "build:exe:current": "npm run build:bundle && pkg dist/cli.bundle.js --targets node20-macos-arm64 --output ../../nekoagent --compress GZip",
+    "dev": "tsx src/cli.tsx",
+    "test": "vitest",
+    "test:run": "vitest --run"
+  },
+  "pkg": {
+    "assets": [],
+    "outputPath": "dist"
+  },
+  "dependencies": {
+    "@neko/agent": "workspace:*",
+    "@neko/shared": "workspace:*",
+    "ink": "^5.0.1",
+    "react": "^18.3.1",
+    "zustand": "^5.0.0",
+    "commander": "^12.0.0",
+    "chalk": "^5.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@yao-pkg/pkg": "^5.11.0",
+    "esbuild": "^0.20.0",
+    "ink-testing-library": "^4.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}
