@@ -16,8 +16,7 @@ out/
 build/
 *.vsix
 
-# 锁文件
-pnpm-lock.yaml
+# 锁文件（pnpm-lock.yaml 必须提交，CI 依赖它）
 bun.lock
 package-lock.json
 
