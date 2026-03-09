@@ -10,6 +10,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
 # ──────────────────────────────────────────────
 # Reusable setup anchors (YAML anchors not supported in GHA,
 # so we use a composite pattern with shared steps)

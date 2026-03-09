@@ -83,6 +83,7 @@ impl Default for VADRMPRIMESurfaceDescriptor {
     }
 }
 
+#[link(name = "va")]
 extern "C" {
     fn vaExportSurfaceHandle(
         display: *mut std::ffi::c_void,
@@ -739,6 +740,8 @@ struct CudaMemcpy2D {
 
 const CU_MEMORYTYPE_DEVICE: u32 = 2;
 
+#[cfg(feature = "cuda")]
+#[link(name = "cuda")]
 extern "C" {
     fn cuImportExternalMemory(
         ext_mem: *mut CUexternalMemory,
@@ -767,10 +770,12 @@ extern "C" {
 /// 4. wgpu uses the Vulkan texture directly
 ///
 /// This avoids CPU roundtrip — data stays on GPU throughout.
+#[cfg(feature = "cuda")]
 pub struct CudaTextureImporter {
     ctx: Arc<GpuContext>,
 }
 
+#[cfg(feature = "cuda")]
 impl CudaTextureImporter {
     /// Create a new CUDA texture importer
     pub fn new(ctx: Arc<GpuContext>) -> Result<Self> {

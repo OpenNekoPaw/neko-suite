@@ -410,7 +410,7 @@ impl HwAccelDecoder {
                     })
                 }
 
-                #[cfg(any(target_os = "linux", target_os = "windows"))]
+                #[cfg(all(any(target_os = "linux", target_os = "windows"), feature = "cuda"))]
                 Pixel::CUDA => {
                     // CUDA: data[0] contains CUdeviceptr
                     let device_ptr = (*frame_ptr).data[0] as usize;

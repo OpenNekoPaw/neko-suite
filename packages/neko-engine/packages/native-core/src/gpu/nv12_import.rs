@@ -180,7 +180,7 @@ impl Nv12TextureImporter {
                 display,
             } => self.import_vaapi(*surface_id, *display, gpu_texture),
 
-            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            #[cfg(all(any(target_os = "linux", target_os = "windows"), feature = "cuda"))]
             GpuTextureHandle::Cuda { device_ptr, pitch } => {
                 self.import_cuda(*device_ptr, *pitch, gpu_texture)
             }
@@ -259,7 +259,7 @@ impl Nv12TextureImporter {
     }
 
     /// Import from CUDA (Linux — GPU-to-GPU via CUDA-Vulkan interop)
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "cuda"))]
     fn import_cuda(
         &self,
         device_ptr: usize,
@@ -272,7 +272,7 @@ impl Nv12TextureImporter {
     }
 
     /// Import from CUDA (Windows — not yet implemented)
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", feature = "cuda"))]
     fn import_cuda(
         &self,
         device_ptr: usize,
