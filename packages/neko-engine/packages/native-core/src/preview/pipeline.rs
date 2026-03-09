@@ -264,7 +264,7 @@ impl PreviewPipeline {
             .process_frame_to_nv12(time, background_color)?;
 
         let pts = (self.frame_count as f64 * 1_000_000.0 / self.config.fps) as i64;
-        let packets = self.encoder.encode_frame(&result.data, pts)?;
+        let packets = self.encoder.encode_frame(&result, pts)?;
 
         self.frame_count += 1;
 
