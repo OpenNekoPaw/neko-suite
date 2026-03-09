@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
+import { sharedCoverage } from '../../../../vitest.shared';
 
 export default defineConfig({
   plugins: [react()],
@@ -8,10 +9,7 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    coverage: {
-      reporter: ['text', 'json', 'html'],
-      exclude: ['node_modules/', 'src/**/*.test.ts', 'src/**/*.test.tsx'],
-    },
+    coverage: sharedCoverage(),
   },
   resolve: {
     alias: {

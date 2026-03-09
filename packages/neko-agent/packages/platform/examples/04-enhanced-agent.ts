@@ -120,19 +120,19 @@ Always be thorough in your analysis.`,
       contextManager: contextCompressor,
 
       // Callbacks
-      onStep: (step) => {
+      onStep: (step: { type: string; content?: string }) => {
         console.log(`\n[${step.type.toUpperCase()}] ${new Date().toISOString()}`);
         if (step.content) {
           console.log(step.content.substring(0, 200) + (step.content.length > 200 ? '...' : ''));
         }
       },
-      onStateChange: (state) => {
+      onStateChange: (state: string) => {
         console.log(`State: ${state}`);
       },
-      onRetry: (error, attempt) => {
+      onRetry: (error: Error, attempt: number) => {
         console.log(`Retry attempt ${attempt}: ${error.message}`);
       },
-      onModelSwitch: (from, to, reason) => {
+      onModelSwitch: (from: string, to: string, reason: string) => {
         console.log(`Model switch: ${from} -> ${to} (${reason})`);
       },
     });
