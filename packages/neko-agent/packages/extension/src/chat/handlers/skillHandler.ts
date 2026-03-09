@@ -17,7 +17,6 @@ import * as vscode from 'vscode';
 import type {
   SkillSummary,
   Skill,
-  SlashCommand,
   SkillInjection,
   SkillDiscoveryResult,
   SkillApplicationResult,
@@ -46,17 +45,6 @@ export interface ActiveSkillState {
   toolGuard?: IToolGuard;
   /** Timestamp when skill was applied */
   appliedAt: number;
-}
-
-/**
- * Skill confirmation request message
- */
-export interface SkillConfirmRequest {
-  type: 'skillConfirmRequest';
-  skillName: string;
-  skillDescription: string;
-  relevance: number;
-  reason: string;
 }
 
 /**
@@ -176,50 +164,6 @@ export class SkillHandler {
     }
 
     return skillService.discover(userInput);
-  }
-
-  /**
-   * Handle semantic skill discovery with optional confirmation
-   *
-   * Note: Skills discovered via semantic matching do NOT support arguments.
-   * Arguments are only for slash commands (use handleSlashCommand for that).
-   *
-   * @param webview Webview for UI communication
-   * @param userInput User's message
-   */
-  async handleDiscoverAndApply(
-    webview: vscode.Webview,
-    userInput: string
-  ): Promise<SkillApplicationResult | null> {
-    const { skillService } = this._deps;
-    if (!skillService) {
-      return null;
-    }
-
-    // Use the skill service's discovery and application flow
-    // Note: Skills don't support args - only slash commands do
-    const result = await skillService.discoverAndApply(
-      userInput,
-      // Confirmation callback - Ask user via webview
-      async (skill: Skill, match: { relevance: number; reason: string }) => {
-        return this._requestUserConfirmation(webview, skill, match);
-      }
-    );
-
-    if (result?.applied && result.injection) {
-      // Store active skill state
-      this._activeSkill = {
-        skill: result.skill!,
-        injection: result.injection,
-        toolGuard: result.toolGuard,
-        appliedAt: Date.now(),
-      };
-
-      // Send injection to webview with tool definitions
-      this._sendSkillInjection(webview, result.injection, result.skill);
-    }
-
-    return result;
   }
 
   // ===========================================================================
@@ -347,38 +291,4 @@ export class SkillHandler {
     webview.postMessage(message);
   }
 
-  /**
-   * Request user confirmation for skill application
-   * Returns a promise that resolves when user responds
-   */
-  private _requestUserConfirmation(
-    webview: vscode.Webview,
-    skill: Skill,
-    match: { relevance: number; reason: string }
-  ): Promise<boolean> {
-    return new Promise((resolve) => {
-      // Send confirmation request to webview
-      const request: SkillConfirmRequest = {
-        type: 'skillConfirmRequest',
-        skillName: skill.name,
-        skillDescription: skill.description,
-        relevance: match.relevance,
-        reason: match.reason,
-      };
-
-      webview.postMessage(request);
-
-      // Set up one-time listener for response
-      // Note: In real implementation, this would use a proper message handler
-      // For now, we'll use VS Code's quick pick as fallback
-      vscode.window
-        .showQuickPick(['Yes, apply this skill', 'No, skip'], {
-          title: `Apply skill "${skill.name}"?`,
-          placeHolder: match.reason,
-        })
-        .then((selection) => {
-          resolve(selection === 'Yes, apply this skill');
-        });
-    });
-  }
 }

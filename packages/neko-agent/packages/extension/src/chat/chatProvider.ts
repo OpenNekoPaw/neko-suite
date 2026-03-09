@@ -24,7 +24,6 @@ import { ConversationHandler } from './conversationHandler';
 import { MessageHandler } from './messageHandler';
 import { SystemPromptManager } from './systemPromptManager';
 import { WebviewMessage, MessageAttachment, TabState, OpenTab } from './types';
-import { GenericConfigService } from '../services/genericConfigService';
 import { ConfigBridge } from '../services/configBridge';
 import {
   TaskHandler, type TaskHandlerDeps,
@@ -299,13 +298,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this._restoreState();
       }
     });
-  }
-
-  /**
-   * Set the GenericConfigService for model preset management
-   */
-  public setGenericConfigService(service: GenericConfigService): void {
-    this._modelPresetHandler.setConfigService(service);
   }
 
   /**
