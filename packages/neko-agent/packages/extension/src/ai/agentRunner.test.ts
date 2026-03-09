@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AgentRunner, IAgentConfig, IAgentEvent } from './agentRunner';
+import { AgentRunner, IAgentConfig, AgentEvent } from './agentRunner';
 import { IAgentContext } from './agentContext';
 import type {
   Platform,
@@ -167,8 +167,8 @@ function createMockPlatform(
 // Helper Functions
 // =============================================================================
 
-async function collectEvents(generator: AsyncIterable<IAgentEvent>): Promise<IAgentEvent[]> {
-  const events: IAgentEvent[] = [];
+async function collectEvents(generator: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
+  const events: AgentEvent[] = [];
   for await (const event of generator) {
     events.push(event);
   }
@@ -472,7 +472,7 @@ describe('AgentRunner', () => {
       runner.cancel();
 
       // 收集剩余事件
-      const events: IAgentEvent[] = [];
+      const events: AgentEvent[] = [];
       for await (const event of generator) {
         events.push(event);
       }

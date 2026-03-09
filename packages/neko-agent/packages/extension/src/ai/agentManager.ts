@@ -286,11 +286,6 @@ export class AgentManager implements IAgentManager {
       if (index !== -1) {
         this._accessOrder.splice(index, 1);
       }
-
-      // 清理会话级别的熔断器状态
-      if (this._platform) {
-        this._platform.providers.cleanupSession(conversationId);
-      }
     }
   }
 

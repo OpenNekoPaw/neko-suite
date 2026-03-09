@@ -15,7 +15,7 @@ import {
 } from 'react';
 import { Message, type TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
-import type { AttachedFile } from '@/components/ChatView/InputArea';
+import type { MessageAttachment } from '@/components/ChatView/InputArea';
 import { setExternalMessageContext } from '@/handlers';
 
 export interface UseChatActionsProps {
@@ -32,11 +32,11 @@ export interface UseChatActionsProps {
   setActiveTab: Dispatch<SetStateAction<TabType>>;
   setInputValue: Dispatch<SetStateAction<string>>;
   clearInput: () => void;
-  setAttachedFiles: (files: AttachedFile[]) => void;
+  setAttachedFiles: (files: MessageAttachment[]) => void;
 }
 
 export interface UseChatActionsReturn {
-  handleSend: (attachments?: AttachedFile[]) => void;
+  handleSend: (attachments?: MessageAttachment[]) => void;
   triggerSend: (messageText: string) => void;
   handleCancelMessage: () => void;
   copyLastResponse: () => void;
@@ -83,7 +83,7 @@ export function useChatActions({
   // Send a user message — always send directly to Extension.
   // AgentRunner handles queueing if the agent is already running.
   const handleSend = useCallback(
-    (attachments?: AttachedFile[]) => {
+    (attachments?: MessageAttachment[]) => {
       const trimmed = inputValue.trim();
       if (!trimmed && (!attachments || attachments.length === 0)) return;
 

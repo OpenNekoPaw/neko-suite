@@ -4,14 +4,14 @@
  */
 
 import { useRef, useCallback } from 'react';
-import { AttachedFile, getFileTypeFromMime, FILE_TYPE_ICONS } from './types';
+import { type MessageAttachment, getFileTypeFromMime, FILE_TYPE_ICONS } from './types';
 import { useTranslation } from '@/i18n/I18nContext';
 
 /**
  * AttachmentPreview - Shows attached files as inline tags (inside input box)
  */
 interface AttachmentPreviewProps {
-  attachedFiles: AttachedFile[];
+  attachedFiles: MessageAttachment[];
   onRemove: (id: string) => void;
 }
 
@@ -48,7 +48,7 @@ export function AttachmentPreview({ attachedFiles, onRemove }: AttachmentPreview
  * AttachmentButton - Upload button for toolbar
  */
 interface AttachmentButtonProps {
-  onFilesAdd: (files: AttachedFile[]) => void;
+  onFilesAdd: (files: MessageAttachment[]) => void;
 }
 
 export function AttachmentButton({ onFilesAdd }: AttachmentButtonProps) {
@@ -60,11 +60,11 @@ export function AttachmentButton({ onFilesAdd }: AttachmentButtonProps) {
       const files = e.target.files;
       if (!files) return;
 
-      const newFiles: AttachedFile[] = [];
+      const newFiles: MessageAttachment[] = [];
 
       Array.from(files).forEach((file) => {
         const fileType = getFileTypeFromMime(file.type);
-        const newFile: AttachedFile = {
+        const newFile: MessageAttachment = {
           id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           name: file.name,
           type: fileType,
@@ -123,32 +123,6 @@ export function AttachmentButton({ onFilesAdd }: AttachmentButtonProps) {
         onChange={handleFileSelect}
         accept="*/*"
       />
-    </>
-  );
-}
-
-/**
- * FileAttachment - Legacy combined component for backward compatibility
- * @deprecated Use AttachmentPreview and AttachmentButton separately
- */
-interface FileAttachmentProps {
-  attachedFiles: AttachedFile[];
-  onFilesChange: (files: AttachedFile[]) => void;
-}
-
-export function FileAttachment({ attachedFiles, onFilesChange }: FileAttachmentProps) {
-  const handleRemove = (id: string) => {
-    onFilesChange(attachedFiles.filter((f) => f.id !== id));
-  };
-
-  const handleFilesAdd = (newFiles: AttachedFile[]) => {
-    onFilesChange([...attachedFiles, ...newFiles]);
-  };
-
-  return (
-    <>
-      <AttachmentPreview attachedFiles={attachedFiles} onRemove={handleRemove} />
-      <AttachmentButton onFilesAdd={handleFilesAdd} />
     </>
   );
 }

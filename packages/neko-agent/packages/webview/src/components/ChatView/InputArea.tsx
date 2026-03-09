@@ -4,4 +4,4 @@
  */
 
 export { InputArea } from './InputArea/InputArea';
-export type { AttachedFile, ProjectFile } from './InputArea/types';
+export type { MessageAttachment, ProjectFile } from './InputArea/types';

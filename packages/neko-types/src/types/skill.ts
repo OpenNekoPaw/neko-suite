@@ -140,12 +140,6 @@ export interface Skill {
   supportFileRefs?: string[];
 
   /**
-   * @deprecated Use supportFileRefs instead.
-   * Support files content - loaded eagerly (not progressive disclosure)
-   */
-  supportFiles?: Record<string, string>;
-
-  /**
    * Allowed tools - Restrict which tools Claude can use during skill execution
    * @example ["Read", "Grep", "Bash(git:*)", "Bash(python:*)"]
    */
@@ -386,10 +380,6 @@ export interface ISkillRegistry {
 
   // Clear
   clear(): void;
-
-  // Legacy compatibility
-  /** @deprecated Use getCommand() instead */
-  getBySlashCommand(command: string): Skill | undefined;
 }
 
 /**
@@ -586,33 +576,11 @@ export interface SkillContentConfig {
 }
 
 /**
- * @deprecated Use SkillContentConfig instead
- * Skill resource injection configuration
- * Defines which external resources a skill can access
- */
-export interface SkillResourceConfig {
-  /** Allowed tools (Tool names or patterns like "Bash(git:*)") */
-  allowedTools?: string[];
-
-  /** MCP servers to enable for this skill (server IDs) */
-  mcpServers?: string[];
-
-  /** Workflows to enable for this skill (workflow IDs) */
-  workflows?: string[];
-
-  /** Whether to auto-inject MCP tools as allowed tools */
-  autoInjectMcpTools?: boolean;
-}
-
-/**
  * Configured Skill (with UI/settings extensions)
  */
 export interface ConfiguredSkill extends Skill {
   /** Content configuration (references, scripts, tools) */
   contentConfig?: SkillContentConfig;
-
-  /** @deprecated Use contentConfig instead */
-  resources?: SkillResourceConfig;
 
   /** User notes/documentation */
   notes?: string;
@@ -630,9 +598,6 @@ export interface ConfiguredSkill extends Skill {
 export interface ConfiguredSlashCommand extends SlashCommand {
   /** Content configuration (references, scripts, tools) */
   contentConfig?: SkillContentConfig;
-
-  /** @deprecated Use contentConfig instead */
-  resources?: SkillResourceConfig;
 
   /** User notes/documentation */
   notes?: string;
@@ -985,33 +950,4 @@ export function skillToolToOpenAI(tool: SkillToolDefinition): OpenAIFunction {
  */
 export function skillToolsToOpenAI(tools: SkillToolDefinition[]): OpenAIFunction[] {
   return tools.map(skillToolToOpenAI);
-}
-
-// =============================================================================
-// Legacy Compatibility (Deprecated)
-// =============================================================================
-
-/**
- * @deprecated Use Skill or SlashCommand instead
- * This type is kept for backward compatibility during migration
- */
-export interface LegacySkill extends Skill {
-  slashCommand?: string;
-  argumentHint?: string;
-}
-
-/**
- * @deprecated Use SkillFrontmatter instead
- */
-export interface LegacySkillFrontmatter extends SkillFrontmatter {
-  'slash-command'?: string;
-  'argument-hint'?: string;
-}
-
-/**
- * @deprecated Kept for backward compatibility
- */
-export interface SkillSlashCommand {
-  command: string;
-  skill: LegacySkill;
 }

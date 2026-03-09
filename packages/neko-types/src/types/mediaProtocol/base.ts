@@ -141,99 +141,7 @@ export interface GetWaveformRequest extends BaseMediaRequest {
 }
 
 /**
- * Phase 2.5: 合成轨道定义
- */
-export interface CompositeTrack {
-  /** 视频文件路径 */
-  videoPath: string;
-  /** X 位置（像素） */
-  x: number;
-  /** Y 位置（像素） */
-  y: number;
-  /** 宽度（像素） */
-  width: number;
-  /** 高度（像素） */
-  height: number;
-  /** 不透明度（0-1，可选，默认 1） */
-  opacity?: number;
-  /** 混合模式（可选，默认 'normal'） */
-  blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay';
-  /** 特效列表（可选） */
-  effects?: CompositeTrackEffect[];
-}
-
-/**
- * Phase 2.5: 轨道特效定义
- */
-export interface CompositeTrackEffect {
-  type: 'blur' | 'colorCorrection' | 'brightness' | 'contrast';
-  // Blur
-  radius?: number;
-  // Color Correction
-  brightness?: number;
-  contrast?: number;
-  saturation?: number;
-  hue?: number;
-}
-
-/**
- * Phase 2.5: 多轨道合成帧请求
- * Extension 端使用 FFmpeg 合成多个视频轨道
- *
- * @deprecated Phase 4: 合成功能将迁移到 Webview 端 GPU 渲染
- * 请使用 GPURenderEngine 进行多轨合成
- */
-export interface GetCompositeFrameRequest extends BaseMediaRequest {
-  type: 'media:getCompositeFrame';
-  payload: {
-    /** 轨道列表（从下到上叠加） */
-    tracks: CompositeTrack[];
-    /** 时间点（秒） */
-    timeInSeconds: number;
-    /** 输出宽度 */
-    width: number;
-    /** 输出高度 */
-    height: number;
-    /** Phase 2: 质量参数（可选） */
-    quality?: number;
-    /** Phase 2: 缩放比例（可选，0-1） */
-    scale?: number;
-  };
-}
-
-/**
- * Phase 2.5: 多轨道合成批量帧请求
- *
- * @deprecated Phase 4: 合成功能将迁移到 Webview 端 GPU 渲染
- * 请使用 GPURenderEngine 进行多轨合成
- */
-export interface GetCompositeFrameRangeRequest extends BaseMediaRequest {
-  type: 'media:getCompositeFrameRange';
-  payload: {
-    /** 轨道列表（从下到上叠加） */
-    tracks: CompositeTrack[];
-    /** 开始时间（秒） */
-    startTime: number;
-    /** 持续时间（秒） */
-    duration: number;
-    /** 帧率 */
-    fps: number;
-    /** 输出宽度 */
-    width: number;
-    /** 输出高度 */
-    height: number;
-    /** Phase 2: 质量参数（可选） */
-    quality?: number;
-    /** Phase 2: 缩放比例（可选，0-1） */
-    scale?: number;
-  };
-}
-
-/**
  * 所有媒体请求类型的联合
- *
- * Note: GetCompositeFrameRequest and GetCompositeFrameRangeRequest are removed.
- * Use GPURenderEngine for GPU-based multi-track composition in Webview.
  */
 export type MediaRequest =
   | GetVideoFrameRequest
@@ -379,41 +287,7 @@ export interface GetWaveformResponse extends BaseMediaResponse {
 }
 
 /**
- * Phase 2.5: 合成帧响应
- */
-export interface GetCompositeFrameResponse extends BaseMediaResponse {
-  type: 'media:response:getCompositeFrame';
-  payload?: {
-    /** 合成后的图片数据 */
-    imageBuffer: ArrayBuffer;
-    /** 图片 MIME 类型 */
-    mimeType: string;
-  };
-}
-
-/**
- * Phase 2.5: 批量合成帧响应
- */
-export interface GetCompositeFrameRangeResponse extends BaseMediaResponse {
-  type: 'media:response:getCompositeFrameRange';
-  payload?: {
-    /** 帧数据数组 */
-    frames: Array<{
-      /** 帧时间（秒） */
-      time: number;
-      /** 帧图片数据 */
-      imageBuffer: ArrayBuffer;
-    }>;
-    /** 图片 MIME 类型 */
-    mimeType: string;
-  };
-}
-
-/**
  * 所有媒体响应类型的联合
- *
- * Note: GetCompositeFrameResponse and GetCompositeFrameRangeResponse are removed.
- * Use GPURenderEngine for GPU-based multi-track composition in Webview.
  */
 export type MediaResponse =
   | GetVideoFrameResponse

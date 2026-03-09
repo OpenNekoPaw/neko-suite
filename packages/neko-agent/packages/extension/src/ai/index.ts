@@ -8,7 +8,6 @@ export {
   IAgentRunner,
   AgentRunner,
   IAgentConfig,
-  IAgentEvent,
   AgentEventType,
   ExecutionMode,
 } from './agentRunner';

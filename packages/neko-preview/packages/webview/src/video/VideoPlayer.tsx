@@ -7,7 +7,11 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { H264StreamClient, AudioStreamClient, FrameScheduler } from '@neko/neko-client';
-import type { FrameSchedulerStats, AudioStreamStats, H264StreamStats } from '@neko/neko-client';
+import type {
+  FrameSchedulerStats,
+  AudioStreamStats,
+  H264StreamClientStats,
+} from '@neko/neko-client';
 import { useExtensionMessage, useVscodeReady } from '../shared/useVscodeMessage';
 import { useTranslation } from '../i18n/I18nContext';
 import { VideoControls } from './VideoControls';
@@ -21,7 +25,7 @@ const CONTROLS_HIDE_DELAY = 3000;
 
 interface SyncStats {
   scheduler: FrameSchedulerStats | null;
-  h264: H264StreamStats | null;
+  h264: H264StreamClientStats | null;
   audio: AudioStreamStats | null;
 }
 

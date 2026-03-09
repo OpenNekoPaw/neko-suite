@@ -11,7 +11,7 @@ import type {
   IService,
   IToolRegistry,
   ISkillService,
-  IToolSkillRegistry,
+  IToolGroupRegistry,
 } from '@neko/shared';
 
 // =============================================================================
@@ -234,7 +234,7 @@ export interface SubAgentManagerDeps {
   /** Skill service (optional - for skill injection) */
   skillService?: ISkillService;
   /** ToolSkill registry (optional - for toolskill injection) */
-  toolSkillRegistry?: IToolSkillRegistry;
+  toolSkillRegistry?: IToolGroupRegistry;
   /** Custom model tier resolver (overrides hardcoded defaults) */
   modelTierResolver?: ModelTierResolver;
 }

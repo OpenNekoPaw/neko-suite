@@ -48,7 +48,6 @@ export type {
   TransitionPlacement,
   // Effects
   EffectType,
-  EffectParams,
   EffectCategory,
   EffectParameterType,
   EffectParameterValue,
@@ -102,7 +101,6 @@ export { AI_ACTIONS, getActionsForElementType, mapElementTypeToAIType } from '@n
 // Re-export constants and functions from shared (engine-aligned)
 export {
   // Transform defaults
-  DEFAULT_TRANSFORM,
   CENTERED_TRANSFORM,
   ENGINE_DEFAULT_TRANSFORM,
   // Audio defaults

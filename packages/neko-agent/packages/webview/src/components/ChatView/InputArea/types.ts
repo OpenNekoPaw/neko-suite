@@ -2,14 +2,9 @@
  * InputArea Types and Constants
  */
 
-// Re-export MessageAttachment from shared and alias as AttachedFile for backward compatibility
-import type { MessageAttachment, AttachmentType } from '@neko/shared';
+// Re-export MessageAttachment from shared
+import type { AttachmentType } from '@neko/shared';
 export type { MessageAttachment, AttachmentType } from '@neko/shared';
-
-/**
- * @deprecated Use MessageAttachment instead
- */
-export type AttachedFile = MessageAttachment;
 
 // Command source type
 export type CommandSource = 'builtin' | 'skill';

@@ -80,9 +80,6 @@ export interface H264StreamClientStats {
   hardwareAcceleration: boolean;
 }
 
-/** @deprecated Use H264StreamClientStats instead */
-export type H264StreamStats = H264StreamClientStats;
-
 // =============================================================================
 // H264StreamClient
 // =============================================================================

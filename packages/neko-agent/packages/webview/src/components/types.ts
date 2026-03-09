@@ -202,7 +202,7 @@ export interface SettingsState {
   // 已配置的 Hooks 列表
   configuredHooks: Array<import('@neko/shared').ConfiguredHook>;
   // 已配置的 ToolSkills 列表 (动态工具注入)
-  configuredToolSkills: Array<import('@neko/shared').ConfiguredToolSkill>;
+  configuredToolSkills: Array<import('@neko/shared').ConfiguredToolGroup>;
   selectedProviderId: string | null;
   selectedModelId: string | null;
   systemPrompt: string;

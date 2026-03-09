@@ -8,7 +8,7 @@
  */
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import type { AttachedFile } from '@/components/ChatView/InputArea';
+import type { MessageAttachment } from '@/components/ChatView/InputArea';
 import type { MutableRefObject } from 'react';
 
 /** Minimal Map interface for cleanup operations */
@@ -30,8 +30,8 @@ export interface UseConversationSessionProps {
 }
 
 export interface UseConversationSessionReturn {
-  attachedFiles: AttachedFile[];
-  setAttachedFiles: React.Dispatch<React.SetStateAction<AttachedFile[]>>;
+  attachedFiles: MessageAttachment[];
+  setAttachedFiles: React.Dispatch<React.SetStateAction<MessageAttachment[]>>;
   /** Clean up all session-bound state for a single conversation */
   cleanupConversation: (conversationId: string) => void;
   /** Clean up all session-bound state for every conversation */
@@ -50,9 +50,9 @@ export function useConversationSession({
 }: UseConversationSessionProps): UseConversationSessionReturn {
   // Per-conversation caches for input and attachments
   const conversationInputRef = useRef<Map<string, string>>(new Map());
-  const conversationAttachmentsRef = useRef<Map<string, AttachedFile[]>>(new Map());
+  const conversationAttachmentsRef = useRef<Map<string, MessageAttachment[]>>(new Map());
 
-  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<MessageAttachment[]>([]);
 
   // Save/restore on conversation switch
   const prevConversationIdRef = useRef<string | null>(null);

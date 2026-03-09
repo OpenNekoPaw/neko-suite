@@ -589,27 +589,6 @@ export class SkillLoader {
     const content = await this.fs.readFile(filePath);
     return content.split('\n')[0];
   }
-
-  // ===========================================================================
-  // Legacy Compatibility
-  // ===========================================================================
-
-  /**
-   * @deprecated Use loadSkillFromDirectory() instead
-   */
-  async loadSkillFile(filePath: string, source: SkillSource): Promise<Skill | null> {
-    const parts = filePath.split('/');
-    parts.pop(); // Remove SKILL.md
-    const directoryPath = parts.join('/');
-    return this.loadSkillFromDirectory(directoryPath, source);
-  }
-
-  /**
-   * @deprecated Use loadSkillFromContent() instead
-   */
-  loadFromContent(content: string, source: SkillSource = 'project', filePath?: string): Skill {
-    return this.loadSkillFromContent(content, source, filePath);
-  }
 }
 
 /**

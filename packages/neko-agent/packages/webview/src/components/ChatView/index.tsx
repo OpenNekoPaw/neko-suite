@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { Message, AgentState } from '@/components/types';
 import { MessageList } from '@/components/ChatView/MessageList';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
-import { InputArea, ProjectFile, AttachedFile } from '@/components/ChatView/InputArea';
+import { InputArea, ProjectFile, MessageAttachment } from '@/components/ChatView/InputArea';
 import { EmptyState } from '@/components/ChatView/EmptyState';
 import { DropZone } from '@/components/ChatView/DropZone';
 import { BackgroundTask } from '@/components/TaskListView';
@@ -42,12 +42,12 @@ interface ChatViewProps {
   onRejectAllPlanSteps?: (planId: string) => void;
   // Input callbacks
   onInputChange: (value: string) => void;
-  onSend: (attachments?: AttachedFile[]) => void;
+  onSend: (attachments?: MessageAttachment[]) => void;
   onCancel?: () => void;
   /** Session-bound attached files (managed by parent) */
-  attachedFiles?: AttachedFile[];
+  attachedFiles?: MessageAttachment[];
   /** Callback to update attached files */
-  onAttachedFilesChange?: (files: AttachedFile[]) => void;
+  onAttachedFilesChange?: (files: MessageAttachment[]) => void;
   /** Current agent execution state (null when idle) */
   agentState?: AgentState | null;
 }
@@ -83,9 +83,9 @@ export function ChatView({
   const isEmpty = messages.length === 0 && !isThinking;
 
   // P2: Dropped files state for DropZone integration
-  const [droppedFiles, setDroppedFiles] = useState<AttachedFile[]>([]);
+  const [droppedFiles, setDroppedFiles] = useState<MessageAttachment[]>([]);
 
-  const handleFilesDropped = useCallback((files: AttachedFile[]) => {
+  const handleFilesDropped = useCallback((files: MessageAttachment[]) => {
     setDroppedFiles(files);
   }, []);
 

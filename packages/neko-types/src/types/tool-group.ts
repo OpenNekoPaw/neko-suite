@@ -19,11 +19,6 @@ import type { IToolProvider } from './tool-injection';
 export type ToolGroupSource = 'builtin' | 'project' | 'personal';
 
 /**
- * @deprecated Use ToolGroupSource instead
- */
-export type ToolSkillSource = ToolGroupSource;
-
-/**
  * ToolGroup definition - defines a group of related tools
  */
 export interface ToolGroup {
@@ -59,11 +54,6 @@ export interface ToolGroup {
 }
 
 /**
- * @deprecated Use ToolGroup instead
- */
-export type ToolSkill = ToolGroup;
-
-/**
  * ToolGroup match result from keyword matching
  */
 export interface ToolGroupMatch {
@@ -74,16 +64,6 @@ export interface ToolGroupMatch {
   relevance: number;
 
   /** Keywords that matched */
-  matchedKeywords: string[];
-}
-
-/**
- * @deprecated Use ToolGroupMatch instead
- */
-export interface ToolSkillMatch {
-  /** @deprecated Use group instead */
-  skill: ToolGroup;
-  relevance: number;
   matchedKeywords: string[];
 }
 
@@ -114,11 +94,6 @@ export interface ConfiguredToolGroup extends ToolGroup {
   /** Last modified timestamp */
   lastModified?: number;
 }
-
-/**
- * @deprecated Use ConfiguredToolGroup instead
- */
-export type ConfiguredToolSkill = ConfiguredToolGroup;
 
 /**
  * ToolGroup registry interface
@@ -154,8 +129,3 @@ export interface IToolGroupRegistry extends IToolProvider {
   /** Check if a tool belongs to any group */
   getGroupsForTool(toolName: string): string[];
 }
-
-/**
- * @deprecated Use IToolGroupRegistry instead
- */
-export type IToolSkillRegistry = IToolGroupRegistry;

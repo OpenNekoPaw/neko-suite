@@ -20,7 +20,7 @@ import type {
   ConfiguredSkill,
   ConfiguredSlashCommand,
   ConfiguredHook,
-  ConfiguredToolSkill,
+  ConfiguredToolGroup,
   TaskDefaults,
 } from '@neko/shared';
 import { getPromptFileService } from '../PromptFileService';
@@ -234,7 +234,7 @@ export class ConfigBridge implements vscode.Disposable {
 
   // ---- Public accessors (used by chatProvider) ----
 
-  setToolSkills(toolSkills: ConfiguredToolSkill[]): void {
+  setToolSkills(toolSkills: ConfiguredToolGroup[]): void {
     this.toolSkill.setToolSkills(toolSkills);
   }
 
@@ -250,7 +250,7 @@ export class ConfigBridge implements vscode.Disposable {
     return this.hookSync.getHooks();
   }
 
-  getToolSkills(): ConfiguredToolSkill[] {
+  getToolSkills(): ConfiguredToolGroup[] {
     return this.toolSkill.getToolSkills();
   }
 

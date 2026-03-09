@@ -19,7 +19,6 @@ export {
   H264StreamClient,
   type H264StreamClientConfig,
   type H264StreamClientStats,
-  type H264StreamStats,
 } from './H264StreamClient';
 
 // PCM Web Audio player + master clock

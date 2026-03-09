@@ -4,14 +4,14 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { AttachedFile } from './InputArea/types';
+import type { MessageAttachment } from './InputArea/types';
 import { getLogger } from '../../utils/logger';
 
 const logger = getLogger('DropZone');
 
 interface DropZoneProps {
   children: React.ReactNode;
-  onFilesDropped: (files: AttachedFile[]) => void;
+  onFilesDropped: (files: MessageAttachment[]) => void;
   disabled?: boolean;
   acceptedTypes?: string[];
   maxSize?: number; // in bytes
@@ -59,8 +59,8 @@ export function DropZone({
 
   // Process dropped files
   const processFiles = useCallback(
-    async (fileList: FileList): Promise<AttachedFile[]> => {
-      const files: AttachedFile[] = [];
+    async (fileList: FileList): Promise<MessageAttachment[]> => {
+      const files: MessageAttachment[] = [];
       const validFiles = Array.from(fileList).filter((file) => {
         if (!isAcceptedType(file)) {
           logger.warn(`File type not accepted: ${file.type}`);
@@ -75,7 +75,7 @@ export function DropZone({
 
       for (const file of validFiles) {
         const fileType = getFileType(file.type);
-        const attachedFile: AttachedFile = {
+        const attachedFile: MessageAttachment = {
           id: `drop-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           name: file.name,
           type: fileType,

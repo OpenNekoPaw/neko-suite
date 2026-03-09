@@ -76,9 +76,3 @@ export const CENTERED_TRANSFORM: Transform = {
   anchorX: 0.5,
   anchorY: 0.5,
 };
-
-/**
- * @deprecated Use CENTERED_TRANSFORM (for normalized center) or
- * ENGINE_DEFAULT_TRANSFORM (for engine origin).
- */
-export const DEFAULT_TRANSFORM: Transform = CENTERED_TRANSFORM;

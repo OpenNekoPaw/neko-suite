@@ -51,25 +51,15 @@ export {
 // Builtin skills and commands
 export {
   registerBuiltins,
-  registerBuiltinSkills,
   builtinSkills,
   builtinCommands,
   // ToolGroups
   builtinToolGroups,
   registerBuiltinToolGroups,
-  // Legacy ToolSkill exports
-  builtinToolSkills,
-  registerBuiltinToolSkills,
 } from './builtins';
 
-// ToolGroup Registry (renamed from ToolSkill)
-export {
-  ToolGroupRegistry,
-  createToolGroupRegistry,
-  // Legacy exports
-  ToolSkillRegistry,
-  createToolSkillRegistry,
-} from './tool-group-registry';
+// ToolGroup Registry
+export { ToolGroupRegistry, createToolGroupRegistry } from './tool-group-registry';
 
 // Skill Conflict Resolver
 export { SkillConflictResolver, createSkillConflictResolver } from './skill-conflict-resolver';
@@ -118,11 +108,6 @@ export type {
 
   // Validation
   SkillValidationResult,
-
-  // Legacy (deprecated)
-  LegacySkill,
-  LegacySkillFrontmatter,
-  SkillSlashCommand,
 } from '@neko/shared';
 
 // Re-export utility functions from @neko/shared

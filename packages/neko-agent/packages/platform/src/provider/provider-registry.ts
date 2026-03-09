@@ -74,13 +74,6 @@ export class ProviderRegistry {
   }
 
   /**
-   * @deprecated No-op. Circuit breaker session cleanup has been removed.
-   */
-  cleanupSession(_sessionId: string): void {
-    // No-op: circuit breaker has been removed
-  }
-
-  /**
    * Dispose resources
    */
   dispose(): void {

@@ -181,16 +181,6 @@ describe('ProviderRegistry', () => {
     });
   });
 
-  describe('cleanupSession', () => {
-    it('should be a no-op (deprecated)', () => {
-      const configManager = createMockConfigManager();
-      const registry = new ProviderRegistry(configManager);
-
-      // Should not throw
-      registry.cleanupSession('session-1');
-    });
-  });
-
   describe('dispose', () => {
     it('should be a no-op', () => {
       const configManager = createMockConfigManager();

@@ -189,31 +189,4 @@ export class SkillInjector implements ISkillInjector {
 
     return result;
   }
-
-  // ===========================================================================
-  // Legacy Compatibility (Deprecated)
-  // ===========================================================================
-
-  /**
-   * @deprecated Use injectSkill() or injectCommand() instead
-   *
-   * This method assumes it's injecting a skill but also supports
-   * argument interpolation for backward compatibility.
-   */
-  inject(skill: Skill, args?: string): SkillInjection {
-    let systemPrompt = skill.content;
-
-    // Interpolate arguments if provided (legacy behavior)
-    if (args) {
-      systemPrompt = this.interpolate(systemPrompt, args);
-    }
-
-    return {
-      systemPrompt,
-      allowedTools: skill.allowedTools,
-      name: skill.name,
-      model: skill.model,
-      type: 'skill',
-    };
-  }
 }

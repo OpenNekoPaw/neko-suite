@@ -10,7 +10,7 @@ import type {
   ToolResult,
   ToolCategory,
   IToolCategoryRegistry,
-  IToolSkillRegistry,
+  IToolGroupRegistry,
   IToolInjectionManager,
 } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
@@ -42,9 +42,9 @@ export class SearchToolsTool extends BuiltinTool {
   readonly category: ToolCategory = 'system';
 
   private categoryRegistry: IToolCategoryRegistry;
-  private skillRegistry?: IToolSkillRegistry;
+  private skillRegistry?: IToolGroupRegistry;
 
-  constructor(categoryRegistry: IToolCategoryRegistry, skillRegistry?: IToolSkillRegistry) {
+  constructor(categoryRegistry: IToolCategoryRegistry, skillRegistry?: IToolGroupRegistry) {
     super();
     this.categoryRegistry = categoryRegistry;
     this.skillRegistry = skillRegistry;
@@ -228,9 +228,9 @@ export class ActivateSkillTool extends BuiltinTool {
   readonly category: ToolCategory = 'system';
 
   private injectionManager: IToolInjectionManager;
-  private skillRegistry?: IToolSkillRegistry;
+  private skillRegistry?: IToolGroupRegistry;
 
-  constructor(injectionManager: IToolInjectionManager, skillRegistry?: IToolSkillRegistry) {
+  constructor(injectionManager: IToolInjectionManager, skillRegistry?: IToolGroupRegistry) {
     super();
     this.injectionManager = injectionManager;
     this.skillRegistry = skillRegistry;
@@ -417,7 +417,7 @@ export class GetContextTool extends BuiltinTool {
 export function createCoreMetaTools(
   categoryRegistry: IToolCategoryRegistry,
   injectionManager: IToolInjectionManager,
-  skillRegistry?: IToolSkillRegistry,
+  skillRegistry?: IToolGroupRegistry,
 ): Tool[] {
   return [
     new SearchToolsTool(categoryRegistry, skillRegistry),

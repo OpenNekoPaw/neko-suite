@@ -4,15 +4,16 @@
 
 ## Quick Reference
 
-| 组件 | 职责 |
-|------|------|
-| `MessageList` | 消息列表（滚动、自动滚底）|
-| `MessageItem` | 单条消息渲染，支持 ContentBlock 模式 |
-| `ToolCallDisplay` | 工具调用卡片，支持媒体预览 |
-| `InputArea` | 输入框（@ 引用、/ 命令、附件）|
-| `MermaidBlock` | Mermaid 图表（自定义高对比度主题、全屏/缩放/导出）|
+| 组件              | 职责                                               |
+| ----------------- | -------------------------------------------------- |
+| `MessageList`     | 消息列表（滚动、自动滚底）                         |
+| `MessageItem`     | 单条消息渲染，支持 ContentBlock 模式               |
+| `ToolCallDisplay` | 工具调用卡片，支持媒体预览                         |
+| `InputArea`       | 输入框（@ 引用、/ 命令、附件）                     |
+| `MermaidBlock`    | Mermaid 图表（自定义高对比度主题、全屏/缩放/导出） |
 
 **目录结构**：
+
 ```
 ChatView/
 ├── index.tsx              # ChatView 主组件
@@ -94,7 +95,7 @@ interface ChatViewProps {
   streamingMessageId: string | null;
   selectedModel: string;
   backgroundTasks: BackgroundTask[];
-  onSend: (attachments?: AttachedFile[]) => void;
+  onSend: (attachments?: MessageAttachment[]) => void;
   onInputChange: (value: string) => void;
   onModelSelect: (modelId: string) => void;
 }

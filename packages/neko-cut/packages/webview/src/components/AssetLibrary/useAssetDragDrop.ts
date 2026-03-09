@@ -19,9 +19,6 @@ import { getLogger } from '../../utils/logger';
 
 const logger = getLogger('AssetDragDrop');
 
-/** @deprecated Use ASSET_INTERNAL_DRAG_MIME from @neko/shared */
-export const ASSET_INTERNAL_DRAG_TYPE = ASSET_INTERNAL_DRAG_MIME;
-
 /** Drop target information */
 export interface DropTarget {
   type: 'entity' | 'variant';

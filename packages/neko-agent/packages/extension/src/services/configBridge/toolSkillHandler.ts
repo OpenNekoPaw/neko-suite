@@ -3,7 +3,7 @@
  */
 
 import type * as vscode from 'vscode';
-import type { ConfiguredToolSkill } from '@neko/shared';
+import type { ConfiguredToolGroup } from '@neko/shared';
 import type { PostMessageFn } from './types';
 import { EnabledStateStore } from './enabledStateStore';
 import { broadcastToWebviews } from './broadcastHelper';
@@ -11,7 +11,7 @@ import { broadcastToWebviews } from './broadcastHelper';
 const TOOL_SKILL_ENABLED_STATE_KEY = 'toolSkillEnabledState';
 
 export class ToolSkillHandler {
-  private cachedToolSkills: ConfiguredToolSkill[] = [];
+  private cachedToolSkills: ConfiguredToolGroup[] = [];
   private readonly enabledState: EnabledStateStore;
 
   constructor(
@@ -24,11 +24,11 @@ export class ToolSkillHandler {
   /**
    * Set ToolSkills from ToolSkillRegistry (called by AgentRunner after initialization)
    */
-  setToolSkills(toolSkills: ConfiguredToolSkill[]): void {
+  setToolSkills(toolSkills: ConfiguredToolGroup[]): void {
     this.cachedToolSkills = this.enabledState.applyTo(toolSkills, (ts) => ts.name);
   }
 
-  getToolSkills(): ConfiguredToolSkill[] {
+  getToolSkills(): ConfiguredToolGroup[] {
     return this.cachedToolSkills;
   }
 

@@ -10,7 +10,7 @@ import { PromptModeToggle } from './PromptModeToggle';
 import { AttachmentPreview } from './FileAttachment';
 import { SlashCommandMenu, getFilteredCommands } from './SlashCommandMenu';
 import { FileReferenceMenu, getFilteredFiles, parseFileReference } from './FileReferenceMenu';
-import { AttachedFile, ProjectFile, SlashCommand } from './types';
+import { MessageAttachment, ProjectFile, SlashCommand } from './types';
 import { UsageIndicator } from './UsageIndicator';
 import { useTranslation } from '@/i18n/I18nContext';
 import { useInputHistory } from '@/hooks/useInputHistory';
@@ -20,15 +20,15 @@ interface InputAreaProps {
   inputValue: string;
   isThinking: boolean;
   projectFiles?: ProjectFile[];
-  droppedFiles?: AttachedFile[];
+  droppedFiles?: MessageAttachment[];
   onDroppedFilesProcessed?: () => void;
   onInputChange: (value: string) => void;
-  onSend: (attachments?: AttachedFile[]) => void;
+  onSend: (attachments?: MessageAttachment[]) => void;
   onCancel?: () => void;
   /** Session-bound attached files (managed by parent for conversation isolation) */
-  attachedFiles?: AttachedFile[];
+  attachedFiles?: MessageAttachment[];
   /** Callback to update attached files (when managed externally) */
-  onAttachedFilesChange?: (files: AttachedFile[]) => void;
+  onAttachedFilesChange?: (files: MessageAttachment[]) => void;
 }
 
 export function InputArea({
@@ -78,12 +78,12 @@ export function InputArea({
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
 
   // Attached files - use external state if provided (for conversation isolation)
-  const [internalAttachedFiles, setInternalAttachedFiles] = useState<AttachedFile[]>([]);
+  const [internalAttachedFiles, setInternalAttachedFiles] = useState<MessageAttachment[]>([]);
   const attachedFiles = externalAttachedFiles ?? internalAttachedFiles;
 
   // Create a unified setter that works with both internal state and external callback
   const updateAttachedFiles = useCallback(
-    (updater: AttachedFile[] | ((prev: AttachedFile[]) => AttachedFile[])) => {
+    (updater: MessageAttachment[] | ((prev: MessageAttachment[]) => MessageAttachment[])) => {
       if (onAttachedFilesChange) {
         // External management: resolve the updater function with current value
         const newValue =
@@ -306,7 +306,7 @@ export function InputArea({
               : file.type.startsWith('audio/')
                 ? 'audio'
                 : 'file';
-          const newFile: AttachedFile = {
+          const newFile: MessageAttachment = {
             id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             name: file.name,
             type,
@@ -320,7 +320,7 @@ export function InputArea({
           reader.readAsDataURL(file);
         } else {
           reader.readAsArrayBuffer(file);
-          const newFile: AttachedFile = {
+          const newFile: MessageAttachment = {
             id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             name: file.name,
             type: file.type.startsWith('video/')
@@ -355,7 +355,7 @@ export function InputArea({
           if (file) {
             const reader = new FileReader();
             reader.onload = (event) => {
-              const newFile: AttachedFile = {
+              const newFile: MessageAttachment = {
                 id: `paste-${Date.now()}-${Math.random().toString(36).slice(2)}`,
                 name: `pasted-image-${Date.now()}.png`,
                 type: 'image',
@@ -547,4 +547,4 @@ function PlusIcon({ className }: { className?: string }) {
   );
 }
 
-export type { AttachedFile, ProjectFile };
+export type { MessageAttachment, ProjectFile };

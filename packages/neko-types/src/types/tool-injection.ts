@@ -22,12 +22,6 @@ export interface ToolInjectionConfig {
     ondemand: number;
   };
 
-  /**
-   * Auto-activate threshold for skill matching (0-1)
-   * @deprecated No longer used. LLM now manages skill activation via SearchTools/ActivateSkill.
-   */
-  autoActivateThreshold: number;
-
   /** Enable on-demand tool loading */
   enableOnDemand: boolean;
 }
@@ -46,7 +40,6 @@ export const DEFAULT_INJECTION_CONFIG: ToolInjectionConfig = {
     skill: 8000,
     ondemand: 4000,
   },
-  autoActivateThreshold: 0.15,
   enableOnDemand: true,
 };
 

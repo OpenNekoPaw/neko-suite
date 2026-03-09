@@ -21,7 +21,7 @@ import type {
   ExecutorHooks,
   ToolCallInfo,
   ToolResultWithMeta,
-  IToolSkillRegistry,
+  IToolGroupRegistry,
   ToolFilterOptions,
   IToolInjectionManager,
   StreamChunk,
@@ -43,7 +43,7 @@ export interface AgentExecutorOptions {
   /** Extensible hooks for additional capabilities */
   hooks?: ExecutorHooks[];
   /** ToolSkill registry for dynamic tool injection */
-  toolSkillRegistry?: IToolSkillRegistry;
+  toolSkillRegistry?: IToolGroupRegistry;
   /** Tool injection manager for three-layer injection */
   toolInjectionManager?: IToolInjectionManager;
   /** Callbacks */
@@ -75,7 +75,7 @@ export class AgentExecutor implements IAgentExecutor {
   private abortController: AbortController | null = null;
 
   /** ToolSkill registry for dynamic tool injection */
-  private toolSkillRegistry?: IToolSkillRegistry;
+  private toolSkillRegistry?: IToolGroupRegistry;
   /** Tool injection manager for three-layer injection */
   private toolInjectionManager?: IToolInjectionManager;
 

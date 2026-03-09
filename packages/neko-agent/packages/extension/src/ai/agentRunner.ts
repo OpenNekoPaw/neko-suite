@@ -56,12 +56,6 @@ export type { ExecutionMode };
 export type { AgentEvent, AgentEventType };
 
 /**
- * Legacy type alias for backward compatibility
- * @deprecated Use AgentEvent from @neko/agent instead
- */
-export type IAgentEvent = AgentEvent;
-
-/**
  * Agent configuration
  */
 export interface IAgentConfig {

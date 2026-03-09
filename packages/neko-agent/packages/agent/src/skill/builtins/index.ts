@@ -15,14 +15,8 @@ import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
 // Re-export ai-generate for external use
 export { aiGenerateSkill, aiGenerateToolDefinitions };
 
-// Re-export ToolGroups (renamed from ToolSkills)
-export {
-  builtinToolGroups,
-  registerBuiltinToolGroups,
-  // Legacy exports
-  builtinToolSkills,
-  registerBuiltinToolSkills,
-} from './tool-skills';
+// Re-export ToolGroups
+export { builtinToolGroups, registerBuiltinToolGroups } from './tool-skills';
 
 // =============================================================================
 // Creative Skills (Semantic Discovery)
@@ -457,11 +451,4 @@ export function registerBuiltins(registry: ISkillRegistry): void {
   for (const command of builtinCommands) {
     registry.registerCommand(command);
   }
-}
-
-/**
- * @deprecated Use registerBuiltins() instead
- */
-export function registerBuiltinSkills(registry: ISkillRegistry): void {
-  registerBuiltins(registry);
 }

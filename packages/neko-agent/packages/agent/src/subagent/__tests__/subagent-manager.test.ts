@@ -376,7 +376,6 @@ describe('SubAgentManager - Skill Injection', () => {
       skillCount: 0,
       commandCount: 0,
       clear: vi.fn(),
-      getBySlashCommand: vi.fn(),
     };
 
     // Add mock skill service with registry

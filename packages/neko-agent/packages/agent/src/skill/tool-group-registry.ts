@@ -218,9 +218,3 @@ export class ToolGroupRegistry implements IToolGroupRegistry {
 export function createToolGroupRegistry(): IToolGroupRegistry {
   return new ToolGroupRegistry();
 }
-
-// Legacy exports for backward compatibility
-/** @deprecated Use ToolGroupRegistry instead */
-export { ToolGroupRegistry as ToolSkillRegistry };
-/** @deprecated Use createToolGroupRegistry instead */
-export { createToolGroupRegistry as createToolSkillRegistry };

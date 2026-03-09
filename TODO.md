@@ -222,7 +222,7 @@
 | 指标 | 数量 | 状态 |
 |------|------|------|
 | eslint-disable 注释 | 17 | 🟢 低，分散在各包 |
-| @deprecated 标记 | 59（neko-types 29 + neko-agent 27） | 🟡 需清理废弃 API |
+| @deprecated 标记 | ~~59~~ → 15 ✅ | 🟢 已清理 44 个（Phase 4 模块 6 + config 兼容 4 + UI 状态 5 保留） |
 | TODO/FIXME | 16（无 P0 阻塞） | 🟢 全部是功能导向 |
 | 测试文件比例 | neko-cut 6%、neko-canvas 6%、neko-agent 10% | 🔴 neko-cut 最需补充 |
 
@@ -237,7 +237,7 @@
 | ~~P1~~ | ~~MediaDiffMessageHandler.ts（1480 LOC）领域拆分~~ ✅ 4 domain handler | 可维护性 |
 | ~~P1~~ | ~~MediaRequestProxy.ts（1234 LOC）领域拆分~~ ✅ 3 子模块 | 可维护性 |
 | ~~P2~~ | ~~neko-engine console → Logger 迁移（20 处生产代码）~~ ✅ | 日志规范 |
-| P2 | @deprecated API 清理（59 处） | 减少混淆 |
+| ~~P2~~ | ~~@deprecated API 清理（59 处）~~ ✅ 59 → 15（剩余为 Phase 4 模块迁移 + config 向后兼容 + UI 状态重构） | 减少混淆 |
 | P2 | neko-cut 测试补充（6% → 15%，需 ~30 个测试文件） | 回归保护 |
 | P3 | ESLint warn → error 升级 | 质量守门 |
 | P3 | Release workflow（vsix 打包发布） | 自动化发布 |
@@ -270,4 +270,4 @@
 
 ---
 
-*最后更新：2026-03-09（Phase 3 P0-P2 重构完成：7 大文件拆分 + 38 as any 清零 + Logger 迁移）*
+*最后更新：2026-03-09（@deprecated 清理：59 → 15，清除 44 个废弃 API/类型/方法，迁移 6 个消费者）*

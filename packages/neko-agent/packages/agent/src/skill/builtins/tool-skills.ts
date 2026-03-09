@@ -526,22 +526,10 @@ export const builtinToolGroups: ToolGroup[] = [
 ];
 
 /**
- * @deprecated Use builtinToolGroups instead
- */
-export const builtinToolSkills = builtinToolGroups;
-
-/**
  * Register all builtin ToolGroups to a registry
  */
 export function registerBuiltinToolGroups(registry: IToolGroupRegistry): void {
   for (const group of builtinToolGroups) {
     registry.register(group);
   }
-}
-
-/**
- * @deprecated Use registerBuiltinToolGroups instead
- */
-export function registerBuiltinToolSkills(registry: IToolGroupRegistry): void {
-  registerBuiltinToolGroups(registry);
 }

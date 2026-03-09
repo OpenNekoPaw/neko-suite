@@ -212,20 +212,13 @@ export {
   createSkillService,
   // Builtins
   registerBuiltins,
-  registerBuiltinSkills,
   builtinSkills,
   builtinCommands,
   builtinToolGroups,
   registerBuiltinToolGroups,
-  // Legacy ToolSkill exports (deprecated)
-  builtinToolSkills,
-  registerBuiltinToolSkills,
-  // ToolGroup Registry (renamed from ToolSkill)
+  // ToolGroup Registry
   ToolGroupRegistry,
   createToolGroupRegistry,
-  // Legacy ToolSkill exports (deprecated)
-  ToolSkillRegistry,
-  createToolSkillRegistry,
   // Skill Conflict Resolver
   SkillConflictResolver,
   createSkillConflictResolver,

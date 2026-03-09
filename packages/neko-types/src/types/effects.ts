@@ -79,13 +79,3 @@ export type EffectType =
   | 'chromatic-aberration'
   | 'filmGrain'
   | 'vignette';
-
-/** @deprecated Use EffectInstance instead */
-export interface EffectParams {
-  /** Effect type */
-  type: EffectType;
-  /** Whether effect is enabled */
-  enabled: boolean;
-  /** Effect-specific parameters */
-  parameters: Record<string, number | string | boolean>;
-}
