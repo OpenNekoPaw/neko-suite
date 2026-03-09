@@ -67,7 +67,7 @@ jobs:
           workspaces: packages/neko-engine
 
       - name: Install FFmpeg dev libraries
-        run: sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev pkg-config
+        run: sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev libavdevice-dev pkg-config
 
       - uses: actions/cache@v4
         with:
