@@ -194,7 +194,7 @@ describe('AttachmentProcessor', () => {
       const mockBuffer = Buffer.from('test');
       vi.mocked(fs.promises.readFile).mockResolvedValue(mockBuffer);
 
-      const result = await processor.readFileAsBase64('/path/to/image.tiff');
+      const result = await processor.readFileAsBase64('/path/to/image.xyz');
 
       expect(result?.media_type).toBe('image/png');
     });

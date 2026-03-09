@@ -36,26 +36,31 @@ vi.mock('../base', () => ({
 }));
 
 // Mock message sub-processors
-vi.mock('../message/attachmentProcessor', () => ({
-  AttachmentProcessor: vi.fn().mockImplementation(() => ({
-    processAttachments: vi.fn().mockResolvedValue({
-      textContent: '',
-      imageAttachments: [],
-    }),
-  })),
-}));
+// NOTE: vitest v4 requires class-based mocks for `new` calls (vi.fn().mockImplementation is not a valid constructor)
+vi.mock('../message/attachmentProcessor', () => {
+  return {
+    AttachmentProcessor: class {
+      processAttachments = vi.fn().mockResolvedValue({
+        textContent: '',
+        imageAttachments: [],
+      });
+    },
+  };
+});
 
-vi.mock('../message/agentStreamProcessor', () => ({
-  AgentStreamProcessor: vi.fn().mockImplementation(() => ({
-    processStream: vi.fn().mockResolvedValue({
-      accumulatedResponse: 'mock response',
-      accumulatedThinking: '',
-      collectedToolCalls: [],
-      contentBlocks: [],
-      hasError: false,
-    }),
-  })),
-}));
+vi.mock('../message/agentStreamProcessor', () => {
+  return {
+    AgentStreamProcessor: class {
+      processStream = vi.fn().mockResolvedValue({
+        accumulatedResponse: 'mock response',
+        accumulatedThinking: '',
+        collectedToolCalls: [],
+        contentBlocks: [],
+        hasError: false,
+      });
+    },
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Test helpers

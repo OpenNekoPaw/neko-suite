@@ -72,7 +72,7 @@
 - [ ] **ChatViewProvider 拆分 + AgentExecutor 流式化** Phase 4-5（Phase 1-3 ✅ 完成）— [refactoring-chat-cli.md](./packages/neko-agent/docs/refactoring-chat-cli.md)
   - Phase 1-2 ✅: Handler 拆分（ChatViewProvider 1,885→734 行 -61%，MessageHandler 1,153→466 行 -60%）
   - Phase 3 ✅: `AgentExecutor.thinkStream()` + `content_delta`/`text_delta` 全链路流式
-  - Phase 4: Handler 单元测试（10 handler + 2 processor）
+  - Phase 4 ✅: Handler 单元测试（10 handler + 2 processor，15 文件 205 tests 全部通过）
   - Phase 5: 可选优化（会话操作提取 + deps 类型安全）
 
 ### neko-assets（Phase 4）
