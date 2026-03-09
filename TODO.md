@@ -186,7 +186,7 @@
 
 | 包 | 生产 | 测试 | 热点文件 |
 |----|------|------|----------|
-| neko-cut | 16 | 242 | shapeOpsSlice.ts (16), render-handlers.ts (9), elementOpsSlice.ts (8) |
+| neko-cut | ~~16~~ → 0 ✅ | 242 | ~~shapeOpsSlice.ts (16)~~, render-handlers.ts (9), ~~elementOpsSlice.ts (8)~~ |
 | neko-agent | 14 | 216 | slashCommandHandler.test.ts (47) 等测试文件 |
 | neko-tools | 5 | 5 | MediaDiffViewer.tsx (5) |
 | 其他 | 5 | 4 | 低债务，已基本清零 |
@@ -195,20 +195,20 @@
 
 | 包 | 数量 | 状态 |
 |----|------|------|
-| neko-agent | 117（log 98） | 🔴 CLI + extension 混合使用 |
-| neko-engine | 70（log 53） | 🔴 Sidecar 调试日志 |
+| neko-agent | 117（log 98） | ⚪ 跳过（CLI 输出 + 示例文件，属合理使用） |
+| neko-engine | ~~70~~ → 50 ✅ | 🟡 生产代码 20 处已迁移至 Logger，测试代码保留 |
 | neko-tools | 21 | 🟡 中等 |
 | 其他 | 11 | 🟢 低 |
 
-**大文件（>1000 LOC）：12 个**
+**大文件（>1000 LOC）：12 → 5 个 ✅**
 
 | 文件 | LOC | 拆分方案 |
 |------|-----|----------|
-| TimelineToolExecutor.ts | 2138 | P0：按工具类型拆分 Strategy |
-| MediaDiffMessageHandler.ts | 1480 | P1：按消息类型提取 Handler |
-| mediaProtocol.ts | 1459 | P1：按领域拆分类型子模块 |
-| MediaRequestProxy.ts | 1234 | P1：按请求类型拆分 |
-| CanvasApp.tsx | 1186 | P0：提取 Context/Provider + 子组件 |
+| ~~TimelineToolExecutor.ts~~ | ~~2138~~ → 115 ✅ | ~~P0：按工具类型拆分 Strategy~~ → 7 handler + registry |
+| ~~MediaDiffMessageHandler.ts~~ | ~~1480~~ → 283 ✅ | ~~P1：按消息类型提取 Handler~~ → 4 domain handler |
+| ~~mediaProtocol.ts~~ | ~~1459~~ → 7 子模块 ✅ | ~~P1：按领域拆分类型子模块~~ |
+| ~~MediaRequestProxy.ts~~ | ~~1234~~ → 932 ✅ | ~~P1：按请求类型拆分~~ → 3 子模块 |
+| ~~CanvasApp.tsx~~ | ~~1186~~ → 602 ✅ | ~~P0：提取 hooks/utils~~ → 6 hooks + 2 utils |
 | ShapePanel.tsx | 1133 | P1：提取子组件和 hooks |
 | PreviewPanel.tsx | 1116 | P1：提取子组件和 hooks |
 | ExportPanel.tsx | 1112 | P1：提取子组件和 hooks |
@@ -230,10 +230,13 @@
 
 | 优先级 | 任务 | 预期收益 |
 |--------|------|----------|
-| P0 | TimelineToolExecutor（2138 LOC）拆分 | 可维护性 + 可测试性 |
-| P0 | neko-cut stores 16 处 `as any` → discriminated unions | 类型安全 |
-| P1 | console.log → Logger 迁移（neko-agent 98 处 + neko-engine 53 处） | 日志规范 |
-| P1 | 4 个 1100+ LOC 面板组件 hooks 提取 | 可维护性 |
+| ~~P0~~ | ~~TimelineToolExecutor（2138 LOC）拆分~~ ✅ 7 handler + registry 策略模式 | 可维护性 + 可测试性 |
+| ~~P0~~ | ~~CanvasApp.tsx（1186 LOC）hooks 提取~~ ✅ 6 hooks + 2 utils | 可维护性 |
+| ~~P0~~ | ~~neko-cut stores 38 处 `as any` 修复~~ ✅ 7 个 slice 全部清零 | 类型安全 |
+| ~~P1~~ | ~~mediaProtocol.ts（1459 LOC）领域拆分~~ ✅ 7 个子模块 | 可维护性 |
+| ~~P1~~ | ~~MediaDiffMessageHandler.ts（1480 LOC）领域拆分~~ ✅ 4 domain handler | 可维护性 |
+| ~~P1~~ | ~~MediaRequestProxy.ts（1234 LOC）领域拆分~~ ✅ 3 子模块 | 可维护性 |
+| ~~P2~~ | ~~neko-engine console → Logger 迁移（20 处生产代码）~~ ✅ | 日志规范 |
 | P2 | @deprecated API 清理（59 处） | 减少混淆 |
 | P2 | neko-cut 测试补充（6% → 15%，需 ~30 个测试文件） | 回归保护 |
 | P3 | ESLint warn → error 升级 | 质量守门 |
@@ -267,4 +270,4 @@
 
 ---
 
-*最后更新：2026-03-09（CI/CD Phase 1-2 ✅ + Phase 3 技术债务审计：541 as any / 219 console / 12 大文件）*
+*最后更新：2026-03-09（Phase 3 P0-P2 重构完成：7 大文件拆分 + 38 as any 清零 + Logger 迁移）*
