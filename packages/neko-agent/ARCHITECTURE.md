@@ -64,7 +64,7 @@ webview ──→ shared（独立进程，仅通过 postMessage 通信）
 │  │  ├─ ToolRegistry    │  │  ├─ Adapters      │ │
 │  │  ├─ SkillRegistry   │  │  │  (Claude,      │ │
 │  │  ├─ MCPClient       │  │  │   OpenAI,      │ │
-│  │  ├─ ContextManager  │  │  │   Google,      │ │
+│  │  ├─ ConvCompressor  │  │  │   Google,      │ │
 │  │  ├─ PermissionSystem│  │  │   Ollama)      │ │
 │  │  └─ HookComposer    │  │  ├─ MediaService  │ │
 │  └─────────────────────┘  │  └─ ToolRegistry  │ │
@@ -97,10 +97,10 @@ Agent 的核心执行引擎，无 VSCode 依赖，可复用于 CLI 场景。
 | `skill/` | SkillRegistry + Loader + Matcher + Injector — 兼容 Claude Code 的技能系统 |
 | `mcp/` | MCP Client（Stdio/HTTP）+ 工具创建 + 测试服务 |
 | `hooks/` | Hook 组合器（Retry、Memory 等可组合的中间件） |
-| `memory/` | ContextManager — 会话记忆、压缩、摘要 |
-| `context/` | 分层上下文管理、持久化、压缩 |
+| `memory/` | InMemorySessionMemory — 会话记忆存储 |
+| `context/` | ConversationCompressor（对话压缩）、LayeredContextManager（分层上下文）、持久化 |
 | `permission/` | 工具权限系统 — 规则匹配 + 权限 Hook |
-| `validation/` | 输出验证器（Image/JSON/Mermaid） |
+| `validation/` | 输出验证器（Image/Output/Mermaid/JSON/Length） |
 | `subagent/` | 子 Agent 管理 |
 | `prompt/` | Prompt 管理器 + 链式执行 |
 | `session/` | Agent 会话生命周期 |
@@ -201,7 +201,7 @@ AgentRunner → AgentExecutor（ReAct 循环）
   │
   ├─ 技能匹配 → SkillRegistry → 发现 + 注入
   │
-  └─ 上下文管理 → ContextManager → 压缩/摘要
+  └─ 上下文管理 → ConversationCompressor → 压缩/摘要
 ```
 
 ---

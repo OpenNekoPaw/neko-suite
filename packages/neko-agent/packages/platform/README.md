@@ -31,7 +31,7 @@ graph TB
     subgraph "Agent 层"
         AgentExecutor[AgentExecutor<br/>ReAct 模式]
         Hooks[Hooks<br/>Retry/Memory/Recording]
-        Memory[ContextManager<br/>上下文压缩]
+        Memory[ConversationCompressor<br/>上下文压缩]
     end
 
     subgraph "Skill 层"

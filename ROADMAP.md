@@ -19,8 +19,8 @@
 | **neko-tools** | WIP | 62% | 媒体 Diff + EngineClient + 并行优化 + 协议增强 + 资产变体对比 + 视频早期预览 |
 | **neko-canvas** | WIP | 40% | 节点系统 + 连线 + 视口裁剪 + 画布操作 |
 | **neko-proto** | Early | 30% | timeline.proto 定义，生成类型在 neko-types |
-| **neko-model** | Planned | 0% | 3D 编辑器，架构设计已完成（见 docs/architecture/3d-capability-analysis.md） |
-| **neko-sketch** | Planned | 5% | 仅扩展入口骨架 |
+| **neko-model** | Planned | 0% | 3D 创作套件（3D 人物/特效/场景/物品），架构设计已完成（见 docs/architecture/3d-capability-analysis.md） |
+| **neko-sketch** | Planned | 5% | 2D 创作套件（绘画/2D 人物/特效/场景/物品），架构设计已完成（见 docs/architecture/2d-capability-analysis.md） |
 | **neko-audio** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-live** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-suite** | Stable | 90% | Extension Pack 门户，纯配置包 |
@@ -101,6 +101,18 @@
   - [ ] 自动配乐
   - [ ] AI 字幕生成
   - [ ] 画面描述
+- [ ] AI 视频一体化工作流
+  - [x] MediaGenerationService（Text-to-Video / Image-to-Video / Video-to-Video）
+  - [x] 8 个 MediaAdapter（Runway/Luma/Vidu/MiniMax/OpenAI/Midjourney/Liblib/Suno）
+  - [x] 智能路由（成本/速度/质量偏好）+ 任务管理 + 进度跟踪
+  - [ ] 分镜 → 批量视频生成（剧本解析 → 逐段调用 GenerateVideo → 自动排列到时间线）
+  - [ ] 关键帧驱动生成（neko-sketch/neko-model 导出帧 → Image-to-Video）
+  - [ ] AI 视频结果自动入时间线（GenerateVideo → AddTimelineElement）
+- [ ] MCP 桥接专业软件
+  - [ ] Blender MCP Server 集成（复杂 3D 建模/动画 → glTF 导入）
+  - [ ] ComfyUI MCP Server 集成（ControlNet + 高级 AI 图像 pipeline）
+  - [ ] Photoshop MCP 集成（专业图像处理）
+  - [ ] 统一 MCP Tool 注册（MCPManager 管理外部软件 Server）
 
 ### neko-story (剧本编辑器)
 
@@ -166,31 +178,70 @@
 
 实施路线：
 - [ ] Phase 3.1：基础 3D 视口 + 场景组装
-  - [ ] native-scene crate 骨架 + glTF 加载器
+  - [ ] native-scene crate 骨架 + glTF/VRM 加载器
   - [ ] @neko/scene-view 共享 R3F 视口组件
   - [ ] neko-model 扩展骨架 + Gizmo 交互
   - [ ] ActionRouter 新增 scenes/meshes/materials 路由
-- [ ] Phase 3.2：基础建模 + 延迟验证
+  - [ ] 骨骼动画基础（glTF Skeleton + AnimationMixer 播放）
+  - [ ] Morph Target 系统（glTF morph targets 加载 + GPU 顶点变形）
+- [ ] Phase 3.2：AI 捏脸 + 基础建模
+  - [ ] 参数化面部编辑器（R3F 视口 + 分类滑块面板 UI）
+  - [ ] Morph Target 驱动捏脸（50+ Blend Shapes：脸型/眼睛/鼻子/嘴巴/下巴）
+  - [ ] 骨骼驱动表情（表情骨骼控制口型/眼球/眉毛）
+  - [ ] VRM 表情预设支持（@pixiv/three-vrm，52 个标准表情）
+  - [ ] AI 捏脸 MCP Tools（face.generate_params / face.from_image / face.adjust）
   - [ ] CSG 布尔运算 + 3D 文字挤出（cosmic-text）
   - [ ] 参数化几何体 + 延迟实测
-- [ ] Phase 3.3：PBR 渲染 + 时间线集成
-  - [ ] PBR 渲染器（metallic-roughness + IBL + Shadow Map）
+- [ ] Phase 3.3：轻量渲染 + 场景组装 + 时间线集成
+  - [ ] 轻量 PBR 渲染器（metallic-roughness + IBL）
+  - [ ] native-scene 骨骼蒙皮渲染（wgpu compute shader + 动画插值）
+  - [ ] 场景组装（glTF/VRM 导入 + 摆放 + 环境 HDR + 天空盒 + 场景模板）
+  - [ ] 特效系统（GPU 粒子 + 后处理链 + 自定义 WGSL shader 特效）
   - [ ] SceneRenderOutput → GpuLayer 集成
-  - [ ] neko-cut 时间线嵌入 3D 元素（Scene3D ElementType）
+  - [ ] neko-cut 时间线嵌入 3D 元素（Scene3D ElementType + 角色动画序列）
   - [ ] neko-canvas 画布嵌入 3D 预览
-- [ ] Phase 3.4：AI 辅助 3D
+- [ ] Phase 3.4：AI 辅助 3D + 3DGS + MCP 桥接
   - [ ] MCP Tools（scene.suggest_layout / material.suggest / mesh.generate）
-  - [ ] 修改器系统 + GPU 粒子系统
+  - [ ] AI 动画生成（文本描述 → 关键帧序列）
+  - [ ] Text-to-3D 集成（外部 API → glTF 导入：角色/道具/场景元素生成）
+  - [ ] Image-to-3D（单图/多图 → 3D 重建 → glTF 导入）
+  - [ ] 3D Gaussian Splatting（.ply/.splat 加载 + wgpu 渲染 + 场景捕捉重建）
+  - [ ] Blender MCP Server 集成（复杂建模/修改器/UV/高级动画）
+  - [ ] ComfyUI MCP Server 集成（ControlNet + 高级 AI 图像 pipeline）
+  - [ ] 面部直接拖拽编辑（Raycasting → Blend Shape 映射）
+  - [ ] neko-live 联动准备（面部追踪 → 骨骼映射接口）
 
 2D↔3D 联动接口（已设计）：
 - 3D→2D：SceneRenderOutput（color/depth/mask/normal texture）→ GpuLayer
 - 2D→3D：SceneExternalTextures（video/image texture）→ 3D material
 
-### neko-sketch (绘图工具)
+### neko-sketch (2D 创作套件)
 
-- [ ] 画笔/橡皮 + 形状工具
-- [ ] 压感支持
-- [ ] 图层系统 + 混合模式
+> 架构设计见 [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md)
+
+定位：neko-sketch（2D 创作）↔ neko-model（3D 创作）对称
+
+- [ ] Phase S.1：绘画基础
+  - [ ] 画笔/橡皮 + 形状工具（Canvas 2D / WebGL 2D）
+  - [ ] 压感支持（Pointer Events API）
+  - [ ] 图层系统 + 混合模式（25+ Photoshop 兼容）
+  - [ ] 选区 + 变换（平移/旋转/缩放/翻转）
+- [ ] Phase S.2：2D 人物 + 骨骼动画
+  - [ ] Spine 骨骼动画集成（spine-ts 运行时 + 编辑器 UI）
+  - [ ] Live2D 集成（Cubism SDK Web + 模型加载/参数控制）
+  - [ ] 逐帧动画编辑器（洋葱皮 + 帧管理）
+  - [ ] 2D 角色 AI 生成（Text-to-Image → 自动分层 → 骨骼绑定辅助）
+- [ ] Phase S.3：2D 特效 + 场景 + 物品
+  - [ ] 2D 粒子特效（平面粒子：火花/雨雪/飘落/魔法）
+  - [ ] 2D 滤镜/后处理（模糊/发光/色彩/扭曲，复用 WGSL shader）
+  - [ ] 序列帧特效编辑（sprite sheet 编辑 + 导出）
+  - [ ] 2D 场景编辑（多图层叠加 + 视差滚动 + 场景模板）
+  - [ ] 2D 物品/资产绘制（矢量 + 像素 → 导出 PNG/SVG/PSD）
+- [ ] Phase S.4：AI 辅助 + 跨模块集成
+  - [ ] AI MCP Tools（sketch.generate / sketch.style_transfer / sketch.auto_layer）
+  - [ ] 导出到 neko-cut 时间线（2D 动画序列 → 时间线元素）
+  - [ ] 导出到 neko-canvas 画布（2D 资产 → 画布节点）
+  - [ ] 2D → 3D 联动（2D 纹理 → neko-model 材质贴图）
 
 ---
 
@@ -313,10 +364,12 @@
 - 剧本 → 时间线自动生成
 - AI 字幕 + 配乐辅助
 
-### M3: 视觉增强
-- neko-canvas WebGPU 渲染
-- 特效/转场系统完成
-- neko-sketch 基础绘图
+### M3: 视觉增强 + 2D/3D 创作 + AI 视频工作流
+- neko-model 轻量 3D（场景组装 + AI 捏脸 + 骨骼动画 + 特效 + Text-to-3D/3DGS）
+- neko-sketch 轻量 2D（绘画 + Spine/Live2D + 2D 特效/场景 + AI 辅助）
+- MCP 桥接专业软件（Blender MCP + ComfyUI MCP）
+- AI 视频一体化工作流（剧本 → 关键帧 → AI 生成 → 时间线编辑 → 导出）
+- neko-canvas WebGPU 渲染 + 特效/转场系统
 
 ### M4: 音频完善
 - neko-audio 波形编辑 + 音频效果
@@ -367,4 +420,4 @@
 
 ---
 
-*最后更新: 2026-03-06*
+*最后更新: 2026-03-09*

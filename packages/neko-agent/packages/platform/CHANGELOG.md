@@ -62,13 +62,9 @@ All notable changes to `@neko/platform` will be documented in this file.
 - Per-tool retry/timeout configuration
 
 #### Memory System
-- `TokenCounter` interface with `SimpleTokenCounter`
-- `ContextManager` for context window management
-- `SlidingWindowCompressor` - message window limiting
-- `SummarizeCompressor` - AI-based summarization
-- `SelectiveCompressor` - importance-based selection
 - `SessionMemory` interface with `InMemorySessionMemory`
-- `KeyFactExtractor` for conversation insights
+- `ConversationCompressor` - turn-aware context compression (replaced legacy compressors)
+- ~~`SimpleTokenCounter`, `SlidingWindowCompressor`, `SummarizeCompressor`, `SelectiveCompressor`, `ContextManager`, `KeyFactExtractor`~~ — removed, use `ConversationCompressor`
 
 #### Prompt System
 - `PromptManager` for prompt templates

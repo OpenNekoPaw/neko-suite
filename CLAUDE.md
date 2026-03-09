@@ -57,9 +57,12 @@ packages/
 │   └── packages/     # extension, parser, types, webview
 ├── neko-assets/      # 资产管理（Git/LFS/云同步）
 │   └── packages/     # asset
+├── neko-model/       # 3D 创作套件（3D 人物/特效/场景/物品，规划中）
+│   └── packages/     # extension, webview
+├── neko-sketch/      # 2D 创作套件（绘画/2D 人物/特效/场景/物品，规划中）
+│   └── packages/     # extension, webview
 ├── neko-audio/       # 音频工作站（规划中）
 ├── neko-live/        # 虚拟制作/动捕（规划中）
-├── neko-sketch/      # 绘画工具（规划中）
 ├── neko-types/       # @neko/shared — 共享基础设施（类型/Logger/i18n/Theme/Errors）
 ├── neko-client/      # @neko/neko-client — 流媒体客户端（H264/PCM/fMP4）
 └── neko-proto/       # @neko/proto — Protobuf IDL（类型契约源）
@@ -150,7 +153,8 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 跨语言架构 | `docs/architecture/cross-language-architecture.md` | Rust 引擎为数据模型权威来源，TS 仅负责 UI |
 | 共享包设计 | `docs/architecture/shared-packages-design.md` | @neko/shared 通过 exports 子路径分层 |
 | 资产管理 | `docs/architecture/asset-management-design.md` | 统一 AssetManifest + Handler 注册表模式 |
-| 3D 能力 | `docs/architecture/3d-capability-analysis.md` | hecs ECS + native-scene，不用 Bevy |
+| 3D 能力 | `docs/architecture/3d-capability-analysis.md` | hecs ECS + native-scene，不用 Bevy；混合策略（内置轻量 + MCP 桥接 Blender） |
+| 2D 能力 | `docs/architecture/2d-capability-analysis.md` | neko-sketch 轻量绘画 + Spine/Live2D；混合策略（内置轻量 + MCP 桥接 PS/ComfyUI） |
 
 ### Rust 引擎开发约束
 

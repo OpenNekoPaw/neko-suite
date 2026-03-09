@@ -267,14 +267,10 @@ interface UnifiedRoutingStrategy<TCandidate, TContext> {
 │  ┌─────────────────────────────┐  ┌─────────────────────────────────┐  │
 │  │      Context Layer          │  │        Memory Layer              │  │
 │  │  ┌─────────────────────┐   │  │  ┌───────────────────────────┐  │  │
-│  │  │ SimpleTokenCounter  │   │  │  │  InMemorySessionMemory    │  │  │
-│  │  │ (字符估算 ~4字符/token)│   │  │  │  (跨会话事实存储)          │  │  │
-│  │  └─────────────────────┘   │  │  └───────────────────────────┘  │  │
-│  │  ┌─────────────────────┐   │  │  ┌───────────────────────────┐  │  │
-│  │  │ ContextCompressors  │   │  │  │    KeyFactExtractor       │  │  │
-│  │  │  - SlidingWindow    │   │  │  │  (关键事实提取)            │  │  │
-│  │  │  - Summarize        │   │  │  └───────────────────────────┘  │  │
-│  │  │  - Selective        │   │  │                                  │  │
+│  │  │ConversationCompressor│   │  │  │  InMemorySessionMemory    │  │  │
+│  │  │ (turn-aware 压缩)    │   │  │  │  (跨会话事实存储)          │  │  │
+│  │  │ • 工具结果截断       │   │  │  └───────────────────────────┘  │  │
+│  │  │ • 可插拔 Summarizer │   │  │                                  │  │
 │  │  └─────────────────────┘   │  │                                  │  │
 │  └─────────────────────────────┘  └─────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -307,49 +303,24 @@ class ConversationManager {
 ### 上下文压缩策略
 
 ```typescript
-// 1. 滑动窗口压缩
-class SlidingWindowCompressor {
-  // 保留最近的消息，丢弃旧消息
-  // 选项: preserveSystem, preserveRecent
-}
-
-// 2. 摘要压缩
-class SummarizeCompressor {
-  // 将旧消息总结为摘要
-  // 需要 summarizer 函数
-}
-
-// 3. 选择性压缩
-class SelectiveCompressor {
-  // 按重要性评分选择保留
-  // 评分规则:
-  //   - system 消息: +100
-  //   - tool calls: +50
-  //   - 代码块: +30
-  //   - 关键动作词: +10
-  //   - 消息长度: +0~20
+// ConversationCompressor — 统一上下文压缩
+// 旧的 SlidingWindowCompressor / SummarizeCompressor / SelectiveCompressor 已移除
+class ConversationCompressor {
+  // Turn-aware 压缩：按 user/assistant 对话轮次分析
+  // 工具结果截断：自动截断过长的 tool result
+  // 可插拔 Summarizer：通过 ISummarizer 接口注入 LLM 摘要
+  compress(messages: ChatMessage[]): Promise<ConversationCompressionResult>;
+  estimateTokens(messages: ChatMessage[]): number;
 }
 ```
 
 ### Memory 系统
 
 ```typescript
-// 关键事实类型
-interface KeyFact {
-  content: string;
-  category: 'preference' | 'decision' | 'context' | 'action';
-  timestamp: number;
-  confidence: number;  // 0-1
-}
-
-// 事实提取规则示例
-"prefer X"      → preference, confidence: 0.8
-"decide to X"   → decision,   confidence: 0.85
-"create X"      → action,     confidence: 0.9
-"project named" → context,    confidence: 0.9
-
 // 会话记忆接口
 interface SessionMemory {
+  getHistory(): Promise<ChatMessage[]>;
+  addMessage(message: ChatMessage): Promise<void>;
   getEntries(limit?): Promise<SessionMemoryEntry[]>;
   saveSession(sessionId, facts, summary?): Promise<void>;
   search(query, limit?): Promise<SessionMemoryEntry[]>;
@@ -457,33 +428,12 @@ interface AgentContext
 
 **建议**: 重命名以明确职责
 - `types/context.ts` → `types/project-context.ts`
-- `ContextManager` → `TokenContextManager`
+- `ContextManager` → removed (use `ConversationCompressor`)
 - `AgentContext` → `ExecutionContext`
 
-### 问题 3: SessionMemory 接口不完整
+### 问题 3: SessionMemory 接口 ✅ 已修复
 
-```typescript
-// 接口定义
-interface SessionMemory {
-  getEntries(limit?): Promise<SessionMemoryEntry[]>;
-  saveSession(sessionId, facts, summary?): Promise<void>;
-  search(query, limit?): Promise<SessionMemoryEntry[]>;
-  clear(): Promise<void>;
-}
-
-// MemoryHooks 实际调用
-sessionMemory.getHistory();   // ❌ 未定义
-sessionMemory.addMessage(...); // ❌ 未定义
-```
-
-**建议**: 扩展接口
-```typescript
-interface SessionMemory {
-  // ... 现有方法
-  getHistory(): Promise<ChatMessage[]>;
-  addMessage(message: ChatMessage): Promise<void>;
-}
-```
+SessionMemory 接口已包含 `getHistory()` 和 `addMessage()` 方法。
 
 ### 问题 4: 缺少会话隔离
 
