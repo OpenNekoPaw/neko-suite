@@ -4,13 +4,18 @@
  * 职责：
  * - 封装与 Extension Host 的 IPC 通信
  * - 提供类型安全的媒体处理 API
+ * - 请求队列管理（优先级排序、并发控制、背压）
  * - 请求超时处理
- * - 数据类型转换（Buffer → ImageBitmap/AudioBuffer）
  *
  * 设计原则：
  * - 接口隔离：仅暴露必要的媒体处理方法
  * - 错误处理：统一的超时和错误处理
  * - 资源管理：Disposable 模式清理监听器
+ *
+ * Delegates to extracted modules:
+ * - media/DataConverters: Buffer → ImageBitmap/AudioBuffer conversion
+ * - media/CompatibleModeRenderer: Compatible mode type guards & response processing
+ * - media/PerformanceMonitor: Stream stats & bitrate tracking
  */
 
 import type {
@@ -33,6 +38,20 @@ import type {
 import { MAX_CONCURRENT_REQUESTS, MEDIA_REQUEST_TIMEOUT } from '@neko/shared';
 import { getVSCodeAPI } from '../utils/vscodeApi';
 import { getLogger } from '../utils/logger';
+
+// Extracted domain modules
+import {
+  dataUrlToImageBitmap,
+  arrayBufferToImageBitmap,
+  arrayBufferToAudioBuffer,
+  disposeAudioContext,
+  isCompatibleModeResponse,
+  processCompatibleFrameResponse,
+  processCompositeFrameResponse,
+  PerformanceMonitor,
+  type StreamStats,
+  type MediaBitrateInfo,
+} from './media';
 
 const logger = getLogger('MediaRequestProxy');
 
@@ -113,29 +132,7 @@ export interface IMediaRequestProxy {
    * Get engine-side stream pipeline stats (timelines:stream_stats)
    * Returns null if no active stream or stats unavailable
    */
-  getStreamStats(): Promise<{
-    video: {
-      hwDecodeMs: number;
-      nv12ImportMs: number;
-      nv12ToRgbaMs: number;
-      compositeMs: number;
-      rgbaToNv12Ms: number;
-      cpuReadbackMs: number;
-      encodeSubmitMs: number;
-      encodeTimeMs: number;
-      avgFps: number;
-      cpuUsagePercent: number;
-      gpuUsagePercent: number | null;
-      peakMemoryBytes: number;
-      vramUsageBytes: number | null;
-    };
-    audioMixMs: number;
-    audioFps: number;
-    currentTime: number;
-    totalDuration: number;
-    peakMemoryBytes: number;
-    cpuUsagePercent: number;
-  } | null>;
+  getStreamStats(): Promise<StreamStats | null>;
 
   // =========================================================================
   // Compatible Mode Methods (Extension-side decoding for preview)
@@ -171,13 +168,7 @@ export interface IMediaRequestProxy {
    * @param mediaPath Media file path
    * @returns Bitrate information
    */
-  getMediaBitrate(mediaPath: string): Promise<{
-    videoBitrate: number;
-    audioBitrate: number;
-    totalBitrate: number;
-    videoBitrateStr: string;
-    totalBitrateStr: string;
-  }>;
+  getMediaBitrate(mediaPath: string): Promise<MediaBitrateInfo>;
 
   /**
    * Cancel all pending requests
@@ -270,7 +261,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
 
   private activeCount = 0;
   private readonly maxConcurrent: number;
-  private audioBufferContext: AudioContext | null = null;
+  private readonly performanceMonitor = new PerformanceMonitor();
 
   constructor(
     private readonly timeout = MEDIA_REQUEST_TIMEOUT,
@@ -317,12 +308,13 @@ class MediaRequestProxy implements IMediaRequestProxy {
     // Handle both formats for backward compatibility
     if (response.payload.imageDataUrl) {
       // Old format: base64 data URL
-      return this.dataUrlToImageBitmap(response.payload.imageDataUrl);
+      return dataUrlToImageBitmap(response.payload.imageDataUrl);
     } else if (response.payload.imageBuffer) {
       // New format: raw ArrayBuffer (more efficient)
-      return this.arrayBufferToImageBitmap(
+      return arrayBufferToImageBitmap(
         response.payload.imageBuffer,
         response.payload.mimeType || 'image/jpeg',
+        logger,
       );
     }
 
@@ -373,11 +365,11 @@ class MediaRequestProxy implements IMediaRequestProxy {
         let bitmap: ImageBitmap;
         if (frame.imageDataUrl) {
           // New format: base64 data URL
-          bitmap = await this.dataUrlToImageBitmap(frame.imageDataUrl);
+          bitmap = await dataUrlToImageBitmap(frame.imageDataUrl);
         } else if (frame.imageBuffer) {
           // Old format: ArrayBuffer (may not work reliably)
           const mimeType = response.payload.mimeType || 'image/jpeg';
-          bitmap = await this.arrayBufferToImageBitmap(frame.imageBuffer, mimeType);
+          bitmap = await arrayBufferToImageBitmap(frame.imageBuffer, mimeType, logger);
         } else {
           throw new Error('Frame has no image data');
         }
@@ -426,7 +418,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
     }
 
     // Convert ArrayBuffer to AudioBuffer
-    return this.arrayBufferToAudioBuffer(
+    return arrayBufferToAudioBuffer(
       response.payload.buffer,
       response.payload.sampleRate,
       response.payload.channels,
@@ -540,22 +532,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
       options,
     );
 
-    if (response.error) {
-      throw new Error(response.error);
-    }
-
-    if (!response.payload?.imageData && !response.payload?.imageDataUrl) {
-      throw new Error('No image data in response');
-    }
-
-    // Prefer binary data (more efficient), fallback to base64
-    if (response.payload.imageData) {
-      return this.arrayBufferToImageBitmap(
-        response.payload.imageData.buffer as ArrayBuffer,
-        'image/jpeg',
-      );
-    }
-    return this.dataUrlToImageBitmap(response.payload.imageDataUrl!);
+    return processCompatibleFrameResponse(response, logger);
   }
 
   async renderCompositeFrame(
@@ -586,32 +563,34 @@ class MediaRequestProxy implements IMediaRequestProxy {
       options,
     );
 
-    if (response.error) {
-      throw new Error(response.error);
-    }
-
-    if (!response.payload?.imageData && !response.payload?.imageDataUrl) {
-      throw new Error('No image data in response');
-    }
-
-    // Prefer binary data (more efficient), fallback to base64
-    if (response.payload.imageData) {
-      const buffer = response.payload.imageData.buffer as ArrayBuffer;
-      const imgWidth = response.payload.width;
-      const imgHeight = response.payload.height;
-
-      // Check if this is raw RGBA data (width * height * 4 === bufferSize)
-      if (imgWidth && imgHeight && buffer.byteLength === imgWidth * imgHeight * 4) {
-        const clamped = new Uint8ClampedArray(buffer);
-        const imageData = new ImageData(clamped, imgWidth, imgHeight);
-        return createImageBitmap(imageData);
-      }
-
-      // Otherwise treat as encoded image (JPEG)
-      return this.arrayBufferToImageBitmap(buffer, 'image/jpeg');
-    }
-    return this.dataUrlToImageBitmap(response.payload.imageDataUrl!);
+    return processCompositeFrameResponse(response, logger);
   }
+
+  // =========================================================================
+  // Stats & Bitrate (delegated to PerformanceMonitor)
+  // =========================================================================
+
+  /**
+   * Get engine-side stream pipeline stats (timelines:stream_stats)
+   */
+  async getStreamStats(): Promise<StreamStats | null> {
+    const requestId = this.generateRequestId();
+    const vscode = getVSCodeAPI();
+    return this.performanceMonitor.getStreamStats(requestId, vscode);
+  }
+
+  /**
+   * Get media bitrate info from Extension
+   */
+  async getMediaBitrate(mediaPath: string): Promise<MediaBitrateInfo> {
+    const requestId = this.generateRequestId();
+    const vscode = getVSCodeAPI();
+    return this.performanceMonitor.getMediaBitrate(requestId, mediaPath, vscode);
+  }
+
+  // =========================================================================
+  // Lifecycle
+  // =========================================================================
 
   dispose(): void {
     window.removeEventListener('message', this.handleMessage);
@@ -636,10 +615,8 @@ class MediaRequestProxy implements IMediaRequestProxy {
 
     this.pendingRequests.clear();
     this.activeCount = 0;
-    if (this.audioBufferContext) {
-      this.audioBufferContext.close().catch(() => {});
-      this.audioBufferContext = null;
-    }
+    this.performanceMonitor.dispose();
+    disposeAudioContext();
   }
 
   /**
@@ -652,7 +629,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
     const total = queuedCount + inFlightCount;
     if (total === 0) return;
 
-    // 取消未发送的队列请求
+    // Cancel queued (not yet sent) requests
     for (const queued of this.queuedRequests) {
       if (queued.signal && queued.abortListener) {
         queued.signal.removeEventListener('abort', queued.abortListener);
@@ -661,7 +638,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
     }
     this.queuedRequests = [];
 
-    // 取消已发送、等待响应的请求
+    // Cancel in-flight (sent, awaiting response) requests
     for (const [requestId, pending] of this.pendingRequests) {
       clearTimeout(pending.timeoutId);
       if (pending.signal && pending.abortListener) {
@@ -682,7 +659,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
   }
 
   // ===========================================================================
-  // Private Methods
+  // Private: Request Queue Management
   // ===========================================================================
 
   /**
@@ -722,7 +699,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
         return;
       }
 
-      // 将请求加入队列，真正发送时再开始计时（避免排队时间被算进超时）
+      // Enqueue request; timeout starts when actually sent (not when queued)
       const queued = {
         request,
         resolve: resolve as (value: unknown) => void,
@@ -737,7 +714,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
       if (signal) {
         const requestId = request.requestId;
         const abortListener = () => {
-          // 1) 若仍在队列中：直接移除并拒绝
+          // 1) If still in queue: remove and reject immediately
           const removed = this.removeQueuedRequest(requestId);
           if (removed) {
             if (removed.signal && removed.abortListener) {
@@ -747,7 +724,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
             return;
           }
 
-          // 2) 若已发送：中止等待（不会取消 Extension 侧任务，仅释放 Webview 侧资源）
+          // 2) If already sent: abort waiting (won't cancel Extension-side task)
           this.abortInFlightRequest(requestId);
         };
         queued.abortListener = abortListener;
@@ -769,7 +746,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
     timeoutMs: number;
     enqueuedAt: number;
   }): void {
-    // 按优先级插入（高优先级在前，同优先级保持相对顺序）
+    // Insert by priority (higher priority first, same priority preserves order)
     const insertIndex = this.queuedRequests.findIndex((r) => r.priority < request.priority);
     if (insertIndex === -1) {
       this.queuedRequests.push(request);
@@ -786,7 +763,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
       const queued = this.queuedRequests.shift();
       if (!queued) break;
 
-      // 队列中等待期间可能已被取消
+      // May have been aborted while waiting in queue
       if (queued.signal?.aborted) {
         if (queued.signal && queued.abortListener) {
           queued.signal.removeEventListener('abort', queued.abortListener);
@@ -798,7 +775,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
       this.activeCount++;
       const startedAt = Date.now();
 
-      // Setup timeout（从“实际发送”开始计时）
+      // Setup timeout (starts from "actual send", not from enqueue)
       const timeoutId = window.setTimeout(() => {
         this.finalizeInFlightRequest(
           queued.request.requestId,
@@ -861,7 +838,7 @@ class MediaRequestProxy implements IMediaRequestProxy {
     this.activeCount = Math.max(0, this.activeCount - 1);
 
     if (error) {
-      // 超时属于需要追踪的异常：输出队列状态，便于定位瓶颈
+      // Track timeouts: log queue state for bottleneck diagnosis
       if (error.message.startsWith('Request timeout after')) {
         logger.warn('Request timeout:', {
           requestId,
@@ -877,12 +854,12 @@ class MediaRequestProxy implements IMediaRequestProxy {
       pending.resolve(response);
     }
 
-    // 释放并发槽位后继续调度
+    // Release concurrency slot, continue scheduling
     this.processQueue();
   }
 
   private createAbortError(): Error {
-    // VSCode Webview/浏览器环境优先使用 DOMException 以兼容标准 AbortError 判断
+    // Prefer DOMException for standard AbortError detection in VSCode Webview/browser
     if (typeof DOMException !== 'undefined') {
       return new DOMException('Request aborted', 'AbortError') as unknown as Error;
     }
@@ -891,34 +868,23 @@ class MediaRequestProxy implements IMediaRequestProxy {
     return error;
   }
 
+  // ===========================================================================
+  // Private: Message Handling
+  // ===========================================================================
+
   /**
    * Handle incoming message from Extension Host
    */
   private handleMessage = (event: MessageEvent): void => {
     const message = event.data;
 
-    // Check for stream stats response
-    if (this.isStreamStatsResponse(message)) {
-      const response = message as { requestId: string; payload?: unknown; error?: string };
-      const pending = this.performanceStatsRequests.get(response.requestId);
-      if (pending) {
-        pending.resolve(response);
-      }
-      return;
-    }
-
-    // Check for media bitrate response
-    if (this.isMediaBitrateResponse(message)) {
-      const response = message as { requestId: string; payload?: unknown; error?: string };
-      const pending = this.performanceStatsRequests.get(response.requestId);
-      if (pending) {
-        pending.resolve(response);
-      }
+    // Delegate stats/bitrate responses to PerformanceMonitor
+    if (this.performanceMonitor.handleResponse(message)) {
       return;
     }
 
     // Check if this is a media response (including compatible mode responses)
-    if (!this.isMediaResponse(message) && !this.isCompatibleModeResponse(message)) {
+    if (!this.isMediaResponse(message) && !isCompatibleModeResponse(message)) {
       return;
     }
 
@@ -928,28 +894,6 @@ class MediaRequestProxy implements IMediaRequestProxy {
       | CompatibleGetVideoFrameResponse;
     this.finalizeInFlightRequest(response.requestId, undefined, response as MediaResponse);
   };
-
-  /**
-   * Type guard for stream stats response
-   */
-  private isStreamStatsResponse(message: unknown): boolean {
-    if (typeof message !== 'object' || message === null) {
-      return false;
-    }
-    const msg = message as Record<string, unknown>;
-    return msg.type === 'media:response:getStreamStats' && typeof msg.requestId === 'string';
-  }
-
-  /**
-   * Type guard for media bitrate response
-   */
-  private isMediaBitrateResponse(message: unknown): boolean {
-    if (typeof message !== 'object' || message === null) {
-      return false;
-    }
-    const msg = message as Record<string, unknown>;
-    return msg.type === 'media:response:getMediaBitrate' && typeof msg.requestId === 'string';
-  }
 
   /**
    * Type guard for MediaResponse
@@ -971,256 +915,10 @@ class MediaRequestProxy implements IMediaRequestProxy {
   }
 
   /**
-   * Type guard for Compatible Mode Response
-   */
-  private isCompatibleModeResponse(
-    message: unknown,
-  ): message is RenderCompositeFrameResponse | CompatibleGetVideoFrameResponse {
-    if (typeof message !== 'object' || message === null) {
-      return false;
-    }
-
-    const msg = message as Record<string, unknown>;
-
-    return (
-      typeof msg.type === 'string' &&
-      (msg.type === 'media:response:compatibleGetVideoFrame' ||
-        msg.type === 'media:response:renderCompositeFrame') &&
-      typeof msg.requestId === 'string'
-    );
-  }
-
-  /**
    * Generate unique request ID
    */
   private generateRequestId(): string {
     return `req_${Date.now()}_${this.requestIdCounter++}`;
-  }
-
-  /**
-   * Convert base64 data URL to ImageBitmap
-   */
-  private async dataUrlToImageBitmap(dataUrl: string): Promise<ImageBitmap> {
-    const response = await fetch(dataUrl);
-    const blob = await response.blob();
-    return await createImageBitmap(blob);
-  }
-
-  /**
-   * Convert raw ArrayBuffer to ImageBitmap (more efficient than base64)
-   */
-  private async arrayBufferToImageBitmap(
-    buffer: ArrayBuffer,
-    mimeType: string,
-  ): Promise<ImageBitmap> {
-    if (buffer.byteLength === 0) {
-      throw new Error('Empty image buffer received');
-    }
-    const blob = new Blob([buffer], { type: mimeType });
-    try {
-      return await createImageBitmap(blob);
-    } catch (error) {
-      logger.error(
-        `createImageBitmap failed: bufferSize=${buffer.byteLength}, mimeType=${mimeType}`,
-        error,
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Convert raw PCM ArrayBuffer to AudioBuffer
-   */
-  private async arrayBufferToAudioBuffer(
-    buffer: ArrayBuffer,
-    sampleRate: number,
-    channels: number,
-  ): Promise<AudioBuffer> {
-    const frameCount = Math.floor(buffer.byteLength / (channels * 4)); // Float32 = 4 bytes
-    let audioBuffer: AudioBuffer;
-
-    // 优先使用 AudioBuffer 构造函数：避免每次解码都创建 AudioContext（会触发浏览器 AudioContext 数量限制）
-    try {
-      audioBuffer = new AudioBuffer({
-        length: frameCount,
-        numberOfChannels: channels,
-        sampleRate,
-      });
-    } catch {
-      // 兼容兜底：复用一个 AudioContext 仅用于 createBuffer（不用于播放）
-      if (!this.audioBufferContext || this.audioBufferContext.sampleRate !== sampleRate) {
-        this.audioBufferContext?.close().catch(() => {});
-        this.audioBufferContext = new AudioContext({ sampleRate });
-      }
-      audioBuffer = this.audioBufferContext.createBuffer(channels, frameCount, sampleRate);
-    }
-
-    // Copy PCM data to AudioBuffer
-    const float32Data = new Float32Array(buffer);
-
-    for (let channel = 0; channel < channels; channel++) {
-      const channelData = audioBuffer.getChannelData(channel);
-
-      for (let i = 0; i < frameCount; i++) {
-        channelData[i] = float32Data[i * channels + channel] || 0;
-      }
-    }
-
-    return audioBuffer;
-  }
-
-  // ===========================================================================
-  // Stats & Bitrate Methods
-  // ===========================================================================
-
-  // Separate map for stats/bitrate requests (different structure from media requests)
-  private performanceStatsRequests = new Map<
-    string,
-    {
-      resolve: (value: unknown) => void;
-      reject: (error: Error) => void;
-      timeoutId: ReturnType<typeof setTimeout>;
-    }
-  >();
-
-  /**
-   * Get media bitrate info from Extension
-   */
-  async getMediaBitrate(mediaPath: string): Promise<{
-    videoBitrate: number;
-    audioBitrate: number;
-    totalBitrate: number;
-    videoBitrateStr: string;
-    totalBitrateStr: string;
-  }> {
-    const requestId = this.generateRequestId();
-    const vscode = getVSCodeAPI();
-
-    return new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.performanceStatsRequests.delete(requestId);
-        reject(new Error('Media bitrate request timeout'));
-      }, 10000);
-
-      this.performanceStatsRequests.set(requestId, {
-        resolve: (response: unknown) => {
-          clearTimeout(timeoutId);
-          this.performanceStatsRequests.delete(requestId);
-          const resp = response as { payload?: unknown; error?: string };
-          if (resp.error) {
-            reject(new Error(resp.error));
-          } else {
-            resolve(
-              resp.payload as {
-                videoBitrate: number;
-                audioBitrate: number;
-                totalBitrate: number;
-                videoBitrateStr: string;
-                totalBitrateStr: string;
-              },
-            );
-          }
-        },
-        reject: (error: Error) => {
-          clearTimeout(timeoutId);
-          this.performanceStatsRequests.delete(requestId);
-          reject(error);
-        },
-        timeoutId,
-      });
-
-      vscode?.postMessage({
-        type: 'media:getMediaBitrate',
-        requestId,
-        timestamp: Date.now(),
-        payload: { mediaPath },
-      });
-    });
-  }
-  /**
-   * Get engine-side stream pipeline stats (timelines:stream_stats)
-   */
-  async getStreamStats(): Promise<{
-    video: {
-      hwDecodeMs: number;
-      nv12ImportMs: number;
-      nv12ToRgbaMs: number;
-      compositeMs: number;
-      rgbaToNv12Ms: number;
-      cpuReadbackMs: number;
-      encodeSubmitMs: number;
-      encodeTimeMs: number;
-      avgFps: number;
-      cpuUsagePercent: number;
-      gpuUsagePercent: number | null;
-      peakMemoryBytes: number;
-      vramUsageBytes: number | null;
-    };
-    audioMixMs: number;
-    audioFps: number;
-    currentTime: number;
-    totalDuration: number;
-    peakMemoryBytes: number;
-    cpuUsagePercent: number;
-  } | null> {
-    const requestId = this.generateRequestId();
-    const vscode = getVSCodeAPI();
-
-    return new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.performanceStatsRequests.delete(requestId);
-        resolve(null); // Graceful fallback — don't reject on timeout
-      }, 5000);
-
-      this.performanceStatsRequests.set(requestId, {
-        resolve: (response: unknown) => {
-          clearTimeout(timeoutId);
-          this.performanceStatsRequests.delete(requestId);
-          const resp = response as { payload?: unknown; error?: string };
-          if (resp.error || !resp.payload) {
-            resolve(null);
-          } else {
-            resolve(
-              resp.payload as {
-                video: {
-                  hwDecodeMs: number;
-                  nv12ImportMs: number;
-                  nv12ToRgbaMs: number;
-                  compositeMs: number;
-                  rgbaToNv12Ms: number;
-                  cpuReadbackMs: number;
-                  encodeSubmitMs: number;
-                  encodeTimeMs: number;
-                  avgFps: number;
-                  cpuUsagePercent: number;
-                  gpuUsagePercent: number | null;
-                  peakMemoryBytes: number;
-                  vramUsageBytes: number | null;
-                };
-                audioMixMs: number;
-                audioFps: number;
-                currentTime: number;
-                totalDuration: number;
-                peakMemoryBytes: number;
-                cpuUsagePercent: number;
-              },
-            );
-          }
-        },
-        reject: (error: Error) => {
-          clearTimeout(timeoutId);
-          this.performanceStatsRequests.delete(requestId);
-          reject(error);
-        },
-        timeoutId,
-      });
-
-      vscode?.postMessage({
-        type: 'media:getStreamStats',
-        requestId,
-        timestamp: Date.now(),
-      });
-    });
   }
 }
 
