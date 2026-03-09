@@ -146,13 +146,29 @@ pnpm format:check    # 检查格式（CI 使用）
 
 Pre-commit hook 会自动对暂存文件执行格式化（Husky + lint-staged）。
 
+### Lint（ESLint）
+
+项目使用 ESLint flat config v9（`eslint.config.mjs`），集成 typescript-eslint + react-hooks。
+
+```bash
+pnpm lint            # 检查所有源文件
+pnpm lint:fix        # 自动修复可修复问题
+```
+
+Pre-commit hook 会自动执行 `eslint --fix` + `prettier --write`。
+
 ### CI/CD
 
-PR 和主分支推送会自动触发 GitHub Actions CI（`.github/workflows/ci.yml`）：
+PR 和主分支推送会自动触发 GitHub Actions CI（`.github/workflows/ci.yml`），通过路径过滤按需运行：
 
-1. **Build & Format Check** — `pnpm format:check` + `pnpm build`
-2. **TypeScript Tests** — `pnpm test`
-3. **Rust Tests**（仅 `packages/neko-engine/` 变更时）— `cargo test` + `cargo clippy`
+| Job | 触发条件 | 内容 |
+|-----|---------|------|
+| **Build & Lint** | TS/配置文件变更 | `format:check` + `lint` + `build` |
+| **TypeScript Tests** | 同上 | `pnpm test --coverage` + coverage artifact |
+| **Rust Tests** | `packages/neko-engine/**` 变更 | `cargo fmt --check` + `clippy` + `cargo test` |
+| **Cargo Deny** | 同上 | Rust 依赖审计 |
+| **Proto Types Sync** | `packages/neko-proto/**` 变更 | 检查生成类型是否同步 |
+| **Dependency Review** | 仅 PR | 安全依赖审查 |
 
 ---
 
