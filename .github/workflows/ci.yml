@@ -21,6 +21,7 @@ jobs:
     name: Detect Changes
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pull-requests: read
     outputs:
       ts: ${{ steps.filter.outputs.ts }}
@@ -28,8 +29,6 @@ jobs:
       proto: ${{ steps.filter.outputs.proto }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -51,8 +50,6 @@ jobs:
     if: needs.changes.outputs.ts == 'true' || github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -83,8 +80,6 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -121,8 +116,6 @@ jobs:
     if: needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -152,8 +145,6 @@ jobs:
     if: needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: packages/neko-engine/Cargo.toml
@@ -166,8 +157,6 @@ jobs:
     if: needs.changes.outputs.proto == 'true'
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -198,8 +187,6 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -228,8 +215,6 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/dependency-review-action@v4
         with:
           comment-summary-in-pr: on-failure
