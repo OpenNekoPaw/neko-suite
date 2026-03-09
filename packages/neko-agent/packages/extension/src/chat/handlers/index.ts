@@ -15,3 +15,7 @@ export { IntegrationHandler, type IntegrationHandlerDeps } from './integrationHa
 export { SettingsHandler, type SettingsHandlerDeps } from './settingsHandler';
 export { ContextHandler, type ContextHandlerDeps } from './contextHandler';
 export { SlashCommandHandler, type SlashCommandHandlerDeps } from './slashCommandHandler';
+export {
+  ConversationMessageHandler,
+  type ConversationMessageHandlerDeps,
+} from './conversationHandler';

@@ -26,6 +26,10 @@ export interface ProviderHandlerDeps {
 export class ProviderHandler {
   constructor(private deps: ProviderHandlerDeps) {}
 
+  updateDeps(partial: Partial<ProviderHandlerDeps>): void {
+    Object.assign(this.deps, partial);
+  }
+
   async handleAddModel(model: any): Promise<void> {
     if (!this.deps.providers) return;
 
@@ -84,7 +88,11 @@ export class ProviderHandler {
 
     await this.deps.providers.toggleModel(providerType, modelId, enabled);
 
-    if (!enabled && this.deps.settings.selectedProviderId === providerType && this.deps.settings.selectedModelId === modelId) {
+    if (
+      !enabled &&
+      this.deps.settings.selectedProviderId === providerType &&
+      this.deps.settings.selectedModelId === modelId
+    ) {
       this.deps.settings.selectedModelId = null;
     }
 

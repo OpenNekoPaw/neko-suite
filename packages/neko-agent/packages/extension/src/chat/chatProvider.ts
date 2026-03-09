@@ -17,7 +17,12 @@ import type { ITaskManager as TaskManager } from '@neko/shared';
 import type { ProviderConfig } from '@neko/shared';
 import type { IAgentManager } from '../ai/agentManager';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
-import { IPlatform, ITaskManager, IConnectionStateManager, IAgentManager as IAgentManagerId } from '../bootstrap';
+import {
+  IPlatform,
+  ITaskManager,
+  IConnectionStateManager,
+  IAgentManager as IAgentManagerId,
+} from '../bootstrap';
 import { SettingsManager } from './settingsManager';
 import { ProviderManager } from './providerManager';
 import { ConversationHandler } from './conversationHandler';
@@ -26,16 +31,17 @@ import { SystemPromptManager } from './systemPromptManager';
 import { WebviewMessage, MessageAttachment, TabState, OpenTab } from './types';
 import { ConfigBridge } from '../services/configBridge';
 import {
-  TaskHandler, type TaskHandlerDeps,
+  TaskHandler,
   ModelPresetHandler,
   SkillHandler,
-  FileOperationHandler, type FileOperationHandlerDeps,
-  PlanModeHandler, type PlanModeHandlerDeps,
-  ProviderHandler, type ProviderHandlerDeps,
+  FileOperationHandler,
+  PlanModeHandler,
+  ProviderHandler,
   IntegrationHandler,
-  SettingsHandler, type SettingsHandlerDeps,
-  ContextHandler, type ContextHandlerDeps,
-  SlashCommandHandler, type SlashCommandHandlerDeps,
+  SettingsHandler,
+  ContextHandler,
+  SlashCommandHandler,
+  ConversationMessageHandler,
 } from './handlers';
 import { createSkillService, builtinSkills, builtinCommands } from '@neko/agent';
 import { getSkillFileService, type SkillScanResult } from '../services/SkillFileService';
@@ -67,6 +73,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private readonly _settingsHandler: SettingsHandler;
   private readonly _contextHandler: ContextHandler;
   private readonly _slashCommandHandler: SlashCommandHandler;
+  private readonly _conversationMessageHandler: ConversationMessageHandler;
 
   // Lifecycle
   private readonly _disposables: vscode.Disposable[] = [];
@@ -80,7 +87,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
-    private readonly _context: vscode.ExtensionContext
+    private readonly _context: vscode.ExtensionContext,
   ) {
     // Initialize managers
     this._settings = new SettingsManager(_context);
@@ -123,6 +130,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this._contextHandler = new ContextHandler({
       conversations: this._conversations,
     });
+    this._conversationMessageHandler = new ConversationMessageHandler({
+      conversations: this._conversations,
+      getWebview: () => this._view?.webview,
+    });
     this._slashCommandHandler = new SlashCommandHandler({
       conversations: this._conversations,
       settings: this._settings,
@@ -131,8 +142,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       taskHandler: this._taskHandler,
       contextHandler: this._contextHandler,
       planModeHandler: this._planModeHandler,
-      sendConversationList: () => this._sendConversationList(),
-      sendActiveConversation: () => this._sendActiveConversation(),
+      sendConversationList: () => this._conversationMessageHandler.sendConversationList(),
+      sendActiveConversation: () => this._conversationMessageHandler.sendActiveConversation(),
     });
 
     // Get services - deferred initialization
@@ -145,7 +156,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
    */
   private _populateSkillRegistry(
     skillService: ReturnType<typeof createSkillService>,
-    scanResult: SkillScanResult
+    scanResult: SkillScanResult,
   ): void {
     skillService.registry.clear();
 
@@ -153,7 +164,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       skillService.registry.registerSkill({ ...skill, source: 'builtin' as const, enabled: true });
     }
     for (const command of builtinCommands) {
-      skillService.registry.registerCommand({ ...command, source: 'builtin' as const, enabled: true });
+      skillService.registry.registerCommand({
+        ...command,
+        source: 'builtin' as const,
+        enabled: true,
+      });
     }
     for (const skill of [...scanResult.personal.skills, ...scanResult.project.skills]) {
       skillService.registry.registerSkill(skill);
@@ -183,7 +198,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const connectionStateManager = getService(IConnectionStateManager);
 
         // Initialize ConfigBridge for unified config message handling
-        this._configBridge = new ConfigBridge(this._platform, connectionStateManager, this._context);
+        this._configBridge = new ConfigBridge(
+          this._platform,
+          connectionStateManager,
+          this._context,
+        );
 
         // Initialize ToolSkills in ConfigBridge
         // Create a temporary AgentRunner to get ToolSkills (they are registered during configure)
@@ -197,44 +216,49 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._agentManager,
           this._editorRegistry,
           () => this._systemPrompt.getPrompt(),
-          this._platform
+          this._platform,
         );
 
         // Wire up SkillService: create instance, populate from disk, keep in sync.
         const skillFileService = getSkillFileService();
         const skillService = createSkillService();
-        skillFileService.getSkills().then((result) => {
-          this._populateSkillRegistry(skillService, result);
-        }).catch((err: unknown) => {
-          logger.warn('Failed to load initial skills into SkillService:', err);
-        });
+        skillFileService
+          .getSkills()
+          .then((result) => {
+            this._populateSkillRegistry(skillService, result);
+          })
+          .catch((err: unknown) => {
+            logger.warn('Failed to load initial skills into SkillService:', err);
+          });
         this._disposables.push(
-          skillFileService.onSkillsChanged((result) => this._populateSkillRegistry(skillService, result))
+          skillFileService.onSkillsChanged((result) =>
+            this._populateSkillRegistry(skillService, result),
+          ),
         );
         this._skillHandler.setDependencies({ skillService });
 
-        // Update remaining handler dependencies via typed casts.
-        // All target handlers store deps as `this.deps` (constructor private shorthand),
-        // so runtime assignment is valid despite the compile-time private access check.
-        // The `unknown` intermediate is required because TypeScript's `private` modifier
-        // prevents direct narrowing — casting through `unknown` bypasses the structural check.
-        (this._taskHandler as unknown as { deps: TaskHandlerDeps }).deps.platform = this._platform;
-        (this._taskHandler as unknown as { deps: TaskHandlerDeps }).deps.taskManager = this._taskManager;
-
-        (this._fileOperationHandler as unknown as { deps: FileOperationHandlerDeps }).deps.platform = this._platform;
-
-        (this._planModeHandler as unknown as { deps: PlanModeHandlerDeps }).deps.agentManager = this._agentManager;
-        (this._planModeHandler as unknown as { deps: PlanModeHandlerDeps }).deps.platform = this._platform;
-        (this._planModeHandler as unknown as { deps: PlanModeHandlerDeps }).deps.messages = this._messages;
-
-        (this._providerHandler as unknown as { deps: ProviderHandlerDeps }).deps.providers = this._providers;
-
-        (this._settingsHandler as unknown as { deps: SettingsHandlerDeps }).deps.providers = this._providers;
-        (this._settingsHandler as unknown as { deps: SettingsHandlerDeps }).deps.platform = this._platform;
-
-        (this._contextHandler as unknown as { deps: ContextHandlerDeps }).deps.agentManager = this._agentManager;
-
-        (this._slashCommandHandler as unknown as { deps: SlashCommandHandlerDeps }).deps.agentManager = this._agentManager;
+        // Update handler dependencies via type-safe updateDeps()
+        this._taskHandler.updateDeps({
+          platform: this._platform,
+          taskManager: this._taskManager,
+        });
+        this._fileOperationHandler.updateDeps({ platform: this._platform });
+        this._planModeHandler.updateDeps({
+          agentManager: this._agentManager,
+          platform: this._platform,
+          messages: this._messages,
+        });
+        this._providerHandler.updateDeps({ providers: this._providers });
+        this._settingsHandler.updateDeps({
+          providers: this._providers,
+          platform: this._platform,
+        });
+        this._contextHandler.updateDeps({ agentManager: this._agentManager });
+        this._slashCommandHandler.updateDeps({ agentManager: this._agentManager });
+        this._conversationMessageHandler.updateDeps({
+          agentManager: this._agentManager,
+          messages: this._messages,
+        });
       }
     } catch (error) {
       logger.error('Failed to get services:', error);
@@ -279,12 +303,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
     _context: vscode.WebviewViewResolveContext,
-    _token: vscode.CancellationToken
+    _token: vscode.CancellationToken,
   ) {
     this._view = webviewView;
 
     // Include workspace folders in localResourceRoots for accessing generated media files
-    const workspaceFolders = vscode.workspace.workspaceFolders?.map(f => f.uri) || [];
+    const workspaceFolders = vscode.workspace.workspaceFolders?.map((f) => f.uri) || [];
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [this._extensionUri, ...workspaceFolders],
@@ -335,7 +359,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (this._configBridge) {
         const handled = await this._configBridge.handleMessage(
           message as { type: string; [key: string]: unknown },
-          postMessageFn
+          postMessageFn,
         );
         if (handled) return;
       }
@@ -351,95 +375,103 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             message.modelId as string | undefined,
             message.attachments as MessageAttachment[] | undefined,
             message.promptId as string | undefined,
-            message.conversationId as string | undefined
+            message.conversationId as string | undefined,
           );
           break;
         case 'searchProjectFiles':
           this._messages?.searchProjectFiles(webview, message.filter as string);
           break;
-        case 'confirmTool': {
-          const confirmConversationId = (message.conversationId as string) || this._conversations.getActiveId();
-          if (confirmConversationId) {
-            this._agentManager?.confirmTool(confirmConversationId, message.toolCallId as string, message.approved as boolean);
-          } else {
-            logger.warn('No conversation for confirmTool');
-          }
+        case 'confirmTool':
+          this._conversationMessageHandler.handleConfirmTool(
+            message.toolCallId as string,
+            message.approved as boolean,
+            message.conversationId as string | undefined,
+          );
           break;
-        }
 
         // Plan mode messages
         case 'planApprove':
-          this._planModeHandler.handlePlanApprove(webview, message.planId as string, message.conversationId as string, message.filePath as string | undefined);
+          this._planModeHandler.handlePlanApprove(
+            webview,
+            message.planId as string,
+            message.conversationId as string,
+            message.filePath as string | undefined,
+          );
           break;
         case 'planReject':
-          this._planModeHandler.handlePlanReject(webview, message.planId as string, message.conversationId as string);
+          this._planModeHandler.handlePlanReject(
+            webview,
+            message.planId as string,
+            message.conversationId as string,
+          );
           break;
         case 'planStepApprove':
-          this._planModeHandler.handlePlanStepAction(webview, message.planId as string, message.stepId as string, message.conversationId as string, 'approve');
+          this._planModeHandler.handlePlanStepAction(
+            webview,
+            message.planId as string,
+            message.stepId as string,
+            message.conversationId as string,
+            'approve',
+          );
           break;
         case 'planStepReject':
-          this._planModeHandler.handlePlanStepAction(webview, message.planId as string, message.stepId as string, message.conversationId as string, 'reject');
+          this._planModeHandler.handlePlanStepAction(
+            webview,
+            message.planId as string,
+            message.stepId as string,
+            message.conversationId as string,
+            'reject',
+          );
           break;
         case 'planStepModify':
-          this._planModeHandler.handlePlanStepModify(webview, message.planId as string, message.stepId as string, message.newDescription as string, message.conversationId as string);
+          this._planModeHandler.handlePlanStepModify(
+            webview,
+            message.planId as string,
+            message.stepId as string,
+            message.newDescription as string,
+            message.conversationId as string,
+          );
           break;
 
-        // Cancel message generation
+        // Cancel / stop agent
         case 'cancelMessage':
-          this._handleCancelMessage(webview);
+          this._conversationMessageHandler.handleCancelMessage(webview);
           break;
-
-        // Stop agent for a specific conversation
         case 'stopAgent':
-          this._handleStopAgent(webview, message.conversationId as string);
+          this._conversationMessageHandler.handleStopAgent(
+            webview,
+            message.conversationId as string,
+          );
           break;
 
-        // Conversation handling
+        // Conversation management (delegated to ConversationMessageHandler)
         case 'newConversation':
-          this._conversations.create();
-          this._sendConversationList();
-          this._sendActiveConversation();
+          this._conversationMessageHandler.handleNewConversation();
           break;
         case 'switchConversation':
-          if (this._conversations.switchTo(message.conversationId as string)) {
-            this._sendActiveConversation();
-          }
+          this._conversationMessageHandler.handleSwitchConversation(
+            message.conversationId as string,
+          );
           break;
         case 'deleteConversation':
-          this._agentManager?.remove(message.conversationId as string);
-          this._messages?.clearAgentState(message.conversationId as string);
-          this._conversations.delete(message.conversationId as string);
-          this._sendConversationList();
-          this._sendActiveConversation();
+          this._conversationMessageHandler.handleDeleteConversation(
+            message.conversationId as string,
+          );
           break;
         case 'getConversations':
-          this._sendConversationList();
+          this._conversationMessageHandler.sendConversationList();
           break;
         case 'getActiveConversation':
-          this._sendActiveConversation();
+          this._conversationMessageHandler.sendActiveConversation();
           break;
         case 'getAgentStates':
-          this._sendAgentStateSnapshot(webview);
+          this._conversationMessageHandler.sendAgentStateSnapshot(webview);
           break;
         case 'clearHistory':
-          const currentConversationId = this._conversations.getActiveId();
-          if (currentConversationId) {
-            this._agentManager?.clearHistory(currentConversationId);
-          }
-          this._conversations.clearCurrent();
-          webview.postMessage({ type: 'historyCleared' });
+          this._conversationMessageHandler.handleClearHistory(webview);
           break;
         case 'clearAllConversations':
-          // Clear all agent histories
-          for (const conv of this._conversations.list()) {
-            this._agentManager?.remove(conv.id);
-            this._messages?.clearAgentState(conv.id);
-          }
-          // Clear all conversations from storage
-          this._conversations.manager.clear();
-          // Notify webview
-          this._sendConversationList();
-          webview.postMessage({ type: 'historyCleared' });
+          this._conversationMessageHandler.handleClearAllConversations(webview);
           break;
 
         // Settings handling
@@ -447,7 +479,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._settingsHandler.sendSettings(webview);
           break;
         case 'updateSettings':
-          this._settingsHandler.handleUpdateSettings(webview, message.settings as Record<string, unknown>);
+          this._settingsHandler.handleUpdateSettings(
+            webview,
+            message.settings as Record<string, unknown>,
+          );
           break;
 
         // Tab state handling
@@ -455,10 +490,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._sendTabState();
           break;
         case 'updateTabState':
-          this._updateTabState(
-            message.openTabs as OpenTab[],
-            message.activeTabId as string | null
-          );
+          this._updateTabState(message.openTabs as OpenTab[], message.activeTabId as string | null);
           break;
 
         // Provider handling
@@ -469,10 +501,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._providerHandler.handleRemoveModel(message.modelType as string);
           break;
         case 'toggleProvider':
-          this._providerHandler.handleToggleProvider(message.providerType as string, message.enabled as boolean);
+          this._providerHandler.handleToggleProvider(
+            message.providerType as string,
+            message.enabled as boolean,
+          );
           break;
         case 'toggleModel':
-          this._providerHandler.handleToggleModel(message.providerType as string, message.modelId as string, message.enabled as boolean);
+          this._providerHandler.handleToggleModel(
+            message.providerType as string,
+            message.modelId as string,
+            message.enabled as boolean,
+          );
           break;
 
         // Integration handling
@@ -480,7 +519,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._integrationHandler.addMCPServer();
           break;
         case 'testMCPServer':
-          this._integrationHandler.handleTestMCPServer(webview, message.server as { id: string; name: string; command: string; args?: string[]; env?: Record<string, string>; requestId?: string });
+          this._integrationHandler.handleTestMCPServer(
+            webview,
+            message.server as {
+              id: string;
+              name: string;
+              command: string;
+              args?: string[];
+              env?: Record<string, string>;
+              requestId?: string;
+            },
+          );
           break;
 
         // Task handling (delegated to TaskHandler)
@@ -503,13 +552,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._fileOperationHandler.handleOpenFile(message.filePath as string);
           break;
         case 'openPromptConfig':
-          this._fileOperationHandler.handleOpenPromptConfig(message.source as 'personal' | 'project', message.promptId as string | undefined);
+          this._fileOperationHandler.handleOpenPromptConfig(
+            message.source as 'personal' | 'project',
+            message.promptId as string | undefined,
+          );
           break;
         case 'openAgentsFile':
           this._fileOperationHandler.handleOpenAgentsFile(message.source as 'personal' | 'project');
           break;
         case 'openSettingsFile':
-          this._fileOperationHandler.handleOpenSettingsFile(message.source as 'personal' | 'project' | 'local');
+          this._fileOperationHandler.handleOpenSettingsFile(
+            message.source as 'personal' | 'project' | 'local',
+          );
           break;
 
         // Prompt mode handling
@@ -528,13 +582,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             message.skillName as string,
             message.source as 'personal' | 'project',
             message.fileType as 'skill' | 'reference' | 'script',
-            message.filePath as string | undefined
+            message.filePath as string | undefined,
           );
           break;
         case 'openCommandFile':
           this._fileOperationHandler.handleOpenCommandFile(
             message.commandName as string,
-            message.source as 'personal' | 'project'
+            message.source as 'personal' | 'project',
           );
           break;
         case 'openUrl':
@@ -550,14 +604,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               undefined, // providerId
               undefined, // modelId
               undefined, // attachments
-              undefined  // promptId
+              undefined, // promptId
             );
           }
           break;
 
         // Download SVG file
         case 'downloadSvg':
-          this._fileOperationHandler.handleDownloadSvg(message.svg as string, message.filename as string);
+          this._fileOperationHandler.handleDownloadSvg(
+            message.svg as string,
+            message.filename as string,
+          );
           break;
 
         // Model Presets handling (delegated to ModelPresetHandler)
@@ -565,22 +622,42 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._modelPresetHandler.sendModelPresets(webview);
           break;
         case 'configureModelPreset':
-          this._modelPresetHandler.handleConfigureModelPreset(webview, message.modelId as string, message.apiKey as string, message.baseUrl as string | undefined);
+          this._modelPresetHandler.handleConfigureModelPreset(
+            webview,
+            message.modelId as string,
+            message.apiKey as string,
+            message.baseUrl as string | undefined,
+          );
           break;
         case 'toggleModelPreset':
-          this._modelPresetHandler.handleToggleModelPreset(webview, message.modelId as string, message.enabled as boolean);
+          this._modelPresetHandler.handleToggleModelPreset(
+            webview,
+            message.modelId as string,
+            message.enabled as boolean,
+          );
           break;
         case 'removeModelPresetConfig':
-          this._modelPresetHandler.handleRemoveModelPresetConfig(webview, message.modelId as string);
+          this._modelPresetHandler.handleRemoveModelPresetConfig(
+            webview,
+            message.modelId as string,
+          );
           break;
         case 'exportModelConfig':
           this._modelPresetHandler.handleExportModelConfig(message.includeSecrets as boolean);
           break;
         case 'importModelConfig':
-          this._modelPresetHandler.handleImportModelConfig(webview, message.jsonString as string, message.options as { overwrite?: boolean; includeSecrets?: boolean });
+          this._modelPresetHandler.handleImportModelConfig(
+            webview,
+            message.jsonString as string,
+            message.options as { overwrite?: boolean; includeSecrets?: boolean },
+          );
           break;
         case 'addCustomModel':
-          this._modelPresetHandler.handleAddCustomModel(webview, message.configJson as string, message.apiKey as string | undefined);
+          this._modelPresetHandler.handleAddCustomModel(
+            webview,
+            message.configJson as string,
+            message.apiKey as string | undefined,
+          );
           break;
 
         // Skill handling (delegated to SkillHandler)
@@ -588,7 +665,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._skillHandler.sendSkillsList(webview);
           break;
         case 'executeSkill':
-          this._skillHandler.handleExecuteSkill(webview, message.skillId as string, message.input as Record<string, unknown> || {});
+          this._skillHandler.handleExecuteSkill(
+            webview,
+            message.skillId as string,
+            (message.input as Record<string, unknown>) || {},
+          );
           break;
         case 'cancelSkill':
           this._skillHandler.handleCancelSkill(message.skillId as string);
@@ -596,7 +677,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         // Slash command invocation
         case 'invokeSlashCommand':
-          this._slashCommandHandler.handleCommand(webview, message.command as string, message.args as string | undefined);
+          this._slashCommandHandler.handleCommand(
+            webview,
+            message.command as string,
+            message.args as string | undefined,
+          );
           break;
 
         // Context management
@@ -604,71 +689,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._contextHandler.getTokenCount(webview, message.conversationId as string | undefined);
           break;
         case 'compressContext':
-          this._contextHandler.compressContext(webview, message.conversationId as string | undefined);
+          this._contextHandler.compressContext(
+            webview,
+            message.conversationId as string | undefined,
+          );
           break;
       }
     });
-  }
-
-  // ============================================================================
-  // Conversation Methods
-  // ============================================================================
-
-  /**
-   * Handle cancel message request - stops agent execution
-   */
-  private _handleCancelMessage(webview: vscode.Webview): void {
-    const conversationId = this._conversations.getActiveId();
-    if (conversationId && this._agentManager) {
-      const agent = this._agentManager.get(conversationId);
-      if (agent?.isRunning()) {
-        // Wait for agent to actually stop before notifying webview
-        const disposable = agent.onDidStop(() => {
-          disposable.dispose();
-          webview.postMessage({ type: 'messageCancelled', conversationId });
-        });
-        this._agentManager.cancel(conversationId);
-      } else {
-        // Not running, just send immediately
-        this._agentManager.cancel(conversationId);
-        webview.postMessage({ type: 'messageCancelled', conversationId });
-      }
-    }
-  }
-
-  /**
-   * Handle stop agent request for a specific conversation
-   * @param webview - The webview to send messages to
-   * @param conversationId - The conversation ID to stop
-   */
-  private _handleStopAgent(webview: vscode.Webview, conversationId: string): void {
-    if (conversationId && this._agentManager) {
-      this._agentManager.cancel(conversationId);
-      this._messages?.clearAgentState(conversationId);
-      webview.postMessage({
-        type: 'agentStopped',
-        conversationId,
-      });
-      // Also send idle phase to update UI
-      webview.postMessage({
-        type: 'agentPhase',
-        conversationId,
-        phase: 'idle',
-        timestamp: Date.now(),
-      });
-    }
-  }
-
-  private _sendConversationList(): void {
-    if (this._view) {
-      this._conversations.sendConversationList(this._view.webview);
-    }
-  }
-
-  private _sendActiveConversation(): void {
-    if (this._view) {
-      this._conversations.sendActiveConversation(this._view.webview);
-    }
   }
 
   // ============================================================================
@@ -676,22 +703,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   // ============================================================================
 
   private _restoreState(): void {
-    this._sendConversationList();
-    this._sendActiveConversation();
+    this._conversationMessageHandler.sendConversationList();
+    this._conversationMessageHandler.sendActiveConversation();
     if (this._view) {
       this._settingsHandler.sendSettings(this._view.webview);
       this._sendTabState();
       this._taskHandler.sendTasks(this._view.webview);
-      this._sendAgentStateSnapshot(this._view.webview);
+      this._conversationMessageHandler.sendAgentStateSnapshot(this._view.webview);
     }
-  }
-
-  private _sendAgentStateSnapshot(webview: vscode.Webview): void {
-    if (!this._messages) return;
-    webview.postMessage({
-      type: 'agentStateSnapshot',
-      agentStates: this._messages.getAgentStateSnapshot(),
-    });
   }
 
   // ============================================================================
@@ -731,10 +750,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const locale = vscode.env.language;
 
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'assets', 'assistant.js')
+      vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'assets', 'assistant.js'),
     );
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'assets', 'assistant-style.css')
+      vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'assets', 'assistant-style.css'),
     );
 
     return `<!DOCTYPE html>

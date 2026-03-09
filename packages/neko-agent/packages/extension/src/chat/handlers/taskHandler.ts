@@ -26,6 +26,10 @@ export interface TaskHandlerDeps {
 export class TaskHandler {
   constructor(private deps: TaskHandlerDeps) {}
 
+  updateDeps(partial: Partial<TaskHandlerDeps>): void {
+    Object.assign(this.deps, partial);
+  }
+
   /**
    * Send all tasks to webview
    */
@@ -39,7 +43,7 @@ export class TaskHandler {
     }
 
     const tasks = await this.deps.taskManager.list();
-    const taskViews = tasks.map(t => this.toTaskView(t));
+    const taskViews = tasks.map((t) => this.toTaskView(t));
     webview.postMessage({
       type: 'tasksUpdated',
       tasks: taskViews,
@@ -151,7 +155,7 @@ export class TaskHandler {
       // Format task type for display (e.g., "image_generation" -> "Image Generation")
       displayName = task.type
         .split('_')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
     }
 

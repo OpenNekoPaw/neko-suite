@@ -41,6 +41,10 @@ export interface SlashCommandHandlerDeps {
 export class SlashCommandHandler {
   constructor(private deps: SlashCommandHandlerDeps) {}
 
+  updateDeps(partial: Partial<SlashCommandHandlerDeps>): void {
+    Object.assign(this.deps, partial);
+  }
+
   /**
    * Handle slash command invocation
    * Supports both builtin commands and skill-based commands
@@ -104,7 +108,7 @@ export class SlashCommandHandler {
 
     // Get context token count
     const tokenCount = activeConversationId
-      ? this.deps.agentManager?.getContextTokenCount(activeConversationId) ?? 0
+      ? (this.deps.agentManager?.getContextTokenCount(activeConversationId) ?? 0)
       : 0;
 
     webview.postMessage({
@@ -189,7 +193,10 @@ export class SlashCommandHandler {
         return true;
 
       case 'compact':
-        this.deps.contextHandler.compressContext(webview, this.deps.conversations.getActiveId() ?? undefined);
+        this.deps.contextHandler.compressContext(
+          webview,
+          this.deps.conversations.getActiveId() ?? undefined,
+        );
         webview.postMessage({
           type: 'slashCommandResult',
           command: cmdName,
@@ -276,7 +283,7 @@ export class SlashCommandHandler {
           success: true,
           action: 'resumeConversation',
           data: {
-            conversations: conversations.map(c => {
+            conversations: conversations.map((c) => {
               const conv = this.deps.conversations.manager.get(c.id);
               return {
                 id: c.id,

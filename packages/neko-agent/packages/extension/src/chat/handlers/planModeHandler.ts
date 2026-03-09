@@ -37,6 +37,10 @@ export interface PlanModeHandlerDeps {
 export class PlanModeHandler {
   constructor(private deps: PlanModeHandlerDeps) {}
 
+  updateDeps(partial: Partial<PlanModeHandlerDeps>): void {
+    Object.assign(this.deps, partial);
+  }
+
   handleSetPromptMode(webview: vscode.Webview, mode: 'default' | 'plan'): void {
     this.deps.systemPrompt.setMode(mode);
     this.sendPromptMode(webview);
@@ -59,7 +63,7 @@ export class PlanModeHandler {
     webview: vscode.Webview,
     planId: string,
     conversationId: string,
-    filePath?: string
+    filePath?: string,
   ): Promise<void> {
     logger.info('Plan approved:', { planId, conversationId, filePath });
 
@@ -103,16 +107,15 @@ export class PlanModeHandler {
       if (agentRunner && this.deps.platform) {
         await agentRunner.configure(this._buildAgentConfig());
 
-        this.deps.messages?.handleUserMessage(webview, 'The plan has been approved. Please proceed with the implementation.');
+        this.deps.messages?.handleUserMessage(
+          webview,
+          'The plan has been approved. Please proceed with the implementation.',
+        );
       }
     }
   }
 
-  handlePlanReject(
-    webview: vscode.Webview,
-    planId: string,
-    conversationId: string
-  ): void {
+  handlePlanReject(webview: vscode.Webview, planId: string, conversationId: string): void {
     logger.info('Plan rejected:', { planId, conversationId });
 
     // Persist the plan status change
@@ -130,7 +133,8 @@ export class PlanModeHandler {
     webview.postMessage({
       type: 'streamText',
       conversationId,
-      content: '\n\n---\n**Plan rejected.** Please provide more details or a different approach if you would like me to create a new plan.',
+      content:
+        '\n\n---\n**Plan rejected.** Please provide more details or a different approach if you would like me to create a new plan.',
     });
   }
 
@@ -139,7 +143,7 @@ export class PlanModeHandler {
     planId: string,
     stepId: string,
     conversationId: string,
-    action: 'approve' | 'reject'
+    action: 'approve' | 'reject',
   ): void {
     logger.info('Plan step action:', { planId, stepId, conversationId, action });
 
@@ -163,7 +167,7 @@ export class PlanModeHandler {
     planId: string,
     stepId: string,
     newDescription: string,
-    conversationId: string
+    conversationId: string,
   ): void {
     logger.info('Plan step modified:', { planId, stepId, newDescription, conversationId });
 
@@ -202,12 +206,11 @@ export class PlanModeHandler {
     };
   }
 
-
   private _updatePlanStepInConversation(
     conversationId: string,
     planId: string,
     stepId: string,
-    update: { status?: string; description?: string }
+    update: { status?: string; description?: string },
   ): void {
     const conversation = this.deps.conversations.manager.get(conversationId);
     if (!conversation) {
@@ -216,10 +219,10 @@ export class PlanModeHandler {
     }
 
     let updated = false;
-    const updatedMessages = conversation.messages.map(message => {
+    const updatedMessages = conversation.messages.map((message) => {
       if (!message.contentBlocks) return message;
 
-      const updatedBlocks = message.contentBlocks.map(block => {
+      const updatedBlocks = message.contentBlocks.map((block) => {
         if (block.type !== 'plan' || !block.plan) return block;
 
         // Type assertion for plan structure
@@ -231,7 +234,7 @@ export class PlanModeHandler {
         if (plan.id !== planId) return block;
 
         // Update the step
-        const updatedSteps = plan.steps.map(step => {
+        const updatedSteps = plan.steps.map((step) => {
           if (step.id !== stepId) return step;
           updated = true;
           return {
@@ -265,7 +268,7 @@ export class PlanModeHandler {
   private _updatePlanStatusInConversation(
     conversationId: string,
     planId: string,
-    status: 'approved' | 'rejected'
+    status: 'approved' | 'rejected',
   ): void {
     const conversation = this.deps.conversations.manager.get(conversationId);
     if (!conversation) {
@@ -274,10 +277,10 @@ export class PlanModeHandler {
     }
 
     let updated = false;
-    const updatedMessages = conversation.messages.map(message => {
+    const updatedMessages = conversation.messages.map((message) => {
       if (!message.contentBlocks) return message;
 
-      const updatedBlocks = message.contentBlocks.map(block => {
+      const updatedBlocks = message.contentBlocks.map((block) => {
         if (block.type !== 'plan' || !block.plan) return block;
 
         // Type assertion for plan structure

@@ -29,6 +29,10 @@ export interface FileOperationHandlerDeps {
 export class FileOperationHandler {
   constructor(private deps: FileOperationHandlerDeps) {}
 
+  updateDeps(partial: Partial<FileOperationHandlerDeps>): void {
+    Object.assign(this.deps, partial);
+  }
+
   async handleOpenFile(filePath: string): Promise<void> {
     if (!filePath) return;
 
@@ -103,7 +107,9 @@ export class FileOperationHandler {
       let promptName: string = promptId || 'New Prompt';
 
       if (promptId && this.deps.platform) {
-        const existingPrompt = this.deps.platform.config.getPrompts().find(p => p.id === promptId);
+        const existingPrompt = this.deps.platform.config
+          .getPrompts()
+          .find((p) => p.id === promptId);
         if (existingPrompt?.filePath) {
           fileName = path.basename(existingPrompt.filePath);
           promptName = existingPrompt.name;
@@ -186,7 +192,7 @@ export class FileOperationHandler {
     skillName: string,
     source: 'personal' | 'project',
     fileType: 'skill' | 'reference' | 'script',
-    filePath?: string
+    filePath?: string,
   ): Promise<void> {
     try {
       let basePath: string;
@@ -246,10 +252,7 @@ export class FileOperationHandler {
     }
   }
 
-  async handleOpenCommandFile(
-    commandName: string,
-    source: 'personal' | 'project'
-  ): Promise<void> {
+  async handleOpenCommandFile(commandName: string, source: 'personal' | 'project'): Promise<void> {
     try {
       let basePath: string;
 

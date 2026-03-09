@@ -24,6 +24,10 @@ export interface ContextHandlerDeps {
 export class ContextHandler {
   constructor(private deps: ContextHandlerDeps) {}
 
+  updateDeps(partial: Partial<ContextHandlerDeps>): void {
+    Object.assign(this.deps, partial);
+  }
+
   /**
    * Get context token count for a conversation
    */

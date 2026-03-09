@@ -18,7 +18,8 @@ chat/
 ├── providerManager.ts    # 提供商读取/查询
 ├── systemPromptManager.ts # 系统提示词管理
 ├── types.ts              # UI 层类型定义
-└── handlers/             # 消息处理器（按领域拆分）
+└── handlers/             # 消息处理器（按领域拆分，均支持 updateDeps()）
+    ├── conversationHandler.ts # 对话 CRUD + Agent 控制（confirmTool/cancel/stop）
     ├── taskHandler.ts
     ├── modelPresetHandler.ts  # Stub — 配置操作由 ConfigBridge 处理
     ├── skillHandler.ts
@@ -33,9 +34,9 @@ chat/
 
 ## 接口
 
-| 导出 | 类型 | 用途 |
-|------|------|------|
-| `ChatViewProvider` | 类 | Webview 视图提供者（唯一公开 API） |
+| 导出               | 类型 | 用途                               |
+| ------------------ | ---- | ---------------------------------- |
+| `ChatViewProvider` | 类   | Webview 视图提供者（唯一公开 API） |
 
 其余类（`ConversationHandler`、`MessageHandler`、`SettingsManager`、`ProviderManager` 等）为模块内部使用，不对外导出。
 
@@ -58,6 +59,7 @@ Webview (React)
 ChatViewProvider._setupMessageHandlers()
     ├─ ConfigBridge.handleMessage()   # 配置 CRUD（Provider/Prompt/Skill/Hook）
     └─ switch(message.type)           # 聊天特定消息
+        ├─ ConversationMessageHandler # 对话管理 + Agent 控制
         ├─ MessageHandler             # AI 对话（sendMessage）
         ├─ TaskHandler                # 任务管理
         ├─ SkillHandler               # 技能系统

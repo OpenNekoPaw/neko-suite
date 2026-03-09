@@ -26,6 +26,10 @@ export interface SettingsHandlerDeps {
 export class SettingsHandler {
   constructor(private deps: SettingsHandlerDeps) {}
 
+  updateDeps(partial: Partial<SettingsHandlerDeps>): void {
+    Object.assign(this.deps, partial);
+  }
+
   /**
    * Send all settings data to webview
    */
@@ -69,15 +73,24 @@ export class SettingsHandler {
    * Handle settings update from webview
    */
   handleUpdateSettings(webview: vscode.Webview, settings: Record<string, unknown>): void {
-    if (settings.providerId !== undefined) this.deps.settings.selectedProviderId = settings.providerId as string;
-    if (settings.modelId !== undefined) this.deps.settings.selectedModelId = settings.modelId as string;
-    if (settings.systemPrompt !== undefined) this.deps.settings.customSystemPrompt = settings.systemPrompt as string;
-    if (settings.autoExecuteTools !== undefined) this.deps.settings.set('autoExecuteTools', settings.autoExecuteTools as boolean);
-    if (settings.streamResponses !== undefined) this.deps.settings.set('streamResponses', settings.streamResponses as boolean);
-    if (settings.showToolCalls !== undefined) this.deps.settings.set('showToolCalls', settings.showToolCalls as boolean);
-    if (settings.temperature !== undefined) this.deps.settings.set('temperature', settings.temperature as number);
-    if (settings.maxTokens !== undefined) this.deps.settings.set('maxTokens', settings.maxTokens as number);
-    if (settings.executionMode !== undefined) this.deps.settings.executionMode = settings.executionMode as 'plan' | 'ask' | 'auto';
+    if (settings.providerId !== undefined)
+      this.deps.settings.selectedProviderId = settings.providerId as string;
+    if (settings.modelId !== undefined)
+      this.deps.settings.selectedModelId = settings.modelId as string;
+    if (settings.systemPrompt !== undefined)
+      this.deps.settings.customSystemPrompt = settings.systemPrompt as string;
+    if (settings.autoExecuteTools !== undefined)
+      this.deps.settings.set('autoExecuteTools', settings.autoExecuteTools as boolean);
+    if (settings.streamResponses !== undefined)
+      this.deps.settings.set('streamResponses', settings.streamResponses as boolean);
+    if (settings.showToolCalls !== undefined)
+      this.deps.settings.set('showToolCalls', settings.showToolCalls as boolean);
+    if (settings.temperature !== undefined)
+      this.deps.settings.set('temperature', settings.temperature as number);
+    if (settings.maxTokens !== undefined)
+      this.deps.settings.set('maxTokens', settings.maxTokens as number);
+    if (settings.executionMode !== undefined)
+      this.deps.settings.executionMode = settings.executionMode as 'plan' | 'ask' | 'auto';
 
     webview.postMessage({ type: 'settingsUpdated', success: true });
   }
