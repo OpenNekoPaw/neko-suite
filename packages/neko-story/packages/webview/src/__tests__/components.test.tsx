@@ -421,8 +421,8 @@ describe('Complex document rendering', () => {
     expect(screen.getByText('Hello everyone.')).toBeInTheDocument();
     expect(screen.getByText('CUT TO:')).toBeInTheDocument();
 
-    // Verify structure: 5 children because character+dialogue are grouped into one DialogueBlock
+    // Verify structure: print-button + 5 rendered elements (section, scene_heading, action, DialogueBlock, transition)
     const screenplay = container.querySelector('.screenplay');
-    expect(screenplay?.children.length).toBe(5);
+    expect(screenplay?.children.length).toBe(6);
   });
 });

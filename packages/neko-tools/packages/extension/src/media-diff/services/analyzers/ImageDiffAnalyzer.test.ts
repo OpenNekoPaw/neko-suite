@@ -24,9 +24,9 @@ vi.mock('vscode', () => ({
 const mockDiff = vi.fn();
 
 vi.mock('../../../services/EngineMediaService', () => ({
-  EngineMediaService: vi.fn().mockImplementation(() => ({
-    diff: mockDiff,
-  })),
+  EngineMediaService: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.diff = mockDiff;
+  }),
 }));
 
 // =============================================================================

@@ -24,10 +24,10 @@ vi.mock('vscode', () => ({
 const mockDispatch = vi.fn();
 
 vi.mock('@neko/neko-client', () => ({
-  EngineClient: vi.fn().mockImplementation((port: number) => ({
-    port,
-    dispatch: mockDispatch,
-  })),
+  EngineClient: vi.fn().mockImplementation(function (this: Record<string, unknown>, port: number) {
+    this.port = port;
+    this.dispatch = mockDispatch;
+  }),
 }));
 
 import { PreviewService, type MediaInfo } from '../../services/PreviewService';

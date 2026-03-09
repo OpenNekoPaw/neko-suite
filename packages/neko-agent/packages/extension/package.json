@@ -20,6 +20,6 @@
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
-    "vitest": "^2.0.0"
+    "vitest": "^4.0.18"
   }
 }

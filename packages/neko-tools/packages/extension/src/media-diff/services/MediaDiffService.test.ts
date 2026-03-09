@@ -5,6 +5,23 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+
+vi.mock('vscode', () => ({
+  Disposable: { from: vi.fn() },
+  Uri: {
+    file: (path: string) => ({ scheme: 'file', fsPath: path, path }),
+    parse: (uri: string) => ({ scheme: 'file', fsPath: uri, path: uri }),
+  },
+  workspace: {
+    fs: {
+      readFile: vi.fn(),
+    },
+  },
+  commands: {
+    executeCommand: vi.fn(),
+  },
+}));
+
 import { MediaDiffService, getMediaDiffService, disposeMediaDiffService } from './MediaDiffService';
 import { AnalyzerRegistry, type IMediaDiffAnalyzer } from './analyzers/IMediaDiffAnalyzer';
 import type { DiffResult, DiffOptions, MediaType } from '@neko/shared';

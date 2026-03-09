@@ -79,30 +79,30 @@ vi.mock('../services/PreviewService', () => ({
 }));
 
 vi.mock('../providers/VideoPreviewProvider', () => {
-  const ctor = vi.fn().mockImplementation(() => ({
-    setPreviewService: vi.fn(),
-    dispose: vi.fn(),
-  }));
-  ctor.viewType = 'neko.videoPreview';
+  const ctor = vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.setPreviewService = vi.fn();
+    this.dispose = vi.fn();
+  });
+  (ctor as unknown as Record<string, string>).viewType = 'neko.videoPreview';
   return { VideoPreviewProvider: ctor };
 });
 
 vi.mock('../providers/AudioPreviewProvider', () => {
-  const ctor = vi.fn().mockImplementation(() => ({
-    setPreviewService: vi.fn(),
-    dispose: vi.fn(),
-  }));
-  ctor.viewType = 'neko.audioPreview';
+  const ctor = vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.setPreviewService = vi.fn();
+    this.dispose = vi.fn();
+  });
+  (ctor as unknown as Record<string, string>).viewType = 'neko.audioPreview';
   return { AudioPreviewProvider: ctor };
 });
 
 vi.mock('../ui/StatusBarManager', () => ({
-  StatusBarManager: vi.fn().mockImplementation(() => ({
-    show: vi.fn(),
-    hide: vi.fn(),
-    updatePlayback: vi.fn(),
-    dispose: vi.fn(),
-  })),
+  StatusBarManager: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.show = vi.fn();
+    this.hide = vi.fn();
+    this.updatePlayback = vi.fn();
+    this.dispose = vi.fn();
+  }),
 }));
 
 import { activate, deactivate } from '../extension';
