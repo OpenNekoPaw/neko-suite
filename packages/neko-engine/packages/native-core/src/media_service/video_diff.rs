@@ -216,11 +216,23 @@ pub fn diff_video_content<P: AsRef<Path>>(
     // reduces analysis time by ~30-50%.
     let (ssim_result, psnr_result) = std::thread::scope(|s| {
         let ssim_handle = s.spawn(|| -> Result<Vec<_>> {
-            let log = run_ffmpeg_ssim(path_a, path_b, opts.start_time, opts.end_time, opts.sample_fps)?;
+            let log = run_ffmpeg_ssim(
+                path_a,
+                path_b,
+                opts.start_time,
+                opts.end_time,
+                opts.sample_fps,
+            )?;
             parse_ssim_log(&log)
         });
         let psnr_handle = s.spawn(|| -> Result<Vec<_>> {
-            let log = run_ffmpeg_psnr(path_a, path_b, opts.start_time, opts.end_time, opts.sample_fps)?;
+            let log = run_ffmpeg_psnr(
+                path_a,
+                path_b,
+                opts.start_time,
+                opts.end_time,
+                opts.sample_fps,
+            )?;
             parse_psnr_log(&log)
         });
         // scope blocks until both threads finish
@@ -237,7 +249,8 @@ pub fn diff_video_content<P: AsRef<Path>>(
     // Step 4: Merge SSIM + PSNR into FrameMetric list
     // Use the lower fps for timestamp calculation
     let base_fps = fps_a.min(fps_b);
-    let frame_metrics = build_frame_metrics(&ssim_entries, &psnr_entries, base_fps, opts.sample_fps);
+    let frame_metrics =
+        build_frame_metrics(&ssim_entries, &psnr_entries, base_fps, opts.sample_fps);
 
     // Step 5: Compute global metrics
     let total = frame_metrics.len() as u64;
@@ -697,8 +710,8 @@ mod tests {
         ];
 
         let metrics = build_frame_metrics(&ssim, &psnr, 30.0, None);
-     assert_eq!(metrics.len(), 2);
-    assert_eq!(metrics[0].frame, 1);
+        assert_eq!(metrics.len(), 2);
+        assert_eq!(metrics[0].frame, 1);
         assert!((metrics[0].timestamp - 0.0).abs() < 1e-6);
         assert!((metrics[0].ssim - 0.99).abs() < 1e-6);
         assert!((metrics[0].psnr - 48.0).abs() < 1e-6);

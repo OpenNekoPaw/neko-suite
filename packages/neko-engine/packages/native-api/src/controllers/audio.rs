@@ -5,7 +5,9 @@ use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_native_core::domain::StreamConfig;
-use neko_native_core::media_service::{diff_audio_content_with_options, diff_media, AudioDiffOptions, DiffCategory};
+use neko_native_core::media_service::{
+    diff_audio_content_with_options, diff_media, AudioDiffOptions, DiffCategory,
+};
 use neko_native_core::services::{AudioService, IAudioService};
 use neko_types::registry;
 use neko_types::ActionResponse;

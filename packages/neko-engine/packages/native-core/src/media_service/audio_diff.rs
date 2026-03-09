@@ -189,7 +189,11 @@ pub fn diff_audio_content_with_options(
 }
 
 /// Decode an audio file to F32 mono samples at 48kHz with optional time range
-fn decode_to_f32_mono(path: &str, start_time: Option<f64>, end_time: Option<f64>) -> Result<Vec<f32>> {
+fn decode_to_f32_mono(
+    path: &str,
+    start_time: Option<f64>,
+    end_time: Option<f64>,
+) -> Result<Vec<f32>> {
     let mut decoder = FfmpegAudioDecoder::new()
         .with_output_format(SampleFormat::F32)
         .with_output_sample_rate(COMPARE_SAMPLE_RATE)

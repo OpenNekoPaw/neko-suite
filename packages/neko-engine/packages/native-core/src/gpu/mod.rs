@@ -78,10 +78,10 @@ pub use transition_processor::{GpuTransitionProcessor, TransitionParams, Transit
 pub use linux_export::{
     CudaExportInfo, ExportedNv12Frame, LinuxExportBackingStore, LinuxTextureExporter,
 };
-#[cfg(target_os = "linux")]
-pub use linux_import::{DmaBufFrame, DmaBufPlane, LinuxTextureImporter};
 #[cfg(all(target_os = "linux", feature = "cuda"))]
 pub use linux_import::CudaTextureImporter;
+#[cfg(target_os = "linux")]
+pub use linux_import::{DmaBufFrame, DmaBufPlane, LinuxTextureImporter};
 #[cfg(target_os = "macos")]
 pub use macos_import::MacOsTextureImporter;
 #[cfg(target_os = "macos")]

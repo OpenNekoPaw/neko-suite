@@ -11,9 +11,9 @@
 pub mod frame;
 pub mod loudness;
 pub mod operations;
-pub mod silence;
 pub mod options;
 pub mod resource;
+pub mod silence;
 pub mod stream;
 pub mod task_handle;
 pub mod timeline;

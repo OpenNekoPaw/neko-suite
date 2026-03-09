@@ -4,9 +4,9 @@ use super::traits::{AudioDecoder, AudioInfo, DecodedAudioFrame, SampleFormat};
 use crate::error::{Error, Result};
 
 use ffmpeg_next as ffmpeg;
+use ffmpeg_next::ffi;
 use ffmpeg_next::format::input;
 use ffmpeg_next::format::Sample;
-use ffmpeg_next::ffi;
 use ffmpeg_next::media::Type;
 use ffmpeg_next::software::resampling::Context as ResamplerContext;
 use ffmpeg_next::util::frame::audio::Audio as AudioFrame;

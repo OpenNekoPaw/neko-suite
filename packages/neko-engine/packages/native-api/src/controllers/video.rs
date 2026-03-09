@@ -190,7 +190,7 @@ struct DiffRequestOptions {
     start_time: Option<f64>,
     /// End time in seconds for range-based diff
     #[serde(default)]
-  end_time: Option<f64>,
+    end_time: Option<f64>,
     /// Sample frame rate for diff computation (None = full frame rate)
     #[serde(default)]
     sample_fps: Option<f64>,
