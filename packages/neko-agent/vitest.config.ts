@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
+import { sharedCoverage } from '../../vitest.shared';
 
 export default defineConfig({
   test: {
@@ -24,9 +25,7 @@ export default defineConfig({
       // media-generation-service depends on deprecated task-manager path
       'packages/platform/src/media/__tests__/media-generation-service.test.ts',
     ],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+    coverage: sharedCoverage({
       exclude: [
         '**/node_modules/**',
         '**/dist/**',
@@ -34,7 +33,7 @@ export default defineConfig({
         '**/*.test.ts',
         '**/types.ts',
       ],
-    },
+    }),
   },
   resolve: {
     alias: {

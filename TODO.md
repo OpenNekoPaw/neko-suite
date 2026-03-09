@@ -2,7 +2,7 @@
 
 > 当前迭代的活跃任务清单。长期路线图见 [ROADMAP.md](./ROADMAP.md)。
 >
-> 来源文档索引：[task-plan](./docs/task-plan.md) · [diff](./docs/diff.md) · [engine](./docs/engine.md) · [timeline-alignment](./docs/timeline-alignment.md) · [editoperation](./docs/editoperation.md) · [lsp](./docs/lsp.md) · [asset-management](./docs/architecture/asset-management-design.md) · [cross-repo-sharing](./docs/architecture/cross-repo-sharing-design.md) · [shared-packages](./docs/architecture/shared-packages-design.md) · [cross-language](./docs/architecture/cross-language-architecture.md) · [3d-capability](./docs/architecture/3d-capability-analysis.md)
+> 来源文档索引：[task-plan](./docs/archive/task-plan-2026-03-03.md) ·[diff](./docs/diff.md) · [engine](./docs/engine.md) · [timeline-alignment](./docs/timeline-alignment.md) · [editoperation](./docs/editoperation.md) · [lsp](./docs/lsp.md) · [asset-management](./docs/architecture/asset-management-design.md) · [cross-repo-sharing](./docs/architecture/cross-repo-sharing-design.md) · [shared-packages](./docs/architecture/shared-packages-design.md) · [cross-language](./docs/architecture/cross-language-architecture.md) · [3d-capability](./docs/architecture/3d-capability-analysis.md)
 
 ---
 
@@ -14,7 +14,7 @@
 - [x] EditOperation Phase 1-4B — [editoperation](./docs/editoperation.md)
 - [x] Timeline Alignment Phase 0-5 — [timeline-alignment](./docs/timeline-alignment.md)
 - [x] Media Diff Phase 1-2.6 — [diff.md §已完成](./docs/diff.md)
-- [x] task-plan P0 #1-2, P1 #3-6 — [task-plan](./docs/task-plan.md)
+- [x] task-plan P0 #1-2, P1 #3-6 — [task-plan](./docs/archive/task-plan-2026-03-03.md)
 - [x] **Bug #1 修复：Git fetch 期间播放失败** — `mediaDiff:fetchState` 协议 + 双重保护（Extension await + Webview 禁用 Play）— [diff.md §Bug #1](./docs/diff.md)
 - [x] **预加载优化**：ProbeCache + DecoderPool 接入 stream + EncoderPool，首帧延迟 >200ms → <50ms（warm）
 - [x] **KeyframeCache 清理**：删除废弃的 NV12 帧缓存模块（与 GPU zero-copy 路径不兼容，FFmpeg 内部已有 keyframe index）
@@ -66,7 +66,7 @@
 ## 🟡 P1 — 核心功能（当前迭代）
 
 ### neko-agent（AI Skills）
-- [ ] 批量时间线操作 Skill（当前仅支持单元素操作）— [task-plan #11](./docs/task-plan.md)
+- [ ] 批量时间线操作 Skill（当前仅支持单元素操作）— [task-plan #11](./docs/archive/task-plan-2026-03-03.md)
 - [ ] AI 字幕生成 Skill（调用 Whisper / 云端 ASR）
 - [ ] 智能素材推荐（根据剧本自动检索资产库）
 - [ ] **ChatViewProvider 拆分 + AgentExecutor 流式化** Phase 4-5（Phase 1-3 ✅ 完成）— [refactoring-chat-cli.md](./packages/neko-agent/docs/refactoring-chat-cli.md)
@@ -92,7 +92,7 @@
 ## 🟢 P2 — 增强功能（可延后）
 
 ### neko-cut
-- [x] ~~反向播放前端 UI~~ ✅ 已完成（SpeedControl.tsx 已有反向切换按钮 + PropertyPanel 集成 + 时间映射工具）— [task-plan #9](./docs/task-plan.md)
+- [x] ~~反向播放前端 UI~~ ✅ 已完成（SpeedControl.tsx 已有反向切换按钮 + PropertyPanel 集成 + 时间映射工具）— [task-plan #9](./docs/archive/task-plan-2026-03-03.md)
 
 ### neko-engine
 - [ ] WebGPU 实时预览优化（降低 GPU→CPU 回读延迟）
@@ -144,7 +144,7 @@
 - [ ] Phase 4：AI 素材审查
 - [ ] Phase 5：质量评估（黑帧检测 / VQA / SAM 智能蒙版）
 
-### neko-agent 创意助手 — [task-plan #13](./docs/task-plan.md)
+### neko-agent 创意助手 — [task-plan #13](./docs/archive/task-plan-2026-03-03.md)
 - [ ] 场景描述 → 自动配乐
 - [ ] AI 字幕（云端 ASR 集成）
 - [ ] 场景描写辅助
@@ -234,12 +234,12 @@
 
 | 优先级 | 问题 | 影响 | 来源 |
 |--------|------|------|------|
-| ~~高~~ | ~~统一错误处理机制~~ ✅ 框架已建立 | ~~调试困难~~ | [task-plan TD-2](./docs/task-plan.md) |
+| ~~高~~ | ~~统一错误处理机制~~ ✅ 框架已建立 | ~~调试困难~~ | [task-plan TD-2](./docs/archive/task-plan-2026-03-03.md) |
 | 高 | neko-engine 性能监控（telemetry 基础已有，需接入指标面板） | 性能盲区 | |
-| 中 | AI SDK 依赖倒置（`AISdkAdapter` 直接依赖 Vercel AI SDK，DIP 65/100） | 可替换性差 | [task-plan TD-1](./docs/task-plan.md) |
+| 中 | AI SDK 依赖倒置（`AISdkAdapter` 直接依赖 Vercel AI SDK，DIP 65/100） | 可替换性差 | [task-plan TD-1](./docs/archive/task-plan-2026-03-03.md) |
 | ~~中~~ | ~~neko-types 83 个 `as any`~~ ✅ 已清理至 2 处（仅测试代码） | ~~类型安全~~ | [engine.md](./docs/engine.md) |
 | 中 | neko-types JSDoc 覆盖率低 | 开发体验差 | |
-| 低 | 国际化扩展（neko-cut/neko-agent 已完成，其他包待补） | 国际化缺口 | [task-plan TD-5](./docs/task-plan.md) |
+| 低 | 国际化扩展（neko-cut/neko-agent 已完成，其他包待补） | 国际化缺口 | [task-plan TD-5](./docs/archive/task-plan-2026-03-03.md) |
 
 ---
 

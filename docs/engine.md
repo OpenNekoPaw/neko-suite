@@ -278,7 +278,7 @@ neko-engine 开发完成度报告
   2. Timeline 模型合并 ✅ 已完成
 
   目标：消除 domain::Timeline vs export::TimelineData 双模型
-  计划文档：native-core/PLAN.md
+  计划文档：../docs/archive/neko-engine/native-core-plan.md
 
   核心决策：以 domain::Timeline 为唯一模型，删除 export 层 DTO
 
@@ -306,7 +306,7 @@ neko-engine 开发完成度报告
   │ # │               任务               │     模块     │ 复杂度 │ 涉及文件 │               状态                    │
   ├───┼──────────────────────────────────┼──────────────┼────────┼──────────┼───────────────────────────────────────┤
   │ 1 │ EditOperation 双轨架构           │ neko-cut     │ 高     │ 7        │ 设计完成，未开始                      │
-  │   │ 快照式 → 操作级 undo/redo        │              │        │          │ docs/phase2-plan.md                   │
+  │   │ 快照式 → 操作级 undo/redo        │              │        │          │ docs/archive/neko-engine/phase2-plan.md│
   ├───┼──────────────────────────────────┼──────────────┼────────┼──────────┼───────────────────────────────────────┤
   │ 2 │ Agent Handler 拆分              │ neko-agent   │ 高     │ 15       │ Phase 1 ✅（18%）→ Phase 2-5 待完成   │
   │   │ ChatViewProvider → 7 个 Handler  │              │        │          │ docs/refactoring-chat-cli.md          │
