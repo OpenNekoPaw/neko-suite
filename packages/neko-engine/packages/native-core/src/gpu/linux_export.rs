@@ -184,7 +184,15 @@ impl LinuxTextureExporter {
                         })),
                     );
 
-                    Ok((y_img, uv_img, y_hal, uv_hal))
+                    Ok::<
+                        (
+                            ExportableImage,
+                            ExportableImage,
+                            wgpu_hal::vulkan::Texture,
+                            wgpu_hal::vulkan::Texture,
+                        ),
+                        Error,
+                    >((y_img, uv_img, y_hal, uv_hal))
                 })
                 .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??
         };
@@ -442,7 +450,7 @@ impl LinuxExportBackingStore {
                         Error::Other(format!("vkGetMemoryFdKHR (UV) failed: {:?}", e))
                     })?;
 
-                    Ok((y_fd, uv_fd))
+                    Ok::<(i32, i32), Error>((y_fd, uv_fd))
                 })
                 .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??
         };
@@ -510,7 +518,7 @@ impl LinuxExportBackingStore {
                         Error::Other(format!("vkGetMemoryFdKHR (CUDA UV) failed: {:?}", e))
                     })?;
 
-                    Ok((y_fd, uv_fd))
+                    Ok::<(i32, i32), Error>((y_fd, uv_fd))
                 })
                 .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??
         };
