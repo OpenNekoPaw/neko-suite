@@ -98,12 +98,18 @@ export class ModelSection extends BaseConfigSection<Model> {
 
 export class MCPServerSection extends BaseConfigSection<MCPServerPreset> {
   constructor(
-    options: Omit<ConfigSectionOptions<MCPServerPreset>, 'name' | 'builtinOverridableFields'>
+    options: Omit<ConfigSectionOptions<MCPServerPreset>, 'name' | 'builtinOverridableFields'>,
   ) {
     super({
       ...options,
       name: 'mcpServer',
-      builtinOverridableFields: ['enabled', 'command', 'args', 'env', 'url'] as (keyof MCPServerPreset)[],
+      builtinOverridableFields: [
+        'enabled',
+        'command',
+        'args',
+        'env',
+        'url',
+      ] as (keyof MCPServerPreset)[],
     });
   }
 
@@ -132,7 +138,7 @@ export class MCPServerSection extends BaseConfigSection<MCPServerPreset> {
 
 export class WorkflowSection extends BaseConfigSection<WorkflowPreset> {
   constructor(
-    options: Omit<ConfigSectionOptions<WorkflowPreset>, 'name' | 'builtinOverridableFields'>
+    options: Omit<ConfigSectionOptions<WorkflowPreset>, 'name' | 'builtinOverridableFields'>,
   ) {
     super({
       ...options,
@@ -166,7 +172,7 @@ export class WorkflowSection extends BaseConfigSection<WorkflowPreset> {
 
 export class PromptSection extends BaseConfigSection<PromptPreset> {
   constructor(
-    options: Omit<ConfigSectionOptions<PromptPreset>, 'name' | 'builtinOverridableFields'>
+    options: Omit<ConfigSectionOptions<PromptPreset>, 'name' | 'builtinOverridableFields'>,
   ) {
     super({
       ...options,

@@ -33,10 +33,7 @@ export class LLMServiceAdapter implements IService {
     this._client = createLLMClient(config);
   }
 
-  async chat(
-    messages: ChatMessage[],
-    options?: ServiceOptions
-  ): Promise<ServiceResponse> {
+  async chat(messages: ChatMessage[], options?: ServiceOptions): Promise<ServiceResponse> {
     const response = await this._client.chat(messages, {
       maxTokens: options?.maxTokens ?? this._config.maxTokens,
       temperature: options?.temperature ?? this._config.temperature,
@@ -60,9 +57,7 @@ export class LLMServiceAdapter implements IService {
           },
         })),
       },
-      finishReason: response.toolCalls && response.toolCalls.length > 0
-        ? 'tool_calls'
-        : 'stop',
+      finishReason: response.toolCalls && response.toolCalls.length > 0 ? 'tool_calls' : 'stop',
       usage: {
         promptTokens: response.usage?.inputTokens ?? 0,
         completionTokens: response.usage?.outputTokens ?? 0,
@@ -71,10 +66,7 @@ export class LLMServiceAdapter implements IService {
     };
   }
 
-  async *chatStream(
-    messages: ChatMessage[],
-    options?: ServiceOptions
-  ): AsyncIterable<StreamChunk> {
+  async *chatStream(messages: ChatMessage[], options?: ServiceOptions): AsyncIterable<StreamChunk> {
     const clientOptions = {
       maxTokens: options?.maxTokens ?? this._config.maxTokens,
       temperature: options?.temperature ?? this._config.temperature,
@@ -135,10 +127,7 @@ export class LLMServiceAdapter implements IService {
  * to avoid unnecessary double-wrapping (IService → ILLMClient → IService).
  * Only wraps BuiltinLLMClient when no existing service is available.
  */
-export function createLLMServiceAdapter(
-  config: CLIConfig,
-  existingService?: IService
-): IService {
+export function createLLMServiceAdapter(config: CLIConfig, existingService?: IService): IService {
   if (existingService) {
     return existingService;
   }

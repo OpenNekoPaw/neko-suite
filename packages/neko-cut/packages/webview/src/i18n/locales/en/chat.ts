@@ -11,10 +11,12 @@ export const chat = {
   'chat.defaultAgent': 'Default',
   'chat.noProvidersConfigured': 'No providers configured. Go to Settings to add providers.',
   'chat.emptyState.title': 'Neko Suite AI Assistant',
-  'chat.emptyState.description': 'Ask me anything about video editing, timeline management, or project organization.',
+  'chat.emptyState.description':
+    'Ask me anything about video editing, timeline management, or project organization.',
   'chat.emptyState.disclaimer': 'AI responses may be inaccurate.',
 
-  'chat.input.placeholder': 'Ask anything... (/ for commands, @ for files, Shift+Enter for new line)',
+  'chat.input.placeholder':
+    'Ask anything... (/ for commands, @ for files, Shift+Enter for new line)',
   'chat.input.templates': 'Prompt Templates (Cmd/Ctrl+T)',
   'chat.input.send': 'Send (Enter)',
   'chat.input.attachFile': 'Attach file',
@@ -29,7 +31,8 @@ export const chat = {
   'chat.toolCall.failed': 'Failed',
 
   'chat.executionMode.label': 'Execution Mode',
-  'chat.executionMode.title': 'Execution mode: plan (dry-run), ask (confirm), auto (whitelist only)',
+  'chat.executionMode.title':
+    'Execution mode: plan (dry-run), ask (confirm), auto (whitelist only)',
   'chat.executionMode.plan': 'Plan',
   'chat.executionMode.planDesc': 'Dry-run, show commands only',
   'chat.executionMode.ask': 'Ask before executing',
@@ -81,7 +84,8 @@ export const chat = {
   'chat.commands.storyboard': 'Create a storyboard',
   'chat.commands.settings': 'Open settings',
 
-  'chat.helpMessage': '**Available Commands:**\n- `/clear` - Clear conversation history\n- `/new` - Start a new conversation\n- `/help` - Show this help message\n- `/image` - Generate an image\n- `/video` - Generate a video\n- `/script` - Write a script\n- `/storyboard` - Create a storyboard\n- `/settings` - Open settings\n\n**Tips:**\n- Use `@` to reference files\n- Attach files using the 📎 button\n- Press Enter to send, Shift+Enter for new line',
+  'chat.helpMessage':
+    '**Available Commands:**\n- `/clear` - Clear conversation history\n- `/new` - Start a new conversation\n- `/help` - Show this help message\n- `/image` - Generate an image\n- `/video` - Generate a video\n- `/script` - Write a script\n- `/storyboard` - Create a storyboard\n- `/settings` - Open settings\n\n**Tips:**\n- Use `@` to reference files\n- Attach files using the 📎 button\n- Press Enter to send, Shift+Enter for new line',
   'chat.attachFile': 'Attach file',
   'chat.referenceFile': 'Reference file with @',
 } as const satisfies MessageBundle;

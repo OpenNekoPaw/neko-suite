@@ -6,10 +6,7 @@
  */
 
 import * as vscode from 'vscode';
-import type {
-  NekoCutAPI,
-  NekoCanvasAPI,
-} from '@neko/shared';
+import type { NekoCutAPI, NekoCanvasAPI } from '@neko/shared';
 import { EngineClient } from '@neko/neko-client';
 import type { EffectPresetInfo, ShaderParamDef } from '@neko/neko-client';
 import { getLogger } from '../base';
@@ -130,7 +127,7 @@ export function createNekoCutTools(): Tool[] {
         const api = await getAPI();
         await api.timeline.updateElement(
           args.id as string,
-          args.updates as Record<string, unknown>
+          args.updates as Record<string, unknown>,
         );
         return { success: true };
       },
@@ -362,7 +359,7 @@ async function getEngineClient(): Promise<EngineClient> {
   }
 
   const result = await vscode.commands.executeCommand<{ port: number } | null>(
-    'neko.engine.ensureFrameServer'
+    'neko.engine.ensureFrameServer',
   );
   if (!result) {
     throw new Error('Failed to start neko-engine Frame Server');
@@ -419,8 +416,7 @@ export function createNekoEngineEffectsTools(): Tool[] {
         properties: {
           id: {
             type: 'string',
-            description:
-              'Unique ID for this shader (e.g. "my_custom_blur")',
+            description: 'Unique ID for this shader (e.g. "my_custom_blur")',
           },
           code: {
             type: 'string',
@@ -448,7 +444,7 @@ export function createNekoEngineEffectsTools(): Tool[] {
         await client.registerShader(
           args.id as string,
           args.code as string,
-          args.params as ShaderParamDef[] | undefined
+          args.params as ShaderParamDef[] | undefined,
         );
         return { success: true, shaderId: args.id as string };
       },

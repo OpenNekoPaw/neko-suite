@@ -210,7 +210,7 @@ export class HookFileService implements vscode.Disposable {
   private parseHookFile(
     content: string,
     source: SkillSource,
-    filePath: string
+    filePath: string,
   ): { hook?: Hook; error?: HookLoadError } {
     // Parse YAML frontmatter
     const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
@@ -328,8 +328,8 @@ export class HookFileService implements vscode.Disposable {
    */
   toConfigured(result: HookScanResult): ConfiguredHook[] {
     return [
-      ...result.personal.map(h => ({ ...h, enabled: h.enabled ?? true })),
-      ...result.project.map(h => ({ ...h, enabled: h.enabled ?? true })),
+      ...result.personal.map((h) => ({ ...h, enabled: h.enabled ?? true })),
+      ...result.project.map((h) => ({ ...h, enabled: h.enabled ?? true })),
     ];
   }
 
@@ -357,10 +357,10 @@ export class HookFileService implements vscode.Disposable {
         this.disposeWatchers();
         this.setupFileWatchers();
         // Rescan hooks
-        this.scanHooks().then(result => {
+        this.scanHooks().then((result) => {
           this._onHooksChanged.fire(result);
         });
-      })
+      }),
     );
   }
 

@@ -24,20 +24,20 @@ export type ShapeAnimatablePropertyName =
   | 'rotation'
   | 'opacity'
   // Shape-specific properties
-  | 'width'           // For rectangle
-  | 'height'          // For rectangle
-  | 'cornerRadius'    // For rectangle
-  | 'radiusX'         // For ellipse
-  | 'radiusY'         // For ellipse
-  | 'outerRadius'     // For star
+  | 'width' // For rectangle
+  | 'height' // For rectangle
+  | 'cornerRadius' // For rectangle
+  | 'radiusX' // For ellipse
+  | 'radiusY' // For ellipse
+  | 'outerRadius' // For star
   | 'innerRadiusRatio' // For star
-  | 'points'          // For star/polygon (number of points)
+  | 'points' // For star/polygon (number of points)
   // Stroke animation properties
   | 'strokeWidth'
   | 'strokeOpacity'
   | 'strokeDashOffset'
-  | 'strokeTrimStart'  // Trim path start (0-1)
-  | 'strokeTrimEnd'    // Trim path end (0-1)
+  | 'strokeTrimStart' // Trim path start (0-1)
+  | 'strokeTrimEnd' // Trim path end (0-1)
   // Fill animation properties
   | 'fillOpacity';
 
@@ -45,27 +45,29 @@ export type ShapeAnimatablePropertyName =
  * Property name translation keys for shape animations
  * 形状动画属性名称的翻译键
  */
-export const SHAPE_ANIMATABLE_PROPERTY_I18N_KEYS: Partial<Record<ShapeAnimatablePropertyName, string>> = {
-  'x': 'shape.animation.positionX',
-  'y': 'shape.animation.positionY',
-  'scaleX': 'shape.animation.scaleX',
-  'scaleY': 'shape.animation.scaleY',
-  'rotation': 'shape.animation.rotation',
-  'opacity': 'shape.animation.opacity',
-  'width': 'shape.animation.width',
-  'height': 'shape.animation.height',
-  'cornerRadius': 'shape.animation.cornerRadius',
-  'radiusX': 'shape.animation.radiusX',
-  'radiusY': 'shape.animation.radiusY',
-  'outerRadius': 'shape.animation.outerRadius',
-  'innerRadiusRatio': 'shape.animation.innerRadiusRatio',
-  'points': 'shape.animation.points',
-  'strokeWidth': 'shape.animation.strokeWidth',
-  'strokeOpacity': 'shape.animation.strokeOpacity',
-  'strokeDashOffset': 'shape.animation.strokeDashOffset',
-  'strokeTrimStart': 'shape.animation.strokeTrimStart',
-  'strokeTrimEnd': 'shape.animation.strokeTrimEnd',
-  'fillOpacity': 'shape.animation.fillOpacity',
+export const SHAPE_ANIMATABLE_PROPERTY_I18N_KEYS: Partial<
+  Record<ShapeAnimatablePropertyName, string>
+> = {
+  x: 'shape.animation.positionX',
+  y: 'shape.animation.positionY',
+  scaleX: 'shape.animation.scaleX',
+  scaleY: 'shape.animation.scaleY',
+  rotation: 'shape.animation.rotation',
+  opacity: 'shape.animation.opacity',
+  width: 'shape.animation.width',
+  height: 'shape.animation.height',
+  cornerRadius: 'shape.animation.cornerRadius',
+  radiusX: 'shape.animation.radiusX',
+  radiusY: 'shape.animation.radiusY',
+  outerRadius: 'shape.animation.outerRadius',
+  innerRadiusRatio: 'shape.animation.innerRadiusRatio',
+  points: 'shape.animation.points',
+  strokeWidth: 'shape.animation.strokeWidth',
+  strokeOpacity: 'shape.animation.strokeOpacity',
+  strokeDashOffset: 'shape.animation.strokeDashOffset',
+  strokeTrimStart: 'shape.animation.strokeTrimStart',
+  strokeTrimEnd: 'shape.animation.strokeTrimEnd',
+  fillOpacity: 'shape.animation.fillOpacity',
 };
 
 // =============================================================================
@@ -173,7 +175,7 @@ export interface EllipseAnimation {
 export interface StarAnimation {
   outerRadius: AnimatableProperty;
   innerRadiusRatio: AnimatableProperty;
-  points: AnimatableProperty;  // Can animate between different point counts
+  points: AnimatableProperty; // Can animate between different point counts
 }
 
 /**
@@ -234,14 +236,14 @@ function createAnimatable(baseValue: number): AnimatableProperty {
  */
 export function createDefaultShapeTransform(): ShapeTransform {
   return {
-    x: createAnimatable(50),       // Center (percentage)
-    y: createAnimatable(50),       // Center (percentage)
-    scaleX: createAnimatable(1),   // 100%
-    scaleY: createAnimatable(1),   // 100%
+    x: createAnimatable(50), // Center (percentage)
+    y: createAnimatable(50), // Center (percentage)
+    scaleX: createAnimatable(1), // 100%
+    scaleY: createAnimatable(1), // 100%
     rotation: createAnimatable(0), // No rotation
-    opacity: createAnimatable(1),  // Fully visible
-    anchorX: 0.5,                  // Center anchor
-    anchorY: 0.5,                  // Center anchor
+    opacity: createAnimatable(1), // Fully visible
+    anchorX: 0.5, // Center anchor
+    anchorY: 0.5, // Center anchor
   };
 }
 
@@ -254,8 +256,8 @@ export function createDefaultStrokeAnimation(initialWidth = 2): StrokeAnimation 
     width: createAnimatable(initialWidth),
     opacity: createAnimatable(1),
     dashOffset: createAnimatable(0),
-    trimStart: createAnimatable(0),  // Start of path
-    trimEnd: createAnimatable(1),    // End of path (fully drawn)
+    trimStart: createAnimatable(0), // Start of path
+    trimEnd: createAnimatable(1), // End of path (fully drawn)
   };
 }
 
@@ -275,7 +277,7 @@ export function createDefaultFillAnimation(): FillAnimation {
 export function createDefaultRectangleAnimation(
   width = 40,
   height = 30,
-  cornerRadius = 0
+  cornerRadius = 0,
 ): RectangleAnimation {
   return {
     width: createAnimatable(width),
@@ -287,10 +289,7 @@ export function createDefaultRectangleAnimation(
 /**
  * Create default ellipse animation
  */
-export function createDefaultEllipseAnimation(
-  radiusX = 20,
-  radiusY = 15
-): EllipseAnimation {
+export function createDefaultEllipseAnimation(radiusX = 20, radiusY = 15): EllipseAnimation {
   return {
     radiusX: createAnimatable(radiusX),
     radiusY: createAnimatable(radiusY),
@@ -303,7 +302,7 @@ export function createDefaultEllipseAnimation(
 export function createDefaultStarAnimation(
   outerRadius = 25,
   innerRadiusRatio = 0.4,
-  points = 5
+  points = 5,
 ): StarAnimation {
   return {
     outerRadius: createAnimatable(outerRadius),
@@ -371,7 +370,7 @@ export function getAllKeyframeTimes(state: ShapeAnimationState): number[] {
   const times = new Set<number>();
 
   const collectTimes = (prop: AnimatableProperty) => {
-    prop.keyframes.forEach(kf => times.add(kf.time));
+    prop.keyframes.forEach((kf) => times.add(kf.time));
   };
 
   // Transform
@@ -423,14 +422,14 @@ export function getAllKeyframeTimes(state: ShapeAnimationState): number[] {
  * 描边动画预设类型
  */
 export type StrokeAnimationPreset =
-  | 'draw-on'         // Path draws on from start to end
-  | 'draw-off'        // Path draws off from start to end
+  | 'draw-on' // Path draws on from start to end
+  | 'draw-off' // Path draws off from start to end
   | 'draw-on-reverse' // Path draws on from end to start
-  | 'draw-off-reverse'// Path draws off from end to start
-  | 'dash-march'      // Marching dashes
-  | 'pulse'           // Width pulsing
-  | 'fade-in'         // Opacity fade in
-  | 'fade-out';       // Opacity fade out
+  | 'draw-off-reverse' // Path draws off from end to start
+  | 'dash-march' // Marching dashes
+  | 'pulse' // Width pulsing
+  | 'fade-in' // Opacity fade in
+  | 'fade-out'; // Opacity fade out
 
 /**
  * Stroke animation preset i18n keys
@@ -441,7 +440,7 @@ export const STROKE_ANIMATION_PRESET_I18N_KEYS: Record<StrokeAnimationPreset, st
   'draw-on-reverse': 'shape.stroke.preset.drawOnReverse',
   'draw-off-reverse': 'shape.stroke.preset.drawOffReverse',
   'dash-march': 'shape.stroke.preset.dashMarch',
-  'pulse': 'shape.stroke.preset.pulse',
+  pulse: 'shape.stroke.preset.pulse',
   'fade-in': 'shape.stroke.preset.fadeIn',
   'fade-out': 'shape.stroke.preset.fadeOut',
 };
@@ -454,7 +453,7 @@ export function applyStrokeAnimationPreset(
   animation: StrokeAnimation,
   preset: StrokeAnimationPreset,
   duration: number,
-  easing: EasingType = 'ease-in-out'
+  easing: EasingType = 'ease-in-out',
 ): StrokeAnimation {
   const createKf = (time: number, value: number): AnimationKeyframe => ({
     id: `kf-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -470,10 +469,7 @@ export function applyStrokeAnimationPreset(
         trimStart: { baseValue: 0, keyframes: [] },
         trimEnd: {
           baseValue: 0,
-          keyframes: [
-            createKf(0, 0),
-            createKf(duration, 1),
-          ],
+          keyframes: [createKf(0, 0), createKf(duration, 1)],
         },
       };
 
@@ -482,10 +478,7 @@ export function applyStrokeAnimationPreset(
         ...animation,
         trimStart: {
           baseValue: 0,
-          keyframes: [
-            createKf(0, 0),
-            createKf(duration, 1),
-          ],
+          keyframes: [createKf(0, 0), createKf(duration, 1)],
         },
         trimEnd: { baseValue: 1, keyframes: [] },
       };
@@ -495,10 +488,7 @@ export function applyStrokeAnimationPreset(
         ...animation,
         trimStart: {
           baseValue: 1,
-          keyframes: [
-            createKf(0, 1),
-            createKf(duration, 0),
-          ],
+          keyframes: [createKf(0, 1), createKf(duration, 0)],
         },
         trimEnd: { baseValue: 1, keyframes: [] },
       };
@@ -509,10 +499,7 @@ export function applyStrokeAnimationPreset(
         trimStart: { baseValue: 0, keyframes: [] },
         trimEnd: {
           baseValue: 1,
-          keyframes: [
-            createKf(0, 1),
-            createKf(duration, 0),
-          ],
+          keyframes: [createKf(0, 1), createKf(duration, 0)],
         },
       };
 
@@ -524,7 +511,7 @@ export function applyStrokeAnimationPreset(
           baseValue: 0,
           keyframes: [
             createKf(0, 0),
-            createKf(duration, 100),  // Offset by 100 pixels
+            createKf(duration, 100), // Offset by 100 pixels
           ],
         },
       };
@@ -549,10 +536,7 @@ export function applyStrokeAnimationPreset(
         ...animation,
         opacity: {
           baseValue: 0,
-          keyframes: [
-            createKf(0, 0),
-            createKf(duration, 1),
-          ],
+          keyframes: [createKf(0, 0), createKf(duration, 1)],
         },
       };
 
@@ -561,10 +545,7 @@ export function applyStrokeAnimationPreset(
         ...animation,
         opacity: {
           baseValue: 1,
-          keyframes: [
-            createKf(0, 1),
-            createKf(duration, 0),
-          ],
+          keyframes: [createKf(0, 1), createKf(duration, 0)],
         },
       };
 

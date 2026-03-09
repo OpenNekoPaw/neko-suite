@@ -18,17 +18,17 @@ const logger = getLogger('LoudnessService');
 // =============================================================================
 
 export interface LoudnessAnalysisResult {
-	integratedLufs: number;
-	truePeakDbfs: number;
-	loudnessRange: number;
-	recommendedGain: number;
-	targetLufs: number;
+  integratedLufs: number;
+  truePeakDbfs: number;
+  loudnessRange: number;
+  recommendedGain: number;
+  targetLufs: number;
 }
 
 export interface LoudnessAnalysisItem {
-	source: string;
-	analysis?: LoudnessAnalysisResult;
-	error?: string;
+  source: string;
+  analysis?: LoudnessAnalysisResult;
+  error?: string;
 }
 
 // =============================================================================
@@ -39,43 +39,43 @@ const LOUDNESS_TIMEOUT_MS = 30_000;
 
 let requestIdCounter = 0;
 const pendingRequests = new Map<
-	string,
-	{
-		resolve: (results: LoudnessAnalysisItem[]) => void;
-		reject: (error: Error) => void;
-		timeoutId: ReturnType<typeof setTimeout>;
-	}
+  string,
+  {
+    resolve: (results: LoudnessAnalysisItem[]) => void;
+    reject: (error: Error) => void;
+    timeoutId: ReturnType<typeof setTimeout>;
+  }
 >();
 
 function handleMessage(event: MessageEvent): void {
-	const message = event.data;
-	if (typeof message !== 'object' || message === null) return;
+  const message = event.data;
+  if (typeof message !== 'object' || message === null) return;
 
-	const msg = message as Record<string, unknown>;
-	if (msg.type !== 'media:response:analyzeLoudness') return;
+  const msg = message as Record<string, unknown>;
+  if (msg.type !== 'media:response:analyzeLoudness') return;
 
-	const requestId = msg.requestId as string;
-	const pending = pendingRequests.get(requestId);
-	if (!pending) return;
+  const requestId = msg.requestId as string;
+  const pending = pendingRequests.get(requestId);
+  if (!pending) return;
 
-	clearTimeout(pending.timeoutId);
-	pendingRequests.delete(requestId);
+  clearTimeout(pending.timeoutId);
+  pendingRequests.delete(requestId);
 
-	if (msg.error) {
-		pending.reject(new Error(msg.error as string));
-	} else {
-		const payload = msg.payload as { results: LoudnessAnalysisItem[] } | undefined;
-		pending.resolve(payload?.results ?? []);
-	}
+  if (msg.error) {
+    pending.reject(new Error(msg.error as string));
+  } else {
+    const payload = msg.payload as { results: LoudnessAnalysisItem[] } | undefined;
+    pending.resolve(payload?.results ?? []);
+  }
 }
 
 // Register global listener once
 let listenerRegistered = false;
 
 function ensureListener(): void {
-	if (listenerRegistered) return;
-	window.addEventListener('message', handleMessage);
-	listenerRegistered = true;
+  if (listenerRegistered) return;
+  window.addEventListener('message', handleMessage);
+  listenerRegistered = true;
 }
 
 /**
@@ -86,35 +86,35 @@ function ensureListener(): void {
  * @returns Per-file analysis results
  */
 export async function analyzeLoudness(
-	sources: string[],
-	targetLufs = -14
+  sources: string[],
+  targetLufs = -14,
 ): Promise<LoudnessAnalysisItem[]> {
-	ensureListener();
+  ensureListener();
 
-	const vscode = getVSCodeAPI();
-	if (!vscode) {
-		throw new Error('VSCode API not available');
-	}
+  const vscode = getVSCodeAPI();
+  if (!vscode) {
+    throw new Error('VSCode API not available');
+  }
 
-	const requestId = `loudness_${Date.now()}_${requestIdCounter++}`;
+  const requestId = `loudness_${Date.now()}_${requestIdCounter++}`;
 
-	return new Promise((resolve, reject) => {
-		const timeoutId = setTimeout(() => {
-			pendingRequests.delete(requestId);
-			reject(new Error('Loudness analysis request timeout'));
-		}, LOUDNESS_TIMEOUT_MS);
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      pendingRequests.delete(requestId);
+      reject(new Error('Loudness analysis request timeout'));
+    }, LOUDNESS_TIMEOUT_MS);
 
-		pendingRequests.set(requestId, { resolve, reject, timeoutId });
+    pendingRequests.set(requestId, { resolve, reject, timeoutId });
 
-		vscode.postMessage({
-			type: 'media:analyzeLoudness',
-			requestId,
-			timestamp: Date.now(),
-			payload: { sources, targetLufs },
-		});
+    vscode.postMessage({
+      type: 'media:analyzeLoudness',
+      requestId,
+      timestamp: Date.now(),
+      payload: { sources, targetLufs },
+    });
 
-		logger.debug(`Sent loudness analysis request: ${sources.length} file(s)`);
-	});
+    logger.debug(`Sent loudness analysis request: ${sources.length} file(s)`);
+  });
 }
 
 /**
@@ -122,14 +122,14 @@ export async function analyzeLoudness(
  * Call when the webview is being disposed.
  */
 export function disposeLoudnessService(): void {
-	if (listenerRegistered) {
-		window.removeEventListener('message', handleMessage);
-		listenerRegistered = false;
-	}
+  if (listenerRegistered) {
+    window.removeEventListener('message', handleMessage);
+    listenerRegistered = false;
+  }
 
-	pendingRequests.forEach((pending) => {
-		clearTimeout(pending.timeoutId);
-		pending.reject(new Error('LoudnessService disposed'));
-	});
-	pendingRequests.clear();
+  pendingRequests.forEach((pending) => {
+    clearTimeout(pending.timeoutId);
+    pending.reject(new Error('LoudnessService disposed'));
+  });
+  pendingRequests.clear();
 }

@@ -11,28 +11,28 @@
  * Audio effect types
  */
 export type AudioEffectType =
-  | 'noise-reduction'      // 降噪
-  | 'compressor'           // 压缩器
-  | 'limiter'              // 限制器
-  | 'reverb'               // 混响
-  | 'delay'                // 延迟/回声
-  | 'chorus'               // 合唱
-  | 'distortion'           // 失真
-  | 'pitch-shift'          // 音高调整
-  | 'time-stretch'         // 时间拉伸
-  | 'high-pass'            // 高通滤波器
-  | 'low-pass'             // 低通滤波器
-  | 'band-pass';           // 带通滤波器
+  | 'noise-reduction' // 降噪
+  | 'compressor' // 压缩器
+  | 'limiter' // 限制器
+  | 'reverb' // 混响
+  | 'delay' // 延迟/回声
+  | 'chorus' // 合唱
+  | 'distortion' // 失真
+  | 'pitch-shift' // 音高调整
+  | 'time-stretch' // 时间拉伸
+  | 'high-pass' // 高通滤波器
+  | 'low-pass' // 低通滤波器
+  | 'band-pass'; // 带通滤波器
 
 /**
  * Audio effect category
  */
 export type AudioEffectCategory =
-  | 'dynamics'     // 动态处理
-  | 'filter'       // 滤波器
-  | 'spatial'      // 空间效果
-  | 'modulation'   // 调制
-  | 'utility';     // 实用工具
+  | 'dynamics' // 动态处理
+  | 'filter' // 滤波器
+  | 'spatial' // 空间效果
+  | 'modulation' // 调制
+  | 'utility'; // 实用工具
 
 // =============================================================================
 // Audio Effect Parameters
@@ -280,7 +280,7 @@ export interface AudioEffectParameterDefinition {
  */
 export function createAudioEffectInstance(
   type: AudioEffectType,
-  name?: string
+  name?: string,
 ): AudioEffectInstance {
   const definition = AUDIO_EFFECT_DEFINITIONS[type];
   if (!definition) {
@@ -319,13 +319,35 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
       smoothing: 0.5,
     },
     parameterDefinitions: [
-      { key: 'amount', labelKey: 'audioEffects.params.amount', type: 'slider', min: 0, max: 1, step: 0.01 },
-      { key: 'threshold', labelKey: 'audioEffects.params.threshold', type: 'slider', min: 20, max: 20000, step: 10, unit: 'Hz' },
-      { key: 'smoothing', labelKey: 'audioEffects.params.smoothing', type: 'slider', min: 0, max: 1, step: 0.01 },
+      {
+        key: 'amount',
+        labelKey: 'audioEffects.params.amount',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      {
+        key: 'threshold',
+        labelKey: 'audioEffects.params.threshold',
+        type: 'slider',
+        min: 20,
+        max: 20000,
+        step: 10,
+        unit: 'Hz',
+      },
+      {
+        key: 'smoothing',
+        labelKey: 'audioEffects.params.smoothing',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
     ],
   },
 
-  'compressor': {
+  compressor: {
     type: 'compressor',
     nameKey: 'audioEffects.compressor',
     descriptionKey: 'audioEffects.compressor.description',
@@ -339,16 +361,63 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
       makeupGain: 0,
     },
     parameterDefinitions: [
-      { key: 'threshold', labelKey: 'audioEffects.params.threshold', type: 'slider', min: -60, max: 0, step: 1, unit: 'dB' },
-      { key: 'ratio', labelKey: 'audioEffects.params.ratio', type: 'slider', min: 1, max: 20, step: 0.5 },
-      { key: 'attack', labelKey: 'audioEffects.params.attack', type: 'slider', min: 0, max: 1000, step: 1, unit: 'ms' },
-      { key: 'release', labelKey: 'audioEffects.params.release', type: 'slider', min: 0, max: 3000, step: 10, unit: 'ms' },
-      { key: 'knee', labelKey: 'audioEffects.params.knee', type: 'slider', min: 0, max: 40, step: 1, unit: 'dB' },
-      { key: 'makeupGain', labelKey: 'audioEffects.params.makeupGain', type: 'slider', min: 0, max: 40, step: 1, unit: 'dB' },
+      {
+        key: 'threshold',
+        labelKey: 'audioEffects.params.threshold',
+        type: 'slider',
+        min: -60,
+        max: 0,
+        step: 1,
+        unit: 'dB',
+      },
+      {
+        key: 'ratio',
+        labelKey: 'audioEffects.params.ratio',
+        type: 'slider',
+        min: 1,
+        max: 20,
+        step: 0.5,
+      },
+      {
+        key: 'attack',
+        labelKey: 'audioEffects.params.attack',
+        type: 'slider',
+        min: 0,
+        max: 1000,
+        step: 1,
+        unit: 'ms',
+      },
+      {
+        key: 'release',
+        labelKey: 'audioEffects.params.release',
+        type: 'slider',
+        min: 0,
+        max: 3000,
+        step: 10,
+        unit: 'ms',
+      },
+      {
+        key: 'knee',
+        labelKey: 'audioEffects.params.knee',
+        type: 'slider',
+        min: 0,
+        max: 40,
+        step: 1,
+        unit: 'dB',
+      },
+      {
+        key: 'makeupGain',
+        labelKey: 'audioEffects.params.makeupGain',
+        type: 'slider',
+        min: 0,
+        max: 40,
+        step: 1,
+        unit: 'dB',
+      },
     ],
   },
 
-  'limiter': {
+  limiter: {
     type: 'limiter',
     nameKey: 'audioEffects.limiter',
     descriptionKey: 'audioEffects.limiter.description',
@@ -359,13 +428,37 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
       ceiling: -0.3,
     },
     parameterDefinitions: [
-      { key: 'threshold', labelKey: 'audioEffects.params.threshold', type: 'slider', min: -20, max: 0, step: 0.1, unit: 'dB' },
-      { key: 'release', labelKey: 'audioEffects.params.release', type: 'slider', min: 0, max: 1000, step: 5, unit: 'ms' },
-      { key: 'ceiling', labelKey: 'audioEffects.params.ceiling', type: 'slider', min: -1, max: 0, step: 0.1, unit: 'dB' },
+      {
+        key: 'threshold',
+        labelKey: 'audioEffects.params.threshold',
+        type: 'slider',
+        min: -20,
+        max: 0,
+        step: 0.1,
+        unit: 'dB',
+      },
+      {
+        key: 'release',
+        labelKey: 'audioEffects.params.release',
+        type: 'slider',
+        min: 0,
+        max: 1000,
+        step: 5,
+        unit: 'ms',
+      },
+      {
+        key: 'ceiling',
+        labelKey: 'audioEffects.params.ceiling',
+        type: 'slider',
+        min: -1,
+        max: 0,
+        step: 0.1,
+        unit: 'dB',
+      },
     ],
   },
 
-  'reverb': {
+  reverb: {
     type: 'reverb',
     nameKey: 'audioEffects.reverb',
     descriptionKey: 'audioEffects.reverb.description',
@@ -391,15 +484,51 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
           { value: 'chamber', labelKey: 'audioEffects.reverbType.chamber' },
         ],
       },
-      { key: 'roomSize', labelKey: 'audioEffects.params.roomSize', type: 'slider', min: 0, max: 1, step: 0.01 },
-      { key: 'damping', labelKey: 'audioEffects.params.damping', type: 'slider', min: 0, max: 1, step: 0.01 },
-      { key: 'wetDry', labelKey: 'audioEffects.params.wetDry', type: 'slider', min: 0, max: 1, step: 0.01 },
-      { key: 'width', labelKey: 'audioEffects.params.width', type: 'slider', min: 0, max: 1, step: 0.01 },
-      { key: 'preDelay', labelKey: 'audioEffects.params.preDelay', type: 'slider', min: 0, max: 500, step: 5, unit: 'ms' },
+      {
+        key: 'roomSize',
+        labelKey: 'audioEffects.params.roomSize',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      {
+        key: 'damping',
+        labelKey: 'audioEffects.params.damping',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      {
+        key: 'wetDry',
+        labelKey: 'audioEffects.params.wetDry',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      {
+        key: 'width',
+        labelKey: 'audioEffects.params.width',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      {
+        key: 'preDelay',
+        labelKey: 'audioEffects.params.preDelay',
+        type: 'slider',
+        min: 0,
+        max: 500,
+        step: 5,
+        unit: 'ms',
+      },
     ],
   },
 
-  'delay': {
+  delay: {
     type: 'delay',
     nameKey: 'audioEffects.delay',
     descriptionKey: 'audioEffects.delay.description',
@@ -412,15 +541,37 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
       pingPong: false,
     },
     parameterDefinitions: [
-      { key: 'delayTime', labelKey: 'audioEffects.params.delayTime', type: 'slider', min: 0, max: 2000, step: 10, unit: 'ms' },
-      { key: 'feedback', labelKey: 'audioEffects.params.feedback', type: 'slider', min: 0, max: 1, step: 0.01 },
-      { key: 'wetDry', labelKey: 'audioEffects.params.wetDry', type: 'slider', min: 0, max: 1, step: 0.01 },
+      {
+        key: 'delayTime',
+        labelKey: 'audioEffects.params.delayTime',
+        type: 'slider',
+        min: 0,
+        max: 2000,
+        step: 10,
+        unit: 'ms',
+      },
+      {
+        key: 'feedback',
+        labelKey: 'audioEffects.params.feedback',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      {
+        key: 'wetDry',
+        labelKey: 'audioEffects.params.wetDry',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
       { key: 'stereo', labelKey: 'audioEffects.params.stereo', type: 'boolean' },
       { key: 'pingPong', labelKey: 'audioEffects.params.pingPong', type: 'boolean' },
     ],
   },
 
-  'chorus': {
+  chorus: {
     type: 'chorus',
     nameKey: 'audioEffects.chorus',
     descriptionKey: 'audioEffects.chorus.description',
@@ -433,15 +584,52 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
       wetDry: 0.5,
     },
     parameterDefinitions: [
-      { key: 'rate', labelKey: 'audioEffects.params.rate', type: 'slider', min: 0.1, max: 10, step: 0.1, unit: 'Hz' },
-      { key: 'depth', labelKey: 'audioEffects.params.depth', type: 'slider', min: 0, max: 1, step: 0.01 },
-      { key: 'delay', labelKey: 'audioEffects.params.delay', type: 'slider', min: 0, max: 50, step: 1, unit: 'ms' },
-      { key: 'feedback', labelKey: 'audioEffects.params.feedback', type: 'slider', min: 0, max: 1, step: 0.01 },
-      { key: 'wetDry', labelKey: 'audioEffects.params.wetDry', type: 'slider', min: 0, max: 1, step: 0.01 },
+      {
+        key: 'rate',
+        labelKey: 'audioEffects.params.rate',
+        type: 'slider',
+        min: 0.1,
+        max: 10,
+        step: 0.1,
+        unit: 'Hz',
+      },
+      {
+        key: 'depth',
+        labelKey: 'audioEffects.params.depth',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      {
+        key: 'delay',
+        labelKey: 'audioEffects.params.delay',
+        type: 'slider',
+        min: 0,
+        max: 50,
+        step: 1,
+        unit: 'ms',
+      },
+      {
+        key: 'feedback',
+        labelKey: 'audioEffects.params.feedback',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      {
+        key: 'wetDry',
+        labelKey: 'audioEffects.params.wetDry',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
     ],
   },
 
-  'distortion': {
+  distortion: {
     type: 'distortion',
     nameKey: 'audioEffects.distortion',
     descriptionKey: 'audioEffects.distortion.description',
@@ -463,8 +651,22 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
           { value: 'fuzz', labelKey: 'audioEffects.distortionType.fuzz' },
         ],
       },
-      { key: 'drive', labelKey: 'audioEffects.params.drive', type: 'slider', min: 0, max: 1, step: 0.01 },
-      { key: 'outputGain', labelKey: 'audioEffects.params.outputGain', type: 'slider', min: 0, max: 1, step: 0.01 },
+      {
+        key: 'drive',
+        labelKey: 'audioEffects.params.drive',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      {
+        key: 'outputGain',
+        labelKey: 'audioEffects.params.outputGain',
+        type: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
     ],
   },
 
@@ -478,8 +680,19 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
       preserveFormants: true,
     },
     parameterDefinitions: [
-      { key: 'semitones', labelKey: 'audioEffects.params.semitones', type: 'slider', min: -12, max: 12, step: 0.1 },
-      { key: 'preserveFormants', labelKey: 'audioEffects.params.preserveFormants', type: 'boolean' },
+      {
+        key: 'semitones',
+        labelKey: 'audioEffects.params.semitones',
+        type: 'slider',
+        min: -12,
+        max: 12,
+        step: 0.1,
+      },
+      {
+        key: 'preserveFormants',
+        labelKey: 'audioEffects.params.preserveFormants',
+        type: 'boolean',
+      },
     ],
   },
 
@@ -493,7 +706,14 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
       preservePitch: true,
     },
     parameterDefinitions: [
-      { key: 'ratio', labelKey: 'audioEffects.params.ratio', type: 'slider', min: 0.5, max: 2, step: 0.01 },
+      {
+        key: 'ratio',
+        labelKey: 'audioEffects.params.ratio',
+        type: 'slider',
+        min: 0.5,
+        max: 2,
+        step: 0.01,
+      },
       { key: 'preservePitch', labelKey: 'audioEffects.params.preservePitch', type: 'boolean' },
     ],
   },
@@ -508,8 +728,23 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
       resonance: 1,
     },
     parameterDefinitions: [
-      { key: 'frequency', labelKey: 'audioEffects.params.frequency', type: 'slider', min: 20, max: 20000, step: 10, unit: 'Hz' },
-      { key: 'resonance', labelKey: 'audioEffects.params.resonance', type: 'slider', min: 0, max: 20, step: 0.1 },
+      {
+        key: 'frequency',
+        labelKey: 'audioEffects.params.frequency',
+        type: 'slider',
+        min: 20,
+        max: 20000,
+        step: 10,
+        unit: 'Hz',
+      },
+      {
+        key: 'resonance',
+        labelKey: 'audioEffects.params.resonance',
+        type: 'slider',
+        min: 0,
+        max: 20,
+        step: 0.1,
+      },
     ],
   },
 
@@ -523,8 +758,23 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
       resonance: 1,
     },
     parameterDefinitions: [
-      { key: 'frequency', labelKey: 'audioEffects.params.frequency', type: 'slider', min: 20, max: 20000, step: 10, unit: 'Hz' },
-      { key: 'resonance', labelKey: 'audioEffects.params.resonance', type: 'slider', min: 0, max: 20, step: 0.1 },
+      {
+        key: 'frequency',
+        labelKey: 'audioEffects.params.frequency',
+        type: 'slider',
+        min: 20,
+        max: 20000,
+        step: 10,
+        unit: 'Hz',
+      },
+      {
+        key: 'resonance',
+        labelKey: 'audioEffects.params.resonance',
+        type: 'slider',
+        min: 0,
+        max: 20,
+        step: 0.1,
+      },
     ],
   },
 
@@ -539,9 +789,33 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
       gain: 0,
     },
     parameterDefinitions: [
-      { key: 'frequency', labelKey: 'audioEffects.params.frequency', type: 'slider', min: 20, max: 20000, step: 10, unit: 'Hz' },
-      { key: 'bandwidth', labelKey: 'audioEffects.params.bandwidth', type: 'slider', min: 0.1, max: 5, step: 0.1, unit: 'oct' },
-      { key: 'gain', labelKey: 'audioEffects.params.gain', type: 'slider', min: -20, max: 20, step: 0.5, unit: 'dB' },
+      {
+        key: 'frequency',
+        labelKey: 'audioEffects.params.frequency',
+        type: 'slider',
+        min: 20,
+        max: 20000,
+        step: 10,
+        unit: 'Hz',
+      },
+      {
+        key: 'bandwidth',
+        labelKey: 'audioEffects.params.bandwidth',
+        type: 'slider',
+        min: 0.1,
+        max: 5,
+        step: 0.1,
+        unit: 'oct',
+      },
+      {
+        key: 'gain',
+        labelKey: 'audioEffects.params.gain',
+        type: 'slider',
+        min: -20,
+        max: 20,
+        step: 0.5,
+        unit: 'dB',
+      },
     ],
   },
 };

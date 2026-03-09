@@ -32,7 +32,14 @@ const THINKING_INDICATOR_HEIGHT = 50;
  */
 type FlattenedItem =
   | { type: 'message'; message: Message; isGrouped: boolean }
-  | { type: 'content_block'; messageId: string; block: ContentBlock; isFirst: boolean; isLast: boolean; isStreaming: boolean }
+  | {
+      type: 'content_block';
+      messageId: string;
+      block: ContentBlock;
+      isFirst: boolean;
+      isLast: boolean;
+      isStreaming: boolean;
+    }
   | { type: 'thinking_indicator' };
 
 /**
@@ -100,7 +107,7 @@ export function MessageList({
   // Flatten messages for chronological rendering
   const flattenedItems = useMemo(
     () => flattenMessages(messages, showThinkingIndicator),
-    [messages, showThinkingIndicator]
+    [messages, showThinkingIndicator],
   );
 
   const itemCount = flattenedItems.length;
@@ -108,38 +115,41 @@ export function MessageList({
   const virtualizer = useVirtualizer({
     count: itemCount,
     getScrollElement: () => parentRef.current,
-    estimateSize: useCallback((index: number) => {
-      const item = flattenedItems[index];
-      if (!item) return ESTIMATED_MESSAGE_HEIGHT;
+    estimateSize: useCallback(
+      (index: number) => {
+        const item = flattenedItems[index];
+        if (!item) return ESTIMATED_MESSAGE_HEIGHT;
 
-      if (item.type === 'thinking_indicator') {
-        return THINKING_INDICATOR_HEIGHT;
-      }
+        if (item.type === 'thinking_indicator') {
+          return THINKING_INDICATOR_HEIGHT;
+        }
 
-      if (item.type === 'content_block') {
-        // Estimate based on block type
-        const block = item.block;
-        if (block.type === 'thinking') return 80;
-        if (block.type === 'tool_call') return 100;
-        if (block.type === 'code_diff') return 200;
-        if (block.type === 'plan') return 150;
-        // Text block
-        const contentLines = Math.ceil((block.content?.length || 0) / 60);
-        return Math.max(ESTIMATED_CONTENT_BLOCK_HEIGHT, contentLines * 20 + 40);
-      }
+        if (item.type === 'content_block') {
+          // Estimate based on block type
+          const block = item.block;
+          if (block.type === 'thinking') return 80;
+          if (block.type === 'tool_call') return 100;
+          if (block.type === 'code_diff') return 200;
+          if (block.type === 'plan') return 150;
+          // Text block
+          const contentLines = Math.ceil((block.content?.length || 0) / 60);
+          return Math.max(ESTIMATED_CONTENT_BLOCK_HEIGHT, contentLines * 20 + 40);
+        }
 
-      // Message item
-      const message = item.message;
-      const contentLines = Math.ceil((message.content?.length || 0) / 60);
-      const attachmentHeight = (message.attachments?.length || 0) * 100;
-      const toolCallHeight = (message.toolCalls?.length || 0) * 60;
-      const thinkingHeight = message.thinking ? 100 : 0;
+        // Message item
+        const message = item.message;
+        const contentLines = Math.ceil((message.content?.length || 0) / 60);
+        const attachmentHeight = (message.attachments?.length || 0) * 100;
+        const toolCallHeight = (message.toolCalls?.length || 0) * 60;
+        const thinkingHeight = message.thinking ? 100 : 0;
 
-      return Math.max(
-        ESTIMATED_MESSAGE_HEIGHT,
-        contentLines * 20 + attachmentHeight + toolCallHeight + thinkingHeight + 40
-      );
-    }, [flattenedItems]),
+        return Math.max(
+          ESTIMATED_MESSAGE_HEIGHT,
+          contentLines * 20 + attachmentHeight + toolCallHeight + thinkingHeight + 40,
+        );
+      },
+      [flattenedItems],
+    ),
     overscan: 5,
   });
 
@@ -161,9 +171,10 @@ export function MessageList({
   useEffect(() => {
     if (streamingMessageId) {
       // Find the last item belonging to the streaming message
-      const streamingIndex = flattenedItems.findLastIndex(item =>
-        (item.type === 'message' && item.message.id === streamingMessageId) ||
-        (item.type === 'content_block' && item.messageId === streamingMessageId)
+      const streamingIndex = flattenedItems.findLastIndex(
+        (item) =>
+          (item.type === 'message' && item.message.id === streamingMessageId) ||
+          (item.type === 'content_block' && item.messageId === streamingMessageId),
       );
       if (streamingIndex !== -1) {
         virtualizer.scrollToIndex(streamingIndex, { align: 'end', behavior: 'smooth' });

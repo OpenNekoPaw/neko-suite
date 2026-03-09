@@ -39,9 +39,12 @@ const SliderRow = memo(function SliderRow({
   onChange,
   unit = '',
 }: SliderRowProps) {
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(parseFloat(e.target.value));
-  }, [onChange]);
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onChange(parseFloat(e.target.value));
+    },
+    [onChange],
+  );
 
   return (
     <div className="flex items-center gap-2">
@@ -58,7 +61,8 @@ const SliderRow = memo(function SliderRow({
         className="flex-1 h-1 accent-[var(--vscode-button-background)]"
       />
       <span className="w-12 text-[10px] text-[var(--vscode-foreground)] text-right">
-        {value.toFixed(step < 1 ? 2 : 0)}{unit}
+        {value.toFixed(step < 1 ? 2 : 0)}
+        {unit}
       </span>
     </div>
   );
@@ -74,25 +78,40 @@ export const MaskProperties = memo(function MaskProperties({
 }: MaskPropertiesProps) {
   const { t } = useTranslation();
 
-  const handleFeatherChange = useCallback((feather: number) => {
-    onChange({ ...mask, feather });
-  }, [mask, onChange]);
+  const handleFeatherChange = useCallback(
+    (feather: number) => {
+      onChange({ ...mask, feather });
+    },
+    [mask, onChange],
+  );
 
-  const handleExpansionChange = useCallback((expansion: number) => {
-    onChange({ ...mask, expansion });
-  }, [mask, onChange]);
+  const handleExpansionChange = useCallback(
+    (expansion: number) => {
+      onChange({ ...mask, expansion });
+    },
+    [mask, onChange],
+  );
 
-  const handleOpacityChange = useCallback((opacity: number) => {
-    onChange({ ...mask, opacity });
-  }, [mask, onChange]);
+  const handleOpacityChange = useCallback(
+    (opacity: number) => {
+      onChange({ ...mask, opacity });
+    },
+    [mask, onChange],
+  );
 
-  const handleInvertedChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange({ ...mask, inverted: e.target.checked });
-  }, [mask, onChange]);
+  const handleInvertedChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onChange({ ...mask, inverted: e.target.checked });
+    },
+    [mask, onChange],
+  );
 
-  const handleBlendModeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    onChange({ ...mask, blendMode: e.target.value as MaskBlendMode });
-  }, [mask, onChange]);
+  const handleBlendModeChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      onChange({ ...mask, blendMode: e.target.value as MaskBlendMode });
+    },
+    [mask, onChange],
+  );
 
   return (
     <div className="space-y-2">

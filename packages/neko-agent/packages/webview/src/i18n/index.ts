@@ -16,10 +16,7 @@ import { bundles as zhCnBundles } from './locales/zh-cn';
 export const i18nService = new I18nService(detectWebviewLocale());
 
 // Register all bundles by namespace
-function registerAll(
-  allBundles: Record<string, MessageBundle>,
-  locale: SupportedLocale,
-): void {
+function registerAll(allBundles: Record<string, MessageBundle>, locale: SupportedLocale): void {
   Object.entries(allBundles).forEach(([ns, bundle]) => {
     i18nService.registerBundle(ns, locale, bundle);
   });

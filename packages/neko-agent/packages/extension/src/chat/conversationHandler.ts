@@ -25,14 +25,29 @@ function isLocalFilePath(str: string): boolean {
     // Check if it looks like a media file path
     const mediaExtensions = [
       // Images
-      '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg',
+      '.png',
+      '.jpg',
+      '.jpeg',
+      '.gif',
+      '.webp',
+      '.bmp',
+      '.svg',
       // Videos
-      '.mp4', '.webm', '.mov', '.avi', '.mkv',
+      '.mp4',
+      '.webm',
+      '.mov',
+      '.avi',
+      '.mkv',
       // Audio
-      '.mp3', '.wav', '.ogg', '.aac', '.flac', '.m4a',
+      '.mp3',
+      '.wav',
+      '.ogg',
+      '.aac',
+      '.flac',
+      '.m4a',
     ];
     const lowerStr = str.toLowerCase();
-    return mediaExtensions.some(ext => lowerStr.endsWith(ext));
+    return mediaExtensions.some((ext) => lowerStr.endsWith(ext));
   }
   return false;
 }
@@ -55,7 +70,7 @@ function toWebviewUri(webview: vscode.Webview, filePath: string): string {
 function convertLocalPathsInObject(
   webview: vscode.Webview,
   obj: unknown,
-  visited = new WeakSet<object>()
+  visited = new WeakSet<object>(),
 ): unknown {
   if (obj === null || obj === undefined) {
     return obj;
@@ -71,7 +86,7 @@ function convertLocalPathsInObject(
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map(item => convertLocalPathsInObject(webview, item, visited));
+    return obj.map((item) => convertLocalPathsInObject(webview, item, visited));
   }
 
   // Handle objects
@@ -92,11 +107,7 @@ function convertLocalPathsInObject(
 
       // Special handling for single URL keys - convert to webview URI
       const singleUrlKeys = ['url', 'thumbnailUrl', 'imageUrl', 'videoUrl', 'audioUrl'];
-      if (
-        singleUrlKeys.includes(key) &&
-        typeof value === 'string' &&
-        isLocalFilePath(value)
-      ) {
+      if (singleUrlKeys.includes(key) && typeof value === 'string' && isLocalFilePath(value)) {
         result[key] = toWebviewUri(webview, value);
         // Also store original path for file opening (if not already set)
         if (!result['localPath']) {
@@ -108,7 +119,7 @@ function convertLocalPathsInObject(
       // Special handling for urls array - convert each and preserve localPaths
       if (key === 'urls' && Array.isArray(value)) {
         const localPaths: string[] = [];
-        const convertedUrls = value.map(url => {
+        const convertedUrls = value.map((url) => {
           if (typeof url === 'string' && isLocalFilePath(url)) {
             localPaths.push(url);
             return toWebviewUri(webview, url);
@@ -139,14 +150,14 @@ function convertLocalPathsInObject(
  */
 function convertMessagesForWebview(
   webview: vscode.Webview,
-  messages: ConversationMessage[]
+  messages: ConversationMessage[],
 ): ConversationMessage[] {
-  return messages.map(message => {
+  return messages.map((message) => {
     let convertedMessage = { ...message };
 
     // Convert URLs in legacy toolCalls array
     if (message.toolCalls && message.toolCalls.length > 0) {
-      convertedMessage.toolCalls = message.toolCalls.map(toolCall => {
+      convertedMessage.toolCalls = message.toolCalls.map((toolCall) => {
         if (!toolCall.result?.data) {
           return toolCall;
         }
@@ -163,7 +174,7 @@ function convertMessagesForWebview(
 
     // Convert URLs in contentBlocks (for tool_call blocks)
     if (message.contentBlocks && message.contentBlocks.length > 0) {
-      convertedMessage.contentBlocks = message.contentBlocks.map(block => {
+      convertedMessage.contentBlocks = message.contentBlocks.map((block) => {
         if (block.type !== 'tool_call' || !block.toolCall?.result?.data) {
           return block;
         }
@@ -315,7 +326,7 @@ export class ConversationHandler {
     const conversations = this._conversationManager.list();
     webview.postMessage({
       type: 'conversationList',
-      conversations: conversations.map(c => ({
+      conversations: conversations.map((c) => ({
         id: c.id,
         title: c.title,
         messageCount: c.messages.length,

@@ -20,8 +20,7 @@ import * as vscode from 'vscode';
  * Interface for outline providers that receive data from custom editors.
  * Consumers should program to this interface, not the base class.
  */
-export interface IOutlineProvider<TElement, TData>
-  extends vscode.TreeDataProvider<TElement> {
+export interface IOutlineProvider<TElement, TData> extends vscode.TreeDataProvider<TElement> {
   /** Push new data snapshot (null to clear) */
   updateData(data: TData | null): void;
   /** Whether the provider currently has data to display */
@@ -43,11 +42,13 @@ export interface IOutlineProvider<TElement, TData>
  * - getParent(element): TElement | null
  * - onDataUpdated(data): void  (hook after data is set, before refresh)
  */
-export abstract class BaseOutlineProvider<TElement, TData>
-  implements IOutlineProvider<TElement, TData>
-{
-  private readonly _onDidChangeTreeData =
-    new vscode.EventEmitter<TElement | undefined | null | void>();
+export abstract class BaseOutlineProvider<TElement, TData> implements IOutlineProvider<
+  TElement,
+  TData
+> {
+  private readonly _onDidChangeTreeData = new vscode.EventEmitter<
+    TElement | undefined | null | void
+  >();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   protected data: TData | null = null;

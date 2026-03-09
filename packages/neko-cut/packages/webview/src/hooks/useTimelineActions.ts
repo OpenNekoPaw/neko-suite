@@ -59,38 +59,35 @@ export function useTimelineActions({ selectedElements }: TimelineActionsOptions)
     (trackId: string, currentMuted: boolean) => {
       updateTrack(trackId, { muted: !currentMuted });
     },
-    [updateTrack]
+    [updateTrack],
   );
 
   const handleToggleLocked = useCallback(
     (trackId: string) => {
       toggleTrackLocked(trackId);
     },
-    [toggleTrackLocked]
+    [toggleTrackLocked],
   );
 
   const handleToggleHidden = useCallback(
     (trackId: string) => {
       toggleTrackHidden(trackId);
     },
-    [toggleTrackHidden]
+    [toggleTrackHidden],
   );
 
   const handleDeleteTrack = useCallback(
     (trackId: string) => {
       removeTrack(trackId);
     },
-    [removeTrack]
+    [removeTrack],
   );
 
   // AI Action handler
-  const handleExecuteAIAction = useCallback(
-    (actionId: string, elementIds: string[]) => {
-      sendAIAction(actionId, elementIds);
-      logger.info('AI Action sent: ' + actionId, { elementIds });
-    },
-    []
-  );
+  const handleExecuteAIAction = useCallback((actionId: string, elementIds: string[]) => {
+    sendAIAction(actionId, elementIds);
+    logger.info('AI Action sent: ' + actionId, { elementIds });
+  }, []);
 
   return {
     // Edit actions

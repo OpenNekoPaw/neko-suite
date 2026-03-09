@@ -27,18 +27,18 @@ import type { SkillSource } from './skill';
  * Hook trigger events (aligned with Claude Code)
  */
 export type HookEvent =
-  | 'PreToolUse'         // Before tool execution (can block)
-  | 'PostToolUse'        // After tool success
+  | 'PreToolUse' // Before tool execution (can block)
+  | 'PostToolUse' // After tool success
   | 'PostToolUseFailure' // After tool failure
-  | 'UserPromptSubmit'   // User submits prompt (can block)
-  | 'PermissionRequest'  // Permission dialog appears (can block)
-  | 'Stop'               // Claude finishes response (can block)
-  | 'SubagentStart'      // Subagent spawned
-  | 'SubagentStop'       // Subagent completed
-  | 'SessionStart'       // Session starts or resumes
-  | 'SessionEnd'         // Session terminates
-  | 'PreCompact'         // Before context compaction
-  | 'Notification';      // Notification sent
+  | 'UserPromptSubmit' // User submits prompt (can block)
+  | 'PermissionRequest' // Permission dialog appears (can block)
+  | 'Stop' // Claude finishes response (can block)
+  | 'SubagentStart' // Subagent spawned
+  | 'SubagentStop' // Subagent completed
+  | 'SessionStart' // Session starts or resumes
+  | 'SessionEnd' // Session terminates
+  | 'PreCompact' // Before context compaction
+  | 'Notification'; // Notification sent
 
 // =============================================================================
 // JSON Configuration Format (Claude Code Compatible)
@@ -302,7 +302,7 @@ export function createHook(
   frontmatter: HookFrontmatter,
   action: string,
   source: SkillSource,
-  filePath?: string
+  filePath?: string,
 ): Hook {
   return {
     name: frontmatter.name,
@@ -322,7 +322,7 @@ export function createHook(
  */
 export function matchHookCondition(
   condition: string | undefined,
-  context: { tool?: string; message?: string }
+  context: { tool?: string; message?: string },
 ): boolean {
   if (!condition) return true;
 

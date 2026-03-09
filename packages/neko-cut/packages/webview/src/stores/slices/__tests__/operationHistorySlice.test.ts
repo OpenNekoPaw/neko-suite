@@ -72,11 +72,7 @@ function createTestStore(initialProject: ProjectData | null = null) {
   return create<TestStore>()((set, get, store) => ({
     project: initialProject,
     setProject: (p) => set({ project: p }),
-    ...createOperationHistorySlice(
-      set as any,
-      get as any,
-      store as any,
-    ),
+    ...createOperationHistorySlice(set as any, get as any, store as any),
   }));
 }
 

@@ -72,11 +72,14 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     }
   }, [x, y]);
 
-  const handleItemClick = useCallback((item: MenuItem) => {
-    if (item.disabled) return;
-    item.action();
-    onClose();
-  }, [onClose]);
+  const handleItemClick = useCallback(
+    (item: MenuItem) => {
+      if (item.disabled) return;
+      item.action();
+      onClose();
+    },
+    [onClose],
+  );
 
   return (
     <div
@@ -118,11 +121,15 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             }}
             onMouseEnter={(e) => {
               if (!item.disabled) {
-                e.currentTarget.style.backgroundColor = 'var(--vscode-menu-selectionBackground, #094771)';
+                e.currentTarget.style.backgroundColor =
+                  'var(--vscode-menu-selectionBackground, #094771)';
                 e.currentTarget.style.color = 'var(--vscode-menu-selectionForeground, #ffffff)';
                 // Also update shortcut color
-                const shortcut = e.currentTarget.querySelector('[data-shortcut]') as HTMLElement | null;
-                if (shortcut) shortcut.style.color = 'var(--vscode-menu-selectionForeground, #ffffff)';
+                const shortcut = e.currentTarget.querySelector(
+                  '[data-shortcut]',
+                ) as HTMLElement | null;
+                if (shortcut)
+                  shortcut.style.color = 'var(--vscode-menu-selectionForeground, #ffffff)';
               }
             }}
             onMouseLeave={(e) => {
@@ -130,7 +137,9 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
               e.currentTarget.style.color = item.disabled
                 ? 'var(--vscode-disabledForeground, #6b6b6b)'
                 : 'var(--vscode-menu-foreground, #cccccc)';
-              const shortcut = e.currentTarget.querySelector('[data-shortcut]') as HTMLElement | null;
+              const shortcut = e.currentTarget.querySelector(
+                '[data-shortcut]',
+              ) as HTMLElement | null;
               if (shortcut) shortcut.style.color = 'var(--vscode-descriptionForeground, #717171)';
             }}
             onClick={() => handleItemClick(item)}
@@ -198,10 +207,28 @@ export function buildCanvasMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
     { label: t('menu.addVideo'), icon: '🎥', action: () => ctx.onAddMedia('video') },
     { label: t('menu.addAudio'), icon: '🎵', action: () => ctx.onAddMedia('audio') },
     { separator: true },
-    { label: t('menu.paste'), icon: '📋', shortcut: '⌘V', action: () => ctx.onPaste?.(), disabled: !ctx.canPaste },
+    {
+      label: t('menu.paste'),
+      icon: '📋',
+      shortcut: '⌘V',
+      action: () => ctx.onPaste?.(),
+      disabled: !ctx.canPaste,
+    },
     { separator: true },
-    { label: t('menu.undo'), icon: '↩', shortcut: '⌘Z', action: () => ctx.onUndo?.(), disabled: !ctx.canUndo },
-    { label: t('menu.redo'), icon: '↪', shortcut: '⇧⌘Z', action: () => ctx.onRedo?.(), disabled: !ctx.canRedo },
+    {
+      label: t('menu.undo'),
+      icon: '↩',
+      shortcut: '⌘Z',
+      action: () => ctx.onUndo?.(),
+      disabled: !ctx.canUndo,
+    },
+    {
+      label: t('menu.redo'),
+      icon: '↪',
+      shortcut: '⇧⌘Z',
+      action: () => ctx.onRedo?.(),
+      disabled: !ctx.canRedo,
+    },
     { separator: true },
     { label: t('menu.selectAll'), icon: '☐', shortcut: '⌘A', action: ctx.onSelectAll },
     { label: t('menu.fitContent'), icon: '⊞', action: ctx.onFitContent },

@@ -9,9 +9,17 @@ import { useEditorStore } from '../stores/editor-store';
 import { formatTimeFull } from '../utils';
 
 // Resolution presets
-export type ResolutionPreset = '720p@60fps' | '1080p@30fps' | '1080p@60fps' | '4k@30fps' | '4k@60fps';
+export type ResolutionPreset =
+  | '720p@60fps'
+  | '1080p@30fps'
+  | '1080p@60fps'
+  | '4k@30fps'
+  | '4k@60fps';
 
-export const RESOLUTION_PRESETS: Record<ResolutionPreset, { width: number; height: number; fps: number; label: string }> = {
+export const RESOLUTION_PRESETS: Record<
+  ResolutionPreset,
+  { width: number; height: number; fps: number; label: string }
+> = {
   '720p@60fps': { width: 1280, height: 720, fps: 60, label: '720P 60FPS' },
   '1080p@30fps': { width: 1920, height: 1080, fps: 30, label: '1080P 30FPS' },
   '1080p@60fps': { width: 1920, height: 1080, fps: 60, label: '1080P 60FPS' },
@@ -63,7 +71,13 @@ interface DropdownProps<T extends string | number> {
   disabled?: boolean;
 }
 
-function Dropdown<T extends string | number>({ value, options, onChange, className = '', disabled }: DropdownProps<T>) {
+function Dropdown<T extends string | number>({
+  value,
+  options,
+  onChange,
+  className = '',
+  disabled,
+}: DropdownProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -93,7 +107,11 @@ function Dropdown<T extends string | number>({ value, options, onChange, classNa
       >
         <span>{selectedOption?.label || value}</span>
         <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+          <path
+            fillRule="evenodd"
+            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+            clipRule="evenodd"
+          />
         </svg>
       </button>
       {isOpen && (
@@ -228,12 +246,10 @@ export const PreviewControls = memo(function PreviewControls({
 
       {/* Right: Quality Dropdown + Volume Controls + Screenshot + Fullscreen */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-vscode-description whitespace-nowrap">{t('preview.quality')}</span>
-        <Dropdown
-          value={previewQuality}
-          options={qualityOptions}
-          onChange={setPreviewQuality}
-        />
+        <span className="text-xs text-vscode-description whitespace-nowrap">
+          {t('preview.quality')}
+        </span>
+        <Dropdown value={previewQuality} options={qualityOptions} onChange={setPreviewQuality} />
 
         {/* Volume Controls */}
         <div className="w-px h-4 bg-vscode-panel-border mx-1" />
@@ -246,11 +262,11 @@ export const PreviewControls = memo(function PreviewControls({
           >
             {previewMuted ? (
               <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+                <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
               </svg>
             ) : (
               <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
               </svg>
             )}
           </button>
@@ -271,7 +287,7 @@ export const PreviewControls = memo(function PreviewControls({
             }}
             className="w-20 h-1 bg-vscode-input-bg rounded-lg appearance-none cursor-pointer accent-vscode-button"
             style={{
-              background: `linear-gradient(to right, var(--vscode-button-background) 0%, var(--vscode-button-background) ${previewMuted ? 0 : previewVolume * 100}%, var(--vscode-input-background) ${previewMuted ? 0 : previewVolume * 100}%, var(--vscode-input-background) 100%)`
+              background: `linear-gradient(to right, var(--vscode-button-background) 0%, var(--vscode-button-background) ${previewMuted ? 0 : previewVolume * 100}%, var(--vscode-input-background) ${previewMuted ? 0 : previewVolume * 100}%, var(--vscode-input-background) 100%)`,
             }}
             title={`${t('preview.volume') || 'Volume'}: ${Math.round(previewVolume * 100)}%`}
           />
@@ -294,7 +310,7 @@ export const PreviewControls = memo(function PreviewControls({
           title={t('preview.toggleFps') || 'Toggle FPS Counter'}
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H5v-2h7v2zm5-4H5v-2h12v2zm0-4H5V7h12v2z"/>
+            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H5v-2h7v2zm5-4H5v-2h12v2zm0-4H5V7h12v2z" />
           </svg>
         </button>
 
@@ -310,8 +326,19 @@ export const PreviewControls = memo(function PreviewControls({
             >
               {isCapturingScreenshot ? (
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
                 </svg>
               ) : (
                 <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
@@ -326,11 +353,13 @@ export const PreviewControls = memo(function PreviewControls({
         {/* PiP Button */}
         <div className="w-px h-4 bg-vscode-panel-border mx-1" />
         <button
-          onClick={() => (window as unknown as { __previewPanelTogglePiP?: () => void }).__previewPanelTogglePiP?.()}
+          onClick={() =>
+            (
+              window as unknown as { __previewPanelTogglePiP?: () => void }
+            ).__previewPanelTogglePiP?.()
+          }
           className={`p-1.5 rounded transition-colors ${
-            isPiPActive
-              ? 'bg-vscode-button text-vscode-button-fg'
-              : 'hover:bg-vscode-toolbar-hover'
+            isPiPActive ? 'bg-vscode-button text-vscode-button-fg' : 'hover:bg-vscode-toolbar-hover'
           }`}
           title={isPiPActive ? t('preview.exitPictureInPicture') : t('preview.pictureInPicture')}
         >

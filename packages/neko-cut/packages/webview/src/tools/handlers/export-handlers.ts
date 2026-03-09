@@ -5,7 +5,14 @@
 
 import type { ToolHandler, ToolHandlerResult } from '../types';
 import { useEditorStore } from '../../stores/editor-store';
-import type { ExportRequest, ExportResponse, ExportSettings, ExportFormat, ExportQuality, ProjectData } from '@neko/shared';
+import type {
+  ExportRequest,
+  ExportResponse,
+  ExportSettings,
+  ExportFormat,
+  ExportQuality,
+  ProjectData,
+} from '@neko/shared';
 import { getVSCodeAPI } from '../../utils/vscodeApi';
 
 // Export progress tracking
@@ -30,7 +37,8 @@ function calculateProjectDuration(project: ProjectData): number {
   let maxEndTime = 0;
   for (const track of project.tracks) {
     for (const element of track.elements) {
-      const endTime = element.startTime + element.duration - (element.trimStart || 0) - (element.trimEnd || 0);
+      const endTime =
+        element.startTime + element.duration - (element.trimStart || 0) - (element.trimEnd || 0);
       if (endTime > maxEndTime) {
         maxEndTime = endTime;
       }
@@ -43,25 +51,17 @@ function calculateProjectDuration(project: ProjectData): number {
  * Start video export
  */
 const exportVideo: ToolHandler = async (params): Promise<ToolHandlerResult> => {
-  const {
-    format,
-    resolution,
-    width,
-    height,
-    fps,
-    quality,
-    audioBitrate,
-    videoBitrate,
-  } = params as {
-    format?: ExportFormat;
-    resolution?: string;
-    width?: number;
-    height?: number;
-    fps?: number;
-    quality?: ExportQuality | 'ultra';
-    audioBitrate?: number;
-    videoBitrate?: number;
-  };
+  const { format, resolution, width, height, fps, quality, audioBitrate, videoBitrate } =
+    params as {
+      format?: ExportFormat;
+      resolution?: string;
+      width?: number;
+      height?: number;
+      fps?: number;
+      quality?: ExportQuality | 'ultra';
+      audioBitrate?: number;
+      videoBitrate?: number;
+    };
 
   const store = useEditorStore.getState();
   const { project } = store;
@@ -195,7 +195,8 @@ const getExportProgress: ToolHandler = async (params): Promise<ToolHandlerResult
       success: true,
       data: {
         exports,
-        activeCount: exports.filter(e => e.status !== 'completed' && e.status !== 'failed').length,
+        activeCount: exports.filter((e) => e.status !== 'completed' && e.status !== 'failed')
+          .length,
       },
     };
   }
@@ -256,10 +257,7 @@ const cancelExport: ToolHandler = async (params): Promise<ToolHandlerResult> => 
 /**
  * Update export progress (called from extension via message)
  */
-export function updateExportProgress(
-  exportId: string,
-  update: Partial<ExportProgress>
-): void {
+export function updateExportProgress(exportId: string, update: Partial<ExportProgress>): void {
   const progress = activeExports.get(exportId);
   if (progress) {
     Object.assign(progress, update);

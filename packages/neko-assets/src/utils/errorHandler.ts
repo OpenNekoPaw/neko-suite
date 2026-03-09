@@ -10,9 +10,9 @@ import type { IErrorHandler, ErrorDisplayOptions } from '@neko/shared';
 
 /** No-op handler used before activate() */
 const noopHandler: IErrorHandler = {
-	async handleError() {
-		return undefined;
-	},
+  async handleError() {
+    return undefined;
+  },
 };
 
 let _errorHandler: IErrorHandler = noopHandler;
@@ -21,22 +21,22 @@ let _errorHandler: IErrorHandler = noopHandler;
  * Set the global error handler (called once in activate())
  */
 export function setErrorHandler(handler: IErrorHandler): void {
-	_errorHandler = handler;
+  _errorHandler = handler;
 }
 
 /**
  * Get the global error handler
  */
 export function getErrorHandler(): IErrorHandler {
-	return _errorHandler;
+  return _errorHandler;
 }
 
 /**
  * Convenience: handle an error with options
  */
 export async function handleError(
-	error: Error | unknown,
-	options?: Partial<ErrorDisplayOptions>,
+  error: Error | unknown,
+  options?: Partial<ErrorDisplayOptions>,
 ): Promise<string | undefined> {
-	return _errorHandler.handleError(error as Error, options);
+  return _errorHandler.handleError(error as Error, options);
 }

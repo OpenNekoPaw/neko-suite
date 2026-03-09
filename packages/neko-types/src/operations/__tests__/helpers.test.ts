@@ -79,7 +79,7 @@ describe('updateTrackInProject', () => {
     const t1 = createTestTrack({ id: 't1', name: 'Old' });
     const project = createTestProject({ tracks: [t1] });
 
-    const result = updateTrackInProject(project, 't1', track => ({
+    const result = updateTrackInProject(project, 't1', (track) => ({
       ...track,
       name: 'New',
     }));
@@ -95,7 +95,7 @@ describe('updateTrackInProject', () => {
     const t2 = createTestTrack({ id: 't2', name: 'Track 2' });
     const project = createTestProject({ tracks: [t1, t2] });
 
-    const result = updateTrackInProject(project, 't1', track => ({
+    const result = updateTrackInProject(project, 't1', (track) => ({
       ...track,
       name: 'Updated',
     }));
@@ -110,7 +110,7 @@ describe('updateElementInProject', () => {
     const track = createTestTrack({ id: 't1', elements: [e1] });
     const project = createTestProject({ tracks: [track] });
 
-    const result = updateElementInProject(project, 't1', 'e1', elem => ({
+    const result = updateElementInProject(project, 't1', 'e1', (elem) => ({
       ...elem,
       name: 'New',
     }));
@@ -122,18 +122,18 @@ describe('updateElementInProject', () => {
   it('should throw when track not found', () => {
     const project = createTestProject({ tracks: [] });
 
-    expect(() =>
-      updateElementInProject(project, 'bad-track', 'e1', e => e),
-    ).toThrow(OperationError);
+    expect(() => updateElementInProject(project, 'bad-track', 'e1', (e) => e)).toThrow(
+      OperationError,
+    );
   });
 
   it('should throw when element not found', () => {
     const track = createTestTrack({ id: 't1', elements: [] });
     const project = createTestProject({ tracks: [track] });
 
-    expect(() =>
-      updateElementInProject(project, 't1', 'bad-elem', e => e),
-    ).toThrow(OperationError);
+    expect(() => updateElementInProject(project, 't1', 'bad-elem', (e) => e)).toThrow(
+      OperationError,
+    );
   });
 });
 
@@ -144,7 +144,7 @@ describe('updateShapeInProject', () => {
     const track = createTestTrack({ id: 't1', elements: [elem] });
     const project = createTestProject({ tracks: [track] });
 
-    const result = updateShapeInProject(project, 't1', 'e1', 's1', shape => ({
+    const result = updateShapeInProject(project, 't1', 'e1', 's1', (shape) => ({
       ...shape,
       name: 'New Shape',
     }));
@@ -159,9 +159,7 @@ describe('updateShapeInProject', () => {
     const project = createTestProject({ tracks: [track] });
 
     // No shapes array → findShape throws
-    expect(() =>
-      updateShapeInProject(project, 't1', 'e1', 's1', s => s),
-    ).toThrow(OperationError);
+    expect(() => updateShapeInProject(project, 't1', 'e1', 's1', (s) => s)).toThrow(OperationError);
   });
 });
 

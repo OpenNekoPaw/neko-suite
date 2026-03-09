@@ -64,7 +64,7 @@ export class LumaMediaAdapter extends BaseMediaAdapter {
   async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/dream-machine/v1/generations`;
 
@@ -93,7 +93,7 @@ export class LumaMediaAdapter extends BaseMediaAdapter {
     const { data, error } = await this.request<LumaGenerationResponse>(
       url,
       { method: 'POST', body: JSON.stringify(body) },
-      provider
+      provider,
     );
 
     if (error) {
@@ -110,16 +110,13 @@ export class LumaMediaAdapter extends BaseMediaAdapter {
   /**
    * Get task status
    */
-  async getTaskStatus(
-    externalTaskId: string,
-    provider: Provider
-  ): Promise<MediaAdapterResult> {
+  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/dream-machine/v1/generations/${externalTaskId}`;
 
     const { data, error } = await this.request<LumaGenerationResponse>(
       url,
       { method: 'GET' },
-      provider
+      provider,
     );
 
     if (error) {
@@ -137,17 +134,16 @@ export class LumaMediaAdapter extends BaseMediaAdapter {
       };
     }
 
-    const outputs: MediaOutput[] | undefined =
-      data?.assets?.video
-        ? [
-            {
-              type: 'video',
-              url: data.assets.video,
-              thumbnailUrl: data.assets.thumbnail,
-              mimeType: 'video/mp4',
-            },
-          ]
-        : undefined;
+    const outputs: MediaOutput[] | undefined = data?.assets?.video
+      ? [
+          {
+            type: 'video',
+            url: data.assets.video,
+            thumbnailUrl: data.assets.thumbnail,
+            mimeType: 'video/mp4',
+          },
+        ]
+      : undefined;
 
     return {
       externalTaskId,
@@ -164,7 +160,7 @@ export class LumaMediaAdapter extends BaseMediaAdapter {
     await this.cancelViaEndpoint(
       `${provider.apiUrl}/dream-machine/v1/generations/${externalTaskId}`,
       provider,
-      'DELETE'
+      'DELETE',
     );
   }
 }

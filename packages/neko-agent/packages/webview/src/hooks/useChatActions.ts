@@ -5,7 +5,14 @@
  * when the agent is already running (via _pendingMessages).
  */
 
-import { useEffect, useCallback, useRef, type Dispatch, type SetStateAction, type MutableRefObject } from 'react';
+import {
+  useEffect,
+  useCallback,
+  useRef,
+  type Dispatch,
+  type SetStateAction,
+  type MutableRefObject,
+} from 'react';
 import { Message, type TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import type { AttachedFile } from '@/components/ChatView/InputArea';
@@ -62,7 +69,6 @@ export function useChatActions({
   clearInput,
   setAttachedFiles,
 }: UseChatActionsProps): UseChatActionsReturn {
-
   // Lightweight dedup guard: prevent double-click within 1s
   const lastSentRef = useRef<{ hash: string; time: number }>();
 
@@ -76,55 +82,95 @@ export function useChatActions({
 
   // Send a user message — always send directly to Extension.
   // AgentRunner handles queueing if the agent is already running.
-  const handleSend = useCallback((attachments?: AttachedFile[]) => {
-    const trimmed = inputValue.trim();
-    if (!trimmed && (!attachments || attachments.length === 0)) return;
+  const handleSend = useCallback(
+    (attachments?: AttachedFile[]) => {
+      const trimmed = inputValue.trim();
+      if (!trimmed && (!attachments || attachments.length === 0)) return;
 
-    // Dedup guard: prevent accidental double-click
-    if (isDuplicate(trimmed)) return;
+      // Dedup guard: prevent accidental double-click
+      if (isDuplicate(trimmed)) return;
 
-    // Clear streaming state from previous turn
-    setStreamingMessageId(null);
-    streamingMessageIdRef.current = null;
+      // Clear streaming state from previous turn
+      setStreamingMessageId(null);
+      streamingMessageIdRef.current = null;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: trimmed,
-      timestamp: Date.now(),
-      attachments: attachments,
-    };
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: trimmed,
+        timestamp: Date.now(),
+        attachments: attachments,
+      };
 
-    setMessages(prev => [...prev, userMessage]);
-    clearInput();
-    setAttachedFiles([]);
-    setIsThinking(true);
+      setMessages((prev) => [...prev, userMessage]);
+      clearInput();
+      setAttachedFiles([]);
+      setIsThinking(true);
 
-    const { providerId, modelId } = parseModelSelection(selectedModel);
-    VSCodeMessages.sendMessage(trimmed, providerId, modelId, attachments, undefined, activeConversationId || undefined);
-  }, [inputValue, selectedModel, activeConversationId, isDuplicate, setMessages, setIsThinking, setStreamingMessageId, streamingMessageIdRef, clearInput, setAttachedFiles]);
+      const { providerId, modelId } = parseModelSelection(selectedModel);
+      VSCodeMessages.sendMessage(
+        trimmed,
+        providerId,
+        modelId,
+        attachments,
+        undefined,
+        activeConversationId || undefined,
+      );
+    },
+    [
+      inputValue,
+      selectedModel,
+      activeConversationId,
+      isDuplicate,
+      setMessages,
+      setIsThinking,
+      setStreamingMessageId,
+      streamingMessageIdRef,
+      clearInput,
+      setAttachedFiles,
+    ],
+  );
 
   // Trigger send from external message (with custom message text)
-  const triggerSend = useCallback((messageText: string) => {
-    if (isThinking) return;
+  const triggerSend = useCallback(
+    (messageText: string) => {
+      if (isThinking) return;
 
-    setStreamingMessageId(null);
-    streamingMessageIdRef.current = null;
+      setStreamingMessageId(null);
+      streamingMessageIdRef.current = null;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: messageText,
-      timestamp: Date.now(),
-    };
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: messageText,
+        timestamp: Date.now(),
+      };
 
-    setMessages(prev => [...prev, userMessage]);
-    setIsThinking(true);
-    setActiveTab('chat');
+      setMessages((prev) => [...prev, userMessage]);
+      setIsThinking(true);
+      setActiveTab('chat');
 
-    const { providerId, modelId } = parseModelSelection(selectedModel);
-    VSCodeMessages.sendMessage(messageText, providerId, modelId, undefined, undefined, activeConversationIdRef.current || undefined);
-  }, [isThinking, selectedModel, setMessages, setIsThinking, setActiveTab, setStreamingMessageId, streamingMessageIdRef, activeConversationIdRef]);
+      const { providerId, modelId } = parseModelSelection(selectedModel);
+      VSCodeMessages.sendMessage(
+        messageText,
+        providerId,
+        modelId,
+        undefined,
+        undefined,
+        activeConversationIdRef.current || undefined,
+      );
+    },
+    [
+      isThinking,
+      selectedModel,
+      setMessages,
+      setIsThinking,
+      setActiveTab,
+      setStreamingMessageId,
+      streamingMessageIdRef,
+      activeConversationIdRef,
+    ],
+  );
 
   // Set external message context for handlers
   useEffect(() => {
@@ -133,7 +179,7 @@ export function useChatActions({
 
   // Copy last assistant response to clipboard
   const copyLastResponse = useCallback(() => {
-    const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
     if (lastAssistant) {
       navigator.clipboard.writeText(lastAssistant.content);
     }

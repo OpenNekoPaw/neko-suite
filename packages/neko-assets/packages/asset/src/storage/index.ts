@@ -3,10 +3,10 @@
  */
 
 export type {
-	IAssetStorage,
-	IAssetStorageWithEvents,
-	StorageEventType,
-	StorageEventListener,
+  IAssetStorage,
+  IAssetStorageWithEvents,
+  StorageEventType,
+  StorageEventListener,
 } from './IAssetStorage';
 
 export { InMemoryStorage } from './InMemoryStorage';

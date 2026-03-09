@@ -149,10 +149,9 @@ describe('clipboardSlice', () => {
 
   describe('copySelected', () => {
     it('should copy selected elements to clipboard', () => {
-      const { store } = createTestStore(
-        createProjectWithElements(),
-        [{ trackId: 'video-track', elementId: 'elem-v1' }],
-      );
+      const { store } = createTestStore(createProjectWithElements(), [
+        { trackId: 'video-track', elementId: 'elem-v1' },
+      ]);
 
       store.getState().copySelected();
 
@@ -164,10 +163,9 @@ describe('clipboardSlice', () => {
     });
 
     it('should strip element ID from clipboard items', () => {
-      const { store } = createTestStore(
-        createProjectWithElements(),
-        [{ trackId: 'video-track', elementId: 'elem-v1' }],
-      );
+      const { store } = createTestStore(createProjectWithElements(), [
+        { trackId: 'video-track', elementId: 'elem-v1' },
+      ]);
 
       store.getState().copySelected();
 
@@ -176,13 +174,10 @@ describe('clipboardSlice', () => {
     });
 
     it('should copy multiple selected elements', () => {
-      const { store } = createTestStore(
-        createProjectWithElements(),
-        [
-          { trackId: 'video-track', elementId: 'elem-v1' },
-          { trackId: 'audio-track', elementId: 'elem-a1' },
-        ],
-      );
+      const { store } = createTestStore(createProjectWithElements(), [
+        { trackId: 'video-track', elementId: 'elem-v1' },
+        { trackId: 'audio-track', elementId: 'elem-a1' },
+      ]);
 
       store.getState().copySelected();
 
@@ -191,26 +186,21 @@ describe('clipboardSlice', () => {
     });
 
     it('should preserve track type information', () => {
-      const { store } = createTestStore(
-        createProjectWithElements(),
-        [
-          { trackId: 'video-track', elementId: 'elem-v1' },
-          { trackId: 'audio-track', elementId: 'elem-a1' },
-        ],
-      );
+      const { store } = createTestStore(createProjectWithElements(), [
+        { trackId: 'video-track', elementId: 'elem-v1' },
+        { trackId: 'audio-track', elementId: 'elem-a1' },
+      ]);
 
       store.getState().copySelected();
 
       const items = store.getState().clipboard!.items;
-      const trackTypes = items.map(i => i.trackType);
+      const trackTypes = items.map((i) => i.trackType);
       expect(trackTypes).toContain('media');
       expect(trackTypes).toContain('audio');
     });
 
     it('should do nothing when project is null', () => {
-      const { store } = createTestStore(null, [
-        { trackId: 'track', elementId: 'elem' },
-      ]);
+      const { store } = createTestStore(null, [{ trackId: 'track', elementId: 'elem' }]);
 
       store.getState().copySelected();
 
@@ -226,13 +216,10 @@ describe('clipboardSlice', () => {
     });
 
     it('should skip non-existent elements gracefully', () => {
-      const { store } = createTestStore(
-        createProjectWithElements(),
-        [
-          { trackId: 'video-track', elementId: 'elem-v1' },
-          { trackId: 'video-track', elementId: 'nonexistent' },
-        ],
-      );
+      const { store } = createTestStore(createProjectWithElements(), [
+        { trackId: 'video-track', elementId: 'elem-v1' },
+        { trackId: 'video-track', elementId: 'nonexistent' },
+      ]);
 
       store.getState().copySelected();
 
@@ -240,10 +227,9 @@ describe('clipboardSlice', () => {
     });
 
     it('should override previous clipboard content', () => {
-      const { store } = createTestStore(
-        createProjectWithElements(),
-        [{ trackId: 'video-track', elementId: 'elem-v1' }],
-      );
+      const { store } = createTestStore(createProjectWithElements(), [
+        { trackId: 'video-track', elementId: 'elem-v1' },
+      ]);
 
       store.getState().copySelected();
       expect(store.getState().clipboard!.items[0]!.element.name).toBe('Video Clip 1');
@@ -259,10 +245,9 @@ describe('clipboardSlice', () => {
 
   describe('pasteAtTime', () => {
     it('should dispatch clipboard.paste operation', () => {
-      const { store, dispatchMock } = createTestStore(
-        createProjectWithElements(),
-        [{ trackId: 'video-track', elementId: 'elem-v1' }],
-      );
+      const { store, dispatchMock } = createTestStore(createProjectWithElements(), [
+        { trackId: 'video-track', elementId: 'elem-v1' },
+      ]);
 
       store.getState().copySelected();
       store.getState().pasteAtTime(20);
@@ -273,10 +258,9 @@ describe('clipboardSlice', () => {
     });
 
     it('should assign new IDs to pasted elements', () => {
-      const { store, dispatchMock } = createTestStore(
-        createProjectWithElements(),
-        [{ trackId: 'video-track', elementId: 'elem-v1' }],
-      );
+      const { store, dispatchMock } = createTestStore(createProjectWithElements(), [
+        { trackId: 'video-track', elementId: 'elem-v1' },
+      ]);
 
       store.getState().copySelected();
       store.getState().pasteAtTime(20);
@@ -295,10 +279,9 @@ describe('clipboardSlice', () => {
     });
 
     it('should do nothing when project is null', () => {
-      const { store, dispatchMock } = createTestStore(
-        createProjectWithElements(),
-        [{ trackId: 'video-track', elementId: 'elem-v1' }],
-      );
+      const { store, dispatchMock } = createTestStore(createProjectWithElements(), [
+        { trackId: 'video-track', elementId: 'elem-v1' },
+      ]);
 
       store.getState().copySelected();
       store.setState({ project: null });
@@ -308,10 +291,9 @@ describe('clipboardSlice', () => {
     });
 
     it('should paste at specified time offset', () => {
-      const { store, dispatchMock } = createTestStore(
-        createProjectWithElements(),
-        [{ trackId: 'video-track', elementId: 'elem-v1' }],
-      );
+      const { store, dispatchMock } = createTestStore(createProjectWithElements(), [
+        { trackId: 'video-track', elementId: 'elem-v1' },
+      ]);
 
       store.getState().copySelected();
       store.getState().pasteAtTime(25);
@@ -323,13 +305,10 @@ describe('clipboardSlice', () => {
     });
 
     it('should paste multiple elements preserving relative timing', () => {
-      const { store, dispatchMock } = createTestStore(
-        createProjectWithElements(),
-        [
-          { trackId: 'video-track', elementId: 'elem-v1' },
-          { trackId: 'video-track', elementId: 'elem-v2' },
-        ],
-      );
+      const { store, dispatchMock } = createTestStore(createProjectWithElements(), [
+        { trackId: 'video-track', elementId: 'elem-v1' },
+        { trackId: 'video-track', elementId: 'elem-v2' },
+      ]);
 
       store.getState().copySelected();
       store.getState().pasteAtTime(30);
@@ -344,10 +323,9 @@ describe('clipboardSlice', () => {
 
   describe('clearClipboard', () => {
     it('should clear clipboard contents', () => {
-      const { store } = createTestStore(
-        createProjectWithElements(),
-        [{ trackId: 'video-track', elementId: 'elem-v1' }],
-      );
+      const { store } = createTestStore(createProjectWithElements(), [
+        { trackId: 'video-track', elementId: 'elem-v1' },
+      ]);
 
       store.getState().copySelected();
       expect(store.getState().clipboard).not.toBeNull();

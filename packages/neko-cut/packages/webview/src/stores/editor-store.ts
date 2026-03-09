@@ -21,20 +21,19 @@ import { ShapeOpsSlice, createShapeOpsSlice } from './slices/shapeOpsSlice';
 import { AIActionSlice, createAIActionSlice } from './slices/aiActionSlice';
 
 // Combined store type - intersection of all slices
-export type EditorStore =
-  & ProjectSlice
-  & SelectionSlice
-  & PlaybackSlice
-  & UIStateSlice
-  & OperationHistorySlice
-  & DispatchSlice
-  & KeyframeSlice
-  & TrackOpsSlice
-  & ElementOpsSlice
-  & ElementSplitSlice
-  & ClipboardSlice
-  & ShapeOpsSlice
-  & AIActionSlice;
+export type EditorStore = ProjectSlice &
+  SelectionSlice &
+  PlaybackSlice &
+  UIStateSlice &
+  OperationHistorySlice &
+  DispatchSlice &
+  KeyframeSlice &
+  TrackOpsSlice &
+  ElementOpsSlice &
+  ElementSplitSlice &
+  ClipboardSlice &
+  ShapeOpsSlice &
+  AIActionSlice;
 
 /**
  * Create the combined editor store

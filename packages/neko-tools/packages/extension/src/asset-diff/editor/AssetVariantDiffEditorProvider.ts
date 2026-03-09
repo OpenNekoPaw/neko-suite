@@ -22,9 +22,9 @@ const COMPARISON_STATE_KEY = 'assetVariantDiff.comparisonState';
 
 // Comparison state structure
 interface ComparisonState {
-	entityId: string;
-	variantIdA: string;
-	variantIdB: string;
+  entityId: string;
+  variantIdA: string;
+  variantIdB: string;
 }
 
 // =============================================================================
@@ -35,38 +35,38 @@ interface ComparisonState {
  * Virtual file system for asset variant diff documents
  */
 export class AssetVariantDiffFileSystemProvider implements vscode.FileSystemProvider {
-	private readonly _emitter = new vscode.EventEmitter<vscode.FileChangeEvent[]>();
-	readonly onDidChangeFile = this._emitter.event;
+  private readonly _emitter = new vscode.EventEmitter<vscode.FileChangeEvent[]>();
+  readonly onDidChangeFile = this._emitter.event;
 
-	watch(): vscode.Disposable {
-		return { dispose: () => {} };
-	}
+  watch(): vscode.Disposable {
+    return { dispose: () => {} };
+  }
 
-	stat(): vscode.FileStat {
-		return {
-			type: vscode.FileType.File,
-			ctime: Date.now(),
-			mtime: Date.now(),
-			size: 0,
-		};
-	}
+  stat(): vscode.FileStat {
+    return {
+      type: vscode.FileType.File,
+      ctime: Date.now(),
+      mtime: Date.now(),
+      size: 0,
+    };
+  }
 
-	readDirectory(): [string, vscode.FileType][] {
-		return [];
-	}
+  readDirectory(): [string, vscode.FileType][] {
+    return [];
+  }
 
-	createDirectory(): void {}
+  createDirectory(): void {}
 
-	readFile(): Uint8Array {
-		// Return empty content - the actual data is fetched via messages
-		return new Uint8Array();
-	}
+  readFile(): Uint8Array {
+    // Return empty content - the actual data is fetched via messages
+    return new Uint8Array();
+  }
 
-	writeFile(): void {}
+  writeFile(): void {}
 
-	delete(): void {}
+  delete(): void {}
 
-	rename(): void {}
+  rename(): void {}
 }
 
 // =============================================================================
@@ -77,178 +77,175 @@ export class AssetVariantDiffFileSystemProvider implements vscode.FileSystemProv
  * Custom editor provider for asset variant diff visualization
  */
 export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEditorProvider {
-	public static readonly viewType = 'neko.assetVariantDiff';
-	public static readonly scheme = 'asset-variant-diff';
+  public static readonly viewType = 'neko.assetVariantDiff';
+  public static readonly scheme = 'asset-variant-diff';
 
-	private activeWebviews: Map<string, vscode.WebviewPanel> = new Map();
-	/** Map from document URI to comparison state */
-	private comparisonStates: Map<string, ComparisonState> = new Map();
+  private activeWebviews: Map<string, vscode.WebviewPanel> = new Map();
+  /** Map from document URI to comparison state */
+  private comparisonStates: Map<string, ComparisonState> = new Map();
 
-	constructor(
-		private readonly context: vscode.ExtensionContext,
-		private readonly getEntity: (id: string) => Promise<AssetEntity | null>,
-		private readonly compareVariants?: (
-			entityId: string,
-			variantIdA: string,
-			variantIdB: string
-		) => Promise<VariantComparisonResult>
-	) {
-		// Restore persisted comparison states
-		this.restoreComparisonStates();
-	}
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly getEntity: (id: string) => Promise<AssetEntity | null>,
+    private readonly compareVariants?: (
+      entityId: string,
+      variantIdA: string,
+      variantIdB: string,
+    ) => Promise<VariantComparisonResult>,
+  ) {
+    // Restore persisted comparison states
+    this.restoreComparisonStates();
+  }
 
-	/**
-	 * Restore comparison states from workspace state
-	 */
-	private restoreComparisonStates(): void {
-		const stored = this.context.workspaceState.get<Record<string, ComparisonState>>(COMPARISON_STATE_KEY);
-		if (stored) {
-			for (const [uri, state] of Object.entries(stored)) {
-				this.comparisonStates.set(uri, state);
-			}
-		}
-	}
+  /**
+   * Restore comparison states from workspace state
+   */
+  private restoreComparisonStates(): void {
+    const stored =
+      this.context.workspaceState.get<Record<string, ComparisonState>>(COMPARISON_STATE_KEY);
+    if (stored) {
+      for (const [uri, state] of Object.entries(stored)) {
+        this.comparisonStates.set(uri, state);
+      }
+    }
+  }
 
-	/**
-	 * Persist comparison states to workspace state
-	 */
-	private persistComparisonStates(): void {
-		const toStore: Record<string, ComparisonState> = {};
-		for (const [uri, state] of this.comparisonStates.entries()) {
-			toStore[uri] = state;
-		}
-		this.context.workspaceState.update(COMPARISON_STATE_KEY, toStore);
-	}
+  /**
+   * Persist comparison states to workspace state
+   */
+  private persistComparisonStates(): void {
+    const toStore: Record<string, ComparisonState> = {};
+    for (const [uri, state] of this.comparisonStates.entries()) {
+      toStore[uri] = state;
+    }
+    this.context.workspaceState.update(COMPARISON_STATE_KEY, toStore);
+  }
 
-	/**
-	 * Set up comparison state for a document
-	 */
-	setComparisonState(documentUri: vscode.Uri, state: ComparisonState): void {
-		this.comparisonStates.set(documentUri.toString(), state);
-		this.persistComparisonStates();
-	}
+  /**
+   * Set up comparison state for a document
+   */
+  setComparisonState(documentUri: vscode.Uri, state: ComparisonState): void {
+    this.comparisonStates.set(documentUri.toString(), state);
+    this.persistComparisonStates();
+  }
 
-	/**
-	 * Clear comparison state for a document
-	 */
-	clearComparisonState(documentUri: vscode.Uri): void {
-		this.comparisonStates.delete(documentUri.toString());
-		this.persistComparisonStates();
-	}
+  /**
+   * Clear comparison state for a document
+   */
+  clearComparisonState(documentUri: vscode.Uri): void {
+    this.comparisonStates.delete(documentUri.toString());
+    this.persistComparisonStates();
+  }
 
-	/**
-	 * Create a URI for comparing two variants
-	 */
-	static createCompareUri(entityId: string, variantIdA: string, variantIdB: string): vscode.Uri {
-		return vscode.Uri.parse(
-			`${AssetVariantDiffEditorProvider.scheme}:/${entityId}/${variantIdA}-vs-${variantIdB}.asset-diff`
-		);
-	}
+  /**
+   * Create a URI for comparing two variants
+   */
+  static createCompareUri(entityId: string, variantIdA: string, variantIdB: string): vscode.Uri {
+    return vscode.Uri.parse(
+      `${AssetVariantDiffEditorProvider.scheme}:/${entityId}/${variantIdA}-vs-${variantIdB}.asset-diff`,
+    );
+  }
 
-	/**
-	 * Open a file for diff viewing
-	 */
-	async openCustomDocument(
-		uri: vscode.Uri,
-		_openContext: vscode.CustomDocumentOpenContext,
-		_token: vscode.CancellationToken
-	): Promise<vscode.CustomDocument> {
-		return { uri, dispose: () => {} };
-	}
+  /**
+   * Open a file for diff viewing
+   */
+  async openCustomDocument(
+    uri: vscode.Uri,
+    _openContext: vscode.CustomDocumentOpenContext,
+    _token: vscode.CancellationToken,
+  ): Promise<vscode.CustomDocument> {
+    return { uri, dispose: () => {} };
+  }
 
-	/**
-	 * Resolve the custom editor
-	 */
-	async resolveCustomEditor(
-		document: vscode.CustomDocument,
-		webviewPanel: vscode.WebviewPanel,
-		_token: vscode.CancellationToken
-	): Promise<void> {
-		const docUri = document.uri.toString();
-		this.activeWebviews.set(docUri, webviewPanel);
+  /**
+   * Resolve the custom editor
+   */
+  async resolveCustomEditor(
+    document: vscode.CustomDocument,
+    webviewPanel: vscode.WebviewPanel,
+    _token: vscode.CancellationToken,
+  ): Promise<void> {
+    const docUri = document.uri.toString();
+    this.activeWebviews.set(docUri, webviewPanel);
 
-		// Get comparison state
-		const state = this.comparisonStates.get(docUri);
-		if (!state) {
-			webviewPanel.webview.html = this.getErrorHtml('Comparison state not found');
-			return;
-		}
+    // Get comparison state
+    const state = this.comparisonStates.get(docUri);
+    if (!state) {
+      webviewPanel.webview.html = this.getErrorHtml('Comparison state not found');
+      return;
+    }
 
-		// Load entity and variants
-		const entity = await this.getEntity(state.entityId);
-		if (!entity) {
-			webviewPanel.webview.html = this.getErrorHtml(`Entity not found: ${state.entityId}`);
-			return;
-		}
+    // Load entity and variants
+    const entity = await this.getEntity(state.entityId);
+    if (!entity) {
+      webviewPanel.webview.html = this.getErrorHtml(`Entity not found: ${state.entityId}`);
+      return;
+    }
 
-		const variantA = entity.variants.find((v) => v.id === state.variantIdA);
-		const variantB = entity.variants.find((v) => v.id === state.variantIdB);
+    const variantA = entity.variants.find((v) => v.id === state.variantIdA);
+    const variantB = entity.variants.find((v) => v.id === state.variantIdB);
 
-		if (!variantA || !variantB) {
-			webviewPanel.webview.html = this.getErrorHtml('One or both variants not found');
-			return;
-		}
+    if (!variantA || !variantB) {
+      webviewPanel.webview.html = this.getErrorHtml('One or both variants not found');
+      return;
+    }
 
-		// Set panel title
-		webviewPanel.title = `${variantA.name} ↔ ${variantB.name}`;
+    // Set panel title
+    webviewPanel.title = `${variantA.name} ↔ ${variantB.name}`;
 
-		// Configure webview
-		const localResourceRoots = [
-			vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
-		];
+    // Configure webview
+    const localResourceRoots = [vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')];
 
-		if (vscode.workspace.workspaceFolders) {
-			localResourceRoots.push(
-				...vscode.workspace.workspaceFolders.map((f) => f.uri)
-			);
-		}
+    if (vscode.workspace.workspaceFolders) {
+      localResourceRoots.push(...vscode.workspace.workspaceFolders.map((f) => f.uri));
+    }
 
-		webviewPanel.webview.options = {
-			enableScripts: true,
-			localResourceRoots,
-		};
+    webviewPanel.webview.options = {
+      enableScripts: true,
+      localResourceRoots,
+    };
 
-		// Set webview HTML
-		webviewPanel.webview.html = this.getHtmlForWebview(
-			webviewPanel.webview,
-			entity,
-			variantA,
-			variantB
-		);
+    // Set webview HTML
+    webviewPanel.webview.html = this.getHtmlForWebview(
+      webviewPanel.webview,
+      entity,
+      variantA,
+      variantB,
+    );
 
-		// Create message handler
-		const messageHandler = new AssetVariantDiffMessageHandler(
-			webviewPanel.webview,
-			entity,
-			variantA,
-			variantB,
-			this.compareVariants
-		);
+    // Create message handler
+    const messageHandler = new AssetVariantDiffMessageHandler(
+      webviewPanel.webview,
+      entity,
+      variantA,
+      variantB,
+      this.compareVariants,
+    );
 
-		// Handle messages from webview
-		webviewPanel.webview.onDidReceiveMessage(
-			async (message) => {
-				await messageHandler.handleMessage(message);
-			},
-			undefined,
-			this.context.subscriptions
-		);
+    // Handle messages from webview
+    webviewPanel.webview.onDidReceiveMessage(
+      async (message) => {
+        await messageHandler.handleMessage(message);
+      },
+      undefined,
+      this.context.subscriptions,
+    );
 
-		// Cleanup on dispose
-		webviewPanel.onDidDispose(() => {
-			this.activeWebviews.delete(docUri);
-			messageHandler.dispose();
-		});
+    // Cleanup on dispose
+    webviewPanel.onDidDispose(() => {
+      this.activeWebviews.delete(docUri);
+      messageHandler.dispose();
+    });
 
-		// Initialize diff analysis
-		messageHandler.initializeDiff();
-	}
+    // Initialize diff analysis
+    messageHandler.initializeDiff();
+  }
 
-	/**
-	 * Get error HTML
-	 */
-	private getErrorHtml(message: string): string {
-		return `<!DOCTYPE html>
+  /**
+   * Get error HTML
+   */
+  private getErrorHtml(message: string): string {
+    return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -269,84 +266,80 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
   <div>${message}</div>
 </body>
 </html>`;
-	}
+  }
 
-	/**
-	 * Get HTML content for webview
-	 */
-	private getHtmlForWebview(
-		webview: vscode.Webview,
-		entity: AssetEntity,
-		variantA: AssetVariant,
-		variantB: AssetVariant
-	): string {
-		const nonce = getNonce();
-		const locale = vscode.env.language || 'en';
+  /**
+   * Get HTML content for webview
+   */
+  private getHtmlForWebview(
+    webview: vscode.Webview,
+    entity: AssetEntity,
+    variantA: AssetVariant,
+    variantB: AssetVariant,
+  ): string {
+    const nonce = getNonce();
+    const locale = vscode.env.language || 'en';
 
-		// Get thumbnail URIs
-		const fileA = variantA.files[0];
-		const fileB = variantB.files[0];
+    // Get thumbnail URIs
+    const fileA = variantA.files[0];
+    const fileB = variantB.files[0];
 
-		const imageUriA = fileA
-			? webview.asWebviewUri(vscode.Uri.file(fileA.path))
-			: null;
-		const imageUriB = fileB
-			? webview.asWebviewUri(vscode.Uri.file(fileB.path))
-			: null;
+    const imageUriA = fileA ? webview.asWebviewUri(vscode.Uri.file(fileA.path)) : null;
+    const imageUriB = fileB ? webview.asWebviewUri(vscode.Uri.file(fileB.path)) : null;
 
-		// Localized strings for the webview
-		const l10n = {
-			loading: vscode.l10n.t('assetDiff.loading'),
-			analyzing: vscode.l10n.t('assetDiff.analyzing'),
-			similar: vscode.l10n.t('assetDiff.similar'),
-			attributes: vscode.l10n.t('assetDiff.attributes'),
-			noChanges: vscode.l10n.t('assetDiff.noChanges'),
-			viewMode: {
-				sideBySide: vscode.l10n.t('assetDiff.viewMode.sideBySide'),
-				slider: vscode.l10n.t('assetDiff.viewMode.slider'),
-				overlay: vscode.l10n.t('assetDiff.viewMode.overlay'),
-			},
-			tabs: {
-				media: vscode.l10n.t('assetDiff.tabs.media'),
-				attributes: vscode.l10n.t('assetDiff.tabs.attributes'),
-				ai: vscode.l10n.t('assetDiff.tabs.ai'),
-			},
-			aiAnalysis: vscode.l10n.t('assetDiff.aiAnalysis'),
-			requestAI: vscode.l10n.t('assetDiff.requestAI'),
-			noFile: vscode.l10n.t('assetDiff.noFile'),
-		};
+    // Localized strings for the webview
+    const l10n = {
+      loading: vscode.l10n.t('assetDiff.loading'),
+      analyzing: vscode.l10n.t('assetDiff.analyzing'),
+      similar: vscode.l10n.t('assetDiff.similar'),
+      attributes: vscode.l10n.t('assetDiff.attributes'),
+      noChanges: vscode.l10n.t('assetDiff.noChanges'),
+      viewMode: {
+        sideBySide: vscode.l10n.t('assetDiff.viewMode.sideBySide'),
+        slider: vscode.l10n.t('assetDiff.viewMode.slider'),
+        overlay: vscode.l10n.t('assetDiff.viewMode.overlay'),
+      },
+      tabs: {
+        media: vscode.l10n.t('assetDiff.tabs.media'),
+        attributes: vscode.l10n.t('assetDiff.tabs.attributes'),
+        ai: vscode.l10n.t('assetDiff.tabs.ai'),
+      },
+      aiAnalysis: vscode.l10n.t('assetDiff.aiAnalysis'),
+      requestAI: vscode.l10n.t('assetDiff.requestAI'),
+      noFile: vscode.l10n.t('assetDiff.noFile'),
+    };
 
-		// Generate initial state
-		const initialState = JSON.stringify({
-			entity: {
-				id: entity.id,
-				name: entity.name,
-				category: entity.category,
-			},
-			variantA: {
-				id: variantA.id,
-				name: variantA.name,
-				attributes: variantA.attributes,
-				fileCount: variantA.files.length,
-				hasImage: !!imageUriA,
-				fileName: fileA?.name ?? null,
-				filePath: fileA?.path ?? null,
-			},
-			variantB: {
-				id: variantB.id,
-				name: variantB.name,
-				attributes: variantB.attributes,
-				fileCount: variantB.files.length,
-				hasImage: !!imageUriB,
-				fileName: fileB?.name ?? null,
-				filePath: fileB?.path ?? null,
-			},
-			imageUriA: imageUriA?.toString() ?? null,
-			imageUriB: imageUriB?.toString() ?? null,
-			l10n,
-		});
+    // Generate initial state
+    const initialState = JSON.stringify({
+      entity: {
+        id: entity.id,
+        name: entity.name,
+        category: entity.category,
+      },
+      variantA: {
+        id: variantA.id,
+        name: variantA.name,
+        attributes: variantA.attributes,
+        fileCount: variantA.files.length,
+        hasImage: !!imageUriA,
+        fileName: fileA?.name ?? null,
+        filePath: fileA?.path ?? null,
+      },
+      variantB: {
+        id: variantB.id,
+        name: variantB.name,
+        attributes: variantB.attributes,
+        fileCount: variantB.files.length,
+        hasImage: !!imageUriB,
+        fileName: fileB?.name ?? null,
+        filePath: fileB?.path ?? null,
+      },
+      imageUriA: imageUriA?.toString() ?? null,
+      imageUriB: imageUriB?.toString() ?? null,
+      l10n,
+    });
 
-		return `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="${locale}">
 <head>
   <meta charset="UTF-8">
@@ -1057,23 +1050,22 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
   </script>
 </body>
 </html>`;
-	}
+  }
 
-	dispose(): void {
-		this.activeWebviews.clear();
-		this.comparisonStates.clear();
-	}
+  dispose(): void {
+    this.activeWebviews.clear();
+    this.comparisonStates.clear();
+  }
 }
 
 /**
  * Generate a nonce for CSP
  */
 function getNonce(): string {
-	let text = '';
-	const possible =
-		'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-	for (let i = 0; i < 32; i++) {
-		text += possible.charAt(Math.floor(Math.random() * possible.length));
-	}
-	return text;
+  let text = '';
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
 }

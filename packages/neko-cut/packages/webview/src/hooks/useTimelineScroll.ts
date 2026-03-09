@@ -88,8 +88,12 @@ export function useTimelineScroll({
       // Update visible range for virtualization
       const scrollLeft = tracksContainer.scrollLeft;
       const containerWidth = tracksContainer.clientWidth;
-      const startTime = Math.max(0, (scrollLeft - VIRTUALIZATION_BUFFER) / (PIXELS_PER_SECOND * zoomLevel));
-      const endTime = (scrollLeft + containerWidth + VIRTUALIZATION_BUFFER) / (PIXELS_PER_SECOND * zoomLevel);
+      const startTime = Math.max(
+        0,
+        (scrollLeft - VIRTUALIZATION_BUFFER) / (PIXELS_PER_SECOND * zoomLevel),
+      );
+      const endTime =
+        (scrollLeft + containerWidth + VIRTUALIZATION_BUFFER) / (PIXELS_PER_SECOND * zoomLevel);
       setVisibleRange({ startTime, endTime });
     };
 

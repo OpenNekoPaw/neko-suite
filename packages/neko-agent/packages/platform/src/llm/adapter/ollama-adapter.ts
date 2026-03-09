@@ -6,12 +6,7 @@
  */
 
 import { BaseAdapter } from './base-adapter';
-import type {
-  ChatMessage,
-  ChatOptions,
-  ChatResponse,
-  ChatChunk,
-} from '../../types/adapter';
+import type { ChatMessage, ChatOptions, ChatResponse, ChatChunk } from '../../types/adapter';
 import type { Model, Provider } from '../../types/provider';
 
 interface OllamaMessage {
@@ -57,7 +52,7 @@ export class OllamaAdapter extends BaseAdapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<ChatResponse> {
     const apiUrl = this.getApiUrl(provider);
     const ollamaMessages = this.transformMessages(messages);
@@ -82,7 +77,7 @@ export class OllamaAdapter extends BaseAdapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): AsyncIterable<ChatChunk> {
     const apiUrl = this.getApiUrl(provider);
     const ollamaMessages = this.transformMessages(messages);

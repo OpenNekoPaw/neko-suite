@@ -5,11 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import {
-  MediaDiffService,
-  getMediaDiffService,
-  disposeMediaDiffService,
-} from './MediaDiffService';
+import { MediaDiffService, getMediaDiffService, disposeMediaDiffService } from './MediaDiffService';
 import { AnalyzerRegistry, type IMediaDiffAnalyzer } from './analyzers/IMediaDiffAnalyzer';
 import type { DiffResult, DiffOptions, MediaType } from '@neko/shared';
 
@@ -35,11 +31,7 @@ class MockAnalyzer implements IMediaDiffAnalyzer {
     this.delay = delay;
   }
 
-  async analyze(
-    current: Buffer,
-    previous: Buffer,
-    options?: DiffOptions
-  ): Promise<DiffResult> {
+  async analyze(current: Buffer, previous: Buffer, options?: DiffOptions): Promise<DiffResult> {
     if (this.delay > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.delay));
     }

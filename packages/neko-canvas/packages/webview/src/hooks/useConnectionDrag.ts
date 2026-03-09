@@ -18,7 +18,7 @@ export interface UseConnectionDragOptions {
     sourceNodeId: string,
     sourceAnchor: string,
     targetNodeId: string,
-    targetAnchor: string
+    targetAnchor: string,
   ) => void;
   onConnectionCancel?: () => void;
 }
@@ -64,7 +64,7 @@ export function useConnectionDrag({
 
       return { x, y };
     },
-    [viewport, containerRef]
+    [viewport, containerRef],
   );
 
   // Start a new connection from an anchor
@@ -83,7 +83,7 @@ export function useConnectionDrag({
       setIsConnecting(true);
       onConnectionStart?.(nodeId, anchor);
     },
-    [screenToCanvas, onConnectionStart]
+    [screenToCanvas, onConnectionStart],
   );
 
   // Update the pending connection position
@@ -101,7 +101,7 @@ export function useConnectionDrag({
         };
       });
     },
-    [isConnecting, screenToCanvas]
+    [isConnecting, screenToCanvas],
   );
 
   // Complete the connection to a target anchor
@@ -119,13 +119,13 @@ export function useConnectionDrag({
         pendingConnection.sourceNodeId,
         pendingConnection.sourceAnchor,
         targetNodeId,
-        targetAnchor
+        targetAnchor,
       );
 
       setPendingConnection(null);
       setIsConnecting(false);
     },
-    [pendingConnection, onConnectionComplete]
+    [pendingConnection, onConnectionComplete],
   );
 
   // Cancel the pending connection

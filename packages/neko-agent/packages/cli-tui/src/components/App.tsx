@@ -71,7 +71,7 @@ export function App({ config, service }: AppProps): React.JSX.Element {
     async (text: string) => {
       await submit(text);
     },
-    [submit]
+    [submit],
   );
 
   // Handle tool approval
@@ -109,11 +109,7 @@ export function App({ config, service }: AppProps): React.JSX.Element {
         ) : null}
 
         {/* Input — fixed at bottom, with slash command support */}
-        <InputEditor
-          onSubmit={handleSubmit}
-          onSlashCommand={handleCommand}
-          disabled={isRunning}
-        />
+        <InputEditor onSubmit={handleSubmit} onSlashCommand={handleCommand} disabled={isRunning} />
 
         {/* Status bar — fixed at very bottom */}
         <StatusBar />

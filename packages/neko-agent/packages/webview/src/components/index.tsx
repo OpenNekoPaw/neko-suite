@@ -1,9 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
-import {
-  ShellExecutionMode,
-  PromptMode,
-  AgentState,
-} from '@/components/types';
+import { ShellExecutionMode, PromptMode, AgentState } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import { Header } from '@/components/Header';
 import { ChatView } from '@/components/ChatView';
@@ -26,7 +22,11 @@ import {
 import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
 
 // Import message handler
-import { useMessageHandler, type BoundSkillConfirmRequest, type BoundActiveSkillIndicator } from '@/handlers';
+import {
+  useMessageHandler,
+  type BoundSkillConfirmRequest,
+  type BoundActiveSkillIndicator,
+} from '@/handlers';
 
 export function AIAssistant() {
   // Use custom hooks for state management
@@ -68,27 +68,20 @@ export function AIAssistant() {
     clearMessages,
   } = conversation;
 
-  const {
-    settings,
-    setSettings,
-    projectFiles,
-    setProjectFiles,
-    updateSettings,
-  } = config;
+  const { settings, setSettings, projectFiles, setProjectFiles, updateSettings } = config;
 
   // Local model presets setter (no longer in useConfigState but still required by useMessageHandler)
   const [, setModelPresets] = useState<unknown[]>([]);
 
-  const {
-    backgroundTasks,
-    setBackgroundTasks,
-  } = resource;
+  const { backgroundTasks, setBackgroundTasks } = resource;
 
   // Skills state
   const [skills, setSkills] = useState<SkillSummary[]>([]);
 
   // Skill confirmation and active skill state (now with conversation binding)
-  const [pendingSkillConfirm, setPendingSkillConfirm] = useState<BoundSkillConfirmRequest | null>(null);
+  const [pendingSkillConfirm, setPendingSkillConfirm] = useState<BoundSkillConfirmRequest | null>(
+    null,
+  );
   const [activeSkill, setActiveSkill] = useState<BoundActiveSkillIndicator | null>(null);
 
   // Context management state (session-bound using Map for conversation isolation)
@@ -102,26 +95,29 @@ export function AIAssistant() {
   const conversationAgentStateRef = useRef<Map<string, AgentState>>(new Map());
   // Force re-render counter for agent state changes (used by streaming-handlers)
   const forceAgentStateUpdate = useCallback(() => {
-    forceUpdate(n => n + 1);
+    forceUpdate((n) => n + 1);
   }, []);
 
   // Session-bound state: input/attachment isolation per conversation
-  const { attachedFiles, setAttachedFiles, cleanupConversation, cleanupAllConversations } = useConversationSession({
-    activeConversationId,
-    inputValue,
-    setInputValue,
-    conversationMessagesRef,
-    conversationStreamingRef,
-    conversationTokenCountRef,
-    conversationCompressingRef,
-    conversationAgentStateRef,
-  });
+  const { attachedFiles, setAttachedFiles, cleanupConversation, cleanupAllConversations } =
+    useConversationSession({
+      activeConversationId,
+      inputValue,
+      setInputValue,
+      conversationMessagesRef,
+      conversationStreamingRef,
+      conversationTokenCountRef,
+      conversationCompressingRef,
+      conversationAgentStateRef,
+    });
 
   // Onboarding overlay state
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Auto-show onboarding when no AI service is configured
-  const isAiConfigured = !!(settings.ssoSession ?? settings.configuredProviders.find(p => p.enabled !== false && p.apiKey));
+  const isAiConfigured = !!(
+    settings.ssoSession ?? settings.configuredProviders.find((p) => p.enabled !== false && p.apiKey)
+  );
   useEffect(() => {
     if (!isAiConfigured) {
       setShowOnboarding(true);
@@ -144,7 +140,7 @@ export function AIAssistant() {
     : false;
 
   // Force update function for context handlers
-  const triggerForceUpdate = useCallback(() => forceUpdate(n => n + 1), []);
+  const triggerForceUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
 
   // Use message handler hook
   const { handleMessage } = useMessageHandler({
@@ -221,18 +217,30 @@ export function AIAssistant() {
   // --- Extracted behavior hooks ---
 
   const { handleSend, handleCancelMessage, copyLastResponse } = useChatActions({
-    inputValue, isThinking, selectedModel,
-    activeConversationId, activeConversationIdRef, streamingMessageIdRef,
+    inputValue,
+    isThinking,
+    selectedModel,
+    activeConversationId,
+    activeConversationIdRef,
+    streamingMessageIdRef,
     messages,
-    setMessages, setIsThinking, setStreamingMessageId, setActiveTab, setInputValue,
-    clearInput, setAttachedFiles,
+    setMessages,
+    setIsThinking,
+    setStreamingMessageId,
+    setActiveTab,
+    setInputValue,
+    clearInput,
+    setAttachedFiles,
   });
 
   const planActions = usePlanActions({ activeConversationId });
 
   const skillActions = useSkillActions({
-    activeConversationId, pendingSkillConfirm, activeSkill,
-    setPendingSkillConfirm, setActiveSkill,
+    activeConversationId,
+    pendingSkillConfirm,
+    activeSkill,
+    setPendingSkillConfirm,
+    setActiveSkill,
   });
 
   // Keyboard shortcuts
@@ -266,10 +274,10 @@ export function AIAssistant() {
 
   const handleDeleteConversation = (conversationId: string) => {
     cleanupConversation(conversationId);
-    const tab = openTabs.find(t => t.conversationId === conversationId);
+    const tab = openTabs.find((t) => t.conversationId === conversationId);
     if (tab) {
-      const tabIndex = openTabs.findIndex(t => t.id === tab.id);
-      const newTabs = openTabs.filter(t => t.id !== tab.id);
+      const tabIndex = openTabs.findIndex((t) => t.id === tab.id);
+      const newTabs = openTabs.filter((t) => t.id !== tab.id);
       setOpenTabs(newTabs);
       if (activeTabId === tab.id && newTabs.length > 0) {
         const newActiveIndex = Math.min(tabIndex, newTabs.length - 1);
@@ -293,22 +301,33 @@ export function AIAssistant() {
 
   // Tab management (extracted hook)
   const { handleOpenTab, handleCloseTab, handleSwitchTab } = useTabManager({
-    openTabs, setOpenTabs, activeTabId, setActiveTabId,
-    conversations, setActiveTab, onNewChat: handleNewChat,
+    openTabs,
+    setOpenTabs,
+    activeTabId,
+    setActiveTabId,
+    conversations,
+    setActiveTab,
+    onNewChat: handleNewChat,
   });
 
   // Slash command routing (extracted hook)
   const { handleSlashCommand } = useSlashCommands({
-    skills, inputValue, setInputValue, setMessages,
-    clearInput, clearMessages, setShowOnboarding,
-    onNewChat: handleNewChat, conversations,
+    skills,
+    inputValue,
+    setInputValue,
+    setMessages,
+    clearInput,
+    clearMessages,
+    setShowOnboarding,
+    onNewChat: handleNewChat,
+    conversations,
   });
 
   // Handle context compression
   const handleCompressContext = useCallback(async () => {
     if (isCompressing || !activeConversationId) return;
     conversationCompressingRef.current.set(activeConversationId, true);
-    forceUpdate(n => n + 1);
+    forceUpdate((n) => n + 1);
     VSCodeMessages.compressContext(activeConversationId);
   }, [isCompressing, activeConversationId]);
 
@@ -325,9 +344,10 @@ export function AIAssistant() {
   };
 
   // Get available models from Platform ConfigManager (via settings.chatModelOptions)
-  const availableModels = settings.chatModelOptions.length > 0
-    ? settings.chatModelOptions
-    : [{ id: 'auto', label: 'Auto', providerId: '', modelId: '' }];
+  const availableModels =
+    settings.chatModelOptions.length > 0
+      ? settings.chatModelOptions
+      : [{ id: 'auto', label: 'Auto', providerId: '', modelId: '' }];
 
   return (
     <div className="flex flex-col h-screen bg-[var(--vscode-sideBar-background,var(--vscode-editor-background))] text-[var(--vscode-foreground)]">
@@ -373,7 +393,11 @@ export function AIAssistant() {
             isThinking={isThinking}
             streamingMessageId={streamingMessageId}
             projectFiles={projectFiles}
-            pendingSkillConfirm={pendingSkillConfirm?.conversationId === activeConversationId ? pendingSkillConfirm : null}
+            pendingSkillConfirm={
+              pendingSkillConfirm?.conversationId === activeConversationId
+                ? pendingSkillConfirm
+                : null
+            }
             activeSkill={activeSkill?.conversationId === activeConversationId ? activeSkill : null}
             onConfirmSkill={skillActions.handleConfirmSkill}
             onDeclineSkill={skillActions.handleDeclineSkill}
@@ -395,11 +419,7 @@ export function AIAssistant() {
           />
         </InputAreaProvider>
       ) : null}
-      {showOnboarding && (
-        <OnboardingFlow
-          onComplete={() => setShowOnboarding(false)}
-        />
-      )}
+      {showOnboarding && <OnboardingFlow onComplete={() => setShowOnboarding(false)} />}
     </div>
   );
 }

@@ -20,12 +20,7 @@ export type TaskType =
 /**
  * Task status
  */
-export type TaskStatus =
-  | 'pending'
-  | 'running'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 /**
  * Task input
@@ -221,5 +216,5 @@ export interface ITaskRecoveryStorage {
  */
 export type TaskExecutor = (
   input: TaskInput,
-  onProgress: (progress: number) => void
+  onProgress: (progress: number) => void,
 ) => Promise<TaskOutput>;

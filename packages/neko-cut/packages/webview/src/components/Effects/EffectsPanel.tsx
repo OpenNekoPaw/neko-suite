@@ -11,11 +11,7 @@ import type {
   EffectCategory,
   EffectParameterValue,
 } from '../../types/effects';
-import {
-  BUILT_IN_EFFECTS,
-  getEffectDefinition,
-  createEffectInstance,
-} from '../../types/effects';
+import { BUILT_IN_EFFECTS, getEffectDefinition, createEffectInstance } from '../../types/effects';
 
 // =============================================================================
 // Types
@@ -61,7 +57,9 @@ const EffectItem = memo(function EffectItem({
         className="flex items-center gap-2 px-2 py-1.5 bg-[var(--vscode-editor-background)] cursor-pointer"
         onClick={onToggleExpand}
       >
-        <span className={`transform transition-transform text-[10px] ${expanded ? 'rotate-90' : ''}`}>
+        <span
+          className={`transform transition-transform text-[10px] ${expanded ? 'rotate-90' : ''}`}
+        >
           ▶
         </span>
         <input
@@ -123,21 +121,33 @@ const EffectParameter = memo(function EffectParameter({
   const { t } = useTranslation();
   const currentValue = value ?? param.defaultValue;
 
-  const handleNumberChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(parseFloat(e.target.value));
-  }, [onChange]);
+  const handleNumberChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onChange(parseFloat(e.target.value));
+    },
+    [onChange],
+  );
 
-  const handleBooleanChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(e.target.checked);
-  }, [onChange]);
+  const handleBooleanChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onChange(e.target.checked);
+    },
+    [onChange],
+  );
 
-  const handleSelectChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    onChange(e.target.value);
-  }, [onChange]);
+  const handleSelectChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      onChange(e.target.value);
+    },
+    [onChange],
+  );
 
-  const handleColorChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(e.target.value);
-  }, [onChange]);
+  const handleColorChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onChange(e.target.value);
+    },
+    [onChange],
+  );
 
   // Render based on parameter type
   switch (param.type) {
@@ -234,13 +244,12 @@ const AddEffectMenu = memo(function AddEffectMenu({ onSelect, onClose }: AddEffe
   const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState<EffectCategory | 'all'>('all');
 
-  const categories: (EffectCategory | 'all')[] = [
-    'all', 'blur', 'sharpen', 'stylize', 'keying',
-  ];
+  const categories: (EffectCategory | 'all')[] = ['all', 'blur', 'sharpen', 'stylize', 'keying'];
 
-  const filteredEffects = selectedCategory === 'all'
-    ? BUILT_IN_EFFECTS
-    : BUILT_IN_EFFECTS.filter((e) => e.category === selectedCategory);
+  const filteredEffects =
+    selectedCategory === 'all'
+      ? BUILT_IN_EFFECTS
+      : BUILT_IN_EFFECTS.filter((e) => e.category === selectedCategory);
 
   return (
     <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded shadow-lg">
@@ -274,7 +283,9 @@ const AddEffectMenu = memo(function AddEffectMenu({ onSelect, onClose }: AddEffe
           >
             {t(effect.nameKey)}
             {effect.gpuAccelerated && (
-              <span className="ml-2 text-[9px] text-[var(--vscode-descriptionForeground)]">GPU</span>
+              <span className="ml-2 text-[9px] text-[var(--vscode-descriptionForeground)]">
+                GPU
+              </span>
             )}
           </button>
         ))}
@@ -297,40 +308,50 @@ export const EffectsPanel = memo(function EffectsPanel({
   const [expandedEffects, setExpandedEffects] = useState<Set<string>>(new Set());
 
   // Handle add effect
-  const handleAddEffect = useCallback((effectType: string) => {
-    const newEffect = createEffectInstance(effectType);
-    if (newEffect) {
-      newEffect.order = effects.length;
-      onChange([...effects, newEffect]);
-      setExpandedEffects((prev) => new Set(prev).add(newEffect.id));
-    }
-  }, [effects, onChange]);
+  const handleAddEffect = useCallback(
+    (effectType: string) => {
+      const newEffect = createEffectInstance(effectType);
+      if (newEffect) {
+        newEffect.order = effects.length;
+        onChange([...effects, newEffect]);
+        setExpandedEffects((prev) => new Set(prev).add(newEffect.id));
+      }
+    },
+    [effects, onChange],
+  );
 
   // Handle remove effect
-  const handleRemoveEffect = useCallback((effectId: string) => {
-    onChange(effects.filter((e) => e.id !== effectId));
-    setExpandedEffects((prev) => {
-      const next = new Set(prev);
-      next.delete(effectId);
-      return next;
-    });
-  }, [effects, onChange]);
+  const handleRemoveEffect = useCallback(
+    (effectId: string) => {
+      onChange(effects.filter((e) => e.id !== effectId));
+      setExpandedEffects((prev) => {
+        const next = new Set(prev);
+        next.delete(effectId);
+        return next;
+      });
+    },
+    [effects, onChange],
+  );
 
   // Handle toggle effect enabled
-  const handleToggleEffect = useCallback((effectId: string) => {
-    onChange(effects.map((e) =>
-      e.id === effectId ? { ...e, enabled: !e.enabled } : e
-    ));
-  }, [effects, onChange]);
+  const handleToggleEffect = useCallback(
+    (effectId: string) => {
+      onChange(effects.map((e) => (e.id === effectId ? { ...e, enabled: !e.enabled } : e)));
+    },
+    [effects, onChange],
+  );
 
   // Handle parameter change
-  const handleParameterChange = useCallback((effectId: string, key: string, value: EffectParameterValue) => {
-    onChange(effects.map((e) =>
-      e.id === effectId
-        ? { ...e, parameters: { ...e.parameters, [key]: value } }
-        : e
-    ));
-  }, [effects, onChange]);
+  const handleParameterChange = useCallback(
+    (effectId: string, key: string, value: EffectParameterValue) => {
+      onChange(
+        effects.map((e) =>
+          e.id === effectId ? { ...e, parameters: { ...e.parameters, [key]: value } } : e,
+        ),
+      );
+    },
+    [effects, onChange],
+  );
 
   // Handle toggle expand
   const handleToggleExpand = useCallback((effectId: string) => {
@@ -357,10 +378,7 @@ export const EffectsPanel = memo(function EffectsPanel({
           + {t('effects.addEffect')}
         </button>
         {showAddMenu && !disabled && (
-          <AddEffectMenu
-            onSelect={handleAddEffect}
-            onClose={() => setShowAddMenu(false)}
-          />
+          <AddEffectMenu onSelect={handleAddEffect} onClose={() => setShowAddMenu(false)} />
         )}
       </div>
 

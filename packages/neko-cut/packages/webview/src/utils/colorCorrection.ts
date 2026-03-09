@@ -3,12 +3,7 @@
  * 颜色校正工具函数
  */
 
-import type {
-  ColorCorrection,
-  CurvePoint,
-  HSLColorRange,
-  LUTData,
-} from '../types/colorCorrection';
+import type { ColorCorrection, CurvePoint, HSLColorRange, LUTData } from '../types/colorCorrection';
 
 // =============================================================================
 // Curve Interpolation
@@ -173,30 +168,25 @@ export function applyTemperature(
   r: number,
   g: number,
   b: number,
-  temperature: number
+  temperature: number,
 ): [number, number, number] {
   const t = temperature / 100;
   return [
-    r + t * 30,     // Add red for warm
+    r + t * 30, // Add red for warm
     g,
-    b - t * 30,     // Subtract blue for warm
+    b - t * 30, // Subtract blue for warm
   ];
 }
 
 /**
  * Apply tint adjustment (shift between green/magenta)
  */
-export function applyTint(
-  r: number,
-  g: number,
-  b: number,
-  tint: number
-): [number, number, number] {
+export function applyTint(r: number, g: number, b: number, tint: number): [number, number, number] {
   const t = tint / 100;
   return [
-    r + t * 10,     // Slight red for magenta
-    g - t * 20,     // Subtract green for magenta
-    b + t * 10,     // Slight blue for magenta
+    r + t * 10, // Slight red for magenta
+    g - t * 20, // Subtract green for magenta
+    b + t * 10, // Slight blue for magenta
   ];
 }
 
@@ -213,7 +203,7 @@ export function applyColorCorrection(
   g: number,
   b: number,
   correction: ColorCorrection,
-  lutData?: LUTData
+  lutData?: LUTData,
 ): [number, number, number] {
   if (!correction.enabled) {
     return [r, g, b];
@@ -246,7 +236,7 @@ export function applyColorCorrection(
 
   if (basic.highlights !== 0) {
     const highlightMask = Math.pow(luminance, 2);
-    const highlightAdjust = basic.highlights / 100 * highlightMask;
+    const highlightAdjust = (basic.highlights / 100) * highlightMask;
     rn += highlightAdjust;
     gn += highlightAdjust;
     bn += highlightAdjust;
@@ -254,7 +244,7 @@ export function applyColorCorrection(
 
   if (basic.shadows !== 0) {
     const shadowMask = Math.pow(1 - luminance, 2);
-    const shadowAdjust = basic.shadows / 100 * shadowMask;
+    const shadowAdjust = (basic.shadows / 100) * shadowMask;
     rn += shadowAdjust;
     gn += shadowAdjust;
     bn += shadowAdjust;
@@ -282,7 +272,7 @@ export function applyColorCorrection(
     newS = newS * (1 + vibranceFactor);
 
     newS = Math.max(0, Math.min(100, newS));
-    [rn, gn, bn] = hslToRgb(h, newS, l).map(v => v / 255) as [number, number, number];
+    [rn, gn, bn] = hslToRgb(h, newS, l).map((v) => v / 255) as [number, number, number];
   }
 
   // 6. Apply curves
@@ -306,7 +296,11 @@ export function applyColorCorrection(
 
   // 7. Apply color wheels
   const wheels = correction.colorWheels;
-  const applyWheel = (value: number, wheel: { hue: number; saturation: number; luminance: number }, mask: number) => {
+  const applyWheel = (
+    value: number,
+    wheel: { hue: number; saturation: number; luminance: number },
+    mask: number,
+  ) => {
     return value + (wheel.luminance / 100) * mask;
   };
 
@@ -354,7 +348,7 @@ export function applyLUT(
   g: number,
   b: number,
   lut: LUTData,
-  intensity: number = 1
+  intensity: number = 1,
 ): [number, number, number] {
   const size = lut.size;
   const data = lut.data;

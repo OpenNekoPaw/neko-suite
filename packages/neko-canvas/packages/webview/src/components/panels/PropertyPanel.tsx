@@ -68,7 +68,11 @@ export function PropertyPanel({
       }}
     >
       <PanelHeader
-        title={isMulti ? t('panel.multiSelected', { count: selectedNodes.length }) : getNodeTypeLabel(node.type)}
+        title={
+          isMulti
+            ? t('panel.multiSelected', { count: selectedNodes.length })
+            : getNodeTypeLabel(node.type)
+        }
       />
 
       {isMulti ? (
@@ -91,12 +95,16 @@ export function PropertyPanel({
               <NumberField
                 label="W"
                 value={node.size.width}
-                onChange={(v) => onUpdateNode(node.id, { size: { ...node.size, width: Math.max(50, v) } })}
+                onChange={(v) =>
+                  onUpdateNode(node.id, { size: { ...node.size, width: Math.max(50, v) } })
+                }
               />
               <NumberField
                 label="H"
                 value={node.size.height}
-                onChange={(v) => onUpdateNode(node.id, { size: { ...node.size, height: Math.max(30, v) } })}
+                onChange={(v) =>
+                  onUpdateNode(node.id, { size: { ...node.size, height: Math.max(30, v) } })
+                }
               />
             </div>
           </PanelSection>
@@ -134,8 +142,12 @@ export function PropertyPanel({
                 backgroundColor: 'var(--button-secondary-bg)',
                 color: '#f48771',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.85'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = '0.85';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = '1';
+              }}
               onClick={() => onDeleteNode(node.id)}
             >
               🗑 {t('menu.delete')}
@@ -190,7 +202,7 @@ function NumberField({
       const v = parseFloat(e.target.value);
       if (!isNaN(v)) onChange(v);
     },
-    [onChange]
+    [onChange],
   );
 
   return (
@@ -232,7 +244,11 @@ function MultiSelectionInfo({ nodes }: { nodes: CanvasNode[] }) {
       </p>
       <div className="space-y-1">
         {Array.from(typeCounts.entries()).map(([type, count]) => (
-          <div key={type} className="flex items-center justify-between text-xs" style={{ color: 'var(--toolbar-fg)' }}>
+          <div
+            key={type}
+            className="flex items-center justify-between text-xs"
+            style={{ color: 'var(--toolbar-fg)' }}
+          >
             <span>{getNodeTypeLabel(type)}</span>
             <span style={{ color: 'var(--toolbar-fg-secondary)' }}>×{count}</span>
           </div>
@@ -280,7 +296,10 @@ function NodeSpecificProperties({
         <PanelSection title={t('panel.storyboard')}>
           <div className="space-y-2">
             <div>
-              <label className="text-xs block mb-1" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+              <label
+                className="text-xs block mb-1"
+                style={{ color: 'var(--toolbar-fg-secondary)' }}
+              >
                 {t('panel.title')}
               </label>
               <input
@@ -296,7 +315,10 @@ function NodeSpecificProperties({
               />
             </div>
             <div>
-              <label className="text-xs block mb-1" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+              <label
+                className="text-xs block mb-1"
+                style={{ color: 'var(--toolbar-fg-secondary)' }}
+              >
                 {t('panel.description')}
               </label>
               <textarea
@@ -321,7 +343,9 @@ function NodeSpecificProperties({
           <div className="space-y-1 text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
             <div className="flex justify-between">
               <span>{t('panel.type')}</span>
-              <span style={{ color: 'var(--toolbar-fg)' }}>{(data.mediaType as string) ?? 'unknown'}</span>
+              <span style={{ color: 'var(--toolbar-fg)' }}>
+                {(data.mediaType as string) ?? 'unknown'}
+              </span>
             </div>
             {typeof data.assetPath === 'string' && (
               <div className="truncate" title={data.assetPath}>
@@ -331,7 +355,9 @@ function NodeSpecificProperties({
             {data.duration != null && (
               <div className="flex justify-between">
                 <span>{t('panel.duration')}</span>
-                <span style={{ color: 'var(--toolbar-fg)' }}>{formatDuration(data.duration as number)}</span>
+                <span style={{ color: 'var(--toolbar-fg)' }}>
+                  {formatDuration(data.duration as number)}
+                </span>
               </div>
             )}
           </div>

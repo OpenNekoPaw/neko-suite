@@ -83,7 +83,7 @@ export function useConfigState(initialSettings?: Partial<SettingsState>): UseCon
 
   // Helper: partial update settings
   const updateSettings = useCallback((updates: Partial<SettingsState>) => {
-    setSettings(prev => ({ ...prev, ...updates }));
+    setSettings((prev) => ({ ...prev, ...updates }));
   }, []);
 
   // Helper: reset to defaults

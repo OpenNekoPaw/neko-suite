@@ -68,12 +68,12 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
   // Compute diff lines
   const diffLines = useMemo(
     () => computeDiff(diff.oldContent, diff.newContent),
-    [diff.oldContent, diff.newContent]
+    [diff.oldContent, diff.newContent],
   );
 
   // Stats
-  const additions = diffLines.filter(l => l.type === 'add').length;
-  const deletions = diffLines.filter(l => l.type === 'remove').length;
+  const additions = diffLines.filter((l) => l.type === 'add').length;
+  const deletions = diffLines.filter((l) => l.type === 'remove').length;
 
   // Language for syntax highlighting hint (future use)
   const _language = diff.language || getLanguageFromPath(diff.filePath);
@@ -87,7 +87,9 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
   };
 
   return (
-    <div className={`my-1 rounded border border-[var(--vscode-panel-border)] overflow-hidden ${statusColors[diff.status]}`}>
+    <div
+      className={`my-1 rounded border border-[var(--vscode-panel-border)] overflow-hidden ${statusColors[diff.status]}`}
+    >
       {/* Header */}
       <div
         className="flex items-center gap-2 px-2 py-1 bg-[var(--vscode-editor-lineHighlightBackground)] cursor-pointer"
@@ -105,16 +107,22 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
         </span>
 
         {/* Stats */}
-        <span className="text-[10px] text-[var(--vscode-gitDecoration-addedResourceForeground)]">+{additions}</span>
-        <span className="text-[10px] text-[var(--vscode-gitDecoration-deletedResourceForeground)]">-{deletions}</span>
+        <span className="text-[10px] text-[var(--vscode-gitDecoration-addedResourceForeground)]">
+          +{additions}
+        </span>
+        <span className="text-[10px] text-[var(--vscode-gitDecoration-deletedResourceForeground)]">
+          -{deletions}
+        </span>
 
         {/* Status badge */}
         {diff.status !== 'pending' && (
-          <span className={`text-[9px] px-1 rounded ${
-            diff.status === 'accepted'
-              ? 'bg-[var(--vscode-charts-green)]/20 text-[var(--vscode-charts-green)]'
-              : 'bg-[var(--vscode-charts-red)]/20 text-[var(--vscode-charts-red)]'
-          }`}>
+          <span
+            className={`text-[9px] px-1 rounded ${
+              diff.status === 'accepted'
+                ? 'bg-[var(--vscode-charts-green)]/20 text-[var(--vscode-charts-green)]'
+                : 'bg-[var(--vscode-charts-red)]/20 text-[var(--vscode-charts-red)]'
+            }`}
+          >
             {diff.status === 'accepted' ? t('chat.diff.accepted') : t('chat.diff.rejected')}
           </span>
         )}
@@ -132,8 +140,8 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
                     line.type === 'add'
                       ? 'bg-[var(--vscode-diffEditor-insertedLineBackground)]'
                       : line.type === 'remove'
-                      ? 'bg-[var(--vscode-diffEditor-removedLineBackground)]'
-                      : ''
+                        ? 'bg-[var(--vscode-diffEditor-removedLineBackground)]'
+                        : ''
                   }`}
                 >
                   {/* Line numbers */}
@@ -145,24 +153,28 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
                   </span>
 
                   {/* Diff marker */}
-                  <span className={`w-4 text-center select-none ${
-                    line.type === 'add'
-                      ? 'text-[var(--vscode-gitDecoration-addedResourceForeground)]'
-                      : line.type === 'remove'
-                      ? 'text-[var(--vscode-gitDecoration-deletedResourceForeground)]'
-                      : 'text-[var(--vscode-descriptionForeground)]'
-                  }`}>
+                  <span
+                    className={`w-4 text-center select-none ${
+                      line.type === 'add'
+                        ? 'text-[var(--vscode-gitDecoration-addedResourceForeground)]'
+                        : line.type === 'remove'
+                          ? 'text-[var(--vscode-gitDecoration-deletedResourceForeground)]'
+                          : 'text-[var(--vscode-descriptionForeground)]'
+                    }`}
+                  >
                     {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}
                   </span>
 
                   {/* Content */}
-                  <span className={`flex-1 px-1 whitespace-pre overflow-x-auto ${
-                    line.type === 'add'
-                      ? 'text-[var(--vscode-gitDecoration-addedResourceForeground)]'
-                      : line.type === 'remove'
-                      ? 'text-[var(--vscode-gitDecoration-deletedResourceForeground)]'
-                      : 'text-[var(--vscode-foreground)]'
-                  }`}>
+                  <span
+                    className={`flex-1 px-1 whitespace-pre overflow-x-auto ${
+                      line.type === 'add'
+                        ? 'text-[var(--vscode-gitDecoration-addedResourceForeground)]'
+                        : line.type === 'remove'
+                          ? 'text-[var(--vscode-gitDecoration-deletedResourceForeground)]'
+                          : 'text-[var(--vscode-foreground)]'
+                    }`}
+                  >
                     {line.content}
                   </span>
                 </div>
@@ -217,7 +229,12 @@ function ChevronIcon({ className }: { className?: string }) {
 function FileIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+      />
     </svg>
   );
 }

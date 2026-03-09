@@ -265,7 +265,10 @@ export interface NormalizedConfig {
 /**
  * Default configuration values
  */
-export const DEFAULT_CONFIG: Omit<NormalizedConfig, 'providers' | 'models' | 'groups' | 'mcpServers' | 'workflows' | 'prompts' | 'templates'> = {
+export const DEFAULT_CONFIG: Omit<
+  NormalizedConfig,
+  'providers' | 'models' | 'groups' | 'mcpServers' | 'workflows' | 'prompts' | 'templates'
+> = {
   defaultProvider: 'anthropic',
   defaultModel: 'claude-sonnet-4-20250514',
   maxTokens: 8192,

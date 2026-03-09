@@ -37,11 +37,11 @@ interface Point {
 
 /** Color mapping for port data types */
 const DATA_TYPE_COLORS: Record<string, string> = {
-  image: '#f59e0b',   // amber
-  video: '#8b5cf6',   // violet
-  audio: '#ec4899',   // pink
-  text: '#06b6d4',    // cyan
-  any: '#6b7280',     // gray
+  image: '#f59e0b', // amber
+  video: '#8b5cf6', // violet
+  audio: '#ec4899', // pink
+  text: '#06b6d4', // cyan
+  any: '#6b7280', // gray
 };
 
 // =============================================================================
@@ -171,8 +171,16 @@ export function Connection({
   const pathData = useMemo(() => {
     const sourcePoint = getAnchorPoint(sourceNode, connection.sourceAnchor, connection.sourcePort);
     const targetPoint = getAnchorPoint(targetNode, connection.targetAnchor, connection.targetPort);
-    const sourceDir = getAnchorDirection(sourceNode, connection.sourceAnchor, connection.sourcePort);
-    const targetDir = getAnchorDirection(targetNode, connection.targetAnchor, connection.targetPort);
+    const sourceDir = getAnchorDirection(
+      sourceNode,
+      connection.sourceAnchor,
+      connection.sourcePort,
+    );
+    const targetDir = getAnchorDirection(
+      targetNode,
+      connection.targetAnchor,
+      connection.targetPort,
+    );
 
     // Calculate control point offset based on distance
     const dx = targetPoint.x - sourcePoint.x;
@@ -194,7 +202,14 @@ export function Connection({
       midY,
       pathD: `M ${sourcePoint.x} ${sourcePoint.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${targetPoint.x} ${targetPoint.y}`,
     };
-  }, [sourceNode, targetNode, connection.sourceAnchor, connection.targetAnchor, connection.sourcePort, connection.targetPort]);
+  }, [
+    sourceNode,
+    targetNode,
+    connection.sourceAnchor,
+    connection.targetAnchor,
+    connection.sourcePort,
+    connection.targetPort,
+  ]);
 
   const strokeColor = resolveConnectionColor(connection, sourceNode, targetNode);
   const strokeWidth = isSelected ? 2.5 : 1.8;

@@ -11,17 +11,8 @@
 //   - Minimum scene:  3.0 s
 // =============================================================================
 
-import type {
-  ProjectData,
-  TimelineTrack,
-  TextElement,
-  SubtitleElement,
-} from '@neko/shared';
-import {
-  generateId,
-  ENGINE_DEFAULT_TRANSFORM,
-  CENTERED_TRANSFORM,
-} from '@neko/shared';
+import type { ProjectData, TimelineTrack, TextElement, SubtitleElement } from '@neko/shared';
+import { generateId, ENGINE_DEFAULT_TRANSFORM, CENTERED_TRANSFORM } from '@neko/shared';
 import type { FountainDocument, AnyFountainElement } from '@neko-story/types';
 
 // ---------------------------------------------------------------------------
@@ -97,9 +88,7 @@ function estimateSceneDuration(sceneElements: AnyFountainElement[]): number {
 function extractTitle(doc: FountainDocument): string | null {
   if (!doc.titlePage) return null;
 
-  const entry = doc.titlePage.entries.find(
-    (e) => e.key.toLowerCase() === 'title',
-  );
+  const entry = doc.titlePage.entries.find((e) => e.key.toLowerCase() === 'title');
   return entry?.value ?? null;
 }
 
@@ -219,13 +208,10 @@ export class TimelineConverter {
       if (!heading || heading.type !== 'scene_heading') continue;
 
       const sceneDuration = estimateSceneDuration(scene);
-      const sceneLabel =
-        heading.type === 'scene_heading' ? heading.raw.trim() : `Scene ${i + 1}`;
+      const sceneLabel = heading.type === 'scene_heading' ? heading.raw.trim() : `Scene ${i + 1}`;
 
       // Scene marker on text track
-      sceneElements.push(
-        makeTextElement(sceneLabel, cursor, sceneDuration, `Scene ${i + 1}`),
-      );
+      sceneElements.push(makeTextElement(sceneLabel, cursor, sceneDuration, `Scene ${i + 1}`));
 
       // Subtitle elements — placed within scene boundaries
       subtitleCursor = cursor;

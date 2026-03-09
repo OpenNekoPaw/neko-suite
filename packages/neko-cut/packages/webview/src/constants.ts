@@ -49,10 +49,10 @@ export const DEFAULT_TIMELINE_HEIGHT = 256;
  * - 暂停时自动使用最高质量 (full)
  */
 export const PREVIEW_QUALITY = {
-  full: 1,        // 100% - Full resolution
-  high: 0.75,     // 75% resolution
-  medium: 0.5,    // 50% resolution
-  low: 0.25,      // 25% resolution
+  full: 1, // 100% - Full resolution
+  high: 0.75, // 75% resolution
+  medium: 0.5, // 50% resolution
+  low: 0.25, // 25% resolution
 } as const;
 
 export type PreviewQuality = keyof typeof PREVIEW_QUALITY;

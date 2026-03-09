@@ -111,7 +111,7 @@ function resamplePeaks(peaks: number[], targetSize: number): number[] {
 function normalizePeaks(peaks: number[]): number[] {
   const maxPeak = Math.max(...peaks, 0.001);
   if (maxPeak <= 1.0) return peaks;
-  return peaks.map(p => p / maxPeak);
+  return peaks.map((p) => p / maxPeak);
 }
 
 /**
@@ -144,7 +144,7 @@ export async function generateWaveform(
   options: {
     samples?: number;
     channel?: number;
-  } = {}
+  } = {},
 ): Promise<WaveformData> {
   const { samples = 200, channel } = options;
 
@@ -186,7 +186,7 @@ export async function generateWaveformRange(
   src: string,
   startTime: number,
   endTime: number,
-  samples: number = 100
+  samples: number = 100,
 ): Promise<number[]> {
   try {
     const engineData = await fetchEngineWaveform(src);
@@ -203,7 +203,7 @@ export async function generateWaveformRange(
 
     const extracted = monoPeaks.slice(
       Math.max(0, startIndex),
-      Math.min(monoPeaks.length, endIndex)
+      Math.min(monoPeaks.length, endIndex),
     );
 
     if (extracted.length === 0) {
@@ -256,7 +256,7 @@ export interface WaveformViewport {
  */
 export async function generateWaveformForViewport(
   src: string,
-  viewport: WaveformViewport
+  viewport: WaveformViewport,
 ): Promise<WaveformData> {
   const { startTime, endTime, pixelsPerSecond } = viewport;
   const duration = endTime - startTime;

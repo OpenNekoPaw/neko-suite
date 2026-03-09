@@ -165,10 +165,20 @@ describe('elementOpsSlice', () => {
     it('should return generated element ID', () => {
       const { store } = createTestStore(createProjectWithMediaTrack());
       const id = store.getState().addElement('media-track', {
-        type: 'media', name: 'Test', src: '/v.mp4',
-        startTime: 0, duration: 5, trimStart: 0, trimEnd: 0,
-        transform: {}, opacity: 1, blendMode: 'normal', effects: [],
-        muted: false, hidden: false, locked: false,
+        type: 'media',
+        name: 'Test',
+        src: '/v.mp4',
+        startTime: 0,
+        duration: 5,
+        trimStart: 0,
+        trimEnd: 0,
+        transform: {},
+        opacity: 1,
+        blendMode: 'normal',
+        effects: [],
+        muted: false,
+        hidden: false,
+        locked: false,
       } as any);
 
       expect(id).toBeTruthy();
@@ -185,18 +195,38 @@ describe('elementOpsSlice', () => {
     it('should assign a unique ID to the element', () => {
       const { store, dispatchMock } = createTestStore(createProjectWithMediaTrack());
       store.getState().addElement('media-track', {
-        type: 'media', name: 'A', src: '/a.mp4',
-        startTime: 0, duration: 1, trimStart: 0, trimEnd: 0,
-        transform: {}, opacity: 1, blendMode: 'normal', effects: [],
-        muted: false, hidden: false, locked: false,
+        type: 'media',
+        name: 'A',
+        src: '/a.mp4',
+        startTime: 0,
+        duration: 1,
+        trimStart: 0,
+        trimEnd: 0,
+        transform: {},
+        opacity: 1,
+        blendMode: 'normal',
+        effects: [],
+        muted: false,
+        hidden: false,
+        locked: false,
       } as any);
       const id1 = (dispatchMock.mock.calls[0]![0] as any).payload.element.id;
 
       store.getState().addElement('media-track', {
-        type: 'media', name: 'B', src: '/b.mp4',
-        startTime: 0, duration: 1, trimStart: 0, trimEnd: 0,
-        transform: {}, opacity: 1, blendMode: 'normal', effects: [],
-        muted: false, hidden: false, locked: false,
+        type: 'media',
+        name: 'B',
+        src: '/b.mp4',
+        startTime: 0,
+        duration: 1,
+        trimStart: 0,
+        trimEnd: 0,
+        transform: {},
+        opacity: 1,
+        blendMode: 'normal',
+        effects: [],
+        muted: false,
+        hidden: false,
+        locked: false,
       } as any);
       const id2 = (dispatchMock.mock.calls[1]![0] as any).payload.element.id;
 
@@ -226,10 +256,18 @@ describe('elementOpsSlice', () => {
 
     it('should create new track when no media track exists and trackId is null', () => {
       const projectNoMedia = createTestProject({
-        tracks: [{
-          id: 'text-track', name: 'Text Track', type: 'text',
-          elements: [], muted: false, locked: false, hidden: false, isMain: false,
-        } as any],
+        tracks: [
+          {
+            id: 'text-track',
+            name: 'Text Track',
+            type: 'text',
+            elements: [],
+            muted: false,
+            locked: false,
+            hidden: false,
+            isMain: false,
+          } as any,
+        ],
       });
       const { store, dispatchBatchMock } = createTestStore(projectNoMedia);
       store.getState().addMediaElement(null, '/new.mp4', 'New Video', 10);
@@ -333,8 +371,8 @@ describe('elementOpsSlice', () => {
       store.getState().updateElement('media-track', 'elem-1', { startTime: 5 });
 
       const updated = store.getState().project!;
-      const track = updated.tracks.find(t => t.id === 'media-track');
-      const elem = track!.elements.find(e => e.id === 'elem-1');
+      const track = updated.tracks.find((t) => t.id === 'media-track');
+      const elem = track!.elements.find((e) => e.id === 'elem-1');
       expect(elem!.startTime).toBe(5);
     });
 
@@ -348,9 +386,9 @@ describe('elementOpsSlice', () => {
       const { store } = createTestStore(createProjectWithMediaTrack());
       store.getState().updateElement('media-track', 'elem-1', { name: 'Renamed' });
 
-      const track = store.getState().project!.tracks.find(t => t.id === 'media-track')!;
+      const track = store.getState().project!.tracks.find((t) => t.id === 'media-track')!;
       expect(track.elements).toHaveLength(2);
-      expect(track.elements.find(e => e.id === 'elem-2')!.name).toBe('Clip 2');
+      expect(track.elements.find((e) => e.id === 'elem-2')!.name).toBe('Clip 2');
     });
 
     it('should do nothing when project is null', () => {

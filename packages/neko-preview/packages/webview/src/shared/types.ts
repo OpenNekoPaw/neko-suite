@@ -9,17 +9,17 @@
 // =============================================================================
 
 export interface MediaInfo {
-	duration: number;
-	width: number;
-	height: number;
-	fps: number;
-	codec: string;
-	format: string;
-	bitrate?: number;
-	hasAudio: boolean;
-	audioCodec?: string;
-	audioSampleRate?: number;
-	audioChannels?: number;
+  duration: number;
+  width: number;
+  height: number;
+  fps: number;
+  codec: string;
+  format: string;
+  bitrate?: number;
+  hasAudio: boolean;
+  audioCodec?: string;
+  audioSampleRate?: number;
+  audioChannels?: number;
 }
 
 // =============================================================================
@@ -27,101 +27,101 @@ export interface MediaInfo {
 // =============================================================================
 
 export interface PreviewInitMessage {
-	type: 'preview:init';
-	payload: {
-		filePath: string;
-		mediaInfo: MediaInfo;
-		/** Frame server port (video only) */
-		port?: number | null;
-	};
+  type: 'preview:init';
+  payload: {
+    filePath: string;
+    mediaInfo: MediaInfo;
+    /** Frame server port (video only) */
+    port?: number | null;
+  };
 }
 
 export interface PreviewStreamReadyMessage {
-	type: 'preview:streamReady';
-	payload: {
-		streamId: string;
-		streamUrl: string;
-		audioStreamId?: string | null;
-		audioStreamUrl?: string | null;
-	};
+  type: 'preview:streamReady';
+  payload: {
+    streamId: string;
+    streamUrl: string;
+    audioStreamId?: string | null;
+    audioStreamUrl?: string | null;
+  };
 }
 
 export interface PreviewFrameDataMessage {
-	type: 'preview:frameData';
-	payload: {
-		imageDataUrl: string;
-	};
+  type: 'preview:frameData';
+  payload: {
+    imageDataUrl: string;
+  };
 }
 
 export interface PreviewWaveformMessage {
-	type: 'preview:waveform';
-	payload: {
-		peaks: number[];
-		duration: number;
-		sampleRate: number;
-	};
+  type: 'preview:waveform';
+  payload: {
+    peaks: number[];
+    duration: number;
+    sampleRate: number;
+  };
 }
 
 export type ExtensionMessage =
-	| PreviewInitMessage
-	| PreviewStreamReadyMessage
-	| PreviewFrameDataMessage
-	| PreviewWaveformMessage;
+  | PreviewInitMessage
+  | PreviewStreamReadyMessage
+  | PreviewFrameDataMessage
+  | PreviewWaveformMessage;
 
 // =============================================================================
 // Webview → Extension Messages
 // =============================================================================
 
 export interface ReadyMessage {
-	type: 'ready';
+  type: 'ready';
 }
 
 export interface PlayMessage {
-	type: 'preview:play';
-	startTime?: number;
-	speed?: number;
+  type: 'preview:play';
+  startTime?: number;
+  speed?: number;
 }
 
 export interface PauseMessage {
-	type: 'preview:pause';
+  type: 'preview:pause';
 }
 
 export interface ResumeMessage {
-	type: 'preview:resume';
+  type: 'preview:resume';
 }
 
 export interface StopMessage {
-	type: 'preview:stop';
+  type: 'preview:stop';
 }
 
 export interface SeekMessage {
-	type: 'preview:seek';
-	time: number;
+  type: 'preview:seek';
+  time: number;
 }
 
 export interface SpeedMessage {
-	type: 'preview:speed';
-	speed: number;
+  type: 'preview:speed';
+  speed: number;
 }
 
 export interface CaptureFrameMessage {
-	type: 'preview:captureFrame';
-	time: number;
+  type: 'preview:captureFrame';
+  time: number;
 }
 
 export interface StatusUpdateMessage {
-	type: 'preview:statusUpdate';
-	playbackState: 'playing' | 'paused' | 'stopped';
-	currentTime: number;
+  type: 'preview:statusUpdate';
+  playbackState: 'playing' | 'paused' | 'stopped';
+  currentTime: number;
 }
 
 export type WebviewMessage =
-	| ReadyMessage
-	| PlayMessage
-	| PauseMessage
-	| ResumeMessage
-	| StopMessage
-	| SeekMessage
-	| SpeedMessage
-	| CaptureFrameMessage
-	| StatusUpdateMessage;
+  | ReadyMessage
+  | PlayMessage
+  | PauseMessage
+  | ResumeMessage
+  | StopMessage
+  | SeekMessage
+  | SpeedMessage
+  | CaptureFrameMessage
+  | StatusUpdateMessage;

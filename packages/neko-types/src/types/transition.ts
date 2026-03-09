@@ -68,8 +68,8 @@ export enum TransitionTypeValue {
  * Map from TransitionType string to numeric value.
  */
 export const TRANSITION_TYPE_TO_VALUE: Record<TransitionType, TransitionTypeValue> = {
-  'fade': TransitionTypeValue.Fade,
-  'dissolve': TransitionTypeValue.Dissolve,
+  fade: TransitionTypeValue.Fade,
+  dissolve: TransitionTypeValue.Dissolve,
   'wipe-left': TransitionTypeValue.WipeLeft,
   'wipe-right': TransitionTypeValue.WipeRight,
   'wipe-up': TransitionTypeValue.WipeUp,
@@ -80,12 +80,12 @@ export const TRANSITION_TYPE_TO_VALUE: Record<TransitionType, TransitionTypeValu
   'zoom-out': TransitionTypeValue.ZoomOut,
   'iris-circle': TransitionTypeValue.IrisCircle,
   'iris-rectangle': TransitionTypeValue.IrisRectangle,
-  'clock': TransitionTypeValue.Clock,
-  'pixelate': TransitionTypeValue.Pixelate,
-  'ripple': TransitionTypeValue.Ripple,
-  'swirl': TransitionTypeValue.Swirl,
-  'glitch': TransitionTypeValue.Glitch,
-  'flash': TransitionTypeValue.Flash,
+  clock: TransitionTypeValue.Clock,
+  pixelate: TransitionTypeValue.Pixelate,
+  ripple: TransitionTypeValue.Ripple,
+  swirl: TransitionTypeValue.Swirl,
+  glitch: TransitionTypeValue.Glitch,
+  flash: TransitionTypeValue.Flash,
 };
 
 /** Transition direction */

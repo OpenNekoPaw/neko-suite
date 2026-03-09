@@ -50,14 +50,14 @@ export interface IThumbnailService {
     height: number,
     trimStart?: number,
     trimEnd?: number,
-    options?: ThumbnailRequestOptions
+    options?: ThumbnailRequestOptions,
   ): Promise<ThumbnailData[]>;
 
   /** Generate thumbnails for a viewport (pyramid mode) */
   getThumbnailsForViewport(
     filePath: string,
     viewport: ThumbnailViewport,
-    options?: ThumbnailRequestOptions
+    options?: ThumbnailRequestOptions,
   ): Promise<ThumbnailData[]>;
 
   /** Clear thumbnail cache */
@@ -77,9 +77,7 @@ export interface IThumbnailService {
 // Constants
 // =============================================================================
 
-const IMAGE_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg',
-]);
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
 
 const DEFAULT_ASPECT_RATIO = 16 / 9;
 const THUMBNAIL_QUALITY = 0.6;
@@ -175,18 +173,22 @@ class RequestQueue {
 
   enqueue(request: QueuedRequest): void {
     // Insert by priority (higher priority first)
-    const insertIndex = this._queue.findIndex(r => r.priority < request.priority);
+    const insertIndex = this._queue.findIndex((r) => r.priority < request.priority);
     if (insertIndex === -1) {
       this._queue.push(request);
     } else {
       this._queue.splice(insertIndex, 0, request);
     }
-    logger.info(`Enqueued ${request.key}, queue length: ${this._queue.length}, active: ${this._activeCount}`);
+    logger.info(
+      `Enqueued ${request.key}, queue length: ${this._queue.length}, active: ${this._activeCount}`,
+    );
     this._processQueue();
   }
 
   private async _processQueue(): Promise<void> {
-    logger.info(`_processQueue called, active: ${this._activeCount}, max: ${this._maxConcurrent}, queue: ${this._queue.length}`);
+    logger.info(
+      `_processQueue called, active: ${this._activeCount}, max: ${this._maxConcurrent}, queue: ${this._queue.length}`,
+    );
     while (this._activeCount < this._maxConcurrent && this._queue.length > 0) {
       const request = this._queue.shift();
       if (!request) break;
@@ -247,7 +249,7 @@ export class ThumbnailService implements IThumbnailService {
     height: number,
     trimStart = 0,
     trimEnd = 0,
-    options: ThumbnailRequestOptions = {}
+    options: ThumbnailRequestOptions = {},
   ): Promise<ThumbnailData[]> {
     const { signal, priority = 0 } = options;
 
@@ -282,9 +284,13 @@ export class ThumbnailService implements IThumbnailService {
     const requestPromise = new Promise<ThumbnailData[]>((resolve, reject) => {
       // Handle abort
       if (signal) {
-        signal.addEventListener('abort', () => {
-          reject(new Error('Request aborted'));
-        }, { once: true });
+        signal.addEventListener(
+          'abort',
+          () => {
+            reject(new Error('Request aborted'));
+          },
+          { once: true },
+        );
       }
 
       const execute = async (): Promise<ThumbnailData[]> => {
@@ -305,7 +311,7 @@ export class ThumbnailService implements IThumbnailService {
           trimStart,
           trimEnd,
           signal,
-          priority
+          priority,
         );
       };
 
@@ -341,7 +347,7 @@ export class ThumbnailService implements IThumbnailService {
   async getThumbnailsForViewport(
     filePath: string,
     viewport: ThumbnailViewport,
-    options: ThumbnailRequestOptions = {}
+    options: ThumbnailRequestOptions = {},
   ): Promise<ThumbnailData[]> {
     const { signal } = options;
 
@@ -411,7 +417,7 @@ export class ThumbnailService implements IThumbnailService {
   private async _generateImageThumbnails(
     filePath: string,
     count: number,
-    height: number
+    height: number,
   ): Promise<ThumbnailData[]> {
     const uri = await this._urlResolver(filePath);
 
@@ -460,7 +466,7 @@ export class ThumbnailService implements IThumbnailService {
     trimStart: number,
     trimEnd: number,
     signal?: AbortSignal,
-    priority = 0
+    priority = 0,
   ): Promise<ThumbnailData[]> {
     logger.info(`_generateVideoThumbnails called: ${filePath}`);
 
@@ -477,8 +483,13 @@ export class ThumbnailService implements IThumbnailService {
 
       logger.info(`Getting media info for ${filePath}`);
       // Get media info first to calculate duration and aspect ratio
-      const mediaInfo = await getMediaProxy().probeMediaInfo(filePath, { signal, priority: mediaRequestPriority });
-      logger.info(`Media info: duration=${mediaInfo.duration}, ${mediaInfo.width}x${mediaInfo.height}`);
+      const mediaInfo = await getMediaProxy().probeMediaInfo(filePath, {
+        signal,
+        priority: mediaRequestPriority,
+      });
+      logger.info(
+        `Media info: duration=${mediaInfo.duration}, ${mediaInfo.width}x${mediaInfo.height}`,
+      );
 
       if (signal?.aborted) {
         throw new Error('Request aborted');
@@ -509,7 +520,7 @@ export class ThumbnailService implements IThumbnailService {
         trimStart,
         trimEnd,
         effectiveDuration,
-        mediaInfo.duration
+        mediaInfo.duration,
       );
 
       // Create reusable canvas for converting ImageBitmap to dataUrl
@@ -524,7 +535,12 @@ export class ThumbnailService implements IThumbnailService {
 
       // Extract frames at selected times
       logger.info(`Generating ${thumbnailTimes.length} thumbnails for ${filePath}`);
-      logger.info(`Thumbnail times: [${thumbnailTimes.slice(0, 5).map(t => t.toFixed(3)).join(', ')}${thumbnailTimes.length > 5 ? ', ...' : ''}]`);
+      logger.info(
+        `Thumbnail times: [${thumbnailTimes
+          .slice(0, 5)
+          .map((t) => t.toFixed(3))
+          .join(', ')}${thumbnailTimes.length > 5 ? ', ...' : ''}]`,
+      );
 
       for (const targetTime of thumbnailTimes) {
         // Check abort before each frame
@@ -590,7 +606,7 @@ export class ThumbnailService implements IThumbnailService {
     trimStart: number,
     _trimEnd: number,
     effectiveDuration: number,
-    totalDuration: number
+    totalDuration: number,
   ): number[] {
     const selectedTimes: number[] = [];
     for (let i = 0; i < count; i++) {
@@ -653,7 +669,7 @@ export function getThumbnailService(): ThumbnailService {
  */
 export function createThumbnailService(
   urlResolver?: UrlResolver,
-  maxCacheSize?: number
+  maxCacheSize?: number,
 ): ThumbnailService {
   return new ThumbnailService(urlResolver, maxCacheSize);
 }

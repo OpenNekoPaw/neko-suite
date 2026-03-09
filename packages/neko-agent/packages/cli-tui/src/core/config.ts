@@ -26,11 +26,7 @@ import * as fs from 'node:fs';
 import type { CLIConfig, ProviderConfig } from './types';
 import { DEFAULT_CLI_CONFIG, PROVIDERS } from './types';
 // Config processing (browser-safe)
-import {
-  migrateLegacyFields,
-  mergeConfigs,
-  type UnifiedConfig,
-} from '@neko/shared';
+import { migrateLegacyFields, mergeConfigs, type UnifiedConfig } from '@neko/shared';
 // Config reading (Node.js only - direct import)
 import {
   getUserConfigDir,
@@ -98,7 +94,7 @@ function getApiKeyFromEnv(provider: string): string | undefined {
  */
 function getProviderFromUnifiedConfig(
   providerId: string,
-  config: UnifiedConfig | null
+  config: UnifiedConfig | null,
 ): { apiKey?: string; baseUrl?: string; defaultModel?: string } | undefined {
   if (!config) return undefined;
 
@@ -115,7 +111,9 @@ function getProviderFromUnifiedConfig(
   }
 
   // Legacy object format (providers as Record<string, LegacyProviderConfigFile>)
-  const legacyProviders = config.providers as unknown as Record<string, LegacyProviderConfigFile> | undefined;
+  const legacyProviders = config.providers as unknown as
+    | Record<string, LegacyProviderConfigFile>
+    | undefined;
   if (legacyProviders && !Array.isArray(legacyProviders)) {
     const legacyProvider = legacyProviders[providerId];
     if (legacyProvider) {
@@ -135,7 +133,7 @@ function getProviderFromUnifiedConfig(
  */
 function getDefaultModelFromConfig(
   providerId: string,
-  config: UnifiedConfig | null
+  config: UnifiedConfig | null,
 ): string | undefined {
   if (!config) return undefined;
 
@@ -163,7 +161,7 @@ function getDefaultModelFromConfig(
 function getDefaultModelForProvider(
   provider: string,
   workspaceConfig: UnifiedConfig | null,
-  userConfig: UnifiedConfig | null
+  userConfig: UnifiedConfig | null,
 ): string | undefined {
   // Try workspace config first
   const workspaceModel = getDefaultModelFromConfig(provider, workspaceConfig);
@@ -188,7 +186,7 @@ function unifiedToCliConfig(
   unified: UnifiedConfig,
   workDir: string,
   userConfig: UnifiedConfig | null,
-  workspaceConfig: UnifiedConfig | null
+  workspaceConfig: UnifiedConfig | null,
 ): CLIConfig {
   const provider = unified.defaultProvider ?? unified.provider ?? DEFAULT_CLI_CONFIG.provider;
 
@@ -198,35 +196,36 @@ function unifiedToCliConfig(
 
   // Get API key: env > workspace config > user config > legacy top-level
   const envApiKey = getApiKeyFromEnv(provider);
-  const apiKey = envApiKey
-    ?? workspaceProviderConfig?.apiKey
-    ?? userProviderConfig?.apiKey
-    ?? unified.apiKey;
+  const apiKey =
+    envApiKey ?? workspaceProviderConfig?.apiKey ?? userProviderConfig?.apiKey ?? unified.apiKey;
 
   // Get base URL: workspace config > user config > built-in
-  const baseUrl = workspaceProviderConfig?.baseUrl
-    ?? userProviderConfig?.baseUrl
-    ?? unified.baseUrl
-    ?? PROVIDERS[provider]?.baseUrl;
+  const baseUrl =
+    workspaceProviderConfig?.baseUrl ??
+    userProviderConfig?.baseUrl ??
+    unified.baseUrl ??
+    PROVIDERS[provider]?.baseUrl;
 
   // Get model
-  const model = unified.defaultModel
-    ?? unified.model
-    ?? getDefaultModelForProvider(provider, workspaceConfig, userConfig)
-    ?? DEFAULT_CLI_CONFIG.model;
+  const model =
+    unified.defaultModel ??
+    unified.model ??
+    getDefaultModelForProvider(provider, workspaceConfig, userConfig) ??
+    DEFAULT_CLI_CONFIG.model;
 
   // Convert MCP servers
-  const mcpServers = unified.mcpServers?.map((s) => ({
-    id: s.id,
-    name: s.name,
-    description: s.description ?? '',
-    category: s.category ?? ('other' as const),
-    transport: s.transport ?? ('stdio' as const),
-    command: s.command,
-    args: s.args,
-    env: s.env,
-    enabled: s.enabled ?? true,
-  })) ?? [];
+  const mcpServers =
+    unified.mcpServers?.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description ?? '',
+      category: s.category ?? ('other' as const),
+      transport: s.transport ?? ('stdio' as const),
+      command: s.command,
+      args: s.args,
+      env: s.env,
+      enabled: s.enabled ?? true,
+    })) ?? [];
 
   return {
     provider,
@@ -255,7 +254,7 @@ function unifiedToCliConfig(
  */
 export function loadConfig(
   workDir: string = process.cwd(),
-  overrides: Partial<CLIConfig> = {}
+  overrides: Partial<CLIConfig> = {},
 ): CLIConfig {
   // Read config files using shared module
   const userConfig = readUserConfig();
@@ -287,16 +286,15 @@ export function loadConfig(
 
     // Update API key for new provider
     const envApiKey = getApiKeyFromEnv(finalProvider);
-    config.apiKey = envApiKey
-      ?? workspaceProviderConfig?.apiKey
-      ?? userProviderConfig?.apiKey
-      ?? config.apiKey;
+    config.apiKey =
+      envApiKey ?? workspaceProviderConfig?.apiKey ?? userProviderConfig?.apiKey ?? config.apiKey;
 
     // Update base URL for new provider
-    config.baseUrl = workspaceProviderConfig?.baseUrl
-      ?? userProviderConfig?.baseUrl
-      ?? PROVIDERS[finalProvider]?.baseUrl
-      ?? config.baseUrl;
+    config.baseUrl =
+      workspaceProviderConfig?.baseUrl ??
+      userProviderConfig?.baseUrl ??
+      PROVIDERS[finalProvider]?.baseUrl ??
+      config.baseUrl;
 
     // Update model for new provider
     const defaultModel = getDefaultModelForProvider(finalProvider, migratedWorkspace, migratedUser);
@@ -346,10 +344,7 @@ export const saveGlobalConfig = saveUserConfig;
 /**
  * Save config to workspace config file (.neko/config.json)
  */
-export function saveWorkspaceConfig(
-  workDir: string,
-  config: Partial<UnifiedConfig>
-): void {
+export function saveWorkspaceConfig(workDir: string, config: Partial<UnifiedConfig>): void {
   const existingConfig = readWorkspaceConfig(workDir) ?? {};
   const newConfig = mergeConfigs(existingConfig, config);
   writeWorkspaceConfigFile(workDir, newConfig);
@@ -364,7 +359,7 @@ export function saveWorkspaceConfig(
  */
 export function setProviderConfig(
   providerId: string,
-  config: { apiKey?: string; baseUrl?: string }
+  config: { apiKey?: string; baseUrl?: string },
 ): void {
   const existingConfig = readUserConfig() ?? {};
   const providers = existingConfig.providers ?? [];
@@ -398,11 +393,7 @@ export function setProviderConfig(
 /**
  * Set provider API key in user config
  */
-export function setProviderApiKey(
-  provider: string,
-  apiKey: string,
-  baseUrl?: string
-): void {
+export function setProviderApiKey(provider: string, apiKey: string, baseUrl?: string): void {
   setProviderConfig(provider, {
     apiKey,
     ...(baseUrl ? { baseUrl } : {}),
@@ -414,7 +405,7 @@ export function setProviderApiKey(
  */
 export function addProviderModel(
   providerId: string,
-  model: string | { id: string; name?: string }
+  model: string | { id: string; name?: string },
 ): void {
   const existingConfig = readUserConfig() ?? {};
   const models = existingConfig.models ?? [];
@@ -441,10 +432,7 @@ export function addProviderModel(
 /**
  * Set default model for provider in user config
  */
-export function setProviderDefaultModel(
-  providerId: string,
-  modelId: string
-): void {
+export function setProviderDefaultModel(providerId: string, modelId: string): void {
   // In unified format, we set defaultModel at top level
   // and ensure the model exists
   addProviderModel(providerId, modelId);
@@ -458,10 +446,7 @@ export function setProviderDefaultModel(
 /**
  * Get available models for a provider
  */
-export function getProviderModels(
-  providerId: string,
-  workDir: string = process.cwd()
-): string[] {
+export function getProviderModels(providerId: string, workDir: string = process.cwd()): string[] {
   const userConfig = readUserConfig();
   const workspaceConfig = readWorkspaceConfig(workDir);
 
@@ -520,9 +505,7 @@ export function listProviders(): ProviderConfig[] {
 /**
  * List configured providers (from config files)
  */
-export function listConfiguredProviders(
-  workDir: string = process.cwd()
-): string[] {
+export function listConfiguredProviders(workDir: string = process.cwd()): string[] {
   const userConfig = readUserConfig();
   const workspaceConfig = readWorkspaceConfig(workDir);
 
@@ -561,8 +544,8 @@ export function validateConfig(config: CLIConfig): { valid: boolean; errors: str
     const envKey = providerConfig?.envKey ?? 'NEKO_API_KEY';
     errors.push(
       `API key not found for provider "${config.provider}". ` +
-      `Set ${envKey} environment variable, use --api-key option, ` +
-      `or configure in ~/.neko/config.json`
+        `Set ${envKey} environment variable, use --api-key option, ` +
+        `or configure in ~/.neko/config.json`,
     );
   }
 
@@ -571,7 +554,7 @@ export function validateConfig(config: CLIConfig): { valid: boolean; errors: str
   if (!PROVIDERS[config.provider] && !config.baseUrl) {
     errors.push(
       `Unknown provider "${config.provider}" requires baseUrl. ` +
-      `Configure baseUrl in ~/.neko/config.json or use --base-url option.`
+        `Configure baseUrl in ~/.neko/config.json or use --base-url option.`,
     );
   }
 
@@ -589,7 +572,9 @@ export function validateConfig(config: CLIConfig): { valid: boolean; errors: str
 
   const validFormats = ['text', 'json', 'markdown'];
   if (!validFormats.includes(config.outputFormat)) {
-    errors.push(`outputFormat must be one of ${validFormats.join(', ')}, got "${config.outputFormat}".`);
+    errors.push(
+      `outputFormat must be one of ${validFormats.join(', ')}, got "${config.outputFormat}".`,
+    );
   }
 
   return {
@@ -605,7 +590,9 @@ export function validateConfig(config: CLIConfig): { valid: boolean; errors: str
 /**
  * Infer provider type from name
  */
-function inferProviderType(name: string): 'anthropic' | 'openai' | 'google' | 'azure' | 'ollama' | 'generic' {
+function inferProviderType(
+  name: string,
+): 'anthropic' | 'openai' | 'google' | 'azure' | 'ollama' | 'generic' {
   const lowerName = name.toLowerCase();
   if (lowerName.includes('anthropic') || lowerName.includes('claude')) {
     return 'anthropic';

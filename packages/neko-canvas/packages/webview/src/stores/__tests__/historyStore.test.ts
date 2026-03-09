@@ -6,9 +6,7 @@ import type { CanvasData } from '@neko/shared';
 // Test Helpers
 // =============================================================================
 
-function createCanvasData(
-  overrides: Partial<CanvasData> = {}
-): CanvasData {
+function createCanvasData(overrides: Partial<CanvasData> = {}): CanvasData {
   return {
     version: '1.0',
     name: 'Test Canvas',
@@ -19,11 +17,7 @@ function createCanvasData(
   };
 }
 
-function createCanvasDataWithNode(
-  nodeId: string,
-  x = 0,
-  y = 0
-): CanvasData {
+function createCanvasDataWithNode(nodeId: string, x = 0, y = 0): CanvasData {
   return createCanvasData({
     nodes: [
       {
@@ -105,9 +99,7 @@ describe('historyStore', () => {
 
     // Push 5 different states
     for (let i = 0; i < 5; i++) {
-      useHistoryStore.getState().pushState(
-        createCanvasDataWithNode(`node-${i}`, i * 10, 0)
-      );
+      useHistoryStore.getState().pushState(createCanvasDataWithNode(`node-${i}`, i * 10, 0));
     }
 
     const state = useHistoryStore.getState();

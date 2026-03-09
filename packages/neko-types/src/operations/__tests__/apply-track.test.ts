@@ -5,11 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { applyOperation } from '../apply';
 import { OperationError } from '../errors';
-import {
-  createTestProject,
-  createTestTrack,
-  createMeta,
-} from './test-helpers';
+import { createTestProject, createTestTrack, createMeta } from './test-helpers';
 
 describe('apply-track', () => {
   describe('track.add', () => {
@@ -105,7 +101,7 @@ describe('apply-track', () => {
         payload: { trackId: 't1', fromIndex: 0, toIndex: 2 },
       });
 
-      expect(result.tracks.map(t => t.id)).toEqual(['t2', 't3', 't1']);
+      expect(result.tracks.map((t) => t.id)).toEqual(['t2', 't3', 't1']);
     });
 
     it('should no-op when from === to', () => {

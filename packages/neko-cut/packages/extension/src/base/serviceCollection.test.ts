@@ -5,7 +5,13 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ServiceCollection, createServiceId, setGlobalServices, getService, getGlobalServices } from './serviceCollection';
+import {
+  ServiceCollection,
+  createServiceId,
+  setGlobalServices,
+  getService,
+  getGlobalServices,
+} from './serviceCollection';
 
 // =============================================================================
 // Mock 服务

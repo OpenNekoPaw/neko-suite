@@ -24,10 +24,7 @@ import chalk from 'chalk';
 
 const program = new Command();
 
-program
-  .name('nekoagent')
-  .description('Neko AI Agent — Professional Terminal UI')
-  .version('0.0.1');
+program.name('nekoagent').description('Neko AI Agent — Professional Terminal UI').version('0.0.1');
 
 // Default: interactive TUI mode
 program
@@ -58,9 +55,7 @@ program
   });
 
 // Config command
-const configCmd = program
-  .command('config')
-  .description('Manage configuration');
+const configCmd = program.command('config').description('Manage configuration');
 
 configCmd
   .command('show')
@@ -70,7 +65,9 @@ configCmd
     console.log(chalk.bold('\nCurrent Configuration:\n'));
     console.log(`  Provider:    ${config.provider}`);
     console.log(`  Model:       ${config.model}`);
-    console.log(`  API Key:     ${config.apiKey ? '***' + config.apiKey.slice(-4) : chalk.red('Not set')}`);
+    console.log(
+      `  API Key:     ${config.apiKey ? '***' + config.apiKey.slice(-4) : chalk.red('Not set')}`,
+    );
     console.log(`  Base URL:    ${config.baseUrl ?? 'Default'}`);
     console.log(`  Max Tokens:  ${config.maxTokens}`);
     console.log(`  Temperature: ${config.temperature}`);

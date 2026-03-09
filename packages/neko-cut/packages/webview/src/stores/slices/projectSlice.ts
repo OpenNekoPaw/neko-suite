@@ -20,12 +20,7 @@ export interface ProjectSlice {
   getTotalDuration: () => number;
 }
 
-export const createProjectSlice: StateCreator<
-  ProjectSlice,
-  [],
-  [],
-  ProjectSlice
-> = (set, get) => ({
+export const createProjectSlice: StateCreator<ProjectSlice, [], [], ProjectSlice> = (set, get) => ({
   // Initial state
   project: null,
   projectRoot: null,

@@ -102,10 +102,7 @@ export type EngineEasingType =
   | 'ease-in-out-bounce'
   | 'cubic-bezier';
 
-export type EngineInterpolationMode =
-  | 'linear'
-  | 'step'
-  | 'smooth';
+export type EngineInterpolationMode = 'linear' | 'step' | 'smooth';
 
 export type EngineEffectType =
   | 'blur'
@@ -324,9 +321,7 @@ export interface EngineAudioDefaults {
   fadeOut: number;
 }
 
-export interface EngineAnimatableValue {
-
-}
+export interface EngineAnimatableValue {}
 
 export interface EnginePoint2D {
   x: number;
@@ -370,17 +365,84 @@ export interface EngineCubicBezierParams {
 // Key Constants (for whitelist-based engine field extraction)
 // =============================================================================
 
-export const ENGINE_BASE_ELEMENT_KEYS = ['id', 'name', 'startTime', 'duration', 'trimStart', 'trimEnd', 'transform', 'opacity', 'blendMode', 'effects', 'muted', 'hidden', 'locked', 'speed', 'transitionIn', 'transitionOut'] as const;
+export const ENGINE_BASE_ELEMENT_KEYS = [
+  'id',
+  'name',
+  'startTime',
+  'duration',
+  'trimStart',
+  'trimEnd',
+  'transform',
+  'opacity',
+  'blendMode',
+  'effects',
+  'muted',
+  'hidden',
+  'locked',
+  'speed',
+  'transitionIn',
+  'transitionOut',
+] as const;
 
-export const ENGINE_MEDIA_KEYS = ['src', 'resourceId', 'audio', 'mediaType', 'linkedAudioId', 'volume'] as const;
+export const ENGINE_MEDIA_KEYS = [
+  'src',
+  'resourceId',
+  'audio',
+  'mediaType',
+  'linkedAudioId',
+  'volume',
+] as const;
 
-export const ENGINE_AUDIO_KEYS = ['src', 'resourceId', 'audio', 'linkedVideoId', 'audioSettings', 'volume', 'pan', 'fadeIn', 'fadeOut'] as const;
+export const ENGINE_AUDIO_KEYS = [
+  'src',
+  'resourceId',
+  'audio',
+  'linkedVideoId',
+  'audioSettings',
+  'volume',
+  'pan',
+  'fadeIn',
+  'fadeOut',
+] as const;
 
-export const ENGINE_TEXT_KEYS = ['content', 'fontFamily', 'fontSize', 'color', 'backgroundColor', 'textAlign', 'fontWeight', 'fontStyle', 'textDecoration', 'lineHeight', 'letterSpacing', 'strokeColor', 'strokeWidth', 'shadow'] as const;
+export const ENGINE_TEXT_KEYS = [
+  'content',
+  'fontFamily',
+  'fontSize',
+  'color',
+  'backgroundColor',
+  'textAlign',
+  'fontWeight',
+  'fontStyle',
+  'textDecoration',
+  'lineHeight',
+  'letterSpacing',
+  'strokeColor',
+  'strokeWidth',
+  'shadow',
+] as const;
 
 export const ENGINE_SHAPE_KEYS = ['shapeType', 'fill', 'stroke', 'strokeWidth'] as const;
 
-export const ENGINE_SUBTITLE_KEYS = ['text', 'fontSize', 'color', 'fontFamily', 'backgroundColor', 'textAlign', 'strokeColor', 'strokeWidth', 'shadow'] as const;
+export const ENGINE_SUBTITLE_KEYS = [
+  'text',
+  'fontSize',
+  'color',
+  'fontFamily',
+  'backgroundColor',
+  'textAlign',
+  'strokeColor',
+  'strokeWidth',
+  'shadow',
+] as const;
 
-export const ENGINE_TRACK_KEYS = ['id', 'name', 'trackType', 'elements', 'muted', 'locked', 'hidden', 'isMain'] as const;
-
+export const ENGINE_TRACK_KEYS = [
+  'id',
+  'name',
+  'trackType',
+  'elements',
+  'muted',
+  'locked',
+  'hidden',
+  'isMain',
+] as const;

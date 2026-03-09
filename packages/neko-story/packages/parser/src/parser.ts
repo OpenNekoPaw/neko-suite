@@ -23,7 +23,8 @@ import type {
 const PATTERNS = {
   // Scene heading: INT./EXT./etc. or forced with leading period
   sceneHeading: /^(\.(?!\.)|(?:INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[\.\s])/i,
-  sceneHeadingFull: /^(INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[\.\s]+(.+?)(?:\s*-\s*(.+?))?(?:\s*#([^#]+)#)?$/i,
+  sceneHeadingFull:
+    /^(INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[\.\s]+(.+?)(?:\s*-\s*(.+?))?(?:\s*#([^#]+)#)?$/i,
   forcedSceneHeading: /^\.(.+?)(?:\s*#([^#]+)#)?$/,
 
   // Character: all caps, may have extension in parens
@@ -379,7 +380,7 @@ function createCharacter(
   name: string,
   extension: string | null,
   isDualDialogue: boolean,
-  forced: boolean
+  forced: boolean,
 ): Character {
   return {
     type: 'character',

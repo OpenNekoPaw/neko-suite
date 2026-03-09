@@ -30,12 +30,7 @@ class MockAdapter implements Adapter {
     return this.capabilities.includes(capability);
   }
 
-  async chat(
-    messages: ChatMessage[],
-    options: ChatOptions,
-    model: Model,
-    provider: Provider
-  ) {
+  async chat(messages: ChatMessage[], options: ChatOptions, model: Model, provider: Provider) {
     return {
       id: 'test-id',
       model: model.id,
@@ -56,7 +51,7 @@ class MockAdapter implements Adapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): AsyncIterable<ChatChunk> {
     const content = `Response to: ${messages[messages.length - 1]?.content || ''}`;
     for (const char of content) {

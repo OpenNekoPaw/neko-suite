@@ -1,9 +1,4 @@
-import type {
-  Character,
-  Dialogue,
-  Parenthetical,
-  AnyFountainElement,
-} from '../types';
+import type { Character, Dialogue, Parenthetical, AnyFountainElement } from '../types';
 import { navigateToLine } from '../hooks/useVSCodeMessaging';
 
 interface DialogueBlockProps {
@@ -20,9 +15,7 @@ export function DialogueBlock({ character, elements }: DialogueBlockProps) {
     <div className="dialogue-block">
       <div className="character element" onClick={handleCharacterClick}>
         {character.name}
-        {character.extension && (
-          <span className="extension"> ({character.extension})</span>
-        )}
+        {character.extension && <span className="extension"> ({character.extension})</span>}
       </div>
       {elements.map((el, index) => {
         if (el.type === 'dialogue') {

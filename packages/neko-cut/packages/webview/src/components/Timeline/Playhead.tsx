@@ -19,39 +19,42 @@ export const Playhead = memo(function Playhead({
 
   const left = currentTime * pixelsPerSecond * zoomLevel;
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
 
-    pause(); // Pause playback when dragging
-    setIsDragging(true);
+      pause(); // Pause playback when dragging
+      setIsDragging(true);
 
-    const startX = e.clientX;
-    const startLeft = left;
-    const totalDuration = getTotalDuration() || 60;
+      const startX = e.clientX;
+      const startLeft = left;
+      const totalDuration = getTotalDuration() || 60;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      const newLeft = startLeft + deltaX;
-      const newTime = Math.max(0, Math.min(totalDuration, newLeft / (pixelsPerSecond * zoomLevel)));
-      seek(newTime);
-    };
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const deltaX = moveEvent.clientX - startX;
+        const newLeft = startLeft + deltaX;
+        const newTime = Math.max(
+          0,
+          Math.min(totalDuration, newLeft / (pixelsPerSecond * zoomLevel)),
+        );
+        seek(newTime);
+      };
 
-    const handleMouseUp = () => {
-      setIsDragging(false);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
+      const handleMouseUp = () => {
+        setIsDragging(false);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [left, seek, pixelsPerSecond, zoomLevel, getTotalDuration, pause]);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    },
+    [left, seek, pixelsPerSecond, zoomLevel, getTotalDuration, pause],
+  );
 
   return (
-    <div
-      className="absolute top-0 z-20 pointer-events-none"
-      style={{ left, height }}
-    >
+    <div className="absolute top-0 z-20 pointer-events-none" style={{ left, height }}>
       {/* Playhead line */}
       <div className={`w-0.5 h-full ${isDragging ? 'bg-red-400' : 'bg-red-500'}`} />
 

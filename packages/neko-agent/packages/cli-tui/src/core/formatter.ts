@@ -15,10 +15,7 @@ import type { AgentStep, ToolResult } from '@neko/agent';
 /**
  * Format result based on output format.
  */
-export function formatResult(
-  result: CLIResult,
-  format: 'text' | 'json' | 'markdown'
-): string {
+export function formatResult(result: CLIResult, format: 'text' | 'json' | 'markdown'): string {
   switch (format) {
     case 'json':
       return formatJson(result);
@@ -69,7 +66,7 @@ export function formatJson(result: CLIResult): string {
       steps: result.agentResult?.steps,
     },
     null,
-    2
+    2,
   );
 }
 
@@ -112,14 +109,14 @@ export function formatStep(step: AgentStep, verbose = false): string {
     case 'act':
       if (step.toolCalls && step.toolCalls.length > 0) {
         return step.toolCalls
-          .map(tc => formatToolCall(tc.name, tc.arguments, 'pending', verbose))
+          .map((tc) => formatToolCall(tc.name, tc.arguments, 'pending', verbose))
           .join('\n');
       }
       return theme.info(`[act] ${step.content}`);
 
     case 'observe':
       if (step.toolResults && step.toolResults.length > 0) {
-        return step.toolResults.map(tr => formatToolResult(tr, verbose)).join('\n');
+        return step.toolResults.map((tr) => formatToolResult(tr, verbose)).join('\n');
       }
       return theme.muted(`[observe] ${step.content}`);
 
@@ -172,11 +169,25 @@ export function formatToolCall(
 // ─── Tool summary ───────────────────────────────────────────────────────────────
 
 const FILE_TOOLS = new Set([
-  'read_file', 'write_file', 'edit_file', 'create_file', 'delete_file',
-  'view_file', 'open_file', 'str_replace_editor', 'str_replace_based_edit_tool',
+  'read_file',
+  'write_file',
+  'edit_file',
+  'create_file',
+  'delete_file',
+  'view_file',
+  'open_file',
+  'str_replace_editor',
+  'str_replace_based_edit_tool',
 ]);
 const SHELL_TOOLS = new Set(['bash', 'execute_command', 'run_command', 'shell', 'terminal']);
-const SEARCH_TOOLS = new Set(['grep', 'search_files', 'search', 'web_search', 'find_files', 'glob']);
+const SEARCH_TOOLS = new Set([
+  'grep',
+  'search_files',
+  'search',
+  'web_search',
+  'find_files',
+  'glob',
+]);
 
 /**
  * Extract a short human-readable summary from a tool call (max 40 chars).
@@ -184,8 +195,10 @@ const SEARCH_TOOLS = new Set(['grep', 'search_files', 'search', 'web_search', 'f
  */
 function getToolSummary(name: string, args: Record<string, unknown>, maxLen = 40): string {
   const n = name.toLowerCase();
-  if (FILE_TOOLS.has(n)) return truncate(getString(args, ['path', 'file_path', 'filePath', 'file']) ?? name, maxLen);
-  if (SHELL_TOOLS.has(n)) return truncate(getString(args, ['command', 'cmd', 'script']) ?? name, maxLen);
+  if (FILE_TOOLS.has(n))
+    return truncate(getString(args, ['path', 'file_path', 'filePath', 'file']) ?? name, maxLen);
+  if (SHELL_TOOLS.has(n))
+    return truncate(getString(args, ['command', 'cmd', 'script']) ?? name, maxLen);
   if (SEARCH_TOOLS.has(n)) {
     const p = getString(args, ['pattern', 'query', 'q', 'keyword']);
     const d = getString(args, ['path', 'directory', 'dir']);
@@ -221,11 +234,7 @@ function truncate(s: string, max: number): string {
  * Render a unified-style diff for terminal output.
  * Uses computeDiff from @neko/shared (same algorithm as webview DiffBlock).
  */
-export function formatDiff(
-  oldContent: string,
-  newContent: string,
-  filePath?: string,
-): string {
+export function formatDiff(oldContent: string, newContent: string, filePath?: string): string {
   const lines = computeDiff(oldContent, newContent);
   const stats = computeDiffStats(lines);
 
@@ -233,13 +242,17 @@ export function formatDiff(
     filePath ? theme.bold(filePath) : '',
     theme.diffAdded(`+${stats.added}`),
     theme.diffRemoved(`-${stats.removed}`),
-  ].filter(Boolean).join('  ');
+  ]
+    .filter(Boolean)
+    .join('  ');
 
-  const body = lines.map(line => {
-    if (line.type === 'add') return theme.diffAdded(`+${line.content}`);
-    if (line.type === 'remove') return theme.diffRemoved(`-${line.content}`);
-    return theme.diffContext(` ${line.content}`);
-  }).join('\n');
+  const body = lines
+    .map((line) => {
+      if (line.type === 'add') return theme.diffAdded(`+${line.content}`);
+      if (line.type === 'remove') return theme.diffRemoved(`-${line.content}`);
+      return theme.diffContext(` ${line.content}`);
+    })
+    .join('\n');
 
   return `${header}\n${body}`;
 }
@@ -258,7 +271,5 @@ export interface TodoItem {
  * Icon encoding aligned with opencode TUI: [ ] [•] [✓] [✗]
  */
 export function formatTodoList(todos: TodoItem[]): string {
-  return todos
-    .map(t => `${TODO_ICONS[t.status]} ${t.content}`)
-    .join('\n');
+  return todos.map((t) => `${TODO_ICONS[t.status]} ${t.content}`).join('\n');
 }

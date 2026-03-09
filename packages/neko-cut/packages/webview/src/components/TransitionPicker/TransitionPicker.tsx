@@ -132,12 +132,15 @@ const DurationControl = memo(function DurationControl({
 }: DurationControlProps) {
   const { t } = useTranslation();
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = parseFloat(e.target.value);
-    if (!isNaN(newValue) && newValue > 0) {
-      onChange(newValue);
-    }
-  }, [onChange]);
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = parseFloat(e.target.value);
+      if (!isNaN(newValue) && newValue > 0) {
+        onChange(newValue);
+      }
+    },
+    [onChange],
+  );
 
   return (
     <div className="flex items-center gap-2">
@@ -178,9 +181,12 @@ const EasingControl = memo(function EasingControl({
 }: EasingControlProps) {
   const { t } = useTranslation();
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    onChange(e.target.value as EasingType);
-  }, [onChange]);
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      onChange(e.target.value as EasingType);
+    },
+    [onChange],
+  );
 
   return (
     <div className="flex items-center gap-2">
@@ -216,14 +222,17 @@ export const TransitionPicker = memo(function TransitionPicker({
   const { t } = useTranslation();
 
   // Handle preset selection
-  const handlePresetSelect = useCallback((preset: TransitionPreset) => {
-    const newTransition = createTransitionFromPreset(preset);
-    // Preserve existing duration if we have one
-    if (transition?.duration) {
-      newTransition.duration = transition.duration;
-    }
-    onChange(newTransition);
-  }, [transition, onChange]);
+  const handlePresetSelect = useCallback(
+    (preset: TransitionPreset) => {
+      const newTransition = createTransitionFromPreset(preset);
+      // Preserve existing duration if we have one
+      if (transition?.duration) {
+        newTransition.duration = transition.duration;
+      }
+      onChange(newTransition);
+    },
+    [transition, onChange],
+  );
 
   // Handle remove transition
   const handleRemoveTransition = useCallback(() => {
@@ -231,24 +240,30 @@ export const TransitionPicker = memo(function TransitionPicker({
   }, [onChange]);
 
   // Handle duration change
-  const handleDurationChange = useCallback((duration: number) => {
-    if (transition) {
-      onChange({
-        ...transition,
-        duration,
-      });
-    }
-  }, [transition, onChange]);
+  const handleDurationChange = useCallback(
+    (duration: number) => {
+      if (transition) {
+        onChange({
+          ...transition,
+          duration,
+        });
+      }
+    },
+    [transition, onChange],
+  );
 
   // Handle easing change
-  const handleEasingChange = useCallback((easing: EasingType) => {
-    if (transition) {
-      onChange({
-        ...transition,
-        easing,
-      });
-    }
-  }, [transition, onChange]);
+  const handleEasingChange = useCallback(
+    (easing: EasingType) => {
+      if (transition) {
+        onChange({
+          ...transition,
+          easing,
+        });
+      }
+    },
+    [transition, onChange],
+  );
 
   return (
     <div className="flex flex-col gap-3 p-3">

@@ -32,7 +32,7 @@ export interface UseSnapReturn {
   snap: (
     position: Point,
     size: { width: number; height: number },
-    excludeIds?: string[]
+    excludeIds?: string[],
   ) => SnapResult;
   /** 当前参考线 */
   guides: Guide[];
@@ -40,7 +40,7 @@ export interface UseSnapReturn {
   updateGuides: (
     position: Point,
     size: { width: number; height: number },
-    excludeIds?: string[]
+    excludeIds?: string[],
   ) => void;
   /** 清除参考线 */
   clearGuides: () => void;
@@ -81,7 +81,7 @@ export function useSnap({
     (
       position: Point,
       size: { width: number; height: number },
-      excludeIds: string[] = []
+      excludeIds: string[] = [],
     ): SnapResult => {
       if (!enabled) {
         return {
@@ -95,16 +95,12 @@ export function useSnap({
       engineRef.current.setNodes(nodes, excludeIds);
       return engineRef.current.snap(position, size);
     },
-    [nodes, enabled]
+    [nodes, enabled],
   );
 
   // 更新参考线
   const updateGuides = useCallback(
-    (
-      position: Point,
-      size: { width: number; height: number },
-      excludeIds: string[] = []
-    ) => {
+    (position: Point, size: { width: number; height: number }, excludeIds: string[] = []) => {
       if (!enabled) {
         setGuides([]);
         return;
@@ -114,7 +110,7 @@ export function useSnap({
       const newGuides = engineRef.current.generateGuides(position, size);
       setGuides(newGuides);
     },
-    [nodes, enabled]
+    [nodes, enabled],
   );
 
   // 清除参考线

@@ -41,10 +41,10 @@ export interface MinimapConfig {
 
 /** 默认 Minimap 配置 */
 export const DEFAULT_MINIMAP_CONFIG: MinimapConfig = {
-  minHeight: 40,        // 最小 40px（更紧凑）
-  maxHeight: 120,       // 最大 120px（避免占用过多空间）
-  trackHeight: 12,      // 每个轨道 12px（从 20px 缩小）
-  sampleInterval: 2,    // 每 2 秒一张缩略图
+  minHeight: 40, // 最小 40px（更紧凑）
+  maxHeight: 120, // 最大 120px（避免占用过多空间）
+  trackHeight: 12, // 每个轨道 12px（从 20px 缩小）
+  sampleInterval: 2, // 每 2 秒一张缩略图
   maxCacheSize: 100,
   enabled: true,
 };

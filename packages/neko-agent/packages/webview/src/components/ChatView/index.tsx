@@ -94,10 +94,7 @@ export function ChatView({
   }, []);
 
   return (
-    <DropZone
-      onFilesDropped={handleFilesDropped}
-      disabled={isThinking}
-    >
+    <DropZone onFilesDropped={handleFilesDropped} disabled={isThinking}>
       <div className="flex-1 flex flex-col overflow-hidden relative h-full">
         {/* Skill Confirmation Banner */}
         {pendingSkillConfirm && onConfirmSkill && onDeclineSkill && (
@@ -110,10 +107,7 @@ export function ChatView({
 
         {/* Active Skill Indicator */}
         {activeSkill && onClearActiveSkill && (
-          <SkillIndicator
-            skill={activeSkill}
-            onClear={onClearActiveSkill}
-          />
+          <SkillIndicator skill={activeSkill} onClear={onClearActiveSkill} />
         )}
 
         {/* Agent State Indicator - shows when agent is thinking/acting/streaming */}

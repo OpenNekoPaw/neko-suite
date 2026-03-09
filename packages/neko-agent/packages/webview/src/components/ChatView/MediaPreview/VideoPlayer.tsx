@@ -45,7 +45,14 @@ function formatTime(time: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function VideoPlayerComponent({ src, poster, title, className, localPath, inline = false }: VideoPlayerProps) {
+function VideoPlayerComponent({
+  src,
+  poster,
+  title,
+  className,
+  localPath,
+  inline = false,
+}: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isExpanded, setIsExpanded] = useState(true);
   const [duration, setDuration] = useState(0);
@@ -54,7 +61,7 @@ function VideoPlayerComponent({ src, poster, title, className, localPath, inline
   const fileName = getFileName(src, title);
 
   const toggleExpand = useCallback(() => {
-    setIsExpanded(prev => !prev);
+    setIsExpanded((prev) => !prev);
   }, []);
 
   const handleLoadedMetadata = useCallback(() => {
@@ -131,9 +138,11 @@ function VideoPlayerComponent({ src, poster, title, className, localPath, inline
       {/* Compact header - matches ToolCallDisplay style */}
       <div
         className={`flex items-center gap-1.5 px-2 py-1 rounded-t text-[11px] cursor-pointer transition-colors
-          ${hasError
-            ? 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#ef4444)]'
-            : 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#3b82f6)]'}
+          ${
+            hasError
+              ? 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#ef4444)]'
+              : 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#3b82f6)]'
+          }
           hover:bg-[var(--vscode-list-hoverBackground)]
           ${!isExpanded ? 'rounded-b' : ''}
         `}
@@ -147,9 +156,7 @@ function VideoPlayerComponent({ src, poster, title, className, localPath, inline
         )}
 
         {/* File name */}
-        <span className="font-medium text-[var(--vscode-foreground)] truncate">
-          {fileName}
-        </span>
+        <span className="font-medium text-[var(--vscode-foreground)] truncate">{fileName}</span>
 
         {/* Duration badge */}
         {duration > 0 && !hasError && (
@@ -177,7 +184,9 @@ function VideoPlayerComponent({ src, poster, title, className, localPath, inline
         )}
 
         {/* Expand indicator */}
-        <ChevronIcon className={`w-3 h-3 text-[var(--vscode-descriptionForeground)] transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+        <ChevronIcon
+          className={`w-3 h-3 text-[var(--vscode-descriptionForeground)] transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+        />
       </div>
 
       {/* Expanded content — thumbnail with click-to-open */}
@@ -235,7 +244,12 @@ export const VideoPlayer = memo(VideoPlayerComponent);
 function VideoIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+      />
     </svg>
   );
 }
@@ -259,7 +273,12 @@ function ChevronIcon({ className }: { className?: string }) {
 function OpenIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+      />
     </svg>
   );
 }

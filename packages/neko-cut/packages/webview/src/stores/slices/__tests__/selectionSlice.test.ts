@@ -143,9 +143,7 @@ describe('selectionSlice', () => {
 
     it('should override existing selections', () => {
       store.getState().selectElement('track1', 'elem1');
-      store.getState().setSelectedElements([
-        { trackId: 'newTrack', elementId: 'newElem' },
-      ]);
+      store.getState().setSelectedElements([{ trackId: 'newTrack', elementId: 'newElem' }]);
       expect(store.getState().selectedElements).toEqual([
         { trackId: 'newTrack', elementId: 'newElem' },
       ]);

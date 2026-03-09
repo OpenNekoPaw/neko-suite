@@ -47,46 +47,49 @@ export const SubtitleImportExport = memo(function SubtitleImportExport({
     fileInputRef.current?.click();
   }, []);
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (!content) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        if (!content) {
+          setMessage({ type: 'error', text: t('subtitles.io.importError') });
+          return;
+        }
+
+        const format = detectSubtitleFormat(content);
+        if (!format) {
+          setMessage({ type: 'error', text: t('subtitles.io.unsupportedFormat') });
+          return;
+        }
+
+        const track = importSubtitles(content, { format });
+        if (track) {
+          // Use filename as track name (without extension)
+          track.name = file.name.replace(/\.[^.]+$/, '');
+          onImport(track);
+          setMessage({ type: 'success', text: t('subtitles.io.importSuccess') });
+        } else {
+          setMessage({ type: 'error', text: t('subtitles.io.importError') });
+        }
+      };
+
+      reader.onerror = () => {
         setMessage({ type: 'error', text: t('subtitles.io.importError') });
-        return;
+      };
+
+      reader.readAsText(file);
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
-
-      const format = detectSubtitleFormat(content);
-      if (!format) {
-        setMessage({ type: 'error', text: t('subtitles.io.unsupportedFormat') });
-        return;
-      }
-
-      const track = importSubtitles(content, { format });
-      if (track) {
-        // Use filename as track name (without extension)
-        track.name = file.name.replace(/\.[^.]+$/, '');
-        onImport(track);
-        setMessage({ type: 'success', text: t('subtitles.io.importSuccess') });
-      } else {
-        setMessage({ type: 'error', text: t('subtitles.io.importError') });
-      }
-    };
-
-    reader.onerror = () => {
-      setMessage({ type: 'error', text: t('subtitles.io.importError') });
-    };
-
-    reader.readAsText(file);
-
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  }, [onImport, t]);
+    },
+    [onImport, t],
+  );
 
   // ==========================================================================
   // Export
@@ -143,7 +146,12 @@ export const SubtitleImportExport = memo(function SubtitleImportExport({
           title={t('subtitles.importSubtitles')}
         >
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+            />
           </svg>
           {t('subtitles.io.import')}
         </button>
@@ -155,7 +163,12 @@ export const SubtitleImportExport = memo(function SubtitleImportExport({
           title={t('subtitles.exportSubtitles')}
         >
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+            />
           </svg>
           {t('subtitles.io.export')}
         </button>
@@ -165,9 +178,7 @@ export const SubtitleImportExport = memo(function SubtitleImportExport({
       {message && (
         <div
           className={`fixed bottom-4 right-4 px-4 py-2 rounded shadow-lg text-[12px] z-50 ${
-            message.type === 'success'
-              ? 'bg-green-600 text-white'
-              : 'bg-red-600 text-white'
+            message.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
           }`}
         >
           {message.text}

@@ -75,45 +75,47 @@ export interface UIStateSlice {
   };
   toggleFpsCounter: () => void;
   setCurrentFps: (fps: number) => void;
-  setPerformanceStats: (stats: Partial<{
-    currentTime: number;
-    frameIndex: number;
-    targetFps: number;
-    resolution: string;
-    bitrate: string;
-    mode: 'compatible';
-    decodeTime: number;
-    renderTime: number;
-    compositeTime: number;
-    frameTimeP50: number;
-    frameTimeP95: number;
-    frameTimeP99: number;
-    measuredFps: number;
-    bitrateKbps: number;
-    memoryUsedMB: number;
-    memoryTotalMB: number;
-    cpuLoad: number;
-    gpuBackend: string;
-    gpuRenderer: string;
-    gpuLoad: number;
-    vramUsedMB: number;
-    cachedFrames: number;
-    cacheHitRate: number;
-    droppedFrames: number;
-    renderErrors: number;
-    engineHwDecodeMs: number;
-    engineNv12ImportMs: number;
-    engineNv12ToRgbaMs: number;
-    engineCompositeMs: number;
-    engineRgbaToNv12Ms: number;
-    engineCpuReadbackMs: number;
-    engineEncodeSubmitMs: number;
-    engineEncodeTimeMs: number;
-    engineAvgFps: number;
-    engineAudioMixMs: number;
-    engineCpuUsagePercent: number;
-    enginePeakMemoryBytes: number;
-  }>) => void;
+  setPerformanceStats: (
+    stats: Partial<{
+      currentTime: number;
+      frameIndex: number;
+      targetFps: number;
+      resolution: string;
+      bitrate: string;
+      mode: 'compatible';
+      decodeTime: number;
+      renderTime: number;
+      compositeTime: number;
+      frameTimeP50: number;
+      frameTimeP95: number;
+      frameTimeP99: number;
+      measuredFps: number;
+      bitrateKbps: number;
+      memoryUsedMB: number;
+      memoryTotalMB: number;
+      cpuLoad: number;
+      gpuBackend: string;
+      gpuRenderer: string;
+      gpuLoad: number;
+      vramUsedMB: number;
+      cachedFrames: number;
+      cacheHitRate: number;
+      droppedFrames: number;
+      renderErrors: number;
+      engineHwDecodeMs: number;
+      engineNv12ImportMs: number;
+      engineNv12ToRgbaMs: number;
+      engineCompositeMs: number;
+      engineRgbaToNv12Ms: number;
+      engineCpuReadbackMs: number;
+      engineEncodeSubmitMs: number;
+      engineEncodeTimeMs: number;
+      engineAvgFps: number;
+      engineAudioMixMs: number;
+      engineCpuUsagePercent: number;
+      enginePeakMemoryBytes: number;
+    }>,
+  ) => void;
 
   // Editing modes
   snappingEnabled: boolean;
@@ -144,12 +146,7 @@ export interface UIStateSlice {
   setDragTargetTrackId: (trackId: string | null) => void;
 }
 
-export const createUIStateSlice: StateCreator<
-  UIStateSlice,
-  [],
-  [],
-  UIStateSlice
-> = (set) => ({
+export const createUIStateSlice: StateCreator<UIStateSlice, [], [], UIStateSlice> = (set) => ({
   // Initial state
   zoomLevel: 1,
   previewQuality: 'high', // Default to 0.75 for balanced performance
@@ -212,16 +209,18 @@ export const createUIStateSlice: StateCreator<
 
   setCurrentFps: (fps) => set({ currentFps: fps }),
 
-  setPerformanceStats: (stats) => set((state) => ({
-    performanceStats: {
-      ...state.performanceStats,
-      ...stats,
-    },
-  })),
+  setPerformanceStats: (stats) =>
+    set((state) => ({
+      performanceStats: {
+        ...state.performanceStats,
+        ...stats,
+      },
+    })),
 
   toggleSnapping: () => set((state) => ({ snappingEnabled: !state.snappingEnabled })),
 
-  toggleRippleEditing: () => set((state) => ({ rippleEditingEnabled: !state.rippleEditingEnabled })),
+  toggleRippleEditing: () =>
+    set((state) => ({ rippleEditingEnabled: !state.rippleEditingEnabled })),
 
   toggleClipThumbnails: () => set((state) => ({ showClipThumbnails: !state.showClipThumbnails })),
 
@@ -235,4 +234,3 @@ export const createUIStateSlice: StateCreator<
 
   setDragTargetTrackId: (trackId) => set({ dragTargetTrackId: trackId }),
 });
-

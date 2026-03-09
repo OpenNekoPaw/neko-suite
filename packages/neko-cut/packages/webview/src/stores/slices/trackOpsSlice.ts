@@ -78,7 +78,7 @@ export const createTrackOpsSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const index = project.tracks.findIndex(t => t.id === trackId);
+    const index = project.tracks.findIndex((t) => t.id === trackId);
     if (index === -1) return;
     const track = project.tracks[index];
 
@@ -94,7 +94,7 @@ export const createTrackOpsSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
+    const track = project.tracks.find((t) => t.id === trackId);
     if (!track) return;
 
     dispatch({
@@ -124,7 +124,7 @@ export const createTrackOpsSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const currentIndex = project.tracks.findIndex(t => t.id === trackId);
+    const currentIndex = project.tracks.findIndex((t) => t.id === trackId);
     if (currentIndex === -1) return;
 
     const clampedIndex = Math.max(0, Math.min(newIndex, project.tracks.length - 1));
@@ -141,7 +141,7 @@ export const createTrackOpsSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const index = project.tracks.findIndex(t => t.id === trackId);
+    const index = project.tracks.findIndex((t) => t.id === trackId);
     if (index <= 0) return;
 
     dispatch({
@@ -155,7 +155,7 @@ export const createTrackOpsSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const index = project.tracks.findIndex(t => t.id === trackId);
+    const index = project.tracks.findIndex((t) => t.id === trackId);
     if (index === -1 || index >= project.tracks.length - 1) return;
 
     dispatch({
@@ -169,7 +169,7 @@ export const createTrackOpsSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
+    const track = project.tracks.find((t) => t.id === trackId);
     if (!track) return;
 
     dispatch({
@@ -184,7 +184,7 @@ export const createTrackOpsSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
+    const track = project.tracks.find((t) => t.id === trackId);
     if (!track) return;
 
     dispatch({

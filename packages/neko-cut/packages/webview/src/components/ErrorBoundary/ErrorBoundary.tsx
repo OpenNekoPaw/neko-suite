@@ -63,12 +63,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       }
 
       // 默认错误 UI
-      return (
-        <DefaultErrorFallback
-          error={this.state.error}
-          onReset={this.handleReset}
-        />
-      );
+      return <DefaultErrorFallback error={this.state.error} onReset={this.handleReset} />;
     }
 
     return this.props.children;
@@ -129,7 +124,7 @@ function DefaultErrorFallback({ error, onReset }: DefaultErrorFallbackProps) {
 
 export function withErrorBoundary<P extends object>(
   Component: React.ComponentType<P>,
-  errorBoundaryProps?: Omit<ErrorBoundaryProps, 'children'>
+  errorBoundaryProps?: Omit<ErrorBoundaryProps, 'children'>,
 ): React.FC<P> {
   const WrappedComponent: React.FC<P> = (props) => (
     <ErrorBoundary {...errorBoundaryProps}>

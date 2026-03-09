@@ -40,7 +40,7 @@ export function interpolateProperty(property: AnimatableProperty, time: number):
  */
 export function computeShapeTransform(
   transform: ShapeTransform,
-  time: number
+  time: number,
 ): ComputedShapeTransform {
   return {
     x: getAnimatedValue(transform.x, time),
@@ -60,7 +60,7 @@ export function computeShapeTransform(
  */
 export function computeStrokeAnimation(
   stroke: StrokeAnimation,
-  time: number
+  time: number,
 ): ComputedStrokeAnimation {
   return {
     width: getAnimatedValue(stroke.width, time),
@@ -82,7 +82,7 @@ export function computeStrokeAnimation(
 export function getTrimmedPathData(
   pathData: string,
   trimStart: number,
-  trimEnd: number
+  trimEnd: number,
 ): { path: string; dashArray: string; dashOffset: number } {
   const estimatedLength = 1000;
 
@@ -131,7 +131,7 @@ export function calculatePathLength(pathData: string): number {
 export function generateTransformCSS(
   transform: ComputedShapeTransform,
   containerWidth: number,
-  containerHeight: number
+  containerHeight: number,
 ): string {
   const translateX = (transform.x / 100) * containerWidth;
   const translateY = (transform.y / 100) * containerHeight;
@@ -158,7 +158,7 @@ export function generateTransformCSS(
 export function generateTransformSVG(
   transform: ComputedShapeTransform,
   width: number,
-  height: number
+  height: number,
 ): string {
   const centerX = (transform.x / 100) * width;
   const centerY = (transform.y / 100) * height;
@@ -193,7 +193,7 @@ export function generateTransformSVG(
  */
 export function getAnimatedValues(
   animation: ShapeAnimationState | undefined,
-  time: number
+  time: number,
 ): {
   transform: ComputedShapeTransform | null;
   stroke: ComputedStrokeAnimation | null;
@@ -213,10 +213,7 @@ export function getAnimatedValues(
 /**
  * Check if shape has any active animations at the given time
  */
-export function isAnimatingAt(
-  animation: ShapeAnimationState | undefined,
-  time: number
-): boolean {
+export function isAnimatingAt(animation: ShapeAnimationState | undefined, time: number): boolean {
   if (!animation) return false;
 
   const checkProperty = (prop: AnimatableProperty): boolean => {

@@ -78,10 +78,7 @@ describe('FileOperationHandler', () => {
       const { commands } = await import('vscode');
       await handler.handleOpenFile('/tmp/readme.md');
 
-      expect(commands.executeCommand).toHaveBeenCalledWith(
-        'vscode.open',
-        expect.any(Object),
-      );
+      expect(commands.executeCommand).toHaveBeenCalledWith('vscode.open', expect.any(Object));
     });
 
     it('should route various video extensions correctly', async () => {
@@ -131,10 +128,9 @@ describe('FileOperationHandler', () => {
     it('should create personal prompt directory', async () => {
       await handler.handleOpenPromptConfig('personal');
 
-      expect(fs.promises.mkdir).toHaveBeenCalledWith(
-        expect.stringContaining('.neko'),
-        { recursive: true },
-      );
+      expect(fs.promises.mkdir).toHaveBeenCalledWith(expect.stringContaining('.neko'), {
+        recursive: true,
+      });
     });
 
     it('should show error for project source without workspace', async () => {
@@ -175,16 +171,13 @@ describe('FileOperationHandler', () => {
 
     it('should use settings.local.json for local source', async () => {
       const vscode = await import('vscode');
-      (vscode.workspace as any).workspaceFolders = [
-        { uri: { fsPath: '/workspace' } },
-      ];
+      (vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: '/workspace' } }];
 
       await handler.handleOpenSettingsFile('local');
 
-      expect(fs.promises.mkdir).toHaveBeenCalledWith(
-        expect.stringContaining('.neko'),
-        { recursive: true },
-      );
+      expect(fs.promises.mkdir).toHaveBeenCalledWith(expect.stringContaining('.neko'), {
+        recursive: true,
+      });
     });
   });
 
@@ -219,7 +212,9 @@ describe('FileOperationHandler', () => {
 
       await handler.handleOpenSkillFile('my-skill', 'personal', 'skill');
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining('File not found'));
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('File not found'),
+      );
     });
   });
 
@@ -240,7 +235,9 @@ describe('FileOperationHandler', () => {
 
       await handler.handleOpenCommandFile('missing', 'personal');
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining('File not found'));
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('File not found'),
+      );
     });
   });
 
@@ -264,10 +261,7 @@ describe('FileOperationHandler', () => {
           filters: expect.objectContaining({ 'SVG Files': ['svg'] }),
         }),
       );
-      expect(workspace.fs.writeFile).toHaveBeenCalledWith(
-        mockUri,
-        expect.any(Buffer),
-      );
+      expect(workspace.fs.writeFile).toHaveBeenCalledWith(mockUri, expect.any(Buffer));
     });
 
     it('should not write when user cancels save dialog', async () => {

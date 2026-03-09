@@ -13,10 +13,10 @@
  * SubAgent status for UI display
  */
 export type SubAgentUIStatus =
-  | 'pending'   // Waiting to start
-  | 'running'   // Currently executing
+  | 'pending' // Waiting to start
+  | 'running' // Currently executing
   | 'completed' // Finished successfully
-  | 'failed'    // Finished with error
+  | 'failed' // Finished with error
   | 'cancelled'; // Cancelled by user/timeout
 
 /**

@@ -36,7 +36,7 @@ describe('ScriptRenderer', () => {
     render(<ScriptRenderer document={null} />);
     expect(screen.getByText('No Script Loaded')).toBeInTheDocument();
     expect(
-      screen.getByText('Open a .fountain, .nks, or .story file to preview')
+      screen.getByText('Open a .fountain, .nks, or .story file to preview'),
     ).toBeInTheDocument();
   });
 
@@ -235,9 +235,7 @@ describe('ScriptRenderer', () => {
     };
     const doc: FountainDocument = { titlePage: null, elements: [synopsis] };
     render(<ScriptRenderer document={doc} />);
-    expect(
-      screen.getByText('John meets Mary at the coffee shop.')
-    ).toBeInTheDocument();
+    expect(screen.getByText('John meets Mary at the coffee shop.')).toBeInTheDocument();
   });
 
   it('renders note', () => {

@@ -14,12 +14,7 @@
 import { StateCreator } from 'zustand';
 import type { ProjectData, TimelineTrack } from '../../types';
 import type { ShapeElement } from '@neko/shared';
-import type {
-  Shape,
-  ShapeInstance,
-  ShapeStyle,
-  ShapeType,
-} from '../../types/shape';
+import type { Shape, ShapeInstance, ShapeStyle, ShapeType } from '../../types/shape';
 import type { EditOperation } from '@neko/shared';
 import {
   createShapeInstance,
@@ -91,7 +86,7 @@ function createShapeByType(shapeType: ShapeType): Shape {
  */
 function findShapeLocation(
   project: ProjectData,
-  shapeId: string
+  shapeId: string,
 ): { track: TimelineTrack; element: WebviewShapeElement; shapeIndex: number } | null {
   for (const track of project.tracks) {
     if (track.type !== 'shape') continue;
@@ -116,7 +111,7 @@ function findShapeLocation(
 function findShapeElement(
   project: ProjectData,
   trackId: string,
-  elementId: string
+  elementId: string,
 ): WebviewShapeElement | null {
   const track = project.tracks.find((t) => t.id === trackId);
   if (!track || track.type !== 'shape') return null;
@@ -134,72 +129,46 @@ function findShapeElement(
 export interface ShapeOpsSlice {
   // 形状元素操作
   /** 添加形状元素到轨道 */
-  addShapeElement: (
-    trackId: string,
-    startTime?: number,
-    duration?: number
-  ) => string;
+  addShapeElement: (trackId: string, startTime?: number, duration?: number) => string;
 
   // 形状实例操作
   /** 添加形状到元素 */
-  addShape: (
-    trackId: string,
-    elementId: string,
-    shapeType: ShapeType,
-    name?: string
-  ) => string;
+  addShape: (trackId: string, elementId: string, shapeType: ShapeType, name?: string) => string;
   /** 删除形状 */
   removeShape: (trackId: string, elementId: string, shapeId: string) => void;
   /** 复制形状 */
-  duplicateShape: (
-    trackId: string,
-    elementId: string,
-    shapeId: string
-  ) => string | null;
+  duplicateShape: (trackId: string, elementId: string, shapeId: string) => string | null;
   /** 更新形状属性 */
   updateShape: (
     trackId: string,
     elementId: string,
     shapeId: string,
-    updates: Partial<ShapeInstance>
+    updates: Partial<ShapeInstance>,
   ) => void;
   /** 更新形状几何 */
   updateShapeGeometry: (
     trackId: string,
     elementId: string,
     shapeId: string,
-    shape: Partial<Shape>
+    shape: Partial<Shape>,
   ) => void;
   /** 更新形状样式 */
   updateShapeStyle: (
     trackId: string,
     elementId: string,
     shapeId: string,
-    style: Partial<ShapeStyle>
+    style: Partial<ShapeStyle>,
   ) => void;
 
   // 形状可见性和锁定
   /** 切换形状可见性 */
-  toggleShapeVisibility: (
-    trackId: string,
-    elementId: string,
-    shapeId: string
-  ) => void;
+  toggleShapeVisibility: (trackId: string, elementId: string, shapeId: string) => void;
   /** 切换形状锁定状态 */
-  toggleShapeLocked: (
-    trackId: string,
-    elementId: string,
-    shapeId: string
-  ) => void;
+  toggleShapeLocked: (trackId: string, elementId: string, shapeId: string) => void;
 
   // 形状排序
   /** 移动形状到指定层级 */
-  moveShapeToIndex: (
-    trackId: string,
-    elementId: string,
-    shapeId: string,
-    newIndex: number
-  ) => void;
+  moveShapeToIndex: (trackId: string, elementId: string, shapeId: string, newIndex: number) => void;
   /** 上移形状 */
   moveShapeUp: (trackId: string, elementId: string, shapeId: string) => void;
   /** 下移形状 */
@@ -207,11 +176,7 @@ export interface ShapeOpsSlice {
   /** 移到顶层 */
   moveShapeToTop: (trackId: string, elementId: string, shapeId: string) => void;
   /** 移到底层 */
-  moveShapeToBottom: (
-    trackId: string,
-    elementId: string,
-    shapeId: string
-  ) => void;
+  moveShapeToBottom: (trackId: string, elementId: string, shapeId: string) => void;
 
   // 快捷操作
   /** 通过形状ID查找并更新 */
@@ -280,14 +245,11 @@ export const createShapeOpsSlice: StateCreator<
     const shapeInstance = createShapeInstance(
       shape,
       name || `${shapeType.charAt(0).toUpperCase() + shapeType.slice(1)}`,
-      createDefaultShapeStyle()
+      createDefaultShapeStyle(),
     );
 
     // Set zIndex to current max + 1
-    const maxZIndex = shapeElement.shapes.reduce(
-      (max, s) => Math.max(max, s.zIndex),
-      -1
-    );
+    const maxZIndex = shapeElement.shapes.reduce((max, s) => Math.max(max, s.zIndex), -1);
     shapeInstance.zIndex = maxZIndex + 1;
 
     dispatch({
@@ -310,7 +272,7 @@ export const createShapeOpsSlice: StateCreator<
     const shapeElement = findShapeElement(project, trackId, elementId);
     if (!shapeElement) return;
 
-    const shapeIndex = shapeElement.shapes.findIndex(s => s.id === shapeId);
+    const shapeIndex = shapeElement.shapes.findIndex((s) => s.id === shapeId);
     if (shapeIndex === -1) return;
     const shape = shapeElement.shapes[shapeIndex]!;
 
@@ -363,7 +325,7 @@ export const createShapeOpsSlice: StateCreator<
     const shapeElement = findShapeElement(project, trackId, elementId);
     if (!shapeElement) return;
 
-    const shape = shapeElement.shapes.find(s => s.id === shapeId);
+    const shape = shapeElement.shapes.find((s) => s.id === shapeId);
     if (!shape) return;
 
     // Build before from existing shape
@@ -387,7 +349,7 @@ export const createShapeOpsSlice: StateCreator<
     const shapeElement = findShapeElement(project, trackId, elementId);
     if (!shapeElement) return;
 
-    const shape = shapeElement.shapes.find(s => s.id === shapeId);
+    const shape = shapeElement.shapes.find((s) => s.id === shapeId);
     if (!shape) return;
 
     // Build before from existing shape geometry
@@ -411,7 +373,7 @@ export const createShapeOpsSlice: StateCreator<
     const shapeElement = findShapeElement(project, trackId, elementId);
     if (!shapeElement) return;
 
-    const shape = shapeElement.shapes.find(s => s.id === shapeId);
+    const shape = shapeElement.shapes.find((s) => s.id === shapeId);
     if (!shape) return;
 
     // Build before from existing style
@@ -520,12 +482,7 @@ export const createShapeOpsSlice: StateCreator<
     const shapeElement = findShapeElement(project, trackId, elementId);
     if (!shapeElement) return;
 
-    get().moveShapeToIndex(
-      trackId,
-      elementId,
-      shapeId,
-      shapeElement.shapes.length - 1
-    );
+    get().moveShapeToIndex(trackId, elementId, shapeId, shapeElement.shapes.length - 1);
   },
 
   moveShapeToBottom: (trackId, elementId, shapeId) => {

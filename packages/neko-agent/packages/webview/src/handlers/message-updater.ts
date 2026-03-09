@@ -27,7 +27,7 @@ export interface ConversationUpdateResult {
  */
 export type ConversationUpdater = (
   messages: Message[],
-  streamingMessageId: string | null
+  streamingMessageId: string | null,
 ) => ConversationUpdateResult;
 
 /**
@@ -44,7 +44,7 @@ export function updateConversation(
 ): void {
   if (context.isCurrentConversation(conversationId)) {
     let result: ConversationUpdateResult | undefined;
-    context.setMessages(prev => {
+    context.setMessages((prev) => {
       result = updater(prev, context.streamingMessageIdRef.current);
       return result.messages;
     });
@@ -64,12 +64,11 @@ export function updateConversation(
       return {
         messages: result.messages,
         streaming: {
-          streamingMessageId: result.streamingMessageId !== undefined
-            ? result.streamingMessageId
-            : streaming.streamingMessageId,
-          isThinking: result.isThinking !== undefined
-            ? result.isThinking
-            : streaming.isThinking,
+          streamingMessageId:
+            result.streamingMessageId !== undefined
+              ? result.streamingMessageId
+              : streaming.streamingMessageId,
+          isThinking: result.isThinking !== undefined ? result.isThinking : streaming.isThinking,
         },
       };
     });

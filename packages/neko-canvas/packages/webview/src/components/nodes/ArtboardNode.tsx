@@ -26,13 +26,7 @@ export interface ArtboardNodeProps {
 // Component
 // =============================================================================
 
-export function ArtboardNode({
-  node,
-  viewport,
-  isSelected,
-  onSelect,
-  onMove,
-}: ArtboardNodeProps) {
+export function ArtboardNode({ node, viewport, isSelected, onSelect, onMove }: ArtboardNodeProps) {
   const { name, description, backgroundColor, showBorder = true, preset } = node.data;
 
   // 获取预设信息
@@ -48,10 +42,7 @@ export function ArtboardNode({
       className="artboard-node"
     >
       <div
-        className={clsx(
-          'w-full h-full flex flex-col',
-          showBorder && 'border border-gray-600'
-        )}
+        className={clsx('w-full h-full flex flex-col', showBorder && 'border border-gray-600')}
         style={{
           backgroundColor: backgroundColor || '#1a1a1a',
         }}
@@ -66,9 +57,7 @@ export function ArtboardNode({
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-500">
             {presetInfo && (
-              <span className="px-1.5 py-0.5 bg-gray-700 rounded">
-                {presetInfo.label}
-              </span>
+              <span className="px-1.5 py-0.5 bg-gray-700 rounded">{presetInfo.label}</span>
             )}
             <span>
               {node.size.width} × {node.size.height}
@@ -134,7 +123,7 @@ export function ArtboardNode({
  */
 export function createArtboardData(
   preset: ArtboardCanvasNode['data']['preset'] = 'custom',
-  name?: string
+  name?: string,
 ): { data: ArtboardCanvasNode['data']; size: { width: number; height: number } } {
   const presetInfo = ARTBOARD_PRESETS[preset];
 

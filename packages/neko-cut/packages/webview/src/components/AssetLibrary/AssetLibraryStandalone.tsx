@@ -8,9 +8,9 @@
 import { AssetPanel } from './AssetPanel';
 
 export function AssetLibraryStandalone() {
-	return (
-		<div className="h-full bg-vscode-bg text-vscode-foreground">
-			<AssetPanel />
-		</div>
-	);
+  return (
+    <div className="h-full bg-vscode-bg text-vscode-foreground">
+      <AssetPanel />
+    </div>
+  );
 }

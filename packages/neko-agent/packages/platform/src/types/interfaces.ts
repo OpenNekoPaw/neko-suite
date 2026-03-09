@@ -6,10 +6,7 @@
  * not concrete implementations.
  */
 
-import type {
-  ChatMessage,
-  ModelInfo,
-} from './adapter';
+import type { ChatMessage, ModelInfo } from './adapter';
 import type {
   ServiceOptions,
   ServiceResponse,
@@ -41,18 +38,12 @@ export interface IService {
   /**
    * Send a chat request and get a complete response
    */
-  chat(
-    messages: ChatMessage[],
-    options?: ServiceOptions
-  ): Promise<ServiceResponse>;
+  chat(messages: ChatMessage[], options?: ServiceOptions): Promise<ServiceResponse>;
 
   /**
    * Send a chat request and get a streaming response
    */
-  chatStream(
-    messages: ChatMessage[],
-    options?: ServiceOptions
-  ): ServiceStreamResponse;
+  chatStream(messages: ChatMessage[], options?: ServiceOptions): ServiceStreamResponse;
 
   /**
    * Generate embeddings for text
@@ -82,7 +73,7 @@ export interface IService {
    */
   validateProviderApiKey(
     providerId: string,
-    modelId?: string
+    modelId?: string,
   ): Promise<{ valid: boolean; error?: string }>;
 
   /**
@@ -137,8 +128,5 @@ export interface IMediaGenerationService {
    * Subscribe to task progress updates
    * @returns Unsubscribe function
    */
-  onProgress(
-    taskId: string,
-    callback: (task: MediaTask) => void
-  ): () => void;
+  onProgress(taskId: string, callback: (task: MediaTask) => void): () => void;
 }

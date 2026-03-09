@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  t,
-  setLocale,
-  getLocale,
-  detectLocale,
-} from '../index';
+import { t, setLocale, getLocale, detectLocale } from '../index';
 
 describe('i18n module', () => {
   beforeEach(() => {

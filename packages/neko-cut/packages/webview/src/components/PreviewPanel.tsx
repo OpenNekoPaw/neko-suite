@@ -18,8 +18,18 @@ import { useMediaInfoCache } from '../hooks/useMediaInfoCache';
 import { PREVIEW_QUALITY } from '../constants';
 import { postMessage } from '../utils/vscodeApi';
 import { getMediaProxy } from '../services/mediaProxyFactory';
-import { H264StreamClient, AudioStreamClient, FrameScheduler, PlaybackPerformanceMonitor } from '@neko/neko-client';
-import type { ProjectData, MediaElement, CompositeLayerConfig, ElementTransform } from '@neko/shared';
+import {
+  H264StreamClient,
+  AudioStreamClient,
+  FrameScheduler,
+  PlaybackPerformanceMonitor,
+} from '@neko/neko-client';
+import type {
+  ProjectData,
+  MediaElement,
+  CompositeLayerConfig,
+  ElementTransform,
+} from '@neko/shared';
 import { getComputedTransform } from '../utils/animation';
 
 // =============================================================================
@@ -34,10 +44,7 @@ import { getComputedTransform } from '../utils/animation';
  * 回退到 element.transform（引擎静态变换），
  * 最后使用居中默认值。
  */
-function buildCompositeLayers(
-  project: ProjectData,
-  time: number
-): CompositeLayerConfig[] {
+function buildCompositeLayers(project: ProjectData, time: number): CompositeLayerConfig[] {
   const layers: CompositeLayerConfig[] = [];
   let zIndex = 0;
 
@@ -123,7 +130,8 @@ export const PreviewPanel = memo(function PreviewPanel({
   isCapturingScreenshot: _isCapturingScreenshot,
 }: PreviewPanelProps = {}) {
   const { t } = useTranslation();
-  const { project, currentTime, isPlaying, previewQuality, previewVolume, previewMuted } = useEditorStore();
+  const { project, currentTime, isPlaying, previewQuality, previewVolume, previewMuted } =
+    useEditorStore();
   const showFpsCounter = useEditorStore((state) => state.showFpsCounter);
   const currentFps = useEditorStore((state) => state.currentFps);
   const performanceStats = useEditorStore((state) => state.performanceStats);
@@ -185,7 +193,9 @@ export const PreviewPanel = memo(function PreviewPanel({
         setFrameServerPort(message.port);
       }
       if (message.type === 'frameServer:streamCreated') {
-        logger.info(`Stream created: video=${message.streamId}, audio=${message.audioStreamId ?? 'none'}`);
+        logger.info(
+          `Stream created: video=${message.streamId}, audio=${message.audioStreamId ?? 'none'}`,
+        );
         setStreamWsUrl(typeof message.wsUrl === 'string' ? message.wsUrl : null);
         setAudioWsUrl(typeof message.audioWsUrl === 'string' ? message.audioWsUrl : null);
       }
@@ -314,7 +324,14 @@ export const PreviewPanel = memo(function PreviewPanel({
       monitor.reset();
       setIsInitialized(false);
     };
-  }, [streamWsUrl, audioWsUrl, project?.resolution.width, project?.resolution.height, project?.fps, renderFrame]);
+  }, [
+    streamWsUrl,
+    audioWsUrl,
+    project?.resolution.width,
+    project?.resolution.height,
+    project?.fps,
+    renderFrame,
+  ]);
 
   // ==========================================================================
   // rAF Playback Loop (A/V sync)
@@ -495,7 +512,7 @@ export const PreviewPanel = memo(function PreviewPanel({
           project.resolution.width,
           project.resolution.height,
           [0, 0, 0, 255],
-          { signal: abortController.signal }
+          { signal: abortController.signal },
         );
 
         // Race check: ensure still paused and not aborted
@@ -506,9 +523,15 @@ export const PreviewPanel = memo(function PreviewPanel({
 
         // Render composite frame to Canvas
         const canvas = canvasRef.current;
-        if (!canvas) { bitmap.close(); return; }
+        if (!canvas) {
+          bitmap.close();
+          return;
+        }
         const ctx = canvas.getContext('2d');
-        if (!ctx) { bitmap.close(); return; }
+        if (!ctx) {
+          bitmap.close();
+          return;
+        }
         ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
         bitmap.close();
       } catch (err) {
@@ -588,7 +611,9 @@ export const PreviewPanel = memo(function PreviewPanel({
     const width = Math.round(project.resolution.width * scale);
     const height = Math.round(project.resolution.height * scale);
 
-    logger.info(`Sending quality update: ${width}x${height} (scale=${scale}, quality=${previewQuality})`);
+    logger.info(
+      `Sending quality update: ${width}x${height} (scale=${scale}, quality=${previewQuality})`,
+    );
     postMessage({
       type: 'media:frameServer:projectPlayback:quality',
       payload: { width, height },
@@ -638,7 +663,7 @@ export const PreviewPanel = memo(function PreviewPanel({
         },
       });
 
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob((b) => resolve(b), 'image/png', 0.95);
@@ -668,7 +693,9 @@ export const PreviewPanel = memo(function PreviewPanel({
 
   useEffect(() => {
     if (onCaptureScreenshot) {
-      (window as unknown as { __previewPanelCaptureScreenshot: typeof captureScreenshot }).__previewPanelCaptureScreenshot = captureScreenshot;
+      (
+        window as unknown as { __previewPanelCaptureScreenshot: typeof captureScreenshot }
+      ).__previewPanelCaptureScreenshot = captureScreenshot;
     }
   }, [onCaptureScreenshot, captureScreenshot]);
 
@@ -720,9 +747,11 @@ export const PreviewPanel = memo(function PreviewPanel({
   }, [setIsPiPActive]);
 
   useEffect(() => {
-    (window as unknown as { __previewPanelTogglePiP: typeof togglePiP }).__previewPanelTogglePiP = togglePiP;
+    (window as unknown as { __previewPanelTogglePiP: typeof togglePiP }).__previewPanelTogglePiP =
+      togglePiP;
     return () => {
-      delete (window as unknown as { __previewPanelTogglePiP?: typeof togglePiP }).__previewPanelTogglePiP;
+      delete (window as unknown as { __previewPanelTogglePiP?: typeof togglePiP })
+        .__previewPanelTogglePiP;
     };
   }, [togglePiP]);
 
@@ -743,9 +772,7 @@ export const PreviewPanel = memo(function PreviewPanel({
       const snapshot = perfMonitorRef.current.getSnapshot();
       const schedStats = schedulerRef.current?.getStats();
 
-      perfMonitorRef.current.recordDroppedFrames(
-        stats.framesDropped - snapshot.droppedFrames
-      );
+      perfMonitorRef.current.recordDroppedFrames(stats.framesDropped - snapshot.droppedFrames);
 
       setCurrentFps(snapshot.measuredFps);
       setPerformanceStats({
@@ -775,31 +802,35 @@ export const PreviewPanel = memo(function PreviewPanel({
         gpuLoad: 0,
         cachedFrames: schedStats?.queueLength ?? 0,
         cacheHitRate: 0,
-        droppedFrames: stats.framesDropped + (schedStats?.skipped ?? 0) + (schedStats?.backpressure ?? 0),
+        droppedFrames:
+          stats.framesDropped + (schedStats?.skipped ?? 0) + (schedStats?.backpressure ?? 0),
         renderErrors: 0,
       });
 
       // Fetch engine-side pipeline stats (async, non-blocking)
-      getMediaProxy().getStreamStats().then((engineStats) => {
-        if (engineStats) {
-          setPerformanceStats({
-            engineHwDecodeMs: engineStats.video.hwDecodeMs,
-            engineNv12ImportMs: engineStats.video.nv12ImportMs,
-            engineNv12ToRgbaMs: engineStats.video.nv12ToRgbaMs,
-            engineCompositeMs: engineStats.video.compositeMs,
-            engineRgbaToNv12Ms: engineStats.video.rgbaToNv12Ms,
-            engineCpuReadbackMs: engineStats.video.cpuReadbackMs,
-            engineEncodeSubmitMs: engineStats.video.encodeSubmitMs,
-            engineEncodeTimeMs: engineStats.video.encodeTimeMs ?? 0,
-            engineAvgFps: engineStats.video.avgFps,
-            engineAudioMixMs: engineStats.audioMixMs,
-            engineCpuUsagePercent: engineStats.cpuUsagePercent,
-            enginePeakMemoryBytes: engineStats.peakMemoryBytes,
-          });
-        }
-      }).catch(() => {
-        // Ignore — engine stats are best-effort
-      });
+      getMediaProxy()
+        .getStreamStats()
+        .then((engineStats) => {
+          if (engineStats) {
+            setPerformanceStats({
+              engineHwDecodeMs: engineStats.video.hwDecodeMs,
+              engineNv12ImportMs: engineStats.video.nv12ImportMs,
+              engineNv12ToRgbaMs: engineStats.video.nv12ToRgbaMs,
+              engineCompositeMs: engineStats.video.compositeMs,
+              engineRgbaToNv12Ms: engineStats.video.rgbaToNv12Ms,
+              engineCpuReadbackMs: engineStats.video.cpuReadbackMs,
+              engineEncodeSubmitMs: engineStats.video.encodeSubmitMs,
+              engineEncodeTimeMs: engineStats.video.encodeTimeMs ?? 0,
+              engineAvgFps: engineStats.video.avgFps,
+              engineAudioMixMs: engineStats.audioMixMs,
+              engineCpuUsagePercent: engineStats.cpuUsagePercent,
+              enginePeakMemoryBytes: engineStats.peakMemoryBytes,
+            });
+          }
+        })
+        .catch(() => {
+          // Ignore — engine stats are best-effort
+        });
     };
 
     // Run first fetch immediately, then every 1s
@@ -844,7 +875,11 @@ export const PreviewPanel = memo(function PreviewPanel({
       <div className="flex flex-col items-center justify-center h-full bg-black gap-4">
         <div className="text-vscode-error flex items-center gap-2">
           <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            <path
+              fillRule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+              clipRule="evenodd"
+            />
           </svg>
           <span>{initError}</span>
         </div>
@@ -905,10 +940,17 @@ export const PreviewPanel = memo(function PreviewPanel({
                 {/* FPS & Bitrate */}
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-gray-400">FPS</span>
-                  <span style={{
-                    color: currentFps >= (project?.fps || 30) * 0.9 ? '#4a9' : currentFps >= (project?.fps || 30) * 0.5 ? '#fa0' : '#f44',
-                    fontWeight: 'bold',
-                  }}>
+                  <span
+                    style={{
+                      color:
+                        currentFps >= (project?.fps || 30) * 0.9
+                          ? '#4a9'
+                          : currentFps >= (project?.fps || 30) * 0.5
+                            ? '#fa0'
+                            : '#f44',
+                      fontWeight: 'bold',
+                    }}
+                  >
                     {currentFps.toFixed(1)}
                   </span>
                 </div>
@@ -929,15 +971,21 @@ export const PreviewPanel = memo(function PreviewPanel({
                 <div className="text-[10px] leading-tight space-y-0.5">
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500">Decode</span>
-                    <span className="text-gray-300">{performanceStats.decodeTime.toFixed(1)}ms</span>
+                    <span className="text-gray-300">
+                      {performanceStats.decodeTime.toFixed(1)}ms
+                    </span>
                   </div>
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500">Render</span>
-                    <span className="text-gray-300">{performanceStats.renderTime.toFixed(1)}ms</span>
+                    <span className="text-gray-300">
+                      {performanceStats.renderTime.toFixed(1)}ms
+                    </span>
                   </div>
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500">Latency</span>
-                    <span className="text-gray-300">{performanceStats.compositeTime.toFixed(1)}ms</span>
+                    <span className="text-gray-300">
+                      {performanceStats.compositeTime.toFixed(1)}ms
+                    </span>
                   </div>
                 </div>
 
@@ -947,10 +995,14 @@ export const PreviewPanel = memo(function PreviewPanel({
                 <div className="text-[10px] leading-tight space-y-0.5">
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500">P50</span>
-                    <span className="text-gray-300">{performanceStats.frameTimeP50.toFixed(1)}ms</span>
+                    <span className="text-gray-300">
+                      {performanceStats.frameTimeP50.toFixed(1)}ms
+                    </span>
                     <span className="text-gray-600 mx-0.5">|</span>
                     <span className="text-gray-500">P95</span>
-                    <span className="text-gray-300">{performanceStats.frameTimeP95.toFixed(1)}ms</span>
+                    <span className="text-gray-300">
+                      {performanceStats.frameTimeP95.toFixed(1)}ms
+                    </span>
                   </div>
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500">Dropped</span>
@@ -965,7 +1017,9 @@ export const PreviewPanel = memo(function PreviewPanel({
                   {performanceStats.memoryUsedMB > 0 && (
                     <div className="flex justify-between gap-2">
                       <span className="text-gray-500">Memory</span>
-                      <span className="text-gray-300">{performanceStats.memoryUsedMB.toFixed(0)} MB</span>
+                      <span className="text-gray-300">
+                        {performanceStats.memoryUsedMB.toFixed(0)} MB
+                      </span>
                     </div>
                   )}
                 </div>
@@ -979,28 +1033,40 @@ export const PreviewPanel = memo(function PreviewPanel({
                       <div className="space-y-0.5">
                         <div className="flex justify-between gap-2">
                           <span className="text-gray-500">HW Decode</span>
-                          <span className="text-gray-300">{performanceStats.engineHwDecodeMs.toFixed(1)}ms</span>
+                          <span className="text-gray-300">
+                            {performanceStats.engineHwDecodeMs.toFixed(1)}ms
+                          </span>
                         </div>
                         <div className="flex justify-between gap-2">
                           <span className="text-gray-500">Composite</span>
-                          <span className="text-gray-300">{performanceStats.engineCompositeMs.toFixed(1)}ms</span>
+                          <span className="text-gray-300">
+                            {performanceStats.engineCompositeMs.toFixed(1)}ms
+                          </span>
                         </div>
                         <div className="flex justify-between gap-2">
                           <span className="text-gray-500">Encode</span>
-                          <span className="text-gray-300">{performanceStats.engineEncodeTimeMs.toFixed(1)}ms</span>
+                          <span className="text-gray-300">
+                            {performanceStats.engineEncodeTimeMs.toFixed(1)}ms
+                          </span>
                         </div>
                         <div className="flex justify-between gap-2">
                           <span className="text-gray-500">Engine FPS</span>
-                          <span className="text-gray-300">{performanceStats.engineAvgFps.toFixed(1)}</span>
+                          <span className="text-gray-300">
+                            {performanceStats.engineAvgFps.toFixed(1)}
+                          </span>
                         </div>
                         <div className="flex justify-between gap-2">
                           <span className="text-gray-500">CPU</span>
-                          <span className="text-gray-300">{performanceStats.engineCpuUsagePercent.toFixed(1)}%</span>
+                          <span className="text-gray-300">
+                            {performanceStats.engineCpuUsagePercent.toFixed(1)}%
+                          </span>
                         </div>
                         {performanceStats.enginePeakMemoryBytes > 0 && (
                           <div className="flex justify-between gap-2">
                             <span className="text-gray-500">Peak Mem</span>
-                            <span className="text-gray-300">{(performanceStats.enginePeakMemoryBytes / 1024 / 1024).toFixed(0)} MB</span>
+                            <span className="text-gray-300">
+                              {(performanceStats.enginePeakMemoryBytes / 1024 / 1024).toFixed(0)} MB
+                            </span>
                           </div>
                         )}
                       </div>
@@ -1012,12 +1078,7 @@ export const PreviewPanel = memo(function PreviewPanel({
           )}
 
           {/* Hidden video element for PiP */}
-          <video
-            ref={pipVideoRef}
-            style={{ display: 'none' }}
-            playsInline
-            muted
-          />
+          <video ref={pipVideoRef} style={{ display: 'none' }} playsInline muted />
 
           {/* Loading overlay */}
           {!isInitialized && (
@@ -1030,8 +1091,19 @@ export const PreviewPanel = memo(function PreviewPanel({
             >
               <div className="flex flex-col items-center gap-2 text-vscode-description">
                 <svg className="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
                 </svg>
                 <span className="text-xs">{t('preview.initializingGpu')}</span>
               </div>

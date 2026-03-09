@@ -66,8 +66,19 @@ export const PROVIDER_UI_METADATA: Record<string, ProviderUIMetadata> = {
     category: 'chat',
     authFields: [
       { key: 'apiKey', label: 'API Key', placeholder: 'your-api-key', required: true },
-      { key: 'resourceName', label: 'Resource Name', placeholder: 'your-resource-name', type: 'text', required: true },
-      { key: 'deploymentId', label: 'Deployment ID', placeholder: 'your-deployment-id', type: 'text' },
+      {
+        key: 'resourceName',
+        label: 'Resource Name',
+        placeholder: 'your-resource-name',
+        type: 'text',
+        required: true,
+      },
+      {
+        key: 'deploymentId',
+        label: 'Deployment ID',
+        placeholder: 'your-deployment-id',
+        type: 'text',
+      },
     ],
   },
   ollama: {
@@ -139,7 +150,13 @@ export const PROVIDER_UI_METADATA: Record<string, ProviderUIMetadata> = {
     category: 'media',
     authFields: [
       { key: 'apiKey', label: 'API Key', placeholder: 'mj-xxx...', required: true },
-      { key: 'proxyUrl', label: 'Proxy URL', placeholder: 'https://proxy.example.com', type: 'text', helpText: 'Midjourney proxy service URL' },
+      {
+        key: 'proxyUrl',
+        label: 'Proxy URL',
+        placeholder: 'https://proxy.example.com',
+        type: 'text',
+        helpText: 'Midjourney proxy service URL',
+      },
     ],
   },
   liblib: {
@@ -147,7 +164,13 @@ export const PROVIDER_UI_METADATA: Record<string, ProviderUIMetadata> = {
     category: 'media',
     authFields: [
       { key: 'apiKey', label: 'API Key', placeholder: 'your-api-key', required: true },
-      { key: 'secretKey', label: 'Secret Key', placeholder: 'your-secret-key', required: true, helpText: 'Used for request signing' },
+      {
+        key: 'secretKey',
+        label: 'Secret Key',
+        placeholder: 'your-secret-key',
+        required: true,
+        helpText: 'Used for request signing',
+      },
     ],
   },
 
@@ -157,7 +180,13 @@ export const PROVIDER_UI_METADATA: Record<string, ProviderUIMetadata> = {
     category: 'media',
     authFields: [
       { key: 'accessKey', label: 'Access Key', placeholder: 'your-access-key', required: true },
-      { key: 'secretKey', label: 'Secret Key', placeholder: 'your-secret-key', required: true, helpText: 'Used for JWT signing' },
+      {
+        key: 'secretKey',
+        label: 'Secret Key',
+        placeholder: 'your-secret-key',
+        required: true,
+        helpText: 'Used for JWT signing',
+      },
     ],
   },
   vidu: {
@@ -177,7 +206,13 @@ export const PROVIDER_UI_METADATA: Record<string, ProviderUIMetadata> = {
     category: 'media',
     authFields: [
       { key: 'apiKey', label: 'API Key', placeholder: 'your-api-key', required: true },
-      { key: 'groupId', label: 'Group ID', placeholder: 'your-group-id', type: 'text', helpText: 'MiniMax group ID' },
+      {
+        key: 'groupId',
+        label: 'Group ID',
+        placeholder: 'your-group-id',
+        type: 'text',
+        helpText: 'MiniMax group ID',
+      },
     ],
   },
 
@@ -194,10 +229,12 @@ export const PROVIDER_UI_METADATA: Record<string, ProviderUIMetadata> = {
  * @returns UI metadata or default values
  */
 export function getProviderUIMetadata(providerId: string): ProviderUIMetadata {
-  return PROVIDER_UI_METADATA[providerId] || {
-    icon: '🔧',
-    category: 'chat',
-  };
+  return (
+    PROVIDER_UI_METADATA[providerId] || {
+      icon: '🔧',
+      category: 'chat',
+    }
+  );
 }
 
 /**

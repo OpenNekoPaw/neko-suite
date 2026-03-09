@@ -1,5 +1,13 @@
 import { useEffect, useState, useMemo, memo, useRef } from 'react';
-import type { TimelineElement, MediaElement, TextElement, AudioElement, TrackType, ShapeElement, AllTimelineElement } from '../../types';
+import type {
+  TimelineElement,
+  MediaElement,
+  TextElement,
+  AudioElement,
+  TrackType,
+  ShapeElement,
+  AllTimelineElement,
+} from '../../types';
 import type { SubtitleElement } from '@neko/shared';
 import { generateWaveform } from '../../utils/waveform';
 import { ShapeElementContent } from '../ShapeElementContent';
@@ -132,7 +140,13 @@ const MediaElementContent = memo(function MediaElementContent({
 
   // Compute generation range
   const { start: genStart, end: genEnd } = computeGenRange(
-    visibleRange, elementStartTime, elementEndTime, minTime, maxTime, elementDuration, interval
+    visibleRange,
+    elementStartTime,
+    elementEndTime,
+    minTime,
+    maxTime,
+    elementDuration,
+    interval,
   );
 
   // Single effect handles both reset and incremental loading
@@ -176,13 +190,13 @@ const MediaElementContent = memo(function MediaElementContent({
       if (!generatedRangeRef.current) setIsLoading(true);
 
       const service = getThumbnailService();
-      const promises = ranges.map(r =>
+      const promises = ranges.map((r) =>
         service.getThumbnailsForViewport(element.src, {
           startTime: r.start,
           endTime: r.end,
           pixelsPerSecond: effectivePPS,
           height: thumbHeight,
-        })
+        }),
       );
 
       Promise.all(promises)
@@ -218,9 +232,7 @@ const MediaElementContent = memo(function MediaElementContent({
   if (isLoading || thumbnails.length === 0) {
     return (
       <div className="absolute inset-0 flex items-center px-2 overflow-hidden pointer-events-none">
-        <span className="text-xs text-white truncate select-none">
-          {element.name}
-        </span>
+        <span className="text-xs text-white truncate select-none">{element.name}</span>
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/20">
             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -241,17 +253,13 @@ const MediaElementContent = memo(function MediaElementContent({
     actualInterval = intervals[Math.floor(intervals.length / 2)];
   }
 
-  const thumbWidthPercent = elementDuration > 0
-    ? (actualInterval / elementDuration) * 100
-    : 100;
+  const thumbWidthPercent = elementDuration > 0 ? (actualInterval / elementDuration) * 100 : 100;
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
       {thumbnails.map((thumb) => {
         const localTime = thumb.time - minTime;
-        const positionPercent = elementDuration > 0
-          ? (localTime / elementDuration) * 100
-          : 0;
+        const positionPercent = elementDuration > 0 ? (localTime / elementDuration) * 100 : 0;
 
         return (
           <div
@@ -281,7 +289,11 @@ const MediaElementContent = memo(function MediaElementContent({
       {element.muted && (
         <div className="absolute top-1 right-1 p-0.5 bg-black/50 rounded">
           <svg className="w-3 h-3 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clipRule="evenodd" />
+            <path
+              fillRule="evenodd"
+              d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"
+              clipRule="evenodd"
+            />
           </svg>
         </div>
       )}
@@ -294,9 +306,7 @@ const TextElementContent = memo(function TextElementContent({ element }: { eleme
   return (
     <div className="absolute inset-0 flex items-center px-2 overflow-hidden pointer-events-none">
       <div className="flex flex-col min-w-0">
-        <span className="text-[10px] text-white/60 truncate select-none">
-          {element.name}
-        </span>
+        <span className="text-[10px] text-white/60 truncate select-none">{element.name}</span>
         <span
           className="text-xs truncate select-none"
           style={{
@@ -335,12 +345,8 @@ const SubtitleElementContent = memo(function SubtitleElementContent({
           <path d="M18 3H2c-.55 0-1 .45-1 1v12c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zm-1 12H3V5h14v10zM4 12h2v2H4v-2zm0-3h8v2H4V9zm10 3h2v2h-2v-2zm-4 0h3v2h-3v-2z" />
         </svg>
         <div className="flex flex-col min-w-0">
-          <span className="text-[10px] text-purple-200 truncate select-none">
-            {element.name}
-          </span>
-          <span className="text-[9px] text-purple-300/80 truncate select-none">
-            {displayText}
-          </span>
+          <span className="text-[10px] text-purple-200 truncate select-none">{element.name}</span>
+          <span className="text-[9px] text-purple-300/80 truncate select-none">{displayText}</span>
         </div>
       </div>
       {/* Decorative subtitle lines */}
@@ -402,7 +408,7 @@ const AudioElementContent = memo(function AudioElementContent({
     const localStart = Math.max(0, visibleStart - elementStartTime + element.trimStart);
     const localEnd = Math.min(
       element.duration - element.trimEnd,
-      visibleEnd - elementStartTime + element.trimStart
+      visibleEnd - elementStartTime + element.trimStart,
     );
 
     return {
@@ -482,7 +488,10 @@ const AudioElementContent = memo(function AudioElementContent({
   const bars = waveformPeaks || placeholderBars;
 
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ backgroundColor: 'rgba(20, 83, 45, 0.7)' }}>
+    <div
+      className="absolute inset-0 overflow-hidden pointer-events-none"
+      style={{ backgroundColor: 'rgba(20, 83, 45, 0.7)' }}
+    >
       {/* Waveform visualization */}
       <div
         className="absolute inset-0 flex items-center justify-around px-1"
@@ -517,7 +526,11 @@ const AudioElementContent = memo(function AudioElementContent({
       {element.muted && (
         <div className="absolute top-1 right-1 p-0.5 bg-black/50 rounded">
           <svg className="w-3 h-3 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clipRule="evenodd" />
+            <path
+              fillRule="evenodd"
+              d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"
+              clipRule="evenodd"
+            />
           </svg>
         </div>
       )}
@@ -559,15 +572,19 @@ const SimpleElementContent = memo(function SimpleElementContent({
   };
 
   return (
-    <div className={`absolute inset-0 flex items-center px-2 overflow-hidden pointer-events-none ${getBackgroundColor()}`}>
-      <span className="text-xs text-white truncate select-none drop-shadow-sm">
-        {element.name}
-      </span>
+    <div
+      className={`absolute inset-0 flex items-center px-2 overflow-hidden pointer-events-none ${getBackgroundColor()}`}
+    >
+      <span className="text-xs text-white truncate select-none drop-shadow-sm">{element.name}</span>
       {/* Muted indicator for media/audio */}
       {'muted' in element && element.muted && (
         <div className="absolute top-1 right-1 p-0.5 bg-black/50 rounded">
           <svg className="w-3 h-3 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clipRule="evenodd" />
+            <path
+              fillRule="evenodd"
+              d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"
+              clipRule="evenodd"
+            />
           </svg>
         </div>
       )}
@@ -593,13 +610,7 @@ export const TimelineElementContent = memo(function TimelineElementContent({
 
   // Shape track or shape element
   if (trackType === 'shape' || element.type === 'shape') {
-    return (
-      <ShapeElementContent
-        element={element as ShapeElement}
-        width={width}
-        height={height}
-      />
-    );
+    return <ShapeElementContent element={element as ShapeElement} width={width} height={height} />;
   }
 
   // Subtitle track
@@ -643,9 +654,7 @@ export const TimelineElementContent = memo(function TimelineElementContent({
   const unknownElement = element as TimelineElement;
   return (
     <div className="absolute inset-0 flex items-center px-2 overflow-hidden pointer-events-none">
-      <span className="text-xs text-white truncate select-none">
-        {unknownElement.name}
-      </span>
+      <span className="text-xs text-white truncate select-none">{unknownElement.name}</span>
     </div>
   );
 });

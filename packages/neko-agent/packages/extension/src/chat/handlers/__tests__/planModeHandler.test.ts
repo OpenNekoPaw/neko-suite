@@ -12,8 +12,12 @@ function createMockWebview() {
 function createMockSystemPrompt() {
   let mode: 'default' | 'plan' = 'default';
   return {
-    setMode: vi.fn((m: 'default' | 'plan') => { mode = m; }),
-    togglePlanMode: vi.fn(() => { mode = mode === 'default' ? 'plan' : 'default'; }),
+    setMode: vi.fn((m: 'default' | 'plan') => {
+      mode = m;
+    }),
+    togglePlanMode: vi.fn(() => {
+      mode = mode === 'default' ? 'plan' : 'default';
+    }),
     getMode: vi.fn(() => mode),
     isPlanMode: vi.fn(() => mode === 'plan'),
     getPrompt: vi.fn().mockReturnValue('system prompt'),

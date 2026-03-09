@@ -251,6 +251,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 /** Helper to get workDir without importing config store at module level */
 function useConfigStore_getWorkDir(): string {
   // Lazily import to avoid circular deps
-  const { useConfigStore } = require('../stores/config-store') as { useConfigStore: { getState: () => { config: { workDir: string } } } };
+  const { useConfigStore } = require('../stores/config-store') as {
+    useConfigStore: { getState: () => { config: { workDir: string } } };
+  };
   return useConfigStore.getState().config.workDir;
 }

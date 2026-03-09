@@ -19,7 +19,10 @@ import type { EngineAudioProperties } from '../generated/timeline.engine';
  * Note: Omit fadeInCurve/fadeOutCurve because TS EasingType is a superset of
  * EngineEasingType (includes legacy aliases 'bezier', 'ease-in', etc.)
  */
-export interface AudioProperties extends Omit<EngineAudioProperties, 'fadeInCurve' | 'fadeOutCurve'> {
+export interface AudioProperties extends Omit<
+  EngineAudioProperties,
+  'fadeInCurve' | 'fadeOutCurve'
+> {
   /** Fade in easing curve (engine field, Phase 3) */
   fadeInCurve?: EasingType;
   /** Fade out easing curve (engine field, Phase 3) */

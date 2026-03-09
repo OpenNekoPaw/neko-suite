@@ -114,7 +114,7 @@ describe('MediaRoutingManager', () => {
         'text-to-video',
         undefined,
         'openai-provider',
-        'sora-model'
+        'sora-model',
       );
 
       expect(result).not.toBeNull();
@@ -128,7 +128,7 @@ describe('MediaRoutingManager', () => {
         'text-to-video',
         undefined,
         'unknown-provider',
-        'unknown-model'
+        'unknown-model',
       );
 
       expect(result).toBeNull();
@@ -169,32 +169,28 @@ describe('MediaRoutingManager', () => {
       const result = await routingManager.selectFallback(
         'text-to-video',
         { allowFallback: false },
-        ['openai-provider']
+        ['openai-provider'],
       );
 
       expect(result).toBeNull();
     });
 
     it('should exclude already tried providers', async () => {
-      const result = await routingManager.selectFallback(
-        'text-to-video',
-        { allowFallback: true },
-        ['openai-provider']
-      );
+      const result = await routingManager.selectFallback('text-to-video', { allowFallback: true }, [
+        'openai-provider',
+      ]);
 
       expect(result).not.toBeNull();
       expect(result?.providerId).toBe('runway-provider');
     });
 
     it('should return null when all providers are excluded', async () => {
-      const result = await routingManager.selectFallback(
-        'text-to-video',
-        { allowFallback: true },
-        ['openai-provider', 'runway-provider']
-      );
+      const result = await routingManager.selectFallback('text-to-video', { allowFallback: true }, [
+        'openai-provider',
+        'runway-provider',
+      ]);
 
       expect(result).toBeNull();
     });
   });
-
 });

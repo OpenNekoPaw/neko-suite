@@ -136,18 +136,12 @@ export interface IService {
   /**
    * Send a chat request and get a complete response
    */
-  chat(
-    messages: ChatMessage[],
-    options?: ServiceOptions
-  ): Promise<ServiceResponse>;
+  chat(messages: ChatMessage[], options?: ServiceOptions): Promise<ServiceResponse>;
 
   /**
    * Send a chat request and get a streaming response
    */
-  chatStream(
-    messages: ChatMessage[],
-    options?: ServiceOptions
-  ): AsyncIterable<StreamChunk>;
+  chatStream(messages: ChatMessage[], options?: ServiceOptions): AsyncIterable<StreamChunk>;
 
   /**
    * Generate embeddings for text
@@ -158,12 +152,7 @@ export interface IService {
 /**
  * Media task status
  */
-export type MediaTaskStatus =
-  | 'pending'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+export type MediaTaskStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
 /**
  * Media task

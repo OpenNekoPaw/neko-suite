@@ -70,9 +70,9 @@ export type EasingType =
   // Custom cubic bezier
   | 'bezier'
   // Legacy aliases (mapped to engine equivalents)
-  | 'ease-in'       // → ease-in-quad
-  | 'ease-out'      // → ease-out-quad
-  | 'ease-in-out';  // → ease-in-out-quad
+  | 'ease-in' // → ease-in-quad
+  | 'ease-out' // → ease-out-quad
+  | 'ease-in-out'; // → ease-in-out-quad
 
 /**
  * Cubic bezier control points for custom easing.

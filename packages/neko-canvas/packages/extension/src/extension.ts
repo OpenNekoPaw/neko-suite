@@ -50,8 +50,8 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
           retainContextWhenHidden: true,
         },
         supportsMultipleEditorsPerDocument: false,
-      }
-    )
+      },
+    ),
   );
 
   // Register outline tree view
@@ -59,7 +59,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
     vscode.window.createTreeView('neko.canvasOutline', {
       treeDataProvider: canvasOutlineProvider,
       showCollapseAll: true,
-    })
+    }),
   );
 
   // Register disposables
@@ -71,7 +71,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
     vscode.window.onDidChangeActiveTextEditor(() => {
       // Custom editors don't trigger this, but when switching away to a text editor, hide
       canvasStatusBar.hide();
-    })
+    }),
   );
 
   // Register commands
@@ -86,7 +86,14 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
       import: async (filePath) => {
         await vscode.commands.executeCommand('neko.assets.importFile', vscode.Uri.file(filePath));
         const name = filePath.split('/').pop() || 'Unknown';
-        return { id: '', name, type: 'other', path: filePath, createdAt: Date.now(), updatedAt: Date.now() };
+        return {
+          id: '',
+          name,
+          type: 'other',
+          path: filePath,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
       },
       list: async () => [],
       getById: async () => undefined,
@@ -96,7 +103,8 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
     canvas: {
       create: (config) => createCanvas(config),
       addShape: (canvasId, shape) => canvasEditorProvider.addShape(shape),
-      updateShape: (canvasId, shapeId, updates) => canvasEditorProvider.updateShape(shapeId, updates),
+      updateShape: (canvasId, shapeId, updates) =>
+        canvasEditorProvider.updateShape(shapeId, updates),
       deleteShape: (canvasId, shapeId) => canvasEditorProvider.deleteShape(shapeId),
     },
     events: {
@@ -170,12 +178,12 @@ function registerCommands(context: vscode.ExtensionContext): void {
         // Reveal in explorer, wait for file tree to refresh, then trigger inline rename
         await vscode.commands.executeCommand('revealInExplorer', fileUri);
         // Small delay to ensure the file is selected in the explorer tree
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200));
         await vscode.commands.executeCommand('renameFile');
       } catch (error) {
         await handleError(error, { showToUser: true });
       }
-    })
+    }),
   );
 
   // Add to Asset Library — delegate to neko-assets
@@ -188,9 +196,9 @@ function registerCommands(context: vscode.ExtensionContext): void {
 
       await vscode.commands.executeCommand('neko.assets.importFile', uri);
       vscode.window.showInformationMessage(
-        vscode.l10n.t('neko.canvas.addToAssetLibrary.success', path.basename(uri.fsPath))
+        vscode.l10n.t('neko.canvas.addToAssetLibrary.success', path.basename(uri.fsPath)),
       );
-    })
+    }),
   );
 
   // Import Asset — delegate to neko-assets
@@ -199,7 +207,23 @@ function registerCommands(context: vscode.ExtensionContext): void {
       const uris = await vscode.window.showOpenDialog({
         canSelectMany: true,
         filters: {
-          'Media Files': ['mp4', 'mov', 'avi', 'mkv', 'webm', 'mp3', 'wav', 'ogg', 'flac', 'aac', 'png', 'jpg', 'jpeg', 'gif', 'webp'],
+          'Media Files': [
+            'mp4',
+            'mov',
+            'avi',
+            'mkv',
+            'webm',
+            'mp3',
+            'wav',
+            'ogg',
+            'flac',
+            'aac',
+            'png',
+            'jpg',
+            'jpeg',
+            'gif',
+            'webp',
+          ],
           'All Files': ['*'],
         },
       });
@@ -209,10 +233,10 @@ function registerCommands(context: vscode.ExtensionContext): void {
           await vscode.commands.executeCommand('neko.assets.importFile', uri);
         }
         vscode.window.showInformationMessage(
-          vscode.l10n.t('neko.canvas.asset.import.success', String(uris.length))
+          vscode.l10n.t('neko.canvas.asset.import.success', String(uris.length)),
         );
       }
-    })
+    }),
   );
 
   // Canvas keyboard shortcuts - forwarded to webview
@@ -232,7 +256,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
       vscode.commands.registerCommand(commandId, () => {
         canvasEditorProvider.postKeyboardAction(action);
-      })
+      }),
     );
   }
 
@@ -240,19 +264,22 @@ function registerCommands(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.canvas.selectNodeFromOutline', (nodeId: string) => {
       canvasEditorProvider.postKeyboardAction('selectNode:' + nodeId);
-    })
+    }),
   );
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.canvas.selectConnectionFromOutline', (connectionId: string) => {
-      canvasEditorProvider.postKeyboardAction('selectConnection:' + connectionId);
-    })
+    vscode.commands.registerCommand(
+      'neko.canvas.selectConnectionFromOutline',
+      (connectionId: string) => {
+        canvasEditorProvider.postKeyboardAction('selectConnection:' + connectionId);
+      },
+    ),
   );
 
   // Zoom reset command (triggered from status bar)
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.canvas.resetZoom', () => {
       canvasEditorProvider.postKeyboardAction('resetZoom');
-    })
+    }),
   );
 
   // Preview media files with neko-preview (hardware-accelerated customEditor)
@@ -273,7 +300,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
       } catch (error) {
         logger.error(`Failed to open media preview: ${error}`);
       }
-    })
+    }),
   );
 }
 
@@ -288,10 +315,7 @@ async function createCanvas(config: CanvasConfig): Promise<string> {
 
   const canvasFile = path.join(folders[0].uri.fsPath, `${config.name}.jvc`);
   const content = getCanvasTemplate(config.name);
-  await vscode.workspace.fs.writeFile(
-    vscode.Uri.file(canvasFile),
-    Buffer.from(content, 'utf-8')
-  );
+  await vscode.workspace.fs.writeFile(vscode.Uri.file(canvasFile), Buffer.from(content, 'utf-8'));
   return canvasFile;
 }
 

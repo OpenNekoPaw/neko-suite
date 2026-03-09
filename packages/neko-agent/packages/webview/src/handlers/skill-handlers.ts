@@ -37,7 +37,7 @@ const handleSkillInjection: MessageHandler = (message, context) => {
     conversationId,
   });
   // Clear any pending confirmation for this conversation
-  context.setPendingSkillConfirm(prev => {
+  context.setPendingSkillConfirm((prev) => {
     if (prev && prev.conversationId === conversationId) {
       return null;
     }
@@ -50,7 +50,7 @@ const handleSkillInjection: MessageHandler = (message, context) => {
  */
 const handleSkillCleared: MessageHandler = (message, context) => {
   const conversationId = message.conversationId || context.activeConversationIdRef.current || '';
-  context.setActiveSkill(prev => {
+  context.setActiveSkill((prev) => {
     if (prev && prev.conversationId === conversationId) {
       return null;
     }

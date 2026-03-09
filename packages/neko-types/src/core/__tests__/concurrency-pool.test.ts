@@ -3,11 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  ConcurrencyPool,
-  KeyedConcurrencyPool,
-  withConcurrencyLimit,
-} from '../concurrency-pool';
+import { ConcurrencyPool, KeyedConcurrencyPool, withConcurrencyLimit } from '../concurrency-pool';
 
 describe('ConcurrencyPool', () => {
   describe('basic operations', () => {
@@ -118,7 +114,7 @@ describe('ConcurrencyPool', () => {
       await expect(
         pool.run(async () => {
           throw new Error('test error');
-        })
+        }),
       ).rejects.toThrow('test error');
 
       expect(pool.stats.running).toBe(0);

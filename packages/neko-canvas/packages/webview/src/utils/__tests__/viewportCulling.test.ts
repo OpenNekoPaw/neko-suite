@@ -14,13 +14,7 @@ import type { ViewportBounds } from '../viewportCulling';
 // Test Helpers
 // =============================================================================
 
-function createNode(
-  id: string,
-  x: number,
-  y: number,
-  width = 100,
-  height = 80
-): CanvasNode {
+function createNode(id: string, x: number, y: number, width = 100, height = 80): CanvasNode {
   return {
     id,
     type: 'annotation',

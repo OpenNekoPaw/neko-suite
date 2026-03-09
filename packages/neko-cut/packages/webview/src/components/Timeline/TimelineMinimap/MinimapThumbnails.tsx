@@ -43,8 +43,10 @@ export const MinimapThumbnails = memo(function MinimapThumbnails({
           const leftPercent = totalDuration > 0 ? (thumbnail.time / totalDuration) * 100 : 0;
 
           // 计算缩略图宽度（填满两个采样点之间的空间）
-          const nextTime = index < thumbnails.length - 1 ? thumbnails[index + 1].time : totalDuration;
-          const widthPercent = totalDuration > 0 ? ((nextTime - thumbnail.time) / totalDuration) * 100 : 0;
+          const nextTime =
+            index < thumbnails.length - 1 ? thumbnails[index + 1].time : totalDuration;
+          const widthPercent =
+            totalDuration > 0 ? ((nextTime - thumbnail.time) / totalDuration) * 100 : 0;
 
           return (
             <div

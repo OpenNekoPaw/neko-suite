@@ -79,9 +79,7 @@ function PlanStepItem({
     >
       {/* Step number and status */}
       <div className="flex items-center gap-1 flex-shrink-0 w-10">
-        <span className="text-[11px] text-[var(--vscode-descriptionForeground)]">
-          {index + 1}.
-        </span>
+        <span className="text-[11px] text-[var(--vscode-descriptionForeground)]">{index + 1}.</span>
         <StatusIcon status={step.status} />
       </div>
 
@@ -101,7 +99,9 @@ function PlanStepItem({
           <>
             <p
               className={`text-[12px] leading-relaxed ${
-                step.status === 'modified' ? 'text-[var(--vscode-charts-yellow)]' : 'text-[var(--vscode-foreground)]'
+                step.status === 'modified'
+                  ? 'text-[var(--vscode-charts-yellow)]'
+                  : 'text-[var(--vscode-foreground)]'
               }`}
             >
               {step.description}
@@ -161,7 +161,9 @@ function PlanReviewComponent({
 
   // Calculate stats
   const pendingCount = plan.steps.filter((s) => s.status === 'pending').length;
-  const approvedCount = plan.steps.filter((s) => s.status === 'approved' || s.status === 'modified').length;
+  const approvedCount = plan.steps.filter(
+    (s) => s.status === 'approved' || s.status === 'modified',
+  ).length;
   const rejectedCount = plan.steps.filter((s) => s.status === 'rejected').length;
 
   // Determine overall status display

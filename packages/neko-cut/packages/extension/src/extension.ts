@@ -7,7 +7,13 @@
  * - Bootstrap services for MCP, Platform, Workflow
  */
 import * as vscode from 'vscode';
-import { ServiceCollection, setGlobalServices, setRootLogger, setErrorHandler, getRootLogger } from './base';
+import {
+  ServiceCollection,
+  setGlobalServices,
+  setRootLogger,
+  setErrorHandler,
+  getRootLogger,
+} from './base';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { VideoEditorProvider } from './editor/video/videoEditorProvider';
@@ -41,32 +47,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Register custom editor (CustomTextEditorProvider for .jvi files)
   context.subscriptions.push(
-    vscode.window.registerCustomEditorProvider(
-      'neko.videoEditor',
-      videoEditorProvider,
-      {
-        webviewOptions: {
-          retainContextWhenHidden: true,
-        },
-        supportsMultipleEditorsPerDocument: false,
-      }
-    )
+    vscode.window.registerCustomEditorProvider('neko.videoEditor', videoEditorProvider, {
+      webviewOptions: {
+        retainContextWhenHidden: true,
+      },
+      supportsMultipleEditorsPerDocument: false,
+    }),
   );
 
   // Register property panel view
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       PropertyPanelViewProvider.viewType,
-      propertyPanelProvider
-    )
+      propertyPanelProvider,
+    ),
   );
 
   // Register outline view
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider(
-      'neko.projectOutline',
-      bootstrapResult.outlineProvider
-    )
+    vscode.window.registerTreeDataProvider('neko.projectOutline', bootstrapResult.outlineProvider),
   );
 
   // Register commands
@@ -90,16 +89,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       } catch (error) {
         getRootLogger().error('Failed to open media preview', error);
       }
-    })
+    }),
   );
 
   // Connect property panel to element selection
   videoEditorProvider.onElementSelected((event) => {
-    propertyPanelProvider.updateSelectedElement(
-      event.element,
-      event.trackId,
-      event.currentTime
-    );
+    propertyPanelProvider.updateSelectedElement(event.element, event.trackId, event.currentTime);
   });
 
   // Connect property panel to current time updates

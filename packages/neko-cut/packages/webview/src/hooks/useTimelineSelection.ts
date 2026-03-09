@@ -41,34 +41,38 @@ export function useTimelineSelection({
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
 
   // Selection box handlers
-  const handleSelectionMouseDown = useCallback((e: React.MouseEvent) => {
-    // Only start selection if clicking on track background (not on elements)
-    if ((e.target as HTMLElement).closest('.timeline-element')) return;
-    // Don't start selection if clicking on track labels (for drag reordering)
-    if ((e.target as HTMLElement).closest('.track-label')) return;
-    // Don't start selection on right-click
-    if (e.button !== 0) return;
+  const handleSelectionMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      // Only start selection if clicking on track background (not on elements)
+      if ((e.target as HTMLElement).closest('.timeline-element')) return;
+      // Don't start selection if clicking on track labels (for drag reordering)
+      if ((e.target as HTMLElement).closest('.track-label')) return;
+      // Don't start selection on right-click
+      if (e.button !== 0) return;
 
-    const rect = tracksRef.current?.getBoundingClientRect();
-    if (!rect) return;
+      const rect = tracksRef.current?.getBoundingClientRect();
+      if (!rect) return;
 
-    // Subtract TRACK_LABEL_WIDTH to convert from container coordinates to content coordinates
-    const startX = e.clientX - rect.left + (tracksRef.current?.scrollLeft || 0) - TRACK_LABEL_WIDTH;
-    const startY = e.clientY - rect.top + (tracksRef.current?.scrollTop || 0);
+      // Subtract TRACK_LABEL_WIDTH to convert from container coordinates to content coordinates
+      const startX =
+        e.clientX - rect.left + (tracksRef.current?.scrollLeft || 0) - TRACK_LABEL_WIDTH;
+      const startY = e.clientY - rect.top + (tracksRef.current?.scrollTop || 0);
 
-    setSelectionBox({
-      startX,
-      startY,
-      currentX: startX,
-      currentY: startY,
-      isSelecting: true,
-    });
+      setSelectionBox({
+        startX,
+        startY,
+        currentX: startX,
+        currentY: startY,
+        isSelecting: true,
+      });
 
-    // Clear selection unless holding shift/cmd
-    if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
-      clearSelectedElements();
-    }
-  }, [clearSelectedElements, tracksRef]);
+      // Clear selection unless holding shift/cmd
+      if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+        clearSelectedElements();
+      }
+    },
+    [clearSelectedElements, tracksRef],
+  );
 
   // Calculate elements within selection box
   // Optimized: O(k*m) where k = tracks in Y range, m = average elements per track
@@ -127,10 +131,11 @@ export function useTimelineSelection({
       if (!rect) return;
 
       // Subtract TRACK_LABEL_WIDTH to convert from container coordinates to content coordinates
-      const currentX = e.clientX - rect.left + (tracksRef.current?.scrollLeft || 0) - TRACK_LABEL_WIDTH;
+      const currentX =
+        e.clientX - rect.left + (tracksRef.current?.scrollLeft || 0) - TRACK_LABEL_WIDTH;
       const currentY = e.clientY - rect.top + (tracksRef.current?.scrollTop || 0);
 
-      setSelectionBox(prev => prev ? { ...prev, currentX, currentY } : null);
+      setSelectionBox((prev) => (prev ? { ...prev, currentX, currentY } : null));
     };
 
     const handleMouseUp = () => {

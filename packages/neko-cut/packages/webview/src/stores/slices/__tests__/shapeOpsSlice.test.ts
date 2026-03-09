@@ -79,7 +79,14 @@ function createProjectWithShapes(): ProjectData {
                 },
                 style: {
                   fill: { type: 'solid', color: '#ff0000', opacity: 1 },
-                  stroke: { color: '#000000', width: 2, opacity: 1, lineCap: 'butt', lineJoin: 'miter', dashArray: [] },
+                  stroke: {
+                    color: '#000000',
+                    width: 2,
+                    opacity: 1,
+                    lineCap: 'butt',
+                    lineJoin: 'miter',
+                    dashArray: [],
+                  },
                   shadow: { color: '#000000', blur: 0, offsetX: 0, offsetY: 0, opacity: 0 },
                 },
                 zIndex: 0,
@@ -99,7 +106,14 @@ function createProjectWithShapes(): ProjectData {
                 },
                 style: {
                   fill: { type: 'solid', color: '#00ff00', opacity: 1 },
-                  stroke: { color: '#000000', width: 1, opacity: 1, lineCap: 'butt', lineJoin: 'miter', dashArray: [] },
+                  stroke: {
+                    color: '#000000',
+                    width: 1,
+                    opacity: 1,
+                    lineCap: 'butt',
+                    lineJoin: 'miter',
+                    dashArray: [],
+                  },
                   shadow: { color: '#000000', blur: 0, offsetX: 0, offsetY: 0, opacity: 0 },
                 },
                 zIndex: 1,
@@ -332,7 +346,9 @@ describe('shapeOpsSlice', () => {
   describe('updateShape', () => {
     it('should dispatch shape.update with updates', () => {
       const { store, dispatchMock } = createTestStore(createProjectWithShapes());
-      store.getState().updateShape('shape-track', 'shape-elem-1', 'shape-inst-1', { name: 'Renamed' });
+      store
+        .getState()
+        .updateShape('shape-track', 'shape-elem-1', 'shape-inst-1', { name: 'Renamed' });
 
       expect(dispatchMock).toHaveBeenCalledTimes(1);
       const op = dispatchMock.mock.calls[0]![0] as EditOperation;
@@ -384,7 +400,9 @@ describe('shapeOpsSlice', () => {
     it('should dispatch shape.updateStyle', () => {
       const { store, dispatchMock } = createTestStore(createProjectWithShapes());
       const newFill = { type: 'solid' as const, color: '#0000ff', opacity: 0.5 };
-      store.getState().updateShapeStyle('shape-track', 'shape-elem-1', 'shape-inst-1', { fill: newFill });
+      store
+        .getState()
+        .updateShapeStyle('shape-track', 'shape-elem-1', 'shape-inst-1', { fill: newFill });
 
       expect(dispatchMock).toHaveBeenCalledTimes(1);
       const op = dispatchMock.mock.calls[0]![0] as EditOperation;

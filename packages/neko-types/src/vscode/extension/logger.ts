@@ -26,9 +26,7 @@ export class OutputChannelTransport implements ILogTransport {
   write(entry: LogEntry): void {
     const ts = new Date(entry.timestamp).toISOString().slice(11, 23);
     const level = LEVEL_LABELS[entry.level] ?? 'INFO';
-    this.channel.appendLine(
-      `[${ts}] [${level}] [${entry.source}] ${entry.message}`,
-    );
+    this.channel.appendLine(`[${ts}] [${level}] [${entry.source}] ${entry.message}`);
     if (entry.error?.stack) {
       this.channel.appendLine(entry.error.stack);
     }
@@ -64,7 +62,5 @@ export function createVSCodeLogger(
 ): ConsoleLogger {
   const channel = vscode.window.createOutputChannel(channelName);
   context.subscriptions.push(channel);
-  return new ConsoleLogger(source, level, [
-    new OutputChannelTransport(channel),
-  ]);
+  return new ConsoleLogger(source, level, [new OutputChannelTransport(channel)]);
 }

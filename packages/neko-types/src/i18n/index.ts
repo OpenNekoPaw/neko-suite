@@ -15,8 +15,4 @@
  * Import from '@neko/shared/i18n/webview' or '@neko/shared/i18n/react' respectively.
  */
 export type { II18nService, MessageBundle, SupportedLocale } from './types';
-export {
-  I18nService,
-  interpolate,
-  normalizeLocale,
-} from './core';
+export { I18nService, interpolate, normalizeLocale } from './core';

@@ -30,25 +30,103 @@ export interface SlashCommand {
 // Aligned with Claude Code CLI built-in commands
 export const SLASH_COMMANDS: SlashCommand[] = [
   // Core commands
-  { id: 'clear', name: '/clear', descriptionKey: 'chat.commands.clear', icon: '🗑️', source: 'builtin' },
-  { id: 'exit', name: '/exit', descriptionKey: 'chat.commands.exit', icon: '🚪', source: 'builtin' },
-  { id: 'help', name: '/help', descriptionKey: 'chat.commands.help', icon: '❓', source: 'builtin' },
+  {
+    id: 'clear',
+    name: '/clear',
+    descriptionKey: 'chat.commands.clear',
+    icon: '🗑️',
+    source: 'builtin',
+  },
+  {
+    id: 'exit',
+    name: '/exit',
+    descriptionKey: 'chat.commands.exit',
+    icon: '🚪',
+    source: 'builtin',
+  },
+  {
+    id: 'help',
+    name: '/help',
+    descriptionKey: 'chat.commands.help',
+    icon: '❓',
+    source: 'builtin',
+  },
   // Session management
   { id: 'new', name: '/new', descriptionKey: 'chat.commands.new', icon: '✨', source: 'builtin' },
-  { id: 'resume', name: '/resume', descriptionKey: 'chat.commands.resume', icon: '▶️', source: 'builtin' },
+  {
+    id: 'resume',
+    name: '/resume',
+    descriptionKey: 'chat.commands.resume',
+    icon: '▶️',
+    source: 'builtin',
+  },
   // Context and cost
-  { id: 'compact', name: '/compact', descriptionKey: 'chat.commands.compact', icon: '📦', source: 'builtin' },
+  {
+    id: 'compact',
+    name: '/compact',
+    descriptionKey: 'chat.commands.compact',
+    icon: '📦',
+    source: 'builtin',
+  },
   // Configuration
-  { id: 'status', name: '/status', descriptionKey: 'chat.commands.status', icon: '📊', source: 'builtin' },
-  { id: 'init', name: '/init', descriptionKey: 'chat.commands.init', icon: '🚀', source: 'builtin' },
-  { id: 'model', name: '/model', descriptionKey: 'chat.commands.model', icon: '🤖', source: 'builtin' },
-  { id: 'permissions', name: '/permissions', descriptionKey: 'chat.commands.permissions', icon: '🔐', source: 'builtin' },
-  { id: 'settings', name: '/settings', descriptionKey: 'chat.commands.settings', icon: '⚙️', source: 'builtin' },
+  {
+    id: 'status',
+    name: '/status',
+    descriptionKey: 'chat.commands.status',
+    icon: '📊',
+    source: 'builtin',
+  },
+  {
+    id: 'init',
+    name: '/init',
+    descriptionKey: 'chat.commands.init',
+    icon: '🚀',
+    source: 'builtin',
+  },
+  {
+    id: 'model',
+    name: '/model',
+    descriptionKey: 'chat.commands.model',
+    icon: '🤖',
+    source: 'builtin',
+  },
+  {
+    id: 'permissions',
+    name: '/permissions',
+    descriptionKey: 'chat.commands.permissions',
+    icon: '🔐',
+    source: 'builtin',
+  },
+  {
+    id: 'settings',
+    name: '/settings',
+    descriptionKey: 'chat.commands.settings',
+    icon: '⚙️',
+    source: 'builtin',
+  },
   // Memory and tasks
-  { id: 'todos', name: '/todos', descriptionKey: 'chat.commands.todos', icon: '✅', source: 'builtin' },
-  { id: 'tasks', name: '/tasks', descriptionKey: 'chat.commands.tasks', icon: '📋', source: 'builtin' },
+  {
+    id: 'todos',
+    name: '/todos',
+    descriptionKey: 'chat.commands.todos',
+    icon: '✅',
+    source: 'builtin',
+  },
+  {
+    id: 'tasks',
+    name: '/tasks',
+    descriptionKey: 'chat.commands.tasks',
+    icon: '📋',
+    source: 'builtin',
+  },
   // Mode and planning
-  { id: 'plan', name: '/plan', descriptionKey: 'chat.commands.plan', icon: '📐', source: 'builtin' },
+  {
+    id: 'plan',
+    name: '/plan',
+    descriptionKey: 'chat.commands.plan',
+    icon: '📐',
+    source: 'builtin',
+  },
   // Tools integration
   { id: 'mcp', name: '/mcp', descriptionKey: 'chat.commands.mcp', icon: '🔌', source: 'builtin' },
 ];

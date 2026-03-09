@@ -15,5 +15,5 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <I18nProvider service={i18nService}>
       <PropertyPanelStandalone />
     </I18nProvider>
-  </React.StrictMode>
+  </React.StrictMode>,
 );

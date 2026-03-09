@@ -26,13 +26,19 @@ export function useTrackNameEditing({ project, updateTrack }: TrackNameEditingOp
   }, []);
 
   // Save track name edit
-  const handleSaveTrackName = useCallback((trackId: string) => {
-    if (editingTrackName.trim() && editingTrackName !== project?.tracks.find(t => t.id === trackId)?.name) {
-      updateTrack(trackId, { name: editingTrackName.trim() });
-    }
-    setEditingTrackId(null);
-    setEditingTrackName('');
-  }, [editingTrackName, updateTrack, project]);
+  const handleSaveTrackName = useCallback(
+    (trackId: string) => {
+      if (
+        editingTrackName.trim() &&
+        editingTrackName !== project?.tracks.find((t) => t.id === trackId)?.name
+      ) {
+        updateTrack(trackId, { name: editingTrackName.trim() });
+      }
+      setEditingTrackId(null);
+      setEditingTrackName('');
+    },
+    [editingTrackName, updateTrack, project],
+  );
 
   // Cancel track name edit
   const handleCancelTrackNameEdit = useCallback(() => {

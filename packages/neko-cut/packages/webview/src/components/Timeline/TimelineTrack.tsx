@@ -139,53 +139,56 @@ export const TimelineTrack = memo(function TimelineTrack({
     if (!excludePoints) return allPoints;
 
     // Filter out excluded points (typically just 2 points to exclude)
-    return allPoints.filter(p => !excludePoints.includes(p));
+    return allPoints.filter((p) => !excludePoints.includes(p));
   }, [snapPointsCache, getSnappingEnabled, dragState.elementId]);
 
   // Find nearest snap point within threshold
-  const findSnapPoint = useCallback((time: number, threshold: number = 0.1): { time: number; snapped: boolean } => {
-    const snapPoints = getSnapPoints();
+  const findSnapPoint = useCallback(
+    (time: number, threshold: number = 0.1): { time: number; snapped: boolean } => {
+      const snapPoints = getSnapPoints();
 
-    // Binary search for performance with many snap points
-    if (snapPoints.length > 20) {
-      let low = 0;
-      let high = snapPoints.length - 1;
-      let nearest = snapPoints[0] ?? time;
-      let nearestDist = Math.abs(time - nearest);
+      // Binary search for performance with many snap points
+      if (snapPoints.length > 20) {
+        let low = 0;
+        let high = snapPoints.length - 1;
+        let nearest = snapPoints[0] ?? time;
+        let nearestDist = Math.abs(time - nearest);
 
-      while (low <= high) {
-        const mid = Math.floor((low + high) / 2);
-        const point = snapPoints[mid] ?? time;
-        const dist = Math.abs(time - point);
+        while (low <= high) {
+          const mid = Math.floor((low + high) / 2);
+          const point = snapPoints[mid] ?? time;
+          const dist = Math.abs(time - point);
 
-        if (dist < nearestDist) {
-          nearest = point;
-          nearestDist = dist;
+          if (dist < nearestDist) {
+            nearest = point;
+            nearestDist = dist;
+          }
+
+          if (point < time) {
+            low = mid + 1;
+          } else if (point > time) {
+            high = mid - 1;
+          } else {
+            return { time: point, snapped: true };
+          }
         }
 
-        if (point < time) {
-          low = mid + 1;
-        } else if (point > time) {
-          high = mid - 1;
-        } else {
+        if (nearestDist < threshold) {
+          return { time: nearest, snapped: true };
+        }
+        return { time, snapped: false };
+      }
+
+      // Linear search for small arrays
+      for (const point of snapPoints) {
+        if (Math.abs(time - point) < threshold) {
           return { time: point, snapped: true };
         }
       }
-
-      if (nearestDist < threshold) {
-        return { time: nearest, snapped: true };
-      }
       return { time, snapped: false };
-    }
-
-    // Linear search for small arrays
-    for (const point of snapPoints) {
-      if (Math.abs(time - point) < threshold) {
-        return { time: point, snapped: true };
-      }
-    }
-    return { time, snapped: false };
-  }, [getSnapPoints]);
+    },
+    [getSnapPoints],
+  );
 
   const handleElementClick = useCallback(
     (e: React.MouseEvent, element: TimelineElement) => {
@@ -194,7 +197,7 @@ export const TimelineTrack = memo(function TimelineTrack({
       const multi = e.metaKey || e.ctrlKey;
       selectElement(track.id, element.id, multi);
     },
-    [track.id, selectElement, dragState.isDragging, dragState.isResizing]
+    [track.id, selectElement, dragState.isDragging, dragState.isResizing],
   );
 
   // Pointer ID for tracking captured pointer
@@ -217,7 +220,12 @@ export const TimelineTrack = memo(function TimelineTrack({
       const width = effectiveDuration * pixelsPerSecond * zoomLevel;
 
       // Record original state for undo (will be committed as operation on drag end)
-      const originalElement = { startTime: element.startTime, trimStart: element.trimStart, trimEnd: element.trimEnd, duration: element.duration };
+      const originalElement = {
+        startTime: element.startTime,
+        trimStart: element.trimStart,
+        trimEnd: element.trimEnd,
+        duration: element.duration,
+      };
 
       setDragState({
         isDragging: !resizeDir,
@@ -233,7 +241,7 @@ export const TimelineTrack = memo(function TimelineTrack({
 
       // Select element if not already selected
       const isSelected = selectedElements.some(
-        (s) => s.trackId === track.id && s.elementId === element.id
+        (s) => s.trackId === track.id && s.elementId === element.id,
       );
       if (!isSelected) {
         selectElement(track.id, element.id, false);
@@ -248,8 +256,8 @@ export const TimelineTrack = memo(function TimelineTrack({
           : [{ trackId: track.id, elementId: element.id }];
 
         for (const sel of elementsToMove) {
-          const selTrack = project.tracks.find(t => t.id === sel.trackId);
-          const selElement = selTrack?.elements.find(el => el.id === sel.elementId);
+          const selTrack = project.tracks.find((t) => t.id === sel.trackId);
+          const selElement = selTrack?.elements.find((el) => el.id === sel.elementId);
           if (selElement) {
             originalPositions.set(sel.elementId, {
               trackId: sel.trackId,
@@ -306,7 +314,10 @@ export const TimelineTrack = memo(function TimelineTrack({
             const snapResult = findSnapPoint(newStartTime);
 
             // Calculate new duration to keep end time fixed
-            const newDuration = Math.max(0.1, currentEndTime - snapResult.time + initialTrimStart + initialTrimEnd);
+            const newDuration = Math.max(
+              0.1,
+              currentEndTime - snapResult.time + initialTrimStart + initialTrimEnd,
+            );
 
             // Show snap indicator if snapped
             setSnapIndicatorTime(snapResult.snapped ? snapResult.time : null);
@@ -364,7 +375,10 @@ export const TimelineTrack = memo(function TimelineTrack({
         } else {
           // Moving element(s) (with cross-track support and batch move)
           const originalPos = originalPositions.get(element.id);
-          const newBaseTime = Math.max(0, (originalPos?.startTime ?? element.startTime) + deltaTime);
+          const newBaseTime = Math.max(
+            0,
+            (originalPos?.startTime ?? element.startTime) + deltaTime,
+          );
           const snapResult = findSnapPoint(newBaseTime);
 
           // Show snap indicator if snapped
@@ -392,7 +406,8 @@ export const TimelineTrack = memo(function TimelineTrack({
           // Determine target track based on Y position (only for single element drag)
           if (originalPositions.size === 1 && tracksContainerRef?.current && sortedTracks) {
             const containerRect = tracksContainerRef.current.getBoundingClientRect();
-            const relativeY = moveEvent.clientY - containerRect.top + tracksContainerRef.current.scrollTop;
+            const relativeY =
+              moveEvent.clientY - containerRect.top + tracksContainerRef.current.scrollTop;
             const targetTrackIndex = Math.floor(relativeY / trackHeight);
             const clampedIndex = Math.max(0, Math.min(sortedTracks.length - 1, targetTrackIndex));
             const targetTrack = sortedTracks[clampedIndex];
@@ -423,9 +438,15 @@ export const TimelineTrack = memo(function TimelineTrack({
         setSnapIndicatorTime(null);
 
         // Handle cross-track move if not resizing and single element
-        if (!resizeDir && originalPositions.size === 1 && tracksContainerRef?.current && sortedTracks) {
+        if (
+          !resizeDir &&
+          originalPositions.size === 1 &&
+          tracksContainerRef?.current &&
+          sortedTracks
+        ) {
           const containerRect = tracksContainerRef.current.getBoundingClientRect();
-          const relativeY = upEvent.clientY - containerRect.top + tracksContainerRef.current.scrollTop;
+          const relativeY =
+            upEvent.clientY - containerRect.top + tracksContainerRef.current.scrollTop;
           const targetTrackIndex = Math.floor(relativeY / trackHeight);
           const clampedIndex = Math.max(0, Math.min(sortedTracks.length - 1, targetTrackIndex));
           const targetTrack = sortedTracks[clampedIndex];
@@ -444,8 +465,8 @@ export const TimelineTrack = memo(function TimelineTrack({
         // (updateElement uses raw set() during drag, so we record the operation here)
         if (project) {
           const currentElement = project.tracks
-            .find(t => t.id === track.id)?.elements
-            .find(e => e.id === element.id);
+            .find((t) => t.id === track.id)
+            ?.elements.find((e) => e.id === element.id);
 
           if (currentElement) {
             const hasChanged =
@@ -512,231 +533,268 @@ export const TimelineTrack = memo(function TimelineTrack({
       target.addEventListener('pointerup', handlePointerUp);
       target.addEventListener('pointercancel', handlePointerUp);
     },
-    [track.id, pixelsPerSecond, zoomLevel, trackHeight, updateElement, pushOperation, selectElement, selectedElements, findSnapPoint, setSnapIndicatorTime, setDragTargetTrackId, moveElement, tracksContainerRef, sortedTracks, project]
+    [
+      track.id,
+      pixelsPerSecond,
+      zoomLevel,
+      trackHeight,
+      updateElement,
+      pushOperation,
+      selectElement,
+      selectedElements,
+      findSnapPoint,
+      setSnapIndicatorTime,
+      setDragTargetTrackId,
+      moveElement,
+      tracksContainerRef,
+      sortedTracks,
+      project,
+    ],
   );
 
   // Handle element right-click
-  const handleElementContextMenu = useCallback((e: React.MouseEvent, element: TimelineElement) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Select the element if not already selected
-    const isSelected = selectedElements.some(s => s.trackId === track.id && s.elementId === element.id);
-    if (!isSelected) {
-      selectElement(track.id, element.id);
-    }
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      element,
-    });
-  }, [track.id, selectedElements, selectElement]);
+  const handleElementContextMenu = useCallback(
+    (e: React.MouseEvent, element: TimelineElement) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Select the element if not already selected
+      const isSelected = selectedElements.some(
+        (s) => s.trackId === track.id && s.elementId === element.id,
+      );
+      if (!isSelected) {
+        selectElement(track.id, element.id);
+      }
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        element,
+      });
+    },
+    [track.id, selectedElements, selectElement],
+  );
 
   // Generate context menu items for an element
-  const getElementContextMenuItems = useCallback((element: TimelineElement): MenuItem[] => {
-    const effectiveDuration = element.duration - element.trimStart - element.trimEnd;
-    const elementStart = element.startTime;
-    const elementEnd = elementStart + effectiveDuration;
-    const canSplit = currentTime > elementStart && currentTime < elementEnd;
+  const getElementContextMenuItems = useCallback(
+    (element: TimelineElement): MenuItem[] => {
+      const effectiveDuration = element.duration - element.trimStart - element.trimEnd;
+      const elementStart = element.startTime;
+      const elementEnd = elementStart + effectiveDuration;
+      const canSplit = currentTime > elementStart && currentTime < elementEnd;
 
-    const items: MenuItem[] = [
-      // Basic edit operations
-      {
-        label: t('timeline.contextMenu.copy'),
-        shortcut: '⌘C',
-        onClick: () => copySelected(),
-      },
-      {
-        label: t('timeline.contextMenu.cut'),
-        shortcut: '⌘X',
-        onClick: () => {
-          copySelected();
-          removeElement(track.id, element.id);
+      const items: MenuItem[] = [
+        // Basic edit operations
+        {
+          label: t('timeline.contextMenu.copy'),
+          shortcut: '⌘C',
+          onClick: () => copySelected(),
         },
-      },
-      {
-        label: t('timeline.contextMenu.duplicate'),
-        shortcut: '⌘D',
-        onClick: () => {
-          // Duplicate element after current position
-          copySelected();
-          // Note: paste will be at current time, ideally after the element
+        {
+          label: t('timeline.contextMenu.cut'),
+          shortcut: '⌘X',
+          onClick: () => {
+            copySelected();
+            removeElement(track.id, element.id);
+          },
         },
-      },
-      { label: '', separator: true, onClick: () => {} },
-      // Split and trim
-      {
-        label: t('timeline.contextMenu.splitAtPlayhead'),
-        shortcut: 'S',
-        onClick: () => splitAtPlayhead(track.id, element.id),
-        disabled: !canSplit,
-      },
-      {
-        label: t('timeline.contextMenu.trimToPlayhead'),
-        onClick: () => {
-          if (currentTime > elementStart && currentTime < elementEnd) {
-            // Trim end to playhead
-            const newTrimEnd = element.trimEnd + (elementEnd - currentTime);
-            updateElement(track.id, element.id, { trimEnd: newTrimEnd });
-          }
+        {
+          label: t('timeline.contextMenu.duplicate'),
+          shortcut: '⌘D',
+          onClick: () => {
+            // Duplicate element after current position
+            copySelected();
+            // Note: paste will be at current time, ideally after the element
+          },
         },
-        disabled: currentTime <= elementStart || currentTime >= elementEnd,
-      },
-      { label: '', separator: true, onClick: () => {} },
-      // Speed submenu
-      {
-        label: t('timeline.contextMenu.speed'),
-        onClick: () => {},
-        submenu: [
-          {
-            label: t('timeline.contextMenu.speed05x'),
-            onClick: () => {
-              // Slow down to 0.5x
-              const newDuration = element.duration * 2;
-              updateElement(track.id, element.id, { duration: newDuration });
-            },
-          },
-          {
-            label: t('timeline.contextMenu.speed1x'),
-            onClick: () => {
-              // Reset to 1x - restore original duration
-            },
-          },
-          {
-            label: t('timeline.contextMenu.speed2x'),
-            onClick: () => {
-              // Speed up to 2x
-              const newDuration = element.duration / 2;
-              updateElement(track.id, element.id, { duration: Math.max(0.1, newDuration) });
-            },
-          },
-          {
-            label: t('timeline.contextMenu.reverse'),
-            onClick: () => {
-              // TODO: Implement reverse playback
-              logger.info('Reverse playback');
-            },
-          },
-        ],
-      },
-      { label: '', separator: true, onClick: () => {} },
-      // Visibility
-      {
-        label: element.hidden ? t('timeline.contextMenu.show') : t('timeline.contextMenu.hide'),
-        shortcut: 'H',
-        onClick: () => toggleElementHidden(track.id, element.id),
-      },
-      {
-        label: element.muted ? t('timeline.contextMenu.unmute') : t('timeline.contextMenu.mute'),
-        shortcut: 'M',
-        onClick: () => toggleElementMuted(track.id, element.id),
-      },
-    ];
-
-    // Media-specific options
-    if (element.type === 'media') {
-      const mediaElement = element as any;
-      const hasLinkedAudio = Boolean(mediaElement.linkedAudioId);
-
-      items.push({ label: '', separator: true, onClick: () => {} });
-
-      if (hasLinkedAudio) {
-        items.push({
-          label: t('timeline.contextMenu.unseparateAudio'),
-          onClick: () => unseparateVideoAudio(track.id, element.id),
-        });
-      } else {
-        items.push({
-          label: t('timeline.contextMenu.separateAudio'),
-          onClick: async () => {
-            const result = await separateVideoAudio(track.id, element.id);
-            if (!result.success) {
-              logger.error('Failed to separate audio:', result.error);
+        { label: '', separator: true, onClick: () => {} },
+        // Split and trim
+        {
+          label: t('timeline.contextMenu.splitAtPlayhead'),
+          shortcut: 'S',
+          onClick: () => splitAtPlayhead(track.id, element.id),
+          disabled: !canSplit,
+        },
+        {
+          label: t('timeline.contextMenu.trimToPlayhead'),
+          onClick: () => {
+            if (currentTime > elementStart && currentTime < elementEnd) {
+              // Trim end to playhead
+              const newTrimEnd = element.trimEnd + (elementEnd - currentTime);
+              updateElement(track.id, element.id, { trimEnd: newTrimEnd });
             }
           },
-        });
-      }
-
-      // AI Operations for media
-      items.push({ label: '', separator: true, onClick: () => {} });
-
-      // Get AI actions based on element type
-      const isImage = mediaElement.src && isImageFile(mediaElement.src);
-      const aiType = mapElementTypeToAIType(element.type, isImage ? 'image' : 'video');
-      const aiActions = getActionsForElementType(aiType);
-
-      if (aiActions.length > 0) {
-        items.push({
-          label: t('timeline.contextMenu.aiOperations'),
+          disabled: currentTime <= elementStart || currentTime >= elementEnd,
+        },
+        { label: '', separator: true, onClick: () => {} },
+        // Speed submenu
+        {
+          label: t('timeline.contextMenu.speed'),
           onClick: () => {},
-          submenu: aiActions.map((action: AIQuickAction) => ({
-            label: t(action.label as any),
-            onClick: () => {
-              if (onExecuteAIAction) {
-                onExecuteAIAction(action.id, [element.id]);
+          submenu: [
+            {
+              label: t('timeline.contextMenu.speed05x'),
+              onClick: () => {
+                // Slow down to 0.5x
+                const newDuration = element.duration * 2;
+                updateElement(track.id, element.id, { duration: newDuration });
+              },
+            },
+            {
+              label: t('timeline.contextMenu.speed1x'),
+              onClick: () => {
+                // Reset to 1x - restore original duration
+              },
+            },
+            {
+              label: t('timeline.contextMenu.speed2x'),
+              onClick: () => {
+                // Speed up to 2x
+                const newDuration = element.duration / 2;
+                updateElement(track.id, element.id, { duration: Math.max(0.1, newDuration) });
+              },
+            },
+            {
+              label: t('timeline.contextMenu.reverse'),
+              onClick: () => {
+                // TODO: Implement reverse playback
+                logger.info('Reverse playback');
+              },
+            },
+          ],
+        },
+        { label: '', separator: true, onClick: () => {} },
+        // Visibility
+        {
+          label: element.hidden ? t('timeline.contextMenu.show') : t('timeline.contextMenu.hide'),
+          shortcut: 'H',
+          onClick: () => toggleElementHidden(track.id, element.id),
+        },
+        {
+          label: element.muted ? t('timeline.contextMenu.unmute') : t('timeline.contextMenu.mute'),
+          shortcut: 'M',
+          onClick: () => toggleElementMuted(track.id, element.id),
+        },
+      ];
+
+      // Media-specific options
+      if (element.type === 'media') {
+        const mediaElement = element as any;
+        const hasLinkedAudio = Boolean(mediaElement.linkedAudioId);
+
+        items.push({ label: '', separator: true, onClick: () => {} });
+
+        if (hasLinkedAudio) {
+          items.push({
+            label: t('timeline.contextMenu.unseparateAudio'),
+            onClick: () => unseparateVideoAudio(track.id, element.id),
+          });
+        } else {
+          items.push({
+            label: t('timeline.contextMenu.separateAudio'),
+            onClick: async () => {
+              const result = await separateVideoAudio(track.id, element.id);
+              if (!result.success) {
+                logger.error('Failed to separate audio:', result.error);
               }
             },
-          })),
-        });
-      }
-    }
+          });
+        }
 
-    // Text-specific AI options
-    if (element.type === 'text') {
+        // AI Operations for media
+        items.push({ label: '', separator: true, onClick: () => {} });
+
+        // Get AI actions based on element type
+        const isImage = mediaElement.src && isImageFile(mediaElement.src);
+        const aiType = mapElementTypeToAIType(element.type, isImage ? 'image' : 'video');
+        const aiActions = getActionsForElementType(aiType);
+
+        if (aiActions.length > 0) {
+          items.push({
+            label: t('timeline.contextMenu.aiOperations'),
+            onClick: () => {},
+            submenu: aiActions.map((action: AIQuickAction) => ({
+              label: t(action.label as any),
+              onClick: () => {
+                if (onExecuteAIAction) {
+                  onExecuteAIAction(action.id, [element.id]);
+                }
+              },
+            })),
+          });
+        }
+      }
+
+      // Text-specific AI options
+      if (element.type === 'text') {
+        items.push({ label: '', separator: true, onClick: () => {} });
+
+        // Get AI actions for text elements
+        const textAiActions = getActionsForElementType('text');
+
+        if (textAiActions.length > 0) {
+          items.push({
+            label: t('timeline.contextMenu.aiOperations'),
+            onClick: () => {},
+            submenu: textAiActions.map((action: AIQuickAction) => ({
+              label: t(action.label as any),
+              onClick: () => {
+                if (onExecuteAIAction) {
+                  onExecuteAIAction(action.id, [element.id]);
+                }
+              },
+            })),
+          });
+        }
+      }
+
+      // Audio-specific AI options
+      if (element.type === 'audio') {
+        items.push({ label: '', separator: true, onClick: () => {} });
+
+        // Get AI actions for audio elements
+        const audioAiActions = getActionsForElementType('audio');
+
+        if (audioAiActions.length > 0) {
+          items.push({
+            label: t('timeline.contextMenu.aiOperations'),
+            onClick: () => {},
+            submenu: audioAiActions.map((action: AIQuickAction) => ({
+              label: t(action.label as any),
+              onClick: () => {
+                if (onExecuteAIAction) {
+                  onExecuteAIAction(action.id, [element.id]);
+                }
+              },
+            })),
+          });
+        }
+      }
+
+      // Delete option (always last)
       items.push({ label: '', separator: true, onClick: () => {} });
+      items.push({
+        label: t('timeline.contextMenu.delete'),
+        shortcut: '⌫',
+        danger: true,
+        onClick: () => removeElement(track.id, element.id),
+      });
 
-      // Get AI actions for text elements
-      const textAiActions = getActionsForElementType('text');
-
-      if (textAiActions.length > 0) {
-        items.push({
-          label: t('timeline.contextMenu.aiOperations'),
-          onClick: () => {},
-          submenu: textAiActions.map((action: AIQuickAction) => ({
-            label: t(action.label as any),
-            onClick: () => {
-              if (onExecuteAIAction) {
-                onExecuteAIAction(action.id, [element.id]);
-              }
-            },
-          })),
-        });
-      }
-    }
-
-    // Audio-specific AI options
-    if (element.type === 'audio') {
-      items.push({ label: '', separator: true, onClick: () => {} });
-
-      // Get AI actions for audio elements
-      const audioAiActions = getActionsForElementType('audio');
-
-      if (audioAiActions.length > 0) {
-        items.push({
-          label: t('timeline.contextMenu.aiOperations'),
-          onClick: () => {},
-          submenu: audioAiActions.map((action: AIQuickAction) => ({
-            label: t(action.label as any),
-            onClick: () => {
-              if (onExecuteAIAction) {
-                onExecuteAIAction(action.id, [element.id]);
-              }
-            },
-          })),
-        });
-      }
-    }
-
-    // Delete option (always last)
-    items.push({ label: '', separator: true, onClick: () => {} });
-    items.push({
-      label: t('timeline.contextMenu.delete'),
-      shortcut: '⌫',
-      danger: true,
-      onClick: () => removeElement(track.id, element.id),
-    });
-
-    return items;
-  }, [track.id, currentTime, copySelected, splitAtPlayhead, toggleElementHidden, toggleElementMuted, separateVideoAudio, unseparateVideoAudio, removeElement, updateElement, t, onExecuteAIAction]);
+      return items;
+    },
+    [
+      track.id,
+      currentTime,
+      copySelected,
+      splitAtPlayhead,
+      toggleElementHidden,
+      toggleElementMuted,
+      separateVideoAudio,
+      unseparateVideoAudio,
+      removeElement,
+      updateElement,
+      t,
+      onExecuteAIAction,
+    ],
+  );
 
   // Get element color based on track type (not element type)
   const getElementColor = (): string => {
@@ -791,13 +849,16 @@ export const TimelineTrack = memo(function TimelineTrack({
       }}
     >
       {/* Track background */}
-      <div className={`absolute inset-0 ${track.locked ? 'bg-vscode-sidebar-bg/70' : 'bg-vscode-sidebar-bg/50'}`}>
+      <div
+        className={`absolute inset-0 ${track.locked ? 'bg-vscode-sidebar-bg/70' : 'bg-vscode-sidebar-bg/50'}`}
+      >
         {/* Locked track stripe pattern overlay */}
         {track.locked && (
           <div
             className="absolute inset-0 opacity-10"
             style={{
-              backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, currentColor 4px, currentColor 5px)',
+              backgroundImage:
+                'repeating-linear-gradient(45deg, transparent, transparent 4px, currentColor 4px, currentColor 5px)',
             }}
           />
         )}
@@ -807,101 +868,119 @@ export const TimelineTrack = memo(function TimelineTrack({
       <div className={`relative h-full ${getTrackStateClasses()}`}>
         {/* Elements - virtualized: only render visible elements */}
         {track.elements
-        .filter((element) => {
-          // Always render if no visibleRange (fallback) or if element is being dragged
-          if (!visibleRange) return true;
-          if (dragState.elementId === element.id) return true;
+          .filter((element) => {
+            // Always render if no visibleRange (fallback) or if element is being dragged
+            if (!visibleRange) return true;
+            if (dragState.elementId === element.id) return true;
 
-          // Check if element overlaps with visible range
-          const effectiveDuration = element.duration - element.trimStart - element.trimEnd;
-          const elementEnd = element.startTime + effectiveDuration;
-          return elementEnd >= visibleRange.startTime && element.startTime <= visibleRange.endTime;
-        })
-        .map((element) => {
-        const effectiveDuration = element.duration - element.trimStart - element.trimEnd;
-        const left = element.startTime * pixelsPerSecond * zoomLevel;
-        const width = effectiveDuration * pixelsPerSecond * zoomLevel;
-        const isSelected = selectedElements.some(
-          (s) => s.trackId === track.id && s.elementId === element.id
-        );
-        const isDragging = dragState.elementId === element.id && (dragState.isDragging || dragState.isResizing);
+            // Check if element overlaps with visible range
+            const effectiveDuration = element.duration - element.trimStart - element.trimEnd;
+            const elementEnd = element.startTime + effectiveDuration;
+            return (
+              elementEnd >= visibleRange.startTime && element.startTime <= visibleRange.endTime
+            );
+          })
+          .map((element) => {
+            const effectiveDuration = element.duration - element.trimStart - element.trimEnd;
+            const left = element.startTime * pixelsPerSecond * zoomLevel;
+            const width = effectiveDuration * pixelsPerSecond * zoomLevel;
+            const isSelected = selectedElements.some(
+              (s) => s.trackId === track.id && s.elementId === element.id,
+            );
+            const isDragging =
+              dragState.elementId === element.id && (dragState.isDragging || dragState.isResizing);
 
-        return (
-          <div
-            key={element.id}
-            className={`timeline-element absolute top-1 bottom-1 rounded border ${track.locked ? 'cursor-not-allowed' : 'cursor-grab'}
+            return (
+              <div
+                key={element.id}
+                className={`timeline-element absolute top-1 bottom-1 rounded border ${track.locked ? 'cursor-not-allowed' : 'cursor-grab'}
               ${getElementColor()}
               ${getElementBorderStyle()}
               ${isSelected ? 'ring-2 ring-vscode-accent ring-offset-1 ring-offset-vscode-bg' : ''}
               ${element.hidden ? 'opacity-40' : ''}
               ${isDragging ? 'cursor-grabbing opacity-90' : ''}
             `}
-            style={{
-              left,
-              width: Math.max(width, 4),
-              zIndex: isDragging ? 100 : isSelected ? 10 : 1,
-              touchAction: 'none', // Required for pointer capture
-            }}
-            onClick={(e) => !track.locked && handleElementClick(e, element)}
-            onPointerDown={(e) => !track.locked && handleMouseDown(e, element, null)}
-            onContextMenu={(e) => handleElementContextMenu(e, element)}
-          >
-            {/* Element content */}
-            <TimelineElementContent
-              element={element}
-              width={Math.max(width, 4)}
-              height={trackHeight - 8}
-              trackType={track.type}
-              showThumbnails={showClipThumbnails}
-              pixelsPerSecond={pixelsPerSecond}
-              zoomLevel={zoomLevel}
-              visibleRange={visibleRange}
-            />
+                style={{
+                  left,
+                  width: Math.max(width, 4),
+                  zIndex: isDragging ? 100 : isSelected ? 10 : 1,
+                  touchAction: 'none', // Required for pointer capture
+                }}
+                onClick={(e) => !track.locked && handleElementClick(e, element)}
+                onPointerDown={(e) => !track.locked && handleMouseDown(e, element, null)}
+                onContextMenu={(e) => handleElementContextMenu(e, element)}
+              >
+                {/* Element content */}
+                <TimelineElementContent
+                  element={element}
+                  width={Math.max(width, 4)}
+                  height={trackHeight - 8}
+                  trackType={track.type}
+                  showThumbnails={showClipThumbnails}
+                  pixelsPerSecond={pixelsPerSecond}
+                  zoomLevel={zoomLevel}
+                  visibleRange={visibleRange}
+                />
 
-            {/* Track state indicators */}
-            <div className="absolute top-0.5 right-0.5 flex gap-0.5">
-              {track.muted && (
-                <div className="w-3 h-3 bg-black/50 rounded-sm flex items-center justify-center" title="Muted">
-                  <svg className="w-2 h-2 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
+                {/* Track state indicators */}
+                <div className="absolute top-0.5 right-0.5 flex gap-0.5">
+                  {track.muted && (
+                    <div
+                      className="w-3 h-3 bg-black/50 rounded-sm flex items-center justify-center"
+                      title="Muted"
+                    >
+                      <svg className="w-2 h-2 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                          fillRule="evenodd"
+                          d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                  )}
+                  {track.locked && (
+                    <div
+                      className="w-3 h-3 bg-black/50 rounded-sm flex items-center justify-center"
+                      title="Locked"
+                    >
+                      <svg
+                        className="w-2 h-2 text-yellow-400"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                  )}
                 </div>
-              )}
-              {track.locked && (
-                <div className="w-3 h-3 bg-black/50 rounded-sm flex items-center justify-center" title="Locked">
-                  <svg className="w-2 h-2 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              )}
-            </div>
 
-            {/* Keyframe indicators - only show for media/text with transform */}
-            {element.transform && (element.type === 'media' || element.type === 'text') && (
-              <KeyframeIndicator
-                element={element}
-                zoomLevel={zoomLevel}
-              />
-            )}
+                {/* Keyframe indicators - only show for media/text with transform */}
+                {element.transform && (element.type === 'media' || element.type === 'text') && (
+                  <KeyframeIndicator element={element} zoomLevel={zoomLevel} />
+                )}
 
-            {/* Left trim handle - disabled when locked */}
-            {!track.locked && (
-              <div
-                className="absolute left-0 top-0 bottom-0 w-2 bg-white/0 hover:bg-white/30 cursor-ew-resize transition-colors"
-                onPointerDown={(e) => handleMouseDown(e, element, 'left')}
-              />
-            )}
+                {/* Left trim handle - disabled when locked */}
+                {!track.locked && (
+                  <div
+                    className="absolute left-0 top-0 bottom-0 w-2 bg-white/0 hover:bg-white/30 cursor-ew-resize transition-colors"
+                    onPointerDown={(e) => handleMouseDown(e, element, 'left')}
+                  />
+                )}
 
-            {/* Right trim handle - disabled when locked */}
-            {!track.locked && (
-              <div
-                className="absolute right-0 top-0 bottom-0 w-2 bg-white/0 hover:bg-white/30 cursor-ew-resize transition-colors"
-                onPointerDown={(e) => handleMouseDown(e, element, 'right')}
-              />
-            )}
-          </div>
-        );
-      })}
+                {/* Right trim handle - disabled when locked */}
+                {!track.locked && (
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-2 bg-white/0 hover:bg-white/30 cursor-ew-resize transition-colors"
+                    onPointerDown={(e) => handleMouseDown(e, element, 'right')}
+                  />
+                )}
+              </div>
+            );
+          })}
       </div>
 
       {/* Context Menu */}

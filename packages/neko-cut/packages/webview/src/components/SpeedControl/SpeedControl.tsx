@@ -72,24 +72,26 @@ interface SpeedSliderProps {
   disabled?: boolean;
 }
 
-const SpeedSlider = memo(function SpeedSlider({
-  value,
-  onChange,
-  disabled,
-}: SpeedSliderProps) {
+const SpeedSlider = memo(function SpeedSlider({ value, onChange, disabled }: SpeedSliderProps) {
   const { t } = useTranslation();
 
-  const handleSliderChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = parseFloat(e.target.value);
-    onChange(clampSpeed(newValue));
-  }, [onChange]);
-
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = parseFloat(e.target.value);
-    if (!isNaN(newValue)) {
+  const handleSliderChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = parseFloat(e.target.value);
       onChange(clampSpeed(newValue));
-    }
-  }, [onChange]);
+    },
+    [onChange],
+  );
+
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = parseFloat(e.target.value);
+      if (!isNaN(newValue)) {
+        onChange(clampSpeed(newValue));
+      }
+    },
+    [onChange],
+  );
 
   return (
     <div className="flex items-center gap-2">
@@ -150,9 +152,7 @@ const ToggleOption = memo(function ToggleOption({
         disabled={disabled}
         className="w-4 h-4 accent-[var(--vscode-button-background)]"
       />
-      <span className="text-[11px] text-[var(--vscode-foreground)]">
-        {t(labelKey)}
-      </span>
+      <span className="text-[11px] text-[var(--vscode-foreground)]">{t(labelKey)}</span>
       {descriptionKey && (
         <span className="text-[10px] text-[var(--vscode-descriptionForeground)] italic">
           {t(descriptionKey)}
@@ -222,36 +222,48 @@ export const SpeedControl = memo(function SpeedControl({
   }, [originalDuration, currentSpeed]);
 
   // Handle speed value change
-  const handleSpeedChange = useCallback((value: number) => {
-    onChange({
-      ...currentSpeed,
-      speed: value,
-    });
-  }, [currentSpeed, onChange]);
+  const handleSpeedChange = useCallback(
+    (value: number) => {
+      onChange({
+        ...currentSpeed,
+        speed: value,
+      });
+    },
+    [currentSpeed, onChange],
+  );
 
   // Handle reverse toggle
-  const handleReverseChange = useCallback((checked: boolean) => {
-    onChange({
-      ...currentSpeed,
-      reverse: checked,
-    });
-  }, [currentSpeed, onChange]);
+  const handleReverseChange = useCallback(
+    (checked: boolean) => {
+      onChange({
+        ...currentSpeed,
+        reverse: checked,
+      });
+    },
+    [currentSpeed, onChange],
+  );
 
   // Handle preserve pitch toggle
-  const handlePreservePitchChange = useCallback((checked: boolean) => {
-    onChange({
-      ...currentSpeed,
-      preservePitch: checked,
-    });
-  }, [currentSpeed, onChange]);
+  const handlePreservePitchChange = useCallback(
+    (checked: boolean) => {
+      onChange({
+        ...currentSpeed,
+        preservePitch: checked,
+      });
+    },
+    [currentSpeed, onChange],
+  );
 
   // Handle preset selection
-  const handlePresetSelect = useCallback((preset: number) => {
-    onChange({
-      ...currentSpeed,
-      speed: preset,
-    });
-  }, [currentSpeed, onChange]);
+  const handlePresetSelect = useCallback(
+    (preset: number) => {
+      onChange({
+        ...currentSpeed,
+        speed: preset,
+      });
+    },
+    [currentSpeed, onChange],
+  );
 
   // Handle reset
   const handleReset = useCallback(() => {
@@ -288,11 +300,7 @@ export const SpeedControl = memo(function SpeedControl({
       </div>
 
       {/* Speed Slider */}
-      <SpeedSlider
-        value={currentSpeed.speed}
-        onChange={handleSpeedChange}
-        disabled={disabled}
-      />
+      <SpeedSlider value={currentSpeed.speed} onChange={handleSpeedChange} disabled={disabled} />
 
       {/* Options */}
       <div className="flex flex-col gap-2">
@@ -312,10 +320,7 @@ export const SpeedControl = memo(function SpeedControl({
       </div>
 
       {/* Duration Info */}
-      <DurationInfo
-        originalDuration={originalDuration}
-        adjustedDuration={adjustedDuration}
-      />
+      <DurationInfo originalDuration={originalDuration} adjustedDuration={adjustedDuration} />
     </div>
   );
 });

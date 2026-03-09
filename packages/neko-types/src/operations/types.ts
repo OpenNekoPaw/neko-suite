@@ -454,10 +454,18 @@ export interface KeyframeUpdateOperation {
     target: KeyframeTarget;
     keyframeId?: string;
     keyframeTime?: number;
-    updates: Partial<Keyframe> | Partial<EffectParameterKeyframe> | Partial<MaskPropertyKeyframe> | Partial<MaskShapeKeyframe>;
+    updates:
+      | Partial<Keyframe>
+      | Partial<EffectParameterKeyframe>
+      | Partial<MaskPropertyKeyframe>
+      | Partial<MaskShapeKeyframe>;
   };
   before: {
-    updates: Partial<Keyframe> | Partial<EffectParameterKeyframe> | Partial<MaskPropertyKeyframe> | Partial<MaskShapeKeyframe>;
+    updates:
+      | Partial<Keyframe>
+      | Partial<EffectParameterKeyframe>
+      | Partial<MaskPropertyKeyframe>
+      | Partial<MaskShapeKeyframe>;
   };
 }
 

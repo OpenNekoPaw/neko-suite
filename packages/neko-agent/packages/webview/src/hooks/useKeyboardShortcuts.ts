@@ -31,10 +31,7 @@ function isMac(): boolean {
 /**
  * Check if modifier keys match
  */
-function matchesModifiers(
-  event: KeyboardEvent,
-  shortcut: KeyboardShortcut
-): boolean {
+function matchesModifiers(event: KeyboardEvent, shortcut: KeyboardShortcut): boolean {
   const mac = isMac();
 
   // On Mac, meta (Cmd) is primary, on others it's Ctrl
@@ -61,7 +58,8 @@ export function useKeyboardShortcuts({
 
       // Don't trigger shortcuts when typing in input/textarea (unless explicitly allowed)
       const target = event.target as HTMLElement;
-      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      const isInput =
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 
       for (const shortcut of shortcuts) {
         if (shortcut.enabled === false) continue;
@@ -83,7 +81,7 @@ export function useKeyboardShortcuts({
         return;
       }
     },
-    [shortcuts, enabled]
+    [shortcuts, enabled],
   );
 
   useEffect(() => {

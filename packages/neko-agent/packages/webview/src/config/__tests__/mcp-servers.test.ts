@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  getMCPCategories,
-  getMCPCategoryName,
-  getMCPCategoryIcon,
-} from '../mcp-servers';
+import { getMCPCategories, getMCPCategoryName, getMCPCategoryIcon } from '../mcp-servers';
 
 describe('mcp-servers config', () => {
   describe('getMCPCategories()', () => {

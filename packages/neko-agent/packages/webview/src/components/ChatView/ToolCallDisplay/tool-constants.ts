@@ -5,9 +5,25 @@
 import { extractFilePath } from './media-extractors';
 
 // Tool category constants
-export const IMAGE_GENERATION_TOOLS = ['generate_image', 'image_generation', 'create_image', 'text_to_image'];
-export const VIDEO_GENERATION_TOOLS = ['generate_video', 'video_generation', 'create_video', 'text_to_video'];
-export const AUDIO_GENERATION_TOOLS = ['generate_audio', 'audio_generation', 'create_audio', 'text_to_audio', 'text_to_speech'];
+export const IMAGE_GENERATION_TOOLS = [
+  'generate_image',
+  'image_generation',
+  'create_image',
+  'text_to_image',
+];
+export const VIDEO_GENERATION_TOOLS = [
+  'generate_video',
+  'video_generation',
+  'create_video',
+  'text_to_video',
+];
+export const AUDIO_GENERATION_TOOLS = [
+  'generate_audio',
+  'audio_generation',
+  'create_audio',
+  'text_to_audio',
+  'text_to_speech',
+];
 export const FILE_TOOLS = ['read_file', 'write_file', 'edit_file', 'create_file', 'delete_file'];
 
 /**

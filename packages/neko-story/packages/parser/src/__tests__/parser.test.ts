@@ -108,7 +108,7 @@ JOHN
 Hello, world!`;
 
       const doc = parse(text);
-      const character = doc.elements.find(e => e.type === 'character');
+      const character = doc.elements.find((e) => e.type === 'character');
 
       expect(character?.type).toBe('character');
       if (character?.type === 'character') {
@@ -124,7 +124,7 @@ JOHN (V.O.)
 Hello, world!`;
 
       const doc = parse(text);
-      const character = doc.elements.find(e => e.type === 'character');
+      const character = doc.elements.find((e) => e.type === 'character');
 
       expect(character?.type).toBe('character');
       if (character?.type === 'character') {
@@ -140,7 +140,7 @@ JOHN
 Hello, world!`;
 
       const doc = parse(text);
-      const dialogue = doc.elements.find(e => e.type === 'dialogue');
+      const dialogue = doc.elements.find((e) => e.type === 'dialogue');
 
       expect(dialogue?.type).toBe('dialogue');
       if (dialogue?.type === 'dialogue') {
@@ -156,7 +156,7 @@ JOHN
 Hello, world!`;
 
       const doc = parse(text);
-      const paren = doc.elements.find(e => e.type === 'parenthetical');
+      const paren = doc.elements.find((e) => e.type === 'parenthetical');
 
       expect(paren?.type).toBe('parenthetical');
       if (paren?.type === 'parenthetical') {
@@ -175,7 +175,7 @@ Hi there!`;
 
       const doc = parse(text);
       const dualChar = doc.elements.find(
-        e => e.type === 'character' && (e as any).isDualDialogue
+        (e) => e.type === 'character' && (e as any).isDualDialogue,
       );
 
       expect(dualChar).toBeDefined();
@@ -192,7 +192,7 @@ Hi there!`;
 John walks into the room and looks around.`;
 
       const doc = parse(text);
-      const action = doc.elements.find(e => e.type === 'action');
+      const action = doc.elements.find((e) => e.type === 'action');
 
       expect(action?.type).toBe('action');
       if (action?.type === 'action') {
@@ -221,7 +221,7 @@ John walks into the room and looks around.`;
 CUT TO:`;
 
       const doc = parse(text);
-      const transition = doc.elements.find(e => e.type === 'transition');
+      const transition = doc.elements.find((e) => e.type === 'transition');
 
       expect(transition?.type).toBe('transition');
       if (transition?.type === 'transition') {
@@ -377,7 +377,7 @@ They walk together.
       expect(doc.titlePage).not.toBeNull();
       expect(doc.elements.length).toBeGreaterThan(5);
 
-      const types = doc.elements.map(e => e.type);
+      const types = doc.elements.map((e) => e.type);
       expect(types).toContain('section');
       expect(types).toContain('scene_heading');
       expect(types).toContain('synopsis');

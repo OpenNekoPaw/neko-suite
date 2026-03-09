@@ -44,7 +44,15 @@ function createProjectWithElements(): ProjectData {
             duration: 10,
             trimStart: 1,
             trimEnd: 2,
-            transform: { x: { baseValue: 0, keyframes: [] }, y: { baseValue: 0, keyframes: [] }, scaleX: { baseValue: 1, keyframes: [] }, scaleY: { baseValue: 1, keyframes: [] }, rotation: { baseValue: 0, keyframes: [] }, anchorX: { baseValue: 0.5, keyframes: [] }, anchorY: { baseValue: 0.5, keyframes: [] } },
+            transform: {
+              x: { baseValue: 0, keyframes: [] },
+              y: { baseValue: 0, keyframes: [] },
+              scaleX: { baseValue: 1, keyframes: [] },
+              scaleY: { baseValue: 1, keyframes: [] },
+              rotation: { baseValue: 0, keyframes: [] },
+              anchorX: { baseValue: 0.5, keyframes: [] },
+              anchorY: { baseValue: 0.5, keyframes: [] },
+            },
             opacity: 1,
             blendMode: 'normal',
             effects: [],
@@ -61,7 +69,15 @@ function createProjectWithElements(): ProjectData {
             duration: 5,
             trimStart: 0,
             trimEnd: 0,
-            transform: { x: { baseValue: 0, keyframes: [] }, y: { baseValue: 0, keyframes: [] }, scaleX: { baseValue: 1, keyframes: [] }, scaleY: { baseValue: 1, keyframes: [] }, rotation: { baseValue: 0, keyframes: [] }, anchorX: { baseValue: 0.5, keyframes: [] }, anchorY: { baseValue: 0.5, keyframes: [] } },
+            transform: {
+              x: { baseValue: 0, keyframes: [] },
+              y: { baseValue: 0, keyframes: [] },
+              scaleX: { baseValue: 1, keyframes: [] },
+              scaleY: { baseValue: 1, keyframes: [] },
+              rotation: { baseValue: 0, keyframes: [] },
+              anchorX: { baseValue: 0.5, keyframes: [] },
+              anchorY: { baseValue: 0.5, keyframes: [] },
+            },
             opacity: 1,
             blendMode: 'normal',
             effects: [],
@@ -161,11 +177,13 @@ describe('projectSlice', () => {
     });
 
     it('should preserve unmodified fields', () => {
-      store.getState().setProject(createTestProject({
-        name: 'My Project',
-        fps: 30,
-        resolution: { width: 1920, height: 1080 },
-      }));
+      store.getState().setProject(
+        createTestProject({
+          name: 'My Project',
+          fps: 30,
+          resolution: { width: 1920, height: 1080 },
+        }),
+      );
       store.getState().updateProject({ name: 'Renamed' });
       expect(store.getState().project!.fps).toBe(30);
       expect(store.getState().project!.resolution).toEqual({ width: 1920, height: 1080 });
@@ -200,61 +218,107 @@ describe('projectSlice', () => {
     });
 
     it('should handle single element', () => {
-      store.getState().setProject(createTestProject({
-        tracks: [{
-          id: 't1',
-          name: 'Track',
-          type: 'media',
-          elements: [{
-            id: 'e1',
-            type: 'media',
-            name: 'Clip',
-            src: '/v.mp4',
-            startTime: 5,
-            duration: 10,
-            trimStart: 0,
-            trimEnd: 0,
-            transform: {},
-            opacity: 1,
-            blendMode: 'normal',
-            effects: [],
-            muted: false,
-            hidden: false,
-            locked: false,
-          } as any],
-          muted: false,
-          locked: false,
-          hidden: false,
-          isMain: false,
-        } as any],
-      }));
+      store.getState().setProject(
+        createTestProject({
+          tracks: [
+            {
+              id: 't1',
+              name: 'Track',
+              type: 'media',
+              elements: [
+                {
+                  id: 'e1',
+                  type: 'media',
+                  name: 'Clip',
+                  src: '/v.mp4',
+                  startTime: 5,
+                  duration: 10,
+                  trimStart: 0,
+                  trimEnd: 0,
+                  transform: {},
+                  opacity: 1,
+                  blendMode: 'normal',
+                  effects: [],
+                  muted: false,
+                  hidden: false,
+                  locked: false,
+                } as any,
+              ],
+              muted: false,
+              locked: false,
+              hidden: false,
+              isMain: false,
+            } as any,
+          ],
+        }),
+      );
       // endTime = 5 + 10 - 0 - 0 = 15
       expect(store.getState().getTotalDuration()).toBe(15);
     });
 
     it('should return max endTime across multiple tracks', () => {
-      store.getState().setProject(createTestProject({
-        tracks: [
-          {
-            id: 't1', name: 'T1', type: 'media', elements: [{
-              id: 'e1', type: 'media', name: 'C1', src: '/v.mp4',
-              startTime: 0, duration: 5, trimStart: 0, trimEnd: 0,
-              transform: {}, opacity: 1, blendMode: 'normal', effects: [],
-              muted: false, hidden: false, locked: false,
-            } as any],
-            muted: false, locked: false, hidden: false, isMain: false,
-          } as any,
-          {
-            id: 't2', name: 'T2', type: 'audio', elements: [{
-              id: 'e2', type: 'audio', name: 'A1', src: '/a.mp3',
-              startTime: 3, duration: 20, trimStart: 0, trimEnd: 0,
-              transform: {}, opacity: 1, blendMode: 'normal', effects: [],
-              muted: false, hidden: false, locked: false,
-            } as any],
-            muted: false, locked: false, hidden: false, isMain: false,
-          } as any,
-        ],
-      }));
+      store.getState().setProject(
+        createTestProject({
+          tracks: [
+            {
+              id: 't1',
+              name: 'T1',
+              type: 'media',
+              elements: [
+                {
+                  id: 'e1',
+                  type: 'media',
+                  name: 'C1',
+                  src: '/v.mp4',
+                  startTime: 0,
+                  duration: 5,
+                  trimStart: 0,
+                  trimEnd: 0,
+                  transform: {},
+                  opacity: 1,
+                  blendMode: 'normal',
+                  effects: [],
+                  muted: false,
+                  hidden: false,
+                  locked: false,
+                } as any,
+              ],
+              muted: false,
+              locked: false,
+              hidden: false,
+              isMain: false,
+            } as any,
+            {
+              id: 't2',
+              name: 'T2',
+              type: 'audio',
+              elements: [
+                {
+                  id: 'e2',
+                  type: 'audio',
+                  name: 'A1',
+                  src: '/a.mp3',
+                  startTime: 3,
+                  duration: 20,
+                  trimStart: 0,
+                  trimEnd: 0,
+                  transform: {},
+                  opacity: 1,
+                  blendMode: 'normal',
+                  effects: [],
+                  muted: false,
+                  hidden: false,
+                  locked: false,
+                } as any,
+              ],
+              muted: false,
+              locked: false,
+              hidden: false,
+              isMain: false,
+            } as any,
+          ],
+        }),
+      );
       // T1: endTime = 5, T2: endTime = 23
       expect(store.getState().getTotalDuration()).toBe(23);
     });

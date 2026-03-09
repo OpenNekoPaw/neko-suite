@@ -33,7 +33,11 @@ function formatTime(timestamp: number): string {
 function UserAvatar() {
   return (
     <div className="w-5 h-5 rounded-full bg-[var(--vscode-button-background)] flex items-center justify-center flex-shrink-0">
-      <svg className="w-3 h-3 text-[var(--vscode-button-foreground)]" fill="currentColor" viewBox="0 0 24 24">
+      <svg
+        className="w-3 h-3 text-[var(--vscode-button-foreground)]"
+        fill="currentColor"
+        viewBox="0 0 24 24"
+      >
         <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
       </svg>
     </div>
@@ -63,13 +67,7 @@ function formatFileSize(bytes?: number): string {
 function AttachmentDisplay({ attachment }: { attachment: MessageAttachment }) {
   // Image preview with fullscreen modal
   if (attachment.type === 'image' && attachment.preview) {
-    return (
-      <ImagePreview
-        src={attachment.preview}
-        alt={attachment.name}
-        className="mt-1"
-      />
-    );
+    return <ImagePreview src={attachment.preview} alt={attachment.name} className="mt-1" />;
   }
 
   // Audio player
@@ -143,10 +141,7 @@ function ContentBlockRenderer({
     case 'thinking':
       return (
         <div className="mb-2">
-          <ThinkingBlock
-            content={block.thinking || ''}
-            isComplete={block.isThinkingComplete}
-          />
+          <ThinkingBlock content={block.thinking || ''} isComplete={block.isThinkingComplete} />
         </div>
       );
 
@@ -173,11 +168,7 @@ function ContentBlockRenderer({
       if (!block.codeDiff) return null;
       return (
         <div className="w-full">
-          <DiffBlock
-            diff={block.codeDiff}
-            onAccept={onAcceptDiff}
-            onReject={onRejectDiff}
-          />
+          <DiffBlock diff={block.codeDiff} onAccept={onAcceptDiff} onReject={onRejectDiff} />
         </div>
       );
 
@@ -187,11 +178,23 @@ function ContentBlockRenderer({
         <div className="w-full">
           <PlanReview
             plan={block.plan}
-            onApproveStep={onApprovePlanStep ? (stepId) => onApprovePlanStep(block.plan!.id, stepId) : undefined}
-            onRejectStep={onRejectPlanStep ? (stepId) => onRejectPlanStep(block.plan!.id, stepId) : undefined}
-            onModifyStep={onModifyPlanStep ? (stepId, desc) => onModifyPlanStep(block.plan!.id, stepId, desc) : undefined}
-            onApproveAll={onApproveAllPlanSteps ? () => onApproveAllPlanSteps(block.plan!.id) : undefined}
-            onRejectAll={onRejectAllPlanSteps ? () => onRejectAllPlanSteps(block.plan!.id) : undefined}
+            onApproveStep={
+              onApprovePlanStep ? (stepId) => onApprovePlanStep(block.plan!.id, stepId) : undefined
+            }
+            onRejectStep={
+              onRejectPlanStep ? (stepId) => onRejectPlanStep(block.plan!.id, stepId) : undefined
+            }
+            onModifyStep={
+              onModifyPlanStep
+                ? (stepId, desc) => onModifyPlanStep(block.plan!.id, stepId, desc)
+                : undefined
+            }
+            onApproveAll={
+              onApproveAllPlanSteps ? () => onApproveAllPlanSteps(block.plan!.id) : undefined
+            }
+            onRejectAll={
+              onRejectAllPlanSteps ? () => onRejectAllPlanSteps(block.plan!.id) : undefined
+            }
           />
         </div>
       );
@@ -253,20 +256,14 @@ function AssistantContentBlocks({
       {/* Thinking block */}
       {message.thinking && (
         <div className="mb-2">
-          <ThinkingBlock
-            content={message.thinking}
-            isComplete={message.isThinkingComplete}
-          />
+          <ThinkingBlock content={message.thinking} isComplete={message.isThinkingComplete} />
         </div>
       )}
 
       {/* Message bubble - compact */}
       {message.content && (
         <div className="inline-block px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)] rounded-tl-sm">
-          <MarkdownRenderer
-            content={message.content}
-            isStreaming={isStreaming}
-          />
+          <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
         </div>
       )}
 
@@ -318,7 +315,7 @@ export const MessageItem = memo(function MessageItem({
         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] text-[var(--vscode-descriptionForeground)] bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)]">
           {message.isQueued && (
             <svg className="w-3 h-3 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
             </svg>
           )}
           <span>{message.content}</span>
@@ -335,7 +332,11 @@ export const MessageItem = memo(function MessageItem({
         {/* Avatar - compact 20px */}
         <div className="flex-shrink-0 w-5 pt-0.5">
           {showAvatar && !isGrouped ? (
-            isUser ? <UserAvatar /> : <AssistantAvatar />
+            isUser ? (
+              <UserAvatar />
+            ) : (
+              <AssistantAvatar />
+            )
           ) : (
             <div className="w-5" />
           )}
@@ -355,7 +356,9 @@ export const MessageItem = memo(function MessageItem({
                 {formatTime(message.timestamp)}
               </span>
               {message.editedAt && (
-                <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">(edited)</span>
+                <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">
+                  (edited)
+                </span>
               )}
             </div>
           )}
@@ -414,7 +417,9 @@ export const MessageItem = memo(function MessageItem({
 
           {/* Message actions */}
           {!isStreaming && (
-            <div className={`mt-1 opacity-0 group-hover:opacity-100 transition-opacity ${isUser ? 'self-end' : ''}`}>
+            <div
+              className={`mt-1 opacity-0 group-hover:opacity-100 transition-opacity ${isUser ? 'self-end' : ''}`}
+            >
               <MessageActions
                 message={message}
                 onEdit={isUser && onEditMessage ? () => onEditMessage(message.id) : undefined}

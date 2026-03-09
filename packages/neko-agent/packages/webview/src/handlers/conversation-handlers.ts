@@ -14,7 +14,7 @@ const handleError: MessageHandler = (message, context) => {
   if (context.isCurrentConversation(message.conversationId)) {
     context.setIsThinking(false);
     context.setStreamingMessageId(null);
-    context.setMessages(prev => [
+    context.setMessages((prev) => [
       ...prev,
       {
         id: Date.now().toString(),
@@ -89,14 +89,14 @@ const handleActiveConversation: MessageHandler = (message, context) => {
 
     context.setActiveConversationId(convId);
 
-    const existingTab = context.openTabs.find(t => t.conversationId === message.conversation.id);
+    const existingTab = context.openTabs.find((t) => t.conversationId === message.conversation.id);
     if (!existingTab) {
       const newTab: OpenTab = {
         id: `tab-${Date.now()}`,
         title: message.conversation.title || 'New Chat',
         conversationId: message.conversation.id,
       };
-      context.setOpenTabs(prev => [...prev, newTab]);
+      context.setOpenTabs((prev) => [...prev, newTab]);
       context.setActiveTabId(newTab.id);
     } else {
       context.setActiveTabId(existingTab.id);

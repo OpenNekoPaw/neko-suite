@@ -33,7 +33,8 @@ export class ProviderRegistry {
     // Priority: model.protocol > inferred from model name (only for generic type) > provider.type
     // Only infer from model name when provider.type is 'generic', because other provider types
     // (like 'newapi') already specify which adapter to use, even if they serve GPT models.
-    const inferredProtocol = provider.type === 'generic' ? this.inferProtocolFromModelName(model?.name) : undefined;
+    const inferredProtocol =
+      provider.type === 'generic' ? this.inferProtocolFromModelName(model?.name) : undefined;
     const adapterType = model?.protocol || inferredProtocol || provider.type;
     return getAdapterRegistry().getForType(adapterType);
   }

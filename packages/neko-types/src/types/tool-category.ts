@@ -78,11 +78,7 @@ export interface IToolCategoryRegistry {
   /**
    * Register a tool with category and optional layer override
    */
-  categorizeTool(
-    toolName: string,
-    category: ToolCategory,
-    layer?: ToolInjectionLayer
-  ): void;
+  categorizeTool(toolName: string, category: ToolCategory, layer?: ToolInjectionLayer): void;
 
   /**
    * Get tool's category and layer info

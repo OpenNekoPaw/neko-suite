@@ -27,7 +27,7 @@ import promptsDataZh from './presets/zh-cn/prompts.json';
  * Locale data map (prevents tree-shaking)
  */
 const LOCALE_DATA = {
-  'en': {
+  en: {
     providers: providersDataEn,
     models: modelsDataEn,
     retryTimeout: retryTimeoutDataEn,

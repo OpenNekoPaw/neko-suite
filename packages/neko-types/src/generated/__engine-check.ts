@@ -24,7 +24,10 @@ import type { TimelineTrack } from '../types/timelineTrack';
 type AssertKeysSubset<A, B> =
   Exclude<keyof A, keyof B> extends never
     ? true
-    : { error: 'Generated type has fields missing from hand-written type'; fields: Exclude<keyof A, keyof B> };
+    : {
+        error: 'Generated type has fields missing from hand-written type';
+        fields: Exclude<keyof A, keyof B>;
+      };
 
 // ---------------------------------------------------------------------------
 // EngineElement ↔ BaseTimelineElement

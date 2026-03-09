@@ -4,7 +4,12 @@
  */
 
 import { memo, useMemo, CSSProperties } from 'react';
-import type { SubtitleTrack, SubtitleCue, SubtitleStyle, SubtitleAnimation } from '../../types/subtitle';
+import type {
+  SubtitleTrack,
+  SubtitleCue,
+  SubtitleStyle,
+  SubtitleAnimation,
+} from '../../types/subtitle';
 import { getCueAtTime } from '../../utils/subtitleParser';
 
 // =============================================================================
@@ -87,7 +92,7 @@ const ANIMATION_KEYFRAMES: Record<SubtitleAnimation, string> = {
 function generateSubtitleCSS(
   style: SubtitleStyle,
   _containerWidth: number,
-  containerHeight: number
+  containerHeight: number,
 ): CSSProperties {
   const fontSize = (style.fontSize / 1080) * containerHeight;
 
@@ -108,23 +113,19 @@ function generateSubtitleCSS(
 
     // Color
     color: style.color,
-    WebkitTextStroke: style.outlineWidth > 0
-      ? `${style.outlineWidth}px ${style.outlineColor}`
-      : undefined,
+    WebkitTextStroke:
+      style.outlineWidth > 0 ? `${style.outlineWidth}px ${style.outlineColor}` : undefined,
 
     // Background
     backgroundColor: style.backgroundColor,
-    padding: style.backgroundColor !== 'transparent'
-      ? `${style.backgroundPadding}px`
-      : undefined,
-    borderRadius: style.backgroundRadius > 0
-      ? `${style.backgroundRadius}px`
-      : undefined,
+    padding: style.backgroundColor !== 'transparent' ? `${style.backgroundPadding}px` : undefined,
+    borderRadius: style.backgroundRadius > 0 ? `${style.backgroundRadius}px` : undefined,
 
     // Shadow
-    textShadow: style.shadowBlur > 0 || style.shadowOffsetX !== 0 || style.shadowOffsetY !== 0
-      ? `${style.shadowOffsetX}px ${style.shadowOffsetY}px ${style.shadowBlur}px ${style.shadowColor}`
-      : undefined,
+    textShadow:
+      style.shadowBlur > 0 || style.shadowOffsetX !== 0 || style.shadowOffsetY !== 0
+        ? `${style.shadowOffsetX}px ${style.shadowOffsetY}px ${style.shadowBlur}px ${style.shadowColor}`
+        : undefined,
 
     // Text layout
     textAlign: style.alignment,
@@ -185,10 +186,13 @@ const SubtitleCueRenderer = memo(function SubtitleCueRenderer({
   currentTime,
 }: SubtitleCueRendererProps) {
   // Merge cue-specific style with track style
-  const mergedStyle: SubtitleStyle = useMemo(() => ({
-    ...style,
-    ...cue.style,
-  }), [style, cue.style]);
+  const mergedStyle: SubtitleStyle = useMemo(
+    () => ({
+      ...style,
+      ...cue.style,
+    }),
+    [style, cue.style],
+  );
 
   // Calculate animation state
   const animationState = useMemo(() => {
@@ -282,9 +286,7 @@ export const SubtitleRenderer = memo(function SubtitleRenderer({
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
       {/* Animation keyframes */}
-      {neededKeyframes && (
-        <style dangerouslySetInnerHTML={{ __html: neededKeyframes }} />
-      )}
+      {neededKeyframes && <style dangerouslySetInnerHTML={{ __html: neededKeyframes }} />}
 
       {/* Render cues */}
       {visibleCues.map(({ track, cue }) => (

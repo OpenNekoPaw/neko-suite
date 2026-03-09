@@ -57,29 +57,17 @@ export class StatusBar implements IStatusBar {
 
   constructor() {
     // Create status bar items with decreasing priority (left to right)
-    this.playStateItem = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Left,
-      100
-    );
+    this.playStateItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     this.playStateItem.name = 'Neko Suite Play State';
 
-    this.timeItem = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Left,
-      99
-    );
+    this.timeItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
     this.timeItem.name = 'Neko Suite Timeline';
 
-    this.infoItem = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Left,
-      98
-    );
+    this.infoItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
     this.infoItem.name = 'Neko Suite Info';
 
     // Export progress item - right aligned for visibility
-    this.exportItem = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Right,
-      1000
-    );
+    this.exportItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 1000);
     this.exportItem.name = 'Neko Suite Export';
     this.exportItem.command = 'neko.showExportPanel';
   }

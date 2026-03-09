@@ -54,16 +54,32 @@ const components: Components = {
 
   // Headers
   h1({ children }) {
-    return <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0 text-[var(--vscode-foreground)]">{children}</h1>;
+    return (
+      <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0 text-[var(--vscode-foreground)]">
+        {children}
+      </h1>
+    );
   },
   h2({ children }) {
-    return <h2 className="text-base font-bold mb-2 mt-3 first:mt-0 text-[var(--vscode-foreground)]">{children}</h2>;
+    return (
+      <h2 className="text-base font-bold mb-2 mt-3 first:mt-0 text-[var(--vscode-foreground)]">
+        {children}
+      </h2>
+    );
   },
   h3({ children }) {
-    return <h3 className="text-sm font-bold mb-1.5 mt-2 first:mt-0 text-[var(--vscode-foreground)]">{children}</h3>;
+    return (
+      <h3 className="text-sm font-bold mb-1.5 mt-2 first:mt-0 text-[var(--vscode-foreground)]">
+        {children}
+      </h3>
+    );
   },
   h4({ children }) {
-    return <h4 className="text-sm font-semibold mb-1 mt-2 first:mt-0 text-[var(--vscode-foreground)]">{children}</h4>;
+    return (
+      <h4 className="text-sm font-semibold mb-1 mt-2 first:mt-0 text-[var(--vscode-foreground)]">
+        {children}
+      </h4>
+    );
   },
 
   // Lists
@@ -149,18 +165,15 @@ const components: Components = {
 
   // Strikethrough
   del({ children }) {
-    return <del className="line-through text-[var(--vscode-descriptionForeground)]">{children}</del>;
+    return (
+      <del className="line-through text-[var(--vscode-descriptionForeground)]">{children}</del>
+    );
   },
 
   // Images
   img({ src, alt }) {
     return (
-      <img
-        src={src}
-        alt={alt || ''}
-        className="max-w-full h-auto rounded my-2"
-        loading="lazy"
-      />
+      <img src={src} alt={alt || ''} className="max-w-full h-auto rounded my-2" loading="lazy" />
     );
   },
 };
@@ -171,10 +184,7 @@ function MarkdownRendererComponent({ content, isStreaming, className }: Markdown
 
   return (
     <div className={`markdown-content text-[13px] leading-relaxed ${className || ''}`}>
-      <ReactMarkdown
-        remarkPlugins={remarkPlugins}
-        components={components}
-      >
+      <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
         {content}
       </ReactMarkdown>
       {isStreaming && (

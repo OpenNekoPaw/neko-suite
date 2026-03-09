@@ -5,12 +5,7 @@
  * For advanced features like ChainPromptExecutor, use @neko/agent.
  */
 
-import type {
-  Prompt,
-  PromptCategory,
-  RenderedPrompt,
-  IPromptManager,
-} from '@neko/shared';
+import type { Prompt, PromptCategory, RenderedPrompt, IPromptManager } from '@neko/shared';
 
 /**
  * Platform Prompt Manager implementation
@@ -136,4 +131,3 @@ export class PromptManager implements IPromptManager {
     }
   }
 }
-

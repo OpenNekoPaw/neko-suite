@@ -60,12 +60,15 @@ export function TextNode({
   }, [isEditing]);
 
   // 双击进入编辑模式
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!node.locked) {
-      setIsEditing(true);
-    }
-  }, [node.locked]);
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!node.locked) {
+        setIsEditing(true);
+      }
+    },
+    [node.locked],
+  );
 
   // 处理文本变化
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -81,15 +84,18 @@ export function TextNode({
   }, [editContent, node.data.content, node.id, onContentChange]);
 
   // 按键处理
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      setEditContent(node.data.content);
-      setIsEditing(false);
-    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      handleBlur();
-    }
-    e.stopPropagation();
-  }, [node.data.content, handleBlur]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setEditContent(node.data.content);
+        setIsEditing(false);
+      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        handleBlur();
+      }
+      e.stopPropagation();
+    },
+    [node.data.content, handleBlur],
+  );
 
   return (
     <BaseNode
@@ -124,7 +130,7 @@ export function TextNode({
             onKeyDown={handleKeyDown}
             className={clsx(
               'flex-1 w-full resize-none bg-transparent border-none outline-none',
-              'text-[var(--text-primary)]'
+              'text-[var(--text-primary)]',
             )}
             style={{
               fontSize: style.fontSize,
@@ -139,7 +145,7 @@ export function TextNode({
           <div
             className={clsx(
               'flex-1 overflow-auto whitespace-pre-wrap break-words',
-              !node.data.content && 'text-gray-500 italic'
+              !node.data.content && 'text-gray-500 italic',
             )}
             style={{
               fontSize: style.fontSize,

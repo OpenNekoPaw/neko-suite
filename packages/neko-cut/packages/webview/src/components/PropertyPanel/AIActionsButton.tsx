@@ -92,7 +92,7 @@ export const AIActionsButton = memo(function AIActionsButton({
       onExecuteAction(action.id, [element.id]);
       setIsOpen(false);
     },
-    [element, onExecuteAction]
+    [element, onExecuteAction],
   );
 
   // Don't render if no element or no actions
@@ -125,10 +125,7 @@ export const AIActionsButton = memo(function AIActionsButton({
       {isOpen && (
         <>
           {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
-          />
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
 
           {/* Dropdown menu */}
           <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] bg-[var(--vscode-menu-background)] border border-[var(--vscode-menu-border)] rounded shadow-lg overflow-hidden">

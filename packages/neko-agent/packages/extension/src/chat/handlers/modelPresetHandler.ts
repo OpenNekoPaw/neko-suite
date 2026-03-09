@@ -28,13 +28,13 @@ export class ModelPresetHandler {
     _webview: vscode.Webview,
     _modelId: string,
     _apiKey: string,
-    _baseUrl?: string
+    _baseUrl?: string,
   ): Promise<void> {}
 
   async handleToggleModelPreset(
     _webview: vscode.Webview,
     _modelId: string,
-    _enabled: boolean
+    _enabled: boolean,
   ): Promise<void> {}
 
   async handleRemoveModelPresetConfig(_webview: vscode.Webview, _modelId: string): Promise<void> {}
@@ -44,7 +44,7 @@ export class ModelPresetHandler {
   async handleImportModelConfig(
     webview: vscode.Webview,
     _jsonString: string,
-    _options: { overwrite?: boolean; includeSecrets?: boolean }
+    _options: { overwrite?: boolean; includeSecrets?: boolean },
   ): Promise<void> {
     webview.postMessage({
       type: 'modelConfigImported',
@@ -56,7 +56,7 @@ export class ModelPresetHandler {
   async handleAddCustomModel(
     webview: vscode.Webview,
     _configJson: string,
-    _apiKey?: string
+    _apiKey?: string,
   ): Promise<void> {
     webview.postMessage({
       type: 'customModelAdded',

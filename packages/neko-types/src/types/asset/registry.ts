@@ -17,14 +17,14 @@ export type AssetChangeKind = 'registered' | 'unregistered' | 'updated';
 
 /** Asset change event */
 export interface AssetChangeEvent {
-	/** Change type */
-	kind: AssetChangeKind;
-	/** Asset ID */
-	id: string;
-	/** Asset type */
-	type: AssetType;
-	/** Updated manifest (undefined for unregister) */
-	manifest?: AssetManifest;
+  /** Change type */
+  kind: AssetChangeKind;
+  /** Asset ID */
+  id: string;
+  /** Asset type */
+  type: AssetType;
+  /** Updated manifest (undefined for unregister) */
+  manifest?: AssetManifest;
 }
 
 // =============================================================================
@@ -33,9 +33,9 @@ export interface AssetChangeEvent {
 
 /** Validation result from a handler */
 export interface AssetValidationResult {
-	valid: boolean;
-	errors?: string[];
-	warnings?: string[];
+  valid: boolean;
+  errors?: string[];
+  warnings?: string[];
 }
 
 /**
@@ -47,26 +47,26 @@ export interface AssetValidationResult {
  * by the registry via AssetLibrary.
  */
 export interface IAssetHandler<T extends AssetType = AssetType> {
-	/** Asset type this handler manages */
-	readonly type: T;
+  /** Asset type this handler manages */
+  readonly type: T;
 
-	/** Validate an asset at the given path */
-	validate(path: string): Promise<AssetValidationResult>;
+  /** Validate an asset at the given path */
+  validate(path: string): Promise<AssetValidationResult>;
 
-	/** Extract type-specific metadata from the asset */
-	extractMetadata(path: string): Promise<Record<string, unknown>>;
+  /** Extract type-specific metadata from the asset */
+  extractMetadata(path: string): Promise<Record<string, unknown>>;
 
-	/** Generate a preview/thumbnail for the asset (returns path or undefined) */
-	generatePreview?(id: string, path: string): Promise<string | undefined>;
+  /** Generate a preview/thumbnail for the asset (returns path or undefined) */
+  generatePreview?(id: string, path: string): Promise<string | undefined>;
 
-	/** Called after an asset is registered */
-	onInstall?(id: string, manifest: AssetManifest): Promise<void>;
+  /** Called after an asset is registered */
+  onInstall?(id: string, manifest: AssetManifest): Promise<void>;
 
-	/** Called before an asset is unregistered */
-	onUninstall?(id: string, manifest: AssetManifest): Promise<void>;
+  /** Called before an asset is unregistered */
+  onUninstall?(id: string, manifest: AssetManifest): Promise<void>;
 
-	/** Called after an asset is updated */
-	onUpdate?(id: string, manifest: AssetManifest): Promise<void>;
+  /** Called after an asset is updated */
+  onUpdate?(id: string, manifest: AssetManifest): Promise<void>;
 }
 
 // =============================================================================
@@ -80,11 +80,11 @@ export interface IAssetHandler<T extends AssetType = AssetType> {
  * to know whether an asset is local, in Git LFS, or from a registry.
  */
 export interface IAssetResolver {
-	/** Resolve asset ID to an absolute file path */
-	resolve(id: string): Promise<string | undefined>;
+  /** Resolve asset ID to an absolute file path */
+  resolve(id: string): Promise<string | undefined>;
 
-	/** Resolve a specific version of an asset */
-	resolveVersion?(id: string, version: string): Promise<string | undefined>;
+  /** Resolve a specific version of an asset */
+  resolveVersion?(id: string, version: string): Promise<string | undefined>;
 }
 
 // =============================================================================
@@ -93,16 +93,16 @@ export interface IAssetResolver {
 
 /** Query filter for the registry */
 export interface AssetRegistryQuery {
-	/** Filter by asset types */
-	types?: AssetType[];
-	/** Full-text search */
-	text?: string;
-	/** Filter by tags (from distribution) */
-	tags?: string[];
-	/** Maximum results */
-	limit?: number;
-	/** Offset for pagination */
-	offset?: number;
+  /** Filter by asset types */
+  types?: AssetType[];
+  /** Full-text search */
+  text?: string;
+  /** Filter by tags (from distribution) */
+  tags?: string[];
+  /** Maximum results */
+  limit?: number;
+  /** Offset for pagination */
+  offset?: number;
 }
 
 /**
@@ -114,43 +114,43 @@ export interface AssetRegistryQuery {
  * via the existing AssetLibrary.
  */
 export interface IAssetRegistry {
-	// =========================================================================
-	// CRUD
-	// =========================================================================
+  // =========================================================================
+  // CRUD
+  // =========================================================================
 
-	/** Register a new asset */
-	register(manifest: AssetManifest): Promise<string>;
+  /** Register a new asset */
+  register(manifest: AssetManifest): Promise<string>;
 
-	/** Unregister an asset by ID */
-	unregister(id: string): Promise<void>;
+  /** Unregister an asset by ID */
+  unregister(id: string): Promise<void>;
 
-	/** Update an existing asset */
-	update(id: string, patch: Partial<AssetManifest>): Promise<void>;
+  /** Update an existing asset */
+  update(id: string, patch: Partial<AssetManifest>): Promise<void>;
 
-	// =========================================================================
-	// Query
-	// =========================================================================
+  // =========================================================================
+  // Query
+  // =========================================================================
 
-	/** Get a single asset by ID */
-	get(id: string): Promise<AssetManifest | undefined>;
+  /** Get a single asset by ID */
+  get(id: string): Promise<AssetManifest | undefined>;
 
-	/** Query assets with filters */
-	query(filter: AssetRegistryQuery): Promise<AssetManifest[]>;
+  /** Query assets with filters */
+  query(filter: AssetRegistryQuery): Promise<AssetManifest[]>;
 
-	/** Full-text search across all assets */
-	search(text: string, types?: AssetType[]): Promise<AssetManifest[]>;
+  /** Full-text search across all assets */
+  search(text: string, types?: AssetType[]): Promise<AssetManifest[]>;
 
-	// =========================================================================
-	// Handler Management
-	// =========================================================================
+  // =========================================================================
+  // Handler Management
+  // =========================================================================
 
-	/** Register a type-specific handler */
-	registerHandler(handler: IAssetHandler): void;
+  /** Register a type-specific handler */
+  registerHandler(handler: IAssetHandler): void;
 
-	// =========================================================================
-	// Resolver
-	// =========================================================================
+  // =========================================================================
+  // Resolver
+  // =========================================================================
 
-	/** Resolve asset ID to file path */
-	resolve(id: string): Promise<string | undefined>;
+  /** Resolve asset ID to file path */
+  resolve(id: string): Promise<string | undefined>;
 }

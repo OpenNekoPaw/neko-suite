@@ -55,7 +55,7 @@ function serializeForHistory(data: CanvasData): string {
  */
 function deserializeWithViewport(
   snapshot: string,
-  currentViewport: CanvasData['viewport']
+  currentViewport: CanvasData['viewport'],
 ): CanvasData {
   const data = JSON.parse(snapshot) as Omit<CanvasData, 'viewport'>;
   return { ...data, viewport: currentViewport } as CanvasData;

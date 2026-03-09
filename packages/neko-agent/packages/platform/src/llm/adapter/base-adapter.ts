@@ -15,11 +15,7 @@ import type {
   ApiKeyValidationResult,
 } from '../../types/adapter';
 import type { Model, Provider } from '../../types/provider';
-import {
-  HttpClient,
-  getHttpClient,
-  type HttpRequestConfig,
-} from '../../core/http-client';
+import { HttpClient, getHttpClient, type HttpRequestConfig } from '../../core/http-client';
 
 // Re-export HttpRequestConfig for backward compatibility
 export type { HttpRequestConfig };
@@ -68,7 +64,7 @@ export abstract class BaseAdapter implements Adapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<ChatResponse>;
 
   /**
@@ -78,7 +74,7 @@ export abstract class BaseAdapter implements Adapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): AsyncIterable<ChatChunk>;
 
   /**
@@ -93,7 +89,7 @@ export abstract class BaseAdapter implements Adapter {
     prompt: string,
     options: ImageGenerationOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<ImageGenerationResult>;
 
   // ==========================================================================
@@ -103,9 +99,7 @@ export abstract class BaseAdapter implements Adapter {
   /**
    * Make HTTP request and parse JSON response
    */
-  protected async httpRequest<T>(
-    config: HttpRequestConfig & { errorPrefix?: string }
-  ): Promise<T> {
+  protected async httpRequest<T>(config: HttpRequestConfig & { errorPrefix?: string }): Promise<T> {
     return this.http.request<T>(config, config.errorPrefix);
   }
 
@@ -113,7 +107,7 @@ export abstract class BaseAdapter implements Adapter {
    * Make streaming HTTP request and yield SSE data lines
    */
   protected async *httpStream(
-    config: HttpRequestConfig & { errorPrefix?: string }
+    config: HttpRequestConfig & { errorPrefix?: string },
   ): AsyncIterable<string> {
     yield* this.http.stream(config, config.errorPrefix);
   }
@@ -124,7 +118,7 @@ export abstract class BaseAdapter implements Adapter {
   protected getCredentials(
     provider: Provider,
     envKeyName?: string,
-    defaultApiUrl?: string
+    defaultApiUrl?: string,
   ): ProviderCredentials {
     const apiKey = provider.apiKey || (envKeyName ? process.env[envKeyName] : undefined);
     if (!apiKey) {
@@ -169,7 +163,7 @@ export abstract class BaseAdapter implements Adapter {
       // Try to fetch models list as a validation check
       const response = await fetch(`${apiUrl}/v1/models`, {
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
         },
       });
 

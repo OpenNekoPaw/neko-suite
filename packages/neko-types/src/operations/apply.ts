@@ -3,7 +3,12 @@
 // =============================================================================
 
 import type { ProjectData } from '../types/project';
-import type { EditOperation, ClipboardPasteOperation, ProjectUpdateOperation, BatchOperation } from './types';
+import type {
+  EditOperation,
+  ClipboardPasteOperation,
+  ProjectUpdateOperation,
+  BatchOperation,
+} from './types';
 import { applyTrackOperation } from './apply-track';
 import { applyElementOperation, applyElementSplitOperation } from './apply-element';
 import { applyShapeOperation } from './apply-shape';
@@ -73,7 +78,9 @@ export function applyOperation(project: ProjectData, op: EditOperation): Project
       return applyBatch(project, op);
 
     default:
-      throw OperationError.invalidOperation(`Unknown operation type: ${(op as Record<string, unknown>).type}`);
+      throw OperationError.invalidOperation(
+        `Unknown operation type: ${(op as Record<string, unknown>).type}`,
+      );
   }
 }
 
@@ -85,7 +92,7 @@ function applyClipboardPaste(project: ProjectData, op: ClipboardPasteOperation):
       result = { ...result, tracks: [...result.tracks, item.newTrack] };
     }
     // 添加元素到 track
-    result = updateTrackInProject(result, item.trackId, track => ({
+    result = updateTrackInProject(result, item.trackId, (track) => ({
       ...track,
       elements: [...track.elements, item.element],
     }));
@@ -98,8 +105,5 @@ function applyProjectUpdate(project: ProjectData, op: ProjectUpdateOperation): P
 }
 
 function applyBatch(project: ProjectData, op: BatchOperation): ProjectData {
-  return op.payload.operations.reduce(
-    (proj, childOp) => applyOperation(proj, childOp),
-    project,
-  );
+  return op.payload.operations.reduce((proj, childOp) => applyOperation(proj, childOp), project);
 }

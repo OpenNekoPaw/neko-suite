@@ -47,7 +47,7 @@ export function getViewportBounds(
   viewport: CanvasViewport,
   containerWidth: number,
   containerHeight: number,
-  buffer: number = VIEWPORT_BUFFER
+  buffer: number = VIEWPORT_BUFFER,
 ): ViewportBounds {
   const { pan, zoom } = viewport;
 
@@ -64,10 +64,7 @@ export function getViewportBounds(
 /**
  * 检查节点是否在视口边界内
  */
-export function isNodeVisible(
-  node: CanvasNode,
-  viewportBounds: ViewportBounds
-): boolean {
+export function isNodeVisible(node: CanvasNode, viewportBounds: ViewportBounds): boolean {
   const { position, size } = node;
 
   // 节点边界
@@ -92,7 +89,7 @@ export function cullNodes(
   nodes: CanvasNode[],
   viewport: CanvasViewport,
   containerWidth: number,
-  containerHeight: number
+  containerHeight: number,
 ): CullingResult {
   const viewportBounds = getViewportBounds(viewport, containerWidth, containerHeight);
 
@@ -140,7 +137,7 @@ export function calculateFitViewport(
   containerHeight: number,
   padding: number = 50,
   minZoom: number = 0.05,
-  maxZoom: number = 16
+  maxZoom: number = 16,
 ): CanvasViewport {
   if (bounds.width === 0 || bounds.height === 0) {
     return { pan: { x: 0, y: 0 }, zoom: 1 };

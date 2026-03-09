@@ -137,10 +137,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
   } = props;
 
   // Create registry once
-  const registry = useMemo(
-    () => createConfiguredRegistry(),
-    []
-  );
+  const registry = useMemo(() => createConfiguredRegistry(), []);
 
   // Helper: check if message is for current conversation
   const isCurrentConversation = useCallback(
@@ -148,7 +145,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       if (!conversationId) return true;
       return conversationId === activeConversationIdRef.current;
     },
-    [activeConversationIdRef]
+    [activeConversationIdRef],
   );
 
   // Helper: update non-current conversation state
@@ -163,7 +160,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       conversationMessagesRef.current.set(conversationId, updated.messages);
       conversationStreamingRef.current.set(conversationId, updated.streaming);
     },
-    [conversationMessagesRef, conversationStreamingRef]
+    [conversationMessagesRef, conversationStreamingRef],
   );
 
   // Create context object
@@ -237,7 +234,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       forceContextUpdate,
       isCurrentConversation,
       updateNonCurrentConversation,
-    ]
+    ],
   );
 
   // Message handler function
@@ -252,7 +249,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
         logger.warn(`Unknown message type: ${message.type}`);
       }
     },
-    [registry, context]
+    [registry, context],
   );
 
   return { handleMessage };

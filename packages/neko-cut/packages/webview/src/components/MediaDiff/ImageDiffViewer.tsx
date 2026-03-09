@@ -97,7 +97,7 @@ const SliderView = memo(function SliderView({
       const x = (e.clientX - rect.left) / rect.width;
       onSliderChange(Math.max(0, Math.min(1, x)));
     },
-    [isDragging, onSliderChange]
+    [isDragging, onSliderChange],
   );
 
   useEffect(() => {
@@ -306,34 +306,32 @@ const ImageDetails = memo(function ImageDetails({ details }: ImageDetailsProps) 
         <div>
           <div className="text-[var(--vscode-descriptionForeground)] mb-1">Dimensions</div>
           <div className="flex items-center gap-2">
-            <span className="text-red-400">{dimensions.previous.width}×{dimensions.previous.height}</span>
+            <span className="text-red-400">
+              {dimensions.previous.width}×{dimensions.previous.height}
+            </span>
             <span>→</span>
-            <span className="text-green-400">{dimensions.current.width}×{dimensions.current.height}</span>
+            <span className="text-green-400">
+              {dimensions.current.width}×{dimensions.current.height}
+            </span>
           </div>
         </div>
 
         {/* Pixel Difference */}
         <div>
           <div className="text-[var(--vscode-descriptionForeground)] mb-1">Pixel Difference</div>
-          <div className="text-yellow-400">
-            {(pixelDifference * 100).toFixed(2)}%
-          </div>
+          <div className="text-yellow-400">{(pixelDifference * 100).toFixed(2)}%</div>
         </div>
 
         {/* Structural Similarity */}
         <div>
           <div className="text-[var(--vscode-descriptionForeground)] mb-1">Similarity</div>
-          <div className="text-blue-400">
-            {(details.structuralSimilarity * 100).toFixed(2)}%
-          </div>
+          <div className="text-blue-400">{(details.structuralSimilarity * 100).toFixed(2)}%</div>
         </div>
 
         {/* Color Histogram Diff */}
         <div>
           <div className="text-[var(--vscode-descriptionForeground)] mb-1">Color Diff</div>
-          <div className="text-purple-400">
-            {(details.colorHistogramDiff * 100).toFixed(2)}%
-          </div>
+          <div className="text-purple-400">{(details.colorHistogramDiff * 100).toFixed(2)}%</div>
         </div>
       </div>
     </div>
@@ -361,7 +359,7 @@ export const ImageDiffViewer = memo(function ImageDiffViewer({
     (position: number) => {
       onSliderChange?.(position);
     },
-    [onSliderChange]
+    [onSliderChange],
   );
 
   // Error state
@@ -394,11 +392,7 @@ export const ImageDiffViewer = memo(function ImageDiffViewer({
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* View based on mode */}
       {viewMode === 'side-by-side' && (
-        <SideBySideView
-          currentSrc={currentSrc}
-          previousSrc={previousSrc}
-          zoom={zoom}
-        />
+        <SideBySideView currentSrc={currentSrc} previousSrc={previousSrc} zoom={zoom} />
       )}
 
       {viewMode === 'slider' && (

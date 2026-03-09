@@ -23,7 +23,9 @@ function createMockContext() {
   return {
     globalState: {
       get: vi.fn((key: string, defaultValue?: unknown) => store.get(key) ?? defaultValue),
-      update: vi.fn(async (key: string, value: unknown) => { store.set(key, value); }),
+      update: vi.fn(async (key: string, value: unknown) => {
+        store.set(key, value);
+      }),
     },
   };
 }
@@ -118,11 +120,11 @@ describe('IntegrationHandler', () => {
 
   describe('addMCPServer', () => {
     it('should store server and notify settings on success', async () => {
-      const { showInputBox, showInformationMessage } = await import('vscode').then(m => m.window);
+      const { showInputBox, showInformationMessage } = await import('vscode').then((m) => m.window);
       (showInputBox as any)
-        .mockResolvedValueOnce('my-server')     // server name
-        .mockResolvedValueOnce('npx my-mcp')    // command
-        .mockResolvedValueOnce('/path/to/dir');  // args
+        .mockResolvedValueOnce('my-server') // server name
+        .mockResolvedValueOnce('npx my-mcp') // command
+        .mockResolvedValueOnce('/path/to/dir'); // args
 
       await handler.addMCPServer();
 
@@ -137,7 +139,7 @@ describe('IntegrationHandler', () => {
     });
 
     it('should abort when server name is cancelled', async () => {
-      const { showInputBox } = await import('vscode').then(m => m.window);
+      const { showInputBox } = await import('vscode').then((m) => m.window);
       (showInputBox as any).mockResolvedValueOnce(undefined);
 
       await handler.addMCPServer();
@@ -147,10 +149,8 @@ describe('IntegrationHandler', () => {
     });
 
     it('should abort when command is cancelled', async () => {
-      const { showInputBox } = await import('vscode').then(m => m.window);
-      (showInputBox as any)
-        .mockResolvedValueOnce('my-server')
-        .mockResolvedValueOnce(undefined);
+      const { showInputBox } = await import('vscode').then((m) => m.window);
+      (showInputBox as any).mockResolvedValueOnce('my-server').mockResolvedValueOnce(undefined);
 
       await handler.addMCPServer();
 
@@ -158,7 +158,7 @@ describe('IntegrationHandler', () => {
     });
 
     it('should handle empty args', async () => {
-      const { showInputBox } = await import('vscode').then(m => m.window);
+      const { showInputBox } = await import('vscode').then((m) => m.window);
       (showInputBox as any)
         .mockResolvedValueOnce('my-server')
         .mockResolvedValueOnce('npx my-mcp')

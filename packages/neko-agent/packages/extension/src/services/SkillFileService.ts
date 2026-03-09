@@ -182,11 +182,15 @@ export class SkillFileService implements vscode.Disposable {
 
     const personalSkillsResult = await this.loadFromDirectory(userSkillsDir, 'personal');
     result.personal.skills = personalSkillsResult.skills;
-    result.errors.push(...personalSkillsResult.errors.map(e => ({ file: e.file, message: e.message })));
+    result.errors.push(
+      ...personalSkillsResult.errors.map((e) => ({ file: e.file, message: e.message })),
+    );
 
     const personalCommandsResult = await this.loadFromDirectory(userCommandsDir, 'personal');
     result.personal.commands = personalCommandsResult.commands;
-    result.errors.push(...personalCommandsResult.errors.map(e => ({ file: e.file, message: e.message })));
+    result.errors.push(
+      ...personalCommandsResult.errors.map((e) => ({ file: e.file, message: e.message })),
+    );
 
     // Load project skills
     const workspaceSkillsDir = this.getWorkspaceSkillsDir();
@@ -195,13 +199,17 @@ export class SkillFileService implements vscode.Disposable {
     if (workspaceSkillsDir) {
       const projectSkillsResult = await this.loadFromDirectory(workspaceSkillsDir, 'project');
       result.project.skills = projectSkillsResult.skills;
-      result.errors.push(...projectSkillsResult.errors.map(e => ({ file: e.file, message: e.message })));
+      result.errors.push(
+        ...projectSkillsResult.errors.map((e) => ({ file: e.file, message: e.message })),
+      );
     }
 
     if (workspaceCommandsDir) {
       const projectCommandsResult = await this.loadFromDirectory(workspaceCommandsDir, 'project');
       result.project.commands = projectCommandsResult.commands;
-      result.errors.push(...projectCommandsResult.errors.map(e => ({ file: e.file, message: e.message })));
+      result.errors.push(
+        ...projectCommandsResult.errors.map((e) => ({ file: e.file, message: e.message })),
+      );
     }
 
     // Cache and emit
@@ -221,10 +229,12 @@ export class SkillFileService implements vscode.Disposable {
       return {
         skills: [],
         commands: [],
-        errors: [{
-          file: dirPath,
-          message: `Failed to load: ${err instanceof Error ? err.message : String(err)}`,
-        }],
+        errors: [
+          {
+            file: dirPath,
+            message: `Failed to load: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
       };
     }
   }
@@ -254,11 +264,9 @@ export class SkillFileService implements vscode.Disposable {
     skillName: string,
     source: 'personal' | 'project',
     content?: string,
-    description?: string
+    description?: string,
   ): Promise<string> {
-    const basePath = source === 'personal'
-      ? this.getUserSkillsDir()
-      : this.getWorkspaceSkillsDir();
+    const basePath = source === 'personal' ? this.getUserSkillsDir() : this.getWorkspaceSkillsDir();
 
     if (!basePath) {
       throw new Error('No workspace folder open for project skills');
@@ -289,14 +297,11 @@ export class SkillFileService implements vscode.Disposable {
         // Content already has frontmatter, use as-is but update name
         fileContent = content.replace(
           /^(---\s*\n(?:.*\n)*?)(name:\s*)[^\n]+/m,
-          `$1$2"${skillName}"`
+          `$1$2"${skillName}"`,
         );
         // If no name field exists, add it
         if (!fileContent.includes('name:')) {
-          fileContent = content.replace(
-            /^---\s*\n/,
-            `---\nname: "${skillName}"\n`
-          );
+          fileContent = content.replace(/^---\s*\n/, `---\nname: "${skillName}"\n`);
         }
       } else {
         // Content doesn't have frontmatter, add it
@@ -329,7 +334,6 @@ Add your skill instructions here.
     return filePath;
   }
 
-
   /**
    * Duplicate an entire skill directory (including references, scripts, etc.)
    * @param sourceDir - The source skill directory path
@@ -340,11 +344,10 @@ Add your skill instructions here.
   async duplicateSkillDirectory(
     sourceDir: string,
     newSkillName: string,
-    targetSource: 'personal' | 'project'
+    targetSource: 'personal' | 'project',
   ): Promise<string> {
-    const basePath = targetSource === 'personal'
-      ? this.getUserSkillsDir()
-      : this.getWorkspaceSkillsDir();
+    const basePath =
+      targetSource === 'personal' ? this.getUserSkillsDir() : this.getWorkspaceSkillsDir();
 
     if (!basePath) {
       throw new Error('No workspace folder open for project skills');
@@ -373,10 +376,7 @@ Add your skill instructions here.
       let content = await fs.readFile(skillMdPath, 'utf-8');
 
       // Update the name in frontmatter if present
-      content = content.replace(
-        /^(name:\s*)["']?[^"'\n]+["']?/m,
-        `$1"${newSkillName}"`
-      );
+      content = content.replace(/^(name:\s*)["']?[^"'\n]+["']?/m, `$1"${newSkillName}"`);
 
       // Remove any enabled: false to ensure the copied skill is enabled
       content = content.replace(/^enabled:\s*false\s*$/m, '');
@@ -390,20 +390,14 @@ Add your skill instructions here.
     return newSkillDir;
   }
 
-
   /**
    * Delete a skill directory
    * @param skillName - The name of the skill to delete
    * @param source - 'personal' or 'project'
    * @returns true if deleted successfully
    */
-  async deleteSkillDirectory(
-    skillName: string,
-    source: 'personal' | 'project'
-  ): Promise<boolean> {
-    const basePath = source === 'personal'
-      ? this.getUserSkillsDir()
-      : this.getWorkspaceSkillsDir();
+  async deleteSkillDirectory(skillName: string, source: 'personal' | 'project'): Promise<boolean> {
+    const basePath = source === 'personal' ? this.getUserSkillsDir() : this.getWorkspaceSkillsDir();
 
     if (!basePath) {
       logger.warn('No workspace folder open for project skills');
@@ -447,7 +441,11 @@ Add your skill instructions here.
 
       if (entry.isDirectory()) {
         // Skip __pycache__ and other cache directories
-        if (entry.name === '__pycache__' || entry.name === 'node_modules' || entry.name === '.git') {
+        if (
+          entry.name === '__pycache__' ||
+          entry.name === 'node_modules' ||
+          entry.name === '.git'
+        ) {
           continue;
         }
         await this.copyDirectory(srcPath, destPath);
@@ -467,11 +465,10 @@ Add your skill instructions here.
   async createCommandFile(
     commandName: string,
     source: 'personal' | 'project',
-    content?: string
+    content?: string,
   ): Promise<string> {
-    const basePath = source === 'personal'
-      ? this.getUserCommandsDir()
-      : this.getWorkspaceCommandsDir();
+    const basePath =
+      source === 'personal' ? this.getUserCommandsDir() : this.getWorkspaceCommandsDir();
 
     if (!basePath) {
       throw new Error('No workspace folder open for project commands');
@@ -494,7 +491,9 @@ Add your skill instructions here.
     }
 
     // Default content template
-    const defaultContent = content ?? `# /${commandName}
+    const defaultContent =
+      content ??
+      `# /${commandName}
 
 <!-- Command configuration -->
 
@@ -513,20 +512,15 @@ Add your command instructions here.
     return filePath;
   }
 
-
   /**
    * Delete a command file
    * @param commandName - The name of the command to delete (without leading /)
    * @param source - 'personal' or 'project'
    * @returns true if deleted successfully
    */
-  async deleteCommandFile(
-    commandName: string,
-    source: 'personal' | 'project'
-  ): Promise<boolean> {
-    const basePath = source === 'personal'
-      ? this.getUserCommandsDir()
-      : this.getWorkspaceCommandsDir();
+  async deleteCommandFile(commandName: string, source: 'personal' | 'project'): Promise<boolean> {
+    const basePath =
+      source === 'personal' ? this.getUserCommandsDir() : this.getWorkspaceCommandsDir();
 
     if (!basePath) {
       logger.warn('No workspace folder open for project commands');
@@ -563,14 +557,14 @@ Add your command instructions here.
     commands: ConfiguredSlashCommand[];
   } {
     // Builtin skills (from agent package)
-    const builtinSkillConfigs: ConfiguredSkill[] = builtinSkills.map(s => ({
+    const builtinSkillConfigs: ConfiguredSkill[] = builtinSkills.map((s) => ({
       ...s,
       source: 'builtin' as SkillSource,
       enabled: true,
     }));
 
     // Builtin commands (from agent package)
-    const builtinCommandConfigs: ConfiguredSlashCommand[] = builtinCommands.map(c => ({
+    const builtinCommandConfigs: ConfiguredSlashCommand[] = builtinCommands.map((c) => ({
       ...c,
       source: 'builtin' as SkillSource,
       enabled: true,
@@ -579,15 +573,15 @@ Add your command instructions here.
     // Personal and project skills
     const skills: ConfiguredSkill[] = [
       ...builtinSkillConfigs,
-      ...result.personal.skills.map(s => ({ ...s, enabled: true })),
-      ...result.project.skills.map(s => ({ ...s, enabled: true })),
+      ...result.personal.skills.map((s) => ({ ...s, enabled: true })),
+      ...result.project.skills.map((s) => ({ ...s, enabled: true })),
     ];
 
     // Personal and project commands
     const commands: ConfiguredSlashCommand[] = [
       ...builtinCommandConfigs,
-      ...result.personal.commands.map(c => ({ ...c, enabled: true })),
-      ...result.project.commands.map(c => ({ ...c, enabled: true })),
+      ...result.personal.commands.map((c) => ({ ...c, enabled: true })),
+      ...result.project.commands.map((c) => ({ ...c, enabled: true })),
     ];
 
     return { skills, commands };
@@ -623,10 +617,10 @@ Add your command instructions here.
         this.disposeWatchers();
         this.setupFileWatchers();
         // Rescan skills
-        this.scanSkills().then(result => {
+        this.scanSkills().then((result) => {
           this._onSkillsChanged.fire(result);
         });
-      })
+      }),
     );
   }
 

@@ -19,8 +19,16 @@ export interface AnnotationNodeProps {
   onSelect?: (nodeId: string, multi: boolean) => void;
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
-  onResize?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
-  onResizeEnd?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  onResize?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
+  onResizeEnd?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   onUpdateData?: (nodeId: string, data: Partial<AnnotationCanvasNode['data']>) => void;
 }

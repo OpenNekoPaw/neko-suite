@@ -6,11 +6,7 @@
  */
 
 import type { Provider, Model, ModelCapability } from '../../types/provider';
-import type {
-  MediaGenerationType,
-  MediaRoutingResult,
-  RoutingPreference,
-} from '../types';
+import type { MediaGenerationType, MediaRoutingResult, RoutingPreference } from '../types';
 import type { ConfigManager } from '../../config/config-manager';
 import { getMediaAdapterRegistry } from '../adapters/media-adapter-registry';
 
@@ -33,7 +29,7 @@ const GENERATION_TYPE_TO_CAPABILITY: Record<MediaGenerationType, ModelCapability
   'video-to-video': 'video_to_video',
   'text-to-audio': 'text_to_audio',
   'text-to-music': 'text_to_music',
-  'workflow': 'workflow',
+  workflow: 'workflow',
 };
 
 /**
@@ -62,7 +58,7 @@ export class MediaRoutingManager {
     generationType: MediaGenerationType,
     preference?: RoutingPreference,
     providerId?: string,
-    modelId?: string
+    modelId?: string,
   ): Promise<MediaRoutingResult | null> {
     // Short-circuit: if specific provider and model are given, use directly
     if (providerId && modelId) {
@@ -83,9 +79,7 @@ export class MediaRoutingManager {
 
     // Filter: exclude providers from preference
     if (preference?.excludeProviders?.length) {
-      candidates = candidates.filter(
-        (c) => !preference.excludeProviders!.includes(c.provider.id)
-      );
+      candidates = candidates.filter((c) => !preference.excludeProviders!.includes(c.provider.id));
     }
 
     // Filter: match generation type to model capabilities
@@ -112,7 +106,7 @@ export class MediaRoutingManager {
   async selectFallback(
     generationType: MediaGenerationType,
     preference?: RoutingPreference,
-    excludeProviders: string[] = []
+    excludeProviders: string[] = [],
   ): Promise<MediaRoutingResult | null> {
     if (!preference?.allowFallback) {
       return null;
@@ -120,10 +114,7 @@ export class MediaRoutingManager {
 
     const updatedPreference: RoutingPreference = {
       ...preference,
-      excludeProviders: [
-        ...(preference.excludeProviders || []),
-        ...excludeProviders,
-      ],
+      excludeProviders: [...(preference.excludeProviders || []), ...excludeProviders],
     };
 
     return this.selectProvider(generationType, updatedPreference);
@@ -132,10 +123,7 @@ export class MediaRoutingManager {
   /**
    * Get initial candidates (providers with media adapters × enabled models)
    */
-  private getCandidates(
-    providerId?: string,
-    modelId?: string
-  ): Candidate[] {
+  private getCandidates(providerId?: string, modelId?: string): Candidate[] {
     const candidates: Candidate[] = [];
     const adapterRegistry = getMediaAdapterRegistry();
 
@@ -157,9 +145,7 @@ export class MediaRoutingManager {
         const model = this.configManager.getModel(modelId);
         models = model && model.providerId === provider.id ? [model] : [];
       } else {
-        models = this.configManager
-          .getModelsByProvider(provider.id)
-          .filter((m) => m.enabled);
+        models = this.configManager.getModelsByProvider(provider.id).filter((m) => m.enabled);
       }
 
       for (const model of models) {
@@ -174,7 +160,7 @@ export class MediaRoutingManager {
    * Check if model has the required capability (with alias support)
    */
   private hasCapability(model: Model, capability: ModelCapability): boolean {
-    const capabilities = model.capabilities as string[] || [];
+    const capabilities = (model.capabilities as string[]) || [];
 
     if (capabilities.includes(capability)) {
       return true;

@@ -96,7 +96,8 @@ export function getVSCodeAPI(): VSCodeAPI | null {
 
   // Try to acquire directly (fallback, may fail if already acquired)
   try {
-    const acquireVsCodeApi = (window as unknown as { acquireVsCodeApi?: () => VSCodeAPI }).acquireVsCodeApi;
+    const acquireVsCodeApi = (window as unknown as { acquireVsCodeApi?: () => VSCodeAPI })
+      .acquireVsCodeApi;
     if (typeof acquireVsCodeApi === 'function') {
       cachedApi = acquireVsCodeApi();
       return cachedApi;
@@ -174,7 +175,7 @@ export function setState<T>(state: T): void {
  */
 export function sendRequest<TResponse = unknown>(
   message: Omit<RequestMessage, '_requestId'>,
-  options?: SendRequestOptions
+  options?: SendRequestOptions,
 ): Promise<TResponse> {
   // Initialize listener on first request
   initMessageListener();

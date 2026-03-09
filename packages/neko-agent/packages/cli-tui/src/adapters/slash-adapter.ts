@@ -26,7 +26,7 @@ export interface TUISlashCommandContext {
  */
 export async function handleTUISlashCommand(
   input: string,
-  context: TUISlashCommandContext
+  context: TUISlashCommandContext,
 ): Promise<{ handled: boolean; output?: string; error?: string }> {
   const cliContext: SlashCommandContext = {
     config: context.config,

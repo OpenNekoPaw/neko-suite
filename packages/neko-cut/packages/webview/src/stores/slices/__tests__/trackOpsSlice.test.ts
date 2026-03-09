@@ -41,26 +41,52 @@ function createProjectWithTracks(): ProjectData {
   return createTestProject({
     tracks: [
       {
-        id: 'track-0', name: 'Video Track', type: 'media',
+        id: 'track-0',
+        name: 'Video Track',
+        type: 'media',
         elements: [
           {
-            id: 'e1', type: 'media', name: 'Clip', src: '/v.mp4',
-            startTime: 0, duration: 10, trimStart: 0, trimEnd: 0,
-            transform: {}, opacity: 1, blendMode: 'normal', effects: [],
-            muted: false, hidden: false, locked: false,
+            id: 'e1',
+            type: 'media',
+            name: 'Clip',
+            src: '/v.mp4',
+            startTime: 0,
+            duration: 10,
+            trimStart: 0,
+            trimEnd: 0,
+            transform: {},
+            opacity: 1,
+            blendMode: 'normal',
+            effects: [],
+            muted: false,
+            hidden: false,
+            locked: false,
           } as any,
         ],
-        muted: false, locked: false, hidden: false, isMain: true,
+        muted: false,
+        locked: false,
+        hidden: false,
+        isMain: true,
       } as any,
       {
-        id: 'track-1', name: 'Audio Track', type: 'audio',
+        id: 'track-1',
+        name: 'Audio Track',
+        type: 'audio',
         elements: [],
-        muted: false, locked: false, hidden: false, isMain: false,
+        muted: false,
+        locked: false,
+        hidden: false,
+        isMain: false,
       } as any,
       {
-        id: 'track-2', name: 'Text Track', type: 'text',
+        id: 'track-2',
+        name: 'Text Track',
+        type: 'text',
         elements: [],
-        muted: false, locked: false, hidden: false, isMain: false,
+        muted: false,
+        locked: false,
+        hidden: false,
+        isMain: false,
       } as any,
     ],
   });
@@ -155,7 +181,15 @@ describe('trackOpsSlice', () => {
     });
 
     it('should support all track types', () => {
-      const trackTypes = ['video', 'media', 'text', 'audio', 'subtitle', 'shape', 'effect'] as const;
+      const trackTypes = [
+        'video',
+        'media',
+        'text',
+        'audio',
+        'subtitle',
+        'shape',
+        'effect',
+      ] as const;
       for (const type of trackTypes) {
         const { store, dispatchMock } = createTestStore(createTestProject());
         store.getState().addTrack(type);

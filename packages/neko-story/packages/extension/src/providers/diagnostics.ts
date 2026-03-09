@@ -7,7 +7,7 @@ import type { WorkspaceIndexService } from '../services/WorkspaceIndexService';
 
 export interface DiagnosticEntry {
   message: string;
-  line: number;        // 0-based
+  line: number; // 0-based
   startChar: number;
   endChar: number;
   severity: 'error' | 'warning';
@@ -127,7 +127,10 @@ export function checkSemantics(doc: FountainDocument): DiagnosticEntry[] {
     const el = elements[i];
     if (el?.type === 'dialogue') {
       const prev = elements[i - 1];
-      if (!prev || (prev.type !== 'character' && prev.type !== 'parenthetical' && prev.type !== 'dialogue')) {
+      if (
+        !prev ||
+        (prev.type !== 'character' && prev.type !== 'parenthetical' && prev.type !== 'dialogue')
+      ) {
         entries.push({
           message: '对话行出现在角色名之前，可能格式有误',
           line: el.range.start.line,
@@ -161,13 +164,13 @@ export class FountainDiagnosticsProvider implements vscode.Disposable {
     }
 
     this.disposables.push(
-      vscode.workspace.onDidOpenTextDocument(doc => {
+      vscode.workspace.onDidOpenTextDocument((doc) => {
         if (this.isFountain(doc)) this.analyzeDocument(doc);
       }),
-      vscode.workspace.onDidChangeTextDocument(e => {
+      vscode.workspace.onDidChangeTextDocument((e) => {
         if (this.isFountain(e.document)) this.scheduleAnalysis(e.document);
       }),
-      vscode.workspace.onDidCloseTextDocument(doc => {
+      vscode.workspace.onDidCloseTextDocument((doc) => {
         this.collection.delete(doc.uri);
         const key = doc.uri.toString();
         const timer = this.debounceTimers.get(key);
@@ -207,14 +210,11 @@ export class FountainDiagnosticsProvider implements vscode.Disposable {
       return;
     }
 
-    const entries: DiagnosticEntry[] = [
-      ...checkSyntax(text),
-      ...checkSemantics(fountainDoc),
-    ];
+    const entries: DiagnosticEntry[] = [...checkSyntax(text), ...checkSemantics(fountainDoc)];
 
     this.collection.set(
       doc.uri,
-      entries.map(e => {
+      entries.map((e) => {
         const range = new vscode.Range(
           new vscode.Position(e.line, e.startChar),
           new vscode.Position(e.line, e.endChar),
@@ -234,6 +234,6 @@ export class FountainDiagnosticsProvider implements vscode.Disposable {
     this.collection.dispose();
     for (const timer of this.debounceTimers.values()) clearTimeout(timer);
     this.debounceTimers.clear();
-    this.disposables.forEach(d => d.dispose());
+    this.disposables.forEach((d) => d.dispose());
   }
 }

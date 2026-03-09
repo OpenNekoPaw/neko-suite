@@ -21,12 +21,9 @@ export interface SelectionSlice {
   setSelectedElements: (elements: SelectedElement[]) => void;
 }
 
-export const createSelectionSlice: StateCreator<
-  SelectionSlice,
-  [],
-  [],
-  SelectionSlice
-> = (set) => ({
+export const createSelectionSlice: StateCreator<SelectionSlice, [], [], SelectionSlice> = (
+  set,
+) => ({
   // Initial state
   selectedElements: [],
 
@@ -34,13 +31,13 @@ export const createSelectionSlice: StateCreator<
   selectElement: (trackId, elementId, multi = false) => {
     set((state) => {
       const exists = state.selectedElements.some(
-        (s) => s.trackId === trackId && s.elementId === elementId
+        (s) => s.trackId === trackId && s.elementId === elementId,
       );
       if (multi) {
         return exists
           ? {
               selectedElements: state.selectedElements.filter(
-                (s) => !(s.trackId === trackId && s.elementId === elementId)
+                (s) => !(s.trackId === trackId && s.elementId === elementId),
               ),
             }
           : { selectedElements: [...state.selectedElements, { trackId, elementId }] };
@@ -52,7 +49,7 @@ export const createSelectionSlice: StateCreator<
   deselectElement: (trackId, elementId) => {
     set((state) => ({
       selectedElements: state.selectedElements.filter(
-        (s) => !(s.trackId === trackId && s.elementId === elementId)
+        (s) => !(s.trackId === trackId && s.elementId === elementId),
       ),
     }));
   },

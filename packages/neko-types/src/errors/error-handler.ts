@@ -51,9 +51,7 @@ export interface IErrorHandler {
  *
  * Maps ErrorCategory to sensible defaults for showToUser, severity, and actions.
  */
-export function getDefaultDisplayOptions(
-  category: ErrorCategory,
-): ErrorDisplayOptions {
+export function getDefaultDisplayOptions(category: ErrorCategory): ErrorDisplayOptions {
   switch (category) {
     case 'authentication':
     case 'permission':
@@ -82,10 +80,7 @@ export function getDefaultDisplayOptions(
 /**
  * Normalize any thrown value to a BaseError
  */
-export function toBaseError(
-  error: unknown,
-  context?: Record<string, unknown>,
-): BaseError {
+export function toBaseError(error: unknown, context?: Record<string, unknown>): BaseError {
   if (error instanceof BaseError) return error;
   if (error instanceof Error) return BaseError.fromError(error, context);
   return BaseError.fromError(

@@ -31,9 +31,7 @@ export interface IRegistry<TKey extends string, TValue> {
  * @template TKey - The type of keys for builtin items (e.g., ProviderType)
  * @template TValue - The type of values stored in the registry (e.g., Adapter)
  */
-export abstract class BaseRegistry<TKey extends string, TValue>
-  implements IRegistry<TKey, TValue>
-{
+export abstract class BaseRegistry<TKey extends string, TValue> implements IRegistry<TKey, TValue> {
   /** Map of builtin items */
   protected builtinItems: Map<TKey, TValue> = new Map();
   /** Map of custom items */

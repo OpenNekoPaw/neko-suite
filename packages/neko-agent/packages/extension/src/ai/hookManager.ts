@@ -48,7 +48,7 @@ class EsbuildHookCompiler implements IHookCompiler {
         this.esbuild = await import('esbuild');
       } catch (error) {
         this.loadError = new Error(
-          `Failed to load esbuild: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to load esbuild: ${error instanceof Error ? error.message : String(error)}`,
         );
         throw this.loadError;
       }
@@ -122,7 +122,7 @@ class EsbuildHookCompiler implements IHookCompiler {
       });
     } catch (error) {
       throw new Error(
-        `Failed to execute hook: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to execute hook: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
 
@@ -168,7 +168,7 @@ class EsbuildHookCompiler implements IHookCompiler {
 
       // Block other requires for security
       throw new Error(
-        `Module '${id}' is not allowed in hooks. Allowed: ${allowedBuiltins.join(', ')}`
+        `Module '${id}' is not allowed in hooks. Allowed: ${allowedBuiltins.join(', ')}`,
       );
     };
 
@@ -300,7 +300,7 @@ export class HookManager implements vscode.Disposable {
       // Log results
       if (result.hooks.length > 0) {
         logger.info(
-          `Loaded ${result.hooks.length} hook(s): ${result.hooks.map((h) => h.metadata.name).join(', ')}`
+          `Loaded ${result.hooks.length} hook(s): ${result.hooks.map((h) => h.metadata.name).join(', ')}`,
         );
       }
 

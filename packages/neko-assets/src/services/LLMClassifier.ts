@@ -11,11 +11,11 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { IAssetClassifier } from '@neko/asset';
 import type {
-	ClassificationResult,
-	SuggestedEntity,
-	VariantAttributes,
-	EntityCategory,
-	ClassifierOptions,
+  ClassificationResult,
+  SuggestedEntity,
+  VariantAttributes,
+  EntityCategory,
+  ClassifierOptions,
 } from '@neko/shared';
 import { getLogger } from '../utils/logger';
 
@@ -23,15 +23,15 @@ const logger = getLogger('LLMClassifier');
 
 // Image extensions and their MIME types — serves as both membership test and MIME lookup
 const IMAGE_MIME_TYPES = new Map<string, string>([
-	['.png', 'image/png'],
-	['.jpg', 'image/jpeg'],
-	['.jpeg', 'image/jpeg'],
-	['.gif', 'image/gif'],
-	['.webp', 'image/webp'],
-	['.bmp', 'image/bmp'],
-	['.tiff', 'image/tiff'],
-	['.tif', 'image/tiff'],
-	['.svg', 'image/svg+xml'],
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.gif', 'image/gif'],
+  ['.webp', 'image/webp'],
+  ['.bmp', 'image/bmp'],
+  ['.tiff', 'image/tiff'],
+  ['.tif', 'image/tiff'],
+  ['.svg', 'image/svg+xml'],
 ]);
 
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024; // 4MB
@@ -41,26 +41,26 @@ const MAX_IMAGE_SIZE = 4 * 1024 * 1024; // 4MB
 // ---------------------------------------------------------------------------
 
 function isValidClassifyResult(val: unknown): val is {
-	category: EntityCategory;
-	name: string;
-	description: string;
-	tags: string[];
-	attributes: Record<string, string | undefined>;
-	confidence: number;
+  category: EntityCategory;
+  name: string;
+  description: string;
+  tags: string[];
+  attributes: Record<string, string | undefined>;
+  confidence: number;
 } {
-	if (typeof val !== 'object' || val === null) return false;
-	const v = val as Record<string, unknown>;
-	return (
-		typeof v['category'] === 'string' &&
-		typeof v['name'] === 'string' &&
-		typeof v['description'] === 'string' &&
-		Array.isArray(v['tags']) &&
-		typeof v['confidence'] === 'number'
-	);
+  if (typeof val !== 'object' || val === null) return false;
+  const v = val as Record<string, unknown>;
+  return (
+    typeof v['category'] === 'string' &&
+    typeof v['name'] === 'string' &&
+    typeof v['description'] === 'string' &&
+    Array.isArray(v['tags']) &&
+    typeof v['confidence'] === 'number'
+  );
 }
 
 function isVariantAttributesShape(val: unknown): val is Record<string, string | undefined> {
-	return typeof val === 'object' && val !== null && !Array.isArray(val);
+  return typeof val === 'object' && val !== null && !Array.isArray(val);
 }
 
 const SYSTEM_PROMPT_CLASSIFY = `\
@@ -94,158 +94,154 @@ Return only the JSON object, no markdown, no explanation.`;
 // a cross-extension dependency. The neko.agent.internalChat command accepts any
 // structurally-compatible message shape via VSCode's dynamically-typed command API.
 type InternalMessage = {
-	role: 'system' | 'user' | 'assistant';
-	content: string | Array<{ type: string; [k: string]: unknown }>;
+  role: 'system' | 'user' | 'assistant';
+  content: string | Array<{ type: string; [k: string]: unknown }>;
 };
 
 export class LLMClassifier implements IAssetClassifier {
-	constructor(private readonly fallback: IAssetClassifier) {}
+  constructor(private readonly fallback: IAssetClassifier) {}
 
-	async analyze(
-		filePath: string,
-		_options?: ClassifierOptions,
-	): Promise<ClassificationResult> {
-		try {
-			const result = await this.callLLMForClassification(filePath);
-			if (result) return result;
-		} catch (err) {
-			logger.debug('LLM classification failed, falling back:', err);
-		}
-		return this.fallback.analyze(filePath, _options);
-	}
+  async analyze(filePath: string, _options?: ClassifierOptions): Promise<ClassificationResult> {
+    try {
+      const result = await this.callLLMForClassification(filePath);
+      if (result) return result;
+    } catch (err) {
+      logger.debug('LLM classification failed, falling back:', err);
+    }
+    return this.fallback.analyze(filePath, _options);
+  }
 
-	async suggestVariantAttributes(
-		_entityId: string,
-		filePath: string,
-	): Promise<VariantAttributes> {
-		try {
-			const fileName = path.basename(filePath);
-			const content = await this.internalChat(
-				[
-					{ role: 'system', content: SYSTEM_PROMPT_ATTRIBUTES },
-					{ role: 'user', content: `File: ${fileName}` },
-				],
-				{ maxTokens: 200 },
-			);
-			if (content) {
-				const parsed: unknown = JSON.parse(this.stripJsonFences(content));
-				if (!isVariantAttributesShape(parsed)) {
-					throw new Error('Invalid variant attributes response');
-				}
-				return parsed as VariantAttributes;
-			}
-		} catch (err) {
-			logger.debug('LLM suggestVariantAttributes failed, falling back:', err);
-		}
-		return this.fallback.suggestVariantAttributes(_entityId, filePath);
-	}
+  async suggestVariantAttributes(_entityId: string, filePath: string): Promise<VariantAttributes> {
+    try {
+      const fileName = path.basename(filePath);
+      const content = await this.internalChat(
+        [
+          { role: 'system', content: SYSTEM_PROMPT_ATTRIBUTES },
+          { role: 'user', content: `File: ${fileName}` },
+        ],
+        { maxTokens: 200 },
+      );
+      if (content) {
+        const parsed: unknown = JSON.parse(this.stripJsonFences(content));
+        if (!isVariantAttributesShape(parsed)) {
+          throw new Error('Invalid variant attributes response');
+        }
+        return parsed as VariantAttributes;
+      }
+    } catch (err) {
+      logger.debug('LLM suggestVariantAttributes failed, falling back:', err);
+    }
+    return this.fallback.suggestVariantAttributes(_entityId, filePath);
+  }
 
-	async suggestTags(filePath: string): Promise<string[]> {
-		try {
-			const fileName = path.basename(filePath);
-			const content = await this.internalChat(
-				[
-					{ role: 'system', content: SYSTEM_PROMPT_TAGS },
-					{ role: 'user', content: `File: ${fileName}` },
-				],
-				{ maxTokens: 200 },
-			);
-			if (content) {
-				const parsed: unknown = JSON.parse(this.stripJsonFences(content));
-				if (!Array.isArray(parsed) || !parsed.every(t => typeof t === 'string')) {
-					throw new Error('Invalid tags response');
-				}
-				return parsed;
-			}
-		} catch (err) {
-			logger.debug('LLM suggestTags failed, falling back:', err);
-		}
-		return this.fallback.suggestTags(filePath);
-	}
+  async suggestTags(filePath: string): Promise<string[]> {
+    try {
+      const fileName = path.basename(filePath);
+      const content = await this.internalChat(
+        [
+          { role: 'system', content: SYSTEM_PROMPT_TAGS },
+          { role: 'user', content: `File: ${fileName}` },
+        ],
+        { maxTokens: 200 },
+      );
+      if (content) {
+        const parsed: unknown = JSON.parse(this.stripJsonFences(content));
+        if (!Array.isArray(parsed) || !parsed.every((t) => typeof t === 'string')) {
+          throw new Error('Invalid tags response');
+        }
+        return parsed;
+      }
+    } catch (err) {
+      logger.debug('LLM suggestTags failed, falling back:', err);
+    }
+    return this.fallback.suggestTags(filePath);
+  }
 
-	async findSimilarEntities(
-		_filePath: string,
-		_options?: ClassifierOptions,
-	): Promise<SuggestedEntity[]> {
-		// Vector/semantic search is out of scope
-		return [];
-	}
+  async findSimilarEntities(
+    _filePath: string,
+    _options?: ClassifierOptions,
+  ): Promise<SuggestedEntity[]> {
+    // Vector/semantic search is out of scope
+    return [];
+  }
 
-	// =========================================================================
-	// Private Helpers
-	// =========================================================================
+  // =========================================================================
+  // Private Helpers
+  // =========================================================================
 
-	private async callLLMForClassification(
-		filePath: string,
-	): Promise<ClassificationResult | null> {
-		const fileName = path.basename(filePath);
-		const ext = path.extname(filePath).toLowerCase();
-		const isImage = IMAGE_MIME_TYPES.has(ext);
+  private async callLLMForClassification(filePath: string): Promise<ClassificationResult | null> {
+    const fileName = path.basename(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const isImage = IMAGE_MIME_TYPES.has(ext);
 
-		const userContent: Array<{ type: string; [k: string]: unknown }> = [];
+    const userContent: Array<{ type: string; [k: string]: unknown }> = [];
 
-		if (isImage) {
-			try {
-				const stat = await fs.stat(filePath);
-				if (stat.size > MAX_IMAGE_SIZE) {
-					// Skip image loading for oversized files, fall through to text-only
-					logger.debug(`Skipping image load for oversized file (${stat.size} bytes): ${fileName}`);
-				} else {
-					const buffer = await fs.readFile(filePath);
-					const mimeType = IMAGE_MIME_TYPES.get(ext)!;
-					const base64 = buffer.toString('base64');
-					userContent.push({
-						type: 'image',
-						imageUrl: `data:${mimeType};base64,${base64}`,
-						detail: 'low',
-					});
-				}
-			} catch (err) {
-				// Image read failed — fall back to text-only
-				logger.debug('Image read failed, continuing text-only:', err);
-			}
-		}
+    if (isImage) {
+      try {
+        const stat = await fs.stat(filePath);
+        if (stat.size > MAX_IMAGE_SIZE) {
+          // Skip image loading for oversized files, fall through to text-only
+          logger.debug(`Skipping image load for oversized file (${stat.size} bytes): ${fileName}`);
+        } else {
+          const buffer = await fs.readFile(filePath);
+          const mimeType = IMAGE_MIME_TYPES.get(ext)!;
+          const base64 = buffer.toString('base64');
+          userContent.push({
+            type: 'image',
+            imageUrl: `data:${mimeType};base64,${base64}`,
+            detail: 'low',
+          });
+        }
+      } catch (err) {
+        // Image read failed — fall back to text-only
+        logger.debug('Image read failed, continuing text-only:', err);
+      }
+    }
 
-		userContent.push({
-			type: 'text',
-			text: `Classify this asset file: ${fileName}`,
-		});
+    userContent.push({
+      type: 'text',
+      text: `Classify this asset file: ${fileName}`,
+    });
 
-		const content = await this.internalChat(
-			[
-				{ role: 'system', content: SYSTEM_PROMPT_CLASSIFY },
-				{ role: 'user', content: userContent },
-			],
-			{ maxTokens: 800 },
-		);
+    const content = await this.internalChat(
+      [
+        { role: 'system', content: SYSTEM_PROMPT_CLASSIFY },
+        { role: 'user', content: userContent },
+      ],
+      { maxTokens: 800 },
+    );
 
-		if (!content) return null;
+    if (!content) return null;
 
-		const parsed: unknown = JSON.parse(this.stripJsonFences(content));
-		if (!isValidClassifyResult(parsed)) return null;  // triggers fallback
+    const parsed: unknown = JSON.parse(this.stripJsonFences(content));
+    if (!isValidClassifyResult(parsed)) return null; // triggers fallback
 
-		return {
-			suggestedCategory: parsed.category,
-			confidence: parsed.confidence ?? 0.8,
-			detectedAttributes: parsed.attributes ?? {},
-			description: parsed.description,
-			suggestedName: parsed.name,
-			suggestedTags: parsed.tags ?? [],
-		};
-	}
+    return {
+      suggestedCategory: parsed.category,
+      confidence: parsed.confidence ?? 0.8,
+      detectedAttributes: parsed.attributes ?? {},
+      description: parsed.description,
+      suggestedName: parsed.name,
+      suggestedTags: parsed.tags ?? [],
+    };
+  }
 
-	private async internalChat(
-		messages: InternalMessage[],
-		options?: { maxTokens?: number },
-	): Promise<string | null> {
-		return vscode.commands.executeCommand<string | null>(
-			'neko.agent.internalChat',
-			messages,
-			options,
-		);
-	}
+  private async internalChat(
+    messages: InternalMessage[],
+    options?: { maxTokens?: number },
+  ): Promise<string | null> {
+    return vscode.commands.executeCommand<string | null>(
+      'neko.agent.internalChat',
+      messages,
+      options,
+    );
+  }
 
-	private stripJsonFences(text: string): string {
-		return text.trim().replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
-	}
+  private stripJsonFences(text: string): string {
+    return text
+      .trim()
+      .replace(/^```(?:json)?\n?/i, '')
+      .replace(/\n?```$/i, '')
+      .trim();
+  }
 }

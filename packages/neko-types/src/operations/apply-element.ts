@@ -11,7 +11,7 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
   switch (op.type) {
     case 'element.add': {
       const { trackId, element, index } = op.payload;
-      return updateTrackInProject(project, trackId, track => {
+      return updateTrackInProject(project, trackId, (track) => {
         const newElements = [...track.elements];
         if (index !== undefined) {
           newElements.splice(index, 0, element);
@@ -24,15 +24,15 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
 
     case 'element.remove': {
       const { trackId, elementId } = op.payload;
-      return updateTrackInProject(project, trackId, track => {
+      return updateTrackInProject(project, trackId, (track) => {
         const { element } = findElement(track, elementId);
         const effectiveDuration = element.duration - element.trimStart - element.trimEnd;
-        let newElements = track.elements.filter(e => e.id !== elementId);
+        let newElements = track.elements.filter((e) => e.id !== elementId);
 
         // 涟纹编辑：后续元素前移
         if (op.before.rippleAffected && op.before.rippleAffected.length > 0) {
-          const affectedIds = new Set(op.before.rippleAffected.map(a => a.elementId));
-          newElements = newElements.map(e => {
+          const affectedIds = new Set(op.before.rippleAffected.map((a) => a.elementId));
+          newElements = newElements.map((e) => {
             if (affectedIds.has(e.id)) {
               return { ...e, startTime: e.startTime - effectiveDuration };
             }
@@ -46,7 +46,7 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
 
     case 'element.update': {
       const { trackId, elementId, updates } = op.payload;
-      return updateElementInProject(project, trackId, elementId, element => {
+      return updateElementInProject(project, trackId, elementId, (element) => {
         const merged = { ...element, ...updates } as TimelineElement;
         // 如果更新 duration 且 trimStart + trimEnd >= newDuration，重置 trim
         if (updates.duration !== undefined) {
@@ -64,13 +64,13 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
       const { track: fromTrack } = findTrack(project, fromTrackId);
       const { element } = findElement(fromTrack, elementId);
 
-      let result = updateTrackInProject(project, fromTrackId, track => ({
+      let result = updateTrackInProject(project, fromTrackId, (track) => ({
         ...track,
-        elements: track.elements.filter(e => e.id !== elementId),
+        elements: track.elements.filter((e) => e.id !== elementId),
       }));
 
       // 添加到目标 track
-      result = updateTrackInProject(result, toTrackId, track => ({
+      result = updateTrackInProject(result, toTrackId, (track) => ({
         ...track,
         elements: [...track.elements, element],
       }));
@@ -80,10 +80,16 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
 
     case 'element.toggle': {
       const { trackId, elementId, field } = op.payload;
-      return updateElementInProject(project, trackId, elementId, element => ({
-        ...element,
-        [field]: !element[field],
-      } as TimelineElement));
+      return updateElementInProject(
+        project,
+        trackId,
+        elementId,
+        (element) =>
+          ({
+            ...element,
+            [field]: !element[field],
+          }) as TimelineElement,
+      );
     }
 
     case 'element.linkAudio': {
@@ -96,16 +102,22 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
       }
 
       // 添加 audio element 到 audio track
-      result = updateTrackInProject(result, audioTrackId, track => ({
+      result = updateTrackInProject(result, audioTrackId, (track) => ({
         ...track,
         elements: [...track.elements, audioElement],
       }));
 
       // 更新视频元素的 linkedAudioId
-      result = updateElementInProject(result, videoTrackId, videoElementId, element => ({
-        ...element,
-        linkedAudioId: audioElement.id,
-      } as TimelineElement));
+      result = updateElementInProject(
+        result,
+        videoTrackId,
+        videoElementId,
+        (element) =>
+          ({
+            ...element,
+            linkedAudioId: audioElement.id,
+          }) as TimelineElement,
+      );
 
       return result;
     }
@@ -115,20 +127,20 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
       const { linkedAudioId, audioTrackId } = op.before;
 
       // 清除视频元素的 linkedAudioId
-      let result = updateElementInProject(project, videoTrackId, videoElementId, element => {
+      let result = updateElementInProject(project, videoTrackId, videoElementId, (element) => {
         const { linkedAudioId: _, ...rest } = element as MediaElement;
         return rest as TimelineElement;
       });
 
       // 删除 audio element
-      result = updateTrackInProject(result, audioTrackId, track => ({
+      result = updateTrackInProject(result, audioTrackId, (track) => ({
         ...track,
-        elements: track.elements.filter(e => e.id !== linkedAudioId),
+        elements: track.elements.filter((e) => e.id !== linkedAudioId),
       }));
 
       // 如果 audio track 是专门创建的，也删除
       if (op.before.audioTrack) {
-        result = { ...result, tracks: result.tracks.filter(t => t.id !== audioTrackId) };
+        result = { ...result, tracks: result.tracks.filter((t) => t.id !== audioTrackId) };
       }
 
       return result;
@@ -136,18 +148,27 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
   }
 }
 
-export function applyElementSplitOperation(project: ProjectData, op: ElementSplitOperation): ProjectData {
+export function applyElementSplitOperation(
+  project: ProjectData,
+  op: ElementSplitOperation,
+): ProjectData {
   switch (op.type) {
     case 'element.splitAt': {
       const { trackId, elementId, splitPoint, rightElement } = op.payload;
       // 修改原元素的 trimEnd（左半部分）
-      let result = updateElementInProject(project, trackId, elementId, element => ({
-        ...element,
-        trimEnd: element.duration - splitPoint,
-      } as TimelineElement));
+      let result = updateElementInProject(
+        project,
+        trackId,
+        elementId,
+        (element) =>
+          ({
+            ...element,
+            trimEnd: element.duration - splitPoint,
+          }) as TimelineElement,
+      );
 
       // 追加右半部分新元素
-      result = updateTrackInProject(result, trackId, track => ({
+      result = updateTrackInProject(result, trackId, (track) => ({
         ...track,
         elements: [...track.elements, rightElement],
       }));
@@ -157,21 +178,33 @@ export function applyElementSplitOperation(project: ProjectData, op: ElementSpli
 
     case 'element.splitKeepLeft': {
       const { trackId, elementId, splitPoint, newName } = op.payload;
-      return updateElementInProject(project, trackId, elementId, element => ({
-        ...element,
-        trimEnd: element.duration - splitPoint,
-        name: newName,
-      } as TimelineElement));
+      return updateElementInProject(
+        project,
+        trackId,
+        elementId,
+        (element) =>
+          ({
+            ...element,
+            trimEnd: element.duration - splitPoint,
+            name: newName,
+          }) as TimelineElement,
+      );
     }
 
     case 'element.splitKeepRight': {
       const { trackId, elementId, splitPoint, newStartTime, newName } = op.payload;
-      return updateElementInProject(project, trackId, elementId, element => ({
-        ...element,
-        startTime: newStartTime,
-        trimStart: splitPoint,
-        name: newName,
-      } as TimelineElement));
+      return updateElementInProject(
+        project,
+        trackId,
+        elementId,
+        (element) =>
+          ({
+            ...element,
+            startTime: newStartTime,
+            trimStart: splitPoint,
+            name: newName,
+          }) as TimelineElement,
+      );
     }
   }
 }

@@ -36,7 +36,10 @@ function AssistantAvatar() {
 }
 
 // Block type icons and labels
-const blockTypeConfig: Record<ContentBlock['type'], { icon: string; label: string; color: string }> = {
+const blockTypeConfig: Record<
+  ContentBlock['type'],
+  { icon: string; label: string; color: string }
+> = {
   thinking: {
     icon: '💭',
     label: 'Thinking',
@@ -119,17 +122,18 @@ function renderBlockContent(
   isStreaming: boolean,
   callbacks: Pick<
     import('@/components/ChatView/MessageActionsContext').MessageActionsContextValue,
-    'onAcceptDiff' | 'onRejectDiff' | 'onApprovePlanStep' | 'onRejectPlanStep' | 'onModifyPlanStep' | 'onApproveAllPlanSteps' | 'onRejectAllPlanSteps'
-  >
+    | 'onAcceptDiff'
+    | 'onRejectDiff'
+    | 'onApprovePlanStep'
+    | 'onRejectPlanStep'
+    | 'onModifyPlanStep'
+    | 'onApproveAllPlanSteps'
+    | 'onRejectAllPlanSteps'
+  >,
 ) {
   switch (block.type) {
     case 'thinking':
-      return (
-        <ThinkingBlock
-          content={block.thinking || ''}
-          isComplete={block.isThinkingComplete}
-        />
-      );
+      return <ThinkingBlock content={block.thinking || ''} isComplete={block.isThinkingComplete} />;
 
     case 'text':
       if (!block.content) return null;
@@ -168,11 +172,31 @@ function renderBlockContent(
         <div className="w-full">
           <PlanReview
             plan={block.plan}
-            onApproveStep={callbacks.onApprovePlanStep ? (stepId) => callbacks.onApprovePlanStep!(block.plan!.id, stepId) : undefined}
-            onRejectStep={callbacks.onRejectPlanStep ? (stepId) => callbacks.onRejectPlanStep!(block.plan!.id, stepId) : undefined}
-            onModifyStep={callbacks.onModifyPlanStep ? (stepId, desc) => callbacks.onModifyPlanStep!(block.plan!.id, stepId, desc) : undefined}
-            onApproveAll={callbacks.onApproveAllPlanSteps ? () => callbacks.onApproveAllPlanSteps!(block.plan!.id) : undefined}
-            onRejectAll={callbacks.onRejectAllPlanSteps ? () => callbacks.onRejectAllPlanSteps!(block.plan!.id) : undefined}
+            onApproveStep={
+              callbacks.onApprovePlanStep
+                ? (stepId) => callbacks.onApprovePlanStep!(block.plan!.id, stepId)
+                : undefined
+            }
+            onRejectStep={
+              callbacks.onRejectPlanStep
+                ? (stepId) => callbacks.onRejectPlanStep!(block.plan!.id, stepId)
+                : undefined
+            }
+            onModifyStep={
+              callbacks.onModifyPlanStep
+                ? (stepId, desc) => callbacks.onModifyPlanStep!(block.plan!.id, stepId, desc)
+                : undefined
+            }
+            onApproveAll={
+              callbacks.onApproveAllPlanSteps
+                ? () => callbacks.onApproveAllPlanSteps!(block.plan!.id)
+                : undefined
+            }
+            onRejectAll={
+              callbacks.onRejectAllPlanSteps
+                ? () => callbacks.onRejectAllPlanSteps!(block.plan!.id)
+                : undefined
+            }
           />
         </div>
       );

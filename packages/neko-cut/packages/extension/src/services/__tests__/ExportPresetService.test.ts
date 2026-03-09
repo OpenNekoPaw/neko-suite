@@ -47,34 +47,34 @@ describe('ExportPresetService', () => {
   describe('built-in presets', () => {
     it('should return 3 built-in presets by default', () => {
       const presets = service.listPresets();
-      const builtins = presets.filter(p => p.isBuiltin);
+      const builtins = presets.filter((p) => p.isBuiltin);
       expect(builtins).toHaveLength(3);
     });
 
     it('should include social media preset with correct id', () => {
       const presets = service.listPresets();
-      const social = presets.find(p => p.id === 'builtin-social');
+      const social = presets.find((p) => p.id === 'builtin-social');
       expect(social).toBeDefined();
       expect(social?.isBuiltin).toBe(true);
     });
 
     it('should include web preset with correct id', () => {
       const presets = service.listPresets();
-      const web = presets.find(p => p.id === 'builtin-web');
+      const web = presets.find((p) => p.id === 'builtin-web');
       expect(web).toBeDefined();
       expect(web?.isBuiltin).toBe(true);
     });
 
     it('should include master quality preset with correct id', () => {
       const presets = service.listPresets();
-      const master = presets.find(p => p.id === 'builtin-master');
+      const master = presets.find((p) => p.id === 'builtin-master');
       expect(master).toBeDefined();
       expect(master?.isBuiltin).toBe(true);
     });
 
     it('social preset should have expected settings', () => {
       const presets = service.listPresets();
-      const social = presets.find(p => p.id === 'builtin-social');
+      const social = presets.find((p) => p.id === 'builtin-social');
       expect(social?.settings.format).toBe('mp4');
       expect(social?.settings.videoCodec).toBe('h264');
       expect(social?.settings.width).toBe(1920);
@@ -84,21 +84,21 @@ describe('ExportPresetService', () => {
 
     it('web preset should use webm/vp9', () => {
       const presets = service.listPresets();
-      const web = presets.find(p => p.id === 'builtin-web');
+      const web = presets.find((p) => p.id === 'builtin-web');
       expect(web?.settings.format).toBe('webm');
       expect(web?.settings.videoCodec).toBe('vp9');
     });
 
     it('master preset should have 4K resolution', () => {
       const presets = service.listPresets();
-      const master = presets.find(p => p.id === 'builtin-master');
+      const master = presets.find((p) => p.id === 'builtin-master');
       expect(master?.settings.width).toBe(3840);
       expect(master?.settings.height).toBe(2160);
     });
 
     it('built-in presets should appear before user presets', () => {
       const presets = service.listPresets();
-      const firstUserIndex = presets.findIndex(p => !p.isBuiltin);
+      const firstUserIndex = presets.findIndex((p) => !p.isBuiltin);
       const lastBuiltinIndex = presets.reduce((acc, p, i) => (p.isBuiltin ? i : acc), -1);
       // If there are no user presets, firstUserIndex is -1, which is fine
       if (firstUserIndex !== -1) {
@@ -145,7 +145,7 @@ describe('ExportPresetService', () => {
       });
 
       const presets = service.listPresets();
-      const found = presets.find(p => p.name === 'Test Preset');
+      const found = presets.find((p) => p.name === 'Test Preset');
       expect(found).toBeDefined();
       expect(found?.isBuiltin).toBe(false);
     });
@@ -198,7 +198,7 @@ describe('ExportPresetService', () => {
       });
 
       const presets = service.listPresets();
-      const userPresets = presets.filter(p => !p.isBuiltin);
+      const userPresets = presets.filter((p) => !p.isBuiltin);
       expect(userPresets).toHaveLength(2);
     });
 

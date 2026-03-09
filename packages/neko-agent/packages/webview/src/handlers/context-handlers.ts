@@ -28,7 +28,10 @@ const handleContextTokenCount: MessageHandler = (message, context) => {
 const handleCompressionResult: MessageHandler = (message, context) => {
   if (message.conversationId) {
     context.conversationCompressingRef.current.set(message.conversationId, false);
-    context.conversationTokenCountRef.current.set(message.conversationId, message.compressedTokens || 0);
+    context.conversationTokenCountRef.current.set(
+      message.conversationId,
+      message.compressedTokens || 0,
+    );
     // Trigger re-render if it's the current conversation
     if (message.conversationId === context.activeConversationIdRef.current) {
       context.forceUpdate();

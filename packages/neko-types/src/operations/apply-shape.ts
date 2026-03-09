@@ -18,7 +18,7 @@ export function applyShapeOperation(project: ProjectData, op: ShapeOperation): P
   switch (op.type) {
     case 'shape.addElement': {
       const { trackId, element, index } = op.payload;
-      return updateTrackInProject(project, trackId, track => {
+      return updateTrackInProject(project, trackId, (track) => {
         const newElements = [...track.elements];
         if (index !== undefined) {
           newElements.splice(index, 0, element);
@@ -31,7 +31,7 @@ export function applyShapeOperation(project: ProjectData, op: ShapeOperation): P
 
     case 'shape.add': {
       const { trackId, elementId, shape, index } = op.payload;
-      return updateElementInProject(project, trackId, elementId, element => {
+      return updateElementInProject(project, trackId, elementId, (element) => {
         const shapes = getShapes(element);
         const newShapes = [...shapes];
         if (index !== undefined && index >= 0 && index <= newShapes.length) {
@@ -45,15 +45,18 @@ export function applyShapeOperation(project: ProjectData, op: ShapeOperation): P
 
     case 'shape.remove': {
       const { trackId, elementId, shapeId } = op.payload;
-      return updateElementInProject(project, trackId, elementId, element => {
+      return updateElementInProject(project, trackId, elementId, (element) => {
         const shapes = getShapes(element);
-        return setShapes(element, shapes.filter(s => s.id !== shapeId));
+        return setShapes(
+          element,
+          shapes.filter((s) => s.id !== shapeId),
+        );
       });
     }
 
     case 'shape.duplicate': {
       const { trackId, elementId, newShape } = op.payload;
-      return updateElementInProject(project, trackId, elementId, element => {
+      return updateElementInProject(project, trackId, elementId, (element) => {
         const shapes = getShapes(element);
         return setShapes(element, [...shapes, newShape]);
       });
@@ -61,7 +64,7 @@ export function applyShapeOperation(project: ProjectData, op: ShapeOperation): P
 
     case 'shape.update': {
       const { trackId, elementId, shapeId, updates } = op.payload;
-      return updateShapeInProject(project, trackId, elementId, shapeId, shape => ({
+      return updateShapeInProject(project, trackId, elementId, shapeId, (shape) => ({
         ...shape,
         ...updates,
       }));
@@ -69,7 +72,7 @@ export function applyShapeOperation(project: ProjectData, op: ShapeOperation): P
 
     case 'shape.updateGeometry': {
       const { trackId, elementId, shapeId, shape: shapeUpdates } = op.payload;
-      return updateShapeInProject(project, trackId, elementId, shapeId, shape => ({
+      return updateShapeInProject(project, trackId, elementId, shapeId, (shape) => ({
         ...shape,
         shape: { ...shape.shape, ...shapeUpdates } as typeof shape.shape,
       }));
@@ -77,19 +80,25 @@ export function applyShapeOperation(project: ProjectData, op: ShapeOperation): P
 
     case 'shape.updateStyle': {
       const { trackId, elementId, shapeId, style: styleUpdates } = op.payload;
-      return updateShapeInProject(project, trackId, elementId, shapeId, shape => ({
+      return updateShapeInProject(project, trackId, elementId, shapeId, (shape) => ({
         ...shape,
         style: {
-          fill: styleUpdates.fill ? { ...shape.style.fill, ...styleUpdates.fill } : shape.style.fill,
-          stroke: styleUpdates.stroke ? { ...shape.style.stroke, ...styleUpdates.stroke } : shape.style.stroke,
-          shadow: styleUpdates.shadow ? { ...shape.style.shadow, ...styleUpdates.shadow } : shape.style.shadow,
+          fill: styleUpdates.fill
+            ? { ...shape.style.fill, ...styleUpdates.fill }
+            : shape.style.fill,
+          stroke: styleUpdates.stroke
+            ? { ...shape.style.stroke, ...styleUpdates.stroke }
+            : shape.style.stroke,
+          shadow: styleUpdates.shadow
+            ? { ...shape.style.shadow, ...styleUpdates.shadow }
+            : shape.style.shadow,
         },
       }));
     }
 
     case 'shape.toggle': {
       const { trackId, elementId, shapeId, field } = op.payload;
-      return updateShapeInProject(project, trackId, elementId, shapeId, shape => ({
+      return updateShapeInProject(project, trackId, elementId, shapeId, (shape) => ({
         ...shape,
         [field]: !shape[field],
       }));
@@ -97,7 +106,7 @@ export function applyShapeOperation(project: ProjectData, op: ShapeOperation): P
 
     case 'shape.reorder': {
       const { trackId, elementId, fromIndex, toIndex } = op.payload;
-      return updateElementInProject(project, trackId, elementId, element => {
+      return updateElementInProject(project, trackId, elementId, (element) => {
         const shapes = getShapes(element);
         const reordered = arrayMove(shapes, fromIndex, toIndex);
         // 重新计算 zIndex

@@ -16,21 +16,21 @@ import { detectMediaType } from '@neko/shared';
 // =============================================================================
 
 export interface ThumbnailOptions {
-	/** Max width in pixels (default 256) */
-	maxWidth?: number;
-	/** Max height in pixels (default 256) */
-	maxHeight?: number;
-	/** Time offset in seconds for video (default 1) */
-	timeOffset?: number;
+  /** Max width in pixels (default 256) */
+  maxWidth?: number;
+  /** Max height in pixels (default 256) */
+  maxHeight?: number;
+  /** Time offset in seconds for video (default 1) */
+  timeOffset?: number;
 }
 
 export interface ThumbnailResult {
-	/** Absolute path to the generated thumbnail */
-	path: string;
-	/** Width of the thumbnail */
-	width: number;
-	/** Height of the thumbnail */
-	height: number;
+  /** Absolute path to the generated thumbnail */
+  path: string;
+  /** Width of the thumbnail */
+  width: number;
+  /** Height of the thumbnail */
+  height: number;
 }
 
 // =============================================================================
@@ -38,109 +38,106 @@ export interface ThumbnailResult {
 // =============================================================================
 
 export class ThumbnailService implements vscode.Disposable {
-	private readonly thumbnailDir: string;
+  private readonly thumbnailDir: string;
 
-	constructor(workspaceRoot: string) {
-		this.thumbnailDir = path.join(workspaceRoot, '.neko', 'assets', 'thumbnails');
-	}
+  constructor(workspaceRoot: string) {
+    this.thumbnailDir = path.join(workspaceRoot, '.neko', 'assets', 'thumbnails');
+  }
 
-	/**
-	 * Generate a thumbnail for a media file.
-	 * Returns the path to the generated thumbnail, or null if generation fails.
-	 */
-	async generate(
-		filePath: string,
-		options: ThumbnailOptions = {},
-	): Promise<ThumbnailResult | null> {
-		const mediaType = detectMediaType(filePath);
-		if (mediaType !== 'video' && mediaType !== 'image') {
-			return null;
-		}
+  /**
+   * Generate a thumbnail for a media file.
+   * Returns the path to the generated thumbnail, or null if generation fails.
+   */
+  async generate(
+    filePath: string,
+    options: ThumbnailOptions = {},
+  ): Promise<ThumbnailResult | null> {
+    const mediaType = detectMediaType(filePath);
+    if (mediaType !== 'video' && mediaType !== 'image') {
+      return null;
+    }
 
-		const maxWidth = options.maxWidth ?? 256;
-		const maxHeight = options.maxHeight ?? 256;
+    const maxWidth = options.maxWidth ?? 256;
+    const maxHeight = options.maxHeight ?? 256;
 
-		// Deterministic filename based on source path + options
-		const hash = crypto
-			.createHash('md5')
-			.update(`${filePath}:${maxWidth}:${maxHeight}:${options.timeOffset ?? 1}`)
-			.digest('hex');
-		const thumbPath = path.join(this.thumbnailDir, `${hash}.jpg`);
+    // Deterministic filename based on source path + options
+    const hash = crypto
+      .createHash('md5')
+      .update(`${filePath}:${maxWidth}:${maxHeight}:${options.timeOffset ?? 1}`)
+      .digest('hex');
+    const thumbPath = path.join(this.thumbnailDir, `${hash}.jpg`);
 
-		// Check cache
-		try {
-			await fs.access(thumbPath);
-			// Already exists — return cached
-			return { path: thumbPath, width: maxWidth, height: maxHeight };
-		} catch {
-			// Not cached, generate
-		}
+    // Check cache
+    try {
+      await fs.access(thumbPath);
+      // Already exists — return cached
+      return { path: thumbPath, width: maxWidth, height: maxHeight };
+    } catch {
+      // Not cached, generate
+    }
 
-		// Ensure directory exists
-		await fs.mkdir(this.thumbnailDir, { recursive: true });
+    // Ensure directory exists
+    await fs.mkdir(this.thumbnailDir, { recursive: true });
 
-		// Try engine thumbnail extraction
-		try {
-			const result = await vscode.commands.executeCommand<{
-				success: boolean;
-				path?: string;
-				width?: number;
-				height?: number;
-			}>(
-				'neko.engine.extractThumbnail',
-				filePath,
-				thumbPath,
-				maxWidth,
-				maxHeight,
-				options.timeOffset ?? 1,
-			);
+    // Try engine thumbnail extraction
+    try {
+      const result = await vscode.commands.executeCommand<{
+        success: boolean;
+        path?: string;
+        width?: number;
+        height?: number;
+      }>(
+        'neko.engine.extractThumbnail',
+        filePath,
+        thumbPath,
+        maxWidth,
+        maxHeight,
+        options.timeOffset ?? 1,
+      );
 
-			if (result?.success && result.path) {
-				return {
-					path: result.path,
-					width: result.width ?? maxWidth,
-					height: result.height ?? maxHeight,
-				};
-			}
-		} catch {
-			// Engine not available — fall through
-		}
+      if (result?.success && result.path) {
+        return {
+          path: result.path,
+          width: result.width ?? maxWidth,
+          height: result.height ?? maxHeight,
+        };
+      }
+    } catch {
+      // Engine not available — fall through
+    }
 
-		// Fallback: for images, copy/resize is not possible without native deps.
-		// Return null to indicate thumbnail generation is not available.
-		return null;
-	}
+    // Fallback: for images, copy/resize is not possible without native deps.
+    // Return null to indicate thumbnail generation is not available.
+    return null;
+  }
 
-	/**
-	 * Get the thumbnail path for a file if it exists in cache.
-	 */
-	async getCached(filePath: string): Promise<string | null> {
-		const hash = crypto
-			.createHash('md5')
-			.update(`${filePath}:256:256:1`)
-			.digest('hex');
-		const thumbPath = path.join(this.thumbnailDir, `${hash}.jpg`);
+  /**
+   * Get the thumbnail path for a file if it exists in cache.
+   */
+  async getCached(filePath: string): Promise<string | null> {
+    const hash = crypto.createHash('md5').update(`${filePath}:256:256:1`).digest('hex');
+    const thumbPath = path.join(this.thumbnailDir, `${hash}.jpg`);
 
-		try {
-			await fs.access(thumbPath);
-			return thumbPath;
-		} catch {
-			return null;
-		}
-	}
+    try {
+      await fs.access(thumbPath);
+      return thumbPath;
+    } catch {
+      return null;
+    }
+  }
 
-	/**
-	 * Clear all cached thumbnails.
-	 */
-	async clearCache(): Promise<void> {
-		try {
-			await fs.rm(this.thumbnailDir, { recursive: true, force: true });
-		} catch {
-			// Directory may not exist
-		}
-	}
+  /**
+   * Clear all cached thumbnails.
+   */
+  async clearCache(): Promise<void> {
+    try {
+      await fs.rm(this.thumbnailDir, { recursive: true, force: true });
+    } catch {
+      // Directory may not exist
+    }
+  }
 
-	dispose(): void {
-		// No resources to clean up
-	}
+  dispose(): void {
+    // No resources to clean up
+  }
 }

@@ -12,7 +12,7 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
     document: vscode.TextDocument,
     position: vscode.Position,
     _token: vscode.CancellationToken,
-    _context: vscode.CompletionContext
+    _context: vscode.CompletionContext,
   ): Promise<vscode.CompletionItem[]> {
     const line = document.lineAt(position.line).text;
     const linePrefix = line.substring(0, position.character);
@@ -42,7 +42,7 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
   private isCharacterContext(
     document: vscode.TextDocument,
     position: vscode.Position,
-    linePrefix: string
+    linePrefix: string,
   ): boolean {
     // Check if previous line is blank and current line starts with uppercase
     if (position.line === 0) return false;
@@ -62,7 +62,7 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
 
   private getCharacterCompletions(): vscode.CompletionItem[] {
     const names = this.index.getAllCharacterNames();
-    return names.map(name => {
+    return names.map((name) => {
       const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.User);
       item.detail = 'Character';
       item.insertText = name;
@@ -123,7 +123,7 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
       'TIME CUT:',
     ];
 
-    return transitions.map(t => {
+    return transitions.map((t) => {
       const item = new vscode.CompletionItem(t, vscode.CompletionItemKind.Snippet);
       item.detail = 'Transition';
       return item;

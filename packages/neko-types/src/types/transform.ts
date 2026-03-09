@@ -11,7 +11,9 @@ import type { EngineTransform } from '../generated/timeline.engine';
 
 // Compile-time drift detection: ensure EngineTransform keys ⊆ Transform keys
 type _Drift = Exclude<keyof EngineTransform, keyof Transform>;
-type _AssertNoDrift = _Drift extends never ? true : { error: 'EngineTransform has new fields not in Transform'; fields: _Drift };
+type _AssertNoDrift = _Drift extends never
+  ? true
+  : { error: 'EngineTransform has new fields not in Transform'; fields: _Drift };
 const _checkTransform: _AssertNoDrift = true;
 void _checkTransform;
 

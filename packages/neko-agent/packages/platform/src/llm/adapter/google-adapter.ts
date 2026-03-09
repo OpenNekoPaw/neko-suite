@@ -45,7 +45,11 @@ export class GoogleAdapter extends AISdkAdapter {
   /**
    * Get Google-specific provider options
    */
-  protected override getProviderOptions(_options: ChatOptions, _provider: Provider, _model: Model): Record<string, unknown> {
+  protected override getProviderOptions(
+    _options: ChatOptions,
+    _provider: Provider,
+    _model: Model,
+  ): Record<string, unknown> {
     // Google-specific options can be added here
     return {};
   }

@@ -6,7 +6,12 @@
  * Uses shared configuration module from @neko/shared.
  */
 
-import type { MCPServerPreset, WorkflowPreset, PromptPreset, TemplatePreset } from '../types/config';
+import type {
+  MCPServerPreset,
+  WorkflowPreset,
+  PromptPreset,
+  TemplatePreset,
+} from '../types/config';
 import type { UnifiedConfig } from '@neko/shared';
 // Node.js config reader - direct import
 import {
@@ -57,10 +62,16 @@ function unifiedToWorkspaceConfig(unified: UnifiedConfig | null): WorkspaceConfi
     workflows: unified.workflows as WorkflowPreset[] | undefined,
     prompts: unified.prompts as PromptPreset[] | undefined,
     templates: unified.templates as TemplatePreset[] | undefined,
-    mcpServerOverrides: unified.mcpServerOverrides as Record<string, Partial<MCPServerPreset>> | undefined,
-    workflowOverrides: unified.workflowOverrides as Record<string, Partial<WorkflowPreset>> | undefined,
+    mcpServerOverrides: unified.mcpServerOverrides as
+      | Record<string, Partial<MCPServerPreset>>
+      | undefined,
+    workflowOverrides: unified.workflowOverrides as
+      | Record<string, Partial<WorkflowPreset>>
+      | undefined,
     promptOverrides: unified.promptOverrides as Record<string, Partial<PromptPreset>> | undefined,
-    templateOverrides: unified.templateOverrides as Record<string, Partial<TemplatePreset>> | undefined,
+    templateOverrides: unified.templateOverrides as
+      | Record<string, Partial<TemplatePreset>>
+      | undefined,
     taskDefaults: unified.taskDefaults,
   };
 }
@@ -97,10 +108,7 @@ export function loadWorkspaceConfig(workspacePath: string): WorkspaceConfig | nu
  *
  * Uses shared configuration writer for unified format.
  */
-export function saveWorkspaceConfig(
-  workspacePath: string,
-  config: WorkspaceConfig
-): void {
+export function saveWorkspaceConfig(workspacePath: string, config: WorkspaceConfig): void {
   const unified = workspaceToUnifiedConfig(config);
   writeWorkspaceConfigFile(workspacePath, unified);
 }
@@ -112,7 +120,7 @@ export function saveWorkspaceConfig(
  */
 export function watchWorkspaceConfig(
   workspacePath: string,
-  callback: (config: WorkspaceConfig | null) => void
+  callback: (config: WorkspaceConfig | null) => void,
 ): () => void {
   return watchWorkspaceConfigFile(workspacePath, (unified) => {
     callback(unifiedToWorkspaceConfig(unified));

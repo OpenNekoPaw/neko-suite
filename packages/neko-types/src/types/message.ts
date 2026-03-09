@@ -209,46 +209,124 @@ export type MessageToWebview =
   | { type: 'fileUri'; path: string; uri: string; isBase64?: boolean }
   | { type: 'exportProgress'; progress: ExportProgressInfo }
   // Audio decode messages (Extension -> WebView)
-  | { type: 'audioDecodeResult'; requestId: string; success: boolean; data?: string; mimeType?: string; duration?: number; cached?: boolean; error?: string }
+  | {
+      type: 'audioDecodeResult';
+      requestId: string;
+      success: boolean;
+      data?: string;
+      mimeType?: string;
+      duration?: number;
+      cached?: boolean;
+      error?: string;
+    }
   // Streaming export messages (Extension -> WebView)
-  | { type: 'exportDialogResult'; success: boolean; cancelled?: boolean; path?: string; error?: string }
+  | {
+      type: 'exportDialogResult';
+      success: boolean;
+      cancelled?: boolean;
+      path?: string;
+      error?: string;
+    }
   | { type: 'exportChunkResult'; success: boolean; error?: string }
   | { type: 'exportStreamError'; error: string }
   | { type: 'exportComplete'; success: boolean; path?: string; error?: string }
   | { type: 'exportCancelled' }
   | { type: 'blobSaveResult'; success: boolean; cancelled?: boolean; path?: string; error?: string }
-  | { type: 'exportPathSelected'; success: boolean; cancelled?: boolean; path?: string; error?: string }
+  | {
+      type: 'exportPathSelected';
+      success: boolean;
+      cancelled?: boolean;
+      path?: string;
+      error?: string;
+    }
   // Compatible mode export messages (Extension -> WebView)
   | { type: 'compatibleExportStarted'; exportId: string }
   | { type: 'compatibleExportProgress'; exportId: string; progress: CompatibleExportProgress }
   | { type: 'compatibleExportResult'; exportId: string; result: CompatibleExportResult }
   | { type: 'compatibleExportCancelled'; exportId: string }
   // Compatible mode preview messages (Extension -> WebView)
-  | { type: 'previewFrameReady'; requestId: string; frameData: string; width: number; height: number; timestamp: number }
+  | {
+      type: 'previewFrameReady';
+      requestId: string;
+      frameData: string;
+      width: number;
+      height: number;
+      timestamp: number;
+    }
   | { type: 'previewFrameError'; requestId: string; error: string }
   // Context menu result (Extension -> WebView)
   | { type: 'contextMenuResult'; menuId: string; selectedId?: string }
   // AI Action messages (Extension -> WebView)
   | { type: 'aiActionStarted'; actionId: string; elementIds: string[] }
-  | { type: 'aiActionProgress'; actionId: string; content?: string; toolCall?: { id: string; name: string; arguments: Record<string, unknown> }; toolResult?: { toolCallId: string; success: boolean; data: unknown; error?: string } }
+  | {
+      type: 'aiActionProgress';
+      actionId: string;
+      content?: string;
+      toolCall?: { id: string; name: string; arguments: Record<string, unknown> };
+      toolResult?: { toolCallId: string; success: boolean; data: unknown; error?: string };
+    }
   | { type: 'aiActionResult'; actionId: string; success: boolean; data?: unknown; error?: string }
   // Template messages (Extension -> WebView)
   | { type: 'templateList'; templates: TemplateSummaryMessage[] }
-  | { type: 'templateExecutionStarted'; templateId: string; templateName: string; steps: TemplateStepMessage[] }
-  | { type: 'templateStepProgress'; templateId: string; stepId: string; state: 'running' | 'completed' | 'failed' | 'skipped'; error?: string; outputPreview?: string }
-  | { type: 'templateExecutionResult'; templateId: string; success: boolean; data?: unknown; error?: string }
+  | {
+      type: 'templateExecutionStarted';
+      templateId: string;
+      templateName: string;
+      steps: TemplateStepMessage[];
+    }
+  | {
+      type: 'templateStepProgress';
+      templateId: string;
+      stepId: string;
+      state: 'running' | 'completed' | 'failed' | 'skipped';
+      error?: string;
+      outputPreview?: string;
+    }
+  | {
+      type: 'templateExecutionResult';
+      templateId: string;
+      success: boolean;
+      data?: unknown;
+      error?: string;
+    }
   // Configuration messages (Extension -> WebView)
   | { type: 'configState'; config: ConfigState }
-  | { type: 'configChanged'; changeType: 'provider' | 'model' | 'mcp' | 'workflow' | 'prompt'; id: string }
+  | {
+      type: 'configChanged';
+      changeType: 'provider' | 'model' | 'mcp' | 'workflow' | 'prompt';
+      id: string;
+    }
   // Provider model discovery response (Extension -> WebView)
-  | { type: 'providerModelsResult'; requestId: string; providerId: string; success: boolean; models?: ProviderModelInfo[]; error?: string }
+  | {
+      type: 'providerModelsResult';
+      requestId: string;
+      providerId: string;
+      success: boolean;
+      models?: ProviderModelInfo[];
+      error?: string;
+    }
   // Tool execution request (Extension -> WebView)
   | { type: 'tool.execute'; requestId: string; toolName: string; params: Record<string, unknown> }
   // File range read response (Extension -> WebView) - for testing on-demand loading
-  | { type: 'fileRangeResult'; requestId: string; success: boolean; data?: string; actualStart?: number; actualEnd?: number; fileSize?: number; error?: string }
+  | {
+      type: 'fileRangeResult';
+      requestId: string;
+      success: boolean;
+      data?: string;
+      actualStart?: number;
+      actualEnd?: number;
+      fileSize?: number;
+      error?: string;
+    }
   // Unified export messages (Extension -> WebView) — via ExportService
   | { type: 'export:progress'; progress: ExportProgressToWebview }
-  | { type: 'export:completed'; success: boolean; outputPath?: string; totalFrames?: number; elapsedMs?: number }
+  | {
+      type: 'export:completed';
+      success: boolean;
+      outputPath?: string;
+      totalFrames?: number;
+      elapsedMs?: number;
+    }
   | { type: 'export:error'; error: string }
   | { type: 'export:cancelled' }
   | { type: 'export:globalStatus'; hasActiveExport: boolean };
@@ -311,19 +389,43 @@ export type MessageFromWebview =
   // File validation (WebView -> Extension)
   | { type: 'validateFile'; path: string }
   // Audio decode request (WebView -> Extension)
-  | { type: 'decodeAudio'; requestId: string; videoPath: string; startTime: number; duration: number; format?: 'wav' | 'mp3'; sampleRate?: number; channels?: number }
+  | {
+      type: 'decodeAudio';
+      requestId: string;
+      videoPath: string;
+      startTime: number;
+      duration: number;
+      format?: 'wav' | 'mp3';
+      sampleRate?: number;
+      channels?: number;
+    }
   // Streaming export messages (WebView -> Extension)
   | { type: 'showExportDialog'; filename: string; format: string }
-  | { type: 'writeExportChunk'; data: ArrayBuffer }  // Binary data (Transferable)
+  | { type: 'writeExportChunk'; data: ArrayBuffer } // Binary data (Transferable)
   | { type: 'finalizeExport'; success: boolean; error?: string }
   | { type: 'cancelExport' }
   // Compatible mode export messages (WebView -> Extension)
   | { type: 'startCompatibleExport'; exportId: string; config: CompatibleExportConfig }
   | { type: 'cancelCompatibleExport'; exportId: string }
   // Compatible mode preview messages (WebView -> Extension)
-  | { type: 'requestPreviewFrame'; requestId: string; time: number; width?: number; height?: number }
+  | {
+      type: 'requestPreviewFrame';
+      requestId: string;
+      time: number;
+      width?: number;
+      height?: number;
+    }
   // Export progress for status bar (WebView -> Extension)
-  | { type: 'exportProgress'; isExporting: boolean; percent: number; message: string; currentFrame?: number; totalFrames?: number; currentFps?: number; estimatedTimeRemaining?: number }
+  | {
+      type: 'exportProgress';
+      isExporting: boolean;
+      percent: number;
+      message: string;
+      currentFrame?: number;
+      totalFrames?: number;
+      currentFps?: number;
+      estimatedTimeRemaining?: number;
+    }
   // Context menu request (WebView -> Extension)
   | { type: 'showContextMenu'; menuId: string; items: ContextMenuItem[] }
   // Configuration requests (WebView -> Extension)
@@ -341,7 +443,12 @@ export type MessageFromWebview =
   // Tool execution response (WebView -> Extension)
   | { type: 'tool.result'; requestId: string; success: boolean; result?: unknown; error?: string }
   // AI Action execution request (WebView -> Extension)
-  | { type: 'executeAIAction'; actionId: string; elementIds: string[]; params?: Record<string, unknown> }
+  | {
+      type: 'executeAIAction';
+      actionId: string;
+      elementIds: string[];
+      params?: Record<string, unknown>;
+    }
   // Template execution requests (WebView -> Extension)
   | { type: 'getTemplates'; category?: string }
   | { type: 'executeTemplate'; templateId: string; params: Record<string, unknown> }
@@ -353,7 +460,13 @@ export type MessageFromWebview =
   | { type: 'planReject'; planId: string; conversationId: string }
   | { type: 'planStepApprove'; planId: string; stepId: string; conversationId: string }
   | { type: 'planStepReject'; planId: string; stepId: string; conversationId: string }
-  | { type: 'planStepModify'; planId: string; stepId: string; newDescription: string; conversationId: string }
+  | {
+      type: 'planStepModify';
+      planId: string;
+      stepId: string;
+      newDescription: string;
+      conversationId: string;
+    }
   // File range read request (WebView -> Extension) - for testing on-demand loading
   | { type: 'readFileRange'; requestId: string; path: string; start: number; end: number }
   // Incremental sync: send EditOperation to Extension (WebView -> Extension)

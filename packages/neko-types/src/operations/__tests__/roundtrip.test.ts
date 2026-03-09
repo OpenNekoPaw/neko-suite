@@ -217,7 +217,13 @@ describe('roundtrip', () => {
       const op: EditOperation = {
         type: 'element.splitKeepRight',
         meta,
-        payload: { trackId: 't1', elementId: 'e1', splitPoint: 5, newStartTime: 5, newName: 'Original (right)' },
+        payload: {
+          trackId: 't1',
+          elementId: 'e1',
+          splitPoint: 5,
+          newStartTime: 5,
+          newName: 'Original (right)',
+        },
         before: { startTime: 0, trimStart: 0, name: 'Original' },
       };
       assertRoundtrip(project, op);
@@ -250,7 +256,9 @@ describe('roundtrip', () => {
     function createShapeProject() {
       const shape1 = createTestShapeInstance({ id: 's1', zIndex: 0 });
       const shape2 = createTestShapeInstance({ id: 's2', zIndex: 1 });
-      const elem = createWebviewElement(createTestShapeElement({ id: 'e1' }), { shapes: [shape1, shape2] });
+      const elem = createWebviewElement(createTestShapeElement({ id: 'e1' }), {
+        shapes: [shape1, shape2],
+      });
       const track = createTestTrack({ id: 't1', type: 'shape', elements: [elem] });
       return { project: createTestProject({ tracks: [track] }), shape1, shape2 };
     }
@@ -305,7 +313,9 @@ describe('roundtrip', () => {
         type: 'shape.updateStyle',
         meta,
         payload: {
-          trackId: 't1', elementId: 'e1', shapeId: 's1',
+          trackId: 't1',
+          elementId: 'e1',
+          shapeId: 's1',
           style: { fill: { type: 'solid', color: '#ff0000', opacity: 1 } },
         },
         before: {
@@ -468,15 +478,45 @@ describe('roundtrip', () => {
       const operations: EditOperation[] = [
         { type: 'track.add', meta, payload: { track } },
         { type: 'track.remove', meta, payload: { trackId: 't1' }, before: { track, index: 0 } },
-        { type: 'track.update', meta, payload: { trackId: 't1', updates: { name: 'X' } }, before: { updates: { name: 'Y' } } },
+        {
+          type: 'track.update',
+          meta,
+          payload: { trackId: 't1', updates: { name: 'X' } },
+          before: { updates: { name: 'Y' } },
+        },
         { type: 'track.reorder', meta, payload: { trackId: 't1', fromIndex: 0, toIndex: 1 } },
-        { type: 'track.toggle', meta, payload: { trackId: 't1', field: 'muted' }, before: { value: false } },
+        {
+          type: 'track.toggle',
+          meta,
+          payload: { trackId: 't1', field: 'muted' },
+          before: { value: false },
+        },
         { type: 'element.add', meta, payload: { trackId: 't1', element: elem } },
-        { type: 'element.remove', meta, payload: { trackId: 't1', elementId: 'e1' }, before: { element: elem, index: 0 } },
-        { type: 'element.toggle', meta, payload: { trackId: 't1', elementId: 'e1', field: 'hidden' }, before: { value: false } },
+        {
+          type: 'element.remove',
+          meta,
+          payload: { trackId: 't1', elementId: 'e1' },
+          before: { element: elem, index: 0 },
+        },
+        {
+          type: 'element.toggle',
+          meta,
+          payload: { trackId: 't1', elementId: 'e1', field: 'hidden' },
+          before: { value: false },
+        },
         { type: 'shape.add', meta, payload: { trackId: 't1', elementId: 'e1', shape } },
-        { type: 'shape.remove', meta, payload: { trackId: 't1', elementId: 'e1', shapeId: 's1' }, before: { shape, index: 0 } },
-        { type: 'project.update', meta, payload: { updates: { name: 'X' } }, before: { updates: { name: 'Y' } } },
+        {
+          type: 'shape.remove',
+          meta,
+          payload: { trackId: 't1', elementId: 'e1', shapeId: 's1' },
+          before: { shape, index: 0 },
+        },
+        {
+          type: 'project.update',
+          meta,
+          payload: { updates: { name: 'X' } },
+          before: { updates: { name: 'Y' } },
+        },
       ];
 
       for (const op of operations) {

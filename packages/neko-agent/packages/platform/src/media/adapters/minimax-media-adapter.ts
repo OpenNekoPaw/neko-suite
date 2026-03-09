@@ -80,7 +80,7 @@ export class MiniMaxMediaAdapter extends BaseMediaAdapter {
   async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/v1/video_generation`;
 
@@ -92,7 +92,7 @@ export class MiniMaxMediaAdapter extends BaseMediaAdapter {
     const { data, error } = await this.request<MiniMaxVideoResponse>(
       url,
       { method: 'POST', body: JSON.stringify(body) },
-      provider
+      provider,
     );
 
     if (error) {
@@ -120,16 +120,13 @@ export class MiniMaxMediaAdapter extends BaseMediaAdapter {
   /**
    * Get task status
    */
-  async getTaskStatus(
-    externalTaskId: string,
-    provider: Provider
-  ): Promise<MediaAdapterResult> {
+  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/v1/query/video_generation?task_id=${externalTaskId}`;
 
     const { data, error } = await this.request<MiniMaxTaskStatusResponse>(
       url,
       { method: 'GET' },
-      provider
+      provider,
     );
 
     if (error) {
@@ -170,16 +167,13 @@ export class MiniMaxMediaAdapter extends BaseMediaAdapter {
   /**
    * Get file download URL
    */
-  private async getFileUrl(
-    fileId: string,
-    provider: Provider
-  ): Promise<MediaOutput[] | undefined> {
+  private async getFileUrl(fileId: string, provider: Provider): Promise<MediaOutput[] | undefined> {
     const url = `${provider.apiUrl}/v1/files/retrieve?file_id=${fileId}`;
 
     const { data, error } = await this.request<MiniMaxFileResponse>(
       url,
       { method: 'GET' },
-      provider
+      provider,
     );
 
     if (error || data?.base_resp.status_code !== 0) {
@@ -202,5 +196,4 @@ export class MiniMaxMediaAdapter extends BaseMediaAdapter {
   async cancelTask(_externalTaskId: string, _provider: Provider): Promise<void> {
     // MiniMax does not support task cancellation
   }
-
 }

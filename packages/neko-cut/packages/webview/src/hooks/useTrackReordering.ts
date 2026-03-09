@@ -26,26 +26,32 @@ export function useTrackReordering({ reorderTrack }: TrackReorderingOptions) {
     }
   }, []);
 
-  const handleTrackDragOver = useCallback((e: React.DragEvent, trackIndex: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (draggingTrackId) {
-      setDragOverTrackIndex(trackIndex);
-    }
-  }, [draggingTrackId]);
+  const handleTrackDragOver = useCallback(
+    (e: React.DragEvent, trackIndex: number) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (draggingTrackId) {
+        setDragOverTrackIndex(trackIndex);
+      }
+    },
+    [draggingTrackId],
+  );
 
   const handleTrackDragLeave = useCallback(() => {
     setDragOverTrackIndex(null);
   }, []);
 
-  const handleTrackDrop = useCallback((e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    if (draggingTrackId) {
-      reorderTrack(draggingTrackId, targetIndex);
-    }
-    setDraggingTrackId(null);
-    setDragOverTrackIndex(null);
-  }, [draggingTrackId, reorderTrack]);
+  const handleTrackDrop = useCallback(
+    (e: React.DragEvent, targetIndex: number) => {
+      e.preventDefault();
+      if (draggingTrackId) {
+        reorderTrack(draggingTrackId, targetIndex);
+      }
+      setDraggingTrackId(null);
+      setDragOverTrackIndex(null);
+    },
+    [draggingTrackId, reorderTrack],
+  );
 
   const handleTrackDragEnd = useCallback(() => {
     setDraggingTrackId(null);

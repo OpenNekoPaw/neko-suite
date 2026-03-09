@@ -145,7 +145,11 @@ export function Toolbar() {
           title={`Frame Align ${frameAlignEnabled ? 'ON' : 'OFF'} (F)`}
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm1 2h10v2H5V4zm0 4h2v2H5V8zm4 0h2v2H9V8zm4 0h2v2h-2V8zm-8 4h2v2H5v-2zm4 0h2v2H9v-2zm4 0h2v2h-2v-2z" clipRule="evenodd" />
+            <path
+              fillRule="evenodd"
+              d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm1 2h10v2H5V4zm0 4h2v2H5V8zm4 0h2v2H9V8zm4 0h2v2h-2V8zm-8 4h2v2H5v-2zm4 0h2v2H9v-2zm4 0h2v2h-2v-2z"
+              clipRule="evenodd"
+            />
           </svg>
         </button>
       </div>
@@ -159,7 +163,11 @@ export function Toolbar() {
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" />
-            <path fillRule="evenodd" d="M5 8a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1z" clipRule="evenodd" />
+            <path
+              fillRule="evenodd"
+              d="M5 8a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1z"
+              clipRule="evenodd"
+            />
           </svg>
         </button>
 
@@ -174,7 +182,11 @@ export function Toolbar() {
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" />
-            <path fillRule="evenodd" d="M8 5a1 1 0 011 1v1h1a1 1 0 110 2H9v1a1 1 0 11-2 0V9H6a1 1 0 110-2h1V6a1 1 0 011-1z" clipRule="evenodd" />
+            <path
+              fillRule="evenodd"
+              d="M8 5a1 1 0 011 1v1h1a1 1 0 110 2H9v1a1 1 0 11-2 0V9H6a1 1 0 110-2h1V6a1 1 0 011-1z"
+              clipRule="evenodd"
+            />
           </svg>
         </button>
 

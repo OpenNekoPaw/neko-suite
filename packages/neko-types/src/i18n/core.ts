@@ -25,10 +25,7 @@ export function normalizeLocale(raw: string): SupportedLocale {
  * Supports named params: "Hello {name}" + { name: 'World' } → "Hello World"
  * Supports positional params: "Zoom: {0}%" + { '0': 100 } → "Zoom: 100%"
  */
-export function interpolate(
-  template: string,
-  params?: Record<string, string | number>,
-): string {
+export function interpolate(template: string, params?: Record<string, string | number>): string {
   if (!params) return template;
   return template.replace(/\{(\w+)\}/g, (match, key: string) => {
     const value = params[key];
@@ -56,10 +53,7 @@ export class I18nService implements II18nService {
   private readonly bundles = new Map<string, Map<SupportedLocale, MessageBundle>>();
   private readonly listeners: Array<(locale: SupportedLocale) => void> = [];
 
-  constructor(
-    initialLocale: SupportedLocale = 'en',
-    fallbackLocale: SupportedLocale = 'en',
-  ) {
+  constructor(initialLocale: SupportedLocale = 'en', fallbackLocale: SupportedLocale = 'en') {
     this._locale = initialLocale;
     this.fallbackLocale = fallbackLocale;
   }
@@ -68,11 +62,7 @@ export class I18nService implements II18nService {
     return this._locale;
   }
 
-  registerBundle(
-    namespace: string,
-    locale: SupportedLocale,
-    bundle: MessageBundle,
-  ): void {
+  registerBundle(namespace: string, locale: SupportedLocale, bundle: MessageBundle): void {
     let localeMap = this.bundles.get(namespace);
     if (!localeMap) {
       localeMap = new Map();

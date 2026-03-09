@@ -39,7 +39,7 @@ export function useEventStream(adapter: IEventAdapter | null) {
         }
       }
     },
-    [adapter]
+    [adapter],
   );
 
   const abort = useCallback(() => {

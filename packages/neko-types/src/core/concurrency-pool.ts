@@ -218,9 +218,7 @@ export class ConcurrencyPool {
   /**
    * Run multiple operations, settling all (no early failure)
    */
-  async runAllSettled<T>(
-    operations: Array<() => Promise<T>>
-  ): Promise<PromiseSettledResult<T>[]> {
+  async runAllSettled<T>(operations: Array<() => Promise<T>>): Promise<PromiseSettledResult<T>[]> {
     return Promise.allSettled(operations.map((op) => this.run(op)));
   }
 
@@ -303,7 +301,7 @@ export class ConcurrencyPool {
  */
 export function withConcurrencyLimit<T extends (...args: unknown[]) => Promise<unknown>>(
   fn: T,
-  pool: ConcurrencyPool
+  pool: ConcurrencyPool,
 ): T {
   return (async (...args: Parameters<T>) => {
     return pool.run(() => fn(...args));

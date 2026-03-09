@@ -19,11 +19,7 @@ import { ConversationHandler } from './conversationHandler';
 import { FileReference, MessageAttachment } from './types';
 import { AttachmentProcessor } from './message/attachmentProcessor';
 import { AgentStreamProcessor } from './message/agentStreamProcessor';
-import {
-  createInputProcessor,
-  type InputProcessor,
-  type IFileReader,
-} from '@neko/agent';
+import { createInputProcessor, type InputProcessor, type IFileReader } from '@neko/agent';
 import { getLogger } from '../base';
 
 const logger = getLogger('MessageHandler');
@@ -38,7 +34,10 @@ interface AgentStateSnapshot {
 }
 
 export class MessageHandler {
-  private _agentStates = new Map<string, { phase: AgentPhase; toolName?: string; startedAt: number }>();
+  private _agentStates = new Map<
+    string,
+    { phase: AgentPhase; toolName?: string; startedAt: number }
+  >();
   private _inputProcessor: InputProcessor | null = null;
   private readonly _attachmentProcessor: AttachmentProcessor;
   private readonly _streamProcessor: AgentStreamProcessor;
@@ -50,7 +49,7 @@ export class MessageHandler {
     private readonly _agentManager: IAgentManager | undefined,
     private readonly _editorRegistry: IEditorRegistry | undefined,
     private readonly _getSystemPrompt: () => string,
-    private readonly _platform?: Platform
+    private readonly _platform?: Platform,
   ) {
     this._attachmentProcessor = new AttachmentProcessor();
     this._streamProcessor = new AgentStreamProcessor({
@@ -115,10 +114,16 @@ export class MessageHandler {
         async glob(pattern: string, options?: { cwd?: string }): Promise<string[]> {
           const cwd = options?.cwd ?? workspaceRoot;
           const relativePattern = new vscode.RelativePattern(cwd, pattern);
-          const files = await vscode.workspace.findFiles(relativePattern, '**/node_modules/**', 100);
-          return files.map(f => vscode.workspace.asRelativePath(f, false));
+          const files = await vscode.workspace.findFiles(
+            relativePattern,
+            '**/node_modules/**',
+            100,
+          );
+          return files.map((f) => vscode.workspace.asRelativePath(f, false));
         },
-        async stat(filePath: string): Promise<{ size: number; isFile: boolean; isDirectory: boolean }> {
+        async stat(
+          filePath: string,
+        ): Promise<{ size: number; isFile: boolean; isDirectory: boolean }> {
           const fullPath = path.isAbsolute(filePath)
             ? vscode.Uri.file(filePath)
             : vscode.Uri.joinPath(vscode.Uri.file(workspaceRoot), filePath);
@@ -168,7 +173,7 @@ export class MessageHandler {
     modelId?: string,
     attachments?: MessageAttachment[],
     promptId?: string,
-    requestConversationId?: string
+    requestConversationId?: string,
   ): Promise<void> {
     const conversationId = requestConversationId || this._conversations.ensureActive();
 
@@ -176,7 +181,8 @@ export class MessageHandler {
     const { message: parsedMessage, fileContents } = await this._parseFileReferences(messageText);
 
     // Process attachments via AttachmentProcessor
-    const { textContent: attachmentText, imageAttachments } = await this._attachmentProcessor.processAttachments(attachments);
+    const { textContent: attachmentText, imageAttachments } =
+      await this._attachmentProcessor.processAttachments(attachments);
 
     // Build enhanced message with file contents and attachment text
     let enhancedMessage = parsedMessage;
@@ -204,7 +210,15 @@ export class MessageHandler {
 
     // Execute with agent
     if (this._agentManager && this._platform) {
-      await this._executeWithAgent(webview, conversationId, enhancedMessage, providerId, modelId, imageAttachments, promptId);
+      await this._executeWithAgent(
+        webview,
+        conversationId,
+        enhancedMessage,
+        providerId,
+        modelId,
+        imageAttachments,
+        promptId,
+      );
     } else {
       this._sendFallbackResponse(webview);
     }
@@ -221,7 +235,7 @@ export class MessageHandler {
     providerId?: string,
     modelId?: string,
     imageAttachments?: Array<{ type: 'base64'; media_type: string; data: string }>,
-    promptId?: string
+    promptId?: string,
   ): Promise<void> {
     let confirmationDisposable: { dispose(): void } | undefined;
 
@@ -324,11 +338,16 @@ export class MessageHandler {
               timestamp,
             });
           },
-        }
+        },
       );
 
       // Store assistant message
-      if ((result.accumulatedResponse || result.collectedToolCalls.length > 0 || result.accumulatedThinking) && !result.hasError) {
+      if (
+        (result.accumulatedResponse ||
+          result.collectedToolCalls.length > 0 ||
+          result.accumulatedThinking) &&
+        !result.hasError
+      ) {
         const assistantMessage: ConversationMessage = {
           id: this._generateId(),
           role: 'assistant',
@@ -365,7 +384,8 @@ export class MessageHandler {
   private _sendFallbackResponse(webview: vscode.Webview): void {
     webview.postMessage({
       type: 'error',
-      message: 'No AI provider configured. Please go to Settings and add an AI provider (Claude, OpenAI, etc.) with your API key.',
+      message:
+        'No AI provider configured. Please go to Settings and add an AI provider (Claude, OpenAI, etc.) with your API key.',
     });
   }
 
@@ -373,7 +393,7 @@ export class MessageHandler {
     conversationId: string,
     phase: AgentPhase,
     toolName: string | undefined,
-    startedAt: number
+    startedAt: number,
   ): void {
     if (phase === 'idle') {
       this._agentStates.delete(conversationId);
@@ -403,8 +423,8 @@ export class MessageHandler {
       const result = await inputProcessor.process(messageText);
 
       const fileContents: FileReference[] = result.fileReferences
-        .filter(ref => ref.content)
-        .map(ref => ({
+        .filter((ref) => ref.content)
+        .map((ref) => ({
           path: ref.path,
           content: ref.content!,
         }));
@@ -438,7 +458,7 @@ export class MessageHandler {
 
       const files = await vscode.workspace.findFiles(pattern, excludePattern, 30);
 
-      const projectFiles = files.map(file => {
+      const projectFiles = files.map((file) => {
         const relativePath = vscode.workspace.asRelativePath(file);
         const name = relativePath.split('/').pop() || relativePath;
 

@@ -118,7 +118,11 @@ vi.mock('vscode', () => ({
   },
   Uri: {
     file: (path: string) => ({ fsPath: path, toString: () => `file://${path}`, scheme: 'file' }),
-    parse: (str: string) => ({ fsPath: str.replace('file://', ''), toString: () => str, scheme: 'file' }),
+    parse: (str: string) => ({
+      fsPath: str.replace('file://', ''),
+      toString: () => str,
+      scheme: 'file',
+    }),
   },
   EventEmitter: class {
     private _listeners: any[] = [];
@@ -127,7 +131,7 @@ vi.mock('vscode', () => ({
       return { dispose: () => {} };
     };
     fire(data: any) {
-      this._listeners.forEach(l => l(data));
+      this._listeners.forEach((l) => l(data));
     }
     dispose() {}
   },
@@ -202,34 +206,45 @@ function createMockIndex(files: Record<string, string>): IWorkspaceIndex {
 
     for (const element of doc.elements) {
       const range = new MockRange(
-        element.range.start.line, element.range.start.character,
-        element.range.end.line, element.range.end.character
+        element.range.start.line,
+        element.range.start.character,
+        element.range.end.line,
+        element.range.end.character,
       );
       const uri = mockUri(uriStr);
 
       if (element.type === 'character') {
         const name = (element as any).name;
         if (!characterIndex.has(name)) characterIndex.set(name, []);
-        characterIndex.get(name)!.push({ uri: uri as any, name, kind: 'character', range: range as any });
+        characterIndex
+          .get(name)!
+          .push({ uri: uri as any, name, kind: 'character', range: range as any });
       } else if (element.type === 'scene_heading') {
         const location = (element as any).location;
         if (location) {
           if (!sceneIndex.has(location)) sceneIndex.set(location, []);
-          sceneIndex.get(location)!.push({ uri: uri as any, name: location, kind: 'scene', range: range as any });
+          sceneIndex
+            .get(location)!
+            .push({ uri: uri as any, name: location, kind: 'scene', range: range as any });
         }
       } else if (element.type === 'section') {
         const text = (element as any).text;
         if (!sectionIndex.has(text)) sectionIndex.set(text, []);
-        sectionIndex.get(text)!.push({ uri: uri as any, name: text, kind: 'section', range: range as any });
+        sectionIndex
+          .get(text)!
+          .push({ uri: uri as any, name: text, kind: 'section', range: range as any });
       }
     }
   }
 
-  const sortCurrentFirst = (locs: SymbolLocation[], currentUri?: any): readonly SymbolLocation[] => {
+  const sortCurrentFirst = (
+    locs: SymbolLocation[],
+    currentUri?: any,
+  ): readonly SymbolLocation[] => {
     if (!currentUri || locs.length === 0) return locs;
     const currentStr = currentUri.toString();
-    const current = locs.filter(l => l.uri.toString() === currentStr);
-    const rest = locs.filter(l => l.uri.toString() !== currentStr);
+    const current = locs.filter((l) => l.uri.toString() === currentStr);
+    const rest = locs.filter((l) => l.uri.toString() !== currentStr);
     return [...current, ...rest];
   };
 
@@ -304,8 +319,8 @@ MARY (V.O.)
 Hi there!`;
 
     const doc = parse(text);
-    const characters = doc.elements.filter(e => e.type === 'character');
-    const dialogues = doc.elements.filter(e => e.type === 'dialogue');
+    const characters = doc.elements.filter((e) => e.type === 'character');
+    const dialogues = doc.elements.filter((e) => e.type === 'dialogue');
 
     expect(characters).toHaveLength(2);
     expect(dialogues).toHaveLength(2);
@@ -331,7 +346,7 @@ INT. OFFICE - DAY
 JOHN enters.`;
 
     const doc = parse(text);
-    const sections = doc.elements.filter(e => e.type === 'section');
+    const sections = doc.elements.filter((e) => e.type === 'section');
 
     expect(sections).toHaveLength(3);
     if (sections[0]?.type === 'section') {
@@ -420,11 +435,11 @@ Hello!`;
     expect(scene?.range.start.line).toBe(0);
 
     // Character at line 2 (after blank line)
-    const character = doc.elements.find(e => e.type === 'character');
+    const character = doc.elements.find((e) => e.type === 'character');
     expect(character?.range.start.line).toBe(2);
 
     // Dialogue at line 3
-    const dialogue = doc.elements.find(e => e.type === 'dialogue');
+    const dialogue = doc.elements.find((e) => e.type === 'dialogue');
     expect(dialogue?.range.start.line).toBe(3);
   });
 });
@@ -655,9 +670,9 @@ describe('Mock Index — Multi-file indexing', () => {
     // JOHN appears 2 times in file A, 1 time in file B
     expect(johnLocs.length).toBe(3);
 
-    const fileUris = johnLocs.map(l => l.uri.fsPath);
-    expect(fileUris.filter(f => f === '/project/a.fountain')).toHaveLength(2);
-    expect(fileUris.filter(f => f === '/project/b.fountain')).toHaveLength(1);
+    const fileUris = johnLocs.map((l) => l.uri.fsPath);
+    expect(fileUris.filter((f) => f === '/project/a.fountain')).toHaveLength(2);
+    expect(fileUris.filter((f) => f === '/project/b.fountain')).toHaveLength(1);
   });
 
   it('should find character definition (first occurrence, current file preferred)', () => {
@@ -672,7 +687,7 @@ describe('Mock Index — Multi-file indexing', () => {
     const officeLocs = index.findSceneLocations('OFFICE');
     // OFFICE appears in both files
     expect(officeLocs.length).toBe(2);
-    const files = new Set(officeLocs.map(l => l.uri.fsPath));
+    const files = new Set(officeLocs.map((l) => l.uri.fsPath));
     expect(files.has('/project/a.fountain')).toBe(true);
     expect(files.has('/project/b.fountain')).toBe(true);
   });
@@ -690,13 +705,13 @@ describe('Mock Index — Multi-file indexing', () => {
   it('should search symbols by query', () => {
     const results = index.searchSymbols('john');
     expect(results.length).toBeGreaterThan(0);
-    expect(results.every(r => r.name === 'JOHN')).toBe(true);
+    expect(results.every((r) => r.name === 'JOHN')).toBe(true);
   });
 
   it('should search symbols case-insensitively', () => {
     const results = index.searchSymbols('OFFICE');
     expect(results.length).toBeGreaterThan(0);
-    expect(results.every(r => r.name === 'OFFICE')).toBe(true);
+    expect(results.every((r) => r.name === 'OFFICE')).toBe(true);
   });
 
   it('should return empty for unknown symbols', () => {
@@ -711,7 +726,6 @@ describe('Mock Index — Multi-file indexing', () => {
 // ============================================================
 
 describe('DefinitionProvider — Cross-file', () => {
-
   it('should find character definition across files', async () => {
     const index = createMockIndex({
       '/project/a.fountain': FILE_A,
@@ -723,7 +737,7 @@ describe('DefinitionProvider — Cross-file', () => {
     const result = await provider.provideDefinition(
       doc,
       { line: 4, character: 0 }, // JOHN line in file B
-      {} as any
+      {} as any,
     );
 
     expect(result).toBeDefined();
@@ -736,18 +750,13 @@ describe('DefinitionProvider — Cross-file', () => {
     const provider = new FountainDefinitionProvider(index);
     const doc = createMockDocument('hello world', '/test.fountain');
 
-    const result = await provider.provideDefinition(
-      doc,
-      { line: 0, character: 0 },
-      {} as any
-    );
+    const result = await provider.provideDefinition(doc, { line: 0, character: 0 }, {} as any);
 
     expect(result).toBeNull();
   });
 });
 
 describe('ReferenceProvider — Cross-file', () => {
-
   it('should find all character references across files', async () => {
     const index = createMockIndex({
       '/project/a.fountain': FILE_A,
@@ -760,7 +769,7 @@ describe('ReferenceProvider — Cross-file', () => {
       doc,
       { line: 4, character: 0 }, // JOHN line in file A
       {} as any,
-      {} as any
+      {} as any,
     );
 
     // JOHN appears 2x in A, 1x in B = 3 total
@@ -772,7 +781,6 @@ describe('ReferenceProvider — Cross-file', () => {
 });
 
 describe('CompletionProvider — Cross-file', () => {
-
   it('should suggest characters from all files', async () => {
     const index = createMockIndex({
       '/project/a.fountain': FILE_A,
@@ -790,7 +798,7 @@ J`;
       doc,
       { line: 2, character: 1 },
       {} as any,
-      {} as any
+      {} as any,
     );
 
     const charItems = items.filter((i: any) => i.detail === 'Character');
@@ -814,7 +822,7 @@ J`;
       doc,
       { line: 0, character: 5 },
       {} as any,
-      {} as any
+      {} as any,
     );
 
     const locationItems = items.filter((i: any) => i.detail === 'Previous location');
@@ -826,7 +834,6 @@ J`;
 });
 
 describe('WorkspaceSymbolProvider — Cross-file', () => {
-
   it('should return matching symbols from all files', async () => {
     const index = createMockIndex({
       '/project/a.fountain': FILE_A,
@@ -865,7 +872,6 @@ describe('WorkspaceSymbolProvider — Cross-file', () => {
 });
 
 describe('HoverProvider — Cross-file stats', () => {
-
   it('should show cross-file stats when character appears in multiple files', async () => {
     const index = createMockIndex({
       '/project/a.fountain': FILE_A,
@@ -875,11 +881,7 @@ describe('HoverProvider — Cross-file stats', () => {
     const doc = createMockDocument(FILE_A, '/project/a.fountain');
 
     // Hover over JOHN (line 4 in FILE_A)
-    const result = await provider.provideHover(
-      doc,
-      { line: 4, character: 0 },
-      {} as any
-    );
+    const result = await provider.provideHover(doc, { line: 4, character: 0 }, {} as any);
 
     expect(result).toBeDefined();
     const md = result.contents;
@@ -896,11 +898,7 @@ describe('HoverProvider — Cross-file stats', () => {
     const doc = createMockDocument(FILE_A, '/project/a.fountain');
 
     // Hover over MARY (line 7 in FILE_A)
-    const result = await provider.provideHover(
-      doc,
-      { line: 7, character: 0 },
-      {} as any
-    );
+    const result = await provider.provideHover(doc, { line: 7, character: 0 }, {} as any);
 
     expect(result).toBeDefined();
     const md = result.contents;
@@ -911,7 +909,6 @@ describe('HoverProvider — Cross-file stats', () => {
 });
 
 describe('DocumentLinkProvider', () => {
-
   it('should detect [[see: file.fountain]] links', () => {
     const text = `INT. OFFICE - DAY
 
@@ -972,31 +969,33 @@ describe('checkSyntax', () => {
   it('detects unclosed inline note', () => {
     const text = 'This is [[unclosed note\nNext line';
     const diags = checkSyntax(text);
-    expect(diags.some(d => d.severity === 'error' && d.message.includes('[['))).toBe(true);
+    expect(diags.some((d) => d.severity === 'error' && d.message.includes('[['))).toBe(true);
   });
 
   it('passes when note is closed on same line', () => {
     const text = 'This is [[a note]] and continues';
     const diags = checkSyntax(text);
-    expect(diags.filter(d => d.message.includes('[['))).toHaveLength(0);
+    expect(diags.filter((d) => d.message.includes('[['))).toHaveLength(0);
   });
 
   it('detects unclosed boneyard', () => {
     const text = 'Normal line\n/* unclosed boneyard\nAnother line';
     const diags = checkSyntax(text);
-    expect(diags.some(d => d.severity === 'error' && d.message.includes('/*'))).toBe(true);
+    expect(diags.some((d) => d.severity === 'error' && d.message.includes('/*'))).toBe(true);
   });
 
   it('passes when boneyard is closed', () => {
     const text = '/* closed */ normal';
     const diags = checkSyntax(text);
-    expect(diags.filter(d => d.message.includes('/*'))).toHaveLength(0);
+    expect(diags.filter((d) => d.message.includes('/*'))).toHaveLength(0);
   });
 
   it('detects empty transition', () => {
     const text = 'INT. OFFICE - DAY\n\n>\n\nSome action';
     const diags = checkSyntax(text);
-    expect(diags.some(d => d.severity === 'warning' && d.message.toLowerCase().includes('transition'))).toBe(true);
+    expect(
+      diags.some((d) => d.severity === 'warning' && d.message.toLowerCase().includes('transition')),
+    ).toBe(true);
   });
 });
 
@@ -1027,8 +1026,8 @@ BOB
 How are you?`;
     const doc = parse(script);
     const diags = checkSemantics(doc);
-    const aliceWarning = diags.find(d => d.message.includes('ALICE'));
+    const aliceWarning = diags.find((d) => d.message.includes('ALICE'));
     expect(aliceWarning?.severity).toBe('warning');
-    expect(diags.find(d => d.message.includes('BOB'))).toBeUndefined();
+    expect(diags.find((d) => d.message.includes('BOB'))).toBeUndefined();
   });
 });

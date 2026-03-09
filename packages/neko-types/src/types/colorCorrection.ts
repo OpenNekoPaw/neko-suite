@@ -96,7 +96,10 @@ export interface CurvesAdjustment {
 }
 
 export const DEFAULT_CURVE: CurveAdjustment = {
-  points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+  points: [
+    { x: 0, y: 0 },
+    { x: 1, y: 1 },
+  ],
   enabled: true,
 };
 
@@ -114,8 +117,14 @@ export const DEFAULT_CURVES_ADJUSTMENT: CurvesAdjustment = {
 
 /** HSL color ranges for selective color adjustment */
 export type HSLColorRange =
-  | 'red' | 'orange' | 'yellow' | 'green'
-  | 'cyan' | 'blue' | 'purple' | 'magenta';
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'green'
+  | 'cyan'
+  | 'blue'
+  | 'purple'
+  | 'magenta';
 
 /** HSL adjustment for a specific color range */
 export interface HSLRangeAdjustment {

@@ -11,12 +11,12 @@ export type AIActionElementType = 'video' | 'image' | 'audio' | 'text' | 'shape'
  * AI action capability requirements
  */
 export type AIActionCapability =
-  | 'text-generation'    // LLM text generation
-  | 'image-generation'   // Image generation (DALL-E, etc.)
-  | 'video-generation'   // Video generation (Sora, Kling, etc.)
-  | 'vision'             // Vision analysis (GPT-4V, Claude Vision)
-  | 'transcription'      // Speech to text (Whisper)
-  | 'translation';       // Text translation
+  | 'text-generation' // LLM text generation
+  | 'image-generation' // Image generation (DALL-E, etc.)
+  | 'video-generation' // Video generation (Sora, Kling, etc.)
+  | 'vision' // Vision analysis (GPT-4V, Claude Vision)
+  | 'transcription' // Speech to text (Whisper)
+  | 'translation'; // Text translation
 
 /**
  * AI Quick Action definition
@@ -195,7 +195,7 @@ export const AI_ACTIONS: AIQuickAction[] = [
  */
 export function getActionsForElementType(
   elementType: AIActionElementType,
-  isMultiSelect: boolean = false
+  isMultiSelect: boolean = false,
 ): AIQuickAction[] {
   return AI_ACTIONS.filter((action) => {
     const typeMatch = action.elementTypes.includes(elementType);
@@ -209,7 +209,7 @@ export function getActionsForElementType(
  */
 export function mapElementTypeToAIType(
   elementType: 'media' | 'text' | 'audio' | 'shape' | 'subtitle',
-  mediaType?: 'video' | 'image'
+  mediaType?: 'video' | 'image',
 ): AIActionElementType {
   switch (elementType) {
     case 'media':

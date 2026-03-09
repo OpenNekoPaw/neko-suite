@@ -31,8 +31,16 @@ export interface MediaNodeProps {
   onSelect?: (nodeId: string, multi: boolean) => void;
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
-  onResize?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
-  onResizeEnd?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  onResize?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
+  onResizeEnd?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   /** 媒体文件的基础 URL（用于构建完整路径） */
   mediaBaseUrl?: string;
@@ -80,7 +88,11 @@ function getFileName(path: string): string {
 }
 
 function getMediaUrl(assetPath: string, baseUrl?: string): string {
-  if (assetPath.startsWith('http://') || assetPath.startsWith('https://') || assetPath.startsWith('blob:')) {
+  if (
+    assetPath.startsWith('http://') ||
+    assetPath.startsWith('https://') ||
+    assetPath.startsWith('blob:')
+  ) {
     return assetPath;
   }
   if (baseUrl) {
@@ -122,7 +134,11 @@ export function MediaNode({
 
   // If another node starts playing, stop this one
   useEffect(() => {
-    if (activePlayingNodeId && activePlayingNodeId !== node.id && (viewMode === 'playing' || viewMode === 'probing')) {
+    if (
+      activePlayingNodeId &&
+      activePlayingNodeId !== node.id &&
+      (viewMode === 'playing' || viewMode === 'probing')
+    ) {
       handleStop();
     }
   }, [activePlayingNodeId, node.id, viewMode]);
@@ -195,60 +211,72 @@ export function MediaNode({
   }, [node.id, assetPath, duration]);
 
   // Start inline playback
-  const handlePlay = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (mediaType !== 'video' && mediaType !== 'audio') return;
-    setError(null);
-    setViewMode('probing');
-    setActivePlayingNode(node.id);
+  const handlePlay = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (mediaType !== 'video' && mediaType !== 'audio') return;
+      setError(null);
+      setViewMode('probing');
+      setActivePlayingNode(node.id);
 
-    // If we have cached mediaInfo from a previous probe, skip probe and go straight to play
-    if (cachedMediaInfoRef.current) {
-      getVscode()?.postMessage({
-        type: 'media:play',
-        nodeId: node.id,
-        assetPath,
-        mediaInfo: cachedMediaInfoRef.current,
-        startTime: lastPlaybackTimeRef.current,
-      });
-    } else {
-      getVscode()?.postMessage({
-        type: 'media:probe',
-        nodeId: node.id,
-        assetPath,
-      });
-    }
-  }, [assetPath, mediaType, node.id, setActivePlayingNode]);
+      // If we have cached mediaInfo from a previous probe, skip probe and go straight to play
+      if (cachedMediaInfoRef.current) {
+        getVscode()?.postMessage({
+          type: 'media:play',
+          nodeId: node.id,
+          assetPath,
+          mediaInfo: cachedMediaInfoRef.current,
+          startTime: lastPlaybackTimeRef.current,
+        });
+      } else {
+        getVscode()?.postMessage({
+          type: 'media:probe',
+          nodeId: node.id,
+          assetPath,
+        });
+      }
+    },
+    [assetPath, mediaType, node.id, setActivePlayingNode],
+  );
 
   // Stop playback
-  const handleStop = useCallback((stoppedTime?: number) => {
-    if (typeof stoppedTime === 'number') {
-      // If playback reached the end, reset to beginning
-      lastPlaybackTimeRef.current = stoppedTime >= (duration ?? 0) ? 0 : stoppedTime;
-    }
-    setViewMode('thumbnail');
-    setStreamInfo(null);
-    if (activePlayingNodeId === node.id) {
-      setActivePlayingNode(null);
-    }
-    getVscode()?.postMessage({ type: 'media:stop', nodeId: node.id });
-  }, [node.id, activePlayingNodeId, setActivePlayingNode, duration]);
+  const handleStop = useCallback(
+    (stoppedTime?: number) => {
+      if (typeof stoppedTime === 'number') {
+        // If playback reached the end, reset to beginning
+        lastPlaybackTimeRef.current = stoppedTime >= (duration ?? 0) ? 0 : stoppedTime;
+      }
+      setViewMode('thumbnail');
+      setStreamInfo(null);
+      if (activePlayingNodeId === node.id) {
+        setActivePlayingNode(null);
+      }
+      getVscode()?.postMessage({ type: 'media:stop', nodeId: node.id });
+    },
+    [node.id, activePlayingNodeId, setActivePlayingNode, duration],
+  );
 
   // Open in neko-preview (full editor)
-  const openInPreview = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    getVscode()?.postMessage({
-      type: 'openMediaPreview',
-      assetPath,
-      mediaType,
-    });
-  }, [assetPath, mediaType]);
+  const openInPreview = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      getVscode()?.postMessage({
+        type: 'openMediaPreview',
+        assetPath,
+        mediaType,
+      });
+    },
+    [assetPath, mediaType],
+  );
 
   // Image: switch to inline viewer
-  const switchToImageViewer = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (mediaType === 'image') setViewMode('image-viewer');
-  }, [mediaType]);
+  const switchToImageViewer = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (mediaType === 'image') setViewMode('image-viewer');
+    },
+    [mediaType],
+  );
 
   // Image: switch back to thumbnail
   const switchToThumbnail = useCallback((e: React.MouseEvent) => {
@@ -309,9 +337,8 @@ export function MediaNode({
     }
 
     // Thumbnail mode (default)
-    const handleClick = (mediaType === 'video' || mediaType === 'audio')
-      ? handlePlay
-      : switchToImageViewer;
+    const handleClick =
+      mediaType === 'video' || mediaType === 'audio' ? handlePlay : switchToImageViewer;
 
     return (
       <div
@@ -320,7 +347,7 @@ export function MediaNode({
       >
         {thumbnailPath || capturedThumbnail || mediaType === 'image' ? (
           <img
-            src={mediaType === 'image' ? mediaUrl : (posterUrl || capturedThumbnail || mediaUrl)}
+            src={mediaType === 'image' ? mediaUrl : posterUrl || capturedThumbnail || mediaUrl}
             alt={fileName}
             className="w-full h-full object-cover"
             draggable={false}
@@ -390,7 +417,11 @@ export function MediaNode({
         {/* Info area */}
         <div className="p-2 border-t border-[var(--node-border)]">
           <div className="flex items-center gap-1">
-            <div className="text-sm truncate flex-1" style={{ color: 'var(--toolbar-fg)' }} title={fileName}>
+            <div
+              className="text-sm truncate flex-1"
+              style={{ color: 'var(--toolbar-fg)' }}
+              title={fileName}
+            >
               {fileName || 'Untitled'}
             </div>
             {/* Open in Preview button for video/audio */}
@@ -400,8 +431,19 @@ export function MediaNode({
                 onClick={openInPreview}
                 title="Open in Neko Preview"
               >
-                <svg className="w-3.5 h-3.5" style={{ color: 'var(--toolbar-fg-secondary)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                <svg
+                  className="w-3.5 h-3.5"
+                  style={{ color: 'var(--toolbar-fg-secondary)' }}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                  />
                 </svg>
               </button>
             )}

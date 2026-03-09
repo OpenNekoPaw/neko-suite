@@ -24,43 +24,46 @@ export function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.newProject', async (uri: vscode.Uri) => {
       await createNewProject(uri);
-    })
+    }),
   );
 
   // Command: Add to Timeline
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.addToTimeline', async (uri: vscode.Uri) => {
       await addToTimeline(uri, videoEditorProvider);
-    })
+    }),
   );
 
   // Command: Open in Video Editor
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.openInEditor', async (uri: vscode.Uri) => {
       await openInEditor(uri);
-    })
+    }),
   );
 
   // Command: Select element from outline (internal)
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.selectElement', async (trackId: string, elementId: string) => {
-      // Get the active webview and send a message to select the element
-      const webview = videoEditorProvider.getActiveWebview();
+    vscode.commands.registerCommand(
+      'neko.selectElement',
+      async (trackId: string, elementId: string) => {
+        // Get the active webview and send a message to select the element
+        const webview = videoEditorProvider.getActiveWebview();
 
-      if (!webview) {
-        logger.warn('No active webview found for element selection');
-        return;
-      }
+        if (!webview) {
+          logger.warn('No active webview found for element selection');
+          return;
+        }
 
-      // Send message to webview to select and jump to the element
-      webview.postMessage({
-        type: 'selectElement',
-        trackId,
-        elementId,
-      });
+        // Send message to webview to select and jump to the element
+        webview.postMessage({
+          type: 'selectElement',
+          trackId,
+          elementId,
+        });
 
-      logger.debug(`Selecting element: track=${trackId}, element=${elementId}`);
-    })
+        logger.debug(`Selecting element: track=${trackId}, element=${elementId}`);
+      },
+    ),
   );
 
   // Command: Show Export Panel (triggered from status bar)
@@ -77,9 +80,7 @@ export function registerCommands(
           // The webview ready handler will auto-show the export panel
           return;
         }
-        vscode.window.showWarningMessage(
-          vscode.l10n.t('editor.warning.noProjectOpen')
-        );
+        vscode.window.showWarningMessage(vscode.l10n.t('editor.warning.noProjectOpen'));
         return;
       }
 
@@ -90,14 +91,14 @@ export function registerCommands(
       webview.postMessage({
         type: 'showExportPanel',
       });
-    })
+    }),
   );
 
   // Command: Export Video (non-Webview, uses ExportService directly)
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.exportVideo', async () => {
       await exportVideoCommand(videoEditorProvider);
-    })
+    }),
   );
 
   // Register timeline commands (element, track, effect, transition, animation, render, export)
@@ -138,7 +139,7 @@ async function createNewProject(folderUri: vscode.Uri): Promise<void> {
     const overwrite = await vscode.window.showWarningMessage(
       vscode.l10n.t('project.warning.fileExists', { filename: fileName }),
       vscode.l10n.t('common.yes'),
-      vscode.l10n.t('common.no')
+      vscode.l10n.t('common.no'),
     );
     if (overwrite !== vscode.l10n.t('common.yes')) {
       return;
@@ -157,20 +158,23 @@ async function createNewProject(folderUri: vscode.Uri): Promise<void> {
   // Open the file in the video editor
   await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.videoEditor');
 
-  vscode.window.showInformationMessage(vscode.l10n.t('project.success.created', { filename: fileName }));
+  vscode.window.showInformationMessage(
+    vscode.l10n.t('project.success.created', { filename: fileName }),
+  );
 }
 
 /**
  * Add a media file to the current timeline
  */
-async function addToTimeline(fileUri: vscode.Uri, editorProvider: VideoEditorProvider): Promise<void> {
+async function addToTimeline(
+  fileUri: vscode.Uri,
+  editorProvider: VideoEditorProvider,
+): Promise<void> {
   // Get the active webview
   const webview = editorProvider.getActiveWebview();
 
   if (!webview) {
-    vscode.window.showWarningMessage(
-      vscode.l10n.t('editor.warning.noProjectOpen')
-    );
+    vscode.window.showWarningMessage(vscode.l10n.t('editor.warning.noProjectOpen'));
     return;
   }
 
@@ -200,7 +204,7 @@ async function addToTimeline(fileUri: vscode.Uri, editorProvider: VideoEditorPro
   });
 
   vscode.window.showInformationMessage(
-    vscode.l10n.t('timeline.info.addingToTimeline', { filename: path.basename(relativePath) })
+    vscode.l10n.t('timeline.info.addingToTimeline', { filename: path.basename(relativePath) }),
   );
 }
 
@@ -220,9 +224,7 @@ async function openInEditor(fileUri: vscode.Uri): Promise<void> {
 async function exportVideoCommand(editorProvider: VideoEditorProvider): Promise<void> {
   const docUri = editorProvider.getActiveDocumentUri();
   if (!docUri) {
-    vscode.window.showWarningMessage(
-      vscode.l10n.t('editor.warning.noProjectOpen')
-    );
+    vscode.window.showWarningMessage(vscode.l10n.t('editor.warning.noProjectOpen'));
     return;
   }
 
@@ -238,7 +240,7 @@ async function exportVideoCommand(editorProvider: VideoEditorProvider): Promise<
   }
 
   // Read project data from document
-  const document = vscode.workspace.textDocuments.find(d => d.uri.toString() === docUri);
+  const document = vscode.workspace.textDocuments.find((d) => d.uri.toString() === docUri);
   if (!document) {
     vscode.window.showErrorMessage('Cannot read project data: document not found.');
     return;
@@ -268,7 +270,10 @@ async function exportVideoCommand(editorProvider: VideoEditorProvider): Promise<
 
   const ext = path.extname(saveUri.fsPath).toLowerCase().slice(1);
   const formatMap: Record<string, 'mp4' | 'webm' | 'mov' | 'mkv'> = {
-    mp4: 'mp4', webm: 'webm', mov: 'mov', mkv: 'mkv',
+    mp4: 'mp4',
+    webm: 'webm',
+    mov: 'mov',
+    mkv: 'mkv',
   };
   const format = formatMap[ext] ?? 'mp4';
 
@@ -295,32 +300,32 @@ async function exportVideoCommand(editorProvider: VideoEditorProvider): Promise<
 
         // Subscribe to events
         disposables.push(
-          exportService.onDidProgress(p => {
+          exportService.onDidProgress((p) => {
             progress.report({
               message: `${p.progress}% — Frame ${p.currentFrame}/${p.totalFrames}`,
               increment: undefined,
             });
-          })
+          }),
         );
 
         disposables.push(
-          exportService.onDidComplete(result => {
+          exportService.onDidComplete((result) => {
             cleanup();
             if (result.success) {
               vscode.window.showInformationMessage(
-                `Export completed: ${path.basename(saveUri.fsPath)}`
+                `Export completed: ${path.basename(saveUri.fsPath)}`,
               );
             }
             resolve();
-          })
+          }),
         );
 
         disposables.push(
-          exportService.onDidError(error => {
+          exportService.onDidError((error) => {
             cleanup();
             handleError(error, { showToUser: true, severity: 'error' });
             resolve();
-          })
+          }),
         );
 
         disposables.push(
@@ -328,7 +333,7 @@ async function exportVideoCommand(editorProvider: VideoEditorProvider): Promise<
             cleanup();
             vscode.window.showInformationMessage('Export cancelled.');
             resolve();
-          })
+          }),
         );
 
         // Handle cancellation from progress notification
@@ -343,12 +348,12 @@ async function exportVideoCommand(editorProvider: VideoEditorProvider): Promise<
         }
 
         // Start the export
-        exportService.startExport(project, config).catch(error => {
+        exportService.startExport(project, config).catch((error) => {
           cleanup();
           handleError(error, { showToUser: true, severity: 'error' });
           resolve();
         });
       });
-    }
+    },
   );
 }

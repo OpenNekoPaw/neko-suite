@@ -6,13 +6,7 @@ import type { CanvasNode, CanvasConnection } from '@neko/shared';
 // Test Helpers
 // =============================================================================
 
-function createNode(
-  id: string,
-  x = 0,
-  y = 0,
-  width = 100,
-  height = 80
-): CanvasNode {
+function createNode(id: string, x = 0, y = 0, width = 100, height = 80): CanvasNode {
   return {
     id,
     type: 'annotation',
@@ -23,11 +17,7 @@ function createNode(
   };
 }
 
-function createConnection(
-  id: string,
-  sourceId: string,
-  targetId: string
-): CanvasConnection {
+function createConnection(id: string, sourceId: string, targetId: string): CanvasConnection {
   return {
     id,
     sourceId,
@@ -53,11 +43,7 @@ describe('clipboardStore', () => {
   });
 
   it('copy should store selected nodes', () => {
-    const nodes = [
-      createNode('a', 10, 20),
-      createNode('b', 100, 200),
-      createNode('c', 300, 400),
-    ];
+    const nodes = [createNode('a', 10, 20), createNode('b', 100, 200), createNode('c', 300, 400)];
     const connections: CanvasConnection[] = [];
 
     useClipboardStore.getState().copy(['a', 'b'], nodes, connections);
@@ -70,11 +56,7 @@ describe('clipboardStore', () => {
   });
 
   it('copy should only store inter-connections', () => {
-    const nodes = [
-      createNode('a'),
-      createNode('b'),
-      createNode('c'),
-    ];
+    const nodes = [createNode('a'), createNode('b'), createNode('c')];
     const connections = [
       createConnection('conn-ab', 'a', 'b'), // both selected
       createConnection('conn-ac', 'a', 'c'), // c not selected
@@ -154,11 +136,7 @@ describe('clipboardStore', () => {
     const nodes = [createNode('a', 100, 200)];
     const connections: CanvasConnection[] = [];
 
-    const result = useClipboardStore.getState().duplicate(
-      ['a'],
-      nodes,
-      connections
-    );
+    const result = useClipboardStore.getState().duplicate(['a'], nodes, connections);
 
     expect(result).not.toBeNull();
     expect(result?.nodes).toHaveLength(1);

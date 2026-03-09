@@ -22,18 +22,19 @@ interface DiffHeaderProps {
   mediaType?: MediaType;
 }
 
-const DiffHeader = memo(function DiffHeader({
-  filePath,
-  gitRef,
-  mediaType,
-}: DiffHeaderProps) {
+const DiffHeader = memo(function DiffHeader({ filePath, gitRef, mediaType }: DiffHeaderProps) {
   const getMediaTypeIcon = () => {
     switch (mediaType) {
-      case 'image': return '🖼️';
-      case 'video': return '🎬';
-      case 'audio': return '🎵';
-      case 'timeline': return '🎞️';
-      default: return '📄';
+      case 'image':
+        return '🖼️';
+      case 'video':
+        return '🎬';
+      case 'audio':
+        return '🎵';
+      case 'timeline':
+        return '🎞️';
+      default:
+        return '📄';
     }
   };
 
@@ -109,7 +110,7 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
       setCurrentTime(time);
       onTimeChange?.(time);
     },
-    [onTimeChange]
+    [onTimeChange],
   );
 
   const renderViewer = () => {

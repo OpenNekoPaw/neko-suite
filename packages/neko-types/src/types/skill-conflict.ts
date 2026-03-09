@@ -101,17 +101,14 @@ export interface ISkillConflictResolver {
   /**
    * Check if activating a skill would cause conflicts
    */
-  checkConflicts(
-    skillName: string,
-    activeSkills: string[]
-  ): SkillConflict | null;
+  checkConflicts(skillName: string, activeSkills: string[]): SkillConflict | null;
 
   /**
    * Resolve a skill conflict
    */
   resolveConflict(
     conflict: SkillConflict,
-    strategy?: ConflictResolutionStrategy
+    strategy?: ConflictResolutionStrategy,
   ): ConflictResolutionResult;
 
   /**
@@ -171,14 +168,23 @@ export interface SkillFrontmatterWithConflict {
  * Parse conflict configuration from frontmatter
  */
 export function parseConflictConfig(
-  frontmatter: SkillFrontmatterWithConflict
+  frontmatter: SkillFrontmatterWithConflict,
 ): SkillConflictConfig {
   return {
-    conflicts: frontmatter.conflicts?.split(',').map((s) => s.trim()).filter(Boolean),
+    conflicts: frontmatter.conflicts
+      ?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
     priority: frontmatter.priority,
     maxConcurrent: frontmatter['max-concurrent'],
     mergeMode: frontmatter['merge-mode'],
-    mergeableWith: frontmatter['mergeable-with']?.split(',').map((s) => s.trim()).filter(Boolean),
-    dependencies: frontmatter.dependencies?.split(',').map((s) => s.trim()).filter(Boolean),
+    mergeableWith: frontmatter['mergeable-with']
+      ?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    dependencies: frontmatter.dependencies
+      ?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
   };
 }

@@ -20,8 +20,16 @@ export interface UseNodeResizeOptions {
   viewport: CanvasViewport;
   minWidth?: number;
   minHeight?: number;
-  onResize?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
-  onResizeEnd?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  onResize?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
+  onResizeEnd?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
   disabled?: boolean;
 }
 
@@ -64,17 +72,20 @@ export function useNodeResize({
     }
   }, [initialSize, initialPosition, isResizing]);
 
-  const startResize = useCallback((handle: ResizeHandle, e: React.MouseEvent) => {
-    if (disabled) return;
-    e.stopPropagation();
-    e.preventDefault();
+  const startResize = useCallback(
+    (handle: ResizeHandle, e: React.MouseEvent) => {
+      if (disabled) return;
+      e.stopPropagation();
+      e.preventDefault();
 
-    handleRef.current = handle;
-    dragStartRef.current = { x: e.clientX, y: e.clientY };
-    sizeStartRef.current = { ...size };
-    posStartRef.current = { ...position };
-    setIsResizing(true);
-  }, [disabled, size, position]);
+      handleRef.current = handle;
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      sizeStartRef.current = { ...size };
+      posStartRef.current = { ...position };
+      setIsResizing(true);
+    },
+    [disabled, size, position],
+  );
 
   useEffect(() => {
     if (!isResizing) return;
@@ -136,7 +147,17 @@ export function useNodeResize({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isResizing, viewport.zoom, nodeId, minWidth, minHeight, onResize, onResizeEnd, size, position]);
+  }, [
+    isResizing,
+    viewport.zoom,
+    nodeId,
+    minWidth,
+    minHeight,
+    onResize,
+    onResizeEnd,
+    size,
+    position,
+  ]);
 
   return { size, position, isResizing, startResize };
 }

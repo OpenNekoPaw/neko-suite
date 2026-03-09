@@ -6,30 +6,26 @@ export { EntityService } from './EntityService';
 export { VariantService } from './VariantService';
 export { FileService, type FileServiceConfig, type MetadataExtractor } from './FileService';
 export {
-	AssetLibrary,
-	type AssetLibraryConfig,
-	type ImportOptions,
-	type ImportResult,
-	type ThumbnailGenerator,
-	type ThumbnailGeneratorResult,
+  AssetLibrary,
+  type AssetLibraryConfig,
+  type ImportOptions,
+  type ImportResult,
+  type ThumbnailGenerator,
+  type ThumbnailGeneratorResult,
 } from './AssetLibrary';
 export {
-	AssetDiffService,
-	type IAssetDiffService,
-	type IGitService,
-	type IAIAnalysisService,
+  AssetDiffService,
+  type IAssetDiffService,
+  type IGitService,
+  type IAIAnalysisService,
 } from './AssetDiffService';
-export {
-	AssetRegistry,
-	type AssetRegistryConfig,
-	type AssetChangeListener,
-} from './AssetRegistry';
+export { AssetRegistry, type AssetRegistryConfig, type AssetChangeListener } from './AssetRegistry';
 export { AssetHealthService, type AssetHealthServiceConfig } from './AssetHealthService';
 export { PathResolver } from './PathResolver';
 export type {
-	FileAccessChecker,
-	FileHealthResult,
-	HealthCheckProgress,
-	PathVariableMap,
+  FileAccessChecker,
+  FileHealthResult,
+  HealthCheckProgress,
+  PathVariableMap,
 } from './types';
 export { generateEntityId, generateVariantId, generateFileId } from './utils';

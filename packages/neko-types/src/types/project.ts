@@ -161,7 +161,15 @@ export function createDefaultTextElement(startTime: number = 0): TextElement {
  */
 export function sortTracksByType(tracks: TimelineTrack[]): TimelineTrack[] {
   return [...tracks].sort((a, b) => {
-    const order: Record<TrackType, number> = { text: 0, shape: 1, video: 2, media: 2, effect: 3, audio: 4, subtitle: 5 };
+    const order: Record<TrackType, number> = {
+      text: 0,
+      shape: 1,
+      video: 2,
+      media: 2,
+      effect: 3,
+      audio: 4,
+      subtitle: 5,
+    };
     return order[a.type] - order[b.type];
   });
 }

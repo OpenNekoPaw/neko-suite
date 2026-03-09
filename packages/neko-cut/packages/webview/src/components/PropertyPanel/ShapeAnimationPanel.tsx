@@ -41,12 +41,7 @@ interface ShapeAnimationPanelProps {
   /** Update shape animation handler */
   onUpdateAnimation: (shapeId: string, animation: ShapeAnimationState) => void;
   /** Add keyframe handler */
-  onAddKeyframe: (
-    shapeId: string,
-    propertyPath: string,
-    time: number,
-    value: number
-  ) => void;
+  onAddKeyframe: (shapeId: string, propertyPath: string, time: number, value: number) => void;
   /** Remove keyframe handler */
   onRemoveKeyframe: (shapeId: string, propertyPath: string, keyframeId: string) => void;
   /** Update keyframe handler */
@@ -54,7 +49,7 @@ interface ShapeAnimationPanelProps {
     shapeId: string,
     propertyPath: string,
     keyframeId: string,
-    updates: Partial<AnimationKeyframe>
+    updates: Partial<AnimationKeyframe>,
   ) => void;
   /** Seek to time handler */
   onSeekToTime: (time: number) => void;
@@ -87,9 +82,7 @@ const CollapsibleSection = memo(function CollapsibleSection({
         className="w-full flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <span className={`transform transition-transform ${expanded ? 'rotate-90' : ''}`}>
-          ▶
-        </span>
+        <span className={`transform transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
         <span className="flex-1 text-left">{title}</span>
         {badge !== undefined && (
           <span className="px-1.5 py-0.5 text-[10px] bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] rounded">
@@ -97,11 +90,7 @@ const CollapsibleSection = memo(function CollapsibleSection({
           </span>
         )}
       </button>
-      {expanded && (
-        <div className="px-2 pb-2 space-y-1.5">
-          {children}
-        </div>
-      )}
+      {expanded && <div className="px-2 pb-2 space-y-1.5">{children}</div>}
     </div>
   );
 });
@@ -147,9 +136,7 @@ const PropertyRow = memo(function PropertyRow({
   const [showKeyframes, setShowKeyframes] = useState(false);
 
   const hasKf = hasKeyframes(property);
-  const currentKeyframe = property.keyframes.find(
-    (kf) => Math.abs(kf.time - currentTime) < 0.01
-  );
+  const currentKeyframe = property.keyframes.find((kf) => Math.abs(kf.time - currentTime) < 0.01);
 
   // Get current value (interpolated or base)
   const getCurrentValue = useCallback(() => {
@@ -164,8 +151,7 @@ const PropertyRow = memo(function PropertyRow({
     // Simple linear interpolation for display
     for (let i = 0; i < sorted.length - 1; i++) {
       if (currentTime >= sorted[i].time && currentTime <= sorted[i + 1].time) {
-        const progress =
-          (currentTime - sorted[i].time) / (sorted[i + 1].time - sorted[i].time);
+        const progress = (currentTime - sorted[i].time) / (sorted[i + 1].time - sorted[i].time);
         return sorted[i].value + (sorted[i + 1].value - sorted[i].value) * progress;
       }
     }
@@ -187,7 +173,7 @@ const PropertyRow = memo(function PropertyRow({
         onAddKeyframe(currentTime, newValue);
       }
     },
-    [currentKeyframe, hasKf, onAddKeyframe, onUpdateKeyframe, currentTime]
+    [currentKeyframe, hasKf, onAddKeyframe, onUpdateKeyframe, currentTime],
   );
 
   return (
@@ -211,9 +197,7 @@ const PropertyRow = memo(function PropertyRow({
             className="w-full px-2 py-1 text-[11px] bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded disabled:opacity-50"
           />
           {unit && (
-            <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">
-              {unit}
-            </span>
+            <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">{unit}</span>
           )}
         </div>
 
@@ -225,8 +209,8 @@ const PropertyRow = memo(function PropertyRow({
             currentKeyframe
               ? 'bg-[var(--vscode-inputOption-activeBackground)] text-[var(--vscode-inputOption-activeForeground)]'
               : hasKf
-              ? 'text-[var(--vscode-textLink-foreground)]'
-              : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'
+                ? 'text-[var(--vscode-textLink-foreground)]'
+                : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'
           }`}
           title={currentKeyframe ? t('animation.removeKeyframe') : t('animation.addKeyframe')}
         >
@@ -292,7 +276,11 @@ interface TransformSectionProps {
   duration: number;
   onAddKeyframe: (propertyPath: string, time: number, value: number) => void;
   onRemoveKeyframe: (propertyPath: string, keyframeId: string) => void;
-  onUpdateKeyframe: (propertyPath: string, keyframeId: string, updates: Partial<AnimationKeyframe>) => void;
+  onUpdateKeyframe: (
+    propertyPath: string,
+    keyframeId: string,
+    updates: Partial<AnimationKeyframe>,
+  ) => void;
   onSeekToTime: (time: number) => void;
   disabled: boolean;
 }
@@ -367,7 +355,11 @@ interface StrokeSectionProps {
   duration: number;
   onAddKeyframe: (propertyPath: string, time: number, value: number) => void;
   onRemoveKeyframe: (propertyPath: string, keyframeId: string) => void;
-  onUpdateKeyframe: (propertyPath: string, keyframeId: string, updates: Partial<AnimationKeyframe>) => void;
+  onUpdateKeyframe: (
+    propertyPath: string,
+    keyframeId: string,
+    updates: Partial<AnimationKeyframe>,
+  ) => void;
   onApplyPreset: (preset: StrokeAnimationPreset) => void;
   onSeekToTime: (time: number) => void;
   disabled: boolean;
@@ -453,9 +445,10 @@ const StrokeSection = memo(function StrokeSection({
 
       {/* Property Editors */}
       {properties.map(({ key, path, min, max, step, unit }) => {
-        const i18nKey = SHAPE_ANIMATABLE_PROPERTY_I18N_KEYS[
-          `stroke${key.charAt(0).toUpperCase() + key.slice(1)}` as ShapeAnimatablePropertyName
-        ];
+        const i18nKey =
+          SHAPE_ANIMATABLE_PROPERTY_I18N_KEYS[
+            `stroke${key.charAt(0).toUpperCase() + key.slice(1)}` as ShapeAnimatablePropertyName
+          ];
 
         return (
           <PropertyRow
@@ -491,7 +484,11 @@ interface FillSectionProps {
   duration: number;
   onAddKeyframe: (propertyPath: string, time: number, value: number) => void;
   onRemoveKeyframe: (propertyPath: string, keyframeId: string) => void;
-  onUpdateKeyframe: (propertyPath: string, keyframeId: string, updates: Partial<AnimationKeyframe>) => void;
+  onUpdateKeyframe: (
+    propertyPath: string,
+    keyframeId: string,
+    updates: Partial<AnimationKeyframe>,
+  ) => void;
   onSeekToTime: (time: number) => void;
   disabled: boolean;
 }
@@ -619,7 +616,7 @@ export const ShapeAnimationPanel = memo(function ShapeAnimationPanel({
         animation.stroke,
         preset,
         duration,
-        'ease-in-out'
+        'ease-in-out',
       );
 
       onUpdateAnimation(shape.id, {
@@ -627,7 +624,7 @@ export const ShapeAnimationPanel = memo(function ShapeAnimationPanel({
         stroke: newStroke,
       });
     },
-    [shape, animation, duration, onUpdateAnimation]
+    [shape, animation, duration, onUpdateAnimation],
   );
 
   // Wrap handlers
@@ -637,7 +634,7 @@ export const ShapeAnimationPanel = memo(function ShapeAnimationPanel({
         onAddKeyframe(shape.id, propertyPath, time, value);
       }
     },
-    [shape, onAddKeyframe]
+    [shape, onAddKeyframe],
   );
 
   const handleRemoveKeyframe = useCallback(
@@ -646,7 +643,7 @@ export const ShapeAnimationPanel = memo(function ShapeAnimationPanel({
         onRemoveKeyframe(shape.id, propertyPath, keyframeId);
       }
     },
-    [shape, onRemoveKeyframe]
+    [shape, onRemoveKeyframe],
   );
 
   const handleUpdateKeyframe = useCallback(
@@ -655,7 +652,7 @@ export const ShapeAnimationPanel = memo(function ShapeAnimationPanel({
         onUpdateKeyframe(shape.id, propertyPath, keyframeId, updates);
       }
     },
-    [shape, onUpdateKeyframe]
+    [shape, onUpdateKeyframe],
   );
 
   if (!shape) {
@@ -673,9 +670,7 @@ export const ShapeAnimationPanel = memo(function ShapeAnimationPanel({
         <span className="text-[11px] font-medium text-[var(--vscode-foreground)]">
           {t('shape.animation.title')}
         </span>
-        <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">
-          {shape.name}
-        </span>
+        <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">{shape.name}</span>
       </div>
 
       {/* Mini Timeline */}

@@ -14,10 +14,7 @@ export interface IChatModelService {
   /**
    * Get chat model options for UI model selector
    */
-  getChatModelOptions(
-    providers: Provider[],
-    models: Model[]
-  ): ChatModelOption[];
+  getChatModelOptions(providers: Provider[], models: Model[]): ChatModelOption[];
 
   /**
    * Infer model category from capabilities
@@ -34,10 +31,7 @@ export class ChatModelService implements IChatModelService {
    * Returns a list of enabled models with 'auto' as the first option
    * Only includes models from providers with API key configured
    */
-  getChatModelOptions(
-    providers: Provider[],
-    models: Model[]
-  ): ChatModelOption[] {
+  getChatModelOptions(providers: Provider[], models: Model[]): ChatModelOption[] {
     const options: ChatModelOption[] = [
       { id: 'auto', label: 'Auto', providerId: '', modelId: '', category: 'chat' },
     ];

@@ -95,9 +95,17 @@ function renderInlineChildren(children?: MarkdownNode[]): React.ReactNode {
   return children.map((child, idx) => {
     switch (child.type) {
       case 'bold':
-        return <Text key={idx} bold>{child.content}</Text>;
+        return (
+          <Text key={idx} bold>
+            {child.content}
+          </Text>
+        );
       case 'italic':
-        return <Text key={idx} italic>{child.content}</Text>;
+        return (
+          <Text key={idx} italic>
+            {child.content}
+          </Text>
+        );
       case 'inline_code':
         return <Text key={idx} color={tokens.warning}>{`\`${child.content}\``}</Text>;
       case 'link':

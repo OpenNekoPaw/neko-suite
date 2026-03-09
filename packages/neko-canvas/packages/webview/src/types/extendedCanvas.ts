@@ -17,7 +17,7 @@ export type ExtendedNodeType =
   | 'storyboard'
   | 'annotation'
   | 'group'
-  | 'text'      // 富文本节点
+  | 'text' // 富文本节点
   | 'artboard'; // 画板节点
 
 /**
@@ -73,19 +73,16 @@ export interface ArtboardCanvasNode extends Omit<CanvasNodeBase, 'type'> {
 
 export type ArtboardPreset =
   | 'custom'
-  | '1080p'      // 1920x1080
-  | '4k'         // 3840x2160
-  | 'instagram'  // 1080x1080
-  | 'story'      // 1080x1920
-  | 'youtube';   // 1280x720
+  | '1080p' // 1920x1080
+  | '4k' // 3840x2160
+  | 'instagram' // 1080x1080
+  | 'story' // 1080x1920
+  | 'youtube'; // 1280x720
 
 /**
  * 扩展的节点联合类型
  */
-export type ExtendedCanvasNode =
-  | BaseCanvasNode
-  | TextCanvasNode
-  | ArtboardCanvasNode;
+export type ExtendedCanvasNode = BaseCanvasNode | TextCanvasNode | ArtboardCanvasNode;
 
 // =============================================================================
 // Type Guards
@@ -113,7 +110,10 @@ export const DEFAULT_TEXT_STYLE: TextNodeStyle = {
   padding: 12,
 };
 
-export const ARTBOARD_PRESETS: Record<ArtboardPreset, { width: number; height: number; label: string }> = {
+export const ARTBOARD_PRESETS: Record<
+  ArtboardPreset,
+  { width: number; height: number; label: string }
+> = {
   custom: { width: 800, height: 600, label: 'Custom' },
   '1080p': { width: 1920, height: 1080, label: '1080p (16:9)' },
   '4k': { width: 3840, height: 2160, label: '4K (16:9)' },

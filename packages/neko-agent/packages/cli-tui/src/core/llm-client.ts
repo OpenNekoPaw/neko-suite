@@ -20,17 +20,14 @@ export interface ILLMClient {
   /**
    * Send chat messages and get response
    */
-  chat(
-    messages: ChatMessage[],
-    options?: LLMClientOptions
-  ): Promise<LLMClientResponse>;
+  chat(messages: ChatMessage[], options?: LLMClientOptions): Promise<LLMClientResponse>;
 
   /**
    * Send chat messages and get streaming response
    */
   chatStream(
     messages: ChatMessage[],
-    options?: LLMClientOptions
+    options?: LLMClientOptions,
   ): AsyncIterable<LLMClientStreamChunk>;
 
   /**
@@ -91,9 +88,7 @@ export interface LLMClientStreamChunk {
 /**
  * Create LLM client from CLI config
  */
-export function createLLMClient(
-  config: CLIConfig
-): ILLMClient {
+export function createLLMClient(config: CLIConfig): ILLMClient {
   return new BuiltinLLMClient(config);
 }
 
@@ -106,10 +101,7 @@ export function createLLMClient(
 class BuiltinLLMClient implements ILLMClient {
   constructor(private config: CLIConfig) {}
 
-  async chat(
-    messages: ChatMessage[],
-    options?: LLMClientOptions
-  ): Promise<LLMClientResponse> {
+  async chat(messages: ChatMessage[], options?: LLMClientOptions): Promise<LLMClientResponse> {
     const { provider, model, apiKey, baseUrl } = this.config;
     const maxTokens = options?.maxTokens ?? this.config.maxTokens;
     const temperature = options?.temperature ?? this.config.temperature;
@@ -142,7 +134,7 @@ class BuiltinLLMClient implements ILLMClient {
 
   async *chatStream(
     messages: ChatMessage[],
-    options?: LLMClientOptions
+    options?: LLMClientOptions,
   ): AsyncIterable<LLMClientStreamChunk> {
     const { provider, apiKey } = this.config;
     const maxTokens = options?.maxTokens ?? this.config.maxTokens;
@@ -181,9 +173,7 @@ class BuiltinLLMClient implements ILLMClient {
       : this.parseOpenAIStream(response.body);
   }
 
-  private async *parseSSELines(
-    body: ReadableStream<Uint8Array>
-  ): AsyncIterable<string> {
+  private async *parseSSELines(body: ReadableStream<Uint8Array>): AsyncIterable<string> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -212,7 +202,7 @@ class BuiltinLLMClient implements ILLMClient {
   }
 
   private async *parseAnthropicStream(
-    body: ReadableStream<Uint8Array>
+    body: ReadableStream<Uint8Array>,
   ): AsyncIterable<LLMClientStreamChunk> {
     let inputTokens = 0;
     let outputTokens = 0;
@@ -256,7 +246,9 @@ class BuiltinLLMClient implements ILLMClient {
           let args: Record<string, unknown> = {};
           try {
             args = JSON.parse(currentToolJson) as Record<string, unknown>;
-          } catch { /* empty */ }
+          } catch {
+            /* empty */
+          }
           yield {
             type: 'tool_call',
             toolCall: {
@@ -285,7 +277,7 @@ class BuiltinLLMClient implements ILLMClient {
   }
 
   private async *parseOpenAIStream(
-    body: ReadableStream<Uint8Array>
+    body: ReadableStream<Uint8Array>,
   ): AsyncIterable<LLMClientStreamChunk> {
     // Track tool call accumulation
     const toolCalls = new Map<number, { id: string; name: string; args: string }>();
@@ -356,7 +348,9 @@ class BuiltinLLMClient implements ILLMClient {
           let args: Record<string, unknown> = {};
           try {
             args = JSON.parse(tc.args) as Record<string, unknown>;
-          } catch { /* empty */ }
+          } catch {
+            /* empty */
+          }
           yield {
             type: 'tool_call',
             toolCall: { id: tc.id, name: tc.name, arguments: args },
@@ -417,9 +411,7 @@ class BuiltinLLMClient implements ILLMClient {
           ...(stream ? { stream: true } : {}),
           ...(systemPrompt ? { system: systemPrompt } : {}),
           messages: this.formatMessagesForAnthropic(messages),
-          ...(tools && tools.length > 0
-            ? { tools: this.formatToolsForAnthropic(tools) }
-            : {}),
+          ...(tools && tools.length > 0 ? { tools: this.formatToolsForAnthropic(tools) } : {}),
         },
       };
     } else if (provider === 'openai' || provider === 'deepseek') {
@@ -459,7 +451,7 @@ class BuiltinLLMClient implements ILLMClient {
       messages: ChatMessage[];
       tools?: ToolDefinition[];
       signal?: AbortSignal;
-    }
+    },
   ): Promise<LLMClientResponse> {
     const { maxTokens, temperature, messages, tools, signal } = options;
 
@@ -490,11 +482,7 @@ class BuiltinLLMClient implements ILLMClient {
   /**
    * Fetch with exponential backoff retry for transient errors
    */
-  private async fetchWithRetry(
-    url: string,
-    init: RequestInit,
-    maxRetries = 3
-  ): Promise<Response> {
+  private async fetchWithRetry(url: string, init: RequestInit, maxRetries = 3): Promise<Response> {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const response = await fetch(url, init);
@@ -532,7 +520,7 @@ class BuiltinLLMClient implements ILLMClient {
   private extractSystemPrompt(messages: ChatMessage[]): string | undefined {
     const systemMsgs = messages.filter((m) => m.role === 'system');
     if (systemMsgs.length === 0) return undefined;
-    return systemMsgs.map((m) => typeof m.content === 'string' ? m.content : '').join('\n\n');
+    return systemMsgs.map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n\n');
   }
 
   /**
@@ -548,11 +536,13 @@ class BuiltinLLMClient implements ILLMClient {
           // Anthropic expects tool results as role: 'user' with tool_result content block
           return {
             role: 'user',
-            content: [{
-              type: 'tool_result',
-              tool_use_id: m.toolCallId ?? '',
-              content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-            }],
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: m.toolCallId ?? '',
+                content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+              },
+            ],
           };
         }
         if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
@@ -618,10 +608,7 @@ class BuiltinLLMClient implements ILLMClient {
     }));
   }
 
-  private parseResponse(
-    provider: string,
-    data: Record<string, unknown>
-  ): LLMClientResponse {
+  private parseResponse(provider: string, data: Record<string, unknown>): LLMClientResponse {
     if (provider === 'anthropic') {
       return this.parseAnthropicResponse(data);
     } else {
@@ -670,10 +657,12 @@ class BuiltinLLMClient implements ILLMClient {
         }>;
       };
     }>;
-    const usage = data.usage as {
-      prompt_tokens: number;
-      completion_tokens: number;
-    } | undefined;
+    const usage = data.usage as
+      | {
+          prompt_tokens: number;
+          completion_tokens: number;
+        }
+      | undefined;
 
     const choice = choices[0];
     const result: LLMClientResponse = {

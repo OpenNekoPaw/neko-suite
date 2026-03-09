@@ -34,7 +34,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       const label = this.props.label ?? 'Component';
       return (
         <Box flexDirection="column" borderStyle="single" borderColor={tokens.error} paddingX={1}>
-          <Text color={tokens.error} bold>{label} crashed</Text>
+          <Text color={tokens.error} bold>
+            {label} crashed
+          </Text>
           <Text dimColor>{this.state.error.message}</Text>
           <Text dimColor>Press Ctrl+L to reset, or Ctrl+C to quit.</Text>
         </Box>

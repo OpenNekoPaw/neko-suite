@@ -11,7 +11,11 @@ import type { MCPServerPreset, WorkflowPreset, PromptPreset } from '../types/con
 import type { ChatModelOption, TaskDefaults } from '@neko/shared';
 import { loadBuiltinPresets, setLocale, type BuiltinPresets } from './builtin-presets';
 import { type UserConfig, type IUserConfigManager } from './user-config';
-import { loadWorkspaceConfig, watchWorkspaceConfig, type WorkspaceConfig } from './workspace-config';
+import {
+  loadWorkspaceConfig,
+  watchWorkspaceConfig,
+  type WorkspaceConfig,
+} from './workspace-config';
 import {
   createConfigSections,
   type ConfigSections,
@@ -121,19 +125,21 @@ export class ConfigManager {
    * Get user configuration (for extension layer)
    */
   getUserConfig(): UserConfig {
-    return this.userConfigManager?.load() ?? {
-      providers: [],
-      models: [],
-      mcpServers: [],
-      workflows: [],
-      prompts: [],
-      providerOverrides: {},
-      modelOverrides: {},
-      mcpServerOverrides: {},
-      workflowOverrides: {},
-      promptOverrides: {},
-      taskDefaults: undefined,
-    };
+    return (
+      this.userConfigManager?.load() ?? {
+        providers: [],
+        models: [],
+        mcpServers: [],
+        workflows: [],
+        prompts: [],
+        providerOverrides: {},
+        modelOverrides: {},
+        mcpServerOverrides: {},
+        workflowOverrides: {},
+        promptOverrides: {},
+        taskDefaults: undefined,
+      }
+    );
   }
 
   /**
@@ -224,7 +230,7 @@ export class ConfigManager {
     this.ensureMerged();
     return this.chatModelService.getChatModelOptions(
       this.getEnabledProviders(),
-      this.getEnabledModels()
+      this.getEnabledModels(),
     );
   }
 
@@ -267,7 +273,10 @@ export class ConfigManager {
     await this.sections.mcpServers.remove(serverId);
   }
 
-  async updateMCPServerOverride(serverId: string, override: Partial<MCPServerPreset>): Promise<void> {
+  async updateMCPServerOverride(
+    serverId: string,
+    override: Partial<MCPServerPreset>,
+  ): Promise<void> {
     await this.sections.mcpServers.updateOverride(serverId, override);
   }
 
@@ -298,7 +307,10 @@ export class ConfigManager {
     await this.sections.workflows.remove(workflowId);
   }
 
-  async updateWorkflowOverride(workflowId: string, override: Partial<WorkflowPreset>): Promise<void> {
+  async updateWorkflowOverride(
+    workflowId: string,
+    override: Partial<WorkflowPreset>,
+  ): Promise<void> {
     await this.sections.workflows.updateOverride(workflowId, override);
   }
 
@@ -351,11 +363,7 @@ export class ConfigManager {
    */
   exportConfig(options: { includeSecrets?: boolean } = {}): ConfigExportData {
     const config = this.getConfig();
-    return this.configExportService.exportConfig(
-      config.providers,
-      config.models,
-      options
-    );
+    return this.configExportService.exportConfig(config.providers, config.models, options);
   }
 
   /**
@@ -363,7 +371,7 @@ export class ConfigManager {
    */
   async importConfig(
     data: ConfigExportData,
-    options: { overwrite?: boolean; includeSecrets?: boolean } = {}
+    options: { overwrite?: boolean; includeSecrets?: boolean } = {},
   ): Promise<ConfigImportResult> {
     return this.configExportService.importConfig(data, this, options);
   }
@@ -413,36 +421,45 @@ export class ConfigManager {
     const workspace = this.workspaceConfig;
 
     // Merge each section (providers/models: user config only, no workspace override)
-    this.sections.providers.merge(this.builtinPresets.providers, this.createMergeContext(
-      userConfig?.providers ?? [],
-      userConfig?.providerOverrides ?? {}
-    ));
+    this.sections.providers.merge(
+      this.builtinPresets.providers,
+      this.createMergeContext(userConfig?.providers ?? [], userConfig?.providerOverrides ?? {}),
+    );
 
-    this.sections.models.merge(this.builtinPresets.models, this.createMergeContext(
-      userConfig?.models ?? [],
-      userConfig?.modelOverrides ?? {}
-    ));
+    this.sections.models.merge(
+      this.builtinPresets.models,
+      this.createMergeContext(userConfig?.models ?? [], userConfig?.modelOverrides ?? {}),
+    );
 
-    this.sections.mcpServers.merge(this.builtinPresets.mcpServers, this.createMergeContext(
-      userConfig?.mcpServers ?? [],
-      userConfig?.mcpServerOverrides ?? {},
-      workspace?.mcpServers,
-      workspace?.mcpServerOverrides
-    ));
+    this.sections.mcpServers.merge(
+      this.builtinPresets.mcpServers,
+      this.createMergeContext(
+        userConfig?.mcpServers ?? [],
+        userConfig?.mcpServerOverrides ?? {},
+        workspace?.mcpServers,
+        workspace?.mcpServerOverrides,
+      ),
+    );
 
-    this.sections.workflows.merge(this.builtinPresets.workflows, this.createMergeContext(
-      userConfig?.workflows ?? [],
-      userConfig?.workflowOverrides ?? {},
-      workspace?.workflows,
-      workspace?.workflowOverrides
-    ));
+    this.sections.workflows.merge(
+      this.builtinPresets.workflows,
+      this.createMergeContext(
+        userConfig?.workflows ?? [],
+        userConfig?.workflowOverrides ?? {},
+        workspace?.workflows,
+        workspace?.workflowOverrides,
+      ),
+    );
 
-    this.sections.prompts.merge(this.builtinPresets.prompts, this.createMergeContext(
-      userConfig?.prompts ?? [],
-      userConfig?.promptOverrides ?? {},
-      workspace?.prompts,
-      workspace?.promptOverrides
-    ));
+    this.sections.prompts.merge(
+      this.builtinPresets.prompts,
+      this.createMergeContext(
+        userConfig?.prompts ?? [],
+        userConfig?.promptOverrides ?? {},
+        workspace?.prompts,
+        workspace?.promptOverrides,
+      ),
+    );
 
     // Merge retry/timeout presets (only from builtin)
     this.retryTimeoutPresets.clear();
@@ -471,7 +488,7 @@ export class ConfigManager {
       // Find and replace the placeholder path in args
       const PLACEHOLDER_PATH = '/path/to/allowed/dir';
       const updatedArgs = server.args.map((arg) =>
-        arg === PLACEHOLDER_PATH ? this.workspacePath! : arg
+        arg === PLACEHOLDER_PATH ? this.workspacePath! : arg,
       );
 
       // Update the server configuration in the items map
@@ -484,7 +501,7 @@ export class ConfigManager {
     userItems: T[],
     userOverrides: Record<string, Partial<T>>,
     workspaceItems?: T[],
-    workspaceOverrides?: Record<string, Partial<T>>
+    workspaceOverrides?: Record<string, Partial<T>>,
   ): MergeContext<T> {
     return {
       userItems,

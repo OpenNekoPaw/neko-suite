@@ -8,13 +8,7 @@ import { Point2D, BezierPoint } from './geometry';
  * Shape type enum
  * 形状类型枚举
  */
-export type ShapeType =
-  | 'rectangle'
-  | 'ellipse'
-  | 'polygon'
-  | 'star'
-  | 'line'
-  | 'bezier';
+export type ShapeType = 'rectangle' | 'ellipse' | 'polygon' | 'star' | 'line' | 'bezier';
 
 // -----------------------------------------------------------------------------
 // Shape Definitions

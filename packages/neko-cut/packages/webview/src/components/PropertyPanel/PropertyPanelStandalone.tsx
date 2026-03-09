@@ -30,7 +30,7 @@ export const PropertyPanelStandalone = memo(function PropertyPanelStandalone() {
 
       switch (message.type) {
         case 'selectedElement':
-          setState(prev => ({
+          setState((prev) => ({
             ...prev,
             element: message.element,
             trackId: message.trackId,
@@ -39,14 +39,14 @@ export const PropertyPanelStandalone = memo(function PropertyPanelStandalone() {
           break;
 
         case 'currentTimeUpdate':
-          setState(prev => ({
+          setState((prev) => ({
             ...prev,
             currentTime: message.currentTime,
           }));
           break;
 
         case 'projectDefaults':
-          setState(prev => ({
+          setState((prev) => ({
             ...prev,
             projectDefaults: message.defaults,
           }));
@@ -66,14 +66,17 @@ export const PropertyPanelStandalone = memo(function PropertyPanelStandalone() {
   }, []);
 
   // Handle element property changes
-  const handleElementChange = useCallback((elementId: string, changes: Partial<TimelineElement>) => {
-    const vscode = getVSCodeAPI();
-    vscode?.postMessage({
-      type: 'propertyChange',
-      elementId,
-      changes,
-    });
-  }, []);
+  const handleElementChange = useCallback(
+    (elementId: string, changes: Partial<TimelineElement>) => {
+      const vscode = getVSCodeAPI();
+      vscode?.postMessage({
+        type: 'propertyChange',
+        elementId,
+        changes,
+      });
+    },
+    [],
+  );
 
   // Handle defaults property changes
   const handleDefaultsChange = useCallback((changes: Partial<ProjectDefaults>) => {
@@ -85,21 +88,19 @@ export const PropertyPanelStandalone = memo(function PropertyPanelStandalone() {
   }, []);
 
   // Handle add keyframe
-  const handleAddKeyframe = useCallback((
-    elementId: string,
-    propertyPath: string,
-    value: number,
-    easing?: EasingType
-  ) => {
-    const vscode = getVSCodeAPI();
-    vscode?.postMessage({
-      type: 'addKeyframe',
-      elementId,
-      propertyPath,
-      value,
-      easing,
-    });
-  }, []);
+  const handleAddKeyframe = useCallback(
+    (elementId: string, propertyPath: string, value: number, easing?: EasingType) => {
+      const vscode = getVSCodeAPI();
+      vscode?.postMessage({
+        type: 'addKeyframe',
+        elementId,
+        propertyPath,
+        value,
+        easing,
+      });
+    },
+    [],
+  );
 
   // Handle remove keyframe
   const handleRemoveKeyframe = useCallback((elementId: string, propertyPath: string) => {

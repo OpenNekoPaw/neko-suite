@@ -84,7 +84,7 @@ export class VideoEditorModel extends BaseEditorModel {
           edit.replace(
             this.document.uri,
             new vscode.Range(0, 0, this.document.lineCount, 0),
-            JSON.stringify(this._content, null, 2)
+            JSON.stringify(this._content, null, 2),
           );
 
           const success = await vscode.workspace.applyEdit(edit);
@@ -95,11 +95,11 @@ export class VideoEditorModel extends BaseEditorModel {
           }
 
           // applyEdit 返回 false，等待后重试
-          await new Promise(resolve => setTimeout(resolve, 50 * (i + 1)));
+          await new Promise((resolve) => setTimeout(resolve, 50 * (i + 1)));
         } catch (error) {
           lastError = error as Error;
           // 等待后重试
-          await new Promise(resolve => setTimeout(resolve, 50 * (i + 1)));
+          await new Promise((resolve) => setTimeout(resolve, 50 * (i + 1)));
         }
       }
 

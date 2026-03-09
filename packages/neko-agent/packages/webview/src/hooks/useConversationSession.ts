@@ -77,15 +77,24 @@ export function useConversationSession({
     prevConversationIdRef.current = newId;
   }, [activeConversationId]); // Only depend on activeConversationId to avoid loops
 
-  const cleanupConversation = useCallback((conversationId: string) => {
-    conversationMessagesRef.current.delete(conversationId);
-    conversationStreamingRef.current.delete(conversationId);
-    conversationInputRef.current.delete(conversationId);
-    conversationAttachmentsRef.current.delete(conversationId);
-    conversationTokenCountRef.current.delete(conversationId);
-    conversationCompressingRef.current.delete(conversationId);
-    conversationAgentStateRef.current.delete(conversationId);
-  }, [conversationMessagesRef, conversationStreamingRef, conversationTokenCountRef, conversationCompressingRef, conversationAgentStateRef]);
+  const cleanupConversation = useCallback(
+    (conversationId: string) => {
+      conversationMessagesRef.current.delete(conversationId);
+      conversationStreamingRef.current.delete(conversationId);
+      conversationInputRef.current.delete(conversationId);
+      conversationAttachmentsRef.current.delete(conversationId);
+      conversationTokenCountRef.current.delete(conversationId);
+      conversationCompressingRef.current.delete(conversationId);
+      conversationAgentStateRef.current.delete(conversationId);
+    },
+    [
+      conversationMessagesRef,
+      conversationStreamingRef,
+      conversationTokenCountRef,
+      conversationCompressingRef,
+      conversationAgentStateRef,
+    ],
+  );
 
   const cleanupAllConversations = useCallback(() => {
     conversationMessagesRef.current.clear();
@@ -95,7 +104,13 @@ export function useConversationSession({
     conversationTokenCountRef.current.clear();
     conversationCompressingRef.current.clear();
     conversationAgentStateRef.current.clear();
-  }, [conversationMessagesRef, conversationStreamingRef, conversationTokenCountRef, conversationCompressingRef, conversationAgentStateRef]);
+  }, [
+    conversationMessagesRef,
+    conversationStreamingRef,
+    conversationTokenCountRef,
+    conversationCompressingRef,
+    conversationAgentStateRef,
+  ]);
 
   return {
     attachedFiles,

@@ -72,7 +72,7 @@ export const zhCN = {
   'panel.duration': '时长',
 
   // Loading
-  'loading': '加载画布中...',
+  loading: '加载画布中...',
 
   // Canvas
   'canvas.dropHint': '拖放文件到画布中添加',

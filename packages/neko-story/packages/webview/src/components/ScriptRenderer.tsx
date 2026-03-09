@@ -34,9 +34,7 @@ export function ScriptRenderer({ document }: ScriptRendererProps) {
 
   // Render title page if present
   if (document.titlePage) {
-    rendered.push(
-      <TitlePageRenderer key="title-page" titlePage={document.titlePage} />
-    );
+    rendered.push(<TitlePageRenderer key="title-page" titlePage={document.titlePage} />);
   }
 
   // Group dialogue elements with their character
@@ -50,9 +48,7 @@ export function ScriptRenderer({ document }: ScriptRendererProps) {
 
     switch (el.type) {
       case 'scene_heading':
-        rendered.push(
-          <SceneHeadingRenderer key={`scene-${i}`} element={el} />
-        );
+        rendered.push(<SceneHeadingRenderer key={`scene-${i}`} element={el} />);
         break;
 
       case 'action':
@@ -74,38 +70,26 @@ export function ScriptRenderer({ document }: ScriptRendererProps) {
           }
         }
         rendered.push(
-          <DialogueBlock
-            key={`dialogue-${i}`}
-            character={character}
-            elements={dialogueElements}
-          />
+          <DialogueBlock key={`dialogue-${i}`} character={character} elements={dialogueElements} />,
         );
         i = j - 1; // Skip processed elements
         break;
       }
 
       case 'transition':
-        rendered.push(
-          <TransitionRenderer key={`transition-${i}`} element={el as Transition} />
-        );
+        rendered.push(<TransitionRenderer key={`transition-${i}`} element={el as Transition} />);
         break;
 
       case 'centered':
-        rendered.push(
-          <CenteredRenderer key={`centered-${i}`} element={el as Centered} />
-        );
+        rendered.push(<CenteredRenderer key={`centered-${i}`} element={el as Centered} />);
         break;
 
       case 'section':
-        rendered.push(
-          <SectionRenderer key={`section-${i}`} element={el as Section} />
-        );
+        rendered.push(<SectionRenderer key={`section-${i}`} element={el as Section} />);
         break;
 
       case 'synopsis':
-        rendered.push(
-          <SynopsisRenderer key={`synopsis-${i}`} element={el as Synopsis} />
-        );
+        rendered.push(<SynopsisRenderer key={`synopsis-${i}`} element={el as Synopsis} />);
         break;
 
       case 'note':
@@ -117,9 +101,7 @@ export function ScriptRenderer({ document }: ScriptRendererProps) {
         break;
 
       case 'lyrics':
-        rendered.push(
-          <LyricsRenderer key={`lyrics-${i}`} element={el as Lyrics} />
-        );
+        rendered.push(<LyricsRenderer key={`lyrics-${i}`} element={el as Lyrics} />);
         break;
 
       default:
@@ -156,10 +138,7 @@ export function ScriptRenderer({ document }: ScriptRendererProps) {
 
 function TransitionRenderer({ element }: { element: Transition }) {
   return (
-    <div
-      className="transition element"
-      onClick={() => navigateToLine(element.range.start.line)}
-    >
+    <div className="transition element" onClick={() => navigateToLine(element.range.start.line)}>
       {element.text}
     </div>
   );
@@ -167,10 +146,7 @@ function TransitionRenderer({ element }: { element: Transition }) {
 
 function CenteredRenderer({ element }: { element: Centered }) {
   return (
-    <div
-      className="centered element"
-      onClick={() => navigateToLine(element.range.start.line)}
-    >
+    <div className="centered element" onClick={() => navigateToLine(element.range.start.line)}>
       {element.text}
     </div>
   );
@@ -189,10 +165,7 @@ function SectionRenderer({ element }: { element: Section }) {
 
 function SynopsisRenderer({ element }: { element: Synopsis }) {
   return (
-    <div
-      className="synopsis element"
-      onClick={() => navigateToLine(element.range.start.line)}
-    >
+    <div className="synopsis element" onClick={() => navigateToLine(element.range.start.line)}>
       {element.text}
     </div>
   );
@@ -200,10 +173,7 @@ function SynopsisRenderer({ element }: { element: Synopsis }) {
 
 function NoteRenderer({ element }: { element: Note }) {
   return (
-    <div
-      className="note element"
-      onClick={() => navigateToLine(element.range.start.line)}
-    >
+    <div className="note element" onClick={() => navigateToLine(element.range.start.line)}>
       {element.text}
     </div>
   );
@@ -211,10 +181,7 @@ function NoteRenderer({ element }: { element: Note }) {
 
 function LyricsRenderer({ element }: { element: Lyrics }) {
   return (
-    <div
-      className="lyrics element"
-      onClick={() => navigateToLine(element.range.start.line)}
-    >
+    <div className="lyrics element" onClick={() => navigateToLine(element.range.start.line)}>
       {element.text}
     </div>
   );

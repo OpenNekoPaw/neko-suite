@@ -19,19 +19,34 @@ interface NekoPreviewAPI {
   readonly port: number | null;
   getStreamWebSocketUrl(streamId: string): string | null;
   probeMedia(filePath: string): Promise<Record<string, unknown>>;
-  startPlayback(filePath: string, mediaInfo: Record<string, unknown>, startTime?: number, speed?: number): Promise<{ videoStreamId: string | null; audioStreamId: string | null }>;
+  startPlayback(
+    filePath: string,
+    mediaInfo: Record<string, unknown>,
+    startTime?: number,
+    speed?: number,
+  ): Promise<{ videoStreamId: string | null; audioStreamId: string | null }>;
   stopStreams(videoStreamId: string | null, audioStreamId: string | null): Promise<void>;
-  seekStreams(videoStreamId: string | null, audioStreamId: string | null, time: number): Promise<void>;
+  seekStreams(
+    videoStreamId: string | null,
+    audioStreamId: string | null,
+    time: number,
+  ): Promise<void>;
   pauseStreams(videoStreamId: string | null, audioStreamId: string | null): Promise<void>;
   resumeStreams(videoStreamId: string | null, audioStreamId: string | null): Promise<void>;
-  setStreamSpeed(videoStreamId: string | null, audioStreamId: string | null, speed: number): Promise<void>;
+  setStreamSpeed(
+    videoStreamId: string | null,
+    audioStreamId: string | null,
+    speed: number,
+  ): Promise<void>;
   captureFrame(filePath: string, time: number, quality?: number): Promise<string>;
 }
 
 export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.CustomDocument> {
   public static readonly viewType = 'neko.canvasEditor';
 
-  private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<vscode.CustomDocumentEditEvent<vscode.CustomDocument>>();
+  private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
+    vscode.CustomDocumentEditEvent<vscode.CustomDocument>
+  >();
   public readonly onDidChangeCustomDocument = this._onDidChangeCustomDocument.event;
 
   private readonly _onDidChangeCanvas = new vscode.EventEmitter<CanvasChangeEvent>();
@@ -47,7 +62,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   // Shared neko-preview API for media playback
   private _previewApi: NekoPreviewAPI | null = null;
   // Track active streams per panel for cleanup
-  private _activeStreams = new Map<vscode.WebviewPanel, { videoStreamId: string | null; audioStreamId: string | null }>();
+  private _activeStreams = new Map<
+    vscode.WebviewPanel,
+    { videoStreamId: string | null; audioStreamId: string | null }
+  >();
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -72,10 +90,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   /** Wire up external providers after construction */
-  setProviders(opts: {
-    outline?: CanvasOutlineProvider;
-    statusBar?: CanvasStatusBar;
-  }): void {
+  setProviders(opts: { outline?: CanvasOutlineProvider; statusBar?: CanvasStatusBar }): void {
     this.outlineProvider = opts.outline;
     this.statusBar = opts.statusBar;
   }
@@ -83,7 +98,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   async openCustomDocument(
     uri: vscode.Uri,
     _openContext: vscode.CustomDocumentOpenContext,
-    _token: vscode.CancellationToken
+    _token: vscode.CancellationToken,
   ): Promise<vscode.CustomDocument> {
     return { uri, dispose: () => {} };
   }
@@ -91,16 +106,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   async resolveCustomEditor(
     document: vscode.CustomDocument,
     webviewPanel: vscode.WebviewPanel,
-    _token: vscode.CancellationToken
+    _token: vscode.CancellationToken,
   ): Promise<void> {
     this.activeWebviewPanel = webviewPanel;
     this.activeDocument = document;
 
     webviewPanel.webview.options = {
       enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
-      ],
+      localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')],
     };
 
     webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document.uri);
@@ -108,7 +121,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     webviewPanel.webview.onDidReceiveMessage(
       (message) => this.handleWebviewMessage(message, webviewPanel, document),
       undefined,
-      this.context.subscriptions
+      this.context.subscriptions,
     );
 
     webviewPanel.onDidDispose(async () => {
@@ -134,7 +147,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
   async saveCustomDocument(
     _document: vscode.CustomDocument,
-    _cancellation: vscode.CancellationToken
+    _cancellation: vscode.CancellationToken,
   ): Promise<void> {
     this.activeWebviewPanel?.webview.postMessage({ type: 'save' });
   }
@@ -142,7 +155,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   async saveCustomDocumentAs(
     _document: vscode.CustomDocument,
     destination: vscode.Uri,
-    _cancellation: vscode.CancellationToken
+    _cancellation: vscode.CancellationToken,
   ): Promise<void> {
     this.activeWebviewPanel?.webview.postMessage({
       type: 'saveAs',
@@ -152,7 +165,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
   async revertCustomDocument(
     _document: vscode.CustomDocument,
-    _cancellation: vscode.CancellationToken
+    _cancellation: vscode.CancellationToken,
   ): Promise<void> {
     this.activeWebviewPanel?.webview.postMessage({ type: 'revert' });
   }
@@ -160,7 +173,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   async backupCustomDocument(
     _document: vscode.CustomDocument,
     context: vscode.CustomDocumentBackupContext,
-    _cancellation: vscode.CancellationToken
+    _cancellation: vscode.CancellationToken,
   ): Promise<vscode.CustomDocumentBackup> {
     return {
       id: context.destination.toString(),
@@ -207,7 +220,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     const workspaceFolders = vscode.workspace.workspaceFolders || [];
     const localResourceRoots = [
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
-      ...workspaceFolders.map(f => f.uri),
+      ...workspaceFolders.map((f) => f.uri),
     ];
 
     webview.options = {
@@ -216,7 +229,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     };
 
     const webviewUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
     );
 
     const nonce = this.getNonce();
@@ -252,7 +265,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private async handleWebviewMessage(
     message: { type: string; [key: string]: unknown },
     webviewPanel: vscode.WebviewPanel,
-    document: vscode.CustomDocument
+    document: vscode.CustomDocument,
   ): Promise<void> {
     switch (message.type) {
       case 'ready': {
@@ -278,10 +291,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         try {
           const data = message.data as Record<string, unknown>;
           const content = JSON.stringify(data, null, 2);
-          await vscode.workspace.fs.writeFile(
-            document.uri,
-            Buffer.from(content, 'utf-8')
-          );
+          await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'));
           // Sync outline & status bar on every save
           this.syncOutline(data);
           this.syncStatusBar(data);
@@ -379,7 +389,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           const api = await this.getPreviewApi();
           logger.debug(`Preview API available: ${!!api}, isAvailable: ${api?.isAvailable}`);
           if (!api) {
-            webviewPanel.webview.postMessage({ type: 'media:probeResult', nodeId: message.nodeId, error: 'Preview engine not available' });
+            webviewPanel.webview.postMessage({
+              type: 'media:probeResult',
+              nodeId: message.nodeId,
+              error: 'Preview engine not available',
+            });
             break;
           }
           const mediaInfo = await api.probeMedia(filePath);
@@ -411,7 +425,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           const filePath = this.resolveAssetPath(assetPath, document.uri);
           const api = await this.getPreviewApi();
           if (!api) {
-            webviewPanel.webview.postMessage({ type: 'media:streamReady', nodeId: message.nodeId, error: 'Preview engine not available' });
+            webviewPanel.webview.postMessage({
+              type: 'media:streamReady',
+              nodeId: message.nodeId,
+              error: 'Preview engine not available',
+            });
             break;
           }
           // Stop previous streams for this panel if any
@@ -424,8 +442,12 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           webviewPanel.webview.postMessage({
             type: 'media:streamReady',
             nodeId: message.nodeId,
-            videoStreamUrl: result.videoStreamId ? api.getStreamWebSocketUrl(result.videoStreamId) : null,
-            audioStreamUrl: result.audioStreamId ? api.getStreamWebSocketUrl(result.audioStreamId) : null,
+            videoStreamUrl: result.videoStreamId
+              ? api.getStreamWebSocketUrl(result.videoStreamId)
+              : null,
+            audioStreamUrl: result.audioStreamId
+              ? api.getStreamWebSocketUrl(result.audioStreamId)
+              : null,
             videoStreamId: result.videoStreamId,
             audioStreamId: result.audioStreamId,
             mediaInfo,
@@ -444,7 +466,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         const streams = this._activeStreams.get(webviewPanel);
         if (!streams) break;
         const api = await this.getPreviewApi();
-        await api?.seekStreams(streams.videoStreamId, streams.audioStreamId, message.time as number);
+        await api?.seekStreams(
+          streams.videoStreamId,
+          streams.audioStreamId,
+          message.time as number,
+        );
         break;
       }
 
@@ -481,7 +507,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           const filePath = this.resolveAssetPath(assetPath, document.uri);
           const api = await this.getPreviewApi();
           if (!api) {
-            webviewPanel.webview.postMessage({ type: 'media:captureFrameResult', nodeId: message.nodeId, error: 'Preview engine not available' });
+            webviewPanel.webview.postMessage({
+              type: 'media:captureFrameResult',
+              nodeId: message.nodeId,
+              error: 'Preview engine not available',
+            });
             break;
           }
           const base64 = await api.captureFrame(filePath, time);
@@ -539,12 +569,31 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   private requestId = 0;
-  private pendingRequests = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+  private pendingRequests = new Map<
+    number,
+    { resolve: (value: unknown) => void; reject: (error: Error) => void }
+  >();
 
   private static readonly MEDIA_EXTENSIONS: Record<string, string> = {
-    png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image', svg: 'image',
-    mp4: 'video', mov: 'video', avi: 'video', mkv: 'video', webm: 'video', m4v: 'video',
-    mp3: 'audio', wav: 'audio', ogg: 'audio', m4a: 'audio', aac: 'audio', flac: 'audio',
+    png: 'image',
+    jpg: 'image',
+    jpeg: 'image',
+    gif: 'image',
+    webp: 'image',
+    bmp: 'image',
+    svg: 'image',
+    mp4: 'video',
+    mov: 'video',
+    avi: 'video',
+    mkv: 'video',
+    webm: 'video',
+    m4v: 'video',
+    mp3: 'audio',
+    wav: 'audio',
+    ogg: 'audio',
+    m4a: 'audio',
+    aac: 'audio',
+    flac: 'audio',
   };
 
   private detectMediaType(ext: string): string | null {

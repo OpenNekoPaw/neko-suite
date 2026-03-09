@@ -54,11 +54,7 @@ export interface II18nService {
    * @param locale - target locale
    * @param bundle - flat key-value translations
    */
-  registerBundle(
-    namespace: string,
-    locale: SupportedLocale,
-    bundle: MessageBundle,
-  ): void;
+  registerBundle(namespace: string, locale: SupportedLocale, bundle: MessageBundle): void;
 
   /** Listen for locale changes */
   onLocaleChange(callback: (locale: SupportedLocale) => void): void;

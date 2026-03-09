@@ -40,9 +40,17 @@ export interface CanvasStore {
   /** Record history + update position (call on drag end) */
   moveNodeEnd: (id: string, position: { x: number; y: number }) => void;
   /** Real-time resize update (no history) */
-  resizeNode: (id: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  resizeNode: (
+    id: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
   /** Record history + final resize (call on resize end) */
-  resizeNodeEnd: (id: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  resizeNodeEnd: (
+    id: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
 
   // ==================== Connection Actions ====================
   addConnection: (connection: Omit<CanvasConnection, 'id'>) => string;
@@ -140,7 +148,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       canvasData: {
         ...canvasData,
         nodes: canvasData.nodes.map((node) =>
-          node.id === id ? { ...node, ...updates } as CanvasNode : node
+          node.id === id ? ({ ...node, ...updates } as CanvasNode) : node,
         ),
       },
     });
@@ -156,9 +164,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       canvasData: {
         ...canvasData,
         nodes: canvasData.nodes.map((node) =>
-          node.id === id
-            ? { ...node, data: { ...node.data, ...data } } as CanvasNode
-            : node
+          node.id === id ? ({ ...node, data: { ...node.data, ...data } } as CanvasNode) : node,
         ),
       },
     });
@@ -176,7 +182,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         nodes: canvasData.nodes.filter((node) => node.id !== id),
         // Also remove connections involving this node
         connections: canvasData.connections.filter(
-          (conn) => conn.sourceId !== id && conn.targetId !== id
+          (conn) => conn.sourceId !== id && conn.targetId !== id,
         ),
       },
       selection: {
@@ -195,9 +201,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     set({
       canvasData: {
         ...canvasData,
-        nodes: canvasData.nodes.map((node) =>
-          node.id === id ? { ...node, position } : node
-        ),
+        nodes: canvasData.nodes.map((node) => (node.id === id ? { ...node, position } : node)),
       },
     });
   },
@@ -212,9 +216,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     set({
       canvasData: {
         ...canvasData,
-        nodes: canvasData.nodes.map((node) =>
-          node.id === id ? { ...node, position } : node
-        ),
+        nodes: canvasData.nodes.map((node) => (node.id === id ? { ...node, position } : node)),
       },
     });
   },
@@ -228,7 +230,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       canvasData: {
         ...canvasData,
         nodes: canvasData.nodes.map((node) =>
-          node.id === id ? { ...node, size, position } : node
+          node.id === id ? { ...node, size, position } : node,
         ),
       },
     });
@@ -244,7 +246,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       canvasData: {
         ...canvasData,
         nodes: canvasData.nodes.map((node) =>
-          node.id === id ? { ...node, size, position } : node
+          node.id === id ? { ...node, size, position } : node,
         ),
       },
     });
@@ -308,8 +310,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       return;
     }
 
-    const sourceNode = canvasData.nodes.find(n => n.id === pendingConnectionSource.nodeId);
-    const targetNode = canvasData.nodes.find(n => n.id === nodeId);
+    const sourceNode = canvasData.nodes.find((n) => n.id === pendingConnectionSource.nodeId);
+    const targetNode = canvasData.nodes.find((n) => n.id === nodeId);
 
     if (!sourceNode || !targetNode) {
       set({ isConnecting: false, pendingConnectionSource: null });
@@ -319,7 +321,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     // Resolve ports for validation
     const sourcePorts = sourceNode.ports ?? getDefaultPorts(sourceNode.type);
     const targetPorts = targetNode.ports ?? getDefaultPorts(targetNode.type);
-    const sourcePort = sourcePorts.find((p: PortDefinition) => p.id === pendingConnectionSource.anchor);
+    const sourcePort = sourcePorts.find(
+      (p: PortDefinition) => p.id === pendingConnectionSource.anchor,
+    );
     const targetPort = targetPorts.find((p: PortDefinition) => p.id === anchor);
 
     // Port-based validation (when both nodes have ports)
@@ -339,7 +343,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       // Check max connections on target input port
       const maxConn = targetPort.maxConnections ?? 1;
       const existingCount = canvasData.connections.filter(
-        c => c.targetId === nodeId && c.targetPort === anchor
+        (c) => c.targetId === nodeId && c.targetPort === anchor,
       ).length;
       if (existingCount >= maxConn) {
         set({ isConnecting: false, pendingConnectionSource: null });
@@ -353,7 +357,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         conn.sourceId === pendingConnectionSource.nodeId &&
         conn.targetId === nodeId &&
         conn.sourcePort === pendingConnectionSource.anchor &&
-        conn.targetPort === anchor
+        conn.targetPort === anchor,
     );
 
     if (!exists) {
@@ -511,7 +515,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
           (conn) =>
             !connectionsToRemove.has(conn.id) &&
             !nodesToRemove.has(conn.sourceId) &&
-            !nodesToRemove.has(conn.targetId)
+            !nodesToRemove.has(conn.targetId),
         ),
       },
       selection: { nodeIds: [], connectionIds: [] },

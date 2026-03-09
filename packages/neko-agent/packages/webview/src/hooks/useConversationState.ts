@@ -61,9 +61,7 @@ export interface ConversationStateActions {
  * useConversationState return type
  */
 export interface UseConversationStateReturn
-  extends ConversationState,
-    ConversationStateRefs,
-    ConversationStateActions {}
+  extends ConversationState, ConversationStateRefs, ConversationStateActions {}
 
 /**
  * Hook for managing conversation state
@@ -112,7 +110,7 @@ export function useConversationState(): UseConversationStateReturn {
 
   // Helper: add a single message
   const addMessage = useCallback((message: Message) => {
-    setMessages(prev => [...prev, message]);
+    setMessages((prev) => [...prev, message]);
   }, []);
 
   // Helper: clear all messages

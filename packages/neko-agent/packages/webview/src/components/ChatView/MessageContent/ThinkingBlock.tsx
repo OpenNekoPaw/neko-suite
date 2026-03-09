@@ -12,11 +12,15 @@ interface ThinkingBlockProps {
   defaultExpanded?: boolean;
 }
 
-function ThinkingBlockComponent({ content, isComplete = true, defaultExpanded = false }: ThinkingBlockProps) {
+function ThinkingBlockComponent({
+  content,
+  isComplete = true,
+  defaultExpanded = false,
+}: ThinkingBlockProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   const toggleExpand = useCallback(() => {
-    setIsExpanded(prev => !prev);
+    setIsExpanded((prev) => !prev);
   }, []);
 
   // Don't render if no content
@@ -32,18 +36,31 @@ function ThinkingBlockComponent({ content, isComplete = true, defaultExpanded = 
         className="w-full flex items-center gap-2 px-3 py-2 bg-[var(--vscode-editor-background)] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors text-left"
       >
         {/* Expand/Collapse icon */}
-        <ChevronIcon className={`w-4 h-4 text-[var(--vscode-foreground)] transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+        <ChevronIcon
+          className={`w-4 h-4 text-[var(--vscode-foreground)] transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+        />
 
         {/* Thinking indicator */}
         <div className="flex items-center gap-2">
           {!isComplete && (
             <span className="flex gap-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--vscode-foreground)] animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--vscode-foreground)] animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--vscode-foreground)] animate-bounce" style={{ animationDelay: '300ms' }} />
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-[var(--vscode-foreground)] animate-bounce"
+                style={{ animationDelay: '0ms' }}
+              />
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-[var(--vscode-foreground)] animate-bounce"
+                style={{ animationDelay: '150ms' }}
+              />
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-[var(--vscode-foreground)] animate-bounce"
+                style={{ animationDelay: '300ms' }}
+              />
             </span>
           )}
-          {isComplete && <BrainIcon className="w-4 h-4 text-[var(--vscode-descriptionForeground)]" />}
+          {isComplete && (
+            <BrainIcon className="w-4 h-4 text-[var(--vscode-descriptionForeground)]" />
+          )}
 
           <span className="text-[12px] font-medium text-[var(--vscode-foreground)]">
             {isComplete ? 'Thinking' : 'Thinking...'}

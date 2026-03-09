@@ -6,11 +6,7 @@
 import { memo, useCallback, useState, useMemo } from 'react';
 import { useTranslation } from '../../i18n/I18nContext';
 import type { SubtitleTrack, SubtitleCue, SubtitleStyle } from '../../types/subtitle';
-import {
-  createSubtitleTrack,
-  createSubtitleCue,
-  SUBTITLE_TEMPLATES,
-} from '../../types/subtitle';
+import { createSubtitleTrack, createSubtitleCue, SUBTITLE_TEMPLATES } from '../../types/subtitle';
 import { SubtitleCueEditor } from './SubtitleCueEditor';
 import { SubtitleStyleEditor } from './SubtitleStyleEditor';
 
@@ -40,7 +36,7 @@ export const SubtitlePanel = memo(function SubtitlePanel({
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabType>('cues');
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(
-    tracks.length > 0 ? tracks[0].id : null
+    tracks.length > 0 ? tracks[0].id : null,
   );
   const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
   const [editingCueId, setEditingCueId] = useState<string | null>(null);
@@ -53,9 +49,10 @@ export const SubtitlePanel = memo(function SubtitlePanel({
   // Get current cue at playhead position
   const currentCue = useMemo(() => {
     if (!currentTrack) return null;
-    return currentTrack.cues.find(
-      (cue) => currentTime >= cue.startTime && currentTime < cue.endTime
-    ) || null;
+    return (
+      currentTrack.cues.find((cue) => currentTime >= cue.startTime && currentTime < cue.endTime) ||
+      null
+    );
   }, [currentTrack, currentTime]);
 
   // ==========================================================================
@@ -63,29 +60,30 @@ export const SubtitlePanel = memo(function SubtitlePanel({
   // ==========================================================================
 
   const handleAddTrack = useCallback(() => {
-    const newTrack = createSubtitleTrack(
-      `${t('subtitles.track')} ${tracks.length + 1}`,
-      'en'
-    );
+    const newTrack = createSubtitleTrack(`${t('subtitles.track')} ${tracks.length + 1}`, 'en');
     const newTracks = [...tracks, newTrack];
     onTracksChange(newTracks);
     setSelectedTrackId(newTrack.id);
   }, [tracks, onTracksChange, t]);
 
-  const handleRemoveTrack = useCallback((trackId: string) => {
-    const newTracks = tracks.filter((t) => t.id !== trackId);
-    onTracksChange(newTracks);
-    if (selectedTrackId === trackId) {
-      setSelectedTrackId(newTracks.length > 0 ? newTracks[0].id : null);
-    }
-  }, [tracks, onTracksChange, selectedTrackId]);
+  const handleRemoveTrack = useCallback(
+    (trackId: string) => {
+      const newTracks = tracks.filter((t) => t.id !== trackId);
+      onTracksChange(newTracks);
+      if (selectedTrackId === trackId) {
+        setSelectedTrackId(newTracks.length > 0 ? newTracks[0].id : null);
+      }
+    },
+    [tracks, onTracksChange, selectedTrackId],
+  );
 
-  const handleTrackChange = useCallback((trackId: string, changes: Partial<SubtitleTrack>) => {
-    const newTracks = tracks.map((t) =>
-      t.id === trackId ? { ...t, ...changes } : t
-    );
-    onTracksChange(newTracks);
-  }, [tracks, onTracksChange]);
+  const handleTrackChange = useCallback(
+    (trackId: string, changes: Partial<SubtitleTrack>) => {
+      const newTracks = tracks.map((t) => (t.id === trackId ? { ...t, ...changes } : t));
+      onTracksChange(newTracks);
+    },
+    [tracks, onTracksChange],
+  );
 
   // ==========================================================================
   // Cue Management
@@ -107,66 +105,81 @@ export const SubtitlePanel = memo(function SubtitlePanel({
     setEditingCueId(newCue.id);
   }, [currentTrack, currentTime, duration, handleTrackChange]);
 
-  const handleRemoveCue = useCallback((cueId: string) => {
-    if (!currentTrack) return;
+  const handleRemoveCue = useCallback(
+    (cueId: string) => {
+      if (!currentTrack) return;
 
-    const newCues = currentTrack.cues.filter((c) => c.id !== cueId);
-    handleTrackChange(currentTrack.id, { cues: newCues });
+      const newCues = currentTrack.cues.filter((c) => c.id !== cueId);
+      handleTrackChange(currentTrack.id, { cues: newCues });
 
-    if (selectedCueId === cueId) {
-      setSelectedCueId(null);
-    }
-    if (editingCueId === cueId) {
-      setEditingCueId(null);
-    }
-  }, [currentTrack, handleTrackChange, selectedCueId, editingCueId]);
+      if (selectedCueId === cueId) {
+        setSelectedCueId(null);
+      }
+      if (editingCueId === cueId) {
+        setEditingCueId(null);
+      }
+    },
+    [currentTrack, handleTrackChange, selectedCueId, editingCueId],
+  );
 
-  const handleCueChange = useCallback((cueId: string, changes: Partial<SubtitleCue>) => {
-    if (!currentTrack) return;
+  const handleCueChange = useCallback(
+    (cueId: string, changes: Partial<SubtitleCue>) => {
+      if (!currentTrack) return;
 
-    const newCues = currentTrack.cues.map((c) =>
-      c.id === cueId ? { ...c, ...changes } : c
-    ).sort((a, b) => a.startTime - b.startTime);
+      const newCues = currentTrack.cues
+        .map((c) => (c.id === cueId ? { ...c, ...changes } : c))
+        .sort((a, b) => a.startTime - b.startTime);
 
-    handleTrackChange(currentTrack.id, { cues: newCues });
-  }, [currentTrack, handleTrackChange]);
+      handleTrackChange(currentTrack.id, { cues: newCues });
+    },
+    [currentTrack, handleTrackChange],
+  );
 
-  const handleDuplicateCue = useCallback((cueId: string) => {
-    if (!currentTrack) return;
+  const handleDuplicateCue = useCallback(
+    (cueId: string) => {
+      if (!currentTrack) return;
 
-    const originalCue = currentTrack.cues.find((c) => c.id === cueId);
-    if (!originalCue) return;
+      const originalCue = currentTrack.cues.find((c) => c.id === cueId);
+      if (!originalCue) return;
 
-    const newCue = createSubtitleCue(
-      originalCue.endTime,
-      originalCue.endTime + (originalCue.endTime - originalCue.startTime),
-      originalCue.text
-    );
-    newCue.style = originalCue.style;
-    newCue.speaker = originalCue.speaker;
+      const newCue = createSubtitleCue(
+        originalCue.endTime,
+        originalCue.endTime + (originalCue.endTime - originalCue.startTime),
+        originalCue.text,
+      );
+      newCue.style = originalCue.style;
+      newCue.speaker = originalCue.speaker;
 
-    const newCues = [...currentTrack.cues, newCue].sort((a, b) => a.startTime - b.startTime);
-    handleTrackChange(currentTrack.id, { cues: newCues });
-    setSelectedCueId(newCue.id);
-  }, [currentTrack, handleTrackChange]);
+      const newCues = [...currentTrack.cues, newCue].sort((a, b) => a.startTime - b.startTime);
+      handleTrackChange(currentTrack.id, { cues: newCues });
+      setSelectedCueId(newCue.id);
+    },
+    [currentTrack, handleTrackChange],
+  );
 
   // ==========================================================================
   // Style Management
   // ==========================================================================
 
-  const handleStyleChange = useCallback((style: SubtitleStyle) => {
-    if (!currentTrack) return;
-    handleTrackChange(currentTrack.id, { style });
-  }, [currentTrack, handleTrackChange]);
+  const handleStyleChange = useCallback(
+    (style: SubtitleStyle) => {
+      if (!currentTrack) return;
+      handleTrackChange(currentTrack.id, { style });
+    },
+    [currentTrack, handleTrackChange],
+  );
 
-  const handleApplyTemplate = useCallback((templateId: string) => {
-    if (!currentTrack) return;
+  const handleApplyTemplate = useCallback(
+    (templateId: string) => {
+      if (!currentTrack) return;
 
-    const template = SUBTITLE_TEMPLATES.find((t) => t.id === templateId);
-    if (template) {
-      handleTrackChange(currentTrack.id, { style: { ...template.style } });
-    }
-  }, [currentTrack, handleTrackChange]);
+      const template = SUBTITLE_TEMPLATES.find((t) => t.id === templateId);
+      if (template) {
+        handleTrackChange(currentTrack.id, { style: { ...template.style } });
+      }
+    },
+    [currentTrack, handleTrackChange],
+  );
 
   // ==========================================================================
   // Render
@@ -194,7 +207,12 @@ export const SubtitlePanel = memo(function SubtitlePanel({
             title={t('subtitles.addTrack')}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
             </svg>
           </button>
         </div>
@@ -221,7 +239,12 @@ export const SubtitlePanel = memo(function SubtitlePanel({
             disabled={!selectedTrackId}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
             </svg>
           </button>
         </div>
@@ -270,7 +293,12 @@ export const SubtitlePanel = memo(function SubtitlePanel({
               onClick={handleAddCue}
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
               </svg>
               {t('subtitles.cue.add')}
             </button>
@@ -289,8 +317,8 @@ export const SubtitlePanel = memo(function SubtitlePanel({
                       selectedCueId === cue.id
                         ? 'bg-[var(--vscode-list-activeSelectionBackground)]'
                         : cue === currentCue
-                        ? 'bg-[var(--vscode-list-hoverBackground)]'
-                        : 'hover:bg-[var(--vscode-list-hoverBackground)]'
+                          ? 'bg-[var(--vscode-list-hoverBackground)]'
+                          : 'hover:bg-[var(--vscode-list-hoverBackground)]'
                     }`}
                     onClick={() => setSelectedCueId(cue.id)}
                     onDoubleClick={() => setEditingCueId(cue.id)}
@@ -316,8 +344,18 @@ export const SubtitlePanel = memo(function SubtitlePanel({
                               }}
                               title={t('subtitles.cue.duplicate')}
                             >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              <svg
+                                className="w-3 h-3"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                />
                               </svg>
                             </button>
                             <button
@@ -328,14 +366,28 @@ export const SubtitlePanel = memo(function SubtitlePanel({
                               }}
                               title={t('subtitles.cue.remove')}
                             >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              <svg
+                                className="w-3 h-3"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
                               </svg>
                             </button>
                           </div>
                         </div>
                         <p className="text-[11px] text-[var(--vscode-foreground)] line-clamp-2">
-                          {cue.text || <span className="italic text-[var(--vscode-descriptionForeground)]">(empty)</span>}
+                          {cue.text || (
+                            <span className="italic text-[var(--vscode-descriptionForeground)]">
+                              (empty)
+                            </span>
+                          )}
                         </p>
                       </>
                     )}
@@ -347,10 +399,7 @@ export const SubtitlePanel = memo(function SubtitlePanel({
         ) : activeTab === 'style' ? (
           // Style editor
           currentTrack && (
-            <SubtitleStyleEditor
-              style={currentTrack.style}
-              onChange={handleStyleChange}
-            />
+            <SubtitleStyleEditor style={currentTrack.style} onChange={handleStyleChange} />
           )
         ) : (
           // Templates

@@ -16,7 +16,9 @@ import type { Model, Provider } from '../../types/provider';
 
 interface AzureMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string | Array<{ type: string; text?: string; image_url?: { url: string; detail?: string } }>;
+  content:
+    | string
+    | Array<{ type: string; text?: string; image_url?: { url: string; detail?: string } }>;
   name?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
@@ -53,14 +55,22 @@ export class AzureAdapter extends BaseAdapter {
   readonly type = 'azure';
 
   protected getSupportedCapabilities(): string[] {
-    return ['chat', 'vision', 'function_calling', 'json_mode', 'streaming', 'embedding', 'image_generation'];
+    return [
+      'chat',
+      'vision',
+      'function_calling',
+      'json_mode',
+      'streaming',
+      'embedding',
+      'image_generation',
+    ];
   }
 
   async chat(
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    _provider?: Provider
+    _provider?: Provider,
   ): Promise<ChatResponse> {
     const url = this.buildUrl(model, 'chat/completions');
     const headers = this.buildHeaders(model);
@@ -81,7 +91,7 @@ export class AzureAdapter extends BaseAdapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    _provider?: Provider
+    _provider?: Provider,
   ): AsyncIterable<ChatChunk> {
     const url = this.buildUrl(model, 'chat/completions');
     const headers = this.buildHeaders(model);
@@ -102,7 +112,9 @@ export class AzureAdapter extends BaseAdapter {
         if (!choice) continue;
 
         // Only emit the delta for current chunk's tool calls, not accumulated state
-        let toolCallsDelta: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }> | undefined;
+        let toolCallsDelta:
+          | Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>
+          | undefined;
 
         if (choice.delta.tool_calls) {
           toolCallsDelta = [];
@@ -145,7 +157,8 @@ export class AzureAdapter extends BaseAdapter {
   }
 
   private buildUrl(model: Model, endpoint: string): string {
-    const resourceName = (model.options?.resourceName as string) || process.env.AZURE_OPENAI_RESOURCE;
+    const resourceName =
+      (model.options?.resourceName as string) || process.env.AZURE_OPENAI_RESOURCE;
     const deploymentId = (model.options?.deploymentId as string) || model.id;
     const apiVersion = (model.options?.apiVersion as string) || '2024-02-15-preview';
 
@@ -171,7 +184,7 @@ export class AzureAdapter extends BaseAdapter {
   private buildRequestBody(
     messages: ChatMessage[],
     options: ChatOptions,
-    model: Model
+    model: Model,
   ): Record<string, unknown> {
     const body: Record<string, unknown> = {
       messages: messages.map((m) => this.transformMessage(m)),

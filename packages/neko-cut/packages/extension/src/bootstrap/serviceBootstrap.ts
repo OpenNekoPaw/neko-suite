@@ -11,7 +11,10 @@ import { getRootLogger } from '../base';
 import { IEditorRegistry, EditorRegistry } from '../editor/common/editorRegistry';
 import { VideoEditorModelProvider } from '../editor/video/videoEditorModel';
 import { IStatusBar, StatusBar } from '../views/statusBar';
-import { IVideoProjectOutlineProvider, VideoProjectOutlineProvider } from '../views/outlineProvider';
+import {
+  IVideoProjectOutlineProvider,
+  VideoProjectOutlineProvider,
+} from '../views/outlineProvider';
 import {
   ConnectionStateManager,
   IConnectionStateManager,
@@ -50,7 +53,7 @@ export interface IServiceBootstrapResult {
  */
 export async function bootstrapCoreServices(
   services: ServiceCollection,
-  context: vscode.ExtensionContext
+  context: vscode.ExtensionContext,
 ): Promise<IServiceBootstrapResult> {
   // ==========================================================================
   // 1. 连接状态管理器
@@ -93,7 +96,7 @@ export async function bootstrapCoreServices(
   context.subscriptions.push(assetService);
 
   // Initialize asset service in background
-  assetService.initialize().catch(error => {
+  assetService.initialize().catch((error) => {
     getRootLogger().error('Failed to initialize AssetService:', error);
   });
 

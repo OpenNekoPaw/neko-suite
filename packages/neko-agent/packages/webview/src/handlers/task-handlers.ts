@@ -20,7 +20,7 @@ const handleTasksUpdated: MessageHandler = (message, context) => {
  * Handle 'taskCreated' message - New background task created
  */
 const handleTaskCreated: MessageHandler = (message, context) => {
-  context.setBackgroundTasks(prev => [message.task, ...prev]);
+  context.setBackgroundTasks((prev) => [message.task, ...prev]);
 };
 
 /**
@@ -28,18 +28,20 @@ const handleTaskCreated: MessageHandler = (message, context) => {
  */
 const handleTaskUpdated: MessageHandler = (message, context) => {
   logger.info('Task updated:', message.task);
-  context.setBackgroundTasks(prev => prev.map(t =>
-    t.id === message.task.id
-      ? { ...t, ...message.task }  // Merge to preserve existing fields
-      : t
-  ));
+  context.setBackgroundTasks((prev) =>
+    prev.map((t) =>
+      t.id === message.task.id
+        ? { ...t, ...message.task } // Merge to preserve existing fields
+        : t,
+    ),
+  );
 };
 
 /**
  * Handle 'taskRemoved' message - Background task removed
  */
 const handleTaskRemoved: MessageHandler = (message, context) => {
-  context.setBackgroundTasks(prev => prev.filter(t => t.id !== message.taskId));
+  context.setBackgroundTasks((prev) => prev.filter((t) => t.id !== message.taskId));
 };
 
 /**

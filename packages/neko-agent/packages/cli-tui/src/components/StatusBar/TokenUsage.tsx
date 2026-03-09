@@ -30,11 +30,7 @@ export function TokenUsage({
   const empty = width - filled;
 
   // Color based on usage level
-  const barColor = ratio > 0.8
-    ? tokens.error
-    : ratio > 0.5
-      ? tokens.warning
-      : tokens.success;
+  const barColor = ratio > 0.8 ? tokens.error : ratio > 0.5 ? tokens.warning : tokens.success;
 
   const bar = '█'.repeat(filled) + '░'.repeat(empty);
 

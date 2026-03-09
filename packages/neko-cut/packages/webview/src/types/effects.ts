@@ -673,9 +673,9 @@ export function cloneEffectInstance(effect: EffectInstance): EffectInstance {
             key,
             {
               baseValue: param.baseValue,
-              keyframes: param.keyframes.map(kf => ({ ...kf })),
+              keyframes: param.keyframes.map((kf) => ({ ...kf })),
             },
-          ])
+          ]),
         )
       : undefined,
   };
@@ -690,10 +690,10 @@ export function cloneEffectInstance(effect: EffectInstance): EffectInstance {
  * 特效参数缓动函数实现
  */
 const effectEasingFunctions: Record<EffectParameterKeyframe['easing'], (t: number) => number> = {
-  'linear': (t) => t,
+  linear: (t) => t,
   'ease-in': (t) => t * t,
   'ease-out': (t) => t * (2 - t),
-  'ease-in-out': (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+  'ease-in-out': (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t),
 };
 
 /**
@@ -706,7 +706,7 @@ const effectEasingFunctions: Record<EffectParameterKeyframe['easing'], (t: numbe
  */
 export function getAnimatedEffectParameterValue(
   param: AnimatableEffectParameter,
-  localTime: number
+  localTime: number,
 ): EffectParameterValue {
   const { baseValue, keyframes } = param;
 
@@ -766,7 +766,7 @@ export function getAnimatedEffectParameterValue(
  */
 export function getEffectParametersAtTime(
   effect: EffectInstance,
-  localTime: number
+  localTime: number,
 ): Record<string, EffectParameterValue> {
   const result: Record<string, EffectParameterValue> = { ...effect.parameters };
 
@@ -787,7 +787,7 @@ export function getEffectParametersAtTime(
  * 从静态值创建可动画参数
  */
 export function createAnimatableEffectParameter(
-  baseValue: EffectParameterValue
+  baseValue: EffectParameterValue,
 ): AnimatableEffectParameter {
   return {
     baseValue,
@@ -803,7 +803,7 @@ export function addEffectParameterKeyframe(
   param: AnimatableEffectParameter,
   time: number,
   value: EffectParameterValue,
-  easing: EffectParameterKeyframe['easing'] = 'linear'
+  easing: EffectParameterKeyframe['easing'] = 'linear',
 ): AnimatableEffectParameter {
   const newKeyframe: EffectParameterKeyframe = {
     id: `efx-kf-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -814,7 +814,7 @@ export function addEffectParameterKeyframe(
 
   // Insert in sorted order
   const keyframes = [...param.keyframes];
-  const insertIndex = keyframes.findIndex(kf => kf.time > time);
+  const insertIndex = keyframes.findIndex((kf) => kf.time > time);
   if (insertIndex === -1) {
     keyframes.push(newKeyframe);
   } else {
@@ -833,11 +833,11 @@ export function addEffectParameterKeyframe(
  */
 export function removeEffectParameterKeyframe(
   param: AnimatableEffectParameter,
-  keyframeId: string
+  keyframeId: string,
 ): AnimatableEffectParameter {
   return {
     ...param,
-    keyframes: param.keyframes.filter(kf => kf.id !== keyframeId),
+    keyframes: param.keyframes.filter((kf) => kf.id !== keyframeId),
   };
 }
 
@@ -847,9 +847,7 @@ export function removeEffectParameterKeyframe(
  */
 export function hasAnimatedParameters(effect: EffectInstance): boolean {
   if (!effect.animatedParameters) return false;
-  return Object.values(effect.animatedParameters).some(
-    param => param.keyframes.length > 0
-  );
+  return Object.values(effect.animatedParameters).some((param) => param.keyframes.length > 0);
 }
 
 /**

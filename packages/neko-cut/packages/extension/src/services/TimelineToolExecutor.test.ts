@@ -144,7 +144,10 @@ describe('TimelineToolExecutor', () => {
 
     const services = new ServiceCollection();
     setGlobalServices(services);
-    services.set(IEditorRegistry, { getActiveEditor: () => model as any, getEditorByUri: () => undefined } as any);
+    services.set(IEditorRegistry, {
+      getActiveEditor: () => model as any,
+      getEditorByUri: () => undefined,
+    } as any);
     executor = new TimelineToolExecutor();
 
     const result = await executor.execute('UpdateElement', {
@@ -223,7 +226,10 @@ describe('TimelineToolExecutor', () => {
 
     const services = new ServiceCollection();
     setGlobalServices(services);
-    services.set(IEditorRegistry, { getActiveEditor: () => model as any, getEditorByUri: () => undefined } as any);
+    services.set(IEditorRegistry, {
+      getActiveEditor: () => model as any,
+      getEditorByUri: () => undefined,
+    } as any);
     executor = new TimelineToolExecutor();
 
     const result = await executor.execute('DeleteElement', { elementId: 'elem-1' });
@@ -258,7 +264,10 @@ describe('TimelineToolExecutor', () => {
 
     const services = new ServiceCollection();
     setGlobalServices(services);
-    services.set(IEditorRegistry, { getActiveEditor: () => model as any, getEditorByUri: () => undefined } as any);
+    services.set(IEditorRegistry, {
+      getActiveEditor: () => model as any,
+      getEditorByUri: () => undefined,
+    } as any);
     executor = new TimelineToolExecutor();
 
     const result = await executor.execute('SplitElement', { elementId: 'elem-1', splitTime: 3 });
@@ -304,7 +313,10 @@ describe('TimelineToolExecutor', () => {
 
     const services = new ServiceCollection();
     setGlobalServices(services);
-    services.set(IEditorRegistry, { getActiveEditor: () => model as any, getEditorByUri: () => undefined } as any);
+    services.set(IEditorRegistry, {
+      getActiveEditor: () => model as any,
+      getEditorByUri: () => undefined,
+    } as any);
     executor = new TimelineToolExecutor();
 
     const result = await executor.execute('SetColorCorrection', {

@@ -31,17 +31,10 @@ export {
 } from './urlResolverFactory';
 
 // Media Request Proxy (Extension FFmpeg via NAPI)
-export {
-  MediaRequestProxy,
-  type IMediaRequestProxy,
-} from './MediaRequestProxy';
+export { MediaRequestProxy, type IMediaRequestProxy } from './MediaRequestProxy';
 
 // Media Proxy Factory (Singleton access)
-export {
-  getMediaProxy,
-  getRemoteMediaProxy,
-  resetMediaProxy,
-} from './mediaProxyFactory';
+export { getMediaProxy, getRemoteMediaProxy, resetMediaProxy } from './mediaProxyFactory';
 
 // H.264 Stream Client (WebCodecs decoding) — re-exported from @neko/neko-client
 export {
@@ -66,10 +59,7 @@ export {
 } from '@neko/neko-client';
 
 // Playback Performance Monitor (real-time metrics) — re-exported from @neko/neko-client
-export {
-  PlaybackPerformanceMonitor,
-  type PerformanceSnapshot,
-} from '@neko/neko-client';
+export { PlaybackPerformanceMonitor, type PerformanceSnapshot } from '@neko/neko-client';
 
 // Preview Mode Controller (mode state management)
 export {

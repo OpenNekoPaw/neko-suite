@@ -26,7 +26,7 @@ export const MessageActions = memo(function MessageActions({
 }: MessageActionsProps) {
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(
-    message.feedback ?? null
+    message.feedback ?? null,
   );
 
   // Copy message content
@@ -42,24 +42,23 @@ export const MessageActions = memo(function MessageActions({
   }, [message.content, onCopy]);
 
   // Handle feedback
-  const handleFeedback = useCallback((type: 'positive' | 'negative') => {
-    const newFeedback = feedback === type ? null : type;
-    setFeedback(newFeedback);
-    if (newFeedback) {
-      onFeedback?.(newFeedback);
-    }
-  }, [feedback, onFeedback]);
+  const handleFeedback = useCallback(
+    (type: 'positive' | 'negative') => {
+      const newFeedback = feedback === type ? null : type;
+      setFeedback(newFeedback);
+      if (newFeedback) {
+        onFeedback?.(newFeedback);
+      }
+    },
+    [feedback, onFeedback],
+  );
 
   const isAssistant = message.role === 'assistant';
 
   return (
     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
       {/* Copy button */}
-      <ActionButton
-        onClick={handleCopy}
-        title={copied ? 'Copied!' : 'Copy'}
-        active={copied}
-      >
+      <ActionButton onClick={handleCopy} title={copied ? 'Copied!' : 'Copy'} active={copied}>
         {copied ? <CheckIcon /> : <CopyIcon />}
       </ActionButton>
 
@@ -140,7 +139,12 @@ function CopyIcon() {
 
 function CheckIcon() {
   return (
-    <svg className="w-3.5 h-3.5 text-[var(--vscode-charts-green)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg
+      className="w-3.5 h-3.5 text-[var(--vscode-charts-green)]"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+    >
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
     </svg>
   );
@@ -148,7 +152,12 @@ function CheckIcon() {
 
 function ThumbUpIcon({ filled }: { filled?: boolean }) {
   return (
-    <svg className="w-3.5 h-3.5" fill={filled ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
+    <svg
+      className="w-3.5 h-3.5"
+      fill={filled ? 'currentColor' : 'none'}
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+    >
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -161,7 +170,12 @@ function ThumbUpIcon({ filled }: { filled?: boolean }) {
 
 function ThumbDownIcon({ filled }: { filled?: boolean }) {
   return (
-    <svg className="w-3.5 h-3.5" fill={filled ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
+    <svg
+      className="w-3.5 h-3.5"
+      fill={filled ? 'currentColor' : 'none'}
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+    >
       <path
         strokeLinecap="round"
         strokeLinejoin="round"

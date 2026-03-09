@@ -45,7 +45,8 @@ export const settings = {
   'settings.providers.contextWindow': 'Context Window',
 
   'settings.prompts.title': 'Configured Prompts',
-  'settings.prompts.description': 'Select a prompt preset for conversations. Each preset has its own system prompt and parameter configuration.',
+  'settings.prompts.description':
+    'Select a prompt preset for conversations. Each preset has its own system prompt and parameter configuration.',
   'settings.prompts.addPrompt': '+ Create Custom Prompt',
   'settings.prompts.editPrompt': 'Edit Prompt',
   'settings.prompts.createPrompt': 'Create New Prompt',
@@ -62,7 +63,8 @@ export const settings = {
   'settings.prompts.promptTypes.video': 'Video - AI video generation prompts',
   'settings.prompts.promptTypes.custom': 'Custom - Other specialized tasks',
   'settings.prompts.systemPrompt': 'System Prompt *',
-  'settings.prompts.systemPromptPlaceholder': 'Define the AI\'s behavior, personality, and capabilities...',
+  'settings.prompts.systemPromptPlaceholder':
+    "Define the AI's behavior, personality, and capabilities...",
   'settings.prompts.characters': '{count} characters',
   'settings.prompts.behavior': 'Behavior',
   'settings.prompts.autoExecuteTools': 'Auto-execute tools',
@@ -79,14 +81,16 @@ export const settings = {
   'settings.prompts.screenwriter.name': 'Screenwriter',
   'settings.prompts.screenwriter.description': 'Creates scripts, dialogues, and story structures',
   'settings.prompts.storyboard.name': 'Storyboard Artist',
-  'settings.prompts.storyboard.description': 'Creates shot-by-shot visual breakdowns for video production',
+  'settings.prompts.storyboard.description':
+    'Creates shot-by-shot visual breakdowns for video production',
   'settings.prompts.imageCreator.name': 'Image Creator',
   'settings.prompts.imageCreator.description': 'Generates detailed prompts for AI image generation',
   'settings.prompts.videoCreator.name': 'Video Creator',
   'settings.prompts.videoCreator.description': 'Plans and creates prompts for AI video generation',
 
   'settings.mcp.title': 'Configured MCP Servers',
-  'settings.mcp.description': 'Model Context Protocol servers extend AI capabilities with external tools.',
+  'settings.mcp.description':
+    'Model Context Protocol servers extend AI capabilities with external tools.',
   'settings.mcp.addServer': '+ Add Custom MCP Server',
   'settings.mcp.editServer': 'Edit MCP Server',
   'settings.mcp.builtIn': 'Built-in',
@@ -101,7 +105,8 @@ export const settings = {
   'settings.mcp.envVarsPlaceholder': 'GITHUB_TOKEN=xxx\nAPI_KEY=yyy',
 
   'settings.workflows.title': 'Configured Workflows',
-  'settings.workflows.description': 'Connect to external workflow engines like ComfyUI, Dify, or n8n.',
+  'settings.workflows.description':
+    'Connect to external workflow engines like ComfyUI, Dify, or n8n.',
   'settings.workflows.addWorkflow': '+ Add Custom Workflow',
   'settings.workflows.editWorkflow': 'Edit Workflow',
   'settings.workflows.builtIn': 'Built-in',
@@ -123,7 +128,8 @@ export const settings = {
   'settings.advanced.showToolCalls': 'Show Tool Calls',
 
   'settings.models.title': 'Model Presets',
-  'settings.models.description': 'Configure AI models for image, video, and audio generation. Add API keys to enable models.',
+  'settings.models.description':
+    'Configure AI models for image, video, and audio generation. Add API keys to enable models.',
   'settings.models.search': 'Search models...',
   'settings.models.searchPlaceholder': 'Search models...',
   'settings.models.all': 'All',

@@ -37,12 +37,12 @@ export interface ToolInjectionConfig {
  */
 export const DEFAULT_INJECTION_CONFIG: ToolInjectionConfig = {
   maxToolsPerLayer: {
-    core: 10,    // Core tools: Read, Write, Bash, ListDirectory, Grep, SearchTools, etc.
+    core: 10, // Core tools: Read, Write, Bash, ListDirectory, Grep, SearchTools, etc.
     skill: 20,
     ondemand: 10,
   },
   tokenBudgetPerLayer: {
-    core: 3000,  // Increased for SearchTools
+    core: 3000, // Increased for SearchTools
     skill: 8000,
     ondemand: 4000,
   },

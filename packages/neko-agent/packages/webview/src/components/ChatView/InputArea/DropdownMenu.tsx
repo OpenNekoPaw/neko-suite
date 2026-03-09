@@ -52,11 +52,7 @@ export function DropdownMenu<T>({
       className={`absolute bottom-full left-0 mb-1 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg max-h-[300px] overflow-y-auto py-1 z-50 ${className}`}
     >
       {items.map((item, index) => (
-        <div
-          key={index}
-          onClick={() => onSelect(item, index)}
-          className="cursor-pointer"
-        >
+        <div key={index} onClick={() => onSelect(item, index)} className="cursor-pointer">
           {renderItem(item, index, index === selectedIndex)}
         </div>
       ))}

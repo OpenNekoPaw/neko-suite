@@ -56,12 +56,15 @@ export const TimelineRuler = memo(function TimelineRuler({
   }, [totalDuration, zoomLevel]);
 
   // Handle ruler click to seek
-  const handleRulerClick = useCallback((e: React.MouseEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const time = x / (PIXELS_PER_SECOND * zoomLevel);
-    seek(Math.max(0, Math.min(totalDuration, time)));
-  }, [zoomLevel, seek, totalDuration]);
+  const handleRulerClick = useCallback(
+    (e: React.MouseEvent) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const time = x / (PIXELS_PER_SECOND * zoomLevel);
+      seek(Math.max(0, Math.min(totalDuration, time)));
+    },
+    [zoomLevel, seek, totalDuration],
+  );
 
   return (
     <div className="flex border-b border-vscode-panel-border">
@@ -78,10 +81,7 @@ export const TimelineRuler = memo(function TimelineRuler({
         style={{ height: RULER_HEIGHT }}
         onClick={handleRulerClick}
       >
-        <div
-          className="relative h-full"
-          style={{ width: timelineWidth }}
-        >
+        <div className="relative h-full" style={{ width: timelineWidth }}>
           {timeMarkers.map((time) => (
             <div
               key={time}

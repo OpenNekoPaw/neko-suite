@@ -41,12 +41,7 @@ export const TimelineMinimap = memo(function TimelineMinimap({
   }, [project.tracks.length, config]);
 
   // 生成缩略图
-  const {
-    thumbnails,
-    isGenerating,
-    progress,
-    error,
-  } = useThumbnailGenerator({
+  const { thumbnails, isGenerating, progress, error } = useThumbnailGenerator({
     project,
     totalDuration,
     sampleInterval: config.sampleInterval,
@@ -55,11 +50,7 @@ export const TimelineMinimap = memo(function TimelineMinimap({
   });
 
   // 交互逻辑
-  const {
-    isDragging,
-    handleMouseDown,
-    handleClick,
-  } = useMinimapInteraction({
+  const { isDragging, handleMouseDown, handleClick } = useMinimapInteraction({
     totalDuration,
     visibleStart,
     visibleEnd,

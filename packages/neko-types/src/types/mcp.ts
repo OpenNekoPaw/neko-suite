@@ -132,7 +132,7 @@ export interface IMCPClient {
   /** Get a prompt */
   getPrompt(
     name: string,
-    args?: Record<string, unknown>
+    args?: Record<string, unknown>,
   ): Promise<{ messages: Array<{ role: string; content: string }> }>;
 }
 

@@ -35,11 +35,7 @@ interface CurveEditorProps {
   onChange: (points: CurvePoint[]) => void;
 }
 
-const CurveEditor = memo(function CurveEditor({
-  points,
-  color,
-  onChange,
-}: CurveEditorProps) {
+const CurveEditor = memo(function CurveEditor({ points, color, onChange }: CurveEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -138,75 +134,92 @@ const CurveEditor = memo(function CurveEditor({
   }, [points, color]);
 
   // Handle mouse events
-  const getCanvasCoords = useCallback((e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
+  const getCanvasCoords = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } => {
+      const canvas = canvasRef.current;
+      if (!canvas) return { x: 0, y: 0 };
 
-    const rect = canvas.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / CANVAS_SIZE));
-    const y = Math.max(0, Math.min(1, 1 - (e.clientY - rect.top) / CANVAS_SIZE));
-    return { x, y };
-  }, []);
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / CANVAS_SIZE));
+      const y = Math.max(0, Math.min(1, 1 - (e.clientY - rect.top) / CANVAS_SIZE));
+      return { x, y };
+    },
+    [],
+  );
 
-  const findPointAtPosition = useCallback((x: number, y: number): number => {
-    const threshold = POINT_RADIUS / CANVAS_SIZE;
-    return points.findIndex((p) => {
-      const dx = p.x - x;
-      const dy = p.y - y;
-      return Math.sqrt(dx * dx + dy * dy) < threshold * 2;
-    });
-  }, [points]);
+  const findPointAtPosition = useCallback(
+    (x: number, y: number): number => {
+      const threshold = POINT_RADIUS / CANVAS_SIZE;
+      return points.findIndex((p) => {
+        const dx = p.x - x;
+        const dy = p.y - y;
+        return Math.sqrt(dx * dx + dy * dy) < threshold * 2;
+      });
+    },
+    [points],
+  );
 
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const { x, y } = getCanvasCoords(e);
-    const pointIndex = findPointAtPosition(x, y);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const { x, y } = getCanvasCoords(e);
+      const pointIndex = findPointAtPosition(x, y);
 
-    if (pointIndex >= 0) {
-      setDraggingIndex(pointIndex);
-    } else {
-      // Add new point
-      const newPoints = [...points, { x, y }].sort((a, b) => a.x - b.x);
-      onChange(newPoints);
-      // Find and start dragging the new point
-      const newIndex = newPoints.findIndex((p) => Math.abs(p.x - x) < 0.01 && Math.abs(p.y - y) < 0.01);
-      if (newIndex >= 0) {
-        setDraggingIndex(newIndex);
+      if (pointIndex >= 0) {
+        setDraggingIndex(pointIndex);
+      } else {
+        // Add new point
+        const newPoints = [...points, { x, y }].sort((a, b) => a.x - b.x);
+        onChange(newPoints);
+        // Find and start dragging the new point
+        const newIndex = newPoints.findIndex(
+          (p) => Math.abs(p.x - x) < 0.01 && Math.abs(p.y - y) < 0.01,
+        );
+        if (newIndex >= 0) {
+          setDraggingIndex(newIndex);
+        }
       }
-    }
-  }, [getCanvasCoords, findPointAtPosition, points, onChange]);
+    },
+    [getCanvasCoords, findPointAtPosition, points, onChange],
+  );
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (draggingIndex === null) return;
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (draggingIndex === null) return;
 
-    const { x, y } = getCanvasCoords(e);
-    const newPoints = [...points];
+      const { x, y } = getCanvasCoords(e);
+      const newPoints = [...points];
 
-    // Don't allow moving first and last points horizontally
-    if (draggingIndex === 0) {
-      newPoints[draggingIndex] = { x: 0, y };
-    } else if (draggingIndex === points.length - 1) {
-      newPoints[draggingIndex] = { x: 1, y };
-    } else {
-      newPoints[draggingIndex] = { x, y };
-    }
+      // Don't allow moving first and last points horizontally
+      if (draggingIndex === 0) {
+        newPoints[draggingIndex] = { x: 0, y };
+      } else if (draggingIndex === points.length - 1) {
+        newPoints[draggingIndex] = { x: 1, y };
+      } else {
+        newPoints[draggingIndex] = { x, y };
+      }
 
-    onChange(newPoints);
-  }, [draggingIndex, getCanvasCoords, points, onChange]);
+      onChange(newPoints);
+    },
+    [draggingIndex, getCanvasCoords, points, onChange],
+  );
 
   const handleMouseUp = useCallback(() => {
     setDraggingIndex(null);
   }, []);
 
-  const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const { x, y } = getCanvasCoords(e);
-    const pointIndex = findPointAtPosition(x, y);
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const { x, y } = getCanvasCoords(e);
+      const pointIndex = findPointAtPosition(x, y);
 
-    if (pointIndex >= 0 && pointIndex !== 0 && pointIndex !== points.length - 1) {
-      // Remove point (but not first or last)
-      const newPoints = points.filter((_, i) => i !== pointIndex);
-      onChange(newPoints);
-    }
-  }, [getCanvasCoords, findPointAtPosition, points, onChange]);
+      if (pointIndex >= 0 && pointIndex !== 0 && pointIndex !== points.length - 1) {
+        // Remove point (but not first or last)
+        const newPoints = points.filter((_, i) => i !== pointIndex);
+        onChange(newPoints);
+      }
+    },
+    [getCanvasCoords, findPointAtPosition, points, onChange],
+  );
 
   return (
     <div ref={containerRef} className="relative">
@@ -229,10 +242,7 @@ const CurveEditor = memo(function CurveEditor({
 // Main Component
 // =============================================================================
 
-export const CurvesPanel = memo(function CurvesPanel({
-  curves,
-  onChange,
-}: CurvesPanelProps) {
+export const CurvesPanel = memo(function CurvesPanel({ curves, onChange }: CurvesPanelProps) {
   const { t } = useTranslation();
   const [activeChannel, setActiveChannel] = useState<ChannelType>('rgb');
 
@@ -240,18 +250,21 @@ export const CurvesPanel = memo(function CurvesPanel({
     setActiveChannel(channel);
   }, []);
 
-  const handlePointsChange = useCallback((points: CurvePoint[]) => {
-    const channelData: CurveAdjustment = {
-      ...curves[activeChannel],
-      points,
-      enabled: true,
-    };
+  const handlePointsChange = useCallback(
+    (points: CurvePoint[]) => {
+      const channelData: CurveAdjustment = {
+        ...curves[activeChannel],
+        points,
+        enabled: true,
+      };
 
-    onChange({
-      ...curves,
-      [activeChannel]: channelData,
-    });
-  }, [curves, activeChannel, onChange]);
+      onChange({
+        ...curves,
+        [activeChannel]: channelData,
+      });
+    },
+    [curves, activeChannel, onChange],
+  );
 
   const handleResetCurve = useCallback(() => {
     const defaultPoints: CurvePoint[] = [
@@ -291,7 +304,8 @@ export const CurvesPanel = memo(function CurvesPanel({
                 : 'text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)]'
             }`}
             style={{
-              borderBottom: activeChannel === channel ? `2px solid ${CHANNEL_COLORS[channel]}` : undefined,
+              borderBottom:
+                activeChannel === channel ? `2px solid ${CHANNEL_COLORS[channel]}` : undefined,
             }}
             onClick={() => handleChannelChange(channel)}
           >

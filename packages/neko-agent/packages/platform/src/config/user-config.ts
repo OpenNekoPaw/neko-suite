@@ -77,7 +77,8 @@ function unifiedToUserConfig(unified: UnifiedConfig | null): UserConfig {
     prompts: (unified.prompts as PromptPreset[]) ?? [],
     providerOverrides: (unified.providerOverrides as Record<string, Partial<Provider>>) ?? {},
     modelOverrides: (unified.modelOverrides as Record<string, Partial<Model>>) ?? {},
-    mcpServerOverrides: (unified.mcpServerOverrides as Record<string, Partial<MCPServerPreset>>) ?? {},
+    mcpServerOverrides:
+      (unified.mcpServerOverrides as Record<string, Partial<MCPServerPreset>>) ?? {},
     workflowOverrides: (unified.workflowOverrides as Record<string, Partial<WorkflowPreset>>) ?? {},
     promptOverrides: (unified.promptOverrides as Record<string, Partial<PromptPreset>>) ?? {},
     taskDefaults: unified.taskDefaults,
@@ -196,10 +197,7 @@ export class FileUserConfigManager implements IUserConfigManager {
   // Provider Methods
   // ==========================================================================
 
-  async updateProviderOverride(
-    providerId: string,
-    override: Partial<Provider>
-  ): Promise<void> {
+  async updateProviderOverride(providerId: string, override: Partial<Provider>): Promise<void> {
     const config = this.load();
     config.providerOverrides[providerId] = {
       ...config.providerOverrides[providerId],
@@ -254,7 +252,7 @@ export class FileUserConfigManager implements IUserConfigManager {
 
   async updateMCPServerOverride(
     serverId: string,
-    override: Partial<MCPServerPreset>
+    override: Partial<MCPServerPreset>,
   ): Promise<void> {
     const config = this.load();
     config.mcpServerOverrides[serverId] = {
@@ -288,7 +286,7 @@ export class FileUserConfigManager implements IUserConfigManager {
 
   async updateWorkflowOverride(
     workflowId: string,
-    override: Partial<WorkflowPreset>
+    override: Partial<WorkflowPreset>,
   ): Promise<void> {
     const config = this.load();
     config.workflowOverrides[workflowId] = {
@@ -320,10 +318,7 @@ export class FileUserConfigManager implements IUserConfigManager {
   // Prompt Methods
   // ==========================================================================
 
-  async updatePromptOverride(
-    promptId: string,
-    override: Partial<PromptPreset>
-  ): Promise<void> {
+  async updatePromptOverride(promptId: string, override: Partial<PromptPreset>): Promise<void> {
     const config = this.load();
     config.promptOverrides[promptId] = {
       ...config.promptOverrides[promptId],

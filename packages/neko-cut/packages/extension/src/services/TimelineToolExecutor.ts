@@ -82,8 +82,13 @@ function normalizePathsForSave(project: ProjectData, projectFilePath?: string): 
 
 function findElement(
   project: ProjectData,
-  elementId: string
-): { trackIndex: number; elementIndex: number; track: TimelineTrack; element: TimelineElement } | null {
+  elementId: string,
+): {
+  trackIndex: number;
+  elementIndex: number;
+  track: TimelineTrack;
+  element: TimelineElement;
+} | null {
   for (let trackIndex = 0; trackIndex < project.tracks.length; trackIndex++) {
     const track = project.tracks[trackIndex];
     const elementIndex = track.elements.findIndex((e) => e.id === elementId);
@@ -103,7 +108,7 @@ function updateElementAt(
   project: ProjectData,
   trackIndex: number,
   elementIndex: number,
-  updatedElement: TimelineElement
+  updatedElement: TimelineElement,
 ): ProjectData {
   const track = project.tracks[trackIndex];
   const updatedElements = [...track.elements];
@@ -114,7 +119,11 @@ function updateElementAt(
   return { ...project, tracks: updatedTracks };
 }
 
-function removeElementAt(project: ProjectData, trackIndex: number, elementIndex: number): ProjectData {
+function removeElementAt(
+  project: ProjectData,
+  trackIndex: number,
+  elementIndex: number,
+): ProjectData {
   const track = project.tracks[trackIndex];
   const updatedElements = [...track.elements];
   updatedElements.splice(elementIndex, 1);
@@ -136,12 +145,7 @@ function createDefaultShapeStyle(): ShapeStyle {
   return structuredClone(DEFAULT_SHAPE_STYLE);
 }
 
-function createRectangleShape(
-  centerX = 50,
-  centerY = 50,
-  width = 40,
-  height = 30
-): Shape {
+function createRectangleShape(centerX = 50, centerY = 50, width = 40, height = 30): Shape {
   return {
     shapeType: 'rectangle',
     centerX,
@@ -153,12 +157,7 @@ function createRectangleShape(
   };
 }
 
-function createEllipseShape(
-  centerX = 50,
-  centerY = 50,
-  radiusX = 20,
-  radiusY = 15
-): Shape {
+function createEllipseShape(centerX = 50, centerY = 50, radiusX = 20, radiusY = 15): Shape {
   return {
     shapeType: 'ellipse',
     centerX,
@@ -189,12 +188,7 @@ function createPolygonShape(sides = 6): Shape {
   };
 }
 
-function createStarShape(
-  centerX = 50,
-  centerY = 50,
-  points = 5,
-  outerRadius = 25
-): Shape {
+function createStarShape(centerX = 50, centerY = 50, points = 5, outerRadius = 25): Shape {
   return {
     shapeType: 'star',
     centerX,
@@ -206,12 +200,7 @@ function createStarShape(
   };
 }
 
-function createLineShape(
-  startX = 25,
-  startY = 50,
-  endX = 75,
-  endY = 50
-): Shape {
+function createLineShape(startX = 25, startY = 50, endX = 75, endY = 50): Shape {
   return {
     shapeType: 'line',
     startX,
@@ -242,7 +231,11 @@ function createBezierShape(): Shape {
   };
 }
 
-function createShapeInstance(shape: Shape, name?: string, style?: Partial<ShapeStyle>): ShapeInstance {
+function createShapeInstance(
+  shape: Shape,
+  name?: string,
+  style?: Partial<ShapeStyle>,
+): ShapeInstance {
   return {
     id: createShapeId(),
     name: name || `Shape ${shape.shapeType}`,
@@ -257,10 +250,7 @@ function createShapeInstance(shape: Shape, name?: string, style?: Partial<ShapeS
   };
 }
 
-function applyStyleOverrides(
-  baseStyle: ShapeStyle,
-  style?: Record<string, unknown>
-): ShapeStyle {
+function applyStyleOverrides(baseStyle: ShapeStyle, style?: Record<string, unknown>): ShapeStyle {
   if (!style || typeof style !== 'object') {
     return baseStyle;
   }
@@ -497,7 +487,11 @@ function normalizePercent(value: number | undefined, fallback: number): number {
   return value;
 }
 
-function applyTool(project: ProjectData, toolName: string, params: Record<string, unknown>): ToolApplyResult {
+function applyTool(
+  project: ProjectData,
+  toolName: string,
+  params: Record<string, unknown>,
+): ToolApplyResult {
   switch (toolName) {
     case 'GetTimelineInfo': {
       const tracks = project.tracks.map((track) => ({
@@ -545,7 +539,12 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
         };
 
         if (element.type === 'media' || element.type === 'audio') {
-          const elementAny = element as unknown as { src?: unknown; audio?: unknown; speed?: unknown; muted?: unknown };
+          const elementAny = element as unknown as {
+            src?: unknown;
+            audio?: unknown;
+            speed?: unknown;
+            muted?: unknown;
+          };
           if (typeof elementAny.src === 'string') info.src = elementAny.src;
           if (elementAny.audio) info.audio = elementAny.audio;
           if (elementAny.speed) info.speed = elementAny.speed;
@@ -572,7 +571,12 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
           if (shapeAny.shapes) info.shapes = shapeAny.shapes;
         }
 
-        const elementAny = element as unknown as { effects?: unknown; transitionIn?: unknown; transitionOut?: unknown; keyframes?: unknown };
+        const elementAny = element as unknown as {
+          effects?: unknown;
+          transitionIn?: unknown;
+          transitionOut?: unknown;
+          keyframes?: unknown;
+        };
         if (elementAny.effects) info.effects = elementAny.effects;
         if (elementAny.transitionIn) info.transitionIn = elementAny.transitionIn;
         if (elementAny.transitionOut) info.transitionOut = elementAny.transitionOut;
@@ -635,7 +639,13 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
         duration?: number;
         src?: string;
         content?: string;
-        transform?: Partial<{ x: number; y: number; scaleX: number; scaleY: number; rotation: number }>;
+        transform?: Partial<{
+          x: number;
+          y: number;
+          scaleX: number;
+          scaleY: number;
+          rotation: number;
+        }>;
       };
 
       if (!trackId || !type || startTime === undefined || duration === undefined) {
@@ -753,7 +763,13 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
         elementId?: string;
         startTime?: number;
         duration?: number;
-        transform?: Partial<{ x: number; y: number; scaleX: number; scaleY: number; rotation: number }>;
+        transform?: Partial<{
+          x: number;
+          y: number;
+          scaleX: number;
+          scaleY: number;
+          rotation: number;
+        }>;
         content?: string;
         opacity?: number;
       };
@@ -787,7 +803,12 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       }
 
       const updatedElement = { ...element, ...updates } as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
 
       return {
         success: true,
@@ -817,13 +838,19 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
     }
 
     case 'AddEffect': {
-      const { elementId, effectType, params: effectParams } = params as {
+      const {
+        elementId,
+        effectType,
+        params: effectParams,
+      } = params as {
         elementId?: string;
         effectType?: string;
         params?: Record<string, unknown>;
       };
-      if (!elementId || !effectType) return { success: false, error: 'elementId and effectType are required' };
-      if (!(effectType in BUILT_IN_EFFECTS)) return { success: false, error: `Unknown effect type: ${effectType}` };
+      if (!elementId || !effectType)
+        return { success: false, error: 'elementId and effectType are required' };
+      if (!(effectType in BUILT_IN_EFFECTS))
+        return { success: false, error: `Unknown effect type: ${effectType}` };
 
       const found = findElement(project, elementId);
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
@@ -845,12 +872,25 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
         effects: [...existingEffects, newEffect],
       } as unknown as TimelineElement;
 
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
-      return { success: true, data: { effectId, message: 'Effect added successfully' }, updatedProject };
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
+      return {
+        success: true,
+        data: { effectId, message: 'Effect added successfully' },
+        updatedProject,
+      };
     }
 
     case 'UpdateEffect': {
-      const { elementId, effectId, params: effectParams } = params as {
+      const {
+        elementId,
+        effectId,
+        params: effectParams,
+      } = params as {
         elementId?: string;
         effectId?: string;
         params?: Record<string, unknown>;
@@ -862,7 +902,9 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       const found = findElement(project, elementId);
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-      const elementAny = found.element as unknown as { effects?: Array<{ id: string; parameters?: Record<string, unknown> }> };
+      const elementAny = found.element as unknown as {
+        effects?: Array<{ id: string; parameters?: Record<string, unknown> }>;
+      };
       const effects = [...(elementAny.effects || [])];
       const idx = effects.findIndex((e) => e.id === effectId);
       if (idx === -1) return { success: false, error: `Effect not found: ${effectId}` };
@@ -873,13 +915,23 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       };
 
       const updatedElement = { ...found.element, effects } as unknown as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
-      return { success: true, data: { effectId, message: 'Effect updated successfully' }, updatedProject };
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
+      return {
+        success: true,
+        data: { effectId, message: 'Effect updated successfully' },
+        updatedProject,
+      };
     }
 
     case 'RemoveEffect': {
       const { elementId, effectId } = params as { elementId?: string; effectId?: string };
-      if (!elementId || !effectId) return { success: false, error: 'elementId and effectId are required' };
+      if (!elementId || !effectId)
+        return { success: false, error: 'elementId and effectId are required' };
 
       const found = findElement(project, elementId);
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
@@ -887,10 +939,19 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       const elementAny = found.element as unknown as { effects?: Array<{ id: string }> };
       const effects = elementAny.effects || [];
       const updatedEffects = effects.filter((e) => e.id !== effectId);
-      if (updatedEffects.length === effects.length) return { success: false, error: `Effect not found: ${effectId}` };
+      if (updatedEffects.length === effects.length)
+        return { success: false, error: `Effect not found: ${effectId}` };
 
-      const updatedElement = { ...found.element, effects: updatedEffects } as unknown as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
+      const updatedElement = {
+        ...found.element,
+        effects: updatedEffects,
+      } as unknown as TimelineElement;
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
       return { success: true, data: { message: 'Effect removed successfully' }, updatedProject };
     }
 
@@ -898,13 +959,23 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       return {
         success: true,
         data: {
-          transitions: Object.entries(TRANSITION_PRESETS).map(([type, config]) => ({ type, ...config })),
+          transitions: Object.entries(TRANSITION_PRESETS).map(([type, config]) => ({
+            type,
+            ...config,
+          })),
         },
       };
     }
 
     case 'SetTransition': {
-      const { elementId, placement, type, duration, easing, params: transitionParams } = params as {
+      const {
+        elementId,
+        placement,
+        type,
+        duration,
+        easing,
+        params: transitionParams,
+      } = params as {
         elementId?: string;
         placement?: 'in' | 'out';
         type?: string;
@@ -939,7 +1010,12 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
         [transitionKey]: transition,
       } as unknown as TimelineElement;
 
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
       return {
         success: true,
         data: { transitionId, placement, message: `Transition ${placement} set successfully` },
@@ -949,7 +1025,8 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
 
     case 'RemoveTransition': {
       const { elementId, placement } = params as { elementId?: string; placement?: 'in' | 'out' };
-      if (!elementId || !placement) return { success: false, error: 'elementId and placement are required' };
+      if (!elementId || !placement)
+        return { success: false, error: 'elementId and placement are required' };
 
       const found = findElement(project, elementId);
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
@@ -958,8 +1035,17 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       const updatedElementAny = { ...(found.element as unknown as Record<string, unknown>) };
       delete updatedElementAny[transitionKey];
 
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElementAny as unknown as TimelineElement);
-      return { success: true, data: { message: `Transition ${placement} removed successfully` }, updatedProject };
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElementAny as unknown as TimelineElement,
+      );
+      return {
+        success: true,
+        data: { message: `Transition ${placement} removed successfully` },
+        updatedProject,
+      };
     }
 
     // ---------------------------------------------------------------------
@@ -967,15 +1053,7 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
     // ---------------------------------------------------------------------
 
     case 'AddShape': {
-      const {
-        trackId,
-        shapeType,
-        name,
-        position,
-        size,
-        style,
-        transform,
-      } = params as {
+      const { trackId, shapeType, name, position, size, style, transform } = params as {
         trackId?: string;
         shapeType?: string;
         name?: string;
@@ -991,7 +1069,10 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
 
       const validTypes: ShapeType[] = ['rectangle', 'ellipse', 'polygon', 'star', 'line', 'bezier'];
       if (!validTypes.includes(shapeType as ShapeType)) {
-        return { success: false, error: `Invalid shape type: ${shapeType}. Valid types: ${validTypes.join(', ')}` };
+        return {
+          success: false,
+          error: `Invalid shape type: ${shapeType}. Valid types: ${validTypes.join(', ')}`,
+        };
       }
 
       const trackIndex = project.tracks.findIndex((t) => t.id === trackId);
@@ -1003,7 +1084,8 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       const baseWidth = 20;
       const baseHeight = 20;
       const width = size?.width ?? (transform?.scaleX ? baseWidth * transform.scaleX : baseWidth);
-      const height = size?.height ?? (transform?.scaleY ? baseHeight * transform.scaleY : baseHeight);
+      const height =
+        size?.height ?? (transform?.scaleY ? baseHeight * transform.scaleY : baseHeight);
 
       let shape: Shape;
       switch (shapeType) {
@@ -1053,15 +1135,7 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
     }
 
     case 'UpdateShape': {
-      const {
-        shapeId,
-        elementId,
-        position,
-        size,
-        style,
-        visible,
-        locked,
-      } = params as {
+      const { shapeId, elementId, position, size, style, visible, locked } = params as {
         shapeId?: string;
         elementId?: string;
         position?: { x?: number; y?: number };
@@ -1111,8 +1185,10 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
           if (typeof size.width === 'number') (shape as { width: number }).width = size.width;
           if (typeof size.height === 'number') (shape as { height: number }).height = size.height;
         } else if ('radiusX' in shape && 'radiusY' in shape) {
-          if (typeof size.width === 'number') (shape as { radiusX: number }).radiusX = size.width / 2;
-          if (typeof size.height === 'number') (shape as { radiusY: number }).radiusY = size.height / 2;
+          if (typeof size.width === 'number')
+            (shape as { radiusX: number }).radiusX = size.width / 2;
+          if (typeof size.height === 'number')
+            (shape as { radiusY: number }).radiusY = size.height / 2;
         }
       }
 
@@ -1195,9 +1271,18 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       keyframes[property] = propertyKeyframes;
 
       const updatedElement = { ...(found.element as any), keyframes } as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
 
-      return { success: true, data: { keyframeId, message: 'Keyframe added successfully' }, updatedProject };
+      return {
+        success: true,
+        data: { keyframeId, message: 'Keyframe added successfully' },
+        updatedProject,
+      };
     }
 
     case 'UpdateKeyframe': {
@@ -1209,7 +1294,8 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
         easing?: string;
       };
 
-      if (!elementId || !keyframeId) return { success: false, error: 'elementId and keyframeId are required' };
+      if (!elementId || !keyframeId)
+        return { success: false, error: 'elementId and keyframeId are required' };
 
       const found = findElement(project, elementId);
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
@@ -1240,13 +1326,23 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       if (!updated) return { success: false, error: `Keyframe not found: ${keyframeId}` };
 
       const updatedElement = { ...(found.element as any), keyframes } as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
-      return { success: true, data: { keyframeId, message: 'Keyframe updated successfully' }, updatedProject };
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
+      return {
+        success: true,
+        data: { keyframeId, message: 'Keyframe updated successfully' },
+        updatedProject,
+      };
     }
 
     case 'RemoveKeyframe': {
       const { elementId, keyframeId } = params as { elementId?: string; keyframeId?: string };
-      if (!elementId || !keyframeId) return { success: false, error: 'elementId and keyframeId are required' };
+      if (!elementId || !keyframeId)
+        return { success: false, error: 'elementId and keyframeId are required' };
 
       const found = findElement(project, elementId);
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
@@ -1267,7 +1363,12 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       if (!removed) return { success: false, error: `Keyframe not found: ${keyframeId}` };
 
       const updatedElement = { ...(found.element as any), keyframes } as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
       return { success: true, data: { message: 'Keyframe removed successfully' }, updatedProject };
     }
 
@@ -1276,7 +1377,14 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
     // ---------------------------------------------------------------------
 
     case 'AddMask': {
-      const { elementId, maskType, name, inverted, feather, params: nestedParams } = params as {
+      const {
+        elementId,
+        maskType,
+        name,
+        inverted,
+        feather,
+        params: nestedParams,
+      } = params as {
         elementId?: string;
         maskType?: string;
         name?: string;
@@ -1285,10 +1393,14 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
         params?: Record<string, unknown>;
       };
 
-      if (!elementId || !maskType) return { success: false, error: 'elementId and maskType are required' };
+      if (!elementId || !maskType)
+        return { success: false, error: 'elementId and maskType are required' };
       const validTypes = ['rectangle', 'ellipse', 'polygon', 'bezier'];
       if (!validTypes.includes(maskType)) {
-        return { success: false, error: `Invalid mask type: ${maskType}. Valid types: ${validTypes.join(', ')}` };
+        return {
+          success: false,
+          error: `Invalid mask type: ${maskType}. Valid types: ${validTypes.join(', ')}`,
+        };
       }
 
       const found = findElement(project, elementId);
@@ -1299,18 +1411,42 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
 
       const mask = createMaskInstance(maskType, name || `Mask ${existingMasks.length + 1}`);
 
-      const mergedParams = { ...(nestedParams || {}), inverted, feather } as Record<string, unknown>;
+      const mergedParams = { ...(nestedParams || {}), inverted, feather } as Record<
+        string,
+        unknown
+      >;
       if (mergedParams.inverted !== undefined) mask.inverted = mergedParams.inverted;
       if (mergedParams.feather !== undefined) mask.feather = mergedParams.feather;
       mask.order = existingMasks.length;
 
-      const updatedElement = { ...(found.element as any), masks: [...existingMasks, mask] } as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
-      return { success: true, data: { maskId: mask.id, message: 'Mask added successfully' }, updatedProject };
+      const updatedElement = {
+        ...(found.element as any),
+        masks: [...existingMasks, mask],
+      } as TimelineElement;
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
+      return {
+        success: true,
+        data: { maskId: mask.id, message: 'Mask added successfully' },
+        updatedProject,
+      };
     }
 
     case 'UpdateMask': {
-      const { elementId, maskId, enabled, inverted, feather, expansion, opacity, params: nestedParams } = params as {
+      const {
+        elementId,
+        maskId,
+        enabled,
+        inverted,
+        feather,
+        expansion,
+        opacity,
+        params: nestedParams,
+      } = params as {
         elementId?: string;
         maskId?: string;
         enabled?: boolean;
@@ -1321,7 +1457,8 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
         params?: Record<string, unknown>;
       };
 
-      if (!elementId || !maskId) return { success: false, error: 'elementId and maskId are required' };
+      if (!elementId || !maskId)
+        return { success: false, error: 'elementId and maskId are required' };
 
       const found = findElement(project, elementId);
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
@@ -1331,7 +1468,14 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       const idx = masks.findIndex((m) => m.id === maskId);
       if (idx === -1) return { success: false, error: `Mask not found: ${maskId}` };
 
-      const merged = { ...(nestedParams || {}), enabled, inverted, feather, expansion, opacity } as Record<string, unknown>;
+      const merged = {
+        ...(nestedParams || {}),
+        enabled,
+        inverted,
+        feather,
+        expansion,
+        opacity,
+      } as Record<string, unknown>;
       masks[idx] = {
         ...masks[idx],
         ...(merged.enabled !== undefined && { enabled: merged.enabled }),
@@ -1342,13 +1486,23 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       };
 
       const updatedElement = { ...(found.element as any), masks } as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
-      return { success: true, data: { maskId, message: 'Mask updated successfully' }, updatedProject };
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
+      return {
+        success: true,
+        data: { maskId, message: 'Mask updated successfully' },
+        updatedProject,
+      };
     }
 
     case 'RemoveMask': {
       const { elementId, maskId } = params as { elementId?: string; maskId?: string };
-      if (!elementId || !maskId) return { success: false, error: 'elementId and maskId are required' };
+      if (!elementId || !maskId)
+        return { success: false, error: 'elementId and maskId are required' };
 
       const found = findElement(project, elementId);
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
@@ -1356,10 +1510,16 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       const elementAny = found.element as unknown as { masks?: Array<Record<string, unknown>> };
       const masks = elementAny.masks || [];
       const updatedMasks = masks.filter((m) => m.id !== maskId);
-      if (updatedMasks.length === masks.length) return { success: false, error: `Mask not found: ${maskId}` };
+      if (updatedMasks.length === masks.length)
+        return { success: false, error: `Mask not found: ${maskId}` };
 
       const updatedElement = { ...(found.element as any), masks: updatedMasks } as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
       return { success: true, data: { message: 'Mask removed successfully' }, updatedProject };
     }
 
@@ -1373,13 +1533,19 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       // 兼容两种入参：
       // 1) { elementId, colorCorrection: Partial<...> }（旧 webview handler）
       // 2) { elementId, brightness/contrast/saturation/temperature/tint/gamma/... }（timeline-bridge schema）
-      const nested = (params as { colorCorrection?: unknown }).colorCorrection as Record<string, unknown> | undefined;
+      const nested = (params as { colorCorrection?: unknown }).colorCorrection as
+        | Record<string, unknown>
+        | undefined;
       const ccParams = nested ?? (params as Record<string, unknown>);
 
       const elementAny = found.element as unknown as { colorCorrection?: unknown };
-      const existingCC = (elementAny.colorCorrection as Record<string, unknown> | undefined) ?? DEFAULT_COLOR_CORRECTION;
+      const existingCC =
+        (elementAny.colorCorrection as Record<string, unknown> | undefined) ??
+        DEFAULT_COLOR_CORRECTION;
 
-      const existingBasic = ((existingCC as Record<string, unknown>).basic as Record<string, unknown> | undefined) ?? {};
+      const existingBasic =
+        ((existingCC as Record<string, unknown>).basic as Record<string, unknown> | undefined) ??
+        {};
 
       const updatedCC = {
         ...existingCC,
@@ -1398,9 +1564,21 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
         },
       };
 
-      const updatedElement = { ...found.element, colorCorrection: updatedCC } as unknown as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
-      return { success: true, data: { elementId, message: 'Color correction applied successfully' }, updatedProject };
+      const updatedElement = {
+        ...found.element,
+        colorCorrection: updatedCC,
+      } as unknown as TimelineElement;
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
+      return {
+        success: true,
+        data: { elementId, message: 'Color correction applied successfully' },
+        updatedProject,
+      };
     }
 
     case 'ResetColorCorrection': {
@@ -1410,9 +1588,21 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       const found = findElement(project, elementId);
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-      const updatedElement = { ...found.element, colorCorrection: DEFAULT_COLOR_CORRECTION } as unknown as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
-      return { success: true, data: { elementId, message: 'Color correction reset to defaults' }, updatedProject };
+      const updatedElement = {
+        ...found.element,
+        colorCorrection: DEFAULT_COLOR_CORRECTION,
+      } as unknown as TimelineElement;
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
+      return {
+        success: true,
+        data: { elementId, message: 'Color correction reset to defaults' },
+        updatedProject,
+      };
     }
 
     case 'AddTrack': {
@@ -1422,7 +1612,10 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       const normalizedType = type === 'video' ? 'media' : type;
       const validTypes = ['media', 'audio', 'subtitle', 'shape', 'text'];
       if (!validTypes.includes(normalizedType)) {
-        return { success: false, error: `Invalid track type: ${type}. Valid types: ${validTypes.join(', ')}` };
+        return {
+          success: false,
+          error: `Invalid track type: ${type}. Valid types: ${validTypes.join(', ')}`,
+        };
       }
 
       const trackId = `track-${generateId()}`;
@@ -1450,12 +1643,17 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
 
       const updatedTracks = [...project.tracks];
       updatedTracks.splice(idx, 1);
-      return { success: true, data: { message: 'Track deleted successfully' }, updatedProject: { ...project, tracks: updatedTracks } };
+      return {
+        success: true,
+        data: { message: 'Track deleted successfully' },
+        updatedProject: { ...project, tracks: updatedTracks },
+      };
     }
 
     case 'ReorderTracks': {
       const trackIds = params.trackIds as string[] | undefined;
-      if (!trackIds || !Array.isArray(trackIds)) return { success: false, error: 'trackIds array is required' };
+      if (!trackIds || !Array.isArray(trackIds))
+        return { success: false, error: 'trackIds array is required' };
 
       const existingIds = new Set(project.tracks.map((t) => t.id));
       for (const id of trackIds) {
@@ -1467,7 +1665,11 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
 
       const trackMap = new Map(project.tracks.map((t) => [t.id, t]));
       const reorderedTracks = trackIds.map((id) => trackMap.get(id)!);
-      return { success: true, data: { message: 'Tracks reordered successfully' }, updatedProject: { ...project, tracks: reorderedTracks } };
+      return {
+        success: true,
+        data: { message: 'Tracks reordered successfully' },
+        updatedProject: { ...project, tracks: reorderedTracks },
+      };
     }
 
     case 'SetTrackProperties': {
@@ -1494,11 +1696,19 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       const updatedTracks = [...project.tracks];
       updatedTracks[idx] = updatedTrack;
 
-      return { success: true, data: { trackId, message: 'Track properties updated successfully' }, updatedProject: { ...project, tracks: updatedTracks } };
+      return {
+        success: true,
+        data: { trackId, message: 'Track properties updated successfully' },
+        updatedProject: { ...project, tracks: updatedTracks },
+      };
     }
 
     case 'TrimElement': {
-      const { elementId, trimStart, trimEnd } = params as { elementId?: string; trimStart?: number; trimEnd?: number };
+      const { elementId, trimStart, trimEnd } = params as {
+        elementId?: string;
+        trimStart?: number;
+        trimEnd?: number;
+      };
       if (!elementId) return { success: false, error: 'elementId is required' };
       if (trimStart === undefined && trimEnd === undefined) {
         return { success: false, error: 'At least one of trimStart or trimEnd is required' };
@@ -1512,15 +1722,33 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       const newTrimEnd = trimEnd ?? element.trimEnd;
 
       const effectiveDuration = element.duration - newTrimStart - newTrimEnd;
-      if (effectiveDuration <= 0) return { success: false, error: 'Trim values would result in zero or negative duration' };
-      if (newTrimStart < 0 || newTrimEnd < 0) return { success: false, error: 'Trim values cannot be negative' };
-      if (newTrimStart + newTrimEnd >= element.duration) return { success: false, error: 'Total trim cannot exceed element duration' };
+      if (effectiveDuration <= 0)
+        return { success: false, error: 'Trim values would result in zero or negative duration' };
+      if (newTrimStart < 0 || newTrimEnd < 0)
+        return { success: false, error: 'Trim values cannot be negative' };
+      if (newTrimStart + newTrimEnd >= element.duration)
+        return { success: false, error: 'Total trim cannot exceed element duration' };
 
-      const updatedElement = { ...element, trimStart: newTrimStart, trimEnd: newTrimEnd } as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
+      const updatedElement = {
+        ...element,
+        trimStart: newTrimStart,
+        trimEnd: newTrimEnd,
+      } as TimelineElement;
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
       return {
         success: true,
-        data: { elementId, trimStart: newTrimStart, trimEnd: newTrimEnd, effectiveDuration, message: 'Element trimmed successfully' },
+        data: {
+          elementId,
+          trimStart: newTrimStart,
+          trimEnd: newTrimEnd,
+          effectiveDuration,
+          message: 'Element trimmed successfully',
+        },
         updatedProject,
       };
     }
@@ -1528,14 +1756,16 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
     case 'SplitElement': {
       const { elementId, splitTime } = params as { elementId?: string; splitTime?: number };
       if (!elementId) return { success: false, error: 'elementId is required' };
-      if (splitTime === undefined || splitTime <= 0) return { success: false, error: 'splitTime must be a positive number' };
+      if (splitTime === undefined || splitTime <= 0)
+        return { success: false, error: 'splitTime must be a positive number' };
 
       const found = findElement(project, elementId);
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
       const element = found.element;
       const effectiveDuration = element.duration - element.trimStart - element.trimEnd;
-      if (splitTime >= effectiveDuration) return { success: false, error: 'splitTime must be less than element effective duration' };
+      if (splitTime >= effectiveDuration)
+        return { success: false, error: 'splitTime must be less than element effective duration' };
 
       const actualSplitPoint = element.trimStart + splitTime;
 
@@ -1560,16 +1790,27 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
 
       return {
         success: true,
-        data: { leftElementId: leftElement.id, rightElementId: rightElement.id, splitPoint: splitTime, message: 'Element split successfully' },
+        data: {
+          leftElementId: leftElement.id,
+          rightElementId: rightElement.id,
+          splitPoint: splitTime,
+          message: 'Element split successfully',
+        },
         updatedProject: { ...project, tracks: updatedTracks },
       };
     }
 
     case 'SetPlaybackSpeed': {
-      const { elementId, speed, maintainPitch } = params as { elementId?: string; speed?: number; maintainPitch?: boolean };
+      const { elementId, speed, maintainPitch } = params as {
+        elementId?: string;
+        speed?: number;
+        maintainPitch?: boolean;
+      };
       if (!elementId) return { success: false, error: 'elementId is required' };
-      if (speed === undefined || speed <= 0) return { success: false, error: 'speed must be a positive number' };
-      if (speed < 0.25 || speed > 4.0) return { success: false, error: 'speed must be between 0.25 and 4.0' };
+      if (speed === undefined || speed <= 0)
+        return { success: false, error: 'speed must be a positive number' };
+      if (speed < 0.25 || speed > 4.0)
+        return { success: false, error: 'speed must be between 0.25 and 4.0' };
 
       const found = findElement(project, elementId);
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
@@ -1586,8 +1827,22 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
         },
       } as unknown as TimelineElement;
 
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
-      return { success: true, data: { elementId, speed, maintainPitch: maintainPitch ?? true, message: 'Playback speed set successfully' }, updatedProject };
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
+      return {
+        success: true,
+        data: {
+          elementId,
+          speed,
+          maintainPitch: maintainPitch ?? true,
+          message: 'Playback speed set successfully',
+        },
+        updatedProject,
+      };
     }
 
     case 'SeparateAudio': {
@@ -1596,11 +1851,19 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
 
       const found = findElement(project, elementId);
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
-      if (found.element.type !== 'media') return { success: false, error: 'Audio can only be separated from media elements' };
+      if (found.element.type !== 'media')
+        return { success: false, error: 'Audio can only be separated from media elements' };
 
-      const elementAny = found.element as unknown as { linkedAudioId?: unknown; src?: string; audio?: unknown; muted?: boolean };
-      if (elementAny.linkedAudioId) return { success: false, error: 'Audio has already been separated from this element' };
-      if (typeof elementAny.src !== 'string') return { success: false, error: 'Media element src is required' };
+      const elementAny = found.element as unknown as {
+        linkedAudioId?: unknown;
+        src?: string;
+        audio?: unknown;
+        muted?: boolean;
+      };
+      if (elementAny.linkedAudioId)
+        return { success: false, error: 'Audio has already been separated from this element' };
+      if (typeof elementAny.src !== 'string')
+        return { success: false, error: 'Media element src is required' };
 
       // Find or create target audio track
       let audioTrackId = targetTrackId;
@@ -1631,7 +1894,9 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
         duration: found.element.duration,
         trimStart: found.element.trimStart,
         trimEnd: found.element.trimEnd,
-        audio: (elementAny.audio as Record<string, unknown> | undefined) ?? { ...DEFAULT_AUDIO_PROPERTIES },
+        audio: (elementAny.audio as Record<string, unknown> | undefined) ?? {
+          ...DEFAULT_AUDIO_PROPERTIES,
+        },
       } as unknown as TimelineElement;
 
       const updatedVideoElement = {
@@ -1655,8 +1920,12 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       } else {
         // Append audio element to existing track
         const targetTrack = updatedTracks[targetTrackIndex];
-        if (targetTrack.type !== 'audio') return { success: false, error: 'Target track must be an audio track' };
-        updatedTracks[targetTrackIndex] = { ...targetTrack, elements: [...targetTrack.elements, audioElement] };
+        if (targetTrack.type !== 'audio')
+          return { success: false, error: 'Target track must be an audio track' };
+        updatedTracks[targetTrackIndex] = {
+          ...targetTrack,
+          elements: [...targetTrack.elements, audioElement],
+        };
       }
 
       // Update video element in its original track
@@ -1667,7 +1936,13 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
 
       return {
         success: true,
-        data: { videoElementId: elementId, audioElementId, audioTrackId, createdNewTrack, message: 'Audio separated successfully' },
+        data: {
+          videoElementId: elementId,
+          audioElementId,
+          audioTrackId,
+          createdNewTrack,
+          message: 'Audio separated successfully',
+        },
         updatedProject: { ...project, tracks: updatedTracks },
       };
     }
@@ -1687,7 +1962,8 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
       const elementAny = found.element as unknown as { audio?: Record<string, unknown> };
-      const existingAudio = elementAny.audio ?? ({ ...DEFAULT_AUDIO_PROPERTIES } as unknown as Record<string, unknown>);
+      const existingAudio =
+        elementAny.audio ?? ({ ...DEFAULT_AUDIO_PROPERTIES } as unknown as Record<string, unknown>);
 
       const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
 
@@ -1700,9 +1976,21 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
         ...(fadeOut !== undefined && { fadeOut: Math.max(0, fadeOut) }),
       };
 
-      const updatedElement = { ...found.element, audio: updatedAudio } as unknown as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
-      return { success: true, data: { elementId, message: 'Audio properties updated successfully' }, updatedProject };
+      const updatedElement = {
+        ...found.element,
+        audio: updatedAudio,
+      } as unknown as TimelineElement;
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
+      return {
+        success: true,
+        data: { elementId, message: 'Audio properties updated successfully' },
+        updatedProject,
+      };
     }
 
     case 'AddAudioKeyframe': {
@@ -1720,7 +2008,10 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
 
       const validProperties = ['volume', 'pan'];
       if (!validProperties.includes(property)) {
-        return { success: false, error: `Invalid property: ${property}. Valid: ${validProperties.join(', ')}` };
+        return {
+          success: false,
+          error: `Invalid property: ${property}. Valid: ${validProperties.join(', ')}`,
+        };
       }
 
       const found = findElement(project, elementId);
@@ -1733,15 +2024,26 @@ function applyTool(project: ProjectData, toolName: string, params: Record<string
       const keyframeId = `akf-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
       const keyframe = { id: keyframeId, time, value, easing: easing || 'linear' };
 
-      const insertIndex = propertyKeyframes.findIndex((kf) => (kf as { time?: number }).time! > time);
+      const insertIndex = propertyKeyframes.findIndex(
+        (kf) => (kf as { time?: number }).time! > time,
+      );
       if (insertIndex === -1) propertyKeyframes.push(keyframe);
       else propertyKeyframes.splice(insertIndex, 0, keyframe);
 
       audioKeyframes[property] = propertyKeyframes;
 
       const updatedElement = { ...found.element, audioKeyframes } as unknown as TimelineElement;
-      const updatedProject = updateElementAt(project, found.trackIndex, found.elementIndex, updatedElement);
-      return { success: true, data: { keyframeId, message: 'Audio keyframe added successfully' }, updatedProject };
+      const updatedProject = updateElementAt(
+        project,
+        found.trackIndex,
+        found.elementIndex,
+        updatedElement,
+      );
+      return {
+        success: true,
+        data: { keyframeId, message: 'Audio keyframe added successfully' },
+        updatedProject,
+      };
     }
 
     default:
@@ -1761,11 +2063,16 @@ export class TimelineToolExecutor {
       const projectSession = getService(IProjectSessionService);
 
       if (!editorRegistry) {
-        return { success: false, error: 'EditorRegistry service not available', duration: Date.now() - start };
+        return {
+          success: false,
+          error: 'EditorRegistry service not available',
+          duration: Date.now() - start,
+        };
       }
 
       const active = editorRegistry.getActiveEditor();
-      let model: VideoEditorModel | null = (active && active.type === 'video' ? (active as unknown as VideoEditorModel) : null);
+      let model: VideoEditorModel | null =
+        active && active.type === 'video' ? (active as unknown as VideoEditorModel) : null;
 
       const sessionInfo = projectSession?.getInfo() ?? null;
       if (!model && sessionInfo?.path) {
@@ -1794,7 +2101,12 @@ export class TimelineToolExecutor {
       }
 
       if (!project || !writeBack) {
-        return { success: false, error: 'No project loaded. Open a .jvi file or call POST /api/v1/project/load|create first.', duration: Date.now() - start };
+        return {
+          success: false,
+          error:
+            'No project loaded. Open a .jvi file or call POST /api/v1/project/load|create first.',
+          duration: Date.now() - start,
+        };
       }
 
       const result = applyTool(project, toolName, params);
@@ -1810,7 +2122,10 @@ export class TimelineToolExecutor {
     };
 
     const task = this.pending.then(run, run) as Promise<ToolResult>;
-    this.pending = task.then(() => undefined, () => undefined);
+    this.pending = task.then(
+      () => undefined,
+      () => undefined,
+    );
     return task;
   }
 }

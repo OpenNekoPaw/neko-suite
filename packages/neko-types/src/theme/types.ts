@@ -7,11 +7,7 @@
 /**
  * Theme kind (matches VSCode ColorThemeKind values)
  */
-export type ThemeKind =
-  | 'light'
-  | 'dark'
-  | 'high-contrast'
-  | 'high-contrast-light';
+export type ThemeKind = 'light' | 'dark' | 'high-contrast' | 'high-contrast-light';
 
 /**
  * Theme info available to all layers

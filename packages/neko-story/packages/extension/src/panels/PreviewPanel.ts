@@ -33,7 +33,7 @@ export class PreviewPanel implements vscode.Disposable {
     this.panel.webview.onDidReceiveMessage(
       (message: MessageFromWebview) => this.handleMessage(message),
       null,
-      this.disposables
+      this.disposables,
     );
 
     // Handle panel disposal
@@ -51,24 +51,18 @@ export class PreviewPanel implements vscode.Disposable {
         }
       }),
       vscode.workspace.onDidChangeTextDocument((event) => {
-        if (
-          this.activeEditor &&
-          event.document === this.activeEditor.document
-        ) {
+        if (this.activeEditor && event.document === this.activeEditor.document) {
           this.scheduleUpdate();
         }
       }),
       vscode.window.onDidChangeTextEditorSelection((event) => {
-        if (
-          this.activeEditor &&
-          event.textEditor === this.activeEditor
-        ) {
+        if (this.activeEditor && event.textEditor === this.activeEditor) {
           const line = event.selections[0]?.start.line;
           if (line !== undefined) {
             this.scrollPreviewToLine(line);
           }
         }
-      })
+      }),
     );
   }
 
@@ -85,18 +79,11 @@ export class PreviewPanel implements vscode.Disposable {
     }
 
     // Create new panel
-    const panel = vscode.window.createWebviewPanel(
-      PreviewPanel.viewType,
-      'Story Preview',
-      column,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [
-          vscode.Uri.joinPath(extensionUri, 'dist', 'webview'),
-        ],
-      }
-    );
+    const panel = vscode.window.createWebviewPanel(PreviewPanel.viewType, 'Story Preview', column, {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist', 'webview')],
+    });
 
     PreviewPanel.currentPanel = new PreviewPanel(panel, extensionUri);
   }
@@ -128,7 +115,7 @@ export class PreviewPanel implements vscode.Disposable {
     this.activeEditor.selection = selection;
     this.activeEditor.revealRange(
       new vscode.Range(position, position),
-      vscode.TextEditorRevealType.InCenter
+      vscode.TextEditorRevealType.InCenter,
     );
 
     // Focus the editor
@@ -175,10 +162,10 @@ export class PreviewPanel implements vscode.Disposable {
 
     // Get URIs for webview resources
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'assets', 'main.js')
+      vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'assets', 'main.js'),
     );
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'assets', 'main.css')
+      vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'assets', 'main.css'),
     );
 
     const nonce = getNonce();

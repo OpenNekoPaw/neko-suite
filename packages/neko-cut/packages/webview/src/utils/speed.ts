@@ -99,7 +99,7 @@ export function createDefaultSpeedProperties(): SpeedProperties {
 export function createTimeRemapKeyframe(
   outputTime: number,
   inputTime: number,
-  easing: EasingType = 'linear'
+  easing: EasingType = 'linear',
 ): TimeRemapKeyframe {
   return {
     id: `trk-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -116,10 +116,7 @@ export function createTimeRemapKeyframe(
 export function createDefaultTimeRemap(duration: number): TimeRemapData {
   return {
     enabled: false,
-    keyframes: [
-      createTimeRemapKeyframe(0, 0),
-      createTimeRemapKeyframe(duration, duration),
-    ],
+    keyframes: [createTimeRemapKeyframe(0, 0), createTimeRemapKeyframe(duration, duration)],
   };
 }
 
@@ -137,15 +134,13 @@ export function createDefaultTimeRemap(duration: number): TimeRemapData {
  */
 export function getSpeedAdjustedDuration(
   originalDuration: number,
-  speed: SpeedProperties | undefined
+  speed: SpeedProperties | undefined,
 ): number {
   if (!speed) return originalDuration;
 
   // If time remap is enabled, use the last output time
   if (speed.timeRemap?.enabled && speed.timeRemap.keyframes.length >= 2) {
-    const sorted = [...speed.timeRemap.keyframes].sort(
-      (a, b) => a.outputTime - b.outputTime
-    );
+    const sorted = [...speed.timeRemap.keyframes].sort((a, b) => a.outputTime - b.outputTime);
     return sorted[sorted.length - 1].outputTime;
   }
 
@@ -164,7 +159,7 @@ export function getSpeedAdjustedDuration(
 export function getSourceTimeFromOutputTime(
   outputTime: number,
   speed: SpeedProperties | undefined,
-  originalDuration: number
+  originalDuration: number,
 ): number {
   if (!speed) return outputTime;
 
@@ -196,7 +191,7 @@ export function getSourceTimeFromOutputTime(
 export function getOutputTimeFromSourceTime(
   sourceTime: number,
   speed: SpeedProperties | undefined,
-  originalDuration: number
+  originalDuration: number,
 ): number {
   if (!speed) return sourceTime;
 
@@ -222,10 +217,7 @@ export function getOutputTimeFromSourceTime(
  * @param speed - Speed properties
  * @returns Instantaneous speed multiplier
  */
-export function getInstantSpeed(
-  outputTime: number,
-  speed: SpeedProperties | undefined
-): number {
+export function getInstantSpeed(outputTime: number, speed: SpeedProperties | undefined): number {
   if (!speed) return 1;
 
   if (speed.timeRemap?.enabled && speed.timeRemap.keyframes.length >= 2) {
@@ -252,7 +244,7 @@ export function getInstantSpeed(
  */
 export function calculateTimeRemapValue(
   outputTime: number,
-  keyframes: TimeRemapKeyframe[]
+  keyframes: TimeRemapKeyframe[],
 ): number {
   if (keyframes.length === 0) return outputTime;
 
@@ -295,7 +287,7 @@ export function calculateTimeRemapValue(
  */
 export function calculateInverseTimeRemap(
   inputTime: number,
-  keyframes: TimeRemapKeyframe[]
+  keyframes: TimeRemapKeyframe[],
 ): number {
   if (keyframes.length === 0) return inputTime;
 

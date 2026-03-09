@@ -20,12 +20,7 @@ export type TaskViewType =
 /**
  * Task status (must match Platform's TaskStatus)
  */
-export type TaskViewStatus =
-  | 'pending'
-  | 'running'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+export type TaskViewStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 /**
  * Task view for UI display

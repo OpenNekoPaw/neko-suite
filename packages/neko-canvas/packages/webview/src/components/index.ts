@@ -15,7 +15,15 @@ export { AlignmentGuides } from './AlignmentGuides';
 export type { AlignmentGuidesProps } from './AlignmentGuides';
 
 // Node components
-export { BaseNode, MediaNode, StoryboardNode, AnnotationNode, TextNode, ArtboardNode, createArtboardData } from './nodes';
+export {
+  BaseNode,
+  MediaNode,
+  StoryboardNode,
+  AnnotationNode,
+  TextNode,
+  ArtboardNode,
+  createArtboardData,
+} from './nodes';
 export type {
   BaseNodeProps,
   MediaNodeProps,

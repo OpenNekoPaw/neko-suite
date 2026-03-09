@@ -53,10 +53,10 @@ export interface ElementSplitSlice {
 function findElementWithDuration(
   project: ProjectData,
   trackId: string,
-  elementId: string
+  elementId: string,
 ): { element: TimelineElement; effectiveDuration: number; elementEnd: number } | null {
-  const track = project.tracks.find(t => t.id === trackId);
-  const element = track?.elements.find(e => e.id === elementId);
+  const track = project.tracks.find((t) => t.id === trackId);
+  const element = track?.elements.find((e) => e.id === elementId);
   if (!element) return null;
 
   const effectiveDuration = element.duration - element.trimStart - element.trimEnd;
@@ -71,7 +71,7 @@ function findElementWithDuration(
 function isPlayheadInElement(
   currentTime: number,
   elementStart: number,
-  elementEnd: number
+  elementEnd: number,
 ): boolean {
   return currentTime > elementStart && currentTime < elementEnd;
 }
@@ -79,11 +79,7 @@ function isPlayheadInElement(
 /**
  * 计算分割点（相对于元素原始时长）
  */
-function calculateSplitPoint(
-  currentTime: number,
-  elementStart: number,
-  trimStart: number
-): number {
+function calculateSplitPoint(currentTime: number, elementStart: number, trimStart: number): number {
   return currentTime - elementStart + trimStart;
 }
 

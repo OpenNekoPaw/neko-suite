@@ -102,7 +102,10 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
   sendInspectElement: (src: string) => void;
   sendStartStreaming: () => void;
   sendStopStreaming: () => void;
-  sendStreamControl: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
+  sendStreamControl: (
+    action: 'play' | 'pause' | 'seek',
+    payload?: { time?: number; speed?: number },
+  ) => void;
   sendStartAudioStreaming: () => void;
   sendStopAudioStreaming: () => void;
   sendAudioStreamControl: (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => void;
@@ -184,8 +187,7 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
           break;
 
         case 'mediaDiff:imageData': {
-          const { currentImage, previousImage, heatmap, mimeType } =
-            msg.payload;
+          const { currentImage, previousImage, heatmap, mimeType } = msg.payload;
           setState((prev) => {
             // Revoke old URLs
             revokeBlobUrl(prev.currentImageSrc);
@@ -201,9 +203,7 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
               previousImageSrc: previousImage
                 ? trackBlobUrl(arrayBufferToBlobUrl(previousImage, mime))
                 : null,
-              heatmapSrc: heatmap
-                ? trackBlobUrl(arrayBufferToBlobUrl(heatmap, 'image/png'))
-                : null,
+              heatmapSrc: heatmap ? trackBlobUrl(arrayBufferToBlobUrl(heatmap, 'image/png')) : null,
             };
           });
           break;
@@ -220,14 +220,11 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
         case 'mediaDiff:frameData': {
           const { version, imageBuffer } = msg.payload;
           setState((prev) => {
-            const key =
-              version === 'current' ? 'currentFrameSrc' : 'previousFrameSrc';
+            const key = version === 'current' ? 'currentFrameSrc' : 'previousFrameSrc';
             revokeBlobUrl(prev[key]);
             return {
               ...prev,
-              [key]: trackBlobUrl(
-                arrayBufferToBlobUrl(imageBuffer, 'image/jpeg')
-              ),
+              [key]: trackBlobUrl(arrayBufferToBlobUrl(imageBuffer, 'image/jpeg')),
             };
           });
           break;
@@ -246,10 +243,7 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
             const next = new Map(prev.elementThumbnails);
             const oldUrl = next.get(src);
             if (oldUrl) revokeBlobUrl(oldUrl);
-            next.set(
-              src,
-              trackBlobUrl(arrayBufferToBlobUrl(imageBuffer, 'image/jpeg'))
-            );
+            next.set(src, trackBlobUrl(arrayBufferToBlobUrl(imageBuffer, 'image/jpeg')));
             return { ...prev, elementThumbnails: next };
           });
           break;
@@ -304,28 +298,28 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
   // Send methods (Webview → Extension)
   // =========================================================================
 
-  const sendInit = useCallback((ref?: string) => {
-    setState((prev) => ({ ...prev, isLoading: true, error: null }));
-    vscode.postMessage({
-      type: 'mediaDiff:init',
-      requestId: nextRequestId(),
-      timestamp: Date.now(),
-      payload: { fileUri: state.initialState.fileUri, ref },
-    });
-  }, [state.initialState.fileUri]);
-
-  const sendInitLocal = useCallback(
-    (currentUri: string, previousUri: string) => {
+  const sendInit = useCallback(
+    (ref?: string) => {
       setState((prev) => ({ ...prev, isLoading: true, error: null }));
       vscode.postMessage({
-        type: 'mediaDiff:initLocal',
+        type: 'mediaDiff:init',
         requestId: nextRequestId(),
         timestamp: Date.now(),
-        payload: { currentUri, previousUri },
+        payload: { fileUri: state.initialState.fileUri, ref },
       });
     },
-    []
+    [state.initialState.fileUri],
   );
+
+  const sendInitLocal = useCallback((currentUri: string, previousUri: string) => {
+    setState((prev) => ({ ...prev, isLoading: true, error: null }));
+    vscode.postMessage({
+      type: 'mediaDiff:initLocal',
+      requestId: nextRequestId(),
+      timestamp: Date.now(),
+      payload: { currentUri, previousUri },
+    });
+  }, []);
 
   const sendSeek = useCallback((time: number) => {
     vscode.postMessage({
@@ -336,17 +330,14 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     });
   }, []);
 
-  const sendGetFrame = useCallback(
-    (time: number, version: 'current' | 'previous') => {
-      vscode.postMessage({
-        type: 'mediaDiff:getFrame',
-        requestId: nextRequestId(),
-        timestamp: Date.now(),
-        payload: { time, version },
-      });
-    },
-    []
-  );
+  const sendGetFrame = useCallback((time: number, version: 'current' | 'previous') => {
+    vscode.postMessage({
+      type: 'mediaDiff:getFrame',
+      requestId: nextRequestId(),
+      timestamp: Date.now(),
+      payload: { time, version },
+    });
+  }, []);
 
   const sendChangeRef = useCallback((ref: string) => {
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
@@ -413,7 +404,7 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
         payload: { action, ...payload },
       });
     },
-    []
+    [],
   );
 
   const sendStartAudioStreaming = useCallback(() => {
@@ -444,21 +435,18 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
         payload: { action, ...payload },
       });
     },
-    []
+    [],
   );
 
-  const sendSetTimeRange = useCallback(
-    (startTime?: number, endTime?: number) => {
-      setState((prev) => ({ ...prev, isLoading: true, error: null }));
-      vscode.postMessage({
-        type: 'mediaDiff:setTimeRange',
-        requestId: nextRequestId(),
-        timestamp: Date.now(),
-        payload: { startTime, endTime },
-      });
-    },
-    []
-  );
+  const sendSetTimeRange = useCallback((startTime?: number, endTime?: number) => {
+    setState((prev) => ({ ...prev, isLoading: true, error: null }));
+    vscode.postMessage({
+      type: 'mediaDiff:setTimeRange',
+      requestId: nextRequestId(),
+      timestamp: Date.now(),
+      payload: { startTime, endTime },
+    });
+  }, []);
 
   return {
     ...state,

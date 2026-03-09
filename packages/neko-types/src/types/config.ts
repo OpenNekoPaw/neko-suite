@@ -281,11 +281,7 @@ export type WorkflowEngineType =
   | 'flowise'
   | 'custom';
 
-export type WorkflowCategory =
-  | 'image-generation'
-  | 'ai-workflow'
-  | 'automation'
-  | 'integration';
+export type WorkflowCategory = 'image-generation' | 'ai-workflow' | 'automation' | 'integration';
 
 export interface WorkflowConfig {
   id: string;

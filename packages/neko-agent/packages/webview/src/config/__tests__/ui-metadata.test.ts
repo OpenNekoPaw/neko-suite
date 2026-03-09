@@ -80,15 +80,15 @@ describe('Provider UI Metadata', () => {
       const azureFields = getProviderAuthFields('azure');
       expect(azureFields).toBeDefined();
       expect(azureFields!.length).toBeGreaterThan(1);
-      expect(azureFields!.some(f => f.key === 'apiKey')).toBe(true);
-      expect(azureFields!.some(f => f.key === 'resourceName')).toBe(true);
+      expect(azureFields!.some((f) => f.key === 'apiKey')).toBe(true);
+      expect(azureFields!.some((f) => f.key === 'resourceName')).toBe(true);
     });
 
     it('should return auth fields for Kling with access/secret keys', () => {
       const klingFields = getProviderAuthFields('kling');
       expect(klingFields).toBeDefined();
-      expect(klingFields!.some(f => f.key === 'accessKey')).toBe(true);
-      expect(klingFields!.some(f => f.key === 'secretKey')).toBe(true);
+      expect(klingFields!.some((f) => f.key === 'accessKey')).toBe(true);
+      expect(klingFields!.some((f) => f.key === 'secretKey')).toBe(true);
     });
 
     it('should return undefined for providers without custom auth', () => {
@@ -99,16 +99,37 @@ describe('Provider UI Metadata', () => {
 
   describe('PROVIDER_UI_METADATA registry', () => {
     it('should have metadata for all chat providers', () => {
-      const chatProviders = ['openai', 'anthropic', 'google', 'azure', 'ollama', 'deepseek', 'kimi', 'glm', 'qwen', 'lmstudio', 'generic'];
-      chatProviders.forEach(id => {
+      const chatProviders = [
+        'openai',
+        'anthropic',
+        'google',
+        'azure',
+        'ollama',
+        'deepseek',
+        'kimi',
+        'glm',
+        'qwen',
+        'lmstudio',
+        'generic',
+      ];
+      chatProviders.forEach((id) => {
         expect(PROVIDER_UI_METADATA[id]).toBeDefined();
         expect(PROVIDER_UI_METADATA[id].category).toBe('chat');
       });
     });
 
     it('should have metadata for all media providers', () => {
-      const mediaProviders = ['midjourney', 'liblib', 'kling', 'vidu', 'runway', 'luma', 'minimax', 'suno'];
-      mediaProviders.forEach(id => {
+      const mediaProviders = [
+        'midjourney',
+        'liblib',
+        'kling',
+        'vidu',
+        'runway',
+        'luma',
+        'minimax',
+        'suno',
+      ];
+      mediaProviders.forEach((id) => {
         expect(PROVIDER_UI_METADATA[id]).toBeDefined();
         expect(PROVIDER_UI_METADATA[id].category).toBe('media');
       });

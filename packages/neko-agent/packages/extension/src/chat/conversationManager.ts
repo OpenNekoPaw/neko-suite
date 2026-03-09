@@ -215,12 +215,13 @@ export class ConversationManager {
     }
 
     // Mark as resumable if it has tool calls in progress
-    if (message.role === 'assistant' && message.toolCalls?.some(tc => !tc.result)) {
+    if (message.role === 'assistant' && message.toolCalls?.some((tc) => !tc.result)) {
       conversation.resumable = true;
     }
 
     // Update token count estimate (rough: ~4 chars per token)
-    conversation.tokenCount = (conversation.tokenCount || 0) + Math.ceil(message.content.length / 4);
+    conversation.tokenCount =
+      (conversation.tokenCount || 0) + Math.ceil(message.content.length / 4);
 
     this._markDirty(id);
     this._scheduleSave();
@@ -248,8 +249,8 @@ export class ConversationManager {
     conversation.tokenCount = messages.reduce((sum, m) => sum + Math.ceil(m.content.length / 4), 0);
 
     // Check resumability
-    const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
-    conversation.resumable = lastAssistant?.toolCalls?.some(tc => !tc.result) ?? false;
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+    conversation.resumable = lastAssistant?.toolCalls?.some((tc) => !tc.result) ?? false;
 
     this._markDirty(id);
     this._scheduleSave();
@@ -258,7 +259,10 @@ export class ConversationManager {
   /**
    * Update the last message in a conversation (for streaming updates)
    */
-  updateLastMessage(id: string, updater: (message: ConversationMessage) => ConversationMessage): void {
+  updateLastMessage(
+    id: string,
+    updater: (message: ConversationMessage) => ConversationMessage,
+  ): void {
     const conversation = this.conversations.get(id);
     if (!conversation || conversation.messages.length === 0) return;
 
@@ -326,7 +330,7 @@ export class ConversationManager {
    * Get all resumable conversations
    */
   getResumable(): Conversation[] {
-    return this.list().filter(c => c.resumable);
+    return this.list().filter((c) => c.resumable);
   }
 
   /**
@@ -369,7 +373,12 @@ export class ConversationManager {
    * Convert conversation messages to ChatMessage format for Agent
    * Preserves tool context for proper resume
    */
-  toAgentHistory(id: string): Array<{ role: 'user' | 'assistant' | 'system'; content: string; toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolResults?: Array<{ callId: string; success: boolean; data: unknown }> }> {
+  toAgentHistory(id: string): Array<{
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+    toolResults?: Array<{ callId: string; success: boolean; data: unknown }>;
+  }> {
     const conversation = this.conversations.get(id);
     if (!conversation) return [];
 
@@ -381,14 +390,14 @@ export class ConversationManager {
     }> = [];
 
     for (const msg of conversation.messages) {
-      const entry: typeof result[0] = {
+      const entry: (typeof result)[0] = {
         role: msg.role,
         content: msg.content,
       };
 
       // Preserve tool calls for assistant messages
       if (msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0) {
-        entry.toolCalls = msg.toolCalls.map(tc => ({
+        entry.toolCalls = msg.toolCalls.map((tc) => ({
           id: tc.id,
           name: tc.name,
           arguments: tc.arguments,
@@ -396,8 +405,8 @@ export class ConversationManager {
 
         // Add tool results as separate entries
         const toolResults = msg.toolCalls
-          .filter(tc => tc.result)
-          .map(tc => ({
+          .filter((tc) => tc.result)
+          .map((tc) => ({
             callId: tc.id,
             success: tc.result!.success,
             data: tc.result!.data,
@@ -467,7 +476,7 @@ export class ConversationManager {
 
     // Only save non-empty conversations
     const nonEmptyConversations = Array.from(this.conversations.entries()).filter(
-      ([, conv]) => conv.messages.length > 0
+      ([, conv]) => conv.messages.length > 0,
     );
 
     this.storage.update('conversations', {
@@ -487,7 +496,10 @@ export class ConversationManager {
     let removed = 0;
 
     // 1. Remove conversations exceeding max count
-    if (this.cleanupPolicy.maxConversations > 0 && conversations.length > this.cleanupPolicy.maxConversations) {
+    if (
+      this.cleanupPolicy.maxConversations > 0 &&
+      conversations.length > this.cleanupPolicy.maxConversations
+    ) {
       const toRemove = conversations.slice(this.cleanupPolicy.maxConversations);
       for (const conv of toRemove) {
         // Don't remove resumable or active conversations
@@ -499,7 +511,7 @@ export class ConversationManager {
 
     // 2. Remove old conversations based on retention days
     if (this.cleanupPolicy.retentionDays > 0) {
-      const cutoff = Date.now() - (this.cleanupPolicy.retentionDays * 24 * 60 * 60 * 1000);
+      const cutoff = Date.now() - this.cleanupPolicy.retentionDays * 24 * 60 * 60 * 1000;
       for (const conv of conversations) {
         if (conv.updatedAt < cutoff && conv.id !== this.activeId && !conv.resumable) {
           this.conversations.delete(conv.id);
@@ -513,8 +525,8 @@ export class ConversationManager {
       for (const conv of this.conversations.values()) {
         if (conv.messages.length > this.cleanupPolicy.maxMessagesPerConversation) {
           // Keep system messages and recent messages
-          const systemMsgs = conv.messages.filter(m => m.role === 'system');
-          const otherMsgs = conv.messages.filter(m => m.role !== 'system');
+          const systemMsgs = conv.messages.filter((m) => m.role === 'system');
+          const otherMsgs = conv.messages.filter((m) => m.role !== 'system');
           const keepCount = this.cleanupPolicy.maxMessagesPerConversation - systemMsgs.length;
           conv.messages = [...systemMsgs, ...otherMsgs.slice(-keepCount)];
           this._markDirty(conv.id);

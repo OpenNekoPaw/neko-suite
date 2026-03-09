@@ -28,9 +28,17 @@ export interface BaseNodeProps {
   /** Called on mouseup when drag ends (final position + history) */
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
   /** Called on every mousemove during resize */
-  onResize?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  onResize?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
   /** Called on mouseup when resize ends */
-  onResizeEnd?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  onResizeEnd?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   children: ReactNode;
   className?: string;
@@ -45,16 +53,16 @@ type AnchorPosition = 'top' | 'right' | 'bottom' | 'left';
 const ANCHOR_POSITIONS: AnchorPosition[] = ['top', 'right', 'bottom', 'left'];
 
 const PORT_COLORS: Record<string, string> = {
-  input: '#3b82f6',   // blue-500
-  output: '#22c55e',  // green-500
+  input: '#3b82f6', // blue-500
+  output: '#22c55e', // green-500
 };
 
 const PORT_DATA_COLORS: Record<string, string> = {
-  image: '#f59e0b',   // amber-500
-  video: '#8b5cf6',   // violet-500
-  audio: '#ec4899',   // pink-500
-  text: '#06b6d4',    // cyan-500
-  any: '#6b7280',     // gray-500
+  image: '#f59e0b', // amber-500
+  video: '#8b5cf6', // violet-500
+  audio: '#ec4899', // pink-500
+  text: '#06b6d4', // cyan-500
+  any: '#6b7280', // gray-500
 };
 
 // =============================================================================
@@ -62,10 +70,10 @@ const PORT_DATA_COLORS: Record<string, string> = {
 // =============================================================================
 
 const RESIZE_HANDLES: { handle: ResizeHandle; cursor: string; style: React.CSSProperties }[] = [
-  { handle: 'n',  cursor: 'ns-resize',   style: { top: -4, left: 8, right: 8, height: 8 } },
-  { handle: 's',  cursor: 'ns-resize',   style: { bottom: -4, left: 8, right: 8, height: 8 } },
-  { handle: 'e',  cursor: 'ew-resize',   style: { right: -4, top: 8, bottom: 8, width: 8 } },
-  { handle: 'w',  cursor: 'ew-resize',   style: { left: -4, top: 8, bottom: 8, width: 8 } },
+  { handle: 'n', cursor: 'ns-resize', style: { top: -4, left: 8, right: 8, height: 8 } },
+  { handle: 's', cursor: 'ns-resize', style: { bottom: -4, left: 8, right: 8, height: 8 } },
+  { handle: 'e', cursor: 'ew-resize', style: { right: -4, top: 8, bottom: 8, width: 8 } },
+  { handle: 'w', cursor: 'ew-resize', style: { left: -4, top: 8, bottom: 8, width: 8 } },
   { handle: 'ne', cursor: 'nesw-resize', style: { top: -4, right: -4, width: 10, height: 10 } },
   { handle: 'nw', cursor: 'nesw-resize', style: { top: -4, left: -4, width: 10, height: 10 } },
   { handle: 'se', cursor: 'nwse-resize', style: { bottom: -4, right: -4, width: 10, height: 10 } },
@@ -90,7 +98,11 @@ export function BaseNode({
   className,
 }: BaseNodeProps) {
   // Node dragging
-  const { position: dragPosition, isDragging, handlers: dragHandlers } = useNodeDrag({
+  const {
+    position: dragPosition,
+    isDragging,
+    handlers: dragHandlers,
+  } = useNodeDrag({
     nodeId: node.id,
     initialPosition: node.position,
     viewport,
@@ -100,7 +112,12 @@ export function BaseNode({
   });
 
   // Node resizing
-  const { size, position: resizePosition, isResizing, startResize } = useNodeResize({
+  const {
+    size,
+    position: resizePosition,
+    isResizing,
+    startResize,
+  } = useNodeResize({
     nodeId: node.id,
     initialSize: node.size,
     initialPosition: node.position,
@@ -119,17 +136,23 @@ export function BaseNode({
   const hasPorts = ports.length > 0;
 
   // Handle node click for selection
-  const handleClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    onSelect?.(node.id, e.shiftKey || e.metaKey);
-  }, [node.id, onSelect]);
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onSelect?.(node.id, e.shiftKey || e.metaKey);
+    },
+    [node.id, onSelect],
+  );
 
   // Handle anchor/port mousedown for drag-based connection
-  const handleAnchorMouseDown = useCallback((anchor: string) => (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    onConnectionStart?.(node.id, anchor, e);
-  }, [node.id, onConnectionStart]);
+  const handleAnchorMouseDown = useCallback(
+    (anchor: string) => (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      onConnectionStart?.(node.id, anchor, e);
+    },
+    [node.id, onConnectionStart],
+  );
 
   // Get legacy anchor position styles
   const getAnchorStyle = (anchor: AnchorPosition): React.CSSProperties => {
@@ -157,7 +180,11 @@ export function BaseNode({
   };
 
   // Get port position styles
-  const getPortStyle = (port: PortDefinition, index: number, totalOnSide: number): React.CSSProperties => {
+  const getPortStyle = (
+    port: PortDefinition,
+    index: number,
+    totalOnSide: number,
+  ): React.CSSProperties => {
     const portColor = PORT_DATA_COLORS[port.dataType ?? 'any'] ?? PORT_COLORS[port.type];
     const base: React.CSSProperties = {
       position: 'absolute',
@@ -205,14 +232,14 @@ export function BaseNode({
         isDragging && 'cursor-grabbing',
         !isDragging && !isResizing && !node.locked && 'cursor-grab',
         node.locked && 'cursor-not-allowed opacity-80',
-        className
+        className,
       )}
       style={{
         left: currentPosition.x,
         top: currentPosition.y,
         width: currentSize.width,
         height: currentSize.height,
-        zIndex: (isDragging || isResizing) ? 1000 : node.zIndex,
+        zIndex: isDragging || isResizing ? 1000 : node.zIndex,
       }}
       onMouseDown={dragHandlers.onMouseDown}
       onClick={handleClick}
@@ -223,68 +250,71 @@ export function BaseNode({
           'w-full h-full rounded-lg border-2 shadow-lg overflow-hidden',
           'bg-[var(--node-bg)] transition-colors duration-150',
           isSelected ? 'border-[var(--node-selected)]' : 'border-[var(--node-border)]',
-          (isDragging || isResizing) && 'shadow-2xl'
+          (isDragging || isResizing) && 'shadow-2xl',
         )}
       >
         {children}
       </div>
 
       {/* Resize handles (visible when selected) */}
-      {isSelected && !node.locked && RESIZE_HANDLES.map(({ handle, cursor, style }) => (
-        <div
-          key={handle}
-          className="absolute z-20"
-          style={{ ...style, cursor, position: 'absolute' }}
-          onMouseDown={(e) => startResize(handle, e)}
-        />
-      ))}
+      {isSelected &&
+        !node.locked &&
+        RESIZE_HANDLES.map(({ handle, cursor, style }) => (
+          <div
+            key={handle}
+            className="absolute z-20"
+            style={{ ...style, cursor, position: 'absolute' }}
+            onMouseDown={(e) => startResize(handle, e)}
+          />
+        ))}
 
       {/* Port-based connections (always visible for data flow clarity) */}
-      {hasPorts && Array.from(portsBySide.entries()).map(([_side, portsOnSide]) =>
-        portsOnSide.map(({ port, index }) => (
-          <div
-            key={port.id}
-            data-port-id={port.id}
-            data-port-type={port.type}
-            data-node-id={node.id}
-            data-anchor={port.position}
-            style={getPortStyle(port, index, portsOnSide.length)}
-            onMouseDown={handleAnchorMouseDown(port.id)}
-            className={clsx(
-              'transition-all duration-150',
-              isSelected ? 'scale-110 opacity-100' : 'scale-75 opacity-60 hover:scale-110 hover:opacity-100',
-            )}
-            title={port.label ?? `${port.type}: ${port.dataType ?? 'any'}`}
-          >
-            {/* Port type indicator: input has inner dot, output is solid */}
-            {port.type === 'input' && (
-              <div
-                className="absolute inset-[3px] rounded-full"
-                style={{ backgroundColor: 'var(--node-bg)' }}
-              />
-            )}
-          </div>
-        ))
-      )}
+      {hasPorts &&
+        Array.from(portsBySide.entries()).map(([_side, portsOnSide]) =>
+          portsOnSide.map(({ port, index }) => (
+            <div
+              key={port.id}
+              data-port-id={port.id}
+              data-port-type={port.type}
+              data-node-id={node.id}
+              data-anchor={port.position}
+              style={getPortStyle(port, index, portsOnSide.length)}
+              onMouseDown={handleAnchorMouseDown(port.id)}
+              className={clsx(
+                'transition-all duration-150',
+                isSelected
+                  ? 'scale-110 opacity-100'
+                  : 'scale-75 opacity-60 hover:scale-110 hover:opacity-100',
+              )}
+              title={port.label ?? `${port.type}: ${port.dataType ?? 'any'}`}
+            >
+              {/* Port type indicator: input has inner dot, output is solid */}
+              {port.type === 'input' && (
+                <div
+                  className="absolute inset-[3px] rounded-full"
+                  style={{ backgroundColor: 'var(--node-bg)' }}
+                />
+              )}
+            </div>
+          )),
+        )}
 
       {/* Legacy anchor points (only when selected, for backward compat) */}
-      {!hasPorts && isSelected && ANCHOR_POSITIONS.map((anchor) => (
-        <div
-          key={anchor}
-          data-node-id={node.id}
-          data-anchor={anchor}
-          style={getAnchorStyle(anchor)}
-          onMouseDown={handleAnchorMouseDown(anchor)}
-          className="hover:bg-[var(--node-selected)] hover:scale-125 transition-all duration-150"
-        />
-      ))}
+      {!hasPorts &&
+        isSelected &&
+        ANCHOR_POSITIONS.map((anchor) => (
+          <div
+            key={anchor}
+            data-node-id={node.id}
+            data-anchor={anchor}
+            style={getAnchorStyle(anchor)}
+            onMouseDown={handleAnchorMouseDown(anchor)}
+            className="hover:bg-[var(--node-selected)] hover:scale-125 transition-all duration-150"
+          />
+        ))}
 
       {/* Lock indicator */}
-      {node.locked && (
-        <div className="absolute top-1 right-1 text-xs text-gray-500">
-          🔒
-        </div>
-      )}
+      {node.locked && <div className="absolute top-1 right-1 text-xs text-gray-500">🔒</div>}
     </div>
   );
 }

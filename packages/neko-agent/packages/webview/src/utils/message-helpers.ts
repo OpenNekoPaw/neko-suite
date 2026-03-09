@@ -30,7 +30,7 @@ export function updateToolCallInBlocks(
   toolCallId: string,
   updater: (tc: ToolCall) => ToolCall,
 ): ContentBlock[] {
-  return blocks.map(b => {
+  return blocks.map((b) => {
     if (b.type !== 'tool_call' || !b.toolCall || b.toolCall.id !== toolCallId) return b;
     return { ...b, toolCall: updater(b.toolCall) };
   });
@@ -65,10 +65,7 @@ export function updateLastPendingToolCall(
 /**
  * Add a new tool call as a content block.
  */
-export function addToolCallBlock(
-  blocks: ContentBlock[],
-  toolCall: ToolCall,
-): ContentBlock[] {
+export function addToolCallBlock(blocks: ContentBlock[], toolCall: ToolCall): ContentBlock[] {
   const newBlock: ContentBlock = {
     id: `block-tool-${toolCall.id}`,
     type: 'tool_call',

@@ -12,8 +12,8 @@ export interface PlaybackSlice {
   frameAlignEnabled: boolean;
 
   // Audio State
-  previewVolume: number;      // 预览音量 (0-1)
-  previewMuted: boolean;      // 预览静音状态
+  previewVolume: number; // 预览音量 (0-1)
+  previewMuted: boolean; // 预览静音状态
 
   // Actions
   play: () => void;
@@ -28,20 +28,18 @@ export interface PlaybackSlice {
   togglePreviewMute: () => void;
 }
 
-export const createPlaybackSlice: StateCreator<
-  PlaybackSlice,
-  [],
-  [],
-  PlaybackSlice
-> = (set, get) => ({
+export const createPlaybackSlice: StateCreator<PlaybackSlice, [], [], PlaybackSlice> = (
+  set,
+  get,
+) => ({
   // Initial state
   isPlaying: false,
   currentTime: 0,
   frameAlignEnabled: false,
 
   // Audio initial state
-  previewVolume: 1.0,     // 默认音量 100%
-  previewMuted: false,    // 默认不静音
+  previewVolume: 1.0, // 默认音量 100%
+  previewMuted: false, // 默认不静音
 
   // Actions
   play: () => set({ isPlaying: true }),

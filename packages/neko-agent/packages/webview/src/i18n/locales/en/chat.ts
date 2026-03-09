@@ -18,10 +18,12 @@ export const chat = {
   'chat.categoryAudio': 'Audio',
   'chat.categoryOther': 'Other',
   'chat.emptyState.title': 'Neko Suite AI Assistant',
-  'chat.emptyState.description': 'Ask me anything about video editing, timeline management, or project organization.',
+  'chat.emptyState.description':
+    'Ask me anything about video editing, timeline management, or project organization.',
   'chat.emptyState.disclaimer': 'AI responses may be inaccurate.',
 
-  'chat.input.placeholder': 'Ask anything... (/ for commands, @ for files, Shift+Enter for new line)',
+  'chat.input.placeholder':
+    'Ask anything... (/ for commands, @ for files, Shift+Enter for new line)',
   'chat.input.thinkingPlaceholder': 'Type next message... (will be queued)',
   'chat.input.queuePlaceholder': '{count} message(s) queued... type another',
   'chat.input.queuedMessages': '{count} queued message(s)',
@@ -65,7 +67,8 @@ export const chat = {
   'chat.plan.rejectAll': 'Reject All',
 
   'chat.executionMode.label': 'Execution Mode',
-  'chat.executionMode.title': 'Execution mode: plan (dry-run), ask (confirm), auto (whitelist only)',
+  'chat.executionMode.title':
+    'Execution mode: plan (dry-run), ask (confirm), auto (whitelist only)',
   'chat.executionMode.plan': 'Plan',
   'chat.executionMode.planDesc': 'Dry-run, show commands only',
   'chat.executionMode.ask': 'Ask before executing',
@@ -129,7 +132,8 @@ export const chat = {
   'chat.commands.plan': 'Enter plan mode',
   'chat.commands.mcp': 'Manage MCP server connections',
 
-  'chat.helpMessage': '**Available Commands:**\n- `/clear` - Clear conversation history\n- `/new` - Start a new conversation\n- `/resume` - Resume a previous conversation\n- `/help` - Show this help message\n- `/compact` - Compress conversation to save context\n- `/status` - Show status information\n- `/model` - Select AI model\n- `/plan` - Enter plan mode\n- `/mcp` - Manage MCP servers\n- `/tasks` - Manage background tasks\n- `/settings` - Open settings\n\n**Tips:**\n- Use `@` to reference files\n- Attach files using the 📎 button\n- Press Enter to send, Shift+Enter for new line',
+  'chat.helpMessage':
+    '**Available Commands:**\n- `/clear` - Clear conversation history\n- `/new` - Start a new conversation\n- `/resume` - Resume a previous conversation\n- `/help` - Show this help message\n- `/compact` - Compress conversation to save context\n- `/status` - Show status information\n- `/model` - Select AI model\n- `/plan` - Enter plan mode\n- `/mcp` - Manage MCP servers\n- `/tasks` - Manage background tasks\n- `/settings` - Open settings\n\n**Tips:**\n- Use `@` to reference files\n- Attach files using the 📎 button\n- Press Enter to send, Shift+Enter for new line',
   'chat.attachFile': 'Attach file',
   'chat.referenceFile': 'Reference file with @',
   'chat.usage.tokens': 'Tokens',

@@ -6,12 +6,18 @@ import type { TaskStatus, TaskStepStatus } from '@/components/TaskListView';
 
 export function getStatusColor(status: TaskStatus): string {
   switch (status) {
-    case 'queued': return 'var(--vscode-charts-yellow, #cca700)';
-    case 'processing': return 'var(--vscode-charts-blue, #3794ff)';
-    case 'completed': return 'var(--vscode-charts-green, #89d185)';
-    case 'failed': return 'var(--vscode-charts-red, #f14c4c)';
-    case 'cancelled': return 'var(--vscode-descriptionForeground)';
-    default: return 'var(--vscode-foreground)';
+    case 'queued':
+      return 'var(--vscode-charts-yellow, #cca700)';
+    case 'processing':
+      return 'var(--vscode-charts-blue, #3794ff)';
+    case 'completed':
+      return 'var(--vscode-charts-green, #89d185)';
+    case 'failed':
+      return 'var(--vscode-charts-red, #f14c4c)';
+    case 'cancelled':
+      return 'var(--vscode-descriptionForeground)';
+    default:
+      return 'var(--vscode-foreground)';
   }
 }
 
@@ -36,18 +42,26 @@ export function formatETA(seconds?: number): string {
 
 export function getStepStatusIcon(status: TaskStepStatus): string {
   switch (status) {
-    case 'completed': return '\u2713';
-    case 'running': return '\u25CF';
-    case 'failed': return '\u2717';
-    default: return '\u25CB';
+    case 'completed':
+      return '\u2713';
+    case 'running':
+      return '\u25CF';
+    case 'failed':
+      return '\u2717';
+    default:
+      return '\u25CB';
   }
 }
 
 export function getStepStatusColor(status: TaskStepStatus): string {
   switch (status) {
-    case 'completed': return 'var(--vscode-charts-green, #89d185)';
-    case 'running': return 'var(--vscode-charts-blue, #3794ff)';
-    case 'failed': return 'var(--vscode-charts-red, #f14c4c)';
-    default: return 'var(--vscode-descriptionForeground)';
+    case 'completed':
+      return 'var(--vscode-charts-green, #89d185)';
+    case 'running':
+      return 'var(--vscode-charts-blue, #3794ff)';
+    case 'failed':
+      return 'var(--vscode-charts-red, #f14c4c)';
+    default:
+      return 'var(--vscode-descriptionForeground)';
   }
 }

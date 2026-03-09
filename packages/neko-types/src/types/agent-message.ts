@@ -500,7 +500,7 @@ export function isThinkingMessage(msg: AgentMessage): msg is ThinkingMessage {
  * Check if message is a tool-related message
  */
 export function isToolMessage(
-  msg: AgentMessage
+  msg: AgentMessage,
 ): msg is ToolCallMessage | ToolResultMessage | ToolConfirmationMessage {
   return msg.type === 'toolCall' || msg.type === 'toolResult' || msg.type === 'toolConfirmation';
 }
@@ -509,7 +509,7 @@ export function isToolMessage(
  * Check if message is a plan-related message
  */
 export function isPlanMessage(
-  msg: AgentMessage
+  msg: AgentMessage,
 ): msg is PlanStepStatusUpdateMessage | PlanStatusUpdateMessage {
   return msg.type === 'planStepStatusUpdate' || msg.type === 'planStatusUpdate';
 }
@@ -545,7 +545,7 @@ export const AgentMessageFactory = {
     toolCallId: string,
     toolName: string,
     args: Record<string, unknown>,
-    options?: { serverName?: string; messageId?: string; conversationId?: string }
+    options?: { serverName?: string; messageId?: string; conversationId?: string },
   ): ToolCallMessage {
     return {
       type: 'toolCall',
@@ -561,7 +561,7 @@ export const AgentMessageFactory = {
     success: boolean,
     result?: unknown,
     error?: string,
-    options?: { toolName?: string; messageId?: string; conversationId?: string }
+    options?: { toolName?: string; messageId?: string; conversationId?: string },
   ): ToolResultMessage {
     return {
       type: 'toolResult',

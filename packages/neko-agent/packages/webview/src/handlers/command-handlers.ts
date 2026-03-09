@@ -18,7 +18,7 @@ const handleSlashCommandResult: MessageHandler = (message, context) => {
         closeCurrentTab(context);
         // Show goodbye message (optional, tab might be closed)
         if (message.message) {
-          context.setMessages(prev => [
+          context.setMessages((prev) => [
             ...prev,
             {
               id: Date.now().toString(),
@@ -33,14 +33,14 @@ const handleSlashCommandResult: MessageHandler = (message, context) => {
       case 'togglePlanMode':
         // Update plan mode in settings
         if (message.data && typeof message.data.planMode === 'boolean') {
-          context.setSettings(prev => ({
+          context.setSettings((prev) => ({
             ...prev,
             promptMode: message.data.planMode ? 'plan' : 'default',
           }));
         }
         // Show confirmation message
         if (message.message) {
-          context.setMessages(prev => [
+          context.setMessages((prev) => [
             ...prev,
             {
               id: Date.now().toString(),
@@ -64,7 +64,7 @@ const handleSlashCommandResult: MessageHandler = (message, context) => {
 - Active skill: ${message.data.activeSkill || 'None'}
 - Plan mode: ${message.data.planMode ? 'Enabled' : 'Disabled'}
 - Execution mode: ${message.data.executionMode || 'normal'}`;
-          context.setMessages(prev => [
+          context.setMessages((prev) => [
             ...prev,
             {
               id: Date.now().toString(),
@@ -108,7 +108,7 @@ const handleSlashCommandResult: MessageHandler = (message, context) => {
 
       case 'initProject':
         // Show project initialization message
-        context.setMessages(prev => [
+        context.setMessages((prev) => [
           ...prev,
           {
             id: Date.now().toString(),
@@ -132,11 +132,13 @@ Or use the Settings panel to configure providers and models.`,
         if (message.data?.conversations && Array.isArray(message.data.conversations)) {
           const conversationList = message.data.conversations
             .slice(0, 5)
-            .map((c: { title: string; messageCount: number }, i: number) =>
-              `${i + 1}. **${c.title}** (${c.messageCount} messages)`)
+            .map(
+              (c: { title: string; messageCount: number }, i: number) =>
+                `${i + 1}. **${c.title}** (${c.messageCount} messages)`,
+            )
             .join('\n');
 
-          context.setMessages(prev => [
+          context.setMessages((prev) => [
             ...prev,
             {
               id: Date.now().toString(),
@@ -149,12 +151,13 @@ Or use the Settings panel to configure providers and models.`,
           ]);
         } else {
           // Fallback: show generic message
-          context.setMessages(prev => [
+          context.setMessages((prev) => [
             ...prev,
             {
               id: Date.now().toString(),
               role: 'assistant',
-              content: 'Use the conversation list in the sidebar to resume a previous conversation.',
+              content:
+                'Use the conversation list in the sidebar to resume a previous conversation.',
               timestamp: Date.now(),
             },
           ]);
@@ -164,7 +167,7 @@ Or use the Settings panel to configure providers and models.`,
       default:
         // Show success message if provided
         if (message.message) {
-          context.setMessages(prev => [
+          context.setMessages((prev) => [
             ...prev,
             {
               id: Date.now().toString(),
@@ -177,7 +180,7 @@ Or use the Settings panel to configure providers and models.`,
     }
   } else {
     // Show error message
-    context.setMessages(prev => [
+    context.setMessages((prev) => [
       ...prev,
       {
         id: Date.now().toString(),
@@ -193,17 +196,18 @@ Or use the Settings panel to configure providers and models.`,
  * Close the current conversation tab
  */
 function closeCurrentTab(context: MessageHandlerContext): void {
-  const { openTabs, activeConversationId, setOpenTabs, setActiveTabId, setActiveConversationId } = context;
+  const { openTabs, activeConversationId, setOpenTabs, setActiveTabId, setActiveConversationId } =
+    context;
 
   if (!activeConversationId) return;
 
   // Find the current tab
-  const currentTab = openTabs.find(t => t.conversationId === activeConversationId);
+  const currentTab = openTabs.find((t) => t.conversationId === activeConversationId);
   if (!currentTab) return;
 
   // Remove the tab
-  const tabIndex = openTabs.findIndex(t => t.id === currentTab.id);
-  const newTabs = openTabs.filter(t => t.id !== currentTab.id);
+  const tabIndex = openTabs.findIndex((t) => t.id === currentTab.id);
+  const newTabs = openTabs.filter((t) => t.id !== currentTab.id);
   setOpenTabs(newTabs);
 
   // Switch to another tab if available

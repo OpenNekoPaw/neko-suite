@@ -70,14 +70,10 @@ export function InputAreaProvider({
       value.skills,
       value.onSlashCommand,
       value.onRequestFiles,
-    ]
+    ],
   );
 
-  return (
-    <InputAreaContext.Provider value={memoized}>
-      {children}
-    </InputAreaContext.Provider>
-  );
+  return <InputAreaContext.Provider value={memoized}>{children}</InputAreaContext.Provider>;
 }
 
 export function useInputAreaContext(): InputAreaContextValue {

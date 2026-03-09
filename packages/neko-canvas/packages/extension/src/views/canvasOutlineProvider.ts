@@ -77,10 +77,7 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
 
       case 'node': {
         const { node } = element;
-        const item = new vscode.TreeItem(
-          node.label,
-          vscode.TreeItemCollapsibleState.None,
-        );
+        const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
         item.iconPath = NODE_ICONS[node.type] ?? new vscode.ThemeIcon('circle-outline');
         item.description = node.detail;
         item.tooltip = `${node.type}: ${node.label}${node.locked ? ' 🔒' : ''}`;
@@ -99,10 +96,7 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
         const label = connection.label
           ? `${connection.sourceLabel} → ${connection.targetLabel} (${connection.label})`
           : `${connection.sourceLabel} → ${connection.targetLabel}`;
-        const item = new vscode.TreeItem(
-          label,
-          vscode.TreeItemCollapsibleState.None,
-        );
+        const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
         item.iconPath = new vscode.ThemeIcon('arrow-right');
         item.contextValue = 'canvasConnection';
         item.command = {

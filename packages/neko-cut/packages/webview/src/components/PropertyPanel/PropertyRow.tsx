@@ -50,24 +50,36 @@ export const PropertyRow = memo(function PropertyRow({
 }: PropertyRowProps) {
   const { t } = useTranslation();
 
-  const handleNumberChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseFloat(e.target.value);
-    if (!isNaN(val)) {
-      onChange(val);
-    }
-  }, [onChange]);
+  const handleNumberChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = parseFloat(e.target.value);
+      if (!isNaN(val)) {
+        onChange(val);
+      }
+    },
+    [onChange],
+  );
 
-  const handleStringChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(e.target.value);
-  }, [onChange]);
+  const handleStringChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onChange(e.target.value);
+    },
+    [onChange],
+  );
 
-  const handleBooleanChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(e.target.checked);
-  }, [onChange]);
+  const handleBooleanChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onChange(e.target.checked);
+    },
+    [onChange],
+  );
 
-  const handleSelectChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    onChange(e.target.value);
-  }, [onChange]);
+  const handleSelectChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      onChange(e.target.value);
+    },
+    [onChange],
+  );
 
   const renderInput = () => {
     switch (definition.type) {
@@ -90,7 +102,7 @@ export const PropertyRow = memo(function PropertyRow({
           <div className="flex items-center gap-2 flex-1">
             <input
               type="range"
-              value={typeof value === 'number' ? value : definition.min ?? 0}
+              value={typeof value === 'number' ? value : (definition.min ?? 0)}
               min={definition.min ?? 0}
               max={definition.max ?? 1}
               step={definition.step ?? 0.01}
@@ -161,7 +173,7 @@ export const PropertyRow = memo(function PropertyRow({
             disabled={disabled}
             className="flex-1 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-2 py-1 text-[11px] outline-none focus:border-[var(--vscode-focusBorder)] disabled:opacity-50"
           >
-            {definition.options?.map(opt => (
+            {definition.options?.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {t(opt.labelKey)}
               </option>
@@ -180,9 +192,7 @@ export const PropertyRow = memo(function PropertyRow({
         {t(definition.labelKey)}
       </label>
 
-      <div className="flex-1 flex items-center">
-        {renderInput()}
-      </div>
+      <div className="flex-1 flex items-center">{renderInput()}</div>
 
       {definition.unit && (
         <span className="text-[10px] text-[var(--vscode-descriptionForeground)] w-5">

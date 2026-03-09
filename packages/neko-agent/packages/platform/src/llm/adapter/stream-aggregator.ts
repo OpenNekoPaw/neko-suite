@@ -7,9 +7,7 @@ import type { ChatChunk, ChatResponse, ChatMessage } from '../../types/adapter';
 /**
  * Aggregate streaming chunks into a complete response
  */
-export async function aggregateStream(
-  stream: AsyncIterable<ChatChunk>
-): Promise<ChatResponse> {
+export async function aggregateStream(stream: AsyncIterable<ChatChunk>): Promise<ChatResponse> {
   let content = '';
   let id = '';
   let modelName = '';
@@ -70,9 +68,7 @@ export async function aggregateStream(
 /**
  * Create a stream that emits chunks and collects the final response
  */
-export function createStreamCollector(
-  stream: AsyncIterable<ChatChunk>
-): {
+export function createStreamCollector(stream: AsyncIterable<ChatChunk>): {
   stream: AsyncIterable<ChatChunk>;
   response: Promise<ChatResponse>;
 } {

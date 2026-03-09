@@ -44,7 +44,7 @@ describe('apply-element', () => {
         payload: { trackId: 't1', element: newElem, index: 1 },
       });
 
-      expect(result.tracks[0].elements.map(e => e.id)).toEqual(['e1', 'e3', 'e2']);
+      expect(result.tracks[0].elements.map((e) => e.id)).toEqual(['e1', 'e3', 'e2']);
     });
   });
 
@@ -67,7 +67,13 @@ describe('apply-element', () => {
     });
 
     it('should handle ripple editing', () => {
-      const e1 = createTestMediaElement({ id: 'e1', startTime: 0, duration: 5, trimStart: 0, trimEnd: 0 });
+      const e1 = createTestMediaElement({
+        id: 'e1',
+        startTime: 0,
+        duration: 5,
+        trimStart: 0,
+        trimEnd: 0,
+      });
       const e2 = createTestMediaElement({ id: 'e2', startTime: 5 });
       const e3 = createTestMediaElement({ id: 'e3', startTime: 10 });
       const track = createTestTrack({ id: 't1', elements: [e1, e2, e3] });

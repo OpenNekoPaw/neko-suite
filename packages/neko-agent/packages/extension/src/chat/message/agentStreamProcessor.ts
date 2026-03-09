@@ -91,7 +91,7 @@ export class AgentStreamProcessor {
     webview: vscode.Webview,
     conversationId: string,
     events: AsyncIterable<AgentEvent>,
-    callbacks: StreamCallbacks
+    callbacks: StreamCallbacks,
   ): Promise<StreamProcessingResult> {
     let accumulatedResponse = '';
     let accumulatedThinking = '';
@@ -128,7 +128,8 @@ export class AgentStreamProcessor {
             };
             contentBlocks.push(currentThinkingBlock);
           } else {
-            currentThinkingBlock.thinking = (currentThinkingBlock.thinking || '') + (event.thinking || '');
+            currentThinkingBlock.thinking =
+              (currentThinkingBlock.thinking || '') + (event.thinking || '');
           }
 
           webview.postMessage({
@@ -212,7 +213,7 @@ export class AgentStreamProcessor {
             event,
             collectedToolCalls,
             contentBlocks,
-            toolBlocksByCallId
+            toolBlocksByCallId,
           );
           break;
 
@@ -248,7 +249,11 @@ export class AgentStreamProcessor {
 
         case 'done':
           sendPhaseChange('idle');
-          webview.postMessage({ type: 'streamComplete', conversationId, messageId: streamingMessageId });
+          webview.postMessage({
+            type: 'streamComplete',
+            conversationId,
+            messageId: streamingMessageId,
+          });
           if (event.usage) {
             webview.postMessage({
               type: 'contextTokenCount',
@@ -261,7 +266,7 @@ export class AgentStreamProcessor {
     }
 
     // Mark remaining blocks as complete
-    contentBlocks.forEach(block => {
+    contentBlocks.forEach((block) => {
       if (block.type === 'text' && block.isStreaming) {
         block.isStreaming = false;
       }
@@ -289,12 +294,12 @@ export class AgentStreamProcessor {
     event: AgentEvent,
     collectedToolCalls: CollectedToolCall[],
     contentBlocks: ContentBlock[],
-    toolBlocksByCallId: Map<string, ContentBlock>
+    toolBlocksByCallId: Map<string, ContentBlock>,
   ): void {
     let parsedPlan: Plan | undefined;
 
     if (event.toolResult) {
-      const toolCall = collectedToolCalls.find(tc => tc.id === event.toolResult!.toolCallId);
+      const toolCall = collectedToolCalls.find((tc) => tc.id === event.toolResult!.toolCallId);
       if (toolCall) {
         toolCall.result = {
           success: event.toolResult.success,
@@ -314,7 +319,10 @@ export class AgentStreamProcessor {
 
       // Check for ExitPlanMode result — parse plan and include in message
       const resultData = event.toolResult.data as Record<string, unknown> | undefined;
-      if (resultData?.planMode && (resultData.planMode as Record<string, unknown>)?.status === 'awaiting_approval') {
+      if (
+        resultData?.planMode &&
+        (resultData.planMode as Record<string, unknown>)?.status === 'awaiting_approval'
+      ) {
         const planId = `plan-${Date.now()}`;
         const planTitle = (resultData.title as string) || 'Implementation Plan';
         const planContent = (resultData.plan as string) || '';
@@ -352,7 +360,7 @@ export class AgentStreamProcessor {
   private _subscribeToTaskProgress(
     webview: vscode.Webview,
     conversationId: string,
-    event: AgentEvent
+    event: AgentEvent,
   ): void {
     const resultData = event.toolResult?.data as Record<string, unknown> | undefined;
     if (resultData?.backgroundMode !== true || !resultData?.taskId || !this.deps.platform) {
@@ -415,20 +423,28 @@ export class AgentStreamProcessor {
         }
       }
 
-      const webviewUrls = resultUrls.map(url => toWebviewUri(url)).filter(Boolean) as string[];
+      const webviewUrls = resultUrls.map((url) => toWebviewUri(url)).filter(Boolean) as string[];
       const webviewThumbnailUrl = toWebviewUri(thumbnailUrl);
 
       webview.postMessage({
         type: 'taskUpdated',
         task: {
           id: task.id,
-          type: task.type === 'text-to-image' ? 'image' : task.type === 'text-to-video' ? 'video' : 'image',
+          type:
+            task.type === 'text-to-image'
+              ? 'image'
+              : task.type === 'text-to-video'
+                ? 'video'
+                : 'image',
           status: task.status === 'pending' ? 'queued' : task.status,
           progress: task.progress,
-          result: webviewUrls.length > 0 ? {
-            urls: webviewUrls,
-            thumbnailUrl: webviewThumbnailUrl,
-          } : undefined,
+          result:
+            webviewUrls.length > 0
+              ? {
+                  urls: webviewUrls,
+                  thumbnailUrl: webviewThumbnailUrl,
+                }
+              : undefined,
           error: task.error?.message,
           updatedAt: new Date().toISOString(),
         },
@@ -449,7 +465,7 @@ export class AgentStreamProcessor {
   async saveOutputsToLocal(
     taskId: string,
     taskType: string,
-    outputs: Array<{ url?: string; type?: string }>
+    outputs: Array<{ url?: string; type?: string }>,
   ): Promise<string[]> {
     const savedPaths: string[] = [];
 
@@ -487,7 +503,10 @@ export class AgentStreamProcessor {
         try {
           const response = await fetch(output.url);
           if (!response.ok) {
-            logger.error('Download failed:', { status: response.status, statusText: response.statusText });
+            logger.error('Download failed:', {
+              status: response.status,
+              statusText: response.statusText,
+            });
             continue;
           }
 
@@ -518,13 +537,13 @@ export class AgentStreamProcessor {
 
       let updated = false;
 
-      const updatedMessages = conversation.messages.map(message => {
+      const updatedMessages = conversation.messages.map((message) => {
         if (!message.toolCalls && !message.contentBlocks) return message;
 
         let updatedMessage = { ...message };
 
         if (message.toolCalls) {
-          const updatedToolCalls = message.toolCalls.map(toolCall => {
+          const updatedToolCalls = message.toolCalls.map((toolCall) => {
             if (!toolCall.result?.data) return toolCall;
 
             const data = toolCall.result.data as Record<string, unknown>;
@@ -551,7 +570,7 @@ export class AgentStreamProcessor {
         }
 
         if (message.contentBlocks) {
-          const updatedContentBlocks = message.contentBlocks.map(block => {
+          const updatedContentBlocks = message.contentBlocks.map((block) => {
             if (block.type !== 'tool_call' || !block.toolCall?.result?.data) return block;
 
             const data = block.toolCall.result.data as Record<string, unknown>;

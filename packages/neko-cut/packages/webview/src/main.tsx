@@ -23,7 +23,7 @@ try {
             </ToastProvider>
           </I18nProvider>
         </ErrorBoundary>
-      </React.StrictMode>
+      </React.StrictMode>,
     );
   } else {
     logger.error('Root element not found!');

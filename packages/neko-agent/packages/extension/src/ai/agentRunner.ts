@@ -18,9 +18,7 @@ import { createServiceId, getLogger } from '../base';
 const logger = getLogger('AgentRunner');
 import type { Platform, ChatMessage } from '@neko/platform';
 import { getBuiltinPrompt, toSharedService } from '@neko/platform';
-import type {
-  ToolConfirmationRequest,
-} from '@neko/agent';
+import type { ToolConfirmationRequest } from '@neko/agent';
 import {
   AgentSession,
   createAgentSession,
@@ -158,10 +156,7 @@ export interface IAgentRunner extends vscode.Disposable {
    * @param context Agent context
    * @returns Agent event stream
    */
-  execute(
-    input: string,
-    context: IAgentContext
-  ): AsyncIterable<AgentEvent>;
+  execute(input: string, context: IAgentContext): AsyncIterable<AgentEvent>;
 
   /**
    * Cancel current execution
@@ -307,15 +302,18 @@ export class AgentRunner implements IAgentRunner {
   private _pendingMessages: string[] = [];
 
   // Pending tool confirmations
-  private _pendingConfirmations = new Map<string, {
-    toolCallId: string;
-    toolName: string;
-    action: string;
-    description: string;
-    details: Record<string, unknown>;
-    confirmationToken?: string;
-    resolve?: (approved: boolean) => void;
-  }>();
+  private _pendingConfirmations = new Map<
+    string,
+    {
+      toolCallId: string;
+      toolName: string;
+      action: string;
+      description: string;
+      details: Record<string, unknown>;
+      confirmationToken?: string;
+      resolve?: (approved: boolean) => void;
+    }
+  >();
 
   // Timeout timers for pending confirmations (5 min auto-reject)
   private _confirmationTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -420,10 +418,7 @@ export class AgentRunner implements IAgentRunner {
   // Execution
   // -------------------------------------------------------------------------
 
-  async *execute(
-    input: string,
-    context: IAgentContext
-  ): AsyncIterable<AgentEvent> {
+  async *execute(input: string, context: IAgentContext): AsyncIterable<AgentEvent> {
     if (!this._config || !this._session) {
       yield { type: 'error', error: new Error('Agent not configured') };
       return;
@@ -577,7 +572,7 @@ export class AgentRunner implements IAgentRunner {
     description: string;
     details: Record<string, unknown>;
   }> {
-    return Array.from(this._pendingConfirmations.values()).map(p => ({
+    return Array.from(this._pendingConfirmations.values()).map((p) => ({
       toolCallId: p.toolCallId,
       toolName: p.toolName,
       action: p.action,
@@ -610,7 +605,7 @@ export class AgentRunner implements IAgentRunner {
     if (!this._toolGroupRegistry) {
       return [];
     }
-    return this._toolGroupRegistry.list().map(ts => ({ ...ts }));
+    return this._toolGroupRegistry.list().map((ts) => ({ ...ts }));
   }
 
   // -------------------------------------------------------------------------

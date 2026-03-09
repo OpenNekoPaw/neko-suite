@@ -97,7 +97,7 @@ const WaveformCanvas = memo(function WaveformCanvas({
       const x = (e.clientX - rect.left) / rect.width;
       onSeek(x * duration);
     },
-    [onSeek, duration]
+    [onSeek, duration],
   );
 
   return (
@@ -272,7 +272,7 @@ const OverlayWaveform = memo(function OverlayWaveform({
       const x = (e.clientX - rect.left) / rect.width;
       onSeek(x * duration);
     },
-    [onSeek, duration]
+    [onSeek, duration],
   );
 
   return (
@@ -517,11 +517,19 @@ const AudioDetails = memo(function AudioDetails({ details }: AudioDetailsProps) 
           <div className="text-[var(--vscode-descriptionForeground)] mb-1">Channels</div>
           <div className="flex items-center gap-2">
             <span className="text-red-400">
-              {details.channels.previous === 1 ? 'Mono' : details.channels.previous === 2 ? 'Stereo' : `${details.channels.previous}ch`}
+              {details.channels.previous === 1
+                ? 'Mono'
+                : details.channels.previous === 2
+                  ? 'Stereo'
+                  : `${details.channels.previous}ch`}
             </span>
             <span>→</span>
             <span className="text-green-400">
-              {details.channels.current === 1 ? 'Mono' : details.channels.current === 2 ? 'Stereo' : `${details.channels.current}ch`}
+              {details.channels.current === 1
+                ? 'Mono'
+                : details.channels.current === 2
+                  ? 'Stereo'
+                  : `${details.channels.current}ch`}
             </span>
           </div>
         </div>
@@ -582,17 +590,14 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
   const [localTime, setLocalTime] = useState(currentTime);
   const [localPlayingVersion, setLocalPlayingVersion] = useState(playingVersion);
 
-  const duration = Math.max(
-    details?.duration.current ?? 0,
-    details?.duration.previous ?? 0
-  );
+  const duration = Math.max(details?.duration.current ?? 0, details?.duration.previous ?? 0);
 
   const handleTimeChange = useCallback(
     (time: number) => {
       setLocalTime(time);
       onTimeChange?.(time);
     },
-    [onTimeChange]
+    [onTimeChange],
   );
 
   const handlePlayingVersionChange = useCallback(
@@ -600,7 +605,7 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
       setLocalPlayingVersion(version);
       onPlayingVersionChange?.(version);
     },
-    [onPlayingVersionChange]
+    [onPlayingVersionChange],
   );
 
   // Error state
@@ -630,8 +635,18 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
   }
 
   // Generate placeholder waveform if none provided
-  const displayCurrentWaveform = currentWaveform.length > 0 ? currentWaveform : Array(100).fill(0.5).map(() => Math.random());
-  const displayPreviousWaveform = previousWaveform.length > 0 ? previousWaveform : Array(100).fill(0.5).map(() => Math.random());
+  const displayCurrentWaveform =
+    currentWaveform.length > 0
+      ? currentWaveform
+      : Array(100)
+          .fill(0.5)
+          .map(() => Math.random());
+  const displayPreviousWaveform =
+    previousWaveform.length > 0
+      ? previousWaveform
+      : Array(100)
+          .fill(0.5)
+          .map(() => Math.random());
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">

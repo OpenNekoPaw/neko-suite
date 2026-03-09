@@ -4,7 +4,13 @@
 
 import type { ProjectData } from '../../types/project';
 import type { TimelineTrack } from '../../types/timelineTrack';
-import type { TimelineElement, MediaElement, AudioElement, TextElement, ShapeElement } from '../../types/element';
+import type {
+  TimelineElement,
+  MediaElement,
+  AudioElement,
+  TextElement,
+  ShapeElement,
+} from '../../types/element';
 import type { ShapeInstance, ShapeStyle, RectangleShape } from '../../types/shape';
 import type { OperationMeta } from '../types';
 import type { WebviewElement } from '../webview-types';
@@ -140,7 +146,17 @@ export function createTestShapeInstance(overrides: Partial<ShapeInstance> = {}):
 
   const defaultStyle: ShapeStyle = {
     fill: { type: 'solid', color: '#4a90d9', opacity: 1 },
-    stroke: { enabled: true, color: '#333', width: 2, opacity: 1, lineCap: 'round', lineJoin: 'round', miterLimit: 10, dashArray: [], dashOffset: 0 },
+    stroke: {
+      enabled: true,
+      color: '#333',
+      width: 2,
+      opacity: 1,
+      lineCap: 'round',
+      lineJoin: 'round',
+      miterLimit: 10,
+      dashArray: [],
+      dashOffset: 0,
+    },
     shadow: { enabled: false, color: 'rgba(0,0,0,0.3)', blur: 10, offsetX: 4, offsetY: 4 },
   };
 

@@ -65,13 +65,16 @@ export function EditableText({
     }
   }, [isEditing]);
 
-  const startEditing = useCallback((e: React.MouseEvent) => {
-    if (disabled) return;
-    e.stopPropagation();
-    e.preventDefault();
-    setEditValue(value);
-    setIsEditing(true);
-  }, [disabled, value]);
+  const startEditing = useCallback(
+    (e: React.MouseEvent) => {
+      if (disabled) return;
+      e.stopPropagation();
+      e.preventDefault();
+      setEditValue(value);
+      setIsEditing(true);
+    },
+    [disabled, value],
+  );
 
   const confirmEdit = useCallback(() => {
     setIsEditing(false);
@@ -87,19 +90,22 @@ export function EditableText({
   }, [value]);
 
   // Stop ALL keyboard events from propagating to VS Code
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    e.stopPropagation();
-    // Also stop native event propagation
-    e.nativeEvent.stopImmediatePropagation();
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      e.stopPropagation();
+      // Also stop native event propagation
+      e.nativeEvent.stopImmediatePropagation();
 
-    if (e.key === 'Enter' && !multiline) {
-      confirmEdit();
-    } else if (e.key === 'Enter' && multiline && (e.metaKey || e.ctrlKey)) {
-      confirmEdit();
-    } else if (e.key === 'Escape') {
-      cancelEdit();
-    }
-  }, [multiline, confirmEdit, cancelEdit]);
+      if (e.key === 'Enter' && !multiline) {
+        confirmEdit();
+      } else if (e.key === 'Enter' && multiline && (e.metaKey || e.ctrlKey)) {
+        confirmEdit();
+      } else if (e.key === 'Escape') {
+        cancelEdit();
+      }
+    },
+    [multiline, confirmEdit, cancelEdit],
+  );
 
   const handleKeyUp = useCallback((e: React.KeyboardEvent) => {
     e.stopPropagation();
@@ -111,11 +117,14 @@ export function EditableText({
     e.nativeEvent.stopImmediatePropagation();
   }, []);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (isEditing) {
-      e.stopPropagation(); // Prevent node drag while editing
-    }
-  }, [isEditing]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (isEditing) {
+        e.stopPropagation(); // Prevent node drag while editing
+      }
+    },
+    [isEditing],
+  );
 
   const handleInput = useCallback((e: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     e.stopPropagation();
@@ -126,7 +135,8 @@ export function EditableText({
     const commonProps = {
       ref: inputRef as React.RefObject<HTMLInputElement & HTMLTextAreaElement>,
       value: editValue,
-      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setEditValue(e.target.value),
+      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+        setEditValue(e.target.value),
       onBlur: confirmEdit,
       onKeyDown: handleKeyDown,
       onKeyUp: handleKeyUp,

@@ -41,7 +41,10 @@ export class OperationError extends BaseError {
   }
 
   static elementNotFound(elementId: string, trackId?: string): OperationError {
-    return new OperationError('ELEMENT_NOT_FOUND', `Element not found: ${elementId}`, { elementId, trackId });
+    return new OperationError('ELEMENT_NOT_FOUND', `Element not found: ${elementId}`, {
+      elementId,
+      trackId,
+    });
   }
 
   static shapeNotFound(shapeId: string): OperationError {
@@ -49,7 +52,9 @@ export class OperationError extends BaseError {
   }
 
   static keyframeNotFound(keyframeId: string): OperationError {
-    return new OperationError('KEYFRAME_NOT_FOUND', `Keyframe not found: ${keyframeId}`, { keyframeId });
+    return new OperationError('KEYFRAME_NOT_FOUND', `Keyframe not found: ${keyframeId}`, {
+      keyframeId,
+    });
   }
 
   static effectNotFound(effectId: string): OperationError {
@@ -61,7 +66,10 @@ export class OperationError extends BaseError {
   }
 
   static invalidIndex(index: number, max: number): OperationError {
-    return new OperationError('INVALID_INDEX', `Index ${index} out of range [0, ${max}]`, { index, max });
+    return new OperationError('INVALID_INDEX', `Index ${index} out of range [0, ${max}]`, {
+      index,
+      max,
+    });
   }
 
   static invalidOperation(message: string): OperationError {

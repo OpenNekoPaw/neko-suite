@@ -17,7 +17,8 @@ export const mediaEngine = {
   'mediaEngine.settings.mode': 'Mode',
   'mediaEngine.settings.preference': 'Mode Preference',
   'mediaEngine.settings.compatibleMode': 'Compatible Mode',
-  'mediaEngine.settings.downloadDescription': 'Download additional components for full codec support',
+  'mediaEngine.settings.downloadDescription':
+    'Download additional components for full codec support',
 
   'mediaEngine.status.installed': 'Installed',
   'mediaEngine.status.notInstalled': 'Not Installed',

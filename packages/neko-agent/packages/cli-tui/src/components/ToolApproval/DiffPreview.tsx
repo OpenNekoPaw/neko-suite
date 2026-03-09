@@ -36,7 +36,11 @@ export function DiffPreview({
     <Box flexDirection="column">
       {/* Header */}
       {filePath ? (
-        <Text dimColor>{'─── '}{filePath}{' ───'}</Text>
+        <Text dimColor>
+          {'─── '}
+          {filePath}
+          {' ───'}
+        </Text>
       ) : null}
 
       {/* Stats */}
@@ -52,30 +56,32 @@ export function DiffPreview({
       ))}
 
       {/* Truncation notice */}
-      {hasMore ? (
-        <Text dimColor>... {diffLines.length - maxLines} more lines</Text>
-      ) : null}
+      {hasMore ? <Text dimColor>... {diffLines.length - maxLines} more lines</Text> : null}
     </Box>
   );
 }
 
 function DiffLineView({ line }: { readonly line: DiffLine }): React.JSX.Element {
   const prefix = line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' ';
-  const color = line.type === 'add'
-    ? tokens.diffAdded
-    : line.type === 'remove'
-      ? tokens.diffRemoved
-      : tokens.diffContext;
+  const color =
+    line.type === 'add'
+      ? tokens.diffAdded
+      : line.type === 'remove'
+        ? tokens.diffRemoved
+        : tokens.diffContext;
 
   // Line number
-  const lineNum = line.type === 'remove'
-    ? String(line.oldLineNum ?? '').padStart(4)
-    : String(line.newLineNum ?? '').padStart(4);
+  const lineNum =
+    line.type === 'remove'
+      ? String(line.oldLineNum ?? '').padStart(4)
+      : String(line.newLineNum ?? '').padStart(4);
 
   return (
     <Text>
       <Text dimColor>{lineNum} </Text>
-      <Text color={color}>{prefix} {line.content}</Text>
+      <Text color={color}>
+        {prefix} {line.content}
+      </Text>
     </Text>
   );
 }

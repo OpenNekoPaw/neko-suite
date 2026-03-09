@@ -780,7 +780,9 @@ export function validateSkill(skill: Partial<Skill>): SkillValidationResult {
       errors.push('Description must be 2048 characters or less');
     }
     if (skill.description.length < 20) {
-      warnings.push('Description is very short. Consider adding more context for better semantic matching.');
+      warnings.push(
+        'Description is very short. Consider adding more context for better semantic matching.',
+      );
     }
   }
 
@@ -834,7 +836,7 @@ export function createSkill(
   directoryPath?: string,
   supportFileRefs?: string[],
   toolDefinitions?: SkillToolDefinition[],
-  contentConfig?: SkillContentConfig
+  contentConfig?: SkillContentConfig,
 ): Skill {
   return {
     name: frontmatter.name,
@@ -860,7 +862,7 @@ export function createCommand(
   frontmatter: CommandFrontmatter,
   content: string,
   source: SkillSource,
-  filePath?: string
+  filePath?: string,
 ): SlashCommand {
   return {
     command: frontmatter.command,

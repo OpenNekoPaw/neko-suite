@@ -19,14 +19,24 @@ import { CommandPreview } from './CommandPreview';
 
 /** Tools that modify files — show diff preview */
 const FILE_TOOLS = new Set([
-  'write_file', 'edit_file', 'create_file', 'patch_file',
-  'WriteFile', 'EditFile', 'CreateFile',
+  'write_file',
+  'edit_file',
+  'create_file',
+  'patch_file',
+  'WriteFile',
+  'EditFile',
+  'CreateFile',
 ]);
 
 /** Tools that execute commands — show command preview */
 const SHELL_TOOLS = new Set([
-  'bash', 'execute_command', 'run_command', 'shell',
-  'Bash', 'ExecuteCommand', 'RunCommand',
+  'bash',
+  'execute_command',
+  'run_command',
+  'shell',
+  'Bash',
+  'ExecuteCommand',
+  'RunCommand',
 ]);
 
 interface ToolApprovalPanelProps {
@@ -58,7 +68,9 @@ export function ToolApprovalPanel({
       marginTop={1}
     >
       {/* Header */}
-      <Text bold color={tokens.warning}>Tool Approval Required</Text>
+      <Text bold color={tokens.warning}>
+        Tool Approval Required
+      </Text>
 
       {/* Tool name */}
       <Box marginTop={1}>
@@ -75,11 +87,17 @@ export function ToolApprovalPanel({
       {/* Keyboard shortcuts */}
       <Box marginTop={1}>
         <Text>
-          <Text color={tokens.approval.approve} bold>[y]</Text>
-          <Text>es  </Text>
-          <Text color={tokens.approval.reject} bold>[n]</Text>
-          <Text>o  </Text>
-          <Text color={tokens.info} bold>[a]</Text>
+          <Text color={tokens.approval.approve} bold>
+            [y]
+          </Text>
+          <Text>es </Text>
+          <Text color={tokens.approval.reject} bold>
+            [n]
+          </Text>
+          <Text>o </Text>
+          <Text color={tokens.info} bold>
+            [a]
+          </Text>
           <Text>lways</Text>
         </Text>
       </Box>
@@ -98,16 +116,18 @@ function ToolPreview({
   // File tools → diff preview
   if (FILE_TOOLS.has(name)) {
     const oldContent = typeof args['old_content'] === 'string' ? args['old_content'] : '';
-    const newContent = typeof args['new_content'] === 'string'
-      ? args['new_content']
-      : typeof args['content'] === 'string'
-        ? args['content']
-        : '';
-    const filePath = typeof args['path'] === 'string'
-      ? args['path']
-      : typeof args['file_path'] === 'string'
-        ? args['file_path']
-        : undefined;
+    const newContent =
+      typeof args['new_content'] === 'string'
+        ? args['new_content']
+        : typeof args['content'] === 'string'
+          ? args['content']
+          : '';
+    const filePath =
+      typeof args['path'] === 'string'
+        ? args['path']
+        : typeof args['file_path'] === 'string'
+          ? args['file_path']
+          : undefined;
 
     if (newContent) {
       return <DiffPreview oldContent={oldContent} newContent={newContent} filePath={filePath} />;
@@ -116,11 +136,12 @@ function ToolPreview({
 
   // Shell tools → command preview
   if (SHELL_TOOLS.has(name)) {
-    const command = typeof args['command'] === 'string'
-      ? args['command']
-      : typeof args['cmd'] === 'string'
-        ? args['cmd']
-        : '';
+    const command =
+      typeof args['command'] === 'string'
+        ? args['command']
+        : typeof args['cmd'] === 'string'
+          ? args['cmd']
+          : '';
     const cwd = typeof args['cwd'] === 'string' ? args['cwd'] : undefined;
 
     if (command) {

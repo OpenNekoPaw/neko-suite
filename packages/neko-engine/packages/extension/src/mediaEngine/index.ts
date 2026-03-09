@@ -36,10 +36,10 @@ export { IMediaEngineManager } from './serviceIds';
 
 // Manager
 export {
-	MediaEngineManager,
-	createMediaEngineManager,
-	BasicModeRequiredError,
-	type MediaEngineManagerConfig,
+  MediaEngineManager,
+  createMediaEngineManager,
+  BasicModeRequiredError,
+  type MediaEngineManagerConfig,
 } from './MediaEngineManager';
 
 // Native engine

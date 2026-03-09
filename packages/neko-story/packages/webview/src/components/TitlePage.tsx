@@ -11,9 +11,7 @@ export function TitlePageRenderer({ titlePage }: TitlePageRendererProps) {
   };
 
   // Find title entry
-  const titleEntry = titlePage.entries.find(
-    (e) => e.key.toLowerCase() === 'title'
-  );
+  const titleEntry = titlePage.entries.find((e) => e.key.toLowerCase() === 'title');
 
   return (
     <div className="title-page element" onClick={handleClick}>

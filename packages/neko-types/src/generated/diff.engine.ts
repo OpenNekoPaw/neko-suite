@@ -10,20 +10,9 @@
 // Enums
 // =============================================================================
 
-export type EngineDiffCategory =
-  | 'image'
-  | 'audio'
-  | 'video'
-  | 'timeline'
-  | 'canvas'
-  | 'model';
+export type EngineDiffCategory = 'image' | 'audio' | 'video' | 'timeline' | 'canvas' | 'model';
 
-export type EngineTimelineChangeType =
-  | 'added'
-  | 'removed'
-  | 'modified'
-  | 'moved'
-  | 'unchanged';
+export type EngineTimelineChangeType = 'added' | 'removed' | 'modified' | 'moved' | 'unchanged';
 
 // =============================================================================
 // Messages
@@ -220,4 +209,3 @@ export interface EngineDiffResult {
   videoDiff?: EngineVideoContentDiff;
   timelineDiff?: EngineTimelineContentDiff;
 }
-

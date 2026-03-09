@@ -34,7 +34,8 @@ export interface IProjectSessionService {
   dispose(): void;
 }
 
-export const IProjectSessionService = createServiceId<IProjectSessionService>('projectSessionService');
+export const IProjectSessionService =
+  createServiceId<IProjectSessionService>('projectSessionService');
 
 export class ProjectSessionService implements IProjectSessionService {
   private session: { info: ProjectSessionInfo; project: ProjectData } | null = null;
@@ -55,7 +56,9 @@ export class ProjectSessionService implements IProjectSessionService {
       try {
         project = JSON.parse(content) as ProjectData;
       } catch (error) {
-        throw new Error(`Invalid project JSON: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(
+          `Invalid project JSON: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
@@ -65,7 +68,12 @@ export class ProjectSessionService implements IProjectSessionService {
     };
   }
 
-  async create(options?: { name?: string; width?: number; height?: number; fps?: number }): Promise<void> {
+  async create(options?: {
+    name?: string;
+    width?: number;
+    height?: number;
+    fps?: number;
+  }): Promise<void> {
     const project = createDefaultProject(options?.name ?? 'Untitled Project');
     if (options?.width && options?.height) {
       project.resolution = { width: options.width, height: options.height };
@@ -126,4 +134,3 @@ export class ProjectSessionService implements IProjectSessionService {
     this.clear();
   }
 }
-

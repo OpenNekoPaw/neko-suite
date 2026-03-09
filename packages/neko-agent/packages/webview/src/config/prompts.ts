@@ -72,4 +72,3 @@ export function getPromptSource(prompt: PromptPresetConfig): PromptSource {
   // Fallback based on builtin flag
   return prompt.builtin ? 'builtin' : 'personal';
 }
-

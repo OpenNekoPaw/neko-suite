@@ -70,12 +70,12 @@ export interface ExportSettings {
  * 默认导出设置
  */
 export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
-  width: 960,   // EMERGENCY FIX: Further reduce to 960 for complex projects
-  height: 540,  // EMERGENCY FIX: Further reduce to 540 for complex projects
+  width: 960, // EMERGENCY FIX: Further reduce to 960 for complex projects
+  height: 540, // EMERGENCY FIX: Further reduce to 540 for complex projects
   fps: 30,
   format: 'mp4',
   quality: 'high',
-  hardwareAccel: false,  // CRITICAL FIX: Disable HW accel to avoid VideoToolbox encoding bottleneck
+  hardwareAccel: false, // CRITICAL FIX: Disable HW accel to avoid VideoToolbox encoding bottleneck
   // CRITICAL FIX: Add default video bitrate based on resolution
   // For 960x540@30fps: ~2500 kbps is reasonable for high quality
   videoBitrate: 2500,
@@ -194,10 +194,7 @@ export interface ExportStatusRequest extends BaseExportRequest {
 /**
  * 所有导出请求类型的联合
  */
-export type ExportRequest =
-  | ExportStartRequest
-  | ExportCancelRequest
-  | ExportStatusRequest;
+export type ExportRequest = ExportStartRequest | ExportCancelRequest | ExportStatusRequest;
 
 // =============================================================================
 // Export Response Types
@@ -369,12 +366,7 @@ export const FFMPEG_SUPPORTED_FEATURES = {
   /** 转场（使用 xfade） */
   transitions: ['fade', 'dissolve', 'wipe', 'slide'],
   /** 不支持的特效 */
-  unsupported: [
-    'custom-shader',
-    'motion-blur',
-    'complex-mask',
-    'advanced-blend-modes',
-  ],
+  unsupported: ['custom-shader', 'motion-blur', 'complex-mask', 'advanced-blend-modes'],
 } as const;
 
 // =============================================================================
@@ -387,16 +379,16 @@ export const FFMPEG_SUPPORTED_FEATURES = {
  * Phase 5: 支持 Webview GPU 渲染 → Extension FFmpeg 流式编码
  */
 export type StreamingExportMode =
-  | 'legacy'      // 旧模式：Extension 渲染 + 编码（两阶段）
-  | 'streaming';  // 新模式：Webview 渲染 → 流式传输 → Extension 编码
+  | 'legacy' // 旧模式：Extension 渲染 + 编码（两阶段）
+  | 'streaming'; // 新模式：Webview 渲染 → 流式传输 → Extension 编码
 
 /**
  * 帧数据格式
  */
 export type FrameDataFormat =
-  | 'rgba'   // Raw RGBA pixels (width * height * 4 bytes)
-  | 'jpeg'   // JPEG compressed
-  | 'png';   // PNG compressed (with alpha)
+  | 'rgba' // Raw RGBA pixels (width * height * 4 bytes)
+  | 'jpeg' // JPEG compressed
+  | 'png'; // PNG compressed (with alpha)
 
 /**
  * 流式导出配置（扩展 ExportSettings）
@@ -606,9 +598,9 @@ export interface BackpressureConfig {
  * 默认背压配置
  */
 export const DEFAULT_BACKPRESSURE_CONFIG: BackpressureConfig = {
-  pauseThreshold: 0.8,       // Pause at 80% utilization (was 0.95)
-  resumeThreshold: 0.4,      // Resume at 40% utilization (was 0.5)
-  maxPendingFrames: 50,      // Buffer 50 frames (was 100) - reduced since encoding tracking is now accurate
+  pauseThreshold: 0.8, // Pause at 80% utilization (was 0.95)
+  resumeThreshold: 0.4, // Resume at 40% utilization (was 0.5)
+  maxPendingFrames: 50, // Buffer 50 frames (was 100) - reduced since encoding tracking is now accurate
   maxWaitTime: 30000,
 };
 
@@ -619,9 +611,7 @@ export const DEFAULT_BACKPRESSURE_CONFIG: BackpressureConfig = {
 /**
  * 流式导出任务扩展状态
  */
-export type StreamingExportJobState =
-  | ExportJobState
-  | 'streaming';  // 正在接收和编码帧
+export type StreamingExportJobState = ExportJobState | 'streaming'; // 正在接收和编码帧
 
 /**
  * 流式导出任务状态
@@ -661,12 +651,12 @@ export const STREAMING_EXPORT_PROTOCOL_VERSION = '2.0.0';
  * 流式视频解码器状态
  */
 export type StreamingDecoderState =
-  | 'idle'        // 空闲
-  | 'starting'    // 正在启动
-  | 'decoding'    // 解码中
-  | 'paused'      // 已暂停
-  | 'completed'   // 已完成
-  | 'error';      // 错误
+  | 'idle' // 空闲
+  | 'starting' // 正在启动
+  | 'decoding' // 解码中
+  | 'paused' // 已暂停
+  | 'completed' // 已完成
+  | 'error'; // 错误
 
 /**
  * 视频源信息（用于初始化解码器）

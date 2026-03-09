@@ -40,7 +40,9 @@ function TodoItemView({ todo }: { readonly todo: TodoItem }): React.JSX.Element 
           <Text color={color}> {todo.content}</Text>
         </>
       ) : (
-        <Text color={color}>{icon} {todo.content}</Text>
+        <Text color={color}>
+          {icon} {todo.content}
+        </Text>
       )}
     </Box>
   );
@@ -53,9 +55,13 @@ function capitalize(s: string): string {
 /** Normalize status for theme lookup (in_progress → InProgress) */
 function normalizeStatus(status: TodoItem['status']): string {
   switch (status) {
-    case 'in_progress': return 'InProgress';
-    case 'pending': return 'Pending';
-    case 'completed': return 'Completed';
-    case 'failed': return 'Failed';
+    case 'in_progress':
+      return 'InProgress';
+    case 'pending':
+      return 'Pending';
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
   }
 }

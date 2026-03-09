@@ -16,7 +16,7 @@ const handleSettingsData: MessageHandler = (message, context) => {
   // The complete providers list comes from 'configState' message via handleConfigState.
   // settingsData.configuredProviders only contains providers with apiKey configured,
   // which would overwrite the complete list if this message arrives after configState.
-  context.setSettings(prev => ({
+  context.setSettings((prev) => ({
     ...prev,
     providers: message.providers || [],
     // configuredProviders: intentionally NOT set here - see handleConfigState
@@ -52,24 +52,30 @@ const handleProjectFiles: MessageHandler = (message, context) => {
 const handleConfigState: MessageHandler = (message, context) => {
   if (message.config) {
     // Map providers from ConfigState to ConfiguredProvider format
-    const mappedProviders = (message.config.providers || []).map((p: import('@neko/shared').ProviderConfig) => ({
-      id: p.id,
-      type: p.type,
-      name: p.displayName || p.name, // Use displayName for UI, fallback to name
-      apiKey: p.apiKey,
-      baseUrl: p.apiUrl, // Map apiUrl to baseUrl for local type compatibility
-      enabled: p.enabled,
-      builtin: p.builtin,
-    }));
+    const mappedProviders = (message.config.providers || []).map(
+      (p: import('@neko/shared').ProviderConfig) => ({
+        id: p.id,
+        type: p.type,
+        name: p.displayName || p.name, // Use displayName for UI, fallback to name
+        apiKey: p.apiKey,
+        baseUrl: p.apiUrl, // Map apiUrl to baseUrl for local type compatibility
+        enabled: p.enabled,
+        builtin: p.builtin,
+      }),
+    );
 
     // Get enabled prompts and validate selectedPromptId
     const newPrompts = message.config.prompts || [];
     const enabledPrompts = newPrompts.filter((p: { enabled?: boolean }) => p.enabled !== false);
 
-    context.setSettings(prev => {
+    context.setSettings((prev) => {
       // If current selectedPromptId is not in enabled prompts, update to first enabled one
-      const currentPromptValid = enabledPrompts.some((p: { id: string }) => p.id === prev.selectedPromptId);
-      const newSelectedPromptId = currentPromptValid ? prev.selectedPromptId : (enabledPrompts[0]?.id || prev.selectedPromptId);
+      const currentPromptValid = enabledPrompts.some(
+        (p: { id: string }) => p.id === prev.selectedPromptId,
+      );
+      const newSelectedPromptId = currentPromptValid
+        ? prev.selectedPromptId
+        : enabledPrompts[0]?.id || prev.selectedPromptId;
 
       return {
         ...prev,
@@ -153,7 +159,7 @@ const handleMCPServerTestResult: MessageHandler = (_message, _context) => {
  * Handle 'skillsData' message - Skills and commands from extension
  */
 const handleSkillsData: MessageHandler = (message, context) => {
-  context.setSettings(prev => ({
+  context.setSettings((prev) => ({
     ...prev,
     configuredSkills: message.skills || [],
     configuredCommands: message.commands || [],
@@ -164,7 +170,7 @@ const handleSkillsData: MessageHandler = (message, context) => {
  * Handle 'skillsChanged' message - Skills/commands changed event
  */
 const handleSkillsChanged: MessageHandler = (message, context) => {
-  context.setSettings(prev => ({
+  context.setSettings((prev) => ({
     ...prev,
     configuredSkills: message.skills || [],
     configuredCommands: message.commands || [],
@@ -175,7 +181,7 @@ const handleSkillsChanged: MessageHandler = (message, context) => {
  * Handle 'hooksData' message - Hooks from extension
  */
 const handleHooksData: MessageHandler = (message, context) => {
-  context.setSettings(prev => ({
+  context.setSettings((prev) => ({
     ...prev,
     configuredHooks: message.hooks || [],
   }));
@@ -185,7 +191,7 @@ const handleHooksData: MessageHandler = (message, context) => {
  * Handle 'hooksChanged' message - Hooks changed event
  */
 const handleHooksChanged: MessageHandler = (message, context) => {
-  context.setSettings(prev => ({
+  context.setSettings((prev) => ({
     ...prev,
     configuredHooks: message.hooks || [],
   }));

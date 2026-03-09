@@ -20,7 +20,10 @@ export function CommandPreview({ command, cwd }: CommandPreviewProps): React.JSX
   return (
     <Box flexDirection="column">
       {cwd ? (
-        <Text dimColor>{'  cwd: '}{cwd}</Text>
+        <Text dimColor>
+          {'  cwd: '}
+          {cwd}
+        </Text>
       ) : null}
       <Box>
         <Text color={tokens.warning}>{'  $ '}</Text>

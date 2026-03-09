@@ -55,39 +55,48 @@ export function useMinimapInteraction({
   /**
    * 计算点击位置对应的时间
    */
-  const getTimeFromPosition = useCallback((clientX: number): number => {
-    if (!containerRef.current) return 0;
+  const getTimeFromPosition = useCallback(
+    (clientX: number): number => {
+      if (!containerRef.current) return 0;
 
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const percent = x / rect.width;
-    const { totalDuration: duration } = callbacksRef.current;
-    const time = percent * duration;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const percent = x / rect.width;
+      const { totalDuration: duration } = callbacksRef.current;
+      const time = percent * duration;
 
-    return Math.max(0, Math.min(duration, time));
-  }, [containerRef]);
+      return Math.max(0, Math.min(duration, time));
+    },
+    [containerRef],
+  );
 
   /**
    * 点击跳转处理
    */
-  const handleClick = useCallback((e: React.MouseEvent) => {
-    // 如果正在拖拽，不处理点击
-    if (isDragging) return;
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      // 如果正在拖拽，不处理点击
+      if (isDragging) return;
 
-    const time = getTimeFromPosition(e.clientX);
-    callbacksRef.current.onScrollToTime(time);
-  }, [isDragging, getTimeFromPosition]);
+      const time = getTimeFromPosition(e.clientX);
+      callbacksRef.current.onScrollToTime(time);
+    },
+    [isDragging, getTimeFromPosition],
+  );
 
   /**
    * 鼠标按下处理
    */
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
 
-    const time = getTimeFromPosition(e.clientX);
-    callbacksRef.current.onScrollToTime(time);
-  }, [getTimeFromPosition]);
+      const time = getTimeFromPosition(e.clientX);
+      callbacksRef.current.onScrollToTime(time);
+    },
+    [getTimeFromPosition],
+  );
 
   // 注册全局鼠标事件（用于拖拽）
   // 在 useEffect 内部定义处理函数，避免闭包问题

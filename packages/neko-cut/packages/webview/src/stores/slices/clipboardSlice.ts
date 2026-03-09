@@ -40,7 +40,9 @@ interface DispatchDependency {
 
 export interface ClipboardSlice {
   // State
-  clipboard: { items: Array<{ trackType: TrackType; element: Omit<TimelineElement, 'id'> }> } | null;
+  clipboard: {
+    items: Array<{ trackType: TrackType; element: Omit<TimelineElement, 'id'> }>;
+  } | null;
 
   // Actions
   /** 复制选中的元素到剪贴板 */
@@ -63,11 +65,12 @@ function findNonOverlappingPositionOnTrack(
   existingElements: TimeRange[],
   pendingElements: TimeRange[],
   desiredStart: number,
-  duration: number
+  duration: number,
 ): number {
   // 合并所有元素并排序
-  const allElements = [...existingElements, ...pendingElements]
-    .sort((a, b) => a.startTime - b.startTime);
+  const allElements = [...existingElements, ...pendingElements].sort(
+    (a, b) => a.startTime - b.startTime,
+  );
 
   let startTime = desiredStart;
 
@@ -90,11 +93,7 @@ function findNonOverlappingPositionOnTrack(
 function elementToTimeRange(element: TimelineElement): TimeRange {
   return {
     startTime: element.startTime,
-    duration: calculateEffectiveDuration(
-      element.duration,
-      element.trimStart,
-      element.trimEnd
-    ),
+    duration: calculateEffectiveDuration(element.duration, element.trimStart, element.trimEnd),
   };
 }
 
@@ -182,7 +181,7 @@ export const createClipboardSlice: StateCreator<
       const elementDuration = calculateEffectiveDuration(
         item.element.duration,
         item.element.trimStart,
-        item.element.trimEnd
+        item.element.trimEnd,
       );
 
       // Get existing elements on the target track
@@ -198,7 +197,7 @@ export const createClipboardSlice: StateCreator<
         existingElements,
         pending,
         desiredStartTime,
-        elementDuration
+        elementDuration,
       );
 
       // Record pending element for future collision checks

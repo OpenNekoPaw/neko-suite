@@ -58,12 +58,10 @@ export interface AIActionSlice {
   aiRemoveSilence: () => void;
 }
 
-export const createAIActionSlice: StateCreator<
-  AIActionSlice,
-  [],
-  [],
-  AIActionSlice
-> = (set, get) => ({
+export const createAIActionSlice: StateCreator<AIActionSlice, [], [], AIActionSlice> = (
+  set,
+  get,
+) => ({
   // Initial state
   pendingAIActions: [],
   activeAIAction: null,
@@ -100,7 +98,7 @@ export const createAIActionSlice: StateCreator<
             message: `${actionId} completed (dev mode)`,
           },
           pendingAIActions: state.pendingAIActions.filter(
-            (a) => a.actionId !== actionId || a.elementIds !== elementIds
+            (a) => a.actionId !== actionId || a.elementIds !== elementIds,
           ),
           aiActionHistory: [
             ...state.aiActionHistory,
@@ -119,7 +117,7 @@ export const createAIActionSlice: StateCreator<
       // If completed or failed, move to history and remove from pending
       if (status.status === 'completed' || status.status === 'failed') {
         newState.pendingAIActions = state.pendingAIActions.filter(
-          (a) => a.actionId !== status.actionId
+          (a) => a.actionId !== status.actionId,
         );
         newState.aiActionHistory = [...state.aiActionHistory, status];
       }

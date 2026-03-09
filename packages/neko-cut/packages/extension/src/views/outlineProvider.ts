@@ -8,7 +8,9 @@ import type { ProjectData, TimelineTrack, TimelineElement } from '@neko/shared';
 // Service identifier
 // =============================================================================
 
-export const IVideoProjectOutlineProvider = createServiceId<IVideoProjectOutlineProvider>('videoProjectOutlineProvider');
+export const IVideoProjectOutlineProvider = createServiceId<IVideoProjectOutlineProvider>(
+  'videoProjectOutlineProvider',
+);
 
 // =============================================================================
 // Interface
@@ -32,7 +34,7 @@ class OutlineItem extends vscode.TreeItem {
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly itemType: 'project' | 'track' | 'element',
     public readonly data?: ProjectData | TimelineTrack | TimelineElement,
-    public readonly trackId?: string
+    public readonly trackId?: string,
   ) {
     super(label, collapsibleState);
   }
@@ -64,7 +66,7 @@ export class VideoProjectOutlineProvider
 
     // Element's parent is its track
     if (element.itemType === 'element' && element.trackId) {
-      const track = this.data.tracks.find(t => t.id === element.trackId);
+      const track = this.data.tracks.find((t) => t.id === element.trackId);
       if (track) {
         return new OutlineItem(
           this.translateTrackName(track.name),
@@ -73,7 +75,7 @@ export class VideoProjectOutlineProvider
             : vscode.TreeItemCollapsibleState.None,
           'track',
           track,
-          track.id
+          track.id,
         );
       }
     }
@@ -84,7 +86,7 @@ export class VideoProjectOutlineProvider
         this.data.name || vscode.l10n.t('Project'),
         vscode.TreeItemCollapsibleState.Expanded,
         'project',
-        this.data
+        this.data,
       );
     }
 
@@ -101,7 +103,7 @@ export class VideoProjectOutlineProvider
         this.data.name || vscode.l10n.t('Project'),
         vscode.TreeItemCollapsibleState.Expanded,
         'project',
-        this.data
+        this.data,
       );
       projectItem.description = `${this.data.resolution.width}x${this.data.resolution.height} @ ${this.data.fps}fps`;
       projectItem.iconPath = new vscode.ThemeIcon('file-media');
@@ -112,7 +114,7 @@ export class VideoProjectOutlineProvider
     if (element.itemType === 'project') {
       // Project level: show tracks
       const project = element.data as ProjectData;
-      return project.tracks.map(track => {
+      return project.tracks.map((track) => {
         const item = new OutlineItem(
           this.translateTrackName(track.name),
           track.elements.length > 0
@@ -120,14 +122,15 @@ export class VideoProjectOutlineProvider
             : vscode.TreeItemCollapsibleState.None,
           'track',
           track,
-          track.id
+          track.id,
         );
 
         const elementCount = track.elements.length;
         const mutedIndicator = track.muted ? ` ${vscode.l10n.t('(muted)')}` : '';
-        const elementText = elementCount === 1
-          ? vscode.l10n.t('{count} element', { count: elementCount })
-          : vscode.l10n.t('{count} elements', { count: elementCount });
+        const elementText =
+          elementCount === 1
+            ? vscode.l10n.t('{count} element', { count: elementCount })
+            : vscode.l10n.t('{count} elements', { count: elementCount });
         item.description = `${elementText}${mutedIndicator}`;
         item.iconPath = this.getTrackIcon(track.type);
         item.contextValue = `track-${track.type}`;
@@ -139,7 +142,7 @@ export class VideoProjectOutlineProvider
     if (element.itemType === 'track') {
       // Track level: show elements
       const track = element.data as TimelineTrack;
-      return track.elements.map(el => {
+      return track.elements.map((el) => {
         const effectiveDuration = el.duration - el.trimStart - el.trimEnd;
         const startTime = this.formatTime(el.startTime);
         const endTime = this.formatTime(el.startTime + effectiveDuration);
@@ -149,7 +152,7 @@ export class VideoProjectOutlineProvider
           vscode.TreeItemCollapsibleState.None,
           'element',
           el,
-          track.id
+          track.id,
         );
 
         // Build description
@@ -158,9 +161,7 @@ export class VideoProjectOutlineProvider
           description += ` ${vscode.l10n.t('(hidden)')}`;
         }
         if (el.type === 'text') {
-          const preview = el.content.length > 15
-            ? el.content.substring(0, 15) + '...'
-            : el.content;
+          const preview = el.content.length > 15 ? el.content.substring(0, 15) + '...' : el.content;
           description = `"${preview}" | ${description}`;
         } else if (el.type === 'media') {
           const fileName = el.src.split('/').pop() || el.src;
@@ -175,7 +176,7 @@ export class VideoProjectOutlineProvider
         item.command = {
           command: 'neko.selectElement',
           title: vscode.l10n.t('Select Element'),
-          arguments: [track.id, el.id]
+          arguments: [track.id, el.id],
         };
 
         return item;
@@ -204,19 +205,27 @@ export class VideoProjectOutlineProvider
 
   private getTrackIcon(type: string): vscode.ThemeIcon {
     switch (type) {
-      case 'media': return new vscode.ThemeIcon('device-camera-video');
-      case 'audio': return new vscode.ThemeIcon('unmute');
-      case 'text': return new vscode.ThemeIcon('symbol-string');
-      default: return new vscode.ThemeIcon('folder');
+      case 'media':
+        return new vscode.ThemeIcon('device-camera-video');
+      case 'audio':
+        return new vscode.ThemeIcon('unmute');
+      case 'text':
+        return new vscode.ThemeIcon('symbol-string');
+      default:
+        return new vscode.ThemeIcon('folder');
     }
   }
 
   private getElementIcon(type: string): vscode.ThemeIcon {
     switch (type) {
-      case 'media': return new vscode.ThemeIcon('file-media');
-      case 'audio': return new vscode.ThemeIcon('music');
-      case 'text': return new vscode.ThemeIcon('text-size');
-      default: return new vscode.ThemeIcon('file');
+      case 'media':
+        return new vscode.ThemeIcon('file-media');
+      case 'audio':
+        return new vscode.ThemeIcon('music');
+      case 'text':
+        return new vscode.ThemeIcon('text-size');
+      default:
+        return new vscode.ThemeIcon('file');
     }
   }
 

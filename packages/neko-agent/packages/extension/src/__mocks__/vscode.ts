@@ -9,7 +9,12 @@ import { vi } from 'vitest';
 
 // Uri mock
 export const Uri = {
-  file: (path: string) => ({ scheme: 'file', fsPath: path, path, toString: () => `file://${path}` }),
+  file: (path: string) => ({
+    scheme: 'file',
+    fsPath: path,
+    path,
+    toString: () => `file://${path}`,
+  }),
   parse: (value: string) => ({ scheme: 'https', path: value, toString: () => value }),
   joinPath: (base: any, ...segments: string[]) => {
     const joined = [base.fsPath || base.path, ...segments].join('/');
@@ -74,7 +79,9 @@ export enum LogLevel {
 // Disposable mock
 export class Disposable {
   constructor(private callOnDispose: () => void) {}
-  dispose() { this.callOnDispose(); }
+  dispose() {
+    this.callOnDispose();
+  }
 }
 
 // EventEmitter mock
@@ -83,13 +90,15 @@ export class EventEmitter<T> {
   event = (listener: (e: T) => void) => {
     this.listeners.push(listener);
     return new Disposable(() => {
-      this.listeners = this.listeners.filter(l => l !== listener);
+      this.listeners = this.listeners.filter((l) => l !== listener);
     });
   };
   fire(data: T) {
     for (const listener of this.listeners) listener(data);
   }
-  dispose() { this.listeners = []; }
+  dispose() {
+    this.listeners = [];
+  }
 }
 
 /**

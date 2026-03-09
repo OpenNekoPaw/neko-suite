@@ -8,42 +8,42 @@
 import type { IMediaProbeCache, ProbeResultLike } from './types';
 
 interface CacheEntry {
-	result: ProbeResultLike;
-	expiry: number;
+  result: ProbeResultLike;
+  expiry: number;
 }
 
 const DEFAULT_TTL_MS = 60_000; // 60 seconds
 
 export class MediaProbeCache implements IMediaProbeCache {
-	private readonly cache = new Map<string, CacheEntry>();
-	private readonly ttlMs: number;
+  private readonly cache = new Map<string, CacheEntry>();
+  private readonly ttlMs: number;
 
-	constructor(ttlMs: number = DEFAULT_TTL_MS) {
-		this.ttlMs = ttlMs;
-	}
+  constructor(ttlMs: number = DEFAULT_TTL_MS) {
+    this.ttlMs = ttlMs;
+  }
 
-	get(absolutePath: string): ProbeResultLike | undefined {
-		const entry = this.cache.get(absolutePath);
-		if (!entry) return undefined;
-		if (Date.now() > entry.expiry) {
-			this.cache.delete(absolutePath);
-			return undefined;
-		}
-		return entry.result;
-	}
+  get(absolutePath: string): ProbeResultLike | undefined {
+    const entry = this.cache.get(absolutePath);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiry) {
+      this.cache.delete(absolutePath);
+      return undefined;
+    }
+    return entry.result;
+  }
 
-	set(absolutePath: string, result: ProbeResultLike): void {
-		this.cache.set(absolutePath, {
-			result,
-			expiry: Date.now() + this.ttlMs,
-		});
-	}
+  set(absolutePath: string, result: ProbeResultLike): void {
+    this.cache.set(absolutePath, {
+      result,
+      expiry: Date.now() + this.ttlMs,
+    });
+  }
 
-	invalidate(absolutePath: string): void {
-		this.cache.delete(absolutePath);
-	}
+  invalidate(absolutePath: string): void {
+    this.cache.delete(absolutePath);
+  }
 
-	clear(): void {
-		this.cache.clear();
-	}
+  clear(): void {
+    this.cache.clear();
+  }
 }

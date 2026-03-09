@@ -7,6 +7,7 @@ export const onboarding = {
   'onboarding.or': 'or',
   'onboarding.openConfigButton': 'Open Config File',
   'onboarding.fileOpenedTitle': 'Config file opened',
-  'onboarding.fileOpenedHint': 'Add your API key to the config file. The changes will be detected automatically.',
+  'onboarding.fileOpenedHint':
+    'Add your API key to the config file. The changes will be detected automatically.',
   'onboarding.gotIt': 'Got it',
 } as const satisfies MessageBundle;

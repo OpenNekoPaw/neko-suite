@@ -14,7 +14,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('neko.live.selectAvatar', () => {
       vscode.window.showOpenDialog({
         canSelectFiles: true,
-        filters: { 'VRM Models': ['vrm'], '3D Models': ['glb', 'gltf'] }
+        filters: { 'VRM Models': ['vrm'], '3D Models': ['glb', 'gltf'] },
       });
     }),
     vscode.commands.registerCommand('neko.live.calibrate', () => {
@@ -25,7 +25,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('neko.live.startStreaming', () => {
       vscode.window.showInformationMessage('Streaming started');
-    })
+    }),
   );
 }
 

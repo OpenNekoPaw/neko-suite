@@ -16,20 +16,20 @@ export type FileAccessChecker = (filePath: string) => Promise<AssetFileStatus>;
 
 /** Result of a file health check */
 export interface FileHealthResult {
-	/** File ID */
-	fileId: string;
-	/** Parent variant ID */
-	variantId: string;
-	/** Parent entity ID */
-	entityId: string;
-	/** Entity display name */
-	entityName: string;
-	/** File path that was checked */
-	path: string;
-	/** Determined status */
-	status: AssetFileStatus;
-	/** Status before this check */
-	previousStatus?: AssetFileStatus;
+  /** File ID */
+  fileId: string;
+  /** Parent variant ID */
+  variantId: string;
+  /** Parent entity ID */
+  entityId: string;
+  /** Entity display name */
+  entityName: string;
+  /** File path that was checked */
+  path: string;
+  /** Determined status */
+  status: AssetFileStatus;
+  /** Status before this check */
+  previousStatus?: AssetFileStatus;
 }
 
 /** Progress callback for batch validation */

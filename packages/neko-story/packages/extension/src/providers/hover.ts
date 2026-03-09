@@ -14,7 +14,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
   async provideHover(
     document: vscode.TextDocument,
     position: vscode.Position,
-    _token: vscode.CancellationToken
+    _token: vscode.CancellationToken,
   ): Promise<vscode.Hover | null> {
     const line = document.lineAt(position.line).text;
 
@@ -31,9 +31,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
         const localStats = this.getLocalCharacterStats(fountainDoc, charName);
         const crossFileStats = this.getCrossFileCharacterStats(charName);
         if (localStats) {
-          return new vscode.Hover(
-            this.formatCharacterStats(charName, localStats, crossFileStats)
-          );
+          return new vscode.Hover(this.formatCharacterStats(charName, localStats, crossFileStats));
         }
       }
     }
@@ -52,7 +50,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
 
   private getLocalCharacterStats(
     doc: { elements: Array<{ type: string }> },
-    name: string
+    name: string,
   ): LocalCharacterStats | null {
     let appearances = 0;
     let dialogueLines = 0;
@@ -74,7 +72,8 @@ export class FountainHoverProvider implements vscode.HoverProvider {
         const dialogue = element as Dialogue;
         // Count dialogue lines for the character (simplified)
         const prevElements = doc.elements.filter(
-          e => e.type === 'character' && (e as Character).range.start.line < dialogue.range.start.line
+          (e) =>
+            e.type === 'character' && (e as Character).range.start.line < dialogue.range.start.line,
         );
         const lastChar = prevElements[prevElements.length - 1] as Character | undefined;
         if (lastChar?.name === name) {
@@ -102,7 +101,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
 
   private getSceneStats(
     doc: { elements: Array<{ type: string }> },
-    lineNum: number
+    lineNum: number,
   ): SceneStats | null {
     let currentScene: SceneHeading | null = null;
     const characters = new Set<string>();
@@ -143,7 +142,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
   private formatCharacterStats(
     name: string,
     local: LocalCharacterStats,
-    crossFile: CrossFileCharacterStats
+    crossFile: CrossFileCharacterStats,
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`### ${name}\n\n`);
@@ -155,7 +154,9 @@ export class FountainHoverProvider implements vscode.HoverProvider {
 
     // Cross-file stats (only show if more than 1 file)
     if (crossFile.fileCount > 1) {
-      md.appendMarkdown(`| **Total appearances** | **${crossFile.totalAppearances} in ${crossFile.fileCount} files** |\n`);
+      md.appendMarkdown(
+        `| **Total appearances** | **${crossFile.totalAppearances} in ${crossFile.fileCount} files** |\n`,
+      );
     }
 
     return md;

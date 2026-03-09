@@ -37,16 +37,18 @@ export function detectCapabilities(): TerminalCapabilities {
   const forceColor = env['FORCE_COLOR'] !== undefined && env['FORCE_COLOR'] !== '0';
   const term = env['TERM'] ?? '';
 
-  const supportsColor = forceColor || (!noColor && term !== 'dumb' && process.stdout.isTTY === true);
+  const supportsColor =
+    forceColor || (!noColor && term !== 'dumb' && process.stdout.isTTY === true);
   const supportsUnicode = !term.startsWith('linux') && term !== 'dumb';
-  const supportsExtendedColor = supportsColor && (
-    term.includes('256color') ||
-    term.includes('truecolor') ||
-    env['COLORTERM'] === 'truecolor' ||
-    env['COLORTERM'] === '24bit'
-  );
+  const supportsExtendedColor =
+    supportsColor &&
+    (term.includes('256color') ||
+      term.includes('truecolor') ||
+      env['COLORTERM'] === 'truecolor' ||
+      env['COLORTERM'] === '24bit');
 
-  const isCI = env['CI'] !== undefined ||
+  const isCI =
+    env['CI'] !== undefined ||
     env['GITHUB_ACTIONS'] !== undefined ||
     env['JENKINS_URL'] !== undefined ||
     env['TRAVIS'] !== undefined;

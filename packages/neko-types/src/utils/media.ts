@@ -26,48 +26,48 @@ import type { AssetMediaType } from '../types/asset/entity';
  * Merged from all packages to ensure no supported format is missing.
  */
 const EXTENSION_TO_MEDIA_TYPE: Record<string, AssetMediaType> = {
-	// Video
-	mp4: 'video',
-	mov: 'video',
-	avi: 'video',
-	mkv: 'video',
-	webm: 'video',
-	flv: 'video',
-	m4v: 'video',
-	ts: 'video',
-	wmv: 'video',
-	// Audio
-	mp3: 'audio',
-	wav: 'audio',
-	ogg: 'audio',
-	aac: 'audio',
-	m4a: 'audio',
-	flac: 'audio',
-	wma: 'audio',
-	opus: 'audio',
-	// Image
-	jpg: 'image',
-	jpeg: 'image',
-	png: 'image',
-	gif: 'image',
-	webp: 'image',
-	bmp: 'image',
-	svg: 'image',
-	tiff: 'image',
-	tif: 'image',
-	// Text (includes subtitles — previously 'subtitle' in neko-agent)
-	txt: 'text',
-	md: 'text',
-	json: 'text',
-	yaml: 'text',
-	yml: 'text',
-	csv: 'text',
-	xml: 'text',
-	srt: 'text',
-	vtt: 'text',
-	ass: 'text',
-	ssa: 'text',
-	sub: 'text',
+  // Video
+  mp4: 'video',
+  mov: 'video',
+  avi: 'video',
+  mkv: 'video',
+  webm: 'video',
+  flv: 'video',
+  m4v: 'video',
+  ts: 'video',
+  wmv: 'video',
+  // Audio
+  mp3: 'audio',
+  wav: 'audio',
+  ogg: 'audio',
+  aac: 'audio',
+  m4a: 'audio',
+  flac: 'audio',
+  wma: 'audio',
+  opus: 'audio',
+  // Image
+  jpg: 'image',
+  jpeg: 'image',
+  png: 'image',
+  gif: 'image',
+  webp: 'image',
+  bmp: 'image',
+  svg: 'image',
+  tiff: 'image',
+  tif: 'image',
+  // Text (includes subtitles — previously 'subtitle' in neko-agent)
+  txt: 'text',
+  md: 'text',
+  json: 'text',
+  yaml: 'text',
+  yml: 'text',
+  csv: 'text',
+  xml: 'text',
+  srt: 'text',
+  vtt: 'text',
+  ass: 'text',
+  ssa: 'text',
+  sub: 'text',
 };
 
 // =============================================================================
@@ -78,49 +78,49 @@ const EXTENSION_TO_MEDIA_TYPE: Record<string, AssetMediaType> = {
  * Comprehensive extension-to-MIME mapping.
  */
 const EXTENSION_TO_MIME: Record<string, string> = {
-	// Video
-	mp4: 'video/mp4',
-	mov: 'video/quicktime',
-	avi: 'video/x-msvideo',
-	mkv: 'video/x-matroska',
-	webm: 'video/webm',
-	flv: 'video/x-flv',
-	m4v: 'video/x-m4v',
-	ts: 'video/mp2t',
-	wmv: 'video/x-ms-wmv',
-	// Audio
-	mp3: 'audio/mpeg',
-	wav: 'audio/wav',
-	ogg: 'audio/ogg',
-	aac: 'audio/aac',
-	m4a: 'audio/mp4',
-	flac: 'audio/flac',
-	wma: 'audio/x-ms-wma',
-	opus: 'audio/opus',
-	// Image
-	jpg: 'image/jpeg',
-	jpeg: 'image/jpeg',
-	png: 'image/png',
-	gif: 'image/gif',
-	webp: 'image/webp',
-	bmp: 'image/bmp',
-	svg: 'image/svg+xml',
-	tiff: 'image/tiff',
-	tif: 'image/tiff',
-	// Text
-	txt: 'text/plain',
-	md: 'text/markdown',
-	json: 'application/json',
-	yaml: 'application/x-yaml',
-	yml: 'application/x-yaml',
-	csv: 'text/csv',
-	xml: 'application/xml',
-	// Subtitle
-	srt: 'application/x-subrip',
-	vtt: 'text/vtt',
-	ass: 'text/x-ssa',
-	ssa: 'text/x-ssa',
-	sub: 'text/x-sub',
+  // Video
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  avi: 'video/x-msvideo',
+  mkv: 'video/x-matroska',
+  webm: 'video/webm',
+  flv: 'video/x-flv',
+  m4v: 'video/x-m4v',
+  ts: 'video/mp2t',
+  wmv: 'video/x-ms-wmv',
+  // Audio
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  aac: 'audio/aac',
+  m4a: 'audio/mp4',
+  flac: 'audio/flac',
+  wma: 'audio/x-ms-wma',
+  opus: 'audio/opus',
+  // Image
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  bmp: 'image/bmp',
+  svg: 'image/svg+xml',
+  tiff: 'image/tiff',
+  tif: 'image/tiff',
+  // Text
+  txt: 'text/plain',
+  md: 'text/markdown',
+  json: 'application/json',
+  yaml: 'application/x-yaml',
+  yml: 'application/x-yaml',
+  csv: 'text/csv',
+  xml: 'application/xml',
+  // Subtitle
+  srt: 'application/x-subrip',
+  vtt: 'text/vtt',
+  ass: 'text/x-ssa',
+  ssa: 'text/x-ssa',
+  sub: 'text/x-sub',
 };
 
 // =============================================================================
@@ -136,12 +136,12 @@ const EXTENSION_TO_MIME: Record<string, string> = {
  * getFileExtension('no-extension')        // ''
  */
 export function getFileExtension(filePath: string): string {
-	const lastDot = filePath.lastIndexOf('.');
-	if (lastDot === -1 || lastDot === filePath.length - 1) return '';
-	// Handle paths with directory separators after the dot
-	const afterDot = filePath.slice(lastDot + 1);
-	if (afterDot.includes('/') || afterDot.includes('\\')) return '';
-	return afterDot.toLowerCase();
+  const lastDot = filePath.lastIndexOf('.');
+  if (lastDot === -1 || lastDot === filePath.length - 1) return '';
+  // Handle paths with directory separators after the dot
+  const afterDot = filePath.slice(lastDot + 1);
+  if (afterDot.includes('/') || afterDot.includes('\\')) return '';
+  return afterDot.toLowerCase();
 }
 
 /**
@@ -161,15 +161,15 @@ export function getFileExtension(filePath: string): string {
  * detectMediaType('subtitle.srt')            // 'text'
  */
 export function detectMediaType(filePath: string): AssetMediaType {
-	const ext = getFileExtension(filePath);
+  const ext = getFileExtension(filePath);
 
-	// Check for image sequence pattern BEFORE extension lookup
-	// Image files with 3+ consecutive digits in the name are treated as sequences
-	if (ext && EXTENSION_TO_MEDIA_TYPE[ext] === 'image' && isImageSequence(filePath)) {
-		return 'sequence';
-	}
+  // Check for image sequence pattern BEFORE extension lookup
+  // Image files with 3+ consecutive digits in the name are treated as sequences
+  if (ext && EXTENSION_TO_MEDIA_TYPE[ext] === 'image' && isImageSequence(filePath)) {
+    return 'sequence';
+  }
 
-	return EXTENSION_TO_MEDIA_TYPE[ext] ?? 'image';
+  return EXTENSION_TO_MEDIA_TYPE[ext] ?? 'image';
 }
 
 /**
@@ -182,17 +182,17 @@ export function detectMediaType(filePath: string): AssetMediaType {
  * getMimeType('unknown.xyz')  // 'application/octet-stream'
  */
 export function getMimeType(filePath: string): string {
-	const ext = getFileExtension(filePath);
-	return EXTENSION_TO_MIME[ext] ?? 'application/octet-stream';
+  const ext = getFileExtension(filePath);
+  return EXTENSION_TO_MIME[ext] ?? 'application/octet-stream';
 }
 
 /**
  * Check if a file path corresponds to a known media file (video, audio, or image).
  */
 export function isMediaFile(filePath: string): boolean {
-	const ext = getFileExtension(filePath);
-	const type = EXTENSION_TO_MEDIA_TYPE[ext];
-	return type === 'video' || type === 'audio' || type === 'image';
+  const ext = getFileExtension(filePath);
+  const type = EXTENSION_TO_MEDIA_TYPE[ext];
+  return type === 'video' || type === 'audio' || type === 'image';
 }
 
 /**
@@ -206,12 +206,12 @@ export function isMediaFile(filePath: string): boolean {
  * Requires 3+ consecutive digits in the file name (not in directory path).
  */
 export function isImageSequence(filePath: string): boolean {
-	// Extract just the filename (handle both / and \ separators)
-	const parts = filePath.split(/[/\\]/);
-	const fileName = parts[parts.length - 1] ?? '';
-	// Remove extension before checking
-	const nameWithoutExt = fileName.replace(/\.[^.]+$/, '');
-	return /\d{3,}/.test(nameWithoutExt);
+  // Extract just the filename (handle both / and \ separators)
+  const parts = filePath.split(/[/\\]/);
+  const fileName = parts[parts.length - 1] ?? '';
+  // Remove extension before checking
+  const nameWithoutExt = fileName.replace(/\.[^.]+$/, '');
+  return /\d{3,}/.test(nameWithoutExt);
 }
 
 /**
@@ -219,15 +219,15 @@ export function isImageSequence(filePath: string): boolean {
  * Useful for neko-agent which previously had a separate 'subtitle' type.
  */
 export function isSubtitleFile(filePath: string): boolean {
-	const ext = getFileExtension(filePath);
-	return ['srt', 'vtt', 'ass', 'ssa', 'sub'].includes(ext);
+  const ext = getFileExtension(filePath);
+  return ['srt', 'vtt', 'ass', 'ssa', 'sub'].includes(ext);
 }
 
 /**
  * Get all supported extensions for a given media type.
  */
 export function getExtensionsForType(type: AssetMediaType): string[] {
-	return Object.entries(EXTENSION_TO_MEDIA_TYPE)
-		.filter(([, t]) => t === type)
-		.map(([ext]) => ext);
+  return Object.entries(EXTENSION_TO_MEDIA_TYPE)
+    .filter(([, t]) => t === type)
+    .map(([ext]) => ext);
 }

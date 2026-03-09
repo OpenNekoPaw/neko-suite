@@ -54,7 +54,7 @@ export function calculateVisibleTimeRange(
   scrollLeft: number,
   containerWidth: number,
   zoomLevel: number,
-  bufferRatio: number = 0.5
+  bufferRatio: number = 0.5,
 ): { startTime: number; endTime: number } {
   const buffer = containerWidth * bufferRatio;
   const startTime = pixelsToTime(Math.max(0, scrollLeft - buffer), zoomLevel);
@@ -70,7 +70,7 @@ export function isElementVisible(
   elementStartTime: number,
   elementEndTime: number,
   visibleStartTime: number,
-  visibleEndTime: number
+  visibleEndTime: number,
 ): boolean {
   return elementEndTime >= visibleStartTime && elementStartTime <= visibleEndTime;
 }
@@ -86,7 +86,7 @@ export function calculateSelectionBoxIntersection(
     currentY: number;
   },
   trackIndex: number,
-  trackHeight: number
+  trackHeight: number,
 ): boolean {
   const boxTop = Math.min(selectionBox.startY, selectionBox.currentY);
   const boxBottom = Math.max(selectionBox.startY, selectionBox.currentY);
@@ -109,7 +109,7 @@ export function calculateSelectionBoxElementIntersection(
   elementStartTime: number,
   elementEndTime: number,
   zoomLevel: number,
-  trackLabelWidth: number
+  trackLabelWidth: number,
 ): boolean {
   const boxLeft = Math.min(selectionBox.startX, selectionBox.currentX) - trackLabelWidth;
   const boxRight = Math.max(selectionBox.startX, selectionBox.currentX) - trackLabelWidth;

@@ -36,38 +36,44 @@ export function useCanvasCoordinates(options: UseCanvasCoordinatesOptions): Canv
   const { containerRef, viewport } = options;
 
   // Screen to canvas coordinate conversion
-  const screenToCanvas = useCallback((screenX: number, screenY: number) => {
-    const container = containerRef.current;
-    if (!container) {
-      return { x: screenX, y: screenY };
-    }
+  const screenToCanvas = useCallback(
+    (screenX: number, screenY: number) => {
+      const container = containerRef.current;
+      if (!container) {
+        return { x: screenX, y: screenY };
+      }
 
-    const rect = container.getBoundingClientRect();
-    const relativeX = screenX - rect.left;
-    const relativeY = screenY - rect.top;
+      const rect = container.getBoundingClientRect();
+      const relativeX = screenX - rect.left;
+      const relativeY = screenY - rect.top;
 
-    // Convert from screen space to canvas space
-    const canvasX = (relativeX - viewport.pan.x) / viewport.zoom;
-    const canvasY = (relativeY - viewport.pan.y) / viewport.zoom;
+      // Convert from screen space to canvas space
+      const canvasX = (relativeX - viewport.pan.x) / viewport.zoom;
+      const canvasY = (relativeY - viewport.pan.y) / viewport.zoom;
 
-    return { x: canvasX, y: canvasY };
-  }, [containerRef, viewport.pan.x, viewport.pan.y, viewport.zoom]);
+      return { x: canvasX, y: canvasY };
+    },
+    [containerRef, viewport.pan.x, viewport.pan.y, viewport.zoom],
+  );
 
   // Canvas to screen coordinate conversion
-  const canvasToScreen = useCallback((canvasX: number, canvasY: number) => {
-    const container = containerRef.current;
-    if (!container) {
-      return { x: canvasX, y: canvasY };
-    }
+  const canvasToScreen = useCallback(
+    (canvasX: number, canvasY: number) => {
+      const container = containerRef.current;
+      if (!container) {
+        return { x: canvasX, y: canvasY };
+      }
 
-    const rect = container.getBoundingClientRect();
+      const rect = container.getBoundingClientRect();
 
-    // Convert from canvas space to screen space
-    const screenX = canvasX * viewport.zoom + viewport.pan.x + rect.left;
-    const screenY = canvasY * viewport.zoom + viewport.pan.y + rect.top;
+      // Convert from canvas space to screen space
+      const screenX = canvasX * viewport.zoom + viewport.pan.x + rect.left;
+      const screenY = canvasY * viewport.zoom + viewport.pan.y + rect.top;
 
-    return { x: screenX, y: screenY };
-  }, [containerRef, viewport.pan.x, viewport.pan.y, viewport.zoom]);
+      return { x: screenX, y: screenY };
+    },
+    [containerRef, viewport.pan.x, viewport.pan.y, viewport.zoom],
+  );
 
   // Get visible canvas bounds
   const getVisibleBounds = useCallback(() => {
@@ -97,37 +103,46 @@ export function useCanvasCoordinates(options: UseCanvasCoordinatesOptions): Canv
   }, [containerRef, viewport.pan.x, viewport.pan.y, viewport.zoom]);
 
   // Check if a canvas point is visible
-  const isPointVisible = useCallback((canvasX: number, canvasY: number) => {
-    const bounds = getVisibleBounds();
-    return (
-      canvasX >= bounds.x &&
-      canvasX <= bounds.x + bounds.width &&
-      canvasY >= bounds.y &&
-      canvasY <= bounds.y + bounds.height
-    );
-  }, [getVisibleBounds]);
+  const isPointVisible = useCallback(
+    (canvasX: number, canvasY: number) => {
+      const bounds = getVisibleBounds();
+      return (
+        canvasX >= bounds.x &&
+        canvasX <= bounds.x + bounds.width &&
+        canvasY >= bounds.y &&
+        canvasY <= bounds.y + bounds.height
+      );
+    },
+    [getVisibleBounds],
+  );
 
   // Check if a canvas rect intersects the viewport
-  const isRectVisible = useCallback((rect: { x: number; y: number; width: number; height: number }) => {
-    const bounds = getVisibleBounds();
+  const isRectVisible = useCallback(
+    (rect: { x: number; y: number; width: number; height: number }) => {
+      const bounds = getVisibleBounds();
 
-    // Check for intersection
-    return !(
-      rect.x + rect.width < bounds.x ||
-      rect.x > bounds.x + bounds.width ||
-      rect.y + rect.height < bounds.y ||
-      rect.y > bounds.y + bounds.height
-    );
-  }, [getVisibleBounds]);
+      // Check for intersection
+      return !(
+        rect.x + rect.width < bounds.x ||
+        rect.x > bounds.x + bounds.width ||
+        rect.y + rect.height < bounds.y ||
+        rect.y > bounds.y + bounds.height
+      );
+    },
+    [getVisibleBounds],
+  );
 
   // Memoize the mapper object
-  const mapper = useMemo<CanvasCoordinateMapper>(() => ({
-    screenToCanvas,
-    canvasToScreen,
-    getVisibleBounds,
-    isPointVisible,
-    isRectVisible,
-  }), [screenToCanvas, canvasToScreen, getVisibleBounds, isPointVisible, isRectVisible]);
+  const mapper = useMemo<CanvasCoordinateMapper>(
+    () => ({
+      screenToCanvas,
+      canvasToScreen,
+      getVisibleBounds,
+      isPointVisible,
+      isRectVisible,
+    }),
+    [screenToCanvas, canvasToScreen, getVisibleBounds, isPointVisible, isRectVisible],
+  );
 
   return mapper;
 }

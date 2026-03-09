@@ -182,7 +182,7 @@ const SliderVideoView = memo(function SliderVideoView({
       const x = (e.clientX - rect.left) / rect.width;
       onSliderChange(Math.max(0, Math.min(1, x)));
     },
-    [isDragging, onSliderChange]
+    [isDragging, onSliderChange],
   );
 
   useEffect(() => {
@@ -317,7 +317,10 @@ const PlaybackControls = memo(function PlaybackControls({
 interface VideoDetailsProps {
   details?: {
     duration: { current: number; previous: number };
-    resolution: { current: { width: number; height: number }; previous: { width: number; height: number } };
+    resolution: {
+      current: { width: number; height: number };
+      previous: { width: number; height: number };
+    };
     fps: { current: number; previous: number };
     codec?: { current: string; previous: string };
     keyframeSimilarities?: Array<{ time: number; similarity: number }>;
@@ -436,17 +439,14 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
   const [localPlaying, setLocalPlaying] = useState(isPlaying);
   const [localSliderPosition, setLocalSliderPosition] = useState(sliderPosition);
 
-  const duration = Math.max(
-    details?.duration.current ?? 0,
-    details?.duration.previous ?? 0
-  );
+  const duration = Math.max(details?.duration.current ?? 0, details?.duration.previous ?? 0);
 
   const handleTimeUpdate = useCallback(
     (time: number) => {
       setLocalTime(time);
       onTimeChange?.(time);
     },
-    [onTimeChange]
+    [onTimeChange],
   );
 
   const handlePlayPause = useCallback(() => {
@@ -459,7 +459,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
       setLocalTime(time);
       onTimeChange?.(time);
     },
-    [onTimeChange]
+    [onTimeChange],
   );
 
   const handleSliderChange = useCallback(
@@ -467,7 +467,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
       setLocalSliderPosition(position);
       onSliderChange?.(position);
     },
-    [onSliderChange]
+    [onSliderChange],
   );
 
   // Error state

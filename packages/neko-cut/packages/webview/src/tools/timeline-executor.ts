@@ -41,7 +41,10 @@ function registerHandlers(): void {
 /**
  * Execute a tool by name
  */
-async function executeTool(toolName: string, params: Record<string, unknown>): Promise<ToolHandlerResult> {
+async function executeTool(
+  toolName: string,
+  params: Record<string, unknown>,
+): Promise<ToolHandlerResult> {
   const handler = toolHandlers.get(toolName);
 
   if (!handler) {
@@ -67,7 +70,7 @@ async function executeTool(toolName: string, params: Record<string, unknown>): P
 function handleToolMessage(message: ToolExecuteRequest): void {
   const { requestId, toolName, params } = message;
 
-  executeTool(toolName, params).then(result => {
+  executeTool(toolName, params).then((result) => {
     // Send result back to Extension
     const vscode = getVSCodeAPI();
     if (vscode) {
@@ -123,7 +126,8 @@ export function initToolExecutor(): void {
             estimatedTimeRemaining: message.estimatedRemaining,
           });
           updateRenderTask(message.jobId, {
-            status: status === 'failed' ? 'failed' : status === 'completed' ? 'completed' : 'rendering',
+            status:
+              status === 'failed' ? 'failed' : status === 'completed' ? 'completed' : 'rendering',
             progress: message.progress,
             currentFrame: message.currentFrame,
             totalFrames: message.totalFrames,

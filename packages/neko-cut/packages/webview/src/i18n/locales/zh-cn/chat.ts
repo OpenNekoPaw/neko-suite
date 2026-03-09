@@ -81,7 +81,8 @@ export const chat = {
   'chat.commands.storyboard': '创建分镜',
   'chat.commands.settings': '打开设置',
 
-  'chat.helpMessage': '**可用命令：**\n- `/clear` - 清除对话历史\n- `/new` - 开始新对话\n- `/help` - 显示帮助信息\n- `/image` - 生成图片\n- `/video` - 生成视频\n- `/script` - 编写脚本\n- `/storyboard` - 创建分镜\n- `/settings` - 打开设置\n\n**提示：**\n- 使用 `@` 引用文件\n- 点击 📎 按钮添加附件\n- 按 Enter 发送，Shift+Enter 换行',
+  'chat.helpMessage':
+    '**可用命令：**\n- `/clear` - 清除对话历史\n- `/new` - 开始新对话\n- `/help` - 显示帮助信息\n- `/image` - 生成图片\n- `/video` - 生成视频\n- `/script` - 编写脚本\n- `/storyboard` - 创建分镜\n- `/settings` - 打开设置\n\n**提示：**\n- 使用 `@` 引用文件\n- 点击 📎 按钮添加附件\n- 按 Enter 发送，Shift+Enter 换行',
   'chat.attachFile': '添加附件',
   'chat.referenceFile': '使用 @ 引用文件',
 } as const satisfies MessageBundle;

@@ -68,7 +68,7 @@ export interface IVSCodeApiWrapper {
   /** Send request and wait for response */
   sendRequest<TResponse = unknown>(
     message: Omit<RequestMessage, '_requestId'>,
-    options?: SendRequestOptions
+    options?: SendRequestOptions,
   ): Promise<TResponse>;
   /** Cancel a pending request */
   cancelRequest(requestId: string): boolean;

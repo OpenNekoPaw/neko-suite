@@ -76,7 +76,10 @@ export interface VideoDiffViewerProps extends BaseDiffViewerProps {
   /** Stream config for real-time H264 dual-stream mode */
   streamConfig?: StreamConfig | null;
   /** Send stream playback control to extension */
-  onStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
+  onStreamControl?: (
+    action: 'play' | 'pause' | 'seek',
+    payload?: { time?: number; speed?: number },
+  ) => void;
   /** True while git show is extracting the previous version — disables Play */
   isFetchingPrevious?: boolean;
 }
@@ -163,7 +166,10 @@ export interface MediaDiffViewerProps {
   /** Callbacks */
   onTimeChange?: (time: number) => void;
   onInspectElement?: (src: string) => void;
-  onStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => void;
+  onStreamControl?: (
+    action: 'play' | 'pause' | 'seek',
+    payload?: { time?: number; speed?: number },
+  ) => void;
   onAudioStreamControl?: (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => void;
   /** Callback to apply a new time range and re-run diff */
   onSetTimeRange?: (startTime?: number, endTime?: number) => void;

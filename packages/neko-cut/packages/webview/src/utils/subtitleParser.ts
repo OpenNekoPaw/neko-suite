@@ -12,7 +12,11 @@ import type {
   SubtitleFormat,
   SubtitleIOOptions,
 } from '../types/subtitle';
-import { createSubtitleCue, createSubtitleTrack, createDefaultSubtitleStyle } from '../types/subtitle';
+import {
+  createSubtitleCue,
+  createSubtitleTrack,
+  createDefaultSubtitleStyle,
+} from '../types/subtitle';
 
 // =============================================================================
 // Time Parsing Utilities
@@ -56,11 +60,7 @@ function parseVttTimestamp(timestamp: string): number {
   match = timestamp.match(/(\d{1,2}):(\d{2})\.(\d{3})/);
   if (match) {
     const [, minutes, seconds, milliseconds] = match;
-    return (
-      parseInt(minutes, 10) * 60 +
-      parseInt(seconds, 10) +
-      parseInt(milliseconds, 10) / 1000
-    );
+    return parseInt(minutes, 10) * 60 + parseInt(seconds, 10) + parseInt(milliseconds, 10) / 1000;
   }
 
   return 0;
@@ -410,7 +410,11 @@ export function detectSubtitleFormat(content: string): SubtitleFormat | null {
     return 'vtt';
   }
 
-  if (trimmed.includes('[Script Info]') || trimmed.includes('[V4+ Styles]') || trimmed.includes('[Events]')) {
+  if (
+    trimmed.includes('[Script Info]') ||
+    trimmed.includes('[V4+ Styles]') ||
+    trimmed.includes('[Events]')
+  ) {
     return trimmed.includes('[V4+ Styles]') ? 'ass' : 'ssa';
   }
 
@@ -442,7 +446,7 @@ export function detectSubtitleFormat(content: string): SubtitleFormat | null {
  */
 export function importSubtitles(
   content: string,
-  options?: Partial<SubtitleIOOptions>
+  options?: Partial<SubtitleIOOptions>,
 ): SubtitleTrack | null {
   const format = options?.format || detectSubtitleFormat(content);
   if (!format) return null;
@@ -477,10 +481,7 @@ export function importSubtitles(
 /**
  * Export subtitle track to specified format
  */
-export function exportSubtitles(
-  track: SubtitleTrack,
-  options: SubtitleIOOptions
-): string {
+export function exportSubtitles(track: SubtitleTrack, options: SubtitleIOOptions): string {
   const { format, includeStyles } = options;
 
   switch (format) {
@@ -564,11 +565,9 @@ export function getCueAtTime(cues: SubtitleCue[], time: number): SubtitleCue | n
 export function getCuesInRange(
   cues: SubtitleCue[],
   startTime: number,
-  endTime: number
+  endTime: number,
 ): SubtitleCue[] {
-  return cues.filter(
-    (cue) => cue.endTime > startTime && cue.startTime < endTime
-  );
+  return cues.filter((cue) => cue.endTime > startTime && cue.startTime < endTime);
 }
 
 /**

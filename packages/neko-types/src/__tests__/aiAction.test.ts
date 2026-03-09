@@ -19,7 +19,7 @@ describe('AI_ACTIONS', () => {
   });
 
   it('should have unique action IDs', () => {
-    const ids = AI_ACTIONS.map(a => a.id);
+    const ids = AI_ACTIONS.map((a) => a.id);
     const uniqueIds = new Set(ids);
     expect(uniqueIds.size).toBe(ids.length);
   });
@@ -45,38 +45,38 @@ describe('AI_ACTIONS', () => {
   });
 
   it('should include video-specific actions', () => {
-    const videoActions = AI_ACTIONS.filter(a => a.elementTypes.includes('video'));
+    const videoActions = AI_ACTIONS.filter((a) => a.elementTypes.includes('video'));
     expect(videoActions.length).toBeGreaterThan(0);
 
-    const actionIds = videoActions.map(a => a.id);
+    const actionIds = videoActions.map((a) => a.id);
     expect(actionIds).toContain('video-generate-variant');
     expect(actionIds).toContain('video-extend');
     expect(actionIds).toContain('video-describe');
   });
 
   it('should include image-specific actions', () => {
-    const imageActions = AI_ACTIONS.filter(a => a.elementTypes.includes('image'));
+    const imageActions = AI_ACTIONS.filter((a) => a.elementTypes.includes('image'));
     expect(imageActions.length).toBeGreaterThan(0);
 
-    const actionIds = imageActions.map(a => a.id);
+    const actionIds = imageActions.map((a) => a.id);
     expect(actionIds).toContain('image-to-video');
     expect(actionIds).toContain('image-edit');
   });
 
   it('should include text-specific actions', () => {
-    const textActions = AI_ACTIONS.filter(a => a.elementTypes.includes('text'));
+    const textActions = AI_ACTIONS.filter((a) => a.elementTypes.includes('text'));
     expect(textActions.length).toBeGreaterThan(0);
 
-    const actionIds = textActions.map(a => a.id);
+    const actionIds = textActions.map((a) => a.id);
     expect(actionIds).toContain('text-translate');
     expect(actionIds).toContain('text-rewrite');
   });
 
   it('should include audio-specific actions', () => {
-    const audioActions = AI_ACTIONS.filter(a => a.elementTypes.includes('audio'));
+    const audioActions = AI_ACTIONS.filter((a) => a.elementTypes.includes('audio'));
     expect(audioActions.length).toBeGreaterThan(0);
 
-    const actionIds = audioActions.map(a => a.id);
+    const actionIds = audioActions.map((a) => a.id);
     expect(actionIds).toContain('audio-transcribe');
   });
 });

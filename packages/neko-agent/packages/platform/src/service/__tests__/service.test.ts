@@ -85,7 +85,7 @@ function createMockConfig(adapter?: Partial<Adapter>): ServiceConfig {
     getModels: vi.fn(() => mockModels),
     getEnabledModels: vi.fn(() => mockModels.filter((m) => m.enabled)),
     getModelsByProvider: vi.fn((providerId: string) =>
-      mockModels.filter((m) => m.providerId === providerId)
+      mockModels.filter((m) => m.providerId === providerId),
     ),
     getTaskDefaults: vi.fn(() => undefined),
     getRetryTimeoutPreset: vi.fn(() => ({
@@ -120,9 +120,7 @@ describe('Service', () => {
       const config = createMockConfig();
       const service = new Service(config);
 
-      const messages: ChatMessage[] = [
-        { role: 'user', content: 'Hello' },
-      ];
+      const messages: ChatMessage[] = [{ role: 'user', content: 'Hello' }];
 
       const response = await service.chat(messages);
 
@@ -136,9 +134,7 @@ describe('Service', () => {
       const config = createMockConfig();
       const service = new Service(config);
 
-      const messages: ChatMessage[] = [
-        { role: 'user', content: 'Hello' },
-      ];
+      const messages: ChatMessage[] = [{ role: 'user', content: 'Hello' }];
 
       const response = await service.chat(messages, { modelId: 'gpt-4' });
 
@@ -159,7 +155,7 @@ describe('Service', () => {
       const service = new Service(config);
 
       await expect(
-        service.chat([{ role: 'user', content: 'Hello' }], { modelId: 'non-existent' })
+        service.chat([{ role: 'user', content: 'Hello' }], { modelId: 'non-existent' }),
       ).rejects.toThrow('Model non-existent not found');
     });
   });
@@ -169,9 +165,7 @@ describe('Service', () => {
       const config = createMockConfig();
       const service = new Service(config);
 
-      const messages: ChatMessage[] = [
-        { role: 'user', content: 'Hello' },
-      ];
+      const messages: ChatMessage[] = [{ role: 'user', content: 'Hello' }];
 
       const { stream, response } = service.chatStream(messages);
 
@@ -233,9 +227,9 @@ describe('Service', () => {
       const config = createMockConfig(adapter);
       const service = new Service(config);
 
-      await expect(
-        service.embed('Hello', { modelId: 'text-embedding-ada' })
-      ).rejects.toThrow('does not support embeddings');
+      await expect(service.embed('Hello', { modelId: 'text-embedding-ada' })).rejects.toThrow(
+        'does not support embeddings',
+      );
     });
   });
 
@@ -247,9 +241,7 @@ describe('Service', () => {
       const config = createMockConfig(adapter);
       const service = new Service(config);
 
-      await expect(
-        service.chat([{ role: 'user', content: 'Hello' }])
-      ).rejects.toThrow('API error');
+      await expect(service.chat([{ role: 'user', content: 'Hello' }])).rejects.toThrow('API error');
     });
   });
 });

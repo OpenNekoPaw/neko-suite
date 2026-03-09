@@ -13,4 +13,3 @@ export * from './mcp-servers';
 
 // Prompt preset configuration (types and utilities)
 export * from './prompts';
-

@@ -52,10 +52,10 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
   readonly type = 'liblib';
 
   private static readonly STATUS_MAP: Record<number, MediaTaskStatus> = {
-    2: 'pending',    // queued
+    2: 'pending', // queued
     1: 'processing', // running
-    5: 'completed',  // success
-    4: 'failed',     // failed
+    5: 'completed', // success
+    4: 'failed', // failed
   };
 
   getSupportedTypes(): MediaGenerationType[] {
@@ -108,7 +108,7 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
   async generateImage(
     request: ImageGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult> {
     const templateUuid = (model.options?.templateUuid as string) || '';
     const url = `${provider.apiUrl}/api/generate/webui/text2img`;
@@ -129,7 +129,7 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
     // Image-to-image
     if (request.referenceImageUrl) {
       body.generateParams = {
-        ...body.generateParams as Record<string, unknown>,
+        ...(body.generateParams as Record<string, unknown>),
         initImageUrl: request.referenceImageUrl,
         denoisingStrength: 0.7,
       };
@@ -138,7 +138,7 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
     const { data, error } = await this.request<LiblibGenerateResponse>(
       url,
       { method: 'POST', body: JSON.stringify(body) },
-      provider
+      provider,
     );
 
     if (error) {
@@ -169,7 +169,7 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
   async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult> {
     const templateUuid = (model.options?.templateUuid as string) || '';
     const url = `${provider.apiUrl}/api/generate/video/text2video`;
@@ -189,7 +189,7 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
     // Image-to-video
     if (request.referenceImageUrl) {
       body.generateParams = {
-        ...body.generateParams as Record<string, unknown>,
+        ...(body.generateParams as Record<string, unknown>),
         initImageUrl: request.referenceImageUrl,
       };
     }
@@ -197,7 +197,7 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
     const { data, error } = await this.request<LiblibGenerateResponse>(
       url,
       { method: 'POST', body: JSON.stringify(body) },
-      provider
+      provider,
     );
 
     if (error) {
@@ -225,16 +225,13 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
   /**
    * Get task status
    */
-  async getTaskStatus(
-    externalTaskId: string,
-    provider: Provider
-  ): Promise<MediaAdapterResult> {
+  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/api/generate/status?generateUuid=${externalTaskId}`;
 
     const { data, error } = await this.request<LiblibStatusResponse>(
       url,
       { method: 'GET' },
-      provider
+      provider,
     );
 
     if (error) {
@@ -294,7 +291,7 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
         method: 'POST',
         body: JSON.stringify({ generateUuid: externalTaskId }),
       },
-      provider
+      provider,
     );
   }
 

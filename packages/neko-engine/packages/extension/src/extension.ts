@@ -13,17 +13,13 @@
  * - Export pipeline orchestration
  */
 import * as vscode from 'vscode';
+import { MediaEngineManager, createMediaEngineManager, NativeMediaEngine } from './mediaEngine';
 import {
-	MediaEngineManager,
-	createMediaEngineManager,
-	NativeMediaEngine,
-} from './mediaEngine';
-import {
-	ExportService,
-	JviProjectLoader,
-	VideoFrameProvider,
-	createVideoFrameProvider,
-	type ExportProgress,
+  ExportService,
+  JviProjectLoader,
+  VideoFrameProvider,
+  createVideoFrameProvider,
+  type ExportProgress,
 } from './mediaEngine/export';
 import { setRootLogger, setErrorHandler, handleError } from './base';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
@@ -47,38 +43,35 @@ let frameServerPort: number | null = null;
  * Activate the extension
  */
 export function activate(context: vscode.ExtensionContext): void {
-	outputChannel = vscode.window.createOutputChannel('Neko Engine');
-	context.subscriptions.push(outputChannel);
+  outputChannel = vscode.window.createOutputChannel('Neko Engine');
+  context.subscriptions.push(outputChannel);
 
-	// Initialize structured logger and error handler
-	const logger = createVSCodeLogger('Neko Engine', 'NekoEngine', context);
-	setRootLogger(logger);
-	setErrorHandler(new VSCodeErrorHandler(logger));
+  // Initialize structured logger and error handler
+  const logger = createVSCodeLogger('Neko Engine', 'NekoEngine', context);
+  setRootLogger(logger);
+  setErrorHandler(new VSCodeErrorHandler(logger));
 
-	log('Activating extension...');
+  log('Activating extension...');
 
-	// Create status bar item
-	statusBarItem = vscode.window.createStatusBarItem(
-		vscode.StatusBarAlignment.Right,
-		100
-	);
-	statusBarItem.command = 'neko.engine.status';
-	context.subscriptions.push(statusBarItem);
+  // Create status bar item
+  statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBarItem.command = 'neko.engine.status';
+  context.subscriptions.push(statusBarItem);
 
-	// Create MediaEngineManager
-	manager = createMediaEngineManager(context.globalStorageUri);
-	context.subscriptions.push(manager);
+  // Create MediaEngineManager
+  manager = createMediaEngineManager(context.globalStorageUri);
+  context.subscriptions.push(manager);
 
-	// Create ExportService
-	exportService = new ExportService();
+  // Create ExportService
+  exportService = new ExportService();
 
-	// Register commands
-	registerCommands(context);
+  // Register commands
+  registerCommands(context);
 
-	// Update status bar
-	updateStatusBar('idle');
+  // Update status bar
+  updateStatusBar('idle');
 
-	log('Extension activated');
+  log('Extension activated');
 }
 
 // =============================================================================
@@ -86,185 +79,186 @@ export function activate(context: vscode.ExtensionContext): void {
 // =============================================================================
 
 function registerCommands(context: vscode.ExtensionContext): void {
-	// Start Engine
-	context.subscriptions.push(
-		vscode.commands.registerCommand('neko.engine.start', cmdStartEngine)
-	);
+  // Start Engine
+  context.subscriptions.push(vscode.commands.registerCommand('neko.engine.start', cmdStartEngine));
 
-	// Stop Engine
-	context.subscriptions.push(
-		vscode.commands.registerCommand('neko.engine.stop', cmdStopEngine)
-	);
+  // Stop Engine
+  context.subscriptions.push(vscode.commands.registerCommand('neko.engine.stop', cmdStopEngine));
 
-	// Engine Status
-	context.subscriptions.push(
-		vscode.commands.registerCommand('neko.engine.status', cmdShowStatus)
-	);
+  // Engine Status
+  context.subscriptions.push(vscode.commands.registerCommand('neko.engine.status', cmdShowStatus));
 
-	// Probe Media (interactive — shows file picker + output)
-	context.subscriptions.push(
-		vscode.commands.registerCommand('neko.engine.probe', cmdProbeMedia)
-	);
+  // Probe Media (interactive — shows file picker + output)
+  context.subscriptions.push(vscode.commands.registerCommand('neko.engine.probe', cmdProbeMedia));
 
-	// Probe Media (internal — programmatic API for other extensions)
-	context.subscriptions.push(
-		vscode.commands.registerCommand('neko.engine.probeInternal', async (filePath: string) => {
-			try {
-				const engine = await getOrStartEngine();
-				if (!engine) return null;
-				return await engine.probeMedia(filePath);
-			} catch (error) {
-				log(`probeInternal failed for ${filePath}: ${error}`, 'error');
-				return null;
-			}
-		})
-	);
+  // Probe Media (internal — programmatic API for other extensions)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.engine.probeInternal', async (filePath: string) => {
+      try {
+        const engine = await getOrStartEngine();
+        if (!engine) return null;
+        return await engine.probeMedia(filePath);
+      } catch (error) {
+        log(`probeInternal failed for ${filePath}: ${error}`, 'error');
+        return null;
+      }
+    }),
+  );
 
-	// Extract Frame (programmatic API for other extensions)
-	context.subscriptions.push(
-		vscode.commands.registerCommand(
-			'neko.engine.extractFrame',
-			async (filePath: string, timeSeconds: number) => {
-				try {
-					const engine = await getOrStartEngine();
-					if (!engine?.engine) return null;
-					const resultJson = await engine.engine.captureFrame(filePath, timeSeconds);
-					const result = JSON.parse(resultJson);
-					if (result.status === 'ok' && result.data?.data) {
-						return { data: Buffer.from(result.data.data as string, 'base64') };
-					}
-					return null;
-				} catch (error) {
-					log(`extractFrame failed for ${filePath} at ${timeSeconds}s: ${error}`, 'error');
-					return null;
-				}
-			}
-		)
-	);
+  // Extract Frame (programmatic API for other extensions)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.engine.extractFrame',
+      async (filePath: string, timeSeconds: number) => {
+        try {
+          const engine = await getOrStartEngine();
+          if (!engine?.engine) return null;
+          const resultJson = await engine.engine.captureFrame(filePath, timeSeconds);
+          const result = JSON.parse(resultJson);
+          if (result.status === 'ok' && result.data?.data) {
+            return { data: Buffer.from(result.data.data as string, 'base64') };
+          }
+          return null;
+        } catch (error) {
+          log(`extractFrame failed for ${filePath} at ${timeSeconds}s: ${error}`, 'error');
+          return null;
+        }
+      },
+    ),
+  );
 
-	// Diff two media files (programmatic API for other extensions)
-	// Dispatches to engine's native diff: audios:diff, videos:diff, images:diff, timelines:diff
-	context.subscriptions.push(
-		vscode.commands.registerCommand(
-			'neko.engine.diff',
-			async (group: string, sourceA: string, sourceB: string, options?: Record<string, unknown>) => {
-				try {
-					const engine = await getOrStartEngine();
-					if (!engine?.engine) return null;
-					const opts = { sourceA, sourceB, ...options };
-					const resultJson = await engine.engine.dispatchAction(
-						group,
-						'diff',
-						null,
-						JSON.stringify(opts),
-						null, null, null, null
-					);
-					const result = JSON.parse(resultJson);
-					if (result.status === 'ok') {
-						const data = result.data;
-						// Rust ContentDiff is a tagged enum: { content: { type: "Image"|"Audio"|"Video"|"Timeline", ...fields } }
-						// TypeScript EngineDiffResult expects flat fields: { imageDiff?, audioDiff?, videoDiff?, timelineDiff? }
-						// Transform here to bridge the mismatch without changing Rust or generated types.
-						if (data?.content) {
-							const { type: contentType, ...contentFields } = data.content;
-							const keyMap: Record<string, string> = {
-								Image: 'imageDiff',
-								Audio: 'audioDiff',
-								Video: 'videoDiff',
-								Timeline: 'timelineDiff',
-								image: 'imageDiff',
-								audio: 'audioDiff',
-								video: 'videoDiff',
-								timeline: 'timelineDiff',
-							};
-							const key = keyMap[contentType];
-							if (key) {
-								data[key] = contentFields;
-							}
-							delete data.content;
-						}
-						return data;
-					}
-					log(`diff failed for ${group}: ${result.message ?? 'unknown error'}`, 'error');
-					return null;
-				} catch (error) {
-					log(`diff failed for ${group} (${sourceA} vs ${sourceB}): ${error}`, 'error');
-					return null;
-				}
-			}
-		)
-	);
+  // Diff two media files (programmatic API for other extensions)
+  // Dispatches to engine's native diff: audios:diff, videos:diff, images:diff, timelines:diff
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.engine.diff',
+      async (
+        group: string,
+        sourceA: string,
+        sourceB: string,
+        options?: Record<string, unknown>,
+      ) => {
+        try {
+          const engine = await getOrStartEngine();
+          if (!engine?.engine) return null;
+          const opts = { sourceA, sourceB, ...options };
+          const resultJson = await engine.engine.dispatchAction(
+            group,
+            'diff',
+            null,
+            JSON.stringify(opts),
+            null,
+            null,
+            null,
+            null,
+          );
+          const result = JSON.parse(resultJson);
+          if (result.status === 'ok') {
+            const data = result.data;
+            // Rust ContentDiff is a tagged enum: { content: { type: "Image"|"Audio"|"Video"|"Timeline", ...fields } }
+            // TypeScript EngineDiffResult expects flat fields: { imageDiff?, audioDiff?, videoDiff?, timelineDiff? }
+            // Transform here to bridge the mismatch without changing Rust or generated types.
+            if (data?.content) {
+              const { type: contentType, ...contentFields } = data.content;
+              const keyMap: Record<string, string> = {
+                Image: 'imageDiff',
+                Audio: 'audioDiff',
+                Video: 'videoDiff',
+                Timeline: 'timelineDiff',
+                image: 'imageDiff',
+                audio: 'audioDiff',
+                video: 'videoDiff',
+                timeline: 'timelineDiff',
+              };
+              const key = keyMap[contentType];
+              if (key) {
+                data[key] = contentFields;
+              }
+              delete data.content;
+            }
+            return data;
+          }
+          log(`diff failed for ${group}: ${result.message ?? 'unknown error'}`, 'error');
+          return null;
+        } catch (error) {
+          log(`diff failed for ${group} (${sourceA} vs ${sourceB}): ${error}`, 'error');
+          return null;
+        }
+      },
+    ),
+  );
 
-	// Ensure Frame Server is running (programmatic API for other extensions)
-	// Starts the embedded HTTP/WebSocket server if not already running.
-	// Returns { port: number } on success, null on failure.
-	context.subscriptions.push(
-		vscode.commands.registerCommand(
-			'neko.engine.ensureFrameServer',
-			async (): Promise<{ port: number } | null> => {
-				try {
-					const engine = await getOrStartEngine();
-					if (!engine?.engine) return null;
+  // Ensure Frame Server is running (programmatic API for other extensions)
+  // Starts the embedded HTTP/WebSocket server if not already running.
+  // Returns { port: number } on success, null on failure.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.engine.ensureFrameServer',
+      async (): Promise<{ port: number } | null> => {
+        try {
+          const engine = await getOrStartEngine();
+          if (!engine?.engine) return null;
 
-					// Check if already running
-					const existingPort = frameServerPort;
-					if (existingPort !== null) {
-						return { port: existingPort };
-					}
+          // Check if already running
+          const existingPort = frameServerPort;
+          if (existingPort !== null) {
+            return { port: existingPort };
+          }
 
-					// Start frame server with auto-assigned port
-					const port = await engine.engine.startFrameServer(0);
-					frameServerPort = port;
-					log(`Frame server started on port ${port}`);
-					return { port };
-				} catch (error) {
-					log(`ensureFrameServer failed: ${error}`, 'error');
-					return null;
-				}
-			}
-		)
-	);
+          // Start frame server with auto-assigned port
+          const port = await engine.engine.startFrameServer(0);
+          frameServerPort = port;
+          log(`Frame server started on port ${port}`);
+          return { port };
+        } catch (error) {
+          log(`ensureFrameServer failed: ${error}`, 'error');
+          return null;
+        }
+      },
+    ),
+  );
 
-	// Generic dispatch (programmatic API for other extensions)
-	// Dispatches an ActionRequest to the engine and returns the JSON result.
-	// Parameters: (group: string, action: string, options?: Record<string, unknown>)
-	context.subscriptions.push(
-		vscode.commands.registerCommand(
-			'neko.engine.dispatch',
-			async (
-				group: string,
-				action: string,
-				options?: Record<string, unknown>
-			): Promise<string | null> => {
-				try {
-					const engine = await getOrStartEngine();
-					if (!engine?.engine) return null;
+  // Generic dispatch (programmatic API for other extensions)
+  // Dispatches an ActionRequest to the engine and returns the JSON result.
+  // Parameters: (group: string, action: string, options?: Record<string, unknown>)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.engine.dispatch',
+      async (
+        group: string,
+        action: string,
+        options?: Record<string, unknown>,
+      ): Promise<string | null> => {
+        try {
+          const engine = await getOrStartEngine();
+          if (!engine?.engine) return null;
 
-					const optionsJson = options ? JSON.stringify(options) : null;
-					return await engine.engine.dispatchAction(
-						group,
-						action,
-						null,
-						optionsJson,
-						null, null, null, null
-					);
-				} catch (error) {
-					log(`dispatch(${group}:${action}) failed: ${error}`, 'error');
-					return null;
-				}
-			}
-		)
-	);
+          const optionsJson = options ? JSON.stringify(options) : null;
+          return await engine.engine.dispatchAction(
+            group,
+            action,
+            null,
+            optionsJson,
+            null,
+            null,
+            null,
+            null,
+          );
+        } catch (error) {
+          log(`dispatch(${group}:${action}) failed: ${error}`, 'error');
+          return null;
+        }
+      },
+    ),
+  );
 
-	// Export JVI Project
-	context.subscriptions.push(
-		vscode.commands.registerCommand('neko.engine.export', cmdExportProject)
-	);
+  // Export JVI Project
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.engine.export', cmdExportProject),
+  );
 
-	// Open Documentation
-	context.subscriptions.push(
-		vscode.commands.registerCommand('neko.engine.openDocs', cmdOpenDocs)
-	);
+  // Open Documentation
+  context.subscriptions.push(vscode.commands.registerCommand('neko.engine.openDocs', cmdOpenDocs));
 }
 
 // =============================================================================
@@ -275,322 +269,332 @@ function registerCommands(context: vscode.ExtensionContext): void {
  * Start the engine — initializes NativeEngine via MediaEngineManager
  */
 async function cmdStartEngine(): Promise<void> {
-	if (!manager) {
-		vscode.window.showErrorMessage('Neko Engine: Manager not initialized');
-		return;
-	}
+  if (!manager) {
+    vscode.window.showErrorMessage('Neko Engine: Manager not initialized');
+    return;
+  }
 
-	updateStatusBar('starting');
+  updateStatusBar('starting');
 
-	try {
-		const engine = await manager.getCompatibleEngine();
+  try {
+    const engine = await manager.getCompatibleEngine();
 
-		// Share the NativeEngine instance with ExportService
-		if (exportService && engine.engine) {
-			exportService.initializeWithEngine(engine.engine);
-		}
+    // Share the NativeEngine instance with ExportService
+    if (exportService && engine.engine) {
+      exportService.initializeWithEngine(engine.engine);
+    }
 
-		log(`Engine started (GPU: ${engine.engine?.hasGpu() ? 'enabled' : 'disabled'})`);
+    log(`Engine started (GPU: ${engine.engine?.hasGpu() ? 'enabled' : 'disabled'})`);
 
-		// Log available groups
-		const groups = engine.engine?.groups();
-		if (groups) {
-			log(`Available API groups: ${groups.join(', ')}`);
-		}
+    // Log available groups
+    const groups = engine.engine?.groups();
+    if (groups) {
+      log(`Available API groups: ${groups.join(', ')}`);
+    }
 
-		updateStatusBar('ready');
-		vscode.window.showInformationMessage('Neko Engine started');
-	} catch (error) {
-		log(`Failed to start engine: ${error instanceof Error ? error.message : String(error)}`, 'error');
-		updateStatusBar('error');
-		handleError(error, { showToUser: true, severity: 'error' });
-	}
+    updateStatusBar('ready');
+    vscode.window.showInformationMessage('Neko Engine started');
+  } catch (error) {
+    log(
+      `Failed to start engine: ${error instanceof Error ? error.message : String(error)}`,
+      'error',
+    );
+    updateStatusBar('error');
+    handleError(error, { showToUser: true, severity: 'error' });
+  }
 }
 
 /**
  * Stop the engine — disposes NativeEngine and cleans up resources
  */
 async function cmdStopEngine(): Promise<void> {
-	if (!manager) {
-		return;
-	}
+  if (!manager) {
+    return;
+  }
 
-	try {
-		// Cancel any ongoing export
-		if (exportService) {
-			await exportService.cancel();
-		}
+  try {
+    // Cancel any ongoing export
+    if (exportService) {
+      await exportService.cancel();
+    }
 
-		// Dispose engines
-		await manager.disposeEngines();
+    // Dispose engines
+    await manager.disposeEngines();
 
-		log('Engine stopped');
-		updateStatusBar('idle');
-		vscode.window.showInformationMessage('Neko Engine stopped');
-	} catch (error) {
-		log(`Failed to stop engine: ${error instanceof Error ? error.message : String(error)}`, 'error');
-		handleError(error, { showToUser: true, severity: 'error' });
-	}
+    log('Engine stopped');
+    updateStatusBar('idle');
+    vscode.window.showInformationMessage('Neko Engine stopped');
+  } catch (error) {
+    log(
+      `Failed to stop engine: ${error instanceof Error ? error.message : String(error)}`,
+      'error',
+    );
+    handleError(error, { showToUser: true, severity: 'error' });
+  }
 }
 
 /**
  * Show engine status — queries real health/GPU info from Rust side
  */
 async function cmdShowStatus(): Promise<void> {
-	if (!manager) {
-		vscode.window.showInformationMessage('Neko Engine: Not initialized');
-		return;
-	}
+  if (!manager) {
+    vscode.window.showInformationMessage('Neko Engine: Not initialized');
+    return;
+  }
 
-	try {
-		const engine = await getOrStartEngine();
-		if (!engine?.engine) {
-			vscode.window.showInformationMessage('Neko Engine: Not running');
-			return;
-		}
+  try {
+    const engine = await getOrStartEngine();
+    if (!engine?.engine) {
+      vscode.window.showInformationMessage('Neko Engine: Not running');
+      return;
+    }
 
-		// Query health
-		const healthJson = await engine.engine.health();
-		const health = JSON.parse(healthJson);
+    // Query health
+    const healthJson = await engine.engine.health();
+    const health = JSON.parse(healthJson);
 
-		// Query GPU info
-		const gpuJson = await engine.engine.gpuInfo();
-		const gpu = JSON.parse(gpuJson);
+    // Query GPU info
+    const gpuJson = await engine.engine.gpuInfo();
+    const gpu = JSON.parse(gpuJson);
 
-		// Query metrics
-		const metricsJson = await engine.engine.metrics();
-		const metrics = JSON.parse(metricsJson);
+    // Query metrics
+    const metricsJson = await engine.engine.metrics();
+    const metrics = JSON.parse(metricsJson);
 
-		// Build status message
-		const lines: string[] = [
-			`State: ${engine.state}`,
-			`GPU: ${gpu.data?.name ?? 'N/A'} (${gpu.data?.backend ?? 'N/A'})`,
-			`Hardware Accel: ${engine.capabilities.hardwareAcceleration ? 'Yes' : 'No'}`,
-		];
+    // Build status message
+    const lines: string[] = [
+      `State: ${engine.state}`,
+      `GPU: ${gpu.data?.name ?? 'N/A'} (${gpu.data?.backend ?? 'N/A'})`,
+      `Hardware Accel: ${engine.capabilities.hardwareAcceleration ? 'Yes' : 'No'}`,
+    ];
 
-		if (metrics.data) {
-			const m = metrics.data;
-			if (m.cpuUsage !== undefined) {
-				lines.push(`CPU: ${(m.cpuUsage as number).toFixed(1)}%`);
-			}
-			if (m.memoryUsedMb !== undefined) {
-				lines.push(`Memory: ${(m.memoryUsedMb as number).toFixed(0)} MB`);
-			}
-		}
+    if (metrics.data) {
+      const m = metrics.data;
+      if (m.cpuUsage !== undefined) {
+        lines.push(`CPU: ${(m.cpuUsage as number).toFixed(1)}%`);
+      }
+      if (m.memoryUsedMb !== undefined) {
+        lines.push(`Memory: ${(m.memoryUsedMb as number).toFixed(0)} MB`);
+      }
+    }
 
-		// Show in output channel
-		outputChannel.show(true);
-		outputChannel.appendLine('--- Engine Status ---');
-		for (const line of lines) {
-			outputChannel.appendLine(line);
-		}
-		outputChannel.appendLine('');
+    // Show in output channel
+    outputChannel.show(true);
+    outputChannel.appendLine('--- Engine Status ---');
+    for (const line of lines) {
+      outputChannel.appendLine(line);
+    }
+    outputChannel.appendLine('');
 
-		vscode.window.showInformationMessage(
-			`Neko Engine: ${engine.state} | GPU: ${gpu.data?.name ?? 'N/A'}`
-		);
-	} catch (error) {
-		handleError(error, { showToUser: true, severity: 'error' });
-	}
+    vscode.window.showInformationMessage(
+      `Neko Engine: ${engine.state} | GPU: ${gpu.data?.name ?? 'N/A'}`,
+    );
+  } catch (error) {
+    handleError(error, { showToUser: true, severity: 'error' });
+  }
 }
 
 /**
  * Probe a media file — select file, probe metadata, show results
  */
 async function cmdProbeMedia(): Promise<void> {
-	// Select file
-	const fileUri = await vscode.window.showOpenDialog({
-		canSelectFiles: true,
-		canSelectMany: false,
-		filters: {
-			'Media Files': ['mp4', 'mov', 'mkv', 'avi', 'webm', 'mp3', 'wav', 'flac', 'aac'],
-			'All Files': ['*'],
-		},
-		title: 'Select media file to probe',
-	});
+  // Select file
+  const fileUri = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectMany: false,
+    filters: {
+      'Media Files': ['mp4', 'mov', 'mkv', 'avi', 'webm', 'mp3', 'wav', 'flac', 'aac'],
+      'All Files': ['*'],
+    },
+    title: 'Select media file to probe',
+  });
 
-	if (!fileUri || fileUri.length === 0) {
-		return;
-	}
+  if (!fileUri || fileUri.length === 0) {
+    return;
+  }
 
-	const filePath = fileUri[0]!.fsPath;
+  const filePath = fileUri[0]!.fsPath;
 
-	try {
-		const engine = await getOrStartEngine();
-		if (!engine) {
-			return;
-		}
+  try {
+    const engine = await getOrStartEngine();
+    if (!engine) {
+      return;
+    }
 
-		const mediaInfo = await engine.probeMedia(filePath);
+    const mediaInfo = await engine.probeMedia(filePath);
 
-		// Show results in output channel
-		outputChannel.show(true);
-		outputChannel.appendLine(`--- Probe: ${filePath} ---`);
-		outputChannel.appendLine(`  Duration: ${mediaInfo.duration.toFixed(2)}s`);
-		outputChannel.appendLine(`  Resolution: ${mediaInfo.width}x${mediaInfo.height}`);
-		outputChannel.appendLine(`  FPS: ${mediaInfo.fps}`);
-		outputChannel.appendLine(`  Video Codec: ${mediaInfo.codec}`);
-		outputChannel.appendLine(`  Format: ${mediaInfo.format}`);
-		if (mediaInfo.hasAudio) {
-			outputChannel.appendLine(`  Audio: ${mediaInfo.audioCodec ?? 'unknown'} (${mediaInfo.audioSampleRate ?? 0} Hz, ${mediaInfo.audioChannels ?? 0} ch)`);
-		}
-		if (mediaInfo.hasSubtitles) {
-			outputChannel.appendLine('  Subtitles: Yes');
-		}
+    // Show results in output channel
+    outputChannel.show(true);
+    outputChannel.appendLine(`--- Probe: ${filePath} ---`);
+    outputChannel.appendLine(`  Duration: ${mediaInfo.duration.toFixed(2)}s`);
+    outputChannel.appendLine(`  Resolution: ${mediaInfo.width}x${mediaInfo.height}`);
+    outputChannel.appendLine(`  FPS: ${mediaInfo.fps}`);
+    outputChannel.appendLine(`  Video Codec: ${mediaInfo.codec}`);
+    outputChannel.appendLine(`  Format: ${mediaInfo.format}`);
+    if (mediaInfo.hasAudio) {
+      outputChannel.appendLine(
+        `  Audio: ${mediaInfo.audioCodec ?? 'unknown'} (${mediaInfo.audioSampleRate ?? 0} Hz, ${mediaInfo.audioChannels ?? 0} ch)`,
+      );
+    }
+    if (mediaInfo.hasSubtitles) {
+      outputChannel.appendLine('  Subtitles: Yes');
+    }
 
-		// Mode recommendation
-		const recommendation = manager!.analyzeMedia(mediaInfo);
-		outputChannel.appendLine(`  Recommended Mode: ${recommendation.recommendedMode}`);
-		outputChannel.appendLine('');
+    // Mode recommendation
+    const recommendation = manager!.analyzeMedia(mediaInfo);
+    outputChannel.appendLine(`  Recommended Mode: ${recommendation.recommendedMode}`);
+    outputChannel.appendLine('');
 
-		vscode.window.showInformationMessage(
-			`${mediaInfo.width}x${mediaInfo.height} | ${mediaInfo.codec} | ${mediaInfo.duration.toFixed(1)}s`
-		);
-	} catch (error) {
-		handleError(error, { showToUser: true, severity: 'error' });
-	}
+    vscode.window.showInformationMessage(
+      `${mediaInfo.width}x${mediaInfo.height} | ${mediaInfo.codec} | ${mediaInfo.duration.toFixed(1)}s`,
+    );
+  } catch (error) {
+    handleError(error, { showToUser: true, severity: 'error' });
+  }
 }
 
 /**
  * Export a JVI project — select .jvi file, export to video
  */
 async function cmdExportProject(): Promise<void> {
-	if (!exportService) {
-		vscode.window.showErrorMessage('Neko Engine: Export service not available');
-		return;
-	}
+  if (!exportService) {
+    vscode.window.showErrorMessage('Neko Engine: Export service not available');
+    return;
+  }
 
-	// Ensure engine is running
-	const engine = await getOrStartEngine();
-	if (!engine?.engine) {
-		return;
-	}
+  // Ensure engine is running
+  const engine = await getOrStartEngine();
+  if (!engine?.engine) {
+    return;
+  }
 
-	// Ensure export service has engine
-	if (!exportService['_isInitialized']) {
-		exportService.initializeWithEngine(engine.engine);
-	}
+  // Ensure export service has engine
+  if (!exportService['_isInitialized']) {
+    exportService.initializeWithEngine(engine.engine);
+  }
 
-	// Select JVI project file
-	const jviUri = await vscode.window.showOpenDialog({
-		canSelectFiles: true,
-		canSelectMany: false,
-		filters: { 'JVI Project': ['jvi'] },
-		title: 'Select JVI project to export',
-	});
+  // Select JVI project file
+  const jviUri = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectMany: false,
+    filters: { 'JVI Project': ['jvi'] },
+    title: 'Select JVI project to export',
+  });
 
-	if (!jviUri || jviUri.length === 0) {
-		return;
-	}
+  if (!jviUri || jviUri.length === 0) {
+    return;
+  }
 
-	const jviPath = jviUri[0]!.fsPath;
+  const jviPath = jviUri[0]!.fsPath;
 
-	// Select output path
-	const outputUri = await vscode.window.showSaveDialog({
-		filters: {
-			'MP4 Video': ['mp4'],
-			'MOV Video': ['mov'],
-		},
-		title: 'Save exported video as',
-	});
+  // Select output path
+  const outputUri = await vscode.window.showSaveDialog({
+    filters: {
+      'MP4 Video': ['mp4'],
+      'MOV Video': ['mov'],
+    },
+    title: 'Save exported video as',
+  });
 
-	if (!outputUri) {
-		return;
-	}
+  if (!outputUri) {
+    return;
+  }
 
-	const outputPath = outputUri.fsPath;
+  const outputPath = outputUri.fsPath;
 
-	try {
-		// Load JVI project
-		const loader = new JviProjectLoader(jviPath);
-		const project = await loader.load();
+  try {
+    // Load JVI project
+    const loader = new JviProjectLoader(jviPath);
+    const project = await loader.load();
 
-		log(`Exporting project: ${project.name} (${project.resolution.width}x${project.resolution.height} @ ${project.fps}fps)`);
+    log(
+      `Exporting project: ${project.name} (${project.resolution.width}x${project.resolution.height} @ ${project.fps}fps)`,
+    );
 
-		// Convert JVI tracks to export layers
-		const layers = loader.toLayers();
-		const duration = loader.calculateDuration();
+    // Convert JVI tracks to export layers
+    const layers = loader.toLayers();
+    const duration = loader.calculateDuration();
 
-		// Create frame provider
-		const frameProvider = await createVideoFrameProvider();
+    // Create frame provider
+    const frameProvider = await createVideoFrameProvider();
 
-		// Build export config
-		const config = {
-			outputPath,
-			width: project.resolution.width,
-			height: project.resolution.height,
-			fps: project.fps,
-			duration,
-			videoCodec: 'h264' as const,
-			preset: 'medium' as const,
-			profile: 'high' as const,
-			container: 'mp4' as const,
-			includeAudio: true,
-			audioCodec: 'aac' as const,
-			audioSampleRate: 48000,
-			audioChannels: 2,
-		};
+    // Build export config
+    const config = {
+      outputPath,
+      width: project.resolution.width,
+      height: project.resolution.height,
+      fps: project.fps,
+      duration,
+      videoCodec: 'h264' as const,
+      preset: 'medium' as const,
+      profile: 'high' as const,
+      container: 'mp4' as const,
+      includeAudio: true,
+      audioCodec: 'aac' as const,
+      audioSampleRate: 48000,
+      audioChannels: 2,
+    };
 
-		// Show progress
-		await vscode.window.withProgress(
-			{
-				location: vscode.ProgressLocation.Notification,
-				title: 'Neko Engine: Exporting',
-				cancellable: true,
-			},
-			async (progress, token) => {
-				// Handle cancellation
-				token.onCancellationRequested(() => {
-					exportService?.cancel();
-				});
+    // Show progress
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'Neko Engine: Exporting',
+        cancellable: true,
+      },
+      async (progress, token) => {
+        // Handle cancellation
+        token.onCancellationRequested(() => {
+          exportService?.cancel();
+        });
 
-				const result = await exportService!.export(
-					config,
-					layers,
-					frameProvider,
-					(p: ExportProgress) => {
-						progress.report({
-							increment: undefined,
-							message: `${p.percentage.toFixed(1)}% | Frame ${p.currentFrame}/${p.totalFrames} | ${p.phase}`,
-						});
-						log(`Export progress: ${p.percentage.toFixed(1)}% (${p.phase})`);
-					}
-				);
+        const result = await exportService!.export(
+          config,
+          layers,
+          frameProvider,
+          (p: ExportProgress) => {
+            progress.report({
+              increment: undefined,
+              message: `${p.percentage.toFixed(1)}% | Frame ${p.currentFrame}/${p.totalFrames} | ${p.phase}`,
+            });
+            log(`Export progress: ${p.percentage.toFixed(1)}% (${p.phase})`);
+          },
+        );
 
-				if (result.success) {
-					log(`Export completed: ${outputPath} (${result.totalTimeMs?.toFixed(0)}ms)`);
-					const action = await vscode.window.showInformationMessage(
-						`Export completed: ${outputPath}`,
-						'Open File',
-						'Open Folder'
-					);
-					if (action === 'Open File') {
-						vscode.env.openExternal(vscode.Uri.file(outputPath));
-					} else if (action === 'Open Folder') {
-						const path = await import('path');
-						vscode.env.openExternal(vscode.Uri.file(path.dirname(outputPath)));
-					}
-				} else {
-					log(`Export failed: ${result.error}`, 'error');
-					handleError(new Error(result.error ?? 'Export failed'), { showToUser: true, severity: 'error' });
-				}
-			}
-		);
-	} catch (error) {
-		log(`Export error: ${error instanceof Error ? error.message : String(error)}`, 'error');
-		handleError(error, { showToUser: true, severity: 'error' });
-	}
+        if (result.success) {
+          log(`Export completed: ${outputPath} (${result.totalTimeMs?.toFixed(0)}ms)`);
+          const action = await vscode.window.showInformationMessage(
+            `Export completed: ${outputPath}`,
+            'Open File',
+            'Open Folder',
+          );
+          if (action === 'Open File') {
+            vscode.env.openExternal(vscode.Uri.file(outputPath));
+          } else if (action === 'Open Folder') {
+            const path = await import('path');
+            vscode.env.openExternal(vscode.Uri.file(path.dirname(outputPath)));
+          }
+        } else {
+          log(`Export failed: ${result.error}`, 'error');
+          handleError(new Error(result.error ?? 'Export failed'), {
+            showToUser: true,
+            severity: 'error',
+          });
+        }
+      },
+    );
+  } catch (error) {
+    log(`Export error: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    handleError(error, { showToUser: true, severity: 'error' });
+  }
 }
 
 /**
  * Open API documentation
  */
 function cmdOpenDocs(): void {
-	const docsPath = vscode.Uri.joinPath(
-		vscode.Uri.file(__dirname),
-		'../../docs/refactor.md'
-	);
-	vscode.commands.executeCommand('markdown.showPreview', docsPath);
+  const docsPath = vscode.Uri.joinPath(vscode.Uri.file(__dirname), '../../docs/refactor.md');
+  vscode.commands.executeCommand('markdown.showPreview', docsPath);
 }
 
 // =============================================================================
@@ -601,67 +605,65 @@ function cmdOpenDocs(): void {
  * Get the compatible engine, starting it if needed
  */
 async function getOrStartEngine(): Promise<NativeMediaEngine | null> {
-	if (!manager) {
-		vscode.window.showErrorMessage('Neko Engine: Manager not initialized');
-		return null;
-	}
+  if (!manager) {
+    vscode.window.showErrorMessage('Neko Engine: Manager not initialized');
+    return null;
+  }
 
-	try {
-		const engine = await manager.getCompatibleEngine();
-		updateStatusBar('ready');
-		return engine;
-	} catch (error) {
-		log(`Failed to get engine: ${error instanceof Error ? error.message : String(error)}`, 'error');
-		updateStatusBar('error');
-		handleError(error, { showToUser: true, severity: 'error' });
-		return null;
-	}
+  try {
+    const engine = await manager.getCompatibleEngine();
+    updateStatusBar('ready');
+    return engine;
+  } catch (error) {
+    log(`Failed to get engine: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    updateStatusBar('error');
+    handleError(error, { showToUser: true, severity: 'error' });
+    return null;
+  }
 }
 
 /**
  * Update status bar based on engine state
  */
 function updateStatusBar(state: 'idle' | 'starting' | 'ready' | 'error'): void {
-	switch (state) {
-		case 'idle':
-			statusBarItem.text = '$(circle-outline) Neko Engine';
-			statusBarItem.tooltip = 'Neko Engine: Idle — Click to view status';
-			statusBarItem.backgroundColor = undefined;
-			break;
-		case 'starting':
-			statusBarItem.text = '$(loading~spin) Neko Engine';
-			statusBarItem.tooltip = 'Neko Engine: Starting...';
-			statusBarItem.backgroundColor = undefined;
-			break;
-		case 'ready':
-			statusBarItem.text = '$(check) Neko Engine';
-			statusBarItem.tooltip = 'Neko Engine: Ready — Click to view status';
-			statusBarItem.backgroundColor = undefined;
-			break;
-		case 'error':
-			statusBarItem.text = '$(error) Neko Engine';
-			statusBarItem.tooltip = 'Neko Engine: Error — Click to view status';
-			statusBarItem.backgroundColor = new vscode.ThemeColor(
-				'statusBarItem.errorBackground'
-			);
-			break;
-	}
-	statusBarItem.show();
+  switch (state) {
+    case 'idle':
+      statusBarItem.text = '$(circle-outline) Neko Engine';
+      statusBarItem.tooltip = 'Neko Engine: Idle — Click to view status';
+      statusBarItem.backgroundColor = undefined;
+      break;
+    case 'starting':
+      statusBarItem.text = '$(loading~spin) Neko Engine';
+      statusBarItem.tooltip = 'Neko Engine: Starting...';
+      statusBarItem.backgroundColor = undefined;
+      break;
+    case 'ready':
+      statusBarItem.text = '$(check) Neko Engine';
+      statusBarItem.tooltip = 'Neko Engine: Ready — Click to view status';
+      statusBarItem.backgroundColor = undefined;
+      break;
+    case 'error':
+      statusBarItem.text = '$(error) Neko Engine';
+      statusBarItem.tooltip = 'Neko Engine: Error — Click to view status';
+      statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+      break;
+  }
+  statusBarItem.show();
 }
 
 /**
  * Log to output channel
  */
 function log(message: string, level: 'info' | 'error' = 'info'): void {
-	const timestamp = new Date().toISOString().slice(11, 23);
-	const prefix = level === 'error' ? '❌' : '📋';
-	outputChannel.appendLine(`[${timestamp}] ${prefix} ${message}`);
+  const timestamp = new Date().toISOString().slice(11, 23);
+  const prefix = level === 'error' ? '❌' : '📋';
+  outputChannel.appendLine(`[${timestamp}] ${prefix} ${message}`);
 
-	if (level === 'error') {
-		console.error(`[NekoEngine] ${message}`);
-	} else {
-		console.log(`[NekoEngine] ${message}`);
-	}
+  if (level === 'error') {
+    console.error(`[NekoEngine] ${message}`);
+  } else {
+    console.log(`[NekoEngine] ${message}`);
+  }
 }
 
 // =============================================================================
@@ -672,23 +674,23 @@ function log(message: string, level: 'info' | 'error' = 'info'): void {
  * Deactivate the extension
  */
 export async function deactivate(): Promise<void> {
-	log('Deactivating extension...');
+  log('Deactivating extension...');
 
-	// Cancel ongoing exports
-	if (exportService) {
-		await exportService.cancel();
-		exportService.dispose();
-		exportService = null;
-	}
+  // Cancel ongoing exports
+  if (exportService) {
+    await exportService.cancel();
+    exportService.dispose();
+    exportService = null;
+  }
 
-	// Dispose engine manager
-	if (manager) {
-		await manager.disposeEngines();
-		manager.dispose();
-		manager = null;
-	}
+  // Dispose engine manager
+  if (manager) {
+    await manager.disposeEngines();
+    manager.dispose();
+    manager = null;
+  }
 
-	frameServerPort = null;
+  frameServerPort = null;
 
-	log('Extension deactivated');
+  log('Extension deactivated');
 }

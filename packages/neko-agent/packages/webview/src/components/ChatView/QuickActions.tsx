@@ -11,23 +11,89 @@ interface PromptTemplate {
 
 const PROMPT_TEMPLATES: PromptTemplate[] = [
   // Help templates
-  { id: 'subtitles', labelKey: 'chat.quickActions.addSubtitles', icon: '💬', promptKey: 'chat.quickActions.prompts.subtitles', category: 'help' },
-  { id: 'shortcuts', labelKey: 'chat.quickActions.shortcuts', icon: '⌨️', promptKey: 'chat.quickActions.prompts.shortcuts', category: 'help' },
-  { id: 'export', labelKey: 'chat.quickActions.exportVideo', icon: '📤', promptKey: 'chat.quickActions.prompts.export', category: 'help' },
+  {
+    id: 'subtitles',
+    labelKey: 'chat.quickActions.addSubtitles',
+    icon: '💬',
+    promptKey: 'chat.quickActions.prompts.subtitles',
+    category: 'help',
+  },
+  {
+    id: 'shortcuts',
+    labelKey: 'chat.quickActions.shortcuts',
+    icon: '⌨️',
+    promptKey: 'chat.quickActions.prompts.shortcuts',
+    category: 'help',
+  },
+  {
+    id: 'export',
+    labelKey: 'chat.quickActions.exportVideo',
+    icon: '📤',
+    promptKey: 'chat.quickActions.prompts.export',
+    category: 'help',
+  },
 
   // Editing templates
-  { id: 'trim', labelKey: 'chat.quickActions.trimClip', icon: '✂️', promptKey: 'chat.quickActions.prompts.trim', category: 'editing' },
-  { id: 'transition', labelKey: 'chat.quickActions.addTransition', icon: '🔄', promptKey: 'chat.quickActions.prompts.transition', category: 'editing' },
-  { id: 'speed', labelKey: 'chat.quickActions.changeSpeed', icon: '⏱️', promptKey: 'chat.quickActions.prompts.speed', category: 'editing' },
+  {
+    id: 'trim',
+    labelKey: 'chat.quickActions.trimClip',
+    icon: '✂️',
+    promptKey: 'chat.quickActions.prompts.trim',
+    category: 'editing',
+  },
+  {
+    id: 'transition',
+    labelKey: 'chat.quickActions.addTransition',
+    icon: '🔄',
+    promptKey: 'chat.quickActions.prompts.transition',
+    category: 'editing',
+  },
+  {
+    id: 'speed',
+    labelKey: 'chat.quickActions.changeSpeed',
+    icon: '⏱️',
+    promptKey: 'chat.quickActions.prompts.speed',
+    category: 'editing',
+  },
 
   // Generation templates
-  { id: 'thumbnail', labelKey: 'chat.quickActions.generateThumbnail', icon: '🖼️', promptKey: 'chat.quickActions.prompts.thumbnail', category: 'generation' },
-  { id: 'title', labelKey: 'chat.quickActions.suggestTitle', icon: '📝', promptKey: 'chat.quickActions.prompts.title', category: 'generation' },
-  { id: 'description', labelKey: 'chat.quickActions.writeDescription', icon: '📄', promptKey: 'chat.quickActions.prompts.description', category: 'generation' },
+  {
+    id: 'thumbnail',
+    labelKey: 'chat.quickActions.generateThumbnail',
+    icon: '🖼️',
+    promptKey: 'chat.quickActions.prompts.thumbnail',
+    category: 'generation',
+  },
+  {
+    id: 'title',
+    labelKey: 'chat.quickActions.suggestTitle',
+    icon: '📝',
+    promptKey: 'chat.quickActions.prompts.title',
+    category: 'generation',
+  },
+  {
+    id: 'description',
+    labelKey: 'chat.quickActions.writeDescription',
+    icon: '📄',
+    promptKey: 'chat.quickActions.prompts.description',
+    category: 'generation',
+  },
 
   // Analysis templates
-  { id: 'analyze', labelKey: 'chat.quickActions.analyzePacing', icon: '📊', promptKey: 'chat.quickActions.prompts.analyze', category: 'analysis' },
-  { id: 'review', labelKey: 'chat.quickActions.reviewQuality', icon: '🔍', promptKey: 'chat.quickActions.prompts.review', category: 'analysis' },
+  {
+    id: 'analyze',
+    labelKey: 'chat.quickActions.analyzePacing',
+    icon: '📊',
+    promptKey: 'chat.quickActions.prompts.analyze',
+    category: 'analysis',
+  },
+  {
+    id: 'review',
+    labelKey: 'chat.quickActions.reviewQuality',
+    icon: '🔍',
+    promptKey: 'chat.quickActions.prompts.review',
+    category: 'analysis',
+  },
 ];
 
 interface Category {
@@ -53,9 +119,10 @@ export function QuickActions({ onActionSelect }: QuickActionsProps) {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showAll, setShowAll] = useState(false);
 
-  const filteredTemplates = selectedCategory === 'all'
-    ? PROMPT_TEMPLATES
-    : PROMPT_TEMPLATES.filter(t => t.category === selectedCategory);
+  const filteredTemplates =
+    selectedCategory === 'all'
+      ? PROMPT_TEMPLATES
+      : PROMPT_TEMPLATES.filter((t) => t.category === selectedCategory);
 
   const displayedTemplates = showAll ? filteredTemplates : filteredTemplates.slice(0, 6);
 
@@ -63,7 +130,7 @@ export function QuickActions({ onActionSelect }: QuickActionsProps) {
     <div className="px-3 pb-2 flex-shrink-0">
       {/* Category tabs */}
       <div className="flex items-center gap-1 mb-2 overflow-x-auto">
-        {CATEGORIES.map(cat => (
+        {CATEGORIES.map((cat) => (
           <button
             key={cat.id}
             onClick={() => {
@@ -84,7 +151,7 @@ export function QuickActions({ onActionSelect }: QuickActionsProps) {
 
       {/* Template buttons */}
       <div className="flex flex-wrap gap-1.5">
-        {displayedTemplates.map(template => (
+        {displayedTemplates.map((template) => (
           <button
             key={template.id}
             onClick={() => onActionSelect(t(template.promptKey))}
@@ -102,7 +169,9 @@ export function QuickActions({ onActionSelect }: QuickActionsProps) {
             onClick={() => setShowAll(!showAll)}
             className="px-2.5 py-1 text-[11px] text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] transition-colors"
           >
-            {showAll ? t('chat.quickActions.less') : t('chat.quickActions.more', { count: filteredTemplates.length - 6 })}
+            {showAll
+              ? t('chat.quickActions.less')
+              : t('chat.quickActions.more', { count: filteredTemplates.length - 6 })}
           </button>
         )}
       </div>

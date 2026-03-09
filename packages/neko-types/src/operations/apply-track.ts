@@ -23,7 +23,7 @@ export function applyTrackOperation(project: ProjectData, op: TrackOperation): P
     case 'track.remove': {
       const { trackId } = op.payload;
       findTrack(project, trackId); // validate existence
-      return { ...project, tracks: project.tracks.filter(t => t.id !== trackId) };
+      return { ...project, tracks: project.tracks.filter((t) => t.id !== trackId) };
     }
 
     case 'track.update': {

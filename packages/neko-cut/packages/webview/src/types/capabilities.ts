@@ -106,30 +106,23 @@ export interface IMediaSource {
  * 媒体元素的完整能力集
  * 组合了所有适用于媒体元素的能力接口
  */
-export type MediaElementCapabilities =
-  & ITimelineElementBase
-  & IMediaSource
-  & IAnimatable
-  & IAudioCapable
-  & IEffectable;
+export type MediaElementCapabilities = ITimelineElementBase &
+  IMediaSource &
+  IAnimatable &
+  IAudioCapable &
+  IEffectable;
 
 /**
  * 音频元素的完整能力集
  * 组合了所有适用于音频元素的能力接口
  */
-export type AudioElementCapabilities =
-  & ITimelineElementBase
-  & IMediaSource
-  & IAudioCapable;
+export type AudioElementCapabilities = ITimelineElementBase & IMediaSource & IAudioCapable;
 
 /**
  * 文本元素的完整能力集
  * 组合了所有适用于文本元素的能力接口
  */
-export type TextElementCapabilities =
-  & ITimelineElementBase
-  & IAnimatable
-  & IEffectable;
+export type TextElementCapabilities = ITimelineElementBase & IAnimatable & IEffectable;
 
 // =============================================================================
 // 类型守卫函数
@@ -146,24 +139,32 @@ export function isAnimatable(element: unknown): element is IAnimatable {
  * 检查元素是否具有音频能力
  */
 export function isAudioCapable(element: unknown): element is IAudioCapable {
-  return element !== null && typeof element === 'object' &&
-    ('audio' in element || 'muted' in element);
+  return (
+    element !== null && typeof element === 'object' && ('audio' in element || 'muted' in element)
+  );
 }
 
 /**
  * 检查元素是否具有效果能力
  */
 export function isEffectable(element: unknown): element is IEffectable {
-  return element !== null && typeof element === 'object' &&
-    ('colorCorrection' in element || 'effects' in element || 'masks' in element);
+  return (
+    element !== null &&
+    typeof element === 'object' &&
+    ('colorCorrection' in element || 'effects' in element || 'masks' in element)
+  );
 }
 
 /**
  * 检查元素是否具有媒体源
  */
 export function hasMediaSource(element: unknown): element is IMediaSource {
-  return element !== null && typeof element === 'object' &&
-    'src' in element && typeof (element as IMediaSource).src === 'string';
+  return (
+    element !== null &&
+    typeof element === 'object' &&
+    'src' in element &&
+    typeof (element as IMediaSource).src === 'string'
+  );
 }
 
 // =============================================================================

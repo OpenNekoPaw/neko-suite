@@ -64,10 +64,7 @@ function pct2px(pct: number, size: number): number {
 /**
  * Generate SVG gradient definition
  */
-function renderGradientDef(
-  gradient: GradientFill,
-  gradientId: string
-): React.ReactNode {
+function renderGradientDef(gradient: GradientFill, gradientId: string): React.ReactNode {
   if (gradient.type === 'linear') {
     const angle = gradient.angle || 0;
     const rad = (angle * Math.PI) / 180;
@@ -77,19 +74,9 @@ function renderGradientDef(
     const y2 = 50 + Math.sin(rad) * 50;
 
     return (
-      <linearGradient
-        id={gradientId}
-        x1={`${x1}%`}
-        y1={`${y1}%`}
-        x2={`${x2}%`}
-        y2={`${y2}%`}
-      >
+      <linearGradient id={gradientId} x1={`${x1}%`} y1={`${y1}%`} x2={`${x2}%`} y2={`${y2}%`}>
         {gradient.stops.map((stop, i) => (
-          <stop
-            key={i}
-            offset={`${stop.offset * 100}%`}
-            stopColor={stop.color}
-          />
+          <stop key={i} offset={`${stop.offset * 100}%`} stopColor={stop.color} />
         ))}
       </linearGradient>
     );
@@ -99,18 +86,9 @@ function renderGradientDef(
     const r = gradient.radius ?? 0.5;
 
     return (
-      <radialGradient
-        id={gradientId}
-        cx={`${cx * 100}%`}
-        cy={`${cy * 100}%`}
-        r={`${r * 100}%`}
-      >
+      <radialGradient id={gradientId} cx={`${cx * 100}%`} cy={`${cy * 100}%`} r={`${r * 100}%`}>
         {gradient.stops.map((stop, i) => (
-          <stop
-            key={i}
-            offset={`${stop.offset * 100}%`}
-            stopColor={stop.color}
-          />
+          <stop key={i} offset={`${stop.offset * 100}%`} stopColor={stop.color} />
         ))}
       </radialGradient>
     );
@@ -120,10 +98,7 @@ function renderGradientDef(
 /**
  * Generate SVG shadow filter definition
  */
-function renderShadowFilter(
-  shadow: ShapeShadow,
-  shadowId: string
-): React.ReactNode {
+function renderShadowFilter(shadow: ShapeShadow, shadowId: string): React.ReactNode {
   if (!shadow.enabled) return null;
 
   return (
@@ -164,11 +139,7 @@ interface ShapeStyleAttrs {
   filter?: string;
 }
 
-function getStyleProps(
-  style: ShapeStyle,
-  gradientId: string,
-  shadowId: string
-): ShapeStyleAttrs {
+function getStyleProps(style: ShapeStyle, gradientId: string, shadowId: string): ShapeStyleAttrs {
   const { fill, stroke, shadow } = style;
 
   return {
@@ -180,9 +151,8 @@ function getStyleProps(
     strokeLinecap: stroke.enabled ? stroke.lineCap : undefined,
     strokeLinejoin: stroke.enabled ? stroke.lineJoin : undefined,
     strokeMiterlimit: stroke.enabled && stroke.lineJoin === 'miter' ? stroke.miterLimit : undefined,
-    strokeDasharray: stroke.enabled && stroke.dashArray.length > 0
-      ? stroke.dashArray.join(' ')
-      : undefined,
+    strokeDasharray:
+      stroke.enabled && stroke.dashArray.length > 0 ? stroke.dashArray.join(' ') : undefined,
     strokeDashoffset: stroke.enabled && stroke.dashOffset ? stroke.dashOffset : undefined,
     filter: shadow.enabled ? `url(#${shadowId})` : undefined,
   };
@@ -279,9 +249,7 @@ const StarRenderer = memo(function StarRenderer({
 }: SingleShapeProps) {
   const star = shape as StarShape;
   const starPoints = generateStarPoints(star);
-  const points = starPoints
-    .map((p) => `${pct2px(p.x, width)},${pct2px(p.y, height)}`)
-    .join(' ');
+  const points = starPoints.map((p) => `${pct2px(p.x, width)},${pct2px(p.y, height)}`).join(' ');
 
   const styleProps = getStyleProps(style, gradientId, shadowId);
 
@@ -415,7 +383,15 @@ export const ShapeRenderer = memo(function ShapeRenderer({
       case 'star':
         return <StarRenderer {...props} />;
       case 'line':
-        return <LineRenderer shape={shape.shape} style={shape.style} width={width} height={height} shadowId={shadowId} />;
+        return (
+          <LineRenderer
+            shape={shape.shape}
+            style={shape.style}
+            width={width}
+            height={height}
+            shadowId={shadowId}
+          />
+        );
       case 'bezier':
         return <BezierRenderer {...props} />;
       default:
@@ -432,16 +408,14 @@ export const ShapeRenderer = memo(function ShapeRenderer({
       elements.push(
         <Fragment key="gradient">
           {renderGradientDef(shape.style.fill.gradient, gradientId)}
-        </Fragment>
+        </Fragment>,
       );
     }
 
     // Shadow
     if (shape.style.shadow.enabled) {
       elements.push(
-        <Fragment key="shadow">
-          {renderShadowFilter(shape.style.shadow, shadowId)}
-        </Fragment>
+        <Fragment key="shadow">{renderShadowFilter(shape.style.shadow, shadowId)}</Fragment>,
       );
     }
 

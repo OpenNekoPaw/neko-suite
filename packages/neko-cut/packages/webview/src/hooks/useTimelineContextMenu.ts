@@ -68,7 +68,7 @@ export function useTimelineContextMenu({
         trackIndex,
       });
     },
-    []
+    [],
   );
 
   // Handle timeline background right-click
@@ -96,15 +96,11 @@ export function useTimelineContextMenu({
 
       return [
         {
-          label: track.hidden
-            ? t('timeline.track.show')
-            : t('timeline.track.hide'),
+          label: track.hidden ? t('timeline.track.show') : t('timeline.track.hide'),
           onClick: () => onToggleHidden(trackId),
         },
         {
-          label: track.locked
-            ? t('timeline.track.unlock')
-            : t('timeline.track.lock'),
+          label: track.locked ? t('timeline.track.unlock') : t('timeline.track.lock'),
           onClick: () => onToggleLocked(trackId),
         },
         {
@@ -124,7 +120,7 @@ export function useTimelineContextMenu({
         },
       ];
     },
-    [tracks, onToggleMute, onToggleLocked, onToggleHidden, onDeleteTrack, t]
+    [tracks, onToggleMute, onToggleLocked, onToggleHidden, onDeleteTrack, t],
   );
 
   // Generate timeline context menu items

@@ -205,7 +205,7 @@ export interface IContextPersistence {
  */
 export function serializeContextState(
   state: ContextState,
-  sessionId: string
+  sessionId: string,
 ): SerializableContextState {
   const items: Record<ContextLayer, SerializableContextItem[]> = {
     permanent: [],
@@ -251,9 +251,7 @@ export function serializeContextState(
 /**
  * Convert serializable format back to ContextState
  */
-export function deserializeContextState(
-  serialized: SerializableContextState
-): ContextState {
+export function deserializeContextState(serialized: SerializableContextState): ContextState {
   const items = new Map<ContextLayer, ContextItem[]>();
   const usage = new Map<ContextLayer, number>();
 

@@ -13,8 +13,8 @@ export * from './types';
 
 // Diff Viewer
 export {
-	AssetVariantDiffViewer,
-	AttributeDiffPanel,
-	VersionHistoryPanel,
-	AIAnalysisPanel,
+  AssetVariantDiffViewer,
+  AttributeDiffPanel,
+  VersionHistoryPanel,
+  AIAnalysisPanel,
 } from './DiffViewer';

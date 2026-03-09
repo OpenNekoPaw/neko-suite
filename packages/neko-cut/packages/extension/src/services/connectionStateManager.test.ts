@@ -68,7 +68,7 @@ describe('ConnectionStateManager', () => {
       const time1 = state1?.lastChecked;
 
       // 等待一小段时间后再更新
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       manager.updateState('server1', 'Test Server', 'mcp', 'disconnected');
       const state2 = manager.getState('server1', 'mcp');
@@ -106,16 +106,16 @@ describe('ConnectionStateManager', () => {
       const mcpStates = manager.getMCPStates();
 
       expect(mcpStates).toHaveLength(2);
-      expect(mcpStates.map(s => s.id)).toContain('mcp1');
-      expect(mcpStates.map(s => s.id)).toContain('mcp2');
+      expect(mcpStates.map((s) => s.id)).toContain('mcp1');
+      expect(mcpStates.map((s) => s.id)).toContain('mcp2');
     });
 
     it('应该能够获取所有 Workflow 状态', () => {
       const workflowStates = manager.getWorkflowStates();
 
       expect(workflowStates).toHaveLength(2);
-      expect(workflowStates.map(s => s.id)).toContain('wf1');
-      expect(workflowStates.map(s => s.id)).toContain('wf2');
+      expect(workflowStates.map((s) => s.id)).toContain('wf1');
+      expect(workflowStates.map((s) => s.id)).toContain('wf2');
     });
 
     it('应该能够获取所有状态', () => {

@@ -69,12 +69,13 @@ export function FileReferenceMenu({
   // Parse filter to separate file path and line range
   const parsed = parseFileReference(filter);
   const fileFilter = parsed?.file || filter;
-  const hasLineRange = parsed && (parsed.startLine !== undefined);
+  const hasLineRange = parsed && parsed.startLine !== undefined;
 
   const filteredFiles = files
-    .filter(file =>
-      file.path.toLowerCase().includes(fileFilter.toLowerCase()) ||
-      file.name.toLowerCase().includes(fileFilter.toLowerCase())
+    .filter(
+      (file) =>
+        file.path.toLowerCase().includes(fileFilter.toLowerCase()) ||
+        file.name.toLowerCase().includes(fileFilter.toLowerCase()),
     )
     .slice(0, 15);
 
@@ -92,7 +93,8 @@ export function FileReferenceMenu({
             {t('chat.input.filesFound', { filter: fileFilter, count: filteredFiles.length })}
             {hasLineRange && (
               <span className="ml-1 text-[var(--vscode-textLink-foreground)]">
-                (L{parsed?.startLine}{parsed?.endLine ? `-${parsed.endLine}` : ''})
+                (L{parsed?.startLine}
+                {parsed?.endLine ? `-${parsed.endLine}` : ''})
               </span>
             )}
           </>
@@ -104,7 +106,10 @@ export function FileReferenceMenu({
       {/* Line range hint */}
       {filteredFiles.length > 0 && !hasLineRange && (
         <div className="px-3 py-1 text-[9px] text-[var(--vscode-descriptionForeground)] bg-[var(--vscode-textBlockQuote-background)]">
-          💡 {t('chat.input.lineRangeHint', { defaultValue: 'Tip: Use :10-20 for line range (e.g., file.ts:10-20)' })}
+          💡{' '}
+          {t('chat.input.lineRangeHint', {
+            defaultValue: 'Tip: Use :10-20 for line range (e.g., file.ts:10-20)',
+          })}
         </div>
       )}
 
@@ -112,7 +117,11 @@ export function FileReferenceMenu({
         filteredFiles.map((file, index) => (
           <button
             key={file.path}
-            onClick={() => onSelect(hasLineRange ? formatFileReference({ ...parsed!, file: file.path }) : file.path)}
+            onClick={() =>
+              onSelect(
+                hasLineRange ? formatFileReference({ ...parsed!, file: file.path }) : file.path,
+              )
+            }
             className={`w-full px-3 py-1 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors truncate ${
               index === selectedIndex ? 'bg-[var(--vscode-list-hoverBackground)]' : ''
             }`}
@@ -120,7 +129,8 @@ export function FileReferenceMenu({
             <span>{file.path}</span>
             {hasLineRange && (
               <span className="ml-1 text-[var(--vscode-textLink-foreground)]">
-                :{parsed?.startLine}{parsed?.endLine ? `-${parsed.endLine}` : ''}
+                :{parsed?.startLine}
+                {parsed?.endLine ? `-${parsed.endLine}` : ''}
               </span>
             )}
           </button>
@@ -145,9 +155,10 @@ export function getFilteredFiles(files: ProjectFile[], filter: string): ProjectF
   const fileFilter = parsed?.file || filter;
 
   return files
-    .filter(file =>
-      file.path.toLowerCase().includes(fileFilter.toLowerCase()) ||
-      file.name.toLowerCase().includes(fileFilter.toLowerCase())
+    .filter(
+      (file) =>
+        file.path.toLowerCase().includes(fileFilter.toLowerCase()) ||
+        file.name.toLowerCase().includes(fileFilter.toLowerCase()),
     )
     .slice(0, 15);
 }

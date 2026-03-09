@@ -288,7 +288,9 @@ export function invertOperation(op: EditOperation): EditOperation {
                 updates: { trimEnd: splitOp.before.trimEnd },
               },
               before: {
-                updates: { trimEnd: splitOp.payload.rightElement.duration - splitOp.payload.splitPoint },
+                updates: {
+                  trimEnd: splitOp.payload.rightElement.duration - splitOp.payload.splitPoint,
+                },
               },
             } as EditOperation,
           ],

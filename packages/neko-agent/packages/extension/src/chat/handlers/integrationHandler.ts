@@ -25,7 +25,14 @@ export class IntegrationHandler {
 
   async handleTestMCPServer(
     webview: vscode.Webview,
-    server: { id: string; name: string; command: string; args?: string[]; env?: Record<string, string>; requestId?: string }
+    server: {
+      id: string;
+      name: string;
+      command: string;
+      args?: string[];
+      env?: Record<string, string>;
+      requestId?: string;
+    },
   ): Promise<void> {
     const requestId = server.requestId || `mcp-test-${Date.now()}`;
 
@@ -76,9 +83,12 @@ export class IntegrationHandler {
       placeHolder: 'e.g., /path/to/allowed/dir',
     });
 
-    const args = argsInput ? argsInput.split(',').map(s => s.trim()) : [];
+    const args = argsInput ? argsInput.split(',').map((s) => s.trim()) : [];
 
-    const mcpServers = this.deps.context.globalState.get<Record<string, any>>('neko.mcpServers', {});
+    const mcpServers = this.deps.context.globalState.get<Record<string, any>>(
+      'neko.mcpServers',
+      {},
+    );
     mcpServers[serverName] = { command, args };
     await this.deps.context.globalState.update('neko.mcpServers', mcpServers);
 

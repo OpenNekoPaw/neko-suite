@@ -12,7 +12,11 @@ import type { EditorElement } from '../../types/editor-types';
 import { getLogger } from '../../utils/logger';
 
 const logger = getLogger('Keyframe');
-import type { AnimatableProperty, AnimationKeyframe, ElementTransform } from '../../types/animation';
+import type {
+  AnimatableProperty,
+  AnimationKeyframe,
+  ElementTransform,
+} from '../../types/animation';
 import type { EffectParameterKeyframe } from '../../types/effects';
 import type {
   MaskShape,
@@ -22,10 +26,7 @@ import type {
 } from '../../types/mask';
 import type { EditOperation } from '@neko/shared';
 import { createDefaultElementTransform } from '../../types/animation';
-import {
-  createMaskPropertyKeyframe,
-  createMaskShapeKeyframe,
-} from '../../types/mask';
+import { createMaskPropertyKeyframe, createMaskShapeKeyframe } from '../../types/mask';
 import { generateId } from '../../utils';
 import { createMeta } from '../utils/operation-helpers';
 
@@ -47,21 +48,93 @@ interface DispatchDependency {
 
 export interface KeyframeSlice {
   // Transform / Audio keyframe actions
-  addKeyframe: (trackId: string, elementId: string, property: string, time: number, value: number) => void;
+  addKeyframe: (
+    trackId: string,
+    elementId: string,
+    property: string,
+    time: number,
+    value: number,
+  ) => void;
   removeKeyframe: (trackId: string, elementId: string, property: string, time: number) => void;
-  updateKeyframe: (trackId: string, elementId: string, property: string, oldTime: number, newTime: number, newValue: number) => void;
+  updateKeyframe: (
+    trackId: string,
+    elementId: string,
+    property: string,
+    oldTime: number,
+    newTime: number,
+    newValue: number,
+  ) => void;
   // Effect keyframe actions
-  addEffectKeyframe: (trackId: string, elementId: string, effectId: string, paramKey: string, time: number, value: any) => void;
-  removeEffectKeyframe: (trackId: string, elementId: string, effectId: string, paramKey: string, keyframeId: string) => void;
-  updateEffectKeyframe: (trackId: string, elementId: string, effectId: string, paramKey: string, keyframeId: string, updates: Partial<EffectParameterKeyframe>) => void;
+  addEffectKeyframe: (
+    trackId: string,
+    elementId: string,
+    effectId: string,
+    paramKey: string,
+    time: number,
+    value: any,
+  ) => void;
+  removeEffectKeyframe: (
+    trackId: string,
+    elementId: string,
+    effectId: string,
+    paramKey: string,
+    keyframeId: string,
+  ) => void;
+  updateEffectKeyframe: (
+    trackId: string,
+    elementId: string,
+    effectId: string,
+    paramKey: string,
+    keyframeId: string,
+    updates: Partial<EffectParameterKeyframe>,
+  ) => void;
   // Mask property keyframe actions
-  addMaskPropertyKeyframe: (trackId: string, elementId: string, maskId: string, property: 'feather' | 'expansion' | 'opacity', time: number, value: number, easing?: MaskEasingType) => void;
-  removeMaskPropertyKeyframe: (trackId: string, elementId: string, maskId: string, property: 'feather' | 'expansion' | 'opacity', keyframeId: string) => void;
-  updateMaskPropertyKeyframe: (trackId: string, elementId: string, maskId: string, property: 'feather' | 'expansion' | 'opacity', keyframeId: string, updates: Partial<MaskPropertyKeyframe>) => void;
+  addMaskPropertyKeyframe: (
+    trackId: string,
+    elementId: string,
+    maskId: string,
+    property: 'feather' | 'expansion' | 'opacity',
+    time: number,
+    value: number,
+    easing?: MaskEasingType,
+  ) => void;
+  removeMaskPropertyKeyframe: (
+    trackId: string,
+    elementId: string,
+    maskId: string,
+    property: 'feather' | 'expansion' | 'opacity',
+    keyframeId: string,
+  ) => void;
+  updateMaskPropertyKeyframe: (
+    trackId: string,
+    elementId: string,
+    maskId: string,
+    property: 'feather' | 'expansion' | 'opacity',
+    keyframeId: string,
+    updates: Partial<MaskPropertyKeyframe>,
+  ) => void;
   // Mask shape keyframe actions
-  addMaskShapeKeyframe: (trackId: string, elementId: string, maskId: string, time: number, shape: MaskShape, easing?: MaskEasingType) => void;
-  removeMaskShapeKeyframe: (trackId: string, elementId: string, maskId: string, keyframeId: string) => void;
-  updateMaskShapeKeyframe: (trackId: string, elementId: string, maskId: string, keyframeId: string, updates: Partial<MaskShapeKeyframe>) => void;
+  addMaskShapeKeyframe: (
+    trackId: string,
+    elementId: string,
+    maskId: string,
+    time: number,
+    shape: MaskShape,
+    easing?: MaskEasingType,
+  ) => void;
+  removeMaskShapeKeyframe: (
+    trackId: string,
+    elementId: string,
+    maskId: string,
+    keyframeId: string,
+  ) => void;
+  updateMaskShapeKeyframe: (
+    trackId: string,
+    elementId: string,
+    maskId: string,
+    keyframeId: string,
+    updates: Partial<MaskShapeKeyframe>,
+  ) => void;
 }
 
 // =============================================================================
@@ -95,7 +168,7 @@ function findAnimatableProperty(
     const animTransform = element.animTransform;
     if (!animTransform) return null;
     const prop = animTransform[propKey as keyof ElementTransform] as AnimatableProperty;
-    return (prop && typeof prop === 'object' && 'baseValue' in prop) ? prop : null;
+    return prop && typeof prop === 'object' && 'baseValue' in prop ? prop : null;
   }
 
   return null;
@@ -111,7 +184,6 @@ export const createKeyframeSlice: StateCreator<
   [],
   KeyframeSlice
 > = (_set, get) => ({
-
   // =========================================================================
   // Transform / Audio Keyframe Actions
   // =========================================================================
@@ -120,8 +192,8 @@ export const createKeyframeSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId) as EditorElement | undefined;
     if (!element) return;
 
     const { rootKey, propKey } = parsePropertyPath(property);
@@ -163,8 +235,8 @@ export const createKeyframeSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId) as EditorElement | undefined;
     if (!element) return;
 
     const { rootKey } = parsePropertyPath(property);
@@ -174,7 +246,7 @@ export const createKeyframeSlice: StateCreator<
     if (!animProp) return;
 
     // Find keyframe to remove (for before data)
-    const existingKeyframe = animProp.keyframes.find(kf => Math.abs(kf.time - time) <= 0.01);
+    const existingKeyframe = animProp.keyframes.find((kf) => Math.abs(kf.time - time) <= 0.01);
     if (!existingKeyframe) return;
 
     dispatch({
@@ -198,8 +270,8 @@ export const createKeyframeSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId) as EditorElement | undefined;
     if (!element) return;
 
     const { rootKey } = parsePropertyPath(property);
@@ -209,7 +281,7 @@ export const createKeyframeSlice: StateCreator<
     if (!animProp) return;
 
     // Find existing keyframe
-    const oldKeyframe = animProp.keyframes.find(kf => Math.abs(kf.time - oldTime) <= 0.01);
+    const oldKeyframe = animProp.keyframes.find((kf) => Math.abs(kf.time - oldTime) <= 0.01);
     if (!oldKeyframe) return;
 
     const updates = { time: newTime, value: newValue };
@@ -238,11 +310,11 @@ export const createKeyframeSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.effects) return;
 
-    if (!element.effects.some(e => e.id === effectId)) return;
+    if (!element.effects.some((e) => e.id === effectId)) return;
 
     const newKeyframe: EffectParameterKeyframe = {
       id: generateId(),
@@ -267,17 +339,17 @@ export const createKeyframeSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.effects) return;
 
-    const effect = element.effects.find(e => e.id === effectId);
+    const effect = element.effects.find((e) => e.id === effectId);
     if (!effect) return;
 
     const animParam = effect.animatedParameters?.[paramKey];
     if (!animParam) return;
 
-    const keyframe = animParam.keyframes.find(kf => kf.id === keyframeId);
+    const keyframe = animParam.keyframes.find((kf) => kf.id === keyframeId);
     if (!keyframe) return;
 
     dispatch({
@@ -301,17 +373,17 @@ export const createKeyframeSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.effects) return;
 
-    const effect = element.effects.find(e => e.id === effectId);
+    const effect = element.effects.find((e) => e.id === effectId);
     if (!effect) return;
 
     const animParam = effect.animatedParameters?.[paramKey];
     if (!animParam) return;
 
-    const keyframe = animParam.keyframes.find(kf => kf.id === keyframeId);
+    const keyframe = animParam.keyframes.find((kf) => kf.id === keyframeId);
     if (!keyframe) return;
 
     // Build before from existing keyframe
@@ -339,15 +411,23 @@ export const createKeyframeSlice: StateCreator<
   // Mask Property Keyframe Actions
   // =========================================================================
 
-  addMaskPropertyKeyframe: (trackId, elementId, maskId, property, time, value, easing = 'linear') => {
+  addMaskPropertyKeyframe: (
+    trackId,
+    elementId,
+    maskId,
+    property,
+    time,
+    value,
+    easing = 'linear',
+  ) => {
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.masks) return;
 
-    if (!element.masks.some(m => m.id === maskId)) return;
+    if (!element.masks.some((m) => m.id === maskId)) return;
 
     const newKeyframe = createMaskPropertyKeyframe(time, value, easing);
 
@@ -367,17 +447,17 @@ export const createKeyframeSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.masks) return;
 
-    const mask = element.masks.find(m => m.id === maskId);
+    const mask = element.masks.find((m) => m.id === maskId);
     if (!mask) return;
 
     const animProp = mask.animation?.[property];
     if (!animProp) return;
 
-    const keyframe = animProp.keyframes.find(kf => kf.id === keyframeId);
+    const keyframe = animProp.keyframes.find((kf) => kf.id === keyframeId);
     if (!keyframe) return;
 
     dispatch({
@@ -401,17 +481,17 @@ export const createKeyframeSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.masks) return;
 
-    const mask = element.masks.find(m => m.id === maskId);
+    const mask = element.masks.find((m) => m.id === maskId);
     if (!mask) return;
 
     const animProp = mask.animation?.[property];
     if (!animProp) return;
 
-    const keyframe = animProp.keyframes.find(kf => kf.id === keyframeId);
+    const keyframe = animProp.keyframes.find((kf) => kf.id === keyframeId);
     if (!keyframe) return;
 
     const beforeUpdates: Record<string, unknown> = {};
@@ -442,11 +522,11 @@ export const createKeyframeSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.masks) return;
 
-    if (!element.masks.some(m => m.id === maskId)) return;
+    if (!element.masks.some((m) => m.id === maskId)) return;
 
     const newKeyframe = createMaskShapeKeyframe(time, shape, easing);
 
@@ -466,17 +546,17 @@ export const createKeyframeSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.masks) return;
 
-    const mask = element.masks.find(m => m.id === maskId);
+    const mask = element.masks.find((m) => m.id === maskId);
     if (!mask) return;
 
     const shapeKeyframes = mask.animation?.shapeKeyframes;
     if (!shapeKeyframes) return;
 
-    const keyframe = shapeKeyframes.find(kf => kf.id === keyframeId);
+    const keyframe = shapeKeyframes.find((kf) => kf.id === keyframeId);
     if (!keyframe) return;
 
     dispatch({
@@ -500,17 +580,17 @@ export const createKeyframeSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId) as EditorElement | undefined;
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId) as EditorElement | undefined;
     if (!element || !element.masks) return;
 
-    const mask = element.masks.find(m => m.id === maskId);
+    const mask = element.masks.find((m) => m.id === maskId);
     if (!mask) return;
 
     const shapeKeyframes = mask.animation?.shapeKeyframes;
     if (!shapeKeyframes) return;
 
-    const keyframe = shapeKeyframes.find(kf => kf.id === keyframeId);
+    const keyframe = shapeKeyframes.find((kf) => kf.id === keyframeId);
     if (!keyframe) return;
 
     const beforeUpdates: Record<string, unknown> = {};

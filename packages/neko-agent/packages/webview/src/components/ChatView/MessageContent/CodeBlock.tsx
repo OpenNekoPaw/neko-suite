@@ -58,11 +58,7 @@ export function CodeBlock({ code, language = 'text', showLineNumbers = false }: 
       </div>
 
       {/* Code content with syntax highlighting */}
-      <Highlight
-        theme={themes.vsDark}
-        code={code.trim()}
-        language={normalizedLanguage}
-      >
+      <Highlight theme={themes.vsDark} code={code.trim()} language={normalizedLanguage}>
         {({ className, style, tokens, getLineProps, getTokenProps }) => (
           <pre
             className={`${className} overflow-x-auto p-3 m-0 text-[12px] leading-relaxed w-full`}
@@ -111,12 +107,7 @@ function CopyIcon({ className }: { className?: string }) {
 function CheckIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M5 13l4 4L19 7"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
     </svg>
   );
 }

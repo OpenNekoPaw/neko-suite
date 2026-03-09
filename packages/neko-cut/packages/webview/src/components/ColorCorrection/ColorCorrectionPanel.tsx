@@ -84,43 +84,55 @@ export const ColorCorrectionPanel = memo(function ColorCorrectionPanel({
   }, [onChange]);
 
   // Handle preset selection
-  const handlePresetSelect = useCallback((presetKey: string) => {
-    const preset = COLOR_CORRECTION_PRESETS[presetKey];
-    if (preset) {
-      onChange({
-        ...createDefaultColorCorrection(),
-        ...preset,
-        enabled: true,
-      });
-    }
-  }, [onChange]);
+  const handlePresetSelect = useCallback(
+    (presetKey: string) => {
+      const preset = COLOR_CORRECTION_PRESETS[presetKey];
+      if (preset) {
+        onChange({
+          ...createDefaultColorCorrection(),
+          ...preset,
+          enabled: true,
+        });
+      }
+    },
+    [onChange],
+  );
 
   // Handle basic adjustment change
-  const handleBasicChange = useCallback((basic: BasicColorAdjustment) => {
-    onChange({
-      ...cc,
-      basic,
-    });
-  }, [cc, onChange]);
+  const handleBasicChange = useCallback(
+    (basic: BasicColorAdjustment) => {
+      onChange({
+        ...cc,
+        basic,
+      });
+    },
+    [cc, onChange],
+  );
 
   // Handle curves change
-  const handleCurvesChange = useCallback((curves: ColorCorrection['curves']) => {
-    onChange({
-      ...cc,
-      curves,
-    });
-  }, [cc, onChange]);
+  const handleCurvesChange = useCallback(
+    (curves: ColorCorrection['curves']) => {
+      onChange({
+        ...cc,
+        curves,
+      });
+    },
+    [cc, onChange],
+  );
 
   // Handle color wheels change
-  const handleColorWheelsChange = useCallback((wheel: 'shadows' | 'midtones' | 'highlights' | 'global', settings: ColorWheelValue) => {
-    onChange({
-      ...cc,
-      colorWheels: {
-        ...cc.colorWheels,
-        [wheel]: settings,
-      },
-    });
-  }, [cc, onChange]);
+  const handleColorWheelsChange = useCallback(
+    (wheel: 'shadows' | 'midtones' | 'highlights' | 'global', settings: ColorWheelValue) => {
+      onChange({
+        ...cc,
+        colorWheels: {
+          ...cc.colorWheels,
+          [wheel]: settings,
+        },
+      });
+    },
+    [cc, onChange],
+  );
 
   return (
     <div className="space-y-2">
@@ -181,22 +193,11 @@ export const ColorCorrectionPanel = memo(function ColorCorrectionPanel({
       {/* Tab Content */}
       <div className="pt-1">
         {activeTab === 'basic' && (
-          <BasicAdjustments
-            basic={cc.basic}
-            onChange={handleBasicChange}
-          />
+          <BasicAdjustments basic={cc.basic} onChange={handleBasicChange} />
         )}
-        {activeTab === 'curves' && (
-          <CurvesPanel
-            curves={cc.curves}
-            onChange={handleCurvesChange}
-          />
-        )}
+        {activeTab === 'curves' && <CurvesPanel curves={cc.curves} onChange={handleCurvesChange} />}
         {activeTab === 'colorWheels' && (
-          <ColorWheelsPanel
-            colorWheels={cc.colorWheels}
-            onChange={handleColorWheelsChange}
-          />
+          <ColorWheelsPanel colorWheels={cc.colorWheels} onChange={handleColorWheelsChange} />
         )}
       </div>
     </div>

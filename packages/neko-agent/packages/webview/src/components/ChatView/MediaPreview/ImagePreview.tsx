@@ -33,7 +33,14 @@ function getFileName(src: string, name?: string): string {
   }
 }
 
-function ImagePreviewComponent({ src, alt = '', name, className, localPath, inline = false }: ImagePreviewProps) {
+function ImagePreviewComponent({
+  src,
+  alt = '',
+  name,
+  className,
+  localPath,
+  inline = false,
+}: ImagePreviewProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -50,7 +57,7 @@ function ImagePreviewComponent({ src, alt = '', name, className, localPath, inli
   }, []);
 
   const toggleExpand = useCallback(() => {
-    setIsExpanded(prev => !prev);
+    setIsExpanded((prev) => !prev);
   }, []);
 
   // Open file in VSCode or system default
@@ -100,9 +107,11 @@ function ImagePreviewComponent({ src, alt = '', name, className, localPath, inli
       {/* Compact header - matches ToolCallDisplay style */}
       <div
         className={`flex items-center gap-1.5 px-2 py-1 rounded-t text-[11px] cursor-pointer transition-colors
-          ${hasError
-            ? 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#ef4444)]'
-            : 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#22c55e)]'}
+          ${
+            hasError
+              ? 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#ef4444)]'
+              : 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#22c55e)]'
+          }
           hover:bg-[var(--vscode-list-hoverBackground)]
           ${!isExpanded ? 'rounded-b' : ''}
         `}
@@ -136,7 +145,9 @@ function ImagePreviewComponent({ src, alt = '', name, className, localPath, inli
         )}
 
         {/* Expand indicator */}
-        <ChevronIcon className={`w-3 h-3 text-[var(--vscode-descriptionForeground)] transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+        <ChevronIcon
+          className={`w-3 h-3 text-[var(--vscode-descriptionForeground)] transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+        />
       </div>
 
       {/* Expanded content */}
@@ -176,7 +187,12 @@ export const ImagePreview = memo(ImagePreviewComponent);
 function ImageIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+      />
     </svg>
   );
 }
@@ -200,16 +216,29 @@ function ChevronIcon({ className }: { className?: string }) {
 function OpenIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+      />
     </svg>
   );
 }
 
 function LoadingSpinner({ className }: { className?: string }) {
   return (
-    <svg className={`${className} animate-spin text-[var(--vscode-foreground)]`} fill="none" viewBox="0 0 24 24">
+    <svg
+      className={`${className} animate-spin text-[var(--vscode-foreground)]`}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
     </svg>
   );
 }

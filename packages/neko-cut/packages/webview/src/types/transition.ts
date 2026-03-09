@@ -39,8 +39,8 @@ import type {
  * Aligned with engine's 18 transition types
  */
 export const TRANSITION_TYPE_I18N_KEYS: Record<TransitionType, string> = {
-  'fade': 'transition.type.fade',
-  'dissolve': 'transition.type.dissolve',
+  fade: 'transition.type.fade',
+  dissolve: 'transition.type.dissolve',
   'wipe-left': 'transition.type.wipeLeft',
   'wipe-right': 'transition.type.wipeRight',
   'wipe-up': 'transition.type.wipeUp',
@@ -51,12 +51,12 @@ export const TRANSITION_TYPE_I18N_KEYS: Record<TransitionType, string> = {
   'zoom-out': 'transition.type.zoomOut',
   'iris-circle': 'transition.type.irisCircle',
   'iris-rectangle': 'transition.type.irisRectangle',
-  'clock': 'transition.type.clock',
-  'pixelate': 'transition.type.pixelate',
-  'ripple': 'transition.type.ripple',
-  'swirl': 'transition.type.swirl',
-  'glitch': 'transition.type.glitch',
-  'flash': 'transition.type.flash',
+  clock: 'transition.type.clock',
+  pixelate: 'transition.type.pixelate',
+  ripple: 'transition.type.ripple',
+  swirl: 'transition.type.swirl',
+  glitch: 'transition.type.glitch',
+  flash: 'transition.type.flash',
 };
 
 /**
@@ -64,8 +64,8 @@ export const TRANSITION_TYPE_I18N_KEYS: Record<TransitionType, string> = {
  * Aligned with engine's 18 transition types
  */
 export const TRANSITION_ICONS: Record<TransitionType, string> = {
-  'fade': '◐',
-  'dissolve': '◑',
+  fade: '◐',
+  dissolve: '◑',
   'wipe-left': '▌',
   'wipe-right': '▐',
   'wipe-up': '▀',
@@ -76,12 +76,12 @@ export const TRANSITION_ICONS: Record<TransitionType, string> = {
   'zoom-out': '⊖',
   'iris-circle': '◎',
   'iris-rectangle': '▣',
-  'clock': '◷',
-  'pixelate': '▦',
-  'ripple': '◉',
-  'swirl': '🌀',
-  'glitch': '⚡',
-  'flash': '☀',
+  clock: '◷',
+  pixelate: '▦',
+  ripple: '◉',
+  swirl: '🌀',
+  glitch: '⚡',
+  flash: '☀',
 };
 
 // =============================================================================
@@ -253,7 +253,7 @@ export const TRANSITION_PRESETS: TransitionPreset[] = [
 export function createTransition(
   type: TransitionType = 'fade',
   duration: number = 0.5,
-  easing: EasingType = 'ease-in-out'
+  easing: EasingType = 'ease-in-out',
 ): Transition {
   return {
     id: `tr-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -270,7 +270,7 @@ export function createElementTransition(
   fromElementId: string,
   toElementId: string,
   transition: Transition,
-  placement: TransitionPlacement = 'overlap'
+  placement: TransitionPlacement = 'overlap',
 ) {
   return {
     id: `etr-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -309,10 +309,9 @@ export function getTransitionIcon(type: TransitionType): string {
  * Check if a transition type is directional
  */
 export function isDirectionalTransition(type: TransitionType): boolean {
-  return [
-    'slide-left', 'slide-right',
-    'wipe-left', 'wipe-right', 'wipe-up', 'wipe-down',
-  ].includes(type);
+  return ['slide-left', 'slide-right', 'wipe-left', 'wipe-right', 'wipe-up', 'wipe-down'].includes(
+    type,
+  );
 }
 
 /**
@@ -337,14 +336,7 @@ export function getOppositeTransition(type: TransitionType): TransitionType {
 /**
  * Get transition category
  */
-export type TransitionCategory =
-  | 'basic'
-  | 'slide'
-  | 'zoom'
-  | 'wipe'
-  | 'iris'
-  | 'clock'
-  | 'special';
+export type TransitionCategory = 'basic' | 'slide' | 'zoom' | 'wipe' | 'iris' | 'clock' | 'special';
 
 export function getTransitionCategory(type: TransitionType): TransitionCategory {
   if (['fade', 'dissolve'].includes(type)) return 'basic';

@@ -70,10 +70,7 @@ export function Timeline() {
   // Calculate derived values
   const tracks = project?.tracks || [];
   const totalDuration = getTotalDuration();
-  const timelineWidth = Math.max(
-    (totalDuration + 10) * PIXELS_PER_SECOND * zoomLevel,
-    800
-  );
+  const timelineWidth = Math.max((totalDuration + 10) * PIXELS_PER_SECOND * zoomLevel, 800);
 
   // ==================== Custom Hooks ====================
 
@@ -169,10 +166,7 @@ export function Timeline() {
     addTrack,
     // Read live store state instead of the stale React-closure snapshot.
     // Required to prevent duplicate track creation across multi-file drops.
-    getCurrentTracks: useCallback(
-      () => useEditorStore.getState().project?.tracks ?? [],
-      []
-    ),
+    getCurrentTracks: useCallback(() => useEditorStore.getState().project?.tracks ?? [], []),
     onError: (message) => showToast(message, 'error'),
   });
 
@@ -191,16 +185,19 @@ export function Timeline() {
   // ==================== Event Handlers ====================
 
   // Timeline click handler
-  const handleTimelineClick = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('.timeline-element')) return;
+  const handleTimelineClick = useCallback(
+    (e: React.MouseEvent) => {
+      if ((e.target as HTMLElement).closest('.timeline-element')) return;
 
-    const rect = tracksRef.current?.getBoundingClientRect();
-    if (!rect) return;
+      const rect = tracksRef.current?.getBoundingClientRect();
+      if (!rect) return;
 
-    const x = e.clientX - rect.left + (tracksRef.current?.scrollLeft || 0) - TRACK_LABEL_WIDTH;
-    const time = x / (PIXELS_PER_SECOND * zoomLevel);
-    seek(Math.max(0, Math.min(totalDuration, time)));
-  }, [zoomLevel, seek, totalDuration]);
+      const x = e.clientX - rect.left + (tracksRef.current?.scrollLeft || 0) - TRACK_LABEL_WIDTH;
+      const time = x / (PIXELS_PER_SECOND * zoomLevel);
+      seek(Math.max(0, Math.min(totalDuration, time)));
+    },
+    [zoomLevel, seek, totalDuration],
+  );
 
   // ==================== Render ====================
 

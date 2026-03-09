@@ -84,8 +84,8 @@ export function UsageIndicator({
           isCompressing
             ? 'opacity-50 cursor-wait'
             : onCompress
-            ? 'hover:bg-[var(--vscode-toolbar-hoverBackground)] cursor-pointer'
-            : 'cursor-default'
+              ? 'hover:bg-[var(--vscode-toolbar-hoverBackground)] cursor-pointer'
+              : 'cursor-default'
         }`}
         title={t('chat.usage.clickToCompress')}
       >

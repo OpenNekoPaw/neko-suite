@@ -6,10 +6,7 @@
  * as they are unnecessary for a single-user desktop application.
  */
 
-import type {
-  ChatMessage,
-  ChatOptions,
-} from '../types/adapter';
+import type { ChatMessage, ChatOptions } from '../types/adapter';
 import type {
   ServiceOptions,
   ServiceResponse,
@@ -74,7 +71,7 @@ export class Service implements IService {
   private resolveRouting(
     modelId?: string,
     excludeModels: string[] = [],
-    taskType: 'chat' | 'embedding' = 'chat'
+    taskType: 'chat' | 'embedding' = 'chat',
   ): RoutingResult {
     return this.selector.resolve(taskType, { modelId, excludeModels });
   }
@@ -122,7 +119,7 @@ export class Service implements IService {
    */
   private buildResponseMeta(
     routing: RoutingResult,
-    startTime: number
+    startTime: number,
   ): { routing: ServiceResponse['routing']; timing: ServiceResponse['timing'] } {
     const endTime = Date.now();
     return {
@@ -146,10 +143,7 @@ export class Service implements IService {
   /**
    * Send a chat request
    */
-  async chat(
-    messages: ChatMessage[],
-    options: ServiceOptions = {}
-  ): Promise<ServiceResponse> {
+  async chat(messages: ChatMessage[], options: ServiceOptions = {}): Promise<ServiceResponse> {
     const startTime = Date.now();
     const routing = this.resolveRouting(options.modelId, [], 'chat');
     const { model, provider, adapter } = this.resolveResources(routing);
@@ -162,10 +156,7 @@ export class Service implements IService {
   /**
    * Send a streaming chat request
    */
-  chatStream(
-    messages: ChatMessage[],
-    options: ServiceOptions = {}
-  ): ServiceStreamResponse {
+  chatStream(messages: ChatMessage[], options: ServiceOptions = {}): ServiceStreamResponse {
     const startTime = Date.now();
     const routing = this.resolveRouting(options.modelId, [], 'chat');
     const { model, provider, adapter } = this.resolveResources(routing);
@@ -193,7 +184,7 @@ export class Service implements IService {
    */
   async embed(
     input: string | string[],
-    options: EmbeddingOptions = {}
+    options: EmbeddingOptions = {},
   ): Promise<EmbeddingResponse> {
     const routing = this.resolveRouting(options.modelId, [], 'embedding');
     const { model, provider, adapter } = this.resolveResources(routing);
@@ -236,7 +227,7 @@ export class Service implements IService {
    * List available models with detailed capability information
    */
   async listProviderModelsDetailed(
-    providerId: string
+    providerId: string,
   ): Promise<import('../types/adapter').ModelInfo[]> {
     const provider = this.config.configManager.getProvider(providerId);
     if (!provider) {
@@ -297,7 +288,7 @@ export class Service implements IService {
    */
   async validateProviderApiKey(
     providerId: string,
-    modelId?: string
+    modelId?: string,
   ): Promise<{ valid: boolean; error?: string }> {
     const provider = this.config.configManager.getProvider(providerId);
     if (!provider) {
@@ -357,7 +348,7 @@ export class Service implements IService {
    */
   private async *withStreamTimeout<T>(
     stream: AsyncIterable<T>,
-    timeoutMs: number
+    timeoutMs: number,
   ): AsyncIterable<T> {
     let lastChunkTime = Date.now();
 

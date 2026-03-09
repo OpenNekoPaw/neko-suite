@@ -16,7 +16,10 @@ import type {
 import type { BackgroundTask } from '@/components/TaskListView';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
 import type { SkillSummary } from '@/components/ChatView/InputArea/types';
-import type { SkillConfirmRequest, ActiveSkillIndicator } from '@/components/ChatView/SkillConfirmBanner';
+import type {
+  SkillConfirmRequest,
+  ActiveSkillIndicator,
+} from '@/components/ChatView/SkillConfirmBanner';
 
 /** Skill confirm request bound to a specific conversation */
 export interface BoundSkillConfirmRequest extends SkillConfirmRequest {
@@ -41,7 +44,7 @@ export interface StreamingState {
  */
 export type NonCurrentConversationUpdater = (
   messages: Message[],
-  streaming: StreamingState
+  streaming: StreamingState,
 ) => { messages: Message[]; streaming: StreamingState };
 
 // =============================================================================
@@ -106,7 +109,7 @@ export interface HelperContext {
   isCurrentConversation: (conversationId?: string) => boolean;
   updateNonCurrentConversation: (
     conversationId: string,
-    updater: NonCurrentConversationUpdater
+    updater: NonCurrentConversationUpdater,
   ) => void;
 }
 
@@ -120,15 +123,16 @@ export interface HelperContext {
  * Composed from semantic sub-interfaces so individual handlers can
  * reference only the subset they need (e.g., `ChatStateContext & ConversationRefContext`).
  */
-export interface MessageHandlerContext extends
-  ChatStateContext,
-  ConversationRefContext,
-  TabContext,
-  SettingsContext,
-  AgentStateContext,
-  SkillContext,
-  ContextManagementContext,
-  HelperContext {
+export interface MessageHandlerContext
+  extends
+    ChatStateContext,
+    ConversationRefContext,
+    TabContext,
+    SettingsContext,
+    AgentStateContext,
+    SkillContext,
+    ContextManagementContext,
+    HelperContext {
   // Conversation list management
   setConversations: React.Dispatch<React.SetStateAction<ConversationSummary[]>>;
   setActiveConversationId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -148,7 +152,7 @@ export interface MessageHandlerContext extends
 export type MessageHandler = (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   message: any,
-  context: MessageHandlerContext
+  context: MessageHandlerContext,
 ) => void;
 
 /**

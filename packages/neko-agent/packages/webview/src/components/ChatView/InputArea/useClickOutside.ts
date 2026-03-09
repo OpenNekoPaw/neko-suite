@@ -5,10 +5,7 @@
 
 import { useEffect, RefObject } from 'react';
 
-export function useClickOutside(
-  refs: RefObject<HTMLElement>[],
-  handlers: (() => void)[]
-) {
+export function useClickOutside(refs: RefObject<HTMLElement>[], handlers: (() => void)[]) {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       refs.forEach((ref, index) => {
@@ -24,10 +21,7 @@ export function useClickOutside(
 }
 
 // Simpler version for single ref
-export function useClickOutsideSingle(
-  ref: RefObject<HTMLElement>,
-  handler: () => void
-) {
+export function useClickOutsideSingle(ref: RefObject<HTMLElement>, handler: () => void) {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) {

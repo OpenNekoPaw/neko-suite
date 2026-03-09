@@ -95,9 +95,7 @@ export class SkillHandler {
       const allSkills = skillService.registry.listSkills();
 
       // Convert to SkillSummary format for UI
-      const summaries: SkillSummary[] = allSkills.map((skill: Skill) =>
-        toSkillSummary(skill)
-      );
+      const summaries: SkillSummary[] = allSkills.map((skill: Skill) => toSkillSummary(skill));
 
       webview.postMessage({ type: 'skillsList', skills: summaries });
     } catch (error) {
@@ -123,7 +121,7 @@ export class SkillHandler {
   handleSlashCommand(
     webview: vscode.Webview,
     command: string,
-    args?: string
+    args?: string,
   ): SkillApplicationResult | null {
     const { skillService } = this._deps;
     if (!skillService) {
@@ -222,7 +220,7 @@ export class SkillHandler {
   handleExecuteSkill(
     webview: vscode.Webview,
     skillId: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
   ): SkillApplicationResult | null {
     const { skillService } = this._deps;
     if (!skillService) {
@@ -277,7 +275,7 @@ export class SkillHandler {
   private _sendSkillInjection(
     webview: vscode.Webview,
     injection: SkillInjection,
-    skill?: Skill
+    skill?: Skill,
   ): void {
     const message: SkillInjectionMessage = {
       type: 'skillInjection',
@@ -290,5 +288,4 @@ export class SkillHandler {
 
     webview.postMessage(message);
   }
-
 }

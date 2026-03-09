@@ -61,9 +61,7 @@ interface SimilarityBadgeProps {
   similarity: number;
 }
 
-const SimilarityBadge = memo(function SimilarityBadge({
-  similarity,
-}: SimilarityBadgeProps) {
+const SimilarityBadge = memo(function SimilarityBadge({ similarity }: SimilarityBadgeProps) {
   const percentage = Math.round(similarity * 100);
 
   // Color based on similarity
@@ -74,12 +72,8 @@ const SimilarityBadge = memo(function SimilarityBadge({
 
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--vscode-input-background)] rounded">
-      <span className="text-xs text-[var(--vscode-descriptionForeground)]">
-        Similarity:
-      </span>
-      <span className={`text-sm font-bold ${colorClass}`}>
-        {percentage}%
-      </span>
+      <span className="text-xs text-[var(--vscode-descriptionForeground)]">Similarity:</span>
+      <span className={`text-sm font-bold ${colorClass}`}>{percentage}%</span>
     </div>
   );
 });

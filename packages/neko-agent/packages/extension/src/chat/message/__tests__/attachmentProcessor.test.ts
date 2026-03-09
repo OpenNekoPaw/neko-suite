@@ -47,11 +47,13 @@ describe('AttachmentProcessor', () => {
     });
 
     it('should process image attachment with base64 preview', async () => {
-      const attachments = [{
-        type: 'image' as const,
-        name: 'photo.png',
-        preview: 'data:image/png;base64,iVBORw0KGgoAAAANS',
-      }];
+      const attachments = [
+        {
+          type: 'image' as const,
+          name: 'photo.png',
+          preview: 'data:image/png;base64,iVBORw0KGgoAAAANS',
+        },
+      ];
 
       const result = await processor.processAttachments(attachments);
 
@@ -67,11 +69,13 @@ describe('AttachmentProcessor', () => {
       const mockBuffer = Buffer.from('fake-image-data');
       vi.mocked(fs.promises.readFile).mockResolvedValue(mockBuffer);
 
-      const attachments = [{
-        type: 'image' as const,
-        name: 'photo.jpg',
-        path: '/tmp/photo.jpg',
-      }];
+      const attachments = [
+        {
+          type: 'image' as const,
+          name: 'photo.jpg',
+          path: '/tmp/photo.jpg',
+        },
+      ];
 
       const result = await processor.processAttachments(attachments);
 
@@ -87,11 +91,13 @@ describe('AttachmentProcessor', () => {
     it('should handle image read failure gracefully', async () => {
       vi.mocked(fs.promises.readFile).mockRejectedValue(new Error('ENOENT'));
 
-      const attachments = [{
-        type: 'image' as const,
-        name: 'missing.png',
-        path: '/tmp/missing.png',
-      }];
+      const attachments = [
+        {
+          type: 'image' as const,
+          name: 'missing.png',
+          path: '/tmp/missing.png',
+        },
+      ];
 
       const result = await processor.processAttachments(attachments);
 
@@ -101,11 +107,13 @@ describe('AttachmentProcessor', () => {
     it('should process file attachment by reading content', async () => {
       vi.mocked(fs.promises.readFile).mockResolvedValue('const x = 1;' as any);
 
-      const attachments = [{
-        type: 'file' as const,
-        name: 'code.ts',
-        path: '/tmp/code.ts',
-      }];
+      const attachments = [
+        {
+          type: 'file' as const,
+          name: 'code.ts',
+          path: '/tmp/code.ts',
+        },
+      ];
 
       const result = await processor.processAttachments(attachments);
 
@@ -116,11 +124,13 @@ describe('AttachmentProcessor', () => {
     it('should handle file read failure gracefully', async () => {
       vi.mocked(fs.promises.readFile).mockRejectedValue(new Error('Permission denied'));
 
-      const attachments = [{
-        type: 'file' as const,
-        name: 'secret.txt',
-        path: '/tmp/secret.txt',
-      }];
+      const attachments = [
+        {
+          type: 'file' as const,
+          name: 'secret.txt',
+          path: '/tmp/secret.txt',
+        },
+      ];
 
       const result = await processor.processAttachments(attachments);
 

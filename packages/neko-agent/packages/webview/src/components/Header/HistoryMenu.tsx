@@ -11,7 +11,10 @@ interface HistoryMenuProps {
 }
 
 // Format relative time
-function formatRelativeTime(timestamp: number, t: (key: string, params?: Record<string, string | number>) => string): string {
+function formatRelativeTime(
+  timestamp: number,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
   const now = Date.now();
   const diff = now - timestamp;
   const minutes = Math.floor(diff / 60000);
@@ -64,9 +67,7 @@ export function HistoryMenu({
       return conversations.slice(0, 10);
     }
     const query = searchQuery.toLowerCase();
-    return conversations.filter(conv =>
-      conv.title.toLowerCase().includes(query)
-    ).slice(0, 20);
+    return conversations.filter((conv) => conv.title.toLowerCase().includes(query)).slice(0, 20);
   }, [conversations, searchQuery]);
 
   // Handle keyboard navigation
@@ -87,7 +88,12 @@ export function HistoryMenu({
         title={t('history.title')}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
         </svg>
       </button>
 
@@ -99,8 +105,18 @@ export function HistoryMenu({
           {/* Search Input */}
           <div className="px-2 py-1.5 border-b border-[var(--vscode-dropdown-border)]">
             <div className="flex items-center gap-2 px-2 py-1 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded">
-              <svg className="w-3.5 h-3.5 text-[var(--vscode-descriptionForeground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <svg
+                className="w-3.5 h-3.5 text-[var(--vscode-descriptionForeground)]"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
               <input
                 ref={searchInputRef}
@@ -116,7 +132,12 @@ export function HistoryMenu({
                   className="text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               )}
@@ -125,7 +146,9 @@ export function HistoryMenu({
 
           {/* Header */}
           <div className="px-3 py-1.5 text-[10px] text-[var(--vscode-descriptionForeground)] uppercase tracking-wider border-b border-[var(--vscode-dropdown-border)]">
-            {searchQuery ? t('history.results', { count: filteredConversations.length }) : t('history.recentConversations')}
+            {searchQuery
+              ? t('history.results', { count: filteredConversations.length })
+              : t('history.recentConversations')}
           </div>
 
           {/* Conversation List */}
@@ -135,11 +158,13 @@ export function HistoryMenu({
                 {searchQuery ? t('history.noMatching') : t('history.noConversations')}
               </div>
             ) : (
-              filteredConversations.map(conv => (
+              filteredConversations.map((conv) => (
                 <div
                   key={conv.id}
                   className={`group px-3 py-1.5 hover:bg-[var(--vscode-list-hoverBackground)] cursor-pointer transition-colors ${
-                    conv.id === activeConversationId ? 'bg-[var(--vscode-button-background)]/20' : ''
+                    conv.id === activeConversationId
+                      ? 'bg-[var(--vscode-button-background)]/20'
+                      : ''
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -166,8 +191,18 @@ export function HistoryMenu({
                       className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-opacity flex-shrink-0"
                       title={t('common.delete')}
                     >
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
                       </svg>
                     </button>
                   </div>

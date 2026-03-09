@@ -116,13 +116,13 @@ export function InputEditor({
 
   return (
     <Box flexDirection="column">
-      {isMultiLine ? (
-        <Text dimColor>  [multi-line: Shift+Enter for newline]</Text>
-      ) : null}
+      {isMultiLine ? <Text dimColor> [multi-line: Shift+Enter for newline]</Text> : null}
 
       {isEmpty && !disabled ? (
         <Box>
-          <Text color={tokens.input.prompt} bold>{prompt} </Text>
+          <Text color={tokens.input.prompt} bold>
+            {prompt}{' '}
+          </Text>
           <Text color={tokens.input.placeholder}>Type a message or /help</Text>
           <Text color={tokens.info}>▋</Text>
         </Box>
@@ -134,9 +134,7 @@ export function InputEditor({
             </Text>
             <Text>
               {line}
-              {idx === lines.length - 1 && !disabled ? (
-                <Text color={tokens.info}>▋</Text>
-              ) : null}
+              {idx === lines.length - 1 && !disabled ? <Text color={tokens.info}>▋</Text> : null}
             </Text>
           </Box>
         ))

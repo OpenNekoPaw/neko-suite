@@ -93,7 +93,7 @@ function generatePathData(
   points: BezierPoint[],
   closed: boolean,
   width: number,
-  height: number
+  height: number,
 ): string {
   if (points.length === 0) return '';
 
@@ -150,10 +150,10 @@ function togglePointType(point: BezierPoint): BezierPoint {
     return { ...point, linkedHandles: false };
   } else {
     // 转换为平滑：链接手柄并对称
-    const avgLen = (
-      Math.sqrt(point.handleIn.x ** 2 + point.handleIn.y ** 2) +
-      Math.sqrt(point.handleOut.x ** 2 + point.handleOut.y ** 2)
-    ) / 2;
+    const avgLen =
+      (Math.sqrt(point.handleIn.x ** 2 + point.handleIn.y ** 2) +
+        Math.sqrt(point.handleOut.x ** 2 + point.handleOut.y ** 2)) /
+      2;
 
     // 使用 handleOut 方向
     const angle = Math.atan2(point.handleOut.y, point.handleOut.x);
@@ -223,10 +223,14 @@ const AnchorPoint = memo(function AnchorPoint({
   // Cursor based on mode
   const getCursor = () => {
     switch (mode) {
-      case 'add': return 'crosshair';
-      case 'delete': return 'not-allowed';
-      case 'convert': return 'pointer';
-      default: return 'move';
+      case 'add':
+        return 'crosshair';
+      case 'delete':
+        return 'not-allowed';
+      case 'convert':
+        return 'pointer';
+      default:
+        return 'move';
     }
   };
 
@@ -314,13 +318,7 @@ const AnchorPoint = memo(function AnchorPoint({
 
       {/* Point index label (debug) */}
       {selected && (
-        <text
-          x={x}
-          y={y - POINT_RADIUS - 6}
-          fontSize={10}
-          fill="#666"
-          textAnchor="middle"
-        >
+        <text x={x} y={y - POINT_RADIUS - 6} fontSize={10} fill="#666" textAnchor="middle">
           {index}
         </text>
       )}
@@ -356,7 +354,7 @@ export const PenToolEditor = memo(function PenToolEditor({
   // Generate path data
   const pathData = useMemo(
     () => generatePathData(points, closed, width, height),
-    [points, closed, width, height]
+    [points, closed, width, height],
   );
 
   // Preview path (when adding point)
@@ -373,18 +371,15 @@ export const PenToolEditor = memo(function PenToolEditor({
   }, [previewPoint, points, width, height, mode]);
 
   // Get mouse position relative to SVG
-  const getMousePos = useCallback(
-    (e: MouseEvent | React.MouseEvent): Point2D => {
-      if (!svgRef.current) return { x: 0, y: 0 };
+  const getMousePos = useCallback((e: MouseEvent | React.MouseEvent): Point2D => {
+    if (!svgRef.current) return { x: 0, y: 0 };
 
-      const rect = svgRef.current.getBoundingClientRect();
-      return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      };
-    },
-    []
-  );
+    const rect = svgRef.current.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+  }, []);
 
   // Handle point selection change
   useEffect(() => {
@@ -431,7 +426,7 @@ export const PenToolEditor = memo(function PenToolEditor({
           break;
       }
     },
-    [mode, points, closed, readonly, onPathChange]
+    [mode, points, closed, readonly, onPathChange],
   );
 
   // SVG click handler (add new point)
@@ -476,7 +471,7 @@ export const PenToolEditor = memo(function PenToolEditor({
       onPathChange([...points, newPoint], closed);
       setSelectedPoint(points.length);
     },
-    [mode, points, closed, width, height, readonly, getMousePos, onPathChange]
+    [mode, points, closed, width, height, readonly, getMousePos, onPathChange],
   );
 
   // Mouse move handler (during drag)
@@ -518,7 +513,7 @@ export const PenToolEditor = memo(function PenToolEditor({
           if (point.linkedHandles) {
             const len = Math.sqrt(relX ** 2 + relY ** 2);
             const outLen = Math.sqrt(
-              originalPoint.handleOut.x ** 2 + originalPoint.handleOut.y ** 2
+              originalPoint.handleOut.x ** 2 + originalPoint.handleOut.y ** 2,
             );
             if (len > 0) {
               point.handleOut = {
@@ -541,9 +536,7 @@ export const PenToolEditor = memo(function PenToolEditor({
           // Mirror handleIn if linked
           if (point.linkedHandles) {
             const len = Math.sqrt(relX ** 2 + relY ** 2);
-            const inLen = Math.sqrt(
-              originalPoint.handleIn.x ** 2 + originalPoint.handleIn.y ** 2
-            );
+            const inLen = Math.sqrt(originalPoint.handleIn.x ** 2 + originalPoint.handleIn.y ** 2);
             if (len > 0) {
               point.handleIn = {
                 x: (-relX / len) * inLen,
@@ -558,7 +551,7 @@ export const PenToolEditor = memo(function PenToolEditor({
       newPoints[pointIndex] = point;
       onPathChange(newPoints, closed);
     },
-    [dragState, mode, points, closed, width, height, readonly, getMousePos, onPathChange]
+    [dragState, mode, points, closed, width, height, readonly, getMousePos, onPathChange],
   );
 
   // Mouse up handler

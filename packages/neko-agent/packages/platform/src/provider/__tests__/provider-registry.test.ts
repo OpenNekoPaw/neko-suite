@@ -93,7 +93,7 @@ function createMockConfigManager(): ConfigManager {
     getModels: vi.fn(() => mockModels),
     getEnabledModels: vi.fn(() => mockModels.filter((m) => m.enabled)),
     getModelsByProvider: vi.fn((providerId: string) =>
-      mockModels.filter((m) => m.providerId === providerId)
+      mockModels.filter((m) => m.providerId === providerId),
     ),
   };
 

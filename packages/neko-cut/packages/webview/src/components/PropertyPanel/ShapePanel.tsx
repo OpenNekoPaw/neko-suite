@@ -74,16 +74,10 @@ const CollapsibleSection = memo(function CollapsibleSection({
         className="w-full flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <span className={`transform transition-transform ${expanded ? 'rotate-90' : ''}`}>
-          ▶
-        </span>
+        <span className={`transform transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
         {t(titleKey)}
       </button>
-      {expanded && (
-        <div className="px-2 pb-2 space-y-1.5">
-          {children}
-        </div>
-      )}
+      {expanded && <div className="px-2 pb-2 space-y-1.5">{children}</div>}
     </div>
   );
 });
@@ -140,12 +134,7 @@ interface ColorInputProps {
   disabled?: boolean;
 }
 
-const ColorInput = memo(function ColorInput({
-  label,
-  value,
-  onChange,
-  disabled,
-}: ColorInputProps) {
+const ColorInput = memo(function ColorInput({ label, value, onChange, disabled }: ColorInputProps) {
   return (
     <div className="flex items-center gap-2">
       <label className="w-20 text-[11px] text-[var(--vscode-descriptionForeground)] truncate">
@@ -403,10 +392,10 @@ const PolygonEditor = memo(function PolygonEditor({
 
   return (
     <div className="text-[11px] text-[var(--vscode-descriptionForeground)]">
-      <p>{t('shape.properties.points')}: {shape.points.length}</p>
-      <p className="mt-1 text-[10px]">
-        (Polygon vertices can be edited directly on canvas)
+      <p>
+        {t('shape.properties.points')}: {shape.points.length}
       </p>
+      <p className="mt-1 text-[10px]">(Polygon vertices can be edited directly on canvas)</p>
     </div>
   );
 });
@@ -417,11 +406,7 @@ interface StarEditorProps {
   disabled?: boolean;
 }
 
-const StarEditor = memo(function StarEditor({
-  shape,
-  onChange,
-  disabled,
-}: StarEditorProps) {
+const StarEditor = memo(function StarEditor({ shape, onChange, disabled }: StarEditorProps) {
   const { t } = useTranslation();
 
   return (
@@ -494,11 +479,7 @@ interface LineEditorProps {
   disabled?: boolean;
 }
 
-const LineEditor = memo(function LineEditor({
-  shape,
-  onChange,
-  disabled,
-}: LineEditorProps) {
+const LineEditor = memo(function LineEditor({ shape, onChange, disabled }: LineEditorProps) {
   const { t } = useTranslation();
 
   return (
@@ -557,11 +538,7 @@ interface FillEditorProps {
   disabled?: boolean;
 }
 
-const FillEditor = memo(function FillEditor({
-  fill,
-  onChange,
-  disabled,
-}: FillEditorProps) {
+const FillEditor = memo(function FillEditor({ fill, onChange, disabled }: FillEditorProps) {
   const { t } = useTranslation();
 
   const fillTypeOptions = [
@@ -720,7 +697,9 @@ const GradientEditor = memo(function GradientEditor({
             <input
               type="number"
               value={Math.round(stop.offset * 100)}
-              onChange={(e) => handleStopChange(index, { offset: parseFloat(e.target.value) / 100 })}
+              onChange={(e) =>
+                handleStopChange(index, { offset: parseFloat(e.target.value) / 100 })
+              }
               min={0}
               max={100}
               disabled={disabled}
@@ -756,11 +735,7 @@ interface StrokeEditorProps {
   disabled?: boolean;
 }
 
-const StrokeEditor = memo(function StrokeEditor({
-  stroke,
-  onChange,
-  disabled,
-}: StrokeEditorProps) {
+const StrokeEditor = memo(function StrokeEditor({ stroke, onChange, disabled }: StrokeEditorProps) {
   const { t } = useTranslation();
 
   const lineCapOptions = [
@@ -837,11 +812,7 @@ interface ShadowEditorProps {
   disabled?: boolean;
 }
 
-const ShadowEditor = memo(function ShadowEditor({
-  shadow,
-  onChange,
-  disabled,
-}: ShadowEditorProps) {
+const ShadowEditor = memo(function ShadowEditor({ shadow, onChange, disabled }: ShadowEditorProps) {
   const { t } = useTranslation();
 
   return (
@@ -924,34 +895,46 @@ export const ShapePanel = memo(function ShapePanel({
   ];
 
   // Handle geometry change
-  const handleGeometryChange = useCallback((updates: Partial<Shape>) => {
-    if (!shape) return;
-    onGeometryChange(shape.id, updates);
-  }, [shape, onGeometryChange]);
+  const handleGeometryChange = useCallback(
+    (updates: Partial<Shape>) => {
+      if (!shape) return;
+      onGeometryChange(shape.id, updates);
+    },
+    [shape, onGeometryChange],
+  );
 
   // Handle fill change
-  const handleFillChange = useCallback((updates: Partial<ShapeFill>) => {
-    if (!shape) return;
-    onStyleChange(shape.id, {
-      fill: { ...shape.style.fill, ...updates },
-    });
-  }, [shape, onStyleChange]);
+  const handleFillChange = useCallback(
+    (updates: Partial<ShapeFill>) => {
+      if (!shape) return;
+      onStyleChange(shape.id, {
+        fill: { ...shape.style.fill, ...updates },
+      });
+    },
+    [shape, onStyleChange],
+  );
 
   // Handle stroke change
-  const handleStrokeChange = useCallback((updates: Partial<ShapeStroke>) => {
-    if (!shape) return;
-    onStyleChange(shape.id, {
-      stroke: { ...shape.style.stroke, ...updates },
-    });
-  }, [shape, onStyleChange]);
+  const handleStrokeChange = useCallback(
+    (updates: Partial<ShapeStroke>) => {
+      if (!shape) return;
+      onStyleChange(shape.id, {
+        stroke: { ...shape.style.stroke, ...updates },
+      });
+    },
+    [shape, onStyleChange],
+  );
 
   // Handle shadow change
-  const handleShadowChange = useCallback((updates: Partial<ShapeShadow>) => {
-    if (!shape) return;
-    onStyleChange(shape.id, {
-      shadow: { ...shape.style.shadow, ...updates },
-    });
-  }, [shape, onStyleChange]);
+  const handleShadowChange = useCallback(
+    (updates: Partial<ShapeShadow>) => {
+      if (!shape) return;
+      onStyleChange(shape.id, {
+        shadow: { ...shape.style.shadow, ...updates },
+      });
+    },
+    [shape, onStyleChange],
+  );
 
   // Render geometry editor based on shape type
   const renderGeometryEditor = () => {
@@ -1001,10 +984,10 @@ export const ShapePanel = memo(function ShapePanel({
       case 'bezier':
         return (
           <div className="text-[11px] text-[var(--vscode-descriptionForeground)]">
-            <p>{t('shape.properties.closed')}: {(shape.shape as any).closed ? 'Yes' : 'No'}</p>
-            <p className="mt-1 text-[10px]">
-              (Bezier points can be edited directly on canvas)
+            <p>
+              {t('shape.properties.closed')}: {(shape.shape as any).closed ? 'Yes' : 'No'}
             </p>
+            <p className="mt-1 text-[10px]">(Bezier points can be edited directly on canvas)</p>
           </div>
         );
       default:
@@ -1055,7 +1038,12 @@ export const ShapePanel = memo(function ShapePanel({
             title={t('shape.duplicateShape')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+              />
             </svg>
           </button>
           <button
@@ -1065,7 +1053,12 @@ export const ShapePanel = memo(function ShapePanel({
             title={t('shape.removeShape')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
             </svg>
           </button>
         </div>
@@ -1094,11 +1087,7 @@ export const ShapePanel = memo(function ShapePanel({
 
       {/* Fill */}
       <CollapsibleSection titleKey="shape.fill.title">
-        <FillEditor
-          fill={shape.style.fill}
-          onChange={handleFillChange}
-          disabled={disabled}
-        />
+        <FillEditor fill={shape.style.fill} onChange={handleFillChange} disabled={disabled} />
       </CollapsibleSection>
 
       {/* Stroke */}

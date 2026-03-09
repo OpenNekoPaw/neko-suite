@@ -32,7 +32,9 @@ export function StatusBar(): React.JSX.Element {
   return (
     <Box borderStyle="single" borderColor={tokens.muted} paddingLeft={1} paddingRight={1}>
       {/* Model */}
-      <Text color={tokens.info} bold>{modelName}</Text>
+      <Text color={tokens.info} bold>
+        {modelName}
+      </Text>
       <Text dimColor> │ </Text>
 
       {/* Mode badge */}
@@ -44,13 +46,14 @@ export function StatusBar(): React.JSX.Element {
         <>
           <Spinner />
           {iteration.max > 0 ? (
-            <Text dimColor> {iteration.current}/{iteration.max}</Text>
+            <Text dimColor>
+              {' '}
+              {iteration.current}/{iteration.max}
+            </Text>
           ) : null}
         </>
       ) : (
-        <Text color={status === 'error' ? tokens.error : tokens.muted}>
-          {status}
-        </Text>
+        <Text color={status === 'error' ? tokens.error : tokens.muted}>{status}</Text>
       )}
 
       {/* Spacer */}
@@ -81,10 +84,14 @@ export function StatusBar(): React.JSX.Element {
 /** Get theme color for execution mode */
 function modeColor(mode: string): string {
   switch (mode) {
-    case 'auto': return tokens.success;
-    case 'plan': return tokens.warning;
-    case 'ask': return tokens.info;
-    default: return tokens.muted;
+    case 'auto':
+      return tokens.success;
+    case 'plan':
+      return tokens.warning;
+    case 'ask':
+      return tokens.info;
+    default:
+      return tokens.muted;
   }
 }
 

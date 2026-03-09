@@ -29,17 +29,24 @@ export function useSkillActions({
   setPendingSkillConfirm,
   setActiveSkill,
 }: UseSkillActionsProps): UseSkillActionsReturn {
-
   const handleConfirmSkill = useCallback(() => {
     if (pendingSkillConfirm && pendingSkillConfirm.conversationId === activeConversationId) {
-      VSCodeMessages.confirmSkill(pendingSkillConfirm.skillName, true, pendingSkillConfirm.conversationId);
+      VSCodeMessages.confirmSkill(
+        pendingSkillConfirm.skillName,
+        true,
+        pendingSkillConfirm.conversationId,
+      );
       setPendingSkillConfirm(null);
     }
   }, [pendingSkillConfirm, activeConversationId, setPendingSkillConfirm]);
 
   const handleDeclineSkill = useCallback(() => {
     if (pendingSkillConfirm && pendingSkillConfirm.conversationId === activeConversationId) {
-      VSCodeMessages.confirmSkill(pendingSkillConfirm.skillName, false, pendingSkillConfirm.conversationId);
+      VSCodeMessages.confirmSkill(
+        pendingSkillConfirm.skillName,
+        false,
+        pendingSkillConfirm.conversationId,
+      );
       setPendingSkillConfirm(null);
     }
   }, [pendingSkillConfirm, activeConversationId, setPendingSkillConfirm]);

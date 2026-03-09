@@ -72,7 +72,7 @@ export const en = {
   'panel.duration': 'Duration',
 
   // Loading
-  'loading': 'Loading canvas...',
+  loading: 'Loading canvas...',
 
   // Canvas
   'canvas.dropHint': 'Drop files here to add to canvas',

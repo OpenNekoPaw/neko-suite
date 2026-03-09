@@ -157,7 +157,7 @@ export class EditorRegistry implements IEditorRegistry {
         if (this._providers.get(type) === provider) {
           this._providers.delete(type);
         }
-      }
+      },
     };
   }
 
@@ -190,7 +190,7 @@ export class EditorRegistry implements IEditorRegistry {
             this.setActiveEditor(undefined);
           }
         }
-      }
+      },
     };
   }
 
@@ -214,7 +214,7 @@ export class EditorRegistry implements IEditorRegistry {
   }
 
   getEditorsByType(type: EditorType): IEditorModel[] {
-    return this.getAllEditors().filter(editor => editor.type === type);
+    return this.getAllEditors().filter((editor) => editor.type === type);
   }
 
   // -------------------------------------------------------------------------

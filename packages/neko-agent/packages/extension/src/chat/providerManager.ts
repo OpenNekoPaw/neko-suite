@@ -29,13 +29,13 @@ export class ProviderManager {
     const providers = Array.from(config.providers.values());
     const models = Array.from(config.models.values());
 
-    return providers.map(provider => ({
+    return providers.map((provider) => ({
       id: provider.id,
       name: provider.name,
       type: provider.type,
       models: models
-        .filter(m => m.providerId === provider.id)
-        .map(m => ({
+        .filter((m) => m.providerId === provider.id)
+        .map((m) => ({
           id: m.id,
           name: m.name,
           enabled: m.enabled !== false,
@@ -54,12 +54,12 @@ export class ProviderManager {
     const models = Array.from(config.models.values());
 
     return providers
-      .filter(p => {
+      .filter((p) => {
         const override = userConfig.providerOverrides[p.id];
         // Provider is configured if it has apiKey from override or from merged config
         return override?.apiKey || p.apiKey;
       })
-      .map(provider => {
+      .map((provider) => {
         const override = userConfig.providerOverrides[provider.id] || {};
         return {
           id: provider.id,
@@ -69,8 +69,8 @@ export class ProviderManager {
           apiKey: override.apiKey || provider.apiKey,
           baseUrl: override.apiUrl || provider.apiUrl,
           models: models
-            .filter(m => m.providerId === provider.id)
-            .map(m => ({
+            .filter((m) => m.providerId === provider.id)
+            .map((m) => ({
               id: m.id,
               name: m.name,
               enabled: m.enabled !== false,
@@ -82,7 +82,9 @@ export class ProviderManager {
   /**
    * Get the default provider
    */
-  getDefaultProvider(): { id: string; isConfigured: boolean; getDefaultModel: () => string } | undefined {
+  getDefaultProvider():
+    | { id: string; isConfigured: boolean; getDefaultModel: () => string }
+    | undefined {
     const config = this._platform.config.getConfig();
     const userConfig = this._platform.config.getUserConfig();
     const providers = Array.from(config.providers.values());
@@ -90,7 +92,7 @@ export class ProviderManager {
 
     // Find an enabled provider that has an API key configured
     // The apiKey is already merged in config.providers from user.providers or providerOverrides
-    const provider = providers.find(p => {
+    const provider = providers.find((p) => {
       if (p.enabled === false) return false;
       // Provider is configured if it has an apiKey (from merged config)
       return !!p.apiKey;
@@ -98,7 +100,9 @@ export class ProviderManager {
 
     if (!provider) return undefined;
 
-    const providerModels = models.filter(m => m.providerId === provider.id && m.enabled !== false);
+    const providerModels = models.filter(
+      (m) => m.providerId === provider.id && m.enabled !== false,
+    );
     const defaultModel = providerModels[0]?.id || '';
 
     return {
@@ -111,7 +115,9 @@ export class ProviderManager {
   /**
    * Get provider by ID
    */
-  getProvider(providerId: string): { id: string; isConfigured: boolean; getDefaultModel: () => string } | undefined {
+  getProvider(
+    providerId: string,
+  ): { id: string; isConfigured: boolean; getDefaultModel: () => string } | undefined {
     const config = this._platform.config.getConfig();
     const provider = config.providers.get(providerId);
 
@@ -120,7 +126,7 @@ export class ProviderManager {
     // Check if provider has API key configured (already merged in config.providers)
     const isConfigured = !!provider.apiKey;
 
-    const models = Array.from(config.models.values()).filter(m => m.providerId === provider.id);
+    const models = Array.from(config.models.values()).filter((m) => m.providerId === provider.id);
     const defaultModel = models[0]?.id || '';
 
     return {
@@ -183,7 +189,7 @@ export class ProviderManager {
    */
   getProviderTemplates(): ProviderTemplateInfo[] {
     const templates = getBuiltinProviderTemplates();
-    return templates.map(t => ({
+    return templates.map((t) => ({
       id: t.id,
       name: t.name,
       displayName: t.displayName || t.name,

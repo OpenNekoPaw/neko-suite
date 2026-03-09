@@ -9,39 +9,39 @@ import * as vscode from 'vscode';
 import { getNonce } from './nonce';
 
 export interface WebviewHtmlOptions {
-	/** Webview instance */
-	webview: vscode.Webview;
-	/** Extension URI for resolving local resources */
-	extensionUri: vscode.Uri;
-	/** Entry point: 'video' or 'audio' */
-	entry: 'video' | 'audio';
-	/** Whether to use Vite dev server */
-	devMode?: boolean;
-	/** Vite dev server port */
-	devPort?: number;
+  /** Webview instance */
+  webview: vscode.Webview;
+  /** Extension URI for resolving local resources */
+  extensionUri: vscode.Uri;
+  /** Entry point: 'video' or 'audio' */
+  entry: 'video' | 'audio';
+  /** Whether to use Vite dev server */
+  devMode?: boolean;
+  /** Vite dev server port */
+  devPort?: number;
 }
 
 /**
  * Generate HTML content for the preview webview
  */
 export function getWebviewHtml(options: WebviewHtmlOptions): string {
-	const { webview, extensionUri, entry, devMode = false, devPort = 5174 } = options;
-	const nonce = getNonce();
+  const { webview, extensionUri, entry, devMode = false, devPort = 5174 } = options;
+  const nonce = getNonce();
 
-	if (devMode) {
-		return getDevHtml(nonce, entry, devPort);
-	}
+  if (devMode) {
+    return getDevHtml(nonce, entry, devPort);
+  }
 
-	return getProdHtml(webview, extensionUri, nonce, entry);
+  return getProdHtml(webview, extensionUri, nonce, entry);
 }
 
 /**
  * Dev mode: connect to Vite dev server for HMR
  */
 function getDevHtml(nonce: string, entry: string, devPort: number): string {
-	const devUrl = `http://localhost:${devPort}`;
+  const devUrl = `http://localhost:${devPort}`;
 
-	return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
 	<meta charset="UTF-8" />
@@ -69,20 +69,16 @@ function getDevHtml(nonce: string, entry: string, devPort: number): string {
  * Production mode: load bundled assets from dist
  */
 function getProdHtml(
-	webview: vscode.Webview,
-	extensionUri: vscode.Uri,
-	nonce: string,
-	entry: string
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
+  nonce: string,
+  entry: string,
 ): string {
-	const distUri = vscode.Uri.joinPath(extensionUri, 'dist', 'webview');
-	const scriptUri = webview.asWebviewUri(
-		vscode.Uri.joinPath(distUri, 'assets', `${entry}.js`)
-	);
-	const styleUri = webview.asWebviewUri(
-		vscode.Uri.joinPath(distUri, 'assets', 'style.css')
-	);
+  const distUri = vscode.Uri.joinPath(extensionUri, 'dist', 'webview');
+  const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, 'assets', `${entry}.js`));
+  const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, 'assets', 'style.css'));
 
-	return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
 	<meta charset="UTF-8" />

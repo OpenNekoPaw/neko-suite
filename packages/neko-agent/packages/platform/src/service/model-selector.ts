@@ -33,7 +33,7 @@ export interface ResolvedModel {
 export class ModelSelector {
   constructor(
     private readonly config: ConfigManager,
-    private readonly registry: ProviderRegistry
+    private readonly registry: ProviderRegistry,
   ) {}
 
   /**
@@ -44,7 +44,7 @@ export class ModelSelector {
    */
   resolve(
     taskType: ModelTaskType,
-    options: { modelId?: string; excludeModels?: string[] } = {}
+    options: { modelId?: string; excludeModels?: string[] } = {},
   ): ResolvedModel {
     const { modelId, excludeModels = [] } = options;
     const attempt = excludeModels.length + 1;
@@ -127,7 +127,7 @@ export class ModelSelector {
 
   private getTaskDefaultModelId(
     taskDefaults: TaskDefaults | undefined,
-    taskType: ModelTaskType
+    taskType: ModelTaskType,
   ): string | undefined {
     if (!taskDefaults) return undefined;
     if (taskType === 'chat') return taskDefaults.chat?.modelId;

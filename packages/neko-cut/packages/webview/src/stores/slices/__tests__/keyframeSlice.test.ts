@@ -92,7 +92,15 @@ function createProjectWithAnimatableElement(): ProjectData {
                 id: 'mask-1',
                 type: 'rectangle',
                 name: 'Mask 1',
-                shape: { type: 'rectangle', centerX: 50, centerY: 50, width: 100, height: 100, rotation: 0, cornerRadius: 0 },
+                shape: {
+                  type: 'rectangle',
+                  centerX: 50,
+                  centerY: 50,
+                  width: 100,
+                  height: 100,
+                  rotation: 0,
+                  cornerRadius: 0,
+                },
                 inverted: false,
                 feather: 0,
                 expansion: 0,
@@ -101,15 +109,21 @@ function createProjectWithAnimatableElement(): ProjectData {
                 animation: {
                   feather: {
                     baseValue: 0,
-                    keyframes: [
-                      { id: 'mkf-1', time: 0, value: 0, easing: 'linear' },
-                    ],
+                    keyframes: [{ id: 'mkf-1', time: 0, value: 0, easing: 'linear' }],
                   },
                   shapeKeyframes: [
                     {
                       id: 'skf-1',
                       time: 0,
-                      shape: { type: 'rectangle', centerX: 50, centerY: 50, width: 100, height: 100, rotation: 0, cornerRadius: 0 },
+                      shape: {
+                        type: 'rectangle',
+                        centerX: 50,
+                        centerY: 50,
+                        width: 100,
+                        height: 100,
+                        rotation: 0,
+                        cornerRadius: 0,
+                      },
                       easing: 'linear',
                     },
                   ],
@@ -302,16 +316,36 @@ describe('keyframeSlice', () => {
 
     it('should not dispatch when element has no effects', () => {
       const project = createTestProject({
-        tracks: [{
-          id: 't1', name: 'T', type: 'media',
-          elements: [{
-            id: 'e1', type: 'media', name: 'C', src: '/v.mp4',
-            startTime: 0, duration: 5, trimStart: 0, trimEnd: 0,
-            transform: {}, opacity: 1, blendMode: 'normal', effects: [],
-            muted: false, hidden: false, locked: false,
-          } as any],
-          muted: false, locked: false, hidden: false, isMain: false,
-        } as any],
+        tracks: [
+          {
+            id: 't1',
+            name: 'T',
+            type: 'media',
+            elements: [
+              {
+                id: 'e1',
+                type: 'media',
+                name: 'C',
+                src: '/v.mp4',
+                startTime: 0,
+                duration: 5,
+                trimStart: 0,
+                trimEnd: 0,
+                transform: {},
+                opacity: 1,
+                blendMode: 'normal',
+                effects: [],
+                muted: false,
+                hidden: false,
+                locked: false,
+              } as any,
+            ],
+            muted: false,
+            locked: false,
+            hidden: false,
+            isMain: false,
+          } as any,
+        ],
       });
       const { store, dispatchMock } = createTestStore(project);
       store.getState().addEffectKeyframe('t1', 'e1', 'eff', 'param', 0, 1);
@@ -340,7 +374,9 @@ describe('keyframeSlice', () => {
 
     it('should not dispatch when keyframe ID not found', () => {
       const { store, dispatchMock } = createTestStore(createProjectWithAnimatableElement());
-      store.getState().removeEffectKeyframe('track-1', 'elem-1', 'effect-1', 'radius', 'nonexistent');
+      store
+        .getState()
+        .removeEffectKeyframe('track-1', 'elem-1', 'effect-1', 'radius', 'nonexistent');
       expect(dispatchMock).not.toHaveBeenCalled();
     });
   });
@@ -392,16 +428,36 @@ describe('keyframeSlice', () => {
 
     it('should not dispatch when element has no masks', () => {
       const project = createTestProject({
-        tracks: [{
-          id: 't1', name: 'T', type: 'media',
-          elements: [{
-            id: 'e1', type: 'media', name: 'C', src: '/v.mp4',
-            startTime: 0, duration: 5, trimStart: 0, trimEnd: 0,
-            transform: {}, opacity: 1, blendMode: 'normal', effects: [],
-            muted: false, hidden: false, locked: false,
-          } as any],
-          muted: false, locked: false, hidden: false, isMain: false,
-        } as any],
+        tracks: [
+          {
+            id: 't1',
+            name: 'T',
+            type: 'media',
+            elements: [
+              {
+                id: 'e1',
+                type: 'media',
+                name: 'C',
+                src: '/v.mp4',
+                startTime: 0,
+                duration: 5,
+                trimStart: 0,
+                trimEnd: 0,
+                transform: {},
+                opacity: 1,
+                blendMode: 'normal',
+                effects: [],
+                muted: false,
+                hidden: false,
+                locked: false,
+              } as any,
+            ],
+            muted: false,
+            locked: false,
+            hidden: false,
+            isMain: false,
+          } as any,
+        ],
       });
       const { store, dispatchMock } = createTestStore(project);
       store.getState().addMaskPropertyKeyframe('t1', 'e1', 'm1', 'feather', 0, 1);
@@ -412,7 +468,9 @@ describe('keyframeSlice', () => {
   describe('removeMaskPropertyKeyframe', () => {
     it('should dispatch keyframe.remove for mask property', () => {
       const { store, dispatchMock } = createTestStore(createProjectWithAnimatableElement());
-      store.getState().removeMaskPropertyKeyframe('track-1', 'elem-1', 'mask-1', 'feather', 'mkf-1');
+      store
+        .getState()
+        .removeMaskPropertyKeyframe('track-1', 'elem-1', 'mask-1', 'feather', 'mkf-1');
 
       expect(dispatchMock).toHaveBeenCalledTimes(1);
       const op = dispatchMock.mock.calls[0]![0] as EditOperation;
@@ -422,7 +480,9 @@ describe('keyframeSlice', () => {
 
     it('should not dispatch when keyframe not found', () => {
       const { store, dispatchMock } = createTestStore(createProjectWithAnimatableElement());
-      store.getState().removeMaskPropertyKeyframe('track-1', 'elem-1', 'mask-1', 'feather', 'nonexistent');
+      store
+        .getState()
+        .removeMaskPropertyKeyframe('track-1', 'elem-1', 'mask-1', 'feather', 'nonexistent');
       expect(dispatchMock).not.toHaveBeenCalled();
     });
   });
@@ -430,7 +490,15 @@ describe('keyframeSlice', () => {
   describe('addMaskShapeKeyframe', () => {
     it('should dispatch keyframe.add with maskShape target', () => {
       const { store, dispatchMock } = createTestStore(createProjectWithAnimatableElement());
-      const shape = { type: 'rectangle' as const, centerX: 100, centerY: 100, width: 200, height: 200, rotation: 0, cornerRadius: 0 };
+      const shape = {
+        type: 'rectangle' as const,
+        centerX: 100,
+        centerY: 100,
+        width: 200,
+        height: 200,
+        rotation: 0,
+        cornerRadius: 0,
+      };
       store.getState().addMaskShapeKeyframe('track-1', 'elem-1', 'mask-1', 2.0, shape);
 
       expect(dispatchMock).toHaveBeenCalledTimes(1);
@@ -442,7 +510,15 @@ describe('keyframeSlice', () => {
 
     it('should not dispatch when mask not found', () => {
       const { store, dispatchMock } = createTestStore(createProjectWithAnimatableElement());
-      const shape = { type: 'rectangle' as const, centerX: 0, centerY: 0, width: 10, height: 10, rotation: 0, cornerRadius: 0 };
+      const shape = {
+        type: 'rectangle' as const,
+        centerX: 0,
+        centerY: 0,
+        width: 10,
+        height: 10,
+        rotation: 0,
+        cornerRadius: 0,
+      };
       store.getState().addMaskShapeKeyframe('track-1', 'elem-1', 'nonexistent', 1.0, shape);
       expect(dispatchMock).not.toHaveBeenCalled();
     });

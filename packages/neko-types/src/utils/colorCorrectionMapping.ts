@@ -30,22 +30,22 @@ import type { ColorCorrectionParams } from '../types/mediaEngine/effects';
  * Ignores UI-only fields that the engine doesn't support (clarity, dehaze).
  */
 export function mapBasicColorToEngine(basic: BasicColorAdjustment): ColorCorrectionParams {
-	return {
-		type: 'colorCorrection',
-		brightness: clamp(basic.brightness / 100, -1.0, 1.0),
-		contrast: clamp((basic.contrast / 100) + 1.0, 0.0, 2.0),
-		saturation: clamp((basic.saturation / 100) + 1.0, 0.0, 2.0),
-		exposure: clamp(basic.exposure, -3.0, 3.0),
-		gamma: clamp(basic.gamma, 0.1, 3.0),
-		hueShift: clamp(basic.hueShift, -180, 180),
-		vibrance: clamp(basic.vibrance / 100, -1.0, 1.0),
-		temperature: clamp(basic.temperature, -100, 100),
-		tint: clamp(basic.tint, -100, 100),
-		highlights: clamp(basic.highlights / 100, -1.0, 1.0),
-		shadows: clamp(basic.shadows / 100, -1.0, 1.0),
-		whites: clamp(basic.whites / 100, -1.0, 1.0),
-		blacks: clamp(basic.blacks / 100, -1.0, 1.0),
-	};
+  return {
+    type: 'colorCorrection',
+    brightness: clamp(basic.brightness / 100, -1.0, 1.0),
+    contrast: clamp(basic.contrast / 100 + 1.0, 0.0, 2.0),
+    saturation: clamp(basic.saturation / 100 + 1.0, 0.0, 2.0),
+    exposure: clamp(basic.exposure, -3.0, 3.0),
+    gamma: clamp(basic.gamma, 0.1, 3.0),
+    hueShift: clamp(basic.hueShift, -180, 180),
+    vibrance: clamp(basic.vibrance / 100, -1.0, 1.0),
+    temperature: clamp(basic.temperature, -100, 100),
+    tint: clamp(basic.tint, -100, 100),
+    highlights: clamp(basic.highlights / 100, -1.0, 1.0),
+    shadows: clamp(basic.shadows / 100, -1.0, 1.0),
+    whites: clamp(basic.whites / 100, -1.0, 1.0),
+    blacks: clamp(basic.blacks / 100, -1.0, 1.0),
+  };
 }
 
 /**
@@ -54,26 +54,26 @@ export function mapBasicColorToEngine(basic: BasicColorAdjustment): ColorCorrect
  * UI-only fields (clarity, dehaze) are set to 0.
  */
 export function mapEngineColorToBasic(params: ColorCorrectionParams): BasicColorAdjustment {
-	return {
-		brightness: Math.round((params.brightness ?? 0) * 100),
-		contrast: Math.round(((params.contrast ?? 1) - 1.0) * 100),
-		saturation: Math.round(((params.saturation ?? 1) - 1.0) * 100),
-		exposure: params.exposure ?? 0,
-		gamma: params.gamma ?? 1,
-		hueShift: params.hueShift ?? 0,
-		vibrance: Math.round((params.vibrance ?? 0) * 100),
-		temperature: params.temperature ?? 0,
-		tint: params.tint ?? 0,
-		highlights: Math.round((params.highlights ?? 0) * 100),
-		shadows: Math.round((params.shadows ?? 0) * 100),
-		whites: Math.round((params.whites ?? 0) * 100),
-		blacks: Math.round((params.blacks ?? 0) * 100),
-		// UI-only fields — engine doesn't support these
-		clarity: 0,
-		dehaze: 0,
-	};
+  return {
+    brightness: Math.round((params.brightness ?? 0) * 100),
+    contrast: Math.round(((params.contrast ?? 1) - 1.0) * 100),
+    saturation: Math.round(((params.saturation ?? 1) - 1.0) * 100),
+    exposure: params.exposure ?? 0,
+    gamma: params.gamma ?? 1,
+    hueShift: params.hueShift ?? 0,
+    vibrance: Math.round((params.vibrance ?? 0) * 100),
+    temperature: params.temperature ?? 0,
+    tint: params.tint ?? 0,
+    highlights: Math.round((params.highlights ?? 0) * 100),
+    shadows: Math.round((params.shadows ?? 0) * 100),
+    whites: Math.round((params.whites ?? 0) * 100),
+    blacks: Math.round((params.blacks ?? 0) * 100),
+    // UI-only fields — engine doesn't support these
+    clarity: 0,
+    dehaze: 0,
+  };
 }
 
 function clamp(value: number, min: number, max: number): number {
-	return Math.min(Math.max(value, min), max);
+  return Math.min(Math.max(value, min), max);
 }

@@ -50,7 +50,8 @@ export const settings = {
   'settings.providers.availableModels': '可用模型',
   'settings.providers.fetchModels': '从 API 获取',
   'settings.providers.fetchModelsFailed': '获取模型列表失败',
-  'settings.providers.fetchModelsNotSupported': '此服务商不支持 API 模型列表查询，请手动输入模型名称。',
+  'settings.providers.fetchModelsNotSupported':
+    '此服务商不支持 API 模型列表查询，请手动输入模型名称。',
   'settings.providers.selectModel': '点击选择此模型',
   'settings.providers.imageGen': '图像',
   'settings.providers.videoGen': '视频',
@@ -58,14 +59,16 @@ export const settings = {
   'settings.providers.embedding': '向量',
   'settings.providers.protocol': '协议',
   'settings.providers.protocolAuto': '自动（根据模型名推断）',
-  'settings.providers.protocolHint': '指定 API 协议类型。"自动" 会根据模型名称（如 claude、gpt）自动推断。',
+  'settings.providers.protocolHint':
+    '指定 API 协议类型。"自动" 会根据模型名称（如 claude、gpt）自动推断。',
   'settings.providers.validateApiKey': '验证 API Key',
   'settings.providers.validating': '验证中...',
   'settings.providers.apiKeyValid': 'API Key 有效',
   'settings.providers.apiKeyInvalid': 'API Key 无效',
 
   'settings.prompts.title': '已配置的提示词',
-  'settings.prompts.description': '选择一个提示词预设进行对话。每个预设都有自己的系统提示词和参数配置。',
+  'settings.prompts.description':
+    '选择一个提示词预设进行对话。每个预设都有自己的系统提示词和参数配置。',
   'settings.prompts.addPrompt': '+ 创建自定义提示词',
   'settings.prompts.editPrompt': '编辑提示词',
   'settings.prompts.createPrompt': '创建新提示词',
@@ -118,13 +121,17 @@ export const settings = {
   'settings.prompts.openInVSCode': '在 VSCode 中打开',
   'settings.prompts.editHelp': '用户和工作区提示词可在 VSCode 中编辑。内置提示词只能启用或禁用。',
   'settings.prompts.agentsTitle': '全局 Agent 指令 (AGENTS.md)',
-  'settings.prompts.agentsDescription': '全局指令会被注入到所有对话的系统提示词中。支持项目级和用户级配置。',
-  'settings.prompts.agentsPriorityHint': '优先级：项目级 (.neko/AGENTS.md) > 用户级 (~/.neko/AGENTS.md)',
+  'settings.prompts.agentsDescription':
+    '全局指令会被注入到所有对话的系统提示词中。支持项目级和用户级配置。',
+  'settings.prompts.agentsPriorityHint':
+    '优先级：项目级 (.neko/AGENTS.md) > 用户级 (~/.neko/AGENTS.md)',
   'settings.prompts.skillsHintTitle': '使用 Skills 自定义 AI 行为',
-  'settings.prompts.skillsHintDescription': 'Skills 是更强大的方式来定制 AI 行为。在 .neko/skills/ 目录下创建 SKILL.md 文件，AI 会根据上下文自动应用相关技能。',
+  'settings.prompts.skillsHintDescription':
+    'Skills 是更强大的方式来定制 AI 行为。在 .neko/skills/ 目录下创建 SKILL.md 文件，AI 会根据上下文自动应用相关技能。',
 
   'settings.hooks.title': 'Hooks 配置',
-  'settings.hooks.description': 'Hooks 允许在 Agent 执行的特定时机运行自定义命令。配置保存在 settings.json 中。',
+  'settings.hooks.description':
+    'Hooks 允许在 Agent 执行的特定时机运行自定义命令。配置保存在 settings.json 中。',
   'settings.hooks.projectSettings': '项目配置',
   'settings.hooks.personalSettings': '用户配置',
   'settings.hooks.localSettings': '本地配置',
@@ -212,7 +219,8 @@ export const settings = {
   'settings.skills.noMcpServers': '暂无配置的 MCP 服务器',
   'settings.skills.autoInjectMcpTools': '自动将 MCP 工具添加为允许的工具',
   'settings.skills.toolSkillsTitle': '工具组',
-  'settings.skills.toolSkillsDescription': '管理动态注入的工具组。根据输入内容，只有相关工具会发送给 AI。',
+  'settings.skills.toolSkillsDescription':
+    '管理动态注入的工具组。根据输入内容，只有相关工具会发送给 AI。',
   'settings.skills.toolSkillType': '工具组',
   'settings.skills.toolSkillTools': '包含工具',
   'settings.skills.toolSkillKeywords': '触发关键词',
@@ -221,18 +229,24 @@ export const settings = {
   'settings.skills.toolSkillDependencies': '依赖',
   'settings.skills.noToolSkills': '暂无配置的工具组',
   'settings.skills.builtin.ai-generate.name': 'AI 生成',
-  'settings.skills.builtin.ai-generate.description': 'AI 媒体生成能力，包括图像、视频、音频和音乐生成。',
+  'settings.skills.builtin.ai-generate.description':
+    'AI 媒体生成能力，包括图像、视频、音频和音乐生成。',
   'settings.skills.builtin.video-editing.name': '视频编辑',
-  'settings.skills.builtin.video-editing.description': '视频编辑助手：剪切、裁剪、转场、分割、合并片段等时间轴操作。',
+  'settings.skills.builtin.video-editing.description':
+    '视频编辑助手：剪切、裁剪、转场、分割、合并片段等时间轴操作。',
   'settings.skills.builtin.color-grading.name': '调色',
-  'settings.skills.builtin.color-grading.description': '调色和颜色校正助手：LUT、白平衡、曝光、对比度、饱和度。',
+  'settings.skills.builtin.color-grading.description':
+    '调色和颜色校正助手：LUT、白平衡、曝光、对比度、饱和度。',
   'settings.skills.builtin.audio-mixing.name': '音频混音',
-  'settings.skills.builtin.audio-mixing.description': '音频混音和声音设计助手：音量、音乐、配音、音效、闪避。',
+  'settings.skills.builtin.audio-mixing.description':
+    '音频混音和声音设计助手：音量、音乐、配音、音效、闪避。',
   'settings.skills.builtin.subtitle-assistant.name': '字幕助手',
-  'settings.skills.builtin.subtitle-assistant.description': '字幕和标题助手：添加字幕、转录、翻译、时间轴、SRT/VTT。',
+  'settings.skills.builtin.subtitle-assistant.description':
+    '字幕和标题助手：添加字幕、转录、翻译、时间轴、SRT/VTT。',
 
   'settings.models.title': '模型预设',
-  'settings.models.description': '配置用于图像、视频和音频生成的 AI 模型。添加 API 密钥以启用模型。',
+  'settings.models.description':
+    '配置用于图像、视频和音频生成的 AI 模型。添加 API 密钥以启用模型。',
   'settings.models.search': '搜索模型...',
   'settings.models.searchPlaceholder': '搜索模型...',
   'settings.models.all': '全部',

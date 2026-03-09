@@ -269,11 +269,16 @@ export const GROUP_NODE_PORTS: PortDefinition[] = [
  */
 export function getDefaultPorts(nodeType: CanvasNodeType): PortDefinition[] {
   switch (nodeType) {
-    case 'media': return MEDIA_NODE_PORTS;
-    case 'storyboard': return STORYBOARD_NODE_PORTS;
-    case 'annotation': return ANNOTATION_NODE_PORTS;
-    case 'group': return GROUP_NODE_PORTS;
-    default: return [];
+    case 'media':
+      return MEDIA_NODE_PORTS;
+    case 'storyboard':
+      return STORYBOARD_NODE_PORTS;
+    case 'annotation':
+      return ANNOTATION_NODE_PORTS;
+    case 'group':
+      return GROUP_NODE_PORTS;
+    default:
+      return [];
   }
 }
 
@@ -283,7 +288,7 @@ export function getDefaultPorts(nodeType: CanvasNodeType): PortDefinition[] {
  */
 export function arePortTypesCompatible(
   sourceType: PortDataType | undefined,
-  targetType: PortDataType | undefined
+  targetType: PortDataType | undefined,
 ): boolean {
   if (!sourceType || !targetType) return true;
   if (sourceType === 'any' || targetType === 'any') return true;

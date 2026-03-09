@@ -17,9 +17,9 @@ import { updateConversation } from './message-updater';
 function findOrCreateContentBlock(
   contentBlocks: ContentBlock[],
   type: ContentBlock['type'],
-  createNew: boolean = false
+  createNew: boolean = false,
 ): { blocks: ContentBlock[]; blockId: string } {
-  const lastBlockOfType = [...contentBlocks].reverse().find(b => {
+  const lastBlockOfType = [...contentBlocks].reverse().find((b) => {
     if (b.type !== type) return false;
     if (type === 'thinking') return !b.isThinkingComplete;
     if (type === 'text') return b.isStreaming;
@@ -68,13 +68,15 @@ const handleResponse: MessageHandler = (message, context) => {
         role: 'assistant' as const,
         content: message.message,
         timestamp: Date.now(),
-        contentBlocks: [{
-          id: `block-${newId}`,
-          type: 'text' as const,
-          timestamp: Date.now(),
-          content: message.message,
-          isStreaming: false,
-        }],
+        contentBlocks: [
+          {
+            id: `block-${newId}`,
+            type: 'text' as const,
+            timestamp: Date.now(),
+            content: message.message,
+            isStreaming: false,
+          },
+        ],
       },
     ],
     isThinking: false,
@@ -102,13 +104,15 @@ const handleStreamText: MessageHandler = (message, context) => {
             content: message.content || '',
             timestamp: Date.now(),
             isStreaming: true,
-            contentBlocks: [{
-              id: blockId,
-              type: 'text' as const,
-              timestamp: Date.now(),
-              content: message.content || '',
-              isStreaming: true,
-            }],
+            contentBlocks: [
+              {
+                id: blockId,
+                type: 'text' as const,
+                timestamp: Date.now(),
+                content: message.content || '',
+                isStreaming: true,
+              },
+            ],
           },
         ],
         streamingMessageId: newId,
@@ -118,7 +122,7 @@ const handleStreamText: MessageHandler = (message, context) => {
 
     // Update existing message - append to last text block or create new one
     return {
-      messages: msgs.map(msg => {
+      messages: msgs.map((msg) => {
         if (msg.id !== targetMessageId) return msg;
 
         const blocks = msg.contentBlocks || [];
@@ -127,10 +131,8 @@ const handleStreamText: MessageHandler = (message, context) => {
         return {
           ...msg,
           content: msg.content + (message.content || ''),
-          contentBlocks: updatedBlocks.map(b =>
-            b.id === blockId
-              ? { ...b, content: (b.content || '') + (message.content || '') }
-              : b
+          contentBlocks: updatedBlocks.map((b) =>
+            b.id === blockId ? { ...b, content: (b.content || '') + (message.content || '') } : b,
           ),
         };
       }),
@@ -151,10 +153,10 @@ const handleStreamComplete: MessageHandler = (message, context) => {
     }
 
     return {
-      messages: msgs.map(msg => {
+      messages: msgs.map((msg) => {
         if (msg.id !== targetMessageId) return msg;
 
-        const updatedBlocks = (msg.contentBlocks || []).map(b => ({
+        const updatedBlocks = (msg.contentBlocks || []).map((b) => ({
           ...b,
           isStreaming: false,
           isThinkingComplete: b.type === 'thinking' ? true : b.isThinkingComplete,
@@ -196,13 +198,15 @@ const handleStreamThinking: MessageHandler = (message, context) => {
             isThinkingComplete: false,
             timestamp: Date.now(),
             isStreaming: true,
-            contentBlocks: [{
-              id: blockId,
-              type: 'thinking' as const,
-              timestamp: Date.now(),
-              thinking: message.content || '',
-              isThinkingComplete: false,
-            }],
+            contentBlocks: [
+              {
+                id: blockId,
+                type: 'thinking' as const,
+                timestamp: Date.now(),
+                thinking: message.content || '',
+                isThinkingComplete: false,
+              },
+            ],
           },
         ],
         streamingMessageId: newId,
@@ -212,7 +216,7 @@ const handleStreamThinking: MessageHandler = (message, context) => {
 
     // Update existing message - append to thinking block or create one
     return {
-      messages: msgs.map(msg => {
+      messages: msgs.map((msg) => {
         if (msg.id !== targetMessageId) return msg;
 
         const blocks = msg.contentBlocks || [];
@@ -222,10 +226,8 @@ const handleStreamThinking: MessageHandler = (message, context) => {
           ...msg,
           thinking: (msg.thinking || '') + (message.content || ''),
           isThinkingComplete: false,
-          contentBlocks: updatedBlocks.map(b =>
-            b.id === blockId
-              ? { ...b, thinking: (b.thinking || '') + (message.content || '') }
-              : b
+          contentBlocks: updatedBlocks.map((b) =>
+            b.id === blockId ? { ...b, thinking: (b.thinking || '') + (message.content || '') } : b,
           ),
         };
       }),
@@ -242,11 +244,11 @@ const handleThinkingComplete: MessageHandler = (message, context) => {
     if (!streamingId) return { messages: msgs };
 
     return {
-      messages: msgs.map(msg => {
+      messages: msgs.map((msg) => {
         if (msg.id !== streamingId) return msg;
 
-        const updatedBlocks = (msg.contentBlocks || []).map(b =>
-          b.type === 'thinking' ? { ...b, isThinkingComplete: true } : b
+        const updatedBlocks = (msg.contentBlocks || []).map((b) =>
+          b.type === 'thinking' ? { ...b, isThinkingComplete: true } : b,
         );
 
         return {
@@ -265,7 +267,7 @@ const handleThinkingComplete: MessageHandler = (message, context) => {
 const handleMessageQueued: MessageHandler = (message, context) => {
   if (context.isCurrentConversation(message.conversationId)) {
     const newId = `queued-${Date.now()}`;
-    context.setMessages(prev => [
+    context.setMessages((prev) => [
       ...prev,
       {
         id: newId,
@@ -288,10 +290,10 @@ const handleMessageCancelled: MessageHandler = (message, context) => {
     }
 
     return {
-      messages: msgs.map(msg => {
+      messages: msgs.map((msg) => {
         if (msg.id !== streamingId) return msg;
 
-        const updatedBlocks = (msg.contentBlocks || []).map(b => ({
+        const updatedBlocks = (msg.contentBlocks || []).map((b) => ({
           ...b,
           isStreaming: false,
           isThinkingComplete: b.type === 'thinking' ? true : b.isThinkingComplete,
@@ -332,7 +334,9 @@ const handleAgentPhase: MessageHandler = (message, context) => {
         context.conversationAgentStateRef.current.delete(message.conversationId);
       } else {
         context.conversationAgentStateRef.current.set(message.conversationId, {
-          phase, toolName, startedAt: timestamp,
+          phase,
+          toolName,
+          startedAt: timestamp,
         });
       }
     }
@@ -341,7 +345,9 @@ const handleAgentPhase: MessageHandler = (message, context) => {
       context.conversationAgentStateRef.current.delete(message.conversationId);
     } else {
       context.conversationAgentStateRef.current.set(message.conversationId, {
-        phase, toolName, startedAt: timestamp,
+        phase,
+        toolName,
+        startedAt: timestamp,
       });
     }
   }

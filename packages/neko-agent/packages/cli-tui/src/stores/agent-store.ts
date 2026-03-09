@@ -6,12 +6,7 @@
  */
 
 import { create } from 'zustand';
-import type {
-  AgentStatus,
-  ExecutionMode,
-  TokenUsage,
-  IterationProgress,
-} from '../types/state';
+import type { AgentStatus, ExecutionMode, TokenUsage, IterationProgress } from '../types/state';
 
 export interface AgentSlice {
   // State

@@ -166,10 +166,7 @@ export abstract class BaseConfigAdapter<T> implements IConfigAdapter<T> {
   /**
    * Helper: Create validation result
    */
-  protected result(
-    errors: ValidationError[],
-    warnings: ValidationError[] = []
-  ): ValidationResult {
+  protected result(errors: ValidationError[], warnings: ValidationError[] = []): ValidationResult {
     return {
       valid: errors.length === 0,
       errors: errors.filter((e) => e.severity === 'error'),

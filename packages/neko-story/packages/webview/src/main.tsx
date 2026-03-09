@@ -10,6 +10,6 @@ if (root) {
       <ErrorBoundary>
         <App />
       </ErrorBoundary>
-    </StrictMode>
+    </StrictMode>,
   );
 }

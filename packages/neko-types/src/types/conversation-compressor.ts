@@ -220,7 +220,7 @@ export interface IConversationCompressor {
       targetTokens?: number;
       /** Active skills to preserve context for */
       activeSkills?: string[];
-    }
+    },
   ): Promise<ConversationCompressionResult>;
 
   /**

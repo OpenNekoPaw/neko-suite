@@ -37,12 +37,7 @@ export interface PositionedTimeRange extends TimeRange {
  * @param end2 第二个范围的结束时间
  * @returns 是否重叠
  */
-export function rangesOverlap(
-  start1: number,
-  end1: number,
-  start2: number,
-  end2: number
-): boolean {
+export function rangesOverlap(start1: number, end1: number, start2: number, end2: number): boolean {
   return start1 < end2 && end1 > start2;
 }
 
@@ -77,7 +72,7 @@ export function isTimeInRange(time: number, range: TimeRange): boolean {
 export function findNonOverlappingPosition(
   existingElements: TimeRange[],
   desiredStart: number,
-  duration: number
+  duration: number,
 ): number {
   // 按开始时间排序
   const sorted = [...existingElements].sort((a, b) => a.startTime - b.startTime);
@@ -110,7 +105,7 @@ export function findNonOverlappingPositionWithPending(
   existingElements: TimeRange[],
   pendingElements: TimeRange[],
   desiredStart: number,
-  duration: number
+  duration: number,
 ): number {
   const allElements = [...existingElements, ...pendingElements];
   return findNonOverlappingPosition(allElements, desiredStart, duration);
@@ -131,7 +126,7 @@ export function findNonOverlappingPositionWithPending(
 export function calculateEffectiveDuration(
   duration: number,
   trimStart: number,
-  trimEnd: number
+  trimEnd: number,
 ): number {
   return Math.max(0, duration - trimStart - trimEnd);
 }
@@ -149,7 +144,7 @@ export function calculateElementEndTime(
   startTime: number,
   duration: number,
   trimStart: number,
-  trimEnd: number
+  trimEnd: number,
 ): number {
   return startTime + calculateEffectiveDuration(duration, trimStart, trimEnd);
 }
@@ -161,7 +156,9 @@ export function calculateElementEndTime(
 /**
  * 获取轨道的总时长（到最后一个元素结束）
  */
-export function getTrackDuration(elements: Array<TimeRange & { trimStart?: number; trimEnd?: number }>): number {
+export function getTrackDuration(
+  elements: Array<TimeRange & { trimStart?: number; trimEnd?: number }>,
+): number {
   if (elements.length === 0) return 0;
 
   let maxEnd = 0;
@@ -169,7 +166,7 @@ export function getTrackDuration(elements: Array<TimeRange & { trimStart?: numbe
     const effectiveDuration = calculateEffectiveDuration(
       elem.duration,
       elem.trimStart ?? 0,
-      elem.trimEnd ?? 0
+      elem.trimEnd ?? 0,
     );
     const endTime = elem.startTime + effectiveDuration;
     if (endTime > maxEnd) {
@@ -184,7 +181,7 @@ export function getTrackDuration(elements: Array<TimeRange & { trimStart?: numbe
  * 获取项目的总时长（所有轨道中最长的）
  */
 export function getProjectDuration(
-  tracks: Array<{ elements: Array<TimeRange & { trimStart?: number; trimEnd?: number }> }>
+  tracks: Array<{ elements: Array<TimeRange & { trimStart?: number; trimEnd?: number }> }>,
 ): number {
   let maxDuration = 0;
 

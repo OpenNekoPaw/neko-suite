@@ -50,7 +50,8 @@ export const settings = {
   'settings.providers.availableModels': 'Available Models',
   'settings.providers.fetchModels': 'Fetch from API',
   'settings.providers.fetchModelsFailed': 'Failed to fetch models',
-  'settings.providers.fetchModelsNotSupported': 'This provider does not support API model listing. Please enter the model name manually.',
+  'settings.providers.fetchModelsNotSupported':
+    'This provider does not support API model listing. Please enter the model name manually.',
   'settings.providers.selectModel': 'Click to select this model',
   'settings.providers.imageGen': 'Image',
   'settings.providers.videoGen': 'Video',
@@ -58,14 +59,16 @@ export const settings = {
   'settings.providers.embedding': 'Embedding',
   'settings.providers.protocol': 'Protocol',
   'settings.providers.protocolAuto': 'Auto (infer from model name)',
-  'settings.providers.protocolHint': 'Specify API protocol type. "Auto" infers from model name (e.g., claude, gpt).',
+  'settings.providers.protocolHint':
+    'Specify API protocol type. "Auto" infers from model name (e.g., claude, gpt).',
   'settings.providers.validateApiKey': 'Validate API Key',
   'settings.providers.validating': 'Validating...',
   'settings.providers.apiKeyValid': 'API Key is valid',
   'settings.providers.apiKeyInvalid': 'API Key is invalid',
 
   'settings.prompts.title': 'Configured Prompts',
-  'settings.prompts.description': 'Select a prompt preset for conversations. Each preset has its own system prompt and parameter configuration.',
+  'settings.prompts.description':
+    'Select a prompt preset for conversations. Each preset has its own system prompt and parameter configuration.',
   'settings.prompts.addPrompt': '+ Create Custom Prompt',
   'settings.prompts.editPrompt': 'Edit Prompt',
   'settings.prompts.createPrompt': 'Create New Prompt',
@@ -82,7 +85,8 @@ export const settings = {
   'settings.prompts.promptTypes.video': 'Video - AI video generation prompts',
   'settings.prompts.promptTypes.custom': 'Custom - Other specialized tasks',
   'settings.prompts.systemPrompt': 'System Prompt *',
-  'settings.prompts.systemPromptPlaceholder': 'Define the AI\'s behavior, personality, and capabilities...',
+  'settings.prompts.systemPromptPlaceholder':
+    "Define the AI's behavior, personality, and capabilities...",
   'settings.prompts.characters': '{count} characters',
   'settings.prompts.behavior': 'Behavior',
   'settings.prompts.autoExecuteTools': 'Auto-execute tools',
@@ -99,7 +103,8 @@ export const settings = {
   'settings.prompts.screenwriter.name': 'Screenwriter',
   'settings.prompts.screenwriter.description': 'Creates scripts, dialogues, and story structures',
   'settings.prompts.storyboard.name': 'Storyboard Artist',
-  'settings.prompts.storyboard.description': 'Creates shot-by-shot visual breakdowns for video production',
+  'settings.prompts.storyboard.description':
+    'Creates shot-by-shot visual breakdowns for video production',
   'settings.prompts.imageCreator.name': 'Image Creator',
   'settings.prompts.imageCreator.description': 'Generates detailed prompts for AI image generation',
   'settings.prompts.videoCreator.name': 'Video Creator',
@@ -112,19 +117,25 @@ export const settings = {
   'settings.prompts.sourcePersonal': 'User Prompts',
   'settings.prompts.sourceProject': 'Workspace Prompts',
   'settings.prompts.promptSource': 'Save Location',
-  'settings.prompts.fileContentHint': 'Prompt content will be saved to a file that you can edit in VSCode.',
+  'settings.prompts.fileContentHint':
+    'Prompt content will be saved to a file that you can edit in VSCode.',
   'settings.prompts.personalFilePath': 'User location: ~/.neko/prompts/<name>.md',
   'settings.prompts.projectFilePath': 'Workspace location: .neko/prompts/<name>.md',
   'settings.prompts.openInVSCode': 'Open in VSCode',
-  'settings.prompts.editHelp': 'User and workspace prompts can be edited in VSCode. Built-in prompts can only be enabled or disabled.',
+  'settings.prompts.editHelp':
+    'User and workspace prompts can be edited in VSCode. Built-in prompts can only be enabled or disabled.',
   'settings.prompts.agentsTitle': 'Global Agent Instructions (AGENTS.md)',
-  'settings.prompts.agentsDescription': 'Global instructions are injected into all conversations. Supports project-level and user-level configuration.',
-  'settings.prompts.agentsPriorityHint': 'Priority: Project (.neko/AGENTS.md) > User (~/.neko/AGENTS.md)',
+  'settings.prompts.agentsDescription':
+    'Global instructions are injected into all conversations. Supports project-level and user-level configuration.',
+  'settings.prompts.agentsPriorityHint':
+    'Priority: Project (.neko/AGENTS.md) > User (~/.neko/AGENTS.md)',
   'settings.prompts.skillsHintTitle': 'Use Skills to Customize AI Behavior',
-  'settings.prompts.skillsHintDescription': 'Skills are a more powerful way to customize AI behavior. Create SKILL.md files in .neko/skills/ directory, and AI will automatically apply relevant skills based on context.',
+  'settings.prompts.skillsHintDescription':
+    'Skills are a more powerful way to customize AI behavior. Create SKILL.md files in .neko/skills/ directory, and AI will automatically apply relevant skills based on context.',
 
   'settings.hooks.title': 'Hooks Configuration',
-  'settings.hooks.description': 'Hooks allow running custom commands at specific points during Agent execution. Configuration is saved in settings.json.',
+  'settings.hooks.description':
+    'Hooks allow running custom commands at specific points during Agent execution. Configuration is saved in settings.json.',
   'settings.hooks.projectSettings': 'Project Settings',
   'settings.hooks.personalSettings': 'User Settings',
   'settings.hooks.localSettings': 'Local Settings',
@@ -140,7 +151,8 @@ export const settings = {
   'settings.hooks.events.SessionEnd': 'Session ends',
 
   'settings.mcp.title': 'Configured MCP Servers',
-  'settings.mcp.description': 'Model Context Protocol servers extend AI capabilities with external tools.',
+  'settings.mcp.description':
+    'Model Context Protocol servers extend AI capabilities with external tools.',
   'settings.mcp.addServer': '+ Add Custom MCP Server',
   'settings.mcp.editServer': 'Edit MCP Server',
   'settings.mcp.builtIn': 'Built-in',
@@ -162,7 +174,8 @@ export const settings = {
   'settings.advanced.showToolCalls': 'Show Tool Calls',
 
   'settings.skills.title': 'Skills & Commands',
-  'settings.skills.description': 'Manage skills and slash commands. Configure content and tools each skill can access.',
+  'settings.skills.description':
+    'Manage skills and slash commands. Configure content and tools each skill can access.',
   'settings.skills.noSkills': 'No skills configured',
   'settings.skills.configured': 'configured',
   'settings.skills.summary': '{enabled}/{total} enabled',
@@ -212,7 +225,8 @@ export const settings = {
   'settings.skills.noMcpServers': 'No MCP servers configured',
   'settings.skills.autoInjectMcpTools': 'Auto-inject MCP tools as allowed tools',
   'settings.skills.toolSkillsTitle': 'Tool Groups',
-  'settings.skills.toolSkillsDescription': 'Manage tool groups for dynamic injection. Only relevant tools are sent to AI based on your input.',
+  'settings.skills.toolSkillsDescription':
+    'Manage tool groups for dynamic injection. Only relevant tools are sent to AI based on your input.',
   'settings.skills.toolSkillType': 'Tool Group',
   'settings.skills.toolSkillTools': 'Tools',
   'settings.skills.toolSkillKeywords': 'Trigger Keywords',
@@ -221,18 +235,24 @@ export const settings = {
   'settings.skills.toolSkillDependencies': 'Dependencies',
   'settings.skills.noToolSkills': 'No tool groups configured',
   'settings.skills.builtin.ai-generate.name': 'AI Generate',
-  'settings.skills.builtin.ai-generate.description': 'AI media generation capabilities including image, video, audio, and music generation.',
+  'settings.skills.builtin.ai-generate.description':
+    'AI media generation capabilities including image, video, audio, and music generation.',
   'settings.skills.builtin.video-editing.name': 'Video Editing',
-  'settings.skills.builtin.video-editing.description': 'Video editing assistant for timeline operations: cut, trim, transition, split, merge clips.',
+  'settings.skills.builtin.video-editing.description':
+    'Video editing assistant for timeline operations: cut, trim, transition, split, merge clips.',
   'settings.skills.builtin.color-grading.name': 'Color Grading',
-  'settings.skills.builtin.color-grading.description': 'Color grading and correction assistant: LUT, white balance, exposure, contrast, saturation.',
+  'settings.skills.builtin.color-grading.description':
+    'Color grading and correction assistant: LUT, white balance, exposure, contrast, saturation.',
   'settings.skills.builtin.audio-mixing.name': 'Audio Mixing',
-  'settings.skills.builtin.audio-mixing.description': 'Audio mixing and sound design assistant: volume, music, voiceover, sound effects, ducking.',
+  'settings.skills.builtin.audio-mixing.description':
+    'Audio mixing and sound design assistant: volume, music, voiceover, sound effects, ducking.',
   'settings.skills.builtin.subtitle-assistant.name': 'Subtitle Assistant',
-  'settings.skills.builtin.subtitle-assistant.description': 'Subtitle and captioning assistant: add subtitles, transcribe, translate, timing, SRT/VTT.',
+  'settings.skills.builtin.subtitle-assistant.description':
+    'Subtitle and captioning assistant: add subtitles, transcribe, translate, timing, SRT/VTT.',
 
   'settings.models.title': 'Model Presets',
-  'settings.models.description': 'Configure AI models for image, video, and audio generation. Add API keys to enable models.',
+  'settings.models.description':
+    'Configure AI models for image, video, and audio generation. Add API keys to enable models.',
   'settings.models.search': 'Search models...',
   'settings.models.searchPlaceholder': 'Search models...',
   'settings.models.all': 'All',

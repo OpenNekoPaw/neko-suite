@@ -78,11 +78,7 @@ export type WorkflowEngineType =
 /**
  * Workflow category
  */
-export type WorkflowCategory =
-  | 'image-generation'
-  | 'ai-workflow'
-  | 'automation'
-  | 'integration';
+export type WorkflowCategory = 'image-generation' | 'ai-workflow' | 'automation' | 'integration';
 
 /**
  * Workflow preset configuration
@@ -180,4 +176,3 @@ export interface PromptPreset {
   /** Internal prompts are not shown in the UI */
   internal?: boolean;
 }
-

@@ -40,7 +40,7 @@ export function AccountBar({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const activeProvider = configuredProviders.find(p => p.enabled !== false && p.apiKey);
+  const activeProvider = configuredProviders.find((p) => p.enabled !== false && p.apiKey);
   const isConfigured = !!ssoSession || !!activeProvider;
 
   // --- Unconfigured state ---
@@ -61,7 +61,7 @@ export function AccountBar({
     <div ref={ref} className="relative">
       {/* Trigger button */}
       <button
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 p-1.5 hover:bg-[var(--vscode-list-hoverBackground)] rounded transition-colors"
         title={ssoSession ? ssoSession.user : activeProvider?.name}
       >
@@ -87,12 +87,16 @@ export function AccountBar({
                 {ssoSession.plan && (
                   <div className="text-[10px] text-[var(--vscode-descriptionForeground)] mt-0.5">
                     {ssoSession.plan}
-                    {ssoSession.usage !== undefined && ` · ${ssoSession.usage.toLocaleString()} tokens`}
+                    {ssoSession.usage !== undefined &&
+                      ` · ${ssoSession.usage.toLocaleString()} tokens`}
                   </div>
                 )}
               </div>
               <button
-                onClick={() => { setOpen(false); postMessage({ type: 'ssoLogout' }); }}
+                onClick={() => {
+                  setOpen(false);
+                  postMessage({ type: 'ssoLogout' });
+                }}
                 className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
               >
                 {t('accountBar.signOut')}
@@ -109,7 +113,10 @@ export function AccountBar({
                 )}
               </div>
               <button
-                onClick={() => { setOpen(false); onOpenOnboarding(); }}
+                onClick={() => {
+                  setOpen(false);
+                  onOpenOnboarding();
+                }}
                 className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
               >
                 {t('accountBar.changeKey')}

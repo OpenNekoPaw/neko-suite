@@ -28,9 +28,9 @@ export interface AudioProperties {
   gain: number;
   /** Equalizer settings (optional) */
   eq?: {
-    lowGain: number;   // Low frequency dB
-    midGain: number;   // Mid frequency dB
-    highGain: number;  // High frequency dB
+    lowGain: number; // Low frequency dB
+    midGain: number; // Mid frequency dB
+    highGain: number; // High frequency dB
   };
 }
 

@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  getPromptTypeName,
-  getPromptTypeIcon,
-} from '../prompts';
+import { getPromptTypeName, getPromptTypeIcon } from '../prompts';
 import type { PromptPresetType } from '@neko/shared';
 
 describe('prompts config', () => {

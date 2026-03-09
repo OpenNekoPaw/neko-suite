@@ -65,42 +65,48 @@ export function useInputHistory(options: UseInputHistoryOptions = {}): UseInputH
    * Add a new entry to history
    * Called when user sends a message
    */
-  const addToHistory = useCallback((input: string) => {
-    const trimmed = input.trim();
-    if (!trimmed) return;
+  const addToHistory = useCallback(
+    (input: string) => {
+      const trimmed = input.trim();
+      if (!trimmed) return;
 
-    setHistory(prev => {
-      // Remove duplicate if exists
-      const filtered = prev.filter(h => h !== trimmed);
-      // Add to front, limit size
-      return [trimmed, ...filtered].slice(0, maxHistory);
-    });
+      setHistory((prev) => {
+        // Remove duplicate if exists
+        const filtered = prev.filter((h) => h !== trimmed);
+        // Add to front, limit size
+        return [trimmed, ...filtered].slice(0, maxHistory);
+      });
 
-    // Reset navigation state
-    setHistoryIndex(-1);
-    tempInputRef.current = '';
-  }, [maxHistory]);
+      // Reset navigation state
+      setHistoryIndex(-1);
+      tempInputRef.current = '';
+    },
+    [maxHistory],
+  );
 
   /**
    * Navigate to previous (older) history entry
    * Returns the history entry or null if at end
    */
-  const navigateUp = useCallback((currentInput: string): string | null => {
-    if (history.length === 0) return null;
+  const navigateUp = useCallback(
+    (currentInput: string): string | null => {
+      if (history.length === 0) return null;
 
-    // If starting navigation, save current input
-    if (historyIndex === -1) {
-      tempInputRef.current = currentInput;
-    }
+      // If starting navigation, save current input
+      if (historyIndex === -1) {
+        tempInputRef.current = currentInput;
+      }
 
-    const newIndex = Math.min(historyIndex + 1, history.length - 1);
+      const newIndex = Math.min(historyIndex + 1, history.length - 1);
 
-    // Already at oldest entry
-    if (newIndex === historyIndex) return null;
+      // Already at oldest entry
+      if (newIndex === historyIndex) return null;
 
-    setHistoryIndex(newIndex);
-    return history[newIndex] ?? null;
-  }, [history, historyIndex]);
+      setHistoryIndex(newIndex);
+      return history[newIndex] ?? null;
+    },
+    [history, historyIndex],
+  );
 
   /**
    * Navigate to next (newer) history entry

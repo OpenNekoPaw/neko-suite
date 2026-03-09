@@ -5,7 +5,12 @@
 
 import { memo, useCallback } from 'react';
 import { useTranslation } from '../../i18n/I18nContext';
-import type { SubtitleStyle, SubtitleAlignment, SubtitleVerticalAlign, SubtitleAnimation } from '../../types/subtitle';
+import type {
+  SubtitleStyle,
+  SubtitleAlignment,
+  SubtitleVerticalAlign,
+  SubtitleAnimation,
+} from '../../types/subtitle';
 
 // =============================================================================
 // Types
@@ -41,9 +46,7 @@ const SliderRow = memo(function SliderRow({
 }: SliderRowProps) {
   return (
     <div className="flex items-center gap-2">
-      <label className="text-[11px] text-[var(--vscode-foreground)] w-24 shrink-0">
-        {label}
-      </label>
+      <label className="text-[11px] text-[var(--vscode-foreground)] w-24 shrink-0">{label}</label>
       <input
         type="range"
         className="flex-1 h-1"
@@ -54,7 +57,8 @@ const SliderRow = memo(function SliderRow({
         onChange={(e) => onChange(parseFloat(e.target.value))}
       />
       <span className="text-[10px] text-[var(--vscode-descriptionForeground)] w-12 text-right">
-        {value}{unit}
+        {value}
+        {unit}
       </span>
     </div>
   );
@@ -66,16 +70,10 @@ interface ColorRowProps {
   onChange: (value: string) => void;
 }
 
-const ColorRow = memo(function ColorRow({
-  label,
-  value,
-  onChange,
-}: ColorRowProps) {
+const ColorRow = memo(function ColorRow({ label, value, onChange }: ColorRowProps) {
   return (
     <div className="flex items-center gap-2">
-      <label className="text-[11px] text-[var(--vscode-foreground)] w-24 shrink-0">
-        {label}
-      </label>
+      <label className="text-[11px] text-[var(--vscode-foreground)] w-24 shrink-0">{label}</label>
       <div className="flex-1 flex items-center gap-2">
         <input
           type="color"
@@ -101,17 +99,10 @@ interface SelectRowProps<T extends string> {
   onChange: (value: T) => void;
 }
 
-function SelectRow<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: SelectRowProps<T>) {
+function SelectRow<T extends string>({ label, value, options, onChange }: SelectRowProps<T>) {
   return (
     <div className="flex items-center gap-2">
-      <label className="text-[11px] text-[var(--vscode-foreground)] w-24 shrink-0">
-        {label}
-      </label>
+      <label className="text-[11px] text-[var(--vscode-foreground)] w-24 shrink-0">{label}</label>
       <select
         className="flex-1 px-2 py-1 text-[10px] bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded"
         value={value}
@@ -133,16 +124,10 @@ interface CheckboxRowProps {
   onChange: (checked: boolean) => void;
 }
 
-const CheckboxRow = memo(function CheckboxRow({
-  label,
-  checked,
-  onChange,
-}: CheckboxRowProps) {
+const CheckboxRow = memo(function CheckboxRow({ label, checked, onChange }: CheckboxRowProps) {
   return (
     <div className="flex items-center gap-2">
-      <label className="text-[11px] text-[var(--vscode-foreground)] w-24 shrink-0">
-        {label}
-      </label>
+      <label className="text-[11px] text-[var(--vscode-foreground)] w-24 shrink-0">{label}</label>
       <input
         type="checkbox"
         className="w-4 h-4"
@@ -163,21 +148,13 @@ interface SectionProps {
   defaultExpanded?: boolean;
 }
 
-const Section = memo(function Section({
-  title,
-  children,
-  defaultExpanded = true,
-}: SectionProps) {
+const Section = memo(function Section({ title, children, defaultExpanded = true }: SectionProps) {
   return (
     <div className="border-b border-[var(--vscode-panel-border)] last:border-b-0">
       <div className="px-3 py-2 text-[11px] font-medium text-[var(--vscode-foreground)] bg-[var(--vscode-sideBar-background)]">
         {title}
       </div>
-      {defaultExpanded && (
-        <div className="px-3 py-2 space-y-2">
-          {children}
-        </div>
-      )}
+      {defaultExpanded && <div className="px-3 py-2 space-y-2">{children}</div>}
     </div>
   );
 });
@@ -192,12 +169,12 @@ export const SubtitleStyleEditor = memo(function SubtitleStyleEditor({
 }: SubtitleStyleEditorProps) {
   const { t } = useTranslation();
 
-  const updateStyle = useCallback(<K extends keyof SubtitleStyle>(
-    key: K,
-    value: SubtitleStyle[K]
-  ) => {
-    onChange({ ...style, [key]: value });
-  }, [style, onChange]);
+  const updateStyle = useCallback(
+    <K extends keyof SubtitleStyle>(key: K, value: SubtitleStyle[K]) => {
+      onChange({ ...style, [key]: value });
+    },
+    [style, onChange],
+  );
 
   // Alignment options
   const alignmentOptions: { value: SubtitleAlignment; label: string }[] = [

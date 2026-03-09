@@ -266,7 +266,7 @@ export function createBezierMask(): BezierMask {
  */
 export function createMaskInstance(
   shapeType: MaskShapeType = 'rectangle',
-  name?: string
+  name?: string,
 ): MaskInstance {
   let shape: MaskShape;
   switch (shapeType) {
@@ -339,7 +339,7 @@ export function createAnimatableMaskProperty(baseValue: number): AnimatableMaskP
 export function createMaskPropertyKeyframe(
   time: number,
   value: number,
-  easing: MaskEasingType = 'linear'
+  easing: MaskEasingType = 'linear',
 ): MaskPropertyKeyframe {
   return {
     id: generateMaskKeyframeId(),
@@ -356,7 +356,7 @@ export function createMaskPropertyKeyframe(
 export function createMaskShapeKeyframe(
   time: number,
   shape: MaskShape,
-  easing: MaskEasingType = 'linear'
+  easing: MaskEasingType = 'linear',
 ): MaskShapeKeyframe {
   return {
     id: generateMaskKeyframeId(),
@@ -372,10 +372,10 @@ export function createMaskShapeKeyframe(
  */
 export function insertMaskKeyframeSorted<T extends { time: number }>(
   keyframes: T[],
-  newKeyframe: T
+  newKeyframe: T,
 ): T[] {
   const result = [...keyframes];
-  const insertIndex = result.findIndex(kf => kf.time > newKeyframe.time);
+  const insertIndex = result.findIndex((kf) => kf.time > newKeyframe.time);
   if (insertIndex === -1) {
     result.push(newKeyframe);
   } else {
@@ -390,9 +390,9 @@ export function insertMaskKeyframeSorted<T extends { time: number }>(
  */
 export function removeMaskKeyframeById<T extends { id: string }>(
   keyframes: T[],
-  keyframeId: string
+  keyframeId: string,
 ): T[] {
-  return keyframes.filter(kf => kf.id !== keyframeId);
+  return keyframes.filter((kf) => kf.id !== keyframeId);
 }
 
 /**
@@ -402,9 +402,9 @@ export function removeMaskKeyframeById<T extends { id: string }>(
 export function getMaskKeyframeAtTime<T extends { time: number }>(
   keyframes: T[],
   time: number,
-  tolerance: number = 0.01
+  tolerance: number = 0.01,
 ): T | undefined {
-  return keyframes.find(kf => Math.abs(kf.time - time) <= tolerance);
+  return keyframes.find((kf) => Math.abs(kf.time - time) <= tolerance);
 }
 
 /**
@@ -436,7 +436,7 @@ export function applyMaskEasing(progress: number, easing: MaskEasingType): numbe
  */
 export function getAnimatedMaskPropertyValue(
   property: AnimatableMaskProperty | undefined,
-  localTime: number
+  localTime: number,
 ): number {
   if (!property) return 0;
 
@@ -517,7 +517,7 @@ function lerpBezierPoint(a: BezierPoint, b: BezierPoint, t: number): BezierPoint
 export function interpolateMaskShapes(
   shapeA: MaskShape,
   shapeB: MaskShape,
-  t: number
+  t: number,
 ): MaskShape | null {
   // Can only interpolate shapes of the same type
   if (shapeA.type !== shapeB.type) {
@@ -588,7 +588,7 @@ export function interpolateMaskShapes(
 export function getAnimatedMaskShape(
   shapeKeyframes: MaskShapeKeyframe[] | undefined,
   baseShape: MaskShape,
-  localTime: number
+  localTime: number,
 ): MaskShape {
   if (!shapeKeyframes || shapeKeyframes.length === 0) {
     return baseShape;
@@ -643,7 +643,7 @@ export function getAnimatedMaskShape(
  */
 export function getComputedMaskAtTime(
   mask: MaskInstance,
-  localTime: number
+  localTime: number,
 ): {
   shape: MaskShape;
   feather: number;
@@ -674,10 +674,14 @@ export function hasMaskAnimation(mask: MaskInstance): boolean {
   const animation = mask.animation;
   if (!animation) return false;
 
-  const hasShapeKeyframes = animation.shapeKeyframes !== undefined && animation.shapeKeyframes.length > 0;
-  const hasFeatherKeyframes = animation.feather !== undefined && animation.feather.keyframes.length > 0;
-  const hasExpansionKeyframes = animation.expansion !== undefined && animation.expansion.keyframes.length > 0;
-  const hasOpacityKeyframes = animation.opacity !== undefined && animation.opacity.keyframes.length > 0;
+  const hasShapeKeyframes =
+    animation.shapeKeyframes !== undefined && animation.shapeKeyframes.length > 0;
+  const hasFeatherKeyframes =
+    animation.feather !== undefined && animation.feather.keyframes.length > 0;
+  const hasExpansionKeyframes =
+    animation.expansion !== undefined && animation.expansion.keyframes.length > 0;
+  const hasOpacityKeyframes =
+    animation.opacity !== undefined && animation.opacity.keyframes.length > 0;
 
   return hasShapeKeyframes || hasFeatherKeyframes || hasExpansionKeyframes || hasOpacityKeyframes;
 }
@@ -692,10 +696,10 @@ export function getMaskKeyframeTimes(mask: MaskInstance): number[] {
 
   if (!animation) return [];
 
-  animation.shapeKeyframes?.forEach(kf => times.add(kf.time));
-  animation.feather?.keyframes.forEach(kf => times.add(kf.time));
-  animation.expansion?.keyframes.forEach(kf => times.add(kf.time));
-  animation.opacity?.keyframes.forEach(kf => times.add(kf.time));
+  animation.shapeKeyframes?.forEach((kf) => times.add(kf.time));
+  animation.feather?.keyframes.forEach((kf) => times.add(kf.time));
+  animation.expansion?.keyframes.forEach((kf) => times.add(kf.time));
+  animation.opacity?.keyframes.forEach((kf) => times.add(kf.time));
 
   return Array.from(times).sort((a, b) => a - b);
 }
@@ -709,7 +713,7 @@ export function addMaskPropertyKeyframe(
   property: 'feather' | 'expansion' | 'opacity',
   time: number,
   value: number,
-  easing: MaskEasingType = 'linear'
+  easing: MaskEasingType = 'linear',
 ): MaskInstance {
   const newKeyframe = createMaskPropertyKeyframe(time, value, easing);
 
@@ -746,7 +750,7 @@ export function addMaskPropertyKeyframe(
 export function removeMaskPropertyKeyframe(
   mask: MaskInstance,
   property: 'feather' | 'expansion' | 'opacity',
-  keyframeId: string
+  keyframeId: string,
 ): MaskInstance {
   const animation = mask.animation;
   if (!animation) return mask;
@@ -776,7 +780,7 @@ export function addMaskShapeKeyframe(
   mask: MaskInstance,
   time: number,
   shape: MaskShape,
-  easing: MaskEasingType = 'linear'
+  easing: MaskEasingType = 'linear',
 ): MaskInstance {
   const newKeyframe = createMaskShapeKeyframe(time, shape, easing);
 
@@ -796,10 +800,7 @@ export function addMaskShapeKeyframe(
  * Remove shape keyframe from mask animation
  * 从蒙版动画中删除形状关键帧
  */
-export function removeMaskShapeKeyframe(
-  mask: MaskInstance,
-  keyframeId: string
-): MaskInstance {
+export function removeMaskShapeKeyframe(mask: MaskInstance, keyframeId: string): MaskInstance {
   const animation = mask.animation;
   if (!animation || !animation.shapeKeyframes) return mask;
 

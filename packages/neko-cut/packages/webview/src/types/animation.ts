@@ -144,7 +144,7 @@ export function createDefaultElementTransform(): ElementTransform {
  * 缓动类型的翻译键
  */
 export const EASING_TYPE_I18N_KEYS: Record<EasingType, string> = {
-  'linear': 'animation.easing.linear',
+  linear: 'animation.easing.linear',
   // Legacy aliases
   'ease-in': 'animation.easing.easeIn',
   'ease-out': 'animation.easing.easeOut',
@@ -190,7 +190,7 @@ export const EASING_TYPE_I18N_KEYS: Record<EasingType, string> = {
   'ease-out-bounce': 'animation.easing.easeOutBounce',
   'ease-in-out-bounce': 'animation.easing.easeInOutBounce',
   // Bezier
-  'bezier': 'animation.easing.bezier',
+  bezier: 'animation.easing.bezier',
 };
 
 /**
@@ -198,15 +198,15 @@ export const EASING_TYPE_I18N_KEYS: Record<EasingType, string> = {
  * 属性名称的翻译键
  */
 export const ANIMATABLE_PROPERTY_I18N_KEYS: Record<AnimatablePropertyName, string> = {
-  'x': 'animation.property.positionX',
-  'y': 'animation.property.positionY',
-  'scaleX': 'animation.property.scaleX',
-  'scaleY': 'animation.property.scaleY',
-  'scale': 'animation.property.scale',
-  'rotation': 'animation.property.rotation',
-  'opacity': 'animation.property.opacity',
-  'anchorX': 'animation.property.anchorX',
-  'anchorY': 'animation.property.anchorY',
+  x: 'animation.property.positionX',
+  y: 'animation.property.positionY',
+  scaleX: 'animation.property.scaleX',
+  scaleY: 'animation.property.scaleY',
+  scale: 'animation.property.scale',
+  rotation: 'animation.property.rotation',
+  opacity: 'animation.property.opacity',
+  anchorX: 'animation.property.anchorX',
+  anchorY: 'animation.property.anchorY',
 };
 
 // =============================================================================
@@ -220,7 +220,7 @@ export const ANIMATABLE_PROPERTY_I18N_KEYS: Record<AnimatablePropertyName, strin
 export function createKeyframe(
   time: number,
   value: number,
-  easing: EasingType = 'linear'
+  easing: EasingType = 'linear',
 ): AnimationKeyframe {
   return {
     id: `kf-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,

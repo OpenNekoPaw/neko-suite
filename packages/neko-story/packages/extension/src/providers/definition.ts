@@ -11,7 +11,7 @@ export class FountainDefinitionProvider implements vscode.DefinitionProvider {
   async provideDefinition(
     document: vscode.TextDocument,
     position: vscode.Position,
-    _token: vscode.CancellationToken
+    _token: vscode.CancellationToken,
   ): Promise<vscode.Definition | null> {
     const wordRange = document.getWordRangeAtPosition(position, /[A-Z][A-Z0-9 ._\-']+/);
     if (!wordRange) return null;
@@ -54,7 +54,7 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
     document: vscode.TextDocument,
     position: vscode.Position,
     _context: vscode.ReferenceContext,
-    _token: vscode.CancellationToken
+    _token: vscode.CancellationToken,
   ): Promise<vscode.Location[]> {
     const wordRange = document.getWordRangeAtPosition(position, /[A-Z][A-Z0-9 ._\-']+/);
     if (!wordRange) return [];
@@ -65,19 +65,19 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
     // Collect all character references across workspace
     const charLocs = this.index.findCharacterLocations(word, document.uri);
     if (charLocs.length > 0) {
-      return charLocs.map(loc => new vscode.Location(loc.uri, loc.range));
+      return charLocs.map((loc) => new vscode.Location(loc.uri, loc.range));
     }
 
     // Try scene locations
     const sceneLocs = this.index.findSceneLocations(word, document.uri);
     if (sceneLocs.length > 0) {
-      return sceneLocs.map(loc => new vscode.Location(loc.uri, loc.range));
+      return sceneLocs.map((loc) => new vscode.Location(loc.uri, loc.range));
     }
 
     // Try sections
     const sectionLocs = this.index.findSectionLocations(word, document.uri);
     if (sectionLocs.length > 0) {
-      return sectionLocs.map(loc => new vscode.Location(loc.uri, loc.range));
+      return sectionLocs.map((loc) => new vscode.Location(loc.uri, loc.range));
     }
 
     return [];

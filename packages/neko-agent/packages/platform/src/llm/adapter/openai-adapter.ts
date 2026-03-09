@@ -31,7 +31,15 @@ export class OpenAIAdapter extends AISdkAdapter {
   private readonly httpHelper = new OpenAIHttpHelper();
 
   protected getSupportedCapabilities(): string[] {
-    return ['chat', 'vision', 'function_calling', 'json_mode', 'streaming', 'embedding', 'image_generation'];
+    return [
+      'chat',
+      'vision',
+      'function_calling',
+      'json_mode',
+      'streaming',
+      'embedding',
+      'image_generation',
+    ];
   }
 
   /**
@@ -64,7 +72,11 @@ export class OpenAIAdapter extends AISdkAdapter {
    * Note: strictJsonSchema is disabled by default for compatibility with
    * third-party API proxies that don't support OpenAI's Structured Outputs feature.
    */
-  protected override getProviderOptions(options: ChatOptions, provider: Provider, _model: Model): Record<string, unknown> {
+  protected override getProviderOptions(
+    options: ChatOptions,
+    provider: Provider,
+    _model: Model,
+  ): Record<string, unknown> {
     const result: Record<string, unknown> = {
       // Disable strict JSON schema validation for tool calls
       // Many API proxies don't support this OpenAI-specific feature
@@ -114,7 +126,7 @@ export class OpenAIAdapter extends AISdkAdapter {
     prompt: string,
     options: ImageGenerationOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<ImageGenerationResult> {
     return this.httpHelper.generateImage(prompt, options, model, provider);
   }
@@ -154,25 +166,28 @@ class OpenAIHttpHelper {
     prompt: string,
     options: ImageGenerationOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<ImageGenerationResult> {
     const { apiKey, apiUrl } = this.getCredentials(provider);
 
     const data = await this.http.request<{
       data: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>;
-    }>({
-      url: `${apiUrl}/images/generations`,
-      method: 'POST',
-      headers: this.http.buildBearerAuth(apiKey),
-      body: {
-        model: model.name,
-        prompt,
-        size: options.size || '1024x1024',
-        quality: options.quality || 'standard',
-        style: options.style || 'natural',
-        n: options.n || 1,
+    }>(
+      {
+        url: `${apiUrl}/images/generations`,
+        method: 'POST',
+        headers: this.http.buildBearerAuth(apiKey),
+        body: {
+          model: model.name,
+          prompt,
+          size: options.size || '1024x1024',
+          quality: options.quality || 'standard',
+          style: options.style || 'natural',
+          n: options.n || 1,
+        },
       },
-    }, 'OpenAI API error');
+      'OpenAI API error',
+    );
 
     return {
       images: data.data.map((img) => ({
@@ -189,11 +204,14 @@ class OpenAIHttpHelper {
   async listModelsDetailed(provider: Provider): Promise<ModelInfo[]> {
     const { apiKey, apiUrl } = this.getCredentials(provider);
 
-    const data = await this.http.request<{ data: Array<{ id: string; owned_by: string }> }>({
-      url: `${apiUrl}/models`,
-      method: 'GET',
-      headers: this.http.buildBearerAuth(apiKey),
-    }, 'OpenAI API error');
+    const data = await this.http.request<{ data: Array<{ id: string; owned_by: string }> }>(
+      {
+        url: `${apiUrl}/models`,
+        method: 'GET',
+        headers: this.http.buildBearerAuth(apiKey),
+      },
+      'OpenAI API error',
+    );
 
     return data.data.map((m) => this.inferModelCapabilities(m.id, m.owned_by));
   }

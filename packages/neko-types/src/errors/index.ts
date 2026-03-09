@@ -9,12 +9,7 @@
  */
 
 // Existing exports
-export {
-  BaseError,
-  calculateBackoff,
-  shouldRetry,
-  sleep,
-} from './base-error';
+export { BaseError, calculateBackoff, shouldRetry, sleep } from './base-error';
 export type {
   BackoffStrategy,
   BaseErrorInfo,
@@ -29,8 +24,4 @@ export type {
 
 // New error handler exports
 export { getDefaultDisplayOptions, toBaseError } from './error-handler';
-export type {
-  ErrorDisplayOptions,
-  ErrorSeverity,
-  IErrorHandler,
-} from './error-handler';
+export type { ErrorDisplayOptions, ErrorSeverity, IErrorHandler } from './error-handler';

@@ -4,7 +4,12 @@
  */
 
 export { PropertyPanel, default } from './PropertyPanel';
-export { PropertyRow, type PropertyDefinition, type PropertyType, type PropertyOption } from './PropertyRow';
+export {
+  PropertyRow,
+  type PropertyDefinition,
+  type PropertyType,
+  type PropertyOption,
+} from './PropertyRow';
 export { ShapePanel } from './ShapePanel';
 
 // Shape Animation Panels

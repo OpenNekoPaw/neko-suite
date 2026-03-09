@@ -44,55 +44,61 @@ export function DropZone({
   const dragCounterRef = useRef(0);
 
   // Check if file type is accepted
-  const isAcceptedType = useCallback((file: File): boolean => {
-    return acceptedTypes.some(type => {
-      if (type.endsWith('/*')) {
-        const prefix = type.slice(0, -1);
-        return file.type.startsWith(prefix);
-      }
-      return file.type === type;
-    });
-  }, [acceptedTypes]);
+  const isAcceptedType = useCallback(
+    (file: File): boolean => {
+      return acceptedTypes.some((type) => {
+        if (type.endsWith('/*')) {
+          const prefix = type.slice(0, -1);
+          return file.type.startsWith(prefix);
+        }
+        return file.type === type;
+      });
+    },
+    [acceptedTypes],
+  );
 
   // Process dropped files
-  const processFiles = useCallback(async (fileList: FileList): Promise<AttachedFile[]> => {
-    const files: AttachedFile[] = [];
-    const validFiles = Array.from(fileList).filter(file => {
-      if (!isAcceptedType(file)) {
-        logger.warn(`File type not accepted: ${file.type}`);
-        return false;
-      }
-      if (file.size > maxSize) {
-        logger.warn(`File too large: ${file.name} (${file.size} bytes)`);
-        return false;
-      }
-      return true;
-    });
-
-    for (const file of validFiles) {
-      const fileType = getFileType(file.type);
-      const attachedFile: AttachedFile = {
-        id: `drop-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: file.name,
-        type: fileType,
-        size: file.size,
-      };
-
-      // Create preview for media files
-      if (fileType === 'image' || fileType === 'video' || fileType === 'audio') {
-        try {
-          const preview = await readFileAsDataURL(file);
-          attachedFile.preview = preview;
-        } catch (err) {
-          logger.error('Failed to read file preview:', err);
+  const processFiles = useCallback(
+    async (fileList: FileList): Promise<AttachedFile[]> => {
+      const files: AttachedFile[] = [];
+      const validFiles = Array.from(fileList).filter((file) => {
+        if (!isAcceptedType(file)) {
+          logger.warn(`File type not accepted: ${file.type}`);
+          return false;
         }
+        if (file.size > maxSize) {
+          logger.warn(`File too large: ${file.name} (${file.size} bytes)`);
+          return false;
+        }
+        return true;
+      });
+
+      for (const file of validFiles) {
+        const fileType = getFileType(file.type);
+        const attachedFile: AttachedFile = {
+          id: `drop-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          name: file.name,
+          type: fileType,
+          size: file.size,
+        };
+
+        // Create preview for media files
+        if (fileType === 'image' || fileType === 'video' || fileType === 'audio') {
+          try {
+            const preview = await readFileAsDataURL(file);
+            attachedFile.preview = preview;
+          } catch (err) {
+            logger.error('Failed to read file preview:', err);
+          }
+        }
+
+        files.push(attachedFile);
       }
 
-      files.push(attachedFile);
-    }
-
-    return files;
-  }, [isAcceptedType, maxSize]);
+      return files;
+    },
+    [isAcceptedType, maxSize],
+  );
 
   // Read file as data URL
   const readFileAsDataURL = (file: File): Promise<string> => {
@@ -105,16 +111,19 @@ export function DropZone({
   };
 
   // Handle drag enter
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (disabled) return;
+  const handleDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (disabled) return;
 
-    dragCounterRef.current++;
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      setIsDragging(true);
-    }
-  }, [disabled]);
+      dragCounterRef.current++;
+      if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+        setIsDragging(true);
+      }
+    },
+    [disabled],
+  );
 
   // Handle drag leave
   const handleDragLeave = useCallback((e: React.DragEvent) => {
@@ -134,23 +143,26 @@ export function DropZone({
   }, []);
 
   // Handle drop
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
 
-    setIsDragging(false);
-    dragCounterRef.current = 0;
+      setIsDragging(false);
+      dragCounterRef.current = 0;
 
-    if (disabled) return;
+      if (disabled) return;
 
-    const files = e.dataTransfer.files;
-    if (files && files.length > 0) {
-      const processedFiles = await processFiles(files);
-      if (processedFiles.length > 0) {
-        onFilesDropped(processedFiles);
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+        const processedFiles = await processFiles(files);
+        if (processedFiles.length > 0) {
+          onFilesDropped(processedFiles);
+        }
       }
-    }
-  }, [disabled, processFiles, onFilesDropped]);
+    },
+    [disabled, processFiles, onFilesDropped],
+  );
 
   // Reset drag counter on mount
   useEffect(() => {

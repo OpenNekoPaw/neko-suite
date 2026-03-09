@@ -62,12 +62,7 @@ export function getElementEndTime(element: {
 /**
  * Check if two time ranges overlap
  */
-export function rangesOverlap(
-  start1: number,
-  end1: number,
-  start2: number,
-  end2: number
-): boolean {
+export function rangesOverlap(start1: number, end1: number, start2: number, end2: number): boolean {
   return start1 < end2 && end1 > start2;
 }
 
@@ -82,7 +77,7 @@ export function isElementVisibleAtTime(
     trimEnd: number;
     hidden?: boolean;
   },
-  time: number
+  time: number,
 ): boolean {
   if (element.hidden) return false;
   const endTime = getElementEndTime(element);
@@ -160,19 +155,13 @@ export function isAudioFile(filename: string): boolean {
  * Check if click target is inside an input element
  */
 export function isInputElement(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement
-  );
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
 }
 
 /**
  * Check if click target has a specific class or is inside an element with that class
  */
-export function hasParentWithClass(
-  element: HTMLElement | null,
-  className: string
-): boolean {
+export function hasParentWithClass(element: HTMLElement | null, className: string): boolean {
   return element?.closest(`.${className}`) !== null;
 }
 

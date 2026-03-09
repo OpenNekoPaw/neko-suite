@@ -108,7 +108,7 @@ export function useMediaInfoCache(): CurrentMediaInfo {
     // Check bitrate cache for immediate update
     const bitrateCached = bitrateCacheRef.current.get(videoSrc);
     if (bitrateCached) {
-      setCurrentInfo(prev => ({
+      setCurrentInfo((prev) => ({
         ...prev,
         bitrate: bitrateCached.bitrate,
       }));
@@ -119,7 +119,7 @@ export function useMediaInfoCache(): CurrentMediaInfo {
 
     fetchBitrateInfo(videoSrc).then((bitrate) => {
       if (cancelled || !bitrate) return;
-      setCurrentInfo(prev => ({
+      setCurrentInfo((prev) => ({
         ...prev,
         bitrate,
       }));

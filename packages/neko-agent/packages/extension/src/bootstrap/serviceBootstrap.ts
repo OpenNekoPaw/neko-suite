@@ -62,7 +62,7 @@ class VSCodeTaskStorage {
 
   async save(task: TaskRecord): Promise<void> {
     const tasks = await this.loadAll();
-    const index = tasks.findIndex(t => t.id === task.id);
+    const index = tasks.findIndex((t) => t.id === task.id);
     if (index >= 0) {
       tasks[index] = task;
     } else {
@@ -73,12 +73,12 @@ class VSCodeTaskStorage {
 
   async load(id: string): Promise<TaskRecord | undefined> {
     const tasks = await this.loadAll();
-    return tasks.find(t => t.id === id);
+    return tasks.find((t) => t.id === id);
   }
 
   async loadPending(): Promise<TaskRecord[]> {
     const tasks = await this.loadAll();
-    return tasks.filter(t => t.status === 'pending' || t.status === 'running');
+    return tasks.filter((t) => t.status === 'pending' || t.status === 'running');
   }
 
   async loadAll(): Promise<TaskRecord[]> {
@@ -87,14 +87,14 @@ class VSCodeTaskStorage {
 
   async delete(id: string): Promise<void> {
     const tasks = await this.loadAll();
-    const filtered = tasks.filter(t => t.id !== id);
+    const filtered = tasks.filter((t) => t.id !== id);
     await this.globalState.update(this.STORAGE_KEY, filtered);
   }
 
   async cleanup(olderThanMs: number): Promise<number> {
     const tasks = await this.loadAll();
     const now = Date.now();
-    const filtered = tasks.filter(t => {
+    const filtered = tasks.filter((t) => {
       if (t.status === 'completed' || t.status === 'failed') {
         const completedAt = t.completedAt ?? t.createdAt;
         return now - completedAt < olderThanMs;
@@ -130,7 +130,7 @@ export interface IServiceBootstrapResult {
  */
 export async function bootstrapCoreServices(
   services: ServiceCollection,
-  context: vscode.ExtensionContext
+  context: vscode.ExtensionContext,
 ): Promise<IServiceBootstrapResult> {
   // ==========================================================================
   // 1. Task Manager with Persistence
@@ -186,7 +186,7 @@ export async function bootstrapCoreServices(
   context.subscriptions.push({ dispose: () => mcpManager.disconnectAll() });
 
   // Connect MCP servers in background
-  connectMCPServers(mcpManager, toolRegistry, connectionStateManager).catch(error => {
+  connectMCPServers(mcpManager, toolRegistry, connectionStateManager).catch((error) => {
     logger.error('Failed to connect MCP servers:', error);
   });
 
@@ -205,11 +205,14 @@ export async function bootstrapCoreServices(
   // ==========================================================================
   // 8. Initialize TaskManager
   // ==========================================================================
-  taskManager.initialize().then(() => {
-    return taskManager.resumePendingTasks();
-  }).catch((err) => {
-    logger.error('Failed to initialize TaskManager:', err);
-  });
+  taskManager
+    .initialize()
+    .then(() => {
+      return taskManager.resumePendingTasks();
+    })
+    .catch((err) => {
+      logger.error('Failed to initialize TaskManager:', err);
+    });
 
   return {
     platform,
@@ -229,7 +232,7 @@ export async function bootstrapCoreServices(
 async function connectMCPServers(
   mcpManager: MCPManager,
   toolRegistry: ToolRegistry,
-  connectionStateManager: ConnectionStateManager
+  connectionStateManager: ConnectionStateManager,
 ): Promise<void> {
   const servers = mcpManager.listServers();
 

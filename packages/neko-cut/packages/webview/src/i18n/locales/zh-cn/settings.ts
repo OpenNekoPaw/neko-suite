@@ -45,7 +45,8 @@ export const settings = {
   'settings.providers.contextWindow': '上下文窗口',
 
   'settings.prompts.title': '已配置的提示词',
-  'settings.prompts.description': '选择一个提示词预设进行对话。每个预设都有自己的系统提示词和参数配置。',
+  'settings.prompts.description':
+    '选择一个提示词预设进行对话。每个预设都有自己的系统提示词和参数配置。',
   'settings.prompts.addPrompt': '+ 创建自定义提示词',
   'settings.prompts.editPrompt': '编辑提示词',
   'settings.prompts.createPrompt': '创建新提示词',
@@ -123,7 +124,8 @@ export const settings = {
   'settings.advanced.showToolCalls': '显示工具调用',
 
   'settings.models.title': '模型预设',
-  'settings.models.description': '配置用于图像、视频和音频生成的 AI 模型。添加 API 密钥以启用模型。',
+  'settings.models.description':
+    '配置用于图像、视频和音频生成的 AI 模型。添加 API 密钥以启用模型。',
   'settings.models.search': '搜索模型...',
   'settings.models.searchPlaceholder': '搜索模型...',
   'settings.models.all': '全部',

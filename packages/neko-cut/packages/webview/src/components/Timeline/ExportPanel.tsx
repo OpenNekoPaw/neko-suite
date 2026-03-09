@@ -13,7 +13,15 @@ import type { ProjectData, ExportPreset, ExportPresetSettings } from '@neko/shar
 type ExportFormat = 'mp4' | 'webm' | 'mov' | 'mkv' | 'avi' | 'ts';
 
 interface ExportProgress {
-  stage: 'initializing' | 'rendering' | 'encoding' | 'muxing' | 'finalizing' | 'completed' | 'error' | 'cancelled';
+  stage:
+    | 'initializing'
+    | 'rendering'
+    | 'encoding'
+    | 'muxing'
+    | 'finalizing'
+    | 'completed'
+    | 'error'
+    | 'cancelled';
   percent: number;
   message?: string;
   currentFrame: number;
@@ -146,9 +154,7 @@ function formatElapsedTime(ms: number): string {
 function HwBadge({ encoder }: { encoder: string | null | undefined }) {
   if (encoder == null) {
     return (
-      <span className="text-xs text-vscode-descriptionForeground opacity-60">
-        💻 软件编码
-      </span>
+      <span className="text-xs text-vscode-descriptionForeground opacity-60">💻 软件编码</span>
     );
   }
   return (
@@ -266,7 +272,10 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
 
   // Global export status
   const [hasGlobalExport, setHasGlobalExport] = useState(false);
-  const [queueStatus, setQueueStatus] = useState<{ active: number; pending: number }>({ active: 0, pending: 0 });
+  const [queueStatus, setQueueStatus] = useState<{ active: number; pending: number }>({
+    active: 0,
+    pending: 0,
+  });
   const [presets, setPresets] = useState<ExportPreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [isNamingPreset, setIsNamingPreset] = useState(false);
@@ -322,7 +331,11 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             setExportProgress(null);
             sendExportProgress({ isExporting: false, percent: 0, message: '' });
             exportRef.current.isActive = false;
-            showToast(t('export.errors.exportFailed', { error: message.error || 'Unknown error' }), 'error', 5000);
+            showToast(
+              t('export.errors.exportFailed', { error: message.error || 'Unknown error' }),
+              'error',
+              5000,
+            );
           }
           break;
 
@@ -374,19 +387,22 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
   // Handlers
   // ---------------------------------------------------------------------------
 
-  const handleFormatChange = useCallback((newFormat: ExportFormat) => {
-    setSelectedPresetId(null);
-    setFormat(newFormat);
-    const defaults = DEFAULT_CODECS[newFormat];
-    const videoOptions = CONTAINER_VIDEO_CODECS[newFormat] ?? [];
-    const audioOptions = CONTAINER_AUDIO_CODECS[newFormat] ?? [];
-    if (!videoOptions.includes(videoCodec)) {
-      setVideoCodec(defaults?.video ?? videoOptions[0] ?? 'h264');
-    }
-    if (!audioOptions.includes(audioCodec)) {
-      setAudioCodec(defaults?.audio ?? audioOptions[0] ?? 'aac');
-    }
-  }, [videoCodec, audioCodec]);
+  const handleFormatChange = useCallback(
+    (newFormat: ExportFormat) => {
+      setSelectedPresetId(null);
+      setFormat(newFormat);
+      const defaults = DEFAULT_CODECS[newFormat];
+      const videoOptions = CONTAINER_VIDEO_CODECS[newFormat] ?? [];
+      const audioOptions = CONTAINER_AUDIO_CODECS[newFormat] ?? [];
+      if (!videoOptions.includes(videoCodec)) {
+        setVideoCodec(defaults?.video ?? videoOptions[0] ?? 'h264');
+      }
+      if (!audioOptions.includes(audioCodec)) {
+        setAudioCodec(defaults?.audio ?? audioOptions[0] ?? 'aac');
+      }
+    },
+    [videoCodec, audioCodec],
+  );
 
   const applyPreset = useCallback((preset: ExportPreset) => {
     const s = preset.settings;
@@ -394,8 +410,11 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
     setFormat(newFormat);
     setVideoCodec(s.videoCodec);
     setAudioCodec(s.audioCodec);
-    const res = RESOLUTIONS.find(r => r.width === s.width && r.height === s.height)
-      ?? { label: `${s.width}x${s.height}`, width: s.width, height: s.height };
+    const res = RESOLUTIONS.find((r) => r.width === s.width && r.height === s.height) ?? {
+      label: `${s.width}x${s.height}`,
+      width: s.width,
+      height: s.height,
+    };
     setResolution(res);
     setQuality(s.quality);
     setFps(s.fps);
@@ -403,14 +422,17 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
     setSelectedPresetId(preset.id);
   }, []);
 
-  const handlePresetChange = useCallback((presetId: string) => {
-    if (presetId === '') {
-      setSelectedPresetId(null);
-      return;
-    }
-    const preset = presets.find(p => p.id === presetId);
-    if (preset) applyPreset(preset);
-  }, [presets, applyPreset]);
+  const handlePresetChange = useCallback(
+    (presetId: string) => {
+      if (presetId === '') {
+        setSelectedPresetId(null);
+        return;
+      }
+      const preset = presets.find((p) => p.id === presetId);
+      if (preset) applyPreset(preset);
+    },
+    [presets, applyPreset],
+  );
 
   const selectExportPath = useCallback(async (): Promise<string | null> => {
     const ext = format;
@@ -458,11 +480,11 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
     // Step 2: Validate media files
     const missingFiles = await validateProjectMediaFiles(project);
     if (missingFiles.length > 0) {
-      const fileList = missingFiles.map(f => `• ${f}`).join('\n');
+      const fileList = missingFiles.map((f) => `• ${f}`).join('\n');
       showToast(
         `导出失败：以下媒体文件不存在或无法访问：\n${fileList}\n\n请检查文件路径或重新导入媒体。`,
         'error',
-        10000
+        10000,
       );
       return;
     }
@@ -499,7 +521,19 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
       project,
       config: exportConfig,
     });
-  }, [project, format, videoCodec, audioCodec, resolution, quality, fps, audioBitrate, t, showToast, selectExportPath]);
+  }, [
+    project,
+    format,
+    videoCodec,
+    audioCodec,
+    resolution,
+    quality,
+    fps,
+    audioBitrate,
+    t,
+    showToast,
+    selectExportPath,
+  ]);
 
   const handleCancel = useCallback(() => {
     vscodePostMessage({ type: 'export:cancel' });
@@ -534,7 +568,12 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
               title="后台导出"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </button>
           </div>
@@ -545,7 +584,10 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             <div className="flex items-center gap-3">
               <div
                 className="w-8 h-8 border-[3px] border-t-transparent rounded-full animate-spin"
-                style={{ borderColor: 'var(--vscode-progressBar-background)', borderTopColor: 'transparent' }}
+                style={{
+                  borderColor: 'var(--vscode-progressBar-background)',
+                  borderTopColor: 'transparent',
+                }}
               />
               <div className="flex-1">
                 <div className="text-sm font-medium text-vscode-foreground">
@@ -553,7 +595,9 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
                 </div>
                 <div className="text-xs text-vscode-descriptionForeground">
                   {exportProgress && exportProgress.totalFrames > 0 && (
-                    <span>{exportProgress.currentFrame}/{exportProgress.totalFrames} 帧</span>
+                    <span>
+                      {exportProgress.currentFrame}/{exportProgress.totalFrames} 帧
+                    </span>
                   )}
                 </div>
               </div>
@@ -571,7 +615,7 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
                 className="h-full transition-all duration-300 ease-out"
                 style={{
                   width: `${exportProgress?.percent || 0}%`,
-                  backgroundColor: 'var(--vscode-progressBar-background)'
+                  backgroundColor: 'var(--vscode-progressBar-background)',
                 }}
               />
             </div>
@@ -579,10 +623,22 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             {/* Queue Status */}
             {queueStatus.pending > 0 && (
               <div className="flex items-center gap-2 text-xs text-vscode-descriptionForeground">
-                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h8" />
+                <svg
+                  className="w-3.5 h-3.5 flex-shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 10h16M4 14h8"
+                  />
                 </svg>
-                <span>已排队 <strong>{queueStatus.pending}</strong> 个导出任务</span>
+                <span>
+                  已排队 <strong>{queueStatus.pending}</strong> 个导出任务
+                </span>
               </div>
             )}
 
@@ -594,7 +650,10 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
               <div className="flex items-center gap-4">
                 {exportProgress && exportProgress.currentFps > 0 && (
                   <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-semibold" style={{ color: 'var(--vscode-charts-yellow)' }}>
+                    <span
+                      className="font-mono font-semibold"
+                      style={{ color: 'var(--vscode-charts-yellow)' }}
+                    >
                       {exportProgress.currentFps.toFixed(1)}
                     </span>
                     <span style={{ color: 'var(--vscode-foreground)', opacity: 0.7 }}>fps</span>
@@ -619,62 +678,69 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
                 className="grid grid-cols-2 gap-x-4 gap-y-1.5 px-3 py-2.5 rounded-md text-xs"
                 style={{ backgroundColor: 'var(--vscode-editor-inactiveSelectionBackground)' }}
               >
-                {exportProgress.performanceStats.avgDecodeTime != null && exportProgress.performanceStats.avgDecodeTime >= 0.05 && (
-                  <div className="flex justify-between">
-                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>解码</span>
-                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
-                      {exportProgress.performanceStats.avgDecodeTime.toFixed(1)} ms
-                    </span>
-                  </div>
-                )}
-                {exportProgress.performanceStats.avgRenderTime != null && exportProgress.performanceStats.avgRenderTime >= 0.05 && (
-                  <div className="flex justify-between">
-                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>合成</span>
-                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
-                      {exportProgress.performanceStats.avgRenderTime.toFixed(1)} ms
-                    </span>
-                  </div>
-                )}
-                {exportProgress.performanceStats.avgEncodeTime != null && exportProgress.performanceStats.avgEncodeTime >= 0.05 && (
-                  <div className="flex justify-between">
-                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>编码</span>
-                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
-                      {exportProgress.performanceStats.avgEncodeTime.toFixed(1)} ms
-                    </span>
-                  </div>
-                )}
-                {exportProgress.performanceStats.cpuUsage != null && exportProgress.performanceStats.cpuUsage > 0 && (
-                  <div className="flex justify-between">
-                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>CPU</span>
-                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
-                      {exportProgress.performanceStats.cpuUsage.toFixed(0)}%
-                    </span>
-                  </div>
-                )}
-                {exportProgress.performanceStats.memoryUsedMB != null && exportProgress.performanceStats.memoryUsedMB > 0 && (
-                  <div className="flex justify-between">
-                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>内存</span>
-                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
-                      {exportProgress.performanceStats.memoryUsedMB.toFixed(0)} MB
-                    </span>
-                  </div>
-                )}
-                {exportProgress.performanceStats.vramUsedMB != null && exportProgress.performanceStats.vramUsedMB > 0 && (
-                  <div className="flex justify-between">
-                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>显存</span>
-                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
-                      {exportProgress.performanceStats.vramUsedMB.toFixed(0)} MB
-                    </span>
-                  </div>
-                )}
-                {exportProgress.performanceStats.gpuUsage != null && exportProgress.performanceStats.gpuUsage > 0 && (
-                  <div className="flex justify-between">
-                    <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>GPU</span>
-                    <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
-                      {exportProgress.performanceStats.gpuUsage.toFixed(0)}%
-                    </span>
-                  </div>
-                )}
+                {exportProgress.performanceStats.avgDecodeTime != null &&
+                  exportProgress.performanceStats.avgDecodeTime >= 0.05 && (
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>解码</span>
+                      <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                        {exportProgress.performanceStats.avgDecodeTime.toFixed(1)} ms
+                      </span>
+                    </div>
+                  )}
+                {exportProgress.performanceStats.avgRenderTime != null &&
+                  exportProgress.performanceStats.avgRenderTime >= 0.05 && (
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>合成</span>
+                      <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                        {exportProgress.performanceStats.avgRenderTime.toFixed(1)} ms
+                      </span>
+                    </div>
+                  )}
+                {exportProgress.performanceStats.avgEncodeTime != null &&
+                  exportProgress.performanceStats.avgEncodeTime >= 0.05 && (
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>编码</span>
+                      <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                        {exportProgress.performanceStats.avgEncodeTime.toFixed(1)} ms
+                      </span>
+                    </div>
+                  )}
+                {exportProgress.performanceStats.cpuUsage != null &&
+                  exportProgress.performanceStats.cpuUsage > 0 && (
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>CPU</span>
+                      <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                        {exportProgress.performanceStats.cpuUsage.toFixed(0)}%
+                      </span>
+                    </div>
+                  )}
+                {exportProgress.performanceStats.memoryUsedMB != null &&
+                  exportProgress.performanceStats.memoryUsedMB > 0 && (
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>内存</span>
+                      <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                        {exportProgress.performanceStats.memoryUsedMB.toFixed(0)} MB
+                      </span>
+                    </div>
+                  )}
+                {exportProgress.performanceStats.vramUsedMB != null &&
+                  exportProgress.performanceStats.vramUsedMB > 0 && (
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>显存</span>
+                      <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                        {exportProgress.performanceStats.vramUsedMB.toFixed(0)} MB
+                      </span>
+                    </div>
+                  )}
+                {exportProgress.performanceStats.gpuUsage != null &&
+                  exportProgress.performanceStats.gpuUsage > 0 && (
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--vscode-foreground)', opacity: 0.6 }}>GPU</span>
+                      <span className="font-mono" style={{ color: 'var(--vscode-foreground)' }}>
+                        {exportProgress.performanceStats.gpuUsage.toFixed(0)}%
+                      </span>
+                    </div>
+                  )}
               </div>
             )}
 
@@ -697,7 +763,7 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
               style={{
                 backgroundColor: 'var(--vscode-inputValidation-errorBackground, #5a1d1d)',
                 color: 'var(--vscode-inputValidation-errorForeground, #ffffff)',
-                border: '1px solid var(--vscode-inputValidation-errorBorder, #be1100)'
+                border: '1px solid var(--vscode-inputValidation-errorBorder, #be1100)',
               }}
             >
               取消导出
@@ -720,7 +786,12 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             className="p-1 rounded hover:bg-vscode-list-hoverBackground text-vscode-foreground"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -729,25 +800,35 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
         <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
           {/* Preset Selector */}
           <div>
-            <label className="block text-sm font-medium text-vscode-foreground mb-2">{t('export.preset.label')}</label>
+            <label className="block text-sm font-medium text-vscode-foreground mb-2">
+              {t('export.preset.label')}
+            </label>
             <div className="flex gap-2">
               <select
                 value={selectedPresetId ?? ''}
                 onChange={(e) => handlePresetChange(e.target.value)}
                 className="flex-1 px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
               >
-                {presets.filter(p => p.isBuiltin).length > 0 && (
+                {presets.filter((p) => p.isBuiltin).length > 0 && (
                   <optgroup label={t('export.preset.builtin')}>
-                    {presets.filter(p => p.isBuiltin).map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
+                    {presets
+                      .filter((p) => p.isBuiltin)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
                   </optgroup>
                 )}
-                {presets.filter(p => !p.isBuiltin).length > 0 && (
+                {presets.filter((p) => !p.isBuiltin).length > 0 && (
                   <optgroup label={t('export.preset.user')}>
-                    {presets.filter(p => !p.isBuiltin).map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
+                    {presets
+                      .filter((p) => !p.isBuiltin)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
                   </optgroup>
                 )}
                 <option value="">{t('export.preset.custom')}</option>
@@ -760,7 +841,12 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
                   title="保存为预设"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+                    />
                   </svg>
                 </button>
               ) : (
@@ -782,7 +868,11 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
                           quality,
                           audioBitrate,
                         };
-                        vscodePostMessage({ type: 'preset:save', name: presetNameInput.trim(), settings });
+                        vscodePostMessage({
+                          type: 'preset:save',
+                          name: presetNameInput.trim(),
+                          settings,
+                        });
                         setPresetNameInput('');
                         setIsNamingPreset(false);
                       } else if (e.key === 'Escape') {
@@ -794,11 +884,19 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
                     className="w-32 px-2 py-1 bg-vscode-input-background border border-vscode-focusBorder rounded text-vscode-input-foreground text-sm focus:outline-none"
                   />
                   <button
-                    onClick={() => { setPresetNameInput(''); setIsNamingPreset(false); }}
+                    onClick={() => {
+                      setPresetNameInput('');
+                      setIsNamingPreset(false);
+                    }}
                     className="px-1 py-1 text-vscode-foreground opacity-60 hover:opacity-100"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
                     </svg>
                   </button>
                 </div>
@@ -809,8 +907,18 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
           {/* Global Export Warning — queuing is supported */}
           {hasGlobalExport && (
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 flex items-start gap-2">
-              <svg className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               <div className="flex-1">
                 <div className="text-sm font-medium text-blue-400">有导出任务正在进行</div>
@@ -823,62 +931,80 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
 
           {/* Container Format */}
           <div>
-            <label className="block text-sm font-medium text-vscode-foreground mb-2">容器格式</label>
+            <label className="block text-sm font-medium text-vscode-foreground mb-2">
+              容器格式
+            </label>
             <select
               value={format}
               onChange={(e) => handleFormatChange(e.target.value as ExportFormat)}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
               {FORMAT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
               ))}
             </select>
           </div>
 
           {/* Video Codec */}
           <div>
-            <label className="block text-sm font-medium text-vscode-foreground mb-2">视频编码</label>
+            <label className="block text-sm font-medium text-vscode-foreground mb-2">
+              视频编码
+            </label>
             <select
               value={videoCodec}
-              onChange={(e) => { setSelectedPresetId(null); setVideoCodec(e.target.value); }}
+              onChange={(e) => {
+                setSelectedPresetId(null);
+                setVideoCodec(e.target.value);
+              }}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
-              {VIDEO_CODEC_OPTIONS
-                .filter((opt) => (CONTAINER_VIDEO_CODECS[format] ?? []).includes(opt.value))
-                .map((opt) => {
-                  const hw = hwCapabilities?.[opt.value];
-                  const tag = hwCapabilities == null ? '' : hw != null ? '  ⚡ 硬件' : '  💻 软件';
-                  return (
-                    <option key={opt.value} value={opt.value}>{opt.label}{tag}</option>
-                  );
-                })}
+              {VIDEO_CODEC_OPTIONS.filter((opt) =>
+                (CONTAINER_VIDEO_CODECS[format] ?? []).includes(opt.value),
+              ).map((opt) => {
+                const hw = hwCapabilities?.[opt.value];
+                const tag = hwCapabilities == null ? '' : hw != null ? '  ⚡ 硬件' : '  💻 软件';
+                return (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                    {tag}
+                  </option>
+                );
+              })}
             </select>
             {/* Hardware acceleration badge */}
             <div className="mt-1 h-5 flex items-center">
-              {hwCapabilities === null
-                ? (
-                  <span className="text-xs text-vscode-descriptionForeground opacity-40">
-                    检测硬件加速...
-                  </span>
-                )
-                : <HwBadge encoder={hwCapabilities[videoCodec]} />
-              }
+              {hwCapabilities === null ? (
+                <span className="text-xs text-vscode-descriptionForeground opacity-40">
+                  检测硬件加速...
+                </span>
+              ) : (
+                <HwBadge encoder={hwCapabilities[videoCodec]} />
+              )}
             </div>
           </div>
 
           {/* Audio Codec */}
           <div>
-            <label className="block text-sm font-medium text-vscode-foreground mb-2">音频编码</label>
+            <label className="block text-sm font-medium text-vscode-foreground mb-2">
+              音频编码
+            </label>
             <select
               value={audioCodec}
-              onChange={(e) => { setSelectedPresetId(null); setAudioCodec(e.target.value); }}
+              onChange={(e) => {
+                setSelectedPresetId(null);
+                setAudioCodec(e.target.value);
+              }}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
-              {AUDIO_CODEC_OPTIONS
-                .filter((opt) => (CONTAINER_AUDIO_CODECS[format] ?? []).includes(opt.value))
-                .map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
+              {AUDIO_CODEC_OPTIONS.filter((opt) =>
+                (CONTAINER_AUDIO_CODECS[format] ?? []).includes(opt.value),
+              ).map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -890,13 +1016,15 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
               onChange={(e) => {
                 setSelectedPresetId(null);
                 const [w, h] = e.target.value.split('x').map(Number);
-                const res = RESOLUTIONS.find(r => r.width === w && r.height === h);
+                const res = RESOLUTIONS.find((r) => r.width === w && r.height === h);
                 if (res) setResolution(res);
               }}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
               {RESOLUTIONS.map((res) => (
-                <option key={res.label} value={`${res.width}x${res.height}`}>{res.label}</option>
+                <option key={res.label} value={`${res.width}x${res.height}`}>
+                  {res.label}
+                </option>
               ))}
             </select>
           </div>
@@ -906,21 +1034,31 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
             <label className="block text-sm font-medium text-vscode-foreground mb-2">质量</label>
             <select
               value={quality}
-              onChange={(e) => { setSelectedPresetId(null); setQuality(e.target.value as 'low' | 'medium' | 'high'); }}
+              onChange={(e) => {
+                setSelectedPresetId(null);
+                setQuality(e.target.value as 'low' | 'medium' | 'high');
+              }}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
               {QUALITY_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
               ))}
             </select>
           </div>
 
           {/* Audio Bitrate */}
           <div>
-            <label className="block text-sm font-medium text-vscode-foreground mb-2">音频比特率</label>
+            <label className="block text-sm font-medium text-vscode-foreground mb-2">
+              音频比特率
+            </label>
             <select
               value={audioBitrate}
-              onChange={(e) => { setSelectedPresetId(null); setAudioBitrate(Number(e.target.value)); }}
+              onChange={(e) => {
+                setSelectedPresetId(null);
+                setAudioBitrate(Number(e.target.value));
+              }}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
               <option value={96000}>96 kbps</option>
@@ -933,18 +1071,24 @@ export function ExportPanel({ isOpen, onClose }: ExportPanelProps) {
 
           {/* FPS */}
           <div>
-            <label className="block text-sm font-medium text-vscode-foreground mb-2">帧率: {fps} FPS</label>
+            <label className="block text-sm font-medium text-vscode-foreground mb-2">
+              帧率: {fps} FPS
+            </label>
             <select
               value={fps}
-              onChange={(e) => { setSelectedPresetId(null); setFps(Number(e.target.value)); }}
+              onChange={(e) => {
+                setSelectedPresetId(null);
+                setFps(Number(e.target.value));
+              }}
               className="w-full px-3 py-2 bg-vscode-input-background border border-vscode-input-border rounded text-vscode-input-foreground focus:outline-none focus:border-vscode-focusBorder"
             >
               {FPS_OPTIONS.map((fpsValue) => (
-                <option key={fpsValue} value={fpsValue}>{fpsValue} FPS</option>
+                <option key={fpsValue} value={fpsValue}>
+                  {fpsValue} FPS
+                </option>
               ))}
             </select>
           </div>
-
         </div>
 
         {/* Footer */}

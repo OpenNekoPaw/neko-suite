@@ -43,7 +43,7 @@ export function useNodeDrag({
 }: UseNodeDragOptions): UseNodeDragReturn {
   const [position, setPosition] = useState(initialPosition);
   const [isDragging, setIsDragging] = useState(false);
-  
+
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const positionStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -54,18 +54,21 @@ export function useNodeDrag({
     }
   }, [initialPosition, isDragging]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (disabled) return;
-    if (e.button !== 0) return; // Only left click
-    
-    e.stopPropagation();
-    e.preventDefault();
-    
-    dragStartRef.current = { x: e.clientX, y: e.clientY };
-    positionStartRef.current = { ...position };
-    setIsDragging(true);
-    onDragStart?.(nodeId);
-  }, [disabled, position, nodeId, onDragStart]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (disabled) return;
+      if (e.button !== 0) return; // Only left click
+
+      e.stopPropagation();
+      e.preventDefault();
+
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      positionStartRef.current = { ...position };
+      setIsDragging(true);
+      onDragStart?.(nodeId);
+    },
+    [disabled, position, nodeId, onDragStart],
+  );
 
   useEffect(() => {
     if (!isDragging) return;

@@ -22,10 +22,12 @@ import { ToolRegistry } from '@neko/agent';
 // Mock Service
 // =============================================================================
 
-function createMockService(options: {
-  simulateToolCalls?: boolean;
-  responseText?: string;
-} = {}): Service {
+function createMockService(
+  options: {
+    simulateToolCalls?: boolean;
+    responseText?: string;
+  } = {},
+): Service {
   const { simulateToolCalls = false, responseText = 'Mock response' } = options;
 
   const mockToolCalls: ToolCall[] = simulateToolCalls
@@ -36,7 +38,11 @@ function createMockService(options: {
     chat: vi.fn().mockResolvedValue({
       id: 'chat-1',
       model: 'test-model',
-      message: { role: 'assistant', content: responseText, toolCalls: mockToolCalls.length > 0 ? mockToolCalls : undefined },
+      message: {
+        role: 'assistant',
+        content: responseText,
+        toolCalls: mockToolCalls.length > 0 ? mockToolCalls : undefined,
+      },
       finishReason: simulateToolCalls ? 'tool_calls' : 'stop',
       usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
     } as ChatResponse),
@@ -50,7 +56,12 @@ function createMockService(options: {
           yield { id: 'stream-1', model: 'test-model', delta: { toolCalls: mockToolCalls } };
         }
         // Yield finish
-        yield { id: 'stream-1', model: 'test-model', delta: {}, finishReason: simulateToolCalls ? 'tool_calls' : 'stop' };
+        yield {
+          id: 'stream-1',
+          model: 'test-model',
+          delta: {},
+          finishReason: simulateToolCalls ? 'tool_calls' : 'stop',
+        };
       })(),
       response: Promise.resolve({
         id: 'chat-1',
@@ -69,10 +80,13 @@ function createMockService(options: {
 // Mock Platform
 // =============================================================================
 
-function createMockPlatform(service: Service, options: {
-  simulateToolCalls?: boolean;
-  responseText?: string;
-} = {}): Platform {
+function createMockPlatform(
+  service: Service,
+  options: {
+    simulateToolCalls?: boolean;
+    responseText?: string;
+  } = {},
+): Platform {
   const { simulateToolCalls = false, responseText = 'Mock response' } = options;
 
   const mockToolCalls = simulateToolCalls
@@ -81,7 +95,10 @@ function createMockPlatform(service: Service, options: {
 
   // Create a mock AgentExecutor that returns steps via executeStream
   const mockExecutor = {
-    executeStream: vi.fn().mockImplementation(async function* (input: string, context: { messages: Array<{ role: string; content: string }> }) {
+    executeStream: vi.fn().mockImplementation(async function* (
+      input: string,
+      context: { messages: Array<{ role: string; content: string }> },
+    ) {
       // Simulate adding user message like real AgentExecutor does
       context.messages.push({ role: 'user', content: input });
 
@@ -99,12 +116,14 @@ function createMockPlatform(service: Service, options: {
           type: 'act',
           content: 'Executed 1 tool(s)',
           toolCalls: mockToolCalls,
-          toolResults: [{
-            callId: 'call-1',
-            name: 'test_tool',
-            success: true,
-            data: { result: 'success' },
-          }],
+          toolResults: [
+            {
+              callId: 'call-1',
+              name: 'test_tool',
+              success: true,
+              data: { result: 'success' },
+            },
+          ],
           timestamp: Date.now(),
         };
         yield {
@@ -148,9 +167,7 @@ function createMockPlatform(service: Service, options: {
 // Helper Functions
 // =============================================================================
 
-async function collectEvents(
-  generator: AsyncIterable<IAgentEvent>
-): Promise<IAgentEvent[]> {
+async function collectEvents(generator: AsyncIterable<IAgentEvent>): Promise<IAgentEvent[]> {
   const events: IAgentEvent[] = [];
   for await (const event of generator) {
     events.push(event);
@@ -179,7 +196,7 @@ describe('AgentRunner', () => {
         platform: mockPlatform,
         systemPrompt: 'Test prompt',
         maxIterations: 5,
-        temperature: 0.7
+        temperature: 0.7,
       };
 
       runner.configure(config);
@@ -203,7 +220,7 @@ describe('AgentRunner', () => {
     it('应该在执行时触发 onDidStart 事件', async () => {
       const config: IAgentConfig = {
         platform: mockPlatform,
-        maxIterations: 1
+        maxIterations: 1,
       };
       runner.configure(config);
 
@@ -222,7 +239,7 @@ describe('AgentRunner', () => {
     it('应该在完成后触发 onDidStop 事件', async () => {
       const config: IAgentConfig = {
         platform: mockPlatform,
-        maxIterations: 1
+        maxIterations: 1,
       };
       runner.configure(config);
 
@@ -249,7 +266,7 @@ describe('AgentRunner', () => {
     it('重复执行应该返回错误', async () => {
       const config: IAgentConfig = {
         platform: mockPlatform,
-        maxIterations: 10
+        maxIterations: 10,
       };
       runner.configure(config);
 
@@ -277,7 +294,7 @@ describe('AgentRunner', () => {
     it('应该记录用户消息', async () => {
       const config: IAgentConfig = {
         platform: mockPlatform,
-        maxIterations: 1
+        maxIterations: 1,
       };
       runner.configure(config);
 
@@ -291,7 +308,7 @@ describe('AgentRunner', () => {
       expect(history[0].role).toBe('system');
 
       // 查找用户消息
-      const userMsg = history.find(m => m.role === 'user');
+      const userMsg = history.find((m) => m.role === 'user');
       expect(userMsg).toBeDefined();
       expect(userMsg?.content).toBe('Hello');
     });
@@ -334,7 +351,7 @@ describe('AgentRunner', () => {
       const config: IAgentConfig = {
         platform: mockPlatform,
         maxIterations: 3,
-        autoExecuteTools: true
+        autoExecuteTools: true,
       };
       runner.configure(config);
 
@@ -342,8 +359,8 @@ describe('AgentRunner', () => {
       const events = await collectEvents(runner.execute('add something', context));
 
       // 验证事件序列 - AgentRunner 委托给 Platform 的 AgentExecutor
-      const toolCallEvents = events.filter(e => e.type === 'tool_call');
-      const toolResultEvents = events.filter(e => e.type === 'tool_result');
+      const toolCallEvents = events.filter((e) => e.type === 'tool_call');
+      const toolResultEvents = events.filter((e) => e.type === 'tool_result');
 
       expect(toolCallEvents.length).toBeGreaterThan(0);
       expect(toolResultEvents.length).toBeGreaterThan(0);
@@ -365,12 +382,14 @@ describe('AgentRunner', () => {
           yield {
             type: 'act',
             content: 'Executed 1 tool(s)',
-            toolResults: [{
-              callId: 'call-1',
-              name: 'test_tool',
-              success: false,
-              error: 'Tool execution failed',
-            }],
+            toolResults: [
+              {
+                callId: 'call-1',
+                name: 'test_tool',
+                success: false,
+                error: 'Tool execution failed',
+              },
+            ],
             timestamp: Date.now(),
           };
           yield {
@@ -395,17 +414,17 @@ describe('AgentRunner', () => {
       const config: IAgentConfig = {
         platform: mockPlatform,
         maxIterations: 3,
-        autoExecuteTools: true
+        autoExecuteTools: true,
       };
       runner.configure(config);
 
       const context: IAgentContext = {};
       const events = await collectEvents(runner.execute('call tool', context));
 
-      const toolResultEvents = events.filter(e => e.type === 'tool_result');
+      const toolResultEvents = events.filter((e) => e.type === 'tool_result');
       expect(toolResultEvents.length).toBeGreaterThan(0);
 
-      const failedResult = toolResultEvents.find(e => !e.toolResult?.success);
+      const failedResult = toolResultEvents.find((e) => !e.toolResult?.success);
       expect(failedResult).toBeDefined();
       expect(failedResult?.toolResult?.error).toContain('Tool execution failed');
     });
@@ -417,15 +436,15 @@ describe('AgentRunner', () => {
       const config: IAgentConfig = {
         platform: mockPlatform,
         maxIterations: 3,
-        autoExecuteTools: true
+        autoExecuteTools: true,
       };
       runner.configure(config);
 
       const context: IAgentContext = {};
       const events = await collectEvents(runner.execute('call tool', context));
 
-      const toolCallEvents = events.filter(e => e.type === 'tool_call');
-      const toolResultEvents = events.filter(e => e.type === 'tool_result');
+      const toolCallEvents = events.filter((e) => e.type === 'tool_call');
+      const toolResultEvents = events.filter((e) => e.type === 'tool_result');
 
       // 验证 tool_call_id 一致性
       expect(toolCallEvents.length).toBeGreaterThan(0);
@@ -439,7 +458,7 @@ describe('AgentRunner', () => {
     it('应该能够取消执行', async () => {
       const config: IAgentConfig = {
         platform: mockPlatform,
-        maxIterations: 10
+        maxIterations: 10,
       };
       runner.configure(config);
 
@@ -467,29 +486,29 @@ describe('AgentRunner', () => {
     it('应该产生 text 事件', async () => {
       const config: IAgentConfig = {
         platform: mockPlatform,
-        maxIterations: 1
+        maxIterations: 1,
       };
       runner.configure(config);
 
       const context: IAgentContext = {};
       const events = await collectEvents(runner.execute('hello', context));
 
-      const textEvents = events.filter(e => e.type === 'text');
+      const textEvents = events.filter((e) => e.type === 'text');
       expect(textEvents.length).toBeGreaterThan(0);
-      expect(textEvents.some(e => e.content)).toBe(true);
+      expect(textEvents.some((e) => e.content)).toBe(true);
     });
 
     it('应该产生 iteration 事件', async () => {
       const config: IAgentConfig = {
         platform: mockPlatform,
-        maxIterations: 3
+        maxIterations: 3,
       };
       runner.configure(config);
 
       const context: IAgentContext = {};
       const events = await collectEvents(runner.execute('test', context));
 
-      const iterationEvents = events.filter(e => e.type === 'iteration');
+      const iterationEvents = events.filter((e) => e.type === 'iteration');
       expect(iterationEvents.length).toBeGreaterThan(0);
 
       const firstIteration = iterationEvents[0];
@@ -500,14 +519,14 @@ describe('AgentRunner', () => {
     it('应该在结束时产生 done 事件', async () => {
       const config: IAgentConfig = {
         platform: mockPlatform,
-        maxIterations: 1
+        maxIterations: 1,
       };
       runner.configure(config);
 
       const context: IAgentContext = {};
       const events = await collectEvents(runner.execute('test', context));
 
-      const doneEvents = events.filter(e => e.type === 'done');
+      const doneEvents = events.filter((e) => e.type === 'done');
       expect(doneEvents.length).toBeGreaterThan(0);
     });
   });
@@ -516,7 +535,7 @@ describe('AgentRunner', () => {
     it('dispose 应该取消执行', async () => {
       const config: IAgentConfig = {
         platform: mockPlatform,
-        maxIterations: 10
+        maxIterations: 10,
       };
       runner.configure(config);
 

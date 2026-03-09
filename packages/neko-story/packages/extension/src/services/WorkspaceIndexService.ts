@@ -72,7 +72,9 @@ export class WorkspaceIndexService implements IWorkspaceIndex {
       for (const loc of locations) {
         if (loc.name.toLowerCase().includes(lowerQuery)) {
           // Only include first occurrence per character per file to avoid duplicates
-          if (!results.some(r => r.name === loc.name && r.uri.toString() === loc.uri.toString())) {
+          if (
+            !results.some((r) => r.name === loc.name && r.uri.toString() === loc.uri.toString())
+          ) {
             results.push(loc);
           }
         }
@@ -81,7 +83,14 @@ export class WorkspaceIndexService implements IWorkspaceIndex {
     for (const [, locations] of this.sceneIndex) {
       for (const loc of locations) {
         if (loc.name.toLowerCase().includes(lowerQuery)) {
-          if (!results.some(r => r.name === loc.name && r.kind === 'scene' && r.uri.toString() === loc.uri.toString())) {
+          if (
+            !results.some(
+              (r) =>
+                r.name === loc.name &&
+                r.kind === 'scene' &&
+                r.uri.toString() === loc.uri.toString(),
+            )
+          ) {
             results.push(loc);
           }
         }
@@ -122,36 +131,44 @@ export class WorkspaceIndexService implements IWorkspaceIndex {
   private setupWatchers(): void {
     const watcher = vscode.workspace.createFileSystemWatcher(FOUNTAIN_GLOB);
 
-    watcher.onDidCreate(uri => { void this.onFileChanged(uri); });
-    watcher.onDidChange(uri => { void this.onFileChanged(uri); });
-    watcher.onDidDelete(uri => { this.onFileDeleted(uri); });
+    watcher.onDidCreate((uri) => {
+      void this.onFileChanged(uri);
+    });
+    watcher.onDidChange((uri) => {
+      void this.onFileChanged(uri);
+    });
+    watcher.onDidDelete((uri) => {
+      this.onFileDeleted(uri);
+    });
 
     this.disposables.push(watcher);
 
     // Watch live editor changes (unsaved buffers)
     this.disposables.push(
-      vscode.workspace.onDidChangeTextDocument(e => {
+      vscode.workspace.onDidChangeTextDocument((e) => {
         if (this.isRelevantDocument(e.document)) {
           void this.indexDocument(e.document.uri, e.document.getText());
         }
-      })
+      }),
     );
 
     // Watch document open (pick up live buffers)
     this.disposables.push(
-      vscode.workspace.onDidOpenTextDocument(doc => {
+      vscode.workspace.onDidOpenTextDocument((doc) => {
         if (this.isRelevantDocument(doc)) {
           void this.indexDocument(doc.uri, doc.getText());
         }
-      })
+      }),
     );
   }
 
   private isRelevantDocument(doc: vscode.TextDocument): boolean {
-    return doc.languageId === 'nekostory'
-      || doc.uri.fsPath.endsWith('.fountain')
-      || doc.uri.fsPath.endsWith('.nks')
-      || doc.uri.fsPath.endsWith('.story');
+    return (
+      doc.languageId === 'nekostory' ||
+      doc.uri.fsPath.endsWith('.fountain') ||
+      doc.uri.fsPath.endsWith('.nks') ||
+      doc.uri.fsPath.endsWith('.story')
+    );
   }
 
   private async buildFullIndex(): Promise<void> {
@@ -192,7 +209,7 @@ export class WorkspaceIndexService implements IWorkspaceIndex {
    */
   private async readFileContent(uri: vscode.Uri): Promise<string | undefined> {
     // Prefer open editor buffer (may have unsaved changes)
-    const openDoc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
+    const openDoc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
     if (openDoc) {
       return openDoc.getText();
     }
@@ -230,7 +247,7 @@ export class WorkspaceIndexService implements IWorkspaceIndex {
           element.range.start.line,
           element.range.start.character,
           element.range.end.line,
-          element.range.end.character
+          element.range.end.character,
         );
 
         if (element.type === 'character') {
@@ -286,7 +303,10 @@ function pushToIndex(index: Map<string, SymbolLocation[]>, key: string, loc: Sym
 /**
  * Sorts locations so that entries matching `currentUri` come first.
  */
-function sortCurrentFirst(locations: readonly SymbolLocation[], currentUri?: vscode.Uri): readonly SymbolLocation[] {
+function sortCurrentFirst(
+  locations: readonly SymbolLocation[],
+  currentUri?: vscode.Uri,
+): readonly SymbolLocation[] {
   if (!currentUri || locations.length === 0) return locations;
   const currentStr = currentUri.toString();
   const current: SymbolLocation[] = [];

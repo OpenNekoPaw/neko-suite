@@ -37,16 +37,18 @@ function isCloseToWhite(color: string): boolean {
 function useVSCodeTheme() {
   const [theme, setTheme] = useState(() => {
     // Check if we're in a dark theme by looking at body classes
-    const isDark = document.body.classList.contains('vscode-dark') ||
-                   document.body.classList.contains('vscode-high-contrast');
+    const isDark =
+      document.body.classList.contains('vscode-dark') ||
+      document.body.classList.contains('vscode-high-contrast');
     return { isDark };
   });
 
   useEffect(() => {
     // Observe body class changes for theme switches
     const observer = new MutationObserver(() => {
-      const isDark = document.body.classList.contains('vscode-dark') ||
-                     document.body.classList.contains('vscode-high-contrast');
+      const isDark =
+        document.body.classList.contains('vscode-dark') ||
+        document.body.classList.contains('vscode-high-contrast');
       setTheme({ isDark });
     });
 
@@ -73,30 +75,33 @@ function useVSCodeTheme() {
       menuBg = isDark ? darkMenuBg : lightMenuBg;
     }
 
-    const menuFg = getCssVar('--vscode-menu-foreground') ||
-                   getCssVar('--vscode-foreground') ||
-                   (isDark ? '#cccccc' : '#616161');
+    const menuFg =
+      getCssVar('--vscode-menu-foreground') ||
+      getCssVar('--vscode-foreground') ||
+      (isDark ? '#cccccc' : '#616161');
 
-    const menuBorder = getCssVar('--vscode-menu-border') ||
-                       getCssVar('--vscode-widget-border') ||
-                       (isDark ? '#454545' : '#c8c8c8');
+    const menuBorder =
+      getCssVar('--vscode-menu-border') ||
+      getCssVar('--vscode-widget-border') ||
+      (isDark ? '#454545' : '#c8c8c8');
 
-    const menuSeparator = getCssVar('--vscode-menu-separatorBackground') ||
-                          (isDark ? '#454545' : '#d4d4d4');
+    const menuSeparator =
+      getCssVar('--vscode-menu-separatorBackground') || (isDark ? '#454545' : '#d4d4d4');
 
-    const selectionBg = getCssVar('--vscode-menu-selectionBackground') ||
-                        getCssVar('--vscode-list-activeSelectionBackground') ||
-                        (isDark ? '#04395e' : '#0060c0');
+    const selectionBg =
+      getCssVar('--vscode-menu-selectionBackground') ||
+      getCssVar('--vscode-list-activeSelectionBackground') ||
+      (isDark ? '#04395e' : '#0060c0');
 
-    const selectionFg = getCssVar('--vscode-menu-selectionForeground') ||
-                        getCssVar('--vscode-list-activeSelectionForeground') ||
-                        '#ffffff';
+    const selectionFg =
+      getCssVar('--vscode-menu-selectionForeground') ||
+      getCssVar('--vscode-list-activeSelectionForeground') ||
+      '#ffffff';
 
-    const descriptionFg = getCssVar('--vscode-descriptionForeground') ||
-                          (isDark ? '#9d9d9d' : '#717171');
+    const descriptionFg =
+      getCssVar('--vscode-descriptionForeground') || (isDark ? '#9d9d9d' : '#717171');
 
-    const errorFg = getCssVar('--vscode-errorForeground') ||
-                    (isDark ? '#f14c4c' : '#e51400');
+    const errorFg = getCssVar('--vscode-errorForeground') || (isDark ? '#f14c4c' : '#e51400');
 
     return {
       isDark,
@@ -267,14 +272,8 @@ export const ContextMenu = memo(function ContextMenu({ x, y, items, onClose }: C
                 lineHeight: '26px',
                 cursor: item.disabled ? 'default' : 'pointer',
                 opacity: item.disabled ? 0.5 : 1,
-                color: item.danger
-                  ? colors.errorFg
-                  : isHovered
-                  ? colors.selectionFg
-                  : 'inherit',
-                backgroundColor: isHovered && !item.disabled
-                  ? colors.selectionBg
-                  : 'transparent',
+                color: item.danger ? colors.errorFg : isHovered ? colors.selectionFg : 'inherit',
+                backgroundColor: isHovered && !item.disabled ? colors.selectionBg : 'transparent',
                 border: 'none',
                 outline: 'none',
                 fontSize: '13px',
@@ -284,25 +283,29 @@ export const ContextMenu = memo(function ContextMenu({ x, y, items, onClose }: C
               }}
             >
               {/* Icon/checkbox area - 28px to match VSCode native menu */}
-              <span style={{
-                width: '28px',
-                minWidth: '28px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
-              }}>
+              <span
+                style={{
+                  width: '28px',
+                  minWidth: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
                 {item.icon}
               </span>
               <span style={{ flex: 1 }}>{item.label}</span>
               {item.shortcut && (
-                <span style={{
-                  marginLeft: '24px',
-                  fontSize: '12px',
-                  opacity: 0.6,
-                  color: colors.descriptionFg,
-                  whiteSpace: 'nowrap',
-                }}>
+                <span
+                  style={{
+                    marginLeft: '24px',
+                    fontSize: '12px',
+                    opacity: 0.6,
+                    color: colors.descriptionFg,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
                   {item.shortcut}
                 </span>
               )}
@@ -323,7 +326,8 @@ export const ContextMenu = memo(function ContextMenu({ x, y, items, onClose }: C
                   borderRadius: '4px',
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.16)',
                   color: colors.menuFg,
-                  fontFamily: 'var(--vscode-font-family, -apple-system, BlinkMacSystemFont, sans-serif)',
+                  fontFamily:
+                    'var(--vscode-font-family, -apple-system, BlinkMacSystemFont, sans-serif)',
                 }}
                 onMouseLeave={() => setHoveredIndex(null)}
               >
@@ -385,14 +389,8 @@ function SubMenuItem({ item, onClose, colors }: SubMenuItemProps) {
         lineHeight: '26px',
         cursor: item.disabled ? 'default' : 'pointer',
         opacity: item.disabled ? 0.5 : 1,
-        color: item.danger
-          ? colors.errorFg
-          : isHovered
-          ? colors.selectionFg
-          : 'inherit',
-        backgroundColor: isHovered && !item.disabled
-          ? colors.selectionBg
-          : 'transparent',
+        color: item.danger ? colors.errorFg : isHovered ? colors.selectionFg : 'inherit',
+        backgroundColor: isHovered && !item.disabled ? colors.selectionBg : 'transparent',
         border: 'none',
         outline: 'none',
         fontSize: '13px',
@@ -403,25 +401,29 @@ function SubMenuItem({ item, onClose, colors }: SubMenuItemProps) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <span style={{
-        width: '28px',
-        minWidth: '28px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0
-      }}>
+      <span
+        style={{
+          width: '28px',
+          minWidth: '28px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
         {item.icon}
       </span>
       <span style={{ flex: 1 }}>{item.label}</span>
       {item.shortcut && (
-        <span style={{
-          marginLeft: '24px',
-          fontSize: '12px',
-          opacity: 0.6,
-          color: colors.descriptionFg,
-          whiteSpace: 'nowrap',
-        }}>
+        <span
+          style={{
+            marginLeft: '24px',
+            fontSize: '12px',
+            opacity: 0.6,
+            color: colors.descriptionFg,
+            whiteSpace: 'nowrap',
+          }}
+        >
           {item.shortcut}
         </span>
       )}

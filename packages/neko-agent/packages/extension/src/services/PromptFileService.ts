@@ -117,9 +117,7 @@ export class PromptFileService implements vscode.Disposable {
    * Get AGENTS.md file path by source
    */
   getAgentsFilePath(source: 'personal' | 'project'): string | null {
-    return source === 'personal'
-      ? this.getUserAgentsFilePath()
-      : this.getWorkspaceAgentsFilePath();
+    return source === 'personal' ? this.getUserAgentsFilePath() : this.getWorkspaceAgentsFilePath();
   }
 
   /**
@@ -130,7 +128,9 @@ export class PromptFileService implements vscode.Disposable {
     if (!baseDir) return null;
 
     // Ensure .md extension
-    const normalizedFileName = fileName.endsWith(PROMPT_FILE_EXT) ? fileName : `${fileName}${PROMPT_FILE_EXT}`;
+    const normalizedFileName = fileName.endsWith(PROMPT_FILE_EXT)
+      ? fileName
+      : `${fileName}${PROMPT_FILE_EXT}`;
     return path.join(baseDir, normalizedFileName);
   }
 
@@ -138,11 +138,13 @@ export class PromptFileService implements vscode.Disposable {
    * Generate safe filename from prompt name
    */
   generateFileName(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9\u4e00-\u9fa5-]/g, '-') // Keep Chinese characters
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') + PROMPT_FILE_EXT;
+    return (
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9\u4e00-\u9fa5-]/g, '-') // Keep Chinese characters
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '') + PROMPT_FILE_EXT
+    );
   }
 
   // ==========================================================================
@@ -241,7 +243,7 @@ export class PromptFileService implements vscode.Disposable {
     source: PromptSource,
     name: string,
     content: string,
-    existingFileName?: string
+    existingFileName?: string,
   ): Promise<{ filePath: string; id: string }> {
     const fileName = existingFileName || this.generateFileName(name);
     const filePath = this.getPromptFilePath(source, fileName);
@@ -268,7 +270,7 @@ export class PromptFileService implements vscode.Disposable {
    */
   async createPromptFile(
     source: PromptSource,
-    name: string
+    name: string,
   ): Promise<{ filePath: string; id: string }> {
     const content = DEFAULT_PROMPT_TEMPLATE.replace('{name}', name);
     return this.savePromptFile(source, name, content);
@@ -334,12 +336,12 @@ export class PromptFileService implements vscode.Disposable {
    */
   async syncWithConfig(
     scanResult: ScanResult,
-    existingPrompts: PromptPresetConfig[]
+    existingPrompts: PromptPresetConfig[],
   ): Promise<PromptPresetConfig[]> {
     const newPrompts: PromptPresetConfig[] = [];
 
     // Build lookup sets for existing prompts
-    const existingIds = new Set(existingPrompts.map(p => p.id));
+    const existingIds = new Set(existingPrompts.map((p) => p.id));
     const existingFilePaths = new Set<string>();
     // Track source + filename combinations to handle same filename in different sources
     const existingSourceFileNames = new Set<string>();
@@ -359,9 +361,11 @@ export class PromptFileService implements vscode.Disposable {
       const fileName = path.basename(fileInfo.filePath);
       const sourceFileName = `personal:${fileName}`;
       // Skip if ID, full path, or source+filename already exists
-      if (existingIds.has(fileInfo.id) ||
-          existingFilePaths.has(fileInfo.filePath) ||
-          existingSourceFileNames.has(sourceFileName)) {
+      if (
+        existingIds.has(fileInfo.id) ||
+        existingFilePaths.has(fileInfo.filePath) ||
+        existingSourceFileNames.has(sourceFileName)
+      ) {
         continue;
       }
       newPrompts.push(this.fileInfoToConfig(fileInfo));
@@ -372,9 +376,11 @@ export class PromptFileService implements vscode.Disposable {
       const fileName = path.basename(fileInfo.filePath);
       const sourceFileName = `project:${fileName}`;
       // Skip if ID, full path, or source+filename already exists
-      if (existingIds.has(fileInfo.id) ||
-          existingFilePaths.has(fileInfo.filePath) ||
-          existingSourceFileNames.has(sourceFileName)) {
+      if (
+        existingIds.has(fileInfo.id) ||
+        existingFilePaths.has(fileInfo.filePath) ||
+        existingSourceFileNames.has(sourceFileName)
+      ) {
         continue;
       }
       newPrompts.push(this.fileInfoToConfig(fileInfo));
@@ -407,7 +413,7 @@ export class PromptFileService implements vscode.Disposable {
         // Re-setup watchers when workspace changes
         this.disposeWatchers();
         this.setupFileWatchers();
-      })
+      }),
     );
   }
 
@@ -499,14 +505,13 @@ export class PromptFileService implements vscode.Disposable {
   /**
    * Create AGENTS.md file with default template
    */
-  async createAgentsFile(
-    source: 'personal' | 'project',
-    content?: string
-  ): Promise<string | null> {
+  async createAgentsFile(source: 'personal' | 'project', content?: string): Promise<string | null> {
     const filePath = this.getAgentsFilePath(source);
     if (!filePath) return null;
 
-    const defaultContent = content || `# Global Agent Instructions
+    const defaultContent =
+      content ||
+      `# Global Agent Instructions
 
 <!-- 全局 Agent 指令 -->
 <!-- 此文件的内容会被注入到所有对话的系统提示词中 -->

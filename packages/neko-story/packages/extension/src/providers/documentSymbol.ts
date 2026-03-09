@@ -27,7 +27,7 @@ const CHILD_ELEMENT_TYPES = new Set([
 export class FountainDocumentSymbolProvider implements vscode.DocumentSymbolProvider {
   provideDocumentSymbols(
     document: vscode.TextDocument,
-    _token: vscode.CancellationToken
+    _token: vscode.CancellationToken,
   ): vscode.ProviderResult<vscode.DocumentSymbol[]> {
     const text = document.getText();
     const fountainDoc = parse(text);
@@ -112,13 +112,13 @@ export class FountainDocumentSymbolProvider implements vscode.DocumentSymbolProv
 
   private createSymbol(
     element: AnyFountainElement,
-    _document: vscode.TextDocument
+    _document: vscode.TextDocument,
   ): vscode.DocumentSymbol | null {
     const range = new vscode.Range(
       element.range.start.line,
       element.range.start.character,
       element.range.end.line,
-      element.range.end.character
+      element.range.end.character,
     );
 
     switch (element.type) {
@@ -129,20 +129,14 @@ export class FountainDocumentSymbolProvider implements vscode.DocumentSymbolProv
           '',
           vscode.SymbolKind.Namespace,
           range,
-          range
+          range,
         );
       }
       case 'scene_heading': {
         const scene = element as SceneHeading;
         const label = scene.location || scene.raw;
         const detail = [scene.intExt, scene.time].filter(Boolean).join(' - ');
-        return new vscode.DocumentSymbol(
-          label,
-          detail,
-          vscode.SymbolKind.Function,
-          range,
-          range
-        );
+        return new vscode.DocumentSymbol(label, detail, vscode.SymbolKind.Function, range, range);
       }
       case 'character': {
         const char = element as Character;
@@ -152,7 +146,7 @@ export class FountainDocumentSymbolProvider implements vscode.DocumentSymbolProv
           detail,
           vscode.SymbolKind.Variable,
           range,
-          range
+          range,
         );
       }
       case 'transition': {
@@ -162,7 +156,7 @@ export class FountainDocumentSymbolProvider implements vscode.DocumentSymbolProv
           '',
           vscode.SymbolKind.Event,
           range,
-          range
+          range,
         );
       }
       case 'synopsis': {
@@ -172,7 +166,7 @@ export class FountainDocumentSymbolProvider implements vscode.DocumentSymbolProv
           'synopsis',
           vscode.SymbolKind.String,
           range,
-          range
+          range,
         );
       }
       case 'lyrics': {
@@ -182,7 +176,7 @@ export class FountainDocumentSymbolProvider implements vscode.DocumentSymbolProv
           'lyrics',
           vscode.SymbolKind.String,
           range,
-          range
+          range,
         );
       }
       case 'page_break': {
@@ -191,18 +185,12 @@ export class FountainDocumentSymbolProvider implements vscode.DocumentSymbolProv
           'page break',
           vscode.SymbolKind.Operator,
           range,
-          range
+          range,
         );
       }
       case 'note': {
         const note = element as Note;
-        return new vscode.DocumentSymbol(
-          note.text,
-          'note',
-          vscode.SymbolKind.String,
-          range,
-          range
-        );
+        return new vscode.DocumentSymbol(note.text, 'note', vscode.SymbolKind.String, range, range);
       }
       default:
         return null;

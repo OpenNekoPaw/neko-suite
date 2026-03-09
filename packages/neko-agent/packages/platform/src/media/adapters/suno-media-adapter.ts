@@ -77,7 +77,7 @@ export class SunoMediaAdapter extends BaseMediaAdapter {
   async generateAudio(
     request: AudioGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/api/generate`;
 
@@ -100,7 +100,7 @@ export class SunoMediaAdapter extends BaseMediaAdapter {
     const { data, error } = await this.request<SunoGenerateResponse>(
       url,
       { method: 'POST', body: JSON.stringify(body) },
-      provider
+      provider,
     );
 
     if (error) {
@@ -128,16 +128,13 @@ export class SunoMediaAdapter extends BaseMediaAdapter {
   /**
    * Get task status
    */
-  async getTaskStatus(
-    externalTaskId: string,
-    provider: Provider
-  ): Promise<MediaAdapterResult> {
+  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/api/get?ids=${externalTaskId}`;
 
     const { data, error } = await this.request<SunoStatusResponse[]>(
       url,
       { method: 'GET' },
-      provider
+      provider,
     );
 
     if (error) {
@@ -199,5 +196,4 @@ export class SunoMediaAdapter extends BaseMediaAdapter {
   async cancelTask(_externalTaskId: string, _provider: Provider): Promise<void> {
     // Suno does not support task cancellation
   }
-
 }

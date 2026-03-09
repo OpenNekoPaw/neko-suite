@@ -53,23 +53,22 @@ interface ToastProviderProps {
 export function ToastProvider({ children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const showToast = useCallback((
-    message: string,
-    type: ToastType = 'info',
-    duration: number = 3000
-  ) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const toast: Toast = { id, type, message, duration };
+  const showToast = useCallback(
+    (message: string, type: ToastType = 'info', duration: number = 3000) => {
+      const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const toast: Toast = { id, type, message, duration };
 
-    setToasts((prev) => [...prev, toast]);
+      setToasts((prev) => [...prev, toast]);
 
-    // 自动移除
-    if (duration > 0) {
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, duration);
-    }
-  }, []);
+      // 自动移除
+      if (duration > 0) {
+        setTimeout(() => {
+          setToasts((prev) => prev.filter((t) => t.id !== id));
+        }, duration);
+      }
+    },
+    [],
+  );
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));

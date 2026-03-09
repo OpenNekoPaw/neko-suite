@@ -114,11 +114,7 @@ export interface RetryPolicy {
 /**
  * Backoff strategy
  */
-export type BackoffStrategy =
-  | FixedBackoff
-  | LinearBackoff
-  | ExponentialBackoff
-  | JitterBackoff;
+export type BackoffStrategy = FixedBackoff | LinearBackoff | ExponentialBackoff | JitterBackoff;
 
 export interface FixedBackoff {
   type: 'fixed';
@@ -160,10 +156,7 @@ export interface TimeoutPolicy {
 /**
  * Calculate backoff delay
  */
-export function calculateBackoff(
-  strategy: BackoffStrategy,
-  attempt: number
-): number {
+export function calculateBackoff(strategy: BackoffStrategy, attempt: number): number {
   switch (strategy.type) {
     case 'fixed':
       return strategy.delayMs;
@@ -171,13 +164,13 @@ export function calculateBackoff(
     case 'linear':
       return Math.min(
         strategy.initialDelayMs + strategy.incrementMs * attempt,
-        strategy.maxDelayMs
+        strategy.maxDelayMs,
       );
 
     case 'exponential':
       return Math.min(
         strategy.initialDelayMs * Math.pow(strategy.multiplier, attempt),
-        strategy.maxDelayMs
+        strategy.maxDelayMs,
       );
 
     case 'jitter': {
@@ -194,11 +187,7 @@ export function calculateBackoff(
 /**
  * Check if error should trigger retry
  */
-export function shouldRetry(
-  error: BaseError,
-  policy: RetryPolicy,
-  attempt: number
-): boolean {
+export function shouldRetry(error: BaseError, policy: RetryPolicy, attempt: number): boolean {
   if (attempt >= policy.maxRetries) {
     return false;
   }

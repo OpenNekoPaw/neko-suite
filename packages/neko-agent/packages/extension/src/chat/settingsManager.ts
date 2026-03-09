@@ -11,7 +11,8 @@ export class SettingsManager {
 
   constructor(private readonly _context: vscode.ExtensionContext) {
     // Load saved settings or use defaults
-    const savedSettings = this._context.workspaceState.get<Partial<AIAssistantSettings>>('aiAssistant.settings');
+    const savedSettings =
+      this._context.workspaceState.get<Partial<AIAssistantSettings>>('aiAssistant.settings');
     this._settings = { ...DEFAULT_SETTINGS, ...savedSettings };
   }
 

@@ -43,7 +43,9 @@ export function ThinkingBlock({
       {/* Preview lines */}
       {displayLines.map((line, idx) => (
         <Box key={idx} marginLeft={2}>
-          <Text dimColor italic>{truncate(line, 80)}</Text>
+          <Text dimColor italic>
+            {truncate(line, 80)}
+          </Text>
         </Box>
       ))}
 

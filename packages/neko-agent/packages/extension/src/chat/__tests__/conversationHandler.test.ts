@@ -5,10 +5,12 @@ function createMockContext() {
   const store = new Map<string, unknown>();
   return {
     workspaceState: {
-      get: vi.fn(<T>(key: string, defaultValue?: T): T | undefined =>
-        (store.get(key) as T) ?? defaultValue
+      get: vi.fn(
+        <T>(key: string, defaultValue?: T): T | undefined => (store.get(key) as T) ?? defaultValue,
       ),
-      update: vi.fn(async (key: string, value: unknown) => { store.set(key, value); }),
+      update: vi.fn(async (key: string, value: unknown) => {
+        store.set(key, value);
+      }),
     },
   };
 }
@@ -79,7 +81,7 @@ describe('ConversationHandler', () => {
 
     it('should not crash when no active conversation', () => {
       expect(() =>
-        handler.addMessage({ id: 'm1', role: 'user', content: 'hello', timestamp: Date.now() })
+        handler.addMessage({ id: 'm1', role: 'user', content: 'hello', timestamp: Date.now() }),
       ).not.toThrow();
     });
   });
@@ -117,7 +119,7 @@ describe('ConversationHandler', () => {
           conversations: expect.arrayContaining([
             expect.objectContaining({ id: expect.any(String), messageCount: 0 }),
           ]),
-        })
+        }),
       );
     });
   });
@@ -141,7 +143,7 @@ describe('ConversationHandler', () => {
         expect.objectContaining({
           type: 'activeConversation',
           conversation: expect.objectContaining({ id: expect.any(String), messages: [] }),
-        })
+        }),
       );
     });
   });

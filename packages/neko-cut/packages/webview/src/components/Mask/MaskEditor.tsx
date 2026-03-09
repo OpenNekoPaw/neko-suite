@@ -56,7 +56,7 @@ export const MaskEditor = memo(function MaskEditor({
     const checkerSize = 10;
     for (let y = 0; y < height; y += checkerSize) {
       for (let x = 0; x < width; x += checkerSize) {
-        const isEven = ((x / checkerSize) + (y / checkerSize)) % 2 === 0;
+        const isEven = (x / checkerSize + y / checkerSize) % 2 === 0;
         ctx.fillStyle = isEven ? '#333' : '#555';
         ctx.fillRect(x, y, checkerSize, checkerSize);
       }
@@ -105,9 +105,14 @@ export const MaskEditor = memo(function MaskEditor({
         ctx.fillStyle = '#00bfff';
         const handleSize = 6;
         [
-          [-w / 2, -h / 2], [w / 2, -h / 2],
-          [w / 2, h / 2], [-w / 2, h / 2],
-          [0, -h / 2], [w / 2, 0], [0, h / 2], [-w / 2, 0],
+          [-w / 2, -h / 2],
+          [w / 2, -h / 2],
+          [w / 2, h / 2],
+          [-w / 2, h / 2],
+          [0, -h / 2],
+          [w / 2, 0],
+          [0, h / 2],
+          [-w / 2, 0],
         ].forEach(([x, y]) => {
           ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
         });
@@ -140,7 +145,10 @@ export const MaskEditor = memo(function MaskEditor({
         ctx.fillStyle = '#00bfff';
         const handleSize = 6;
         [
-          [-radiusX, 0], [radiusX, 0], [0, -radiusY], [0, radiusY],
+          [-radiusX, 0],
+          [radiusX, 0],
+          [0, -radiusY],
+          [0, radiusY],
         ].forEach(([x, y]) => {
           ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
         });
@@ -174,37 +182,40 @@ export const MaskEditor = memo(function MaskEditor({
     setDragHandle('center'); // Simplified - would detect specific handle
   }, []);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDragging || !dragHandle) return;
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isDragging || !dragHandle) return;
 
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
 
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
 
-    if (mask.shape.type === 'rectangle') {
-      const shape = mask.shape as RectangleMask;
-      onChange({
-        ...mask,
-        shape: {
-          ...shape,
-          centerX: pixelToPct(mouseX, width),
-          centerY: pixelToPct(mouseY, height),
-        },
-      });
-    } else if (mask.shape.type === 'ellipse') {
-      const shape = mask.shape as EllipseMask;
-      onChange({
-        ...mask,
-        shape: {
-          ...shape,
-          centerX: pixelToPct(mouseX, width),
-          centerY: pixelToPct(mouseY, height),
-        },
-      });
-    }
-  }, [isDragging, dragHandle, mask, onChange, width, height, pixelToPct]);
+      if (mask.shape.type === 'rectangle') {
+        const shape = mask.shape as RectangleMask;
+        onChange({
+          ...mask,
+          shape: {
+            ...shape,
+            centerX: pixelToPct(mouseX, width),
+            centerY: pixelToPct(mouseY, height),
+          },
+        });
+      } else if (mask.shape.type === 'ellipse') {
+        const shape = mask.shape as EllipseMask;
+        onChange({
+          ...mask,
+          shape: {
+            ...shape,
+            centerX: pixelToPct(mouseX, width),
+            centerY: pixelToPct(mouseY, height),
+          },
+        });
+      }
+    },
+    [isDragging, dragHandle, mask, onChange, width, height, pixelToPct],
+  );
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);

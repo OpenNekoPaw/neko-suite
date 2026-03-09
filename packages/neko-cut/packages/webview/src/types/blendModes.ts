@@ -76,30 +76,80 @@ export const BLEND_MODE_DEFINITIONS: BlendModeDefinition[] = [
   // Lighten Group
   { mode: 'lighten', nameKey: 'blendMode.lighten', category: 'lighten', cssValue: 'lighten' },
   { mode: 'screen', nameKey: 'blendMode.screen', category: 'lighten', cssValue: 'screen' },
-  { mode: 'colorDodge', nameKey: 'blendMode.colorDodge', category: 'lighten', cssValue: 'color-dodge' },
-  { mode: 'linearDodge', nameKey: 'blendMode.linearDodge', category: 'lighten', notSupported: true },
-  { mode: 'lighterColor', nameKey: 'blendMode.lighterColor', category: 'lighten', notSupported: true },
+  {
+    mode: 'colorDodge',
+    nameKey: 'blendMode.colorDodge',
+    category: 'lighten',
+    cssValue: 'color-dodge',
+  },
+  {
+    mode: 'linearDodge',
+    nameKey: 'blendMode.linearDodge',
+    category: 'lighten',
+    notSupported: true,
+  },
+  {
+    mode: 'lighterColor',
+    nameKey: 'blendMode.lighterColor',
+    category: 'lighten',
+    notSupported: true,
+  },
 
   // Contrast Group
   { mode: 'overlay', nameKey: 'blendMode.overlay', category: 'contrast', cssValue: 'overlay' },
-  { mode: 'softLight', nameKey: 'blendMode.softLight', category: 'contrast', cssValue: 'soft-light' },
-  { mode: 'hardLight', nameKey: 'blendMode.hardLight', category: 'contrast', cssValue: 'hard-light' },
+  {
+    mode: 'softLight',
+    nameKey: 'blendMode.softLight',
+    category: 'contrast',
+    cssValue: 'soft-light',
+  },
+  {
+    mode: 'hardLight',
+    nameKey: 'blendMode.hardLight',
+    category: 'contrast',
+    cssValue: 'hard-light',
+  },
   { mode: 'vividLight', nameKey: 'blendMode.vividLight', category: 'contrast', notSupported: true },
-  { mode: 'linearLight', nameKey: 'blendMode.linearLight', category: 'contrast', notSupported: true },
+  {
+    mode: 'linearLight',
+    nameKey: 'blendMode.linearLight',
+    category: 'contrast',
+    notSupported: true,
+  },
   { mode: 'pinLight', nameKey: 'blendMode.pinLight', category: 'contrast', notSupported: true },
   { mode: 'hardMix', nameKey: 'blendMode.hardMix', category: 'contrast', notSupported: true },
 
   // Inversion Group
-  { mode: 'difference', nameKey: 'blendMode.difference', category: 'inversion', cssValue: 'difference' },
-  { mode: 'exclusion', nameKey: 'blendMode.exclusion', category: 'inversion', cssValue: 'exclusion' },
+  {
+    mode: 'difference',
+    nameKey: 'blendMode.difference',
+    category: 'inversion',
+    cssValue: 'difference',
+  },
+  {
+    mode: 'exclusion',
+    nameKey: 'blendMode.exclusion',
+    category: 'inversion',
+    cssValue: 'exclusion',
+  },
   { mode: 'subtract', nameKey: 'blendMode.subtract', category: 'inversion', notSupported: true },
   { mode: 'divide', nameKey: 'blendMode.divide', category: 'inversion', notSupported: true },
 
   // Component Group
   { mode: 'hue', nameKey: 'blendMode.hue', category: 'component', cssValue: 'hue' },
-  { mode: 'saturation', nameKey: 'blendMode.saturation', category: 'component', cssValue: 'saturation' },
+  {
+    mode: 'saturation',
+    nameKey: 'blendMode.saturation',
+    category: 'component',
+    cssValue: 'saturation',
+  },
   { mode: 'color', nameKey: 'blendMode.color', category: 'component', cssValue: 'color' },
-  { mode: 'luminosity', nameKey: 'blendMode.luminosity', category: 'component', cssValue: 'luminosity' },
+  {
+    mode: 'luminosity',
+    nameKey: 'blendMode.luminosity',
+    category: 'component',
+    cssValue: 'luminosity',
+  },
 ];
 
 // =============================================================================
@@ -111,7 +161,7 @@ export const BLEND_MODE_DEFINITIONS: BlendModeDefinition[] = [
  * 根据模式获取混合模式定义
  */
 export function getBlendModeDefinition(mode: BlendModeType): BlendModeDefinition | undefined {
-  return BLEND_MODE_DEFINITIONS.find(d => d.mode === mode);
+  return BLEND_MODE_DEFINITIONS.find((d) => d.mode === mode);
 }
 
 /**
@@ -119,7 +169,7 @@ export function getBlendModeDefinition(mode: BlendModeType): BlendModeDefinition
  * 按分类获取混合模式
  */
 export function getBlendModesByCategory(category: BlendModeCategory): BlendModeDefinition[] {
-  return BLEND_MODE_DEFINITIONS.filter(d => d.category === category);
+  return BLEND_MODE_DEFINITIONS.filter((d) => d.category === category);
 }
 
 /**
@@ -127,7 +177,7 @@ export function getBlendModesByCategory(category: BlendModeCategory): BlendModeD
  * 获取 CSS 支持的混合模式
  */
 export function getCSSBlendModes(): BlendModeDefinition[] {
-  return BLEND_MODE_DEFINITIONS.filter(d => d.cssValue);
+  return BLEND_MODE_DEFINITIONS.filter((d) => d.cssValue);
 }
 
 /**
@@ -135,7 +185,7 @@ export function getCSSBlendModes(): BlendModeDefinition[] {
  * 获取不支持的混合模式（需要自定义 shader）
  */
 export function getUnsupportedBlendModes(): BlendModeDefinition[] {
-  return BLEND_MODE_DEFINITIONS.filter(d => d.notSupported);
+  return BLEND_MODE_DEFINITIONS.filter((d) => d.notSupported);
 }
 
 /**

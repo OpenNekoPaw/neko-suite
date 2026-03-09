@@ -13,8 +13,4 @@ export {
 
 export { setRootLogger, getLogger, getRootLogger } from './logger';
 
-export {
-  setErrorHandler,
-  getErrorHandler,
-  handleError,
-} from './errorHandler';
+export { setErrorHandler, getErrorHandler, handleError } from './errorHandler';

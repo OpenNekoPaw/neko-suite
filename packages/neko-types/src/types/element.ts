@@ -29,7 +29,10 @@ import type { EngineElement, EngineSubtitleElementData } from '../generated/time
 type AssertKeysSubset<A, B> =
   Exclude<keyof A, keyof B> extends never
     ? true
-    : { error: 'Engine type has fields missing from hand-written type'; fields: Exclude<keyof A, keyof B> };
+    : {
+        error: 'Engine type has fields missing from hand-written type';
+        fields: Exclude<keyof A, keyof B>;
+      };
 
 type _CheckBaseElement = AssertKeysSubset<EngineElement, BaseTimelineElement>;
 type _CheckSubtitle = AssertKeysSubset<EngineSubtitleElementData, SubtitleElement>;
@@ -38,7 +41,8 @@ type _CheckSubtitle = AssertKeysSubset<EngineSubtitleElementData, SubtitleElemen
 // void usage prevents TS6133 (noUnusedLocals) without exporting internals.
 const _driftCheckElement: _CheckBaseElement = true;
 const _driftCheckSubtitle: _CheckSubtitle = true;
-void _driftCheckElement; void _driftCheckSubtitle;
+void _driftCheckElement;
+void _driftCheckSubtitle;
 
 // =============================================================================
 // Base Element — Engine-aligned fields only
@@ -183,4 +187,9 @@ export interface SubtitleElement extends BaseTimelineElement {
   };
 }
 
-export type TimelineElement = MediaElement | TextElement | AudioElement | ShapeElement | SubtitleElement;
+export type TimelineElement =
+  | MediaElement
+  | TextElement
+  | AudioElement
+  | ShapeElement
+  | SubtitleElement;

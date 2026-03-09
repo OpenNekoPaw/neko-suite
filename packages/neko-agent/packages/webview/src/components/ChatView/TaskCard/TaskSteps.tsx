@@ -15,13 +15,13 @@ export function TaskSteps({ steps, currentStepId }: TaskStepsProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const toggleExpand = useCallback(() => {
-    setIsExpanded(prev => !prev);
+    setIsExpanded((prev) => !prev);
   }, []);
 
   if (!steps || steps.length === 0) return null;
 
-  const currentStepIndex = steps.findIndex(s => s.id === currentStepId);
-  const completedSteps = steps.filter(s => s.status === 'completed').length;
+  const currentStepIndex = steps.findIndex((s) => s.id === currentStepId);
+  const completedSteps = steps.filter((s) => s.status === 'completed').length;
 
   return (
     <div className="mb-2">
@@ -31,11 +31,11 @@ export function TaskSteps({ steps, currentStepId }: TaskStepsProps) {
         className="w-full flex items-center gap-2 text-[10px] text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] transition-colors"
       >
         <ChevronIcon className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-        <span>Steps: {completedSteps}/{steps.length}</span>
+        <span>
+          Steps: {completedSteps}/{steps.length}
+        </span>
         {currentStepId && currentStepIndex >= 0 && (
-          <span className="text-[var(--vscode-foreground)]">
-            - {steps[currentStepIndex]!.name}
-          </span>
+          <span className="text-[var(--vscode-foreground)]">- {steps[currentStepIndex]!.name}</span>
         )}
       </button>
 
@@ -46,7 +46,9 @@ export function TaskSteps({ steps, currentStepId }: TaskStepsProps) {
             <div
               key={step.id}
               className={`flex items-start gap-2 text-[10px] ${
-                step.id === currentStepId ? 'text-[var(--vscode-foreground)]' : 'text-[var(--vscode-descriptionForeground)]'
+                step.id === currentStepId
+                  ? 'text-[var(--vscode-foreground)]'
+                  : 'text-[var(--vscode-descriptionForeground)]'
               }`}
             >
               {/* Status icon */}
@@ -60,7 +62,9 @@ export function TaskSteps({ steps, currentStepId }: TaskStepsProps) {
               {/* Step info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium">{index + 1}. {step.name}</span>
+                  <span className="font-medium">
+                    {index + 1}. {step.name}
+                  </span>
                   {step.startTime && step.endTime && (
                     <span className="text-[var(--vscode-descriptionForeground)]">
                       ({formatDuration(Math.round((step.endTime - step.startTime) / 1000))})

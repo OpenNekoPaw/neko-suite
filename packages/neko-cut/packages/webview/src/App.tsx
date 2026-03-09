@@ -13,8 +13,8 @@ const logger = getLogger('App');
 
 // Split ratio: Preview占比 (0.0 ~ 1.0)
 const DEFAULT_PREVIEW_RATIO = 0.5; // 默认 Preview 占 50%
-const MIN_PREVIEW_RATIO = 0.2;     // Preview 最小 20%
-const MAX_PREVIEW_RATIO = 0.8;     // Preview 最大 80%
+const MIN_PREVIEW_RATIO = 0.2; // Preview 最小 20%
+const MAX_PREVIEW_RATIO = 0.8; // Preview 最大 80%
 
 function App() {
   const {
@@ -31,23 +31,21 @@ function App() {
     previewMuted,
     setPreviewVolume,
     togglePreviewMute,
-  } = useShallowStore(
-    (state) => ({
-      project: state.project,
-      isPlaying: state.isPlaying,
-      currentTime: state.currentTime,
-      seek: state.seek,
-      pause: state.pause,
-      getTotalDuration: state.getTotalDuration,
-      togglePlayback: state.togglePlayback,
-      previewQuality: state.previewQuality,
-      setPreviewQuality: state.setPreviewQuality,
-      previewVolume: state.previewVolume,
-      previewMuted: state.previewMuted,
-      setPreviewVolume: state.setPreviewVolume,
-      togglePreviewMute: state.togglePreviewMute,
-    })
-  );
+  } = useShallowStore((state) => ({
+    project: state.project,
+    isPlaying: state.isPlaying,
+    currentTime: state.currentTime,
+    seek: state.seek,
+    pause: state.pause,
+    getTotalDuration: state.getTotalDuration,
+    togglePlayback: state.togglePlayback,
+    previewQuality: state.previewQuality,
+    setPreviewQuality: state.setPreviewQuality,
+    previewVolume: state.previewVolume,
+    previewMuted: state.previewMuted,
+    setPreviewVolume: state.setPreviewVolume,
+    togglePreviewMute: state.togglePreviewMute,
+  }));
   const selectedElements = useEditorStore((state) => state.selectedElements);
   const updateElement = useEditorStore((state) => state.updateElement);
   const updateProject = useEditorStore((state) => state.updateProject);
@@ -95,7 +93,6 @@ function App() {
       } else {
         logger.error('PreviewPanel capture function not available');
       }
-
     } catch (error) {
       logger.error('Screenshot capture failed:', error);
     } finally {
@@ -163,7 +160,7 @@ function App() {
               message.elementId,
               message.propertyPath,
               currentTime,
-              message.value
+              message.value,
             );
           }
           break;
@@ -171,12 +168,7 @@ function App() {
         case 'removeKeyframeFromPropertyPanel':
           if (message.trackId && message.elementId && message.propertyPath) {
             // Remove keyframe at current time
-            removeKeyframe(
-              message.trackId,
-              message.elementId,
-              message.propertyPath,
-              currentTime
-            );
+            removeKeyframe(message.trackId, message.elementId, message.propertyPath, currentTime);
           }
           break;
       }
@@ -196,19 +188,22 @@ function App() {
     setIsResizing(true);
   }, []);
 
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!isResizing || !containerRef.current) return;
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isResizing || !containerRef.current) return;
 
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const containerHeight = containerRect.height - 4; // 4px for resize handle
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const containerHeight = containerRect.height - 4; // 4px for resize handle
 
-    // Calculate preview ratio based on pointer position
-    const pointerY = e.clientY - containerRect.top;
-    const newRatio = pointerY / containerHeight;
+      // Calculate preview ratio based on pointer position
+      const pointerY = e.clientY - containerRect.top;
+      const newRatio = pointerY / containerHeight;
 
-    // Clamp to min/max
-    setPreviewRatio(Math.max(MIN_PREVIEW_RATIO, Math.min(MAX_PREVIEW_RATIO, newRatio)));
-  }, [isResizing]);
+      // Clamp to min/max
+      setPreviewRatio(Math.max(MIN_PREVIEW_RATIO, Math.min(MAX_PREVIEW_RATIO, newRatio)));
+    },
+    [isResizing],
+  );
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     // Release pointer capture
@@ -334,10 +329,7 @@ function App() {
 
       {/* Timeline with Controls - hidden in fullscreen */}
       {!isFullscreen && (
-        <div
-          className="overflow-hidden flex flex-col min-h-0"
-          style={{ flex: 1 - previewRatio }}
-        >
+        <div className="overflow-hidden flex flex-col min-h-0" style={{ flex: 1 - previewRatio }}>
           <Timeline />
         </div>
       )}

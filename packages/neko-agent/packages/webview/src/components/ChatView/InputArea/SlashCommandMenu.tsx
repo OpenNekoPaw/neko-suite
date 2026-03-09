@@ -37,7 +37,7 @@ export function SlashCommandMenu({
   // Filter commands by name or description
   const filteredCommands = useMemo(() => {
     const lowerFilter = filter.toLowerCase();
-    return allCommands.filter(cmd => {
+    return allCommands.filter((cmd) => {
       const nameMatch = cmd.name.toLowerCase().includes(lowerFilter);
       // For builtin commands, use i18n; for skills, use direct description
       const description = cmd.source === 'skill' ? cmd.descriptionKey : t(cmd.descriptionKey);
@@ -83,7 +83,5 @@ export function SlashCommandMenu({
 // Export filtered commands helper
 export function getFilteredCommands(filter: string, skills: SkillSummary[] = []): SlashCommand[] {
   const allCommands = getAllCommands(skills);
-  return allCommands.filter(cmd =>
-    cmd.name.toLowerCase().includes(filter.toLowerCase())
-  );
+  return allCommands.filter((cmd) => cmd.name.toLowerCase().includes(filter.toLowerCase()));
 }

@@ -12,7 +12,16 @@ import * as vscode from 'vscode';
 
 export interface CanvasTimelineEntry {
   /** Operation type */
-  action: 'addNode' | 'deleteNode' | 'moveNode' | 'addConnection' | 'deleteConnection' | 'editNode' | 'paste' | 'undo' | 'redo';
+  action:
+    | 'addNode'
+    | 'deleteNode'
+    | 'moveNode'
+    | 'addConnection'
+    | 'deleteConnection'
+    | 'editNode'
+    | 'paste'
+    | 'undo'
+    | 'redo';
   /** Human-readable description */
   label: string;
   /** Timestamp (ms since epoch) */
@@ -104,10 +113,7 @@ export class CanvasTimelineProvider implements vscode.TimelineProvider {
     const sliced = filtered.slice(-pageSize);
 
     const items: vscode.TimelineItem[] = sliced.map((entry) => {
-      const item = new vscode.TimelineItem(
-        entry.label,
-        entry.timestamp,
-      );
+      const item = new vscode.TimelineItem(entry.label, entry.timestamp);
       item.description = entry.detail;
       item.iconPath = ACTION_ICONS[entry.action] ?? new vscode.ThemeIcon('circle-outline');
       item.contextValue = 'canvasTimelineEntry';
@@ -116,9 +122,8 @@ export class CanvasTimelineProvider implements vscode.TimelineProvider {
 
     return {
       items,
-      paging: sliced.length < filtered.length
-        ? { cursor: String(sliced[0]?.timestamp ?? 0) }
-        : undefined,
+      paging:
+        sliced.length < filtered.length ? { cursor: String(sliced[0]?.timestamp ?? 0) } : undefined,
     };
   }
 

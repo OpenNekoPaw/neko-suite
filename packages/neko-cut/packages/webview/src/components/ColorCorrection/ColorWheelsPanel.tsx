@@ -13,7 +13,10 @@ import type { ColorWheelsParams, ColorWheelValue } from '../../types/colorCorrec
 
 interface ColorWheelsPanelProps {
   colorWheels: ColorWheelsParams;
-  onChange: (wheel: 'shadows' | 'midtones' | 'highlights' | 'global', settings: ColorWheelValue) => void;
+  onChange: (
+    wheel: 'shadows' | 'midtones' | 'highlights' | 'global',
+    settings: ColorWheelValue,
+  ) => void;
 }
 
 type WheelType = 'shadows' | 'midtones' | 'highlights' | 'global';
@@ -39,30 +42,36 @@ const ColorWheel = memo(function ColorWheel({
   const [isDragging, setIsDragging] = useState(false);
 
   // Convert hue/saturation to x/y position
-  const hueToXY = useCallback((hue: number, sat: number): { x: number; y: number } => {
-    const radius = (sat / 100) * (size / 2 - 4);
-    const angle = (hue - 90) * (Math.PI / 180);
-    const x = size / 2 + Math.cos(angle) * radius;
-    const y = size / 2 + Math.sin(angle) * radius;
-    return { x, y };
-  }, [size]);
+  const hueToXY = useCallback(
+    (hue: number, sat: number): { x: number; y: number } => {
+      const radius = (sat / 100) * (size / 2 - 4);
+      const angle = (hue - 90) * (Math.PI / 180);
+      const x = size / 2 + Math.cos(angle) * radius;
+      const y = size / 2 + Math.sin(angle) * radius;
+      return { x, y };
+    },
+    [size],
+  );
 
   // Convert x/y to hue/saturation
-  const xyToHueSat = useCallback((x: number, y: number): { hue: number; saturation: number } => {
-    const centerX = size / 2;
-    const centerY = size / 2;
-    const dx = x - centerX;
-    const dy = y - centerY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const maxRadius = size / 2 - 4;
+  const xyToHueSat = useCallback(
+    (x: number, y: number): { hue: number; saturation: number } => {
+      const centerX = size / 2;
+      const centerY = size / 2;
+      const dx = x - centerX;
+      const dy = y - centerY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const maxRadius = size / 2 - 4;
 
-    let angle = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
-    if (angle < 0) angle += 360;
+      let angle = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
+      if (angle < 0) angle += 360;
 
-    const saturation = Math.min(100, (distance / maxRadius) * 100);
+      const saturation = Math.min(100, (distance / maxRadius) * 100);
 
-    return { hue: angle, saturation };
-  }, [size]);
+      return { hue: angle, saturation };
+    },
+    [size],
+  );
 
   // Draw the color wheel
   useEffect(() => {
@@ -84,10 +93,7 @@ const ColorWheel = memo(function ColorWheel({
       const startAngle = (angle - 0.5) * (Math.PI / 180);
       const endAngle = (angle + 0.5) * (Math.PI / 180);
 
-      const gradient = ctx.createRadialGradient(
-        centerX, centerY, 0,
-        centerX, centerY, radius
-      );
+      const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
       gradient.addColorStop(0, '#808080');
       gradient.addColorStop(1, `hsl(${angle}, 100%, 50%)`);
 
@@ -119,27 +125,33 @@ const ColorWheel = memo(function ColorWheel({
   }, [settings, size, hueToXY]);
 
   // Handle mouse events
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    setIsDragging(true);
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const { hue, saturation } = xyToHueSat(x, y);
-      onChange({ ...settings, hue, saturation });
-    }
-  }, [xyToHueSat, onChange, settings]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      setIsDragging(true);
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const { hue, saturation } = xyToHueSat(x, y);
+        onChange({ ...settings, hue, saturation });
+      }
+    },
+    [xyToHueSat, onChange, settings],
+  );
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDragging) return;
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const { hue, saturation } = xyToHueSat(x, y);
-      onChange({ ...settings, hue, saturation });
-    }
-  }, [isDragging, xyToHueSat, onChange, settings]);
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isDragging) return;
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const { hue, saturation } = xyToHueSat(x, y);
+        onChange({ ...settings, hue, saturation });
+      }
+    },
+    [isDragging, xyToHueSat, onChange, settings],
+  );
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
@@ -150,9 +162,12 @@ const ColorWheel = memo(function ColorWheel({
     onChange({ ...settings, hue: 0, saturation: 0 });
   }, [onChange, settings]);
 
-  const handleLuminanceChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange({ ...settings, luminance: parseFloat(e.target.value) });
-  }, [onChange, settings]);
+  const handleLuminanceChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onChange({ ...settings, luminance: parseFloat(e.target.value) });
+    },
+    [onChange, settings],
+  );
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -194,9 +209,12 @@ export const ColorWheelsPanel = memo(function ColorWheelsPanel({
 }: ColorWheelsPanelProps) {
   const { t } = useTranslation();
 
-  const handleWheelChange = useCallback((wheel: WheelType) => (settings: ColorWheelValue) => {
-    onChange(wheel, settings);
-  }, [onChange]);
+  const handleWheelChange = useCallback(
+    (wheel: WheelType) => (settings: ColorWheelValue) => {
+      onChange(wheel, settings);
+    },
+    [onChange],
+  );
 
   return (
     <div className="space-y-3">
@@ -233,7 +251,8 @@ export const ColorWheelsPanel = memo(function ColorWheelsPanel({
       <div className="text-[9px] text-[var(--vscode-descriptionForeground)] text-center">
         {t('colorCorrection.colorWheels.hue')}: {colorWheels.global.hue.toFixed(0)}° |
         {t('colorCorrection.colorWheels.saturation')}: {colorWheels.global.saturation.toFixed(0)}% |
-        {t('colorCorrection.colorWheels.luminance')}: {colorWheels.global.luminance > 0 ? '+' : ''}{colorWheels.global.luminance.toFixed(0)}
+        {t('colorCorrection.colorWheels.luminance')}: {colorWheels.global.luminance > 0 ? '+' : ''}
+        {colorWheels.global.luminance.toFixed(0)}
       </div>
     </div>
   );

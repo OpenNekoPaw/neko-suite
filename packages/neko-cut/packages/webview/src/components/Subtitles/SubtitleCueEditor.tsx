@@ -91,13 +91,16 @@ export const SubtitleCueEditor = memo(function SubtitleCueEditor({
     onClose();
   }, [text, startTime, endTime, onChange, onClose]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose();
-    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      handleSave();
-    }
-  }, [onClose, handleSave]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        handleSave();
+      }
+    },
+    [onClose, handleSave],
+  );
 
   return (
     <div className="space-y-2" onKeyDown={handleKeyDown}>

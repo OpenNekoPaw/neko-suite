@@ -145,7 +145,7 @@ export function MiniMap({
         pan: { x: newPanX, y: newPanY },
       });
     },
-    [scale, bounds, containerWidth, containerHeight, viewport.zoom, onViewportChange]
+    [scale, bounds, containerWidth, containerHeight, viewport.zoom, onViewportChange],
   );
 
   return (

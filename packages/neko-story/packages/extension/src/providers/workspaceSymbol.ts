@@ -17,16 +17,19 @@ export class FountainWorkspaceSymbolProvider implements vscode.WorkspaceSymbolPr
 
   async provideWorkspaceSymbols(
     query: string,
-    _token: vscode.CancellationToken
+    _token: vscode.CancellationToken,
   ): Promise<vscode.SymbolInformation[]> {
     await this.index.ensureInitialized();
 
     const locations = this.index.searchSymbols(query);
-    return locations.map(loc => new vscode.SymbolInformation(
-      loc.name,
-      KIND_MAP[loc.kind],
-      loc.detail ?? '',
-      new vscode.Location(loc.uri, loc.range)
-    ));
+    return locations.map(
+      (loc) =>
+        new vscode.SymbolInformation(
+          loc.name,
+          KIND_MAP[loc.kind],
+          loc.detail ?? '',
+          new vscode.Location(loc.uri, loc.range),
+        ),
+    );
   }
 }

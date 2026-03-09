@@ -50,9 +50,7 @@ export interface UseThumbnailGeneratorResult {
  */
 function getCSSColor(varName: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
-  const value = getComputedStyle(document.documentElement)
-    .getPropertyValue(varName)
-    .trim();
+  const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
   return value || fallback;
 }
 
@@ -72,13 +70,13 @@ function getThemeColors() {
     accentBlue: getCSSColor('--vscode-focusBorder', '#007acc'),
 
     // 语法高亮色（VSCode 默认主题）
-    blue: '#569cd6',      // 关键字蓝
+    blue: '#569cd6', // 关键字蓝
     lightBlue: '#9cdcfe', // 变量浅蓝
-    green: '#6a9955',     // 字符串绿
-    teal: '#4ec9b0',      // 类型青
-    yellow: '#dcdcaa',    // 函数黄
-    orange: '#ce9178',    // 数字橙
-    purple: '#c586c0',    // 控制流紫
+    green: '#6a9955', // 字符串绿
+    teal: '#4ec9b0', // 类型青
+    yellow: '#dcdcaa', // 函数黄
+    orange: '#ce9178', // 数字橙
+    purple: '#c586c0', // 控制流紫
 
     // 边框色
     border: getCSSColor('--vscode-panel-border', '#3c3c3c'),
@@ -90,20 +88,20 @@ function getThemeColors() {
  */
 const TRACK_TYPE_COLORS = {
   media: {
-    background: 'rgba(86, 156, 214, 0.15)',  // 蓝色半透明
-    element: '#569cd6',                       // VSCode 关键字蓝
+    background: 'rgba(86, 156, 214, 0.15)', // 蓝色半透明
+    element: '#569cd6', // VSCode 关键字蓝
   },
   audio: {
-    background: 'rgba(78, 201, 176, 0.15)',  // 青色半透明
-    element: '#4ec9b0',                       // VSCode 类型青
+    background: 'rgba(78, 201, 176, 0.15)', // 青色半透明
+    element: '#4ec9b0', // VSCode 类型青
   },
   text: {
     background: 'rgba(220, 220, 170, 0.15)', // 黄色半透明
-    element: '#dcdcaa',                       // VSCode 函数黄
+    element: '#dcdcaa', // VSCode 函数黄
   },
   effect: {
     background: 'rgba(197, 134, 192, 0.15)', // 紫色半透明
-    element: '#c586c0',                       // VSCode 控制流紫
+    element: '#c586c0', // VSCode 控制流紫
   },
 };
 
@@ -137,10 +135,10 @@ export function useThumbnailGenerator({
     }
 
     // Minimap 尺寸配置（与组件配置保持一致）
-    const width = 1200;           // 固定宽度以提升清晰度
-    const trackHeight = 12;       // 每个轨道高度（与 types.ts 中的 trackHeight 一致）
-    const trackGap = 0.5;         // 轨道间隙（缩小）
-    const elementPadding = 1;     // 元素上下内边距（缩小）
+    const width = 1200; // 固定宽度以提升清晰度
+    const trackHeight = 12; // 每个轨道高度（与 types.ts 中的 trackHeight 一致）
+    const trackGap = 0.5; // 轨道间隙（缩小）
+    const elementPadding = 1; // 元素上下内边距（缩小）
 
     // Canvas 高度：渲染所有轨道（不受容器高度限制）
     // 容器会通过滚动条来显示超出部分
@@ -187,12 +185,7 @@ export function useThumbnailGenerator({
 
         // 元素主体
         ctx.fillStyle = trackColors.element;
-        ctx.fillRect(
-          x,
-          y + elementPadding,
-          elementWidth,
-          trackHeight - elementPadding * 2
-        );
+        ctx.fillRect(x, y + elementPadding, elementWidth, trackHeight - elementPadding * 2);
 
         // 元素高亮边框（宽度足够时）
         if (elementWidth > 4) {
@@ -202,7 +195,7 @@ export function useThumbnailGenerator({
             x + 0.5,
             y + elementPadding + 0.5,
             elementWidth - 1,
-            trackHeight - elementPadding * 2 - 1
+            trackHeight - elementPadding * 2 - 1,
           );
         }
       });

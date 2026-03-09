@@ -18,26 +18,23 @@ import type { MetadataExtractor } from '@neko/asset';
 // Text Metadata Extraction (migrated from neko-cut AssetService)
 // =============================================================================
 
-async function extractTextMetadata(
-	filePath: string,
-	metadata: MediaFileMetadata,
-): Promise<void> {
-	try {
-		const content = await fs.readFile(filePath, 'utf-8');
-		metadata.characterCount = content.length;
-		metadata.wordCount = content.split(/\s+/).filter((w) => w.length > 0).length;
-		metadata.lineCount = content.split('\n').length;
-		metadata.encoding = 'utf-8';
+async function extractTextMetadata(filePath: string, metadata: MediaFileMetadata): Promise<void> {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    metadata.characterCount = content.length;
+    metadata.wordCount = content.split(/\s+/).filter((w) => w.length > 0).length;
+    metadata.lineCount = content.split('\n').length;
+    metadata.encoding = 'utf-8';
 
-		// Simple language detection based on content
-		if (/[\u4e00-\u9fa5]/.test(content)) {
-			metadata.language = 'zh-CN';
-		} else {
-			metadata.language = 'en';
-		}
-	} catch {
-		// Silently ignore — text metadata is best-effort
-	}
+    // Simple language detection based on content
+    if (/[\u4e00-\u9fa5]/.test(content)) {
+      metadata.language = 'zh-CN';
+    } else {
+      metadata.language = 'en';
+    }
+  } catch {
+    // Silently ignore — text metadata is best-effort
+  }
 }
 
 // =============================================================================
@@ -49,29 +46,29 @@ async function extractTextMetadata(
  * Returns null if the engine is not available or probe fails.
  */
 async function probeViaEngine(filePath: string): Promise<MediaInfo | null> {
-	try {
-		const result = await vscode.commands.executeCommand<MediaInfo | null>(
-			'neko.engine.probeInternal',
-			filePath,
-		);
-		return result ?? null;
-	} catch {
-		// Engine not available — fall back silently
-		return null;
-	}
+  try {
+    const result = await vscode.commands.executeCommand<MediaInfo | null>(
+      'neko.engine.probeInternal',
+      filePath,
+    );
+    return result ?? null;
+  } catch {
+    // Engine not available — fall back silently
+    return null;
+  }
 }
 
 /**
  * Map engine MediaInfo to MediaFileMetadata fields.
  */
 function applyMediaInfo(metadata: MediaFileMetadata, info: MediaInfo): void {
-	if (info.duration > 0) metadata.duration = info.duration;
-	if (info.width > 0) metadata.width = info.width;
-	if (info.height > 0) metadata.height = info.height;
-	if (info.fps > 0) metadata.frameRate = info.fps;
-	if (info.codec && info.codec !== 'unknown') metadata.codec = info.codec;
-	if (info.audioSampleRate) metadata.sampleRate = info.audioSampleRate;
-	if (info.audioChannels) metadata.channels = info.audioChannels;
+  if (info.duration > 0) metadata.duration = info.duration;
+  if (info.width > 0) metadata.width = info.width;
+  if (info.height > 0) metadata.height = info.height;
+  if (info.fps > 0) metadata.frameRate = info.fps;
+  if (info.codec && info.codec !== 'unknown') metadata.codec = info.codec;
+  if (info.audioSampleRate) metadata.sampleRate = info.audioSampleRate;
+  if (info.audioChannels) metadata.channels = info.audioChannels;
 }
 
 // =============================================================================
@@ -92,37 +89,37 @@ function applyMediaInfo(metadata: MediaFileMetadata, info: MediaInfo): void {
  * existing MetadataExtractor callback pattern.
  */
 export function createEngineMetadataExtractor(): MetadataExtractor {
-	return async (filePath: string): Promise<MediaFileMetadata> => {
-		// 1. Basic metadata (always available)
-		let fileSize = 0;
-		try {
-			const stats = await fs.stat(filePath);
-			fileSize = stats.size;
-		} catch {
-			// File may not exist yet (e.g., AI-generated, not yet written)
-		}
+  return async (filePath: string): Promise<MediaFileMetadata> => {
+    // 1. Basic metadata (always available)
+    let fileSize = 0;
+    try {
+      const stats = await fs.stat(filePath);
+      fileSize = stats.size;
+    } catch {
+      // File may not exist yet (e.g., AI-generated, not yet written)
+    }
 
-		const mimeType = getMimeType(filePath);
-		const mediaType = detectMediaType(filePath);
+    const mimeType = getMimeType(filePath);
+    const mediaType = detectMediaType(filePath);
 
-		const metadata: MediaFileMetadata = {
-			fileSize,
-			mimeType,
-		};
+    const metadata: MediaFileMetadata = {
+      fileSize,
+      mimeType,
+    };
 
-		// 2. Rich metadata for video/audio/image via engine probeMedia
-		if (mediaType === 'video' || mediaType === 'audio' || mediaType === 'image') {
-			const info = await probeViaEngine(filePath);
-			if (info) {
-				applyMediaInfo(metadata, info);
-			}
-		}
+    // 2. Rich metadata for video/audio/image via engine probeMedia
+    if (mediaType === 'video' || mediaType === 'audio' || mediaType === 'image') {
+      const info = await probeViaEngine(filePath);
+      if (info) {
+        applyMediaInfo(metadata, info);
+      }
+    }
 
-		// 3. Text metadata
-		if (mediaType === 'text') {
-			await extractTextMetadata(filePath, metadata);
-		}
+    // 3. Text metadata
+    if (mediaType === 'text') {
+      await extractTextMetadata(filePath, metadata);
+    }
 
-		return metadata;
-	};
+    return metadata;
+  };
 }

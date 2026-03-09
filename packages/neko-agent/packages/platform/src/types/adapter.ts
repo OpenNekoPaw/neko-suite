@@ -135,7 +135,7 @@ export interface Adapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<ChatResponse>;
 
   /** Send streaming chat request */
@@ -143,7 +143,7 @@ export interface Adapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): AsyncIterable<ChatChunk>;
 
   /** Generate embeddings */
@@ -154,7 +154,7 @@ export interface Adapter {
     prompt: string,
     options: ImageGenerationOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<ImageGenerationResult>;
 
   /** Generate video */
@@ -162,7 +162,7 @@ export interface Adapter {
     prompt: string,
     options: VideoGenerationOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<VideoGenerationResult>;
 
   /**

@@ -145,7 +145,9 @@ export const TimelineControls = memo(function TimelineControls({
           onClick={onSplit}
           disabled={!hasSelection || !onSplit}
           className={`p-1.5 rounded ${
-            hasSelection && onSplit ? 'hover:bg-vscode-toolbar-hover' : 'opacity-40 cursor-not-allowed'
+            hasSelection && onSplit
+              ? 'hover:bg-vscode-toolbar-hover'
+              : 'opacity-40 cursor-not-allowed'
           }`}
           title={t('timeline.controls.split')}
         >
@@ -158,7 +160,9 @@ export const TimelineControls = memo(function TimelineControls({
           onClick={onDelete}
           disabled={!hasSelection || !onDelete}
           className={`p-1.5 rounded ${
-            hasSelection && onDelete ? 'hover:bg-vscode-toolbar-hover' : 'opacity-40 cursor-not-allowed'
+            hasSelection && onDelete
+              ? 'hover:bg-vscode-toolbar-hover'
+              : 'opacity-40 cursor-not-allowed'
           }`}
           title={t('timeline.controls.delete')}
         >
@@ -171,7 +175,9 @@ export const TimelineControls = memo(function TimelineControls({
           onClick={onCopy}
           disabled={!hasSelection || !onCopy}
           className={`p-1.5 rounded ${
-            hasSelection && onCopy ? 'hover:bg-vscode-toolbar-hover' : 'opacity-40 cursor-not-allowed'
+            hasSelection && onCopy
+              ? 'hover:bg-vscode-toolbar-hover'
+              : 'opacity-40 cursor-not-allowed'
           }`}
           title={t('timeline.controls.copy')}
         >
@@ -184,7 +190,9 @@ export const TimelineControls = memo(function TimelineControls({
           onClick={onPaste}
           disabled={!hasClipboard || !onPaste}
           className={`p-1.5 rounded ${
-            hasClipboard && onPaste ? 'hover:bg-vscode-toolbar-hover' : 'opacity-40 cursor-not-allowed'
+            hasClipboard && onPaste
+              ? 'hover:bg-vscode-toolbar-hover'
+              : 'opacity-40 cursor-not-allowed'
           }`}
           title={t('timeline.controls.paste')}
         >
@@ -200,7 +208,9 @@ export const TimelineControls = memo(function TimelineControls({
           onClick={onPrevKeyframe}
           disabled={!hasSelection || !onPrevKeyframe}
           className={`p-1.5 rounded ${
-            hasSelection && onPrevKeyframe ? 'hover:bg-vscode-toolbar-hover' : 'opacity-40 cursor-not-allowed'
+            hasSelection && onPrevKeyframe
+              ? 'hover:bg-vscode-toolbar-hover'
+              : 'opacity-40 cursor-not-allowed'
           }`}
           title={t('timeline.controls.prevKeyframe')}
         >
@@ -217,10 +227,14 @@ export const TimelineControls = memo(function TimelineControls({
             !hasSelection || !onAddKeyframe
               ? 'opacity-40 cursor-not-allowed'
               : hasKeyframeAtCurrentTime
-              ? 'bg-yellow-600 text-white hover:bg-yellow-700'
-              : 'hover:bg-vscode-toolbar-hover'
+                ? 'bg-yellow-600 text-white hover:bg-yellow-700'
+                : 'hover:bg-vscode-toolbar-hover'
           }`}
-          title={hasKeyframeAtCurrentTime ? t('timeline.controls.removeKeyframe') : t('timeline.controls.addKeyframe')}
+          title={
+            hasKeyframeAtCurrentTime
+              ? t('timeline.controls.removeKeyframe')
+              : t('timeline.controls.addKeyframe')
+          }
         >
           <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
             <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71L12 2z" />
@@ -231,7 +245,9 @@ export const TimelineControls = memo(function TimelineControls({
           onClick={onNextKeyframe}
           disabled={!hasSelection || !onNextKeyframe}
           className={`p-1.5 rounded ${
-            hasSelection && onNextKeyframe ? 'hover:bg-vscode-toolbar-hover' : 'opacity-40 cursor-not-allowed'
+            hasSelection && onNextKeyframe
+              ? 'hover:bg-vscode-toolbar-hover'
+              : 'opacity-40 cursor-not-allowed'
           }`}
           title={t('timeline.controls.nextKeyframe')}
         >

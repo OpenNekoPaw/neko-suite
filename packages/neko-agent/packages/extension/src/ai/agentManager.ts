@@ -93,12 +93,15 @@ export interface IAgentManager extends vscode.Disposable {
   /**
    * 加载完整会话历史（包含工具调用上下文）
    */
-  loadHistoryWithContext(conversationId: string, messages: Array<{
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-    toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
-    toolResults?: Array<{ callId: string; success: boolean; data: unknown }>;
-  }>): void;
+  loadHistoryWithContext(
+    conversationId: string,
+    messages: Array<{
+      role: 'user' | 'assistant' | 'system';
+      content: string;
+      toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+      toolResults?: Array<{ callId: string; success: boolean; data: unknown }>;
+    }>,
+  ): void;
 
   /**
    * 清空指定会话的历史
@@ -217,7 +220,7 @@ export class AgentManager implements IAgentManager {
           this._onDidAgentStop.fire({ conversationId });
           // 当 Agent 停止时，尝试处理等待队列中的请求
           this._processWaitingQueue();
-        })
+        }),
       );
       this._agentDisposables.set(conversationId, disposables);
     }
@@ -323,12 +326,15 @@ export class AgentManager implements IAgentManager {
     }
   }
 
-  loadHistoryWithContext(conversationId: string, messages: Array<{
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-    toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
-    toolResults?: Array<{ callId: string; success: boolean; data: unknown }>;
-  }>): void {
+  loadHistoryWithContext(
+    conversationId: string,
+    messages: Array<{
+      role: 'user' | 'assistant' | 'system';
+      content: string;
+      toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+      toolResults?: Array<{ callId: string; success: boolean; data: unknown }>;
+    }>,
+  ): void {
     const agent = this.getOrCreate(conversationId);
     agent.clearHistory();
 
@@ -438,7 +444,7 @@ export class AgentManager implements IAgentManager {
 
     // 检查是否有可用容量
     const availableSlots = this._maxAgents - this._agents.size;
-    const nonRunningAgents = Array.from(this._agents.values()).filter(a => !a.isRunning()).length;
+    const nonRunningAgents = Array.from(this._agents.values()).filter((a) => !a.isRunning()).length;
 
     if (availableSlots > 0 || nonRunningAgents > 0) {
       const waiting = this._waitingQueue.shift();

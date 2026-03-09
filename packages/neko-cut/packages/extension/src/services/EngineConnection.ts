@@ -25,83 +25,83 @@ const ENGINE_EXTENSION_ID = 'neko.neko-engine';
 // =============================================================================
 
 export class EngineConnection {
-	private _client: EngineClient | null = null;
-	private _port: number | null = null;
-	private _initPromise: Promise<EngineClient | null> | null = null;
+  private _client: EngineClient | null = null;
+  private _port: number | null = null;
+  private _initPromise: Promise<EngineClient | null> | null = null;
 
-	/**
-	 * Get or create the EngineClient instance (lazy init + singleton)
-	 * Returns null if engine is unavailable
-	 */
-	async ensureClient(): Promise<EngineClient | null> {
-		// Return cached client if available
-		if (this._client) {
-			return this._client;
-		}
+  /**
+   * Get or create the EngineClient instance (lazy init + singleton)
+   * Returns null if engine is unavailable
+   */
+  async ensureClient(): Promise<EngineClient | null> {
+    // Return cached client if available
+    if (this._client) {
+      return this._client;
+    }
 
-		// Reuse in-flight initialization
-		if (this._initPromise) {
-			return this._initPromise;
-		}
+    // Reuse in-flight initialization
+    if (this._initPromise) {
+      return this._initPromise;
+    }
 
-		// Start initialization
-		this._initPromise = this.initialize();
-		const client = await this._initPromise;
-		this._initPromise = null;
+    // Start initialization
+    this._initPromise = this.initialize();
+    const client = await this._initPromise;
+    this._initPromise = null;
 
-		return client;
-	}
+    return client;
+  }
 
-	/**
-	 * Get the current port (if initialized)
-	 */
-	get port(): number | null {
-		return this._port;
-	}
+  /**
+   * Get the current port (if initialized)
+   */
+  get port(): number | null {
+    return this._port;
+  }
 
-	/**
-	 * Check if the connection is available
-	 */
-	get isAvailable(): boolean {
-		return this._client !== null && this._port !== null;
-	}
+  /**
+   * Check if the connection is available
+   */
+  get isAvailable(): boolean {
+    return this._client !== null && this._port !== null;
+  }
 
-	// =========================================================================
-	// Initialization
-	// =========================================================================
+  // =========================================================================
+  // Initialization
+  // =========================================================================
 
-	private async initialize(): Promise<EngineClient | null> {
-		try {
-			logger.info('Connecting to neko-engine Frame Server...');
+  private async initialize(): Promise<EngineClient | null> {
+    try {
+      logger.info('Connecting to neko-engine Frame Server...');
 
-			// 1. Ensure engine extension is activated
-			const ext = vscode.extensions.getExtension(ENGINE_EXTENSION_ID);
-			if (!ext) {
-				logger.error(`Extension ${ENGINE_EXTENSION_ID} not installed`);
-				return null;
-			}
+      // 1. Ensure engine extension is activated
+      const ext = vscode.extensions.getExtension(ENGINE_EXTENSION_ID);
+      if (!ext) {
+        logger.error(`Extension ${ENGINE_EXTENSION_ID} not installed`);
+        return null;
+      }
 
-			if (!ext.isActive) {
-				await ext.activate();
-			}
+      if (!ext.isActive) {
+        await ext.activate();
+      }
 
-			// 2. Ensure Frame Server is running → get port
-			const result = await vscode.commands.executeCommand<{ port: number } | null>(
-				'neko.engine.ensureFrameServer'
-			);
-			if (!result) {
-				logger.error('ensureFrameServer returned null');
-				return null;
-			}
+      // 2. Ensure Frame Server is running → get port
+      const result = await vscode.commands.executeCommand<{ port: number } | null>(
+        'neko.engine.ensureFrameServer',
+      );
+      if (!result) {
+        logger.error('ensureFrameServer returned null');
+        return null;
+      }
 
-			this._port = result.port;
-			this._client = new EngineClient(result.port);
-			logger.info(`Connected to Frame Server on port ${this._port}`);
+      this._port = result.port;
+      this._client = new EngineClient(result.port);
+      logger.info(`Connected to Frame Server on port ${this._port}`);
 
-			return this._client;
-		} catch (error) {
-			logger.error(`Failed to initialize: ${error instanceof Error ? error.message : error}`);
-			return null;
-		}
-	}
+      return this._client;
+    } catch (error) {
+      logger.error(`Failed to initialize: ${error instanceof Error ? error.message : error}`);
+      return null;
+    }
+  }
 }

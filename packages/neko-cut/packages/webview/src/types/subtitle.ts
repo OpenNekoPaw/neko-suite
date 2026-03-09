@@ -10,7 +10,18 @@
 /**
  * Font weight options
  */
-export type SubtitleFontWeight = 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
+export type SubtitleFontWeight =
+  | 'normal'
+  | 'bold'
+  | '100'
+  | '200'
+  | '300'
+  | '400'
+  | '500'
+  | '600'
+  | '700'
+  | '800'
+  | '900';
 
 /**
  * Text alignment options
@@ -265,7 +276,7 @@ export function createSubtitleCue(
   startTime: number,
   endTime: number,
   text: string,
-  id?: string
+  id?: string,
 ): SubtitleCue {
   return {
     id: id || `cue-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -281,7 +292,7 @@ export function createSubtitleCue(
 export function createSubtitleTrack(
   name: string,
   language: string = 'en',
-  id?: string
+  id?: string,
 ): SubtitleTrack {
   return {
     id: id || `track-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,

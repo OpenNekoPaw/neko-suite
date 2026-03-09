@@ -10,16 +10,12 @@ export function SceneHeadingRenderer({ element }: SceneHeadingRendererProps) {
     navigateToLine(element.range.start.line);
   };
 
-  const heading = [element.intExt, element.location, element.time]
-    .filter(Boolean)
-    .join(' - ');
+  const heading = [element.intExt, element.location, element.time].filter(Boolean).join(' - ');
 
   return (
     <div className="scene-heading element" onClick={handleClick}>
       {heading}
-      {element.sceneNumber && (
-        <span className="scene-number">#{element.sceneNumber}</span>
-      )}
+      {element.sceneNumber && <span className="scene-number">#{element.sceneNumber}</span>}
     </div>
   );
 }

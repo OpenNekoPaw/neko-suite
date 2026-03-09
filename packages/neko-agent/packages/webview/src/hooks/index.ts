@@ -38,11 +38,7 @@ export {
   type UseConversationSessionReturn,
 } from './useConversationSession';
 
-export {
-  useTabManager,
-  type UseTabManagerProps,
-  type UseTabManagerReturn,
-} from './useTabManager';
+export { useTabManager, type UseTabManagerProps, type UseTabManagerReturn } from './useTabManager';
 
 export {
   useSlashCommands,

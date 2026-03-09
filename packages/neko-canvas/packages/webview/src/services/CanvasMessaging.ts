@@ -179,7 +179,7 @@ export class CanvasMessaging {
   async requestAssetThumbnail(assetPath: string, nodeId: string): Promise<string | undefined> {
     const response = await this.request<AssetThumbnailRequest, AssetThumbnailResponse>(
       'requestAssetThumbnail',
-      { assetPath, nodeId }
+      { assetPath, nodeId },
     );
     return response?.thumbnailPath;
   }

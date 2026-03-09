@@ -21,7 +21,12 @@ import {
 } from '../constants';
 import { getFileType } from '../utils';
 import type { ProjectData, TimelineTrack, TextElement } from '../types';
-import { CENTERED_TRANSFORM, ASSET_DRAG_MIME, getDragItems, type AssetDragData } from '@neko/shared';
+import {
+  CENTERED_TRANSFORM,
+  ASSET_DRAG_MIME,
+  getDragItems,
+  type AssetDragData,
+} from '@neko/shared';
 import { getMediaInfoService } from '../services';
 import { getLogger } from '../utils/logger';
 
@@ -33,13 +38,19 @@ export interface TimelineDragDropOptions {
   project: ProjectData | null;
   tracks: TimelineTrack[];
   zoomLevel: number;
-  addMediaElement: (trackId: string, src: string, name: string, duration: number, startTime: number) => void;
+  addMediaElement: (
+    trackId: string,
+    src: string,
+    name: string,
+    duration: number,
+    startTime: number,
+  ) => void;
   addMediaElementWithAudio: (
     trackId: string,
     src: string,
     name: string,
     duration: number,
-    startTime: number
+    startTime: number,
   ) => Promise<{ videoElementId: string; audioElementId?: string }>;
   addElement: (trackId: string, element: Omit<TextElement, 'id'>) => void;
   addTrack: (type: 'media' | 'audio' | 'text', name?: string) => string;
@@ -87,7 +98,7 @@ export function useTimelineDragDrop({
         setIsDragOver(false);
       }
     },
-    [timelineRef]
+    [timelineRef],
   );
 
   const handleDrop = useCallback(
@@ -127,7 +138,7 @@ export function useTimelineDragDrop({
       const addFileToTrack = async (
         filePath: string,
         displayName: string,
-        startTime: number
+        startTime: number,
       ): Promise<boolean> => {
         const fileType = getFileType(displayName);
         if (!fileType) {
@@ -140,7 +151,7 @@ export function useTimelineDragDrop({
           let textTrackId = targetTrack?.type === 'text' ? targetTrack.id : '';
           if (!textTrackId) {
             // Use live state — previous file in the same batch may have created this track
-            const existing = getCurrentTracks().find(t => t.type === 'text');
+            const existing = getCurrentTracks().find((t) => t.type === 'text');
             textTrackId = existing ? existing.id : addTrack('text');
           }
           addElement(textTrackId, {
@@ -174,7 +185,7 @@ export function useTimelineDragDrop({
           let audioTrackId = targetTrack?.type === 'audio' ? targetTrack.id : '';
           if (!audioTrackId) {
             // Use live state — avoids duplicate audio tracks across multi-file drops
-            const existing = getCurrentTracks().find(t => t.type === 'audio');
+            const existing = getCurrentTracks().find((t) => t.type === 'audio');
             audioTrackId = existing ? existing.id : addTrack('audio');
           }
           let duration = DEFAULT_VIDEO_DURATION;
@@ -189,7 +200,7 @@ export function useTimelineDragDrop({
           let mediaTrackId = targetTrack?.type === 'media' ? targetTrack.id : '';
           if (!mediaTrackId) {
             // Use live state — avoids duplicate media tracks across multi-file drops
-            const existing = getCurrentTracks().find(t => t.type === 'media');
+            const existing = getCurrentTracks().find((t) => t.type === 'media');
             mediaTrackId = existing ? existing.id : addTrack('media');
           }
           if (fileType === 'video') {
@@ -201,7 +212,13 @@ export function useTimelineDragDrop({
             }
             // addMediaElementWithAudio awaits audio/subtitle detection internally,
             // so the next file won't start until this one's linked tracks are created.
-            await addMediaElementWithAudio(mediaTrackId, filePath, displayName, duration, startTime);
+            await addMediaElementWithAudio(
+              mediaTrackId,
+              filePath,
+              displayName,
+              duration,
+              startTime,
+            );
           } else {
             // image — no audio detection needed
             addMediaElement(mediaTrackId, filePath, displayName, DEFAULT_IMAGE_DURATION, startTime);
@@ -238,8 +255,8 @@ export function useTimelineDragDrop({
         if (uriList) {
           const uris = uriList
             .split('\n')
-            .map(u => u.trim())
-            .filter(u => u && !u.startsWith('#'));
+            .map((u) => u.trim())
+            .filter((u) => u && !u.startsWith('#'));
           for (let idx = 0; idx < uris.length; idx++) {
             let filePath = uris[idx]!;
             if (filePath.startsWith('file://')) {
@@ -247,8 +264,7 @@ export function useTimelineDragDrop({
               // Windows: remove leading slash from /C:/...
               if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1);
             }
-            const fileName =
-              filePath.split('/').pop() || filePath.split('\\').pop() || 'media';
+            const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || 'media';
             await addFileToTrack(filePath, fileName, dropTime + idx * 0.5);
           }
           return;
@@ -281,7 +297,7 @@ export function useTimelineDragDrop({
       getCurrentTracks,
       tracksRef,
       onError,
-    ]
+    ],
   );
 
   return {

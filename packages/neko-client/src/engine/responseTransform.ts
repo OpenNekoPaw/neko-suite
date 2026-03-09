@@ -13,15 +13,17 @@
 import type { DiffResult } from './types';
 
 /** Maps Rust ContentDiff tag values to DiffResult field names */
-const CONTENT_TYPE_KEY_MAP: Partial<Record<string, keyof Pick<DiffResult, 'imageDiff' | 'audioDiff' | 'videoDiff' | 'timelineDiff'>>> = {
-	Image: 'imageDiff',
-	Audio: 'audioDiff',
-	Video: 'videoDiff',
-	Timeline: 'timelineDiff',
-	image: 'imageDiff',
-	audio: 'audioDiff',
-	video: 'videoDiff',
-	timeline: 'timelineDiff',
+const CONTENT_TYPE_KEY_MAP: Partial<
+  Record<string, keyof Pick<DiffResult, 'imageDiff' | 'audioDiff' | 'videoDiff' | 'timelineDiff'>>
+> = {
+  Image: 'imageDiff',
+  Audio: 'audioDiff',
+  Video: 'videoDiff',
+  Timeline: 'timelineDiff',
+  image: 'imageDiff',
+  audio: 'audioDiff',
+  video: 'videoDiff',
+  timeline: 'timelineDiff',
 };
 
 /**
@@ -29,14 +31,14 @@ const CONTENT_TYPE_KEY_MAP: Partial<Record<string, keyof Pick<DiffResult, 'image
  * Mutates `data` in place and returns it.
  */
 export function transformDiffResponse<T extends Record<string, unknown>>(data: T): T {
-	const content = data['content'] as Record<string, unknown> | undefined;
-	if (!content) return data;
+  const content = data['content'] as Record<string, unknown> | undefined;
+  if (!content) return data;
 
-	const { type: contentType, ...contentFields } = content;
-	const key = CONTENT_TYPE_KEY_MAP[contentType as string];
-	if (key) {
-		(data as Record<string, unknown>)[key] = contentFields;
-	}
-	delete (data as Record<string, unknown>)['content'];
-	return data;
+  const { type: contentType, ...contentFields } = content;
+  const key = CONTENT_TYPE_KEY_MAP[contentType as string];
+  if (key) {
+    (data as Record<string, unknown>)[key] = contentFields;
+  }
+  delete (data as Record<string, unknown>)['content'];
+  return data;
 }

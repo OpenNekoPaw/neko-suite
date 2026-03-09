@@ -60,7 +60,7 @@ export class ConnectionStateManager implements vscode.Disposable {
     name: string,
     type: 'mcp' | 'workflow',
     status: ConnectionStatus,
-    error?: string
+    error?: string,
   ): void {
     const key = `${type}:${id}`;
     const existing = this.states.get(key);
@@ -100,14 +100,14 @@ export class ConnectionStateManager implements vscode.Disposable {
    * Get all MCP connection states
    */
   getMCPStates(): ConnectionState[] {
-    return Array.from(this.states.values()).filter(s => s.type === 'mcp');
+    return Array.from(this.states.values()).filter((s) => s.type === 'mcp');
   }
 
   /**
    * Get all Workflow connection states
    */
   getWorkflowStates(): ConnectionState[] {
-    return Array.from(this.states.values()).filter(s => s.type === 'workflow');
+    return Array.from(this.states.values()).filter((s) => s.type === 'workflow');
   }
 
   /**
@@ -171,4 +171,5 @@ export class ConnectionStateManager implements vscode.Disposable {
 
 // Service identifier for DI
 import { createServiceId } from '../base';
-export const IConnectionStateManager = createServiceId<ConnectionStateManager>('connectionStateManager');
+export const IConnectionStateManager =
+  createServiceId<ConnectionStateManager>('connectionStateManager');

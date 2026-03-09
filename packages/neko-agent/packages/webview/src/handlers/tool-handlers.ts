@@ -26,10 +26,10 @@ const logger = getLogger('ToolHandlers');
  */
 function findTargetMessageForToolCall(
   messages: Array<{ id: string; role: string; isStreaming?: boolean }>,
-  streamingMessageId: string | null
+  streamingMessageId: string | null,
 ): number {
   if (streamingMessageId) {
-    const idx = messages.findIndex(msg => msg.id === streamingMessageId);
+    const idx = messages.findIndex((msg) => msg.id === streamingMessageId);
     if (idx !== -1) return idx;
   }
 
@@ -61,26 +61,35 @@ function findTargetMessageForToolCall(
  * Priority: 1) streamingMessageId 2) toolCallId match 3) last assistant with toolCalls
  */
 function findTargetMessageIndex(
-  messages: Array<{ id: string; role: string; toolCalls?: Array<{ id: string }>; contentBlocks?: ContentBlock[] }>,
+  messages: Array<{
+    id: string;
+    role: string;
+    toolCalls?: Array<{ id: string }>;
+    contentBlocks?: ContentBlock[];
+  }>,
   streamingMessageId: string | null,
-  toolCallId?: string
+  toolCallId?: string,
 ): number {
   if (streamingMessageId) {
-    const idx = messages.findIndex(msg => msg.id === streamingMessageId);
+    const idx = messages.findIndex((msg) => msg.id === streamingMessageId);
     if (idx !== -1) return idx;
   }
 
   if (toolCallId) {
-    const idx = messages.findIndex(msg =>
-      msg.contentBlocks?.some(b => b.type === 'tool_call' && b.toolCall?.id === toolCallId) ||
-      msg.toolCalls?.some(tc => tc.id === toolCallId)
+    const idx = messages.findIndex(
+      (msg) =>
+        msg.contentBlocks?.some((b) => b.type === 'tool_call' && b.toolCall?.id === toolCallId) ||
+        msg.toolCalls?.some((tc) => tc.id === toolCallId),
     );
     if (idx !== -1) return idx;
   }
 
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === 'assistant' &&
-        (messages[i].contentBlocks?.some(b => b.type === 'tool_call') || messages[i].toolCalls?.length)) {
+    if (
+      messages[i].role === 'assistant' &&
+      (messages[i].contentBlocks?.some((b) => b.type === 'tool_call') ||
+        messages[i].toolCalls?.length)
+    ) {
       return i;
     }
   }
@@ -110,9 +119,7 @@ const handleToolCall: MessageHandler = (message, context) => {
 
   updateConversation(context, message.conversationId, (msgs, streamingId) => {
     const targetMessageId = message.messageId || streamingId;
-    let targetIndex = targetMessageId
-      ? msgs.findIndex(msg => msg.id === targetMessageId)
-      : -1;
+    let targetIndex = targetMessageId ? msgs.findIndex((msg) => msg.id === targetMessageId) : -1;
 
     if (targetIndex === -1 && !message.messageId) {
       targetIndex = findTargetMessageForToolCall(msgs, streamingId);
@@ -182,9 +189,7 @@ const handleToolResult: MessageHandler = (message, context) => {
   // 1. Update tool call result in messages
   updateConversation(context, message.conversationId, (msgs, streamingId) => {
     const targetMessageId = message.messageId || streamingId;
-    let targetIndex = targetMessageId
-      ? msgs.findIndex(msg => msg.id === targetMessageId)
-      : -1;
+    let targetIndex = targetMessageId ? msgs.findIndex((msg) => msg.id === targetMessageId) : -1;
 
     if (targetIndex === -1 && !message.messageId) {
       targetIndex = findTargetMessageIndex(msgs, streamingId, message.toolCallId);
@@ -208,7 +213,11 @@ const handleToolResult: MessageHandler = (message, context) => {
 
         let updatedBlocks: ContentBlock[];
         if (message.toolCallId) {
-          updatedBlocks = updateToolCallInBlocks(msg.contentBlocks || [], message.toolCallId, toolCallUpdater);
+          updatedBlocks = updateToolCallInBlocks(
+            msg.contentBlocks || [],
+            message.toolCallId,
+            toolCallUpdater,
+          );
         } else {
           updatedBlocks = updateLastPendingToolCall(msg.contentBlocks || [], toolCallUpdater);
         }
@@ -277,9 +286,10 @@ const handleToolConfirmation: MessageHandler = (message, context) => {
   };
 
   updateConversation(context, message.conversationId, (msgs) => {
-    const targetIndex = msgs.findIndex(msg =>
-      msg.contentBlocks?.some(b => b.type === 'tool_call' && b.toolCall?.id === toolCallId) ||
-      msg.toolCalls?.some(tc => tc.id === toolCallId)
+    const targetIndex = msgs.findIndex(
+      (msg) =>
+        msg.contentBlocks?.some((b) => b.type === 'tool_call' && b.toolCall?.id === toolCallId) ||
+        msg.toolCalls?.some((tc) => tc.id === toolCallId),
     );
 
     if (targetIndex === -1) {
@@ -291,7 +301,7 @@ const handleToolConfirmation: MessageHandler = (message, context) => {
       messages: msgs.map((msg, idx) => {
         if (idx !== targetIndex) return msg;
 
-        const updatedBlocks = updateToolCallInBlocks(msg.contentBlocks || [], toolCallId, tc => ({
+        const updatedBlocks = updateToolCallInBlocks(msg.contentBlocks || [], toolCallId, (tc) => ({
           ...tc,
           pendingConfirmation: true,
           confirmation: confirmationData,
@@ -337,18 +347,18 @@ function updatePlanStepInMessages(
   planId: string,
   stepId: string,
   status: string,
-  newDescription?: string
+  newDescription?: string,
 ): Message[] {
-  return messages.map(msg => {
+  return messages.map((msg) => {
     if (!msg.contentBlocks) return msg;
 
-    const updatedBlocks = msg.contentBlocks.map(block => {
+    const updatedBlocks = msg.contentBlocks.map((block) => {
       if (block.type !== 'plan' || !block.plan) return block;
 
       const plan = block.plan as Plan;
       if (plan.id !== planId) return block;
 
-      const updatedSteps = plan.steps.map(step => {
+      const updatedSteps = plan.steps.map((step) => {
         if (step.id !== stepId) return step;
         return {
           ...step,
@@ -373,12 +383,12 @@ function updatePlanStepInMessages(
 function updatePlanStatusInMessages(
   messages: Message[],
   planId: string,
-  status: string
+  status: string,
 ): Message[] {
-  return messages.map(msg => {
+  return messages.map((msg) => {
     if (!msg.contentBlocks) return msg;
 
-    const updatedBlocks = msg.contentBlocks.map(block => {
+    const updatedBlocks = msg.contentBlocks.map((block) => {
       if (block.type !== 'plan' || !block.plan) return block;
 
       const plan = block.plan as Plan;

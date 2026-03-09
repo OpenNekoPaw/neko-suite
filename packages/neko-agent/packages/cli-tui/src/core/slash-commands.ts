@@ -62,39 +62,45 @@ export function parseSlashCommand(input: string): { command: string; args: strin
  */
 function toCommandContext(context: SlashCommandContext): CommandContext {
   return {
-    skillService: context.skillService ? {
-      registry: {
-        skillCount: context.skillService.skillCount,
-        commandCount: context.skillService.commandCount,
-        listSkills: () => context.skillService!.registry.listSkills() as unknown[],
-        listAllSkills: () => context.skillService!.registry.listAllSkills() as unknown[],
-        listCommands: () => context.skillService!.registry.listCommands() as unknown[],
-        getSkill: (name: string) => context.skillService!.registry.getSkill(name) as unknown | undefined,
-        getCommand: (name: string) => context.skillService!.registry.getCommand(name) as unknown | undefined,
-        hasCommand: (name: string) => context.skillService!.registry.hasCommand(name),
-        searchSkills: (keyword: string) => context.skillService!.registry.searchSkills(keyword) as unknown[],
-      },
-      skillCount: context.skillService.skillCount,
-      commandCount: context.skillService.commandCount,
-      getActiveSkill: () => {
-        const skill = context.skillService!.getActiveSkill();
-        return skill ? { name: skill.name } : null;
-      },
-      clearActiveSkill: () => context.skillService!.clearActiveSkill(),
-    } : undefined,
-    toolRegistry: context.toolRegistry ? {
-      size: context.toolRegistry.size,
-      list: () => context.toolRegistry!.list() as unknown[],
-      get: (name: string) => context.toolRegistry!.get(name) as unknown | undefined,
-      search: (query: string) => {
-        const tools = context.toolRegistry!.list();
-        const q = query.toLowerCase();
-        return tools.filter(t =>
-          t.name.toLowerCase().includes(q) ||
-          t.description.toLowerCase().includes(q)
-        ) as unknown[];
-      },
-    } : undefined,
+    skillService: context.skillService
+      ? {
+          registry: {
+            skillCount: context.skillService.skillCount,
+            commandCount: context.skillService.commandCount,
+            listSkills: () => context.skillService!.registry.listSkills() as unknown[],
+            listAllSkills: () => context.skillService!.registry.listAllSkills() as unknown[],
+            listCommands: () => context.skillService!.registry.listCommands() as unknown[],
+            getSkill: (name: string) =>
+              context.skillService!.registry.getSkill(name) as unknown | undefined,
+            getCommand: (name: string) =>
+              context.skillService!.registry.getCommand(name) as unknown | undefined,
+            hasCommand: (name: string) => context.skillService!.registry.hasCommand(name),
+            searchSkills: (keyword: string) =>
+              context.skillService!.registry.searchSkills(keyword) as unknown[],
+          },
+          skillCount: context.skillService.skillCount,
+          commandCount: context.skillService.commandCount,
+          getActiveSkill: () => {
+            const skill = context.skillService!.getActiveSkill();
+            return skill ? { name: skill.name } : null;
+          },
+          clearActiveSkill: () => context.skillService!.clearActiveSkill(),
+        }
+      : undefined,
+    toolRegistry: context.toolRegistry
+      ? {
+          size: context.toolRegistry.size,
+          list: () => context.toolRegistry!.list() as unknown[],
+          get: (name: string) => context.toolRegistry!.get(name) as unknown | undefined,
+          search: (query: string) => {
+            const tools = context.toolRegistry!.list();
+            const q = query.toLowerCase();
+            return tools.filter(
+              (t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q),
+            ) as unknown[];
+          },
+        }
+      : undefined,
     config: {
       provider: context.config.provider,
       model: context.config.model,
@@ -128,7 +134,7 @@ function toSlashCommandResult(result: CommandResult): SlashCommandResult {
  */
 export async function handleSlashCommand(
   input: string,
-  context: SlashCommandContext
+  context: SlashCommandContext,
 ): Promise<SlashCommandResult> {
   const { command, args } = parseSlashCommand(input);
 
@@ -142,17 +148,22 @@ export async function handleSlashCommand(
   const result = await executeSlashCommand(
     input,
     commandContext,
-    context.skillService ? {
-      getCommand: (name: string) => context.skillService!.registry.getCommand(name),
-      applyCommand: (cmd: unknown, cmdArgs?: string) => {
-        const result = context.skillService!.applyCommandWithResult(cmd as Parameters<typeof context.skillService.applyCommandWithResult>[0], cmdArgs);
-        return {
-          applied: result.applied,
-          injection: result.injection,
-          error: result.error,
-        };
-      },
-    } : undefined
+    context.skillService
+      ? {
+          getCommand: (name: string) => context.skillService!.registry.getCommand(name),
+          applyCommand: (cmd: unknown, cmdArgs?: string) => {
+            const result = context.skillService!.applyCommandWithResult(
+              cmd as Parameters<typeof context.skillService.applyCommandWithResult>[0],
+              cmdArgs,
+            );
+            return {
+              applied: result.applied,
+              injection: result.injection,
+              error: result.error,
+            };
+          },
+        }
+      : undefined,
   );
 
   return toSlashCommandResult(result);
@@ -166,9 +177,7 @@ function handleConfig(args: string[], context: SlashCommandContext): SlashComman
 
   if (args.length === 0) {
     // Show current config
-    const apiKeyStatus = config.apiKey
-      ? `***${config.apiKey.slice(-4)}`
-      : '(not set)';
+    const apiKeyStatus = config.apiKey ? `***${config.apiKey.slice(-4)}` : '(not set)';
 
     const lines = [
       '',
@@ -208,7 +217,14 @@ function handleConfig(args: string[], context: SlashCommandContext): SlashComman
         };
       }
 
-      const validKeys = ['provider', 'model', 'maxTokens', 'temperature', 'verbose', 'outputFormat'];
+      const validKeys = [
+        'provider',
+        'model',
+        'maxTokens',
+        'temperature',
+        'verbose',
+        'outputFormat',
+      ];
       if (!validKeys.includes(key)) {
         return {
           handled: true,
@@ -300,5 +316,5 @@ function handleConfig(args: string[], context: SlashCommandContext): SlashComman
  * Get available CLI commands for help display
  */
 export function getAvailableCommands(): string[] {
-  return getCliCommands().map(cmd => cmd.name);
+  return getCliCommands().map((cmd) => cmd.name);
 }

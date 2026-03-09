@@ -65,11 +65,7 @@ describe('MediaGenerationService', () => {
     executor.registerWith(taskManager);
 
     // Create service
-    service = new MediaGenerationService(
-      taskManager,
-      providerRegistry,
-      routingManager
-    );
+    service = new MediaGenerationService(taskManager, providerRegistry, routingManager);
   });
 
   describe('generateImage', () => {
@@ -113,7 +109,7 @@ describe('MediaGenerationService', () => {
       const newService = new MediaGenerationService(
         taskManager,
         newProviderRegistry,
-        newRoutingManager
+        newRoutingManager,
       );
 
       const request = {
@@ -151,7 +147,7 @@ describe('MediaGenerationService', () => {
       const newService = new MediaGenerationService(
         taskManager,
         newProviderRegistry,
-        newRoutingManager
+        newRoutingManager,
       );
 
       const request = {
@@ -187,7 +183,7 @@ describe('MediaGenerationService', () => {
       const newService = new MediaGenerationService(
         taskManager,
         newProviderRegistry,
-        newRoutingManager
+        newRoutingManager,
       );
 
       const request = {
@@ -224,7 +220,7 @@ describe('MediaGenerationService', () => {
       const newService = new MediaGenerationService(
         taskManager,
         newProviderRegistry,
-        newRoutingManager
+        newRoutingManager,
       );
 
       const request = {
@@ -260,7 +256,7 @@ describe('MediaGenerationService', () => {
       const newService = new MediaGenerationService(
         taskManager,
         newProviderRegistry,
-        newRoutingManager
+        newRoutingManager,
       );
 
       const request = {

@@ -228,7 +228,7 @@ export abstract class BaseConfigSection<T extends ConfigItem> {
    */
   protected mergeOverrides(
     overrides: Record<string, Partial<T>>,
-    respectBuiltinProtection: boolean
+    respectBuiltinProtection: boolean,
   ): void {
     for (const [id, override] of Object.entries(overrides)) {
       const existing = this.items.get(id);

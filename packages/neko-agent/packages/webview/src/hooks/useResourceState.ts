@@ -18,9 +18,13 @@ export interface ResourceState {
  * Promise resolvers for async operations
  */
 export interface PromiseResolvers {
-  pendingExportResolve: ((result: { success: boolean; data?: string; error?: string }) => void) | null;
+  pendingExportResolve:
+    | ((result: { success: boolean; data?: string; error?: string }) => void)
+    | null;
   setPendingExportResolve: React.Dispatch<
-    React.SetStateAction<((result: { success: boolean; data?: string; error?: string }) => void) | null>
+    React.SetStateAction<
+      ((result: { success: boolean; data?: string; error?: string }) => void) | null
+    >
   >;
 }
 
@@ -38,9 +42,7 @@ export interface ResourceStateActions {
  * useResourceState return type
  */
 export interface UseResourceStateReturn
-  extends ResourceState,
-    PromiseResolvers,
-    ResourceStateActions {}
+  extends ResourceState, PromiseResolvers, ResourceStateActions {}
 
 /**
  * Hook for managing resource state
@@ -56,8 +58,8 @@ export function useResourceState(): UseResourceStateReturn {
 
   // Helper: add a background task
   const addBackgroundTask = useCallback((task: BackgroundTask) => {
-    setBackgroundTasks(prev => {
-      if (prev.some(t => t.id === task.id)) {
+    setBackgroundTasks((prev) => {
+      if (prev.some((t) => t.id === task.id)) {
         return prev;
       }
       return [task, ...prev];
@@ -66,14 +68,12 @@ export function useResourceState(): UseResourceStateReturn {
 
   // Helper: update a background task
   const updateBackgroundTask = useCallback((taskId: string, updates: Partial<BackgroundTask>) => {
-    setBackgroundTasks(prev =>
-      prev.map(t => (t.id === taskId ? { ...t, ...updates } : t))
-    );
+    setBackgroundTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t)));
   }, []);
 
   // Helper: remove a background task
   const removeBackgroundTask = useCallback((taskId: string) => {
-    setBackgroundTasks(prev => prev.filter(t => t.id !== taskId));
+    setBackgroundTasks((prev) => prev.filter((t) => t.id !== taskId));
   }, []);
 
   return {

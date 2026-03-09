@@ -35,39 +35,39 @@ export function activate(context: vscode.ExtensionContext) {
     // Outline view (per-file, no index needed)
     vscode.languages.registerDocumentSymbolProvider(
       FOUNTAIN_SELECTOR,
-      new FountainDocumentSymbolProvider()
+      new FountainDocumentSymbolProvider(),
     ),
     // Auto-completion (cross-file via index)
     vscode.languages.registerCompletionItemProvider(
       FOUNTAIN_SELECTOR,
       new FountainCompletionProvider(indexService),
       '.', // Trigger on period for forced scene headings
-      '@'  // Trigger on @ for forced characters
+      '@', // Trigger on @ for forced characters
     ),
     // Go to definition (cross-file via index)
     vscode.languages.registerDefinitionProvider(
       FOUNTAIN_SELECTOR,
-      new FountainDefinitionProvider(indexService)
+      new FountainDefinitionProvider(indexService),
     ),
     // Find references (cross-file via index)
     vscode.languages.registerReferenceProvider(
       FOUNTAIN_SELECTOR,
-      new FountainReferenceProvider(indexService)
+      new FountainReferenceProvider(indexService),
     ),
     // Hover information (cross-file stats via index)
     vscode.languages.registerHoverProvider(
       FOUNTAIN_SELECTOR,
-      new FountainHoverProvider(indexService)
+      new FountainHoverProvider(indexService),
     ),
     // Workspace symbol search — Ctrl+T (cross-file via index)
     vscode.languages.registerWorkspaceSymbolProvider(
-      new FountainWorkspaceSymbolProvider(indexService)
+      new FountainWorkspaceSymbolProvider(indexService),
     ),
     // Document links — [[see: file.fountain]] clickable
     vscode.languages.registerDocumentLinkProvider(
       FOUNTAIN_SELECTOR,
-      new FountainDocumentLinkProvider()
-    )
+      new FountainDocumentLinkProvider(),
+    ),
   );
 
   // Register diagnostics provider (error underlining)
@@ -113,10 +113,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!picked) return;
 
       const defaultUri = vscode.Uri.file(
-        path.join(
-          path.dirname(editor.document.fileName),
-          `${baseName}.neko`,
-        ),
+        path.join(path.dirname(editor.document.fileName), `${baseName}.neko`),
       );
 
       const saveUri = await vscode.window.showSaveDialog({
@@ -189,7 +186,7 @@ export function activate(context: vscode.ExtensionContext) {
       // Reveal in explorer and trigger inline rename
       await vscode.commands.executeCommand('revealInExplorer', fileUri);
       await vscode.commands.executeCommand('renameFile');
-    })
+    }),
   );
 }
 

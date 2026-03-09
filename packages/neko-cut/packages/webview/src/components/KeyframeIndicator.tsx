@@ -5,7 +5,11 @@
 
 import { memo, useMemo } from 'react';
 import type { TimelineElement } from '../types';
-import type { AnimatableProperty, ElementTransform, AnimatablePropertyName } from '../types/animation';
+import type {
+  AnimatableProperty,
+  ElementTransform,
+  AnimatablePropertyName,
+} from '../types/animation';
 import { useTranslation } from '../i18n/I18nContext';
 
 // Pixels per second constant (should match Timeline.tsx)
@@ -20,8 +24,16 @@ interface KeyframeData {
 interface KeyframeIndicatorProps {
   element: TimelineElement;
   zoomLevel: number;
-  onKeyframeClick?: (propertyName: AnimatablePropertyName, keyframeId: string, time: number) => void;
-  onKeyframeDoubleClick?: (propertyName: AnimatablePropertyName, keyframeId: string, time: number) => void;
+  onKeyframeClick?: (
+    propertyName: AnimatablePropertyName,
+    keyframeId: string,
+    time: number,
+  ) => void;
+  onKeyframeDoubleClick?: (
+    propertyName: AnimatablePropertyName,
+    keyframeId: string,
+    time: number,
+  ) => void;
   selectedKeyframeIds?: Set<string>;
 }
 
@@ -106,10 +118,10 @@ export const KeyframeIndicator = memo(function KeyframeIndicator({
 
   return (
     <div className="absolute bottom-0 left-0 right-0 h-4 pointer-events-none z-10">
-      {times.map(time => {
+      {times.map((time) => {
         const group = keyframeGroups.get(time)!;
         const left = time * PIXELS_PER_SECOND * zoomLevel;
-        const isSelected = group.some(kf => selectedKeyframeIds.has(kf.keyframeId));
+        const isSelected = group.some((kf) => selectedKeyframeIds.has(kf.keyframeId));
         const count = group.length;
 
         // Generate tooltip
@@ -121,9 +133,10 @@ export const KeyframeIndicator = memo(function KeyframeIndicator({
             className={`
               absolute w-2.5 h-2.5 rotate-45 cursor-pointer pointer-events-auto
               transition-colors duration-100
-              ${isSelected
-                ? 'bg-yellow-300 border border-yellow-500 shadow-lg shadow-yellow-500/30'
-                : 'bg-yellow-400 hover:bg-yellow-300 border border-yellow-600/50'
+              ${
+                isSelected
+                  ? 'bg-yellow-300 border border-yellow-500 shadow-lg shadow-yellow-500/30'
+                  : 'bg-yellow-400 hover:bg-yellow-300 border border-yellow-600/50'
               }
             `}
             style={{
@@ -189,11 +202,12 @@ export const KeyframeDot = memo(function KeyframeDot({
         w-4 h-4 flex items-center justify-center rounded text-xs
         transition-colors duration-100
         ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        ${isAtKeyframe
-          ? 'bg-yellow-400 text-yellow-900 hover:bg-yellow-300'
-          : hasKeyframes
-            ? 'bg-yellow-500/30 text-yellow-400 hover:bg-yellow-500/50'
-            : 'bg-[var(--vscode-input-background)] text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-list-hoverBackground)]'
+        ${
+          isAtKeyframe
+            ? 'bg-yellow-400 text-yellow-900 hover:bg-yellow-300'
+            : hasKeyframes
+              ? 'bg-yellow-500/30 text-yellow-400 hover:bg-yellow-500/50'
+              : 'bg-[var(--vscode-input-background)] text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-list-hoverBackground)]'
         }
       `}
       onClick={onClick}

@@ -15,11 +15,7 @@ import type {
   VideoGenerationRequest,
   AudioGenerationRequest,
 } from '../types';
-import {
-  HttpClient,
-  getHttpClient,
-  type HttpResult,
-} from '../../core/http-client';
+import { HttpClient, getHttpClient, type HttpResult } from '../../core/http-client';
 
 /**
  * Abstract base adapter with common functionality
@@ -48,7 +44,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
   async generateImage(
     _request: ImageGenerationRequest,
     _model: Model,
-    _provider: Provider
+    _provider: Provider,
   ): Promise<MediaAdapterResult> {
     return this.notSupportedResult('text-to-image');
   }
@@ -59,7 +55,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
   async generateVideo(
     _request: VideoGenerationRequest,
     _model: Model,
-    _provider: Provider
+    _provider: Provider,
   ): Promise<MediaAdapterResult> {
     return this.notSupportedResult('text-to-video');
   }
@@ -70,7 +66,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
   async generateAudio(
     _request: AudioGenerationRequest,
     _model: Model,
-    _provider: Provider
+    _provider: Provider,
   ): Promise<MediaAdapterResult> {
     return this.notSupportedResult('text-to-audio');
   }
@@ -78,10 +74,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
   /**
    * Get task status - must be implemented for async polling
    */
-  abstract getTaskStatus(
-    externalTaskId: string,
-    provider: Provider
-  ): Promise<MediaAdapterResult>;
+  abstract getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult>;
 
   /**
    * Cancel a running task
@@ -95,7 +88,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
     code: string,
     message: string,
     retryable: boolean = false,
-    retryAfterMs?: number
+    retryAfterMs?: number,
   ): MediaAdapterResult {
     return {
       status: 'failed',
@@ -114,7 +107,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
   protected notSupportedResult(type: MediaGenerationType): MediaAdapterResult {
     return this.createErrorResult(
       'NOT_SUPPORTED',
-      `${type} is not supported by ${this.type} adapter`
+      `${type} is not supported by ${this.type} adapter`,
     );
   }
 
@@ -135,7 +128,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
   protected async request<T>(
     url: string,
     options: RequestInit,
-    provider: Provider
+    provider: Provider,
   ): Promise<{ data?: T; error?: MediaAdapterError }> {
     const result = await this.http.requestSafe<T>({
       url,
@@ -170,7 +163,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     provider: Provider,
     body?: unknown,
-    additionalHeaders?: Record<string, string>
+    additionalHeaders?: Record<string, string>,
   ): Promise<T> {
     return this.http.request<T>(
       {
@@ -182,7 +175,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
         },
         body,
       },
-      `${this.type} API error`
+      `${this.type} API error`,
     );
   }
 
@@ -191,7 +184,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
    */
   protected httpResultToAdapterResult<T>(
     result: HttpResult<T>,
-    transform: (data: T) => MediaAdapterResult
+    transform: (data: T) => MediaAdapterResult,
   ): MediaAdapterResult {
     if (result.success) {
       return transform(result.data);
@@ -217,7 +210,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
    */
   protected mapStatusFrom(
     rawStatus: string | number | undefined,
-    statusMap: Record<string | number, MediaTaskStatus>
+    statusMap: Record<string | number, MediaTaskStatus>,
   ): MediaTaskStatus {
     if (rawStatus === undefined) return 'pending';
     return statusMap[rawStatus] ?? 'pending';
@@ -228,7 +221,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
    */
   protected estimateProgressFrom(
     rawStatus: string | number | undefined,
-    progressMap: Record<string | number, number>
+    progressMap: Record<string | number, number>,
   ): number {
     if (rawStatus === undefined) return 0;
     return progressMap[rawStatus] ?? 0;
@@ -242,12 +235,12 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
     url: string,
     body: Record<string, unknown>,
     provider: Provider,
-    extractTaskId: (data: T) => string | undefined
+    extractTaskId: (data: T) => string | undefined,
   ): Promise<MediaAdapterResult> {
     const { data, error } = await this.request<T>(
       url,
       { method: 'POST', body: JSON.stringify(body) },
-      provider
+      provider,
     );
     if (error) return { status: 'failed', error };
     return {
@@ -264,13 +257,9 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
   protected async pollTaskStatus<T>(
     url: string,
     provider: Provider,
-    transform: (data: T) => MediaAdapterResult
+    transform: (data: T) => MediaAdapterResult,
   ): Promise<MediaAdapterResult> {
-    const { data, error } = await this.request<T>(
-      url,
-      { method: 'GET' },
-      provider
-    );
+    const { data, error } = await this.request<T>(url, { method: 'GET' }, provider);
     if (error) return { status: 'failed', error };
     if (!data) return this.createErrorResult('NO_DATA', 'No response data');
     return transform(data);
@@ -282,7 +271,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
   protected async cancelViaEndpoint(
     url: string,
     provider: Provider,
-    method: 'POST' | 'DELETE' = 'POST'
+    method: 'POST' | 'DELETE' = 'POST',
   ): Promise<void> {
     await this.request(url, { method }, provider);
   }

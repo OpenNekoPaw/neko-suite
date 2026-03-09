@@ -151,14 +151,17 @@ export class PyramidThumbnailGenerator {
    * Get thumbnails for a viewport with dynamic interval based on zoom level.
    * Interval is computed so each thumbnail is ~80px wide on screen.
    */
-  async getThumbnailsForViewport(
-    viewport: ThumbnailViewport
-  ): Promise<LevelThumbnailData> {
+  async getThumbnailsForViewport(viewport: ThumbnailViewport): Promise<LevelThumbnailData> {
     const { startTime, endTime, pixelsPerSecond, height } = viewport;
     const interval = computeInterval(pixelsPerSecond);
 
     const frames = await this._generateFramesConcurrent(
-      startTime, endTime, interval, height || DEFAULT_THUMBNAIL_HEIGHT, this._cache, 'L2'
+      startTime,
+      endTime,
+      interval,
+      height || DEFAULT_THUMBNAIL_HEIGHT,
+      this._cache,
+      'L2',
     );
 
     return {
@@ -222,7 +225,7 @@ export class PyramidThumbnailGenerator {
     height: number,
     cache: Map<number, ThumbnailFrame>,
     level: ThumbnailLevel,
-    onProgress?: ThumbnailProgressCallback
+    onProgress?: ThumbnailProgressCallback,
   ): Promise<ThumbnailFrame[]> {
     const duration = endTime - startTime;
     const frameCount = Math.ceil(duration / interval);
@@ -254,7 +257,7 @@ export class PyramidThumbnailGenerator {
         batch.map(async (t) => {
           const dataUrl = await this._generateThumbnail(t, height);
           return { time: t, dataUrl } as ThumbnailFrame;
-        })
+        }),
       );
 
       for (let j = 0; j < results.length; j++) {
@@ -276,7 +279,7 @@ export class PyramidThumbnailGenerator {
     }
 
     // Assemble in order
-    return times.map(t => cachedFrames.get(t) ?? newFrames.get(t)!);
+    return times.map((t) => cachedFrames.get(t) ?? newFrames.get(t)!);
   }
 
   /**
@@ -357,7 +360,7 @@ export class PyramidThumbnailGenerator {
   private _cacheFrame(
     cache: Map<number, ThumbnailFrame>,
     time: number,
-    frame: ThumbnailFrame
+    frame: ThumbnailFrame,
   ): void {
     // Evict oldest if at capacity
     if (cache.size >= MAX_CACHED_FRAMES) {
@@ -391,7 +394,7 @@ const generatorCache = new Map<string, PyramidThumbnailGenerator>();
  * Get or create a PyramidThumbnailGenerator for a video
  */
 export async function getPyramidThumbnailGenerator(
-  videoPath: string
+  videoPath: string,
 ): Promise<PyramidThumbnailGenerator> {
   let generator = generatorCache.get(videoPath);
 

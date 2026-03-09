@@ -16,11 +16,7 @@ import {
   processConfig,
   type UnifiedConfig,
 } from '../config/config-normalizer';
-import {
-  DEFAULT_CONFIG,
-  CONFIG_DIR_NAME,
-  CONFIG_FILE_NAME,
-} from '../config/types';
+import { DEFAULT_CONFIG, CONFIG_DIR_NAME, CONFIG_FILE_NAME } from '../config/types';
 
 // =============================================================================
 // Legacy Field Migration Tests

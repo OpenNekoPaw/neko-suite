@@ -117,7 +117,7 @@ export function createMediaPlatform(deps: MediaPlatformDeps): MediaPlatform {
   const service = new MediaGenerationService(
     deps.taskManager,
     deps.providerRegistry,
-    routingManager
+    routingManager,
   );
 
   return {

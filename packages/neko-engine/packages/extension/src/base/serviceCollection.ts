@@ -10,8 +10,8 @@
  * Used as a typed key for service registration and lookup.
  */
 export interface ServiceIdentifier<T> {
-	readonly id: string;
-	readonly _brand: T;
+  readonly id: string;
+  readonly _brand: T;
 }
 
 /**
@@ -26,5 +26,5 @@ export interface ServiceIdentifier<T> {
  * ```
  */
 export function createServiceId<T>(id: string): ServiceIdentifier<T> {
-	return { id, _brand: undefined as unknown as T };
+  return { id, _brand: undefined as unknown as T };
 }

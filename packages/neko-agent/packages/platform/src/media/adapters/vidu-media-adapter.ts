@@ -45,7 +45,7 @@ export class ViduMediaAdapter extends BaseMediaAdapter {
   async generateImage(
     _request: ImageGenerationRequest,
     _model: Model,
-    _provider: Provider
+    _provider: Provider,
   ): Promise<MediaAdapterResult> {
     return {
       status: 'failed',
@@ -60,7 +60,7 @@ export class ViduMediaAdapter extends BaseMediaAdapter {
   async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult> {
     const baseUrl = provider.apiUrl || 'https://api.vidu.com/v1';
 
@@ -93,7 +93,7 @@ export class ViduMediaAdapter extends BaseMediaAdapter {
         method: 'POST',
         body: JSON.stringify(body),
       },
-      provider
+      provider,
     );
 
     if (result.error) {
@@ -109,7 +109,7 @@ export class ViduMediaAdapter extends BaseMediaAdapter {
   async generateAudio(
     _request: AudioGenerationRequest,
     _model: Model,
-    _provider: Provider
+    _provider: Provider,
   ): Promise<MediaAdapterResult> {
     return {
       status: 'failed',
@@ -121,18 +121,11 @@ export class ViduMediaAdapter extends BaseMediaAdapter {
     };
   }
 
-  async getTaskStatus(
-    externalTaskId: string,
-    provider: Provider
-  ): Promise<MediaAdapterResult> {
+  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
     const baseUrl = provider.apiUrl || 'https://api.vidu.com/v1';
     const endpoint = `${baseUrl}/tasks/${externalTaskId}`;
 
-    const result = await this.request<ViduTaskResponse>(
-      endpoint,
-      { method: 'GET' },
-      provider
-    );
+    const result = await this.request<ViduTaskResponse>(endpoint, { method: 'GET' }, provider);
 
     if (result.error) {
       return { status: 'failed', error: result.error };

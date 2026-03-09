@@ -82,9 +82,7 @@ function createMockSettings() {
 
 /** Minimal ProviderManager-shaped object — no configured provider by default */
 function createMockProviders(isConfigured = false) {
-  const provider = isConfigured
-    ? { id: 'anthropic', isConfigured: true, models: [] }
-    : undefined;
+  const provider = isConfigured ? { id: 'anthropic', isConfigured: true, models: [] } : undefined;
   return {
     getProvider: vi.fn().mockReturnValue(provider),
     getDefaultProvider: vi.fn().mockReturnValue(provider),
@@ -140,21 +138,22 @@ function createMockPlatform() {
 /**
  * Build a MessageHandler with sensible defaults, allowing per-test overrides.
  */
-function buildHandler(overrides: {
-  agentManager?: ReturnType<typeof createMockAgentManager> | undefined | null;
-  platform?: ReturnType<typeof createMockPlatform> | undefined;
-  providers?: ReturnType<typeof createMockProviders>;
-  conversations?: ReturnType<typeof createMockConversations>;
-  settings?: ReturnType<typeof createMockSettings>;
-} = {}) {
+function buildHandler(
+  overrides: {
+    agentManager?: ReturnType<typeof createMockAgentManager> | undefined | null;
+    platform?: ReturnType<typeof createMockPlatform> | undefined;
+    providers?: ReturnType<typeof createMockProviders>;
+    conversations?: ReturnType<typeof createMockConversations>;
+    settings?: ReturnType<typeof createMockSettings>;
+  } = {},
+) {
   const settings = overrides.settings ?? createMockSettings();
   const providers = overrides.providers ?? createMockProviders();
   const conversations = overrides.conversations ?? createMockConversations();
   // Default: agentManager present unless explicitly set to null/undefined
   const agentManager =
     overrides.agentManager !== undefined ? overrides.agentManager : createMockAgentManager();
-  const platform =
-    overrides.platform !== undefined ? overrides.platform : createMockPlatform();
+  const platform = overrides.platform !== undefined ? overrides.platform : createMockPlatform();
 
   return new MessageHandler(
     settings as any,
@@ -163,7 +162,7 @@ function buildHandler(overrides: {
     agentManager as any,
     undefined, // editorRegistry
     () => 'mock system prompt',
-    platform as any
+    platform as any,
   );
 }
 
@@ -223,8 +222,10 @@ describe('MessageHandler', () => {
 
       await handler.handleUserMessage(webview as any, 'hello');
 
-      const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{ type: string }>;
-      const hasThinking = calls.some(msg => msg.type === 'thinking');
+      const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
+        type: string;
+      }>;
+      const hasThinking = calls.some((msg) => msg.type === 'thinking');
       expect(hasThinking).toBe(true);
     });
 
@@ -234,7 +235,9 @@ describe('MessageHandler', () => {
 
       await handler.handleUserMessage(webview as any, 'hello');
 
-      const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{ type: string }>;
+      const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
+        type: string;
+      }>;
       expect(calls[0]?.type).toBe('thinking');
     });
   });
@@ -249,7 +252,15 @@ describe('MessageHandler', () => {
       const conversations = createMockConversations();
       const handler = buildHandler({ conversations });
 
-      await handler.handleUserMessage(webview as any, 'hi', undefined, undefined, undefined, undefined, 'provided-conv-id');
+      await handler.handleUserMessage(
+        webview as any,
+        'hi',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'provided-conv-id',
+      );
 
       // ensureActive should NOT have been called when a conversationId is provided
       expect(conversations.ensureActive).not.toHaveBeenCalled();
@@ -269,10 +280,21 @@ describe('MessageHandler', () => {
       const webview = createMockWebview();
       const handler = buildHandler();
 
-      await handler.handleUserMessage(webview as any, 'hello', undefined, undefined, undefined, undefined, 'my-conv');
+      await handler.handleUserMessage(
+        webview as any,
+        'hello',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'my-conv',
+      );
 
-      const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{ type: string; conversationId?: string }>;
-      const thinkingMsg = calls.find(msg => msg.type === 'thinking');
+      const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
+        type: string;
+        conversationId?: string;
+      }>;
+      const thinkingMsg = calls.find((msg) => msg.type === 'thinking');
       expect(thinkingMsg?.conversationId).toBe('my-conv');
     });
   });
@@ -288,8 +310,10 @@ describe('MessageHandler', () => {
 
       await handler.handleUserMessage(webview as any, 'hello');
 
-      const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{ type: string }>;
-      const hasError = calls.some(msg => msg.type === 'error');
+      const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
+        type: string;
+      }>;
+      const hasError = calls.some((msg) => msg.type === 'error');
       expect(hasError).toBe(true);
     });
 
@@ -313,8 +337,10 @@ describe('MessageHandler', () => {
 
       await handler.handleUserMessage(webview as any, 'hello');
 
-      const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{ type: string }>;
-      const hasError = calls.some(msg => msg.type === 'error');
+      const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
+        type: string;
+      }>;
+      const hasError = calls.some((msg) => msg.type === 'error');
       expect(hasError).toBe(true);
     });
   });
@@ -333,7 +359,7 @@ describe('MessageHandler', () => {
 
       expect(conversations.addMessageToConversation).toHaveBeenCalledWith(
         expect.any(String),
-        expect.objectContaining({ role: 'user', content: 'test message' })
+        expect.objectContaining({ role: 'user', content: 'test message' }),
       );
     });
   });

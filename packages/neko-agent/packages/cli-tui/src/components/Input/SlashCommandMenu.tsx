@@ -35,9 +35,7 @@ export function SlashCommandMenu({
 
   // Filter commands based on input
   const filterText = filter.startsWith('/') ? filter.slice(1).toLowerCase() : filter.toLowerCase();
-  const filtered = commands.filter((cmd) =>
-    cmd.name.toLowerCase().includes(filterText)
-  );
+  const filtered = commands.filter((cmd) => cmd.name.toLowerCase().includes(filterText));
 
   useInput((_input, key) => {
     if (key.escape) {
@@ -80,15 +78,12 @@ export function SlashCommandMenu({
             color={idx === selectedIndex ? tokens.info : undefined}
             bold={idx === selectedIndex}
           >
-            {idx === selectedIndex ? '▸ ' : '  '}
-            /{cmd.name}
+            {idx === selectedIndex ? '▸ ' : '  '}/{cmd.name}
           </Text>
-          <Text dimColor>  {cmd.description}</Text>
+          <Text dimColor> {cmd.description}</Text>
         </Box>
       ))}
-      {filtered.length > 8 ? (
-        <Text dimColor>  ... {filtered.length - 8} more</Text>
-      ) : null}
+      {filtered.length > 8 ? <Text dimColor> ... {filtered.length - 8} more</Text> : null}
     </Box>
   );
 }

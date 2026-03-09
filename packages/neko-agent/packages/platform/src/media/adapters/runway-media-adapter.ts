@@ -71,7 +71,7 @@ export class RunwayMediaAdapter extends BaseMediaAdapter {
   async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult> {
     // Determine if this is text-to-video or image-to-video
     const isImageToVideo = !!request.referenceImageUrl;
@@ -98,7 +98,7 @@ export class RunwayMediaAdapter extends BaseMediaAdapter {
     const { data, error } = await this.request<RunwayTaskResponse>(
       url,
       { method: 'POST', body: JSON.stringify(body) },
-      provider
+      provider,
     );
 
     if (error) {
@@ -108,23 +108,21 @@ export class RunwayMediaAdapter extends BaseMediaAdapter {
     return {
       externalTaskId: data?.id,
       status: this.mapStatusFrom(data?.status, RunwayMediaAdapter.STATUS_MAP),
-      progress: data?.progress ?? this.estimateProgressFrom(data?.status, RunwayMediaAdapter.PROGRESS_MAP),
+      progress:
+        data?.progress ?? this.estimateProgressFrom(data?.status, RunwayMediaAdapter.PROGRESS_MAP),
     };
   }
 
   /**
    * Get task status
    */
-  async getTaskStatus(
-    externalTaskId: string,
-    provider: Provider
-  ): Promise<MediaAdapterResult> {
+  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/v1/tasks/${externalTaskId}`;
 
     const { data, error } = await this.request<RunwayTaskResponse>(
       url,
       { method: 'GET' },
-      provider
+      provider,
     );
 
     if (error) {
@@ -151,7 +149,8 @@ export class RunwayMediaAdapter extends BaseMediaAdapter {
     return {
       externalTaskId,
       status: this.mapStatusFrom(data?.status, RunwayMediaAdapter.STATUS_MAP),
-      progress: data?.progress ?? this.estimateProgressFrom(data?.status, RunwayMediaAdapter.PROGRESS_MAP),
+      progress:
+        data?.progress ?? this.estimateProgressFrom(data?.status, RunwayMediaAdapter.PROGRESS_MAP),
       outputs: data?.status === 'SUCCEEDED' ? outputs : undefined,
     };
   }

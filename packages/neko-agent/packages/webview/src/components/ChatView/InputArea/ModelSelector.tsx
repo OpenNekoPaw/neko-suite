@@ -66,7 +66,9 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
     if (config) {
       const label = t(config.labelKey);
       // Fallback if translation not found
-      return label !== config.labelKey ? label : category.charAt(0).toUpperCase() + category.slice(1);
+      return label !== config.labelKey
+        ? label
+        : category.charAt(0).toUpperCase() + category.slice(1);
     }
     return category.charAt(0).toUpperCase() + category.slice(1);
   };

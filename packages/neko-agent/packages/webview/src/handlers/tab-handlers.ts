@@ -26,6 +26,4 @@ const handleTabState: MessageHandler = (message, context) => {
 /**
  * All tab handler registrations
  */
-export const tabHandlers: HandlerRegistration[] = [
-  { type: 'tabState', handler: handleTabState },
-];
+export const tabHandlers: HandlerRegistration[] = [{ type: 'tabState', handler: handleTabState }];

@@ -26,16 +26,18 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   override render(): ReactNode {
     if (this.state.hasError && this.state.error) {
       return (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          padding: '1rem',
-          color: 'var(--vscode-editor-foreground)',
-          backgroundColor: 'var(--vscode-editor-background)',
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            padding: '1rem',
+            color: 'var(--vscode-editor-foreground)',
+            backgroundColor: 'var(--vscode-editor-background)',
+          }}
+        >
           <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>&#x26A0;&#xFE0F;</div>
           <h2 style={{ marginBottom: '0.5rem' }}>Something went wrong</h2>
           <p style={{ fontSize: '0.875rem', opacity: 0.7, marginBottom: '1rem' }}>

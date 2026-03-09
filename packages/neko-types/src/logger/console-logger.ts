@@ -77,11 +77,7 @@ export class ConsoleLogger implements ILogger {
   }
 
   child(subSource: string): ILogger {
-    return new ConsoleLogger(
-      `${this.source}:${subSource}`,
-      this._level,
-      this.transports,
-    );
+    return new ConsoleLogger(`${this.source}:${subSource}`, this._level, this.transports);
   }
 
   private write(level: LogLevel, message: string, data?: unknown): void {

@@ -51,7 +51,7 @@ function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerP
   const fileName = getFileName(src, title);
 
   const toggleExpand = useCallback(() => {
-    setIsExpanded(prev => !prev);
+    setIsExpanded((prev) => !prev);
   }, []);
 
   const handleLoadedMetadata = useCallback(() => {
@@ -91,9 +91,11 @@ function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerP
       {/* Compact header - matches ToolCallDisplay style */}
       <div
         className={`flex items-center gap-1.5 px-2 py-1 rounded-t text-[11px] cursor-pointer transition-colors
-          ${hasError
-            ? 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#ef4444)]'
-            : 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#a855f7)]'}
+          ${
+            hasError
+              ? 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#ef4444)]'
+              : 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#a855f7)]'
+          }
           hover:bg-[var(--vscode-list-hoverBackground)]
           ${!isExpanded ? 'rounded-b' : ''}
         `}
@@ -107,9 +109,7 @@ function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerP
         )}
 
         {/* File name */}
-        <span className="font-medium text-[var(--vscode-foreground)] truncate">
-          {fileName}
-        </span>
+        <span className="font-medium text-[var(--vscode-foreground)] truncate">{fileName}</span>
 
         {/* Duration badge */}
         {duration > 0 && !hasError && (
@@ -137,7 +137,9 @@ function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerP
         )}
 
         {/* Expand indicator */}
-        <ChevronIcon className={`w-3 h-3 text-[var(--vscode-descriptionForeground)] transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+        <ChevronIcon
+          className={`w-3 h-3 text-[var(--vscode-descriptionForeground)] transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+        />
       </div>
 
       {/* Expanded content — audio info card with click-to-open */}
@@ -164,7 +166,8 @@ function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerP
                   {fileName}
                 </div>
                 <div className="text-[10px] text-[var(--vscode-descriptionForeground)]">
-                  {duration > 0 ? formatTime(duration) : 'Loading...'} · Click to open in Neko Preview
+                  {duration > 0 ? formatTime(duration) : 'Loading...'} · Click to open in Neko
+                  Preview
                 </div>
               </div>
 
@@ -184,7 +187,12 @@ export const AudioPlayer = memo(AudioPlayerComponent);
 function AudioIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+      />
     </svg>
   );
 }
@@ -208,7 +216,12 @@ function ChevronIcon({ className }: { className?: string }) {
 function OpenIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+      />
     </svg>
   );
 }

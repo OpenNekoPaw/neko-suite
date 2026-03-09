@@ -50,14 +50,17 @@ export function ImageViewer({
     onError?.();
   }, [onError]);
 
-  const openFullscreen = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (enableZoom) {
-      setIsFullscreen(true);
-      setScale(1);
-      setPosition({ x: 0, y: 0 });
-    }
-  }, [enableZoom]);
+  const openFullscreen = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (enableZoom) {
+        setIsFullscreen(true);
+        setScale(1);
+        setPosition({ x: 0, y: 0 });
+      }
+    },
+    [enableZoom],
+  );
 
   const closeFullscreen = useCallback(() => {
     setIsFullscreen(false);
@@ -92,7 +95,7 @@ export function ImageViewer({
         className={clsx(
           'relative bg-black/20 overflow-hidden',
           enableZoom && 'cursor-zoom-in',
-          className
+          className,
         )}
         onClick={openFullscreen}
       >
@@ -120,7 +123,7 @@ export function ImageViewer({
             isLoading ? 'opacity-0' : 'opacity-100',
             objectFit === 'contain' && 'object-contain',
             objectFit === 'cover' && 'object-cover',
-            objectFit === 'fill' && 'object-fill'
+            objectFit === 'fill' && 'object-fill',
           )}
           onLoad={handleLoad}
           onError={handleError}
@@ -144,9 +147,7 @@ export function ImageViewer({
         >
           {/* 工具栏 */}
           <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-            <span className="text-white/60 text-sm mr-2">
-              {Math.round(scale * 100)}%
-            </span>
+            <span className="text-white/60 text-sm mr-2">{Math.round(scale * 100)}%</span>
             <button
               className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white"
               onClick={(e) => {

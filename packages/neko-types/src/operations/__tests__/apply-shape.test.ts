@@ -19,7 +19,9 @@ describe('apply-shape', () => {
   function createShapeProject() {
     const shape1 = createTestShapeInstance({ id: 's1', zIndex: 0 });
     const shape2 = createTestShapeInstance({ id: 's2', zIndex: 1 });
-    const elem = createWebviewElement(createTestShapeElement({ id: 'e1' }), { shapes: [shape1, shape2] });
+    const elem = createWebviewElement(createTestShapeElement({ id: 'e1' }), {
+      shapes: [shape1, shape2],
+    });
     const track = createTestTrack({ id: 't1', type: 'shape', elements: [elem] });
     return { project: createTestProject({ tracks: [track] }), shape1, shape2, elem };
   }
@@ -120,7 +122,9 @@ describe('apply-shape', () => {
         type: 'shape.updateGeometry',
         meta: createMeta(),
         payload: {
-          trackId: 't1', elementId: 'e1', shapeId: 's1',
+          trackId: 't1',
+          elementId: 'e1',
+          shapeId: 's1',
           shape: { centerX: 75, centerY: 75 },
         },
         before: { shape: { centerX: 50, centerY: 50 } },
@@ -141,7 +145,9 @@ describe('apply-shape', () => {
         type: 'shape.updateStyle',
         meta: createMeta(),
         payload: {
-          trackId: 't1', elementId: 'e1', shapeId: 's1',
+          trackId: 't1',
+          elementId: 'e1',
+          shapeId: 's1',
           style: { fill: { type: 'solid' as const, color: '#ff0000', opacity: 1 } },
         },
         before: { style: { fill: { type: 'solid' as const, color: '#4a90d9', opacity: 1 } } },

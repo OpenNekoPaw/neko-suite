@@ -37,9 +37,7 @@ export interface IMediaInfoService {
 // =============================================================================
 
 // Image extensions (don't need duration from metadata)
-const IMAGE_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg',
-]);
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
 
 // =============================================================================
 // Implementation

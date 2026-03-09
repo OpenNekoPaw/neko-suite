@@ -13,5 +13,5 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <AIAssistant />
       </I18nProvider>
     </ErrorBoundary>
-  </React.StrictMode>
+  </React.StrictMode>,
 );

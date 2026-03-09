@@ -32,28 +32,22 @@ export const vscodeCSSTokens = {
     // List
     'vscode-list-hover': 'var(--vscode-list-hoverBackground)',
     'vscode-list-active': 'var(--vscode-list-activeSelectionBackground)',
-    'vscode-list-active-fg':
-      'var(--vscode-list-activeSelectionForeground)',
-    'vscode-list-inactive':
-      'var(--vscode-list-inactiveSelectionBackground)',
+    'vscode-list-active-fg': 'var(--vscode-list-activeSelectionForeground)',
+    'vscode-list-inactive': 'var(--vscode-list-inactiveSelectionBackground)',
 
     // Input
     'vscode-input-bg': 'var(--vscode-input-background)',
     'vscode-input-fg': 'var(--vscode-input-foreground)',
     'vscode-input-border': 'var(--vscode-input-border)',
-    'vscode-input-placeholder':
-      'var(--vscode-input-placeholderForeground)',
+    'vscode-input-placeholder': 'var(--vscode-input-placeholderForeground)',
 
     // Button
     'vscode-button': 'var(--vscode-button-background)',
     'vscode-button-fg': 'var(--vscode-button-foreground)',
     'vscode-button-hover': 'var(--vscode-button-hoverBackground)',
-    'vscode-button-secondary':
-      'var(--vscode-button-secondaryBackground)',
-    'vscode-button-secondary-fg':
-      'var(--vscode-button-secondaryForeground)',
-    'vscode-button-secondary-hover':
-      'var(--vscode-button-secondaryHoverBackground)',
+    'vscode-button-secondary': 'var(--vscode-button-secondaryBackground)',
+    'vscode-button-secondary-fg': 'var(--vscode-button-secondaryForeground)',
+    'vscode-button-secondary-hover': 'var(--vscode-button-secondaryHoverBackground)',
 
     // Focus / Accent
     'vscode-accent': 'var(--vscode-focusBorder)',
@@ -89,20 +83,15 @@ export const vscodeCSSTokens = {
 
     // Scrollbar
     'vscode-scrollbar': 'var(--vscode-scrollbarSlider-background)',
-    'vscode-scrollbar-hover':
-      'var(--vscode-scrollbarSlider-hoverBackground)',
-    'vscode-scrollbar-active':
-      'var(--vscode-scrollbarSlider-activeBackground)',
+    'vscode-scrollbar-hover': 'var(--vscode-scrollbarSlider-hoverBackground)',
+    'vscode-scrollbar-active': 'var(--vscode-scrollbarSlider-activeBackground)',
 
     // Diff editor
     'vscode-diff-inserted': 'var(--vscode-diffEditor-insertedLineBackground)',
     'vscode-diff-removed': 'var(--vscode-diffEditor-removedLineBackground)',
-    'vscode-diff-inserted-fg':
-      'var(--vscode-gitDecoration-addedResourceForeground)',
-    'vscode-diff-removed-fg':
-      'var(--vscode-gitDecoration-deletedResourceForeground)',
-    'vscode-diff-modified-fg':
-      'var(--vscode-gitDecoration-modifiedResourceForeground)',
+    'vscode-diff-inserted-fg': 'var(--vscode-gitDecoration-addedResourceForeground)',
+    'vscode-diff-removed-fg': 'var(--vscode-gitDecoration-deletedResourceForeground)',
+    'vscode-diff-modified-fg': 'var(--vscode-gitDecoration-modifiedResourceForeground)',
 
     // Charts (status color encoding, aligned with opencode TUI semantic tokens)
     'vscode-chart-green': 'var(--vscode-charts-green)',

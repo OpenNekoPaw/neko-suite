@@ -188,7 +188,7 @@ export interface ExecutorHooks {
   /** Called for each tool call - can intercept and handle */
   onToolCall?(
     info: ToolCallInfo,
-    execute: () => Promise<ToolResult>
+    execute: () => Promise<ToolResult>,
   ): Promise<ToolResultWithMeta | null>;
 }
 
@@ -199,18 +199,12 @@ export interface IAgentExecutor {
   /**
    * Execute agent with user input
    */
-  execute(
-    input: string,
-    context?: Partial<AgentContext>
-  ): Promise<AgentResult>;
+  execute(input: string, context?: Partial<AgentContext>): Promise<AgentResult>;
 
   /**
    * Execute with streaming - yields steps as they complete
    */
-  executeStream(
-    input: string,
-    context?: Partial<AgentContext>
-  ): AsyncIterable<AgentStep>;
+  executeStream(input: string, context?: Partial<AgentContext>): AsyncIterable<AgentStep>;
 
   /**
    * Abort current execution
@@ -338,10 +332,7 @@ export interface IAgentRuntime {
   /**
    * Create an agent executor
    */
-  createAgent(
-    config: AgentConfig,
-    hooks?: ExecutorHooks[]
-  ): IAgentExecutor;
+  createAgent(config: AgentConfig, hooks?: ExecutorHooks[]): IAgentExecutor;
 
   /**
    * Create a service for direct LLM access

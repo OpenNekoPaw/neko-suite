@@ -210,9 +210,7 @@ describe('AgentStreamProcessor', () => {
     });
 
     it('should handle messageQueued events', async () => {
-      const events = toAsyncIterable([
-        { type: 'messageQueued', content: 'Queued message' },
-      ]);
+      const events = toAsyncIterable([{ type: 'messageQueued', content: 'Queued message' }]);
 
       await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
@@ -239,9 +237,7 @@ describe('AgentStreamProcessor', () => {
     });
 
     it('should handle done event without usage', async () => {
-      const events = toAsyncIterable([
-        { type: 'done' },
-      ]);
+      const events = toAsyncIterable([{ type: 'done' }]);
 
       await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
@@ -277,7 +273,7 @@ describe('AgentStreamProcessor', () => {
 
       const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
-      const planBlocks = result.contentBlocks.filter(b => b.type === 'plan');
+      const planBlocks = result.contentBlocks.filter((b) => b.type === 'plan');
       expect(planBlocks).toHaveLength(1);
       expect(planBlocks[0]!.plan!.title).toBe('Refactor Auth');
       expect(planBlocks[0]!.plan!.steps).toHaveLength(2);

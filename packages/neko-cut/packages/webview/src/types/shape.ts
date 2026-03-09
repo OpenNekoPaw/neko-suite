@@ -100,7 +100,7 @@ export function createRectangleShape(
   centerX = 50,
   centerY = 50,
   width = 40,
-  height = 30
+  height = 30,
 ): RectangleShape {
   return {
     shapeType: 'rectangle',
@@ -120,7 +120,7 @@ export function createEllipseShape(
   centerX = 50,
   centerY = 50,
   radiusX = 20,
-  radiusY = 15
+  radiusY = 15,
 ): EllipseShape {
   return {
     shapeType: 'ellipse',
@@ -162,7 +162,7 @@ export function createStarShape(
   centerX = 50,
   centerY = 50,
   points = 5,
-  outerRadius = 25
+  outerRadius = 25,
 ): StarShape {
   return {
     shapeType: 'star',
@@ -178,12 +178,7 @@ export function createStarShape(
 /**
  * Create default line shape
  */
-export function createLineShape(
-  startX = 25,
-  startY = 50,
-  endX = 75,
-  endY = 50
-): LineShape {
+export function createLineShape(startX = 25, startY = 50, endX = 75, endY = 50): LineShape {
   return {
     shapeType: 'line',
     startX,
@@ -258,7 +253,7 @@ export function createDefaultShapeStyle(): ShapeStyle {
 export function createShapeInstance(
   shape: Shape,
   name?: string,
-  style?: Partial<ShapeStyle>
+  style?: Partial<ShapeStyle>,
 ): ShapeInstance {
   return {
     id: generateShapeId(),
@@ -326,8 +321,8 @@ export function getShapeBounds(shape: Shape): {
       };
     }
     case 'polygon': {
-      const xs = shape.points.map(p => p.x);
-      const ys = shape.points.map(p => p.y);
+      const xs = shape.points.map((p) => p.x);
+      const ys = shape.points.map((p) => p.y);
       const minX = Math.min(...xs);
       const maxX = Math.max(...xs);
       const minY = Math.min(...ys);
@@ -352,8 +347,8 @@ export function getShapeBounds(shape: Shape): {
       return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
     }
     case 'bezier': {
-      const xs = shape.points.map(p => p.anchor.x);
-      const ys = shape.points.map(p => p.anchor.y);
+      const xs = shape.points.map((p) => p.anchor.x);
+      const ys = shape.points.map((p) => p.anchor.y);
       const minX = Math.min(...xs);
       const maxX = Math.max(...xs);
       const minY = Math.min(...ys);
@@ -367,11 +362,7 @@ export function getShapeBounds(shape: Shape): {
  * Check if point is inside shape (basic implementation)
  * 检查点是否在形状内部
  */
-export function isPointInShape(
-  shape: Shape,
-  x: number,
-  y: number
-): boolean {
+export function isPointInShape(shape: Shape, x: number, y: number): boolean {
   switch (shape.shapeType) {
     case 'rectangle': {
       const halfW = shape.width / 2;
@@ -388,17 +379,21 @@ export function isPointInShape(
       // Simplified: ignore rotation
       const dx = x - shape.centerX;
       const dy = y - shape.centerY;
-      return (dx * dx) / (shape.radiusX * shape.radiusX) +
-             (dy * dy) / (shape.radiusY * shape.radiusY) <= 1;
+      return (
+        (dx * dx) / (shape.radiusX * shape.radiusX) + (dy * dy) / (shape.radiusY * shape.radiusY) <=
+        1
+      );
     }
     case 'polygon': {
       // Ray casting algorithm
       let inside = false;
       const points = shape.points;
       for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-        const xi = points[i].x, yi = points[i].y;
-        const xj = points[j].x, yj = points[j].y;
-        if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+        const xi = points[i].x,
+          yi = points[i].y;
+        const xj = points[j].x,
+          yj = points[j].y;
+        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
           inside = !inside;
         }
       }

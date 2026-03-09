@@ -8,7 +8,8 @@ export const propertyPanel = {
   'propertyPanel.defaultsMode': 'Global Defaults',
   'propertyPanel.removeKeyframe': 'Remove keyframe',
   'propertyPanel.emptyState.title': 'No Element Selected',
-  'propertyPanel.emptyState.description': 'Select an element on the timeline or preview to edit its properties.',
+  'propertyPanel.emptyState.description':
+    'Select an element on the timeline or preview to edit its properties.',
   'propertyPanel.emptyState.tips': 'Quick Tips',
   'propertyPanel.emptyState.tip1': 'Click on timeline clips to select',
   'propertyPanel.emptyState.tip2': 'Double-click to trim or adjust',

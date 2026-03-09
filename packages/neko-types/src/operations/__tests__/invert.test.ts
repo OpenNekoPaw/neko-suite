@@ -226,7 +226,13 @@ describe('invertOperation', () => {
       const op: EditOperation = {
         type: 'element.splitKeepRight',
         meta,
-        payload: { trackId: 't1', elementId: 'e1', splitPoint: 5, newStartTime: 5, newName: 'Right' },
+        payload: {
+          trackId: 't1',
+          elementId: 'e1',
+          splitPoint: 5,
+          newStartTime: 5,
+          newName: 'Right',
+        },
         before: { startTime: 0, trimStart: 0, name: 'Original' },
       };
 

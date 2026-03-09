@@ -13,21 +13,24 @@ interface BatchTaskCardProps {
   onViewResult?: (taskId: string) => void;
 }
 
-export function BatchTaskCard({ tasks, onCancel: _onCancel, onCancelAll, onViewResult }: BatchTaskCardProps) {
+export function BatchTaskCard({
+  tasks,
+  onCancel: _onCancel,
+  onCancelAll,
+  onViewResult,
+}: BatchTaskCardProps) {
   const { t } = useTranslation();
 
   if (tasks.length === 0) return null;
 
   const stats = {
-    queued: tasks.filter(t => t.status === 'queued').length,
-    processing: tasks.filter(t => t.status === 'processing').length,
-    completed: tasks.filter(t => t.status === 'completed').length,
-    failed: tasks.filter(t => t.status === 'failed' || t.status === 'cancelled').length,
+    queued: tasks.filter((t) => t.status === 'queued').length,
+    processing: tasks.filter((t) => t.status === 'processing').length,
+    completed: tasks.filter((t) => t.status === 'completed').length,
+    failed: tasks.filter((t) => t.status === 'failed' || t.status === 'cancelled').length,
   };
 
-  const totalProgress = Math.round(
-    tasks.reduce((sum, t) => sum + t.progress, 0) / tasks.length
-  );
+  const totalProgress = Math.round(tasks.reduce((sum, t) => sum + t.progress, 0) / tasks.length);
 
   const allCompleted = stats.completed === tasks.length;
   const allFailed = stats.failed === tasks.length;
@@ -43,8 +46,8 @@ export function BatchTaskCard({ tasks, onCancel: _onCancel, onCancelAll, onViewR
           background: allCompleted
             ? 'linear-gradient(90deg, color-mix(in srgb, var(--vscode-charts-green, #89d185) 15%, transparent), transparent)'
             : allFailed
-            ? 'linear-gradient(90deg, color-mix(in srgb, var(--vscode-charts-red, #f14c4c) 15%, transparent), transparent)'
-            : 'linear-gradient(90deg, color-mix(in srgb, var(--vscode-charts-blue, #3794ff) 15%, transparent), transparent)',
+              ? 'linear-gradient(90deg, color-mix(in srgb, var(--vscode-charts-red, #f14c4c) 15%, transparent), transparent)'
+              : 'linear-gradient(90deg, color-mix(in srgb, var(--vscode-charts-blue, #3794ff) 15%, transparent), transparent)',
         }}
       >
         <div className="flex items-center gap-2">
@@ -68,7 +71,8 @@ export function BatchTaskCard({ tasks, onCancel: _onCancel, onCancelAll, onViewR
             <span
               className="text-[10px] px-1.5 py-0.5 rounded-full"
               style={{
-                backgroundColor: 'color-mix(in srgb, var(--vscode-charts-green, #89d185) 20%, transparent)',
+                backgroundColor:
+                  'color-mix(in srgb, var(--vscode-charts-green, #89d185) 20%, transparent)',
                 color: 'var(--vscode-charts-green, #89d185)',
               }}
             >
@@ -79,7 +83,8 @@ export function BatchTaskCard({ tasks, onCancel: _onCancel, onCancelAll, onViewR
             <span
               className="text-[10px] px-1.5 py-0.5 rounded-full animate-pulse"
               style={{
-                backgroundColor: 'color-mix(in srgb, var(--vscode-charts-blue, #3794ff) 20%, transparent)',
+                backgroundColor:
+                  'color-mix(in srgb, var(--vscode-charts-blue, #3794ff) 20%, transparent)',
                 color: 'var(--vscode-charts-blue, #3794ff)',
               }}
             >
@@ -90,7 +95,8 @@ export function BatchTaskCard({ tasks, onCancel: _onCancel, onCancelAll, onViewR
             <span
               className="text-[10px] px-1.5 py-0.5 rounded-full"
               style={{
-                backgroundColor: 'color-mix(in srgb, var(--vscode-charts-yellow, #cca700) 20%, transparent)',
+                backgroundColor:
+                  'color-mix(in srgb, var(--vscode-charts-yellow, #cca700) 20%, transparent)',
                 color: 'var(--vscode-charts-yellow, #cca700)',
               }}
             >
@@ -101,7 +107,8 @@ export function BatchTaskCard({ tasks, onCancel: _onCancel, onCancelAll, onViewR
             <span
               className="text-[10px] px-1.5 py-0.5 rounded-full"
               style={{
-                backgroundColor: 'color-mix(in srgb, var(--vscode-charts-red, #f14c4c) 20%, transparent)',
+                backgroundColor:
+                  'color-mix(in srgb, var(--vscode-charts-red, #f14c4c) 20%, transparent)',
                 color: 'var(--vscode-charts-red, #f14c4c)',
               }}
             >
@@ -138,10 +145,15 @@ export function BatchTaskCard({ tasks, onCancel: _onCancel, onCancelAll, onViewR
                 style={{ backgroundColor: getStatusColor(task.status) }}
               />
               <span className="flex-1 truncate text-[var(--vscode-descriptionForeground)]">
-                #{index + 1}: {task.prompt.slice(0, 40)}{task.prompt.length > 40 ? '...' : ''}
+                #{index + 1}: {task.prompt.slice(0, 40)}
+                {task.prompt.length > 40 ? '...' : ''}
               </span>
               <span className="flex-shrink-0" style={{ color: getStatusColor(task.status) }}>
-                {task.status === 'completed' ? '✓' : task.status === 'failed' ? '✗' : `${task.progress}%`}
+                {task.status === 'completed'
+                  ? '✓'
+                  : task.status === 'failed'
+                    ? '✗'
+                    : `${task.progress}%`}
               </span>
               {task.status === 'completed' && onViewResult && (
                 <button

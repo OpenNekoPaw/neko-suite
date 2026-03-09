@@ -48,9 +48,7 @@ const MaskItem = memo(function MaskItem({
   return (
     <div
       className={`border rounded overflow-hidden ${
-        isSelected
-          ? 'border-[var(--vscode-focusBorder)]'
-          : 'border-[var(--vscode-panel-border)]'
+        isSelected ? 'border-[var(--vscode-focusBorder)]' : 'border-[var(--vscode-panel-border)]'
       }`}
     >
       {/* Header */}
@@ -147,33 +145,43 @@ export const MaskPanel = memo(function MaskPanel({
   const [selectedMaskIndex, setSelectedMaskIndex] = useState<number | null>(null);
 
   // Handle add mask
-  const handleAddMask = useCallback((shapeType: MaskShapeType) => {
-    const newMask = createMaskInstance(shapeType);
-    onChange([...masks, newMask]);
-    setSelectedMaskIndex(masks.length);
-  }, [masks, onChange]);
+  const handleAddMask = useCallback(
+    (shapeType: MaskShapeType) => {
+      const newMask = createMaskInstance(shapeType);
+      onChange([...masks, newMask]);
+      setSelectedMaskIndex(masks.length);
+    },
+    [masks, onChange],
+  );
 
   // Handle remove mask
-  const handleRemoveMask = useCallback((index: number) => {
-    onChange(masks.filter((_, i) => i !== index));
-    if (selectedMaskIndex === index) {
-      setSelectedMaskIndex(null);
-    } else if (selectedMaskIndex !== null && selectedMaskIndex > index) {
-      setSelectedMaskIndex(selectedMaskIndex - 1);
-    }
-  }, [masks, onChange, selectedMaskIndex]);
+  const handleRemoveMask = useCallback(
+    (index: number) => {
+      onChange(masks.filter((_, i) => i !== index));
+      if (selectedMaskIndex === index) {
+        setSelectedMaskIndex(null);
+      } else if (selectedMaskIndex !== null && selectedMaskIndex > index) {
+        setSelectedMaskIndex(selectedMaskIndex - 1);
+      }
+    },
+    [masks, onChange, selectedMaskIndex],
+  );
 
   // Handle toggle mask enabled
-  const handleToggleMask = useCallback((index: number) => {
-    onChange(masks.map((m, i) =>
-      i === index ? { ...m, enabled: !m.enabled } : m
-    ));
-  }, [masks, onChange]);
+  const handleToggleMask = useCallback(
+    (index: number) => {
+      onChange(masks.map((m, i) => (i === index ? { ...m, enabled: !m.enabled } : m)));
+    },
+    [masks, onChange],
+  );
 
   // Handle mask change
-  const handleMaskChange = useCallback((index: number, mask: MaskInstance) => {
-    onChange(masks.map((m, i) => i === index ? mask : m));
-  }, [masks, onChange]);
+  const handleMaskChange = useCallback(
+    (index: number, mask: MaskInstance) => {
+      onChange(masks.map((m, i) => (i === index ? mask : m)));
+    },
+    [masks, onChange],
+  );
 
   const selectedMask = selectedMaskIndex !== null ? masks[selectedMaskIndex] : null;
 
@@ -183,7 +191,9 @@ export const MaskPanel = memo(function MaskPanel({
       {selectedMask && !disabled && (
         <MaskEditor
           mask={selectedMask}
-          onChange={(mask) => selectedMaskIndex !== null && handleMaskChange(selectedMaskIndex, mask)}
+          onChange={(mask) =>
+            selectedMaskIndex !== null && handleMaskChange(selectedMaskIndex, mask)
+          }
         />
       )}
 
@@ -197,10 +207,7 @@ export const MaskPanel = memo(function MaskPanel({
           + {t('mask.add')}
         </button>
         {showAddMenu && !disabled && (
-          <AddMaskMenu
-            onSelect={handleAddMask}
-            onClose={() => setShowAddMenu(false)}
-          />
+          <AddMaskMenu onSelect={handleAddMask} onClose={() => setShowAddMenu(false)} />
         )}
       </div>
 

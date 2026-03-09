@@ -15,7 +15,7 @@ const SEE_LINK_PATTERN = /\[\[see:\s*([^\]]+\.(?:fountain|nks|story))\s*\]\]/gi;
 export class FountainDocumentLinkProvider implements vscode.DocumentLinkProvider {
   provideDocumentLinks(
     document: vscode.TextDocument,
-    _token: vscode.CancellationToken
+    _token: vscode.CancellationToken,
   ): vscode.ProviderResult<vscode.DocumentLink[]> {
     const links: vscode.DocumentLink[] = [];
     const text = document.getText();

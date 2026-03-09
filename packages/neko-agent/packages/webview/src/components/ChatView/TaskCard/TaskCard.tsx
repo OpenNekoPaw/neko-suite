@@ -6,7 +6,11 @@ import { useState, useCallback } from 'react';
 import type { BackgroundTask } from '@/components/TaskListView';
 import { useTranslation } from '@/i18n/I18nContext';
 import { ImagePreview, VideoPlayer } from '@/components/ChatView/MediaPreview';
-import { SuccessIcon, ErrorIcon, ToolLoadingSpinner as LoadingSpinner } from '@/components/ChatView/ToolCallDisplay';
+import {
+  SuccessIcon,
+  ErrorIcon,
+  ToolLoadingSpinner as LoadingSpinner,
+} from '@/components/ChatView/ToolCallDisplay';
 import { TaskSteps, ChevronIcon } from './TaskSteps';
 import { getStatusColor, getTypeIcon, formatDuration, formatETA } from './task-utils';
 
@@ -25,13 +29,16 @@ export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
   const isFailed = task.status === 'failed' || task.status === 'cancelled';
 
   const toggleExpand = useCallback(() => {
-    setIsExpanded(prev => !prev);
+    setIsExpanded((prev) => !prev);
   }, []);
 
   const getStatusBgClass = () => {
-    if (isCompleted) return 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#22c55e)]';
-    if (isFailed) return 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#ef4444)]';
-    if (isActive) return 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#3b82f6)]';
+    if (isCompleted)
+      return 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#22c55e)]';
+    if (isFailed)
+      return 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#ef4444)]';
+    if (isActive)
+      return 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#3b82f6)]';
     return 'bg-[var(--vscode-textBlockQuote-background)]';
   };
 
@@ -47,8 +54,12 @@ export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
         onClick={toggleExpand}
       >
         {/* Status indicator */}
-        {isActive && <LoadingSpinner className="w-3 h-3 text-[var(--vscode-charts-blue)] shrink-0" />}
-        {isCompleted && <SuccessIcon className="w-3 h-3 text-[var(--vscode-charts-green)] shrink-0" />}
+        {isActive && (
+          <LoadingSpinner className="w-3 h-3 text-[var(--vscode-charts-blue)] shrink-0" />
+        )}
+        {isCompleted && (
+          <SuccessIcon className="w-3 h-3 text-[var(--vscode-charts-green)] shrink-0" />
+        )}
         {isFailed && <ErrorIcon className="w-3 h-3 text-[var(--vscode-charts-red)] shrink-0" />}
 
         {/* Task type icon + name */}
@@ -98,7 +109,9 @@ export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
           </button>
         )}
 
-        <ChevronIcon className={`w-3 h-3 text-[var(--vscode-descriptionForeground)] transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+        <ChevronIcon
+          className={`w-3 h-3 text-[var(--vscode-descriptionForeground)] transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+        />
       </div>
 
       {/* Error message (always show if failed) */}

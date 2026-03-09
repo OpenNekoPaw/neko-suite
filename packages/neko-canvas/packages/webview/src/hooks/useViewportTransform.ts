@@ -47,7 +47,10 @@ export interface UseViewportTransformReturn {
   };
   panTo: (position: { x: number; y: number }) => void;
   zoomTo: (zoom: number, center?: { x: number; y: number }) => void;
-  fitContent: (bounds: { x: number; y: number; width: number; height: number }, containerSize: { width: number; height: number }) => void;
+  fitContent: (
+    bounds: { x: number; y: number; width: number; height: number },
+    containerSize: { width: number; height: number },
+  ) => void;
   resetViewport: () => void;
 }
 
@@ -55,7 +58,9 @@ export interface UseViewportTransformReturn {
 // Hook
 // =============================================================================
 
-export function useViewportTransform(options: UseViewportTransformOptions): UseViewportTransformReturn {
+export function useViewportTransform(
+  options: UseViewportTransformOptions,
+): UseViewportTransformReturn {
   const {
     viewport,
     onViewportChange,
@@ -98,47 +103,53 @@ export function useViewportTransform(options: UseViewportTransformOptions): UseV
   }, []);
 
   // Mouse down - start panning
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    // Only pan with middle mouse button or space + left click
-    const shouldPan = e.button === 1 || (e.button === 0 && isSpacePressed.current);
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      // Only pan with middle mouse button or space + left click
+      const shouldPan = e.button === 1 || (e.button === 0 && isSpacePressed.current);
 
-    if (!shouldPan) return;
+      if (!shouldPan) return;
 
-    e.preventDefault();
+      e.preventDefault();
 
-    setState({
-      isPanning: true,
-      startPan: { x: e.clientX, y: e.clientY },
-      startViewport: { ...viewport },
-    });
-  }, [viewport]);
+      setState({
+        isPanning: true,
+        startPan: { x: e.clientX, y: e.clientY },
+        startViewport: { ...viewport },
+      });
+    },
+    [viewport],
+  );
 
   // Mouse move - update pan
-  const onMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!state.isPanning) return;
+  const onMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!state.isPanning) return;
 
-    const deltaX = e.clientX - state.startPan.x;
-    const deltaY = e.clientY - state.startPan.y;
+      const deltaX = e.clientX - state.startPan.x;
+      const deltaY = e.clientY - state.startPan.y;
 
-    onViewportChange({
-      pan: {
-        x: state.startViewport.pan.x + deltaX,
-        y: state.startViewport.pan.y + deltaY,
-      },
-    });
-  }, [state.isPanning, state.startPan, state.startViewport, onViewportChange]);
+      onViewportChange({
+        pan: {
+          x: state.startViewport.pan.x + deltaX,
+          y: state.startViewport.pan.y + deltaY,
+        },
+      });
+    },
+    [state.isPanning, state.startPan, state.startViewport, onViewportChange],
+  );
 
   // Mouse up - end panning
   const onMouseUp = useCallback(() => {
     if (state.isPanning) {
-      setState(prev => ({ ...prev, isPanning: false }));
+      setState((prev) => ({ ...prev, isPanning: false }));
     }
   }, [state.isPanning]);
 
   // Mouse leave - end panning
   const onMouseLeave = useCallback(() => {
     if (state.isPanning) {
-      setState(prev => ({ ...prev, isPanning: false }));
+      setState((prev) => ({ ...prev, isPanning: false }));
     }
   }, [state.isPanning]);
 
@@ -179,50 +190,59 @@ export function useViewportTransform(options: UseViewportTransformOptions): UseV
   }, [containerRef, minZoom, maxZoom]);
 
   // Programmatic pan
-  const panTo = useCallback((position: { x: number; y: number }) => {
-    onViewportChange({ pan: position });
-  }, [onViewportChange]);
+  const panTo = useCallback(
+    (position: { x: number; y: number }) => {
+      onViewportChange({ pan: position });
+    },
+    [onViewportChange],
+  );
 
   // Programmatic zoom
-  const zoomTo = useCallback((zoom: number, center?: { x: number; y: number }) => {
-    const clampedZoom = Math.max(minZoom, Math.min(maxZoom, zoom));
+  const zoomTo = useCallback(
+    (zoom: number, center?: { x: number; y: number }) => {
+      const clampedZoom = Math.max(minZoom, Math.min(maxZoom, zoom));
 
-    if (center) {
-      const zoomRatio = clampedZoom / viewport.zoom;
-      const newPanX = center.x - (center.x - viewport.pan.x) * zoomRatio;
-      const newPanY = center.y - (center.y - viewport.pan.y) * zoomRatio;
-      onViewportChange({ zoom: clampedZoom, pan: { x: newPanX, y: newPanY } });
-    } else {
-      onViewportChange({ zoom: clampedZoom });
-    }
-  }, [viewport, minZoom, maxZoom, onViewportChange]);
+      if (center) {
+        const zoomRatio = clampedZoom / viewport.zoom;
+        const newPanX = center.x - (center.x - viewport.pan.x) * zoomRatio;
+        const newPanY = center.y - (center.y - viewport.pan.y) * zoomRatio;
+        onViewportChange({ zoom: clampedZoom, pan: { x: newPanX, y: newPanY } });
+      } else {
+        onViewportChange({ zoom: clampedZoom });
+      }
+    },
+    [viewport, minZoom, maxZoom, onViewportChange],
+  );
 
   // Fit content in view
-  const fitContent = useCallback((
-    bounds: { x: number; y: number; width: number; height: number },
-    containerSize: { width: number; height: number }
-  ) => {
-    if (bounds.width === 0 || bounds.height === 0) {
-      onViewportChange({ pan: { x: 0, y: 0 }, zoom: 1 });
-      return;
-    }
+  const fitContent = useCallback(
+    (
+      bounds: { x: number; y: number; width: number; height: number },
+      containerSize: { width: number; height: number },
+    ) => {
+      if (bounds.width === 0 || bounds.height === 0) {
+        onViewportChange({ pan: { x: 0, y: 0 }, zoom: 1 });
+        return;
+      }
 
-    const padding = 50;
-    const availableWidth = containerSize.width - padding * 2;
-    const availableHeight = containerSize.height - padding * 2;
+      const padding = 50;
+      const availableWidth = containerSize.width - padding * 2;
+      const availableHeight = containerSize.height - padding * 2;
 
-    const scaleX = availableWidth / bounds.width;
-    const scaleY = availableHeight / bounds.height;
-    const zoom = Math.max(minZoom, Math.min(maxZoom, Math.min(scaleX, scaleY)));
+      const scaleX = availableWidth / bounds.width;
+      const scaleY = availableHeight / bounds.height;
+      const zoom = Math.max(minZoom, Math.min(maxZoom, Math.min(scaleX, scaleY)));
 
-    const centerX = bounds.x + bounds.width / 2;
-    const centerY = bounds.y + bounds.height / 2;
+      const centerX = bounds.x + bounds.width / 2;
+      const centerY = bounds.y + bounds.height / 2;
 
-    const panX = containerSize.width / 2 - centerX * zoom;
-    const panY = containerSize.height / 2 - centerY * zoom;
+      const panX = containerSize.width / 2 - centerX * zoom;
+      const panY = containerSize.height / 2 - centerY * zoom;
 
-    onViewportChange({ zoom, pan: { x: panX, y: panY } });
-  }, [minZoom, maxZoom, onViewportChange]);
+      onViewportChange({ zoom, pan: { x: panX, y: panY } });
+    },
+    [minZoom, maxZoom, onViewportChange],
+  );
 
   // Reset viewport
   const resetViewport = useCallback(() => {

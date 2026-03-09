@@ -11,94 +11,94 @@ import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import { handleError } from '../utils/errorHandler';
 
 export class AssetLibraryProvider implements vscode.WebviewViewProvider {
-	public static readonly viewType = 'neko.assetLibrary';
+  public static readonly viewType = 'neko.assetLibrary';
 
-	private view?: vscode.WebviewView;
+  private view?: vscode.WebviewView;
 
-	constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(private readonly context: vscode.ExtensionContext) {}
 
-	resolveWebviewView(
-		webviewView: vscode.WebviewView,
-		_context: vscode.WebviewViewResolveContext,
-		_token: vscode.CancellationToken
-	): void {
-		this.view = webviewView;
+  resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    _context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken,
+  ): void {
+    this.view = webviewView;
 
-		webviewView.webview.options = {
-			enableScripts: true,
-			localResourceRoots: [this.context.extensionUri],
-		};
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [this.context.extensionUri],
+    };
 
-		webviewView.webview.html = this.getHtmlForWebview(webviewView.webview);
+    webviewView.webview.html = this.getHtmlForWebview(webviewView.webview);
 
-		webviewView.webview.onDidReceiveMessage(
-			(message) => this.handleMessage(message),
-			undefined,
-			this.context.subscriptions
-		);
+    webviewView.webview.onDidReceiveMessage(
+      (message) => this.handleMessage(message),
+      undefined,
+      this.context.subscriptions,
+    );
 
-		// Load initial data
-		this.refreshView();
-	}
+    // Load initial data
+    this.refreshView();
+  }
 
-	// =========================================================================
-	// Data Access (via neko-assets commands)
-	// =========================================================================
+  // =========================================================================
+  // Data Access (via neko-assets commands)
+  // =========================================================================
 
-	private async getAllEntities(): Promise<AssetEntity[]> {
-		try {
-			const entities = await vscode.commands.executeCommand<AssetEntity[]>(
-				'neko.assets.getAllEntities',
-			);
-			return entities ?? [];
-		} catch {
-			return [];
-		}
-	}
+  private async getAllEntities(): Promise<AssetEntity[]> {
+    try {
+      const entities = await vscode.commands.executeCommand<AssetEntity[]>(
+        'neko.assets.getAllEntities',
+      );
+      return entities ?? [];
+    } catch {
+      return [];
+    }
+  }
 
-	private async importFile(filePath: string): Promise<void> {
-		try {
-			await vscode.commands.executeCommand('neko.assets.importFile', vscode.Uri.file(filePath));
-			await this.refreshView();
-		} catch (error) {
-			await handleError(error, { showToUser: true });
-		}
-	}
+  private async importFile(filePath: string): Promise<void> {
+    try {
+      await vscode.commands.executeCommand('neko.assets.importFile', vscode.Uri.file(filePath));
+      await this.refreshView();
+    } catch (error) {
+      await handleError(error, { showToUser: true });
+    }
+  }
 
-	// =========================================================================
-	// View
-	// =========================================================================
+  // =========================================================================
+  // View
+  // =========================================================================
 
-	async refreshView(): Promise<void> {
-		if (!this.view) return;
-		const entities = await this.getAllEntities();
+  async refreshView(): Promise<void> {
+    if (!this.view) return;
+    const entities = await this.getAllEntities();
 
-		// Flatten to simple items for the webview
-		const items = entities.flatMap((entity) =>
-			entity.variants.map((variant) => ({
-				entityId: entity.id,
-				variantId: variant.id,
-				entityName: entity.name,
-				variantName: variant.name,
-				category: entity.category,
-				mediaType: variant.files[0]?.mediaType ?? 'image',
-				filePath: variant.files[0]?.path ?? '',
-				fileName: variant.files[0]?.name ?? entity.name,
-				tags: entity.tags,
-			}))
-		);
+    // Flatten to simple items for the webview
+    const items = entities.flatMap((entity) =>
+      entity.variants.map((variant) => ({
+        entityId: entity.id,
+        variantId: variant.id,
+        entityName: entity.name,
+        variantName: variant.name,
+        category: entity.category,
+        mediaType: variant.files[0]?.mediaType ?? 'image',
+        filePath: variant.files[0]?.path ?? '',
+        fileName: variant.files[0]?.name ?? entity.name,
+        tags: entity.tags,
+      })),
+    );
 
-		this.view.webview.postMessage({ type: 'updateAssets', items });
-	}
+    this.view.webview.postMessage({ type: 'updateAssets', items });
+  }
 
-	// =========================================================================
-	// HTML
-	// =========================================================================
+  // =========================================================================
+  // HTML
+  // =========================================================================
 
-	private getHtmlForWebview(webview: vscode.Webview): string {
-		const nonce = this.getNonce();
+  private getHtmlForWebview(webview: vscode.Webview): string {
+    const nonce = this.getNonce();
 
-		return `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html ${injectLocaleAttribute()}>
 <head>
   <meta charset="UTF-8">
@@ -275,37 +275,53 @@ export class AssetLibraryProvider implements vscode.WebviewViewProvider {
   </script>
 </body>
 </html>`;
-	}
+  }
 
-	private getNonce(): string {
-		let text = '';
-		const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-		for (let i = 0; i < 32; i++) {
-			text += possible.charAt(Math.floor(Math.random() * possible.length));
-		}
-		return text;
-	}
+  private getNonce(): string {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+  }
 
-	private async handleMessage(message: { type: string; [key: string]: unknown }): Promise<void> {
-		switch (message.type) {
-			case 'import': {
-				const uris = await vscode.window.showOpenDialog({
-					canSelectMany: true,
-					filters: {
-						'Media Files': ['mp4', 'mov', 'avi', 'mkv', 'webm', 'mp3', 'wav', 'ogg', 'flac', 'aac', 'png', 'jpg', 'jpeg', 'gif', 'webp'],
-						'All Files': ['*'],
-					},
-				});
-				if (uris) {
-					for (const uri of uris) {
-						await this.importFile(uri.fsPath);
-					}
-				}
-				break;
-			}
-			case 'select':
-				// Handle asset selection — could open preview or show properties
-				break;
-		}
-	}
+  private async handleMessage(message: { type: string; [key: string]: unknown }): Promise<void> {
+    switch (message.type) {
+      case 'import': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: true,
+          filters: {
+            'Media Files': [
+              'mp4',
+              'mov',
+              'avi',
+              'mkv',
+              'webm',
+              'mp3',
+              'wav',
+              'ogg',
+              'flac',
+              'aac',
+              'png',
+              'jpg',
+              'jpeg',
+              'gif',
+              'webp',
+            ],
+            'All Files': ['*'],
+          },
+        });
+        if (uris) {
+          for (const uri of uris) {
+            await this.importFile(uri.fsPath);
+          }
+        }
+        break;
+      }
+      case 'select':
+        // Handle asset selection — could open preview or show properties
+        break;
+    }
+  }
 }

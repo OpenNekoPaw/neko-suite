@@ -23,7 +23,11 @@ export function CodeBlock({ code, language }: CodeBlockProps): React.JSX.Element
     <Box flexDirection="column" marginTop={0} marginBottom={1}>
       {/* Language label */}
       {language ? (
-        <Text dimColor>{'╭─ '}{language}{' ─'}</Text>
+        <Text dimColor>
+          {'╭─ '}
+          {language}
+          {' ─'}
+        </Text>
       ) : (
         <Text dimColor>{'╭──'}</Text>
       )}

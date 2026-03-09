@@ -44,26 +44,32 @@ function bounceOut(t: number): number {
  */
 export const easingFunctions: Record<EasingType, (t: number) => number> = {
   // Linear
-  'linear': (t) => t,
+  linear: (t) => t,
 
   // Legacy aliases (map to Quad)
   'ease-in': (t) => t * t,
   'ease-out': (t) => t * (2 - t),
-  'ease-in-out': (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+  'ease-in-out': (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t),
 
   // Quad
   'ease-in-quad': (t) => t * t,
   'ease-out-quad': (t) => t * (2 - t),
-  'ease-in-out-quad': (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+  'ease-in-out-quad': (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t),
 
   // Cubic
   'ease-in-cubic': (t) => t * t * t,
-  'ease-out-cubic': (t) => { const t1 = t - 1; return t1 * t1 * t1 + 1; },
-  'ease-in-out-cubic': (t) => t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1,
+  'ease-out-cubic': (t) => {
+    const t1 = t - 1;
+    return t1 * t1 * t1 + 1;
+  },
+  'ease-in-out-cubic': (t) => (t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1),
 
   // Quart
   'ease-in-quart': (t) => t * t * t * t,
-  'ease-out-quart': (t) => { const t1 = t - 1; return 1 - t1 * t1 * t1 * t1; },
+  'ease-out-quart': (t) => {
+    const t1 = t - 1;
+    return 1 - t1 * t1 * t1 * t1;
+  },
   'ease-in-out-quart': (t) => {
     if (t < 0.5) return 8 * t * t * t * t;
     const t1 = t - 1;
@@ -72,7 +78,10 @@ export const easingFunctions: Record<EasingType, (t: number) => number> = {
 
   // Quint
   'ease-in-quint': (t) => t * t * t * t * t,
-  'ease-out-quint': (t) => { const t1 = t - 1; return t1 * t1 * t1 * t1 * t1 + 1; },
+  'ease-out-quint': (t) => {
+    const t1 = t - 1;
+    return t1 * t1 * t1 * t1 * t1 + 1;
+  },
   'ease-in-out-quint': (t) => {
     if (t < 0.5) return 16 * t * t * t * t * t;
     const t1 = 2 * t - 2;
@@ -80,19 +89,17 @@ export const easingFunctions: Record<EasingType, (t: number) => number> = {
   },
 
   // Sine
-  'ease-in-sine': (t) => 1 - Math.cos(t * Math.PI / 2),
-  'ease-out-sine': (t) => Math.sin(t * Math.PI / 2),
+  'ease-in-sine': (t) => 1 - Math.cos((t * Math.PI) / 2),
+  'ease-out-sine': (t) => Math.sin((t * Math.PI) / 2),
   'ease-in-out-sine': (t) => -(Math.cos(Math.PI * t) - 1) / 2,
 
   // Expo
-  'ease-in-expo': (t) => t === 0 ? 0 : Math.pow(2, 10 * (t - 1)),
-  'ease-out-expo': (t) => t === 1 ? 1 : 1 - Math.pow(2, -10 * t),
+  'ease-in-expo': (t) => (t === 0 ? 0 : Math.pow(2, 10 * (t - 1))),
+  'ease-out-expo': (t) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t)),
   'ease-in-out-expo': (t) => {
     if (t === 0) return 0;
     if (t === 1) return 1;
-    return t < 0.5
-      ? Math.pow(2, 20 * t - 10) / 2
-      : (2 - Math.pow(2, -20 * t + 10)) / 2;
+    return t < 0.5 ? Math.pow(2, 20 * t - 10) / 2 : (2 - Math.pow(2, -20 * t + 10)) / 2;
   },
 
   // Circ
@@ -126,36 +133,34 @@ export const easingFunctions: Record<EasingType, (t: number) => number> = {
 
   // Elastic
   'ease-in-elastic': (t) => {
-    const c4 = 2 * Math.PI / 3;
+    const c4 = (2 * Math.PI) / 3;
     if (t === 0) return 0;
     if (t === 1) return 1;
     return -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4);
   },
   'ease-out-elastic': (t) => {
-    const c4 = 2 * Math.PI / 3;
+    const c4 = (2 * Math.PI) / 3;
     if (t === 0) return 0;
     if (t === 1) return 1;
     return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
   },
   'ease-in-out-elastic': (t) => {
-    const c5 = 2 * Math.PI / 4.5;
+    const c5 = (2 * Math.PI) / 4.5;
     if (t === 0) return 0;
     if (t === 1) return 1;
-    if (t < 0.5) return -Math.pow(2, 20 * t - 10) * Math.sin((20 * t - 11.125) * c5) / 2;
-    return Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5) / 2 + 1;
+    if (t < 0.5) return (-Math.pow(2, 20 * t - 10) * Math.sin((20 * t - 11.125) * c5)) / 2;
+    return (Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5)) / 2 + 1;
   },
 
   // Bounce
   'ease-in-bounce': (t) => 1 - bounceOut(1 - t),
   'ease-out-bounce': (t) => bounceOut(t),
   'ease-in-out-bounce': (t) => {
-    return t < 0.5
-      ? (1 - bounceOut(1 - 2 * t)) / 2
-      : (1 + bounceOut(2 * t - 1)) / 2;
+    return t < 0.5 ? (1 - bounceOut(1 - 2 * t)) / 2 : (1 + bounceOut(2 * t - 1)) / 2;
   },
 
   // Bezier is handled separately via CubicBezierParams
-  'bezier': (t) => t,
+  bezier: (t) => t,
 };
 
 /**
@@ -175,18 +180,9 @@ export function applyEasing(progress: number, easing: EasingType): number {
  * Cubic bezier interpolation
  * 三次贝塞尔插值
  */
-export function cubicBezier(
-  t: number,
-  p0: number,
-  p1: number,
-  p2: number,
-  p3: number
-): number {
+export function cubicBezier(t: number, p0: number, p1: number, p2: number, p3: number): number {
   const u = 1 - t;
-  return u * u * u * p0 +
-    3 * u * u * t * p1 +
-    3 * u * t * t * p2 +
-    t * t * t * p3;
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
 }
 
 // =============================================================================
@@ -213,8 +209,10 @@ function findKeyframeIndex(sortedKeyframes: AnimationKeyframe[], time: number): 
   while (left <= right) {
     const mid = Math.floor((left + right) / 2);
 
-    if (sortedKeyframes[mid]!.time <= time &&
-      (mid === sortedKeyframes.length - 1 || sortedKeyframes[mid + 1]!.time > time)) {
+    if (
+      sortedKeyframes[mid]!.time <= time &&
+      (mid === sortedKeyframes.length - 1 || sortedKeyframes[mid + 1]!.time > time)
+    ) {
       return mid;
     }
 
@@ -249,10 +247,7 @@ function isSorted(keyframes: AnimationKeyframe[]): boolean {
  * @param localTime - Time relative to element start (in seconds)
  * @returns The interpolated value at the given time
  */
-export function getAnimatedValue(
-  property: AnimatableProperty,
-  localTime: number
-): number {
+export function getAnimatedValue(property: AnimatableProperty, localTime: number): number {
   // Guard against undefined/null property
   if (!property) {
     return 0;
@@ -266,9 +261,7 @@ export function getAnimatedValue(
   }
 
   // Only sort if needed (preserve original array if possible)
-  const sorted = isSorted(keyframes)
-    ? keyframes
-    : [...keyframes].sort((a, b) => a.time - b.time);
+  const sorted = isSorted(keyframes) ? keyframes : [...keyframes].sort((a, b) => a.time - b.time);
 
   // Before first keyframe
   if (localTime <= sorted[0]!.time) {
@@ -296,7 +289,7 @@ export function getAnimatedValue(
       prevFrame.value,
       prevFrame.value + prevFrame.bezierOut.y,
       nextFrame.value + nextFrame.bezierIn.y,
-      nextFrame.value
+      nextFrame.value,
     );
   } else {
     const easedProgress = applyEasing(progress, prevFrame.easing);
@@ -314,7 +307,7 @@ export function getAnimatedValue(
  */
 export function getComputedTransform(
   transform: ElementTransform | undefined,
-  localTime: number
+  localTime: number,
 ): ComputedTransform {
   // Default transform when none provided
   if (!transform) {
@@ -374,7 +367,7 @@ export function getElementTransformAtTime(
     rotation?: number;
     opacity?: number;
   },
-  globalTime: number
+  globalTime: number,
 ): ComputedTransform {
   const localTime = globalTime - element.startTime + element.trimStart;
 
@@ -406,15 +399,13 @@ export function getElementTransformAtTime(
 export function getKeyframeAtTime(
   property: AnimatableProperty,
   time: number,
-  tolerance: number = 0.01
+  tolerance: number = 0.01,
 ): AnimationKeyframe | undefined {
   if (!property || !property.keyframes) {
     return undefined;
   }
 
-  return property.keyframes.find(
-    kf => Math.abs(kf.time - time) <= tolerance
-  );
+  return property.keyframes.find((kf) => Math.abs(kf.time - time) <= tolerance);
 }
 
 /**
@@ -423,7 +414,7 @@ export function getKeyframeAtTime(
  */
 export function insertKeyframeSorted(
   keyframes: AnimationKeyframe[],
-  newKeyframe: AnimationKeyframe
+  newKeyframe: AnimationKeyframe,
 ): AnimationKeyframe[] {
   let left = 0;
   let right = keyframes.length;
@@ -449,9 +440,9 @@ export function insertKeyframeSorted(
 export function removeKeyframeAtTime(
   keyframes: AnimationKeyframe[],
   time: number,
-  tolerance: number = 0.01
+  tolerance: number = 0.01,
 ): AnimationKeyframe[] {
-  const index = keyframes.findIndex(kf => Math.abs(kf.time - time) <= tolerance);
+  const index = keyframes.findIndex((kf) => Math.abs(kf.time - time) <= tolerance);
   if (index === -1) return keyframes;
 
   const result = [...keyframes];
@@ -493,12 +484,17 @@ export function getAllKeyframeTimes(transform: ElementTransform): number[] {
 export function getKeyframesAtTime(
   transform: ElementTransform,
   time: number,
-  tolerance: number = 0.01
+  tolerance: number = 0.01,
 ): Array<{ property: keyof ElementTransform; keyframe: AnimationKeyframe }> {
   const result: Array<{ property: keyof ElementTransform; keyframe: AnimationKeyframe }> = [];
 
   const animatableProps: (keyof ElementTransform)[] = [
-    'x', 'y', 'scaleX', 'scaleY', 'rotation', 'opacity'
+    'x',
+    'y',
+    'scaleX',
+    'scaleY',
+    'rotation',
+    'opacity',
   ];
 
   for (const propName of animatableProps) {

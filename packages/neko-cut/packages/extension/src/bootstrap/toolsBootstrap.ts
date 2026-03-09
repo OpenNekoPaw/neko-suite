@@ -49,11 +49,14 @@ interface TimelineBridgeResponse {
  */
 export class TimelineBridge {
   private webview: vscode.Webview | null = null;
-  private pendingRequests = new Map<string, {
-    resolve: (result: TimelineToolResult) => void;
-    reject: (error: Error) => void;
-    timeout: NodeJS.Timeout;
-  }>();
+  private pendingRequests = new Map<
+    string,
+    {
+      resolve: (result: TimelineToolResult) => void;
+      reject: (error: Error) => void;
+      timeout: NodeJS.Timeout;
+    }
+  >();
   private messageListener: vscode.Disposable | null = null;
   private requestTimeout = 30000; // 30 seconds
 
@@ -81,7 +84,7 @@ export class TimelineBridge {
    */
   async execute<T = unknown>(
     toolName: string,
-    params: Record<string, unknown>
+    params: Record<string, unknown>,
   ): Promise<TimelineToolResult<T>> {
     if (!this.webview) {
       return {

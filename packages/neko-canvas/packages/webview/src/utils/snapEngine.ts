@@ -217,10 +217,7 @@ export class SnapEngine {
   /**
    * 网格吸附
    */
-  private snapToGrid(
-    position: Point,
-    _size: { width: number; height: number }
-  ): SnapResult {
+  private snapToGrid(position: Point, _size: { width: number; height: number }): SnapResult {
     const { gridSize, threshold } = this.config;
 
     let resultX = position.x;
@@ -253,10 +250,7 @@ export class SnapEngine {
   /**
    * 生成对齐参考线
    */
-  generateGuides(
-    position: Point,
-    size: { width: number; height: number }
-  ): Guide[] {
+  generateGuides(position: Point, size: { width: number; height: number }): Guide[] {
     const guides: Guide[] = [];
     const snapResult = this.snap(position, size);
 

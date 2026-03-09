@@ -16,14 +16,17 @@ import { getVSCodeAPI } from '../../utils/vscodeApi';
 /**
  * Active render clip tasks
  */
-const activeRenderTasks: Map<string, {
-  status: 'pending' | 'rendering' | 'completed' | 'failed';
-  progress: number;
-  totalFrames: number;
-  currentFrame: number;
-  error?: string;
-  result?: string; // base64 data or file path
-}> = new Map();
+const activeRenderTasks: Map<
+  string,
+  {
+    status: 'pending' | 'rendering' | 'completed' | 'failed';
+    progress: number;
+    totalFrames: number;
+    currentFrame: number;
+    error?: string;
+    result?: string; // base64 data or file path
+  }
+> = new Map();
 
 export function updateRenderTask(
   taskId: string,
@@ -34,7 +37,7 @@ export function updateRenderTask(
     currentFrame: number;
     error?: string;
     result?: string;
-  }>
+  }>,
 ): void {
   const task = activeRenderTasks.get(taskId);
   if (!task) return;
@@ -59,8 +62,8 @@ function dataUrlToBase64(dataUrl: string): string {
 
 function findTopmostMediaElementAtTime(
   project: { tracks: Array<{ elements: Array<unknown> }> },
-  time: number
-): { element: { src: string; startTime: number; trimStart?: number }, sourceTime: number } | null {
+  time: number,
+): { element: { src: string; startTime: number; trimStart?: number }; sourceTime: number } | null {
   // Track 顺序通常从下到上：后面的轨道更“上层”，因此倒序找第一个命中的媒体元素
   for (let trackIndex = project.tracks.length - 1; trackIndex >= 0; trackIndex--) {
     const track = project.tracks[trackIndex];
@@ -114,27 +117,34 @@ const renderFrame: ToolHandler = async (params): Promise<ToolHandlerResult> => {
       return { success: false, error: 'No media element found at specified time' };
     }
 
-    const bitmap = await getMediaProxy().getVideoFrame(
-      found.element.src,
-      found.sourceTime,
-      { timeoutMs: 30_000, priority: 10 }
-    );
+    const bitmap = await getMediaProxy().getVideoFrame(found.element.src, found.sourceTime, {
+      timeoutMs: 30_000,
+      priority: 10,
+    });
 
     const canvas = document.createElement('canvas');
     canvas.width = outputWidth;
     canvas.height = outputHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      try { bitmap.close(); } catch { /* ignore */ }
+      try {
+        bitmap.close();
+      } catch {
+        /* ignore */
+      }
       return { success: false, error: 'Failed to create canvas context' };
     }
 
     ctx.drawImage(bitmap, 0, 0, outputWidth, outputHeight);
-    try { bitmap.close(); } catch { /* ignore */ }
+    try {
+      bitmap.close();
+    } catch {
+      /* ignore */
+    }
 
     const dataUrl = canvas.toDataURL(
       mimeFromFormat(outputFormat),
-      outputFormat === 'png' ? undefined : Math.max(0, Math.min(1, outputQuality / 100))
+      outputFormat === 'png' ? undefined : Math.max(0, Math.min(1, outputQuality / 100)),
     );
 
     return {
@@ -272,7 +282,8 @@ const renderClip: ToolHandler = async (params): Promise<ToolHandlerResult> => {
         format: outputFormat,
         quality: outputQuality,
         status: 'rendering',
-        message: 'Clip rendering started via Extension FFmpeg. Use get_render_progress to check status.',
+        message:
+          'Clip rendering started via Extension FFmpeg. Use get_render_progress to check status.',
       },
     };
   } catch (error) {
@@ -314,7 +325,7 @@ const getThumbnail: ToolHandler = async (params): Promise<ToolHandlerResult> => 
     // Find element and use its start time
     let foundElement = null;
     for (const track of project.tracks) {
-      const element = track.elements.find(e => e.id === elementId);
+      const element = track.elements.find((e) => e.id === elementId);
       if (element) {
         foundElement = element;
         break;
@@ -343,7 +354,7 @@ const getThumbnail: ToolHandler = async (params): Promise<ToolHandlerResult> => 
     let target: { src: string; sourceTime: number } | null = null;
     if (elementId) {
       for (const track of project.tracks) {
-        const found = track.elements.find(e => (e as any).id === elementId);
+        const found = track.elements.find((e) => (e as any).id === elementId);
         if (found && hasMediaSource(found) && (found as any).type === 'media') {
           const trimStart = (found as any).trimStart ?? 0;
           target = { src: (found as any).src, sourceTime: Math.max(0, trimStart + 0.1) };
@@ -361,26 +372,33 @@ const getThumbnail: ToolHandler = async (params): Promise<ToolHandlerResult> => 
       return { success: false, error: 'No media element found for thumbnail' };
     }
 
-    const bitmap = await getMediaProxy().getVideoFrame(
-      target.src,
-      target.sourceTime,
-      { timeoutMs: 30_000, priority: -10 }
-    );
+    const bitmap = await getMediaProxy().getVideoFrame(target.src, target.sourceTime, {
+      timeoutMs: 30_000,
+      priority: -10,
+    });
 
     const canvas = document.createElement('canvas');
     canvas.width = thumbWidth;
     canvas.height = thumbHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      try { bitmap.close(); } catch { /* ignore */ }
+      try {
+        bitmap.close();
+      } catch {
+        /* ignore */
+      }
       return { success: false, error: 'Failed to create canvas context' };
     }
 
     ctx.drawImage(bitmap, 0, 0, thumbWidth, thumbHeight);
-    try { bitmap.close(); } catch { /* ignore */ }
+    try {
+      bitmap.close();
+    } catch {
+      /* ignore */
+    }
     const dataUrl = canvas.toDataURL(
       mimeFromFormat(outputFormat),
-      outputFormat === 'png' ? undefined : 0.8
+      outputFormat === 'png' ? undefined : 0.8,
     );
 
     return {

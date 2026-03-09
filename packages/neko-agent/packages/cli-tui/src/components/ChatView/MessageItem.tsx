@@ -33,7 +33,10 @@ export function MessageItem({
   if (message.role === 'user') {
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Text color={tokens.info} bold>{'> '}{message.content}</Text>
+        <Text color={tokens.info} bold>
+          {'> '}
+          {message.content}
+        </Text>
       </Box>
     );
   }
@@ -62,12 +65,7 @@ export function MessageItem({
 
       {/* 2. Tool calls */}
       {message.toolCalls.map((tc) => (
-        <ToolCallLine
-          key={tc.id}
-          name={tc.name}
-          args={tc.arguments}
-          status={tc.status}
-        />
+        <ToolCallLine key={tc.id} name={tc.name} args={tc.arguments} status={tc.status} />
       ))}
 
       {/* 3. Streaming text or final markdown */}
@@ -78,9 +76,7 @@ export function MessageItem({
       ) : null}
 
       {/* 4. Todo list */}
-      {message.todos.length > 0 ? (
-        <TodoList todos={message.todos} />
-      ) : null}
+      {message.todos.length > 0 ? <TodoList todos={message.todos} /> : null}
     </Box>
   );
 }
@@ -96,19 +92,17 @@ function ToolCallLine({
   readonly status: string;
 }): React.JSX.Element {
   const icon = TOOL_ICONS[status as keyof typeof TOOL_ICONS] ?? TOOL_ICONS.pending;
-  const statusColor = status === 'success'
-    ? tokens.toolSuccess
-    : status === 'error'
-      ? tokens.toolError
-      : tokens.toolPending;
+  const statusColor =
+    status === 'success'
+      ? tokens.toolSuccess
+      : status === 'error'
+        ? tokens.toolError
+        : tokens.toolPending;
 
   return (
     <Box>
       <Text>
-        <Text color={statusColor}>{icon}</Text>
-        {' '}
-        <Text bold>{name}</Text>
-        {' '}
+        <Text color={statusColor}>{icon}</Text> <Text bold>{name}</Text>{' '}
         <Text dimColor>{summarizeArgs(args)}</Text>
       </Text>
     </Box>

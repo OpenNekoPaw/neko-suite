@@ -12,8 +12,11 @@ import { OperationError } from './errors';
 /**
  * 查找 track，找不到则抛出 OperationError
  */
-export function findTrack(project: ProjectData, trackId: string): { track: TimelineTrack; index: number } {
-  const index = project.tracks.findIndex(t => t.id === trackId);
+export function findTrack(
+  project: ProjectData,
+  trackId: string,
+): { track: TimelineTrack; index: number } {
+  const index = project.tracks.findIndex((t) => t.id === trackId);
   if (index === -1) throw OperationError.trackNotFound(trackId);
   return { track: project.tracks[index]!, index };
 }
@@ -25,7 +28,7 @@ export function findElement(
   track: TimelineTrack,
   elementId: string,
 ): { element: TimelineElement; index: number } {
-  const index = track.elements.findIndex(e => e.id === elementId);
+  const index = track.elements.findIndex((e) => e.id === elementId);
   if (index === -1) throw OperationError.elementNotFound(elementId, track.id);
   return { element: track.elements[index]!, index };
 }
@@ -37,7 +40,7 @@ export function findShape(
   shapes: ShapeInstance[],
   shapeId: string,
 ): { shape: ShapeInstance; index: number } {
-  const index = shapes.findIndex(s => s.id === shapeId);
+  const index = shapes.findIndex((s) => s.id === shapeId);
   if (index === -1) throw OperationError.shapeNotFound(shapeId);
   return { shape: shapes[index]!, index };
 }
@@ -65,7 +68,7 @@ export function updateElementInProject(
   elementId: string,
   updater: (element: TimelineElement) => TimelineElement,
 ): ProjectData {
-  return updateTrackInProject(project, trackId, track => {
+  return updateTrackInProject(project, trackId, (track) => {
     const { index } = findElement(track, elementId);
     const newElements = [...track.elements];
     newElements[index] = updater(newElements[index]!);
@@ -84,7 +87,7 @@ export function updateShapeInProject(
   shapeId: string,
   updater: (shape: ShapeInstance) => ShapeInstance,
 ): ProjectData {
-  return updateElementInProject(project, trackId, elementId, element => {
+  return updateElementInProject(project, trackId, elementId, (element) => {
     const shapes: ShapeInstance[] = (element as WebviewElement).shapes ?? [];
     const { index } = findShape(shapes, shapeId);
     const newShapes = [...shapes];
@@ -110,10 +113,7 @@ export function setShapes(element: TimelineElement, shapes: ShapeInstance[]): Ti
 /**
  * 提取对象中指定 keys 的子集（用于构建 before 快照）
  */
-export function pickKeys<T extends Record<string, any>>(
-  obj: T,
-  updates: Partial<T>,
-): Partial<T> {
+export function pickKeys<T extends Record<string, any>>(obj: T, updates: Partial<T>): Partial<T> {
   const result: Partial<T> = {};
   for (const key of Object.keys(updates) as Array<keyof T>) {
     if (key in obj) {

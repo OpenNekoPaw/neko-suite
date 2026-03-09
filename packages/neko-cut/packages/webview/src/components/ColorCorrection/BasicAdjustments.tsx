@@ -39,16 +39,22 @@ const SliderRow = memo(function SliderRow({
   onChange,
   unit = '',
 }: SliderRowProps) {
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(parseFloat(e.target.value));
-  }, [onChange]);
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onChange(parseFloat(e.target.value));
+    },
+    [onChange],
+  );
 
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = parseFloat(e.target.value);
-    if (!isNaN(newValue)) {
-      onChange(Math.max(min, Math.min(max, newValue)));
-    }
-  }, [onChange, min, max]);
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = parseFloat(e.target.value);
+      if (!isNaN(newValue)) {
+        onChange(Math.max(min, Math.min(max, newValue)));
+      }
+    },
+    [onChange, min, max],
+  );
 
   const handleDoubleClick = useCallback(() => {
     // Reset to default (0 for most adjustments)
@@ -93,12 +99,15 @@ export const BasicAdjustments = memo(function BasicAdjustments({
 }: BasicAdjustmentsProps) {
   const { t } = useTranslation();
 
-  const handleChange = useCallback((key: keyof BasicColorAdjustment, value: number) => {
-    onChange({
-      ...basic,
-      [key]: value,
-    });
-  }, [basic, onChange]);
+  const handleChange = useCallback(
+    (key: keyof BasicColorAdjustment, value: number) => {
+      onChange({
+        ...basic,
+        [key]: value,
+      });
+    },
+    [basic, onChange],
+  );
 
   return (
     <div className="space-y-2">

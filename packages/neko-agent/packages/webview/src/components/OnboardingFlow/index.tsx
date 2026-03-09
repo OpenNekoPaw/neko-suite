@@ -34,7 +34,6 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--vscode-editor-background)]/90 backdrop-blur-sm">
       <div className="w-80 bg-[var(--vscode-panel-background)] border border-[var(--vscode-panel-border)] rounded-lg shadow-xl p-6">
-
         {/* Step: choose */}
         {step === 'choose' && (
           <>
@@ -50,7 +49,9 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
             </button>
             <div className="flex items-center gap-2 mb-3">
               <div className="flex-1 h-px bg-[var(--vscode-panel-border)]" />
-              <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">{t('onboarding.or')}</span>
+              <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">
+                {t('onboarding.or')}
+              </span>
               <div className="flex-1 h-px bg-[var(--vscode-panel-border)]" />
             </div>
             <button
@@ -77,7 +78,6 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
             </button>
           </>
         )}
-
       </div>
     </div>
   );

@@ -5,15 +5,8 @@
  * Handles legacy field migration and format conversion.
  */
 
-import type {
-  ProviderConfig,
-} from '../types/config';
-import type {
-  UnifiedConfig,
-  NormalizedConfig,
-  GroupConfig,
-  TemplatePresetConfig,
-} from './types';
+import type { ProviderConfig } from '../types/config';
+import type { UnifiedConfig, NormalizedConfig, GroupConfig, TemplatePresetConfig } from './types';
 import { DEFAULT_CONFIG } from './types';
 
 // =============================================================================
@@ -44,7 +37,7 @@ interface LegacyProviderConfig {
  * Check if providers is in legacy object format
  */
 function isLegacyProvidersFormat(
-  providers: unknown
+  providers: unknown,
 ): providers is Record<string, LegacyProviderConfig> {
   if (!providers || typeof providers !== 'object') {
     return false;
@@ -61,7 +54,7 @@ function isLegacyProvidersFormat(
  * Convert legacy providers object format to array format
  */
 function convertLegacyProviders(
-  legacyProviders: Record<string, LegacyProviderConfig>
+  legacyProviders: Record<string, LegacyProviderConfig>,
 ): ProviderConfig[] {
   const providers: ProviderConfig[] = [];
 
@@ -167,9 +160,7 @@ export function migrateLegacyFields(config: UnifiedConfig): UnifiedConfig {
   // Migrate top-level apiKey/baseUrl to default provider
   if ((config.apiKey || config.baseUrl) && migrated.providers) {
     const defaultProviderId = migrated.defaultProvider ?? 'anthropic';
-    const existingProvider = migrated.providers.find(
-      (p) => p.id === defaultProviderId
-    );
+    const existingProvider = migrated.providers.find((p) => p.id === defaultProviderId);
 
     if (existingProvider) {
       if (config.apiKey && !existingProvider.apiKey) {
@@ -206,10 +197,7 @@ export function migrateLegacyFields(config: UnifiedConfig): UnifiedConfig {
  * @param override - Override configuration (takes precedence)
  * @returns Merged configuration
  */
-export function mergeConfigs(
-  base: UnifiedConfig,
-  override: UnifiedConfig
-): UnifiedConfig {
+export function mergeConfigs(base: UnifiedConfig, override: UnifiedConfig): UnifiedConfig {
   const merged: UnifiedConfig = { ...base };
 
   // Merge scalar fields (override takes precedence)
@@ -245,34 +233,13 @@ export function mergeConfigs(
   merged.templates = mergeArrayById(base.templates, override.templates);
 
   // Merge override objects
-  merged.providerOverrides = mergeOverrides(
-    base.providerOverrides,
-    override.providerOverrides
-  );
-  merged.modelOverrides = mergeOverrides(
-    base.modelOverrides,
-    override.modelOverrides
-  );
-  merged.groupOverrides = mergeOverrides(
-    base.groupOverrides,
-    override.groupOverrides
-  );
-  merged.mcpServerOverrides = mergeOverrides(
-    base.mcpServerOverrides,
-    override.mcpServerOverrides
-  );
-  merged.workflowOverrides = mergeOverrides(
-    base.workflowOverrides,
-    override.workflowOverrides
-  );
-  merged.promptOverrides = mergeOverrides(
-    base.promptOverrides,
-    override.promptOverrides
-  );
-  merged.templateOverrides = mergeOverrides(
-    base.templateOverrides,
-    override.templateOverrides
-  );
+  merged.providerOverrides = mergeOverrides(base.providerOverrides, override.providerOverrides);
+  merged.modelOverrides = mergeOverrides(base.modelOverrides, override.modelOverrides);
+  merged.groupOverrides = mergeOverrides(base.groupOverrides, override.groupOverrides);
+  merged.mcpServerOverrides = mergeOverrides(base.mcpServerOverrides, override.mcpServerOverrides);
+  merged.workflowOverrides = mergeOverrides(base.workflowOverrides, override.workflowOverrides);
+  merged.promptOverrides = mergeOverrides(base.promptOverrides, override.promptOverrides);
+  merged.templateOverrides = mergeOverrides(base.templateOverrides, override.templateOverrides);
 
   return merged;
 }
@@ -280,10 +247,7 @@ export function mergeConfigs(
 /**
  * Merge arrays by ID (later items override earlier ones with same ID)
  */
-function mergeArrayById<T extends { id: string }>(
-  base?: T[],
-  override?: T[]
-): T[] | undefined {
+function mergeArrayById<T extends { id: string }>(base?: T[], override?: T[]): T[] | undefined {
   if (!base && !override) {
     return undefined;
   }
@@ -318,7 +282,7 @@ function mergeArrayById<T extends { id: string }>(
  */
 function mergeOverrides<T>(
   base?: Record<string, Partial<T>>,
-  override?: Record<string, Partial<T>>
+  override?: Record<string, Partial<T>>,
 ): Record<string, Partial<T>> | undefined {
   if (!base && !override) {
     return undefined;
@@ -344,7 +308,7 @@ function mergeOverrides<T>(
  */
 function applyOverrides<T extends { id: string }>(
   items: T[],
-  overrides?: Record<string, Partial<T>>
+  overrides?: Record<string, Partial<T>>,
 ): T[] {
   if (!overrides) {
     return items;
@@ -380,27 +344,15 @@ function arrayToMap<T extends { id: string }>(items?: T[]): Map<string, T> {
  */
 export function normalizeConfig(config: UnifiedConfig): NormalizedConfig {
   // Apply overrides to items
-  const providers = applyOverrides(
-    config.providers ?? [],
-    config.providerOverrides
-  );
+  const providers = applyOverrides(config.providers ?? [], config.providerOverrides);
   const models = applyOverrides(config.models ?? [], config.modelOverrides);
-  const groups = applyOverrides(
-    config.groups ?? [],
-    config.groupOverrides
-  ) as GroupConfig[];
-  const mcpServers = applyOverrides(
-    config.mcpServers ?? [],
-    config.mcpServerOverrides
-  );
-  const workflows = applyOverrides(
-    config.workflows ?? [],
-    config.workflowOverrides
-  );
+  const groups = applyOverrides(config.groups ?? [], config.groupOverrides) as GroupConfig[];
+  const mcpServers = applyOverrides(config.mcpServers ?? [], config.mcpServerOverrides);
+  const workflows = applyOverrides(config.workflows ?? [], config.workflowOverrides);
   const prompts = applyOverrides(config.prompts ?? [], config.promptOverrides);
   const templates = applyOverrides(
     config.templates ?? [],
-    config.templateOverrides
+    config.templateOverrides,
   ) as TemplatePresetConfig[];
 
   return {
@@ -438,7 +390,7 @@ export function normalizeConfig(config: UnifiedConfig): NormalizedConfig {
  */
 export function processConfig(
   userConfig: UnifiedConfig | null,
-  workspaceConfig: UnifiedConfig | null
+  workspaceConfig: UnifiedConfig | null,
 ): NormalizedConfig {
   // Start with empty config
   let config: UnifiedConfig = {};

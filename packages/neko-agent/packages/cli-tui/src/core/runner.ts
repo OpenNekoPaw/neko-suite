@@ -7,12 +7,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type {
-  AgentResult,
-  AgentStep,
-  ExecutorHooks,
-  AgentEvent,
-} from '@neko/agent';
+import type { AgentResult, AgentStep, ExecutorHooks, AgentEvent } from '@neko/agent';
 import {
   MCPManager,
   createAllMCPTools,
@@ -37,11 +32,7 @@ import { PROVIDERS } from './types';
 import { createLLMServiceAdapter } from './llm-service-adapter';
 import { theme, TOOL_ICONS } from './theme';
 import { formatToolCall } from './formatter';
-import {
-  isSlashCommand,
-  handleSlashCommand,
-  type SlashCommandContext,
-} from './slash-commands';
+import { isSlashCommand, handleSlashCommand, type SlashCommandContext } from './slash-commands';
 
 /**
  * Agent runner options
@@ -166,7 +157,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     // Report any file loading errors
     if (processedInput.errors.length > 0) {
       const errorMessages = processedInput.errors
-        .map(e => `- ${e.reference}: ${e.error}`)
+        .map((e) => `- ${e.reference}: ${e.error}`)
         .join('\n');
       finalPrompt += `\n\n## File Loading Errors\n\n${errorMessages}`;
     }
@@ -190,12 +181,18 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
           onOutput?.('\n[Timeout] Execution aborted');
           break;
         }
-        handleAgentEvent(event, {
-          onOutput,
-          onToolCall,
-          onThinking,
-          onText: (text) => { output += text; },
-        }, collector);
+        handleAgentEvent(
+          event,
+          {
+            onOutput,
+            onToolCall,
+            onThinking,
+            onText: (text) => {
+              output += text;
+            },
+          },
+          collector,
+        );
       }
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
@@ -257,7 +254,7 @@ function handleAgentEvent(
     onText?: (text: string) => void;
     onTokens?: (tokens: number) => void;
   },
-  collector?: EventCollector
+  collector?: EventCollector,
 ): void {
   const { onOutput, onToolCall, onThinking, onText, onTokens } = handlers;
 
@@ -288,11 +285,13 @@ function handleAgentEvent(
         collector?.steps.push({
           type: 'act',
           content: event.toolCall.name,
-          toolCalls: [{
-            id: event.toolCall.id,
-            name: event.toolCall.name,
-            arguments: event.toolCall.arguments,
-          }],
+          toolCalls: [
+            {
+              id: event.toolCall.id,
+              name: event.toolCall.name,
+              arguments: event.toolCall.arguments,
+            },
+          ],
         });
       }
       break;
@@ -350,17 +349,9 @@ export interface AgentRunnerWithContextOptions extends AgentRunnerOptions {
  * Used by interactive mode to reuse resources across prompts
  */
 export async function runAgentWithContext(
-  options: AgentRunnerWithContextOptions
+  options: AgentRunnerWithContextOptions,
 ): Promise<CLIResult> {
-  const {
-    config,
-    runOptions,
-    session,
-    inputProcessor,
-    onOutput,
-    onToolCall,
-    onThinking,
-  } = options;
+  const { config, runOptions, session, inputProcessor, onOutput, onToolCall, onThinking } = options;
   const startTime = Date.now();
 
   if (!session) {
@@ -379,7 +370,7 @@ export async function runAgentWithContext(
       }
       if (processedInput.errors.length > 0) {
         const errorMessages = processedInput.errors
-          .map(e => `- ${e.reference}: ${e.error}`)
+          .map((e) => `- ${e.reference}: ${e.error}`)
           .join('\n');
         finalPrompt += `\n\n## File Loading Errors\n\n${errorMessages}`;
       }
@@ -392,12 +383,18 @@ export async function runAgentWithContext(
     for await (const event of session.execute(finalPrompt, {
       workspaceRoot: config.workDir,
     })) {
-      handleAgentEvent(event, {
-        onOutput,
-        onToolCall,
-        onThinking,
-        onText: (text) => { output += text; },
-      }, collector);
+      handleAgentEvent(
+        event,
+        {
+          onOutput,
+          onToolCall,
+          onThinking,
+          onText: (text) => {
+            output += text;
+          },
+        },
+        collector,
+      );
     }
 
     const result: AgentResult = {
@@ -450,7 +447,7 @@ interface InteractiveSessionState {
 async function initializeInteractiveSession(
   config: CLIConfig,
   rl: import('node:readline').Interface,
-  service?: IService
+  service?: IService,
 ): Promise<InteractiveSessionState> {
   // Track tools the user has approved with "always"
   const alwaysAllowedTools = new Set<string>();
@@ -527,7 +524,9 @@ async function initializeInteractiveSession(
       // Prompt user via shared readline (no stdin contention)
       // Two-tier display: collapsed summary + full args in verbose mode
       process.stdout.write('\n');
-      console.log(formatToolCall(request.toolCall.name, request.toolCall.arguments, 'pending', true));
+      console.log(
+        formatToolCall(request.toolCall.name, request.toolCall.arguments, 'pending', true),
+      );
 
       const answer = await askToolConfirmation('Approve? (y)es / (n)o / (a)lways: ');
       if (answer === 'a' || answer === 'always') {
@@ -576,7 +575,7 @@ async function initializeInteractiveSession(
 export async function runInteractive(
   config: CLIConfig,
   service?: IService,
-  _hooks?: Partial<ExecutorHooks>
+  _hooks?: Partial<ExecutorHooks>,
 ): Promise<void> {
   const readline = await import('node:readline');
 
@@ -682,7 +681,11 @@ export async function runInteractive(
 
           if (trimmed === '/compact') {
             const result = await state!.session.compressContext();
-            console.log(theme.info(`Context compressed: ${result.originalTokens} -> ${result.compressedTokens} tokens (${(result.ratio * 100).toFixed(1)}%)`));
+            console.log(
+              theme.info(
+                `Context compressed: ${result.originalTokens} -> ${result.compressedTokens} tokens (${(result.ratio * 100).toFixed(1)}%)`,
+              ),
+            );
             prompt();
             return;
           }
@@ -712,9 +715,7 @@ export async function runInteractive(
         }
 
         // Run agent for non-slash commands or /run commands
-        const agentPrompt = trimmed.startsWith('/run ')
-          ? trimmed.slice(5).trim()
-          : trimmed;
+        const agentPrompt = trimmed.startsWith('/run ') ? trimmed.slice(5).trim() : trimmed;
 
         if (!agentPrompt) {
           prompt();
@@ -733,9 +734,11 @@ export async function runInteractive(
         // Report any file loading errors
         if (processedInput.errors.length > 0) {
           const errorMessages = processedInput.errors
-            .map(e => `- ${e.reference}: ${e.error}`)
+            .map((e) => `- ${e.reference}: ${e.error}`)
             .join('\n');
-          console.log(theme.warning(`\n[Warning] Some files could not be loaded:\n${errorMessages}\n`));
+          console.log(
+            theme.warning(`\n[Warning] Some files could not be loaded:\n${errorMessages}\n`),
+          );
         }
 
         // Execute via session
@@ -755,7 +758,9 @@ export async function runInteractive(
           }
           console.log('\n');
         } catch (error) {
-          console.error(theme.error(`Error: ${error instanceof Error ? error.message : String(error)}`));
+          console.error(
+            theme.error(`Error: ${error instanceof Error ? error.message : String(error)}`),
+          );
         }
 
         prompt();

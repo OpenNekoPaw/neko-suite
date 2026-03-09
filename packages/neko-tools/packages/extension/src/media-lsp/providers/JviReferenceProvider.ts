@@ -11,41 +11,35 @@ import { findSrcNodeAtOffset } from '../services/JviParser';
 import type { MediaWorkspaceIndex } from '../services/MediaWorkspaceIndex';
 
 export class JviReferenceProvider implements vscode.ReferenceProvider {
-	constructor(private readonly workspaceIndex: MediaWorkspaceIndex) {}
+  constructor(private readonly workspaceIndex: MediaWorkspaceIndex) {}
 
-	provideReferences(
-		document: vscode.TextDocument,
-		position: vscode.Position,
-		_context: vscode.ReferenceContext,
-		_token: vscode.CancellationToken,
-	): vscode.Location[] | null {
-		const text = document.getText();
-		const offset = document.offsetAt(position);
+  provideReferences(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    _context: vscode.ReferenceContext,
+    _token: vscode.CancellationToken,
+  ): vscode.Location[] | null {
+    const text = document.getText();
+    const offset = document.offsetAt(position);
 
-		const srcNode = findSrcNodeAtOffset(text, offset);
-		if (!srcNode) return null;
+    const srcNode = findSrcNodeAtOffset(text, offset);
+    if (!srcNode) return null;
 
-		const jviDir = path.dirname(document.uri.fsPath);
-		const absolutePath = path.resolve(jviDir, srcNode.value);
+    const jviDir = path.dirname(document.uri.fsPath);
+    const absolutePath = path.resolve(jviDir, srcNode.value);
 
-		const references = this.workspaceIndex.findMediaReferences(absolutePath);
-		if (references.length === 0) return null;
+    const references = this.workspaceIndex.findMediaReferences(absolutePath);
+    if (references.length === 0) return null;
 
-		return references.map(
-			(ref) =>
-				new vscode.Location(
-					vscode.Uri.parse(ref.jviUri),
-					new vscode.Range(
-						new vscode.Position(
-							ref.srcRange.startLine,
-							ref.srcRange.startChar,
-						),
-						new vscode.Position(
-							ref.srcRange.endLine,
-							ref.srcRange.endChar,
-						),
-					),
-				),
-		);
-	}
+    return references.map(
+      (ref) =>
+        new vscode.Location(
+          vscode.Uri.parse(ref.jviUri),
+          new vscode.Range(
+            new vscode.Position(ref.srcRange.startLine, ref.srcRange.startChar),
+            new vscode.Position(ref.srcRange.endLine, ref.srcRange.endChar),
+          ),
+        ),
+    );
+  }
 }

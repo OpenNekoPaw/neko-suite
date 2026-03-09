@@ -8,12 +8,7 @@
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import {
-  H264StreamClient,
-  AudioStreamClient,
-  FrameScheduler,
-  formatTime,
-} from '@neko/neko-client';
+import { H264StreamClient, AudioStreamClient, FrameScheduler, formatTime } from '@neko/neko-client';
 import { getLogger } from '../../utils/logger';
 
 const logger = getLogger('InlineMediaPlayer');
@@ -66,9 +61,15 @@ export function InlineMediaPlayer({
 
   const renderFrame = useCallback((frame: VideoFrame) => {
     const canvas = canvasRef.current;
-    if (!canvas) { frame.close(); return; }
+    if (!canvas) {
+      frame.close();
+      return;
+    }
     const ctx = canvas.getContext('2d');
-    if (!ctx) { frame.close(); return; }
+    if (!ctx) {
+      frame.close();
+      return;
+    }
     if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
       canvas.width = frame.displayWidth;
       canvas.height = frame.displayHeight;
@@ -77,14 +78,17 @@ export function InlineMediaPlayer({
     frame.close();
   }, []);
 
-  const onFrame = useCallback((frame: VideoFrame) => {
-    const scheduler = schedulerRef.current;
-    if (scheduler) {
-      scheduler.enqueue(frame);
-    } else {
-      renderFrame(frame);
-    }
-  }, [renderFrame]);
+  const onFrame = useCallback(
+    (frame: VideoFrame) => {
+      const scheduler = schedulerRef.current;
+      if (scheduler) {
+        scheduler.enqueue(frame);
+      } else {
+        renderFrame(frame);
+      }
+    },
+    [renderFrame],
+  );
 
   // =========================================================================
   // Playback loop
@@ -180,7 +184,10 @@ export function InlineMediaPlayer({
       schedulerRef.current?.dispose();
       clientRef.current?.dispose();
       const ac = audioClientRef.current;
-      if (ac) { ac.setVolume(0); ac.dispose(); }
+      if (ac) {
+        ac.setVolume(0);
+        ac.dispose();
+      }
       schedulerRef.current = null;
       clientRef.current = null;
       audioClientRef.current = null;
@@ -193,7 +200,9 @@ export function InlineMediaPlayer({
 
   const currentTimeRef = useRef(startTime);
   // Keep ref in sync with state
-  useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
 
   const handleStop = useCallback(() => {
     setIsPlaying(false);
@@ -201,22 +210,31 @@ export function InlineMediaPlayer({
     clientRef.current?.dispose();
     clientRef.current = null;
     const ac = audioClientRef.current;
-    if (ac) { ac.setVolume(0); ac.dispose(); }
+    if (ac) {
+      ac.setVolume(0);
+      ac.dispose();
+    }
     audioClientRef.current = null;
     onStop(currentTimeRef.current);
   }, [onStop]);
 
-  const handleToggleMute = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    const newMuted = !isMuted;
-    setIsMuted(newMuted);
-    audioClientRef.current?.setVolume(newMuted ? 0 : 0.8);
-  }, [isMuted]);
+  const handleToggleMute = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const newMuted = !isMuted;
+      setIsMuted(newMuted);
+      audioClientRef.current?.setVolume(newMuted ? 0 : 0.8);
+    },
+    [isMuted],
+  );
 
-  const handleStopClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    handleStop();
-  }, [handleStop]);
+  const handleStopClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      handleStop();
+    },
+    [handleStop],
+  );
 
   // =========================================================================
   // Render
@@ -243,9 +261,7 @@ export function InlineMediaPlayer({
       {/* Minimal controls overlay */}
       <div className="absolute bottom-1 left-1 right-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {/* Time */}
-        <span className="text-[10px] text-white/80 tabular-nums">
-          {formatTime(currentTime)}
-        </span>
+        <span className="text-[10px] text-white/80 tabular-nums">{formatTime(currentTime)}</span>
         <div className="flex-1" />
         {/* Mute toggle */}
         {audioStreamUrl && (

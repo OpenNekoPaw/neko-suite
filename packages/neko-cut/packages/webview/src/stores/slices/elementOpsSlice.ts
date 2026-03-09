@@ -17,7 +17,14 @@
  */
 
 import { StateCreator } from 'zustand';
-import type { ProjectData, TimelineElement, TrackType, TimelineTrack, MediaElement, AudioElement } from '../../types';
+import type {
+  ProjectData,
+  TimelineElement,
+  TrackType,
+  TimelineTrack,
+  MediaElement,
+  AudioElement,
+} from '../../types';
 import type { EditOperation } from '@neko/shared';
 import { generateId } from '../../utils';
 import { getMediaProxy } from '../../services/mediaProxyFactory';
@@ -106,15 +113,16 @@ function collectRippleAffected(
   elements: TimelineElement[],
   elementId: string,
 ): Array<{ elementId: string; startTime: number }> {
-  const elementToRemove = elements.find(e => e.id === elementId);
+  const elementToRemove = elements.find((e) => e.id === elementId);
   if (!elementToRemove) return [];
 
-  const removedDuration = elementToRemove.duration - elementToRemove.trimStart - elementToRemove.trimEnd;
+  const removedDuration =
+    elementToRemove.duration - elementToRemove.trimStart - elementToRemove.trimEnd;
   const removedEnd = elementToRemove.startTime + removedDuration;
 
   return elements
-    .filter(e => e.id !== elementId && e.startTime >= removedEnd)
-    .map(e => ({ elementId: e.id, startTime: e.startTime }));
+    .filter((e) => e.id !== elementId && e.startTime >= removedEnd)
+    .map((e) => ({ elementId: e.id, startTime: e.startTime }));
 }
 
 // =============================================================================
@@ -138,14 +146,20 @@ export interface ElementOpsSlice {
   /** 添加元素到轨道 */
   addElement: (trackId: string, element: Omit<TimelineElement, 'id'>) => string;
   /** 添加媒体元素（自动创建轨道） */
-  addMediaElement: (trackId: string | null, src: string, name: string, duration: number, startTime?: number) => string;
+  addMediaElement: (
+    trackId: string | null,
+    src: string,
+    name: string,
+    duration: number,
+    startTime?: number,
+  ) => string;
   /** 添加媒体元素并自动检测音频（视频文件专用） */
   addMediaElementWithAudio: (
     trackId: string | null,
     src: string,
     name: string,
     duration: number,
-    startTime?: number
+    startTime?: number,
   ) => Promise<AddMediaWithAudioResult>;
   /** 删除元素（支持涟纹编辑） */
   removeElement: (trackId: string, elementId: string) => void;
@@ -274,7 +288,7 @@ export const createElementOpsSlice: StateCreator<
       const mediaTrack = project.tracks.find((t) => t.type === 'media');
       if (mediaTrack) {
         videoTrackId = mediaTrack.id;
-        videoTrackIndex = project.tracks.findIndex(t => t.id === mediaTrack.id);
+        videoTrackIndex = project.tracks.findIndex((t) => t.id === mediaTrack.id);
       } else {
         videoTrackId = generateId();
         const newTrack: TimelineTrack = {
@@ -295,7 +309,7 @@ export const createElementOpsSlice: StateCreator<
         videoTrackIndex = project.tracks.length;
       }
     } else {
-      videoTrackIndex = project.tracks.findIndex(t => t.id === videoTrackId);
+      videoTrackIndex = project.tracks.findIndex((t) => t.id === videoTrackId);
     }
 
     // 2. Create video element
@@ -343,14 +357,14 @@ export const createElementOpsSlice: StateCreator<
         // Find or prepare audio track
         let audioTrackId: string | null = null;
         let audioTrack: TimelineTrack | undefined;
-        let currentVideoTrackIndex = currentProject.tracks.findIndex(t => t.id === videoTrackId);
+        let currentVideoTrackIndex = currentProject.tracks.findIndex((t) => t.id === videoTrackId);
         if (currentVideoTrackIndex === -1) currentVideoTrackIndex = videoTrackIndex;
 
         // Look for existing audio track below video track
         for (let i = currentVideoTrackIndex + 1; i < currentProject.tracks.length; i++) {
           const candidateTrack = currentProject.tracks[i];
           if (candidateTrack?.type === 'audio') {
-            const hasConflict = candidateTrack.elements.some(e => {
+            const hasConflict = candidateTrack.elements.some((e) => {
               const eStart = e.startTime;
               const eEnd = e.startTime + e.duration - e.trimStart - e.trimEnd;
               const newStart = startTime;
@@ -431,7 +445,8 @@ export const createElementOpsSlice: StateCreator<
         logger.info(`Detected ${subtitleTracks.length} subtitle tracks`);
 
         for (const extractedTrack of subtitleTracks) {
-          const trackName = extractedTrack.title || `Subtitle ${extractedTrack.language || 'Unknown'}`;
+          const trackName =
+            extractedTrack.title || `Subtitle ${extractedTrack.language || 'Unknown'}`;
 
           // Build batch: track.add + all element.add
           const batchOps: EditOperation[] = [];
@@ -509,10 +524,10 @@ export const createElementOpsSlice: StateCreator<
     const { project, rippleEditingEnabled, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
+    const track = project.tracks.find((t) => t.id === trackId);
     if (!track) return;
 
-    const elementIndex = track.elements.findIndex(e => e.id === elementId);
+    const elementIndex = track.elements.findIndex((e) => e.id === elementId);
     if (elementIndex === -1) return;
     const element = track.elements[elementIndex]!;
 
@@ -541,8 +556,8 @@ export const createElementOpsSlice: StateCreator<
 
     // Validate duration vs trim
     if (updates.duration !== undefined) {
-      const track = project.tracks.find(t => t.id === trackId);
-      const element = track?.elements.find(e => e.id === elementId);
+      const track = project.tracks.find((t) => t.id === trackId);
+      const element = track?.elements.find((e) => e.id === elementId);
       if (element) {
         const newDuration = updates.duration;
         const minEffectiveDuration = 0.1;
@@ -565,10 +580,10 @@ export const createElementOpsSlice: StateCreator<
             ? {
                 ...t,
                 elements: t.elements.map((e) =>
-                  e.id === elementId ? ({ ...e, ...updates } as TimelineElement) : e
+                  e.id === elementId ? ({ ...e, ...updates } as TimelineElement) : e,
                 ),
               }
-            : t
+            : t,
         ),
       },
     });
@@ -596,8 +611,8 @@ export const createElementOpsSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId);
     if (!element) return;
 
     dispatch({
@@ -612,8 +627,8 @@ export const createElementOpsSlice: StateCreator<
     const { project, dispatch } = get();
     if (!project) return;
 
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId);
     if (!element) return;
 
     dispatch({
@@ -631,7 +646,7 @@ export const createElementOpsSlice: StateCreator<
     }
 
     // 1. Find video element
-    const trackIndex = project.tracks.findIndex(t => t.id === trackId);
+    const trackIndex = project.tracks.findIndex((t) => t.id === trackId);
     if (trackIndex === -1) {
       return { success: false, error: 'Invalid track' };
     }
@@ -641,7 +656,7 @@ export const createElementOpsSlice: StateCreator<
       return { success: false, error: 'Track is not a media track' };
     }
 
-    const element = track.elements.find(e => e.id === elementId);
+    const element = track.elements.find((e) => e.id === elementId);
     if (!element || element.type !== 'media') {
       return { success: false, error: 'Invalid element' };
     }
@@ -675,7 +690,7 @@ export const createElementOpsSlice: StateCreator<
     let audioTrack: TimelineTrack | undefined;
     let createdNewTrack = false;
 
-    const currentTrackIndex = currentProject.tracks.findIndex(t => t.id === trackId);
+    const currentTrackIndex = currentProject.tracks.findIndex((t) => t.id === trackId);
     for (let i = currentTrackIndex + 1; i < currentProject.tracks.length; i++) {
       const candidateTrack = currentProject.tracks[i];
       if (candidateTrack?.type === 'audio' && candidateTrack.elements.length === 0) {
@@ -748,8 +763,8 @@ export const createElementOpsSlice: StateCreator<
     if (!project) return;
 
     // Find video element
-    const track = project.tracks.find(t => t.id === trackId);
-    const element = track?.elements.find(e => e.id === elementId);
+    const track = project.tracks.find((t) => t.id === trackId);
+    const element = track?.elements.find((e) => e.id === elementId);
     if (!element || element.type !== 'media') return;
 
     const mediaElement = element as LinkedMediaElement;
@@ -767,7 +782,7 @@ export const createElementOpsSlice: StateCreator<
 
     for (const t of project.tracks) {
       if (t.type === 'audio') {
-        const found = t.elements.find(e => e.id === linkedAudioId);
+        const found = t.elements.find((e) => e.id === linkedAudioId);
         if (found) {
           audioTrackId = t.id;
           audioElement = found;

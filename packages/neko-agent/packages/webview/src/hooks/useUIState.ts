@@ -45,13 +45,13 @@ const DEFAULT_UI_STATE: UIState = {
  */
 export function useUIState(initialState?: Partial<UIState>): UseUIStateReturn {
   const [activeTab, setActiveTab] = useState<TabType>(
-    initialState?.activeTab ?? DEFAULT_UI_STATE.activeTab
+    initialState?.activeTab ?? DEFAULT_UI_STATE.activeTab,
   );
   const [inputValue, setInputValue] = useState(
-    initialState?.inputValue ?? DEFAULT_UI_STATE.inputValue
+    initialState?.inputValue ?? DEFAULT_UI_STATE.inputValue,
   );
   const [selectedModel, setSelectedModel] = useState(
-    initialState?.selectedModel ?? DEFAULT_UI_STATE.selectedModel
+    initialState?.selectedModel ?? DEFAULT_UI_STATE.selectedModel,
   );
 
   const clearInput = useCallback(() => {

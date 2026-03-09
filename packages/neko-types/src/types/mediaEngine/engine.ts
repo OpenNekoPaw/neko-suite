@@ -21,21 +21,21 @@ import type { MediaEngineMode, MediaEngineState } from './mode';
  * Event emitter interface (compatible with both VSCode and DOM events)
  */
 export interface Event<T> {
-	(listener: (data: T) => void): { dispose: () => void };
+  (listener: (data: T) => void): { dispose: () => void };
 }
 
 /**
  * Media engine error
  */
 export interface MediaEngineError {
-	/** Error code */
-	code: string;
-	/** Error message */
-	message: string;
-	/** Original error (if any) */
-	cause?: Error;
-	/** Whether the error is recoverable */
-	recoverable: boolean;
+  /** Error code */
+  code: string;
+  /** Error message */
+  message: string;
+  /** Original error (if any) */
+  cause?: Error;
+  /** Whether the error is recoverable */
+  recoverable: boolean;
 }
 
 // =============================================================================
@@ -46,16 +46,16 @@ export interface MediaEngineError {
  * Media engine initialization options
  */
 export interface MediaEngineInitOptions {
-	/** Preferred mode (default: auto-detect) */
-	preferredMode?: MediaEngineMode;
-	/** Whether to allow fallback to other mode on failure */
-	allowFallback?: boolean;
-	/** Hardware acceleration preference */
-	hardwareAcceleration?: 'prefer' | 'require' | 'disable';
-	/** GPU device preference (for multi-GPU systems) */
-	gpuDeviceIndex?: number;
-	/** Maximum memory usage in bytes (for buffer pools) */
-	maxMemoryUsage?: number;
+  /** Preferred mode (default: auto-detect) */
+  preferredMode?: MediaEngineMode;
+  /** Whether to allow fallback to other mode on failure */
+  allowFallback?: boolean;
+  /** Hardware acceleration preference */
+  hardwareAcceleration?: 'prefer' | 'require' | 'disable';
+  /** GPU device preference (for multi-GPU systems) */
+  gpuDeviceIndex?: number;
+  /** Maximum memory usage in bytes (for buffer pools) */
+  maxMemoryUsage?: number;
 }
 
 // =============================================================================
@@ -74,115 +74,115 @@ export interface MediaEngineInitOptions {
  * - NativeMediaEngine: Compatible mode (Extension Host, Native FFmpeg + wgpu)
  */
 export interface IMediaEngine {
-	// =========================================================================
-	// Properties
-	// =========================================================================
+  // =========================================================================
+  // Properties
+  // =========================================================================
 
-	/** Engine name (e.g., 'WebMediaEngine', 'NativeMediaEngine') */
-	readonly name: string;
+  /** Engine name (e.g., 'WebMediaEngine', 'NativeMediaEngine') */
+  readonly name: string;
 
-	/** Current runtime mode */
-	readonly mode: MediaEngineMode;
+  /** Current runtime mode */
+  readonly mode: MediaEngineMode;
 
-	/** Current engine state */
-	readonly state: MediaEngineState;
+  /** Current engine state */
+  readonly state: MediaEngineState;
 
-	/** Engine capabilities */
-	readonly capabilities: MediaEngineCapabilities;
+  /** Engine capabilities */
+  readonly capabilities: MediaEngineCapabilities;
 
-	/** Whether the engine is ready for use */
-	readonly isReady: boolean;
+  /** Whether the engine is ready for use */
+  readonly isReady: boolean;
 
-	// =========================================================================
-	// Lifecycle
-	// =========================================================================
+  // =========================================================================
+  // Lifecycle
+  // =========================================================================
 
-	/**
-	 * Initialize the media engine
-	 * @param options Initialization options
-	 */
-	initialize(options?: MediaEngineInitOptions): Promise<void>;
+  /**
+   * Initialize the media engine
+   * @param options Initialization options
+   */
+  initialize(options?: MediaEngineInitOptions): Promise<void>;
 
-	/**
-	 * Dispose the engine and release all resources
-	 */
-	dispose(): Promise<void>;
+  /**
+   * Dispose the engine and release all resources
+   */
+  dispose(): Promise<void>;
 
-	// =========================================================================
-	// Decoder Factory
-	// =========================================================================
+  // =========================================================================
+  // Decoder Factory
+  // =========================================================================
 
-	/**
-	 * Create a video decoder
-	 * @param config Decoder configuration
-	 */
-	createVideoDecoder(config: VideoDecoderConfig): Promise<IDecoder>;
+  /**
+   * Create a video decoder
+   * @param config Decoder configuration
+   */
+  createVideoDecoder(config: VideoDecoderConfig): Promise<IDecoder>;
 
-	/**
-	 * Create an audio decoder
-	 * @param config Decoder configuration
-	 */
-	createAudioDecoder(config: AudioDecoderConfig): Promise<IDecoder>;
+  /**
+   * Create an audio decoder
+   * @param config Decoder configuration
+   */
+  createAudioDecoder(config: AudioDecoderConfig): Promise<IDecoder>;
 
-	/**
-	 * Check if a codec can be decoded
-	 * @param codec Codec identifier (e.g., 'h264', 'aac')
-	 * @param container Optional container format
-	 */
-	canDecode(codec: string, container?: string): boolean;
+  /**
+   * Check if a codec can be decoded
+   * @param codec Codec identifier (e.g., 'h264', 'aac')
+   * @param container Optional container format
+   */
+  canDecode(codec: string, container?: string): boolean;
 
-	// =========================================================================
-	// Encoder Factory
-	// =========================================================================
+  // =========================================================================
+  // Encoder Factory
+  // =========================================================================
 
-	/**
-	 * Create an encoder
-	 * @param config Encoder configuration
-	 */
-	createEncoder(config: EncoderConfig): Promise<IEncoder>;
+  /**
+   * Create an encoder
+   * @param config Encoder configuration
+   */
+  createEncoder(config: EncoderConfig): Promise<IEncoder>;
 
-	/**
-	 * Check if a codec can be encoded
-	 * @param codec Codec identifier
-	 * @param container Optional container format
-	 */
-	canEncode(codec: string, container?: string): boolean;
+  /**
+   * Check if a codec can be encoded
+   * @param codec Codec identifier
+   * @param container Optional container format
+   */
+  canEncode(codec: string, container?: string): boolean;
 
-	// =========================================================================
-	// Effect Processor
-	// =========================================================================
+  // =========================================================================
+  // Effect Processor
+  // =========================================================================
 
-	/**
-	 * Get the effect processor instance
-	 * (lazily initialized on first call)
-	 */
-	getEffectProcessor(): Promise<IEffectProcessor>;
+  /**
+   * Get the effect processor instance
+   * (lazily initialized on first call)
+   */
+  getEffectProcessor(): Promise<IEffectProcessor>;
 
-	// =========================================================================
-	// Utility Methods
-	// =========================================================================
+  // =========================================================================
+  // Utility Methods
+  // =========================================================================
 
-	/**
-	 * Probe media file information
-	 * @param source File path or URL
-	 */
-	probeMedia(source: string): Promise<MediaInfo>;
+  /**
+   * Probe media file information
+   * @param source File path or URL
+   */
+  probeMedia(source: string): Promise<MediaInfo>;
 
-	/**
-	 * Check if a media file can be processed by this engine
-	 * @param mediaInfo Media information
-	 */
-	canProcess(mediaInfo: MediaInfo): boolean;
+  /**
+   * Check if a media file can be processed by this engine
+   * @param mediaInfo Media information
+   */
+  canProcess(mediaInfo: MediaInfo): boolean;
 
-	// =========================================================================
-	// Events
-	// =========================================================================
+  // =========================================================================
+  // Events
+  // =========================================================================
 
-	/** State change event */
-	onStateChange: Event<MediaEngineState>;
+  /** State change event */
+  onStateChange: Event<MediaEngineState>;
 
-	/** Error event */
-	onError: Event<MediaEngineError>;
+  /** Error event */
+  onError: Event<MediaEngineError>;
 }
 
 // =============================================================================
@@ -202,16 +202,16 @@ export type MediaEngineFactory = (options?: MediaEngineInitOptions) => Promise<I
  * Check if an object implements IMediaEngine
  */
 export function isMediaEngine(obj: unknown): obj is IMediaEngine {
-	if (!obj || typeof obj !== 'object') return false;
-	const engine = obj as IMediaEngine;
-	return (
-		typeof engine.name === 'string' &&
-		typeof engine.mode === 'string' &&
-		typeof engine.state === 'string' &&
-		typeof engine.initialize === 'function' &&
-		typeof engine.dispose === 'function' &&
-		typeof engine.createVideoDecoder === 'function' &&
-		typeof engine.createAudioDecoder === 'function' &&
-		typeof engine.createEncoder === 'function'
-	);
+  if (!obj || typeof obj !== 'object') return false;
+  const engine = obj as IMediaEngine;
+  return (
+    typeof engine.name === 'string' &&
+    typeof engine.mode === 'string' &&
+    typeof engine.state === 'string' &&
+    typeof engine.initialize === 'function' &&
+    typeof engine.dispose === 'function' &&
+    typeof engine.createVideoDecoder === 'function' &&
+    typeof engine.createAudioDecoder === 'function' &&
+    typeof engine.createEncoder === 'function'
+  );
 }

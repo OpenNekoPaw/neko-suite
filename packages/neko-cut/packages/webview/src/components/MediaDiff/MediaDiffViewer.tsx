@@ -21,11 +21,7 @@ interface DiffHeaderProps {
   mediaType?: MediaType;
 }
 
-const DiffHeader = memo(function DiffHeader({
-  filePath,
-  gitRef,
-  mediaType,
-}: DiffHeaderProps) {
+const DiffHeader = memo(function DiffHeader({ filePath, gitRef, mediaType }: DiffHeaderProps) {
   const getMediaTypeIcon = () => {
     switch (mediaType) {
       case 'image':

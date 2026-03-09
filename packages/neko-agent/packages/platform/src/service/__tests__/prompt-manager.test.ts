@@ -63,9 +63,7 @@ describe('PromptManager', () => {
         description: 'Test prompt',
         category: 'custom',
         template: 'Hello {{name}}!',
-        variables: [
-          { name: 'name', description: 'Name', type: 'string', required: true },
-        ],
+        variables: [{ name: 'name', description: 'Name', type: 'string', required: true }],
         version: '1.0.0',
       };
 
@@ -122,7 +120,13 @@ describe('PromptManager', () => {
         category: 'custom',
         template: 'Value: {{value}}',
         variables: [
-          { name: 'value', description: 'Value', type: 'string', required: false, default: 'default' },
+          {
+            name: 'value',
+            description: 'Value',
+            type: 'string',
+            required: false,
+            default: 'default',
+          },
         ],
         version: '1.0.0',
       };
@@ -140,9 +144,7 @@ describe('PromptManager', () => {
         description: 'Test required vars',
         category: 'custom',
         template: 'Name: {{name}}',
-        variables: [
-          { name: 'name', description: 'Name', type: 'string', required: true },
-        ],
+        variables: [{ name: 'name', description: 'Name', type: 'string', required: true }],
         version: '1.0.0',
       };
 
@@ -164,9 +166,7 @@ describe('PromptManager', () => {
         description: 'Test JSON formatting',
         category: 'custom',
         template: 'Data: {{data}}',
-        variables: [
-          { name: 'data', description: 'Data', type: 'object', required: true },
-        ],
+        variables: [{ name: 'data', description: 'Data', type: 'object', required: true }],
         version: '1.0.0',
       };
 

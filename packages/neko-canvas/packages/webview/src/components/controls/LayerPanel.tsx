@@ -73,31 +73,40 @@ export function LayerPanel({
   // 按 zIndex 降序排列（最上层在最前）
   const sortedNodes = [...nodes].sort((a, b) => b.zIndex - a.zIndex);
 
-  const handleDragStart = useCallback((nodeId: string) => (e: React.DragEvent) => {
-    setDraggedNodeId(nodeId);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', nodeId);
-  }, []);
+  const handleDragStart = useCallback(
+    (nodeId: string) => (e: React.DragEvent) => {
+      setDraggedNodeId(nodeId);
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', nodeId);
+    },
+    [],
+  );
 
-  const handleDragOver = useCallback((_nodeId: string) => (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }, []);
+  const handleDragOver = useCallback(
+    (_nodeId: string) => (e: React.DragEvent) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    },
+    [],
+  );
 
-  const handleDrop = useCallback((targetNodeId: string) => (e: React.DragEvent) => {
-    e.preventDefault();
-    if (!draggedNodeId || draggedNodeId === targetNodeId) {
+  const handleDrop = useCallback(
+    (targetNodeId: string) => (e: React.DragEvent) => {
+      e.preventDefault();
+      if (!draggedNodeId || draggedNodeId === targetNodeId) {
+        setDraggedNodeId(null);
+        return;
+      }
+
+      const targetNode = nodes.find((n) => n.id === targetNodeId);
+      if (targetNode) {
+        onReorderNode(draggedNodeId, targetNode.zIndex);
+      }
+
       setDraggedNodeId(null);
-      return;
-    }
-
-    const targetNode = nodes.find(n => n.id === targetNodeId);
-    if (targetNode) {
-      onReorderNode(draggedNodeId, targetNode.zIndex);
-    }
-
-    setDraggedNodeId(null);
-  }, [draggedNodeId, nodes, onReorderNode]);
+    },
+    [draggedNodeId, nodes, onReorderNode],
+  );
 
   const handleDragEnd = useCallback(() => {
     setDraggedNodeId(null);
@@ -126,7 +135,9 @@ export function LayerPanel({
                 isSelected={selectedNodeIds.includes(node.id)}
                 onSelect={(multi) => onSelectNode(node.id, multi)}
                 onToggleLock={() => onToggleLock(node.id)}
-                onToggleVisibility={onToggleVisibility ? () => onToggleVisibility(node.id) : undefined}
+                onToggleVisibility={
+                  onToggleVisibility ? () => onToggleVisibility(node.id) : undefined
+                }
                 onDelete={onDeleteNode ? () => onDeleteNode(node.id) : undefined}
                 onDragStart={handleDragStart(node.id)}
                 onDragOver={handleDragOver(node.id)}
@@ -143,7 +154,7 @@ export function LayerPanel({
           className="px-2 py-1 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200"
           title="Select All"
           onClick={() => {
-            nodes.forEach(n => onSelectNode(n.id, true));
+            nodes.forEach((n) => onSelectNode(n.id, true));
           }}
         >
           All
@@ -197,8 +208,10 @@ function LayerItem({
       className={clsx(
         'flex items-center gap-2 px-2 py-1.5 mx-1 rounded cursor-pointer',
         'transition-colors duration-100',
-        isSelected ? 'bg-blue-600/30 border border-blue-500/50' : 'hover:bg-gray-800 border border-transparent',
-        node.locked && 'opacity-60'
+        isSelected
+          ? 'bg-blue-600/30 border border-blue-500/50'
+          : 'hover:bg-gray-800 border border-transparent',
+        node.locked && 'opacity-60',
       )}
       onClick={(e) => onSelect(e.shiftKey || e.metaKey)}
       draggable
@@ -207,17 +220,13 @@ function LayerItem({
       onDrop={onDrop}
     >
       {/* 拖拽手柄 */}
-      <div className="text-gray-600 cursor-grab hover:text-gray-400">
-        ⋮⋮
-      </div>
+      <div className="text-gray-600 cursor-grab hover:text-gray-400">⋮⋮</div>
 
       {/* 类型图标 */}
       <span className="text-sm w-5 text-center">{icon}</span>
 
       {/* 节点名称 */}
-      <span className="flex-1 text-sm text-gray-300 truncate">
-        {getNodeName()}
-      </span>
+      <span className="flex-1 text-sm text-gray-300 truncate">{getNodeName()}</span>
 
       {/* 操作按钮 */}
       <div className="flex items-center gap-1">
@@ -225,7 +234,7 @@ function LayerItem({
         <button
           className={clsx(
             'p-1 rounded text-xs transition-colors',
-            node.locked ? 'text-yellow-500' : 'text-gray-500 hover:text-gray-300'
+            node.locked ? 'text-yellow-500' : 'text-gray-500 hover:text-gray-300',
           )}
           onClick={(e) => {
             e.stopPropagation();
@@ -266,9 +275,7 @@ function LayerItem({
       </div>
 
       {/* zIndex 指示器 */}
-      <span className="text-xs text-gray-600 w-6 text-right">
-        {node.zIndex}
-      </span>
+      <span className="text-xs text-gray-600 w-6 text-right">{node.zIndex}</span>
     </div>
   );
 }

@@ -23,75 +23,78 @@ interface SlashCommandHandlers {
 export function useSlashCommands(sessionActions: {
   clearHistory: () => void;
 }): SlashCommandHandlers {
-  const handleCommand = useCallback(async (input: string) => {
-    const config = useConfigStore.getState().config;
+  const handleCommand = useCallback(
+    async (input: string) => {
+      const config = useConfigStore.getState().config;
 
-    // Built-in TUI commands that don't delegate to CLI
-    const cmd = input.split(' ')[0]?.toLowerCase();
+      // Built-in TUI commands that don't delegate to CLI
+      const cmd = input.split(' ')[0]?.toLowerCase();
 
-    switch (cmd) {
-      case '/exit':
-      case '/quit':
-        process.exit(0);
-        return;
+      switch (cmd) {
+        case '/exit':
+        case '/quit':
+          process.exit(0);
+          return;
 
-      case '/clear':
-        sessionActions.clearHistory();
-        useConversationStore.getState().clearMessages();
-        useConversationStore.getState().addUserMessage('[History cleared]');
-        return;
+        case '/clear':
+          sessionActions.clearHistory();
+          useConversationStore.getState().clearMessages();
+          useConversationStore.getState().addUserMessage('[History cleared]');
+          return;
 
-      case '/plan':
-        useAgentStore.getState().setExecutionMode('plan');
-        addSystemMessage('Switched to plan mode');
-        return;
+        case '/plan':
+          useAgentStore.getState().setExecutionMode('plan');
+          addSystemMessage('Switched to plan mode');
+          return;
 
-      case '/auto':
-        useAgentStore.getState().setExecutionMode('auto');
-        addSystemMessage('Switched to auto mode');
-        return;
+        case '/auto':
+          useAgentStore.getState().setExecutionMode('auto');
+          addSystemMessage('Switched to auto mode');
+          return;
 
-      case '/ask':
-        useAgentStore.getState().setExecutionMode('ask');
-        addSystemMessage('Switched to ask mode');
-        return;
+        case '/ask':
+          useAgentStore.getState().setExecutionMode('ask');
+          addSystemMessage('Switched to ask mode');
+          return;
 
-      case '/status': {
-        const status = useAgentStore.getState();
-        const msg = [
-          `Model: ${config.model}`,
-          `Mode: ${status.executionMode}`,
-          `Status: ${status.status}`,
-          `Tokens: ${status.usage.total}`,
-        ].join('\n');
-        addSystemMessage(msg);
-        return;
+        case '/status': {
+          const status = useAgentStore.getState();
+          const msg = [
+            `Model: ${config.model}`,
+            `Mode: ${status.executionMode}`,
+            `Status: ${status.status}`,
+            `Tokens: ${status.usage.total}`,
+          ].join('\n');
+          addSystemMessage(msg);
+          return;
+        }
+
+        default:
+          break;
       }
 
-      default:
-        break;
-    }
+      // Delegate to CLI slash command handler
+      try {
+        const result = await handleTUISlashCommand(input, {
+          config,
+          onConfigUpdate: (updates) => {
+            useConfigStore.getState().setConfig(updates);
+          },
+          onOutput: (text) => {
+            addSystemMessage(text);
+          },
+        });
 
-    // Delegate to CLI slash command handler
-    try {
-      const result = await handleTUISlashCommand(input, {
-        config,
-        onConfigUpdate: (updates) => {
-          useConfigStore.getState().setConfig(updates);
-        },
-        onOutput: (text) => {
-          addSystemMessage(text);
-        },
-      });
-
-      if (!result.handled) {
-        addSystemMessage(`Unknown command: ${input}. Type /help for available commands.`);
+        if (!result.handled) {
+          addSystemMessage(`Unknown command: ${input}. Type /help for available commands.`);
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        addSystemMessage(`Command error: ${msg}`);
       }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      addSystemMessage(`Command error: ${msg}`);
-    }
-  }, [sessionActions]);
+    },
+    [sessionActions],
+  );
 
   const onClear = useCallback(() => {
     sessionActions.clearHistory();

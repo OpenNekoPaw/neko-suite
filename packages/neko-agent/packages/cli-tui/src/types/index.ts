@@ -14,8 +14,4 @@ export type {
   TUIResult,
 } from './state';
 
-export type {
-  InkColor,
-  ColorPair,
-  ThemeTokens,
-} from './theme';
+export type { InkColor, ColorPair, ThemeTokens } from './theme';

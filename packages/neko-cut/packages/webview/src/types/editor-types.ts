@@ -130,7 +130,7 @@ export function toEngineTrack(track: EditorTrack): TimelineTrack {
   }
   // Recursively convert elements
   if (Array.isArray(track.elements)) {
-    base.elements = track.elements.map(el => toEngineElement(el as EditorElement));
+    base.elements = track.elements.map((el) => toEngineElement(el as EditorElement));
   }
   return base as unknown as TimelineTrack;
 }

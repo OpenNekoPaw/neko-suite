@@ -154,7 +154,7 @@ async function getMermaid() {
 function getErrorHints(error: string, code: string): string[] {
   const hints: string[] = [];
 
-  if (error.includes('PS') || error.includes('Expecting') && code.includes('(')) {
+  if (error.includes('PS') || (error.includes('Expecting') && code.includes('('))) {
     hints.push('Parentheses () in text need to be quoted: ["text (with parens)"]');
   }
   if (code.includes('[') && code.includes(']') && (code.includes('(') || code.includes('{'))) {
@@ -280,7 +280,7 @@ function MermaidBlockComponent({ code }: MermaidBlockProps) {
 
 **Error:** ${error}
 
-${hints.length > 0 ? `**Hints:**\n${hints.map(h => `- ${h}`).join('\n')}\n\n` : ''}**Original code:**
+${hints.length > 0 ? `**Hints:**\n${hints.map((h) => `- ${h}`).join('\n')}\n\n` : ''}**Original code:**
 \`\`\`mermaid
 ${code}
 \`\`\`
@@ -301,7 +301,7 @@ Please fix the Mermaid syntax. Common issues:
   }, [error, code, feedbackSent]);
 
   const toggleSource = useCallback(() => {
-    setShowSource(prev => !prev);
+    setShowSource((prev) => !prev);
   }, []);
 
   const errorHints = error ? getErrorHints(error, code) : [];
@@ -314,9 +314,7 @@ Please fix the Mermaid syntax. Common issues:
           <MermaidIcon className="w-3.5 h-3.5" />
           Mermaid
           {error && (
-            <span className="text-[var(--vscode-errorForeground)] normal-case">
-              · Error
-            </span>
+            <span className="text-[var(--vscode-errorForeground)] normal-case">· Error</span>
           )}
         </span>
         <div className="flex items-center gap-1">
@@ -439,10 +437,7 @@ Please fix the Mermaid syntax. Common issues:
             </div>
           </div>
         ) : (
-          <div
-            className="mermaid-diagram p-4"
-            dangerouslySetInnerHTML={{ __html: svg }}
-          />
+          <div className="mermaid-diagram p-4" dangerouslySetInnerHTML={{ __html: svg }} />
         )}
       </div>
     </div>

@@ -27,57 +27,64 @@ function createMockUserConfigManager(): IUserConfigManager {
 
   return {
     load: () => ({ ...config }),
-    save: async (c: UserConfig) => { config = { ...c }; },
+    save: async (c: UserConfig) => {
+      config = { ...c };
+    },
     updateProviderOverride: async (id, override) => {
       config.providerOverrides[id] = { ...config.providerOverrides[id], ...override };
     },
     addProvider: async (p: Provider) => {
-      const i = config.providers.findIndex(x => x.id === p.id);
-      if (i >= 0) config.providers[i] = p; else config.providers.push(p);
+      const i = config.providers.findIndex((x) => x.id === p.id);
+      if (i >= 0) config.providers[i] = p;
+      else config.providers.push(p);
     },
     removeProvider: async (id: string) => {
-      config.providers = config.providers.filter(p => p.id !== id);
+      config.providers = config.providers.filter((p) => p.id !== id);
       delete config.providerOverrides[id];
     },
     addModel: async (m: Model) => {
-      const i = config.models.findIndex(x => x.id === m.id);
-      if (i >= 0) config.models[i] = m; else config.models.push(m);
+      const i = config.models.findIndex((x) => x.id === m.id);
+      if (i >= 0) config.models[i] = m;
+      else config.models.push(m);
     },
     removeModel: async (id: string) => {
-      config.models = config.models.filter(m => m.id !== id);
+      config.models = config.models.filter((m) => m.id !== id);
       delete config.modelOverrides[id];
     },
     updateMCPServerOverride: async (id, override) => {
       config.mcpServerOverrides[id] = { ...config.mcpServerOverrides[id], ...override };
     },
     addMCPServer: async (s: MCPServerPreset) => {
-      const i = config.mcpServers.findIndex(x => x.id === s.id);
-      if (i >= 0) config.mcpServers[i] = s; else config.mcpServers.push(s);
+      const i = config.mcpServers.findIndex((x) => x.id === s.id);
+      if (i >= 0) config.mcpServers[i] = s;
+      else config.mcpServers.push(s);
     },
     removeMCPServer: async (id: string) => {
-      config.mcpServers = config.mcpServers.filter(s => s.id !== id);
+      config.mcpServers = config.mcpServers.filter((s) => s.id !== id);
       delete config.mcpServerOverrides[id];
     },
     updateWorkflowOverride: async (id, override) => {
       config.workflowOverrides[id] = { ...config.workflowOverrides[id], ...override };
     },
     addWorkflow: async (w: WorkflowPreset) => {
-      const i = config.workflows.findIndex(x => x.id === w.id);
-      if (i >= 0) config.workflows[i] = w; else config.workflows.push(w);
+      const i = config.workflows.findIndex((x) => x.id === w.id);
+      if (i >= 0) config.workflows[i] = w;
+      else config.workflows.push(w);
     },
     removeWorkflow: async (id: string) => {
-      config.workflows = config.workflows.filter(w => w.id !== id);
+      config.workflows = config.workflows.filter((w) => w.id !== id);
       delete config.workflowOverrides[id];
     },
     updatePromptOverride: async (id, override) => {
       config.promptOverrides[id] = { ...config.promptOverrides[id], ...override };
     },
     addPrompt: async (p: PromptPreset) => {
-      const i = config.prompts.findIndex(x => x.id === p.id);
-      if (i >= 0) config.prompts[i] = p; else config.prompts.push(p);
+      const i = config.prompts.findIndex((x) => x.id === p.id);
+      if (i >= 0) config.prompts[i] = p;
+      else config.prompts.push(p);
     },
     removePrompt: async (id: string) => {
-      config.prompts = config.prompts.filter(p => p.id !== id);
+      config.prompts = config.prompts.filter((p) => p.id !== id);
       delete config.promptOverrides[id];
     },
     updateTaskDefaults: async (defaults: TaskDefaults | undefined) => {
@@ -85,13 +92,20 @@ function createMockUserConfigManager(): IUserConfigManager {
     },
     clear: async () => {
       config = {
-        providers: [], models: [], mcpServers: [], workflows: [], prompts: [],
-        providerOverrides: {}, modelOverrides: {}, mcpServerOverrides: {},
-        workflowOverrides: {}, promptOverrides: {},
+        providers: [],
+        models: [],
+        mcpServers: [],
+        workflows: [],
+        prompts: [],
+        providerOverrides: {},
+        modelOverrides: {},
+        mcpServerOverrides: {},
+        workflowOverrides: {},
+        promptOverrides: {},
       };
     },
     migrateProviders: async (builtinIds: Set<string>) => {
-      config.providers = config.providers.filter(p => !p.builtin || builtinIds.has(p.id));
+      config.providers = config.providers.filter((p) => !p.builtin || builtinIds.has(p.id));
     },
   };
 }

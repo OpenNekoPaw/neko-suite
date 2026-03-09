@@ -121,11 +121,7 @@ export const ShapeElementContent = memo(function ShapeElementContent({
 /**
  * Shape type icon
  */
-const ShapeTypeIcon = memo(function ShapeTypeIcon({
-  type,
-}: {
-  type: string;
-}) {
+const ShapeTypeIcon = memo(function ShapeTypeIcon({ type }: { type: string }) {
   const iconClass = 'w-2 h-2 text-white/80';
 
   switch (type) {
@@ -155,13 +151,25 @@ const ShapeTypeIcon = memo(function ShapeTypeIcon({
       );
     case 'line':
       return (
-        <svg className={iconClass} viewBox="0 0 10 10" stroke="currentColor" strokeWidth="1.5" fill="none">
+        <svg
+          className={iconClass}
+          viewBox="0 0 10 10"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          fill="none"
+        >
           <line x1="1" y1="9" x2="9" y2="1" />
         </svg>
       );
     case 'bezier':
       return (
-        <svg className={iconClass} viewBox="0 0 10 10" stroke="currentColor" strokeWidth="1.5" fill="none">
+        <svg
+          className={iconClass}
+          viewBox="0 0 10 10"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          fill="none"
+        >
           <path d="M1,8 C3,2 7,2 9,8" />
         </svg>
       );

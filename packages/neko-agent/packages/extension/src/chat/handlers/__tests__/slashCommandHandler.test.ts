@@ -115,7 +115,11 @@ describe('SlashCommandHandler', () => {
       expect(conversations.clearCurrent).toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith({ type: 'historyCleared' });
       expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ command: 'clear', success: true, message: 'Conversation cleared' }),
+        expect.objectContaining({
+          command: 'clear',
+          success: true,
+          message: 'Conversation cleared',
+        }),
       );
     });
 
@@ -169,7 +173,11 @@ describe('SlashCommandHandler', () => {
       expect(sendConversationList).toHaveBeenCalled();
       expect(sendActiveConversation).toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ command: 'new', success: true, message: 'New conversation created' }),
+        expect.objectContaining({
+          command: 'new',
+          success: true,
+          message: 'New conversation created',
+        }),
       );
     });
 
@@ -295,7 +303,10 @@ describe('SlashCommandHandler', () => {
 
   describe('handleCommand - skill commands', () => {
     it('should delegate to skillHandler for unknown builtin commands', () => {
-      skillHandler.handleSlashCommand.mockReturnValue({ applied: true, injection: { name: 'commit' } });
+      skillHandler.handleSlashCommand.mockReturnValue({
+        applied: true,
+        injection: { name: 'commit' },
+      });
 
       handler.handleCommand(webview as any, 'commit', 'fix bug');
 

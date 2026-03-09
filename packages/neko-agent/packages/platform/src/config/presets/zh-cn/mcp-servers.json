@@ -51,9 +51,7 @@
       "enabled": true,
       "builtin": true,
       "homepage": "https://github.com/modelcontextprotocol/servers",
-      "tools": [
-        { "name": "fetch", "description": "抓取 URL 并转换为 Markdown" }
-      ]
+      "tools": [{ "name": "fetch", "description": "抓取 URL 并转换为 Markdown" }]
     },
     {
       "id": "memory",

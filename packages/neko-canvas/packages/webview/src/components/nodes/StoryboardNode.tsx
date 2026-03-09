@@ -19,8 +19,16 @@ export interface StoryboardNodeProps {
   onSelect?: (nodeId: string, multi: boolean) => void;
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
-  onResize?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
-  onResizeEnd?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  onResize?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
+  onResizeEnd?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   onUpdateData?: (nodeId: string, data: Partial<StoryboardCanvasNode['data']>) => void;
 }
@@ -92,7 +100,10 @@ export function StoryboardNode({
             </div>
             {/* Duration badge */}
             {duration && (
-              <div className="text-xs flex-shrink-0" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+              <div
+                className="text-xs flex-shrink-0"
+                style={{ color: 'var(--toolbar-fg-secondary)' }}
+              >
                 {formatDuration(duration)}
               </div>
             )}
@@ -115,8 +126,12 @@ export function StoryboardNode({
         {/* Footer */}
         <div className="px-3 py-1.5 border-t border-[var(--node-border)] bg-black/20">
           <div className="flex items-center justify-between">
-            <span className="text-xs uppercase" style={{ color: 'var(--toolbar-fg-secondary)' }}>{t('node.storyboard')}</span>
-            <span className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>📋</span>
+            <span className="text-xs uppercase" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+              {t('node.storyboard')}
+            </span>
+            <span className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+              📋
+            </span>
           </div>
         </div>
       </div>

@@ -247,4 +247,3 @@ export interface ProviderTemplateInfo {
 
 // Re-export VSCodeAPI from shared (Single Source of Truth)
 export type { VSCodeAPI } from '@neko/shared/vscode';
-

@@ -28,14 +28,14 @@ export interface ClipboardStore {
   copy: (
     selectedNodeIds: string[],
     allNodes: CanvasNode[],
-    allConnections: CanvasConnection[]
+    allConnections: CanvasConnection[],
   ) => void;
 
   /** Cut selected nodes (copy + return IDs to delete) */
   cut: (
     selectedNodeIds: string[],
     allNodes: CanvasNode[],
-    allConnections: CanvasConnection[]
+    allConnections: CanvasConnection[],
   ) => void;
 
   /** Paste clipboard contents at given position offset */
@@ -45,7 +45,7 @@ export interface ClipboardStore {
   duplicate: (
     selectedNodeIds: string[],
     allNodes: CanvasNode[],
-    allConnections: CanvasConnection[]
+    allConnections: CanvasConnection[],
   ) => ClipboardData | null;
 
   /** Clear clipboard */
@@ -67,7 +67,7 @@ function generateId(): string {
 function cloneWithNewIds(
   nodes: CanvasNode[],
   connections: CanvasConnection[],
-  offset: { x: number; y: number } = { x: 0, y: 0 }
+  offset: { x: number; y: number } = { x: 0, y: 0 },
 ): ClipboardData {
   const idMap = new Map<string, string>();
 
@@ -89,9 +89,7 @@ function cloneWithNewIds(
   // Clone connections, only keeping those between selected nodes
   const nodeIdSet = new Set(nodes.map((n) => n.id));
   const clonedConnections = connections
-    .filter(
-      (conn) => nodeIdSet.has(conn.sourceId) && nodeIdSet.has(conn.targetId)
-    )
+    .filter((conn) => nodeIdSet.has(conn.sourceId) && nodeIdSet.has(conn.targetId))
     .map((conn) => ({
       ...structuredClone(conn),
       id: generateId(),
@@ -129,7 +127,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
 
     // Store original nodes/connections (will be cloned on paste)
     const relevantConnections = allConnections.filter(
-      (c) => selectedSet.has(c.sourceId) && selectedSet.has(c.targetId)
+      (c) => selectedSet.has(c.sourceId) && selectedSet.has(c.targetId),
     );
 
     set({
@@ -160,7 +158,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
     if (selectedNodes.length === 0) return null;
 
     const relevantConnections = allConnections.filter(
-      (c) => selectedSet.has(c.sourceId) && selectedSet.has(c.targetId)
+      (c) => selectedSet.has(c.sourceId) && selectedSet.has(c.targetId),
     );
 
     return cloneWithNewIds(selectedNodes, relevantConnections, DUPLICATE_OFFSET);

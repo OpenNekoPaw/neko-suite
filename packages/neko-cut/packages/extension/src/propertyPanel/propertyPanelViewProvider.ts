@@ -80,7 +80,7 @@ export class PropertyPanelViewProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
-    private readonly _context: vscode.ExtensionContext
+    private readonly _context: vscode.ExtensionContext,
   ) {}
 
   /**
@@ -89,7 +89,7 @@ export class PropertyPanelViewProvider implements vscode.WebviewViewProvider {
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
     _context: vscode.WebviewViewResolveContext,
-    _token: vscode.CancellationToken
+    _token: vscode.CancellationToken,
   ): void {
     this._view = webviewView;
 
@@ -116,7 +116,7 @@ export class PropertyPanelViewProvider implements vscode.WebviewViewProvider {
   public updateSelectedElement(
     element: TimelineElement | null,
     trackId: string | null,
-    currentTime: number
+    currentTime: number,
   ): void {
     this._selectedElement = element;
     this._selectedTrackId = trackId;
@@ -246,10 +246,10 @@ export class PropertyPanelViewProvider implements vscode.WebviewViewProvider {
     const locale = vscode.env.language;
 
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'assets', 'propertyPanel.js')
+      vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'assets', 'propertyPanel.js'),
     );
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'assets', 'style.css')
+      vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'assets', 'style.css'),
     );
 
     return `<!DOCTYPE html>

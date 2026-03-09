@@ -53,7 +53,7 @@ export class MediaGenerationService {
     taskManager: IMediaTaskManager,
     providerRegistry: ProviderRegistry,
     routingManager: MediaRoutingManager,
-    options: MediaGenerationServiceOptions = {}
+    options: MediaGenerationServiceOptions = {},
   ) {
     this.taskManager = taskManager;
     this.providerRegistry = providerRegistry;
@@ -93,9 +93,7 @@ export class MediaGenerationService {
    * Generate audio/music
    */
   async generateAudio(request: AudioGenerationRequest): Promise<MediaTask> {
-    const generationType: MediaGenerationType = request.isMusic
-      ? 'text-to-music'
-      : 'text-to-audio';
+    const generationType: MediaGenerationType = request.isMusic ? 'text-to-music' : 'text-to-audio';
 
     return this.submitGeneration(generationType, request);
   }
@@ -106,7 +104,7 @@ export class MediaGenerationService {
   async waitForTask(taskId: string, timeoutMs?: number): Promise<MediaTask> {
     const task = await this.taskManager.waitForCompletion(
       taskId,
-      timeoutMs ?? this.defaultTimeoutMs
+      timeoutMs ?? this.defaultTimeoutMs,
     );
     return this.convertToMediaTask(task);
   }
@@ -161,14 +159,14 @@ export class MediaGenerationService {
    */
   private async submitGeneration(
     generationType: MediaGenerationType,
-    request: ImageGenerationRequest | VideoGenerationRequest | AudioGenerationRequest
+    request: ImageGenerationRequest | VideoGenerationRequest | AudioGenerationRequest,
   ): Promise<MediaTask> {
     // Route to best provider
     const routing = await this.routingManager.selectProvider(
       generationType,
       request.routingPreference,
       request.providerId,
-      request.modelId
+      request.modelId,
     );
 
     if (!routing) {
@@ -180,7 +178,7 @@ export class MediaGenerationService {
       generationType,
       routing.providerId,
       routing.modelId,
-      request
+      request,
     );
 
     // Submit to task manager
@@ -244,7 +242,7 @@ export class MediaGenerationService {
    * Map task status to media task status
    */
   private mapTaskStatus(
-    status: string
+    status: string,
   ): 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' {
     switch (status) {
       case 'pending':

@@ -37,13 +37,26 @@ export interface InfiniteCanvasProps {
   /** Called on mouseup when node drag ends (final position + history) */
   onNodeMove?: (nodeId: string, position: { x: number; y: number }) => void;
   /** Called on every mousemove during node resize */
-  onNodeResize?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  onNodeResize?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
   /** Called on mouseup when node resize ends */
-  onNodeResizeEnd?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void;
+  onNodeResizeEnd?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void;
   onNodeUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
   onConnectionSelect?: (connectionId: string) => void;
   onConnectionStart?: (nodeId: string, anchor: string) => void;
-  onConnectionComplete?: (sourceNodeId: string, sourceAnchor: string, targetNodeId: string, targetAnchor: string) => void;
+  onConnectionComplete?: (
+    sourceNodeId: string,
+    sourceAnchor: string,
+    targetNodeId: string,
+    targetAnchor: string,
+  ) => void;
   onConnectionCancel?: () => void;
   onCanvasClick?: () => void;
   /** 是否启用视口裁剪（默认启用） */
@@ -129,12 +142,18 @@ export function InfiniteCanvas({
   }, []);
 
   // Handle canvas click (deselect)
-  const handleCanvasClick = useCallback((e: React.MouseEvent) => {
-    // Only handle clicks on the canvas itself, not on nodes
-    if (e.target === e.currentTarget || (e.target as HTMLElement).closest('[data-canvas-background]')) {
-      onCanvasClick?.();
-    }
-  }, [onCanvasClick]);
+  const handleCanvasClick = useCallback(
+    (e: React.MouseEvent) => {
+      // Only handle clicks on the canvas itself, not on nodes
+      if (
+        e.target === e.currentTarget ||
+        (e.target as HTMLElement).closest('[data-canvas-background]')
+      ) {
+        onCanvasClick?.();
+      }
+    },
+    [onCanvasClick],
+  );
 
   // Cursor style based on state
   const getCursor = () => {
@@ -157,11 +176,7 @@ export function InfiniteCanvas({
       onMouseLeave={viewportHandlers.onMouseLeave}
     >
       {/* Background grid */}
-      <CanvasGrid
-        viewport={viewport}
-        width={containerSize.width}
-        height={containerSize.height}
-      />
+      <CanvasGrid viewport={viewport} width={containerSize.width} height={containerSize.height} />
 
       {/* Viewport transform layer */}
       <CanvasViewport viewport={viewport}>
@@ -178,16 +193,31 @@ export function InfiniteCanvas({
         {visibleNodes.map((node) => {
           const isSelected = selectedNodeIds.includes(node.id);
 
-          return renderNode(node, viewport, isSelected, onNodeSelect, onNodeDrag, onNodeMove, onNodeResize, onNodeResizeEnd, onNodeUpdateData, startDragConnection);
+          return renderNode(
+            node,
+            viewport,
+            isSelected,
+            onNodeSelect,
+            onNodeDrag,
+            onNodeMove,
+            onNodeResize,
+            onNodeResizeEnd,
+            onNodeUpdateData,
+            startDragConnection,
+          );
         })}
       </CanvasViewport>
 
       {/* Canvas info overlay */}
       <div className="absolute bottom-2 left-2 text-xs text-gray-500 pointer-events-none">
         {enableCulling && culledCount > 0 ? (
-          <span>{visibleNodes.length} visible / {totalCount} total ({culledCount} culled)</span>
+          <span>
+            {visibleNodes.length} visible / {totalCount} total ({culledCount} culled)
+          </span>
         ) : (
-          <span>{nodes.length} nodes | {connections.length} connections</span>
+          <span>
+            {nodes.length} nodes | {connections.length} connections
+          </span>
         )}
       </div>
     </div>
@@ -205,8 +235,16 @@ function renderNode(
   onSelect?: (nodeId: string, multi: boolean) => void,
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void,
   onMove?: (nodeId: string, position: { x: number; y: number }) => void,
-  onResize?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void,
-  onResizeEnd?: (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => void,
+  onResize?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void,
+  onResizeEnd?: (
+    nodeId: string,
+    size: { width: number; height: number },
+    position: { x: number; y: number },
+  ) => void,
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void,
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void,
 ): React.ReactNode {
@@ -224,29 +262,11 @@ function renderNode(
 
   switch (node.type) {
     case 'media':
-      return (
-        <MediaNode
-          key={node.id}
-          node={node as MediaCanvasNode}
-          {...commonProps}
-        />
-      );
+      return <MediaNode key={node.id} node={node as MediaCanvasNode} {...commonProps} />;
     case 'storyboard':
-      return (
-        <StoryboardNode
-          key={node.id}
-          node={node as StoryboardCanvasNode}
-          {...commonProps}
-        />
-      );
+      return <StoryboardNode key={node.id} node={node as StoryboardCanvasNode} {...commonProps} />;
     case 'annotation':
-      return (
-        <AnnotationNode
-          key={node.id}
-          node={node as AnnotationCanvasNode}
-          {...commonProps}
-        />
-      );
+      return <AnnotationNode key={node.id} node={node as AnnotationCanvasNode} {...commonProps} />;
     case 'group':
       // Group node - render as a simple container for now
       return (

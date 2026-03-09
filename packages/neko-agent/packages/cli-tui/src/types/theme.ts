@@ -9,11 +9,23 @@
  * Ink-compatible color names
  */
 export type InkColor =
-  | 'black' | 'red' | 'green' | 'yellow'
-  | 'blue' | 'magenta' | 'cyan' | 'white'
-  | 'gray' | 'grey'
-  | 'redBright' | 'greenBright' | 'yellowBright'
-  | 'blueBright' | 'magentaBright' | 'cyanBright' | 'whiteBright';
+  | 'black'
+  | 'red'
+  | 'green'
+  | 'yellow'
+  | 'blue'
+  | 'magenta'
+  | 'cyan'
+  | 'white'
+  | 'gray'
+  | 'grey'
+  | 'redBright'
+  | 'greenBright'
+  | 'yellowBright'
+  | 'blueBright'
+  | 'magentaBright'
+  | 'cyanBright'
+  | 'whiteBright';
 
 /**
  * Semantic color pair (foreground + optional background)
@@ -53,7 +65,11 @@ export interface ThemeTokens {
   // TUI-specific
   readonly statusBar: ColorPair;
   readonly input: { readonly prompt: InkColor; readonly placeholder: InkColor };
-  readonly approval: { readonly border: InkColor; readonly approve: InkColor; readonly reject: InkColor };
+  readonly approval: {
+    readonly border: InkColor;
+    readonly approve: InkColor;
+    readonly reject: InkColor;
+  };
   readonly code: {
     readonly keyword: InkColor;
     readonly string: InkColor;

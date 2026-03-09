@@ -4,7 +4,11 @@ import { useCanvasStore } from './stores/canvasStore';
 import { useClipboardStore } from './stores/clipboardStore';
 import { useHistoryStore } from './stores/historyStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
-import { ContextMenu, buildCanvasMenuItems, buildNodeMenuItems } from './components/common/ContextMenu';
+import {
+  ContextMenu,
+  buildCanvasMenuItems,
+  buildNodeMenuItems,
+} from './components/common/ContextMenu';
 import type { MenuEntry } from './components/common/ContextMenu';
 import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
 import { PropertyPanel } from './components/panels/PropertyPanel';
@@ -37,9 +41,25 @@ if (vscode) {
 
 // Media type detection by file extension
 const MEDIA_EXTENSIONS: Record<string, 'image' | 'video' | 'audio'> = {
-  png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image', svg: 'image',
-  mp4: 'video', mov: 'video', avi: 'video', mkv: 'video', webm: 'video', m4v: 'video',
-  mp3: 'audio', wav: 'audio', ogg: 'audio', m4a: 'audio', aac: 'audio', flac: 'audio',
+  png: 'image',
+  jpg: 'image',
+  jpeg: 'image',
+  gif: 'image',
+  webp: 'image',
+  bmp: 'image',
+  svg: 'image',
+  mp4: 'video',
+  mov: 'video',
+  avi: 'video',
+  mkv: 'video',
+  webm: 'video',
+  m4v: 'video',
+  mp3: 'audio',
+  wav: 'audio',
+  ogg: 'audio',
+  m4a: 'audio',
+  aac: 'audio',
+  flac: 'audio',
 };
 
 function detectMediaType(fileName: string): 'image' | 'video' | 'audio' | null {
@@ -142,7 +162,11 @@ export function CanvasApp() {
             break;
           case 'addMedia':
             // Extension sends media file info to add to canvas
-            handleAddMediaFromExtension(message.mediaType as string, message.uri as string, message.name as string);
+            handleAddMediaFromExtension(
+              message.mediaType as string,
+              message.uri as string,
+              message.name as string,
+            );
             break;
           case 'dropMedia': {
             // Extension resolved dropped file URIs → add media nodes at drop position
@@ -236,13 +260,19 @@ export function CanvasApp() {
   // Viewport helpers
   // =========================================================================
 
-  const handleViewportChange = useCallback((partial: Partial<CanvasViewport>) => {
-    setViewport(partial);
-  }, [setViewport]);
+  const handleViewportChange = useCallback(
+    (partial: Partial<CanvasViewport>) => {
+      setViewport(partial);
+    },
+    [setViewport],
+  );
 
-  const handleNodeSelect = useCallback((nodeId: string, multi: boolean) => {
-    selectNode(nodeId, multi);
-  }, [selectNode]);
+  const handleNodeSelect = useCallback(
+    (nodeId: string, multi: boolean) => {
+      selectNode(nodeId, multi);
+    },
+    [selectNode],
+  );
 
   const handleCanvasClick = useCallback(() => {
     setContextMenu(null);
@@ -254,42 +284,74 @@ export function CanvasApp() {
   }, [isConnecting, cancelConnection, clearSelection]);
 
   // Real-time position update during drag (no history recording)
-  const handleNodeDrag = useCallback((nodeId: string, position: { x: number; y: number }) => {
-    moveNode(nodeId, position);
-  }, [moveNode]);
+  const handleNodeDrag = useCallback(
+    (nodeId: string, position: { x: number; y: number }) => {
+      moveNode(nodeId, position);
+    },
+    [moveNode],
+  );
 
   // Final position update on drag end (records history for undo)
-  const handleNodeMove = useCallback((nodeId: string, position: { x: number; y: number }) => {
-    moveNodeEnd(nodeId, position);
-  }, [moveNodeEnd]);
+  const handleNodeMove = useCallback(
+    (nodeId: string, position: { x: number; y: number }) => {
+      moveNodeEnd(nodeId, position);
+    },
+    [moveNodeEnd],
+  );
 
   // Real-time resize update during resize (no history recording)
-  const handleNodeResize = useCallback((nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => {
-    resizeNode(nodeId, size, position);
-  }, [resizeNode]);
+  const handleNodeResize = useCallback(
+    (
+      nodeId: string,
+      size: { width: number; height: number },
+      position: { x: number; y: number },
+    ) => {
+      resizeNode(nodeId, size, position);
+    },
+    [resizeNode],
+  );
 
   // Final resize update on resize end (records history for undo)
-  const handleNodeResizeEnd = useCallback((nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) => {
-    resizeNodeEnd(nodeId, size, position);
-  }, [resizeNodeEnd]);
+  const handleNodeResizeEnd = useCallback(
+    (
+      nodeId: string,
+      size: { width: number; height: number },
+      position: { x: number; y: number },
+    ) => {
+      resizeNodeEnd(nodeId, size, position);
+    },
+    [resizeNodeEnd],
+  );
 
-  const handleConnectionSelect = useCallback((connectionId: string) => {
-    selectConnection(connectionId);
-  }, [selectConnection]);
+  const handleConnectionSelect = useCallback(
+    (connectionId: string) => {
+      selectConnection(connectionId);
+    },
+    [selectConnection],
+  );
 
-  const handleNodeUpdateData = useCallback((nodeId: string, data: Record<string, unknown>) => {
-    updateNodeData(nodeId, data);
-  }, [updateNodeData]);
+  const handleNodeUpdateData = useCallback(
+    (nodeId: string, data: Record<string, unknown>) => {
+      updateNodeData(nodeId, data);
+    },
+    [updateNodeData],
+  );
 
-  const handleConnectionStart = useCallback((nodeId: string, anchor: string) => {
-    startConnection(nodeId, anchor);
-  }, [startConnection]);
+  const handleConnectionStart = useCallback(
+    (nodeId: string, anchor: string) => {
+      startConnection(nodeId, anchor);
+    },
+    [startConnection],
+  );
 
-  const handleConnectionComplete = useCallback((sourceNodeId: string, sourceAnchor: string, targetNodeId: string, targetAnchor: string) => {
-    // Start then immediately complete the connection via the store
-    startConnection(sourceNodeId, sourceAnchor);
-    completeConnection(targetNodeId, targetAnchor);
-  }, [startConnection, completeConnection]);
+  const handleConnectionComplete = useCallback(
+    (sourceNodeId: string, sourceAnchor: string, targetNodeId: string, targetAnchor: string) => {
+      // Start then immediately complete the connection via the store
+      startConnection(sourceNodeId, sourceAnchor);
+      completeConnection(targetNodeId, targetAnchor);
+    },
+    [startConnection, completeConnection],
+  );
 
   const handleConnectionCancel = useCallback(() => {
     cancelConnection();
@@ -309,9 +371,12 @@ export function CanvasApp() {
     zoomCanvas(newZoom);
   }, [viewport.zoom, zoomCanvas]);
 
-  const handleZoomTo = useCallback((zoom: number) => {
-    zoomCanvas(zoom);
-  }, [zoomCanvas]);
+  const handleZoomTo = useCallback(
+    (zoom: number) => {
+      zoomCanvas(zoom);
+    },
+    [zoomCanvas],
+  );
 
   const handleFitContent = useCallback(() => {
     if (nodes.length === 0) {
@@ -319,7 +384,10 @@ export function CanvasApp() {
       return;
     }
 
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
     for (const node of nodes) {
       minX = Math.min(minX, node.position.x);
       minY = Math.min(minY, node.position.y);
@@ -349,14 +417,17 @@ export function CanvasApp() {
   // Screen → Canvas coordinate conversion
   // =========================================================================
 
-  const screenToCanvas = useCallback((screenX: number, screenY: number) => {
-    const container = canvasContainerRef.current;
-    if (!container) return { x: 0, y: 0 };
-    const rect = container.getBoundingClientRect();
-    const cx = (screenX - rect.left - viewport.pan.x) / viewport.zoom;
-    const cy = (screenY - rect.top - viewport.pan.y) / viewport.zoom;
-    return { x: Math.round(cx), y: Math.round(cy) };
-  }, [viewport]);
+  const screenToCanvas = useCallback(
+    (screenX: number, screenY: number) => {
+      const container = canvasContainerRef.current;
+      if (!container) return { x: 0, y: 0 };
+      const rect = container.getBoundingClientRect();
+      const cx = (screenX - rect.left - viewport.pan.x) / viewport.zoom;
+      const cy = (screenY - rect.top - viewport.pan.y) / viewport.zoom;
+      return { x: Math.round(cx), y: Math.round(cy) };
+    },
+    [viewport],
+  );
 
   /** Get canvas center position (for toolbar add buttons) */
   const getViewportCenter = useCallback(() => {
@@ -369,47 +440,63 @@ export function CanvasApp() {
   // Add node helpers (centered on given position)
   // =========================================================================
 
-  const addTextAt = useCallback((pos: { x: number; y: number }) => {
-    const w = 200, h = 100;
-    addNode({
-      type: 'annotation',
-      position: { x: pos.x - w / 2, y: pos.y - h / 2 },
-      size: { width: w, height: h },
-      zIndex: nodes.length,
-      data: { content: t('node.newText') },
-    });
-    reportAction('addNode', 'Add text note');
-  }, [addNode, nodes.length, reportAction]);
+  const addTextAt = useCallback(
+    (pos: { x: number; y: number }) => {
+      const w = 200,
+        h = 100;
+      addNode({
+        type: 'annotation',
+        position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+        size: { width: w, height: h },
+        zIndex: nodes.length,
+        data: { content: t('node.newText') },
+      });
+      reportAction('addNode', 'Add text note');
+    },
+    [addNode, nodes.length, reportAction],
+  );
 
-  const addSceneAt = useCallback((pos: { x: number; y: number }) => {
-    const w = 240, h = 160;
-    addNode({
-      type: 'storyboard',
-      position: { x: pos.x - w / 2, y: pos.y - h / 2 },
-      size: { width: w, height: h },
-      zIndex: nodes.length,
-      data: { title: t('node.newScene') },
-    });
-    reportAction('addNode', 'Add storyboard scene');
-  }, [addNode, nodes.length, reportAction]);
+  const addSceneAt = useCallback(
+    (pos: { x: number; y: number }) => {
+      const w = 240,
+        h = 160;
+      addNode({
+        type: 'storyboard',
+        position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+        size: { width: w, height: h },
+        zIndex: nodes.length,
+        data: { title: t('node.newScene') },
+      });
+      reportAction('addNode', 'Add storyboard scene');
+    },
+    [addNode, nodes.length, reportAction],
+  );
 
-  const addMediaAt = useCallback((pos: { x: number; y: number }, mediaType: 'image' | 'video' | 'audio', uri?: string, name?: string) => {
-    const w = mediaType === 'audio' ? 280 : 280;
-    const h = mediaType === 'audio' ? 80 : 200;
-    addNode({
-      type: 'media',
-      position: { x: pos.x - w / 2, y: pos.y - h / 2 },
-      size: { width: w, height: h },
-      zIndex: nodes.length,
-      data: {
-        assetPath: uri || '',
-        mediaType,
-        thumbnailPath: undefined,
-        duration: undefined,
-      },
-    });
-    reportAction('addNode', `Add ${mediaType}`, name);
-  }, [addNode, nodes.length, reportAction]);
+  const addMediaAt = useCallback(
+    (
+      pos: { x: number; y: number },
+      mediaType: 'image' | 'video' | 'audio',
+      uri?: string,
+      name?: string,
+    ) => {
+      const w = mediaType === 'audio' ? 280 : 280;
+      const h = mediaType === 'audio' ? 80 : 200;
+      addNode({
+        type: 'media',
+        position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+        size: { width: w, height: h },
+        zIndex: nodes.length,
+        data: {
+          assetPath: uri || '',
+          mediaType,
+          thumbnailPath: undefined,
+          duration: undefined,
+        },
+      });
+      reportAction('addNode', `Add ${mediaType}`, name);
+    },
+    [addNode, nodes.length, reportAction],
+  );
 
   // Toolbar add handlers (add at viewport center)
   const handleAddText = useCallback(() => {
@@ -421,20 +508,26 @@ export function CanvasApp() {
   }, [addSceneAt, getViewportCenter]);
 
   // Handle media added from extension (file picker)
-  const handleAddMediaFromExtension = useCallback((mediaType: string, uri: string, name: string) => {
-    const pos = getViewportCenter();
-    addMediaAt(pos, mediaType as 'image' | 'video' | 'audio', uri, name);
-  }, [addMediaAt, getViewportCenter]);
+  const handleAddMediaFromExtension = useCallback(
+    (mediaType: string, uri: string, name: string) => {
+      const pos = getViewportCenter();
+      addMediaAt(pos, mediaType as 'image' | 'video' | 'audio', uri, name);
+    },
+    [addMediaAt, getViewportCenter],
+  );
 
   // Request extension to open file picker for media
-  const handleAddMedia = useCallback((type: 'image' | 'video' | 'audio') => {
-    if (vscode) {
-      vscode.postMessage({ type: 'pickMedia', mediaType: type });
-    } else {
-      // Dev mode: add placeholder
-      addMediaAt(getViewportCenter(), type);
-    }
-  }, [addMediaAt, getViewportCenter]);
+  const handleAddMedia = useCallback(
+    (type: 'image' | 'video' | 'audio') => {
+      if (vscode) {
+        vscode.postMessage({ type: 'pickMedia', mediaType: type });
+      } else {
+        // Dev mode: add placeholder
+        addMediaAt(getViewportCenter(), type);
+      }
+    },
+    [addMediaAt, getViewportCenter],
+  );
 
   // =========================================================================
   // Drag & Drop from VSCode explorer
@@ -455,96 +548,112 @@ export function CanvasApp() {
     const rect = canvasContainerRef.current?.getBoundingClientRect();
     if (rect) {
       const { clientX, clientY } = e;
-      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+      if (
+        clientX < rect.left ||
+        clientX > rect.right ||
+        clientY < rect.top ||
+        clientY > rect.bottom
+      ) {
         setIsDragOver(false);
       }
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
 
-    // Save drop position for when extension responds
-    dropPositionRef.current = screenToCanvas(e.clientX, e.clientY);
+      // Save drop position for when extension responds
+      dropPositionRef.current = screenToCanvas(e.clientX, e.clientY);
 
-    // First, check for AssetDragData from asset library (unified protocol)
-    const jsonData = e.dataTransfer.getData('application/json');
-    if (jsonData) {
-      try {
-        const data = JSON.parse(jsonData);
-        if (data.type === 'asset' || data.type === 'assets' || data.type === 'media-file') {
-          const items = data.type === 'assets' ? data.items :
-                        data.type === 'media-file' ? data.files.map((f: any) => ({ files: [{ path: f.path }] })) :
-                        [data];
-          const pos = dropPositionRef.current ?? { x: 0, y: 0 };
-          for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            const file = item.files?.[0];
-            if (file) {
-              if (vscode) {
-                // Send file URI to extension for webview URI resolution
-                vscode.postMessage({
-                  type: 'resolveDroppedFiles',
-                  uris: [`file://${file.path}`],
-                  dropX: e.clientX,
-                  dropY: e.clientY,
-                });
-              } else {
-                const mt = file.mediaType === 'video' ? 'video' : file.mediaType === 'audio' ? 'audio' : 'image';
-                addMediaAt({ x: pos.x + i * 30, y: pos.y + i * 30 }, mt, file.path, file.name);
+      // First, check for AssetDragData from asset library (unified protocol)
+      const jsonData = e.dataTransfer.getData('application/json');
+      if (jsonData) {
+        try {
+          const data = JSON.parse(jsonData);
+          if (data.type === 'asset' || data.type === 'assets' || data.type === 'media-file') {
+            const items =
+              data.type === 'assets'
+                ? data.items
+                : data.type === 'media-file'
+                  ? data.files.map((f: any) => ({ files: [{ path: f.path }] }))
+                  : [data];
+            const pos = dropPositionRef.current ?? { x: 0, y: 0 };
+            for (let i = 0; i < items.length; i++) {
+              const item = items[i];
+              const file = item.files?.[0];
+              if (file) {
+                if (vscode) {
+                  // Send file URI to extension for webview URI resolution
+                  vscode.postMessage({
+                    type: 'resolveDroppedFiles',
+                    uris: [`file://${file.path}`],
+                    dropX: e.clientX,
+                    dropY: e.clientY,
+                  });
+                } else {
+                  const mt =
+                    file.mediaType === 'video'
+                      ? 'video'
+                      : file.mediaType === 'audio'
+                        ? 'audio'
+                        : 'image';
+                  addMediaAt({ x: pos.x + i * 30, y: pos.y + i * 30 }, mt, file.path, file.name);
+                }
               }
             }
+            return;
           }
-          return;
-        }
-      } catch {
-        // Not valid asset drag data, continue with other handlers
-      }
-    }
-
-    // Try to get URIs from the drop data
-    const uriList = e.dataTransfer.getData('text/uri-list');
-    const textData = e.dataTransfer.getData('text/plain');
-    const files = e.dataTransfer.files;
-
-    if (vscode) {
-      // In VSCode webview: send URIs to extension for resolution
-      const uris = (uriList || textData || '')
-        .split('\n')
-        .map(u => u.trim())
-        .filter(u => u && !u.startsWith('#'));
-
-      if (uris.length > 0) {
-        vscode.postMessage({
-          type: 'resolveDroppedFiles',
-          uris,
-          dropX: e.clientX,
-          dropY: e.clientY,
-        });
-      }
-    } else {
-      // Dev mode: handle File objects from native drag
-      if (files.length > 0) {
-        const pos = dropPositionRef.current;
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          if (!file) continue;
-          const mediaType = detectMediaType(file.name);
-          if (mediaType) {
-            const offset = i * 30;
-            addMediaAt(
-              { x: (pos?.x ?? 0) + offset, y: (pos?.y ?? 0) + offset },
-              mediaType,
-              URL.createObjectURL(file),
-              file.name,
-            );
-          }
+        } catch {
+          // Not valid asset drag data, continue with other handlers
         }
       }
-    }
-  }, [screenToCanvas, addMediaAt]);
+
+      // Try to get URIs from the drop data
+      const uriList = e.dataTransfer.getData('text/uri-list');
+      const textData = e.dataTransfer.getData('text/plain');
+      const files = e.dataTransfer.files;
+
+      if (vscode) {
+        // In VSCode webview: send URIs to extension for resolution
+        const uris = (uriList || textData || '')
+          .split('\n')
+          .map((u) => u.trim())
+          .filter((u) => u && !u.startsWith('#'));
+
+        if (uris.length > 0) {
+          vscode.postMessage({
+            type: 'resolveDroppedFiles',
+            uris,
+            dropX: e.clientX,
+            dropY: e.clientY,
+          });
+        }
+      } else {
+        // Dev mode: handle File objects from native drag
+        if (files.length > 0) {
+          const pos = dropPositionRef.current;
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (!file) continue;
+            const mediaType = detectMediaType(file.name);
+            if (mediaType) {
+              const offset = i * 30;
+              addMediaAt(
+                { x: (pos?.x ?? 0) + offset, y: (pos?.y ?? 0) + offset },
+                mediaType,
+                URL.createObjectURL(file),
+                file.name,
+              );
+            }
+          }
+        }
+      }
+    },
+    [screenToCanvas, addMediaAt],
+  );
 
   // =========================================================================
   // Clipboard handlers
@@ -583,7 +692,7 @@ export function CanvasApp() {
 
       // Select the pasted nodes
       const { selectNodes } = useCanvasStore.getState();
-      selectNodes(result.nodes.map(n => n.id));
+      selectNodes(result.nodes.map((n) => n.id));
     }
   }, []);
 
@@ -607,7 +716,7 @@ export function CanvasApp() {
       store.setCanvasData(updatedData);
 
       const { selectNodes } = useCanvasStore.getState();
-      selectNodes(result.nodes.map(n => n.id));
+      selectNodes(result.nodes.map((n) => n.id));
     }
   }, [selectedNodeIds, nodes, connections]);
 
@@ -615,69 +724,91 @@ export function CanvasApp() {
   // Keyboard action handler (defined after clipboard handlers)
   // =========================================================================
 
-  const handleKeyboardAction = useCallback((action: string) => {
-    // Handle outline selection commands (selectNode:id, selectConnection:id)
-    if (action.startsWith('selectNode:')) {
-      const nodeId = action.slice('selectNode:'.length);
-      selectNode(nodeId);
-      return;
-    }
-    if (action.startsWith('selectConnection:')) {
-      const connId = action.slice('selectConnection:'.length);
-      selectConnection(connId);
-      return;
-    }
+  const handleKeyboardAction = useCallback(
+    (action: string) => {
+      // Handle outline selection commands (selectNode:id, selectConnection:id)
+      if (action.startsWith('selectNode:')) {
+        const nodeId = action.slice('selectNode:'.length);
+        selectNode(nodeId);
+        return;
+      }
+      if (action.startsWith('selectConnection:')) {
+        const connId = action.slice('selectConnection:'.length);
+        selectConnection(connId);
+        return;
+      }
 
-    switch (action) {
-      case 'deleteSelected':
-        if (selectedNodeIds.length > 0 || selectedConnectionIds.length > 0) {
-          deleteSelected();
-          reportAction('deleteNode', `Deleted ${selectedNodeIds.length} node(s)`);
-        }
-        break;
-      case 'escape':
-        if (contextMenu) {
-          setContextMenu(null);
-        } else if (isConnecting) {
-          cancelConnection();
-        } else {
-          clearSelection();
-        }
-        break;
-      case 'selectAll':
-        if (nodes.length > 0) {
-          const { selectNodes } = useCanvasStore.getState();
-          selectNodes(nodes.map(n => n.id));
-        }
-        break;
-      case 'undo':
-        undo();
-        reportAction('undo', 'Undo');
-        break;
-      case 'redo':
-        redo();
-        reportAction('redo', 'Redo');
-        break;
-      case 'copy':
-        handleCopy();
-        break;
-      case 'cut':
-        handleCut();
-        reportAction('deleteNode', `Cut ${selectedNodeIds.length} node(s)`);
-        break;
-      case 'paste':
-        handlePaste();
-        reportAction('paste', 'Paste');
-        break;
-      case 'duplicate':
-        handleDuplicate();
-        reportAction('paste', 'Duplicate');
-        break;
-      case 'resetZoom':
-        resetViewport();
-        break;
-    }
-  }, [selectedNodeIds, selectedConnectionIds, deleteSelected, isConnecting, cancelConnection, clearSelection, nodes, contextMenu, undo, redo, handleCopy, handleCut, handlePaste, handleDuplicate, selectNode, selectConnection, resetViewport, reportAction]);
+      switch (action) {
+        case 'deleteSelected':
+          if (selectedNodeIds.length > 0 || selectedConnectionIds.length > 0) {
+            deleteSelected();
+            reportAction('deleteNode', `Deleted ${selectedNodeIds.length} node(s)`);
+          }
+          break;
+        case 'escape':
+          if (contextMenu) {
+            setContextMenu(null);
+          } else if (isConnecting) {
+            cancelConnection();
+          } else {
+            clearSelection();
+          }
+          break;
+        case 'selectAll':
+          if (nodes.length > 0) {
+            const { selectNodes } = useCanvasStore.getState();
+            selectNodes(nodes.map((n) => n.id));
+          }
+          break;
+        case 'undo':
+          undo();
+          reportAction('undo', 'Undo');
+          break;
+        case 'redo':
+          redo();
+          reportAction('redo', 'Redo');
+          break;
+        case 'copy':
+          handleCopy();
+          break;
+        case 'cut':
+          handleCut();
+          reportAction('deleteNode', `Cut ${selectedNodeIds.length} node(s)`);
+          break;
+        case 'paste':
+          handlePaste();
+          reportAction('paste', 'Paste');
+          break;
+        case 'duplicate':
+          handleDuplicate();
+          reportAction('paste', 'Duplicate');
+          break;
+        case 'resetZoom':
+          resetViewport();
+          break;
+      }
+    },
+    [
+      selectedNodeIds,
+      selectedConnectionIds,
+      deleteSelected,
+      isConnecting,
+      cancelConnection,
+      clearSelection,
+      nodes,
+      contextMenu,
+      undo,
+      redo,
+      handleCopy,
+      handleCut,
+      handlePaste,
+      handleDuplicate,
+      selectNode,
+      selectConnection,
+      resetViewport,
+      reportAction,
+    ],
+  );
 
   // Keep ref in sync with latest handler
   keyboardActionRef.current = handleKeyboardAction;
@@ -686,44 +817,61 @@ export function CanvasApp() {
   // Context menu
   // =========================================================================
 
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
 
-    const canvasPos = screenToCanvas(e.clientX, e.clientY);
-    const hasSelection = selectedNodeIds.length > 0;
+      const canvasPos = screenToCanvas(e.clientX, e.clientY);
+      const hasSelection = selectedNodeIds.length > 0;
 
-    const menuCtx = {
-      canvasPosition: canvasPos,
-      hasSelection,
-      selectedCount: selectedNodeIds.length,
-      onAddText: addTextAt,
-      onAddScene: addSceneAt,
-      onAddMedia: handleAddMedia,
-      onDelete: deleteSelected,
-      onSelectAll: () => {
-        const { selectNodes } = useCanvasStore.getState();
-        selectNodes(nodes.map(n => n.id));
-      },
-      onFitContent: handleFitContent,
-      onResetView: handleResetViewport,
-      onCopy: handleCopy,
-      onCut: handleCut,
-      onPaste: handlePaste,
-      onDuplicate: handleDuplicate,
-      onUndo: undo,
-      onRedo: redo,
-      canPaste: useClipboardStore.getState().canPaste(),
-      canUndo: useHistoryStore.getState().canUndo(),
-      canRedo: useHistoryStore.getState().canRedo(),
-    };
+      const menuCtx = {
+        canvasPosition: canvasPos,
+        hasSelection,
+        selectedCount: selectedNodeIds.length,
+        onAddText: addTextAt,
+        onAddScene: addSceneAt,
+        onAddMedia: handleAddMedia,
+        onDelete: deleteSelected,
+        onSelectAll: () => {
+          const { selectNodes } = useCanvasStore.getState();
+          selectNodes(nodes.map((n) => n.id));
+        },
+        onFitContent: handleFitContent,
+        onResetView: handleResetViewport,
+        onCopy: handleCopy,
+        onCut: handleCut,
+        onPaste: handlePaste,
+        onDuplicate: handleDuplicate,
+        onUndo: undo,
+        onRedo: redo,
+        canPaste: useClipboardStore.getState().canPaste(),
+        canUndo: useHistoryStore.getState().canUndo(),
+        canRedo: useHistoryStore.getState().canRedo(),
+      };
 
-    const items = hasSelection
-      ? buildNodeMenuItems(menuCtx)
-      : buildCanvasMenuItems(menuCtx);
+      const items = hasSelection ? buildNodeMenuItems(menuCtx) : buildCanvasMenuItems(menuCtx);
 
-    setContextMenu({ x: e.clientX, y: e.clientY, items });
-  }, [screenToCanvas, selectedNodeIds, nodes, addTextAt, addSceneAt, handleAddMedia, deleteSelected, handleFitContent, handleResetViewport, handleCopy, handleCut, handlePaste, handleDuplicate, undo, redo]);
+      setContextMenu({ x: e.clientX, y: e.clientY, items });
+    },
+    [
+      screenToCanvas,
+      selectedNodeIds,
+      nodes,
+      addTextAt,
+      addSceneAt,
+      handleAddMedia,
+      deleteSelected,
+      handleFitContent,
+      handleResetViewport,
+      handleCopy,
+      handleCut,
+      handlePaste,
+      handleDuplicate,
+      undo,
+      redo,
+    ],
+  );
 
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
@@ -783,18 +931,24 @@ export function CanvasApp() {
   // Property panel helpers
   // =========================================================================
 
-  const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
+  const selectedNodes = nodes.filter((n) => selectedNodeIds.includes(n.id));
 
-  const handleUpdateNode = useCallback((id: string, updates: Partial<import('@neko/shared').CanvasNode>) => {
-    useCanvasStore.getState().updateNode(id, updates);
-  }, []);
+  const handleUpdateNode = useCallback(
+    (id: string, updates: Partial<import('@neko/shared').CanvasNode>) => {
+      useCanvasStore.getState().updateNode(id, updates);
+    },
+    [],
+  );
 
-  const handleToggleLock = useCallback((id: string) => {
-    const node = nodes.find(n => n.id === id);
-    if (node) {
-      useCanvasStore.getState().updateNode(id, { locked: !node.locked });
-    }
-  }, [nodes]);
+  const handleToggleLock = useCallback(
+    (id: string) => {
+      const node = nodes.find((n) => n.id === id);
+      if (node) {
+        useCanvasStore.getState().updateNode(id, { locked: !node.locked });
+      }
+    },
+    [nodes],
+  );
 
   const handleDeleteNode = useCallback((id: string) => {
     useCanvasStore.getState().removeNode(id);
@@ -806,7 +960,10 @@ export function CanvasApp() {
 
   if (!isReady) {
     return (
-      <div className="flex items-center justify-center h-screen" style={{ backgroundColor: 'var(--canvas-bg)' }}>
+      <div
+        className="flex items-center justify-center h-screen"
+        style={{ backgroundColor: 'var(--canvas-bg)' }}
+      >
         <div style={{ color: 'var(--toolbar-fg-secondary)' }}>{t('loading')}</div>
       </div>
     );
@@ -823,9 +980,18 @@ export function CanvasApp() {
           color: 'var(--titlebar-fg)',
         }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" opacity={0.6}>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          opacity={0.6}
+        >
           <rect x="3" y="3" width="18" height="18" rx="2" />
-          <path d="M12 8v8" /><path d="M8 12h8" />
+          <path d="M12 8v8" />
+          <path d="M8 12h8" />
         </svg>
         <span className="text-xs font-medium" style={{ color: 'var(--titlebar-fg)' }}>
           {canvasData?.name || 'Untitled Canvas'}
@@ -847,7 +1013,7 @@ export function CanvasApp() {
           onAddMedia={handleAddMedia}
           onUndo={undo}
           onRedo={redo}
-          onToggleLayerPanel={() => setIsLayerPanelOpen(prev => !prev)}
+          onToggleLayerPanel={() => setIsLayerPanelOpen((prev) => !prev)}
           isLayerPanelOpen={isLayerPanelOpen}
         />
 
@@ -885,9 +1051,18 @@ export function CanvasApp() {
           {nodes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center" style={{ color: 'var(--toolbar-fg-secondary)' }}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="mx-auto mb-3 opacity-40">
+                <svg
+                  width="48"
+                  height="48"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  className="mx-auto mb-3 opacity-40"
+                >
                   <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <path d="M12 8v8" /><path d="M8 12h8" />
+                  <path d="M12 8v8" />
+                  <path d="M8 12h8" />
                 </svg>
                 <p className="text-sm opacity-60">{t('empty.hint')}</p>
                 <p className="text-xs opacity-40 mt-1">{t('empty.zoom')}</p>
@@ -970,23 +1145,37 @@ export function CanvasApp() {
         className="h-[22px] flex items-center px-2 text-[11px] shrink-0 gap-0"
         style={{ backgroundColor: 'var(--statusbar-bg)', color: 'var(--statusbar-fg)' }}
       >
-        <span className="px-1.5 hover:bg-white/10 cursor-default">{t('status.zoom', { level: (viewport.zoom * 100).toFixed(0) })}</span>
-        <span className="px-1.5 hover:bg-white/10 cursor-default">{t('status.pan', { x: viewport.pan.x.toFixed(0), y: viewport.pan.y.toFixed(0) })}</span>
-        {isConnecting && (
-          <span className="px-1.5 animate-pulse">{t('status.connecting')}</span>
-        )}
+        <span className="px-1.5 hover:bg-white/10 cursor-default">
+          {t('status.zoom', { level: (viewport.zoom * 100).toFixed(0) })}
+        </span>
+        <span className="px-1.5 hover:bg-white/10 cursor-default">
+          {t('status.pan', { x: viewport.pan.x.toFixed(0), y: viewport.pan.y.toFixed(0) })}
+        </span>
+        {isConnecting && <span className="px-1.5 animate-pulse">{t('status.connecting')}</span>}
         {selectedNodeIds.length > 0 && (
-          <span className="px-1.5 hover:bg-white/10 cursor-default">{t('status.selected', { count: selectedNodeIds.length })}</span>
+          <span className="px-1.5 hover:bg-white/10 cursor-default">
+            {t('status.selected', { count: selectedNodeIds.length })}
+          </span>
         )}
         <div className="flex-1" />
         {/* Property panel toggle */}
         <button
           className="px-1.5 h-full flex items-center hover:bg-white/10 transition-colors"
-          style={{ color: isPropertyPanelOpen ? 'var(--statusbar-fg)' : 'var(--statusbar-fg)', opacity: isPropertyPanelOpen ? 1 : 0.7 }}
-          onClick={() => setIsPropertyPanelOpen(prev => !prev)}
+          style={{
+            color: isPropertyPanelOpen ? 'var(--statusbar-fg)' : 'var(--statusbar-fg)',
+            opacity: isPropertyPanelOpen ? 1 : 0.7,
+          }}
+          onClick={() => setIsPropertyPanelOpen((prev) => !prev)}
           title="Toggle Properties Panel"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <path d="M15 3v18" />
           </svg>

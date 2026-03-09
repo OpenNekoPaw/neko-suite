@@ -45,24 +45,27 @@ export function InputArea({
 }: InputAreaProps) {
   // Global configuration from context (model, modes, compression, skills)
   const {
-    selectedModel, availableModels, onModelSelect,
-    executionMode, onExecutionModeChange,
-    promptMode, onPromptModeChange,
-    contextTokenCount, isCompressing, onCompressContext,
-    skills, onSlashCommand, onRequestFiles,
+    selectedModel,
+    availableModels,
+    onModelSelect,
+    executionMode,
+    onExecutionModeChange,
+    promptMode,
+    onPromptModeChange,
+    contextTokenCount,
+    isCompressing,
+    onCompressContext,
+    skills,
+    onSlashCommand,
+    onRequestFiles,
   } = useInputAreaContext();
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Input history for arrow key navigation
-  const {
-    addToHistory,
-    navigateUp,
-    navigateDown,
-    resetNavigation,
-    isNavigating,
-  } = useInputHistory();
+  const { addToHistory, navigateUp, navigateDown, resetNavigation, isNavigating } =
+    useInputHistory();
 
   // Slash command state
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -79,23 +82,25 @@ export function InputArea({
   const attachedFiles = externalAttachedFiles ?? internalAttachedFiles;
 
   // Create a unified setter that works with both internal state and external callback
-  const updateAttachedFiles = useCallback((updater: AttachedFile[] | ((prev: AttachedFile[]) => AttachedFile[])) => {
-    if (onAttachedFilesChange) {
-      // External management: resolve the updater function with current value
-      const newValue = typeof updater === 'function'
-        ? updater(externalAttachedFiles ?? [])
-        : updater;
-      onAttachedFilesChange(newValue);
-    } else {
-      // Internal state: use React's setState directly
-      setInternalAttachedFiles(updater);
-    }
-  }, [onAttachedFilesChange, externalAttachedFiles]);
+  const updateAttachedFiles = useCallback(
+    (updater: AttachedFile[] | ((prev: AttachedFile[]) => AttachedFile[])) => {
+      if (onAttachedFilesChange) {
+        // External management: resolve the updater function with current value
+        const newValue =
+          typeof updater === 'function' ? updater(externalAttachedFiles ?? []) : updater;
+        onAttachedFilesChange(newValue);
+      } else {
+        // Internal state: use React's setState directly
+        setInternalAttachedFiles(updater);
+      }
+    },
+    [onAttachedFilesChange, externalAttachedFiles],
+  );
 
   // Handle externally dropped files
   useEffect(() => {
     if (droppedFiles && droppedFiles.length > 0) {
-      updateAttachedFiles(prev => [...prev, ...droppedFiles]);
+      updateAttachedFiles((prev) => [...prev, ...droppedFiles]);
       onDroppedFilesProcessed?.();
     }
   }, [droppedFiles, onDroppedFilesProcessed, updateAttachedFiles]);
@@ -159,12 +164,14 @@ export function InputArea({
     if (showSlashMenu && filteredCommands.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedCommandIndex(prev => (prev + 1) % filteredCommands.length);
+        setSelectedCommandIndex((prev) => (prev + 1) % filteredCommands.length);
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedCommandIndex(prev => (prev - 1 + filteredCommands.length) % filteredCommands.length);
+        setSelectedCommandIndex(
+          (prev) => (prev - 1 + filteredCommands.length) % filteredCommands.length,
+        );
         return;
       }
       if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
@@ -183,12 +190,12 @@ export function InputArea({
     if (showAtMenu && filteredFiles.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedFileIndex(prev => (prev + 1) % filteredFiles.length);
+        setSelectedFileIndex((prev) => (prev + 1) % filteredFiles.length);
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedFileIndex(prev => (prev - 1 + filteredFiles.length) % filteredFiles.length);
+        setSelectedFileIndex((prev) => (prev - 1 + filteredFiles.length) % filteredFiles.length);
         return;
       }
       if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
@@ -280,77 +287,90 @@ export function InputArea({
   };
 
   const handleRemoveFile = (id: string) => {
-    updateAttachedFiles(files => files.filter(f => f.id !== id));
+    updateAttachedFiles((files) => files.filter((f) => f.id !== id));
   };
 
   // Handle file selection
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files) return;
 
-    Array.from(files).forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const type = file.type.startsWith('image/') ? 'image' :
-                     file.type.startsWith('video/') ? 'video' :
-                     file.type.startsWith('audio/') ? 'audio' : 'file';
-        const newFile: AttachedFile = {
-          id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: file.name,
-          type,
-          size: file.size,
-          preview: type === 'image' ? event.target?.result as string : undefined,
-          path: file.name,
+      Array.from(files).forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const type = file.type.startsWith('image/')
+            ? 'image'
+            : file.type.startsWith('video/')
+              ? 'video'
+              : file.type.startsWith('audio/')
+                ? 'audio'
+                : 'file';
+          const newFile: AttachedFile = {
+            id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            name: file.name,
+            type,
+            size: file.size,
+            preview: type === 'image' ? (event.target?.result as string) : undefined,
+            path: file.name,
+          };
+          updateAttachedFiles((prev) => [...prev, newFile]);
         };
-        updateAttachedFiles(prev => [...prev, newFile]);
-      };
-      if (file.type.startsWith('image/')) {
-        reader.readAsDataURL(file);
-      } else {
-        reader.readAsArrayBuffer(file);
-        const newFile: AttachedFile = {
-          id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: file.name,
-          type: file.type.startsWith('video/') ? 'video' :
-                file.type.startsWith('audio/') ? 'audio' : 'file',
-          size: file.size,
-          path: file.name,
-        };
-        updateAttachedFiles(prev => [...prev, newFile]);
-      }
-    });
+        if (file.type.startsWith('image/')) {
+          reader.readAsDataURL(file);
+        } else {
+          reader.readAsArrayBuffer(file);
+          const newFile: AttachedFile = {
+            id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            name: file.name,
+            type: file.type.startsWith('video/')
+              ? 'video'
+              : file.type.startsWith('audio/')
+                ? 'audio'
+                : 'file',
+            size: file.size,
+            path: file.name,
+          };
+          updateAttachedFiles((prev) => [...prev, newFile]);
+        }
+      });
 
-    // Reset input
-    e.target.value = '';
-  }, [updateAttachedFiles]);
+      // Reset input
+      e.target.value = '';
+    },
+    [updateAttachedFiles],
+  );
 
   // Handle paste for images
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
 
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type.startsWith('image/')) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const newFile: AttachedFile = {
-              id: `paste-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-              name: `pasted-image-${Date.now()}.png`,
-              type: 'image',
-              size: file.size,
-              preview: event.target?.result as string,
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const newFile: AttachedFile = {
+                id: `paste-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                name: `pasted-image-${Date.now()}.png`,
+                type: 'image',
+                size: file.size,
+                preview: event.target?.result as string,
+              };
+              updateAttachedFiles((files) => [...files, newFile]);
             };
-            updateAttachedFiles(files => [...files, newFile]);
-          };
-          reader.readAsDataURL(file);
+            reader.readAsDataURL(file);
+          }
         }
       }
-    }
-  }, [updateAttachedFiles]);
+    },
+    [updateAttachedFiles],
+  );
 
   // Insert slash command
   const handleSlashClick = () => {
@@ -387,10 +407,7 @@ export function InputArea({
         />
 
         {/* File attachment preview */}
-        <AttachmentPreview
-          attachedFiles={attachedFiles}
-          onRemove={handleRemoveFile}
-        />
+        <AttachmentPreview attachedFiles={attachedFiles} onRemove={handleRemoveFile} />
 
         {/* Input row with inline buttons */}
         <div className="flex items-end gap-1 px-2 py-2">
@@ -401,9 +418,9 @@ export function InputArea({
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={isThinking
-              ? t('chat.input.thinkingPlaceholder')
-              : t('chat.input.placeholder')}
+            placeholder={
+              isThinking ? t('chat.input.thinkingPlaceholder') : t('chat.input.placeholder')
+            }
             className="flex-1 px-2 py-1.5 bg-transparent text-[var(--vscode-foreground)] resize-none outline-none text-[13px] min-h-[32px] max-h-[120px] placeholder:text-[var(--vscode-descriptionForeground)]"
             rows={1}
           />
@@ -489,16 +506,10 @@ export function InputArea({
             )}
 
             {/* Prompt mode toggle */}
-            <PromptModeToggle
-              mode={promptMode}
-              onChange={onPromptModeChange}
-            />
+            <PromptModeToggle mode={promptMode} onChange={onPromptModeChange} />
 
             {/* Mode selector */}
-            <ModeSelector
-              mode={executionMode}
-              onChange={onExecutionModeChange}
-            />
+            <ModeSelector mode={executionMode} onChange={onExecutionModeChange} />
           </div>
         </div>
       </div>
@@ -510,7 +521,12 @@ export function InputArea({
 function SendIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M5 10l7-7m0 0l7 7m-7-7v18"
+      />
     </svg>
   );
 }

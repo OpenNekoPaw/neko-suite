@@ -26,12 +26,24 @@ export function ModeSelector({ mode, onChange }: ModeSelectorProps) {
     labelKey: string;
     descriptionKey: string;
   }> = [
-    { value: 'plan', labelKey: 'chat.executionMode.plan', descriptionKey: 'chat.executionMode.planDesc' },
-    { value: 'ask', labelKey: 'chat.executionMode.ask', descriptionKey: 'chat.executionMode.askDesc' },
-    { value: 'auto', labelKey: 'chat.executionMode.auto', descriptionKey: 'chat.executionMode.autoDesc' },
+    {
+      value: 'plan',
+      labelKey: 'chat.executionMode.plan',
+      descriptionKey: 'chat.executionMode.planDesc',
+    },
+    {
+      value: 'ask',
+      labelKey: 'chat.executionMode.ask',
+      descriptionKey: 'chat.executionMode.askDesc',
+    },
+    {
+      value: 'auto',
+      labelKey: 'chat.executionMode.auto',
+      descriptionKey: 'chat.executionMode.autoDesc',
+    },
   ];
 
-  const currentMode = MODE_OPTIONS.find(option => option.value === mode);
+  const currentMode = MODE_OPTIONS.find((option) => option.value === mode);
 
   return (
     <div className="relative" ref={menuRef}>

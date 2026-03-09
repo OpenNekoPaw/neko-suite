@@ -18,7 +18,7 @@ function isValidMediaUrl(url: string, extensions: string[]): boolean {
   if (url.startsWith('data:')) return true;
   if (url.startsWith('/') || /^[A-Za-z]:[\\/]/.test(url)) {
     const lowerUrl = url.toLowerCase();
-    return extensions.some(ext => lowerUrl.endsWith(ext));
+    return extensions.some((ext) => lowerUrl.endsWith(ext));
   }
   return false;
 }
@@ -62,11 +62,7 @@ export function extractFilePath(data: unknown): string | null {
 }
 
 /** Helper to collect URLs from common result fields */
-function collectUrls(
-  data: unknown,
-  urlField: string,
-  arrayField: string,
-): Set<string> {
+function collectUrls(data: unknown, urlField: string, arrayField: string): Set<string> {
   if (!data || typeof data !== 'object') return new Set();
   const result = data as Record<string, unknown>;
   const urlSet = new Set<string>();
@@ -81,7 +77,11 @@ function collectUrls(
   if (Array.isArray(result[arrayField])) {
     for (const item of result[arrayField] as unknown[]) {
       if (typeof item === 'string') urlSet.add(item);
-      else if (item && typeof item === 'object' && typeof (item as Record<string, unknown>).url === 'string') {
+      else if (
+        item &&
+        typeof item === 'object' &&
+        typeof (item as Record<string, unknown>).url === 'string'
+      ) {
         urlSet.add((item as Record<string, unknown>).url as string);
       }
     }

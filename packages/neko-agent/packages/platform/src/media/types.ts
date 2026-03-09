@@ -26,12 +26,7 @@ export type MediaGenerationType =
 /**
  * Media task status
  */
-export type MediaTaskStatus =
-  | 'pending'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+export type MediaTaskStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
 /**
  * Media output type
@@ -209,7 +204,7 @@ export interface MediaAdapter {
   generateImage(
     request: ImageGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult>;
 
   /**
@@ -218,7 +213,7 @@ export interface MediaAdapter {
   generateVideo(
     request: VideoGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult>;
 
   /**
@@ -227,16 +222,13 @@ export interface MediaAdapter {
   generateAudio(
     request: AudioGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult>;
 
   /**
    * Get task status (for async polling)
    */
-  getTaskStatus(
-    externalTaskId: string,
-    provider: Provider
-  ): Promise<MediaAdapterResult>;
+  getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult>;
 
   /**
    * Cancel a running task

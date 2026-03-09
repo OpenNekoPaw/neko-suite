@@ -143,7 +143,7 @@ export function writeWorkspaceConfig(workDir: string, config: UnifiedConfig): vo
  */
 export function watchConfigFile(
   filePath: string,
-  callback: (config: UnifiedConfig | null) => void
+  callback: (config: UnifiedConfig | null) => void,
 ): () => void {
   let watcher: fs.FSWatcher | null = null;
 
@@ -183,9 +183,7 @@ export function watchConfigFile(
  * @param callback - Callback when config changes
  * @returns Cleanup function to stop watching
  */
-export function watchUserConfig(
-  callback: (config: UnifiedConfig | null) => void
-): () => void {
+export function watchUserConfig(callback: (config: UnifiedConfig | null) => void): () => void {
   return watchConfigFile(getUserConfigPath(), callback);
 }
 
@@ -198,7 +196,7 @@ export function watchUserConfig(
  */
 export function watchWorkspaceConfig(
   workDir: string,
-  callback: (config: UnifiedConfig | null) => void
+  callback: (config: UnifiedConfig | null) => void,
 ): () => void {
   return watchConfigFile(getWorkspaceConfigPath(workDir), callback);
 }

@@ -51,15 +51,14 @@ function initGlobalFileUriListener(): void {
       // Resolve any pending promises
       const pending = pendingFileRequests.get(message.path);
       if (pending) {
-        pending.forEach(resolve => resolve(decodedUri));
+        pending.forEach((resolve) => resolve(decodedUri));
         pendingFileRequests.delete(message.path);
       }
 
       // Notify listeners
-      cacheUpdateListeners.forEach(listener => listener());
+      cacheUpdateListeners.forEach((listener) => listener());
     }
   });
-
 }
 
 // Initialize global listener immediately when module loads
@@ -95,7 +94,8 @@ export function getFileUri(path: string): Promise<string> {
 }
 
 export function useVSCodeMessaging() {
-  const { setProject, project, currentTime, isPlaying, selectElement, seek, setAIActionStatus } = useEditorStore();
+  const { setProject, project, currentTime, isPlaying, selectElement, seek, setAIActionStatus } =
+    useEditorStore();
   const projectRef = useRef(project);
   const lastSavedRef = useRef<string>('');
 
@@ -113,7 +113,7 @@ export function useVSCodeMessaging() {
     const trackCount = projectRef.current.tracks.length;
     const elementCount = projectRef.current.tracks.reduce(
       (sum: number, track: { elements: unknown[] }) => sum + track.elements.length,
-      0
+      0,
     );
 
     sendMessage({
@@ -167,7 +167,7 @@ export function useVSCodeMessaging() {
             });
 
             // Request webview URIs for all unique media paths
-            mediaPaths.forEach(path => {
+            mediaPaths.forEach((path) => {
               if (!fileUriCache.has(path)) {
                 vscode?.postMessage({ type: 'requestFile', path });
               }
@@ -177,7 +177,7 @@ export function useVSCodeMessaging() {
             // to trigger re-render when URIs arrive
             if (mediaPaths.size > 0) {
               setTimeout(() => {
-                cacheUpdateListeners.forEach(listener => listener());
+                cacheUpdateListeners.forEach((listener) => listener());
               }, 100);
             }
           }
@@ -195,12 +195,12 @@ export function useVSCodeMessaging() {
             // Resolve any pending promises
             const pending = pendingFileRequests.get(message.path);
             if (pending) {
-              pending.forEach(resolve => resolve(decodedUri));
+              pending.forEach((resolve) => resolve(decodedUri));
               pendingFileRequests.delete(message.path);
             }
 
             // Notify all listeners that cache was updated
-            cacheUpdateListeners.forEach(listener => listener());
+            cacheUpdateListeners.forEach((listener) => listener());
           }
           break;
 
@@ -208,12 +208,14 @@ export function useVSCodeMessaging() {
           // Handle adding media file to timeline
           if (message.path && message.mediaType) {
             const addMediaToStore = async () => {
-              const { addMediaElement, addMediaElementWithAudio, getTotalDuration } = useEditorStore.getState();
+              const { addMediaElement, addMediaElementWithAudio, getTotalDuration } =
+                useEditorStore.getState();
               const mediaInfoService = getMediaInfoService();
               const fileName = message.path.split('/').pop() || message.path;
 
               // Read actual duration when possible (fallback to defaults)
-              let duration = message.mediaType === 'image' ? DEFAULT_IMAGE_DURATION : DEFAULT_VIDEO_DURATION;
+              let duration =
+                message.mediaType === 'image' ? DEFAULT_IMAGE_DURATION : DEFAULT_VIDEO_DURATION;
               if (message.mediaType !== 'image') {
                 try {
                   duration = await mediaInfoService.getDuration(message.path);
@@ -236,7 +238,7 @@ export function useVSCodeMessaging() {
 
               logger.info(`Added ${message.mediaType} file to timeline: ${message.path}`);
             };
-            addMediaToStore().catch(err => {
+            addMediaToStore().catch((err) => {
               logger.error('Failed to add media file to timeline:', err);
             });
           }
@@ -252,7 +254,7 @@ export function useVSCodeMessaging() {
           if (message.content) {
             const shouldReload = window.confirm(
               'The file has been changed externally. Do you want to reload it?\n\n' +
-              'Click OK to reload (your unsaved changes will be lost) or Cancel to keep your current version.'
+                'Click OK to reload (your unsaved changes will be lost) or Cancel to keep your current version.',
             );
             if (shouldReload) {
               lastSavedRef.current = JSON.stringify(message.content);
@@ -274,22 +276,24 @@ export function useVSCodeMessaging() {
 
             // Find the element to get its start time and jump to it
             if (projectRef.current) {
-              const track = projectRef.current.tracks.find(t => t.id === message.trackId);
+              const track = projectRef.current.tracks.find((t) => t.id === message.trackId);
               if (track) {
-                const element = track.elements.find(el => el.id === message.elementId);
+                const element = track.elements.find((el) => el.id === message.elementId);
                 if (element) {
                   // Jump to the element's start time
                   seek(element.startTime);
 
                   // Dispatch custom event to scroll timeline to this element
                   // The Timeline component will listen for this event
-                  window.dispatchEvent(new CustomEvent('scrollToElement', {
-                    detail: {
-                      trackId: message.trackId,
-                      elementId: message.elementId,
-                      startTime: element.startTime,
-                    }
-                  }));
+                  window.dispatchEvent(
+                    new CustomEvent('scrollToElement', {
+                      detail: {
+                        trackId: message.trackId,
+                        elementId: message.elementId,
+                        startTime: element.startTime,
+                      },
+                    }),
+                  );
 
                   logger.info(`Jumped to element at ${element.startTime}s`);
                 }
@@ -305,61 +309,73 @@ export function useVSCodeMessaging() {
         case 'exportProgress':
           // Handle export progress from Extension Host FFmpeg
           // Dispatch custom event for ExportPanel to handle
-          window.dispatchEvent(new CustomEvent('exportProgress', {
-            detail: message.progress
-          }));
+          window.dispatchEvent(
+            new CustomEvent('exportProgress', {
+              detail: message.progress,
+            }),
+          );
           break;
 
         case 'blobSaveResult':
           // Handle blob save result from Extension Host
-          window.dispatchEvent(new CustomEvent('blobSaveResult', {
-            detail: {
-              success: message.success,
-              error: message.error,
-              path: message.path,
-            }
-          }));
+          window.dispatchEvent(
+            new CustomEvent('blobSaveResult', {
+              detail: {
+                success: message.success,
+                error: message.error,
+                path: message.path,
+              },
+            }),
+          );
           break;
 
         // Streaming export messages
         case 'exportDialogResult':
           // Handle export dialog result (user selected file or cancelled)
-          window.dispatchEvent(new CustomEvent('exportDialogResult', {
-            detail: {
-              success: message.success,
-              cancelled: message.cancelled,
-              path: message.path,
-              error: message.error,
-            }
-          }));
+          window.dispatchEvent(
+            new CustomEvent('exportDialogResult', {
+              detail: {
+                success: message.success,
+                cancelled: message.cancelled,
+                path: message.path,
+                error: message.error,
+              },
+            }),
+          );
           break;
 
         case 'exportChunkResult':
           // Handle chunk write result
-          window.dispatchEvent(new CustomEvent('exportChunkResult', {
-            detail: {
-              success: message.success,
-              error: message.error,
-            }
-          }));
+          window.dispatchEvent(
+            new CustomEvent('exportChunkResult', {
+              detail: {
+                success: message.success,
+                error: message.error,
+              },
+            }),
+          );
           break;
 
         case 'exportStreamError':
           // Handle stream error
-          window.dispatchEvent(new CustomEvent('exportStreamError', {
-            detail: { error: message.error }
-          }));
+          window.dispatchEvent(
+            new CustomEvent('exportStreamError', {
+              detail: { error: message.error },
+            }),
+          );
           break;
 
         case 'exportComplete':
           // Handle export completion
-          window.dispatchEvent(new CustomEvent('exportComplete', {
-            detail: {
-              success: message.success,
-              path: message.path,
-              error: message.error,
-            }
-          }));
+          window.dispatchEvent(
+            new CustomEvent('exportComplete', {
+              detail: {
+                success: message.success,
+                path: message.path,
+                error: message.error,
+              },
+            }),
+          );
           break;
 
         case 'exportCancelled':
@@ -425,44 +441,59 @@ export function useVSCodeMessaging() {
   }, [currentTime, isPlaying, project, sendStatusUpdate]);
 
   // Request file URI for media playback
-  const requestFileUri = useCallback((path: string) => {
-    sendMessage({ type: 'requestFile', path });
-  }, [sendMessage]);
+  const requestFileUri = useCallback(
+    (path: string) => {
+      sendMessage({ type: 'requestFile', path });
+    },
+    [sendMessage],
+  );
 
   // Get webview URI for a file path (with caching and async request)
-  const getFileUri = useCallback((path: string): Promise<string> => {
-    // Check cache first
-    const cached = fileUriCache.get(path);
-    if (cached) {
-      return Promise.resolve(cached);
-    }
-
-    // Request from extension
-    return new Promise((resolve) => {
-      // Add to pending requests
-      if (!pendingFileRequests.has(path)) {
-        pendingFileRequests.set(path, []);
-        // Send request
-        sendMessage({ type: 'requestFile', path });
+  const getFileUri = useCallback(
+    (path: string): Promise<string> => {
+      // Check cache first
+      const cached = fileUriCache.get(path);
+      if (cached) {
+        return Promise.resolve(cached);
       }
-      pendingFileRequests.get(path)!.push(resolve);
-    });
-  }, [sendMessage]);
+
+      // Request from extension
+      return new Promise((resolve) => {
+        // Add to pending requests
+        if (!pendingFileRequests.has(path)) {
+          pendingFileRequests.set(path, []);
+          // Send request
+          sendMessage({ type: 'requestFile', path });
+        }
+        pendingFileRequests.get(path)!.push(resolve);
+      });
+    },
+    [sendMessage],
+  );
 
   // Add media to timeline
-  const addMediaToTimeline = useCallback((path: string) => {
-    sendMessage({ type: 'addMediaToTimeline', path });
-  }, [sendMessage]);
+  const addMediaToTimeline = useCallback(
+    (path: string) => {
+      sendMessage({ type: 'addMediaToTimeline', path });
+    },
+    [sendMessage],
+  );
 
   // Export video
-  const exportVideo = useCallback((format: 'mp4' | 'webm', quality: 'low' | 'medium' | 'high') => {
-    sendMessage({ type: 'export', format, quality });
-  }, [sendMessage]);
+  const exportVideo = useCallback(
+    (format: 'mp4' | 'webm', quality: 'low' | 'medium' | 'high') => {
+      sendMessage({ type: 'export', format, quality });
+    },
+    [sendMessage],
+  );
 
   // Streaming export methods
-  const showExportDialog = useCallback((filename: string, format: string) => {
-    sendMessage({ type: 'showExportDialog', filename, format });
-  }, [sendMessage]);
+  const showExportDialog = useCallback(
+    (filename: string, format: string) => {
+      sendMessage({ type: 'showExportDialog', filename, format });
+    },
+    [sendMessage],
+  );
 
   const writeExportChunk = useCallback((data: Uint8Array) => {
     // Create a copy of the ArrayBuffer for sending
@@ -475,43 +506,52 @@ export function useVSCodeMessaging() {
     }
   }, []);
 
-  const finalizeExport = useCallback((success: boolean, error?: string) => {
-    sendMessage({ type: 'finalizeExport', success, error });
-  }, [sendMessage]);
+  const finalizeExport = useCallback(
+    (success: boolean, error?: string) => {
+      sendMessage({ type: 'finalizeExport', success, error });
+    },
+    [sendMessage],
+  );
 
   const cancelExport = useCallback(() => {
     sendMessage({ type: 'cancelExport' });
   }, [sendMessage]);
 
   // Send export progress to status bar
-  const sendExportProgress = useCallback((info: {
-    isExporting: boolean;
-    percent: number;
-    message: string;
-    currentFrame?: number;
-    totalFrames?: number;
-    currentFps?: number;
-    estimatedTimeRemaining?: number;
-  }) => {
-    sendMessage({ type: 'exportProgress', ...info });
-  }, [sendMessage]);
+  const sendExportProgress = useCallback(
+    (info: {
+      isExporting: boolean;
+      percent: number;
+      message: string;
+      currentFrame?: number;
+      totalFrames?: number;
+      currentFps?: number;
+      estimatedTimeRemaining?: number;
+    }) => {
+      sendMessage({ type: 'exportProgress', ...info });
+    },
+    [sendMessage],
+  );
 
   // Show VSCode native context menu
-  const showContextMenu = useCallback((
-    items: Array<{
-      id: string;
-      label: string;
-      disabled?: boolean;
-      separator?: boolean;
-      shortcut?: string;
-    }>
-  ): Promise<string | undefined> => {
-    return new Promise((resolve) => {
-      const menuId = `menu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      pendingContextMenuCallbacks.set(menuId, resolve);
-      sendMessage({ type: 'showContextMenu', menuId, items });
-    });
-  }, [sendMessage]);
+  const showContextMenu = useCallback(
+    (
+      items: Array<{
+        id: string;
+        label: string;
+        disabled?: boolean;
+        separator?: boolean;
+        shortcut?: string;
+      }>,
+    ): Promise<string | undefined> => {
+      return new Promise((resolve) => {
+        const menuId = `menu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        pendingContextMenuCallbacks.set(menuId, resolve);
+        sendMessage({ type: 'showContextMenu', menuId, items });
+      });
+    },
+    [sendMessage],
+  );
 
   return {
     sendMessage,
@@ -544,7 +584,7 @@ export function showVSCodeContextMenu(
     disabled?: boolean;
     separator?: boolean;
     shortcut?: string;
-  }>
+  }>,
 ): Promise<string | undefined> {
   return new Promise((resolve) => {
     if (!vscode) {

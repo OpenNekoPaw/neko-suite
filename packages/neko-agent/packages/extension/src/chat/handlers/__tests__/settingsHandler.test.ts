@@ -19,7 +19,9 @@ function createMockSettings() {
     maxTokens: 4096,
     executionMode: 'auto' as 'plan' | 'ask' | 'auto',
     get: vi.fn((key: string) => store.get(key)),
-    set: vi.fn((key: string, value: unknown) => { store.set(key, value); }),
+    set: vi.fn((key: string, value: unknown) => {
+      store.set(key, value);
+    }),
   };
 }
 

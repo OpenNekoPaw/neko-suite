@@ -46,7 +46,7 @@ export class MidjourneyMediaAdapter extends BaseMediaAdapter {
   async generateImage(
     request: ImageGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult> {
     const baseUrl = provider.apiUrl || 'https://api.midjourney-proxy.com';
 
@@ -87,7 +87,7 @@ export class MidjourneyMediaAdapter extends BaseMediaAdapter {
         method: 'POST',
         body: JSON.stringify(body),
       },
-      provider
+      provider,
     );
 
     if (result.error) {
@@ -103,7 +103,7 @@ export class MidjourneyMediaAdapter extends BaseMediaAdapter {
   async generateVideo(
     _request: VideoGenerationRequest,
     _model: Model,
-    _provider: Provider
+    _provider: Provider,
   ): Promise<MediaAdapterResult> {
     return {
       status: 'failed',
@@ -118,7 +118,7 @@ export class MidjourneyMediaAdapter extends BaseMediaAdapter {
   async generateAudio(
     _request: AudioGenerationRequest,
     _model: Model,
-    _provider: Provider
+    _provider: Provider,
   ): Promise<MediaAdapterResult> {
     return {
       status: 'failed',
@@ -130,17 +130,14 @@ export class MidjourneyMediaAdapter extends BaseMediaAdapter {
     };
   }
 
-  async getTaskStatus(
-    externalTaskId: string,
-    provider: Provider
-  ): Promise<MediaAdapterResult> {
+  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
     const baseUrl = provider.apiUrl || 'https://api.midjourney-proxy.com';
     const endpoint = `${baseUrl}/mj/task/${externalTaskId}/fetch`;
 
     const result = await this.request<MidjourneyTaskResponse>(
       endpoint,
       { method: 'GET' },
-      provider
+      provider,
     );
 
     if (result.error) {
@@ -156,7 +153,7 @@ export class MidjourneyMediaAdapter extends BaseMediaAdapter {
           externalTaskId,
           status: 'completed',
           progress: 100,
-          outputs: images.map(url => ({
+          outputs: images.map((url) => ({
             type: 'image' as const,
             url,
           })),

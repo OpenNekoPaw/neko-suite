@@ -20,11 +20,7 @@ interface SkillConfirmBannerProps {
   onDecline: () => void;
 }
 
-export function SkillConfirmBanner({
-  request,
-  onConfirm,
-  onDecline,
-}: SkillConfirmBannerProps) {
+export function SkillConfirmBanner({ request, onConfirm, onDecline }: SkillConfirmBannerProps) {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleConfirm = () => {
@@ -43,20 +39,16 @@ export function SkillConfirmBanner({
     relevancePercent >= 80
       ? 'text-[var(--vscode-charts-green)]'
       : relevancePercent >= 60
-      ? 'text-[var(--vscode-charts-yellow)]'
-      : 'text-[var(--vscode-charts-orange)]';
+        ? 'text-[var(--vscode-charts-yellow)]'
+        : 'text-[var(--vscode-charts-orange)]';
 
   return (
     <div className="mx-4 my-2 p-3 rounded-lg border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)]">
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
         <span className="text-lg">✨</span>
-        <span className="font-medium text-[var(--vscode-foreground)]">
-          发现匹配的 Skill
-        </span>
-        <span className={`text-xs ${relevanceColor}`}>
-          ({relevancePercent}% 匹配度)
-        </span>
+        <span className="font-medium text-[var(--vscode-foreground)]">发现匹配的 Skill</span>
+        <span className={`text-xs ${relevanceColor}`}>({relevancePercent}% 匹配度)</span>
       </div>
 
       {/* Skill Info */}
@@ -114,9 +106,7 @@ export function SkillIndicator({ skill, onClear }: SkillIndicatorProps) {
   return (
     <div className="mx-4 my-1 px-3 py-1.5 rounded-md flex items-center gap-2 bg-[var(--vscode-textBlockQuote-background)] border border-[var(--vscode-textBlockQuote-border)]">
       <span className="text-sm">🎯</span>
-      <span className="text-sm font-medium text-[var(--vscode-foreground)]">
-        Skill 已激活:
-      </span>
+      <span className="text-sm font-medium text-[var(--vscode-foreground)]">Skill 已激活:</span>
       <code className="text-xs px-1.5 py-0.5 rounded bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)]">
         {skill.skillName}
       </code>

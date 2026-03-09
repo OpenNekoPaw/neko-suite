@@ -237,7 +237,9 @@ export const StrokeAnimationPresetPicker = memo(function StrokeAnimationPresetPi
   compact = false,
 }: StrokeAnimationPresetPickerProps) {
   const { t } = useTranslation();
-  const [localPreset, setLocalPreset] = useState<StrokeAnimationPreset | null>(selectedPreset || null);
+  const [localPreset, setLocalPreset] = useState<StrokeAnimationPreset | null>(
+    selectedPreset || null,
+  );
   const [duration, setDuration] = useState(initialDuration);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
@@ -258,7 +260,7 @@ export const StrokeAnimationPresetPicker = memo(function StrokeAnimationPresetPi
       setLocalPreset(preset);
       onSelect?.(preset);
     },
-    [onSelect]
+    [onSelect],
   );
 
   const handleApply = useCallback(() => {
@@ -353,7 +355,7 @@ export const StrokeAnimationPresetPicker = memo(function StrokeAnimationPresetPi
               label={t(STROKE_ANIMATION_PRESET_I18N_KEYS[p.preset])}
               icon={p.icon}
             />
-          )
+          ),
         )}
       </div>
 

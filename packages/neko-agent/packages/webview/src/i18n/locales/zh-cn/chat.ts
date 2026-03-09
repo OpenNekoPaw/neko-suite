@@ -129,7 +129,8 @@ export const chat = {
   'chat.commands.plan': '进入计划模式',
   'chat.commands.mcp': '管理 MCP 服务器连接',
 
-  'chat.helpMessage': '**可用命令：**\n- `/clear` - 清除对话历史\n- `/new` - 开始新对话\n- `/resume` - 恢复之前的对话\n- `/help` - 显示帮助信息\n- `/compact` - 压缩对话以节省上下文\n- `/status` - 显示状态信息\n- `/model` - 选择 AI 模型\n- `/plan` - 进入计划模式\n- `/mcp` - 管理 MCP 服务器\n- `/tasks` - 管理后台任务\n- `/settings` - 打开设置\n\n**提示：**\n- 使用 `@` 引用文件\n- 点击 📎 按钮添加附件\n- 按 Enter 发送，Shift+Enter 换行',
+  'chat.helpMessage':
+    '**可用命令：**\n- `/clear` - 清除对话历史\n- `/new` - 开始新对话\n- `/resume` - 恢复之前的对话\n- `/help` - 显示帮助信息\n- `/compact` - 压缩对话以节省上下文\n- `/status` - 显示状态信息\n- `/model` - 选择 AI 模型\n- `/plan` - 进入计划模式\n- `/mcp` - 管理 MCP 服务器\n- `/tasks` - 管理后台任务\n- `/settings` - 打开设置\n\n**提示：**\n- 使用 `@` 引用文件\n- 点击 📎 按钮添加附件\n- 按 Enter 发送，Shift+Enter 换行',
   'chat.attachFile': '添加附件',
   'chat.referenceFile': '使用 @ 引用文件',
   'chat.usage.tokens': 'Token 数',

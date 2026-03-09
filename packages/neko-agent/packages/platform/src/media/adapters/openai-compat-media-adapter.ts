@@ -86,7 +86,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
   async generateImage(
     request: ImageGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult> {
     const url = `${this.getBaseUrl(provider)}/v1/images/generations`;
 
@@ -102,7 +102,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
     const { data, error } = await this.request<OpenAIImageResponse>(
       url,
       { method: 'POST', body: JSON.stringify(body) },
-      provider
+      provider,
     );
 
     if (error) {
@@ -129,7 +129,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
   async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult> {
     const url = `${this.getBaseUrl(provider)}/v1/videos/generations`;
 
@@ -146,7 +146,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
     const { data, error } = await this.request<OpenAIVideoResponse>(
       url,
       { method: 'POST', body: JSON.stringify(body) },
-      provider
+      provider,
     );
 
     if (error) {
@@ -164,16 +164,13 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
   /**
    * Get task status for async video generation
    */
-  async getTaskStatus(
-    externalTaskId: string,
-    provider: Provider
-  ): Promise<MediaAdapterResult> {
+  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
     const url = `${this.getBaseUrl(provider)}/v1/videos/${externalTaskId}`;
 
     const { data, error } = await this.request<OpenAIVideoResponse>(
       url,
       { method: 'GET' },
-      provider
+      provider,
     );
 
     if (error) {
@@ -218,18 +215,14 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
   async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
     await this.cancelViaEndpoint(
       `${this.getBaseUrl(provider)}/v1/videos/${externalTaskId}/cancel`,
-      provider
+      provider,
     );
   }
 
   /**
    * Format size string from dimensions
    */
-  private formatSize(
-    width?: number,
-    height?: number,
-    aspectRatio?: string
-  ): string {
+  private formatSize(width?: number, height?: number, aspectRatio?: string): string {
     if (width && height) {
       return `${width}x${height}`;
     }

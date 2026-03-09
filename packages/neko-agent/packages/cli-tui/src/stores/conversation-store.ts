@@ -27,7 +27,12 @@ export interface ConversationSlice {
   completeMessage: (content: string) => void;
   setThinking: (thinking: string) => void;
   addToolCall: (toolCall: { id: string; name: string; arguments: Record<string, unknown> }) => void;
-  updateToolResult: (result: { toolCallId: string; success: boolean; data: unknown; error?: string }) => void;
+  updateToolResult: (result: {
+    toolCallId: string;
+    success: boolean;
+    data: unknown;
+    error?: string;
+  }) => void;
   updateTodos: (todos: TodoItem[]) => void;
   addError: (error: Error) => void;
   clearMessages: () => void;
@@ -130,7 +135,7 @@ export const useConversationStore = create<ConversationSlice>((set) => ({
                 result: result.data,
                 error: result.error,
               }
-            : tc
+            : tc,
         );
         messages[messages.length - 1] = { ...last, toolCalls };
       }

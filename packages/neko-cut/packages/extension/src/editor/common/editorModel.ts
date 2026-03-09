@@ -202,7 +202,7 @@ export abstract class BaseEditorModel implements IEditorModel {
 
   constructor(
     public readonly document: vscode.TextDocument,
-    public readonly type: EditorType
+    public readonly type: EditorType,
   ) {}
 
   // -------------------------------------------------------------------------

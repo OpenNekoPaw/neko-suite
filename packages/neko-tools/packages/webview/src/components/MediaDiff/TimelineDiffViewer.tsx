@@ -22,46 +22,40 @@ import type { TimelineDiffViewerProps } from './types';
 // Constants
 // =============================================================================
 
-const CHANGE_TYPE_CONFIG: Record<
-  TimelineChangeType,
-  { label: string; color: string; bg: string }
-> = {
-  added: {
-    label: 'Added',
-    color: 'text-green-400',
-    bg: 'bg-green-900/30',
-  },
-  removed: {
-    label: 'Removed',
-    color: 'text-red-400',
-    bg: 'bg-red-900/30',
-  },
-  modified: {
-    label: 'Modified',
-    color: 'text-yellow-400',
-    bg: 'bg-yellow-900/30',
-  },
-  moved: {
-    label: 'Moved',
-    color: 'text-blue-400',
-    bg: 'bg-blue-900/30',
-  },
-  unchanged: {
-    label: 'Unchanged',
-    color: 'text-[var(--vscode-descriptionForeground)]',
-    bg: 'bg-transparent',
-  },
-};
+const CHANGE_TYPE_CONFIG: Record<TimelineChangeType, { label: string; color: string; bg: string }> =
+  {
+    added: {
+      label: 'Added',
+      color: 'text-green-400',
+      bg: 'bg-green-900/30',
+    },
+    removed: {
+      label: 'Removed',
+      color: 'text-red-400',
+      bg: 'bg-red-900/30',
+    },
+    modified: {
+      label: 'Modified',
+      color: 'text-yellow-400',
+      bg: 'bg-yellow-900/30',
+    },
+    moved: {
+      label: 'Moved',
+      color: 'text-blue-400',
+      bg: 'bg-blue-900/30',
+    },
+    unchanged: {
+      label: 'Unchanged',
+      color: 'text-[var(--vscode-descriptionForeground)]',
+      bg: 'bg-transparent',
+    },
+  };
 
 // =============================================================================
 // ChangeTypeBadge
 // =============================================================================
 
-const ChangeTypeBadge = memo(function ChangeTypeBadge({
-  type,
-}: {
-  type: TimelineChangeType;
-}) {
+const ChangeTypeBadge = memo(function ChangeTypeBadge({ type }: { type: TimelineChangeType }) {
   const config = CHANGE_TYPE_CONFIG[type] ?? CHANGE_TYPE_CONFIG.unchanged;
   return (
     <span
@@ -95,9 +89,7 @@ const SummaryCard = memo(function SummaryCard({
       <div className="text-xs text-[var(--vscode-descriptionForeground)] uppercase tracking-wider">
         {label}
       </div>
-      <div className="text-lg font-semibold text-[var(--vscode-foreground)]">
-        {total} changes
-      </div>
+      <div className="text-lg font-semibold text-[var(--vscode-foreground)]">{total} changes</div>
       <div className="flex gap-3 text-xs">
         {added > 0 && <span className="text-green-400">+{added}</span>}
         {removed > 0 && <span className="text-red-400">-{removed}</span>}
@@ -111,11 +103,7 @@ const SummaryCard = memo(function SummaryCard({
 // PropertyChangeRow
 // =============================================================================
 
-const PropertyChangeRow = memo(function PropertyChangeRow({
-  change,
-}: {
-  change: PropertyChange;
-}) {
+const PropertyChangeRow = memo(function PropertyChangeRow({ change }: { change: PropertyChange }) {
   const formatValue = (val: unknown): string => {
     if (val === null || val === undefined) return '—';
     if (typeof val === 'object') return JSON.stringify(val);
@@ -131,9 +119,7 @@ const PropertyChangeRow = memo(function PropertyChangeRow({
         {formatValue(change.previous)}
       </span>
       <span className="text-[var(--vscode-descriptionForeground)]">→</span>
-      <span className="text-green-400 truncate max-w-[200px]">
-        {formatValue(change.current)}
-      </span>
+      <span className="text-green-400 truncate max-w-[200px]">{formatValue(change.current)}</span>
     </div>
   );
 });
@@ -154,9 +140,7 @@ const ElementChangeItem = memo(function ElementChangeItem({
   thumbnailSrc,
 }: ElementChangeItemProps) {
   const [expanded, setExpanded] = useState(false);
-  const hasDetails =
-    (element.propertyChanges && element.propertyChanges.length > 0) ||
-    element.src;
+  const hasDetails = (element.propertyChanges && element.propertyChanges.length > 0) || element.src;
 
   const handleThumbnailRequest = useCallback(() => {
     if (element.src && onInspectElement) {
@@ -299,20 +283,12 @@ const ProjectMetadata = memo(function ProjectMetadata({
 }) {
   const { project, duration } = details;
 
-  const MetaRow = ({
-    label,
-    prev,
-    curr,
-  }: {
-    label: string;
-    prev: string;
-    curr: string;
-  }) => (
+  const MetaRow = ({ label, prev, curr }: { label: string; prev: string; curr: string }) => (
     <div className="flex items-center gap-2 text-xs">
-      <span className="text-[var(--vscode-descriptionForeground)] min-w-[80px]">
-        {label}
-      </span>
-      <span className={prev !== curr ? 'text-red-400 line-through' : 'text-[var(--vscode-foreground)]'}>
+      <span className="text-[var(--vscode-descriptionForeground)] min-w-[80px]">{label}</span>
+      <span
+        className={prev !== curr ? 'text-red-400 line-through' : 'text-[var(--vscode-foreground)]'}
+      >
         {prev}
       </span>
       {prev !== curr && (
@@ -335,11 +311,7 @@ const ProjectMetadata = memo(function ProjectMetadata({
         prev={`${project.resolution.previous.width}×${project.resolution.previous.height}`}
         curr={`${project.resolution.current.width}×${project.resolution.current.height}`}
       />
-      <MetaRow
-        label="FPS"
-        prev={String(project.fps.previous)}
-        curr={String(project.fps.current)}
-      />
+      <MetaRow label="FPS" prev={String(project.fps.previous)} curr={String(project.fps.current)} />
       <MetaRow
         label="Duration"
         prev={`${duration.previous.toFixed(2)}s`}
@@ -392,7 +364,8 @@ export const TimelineDiffViewer = memo(function TimelineDiffViewer({
       {/* Media source changes note */}
       {summary.mediaSourceChanges > 0 && (
         <div className="text-xs text-yellow-400 px-3 py-2 rounded bg-yellow-900/20 border border-yellow-800/30">
-          {summary.mediaSourceChanges} element(s) have changed media sources — click to load thumbnails
+          {summary.mediaSourceChanges} element(s) have changed media sources — click to load
+          thumbnails
         </div>
       )}
 

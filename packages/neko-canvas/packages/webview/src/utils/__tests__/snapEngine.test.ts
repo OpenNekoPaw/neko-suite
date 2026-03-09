@@ -6,13 +6,7 @@ import type { CanvasNode } from '@neko/shared';
 // Test Helpers
 // =============================================================================
 
-function createNode(
-  id: string,
-  x: number,
-  y: number,
-  width = 100,
-  height = 80
-): CanvasNode {
+function createNode(id: string, x: number, y: number, width = 100, height = 80): CanvasNode {
   return {
     id,
     type: 'annotation',
@@ -298,10 +292,7 @@ describe('SnapEngine', () => {
       engine.setNodes([refNode]);
 
       // Snap to ref left edge x=200
-      const guides = engine.generateGuides(
-        { x: 203, y: 50 },
-        { width: 100, height: 80 }
-      );
+      const guides = engine.generateGuides({ x: 203, y: 50 }, { width: 100, height: 80 });
 
       const verticalGuide = guides.find((g) => g.direction === 'vertical');
       expect(verticalGuide).toBeDefined();
@@ -319,10 +310,7 @@ describe('SnapEngine', () => {
       engine.setNodes([refNode]);
 
       // Snap to ref top edge y=200
-      const guides = engine.generateGuides(
-        { x: 50, y: 203 },
-        { width: 100, height: 80 }
-      );
+      const guides = engine.generateGuides({ x: 50, y: 203 }, { width: 100, height: 80 });
 
       const horizontalGuide = guides.find((g) => g.direction === 'horizontal');
       expect(horizontalGuide).toBeDefined();
@@ -340,10 +328,7 @@ describe('SnapEngine', () => {
       engine.setNodes([refNode]);
 
       // Position far from any snap target
-      const guides = engine.generateGuides(
-        { x: 500, y: 500 },
-        { width: 100, height: 80 }
-      );
+      const guides = engine.generateGuides({ x: 500, y: 500 }, { width: 100, height: 80 });
 
       expect(guides).toHaveLength(0);
     });
@@ -359,10 +344,7 @@ describe('SnapEngine', () => {
 
       // ref center X = 250, moving center X = x + 50
       // x = 203 => center = 253, diff = 3
-      const guides = engine.generateGuides(
-        { x: 203, y: 50 },
-        { width: 100, height: 80 }
-      );
+      const guides = engine.generateGuides({ x: 203, y: 50 }, { width: 100, height: 80 });
 
       const centerGuide = guides.find((g) => g.type === 'center');
       expect(centerGuide).toBeDefined();
@@ -379,10 +361,7 @@ describe('SnapEngine', () => {
         threshold: 8,
       });
 
-      const guides = engine.generateGuides(
-        { x: 23, y: 45 },
-        { width: 100, height: 80 }
-      );
+      const guides = engine.generateGuides({ x: 23, y: 45 }, { width: 100, height: 80 });
 
       expect(guides).toHaveLength(0);
     });
@@ -410,10 +389,7 @@ describe('SnapEngine', () => {
       // Grid enabled, gridSize 20, threshold 8
 
       // Position x=22 is 2 away from grid 20 (within threshold 8)
-      const result = defaultEngine.snap(
-        { x: 22, y: 18 },
-        { width: 100, height: 80 }
-      );
+      const result = defaultEngine.snap({ x: 22, y: 18 }, { width: 100, height: 80 });
 
       expect(result.snapped).toBe(true);
       expect(result.position.x).toBe(20);

@@ -50,14 +50,10 @@ export function MessageActionsProvider({
       actions.onModifyPlanStep,
       actions.onApproveAllPlanSteps,
       actions.onRejectAllPlanSteps,
-    ]
+    ],
   );
 
-  return (
-    <MessageActionsContext.Provider value={value}>
-      {children}
-    </MessageActionsContext.Provider>
-  );
+  return <MessageActionsContext.Provider value={value}>{children}</MessageActionsContext.Provider>;
 }
 
 export function useMessageActions(): MessageActionsContextValue {

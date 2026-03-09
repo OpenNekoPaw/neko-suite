@@ -79,23 +79,18 @@ export function AgentStateIndicator({ agentState, className = '' }: AgentStateIn
   }, [startedAt]);
 
   // Generate display text
-  const displayText = phase === 'acting' && toolName
-    ? `${config.label}: ${toolName}`
-    : config.label;
+  const displayText =
+    phase === 'acting' && toolName ? `${config.label}: ${toolName}` : config.label;
 
   return (
     <div
       className={`flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] ${className}`}
     >
       {/* Animated indicator */}
-      <span className={`animate-pulse ${config.color}`}>
-        {config.icon}
-      </span>
+      <span className={`animate-pulse ${config.color}`}>{config.icon}</span>
 
       {/* Status text */}
-      <span className="text-xs text-[var(--vscode-foreground)] opacity-80">
-        {displayText}
-      </span>
+      <span className="text-xs text-[var(--vscode-foreground)] opacity-80">{displayText}</span>
 
       {/* Elapsed time */}
       <span className="text-xs text-[var(--vscode-descriptionForeground)] opacity-60">
@@ -137,21 +132,14 @@ export function AgentStateIndicatorCompact({ agentState }: { agentState: AgentSt
   const { phase, toolName } = agentState;
   const config = phaseConfig[phase];
 
-  const title = phase === 'acting' && toolName
-    ? `${config.label}: ${toolName}`
-    : config.label;
+  const title = phase === 'acting' && toolName ? `${config.label}: ${toolName}` : config.label;
 
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 text-xs ${config.color}`}
-      title={title}
-    >
+    <span className={`inline-flex items-center gap-1.5 text-xs ${config.color}`} title={title}>
       <span className="animate-pulse">{config.icon}</span>
       <span className="opacity-80">{config.label}</span>
       {elapsedTime && (
-        <span className="text-[var(--vscode-descriptionForeground)] opacity-60">
-          {elapsedTime}
-        </span>
+        <span className="text-[var(--vscode-descriptionForeground)] opacity-60">{elapsedTime}</span>
       )}
     </span>
   );
