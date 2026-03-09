@@ -1,6 +1,7 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+import security from 'eslint-plugin-security';
 
 export default tseslint.config(
   // Global ignores
@@ -53,6 +54,14 @@ export default tseslint.config(
       'no-useless-escape': 'warn',
       'prefer-const': 'warn',
     },
+  },
+
+  // Security rules — all at warn level (Phase 2 policy: report-only, no CI block)
+  // Covers: path traversal, child_process injection, unsafe regex (ReDoS),
+  //         object injection, eval, non-literal regexp, timing attacks
+  {
+    ...security.configs.recommended,
+    files: ['packages/**/src/**/*.ts', 'packages/**/src/**/*.tsx'],
   },
 
   // React hooks rules — applied to both .tsx and hook .ts files

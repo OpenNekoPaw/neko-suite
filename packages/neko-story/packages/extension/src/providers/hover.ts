@@ -24,6 +24,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     const fountainDoc = this.index.getDocument(document.uri) ?? parse(document.getText());
 
     // Check if hovering over a character name
+    // eslint-disable-next-line security/detect-unsafe-regex -- false positive: no nested quantifiers, input is short local Fountain script lines
     const charMatch = /^([A-Z][A-Z0-9 ._\-']+)(?:\s*\([^)]+\))?(\s*\^)?$/.exec(line);
     if (charMatch) {
       const charName = charMatch[1]?.trim();

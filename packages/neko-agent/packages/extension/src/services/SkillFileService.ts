@@ -296,6 +296,7 @@ export class SkillFileService implements vscode.Disposable {
       if (content.trim().startsWith('---')) {
         // Content already has frontmatter, use as-is but update name
         fileContent = content.replace(
+          // eslint-disable-next-line security/detect-unsafe-regex -- false positive: `.*` excludes \n so each iteration matches exactly one line, no backtracking ambiguity
           /^(---\s*\n(?:.*\n)*?)(name:\s*)[^\n]+/m,
           `$1$2"${skillName}"`,
         );
