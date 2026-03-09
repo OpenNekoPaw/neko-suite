@@ -68,7 +68,7 @@ export const createTrackOpsSlice: StateCreator<
     dispatch({
       type: 'track.add',
       meta: createMeta('user', `Add ${trackName}`),
-      payload: { track: newTrack as any },
+      payload: { track: newTrack },
     });
 
     return trackId;
@@ -86,7 +86,7 @@ export const createTrackOpsSlice: StateCreator<
       type: 'track.remove',
       meta: createMeta('user', `Remove ${track.name}`),
       payload: { trackId },
-      before: { track: track as any, index },
+      before: { track, index },
     });
   },
 

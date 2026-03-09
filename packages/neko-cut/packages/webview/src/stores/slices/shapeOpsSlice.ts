@@ -13,7 +13,7 @@
 
 import { StateCreator } from 'zustand';
 import type { ProjectData, TimelineTrack } from '../../types';
-import type { ShapeElement } from '@neko/shared';
+import type { ShapeElement, TimelineElement as BaseTimelineElement } from '@neko/shared';
 import type { Shape, ShapeInstance, ShapeStyle, ShapeType } from '../../types/shape';
 import type { EditOperation } from '@neko/shared';
 import {
@@ -227,7 +227,7 @@ export const createShapeOpsSlice: StateCreator<
       meta: createMeta('user', 'Add Shape Layer'),
       payload: {
         trackId,
-        element: shapeElement as unknown as any,
+        element: shapeElement as BaseTimelineElement,
       },
     });
 
@@ -258,7 +258,7 @@ export const createShapeOpsSlice: StateCreator<
       payload: {
         trackId,
         elementId,
-        shape: shapeInstance as any,
+        shape: shapeInstance,
       },
     });
 
@@ -281,7 +281,7 @@ export const createShapeOpsSlice: StateCreator<
       meta: createMeta('user'),
       payload: { trackId, elementId, shapeId },
       before: {
-        shape: shape as any,
+        shape,
         index: shapeIndex,
       },
     });
@@ -311,7 +311,7 @@ export const createShapeOpsSlice: StateCreator<
       payload: {
         trackId,
         elementId,
-        newShape: clonedShape as any,
+        newShape: clonedShape,
       },
     });
 
@@ -329,16 +329,18 @@ export const createShapeOpsSlice: StateCreator<
     if (!shape) return;
 
     // Build before from existing shape
-    const beforeUpdates: Record<string, unknown> = {};
+    const shapeRecord = shape as unknown as Record<string, unknown>;
+    const beforeUpdates: Partial<ShapeInstance> = {};
+    const beforeRecord = beforeUpdates as unknown as Record<string, unknown>;
     for (const key of Object.keys(updates)) {
-      beforeUpdates[key] = (shape as any)[key];
+      beforeRecord[key] = shapeRecord[key];
     }
 
     dispatch({
       type: 'shape.update',
       meta: createMeta('user'),
-      payload: { trackId, elementId, shapeId, updates: updates as any },
-      before: { updates: beforeUpdates as any },
+      payload: { trackId, elementId, shapeId, updates },
+      before: { updates: beforeUpdates },
     });
   },
 
@@ -353,16 +355,18 @@ export const createShapeOpsSlice: StateCreator<
     if (!shape) return;
 
     // Build before from existing shape geometry
-    const beforeShape: Record<string, unknown> = {};
+    const shapeRecord = shape.shape as unknown as Record<string, unknown>;
+    const beforeShape: Partial<Shape> = {};
+    const beforeRecord = beforeShape as unknown as Record<string, unknown>;
     for (const key of Object.keys(shapeUpdates)) {
-      beforeShape[key] = (shape.shape as any)[key];
+      beforeRecord[key] = shapeRecord[key];
     }
 
     dispatch({
       type: 'shape.updateGeometry',
       meta: createMeta('user'),
-      payload: { trackId, elementId, shapeId, shape: shapeUpdates as any },
-      before: { shape: beforeShape as any },
+      payload: { trackId, elementId, shapeId, shape: shapeUpdates },
+      before: { shape: beforeShape },
     });
   },
 
@@ -385,8 +389,8 @@ export const createShapeOpsSlice: StateCreator<
     dispatch({
       type: 'shape.updateStyle',
       meta: createMeta('user'),
-      payload: { trackId, elementId, shapeId, style: styleUpdates as any },
-      before: { style: beforeStyle as any },
+      payload: { trackId, elementId, shapeId, style: styleUpdates },
+      before: { style: beforeStyle },
     });
   },
 
@@ -497,9 +501,11 @@ export const createShapeOpsSlice: StateCreator<
     if (!location) return;
 
     const shape = location.element.shapes[location.shapeIndex]!;
-    const beforeUpdates: Record<string, unknown> = {};
+    const shapeRecord = shape as unknown as Record<string, unknown>;
+    const beforeUpdates: Partial<ShapeInstance> = {};
+    const beforeRecord = beforeUpdates as unknown as Record<string, unknown>;
     for (const key of Object.keys(updates)) {
-      beforeUpdates[key] = (shape as any)[key];
+      beforeRecord[key] = shapeRecord[key];
     }
 
     dispatch({
@@ -509,9 +515,9 @@ export const createShapeOpsSlice: StateCreator<
         trackId: location.track.id,
         elementId: location.element.id,
         shapeId,
-        updates: updates as any,
+        updates,
       },
-      before: { updates: beforeUpdates as any },
+      before: { updates: beforeUpdates },
     });
   },
 
@@ -533,7 +539,7 @@ export const createShapeOpsSlice: StateCreator<
         shapeId,
       },
       before: {
-        shape: shape as any,
+        shape,
         index: location.shapeIndex,
       },
     });

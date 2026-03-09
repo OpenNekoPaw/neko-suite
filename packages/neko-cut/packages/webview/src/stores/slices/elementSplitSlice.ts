@@ -125,7 +125,7 @@ export const createElementSplitSlice: StateCreator<
         trackId,
         elementId,
         splitPoint,
-        rightElement: rightElement as any,
+        rightElement,
       },
       before: { trimEnd: element.trimEnd },
     });

@@ -43,8 +43,8 @@ export const createDispatchSlice: StateCreator<
     if (!project) return;
 
     try {
-      const newProject = applyOperation(project as any, op);
-      set({ project: newProject as any });
+      const newProject = applyOperation(project, op);
+      set({ project: newProject });
       pushOperation(op);
     } catch (e) {
       logger.error('apply failed:', { error: e, op });
@@ -62,8 +62,8 @@ export const createDispatchSlice: StateCreator<
     };
 
     try {
-      const newProject = applyOperation(project as any, batchOp);
-      set({ project: newProject as any });
+      const newProject = applyOperation(project, batchOp);
+      set({ project: newProject });
       pushOperation(batchOp);
     } catch (e) {
       logger.error('batch apply failed:', { error: e, ops });

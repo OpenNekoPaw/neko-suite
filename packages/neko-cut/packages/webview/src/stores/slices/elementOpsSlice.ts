@@ -235,7 +235,7 @@ export const createElementOpsSlice: StateCreator<
         ops.push({
           type: 'track.add',
           meta: createMeta('user', 'Add Media Track'),
-          payload: { track: newTrack as any },
+          payload: { track: newTrack },
         });
       }
     }
@@ -304,7 +304,7 @@ export const createElementOpsSlice: StateCreator<
         syncOps.push({
           type: 'track.add',
           meta: createMeta('user', 'Add Media Track'),
-          payload: { track: newTrack as any },
+          payload: { track: newTrack },
         });
         videoTrackIndex = project.tracks.length;
       }
@@ -426,7 +426,7 @@ export const createElementOpsSlice: StateCreator<
             videoElementId,
             audioTrackId,
             audioElement,
-            audioTrack: audioTrack as any,
+            audioTrack,
           },
         });
 
@@ -465,7 +465,7 @@ export const createElementOpsSlice: StateCreator<
           batchOps.push({
             type: 'track.add',
             meta: createMeta('system', `Add ${trackName}`),
-            payload: { track: newTrack as any },
+            payload: { track: newTrack },
           });
 
           for (const cue of extractedTrack.cues) {
@@ -541,7 +541,7 @@ export const createElementOpsSlice: StateCreator<
       meta: createMeta('user', `Remove ${element.name || 'element'}`),
       payload: { trackId, elementId },
       before: {
-        element: element as any,
+        element,
         index: elementIndex,
         rippleAffected,
       },
@@ -746,7 +746,7 @@ export const createElementOpsSlice: StateCreator<
         videoElementId: elementId,
         audioTrackId,
         audioElement,
-        audioTrack: audioTrack as any,
+        audioTrack,
       },
     });
 
@@ -810,8 +810,8 @@ export const createElementOpsSlice: StateCreator<
       before: {
         linkedAudioId,
         audioTrackId,
-        audioElement: audioElement as any,
-        audioTrack: audioTrack as any,
+        audioElement,
+        audioTrack,
       },
     });
   },

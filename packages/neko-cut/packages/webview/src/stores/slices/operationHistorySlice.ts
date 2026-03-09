@@ -62,10 +62,10 @@ export const createOperationHistorySlice: StateCreator<
     const inv = invertOperation(op);
 
     try {
-      const newProject = applyOperation(project as any, inv);
+      const newProject = applyOperation(project, inv);
       const { opRedoStack } = get();
       set({
-        project: newProject as any,
+        project: newProject,
         opUndoStack: opUndoStack.slice(0, -1),
         opRedoStack: [...opRedoStack, op],
       });
@@ -82,10 +82,10 @@ export const createOperationHistorySlice: StateCreator<
     const op = opRedoStack[opRedoStack.length - 1];
 
     try {
-      const newProject = applyOperation(project as any, op);
+      const newProject = applyOperation(project, op);
       const { opUndoStack } = get();
       set({
-        project: newProject as any,
+        project: newProject,
         opUndoStack: [...opUndoStack, op],
         opRedoStack: opRedoStack.slice(0, -1),
       });

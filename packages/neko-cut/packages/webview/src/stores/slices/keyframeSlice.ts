@@ -389,7 +389,7 @@ export const createKeyframeSlice: StateCreator<
     // Build before from existing keyframe
     const beforeUpdates: Record<string, unknown> = {};
     for (const key of Object.keys(updates)) {
-      beforeUpdates[key] = (keyframe as any)[key];
+      beforeUpdates[key] = (keyframe as unknown as Record<string, unknown>)[key];
     }
 
     dispatch({
@@ -496,7 +496,7 @@ export const createKeyframeSlice: StateCreator<
 
     const beforeUpdates: Record<string, unknown> = {};
     for (const key of Object.keys(updates)) {
-      beforeUpdates[key] = (keyframe as any)[key];
+      beforeUpdates[key] = (keyframe as unknown as Record<string, unknown>)[key];
     }
 
     dispatch({
@@ -595,7 +595,7 @@ export const createKeyframeSlice: StateCreator<
 
     const beforeUpdates: Record<string, unknown> = {};
     for (const key of Object.keys(updates)) {
-      beforeUpdates[key] = (keyframe as any)[key];
+      beforeUpdates[key] = (keyframe as unknown as Record<string, unknown>)[key];
     }
 
     dispatch({
