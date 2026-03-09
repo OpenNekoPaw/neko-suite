@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build & Format Check
+    name: Build & Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +36,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
+      - run: pnpm lint || true
       - run: pnpm build
 
   test-ts:
@@ -63,7 +64,14 @@ jobs:
             turbo-${{ runner.os }}-
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test -- --run
+      - run: pnpm test -- --run --coverage
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-reports
+          path: packages/**/coverage/
+          retention-days: 14
 
   test-rust:
     name: Rust Tests

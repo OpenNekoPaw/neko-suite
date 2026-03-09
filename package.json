@@ -24,7 +24,9 @@
     "build:neko-preview": "turbo run compile --filter=neko-preview",
     "dev": "turbo run dev --filter=neko-cut",
     "dev:neko": "turbo run watch --filter=neko-cut",
-    "lint": "turbo run lint",
+    "lint": "eslint \"packages/**/src/**/*.{ts,tsx}\"",
+    "lint:fix": "eslint \"packages/**/src/**/*.{ts,tsx}\" --fix",
+    "lint:turbo": "turbo run lint",
     "test": "turbo run test",
     "clean": "turbo run clean && rm -rf .turbo node_modules/.cache",
     "generate:types": "node scripts/proto-gen-ts.mjs",
@@ -35,6 +37,7 @@
   },
   "lint-staged": {
     "packages/**/src/**/*.{ts,tsx}": [
+      "eslint --fix",
       "prettier --write"
     ],
     "packages/**/src/**/*.{json,md}": [
@@ -48,11 +51,15 @@
     "mp4-muxer": "^5.2.2"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@vscode/vsce": "^3.7.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.3.2",
     "prettier": "^3.8.1",
     "protobufjs": "^8.0.0",
-    "turbo": "^2.8.3"
+    "turbo": "^2.8.3",
+    "typescript-eslint": "^8.56.1"
   }
 }

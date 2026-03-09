@@ -157,15 +157,16 @@
 
 ## 📋 技术债务
 
-### CI/CD 基础设施（Phase 1 ✅ 已完成）
+### CI/CD 基础设施（Phase 1-2 ✅ 已完成）
 
-- [x] GitHub Actions CI（`.github/workflows/ci.yml`）— build + test-ts + test-rust（路径过滤）
+- [x] GitHub Actions CI（`.github/workflows/ci.yml`）— build + lint + test-ts + test-rust（路径过滤）
 - [x] Prettier 统一格式化（`.prettierrc.json`）— 835 个文件已格式化
-- [x] Pre-commit hooks（Husky + lint-staged）— 自动格式化暂存文件
+- [x] Pre-commit hooks（Husky + lint-staged）— ESLint --fix + Prettier 自动格式化
 - [x] 根 tsconfig 强化（`strict` + `noUncheckedIndexedAccess` + `noImplicitOverride`）
-- [ ] ESLint 统一配置（`eslint.config.mjs` flat config v9+，warn 模式）— Phase 2
-- [ ] 测试覆盖率收集（vitest coverage + CI artifact 上传）— Phase 2
+- [x] ESLint 统一配置（`eslint.config.mjs` flat config v9 + typescript-eslint + react-hooks，warn 模式）
+- [x] 测试覆盖率收集（vitest v8 coverage + CI artifact 上传，13 个 vitest.config 已配置）
 - [ ] Release workflow（`.github/workflows/release.yml`，tag 触发 vsix 打包）— Phase 3
+- [ ] ESLint warn → error 升级（`no-console` + `no-explicit-any`，待清理完成后）— Phase 3
 
 ### 代码质量
 
@@ -200,4 +201,4 @@
 
 ---
 
-*最后更新：2026-03-09（CI/CD Phase 1 ✅：GitHub Actions + Prettier + Husky + tsconfig strict）*
+*最后更新：2026-03-09（CI/CD Phase 1-2 ✅：GitHub Actions + Prettier + Husky + tsconfig strict + ESLint + Coverage）*
