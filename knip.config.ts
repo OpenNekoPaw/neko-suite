@@ -31,10 +31,14 @@ const config: KnipConfig = {
 
     // ── Extension sub-packages ────────────────────────
     'packages/neko-cut/packages/extension': {},
-    'packages/neko-cut/packages/webview': { entry: ['src/main.tsx'] },
+    'packages/neko-cut/packages/webview': {
+      entry: ['src/main.tsx', 'src/assetLibrary.tsx', 'src/propertyPanel.tsx'],
+    },
     'packages/neko-agent/packages/extension': {},
     'packages/neko-agent/packages/webview': { entry: ['src/main.tsx'] },
-    'packages/neko-agent/packages/platform': {},
+    'packages/neko-agent/packages/platform': {
+      ignore: ['examples/**'], // Dev examples, not part of build
+    },
     'packages/neko-agent/packages/agent': {},
     'packages/neko-canvas/packages/extension': {},
     'packages/neko-canvas/packages/webview': { entry: ['src/main.tsx'] },
@@ -48,10 +52,16 @@ const config: KnipConfig = {
         'src/media-lsp/index.ts',
       ],
     },
-    'packages/neko-tools/packages/webview': { entry: ['src/main.tsx'] },
+    'packages/neko-tools/packages/webview': { entry: ['src/mediaDiff.tsx'] },
+    'packages/neko-preview/packages/webview': {
+      entry: ['src/audio/main.tsx', 'src/video/main.tsx'],
+    },
     'packages/neko-preview/packages/extension': {},
     'packages/neko-assets/packages/asset': {},
     'packages/neko-engine/packages/extension': {},
+
+    // ── Skills (CLI scripts, not imported) ───────────────
+    'skills/vscode-extension-debugger': { ignore: ['**/*'] },
 
     // ── Skip packages ─────────────────────────────────
     'packages/neko-proto': { ignore: ['**/*'] },
