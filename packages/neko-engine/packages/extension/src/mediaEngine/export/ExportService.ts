@@ -6,6 +6,9 @@
  */
 
 import type { NativeEngineType, NativeEngineModule } from '../NativeMediaEngine';
+import { getLogger } from '../../base/logger';
+
+const logger = getLogger('ExportService');
 
 // =============================================================================
 // Coordinate Transform Utility
@@ -271,9 +274,9 @@ export class ExportService {
       const module = (await import('@neko-engine/native-napi')) as unknown as NativeEngineModule;
       this._engine = await module.NativeEngine.create();
       this._isInitialized = true;
-      console.log('[ExportService] Initialized with NativeEngine');
+      logger.info('Initialized with NativeEngine');
     } catch (error) {
-      console.error('[ExportService] Failed to initialize:', error);
+      logger.error('Failed to initialize', error);
       throw new Error(`Export service initialization failed: ${error}`);
     }
   }
@@ -284,7 +287,7 @@ export class ExportService {
   initializeWithEngine(engine: NativeEngineType): void {
     this._engine = engine;
     this._isInitialized = true;
-    console.log('[ExportService] Initialized with existing NativeEngine');
+    logger.info('Initialized with existing NativeEngine');
   }
 
   /**
@@ -369,9 +372,9 @@ export class ExportService {
     if (this._currentJobId && this._engine) {
       try {
         await this._engine.cancelTask(this._currentJobId);
-        console.log(`[ExportService] Cancelled job ${this._currentJobId}`);
+        logger.info(`Cancelled job ${this._currentJobId}`);
       } catch (error) {
-        console.warn('[ExportService] Failed to cancel:', error);
+        logger.warn('Failed to cancel', error);
       }
     }
 
@@ -534,7 +537,7 @@ export class ExportService {
           }
         } catch (error) {
           // Transient error — keep polling
-          console.warn('[ExportService] Progress poll error:', error);
+          logger.warn('Progress poll error', error);
         }
       }, PROGRESS_POLL_INTERVAL_MS);
     });

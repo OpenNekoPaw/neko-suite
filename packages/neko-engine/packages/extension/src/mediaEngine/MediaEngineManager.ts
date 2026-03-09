@@ -33,6 +33,9 @@ function isBasicModeAudioCodec(codec: string): boolean {
 }
 
 import { NativeMediaEngine, createNativeMediaEngine } from './NativeMediaEngine';
+import { getLogger } from '../base/logger';
+
+const logger = getLogger('MediaEngineManager');
 
 // =============================================================================
 // Types
@@ -168,7 +171,7 @@ export class MediaEngineManager implements vscode.Disposable {
         }
       } catch (error) {
         // Probe failed - conservative approach: mark as unsupported
-        console.warn(`[MediaEngineManager] Failed to probe ${absolutePath}:`, error);
+        logger.warn(`Failed to probe ${absolutePath}`, error);
         unsupportedFiles.push({
           path: mediaPath,
           reason: `无法分析文件: ${error instanceof Error ? error.message : String(error)}`,
@@ -214,14 +217,13 @@ export class MediaEngineManager implements vscode.Disposable {
     const analysis = await this.analyzeTimelineMedia(mediaPaths, projectDir);
 
     if (analysis.allSupportBasic) {
-      console.log(`[MediaEngineManager] All ${analysis.totalFiles} media files support basic mode`);
+      logger.info(`All ${analysis.totalFiles} media files support basic mode`);
       return 'basic';
     }
 
     // Some files need compatible mode
-    console.log(
-      `[MediaEngineManager] ${analysis.unsupportedFiles.length}/${analysis.totalFiles} ` +
-        `files require compatible mode:`,
+    logger.info(
+      `${analysis.unsupportedFiles.length}/${analysis.totalFiles} files require compatible mode`,
       analysis.unsupportedFiles.map((f) => `${f.path}: ${f.reason}`),
     );
 
@@ -372,7 +374,7 @@ export class MediaEngineManager implements vscode.Disposable {
   // =========================================================================
 
   dispose(): void {
-    this.disposeEngines().catch(console.error);
+    this.disposeEngines().catch((err) => logger.error('Failed to dispose engines', err));
     this._disposables.forEach((d) => d.dispose());
   }
 }

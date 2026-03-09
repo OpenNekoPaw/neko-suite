@@ -6,6 +6,9 @@
 
 import type { TrackLayer, FrameProvider } from './ExportService';
 import type { NativeEngineType, NativeEngineModule } from '../NativeMediaEngine';
+import { getLogger } from '../../base/logger';
+
+const logger = getLogger('VideoFrameProvider');
 
 // =============================================================================
 // Frame Cache
@@ -76,9 +79,9 @@ export class VideoFrameProvider implements FrameProvider {
       const module = (await import('@neko-engine/native-napi')) as unknown as NativeEngineModule;
       this._engine = await module.NativeEngine.create();
       this._initialized = true;
-      console.log('[VideoFrameProvider] Initialized with NativeEngine');
+      logger.info('Initialized with NativeEngine');
     } catch (error) {
-      console.error('[VideoFrameProvider] Failed to initialize:', error);
+      logger.error('Failed to initialize', error);
       throw new Error(`VideoFrameProvider initialization failed: ${error}`);
     }
   }
@@ -137,10 +140,7 @@ export class VideoFrameProvider implements FrameProvider {
 
       return { data: buffer, width: frameData.width, height: frameData.height };
     } catch (error) {
-      console.error(
-        `[VideoFrameProvider] Failed to decode frame for ${layer.source} at ${localTime}:`,
-        error,
-      );
+      logger.error(`Failed to decode frame for ${layer.source} at ${localTime}`, error);
       return null;
     }
   }

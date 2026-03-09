@@ -21,7 +21,7 @@ import {
   createVideoFrameProvider,
   type ExportProgress,
 } from './mediaEngine/export';
-import { setRootLogger, setErrorHandler, handleError } from './base';
+import { setRootLogger, setErrorHandler, handleError, getLogger } from './base';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 
 // =============================================================================
@@ -659,10 +659,11 @@ function log(message: string, level: 'info' | 'error' = 'info'): void {
   const prefix = level === 'error' ? '❌' : '📋';
   outputChannel.appendLine(`[${timestamp}] ${prefix} ${message}`);
 
+  const extensionLogger = getLogger('Extension');
   if (level === 'error') {
-    console.error(`[NekoEngine] ${message}`);
+    extensionLogger.error(message);
   } else {
-    console.log(`[NekoEngine] ${message}`);
+    extensionLogger.info(message);
   }
 }
 

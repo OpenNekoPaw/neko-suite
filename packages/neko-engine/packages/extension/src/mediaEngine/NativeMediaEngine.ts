@@ -28,6 +28,7 @@ import type {
   EffectPipeline,
 } from '@neko/shared';
 import { COMPATIBLE_MODE_CAPABILITIES } from '@neko/shared';
+import { getLogger } from '../base/logger';
 
 // =============================================================================
 // NativeEngine Types (matching engine.rs NAPI interface)
@@ -134,9 +135,8 @@ export class NativeMediaEngine implements IMediaEngine {
 
       // Log GPU info
       const hasGpu = this._engine.hasGpu();
-      console.log(
-        `[NativeMediaEngine] NativeEngine created (GPU: ${hasGpu ? 'enabled' : 'disabled'})`,
-      );
+      const engineLogger = getLogger('NativeMediaEngine');
+      engineLogger.info(`NativeEngine created (GPU: ${hasGpu ? 'enabled' : 'disabled'})`);
 
       // Detect hardware acceleration
       this._detectHardwareAcceleration();
@@ -412,7 +412,7 @@ class NativeVideoDecoder implements IDecoder {
         isKeyframe: true,
       };
     } catch (error) {
-      console.warn('[NativeVideoDecoder] Decode failed:', error);
+      getLogger('NativeVideoDecoder').warn('Decode failed', error);
       return null;
     }
   }
@@ -543,7 +543,7 @@ class NativeAudioDecoder implements IDecoder {
         duration: 0.1,
       };
     } catch (error) {
-      console.warn('[NativeAudioDecoder] Decode failed:', error);
+      getLogger('NativeAudioDecoder').warn('Decode failed', error);
       return null;
     }
   }
@@ -590,7 +590,7 @@ class NativeAudioDecoder implements IDecoder {
         duration,
       };
     } catch (error) {
-      console.warn('[NativeAudioDecoder] Range decode failed:', error);
+      getLogger('NativeAudioDecoder').warn('Range decode failed', error);
     }
   }
 
@@ -671,7 +671,7 @@ class NativeEncoder implements IEncoder {
       try {
         await this._engine.cancelTask(this._jobId);
       } catch (error) {
-        console.warn('[NativeEncoder] Failed to cancel task:', error);
+        getLogger('NativeEncoder').warn('Failed to cancel task', error);
       }
     }
 
