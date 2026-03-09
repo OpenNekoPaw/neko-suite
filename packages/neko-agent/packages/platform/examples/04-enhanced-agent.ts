@@ -9,31 +9,19 @@ import {
   createEnhancedAgent,
   ToolRegistry,
   InMemorySessionMemory,
-  SlidingWindowCompressor,
-  SimpleTokenCounter,
+  ConversationCompressor,
   Tool,
   ToolResult,
   ToolCategory,
 } from '@neko/platform';
 
-// Custom context manager
-class SimpleContextManager {
-  maxTokens = 4096;
-  private tokenCounter = new SimpleTokenCounter();
-  private compressor = new SlidingWindowCompressor({ maxMessages: 20 });
-
-  async compress(messages: Array<{ role: string; content: string }>) {
-    return this.compressor.compress(messages as any, this.maxTokens);
-  }
-
-  estimateTokens(messages: Array<{ role: string; content: string }>) {
-    return messages.reduce((sum, m) => sum + this.tokenCounter.count(m.content), 0);
-  }
-
-  shouldCompress(messages: Array<{ role: string; content: string }>) {
-    return this.estimateTokens(messages) > this.maxTokens * 0.8;
-  }
-}
+// Context manager using ConversationCompressor
+const contextCompressor = new ConversationCompressor({
+  triggers: {
+    tokenThreshold: 4096,
+    turnThreshold: 20,
+  },
+});
 
 // Sample tool
 class AnalyzeVideoTool implements Tool {
@@ -83,8 +71,6 @@ async function main() {
 
     // Setup memory
     const sessionMemory = new InMemorySessionMemory('enhanced-session');
-    const contextManager = new SimpleContextManager();
-
     // Create enhanced agent
     const agent = createEnhancedAgent({
       service,
@@ -131,7 +117,7 @@ Always be thorough in your analysis.`,
 
       // Memory integration
       sessionMemory,
-      contextManager,
+      contextManager: contextCompressor,
 
       // Callbacks
       onStep: (step) => {

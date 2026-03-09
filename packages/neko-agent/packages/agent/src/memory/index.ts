@@ -1,22 +1,11 @@
 /**
  * Agent Memory Module
  *
- * Provides token counting, context compression, and session memory
- * for Agent execution.
+ * Provides session memory for Agent execution.
+ * Context compression has been moved to '../context' (ConversationCompressor).
  */
 
-// Context management (token counting & compression)
-export {
-  SimpleTokenCounter,
-  SlidingWindowCompressor,
-  SummarizeCompressor,
-  SelectiveCompressor,
-  ContextManager,
-} from './context';
-
-// Session memory (fact extraction & persistence)
+// Session memory
 export {
   InMemorySessionMemory,
-  KeyFactExtractor,
-  type KeyFactExtractorConfig,
 } from './session-memory';

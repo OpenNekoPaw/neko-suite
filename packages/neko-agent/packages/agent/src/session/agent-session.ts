@@ -33,7 +33,7 @@ import type {
 import type { ToolConfirmationRequest } from '../permission/types';
 
 import { AgentExecutor } from '../executor';
-import { ContextManager, SimpleTokenCounter } from '../memory';
+import { ConversationCompressor } from '../context';
 import { MemoryHooks } from '../hooks';
 import { createValidationHooks } from '../validation';
 import {
@@ -59,9 +59,6 @@ import {
 /** Default max context tokens */
 const DEFAULT_MAX_CONTEXT_TOKENS = 100000;
 
-/** Default reserved tokens for response */
-const DEFAULT_RESERVED_TOKENS = 4000;
-
 /** Default max iterations */
 const DEFAULT_MAX_ITERATIONS = 50;
 
@@ -86,7 +83,7 @@ export class AgentSession implements IAgentSession {
 
   // Core components
   private _executor: AgentExecutor | null = null;
-  private _contextManager: ContextManager;
+  private _compressor: ConversationCompressor;
   private _permissionHooks: PermissionHooks | null = null;
 
   // Registries
@@ -107,13 +104,12 @@ export class AgentSession implements IAgentSession {
     this._config = config;
     this._executionMode = config.executionMode ?? 'auto';
 
-    // Initialize context manager
-    const tokenCounter = new SimpleTokenCounter();
-    this._contextManager = new ContextManager({
-      maxTokens: config.contextSettings?.maxTokens ?? DEFAULT_MAX_CONTEXT_TOKENS,
-      reservedTokens: config.contextSettings?.reservedTokens ?? DEFAULT_RESERVED_TOKENS,
-      strategy: 'sliding_window',
-      tokenCounter,
+    // Initialize conversation compressor
+    this._compressor = new ConversationCompressor({
+      triggers: {
+        tokenThreshold: config.contextSettings?.maxTokens ?? DEFAULT_MAX_CONTEXT_TOKENS,
+        turnThreshold: 20,
+      },
     });
 
     // Initialize registries
@@ -320,16 +316,15 @@ export class AgentSession implements IAgentSession {
   // ---------------------------------------------------------------------------
 
   getTokenCount(): number {
-    const tokenCounter = new SimpleTokenCounter();
-    return tokenCounter.countMessages(this._history);
+    return this._compressor.estimateTokens(this._history);
   }
 
   async compressContext(): Promise<CompressionResult> {
     const originalTokens = this.getTokenCount();
 
-    const compressed = await this._contextManager.compress(this._history);
-    const compressedTokens = new SimpleTokenCounter().countMessages(compressed);
-    this._history = compressed;
+    const result = await this._compressor.compress(this._history);
+    this._history = result.messages.map(m => m.message);
+    const compressedTokens = this._compressor.estimateTokens(this._history);
 
     const ratio = originalTokens > 0 ? compressedTokens / originalTokens : 1;
 
@@ -359,7 +354,7 @@ export class AgentSession implements IAgentSession {
   private _initializeExecutor(): void {
     // Create memory hooks
     const memoryHooks = new MemoryHooks({
-      contextManager: this._contextManager,
+      compressor: this._compressor,
     });
 
     // Create validation hooks

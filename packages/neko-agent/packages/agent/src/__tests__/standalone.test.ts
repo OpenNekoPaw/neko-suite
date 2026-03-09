@@ -37,10 +37,10 @@ import {
   MCPTool,
 
   // Memory
-  SimpleTokenCounter,
-  SlidingWindowCompressor,
-  ContextManager,
   InMemorySessionMemory,
+
+  // Context
+  ConversationCompressor,
 
   // Validation
   ImageValidator,
@@ -104,10 +104,8 @@ describe('Standalone Mode', () => {
     });
 
     it('should export memory components', () => {
-      expect(SimpleTokenCounter).toBeDefined();
-      expect(SlidingWindowCompressor).toBeDefined();
-      expect(ContextManager).toBeDefined();
       expect(InMemorySessionMemory).toBeDefined();
+      expect(ConversationCompressor).toBeDefined();
     });
 
     it('should export validation components', () => {
@@ -253,21 +251,23 @@ describe('Standalone Mode', () => {
   });
 
   describe('Memory Components', () => {
-    it('should use SimpleTokenCounter', () => {
-      const counter = new SimpleTokenCounter();
-      const count = counter.count('Hello world');
-      expect(count).toBeGreaterThan(0);
-    });
-
     it('should use InMemorySessionMemory', async () => {
-      const memory = new InMemorySessionMemory('test-session');
+      const memory = new InMemorySessionMemory();
 
       await memory.addMessage({ role: 'user', content: 'Hello' });
       await memory.addMessage({ role: 'assistant', content: 'Hi there!' });
 
       const history = await memory.getHistory();
       expect(history.length).toBe(2);
-      expect(history[0].role).toBe('user');
+      expect(history[0]?.role).toBe('user');
+    });
+
+    it('should use ConversationCompressor', () => {
+      const compressor = new ConversationCompressor();
+      const tokens = compressor.estimateTokens([
+        { role: 'user', content: 'Hello world' },
+      ]);
+      expect(tokens).toBeGreaterThan(0);
     });
   });
 

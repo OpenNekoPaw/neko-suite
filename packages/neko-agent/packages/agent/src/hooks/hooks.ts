@@ -13,8 +13,7 @@ import type {
   ToolResultWithMeta,
   ToolResult,
   SessionMemory,
-  ContextManager,
-  ChatMessage,
+  IConversationCompressor,
 } from '@neko/shared';
 import {
   type RetryPolicy,
@@ -23,7 +22,7 @@ import {
   shouldRetry,
   BaseError,
 } from '@neko/shared';
-import { AgentError } from '../errors';
+
 
 /**
  * Retry hooks options
@@ -170,8 +169,8 @@ export class RetryHooks implements ExecutorHooks {
 export interface MemoryHooksOptions {
   /** Session memory for cross-session persistence */
   sessionMemory?: SessionMemory;
-  /** Context manager for token management */
-  contextManager?: ContextManager;
+  /** Conversation compressor for turn-aware token management */
+  compressor?: IConversationCompressor;
 }
 
 /**
@@ -180,13 +179,13 @@ export interface MemoryHooksOptions {
 export class MemoryHooks implements ExecutorHooks {
   name = 'memory';
   private sessionMemory?: SessionMemory;
-  private contextManager?: ContextManager;
+  private compressor?: IConversationCompressor;
   private userInput?: string;
   private historyLoaded = false;
 
   constructor(options: MemoryHooksOptions = {}) {
     this.sessionMemory = options.sessionMemory;
-    this.contextManager = options.contextManager;
+    this.compressor = options.compressor;
   }
 
   async onExecuteStart(input: string, context: AgentContext): Promise<void> {
@@ -216,9 +215,10 @@ export class MemoryHooks implements ExecutorHooks {
   }
 
   async beforeThink(context: AgentContext): Promise<AgentContext> {
-    // Apply context compression if manager available
-    if (this.contextManager) {
-      context.messages = await this.contextManager.compress(context.messages);
+    // Apply context compression via ConversationCompressor
+    if (this.compressor) {
+      const result = await this.compressor.compress(context.messages);
+      context.messages = result.messages.map(m => m.message);
     }
     return context;
   }
@@ -239,10 +239,10 @@ export class MemoryHooks implements ExecutorHooks {
   }
 
   /**
-   * Get context manager
+   * Get compressor
    */
-  getContextManager(): ContextManager | undefined {
-    return this.contextManager;
+  getCompressor(): IConversationCompressor | undefined {
+    return this.compressor;
   }
 }
 

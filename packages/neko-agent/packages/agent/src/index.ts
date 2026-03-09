@@ -75,6 +75,13 @@ export type {
   LLMProviderConfig,
 } from '@neko/shared';
 
+// Export plan parsing
+export {
+  parsePlanMarkdown,
+  type Plan,
+  type PlanStep,
+} from './plan';
+
 // Export errors
 export { AgentError, type AgentErrorCategory, type AgentErrorInfo } from './errors';
 
@@ -98,14 +105,7 @@ export {
 
 // Export memory
 export {
-  SimpleTokenCounter,
-  SlidingWindowCompressor,
-  SummarizeCompressor,
-  SelectiveCompressor,
-  ContextManager,
   InMemorySessionMemory,
-  KeyFactExtractor,
-  type KeyFactExtractorConfig,
 } from './memory';
 
 // Export MCP

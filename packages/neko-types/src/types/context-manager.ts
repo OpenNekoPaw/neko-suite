@@ -3,9 +3,6 @@
  *
  * Defines types for managing context lifecycle and token budgets
  * across different context layers (permanent, session, turn, conversation).
- *
- * Note: These types are prefixed with "Layered" to avoid conflicts with
- * the simpler ContextManager types in memory.ts.
  */
 
 /**
