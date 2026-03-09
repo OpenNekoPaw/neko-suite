@@ -3,7 +3,6 @@
  */
 
 export { InputArea } from './InputArea';
-export { AgentSelector } from './AgentSelector';
 export { ModelSelector } from './ModelSelector';
 export { ModeSelector } from './ModeSelector';
 export { FileAttachment, AttachmentPreview, AttachmentButton } from './FileAttachment';
