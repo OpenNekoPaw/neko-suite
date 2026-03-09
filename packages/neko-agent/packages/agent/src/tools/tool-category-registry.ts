@@ -55,37 +55,27 @@ export class ToolCategoryRegistry implements IToolCategoryRegistry {
    * List all registered categories
    */
   listCategories(): ToolCategoryInfo[] {
-    return Array.from(this.categories.values()).sort(
-      (a, b) => b.priority - a.priority
-    );
+    return Array.from(this.categories.values()).sort((a, b) => b.priority - a.priority);
   }
 
   /**
    * Get all tools in a category
    */
   getToolsByCategory(category: ToolCategory): CategorizedTool[] {
-    return Array.from(this.tools.values()).filter(
-      (tool) => tool.category === category
-    );
+    return Array.from(this.tools.values()).filter((tool) => tool.category === category);
   }
 
   /**
    * Get all tools in a layer
    */
   getToolsByLayer(layer: ToolInjectionLayer): CategorizedTool[] {
-    return Array.from(this.tools.values()).filter(
-      (tool) => tool.layer === layer
-    );
+    return Array.from(this.tools.values()).filter((tool) => tool.layer === layer);
   }
 
   /**
    * Register a tool with category and optional layer override
    */
-  categorizeTool(
-    toolName: string,
-    category: ToolCategory,
-    layer?: ToolInjectionLayer
-  ): void {
+  categorizeTool(toolName: string, category: ToolCategory, layer?: ToolInjectionLayer): void {
     const categoryInfo = this.categories.get(category);
     const defaultLayer = categoryInfo?.defaultLayer ?? 'skill';
 

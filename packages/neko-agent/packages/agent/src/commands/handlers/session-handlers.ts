@@ -33,7 +33,7 @@ export const handleResume: CommandHandler = (_args, context) => {
     continueExecution: true,
     action: 'resumeConversation',
     data: {
-      conversations: conversations.slice(0, 5).map(c => ({
+      conversations: conversations.slice(0, 5).map((c) => ({
         id: c.id,
         title: c.title,
       })),

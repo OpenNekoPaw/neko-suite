@@ -23,12 +23,7 @@ export {
   handleInit,
 } from './config-handlers';
 
-export {
-  handleNew,
-  handleResume,
-  handleCompact,
-  handlePlan,
-} from './session-handlers';
+export { handleNew, handleResume, handleCompact, handlePlan } from './session-handlers';
 
 export {
   handleSkills,

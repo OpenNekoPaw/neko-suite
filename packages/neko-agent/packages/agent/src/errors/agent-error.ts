@@ -4,18 +4,23 @@
  * Extends BaseError with agent-specific error categories.
  */
 
-import {
-  BaseError,
-  type BaseErrorInfo,
-  type ErrorCategory,
-} from '@neko/shared';
+import { BaseError, type BaseErrorInfo, type ErrorCategory } from '@neko/shared';
 
 /**
  * Agent-specific error categories (subset of ErrorCategory)
  */
 export type AgentErrorCategory = Extract<
   ErrorCategory,
-  'mcp' | 'tool' | 'execution' | 'permission' | 'validation' | 'skill' | 'timeout' | 'network' | 'server' | 'unknown'
+  | 'mcp'
+  | 'tool'
+  | 'execution'
+  | 'permission'
+  | 'validation'
+  | 'skill'
+  | 'timeout'
+  | 'network'
+  | 'server'
+  | 'unknown'
 >;
 
 /**

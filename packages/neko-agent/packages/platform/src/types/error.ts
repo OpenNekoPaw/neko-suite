@@ -1,11 +1,29 @@
 /**
  * Error Types - Platform error handling
+ *
+ * Delegates to @neko/shared BaseError hierarchy.
+ * Platform defines a constrained ErrorCategory subset.
  */
 
+import type { ErrorCategory, BaseErrorInfo, RetryPolicy } from '@neko/shared';
+
+// Re-export shared types for backward compatibility
+export type {
+  ErrorCategory,
+  BaseErrorInfo,
+  RetryPolicy,
+  BackoffStrategy,
+  FixedBackoff,
+  LinearBackoff,
+  ExponentialBackoff,
+  JitterBackoff,
+} from '@neko/shared';
+
 /**
- * Error category for classification
+ * Platform-specific error categories (subset of ErrorCategory)
  */
-export type ErrorCategory =
+export type PlatformErrorCategory = Extract<
+  ErrorCategory,
   | 'authentication'
   | 'rate_limit'
   | 'timeout'
@@ -15,74 +33,14 @@ export type ErrorCategory =
   | 'not_found'
   | 'context_length'
   | 'content_filter'
-  | 'unknown';
+  | 'unknown'
+>;
 
 /**
- * Platform error with classification
+ * Platform error info (constrained category)
  */
-export interface PlatformErrorInfo {
-  /** Error category */
-  category: ErrorCategory;
-  /** Error code */
-  code: string;
-  /** Error message */
-  message: string;
-  /** Whether error is retryable */
-  retryable: boolean;
-  /** Suggested retry delay in ms */
-  retryAfter?: number;
-  /** Original error */
-  cause?: Error;
-  /** Additional context */
-  context?: Record<string, unknown>;
-}
-
-/**
- * Retry policy configuration
- */
-export interface RetryPolicy {
-  /** Maximum number of retries */
-  maxRetries: number;
-  /** Backoff strategy */
-  backoffStrategy: BackoffStrategy;
-  /** Errors that should trigger retry */
-  retryableCategories: ErrorCategory[];
-  /** Maximum total retry time in ms */
-  maxRetryTime?: number;
-}
-
-/**
- * Backoff strategy
- */
-export type BackoffStrategy =
-  | FixedBackoff
-  | LinearBackoff
-  | ExponentialBackoff
-  | JitterBackoff;
-
-export interface FixedBackoff {
-  type: 'fixed';
-  delayMs: number;
-}
-
-export interface LinearBackoff {
-  type: 'linear';
-  initialDelayMs: number;
-  incrementMs: number;
-  maxDelayMs: number;
-}
-
-export interface ExponentialBackoff {
-  type: 'exponential';
-  initialDelayMs: number;
-  multiplier: number;
-  maxDelayMs: number;
-}
-
-export interface JitterBackoff {
-  type: 'jitter';
-  baseStrategy: Exclude<BackoffStrategy, JitterBackoff>;
-  jitterFactor: number; // 0-1, percentage of delay to randomize
+export interface PlatformErrorInfo extends Omit<BaseErrorInfo, 'category'> {
+  category: PlatformErrorCategory;
 }
 
 /**

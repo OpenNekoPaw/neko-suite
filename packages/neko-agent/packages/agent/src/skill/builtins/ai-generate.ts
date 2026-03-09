@@ -15,20 +15,60 @@ export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
     name: 'GenerateImage',
     description: 'Generate an image from a text prompt using AI',
     parameters: {
-      prompt: { type: 'string', required: true, description: 'Text description of the image to generate' },
-      size: { type: 'string', enum: ['256x256', '512x512', '1024x1024', '1792x1024', '1024x1792'], default: '1024x1024', description: 'Image dimensions' },
-      quality: { type: 'string', enum: ['standard', 'hd'], default: 'standard', description: 'Image quality' },
-      style: { type: 'string', enum: ['natural', 'vivid'], default: 'vivid', description: 'Image style' },
-      n: { type: 'number', min: 1, max: 4, default: 1, description: 'Number of images to generate' },
+      prompt: {
+        type: 'string',
+        required: true,
+        description: 'Text description of the image to generate',
+      },
+      size: {
+        type: 'string',
+        enum: ['256x256', '512x512', '1024x1024', '1792x1024', '1024x1792'],
+        default: '1024x1024',
+        description: 'Image dimensions',
+      },
+      quality: {
+        type: 'string',
+        enum: ['standard', 'hd'],
+        default: 'standard',
+        description: 'Image quality',
+      },
+      style: {
+        type: 'string',
+        enum: ['natural', 'vivid'],
+        default: 'vivid',
+        description: 'Image style',
+      },
+      n: {
+        type: 'number',
+        min: 1,
+        max: 4,
+        default: 1,
+        description: 'Number of images to generate',
+      },
     },
   },
   {
     name: 'GenerateVideo',
     description: 'Generate a video from a text prompt using AI',
     parameters: {
-      prompt: { type: 'string', required: true, description: 'Text description of the video to generate' },
-      duration: { type: 'number', min: 1, max: 30, default: 4, description: 'Video duration in seconds' },
-      resolution: { type: 'string', enum: ['480p', '720p', '1080p'], default: '720p', description: 'Video resolution' },
+      prompt: {
+        type: 'string',
+        required: true,
+        description: 'Text description of the video to generate',
+      },
+      duration: {
+        type: 'number',
+        min: 1,
+        max: 30,
+        default: 4,
+        description: 'Video duration in seconds',
+      },
+      resolution: {
+        type: 'string',
+        enum: ['480p', '720p', '1080p'],
+        default: '720p',
+        description: 'Video resolution',
+      },
       fps: { type: 'number', enum: [24, 30, 60], default: 24, description: 'Frames per second' },
     },
   },
@@ -39,15 +79,31 @@ export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
       text: { type: 'string', required: true, description: 'Text to convert to speech' },
       voice: { type: 'string', description: 'Voice ID or name to use' },
       language: { type: 'string', description: 'Language code (e.g., en, zh, ja)' },
-      speed: { type: 'number', min: 0.5, max: 2, default: 1, description: 'Speech speed multiplier' },
+      speed: {
+        type: 'number',
+        min: 0.5,
+        max: 2,
+        default: 1,
+        description: 'Speech speed multiplier',
+      },
     },
   },
   {
     name: 'GenerateMusic',
     description: 'Generate background music from a text prompt using AI',
     parameters: {
-      prompt: { type: 'string', required: true, description: 'Description of the music to generate' },
-      duration: { type: 'number', min: 5, max: 300, default: 30, description: 'Music duration in seconds' },
+      prompt: {
+        type: 'string',
+        required: true,
+        description: 'Description of the music to generate',
+      },
+      duration: {
+        type: 'number',
+        min: 5,
+        max: 300,
+        default: 30,
+        description: 'Music duration in seconds',
+      },
       genre: { type: 'string', description: 'Music genre (e.g., corporate, ambient, electronic)' },
       mood: { type: 'string', description: 'Music mood (e.g., upbeat, calm, dramatic)' },
     },
@@ -56,8 +112,15 @@ export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
     name: 'GenerateCharacter',
     description: 'Generate a character image with optional reference for consistency',
     parameters: {
-      prompt: { type: 'string', required: true, description: 'Description of the character to generate' },
-      referenceImageUrl: { type: 'string', description: 'URL of reference image for character consistency' },
+      prompt: {
+        type: 'string',
+        required: true,
+        description: 'Description of the character to generate',
+      },
+      referenceImageUrl: {
+        type: 'string',
+        description: 'URL of reference image for character consistency',
+      },
       style: { type: 'string', description: 'Art style (e.g., realistic, anime, cartoon, 3d)' },
       pose: { type: 'string', description: 'Character pose (e.g., standing, sitting, action)' },
       expression: { type: 'string', description: 'Facial expression (e.g., happy, sad, neutral)' },
@@ -67,9 +130,23 @@ export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
     name: 'TransferStyle',
     description: 'Apply artistic style transfer to an image',
     parameters: {
-      sourceImageUrl: { type: 'string', required: true, description: 'URL of the source image to style' },
-      stylePrompt: { type: 'string', required: true, description: 'Description of the style to apply' },
-      styleStrength: { type: 'number', min: 0, max: 1, default: 0.7, description: 'Strength of style application' },
+      sourceImageUrl: {
+        type: 'string',
+        required: true,
+        description: 'URL of the source image to style',
+      },
+      stylePrompt: {
+        type: 'string',
+        required: true,
+        description: 'Description of the style to apply',
+      },
+      styleStrength: {
+        type: 'number',
+        min: 0,
+        max: 1,
+        default: 0.7,
+        description: 'Strength of style application',
+      },
     },
   },
   {
@@ -77,10 +154,18 @@ export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
     description: 'Enhance video quality with upscaling, denoising, and stabilization',
     parameters: {
       videoUrl: { type: 'string', required: true, description: 'URL of the video to enhance' },
-      targetResolution: { type: 'string', enum: ['720p', '1080p', '4k'], description: 'Target resolution for upscaling' },
+      targetResolution: {
+        type: 'string',
+        enum: ['720p', '1080p', '4k'],
+        description: 'Target resolution for upscaling',
+      },
       denoise: { type: 'boolean', default: true, description: 'Apply noise reduction' },
       stabilize: { type: 'boolean', default: false, description: 'Apply video stabilization' },
-      interpolateFps: { type: 'number', enum: [30, 60, 120], description: 'Interpolate to target frame rate' },
+      interpolateFps: {
+        type: 'number',
+        enum: [30, 60, 120],
+        description: 'Interpolate to target frame rate',
+      },
     },
   },
   {
@@ -91,7 +176,11 @@ export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
       denoise: { type: 'boolean', default: true, description: 'Apply noise reduction' },
       normalize: { type: 'boolean', default: true, description: 'Normalize audio levels' },
       enhanceVoice: { type: 'boolean', default: false, description: 'Enhance voice clarity' },
-      removeBackground: { type: 'boolean', default: false, description: 'Remove background noise/music' },
+      removeBackground: {
+        type: 'boolean',
+        default: false,
+        description: 'Remove background noise/music',
+      },
     },
   },
 ];

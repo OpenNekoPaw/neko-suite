@@ -4,11 +4,7 @@
  * Parses Markdown files with YAML frontmatter for skills and commands
  */
 
-import type {
-  SkillFrontmatter,
-  CommandFrontmatter,
-  ParsedSkillFile,
-} from '@neko/shared';
+import type { SkillFrontmatter, CommandFrontmatter, ParsedSkillFile } from '@neko/shared';
 import { extractSupportFileRefs } from '@neko/shared';
 
 /**

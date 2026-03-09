@@ -18,15 +18,17 @@ import { exec, spawn } from 'child_process';
 import { createWriteStream } from 'fs';
 import { promisify } from 'util';
 import {
-	type MediaType,
-	type MediaFileChange,
-	type FileVersionPair,
-	type GitChangeStatus,
-	type GitCommitInfo,
-	getMediaType,
-	isSupportedMediaFile,
+  type MediaType,
+  type MediaFileChange,
+  type FileVersionPair,
+  type GitChangeStatus,
+  type GitCommitInfo,
+  getMediaType,
+  isSupportedMediaFile,
 } from '@neko/shared';
+import { getLogger } from '../../utils/logger';
 
+const logger = getLogger('GitMediaService');
 const execAsync = promisify(exec);
 
 // =============================================================================
@@ -34,60 +36,60 @@ const execAsync = promisify(exec);
 // =============================================================================
 
 interface GitExtension {
-	getAPI(version: number): GitAPI;
+  getAPI(version: number): GitAPI;
 }
 
 interface GitAPI {
-	repositories: Repository[];
-	onDidOpenRepository: vscode.Event<Repository>;
-	onDidCloseRepository: vscode.Event<Repository>;
+  repositories: Repository[];
+  onDidOpenRepository: vscode.Event<Repository>;
+  onDidCloseRepository: vscode.Event<Repository>;
 }
 
 interface Repository {
-	rootUri: vscode.Uri;
-	state: RepositoryState;
-	show(ref: string, path: string): Promise<string>;
-	diff(cached?: boolean): Promise<string>;
+  rootUri: vscode.Uri;
+  state: RepositoryState;
+  show(ref: string, path: string): Promise<string>;
+  diff(cached?: boolean): Promise<string>;
 }
 
 interface RepositoryState {
-	HEAD: Ref | undefined;
-	workingTreeChanges: Change[];
-	indexChanges: Change[];
-	mergeChanges: Change[];
+  HEAD: Ref | undefined;
+  workingTreeChanges: Change[];
+  indexChanges: Change[];
+  mergeChanges: Change[];
 }
 
 interface Ref {
-	commit?: string;
-	name?: string;
+  commit?: string;
+  name?: string;
 }
 
 interface Change {
-	uri: vscode.Uri;
-	originalUri: vscode.Uri;
-	renameUri?: vscode.Uri;
-	status: number;
+  uri: vscode.Uri;
+  originalUri: vscode.Uri;
+  renameUri?: vscode.Uri;
+  status: number;
 }
 
 // Git status codes
 const Status = {
-	INDEX_MODIFIED: 0,
-	INDEX_ADDED: 1,
-	INDEX_DELETED: 2,
-	INDEX_RENAMED: 3,
-	INDEX_COPIED: 4,
-	MODIFIED: 5,
-	DELETED: 6,
-	UNTRACKED: 7,
-	IGNORED: 8,
-	INTENT_TO_ADD: 9,
-	ADDED_BY_US: 10,
-	ADDED_BY_THEM: 11,
-	DELETED_BY_US: 12,
-	DELETED_BY_THEM: 13,
-	BOTH_ADDED: 14,
-	BOTH_DELETED: 15,
-	BOTH_MODIFIED: 16,
+  INDEX_MODIFIED: 0,
+  INDEX_ADDED: 1,
+  INDEX_DELETED: 2,
+  INDEX_RENAMED: 3,
+  INDEX_COPIED: 4,
+  MODIFIED: 5,
+  DELETED: 6,
+  UNTRACKED: 7,
+  IGNORED: 8,
+  INTENT_TO_ADD: 9,
+  ADDED_BY_US: 10,
+  ADDED_BY_THEM: 11,
+  DELETED_BY_US: 12,
+  DELETED_BY_THEM: 13,
+  BOTH_ADDED: 14,
+  BOTH_DELETED: 15,
+  BOTH_MODIFIED: 16,
 };
 
 // =============================================================================
@@ -98,55 +100,51 @@ const Status = {
  * Git media service interface
  */
 export interface IGitMediaService extends vscode.Disposable {
-	/**
-	 * Check if service is ready
-	 */
-	isReady(): boolean;
+  /**
+   * Check if service is ready
+   */
+  isReady(): boolean;
 
-	/**
-	 * Get changed media files in working directory
-	 */
-	getChangedMediaFiles(): Promise<MediaFileChange[]>;
+  /**
+   * Get changed media files in working directory
+   */
+  getChangedMediaFiles(): Promise<MediaFileChange[]>;
 
-	/**
-	 * Get file versions for comparison
-	 * @param uri - File URI
-	 * @param ref - Git ref (default: HEAD)
-	 */
-	getFileVersions(uri: vscode.Uri, ref?: string): Promise<FileVersionPair>;
+  /**
+   * Get file versions for comparison
+   * @param uri - File URI
+   * @param ref - Git ref (default: HEAD)
+   */
+  getFileVersions(uri: vscode.Uri, ref?: string): Promise<FileVersionPair>;
 
-	/**
-	 * Get file content at specific commit
-	 * @param uri - File URI
-	 * @param commitHash - Commit hash
-	 */
-	getFileAtCommit(uri: vscode.Uri, commitHash: string): Promise<Buffer>;
+  /**
+   * Get file content at specific commit
+   * @param uri - File URI
+   * @param commitHash - Commit hash
+   */
+  getFileAtCommit(uri: vscode.Uri, commitHash: string): Promise<Buffer>;
 
-	/**
-	 * Check if file is tracked by Git
-	 */
-	isTracked(uri: vscode.Uri): Promise<boolean>;
+  /**
+   * Check if file is tracked by Git
+   */
+  isTracked(uri: vscode.Uri): Promise<boolean>;
 
-	/**
-	 * Get commit history for a file
-	 * @param uri - File URI
-	 * @param maxCount - Maximum number of commits to return (default: 20)
-	 * @returns Array of { hash, subject, date } ordered newest first
-	 */
-	getFileHistory(uri: vscode.Uri, maxCount?: number): Promise<GitCommitInfo[]>;
+  /**
+   * Get commit history for a file
+   * @param uri - File URI
+   * @param maxCount - Maximum number of commits to return (default: 20)
+   * @returns Array of { hash, subject, date } ordered newest first
+   */
+  getFileHistory(uri: vscode.Uri, maxCount?: number): Promise<GitCommitInfo[]>;
 
-	/**
-	 * Extract file at a Git ref directly to a local path (zero-copy).
-	 * Uses `git show` piped to a file stream — never loads content into memory.
-	 * @param uri - File URI in the workspace
-	 * @param ref - Git ref (e.g. 'HEAD', commit hash)
-	 * @param outputPath - Absolute path to write the file to
-	 */
-	extractFileToPath(
-		uri: vscode.Uri,
-		ref: string,
-		outputPath: string
-	): Promise<void>;
+  /**
+   * Extract file at a Git ref directly to a local path (zero-copy).
+   * Uses `git show` piped to a file stream — never loads content into memory.
+   * @param uri - File URI in the workspace
+   * @param ref - Git ref (e.g. 'HEAD', commit hash)
+   * @param outputPath - Absolute path to write the file to
+   */
+  extractFileToPath(uri: vscode.Uri, ref: string, outputPath: string): Promise<void>;
 }
 
 // =============================================================================
@@ -157,426 +155,379 @@ export interface IGitMediaService extends vscode.Disposable {
  * Git media file service implementation
  */
 export class GitMediaService implements IGitMediaService {
-	private git: GitAPI | null = null;
-	private repository: Repository | null = null;
-	private disposables: vscode.Disposable[] = [];
-	private initPromise: Promise<void> | null = null;
+  private git: GitAPI | null = null;
+  private repository: Repository | null = null;
+  private disposables: vscode.Disposable[] = [];
+  private initPromise: Promise<void> | null = null;
 
-	constructor() {
-		this.initPromise = this.initialize();
-	}
+  constructor() {
+    this.initPromise = this.initialize();
+  }
 
-	/**
-	 * Initialize Git extension connection
-	 */
-	private async initialize(): Promise<void> {
-		try {
-			const gitExtension =
-				vscode.extensions.getExtension<GitExtension>('vscode.git');
-			if (!gitExtension) {
-				console.warn('[GitMediaService] Git extension not found');
-				return;
-			}
+  /**
+   * Initialize Git extension connection
+   */
+  private async initialize(): Promise<void> {
+    try {
+      const gitExtension = vscode.extensions.getExtension<GitExtension>('vscode.git');
+      if (!gitExtension) {
+        logger.warn('Git extension not found');
+        return;
+      }
 
-			const git = gitExtension.isActive
-				? gitExtension.exports
-				: await gitExtension.activate();
+      const git = gitExtension.isActive ? gitExtension.exports : await gitExtension.activate();
 
-			this.git = git.getAPI(1);
+      this.git = git.getAPI(1);
 
-			// Set initial repository
-			if (this.git.repositories.length > 0) {
-				this.repository = this.git.repositories[0]!;
-			}
+      // Set initial repository
+      if (this.git.repositories.length > 0) {
+        this.repository = this.git.repositories[0]!;
+      }
 
-			// Listen for repository changes
-			this.disposables.push(
-				this.git.onDidOpenRepository((repo) => {
-					if (!this.repository) {
-						this.repository = repo;
-					}
-				}),
-				this.git.onDidCloseRepository((repo) => {
-					if (this.repository === repo) {
-						this.repository =
-							this.git?.repositories[0] ?? null;
-					}
-				})
-			);
+      // Listen for repository changes
+      this.disposables.push(
+        this.git.onDidOpenRepository((repo) => {
+          if (!this.repository) {
+            this.repository = repo;
+          }
+        }),
+        this.git.onDidCloseRepository((repo) => {
+          if (this.repository === repo) {
+            this.repository = this.git?.repositories[0] ?? null;
+          }
+        }),
+      );
+    } catch (error) {
+      logger.error('Initialization failed:', error);
+    }
+  }
 
-			} catch (error) {
-			console.error('[GitMediaService] Initialization failed:', error);
-		}
-	}
+  /**
+   * Ensure service is initialized
+   */
+  private async ensureInitialized(): Promise<void> {
+    if (this.initPromise) {
+      await this.initPromise;
+    }
+  }
 
-	/**
-	 * Ensure service is initialized
-	 */
-	private async ensureInitialized(): Promise<void> {
-		if (this.initPromise) {
-			await this.initPromise;
-		}
-	}
+  isReady(): boolean {
+    return this.git !== null && this.repository !== null;
+  }
 
-	isReady(): boolean {
-		return this.git !== null && this.repository !== null;
-	}
+  async getChangedMediaFiles(): Promise<MediaFileChange[]> {
+    await this.ensureInitialized();
 
-	async getChangedMediaFiles(): Promise<MediaFileChange[]> {
-		await this.ensureInitialized();
+    if (!this.repository) {
+      return [];
+    }
 
-		if (!this.repository) {
-			return [];
-		}
+    const changes: MediaFileChange[] = [];
+    const state = this.repository.state;
 
-		const changes: MediaFileChange[] = [];
-		const state = this.repository.state;
+    // Process working tree changes
+    for (const change of state.workingTreeChanges) {
+      const mediaType = getMediaType(change.uri.fsPath);
+      if (mediaType) {
+        changes.push({
+          uri: change.uri.toString(),
+          mediaType,
+          status: this.mapGitStatus(change.status),
+          oldUri: change.renameUri?.toString(),
+        });
+      }
+    }
 
-		// Process working tree changes
-		for (const change of state.workingTreeChanges) {
-			const mediaType = getMediaType(change.uri.fsPath);
-			if (mediaType) {
-				changes.push({
-					uri: change.uri.toString(),
-					mediaType,
-					status: this.mapGitStatus(change.status),
-					oldUri: change.renameUri?.toString(),
-				});
-			}
-		}
+    // Process index changes
+    for (const change of state.indexChanges) {
+      const mediaType = getMediaType(change.uri.fsPath);
+      if (mediaType) {
+        // Avoid duplicates
+        if (!changes.some((c) => c.uri === change.uri.toString())) {
+          changes.push({
+            uri: change.uri.toString(),
+            mediaType,
+            status: this.mapGitStatus(change.status),
+            oldUri: change.renameUri?.toString(),
+          });
+        }
+      }
+    }
 
-		// Process index changes
-		for (const change of state.indexChanges) {
-			const mediaType = getMediaType(change.uri.fsPath);
-			if (mediaType) {
-				// Avoid duplicates
-				if (!changes.some((c) => c.uri === change.uri.toString())) {
-					changes.push({
-						uri: change.uri.toString(),
-						mediaType,
-						status: this.mapGitStatus(change.status),
-						oldUri: change.renameUri?.toString(),
-					});
-				}
-			}
-		}
+    return changes;
+  }
 
-		return changes;
-	}
+  async getFileVersions(uri: vscode.Uri, ref: string = 'HEAD'): Promise<FileVersionPair> {
+    await this.ensureInitialized();
 
-	async getFileVersions(
-		uri: vscode.Uri,
-		ref: string = 'HEAD'
-	): Promise<FileVersionPair> {
-		await this.ensureInitialized();
+    const mediaType = getMediaType(uri.fsPath);
+    if (!mediaType) {
+      throw new Error(`Unsupported media file: ${uri.fsPath}`);
+    }
 
-		const mediaType = getMediaType(uri.fsPath);
-		if (!mediaType) {
-			throw new Error(`Unsupported media file: ${uri.fsPath}`);
-		}
+    // Get current version from filesystem
+    const currentBuffer = await vscode.workspace.fs.readFile(uri);
+    const current = Buffer.from(currentBuffer);
 
-		// Get current version from filesystem
-		const currentBuffer = await vscode.workspace.fs.readFile(uri);
-		const current = Buffer.from(currentBuffer);
+    // Get previous version from Git (handle new/untracked files)
+    let previous: Buffer;
+    const isNewFile = await this.isNewFile(uri);
+    if (isNewFile) {
+      // For new files, use empty buffer as previous version
+      previous = Buffer.alloc(0);
+    } else {
+      previous = await this.getFileAtCommit(uri, ref);
+    }
 
-		// Get previous version from Git (handle new/untracked files)
-		let previous: Buffer;
-		const isNewFile = await this.isNewFile(uri);
-		if (isNewFile) {
-			// For new files, use empty buffer as previous version
-			previous = Buffer.alloc(0);
-		} else {
-			previous = await this.getFileAtCommit(uri, ref);
-		}
+    return {
+      current: current.buffer.slice(current.byteOffset, current.byteOffset + current.byteLength),
+      previous: previous.buffer.slice(
+        previous.byteOffset,
+        previous.byteOffset + previous.byteLength,
+      ),
+      currentPath: uri.fsPath,
+      previousPath: isNewFile ? '(new file)' : `${uri.fsPath}@${ref}`,
+      mediaType,
+      isNewFile,
+    };
+  }
 
-		return {
-			current: current.buffer.slice(
-				current.byteOffset,
-				current.byteOffset + current.byteLength
-			),
-			previous: previous.buffer.slice(
-				previous.byteOffset,
-				previous.byteOffset + previous.byteLength
-			),
-			currentPath: uri.fsPath,
-			previousPath: isNewFile ? '(new file)' : `${uri.fsPath}@${ref}`,
-			mediaType,
-			isNewFile,
-		};
-	}
+  /**
+   * Check if file is new (untracked or added but not committed)
+   */
+  private async isNewFile(uri: vscode.Uri): Promise<boolean> {
+    if (!this.repository) {
+      return false;
+    }
 
-	/**
-	 * Check if file is new (untracked or added but not committed)
-	 */
-	private async isNewFile(uri: vscode.Uri): Promise<boolean> {
-		if (!this.repository) {
-			return false;
-		}
+    const state = this.repository.state;
+    const uriStr = uri.toString();
 
-		const state = this.repository.state;
-		const uriStr = uri.toString();
+    // Check if file is untracked
+    const isUntracked = state.workingTreeChanges.some(
+      (c) => c.uri.toString() === uriStr && c.status === Status.UNTRACKED,
+    );
+    if (isUntracked) {
+      return true;
+    }
 
-		// Check if file is untracked
-		const isUntracked = state.workingTreeChanges.some(
-			(c) => c.uri.toString() === uriStr && c.status === Status.UNTRACKED
-		);
-		if (isUntracked) {
-			return true;
-		}
+    // Check if file is newly added in index (not yet committed)
+    const isIndexAdded = state.indexChanges.some(
+      (c) => c.uri.toString() === uriStr && c.status === Status.INDEX_ADDED,
+    );
+    if (isIndexAdded) {
+      // Check if it exists in HEAD
+      const existsInHead = await this.existsInRef(uri, 'HEAD');
+      return !existsInHead;
+    }
 
-		// Check if file is newly added in index (not yet committed)
-		const isIndexAdded = state.indexChanges.some(
-			(c) => c.uri.toString() === uriStr && c.status === Status.INDEX_ADDED
-		);
-		if (isIndexAdded) {
-			// Check if it exists in HEAD
-			const existsInHead = await this.existsInRef(uri, 'HEAD');
-			return !existsInHead;
-		}
+    return false;
+  }
 
-		return false;
-	}
+  /**
+   * Check if file exists in a Git ref
+   */
+  private async existsInRef(uri: vscode.Uri, ref: string): Promise<boolean> {
+    try {
+      await this.getFileAtCommit(uri, ref);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
-	/**
-	 * Check if file exists in a Git ref
-	 */
-	private async existsInRef(uri: vscode.Uri, ref: string): Promise<boolean> {
-		try {
-			await this.getFileAtCommit(uri, ref);
-			return true;
-		} catch {
-			return false;
-		}
-	}
+  async getFileAtCommit(uri: vscode.Uri, commitHash: string): Promise<Buffer> {
+    await this.ensureInitialized();
 
-	async getFileAtCommit(
-		uri: vscode.Uri,
-		commitHash: string
-	): Promise<Buffer> {
-		await this.ensureInitialized();
+    // Try Git Extension API first
+    if (this.repository) {
+      try {
+        const relativePath = this.getRelativePath(uri);
+        const content = await this.repository.show(commitHash, relativePath);
+        // Git show returns string for binary files, need to handle encoding
+        return Buffer.from(content, 'binary');
+      } catch (error) {
+        logger.warn('Git API failed, falling back to CLI:', error);
+      }
+    }
 
-		// Try Git Extension API first
-		if (this.repository) {
-			try {
-				const relativePath = this.getRelativePath(uri);
-				const content = await this.repository.show(
-					commitHash,
-					relativePath
-				);
-				// Git show returns string for binary files, need to handle encoding
-				return Buffer.from(content, 'binary');
-			} catch (error) {
-				console.warn(
-					'[GitMediaService] Git API failed, falling back to CLI:',
-					error
-				);
-			}
-		}
+    // Fallback to git CLI
+    return this.getFileAtCommitCLI(uri, commitHash);
+  }
 
-		// Fallback to git CLI
-		return this.getFileAtCommitCLI(uri, commitHash);
-	}
+  async isTracked(uri: vscode.Uri): Promise<boolean> {
+    await this.ensureInitialized();
 
-	async isTracked(uri: vscode.Uri): Promise<boolean> {
-		await this.ensureInitialized();
+    try {
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+      if (!workspaceFolder) {
+        return false;
+      }
 
-		try {
-			const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-			if (!workspaceFolder) {
-				return false;
-			}
+      const relativePath = path.relative(workspaceFolder.uri.fsPath, uri.fsPath);
+      const { stdout } = await execAsync(`git ls-files --error-unmatch "${relativePath}"`, {
+        cwd: workspaceFolder.uri.fsPath,
+      });
+      return stdout.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
 
-			const relativePath = path.relative(
-				workspaceFolder.uri.fsPath,
-				uri.fsPath
-			);
-			const { stdout } = await execAsync(
-				`git ls-files --error-unmatch "${relativePath}"`,
-				{ cwd: workspaceFolder.uri.fsPath }
-			);
-			return stdout.trim().length > 0;
-		} catch {
-			return false;
-		}
-	}
+  async getFileHistory(uri: vscode.Uri, maxCount: number = 20): Promise<GitCommitInfo[]> {
+    await this.ensureInitialized();
 
-	async getFileHistory(
-		uri: vscode.Uri,
-		maxCount: number = 20
-	): Promise<GitCommitInfo[]> {
-		await this.ensureInitialized();
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+    if (!workspaceFolder) {
+      return [];
+    }
 
-		const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-		if (!workspaceFolder) {
-			return [];
-		}
+    const relativePath = path.relative(workspaceFolder.uri.fsPath, uri.fsPath);
 
-		const relativePath = path.relative(
-			workspaceFolder.uri.fsPath,
-			uri.fsPath
-		);
+    try {
+      // %x1f = unit separator (field delimiter), %x1e = record separator
+      // --follow tracks renames
+      const format = '%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e';
+      const { stdout } = await execAsync(
+        `git log --follow --max-count=${maxCount} --format="${format}" -- "${relativePath}"`,
+        {
+          cwd: workspaceFolder.uri.fsPath,
+          maxBuffer: 1024 * 1024,
+        },
+      );
 
-		try {
-			// %x1f = unit separator (field delimiter), %x1e = record separator
-			// --follow tracks renames
-			const format = '%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e';
-			const { stdout } = await execAsync(
-				`git log --follow --max-count=${maxCount} --format="${format}" -- "${relativePath}"`,
-				{
-					cwd: workspaceFolder.uri.fsPath,
-					maxBuffer: 1024 * 1024,
-				}
-			);
+      if (!stdout.trim()) {
+        return [];
+      }
 
-			if (!stdout.trim()) {
-				return [];
-			}
+      return stdout
+        .split('\x1e')
+        .filter((record) => record.trim())
+        .map((record) => {
+          const [hash, shortHash, subject, authorName, date] = record.trim().split('\x1f');
+          return {
+            hash: hash!,
+            shortHash: shortHash!,
+            subject: subject!,
+            authorName: authorName!,
+            date: date!,
+          };
+        });
+    } catch (error) {
+      logger.warn('Failed to get file history:', error);
+      return [];
+    }
+  }
 
-			return stdout
-				.split('\x1e')
-				.filter((record) => record.trim())
-				.map((record) => {
-					const [hash, shortHash, subject, authorName, date] =
-						record.trim().split('\x1f');
-					return {
-						hash: hash!,
-						shortHash: shortHash!,
-						subject: subject!,
-						authorName: authorName!,
-						date: date!,
-					};
-				});
-		} catch (error) {
-			console.warn('[GitMediaService] Failed to get file history:', error);
-			return [];
-		}
-	}
+  async extractFileToPath(uri: vscode.Uri, ref: string, outputPath: string): Promise<void> {
+    await this.ensureInitialized();
 
-	async extractFileToPath(
-		uri: vscode.Uri,
-		ref: string,
-		outputPath: string
-	): Promise<void> {
-		await this.ensureInitialized();
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+    if (!workspaceFolder) {
+      throw new Error('File is not in a workspace');
+    }
 
-		const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-		if (!workspaceFolder) {
-			throw new Error('File is not in a workspace');
-		}
+    const relativePath = this.getRelativePath(uri);
 
-		const relativePath = this.getRelativePath(uri);
+    return new Promise<void>((resolve, reject) => {
+      const gitProcess = spawn('git', ['show', `${ref}:${relativePath}`], {
+        cwd: workspaceFolder.uri.fsPath,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
 
-		return new Promise<void>((resolve, reject) => {
-			const gitProcess = spawn(
-				'git',
-				['show', `${ref}:${relativePath}`],
-				{ cwd: workspaceFolder.uri.fsPath, stdio: ['ignore', 'pipe', 'pipe'] }
-			);
+      const fileStream = createWriteStream(outputPath);
+      let stderrChunks: Buffer[] = [];
 
-			const fileStream = createWriteStream(outputPath);
-			let stderrChunks: Buffer[] = [];
+      gitProcess.stdout.pipe(fileStream);
+      gitProcess.stderr.on('data', (chunk: Buffer) => {
+        stderrChunks.push(chunk);
+      });
 
-			gitProcess.stdout.pipe(fileStream);
-			gitProcess.stderr.on('data', (chunk: Buffer) => {
-				stderrChunks.push(chunk);
-			});
+      fileStream.on('error', (err) => {
+        gitProcess.kill();
+        reject(new Error(`Failed to write to ${outputPath}: ${err.message}`));
+      });
 
-			fileStream.on('error', (err) => {
-				gitProcess.kill();
-				reject(new Error(`Failed to write to ${outputPath}: ${err.message}`));
-			});
+      gitProcess.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          const stderr = Buffer.concat(stderrChunks).toString();
+          reject(new Error(`git show ${ref}:${relativePath} failed (code ${code}): ${stderr}`));
+        }
+      });
 
-			gitProcess.on('close', (code) => {
-				if (code === 0) {
-					resolve();
-				} else {
-					const stderr = Buffer.concat(stderrChunks).toString();
-					reject(new Error(
-						`git show ${ref}:${relativePath} failed (code ${code}): ${stderr}`
-					));
-				}
-			});
+      gitProcess.on('error', (err) => {
+        reject(new Error(`Failed to spawn git: ${err.message}`));
+      });
+    });
+  }
 
-			gitProcess.on('error', (err) => {
-				reject(new Error(`Failed to spawn git: ${err.message}`));
-			});
-		});
-	}
+  /**
+   * Get file at commit using git CLI
+   */
+  private async getFileAtCommitCLI(uri: vscode.Uri, commitHash: string): Promise<Buffer> {
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+    if (!workspaceFolder) {
+      throw new Error('File is not in a workspace');
+    }
 
-	/**
-	 * Get file at commit using git CLI
-	 */
-	private async getFileAtCommitCLI(
-		uri: vscode.Uri,
-		commitHash: string
-	): Promise<Buffer> {
-		const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-		if (!workspaceFolder) {
-			throw new Error('File is not in a workspace');
-		}
+    const relativePath = path.relative(workspaceFolder.uri.fsPath, uri.fsPath);
 
-		const relativePath = path.relative(
-			workspaceFolder.uri.fsPath,
-			uri.fsPath
-		);
+    try {
+      // Use git show with binary output
+      const { stdout } = await execAsync(`git show "${commitHash}:${relativePath}"`, {
+        cwd: workspaceFolder.uri.fsPath,
+        encoding: 'buffer',
+        maxBuffer: 100 * 1024 * 1024, // 100MB for large media files
+      });
+      return stdout as unknown as Buffer;
+    } catch (error) {
+      throw new Error(
+        `Failed to get file at ${commitHash}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
-		try {
-			// Use git show with binary output
-			const { stdout } = await execAsync(
-				`git show "${commitHash}:${relativePath}"`,
-				{
-					cwd: workspaceFolder.uri.fsPath,
-					encoding: 'buffer',
-					maxBuffer: 100 * 1024 * 1024, // 100MB for large media files
-				}
-			);
-			return stdout as unknown as Buffer;
-		} catch (error) {
-			throw new Error(
-				`Failed to get file at ${commitHash}: ${error instanceof Error ? error.message : String(error)}`
-			);
-		}
-	}
+  /**
+   * Get relative path from repository root
+   */
+  private getRelativePath(uri: vscode.Uri): string {
+    if (this.repository) {
+      return path.relative(this.repository.rootUri.fsPath, uri.fsPath);
+    }
 
-	/**
-	 * Get relative path from repository root
-	 */
-	private getRelativePath(uri: vscode.Uri): string {
-		if (this.repository) {
-			return path.relative(this.repository.rootUri.fsPath, uri.fsPath);
-		}
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+    if (workspaceFolder) {
+      return path.relative(workspaceFolder.uri.fsPath, uri.fsPath);
+    }
 
-		const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-		if (workspaceFolder) {
-			return path.relative(workspaceFolder.uri.fsPath, uri.fsPath);
-		}
+    return uri.fsPath;
+  }
 
-		return uri.fsPath;
-	}
+  /**
+   * Map Git status code to our status type
+   */
+  private mapGitStatus(status: number): GitChangeStatus {
+    switch (status) {
+      case Status.INDEX_ADDED:
+      case Status.UNTRACKED:
+      case Status.INTENT_TO_ADD:
+        return 'added';
+      case Status.INDEX_DELETED:
+      case Status.DELETED:
+        return 'deleted';
+      case Status.INDEX_RENAMED:
+        return 'renamed';
+      default:
+        return 'modified';
+    }
+  }
 
-	/**
-	 * Map Git status code to our status type
-	 */
-	private mapGitStatus(status: number): GitChangeStatus {
-		switch (status) {
-			case Status.INDEX_ADDED:
-			case Status.UNTRACKED:
-			case Status.INTENT_TO_ADD:
-				return 'added';
-			case Status.INDEX_DELETED:
-			case Status.DELETED:
-				return 'deleted';
-			case Status.INDEX_RENAMED:
-				return 'renamed';
-			default:
-				return 'modified';
-		}
-	}
-
-	dispose(): void {
-		this.disposables.forEach((d) => d.dispose());
-		this.disposables = [];
-		this.git = null;
-		this.repository = null;
-	}
+  dispose(): void {
+    this.disposables.forEach((d) => d.dispose());
+    this.disposables = [];
+    this.git = null;
+    this.repository = null;
+  }
 }

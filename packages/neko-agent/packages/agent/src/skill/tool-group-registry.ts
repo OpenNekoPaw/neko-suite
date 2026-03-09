@@ -8,11 +8,10 @@
  * - Provide active tool list based on active groups
  */
 
-import type {
-  ToolGroup,
-  ToolGroupMatch,
-  IToolGroupRegistry,
-} from '@neko/shared';
+import type { ToolGroup, ToolGroupMatch, IToolGroupRegistry } from '@neko/shared';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('ToolGroupRegistry');
 
 /**
  * ToolGroupRegistry implementation
@@ -26,7 +25,7 @@ export class ToolGroupRegistry implements IToolGroupRegistry {
    */
   register(group: ToolGroup): void {
     if (this.groups.has(group.name)) {
-      console.warn(`[ToolGroupRegistry] Overwriting existing group: ${group.name}`);
+      logger.warn('Overwriting existing group', { groupName: group.name });
     }
 
     this.groups.set(group.name, group);

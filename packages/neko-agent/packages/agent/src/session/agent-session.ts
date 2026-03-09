@@ -15,11 +15,7 @@
  * - Converts AgentStep to AgentEvent for unified event streaming
  */
 
-import type {
-  ChatMessage,
-  AgentStep,
-  ExecutorHooks,
-} from '@neko/shared';
+import type { ChatMessage, AgentStep, ExecutorHooks } from '@neko/shared';
 
 import type {
   IAgentSession,
@@ -36,21 +32,17 @@ import { AgentExecutor } from '../executor';
 import { ConversationCompressor } from '../context';
 import { MemoryHooks } from '../hooks';
 import { createValidationHooks } from '../validation';
-import {
-  createPermissionHooks,
-  type PermissionHooks,
-  type PermissionMode,
-} from '../permission';
-import {
-  ToolGroupRegistry,
-  registerBuiltinToolGroups,
-} from '../skill';
+import { createPermissionHooks, type PermissionHooks, type PermissionMode } from '../permission';
+import { ToolGroupRegistry, registerBuiltinToolGroups } from '../skill';
 import {
   ToolCategoryRegistry,
   ToolInjectionManager,
   createCoreMetaTools,
   DEFAULT_INJECTION_CONFIG,
 } from '../tools';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('AgentSession');
 
 // =============================================================================
 // Constants
@@ -96,9 +88,12 @@ export class AgentSession implements IAgentSession {
   private _isRunning = false;
   /** Tracks whether content_delta steps were emitted for current think cycle */
   private _hasStreamedDeltas = false;
-  private _pendingConfirmations = new Map<string, {
-    request: ToolConfirmationRequest;
-  }>();
+  private _pendingConfirmations = new Map<
+    string,
+    {
+      request: ToolConfirmationRequest;
+    }
+  >();
 
   constructor(config: AgentSessionConfig) {
     this._config = config;
@@ -113,15 +108,17 @@ export class AgentSession implements IAgentSession {
     });
 
     // Initialize registries
-    this._toolGroupRegistry = (config.toolGroupRegistry as ToolGroupRegistry) ?? new ToolGroupRegistry();
+    this._toolGroupRegistry =
+      (config.toolGroupRegistry as ToolGroupRegistry) ?? new ToolGroupRegistry();
     if (!config.toolGroupRegistry) {
       registerBuiltinToolGroups(this._toolGroupRegistry);
     }
 
-    this._toolCategoryRegistry = (config.toolCategoryRegistry as ToolCategoryRegistry) ?? new ToolCategoryRegistry();
+    this._toolCategoryRegistry =
+      (config.toolCategoryRegistry as ToolCategoryRegistry) ?? new ToolCategoryRegistry();
     if (!config.toolCategoryRegistry) {
       // Populate with tool categories from ToolGroupRegistry
-      const defaultActiveGroups = this._toolGroupRegistry.list().filter(g => g.defaultActive);
+      const defaultActiveGroups = this._toolGroupRegistry.list().filter((g) => g.defaultActive);
       for (const group of defaultActiveGroups) {
         for (const toolName of group.tools) {
           this._toolCategoryRegistry.categorizeTool(toolName, 'system', 'skill');
@@ -132,14 +129,14 @@ export class AgentSession implements IAgentSession {
     this._toolInjectionManager = new ToolInjectionManager(
       this._toolCategoryRegistry,
       this._toolGroupRegistry,
-      DEFAULT_INJECTION_CONFIG
+      DEFAULT_INJECTION_CONFIG,
     );
 
     // Register core meta tools
     const metaTools = createCoreMetaTools(
       this._toolCategoryRegistry,
       this._toolInjectionManager,
-      this._toolGroupRegistry
+      this._toolGroupRegistry,
     );
     for (const tool of metaTools) {
       config.toolRegistry.register(tool);
@@ -187,8 +184,8 @@ export class AgentSession implements IAgentSession {
     this._executionMode = mode;
     // Only update permission hooks mode instead of rebuilding entire executor
     if (this._permissionHooks) {
-      const permissionMode: PermissionMode = mode === 'plan' ? 'plan'
-        : mode === 'auto' ? 'auto' : 'ask';
+      const permissionMode: PermissionMode =
+        mode === 'plan' ? 'plan' : mode === 'auto' ? 'auto' : 'ask';
       this._permissionHooks.setMode(permissionMode);
     }
   }
@@ -282,7 +279,7 @@ export class AgentSession implements IAgentSession {
   }
 
   getPendingConfirmations(): ToolConfirmationRequest[] {
-    return Array.from(this._pendingConfirmations.values()).map(p => p.request);
+    return Array.from(this._pendingConfirmations.values()).map((p) => p.request);
   }
 
   // ---------------------------------------------------------------------------
@@ -299,7 +296,7 @@ export class AgentSession implements IAgentSession {
 
   clearHistory(): void {
     // Keep system prompt
-    const systemPrompt = this._history.find(m => m.role === 'system');
+    const systemPrompt = this._history.find((m) => m.role === 'system');
     this._history = systemPrompt ? [systemPrompt] : [];
   }
 
@@ -323,7 +320,7 @@ export class AgentSession implements IAgentSession {
     const originalTokens = this.getTokenCount();
 
     const result = await this._compressor.compress(this._history);
-    this._history = result.messages.map(m => m.message);
+    this._history = result.messages.map((m) => m.message);
     const compressedTokens = this._compressor.estimateTokens(this._history);
 
     const ratio = originalTokens > 0 ? compressedTokens / originalTokens : 1;
@@ -372,8 +369,8 @@ export class AgentSession implements IAgentSession {
     });
 
     // Create permission hooks
-    const permissionMode: PermissionMode = this._executionMode === 'plan' ? 'plan'
-      : this._executionMode === 'auto' ? 'auto' : 'ask';
+    const permissionMode: PermissionMode =
+      this._executionMode === 'plan' ? 'plan' : this._executionMode === 'auto' ? 'auto' : 'ask';
 
     this._permissionHooks = createPermissionHooks({
       config: {
@@ -421,20 +418,23 @@ export class AgentSession implements IAgentSession {
 
     // Call user callback if provided
     if (this._config.onConfirmTool) {
-      this._config.onConfirmTool(request).then(approved => {
-        this.confirmTool(toolCallId, approved);
-      }).catch(err => {
-        // Deny on error and clean up pending state
-        this.confirmTool(toolCallId, false);
-        console.error('[AgentSession] Tool confirmation failed:', err);
-      });
+      this._config
+        .onConfirmTool(request)
+        .then((approved) => {
+          this.confirmTool(toolCallId, approved);
+        })
+        .catch((err) => {
+          // Deny on error and clean up pending state
+          this.confirmTool(toolCallId, false);
+          logger.error('Tool confirmation failed', { error: err });
+        });
     }
   }
 
   private *_convertStepToEvents(
     step: AgentStep,
     iteration: number,
-    maxIterations: number
+    maxIterations: number,
   ): Generator<AgentEvent> {
     // Skip iteration event for streaming deltas (sub-events within a think cycle)
     if (step.type !== 'content_delta') {

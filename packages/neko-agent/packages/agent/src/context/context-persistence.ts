@@ -109,10 +109,7 @@ export class ContextPersistenceManager implements IContextPersistence {
   /** Pending state to save */
   private pendingState: ContextState | null = null;
 
-  constructor(
-    storage: IContextStorage,
-    config?: Partial<ContextPersistenceConfig>
-  ) {
+  constructor(storage: IContextStorage, config?: Partial<ContextPersistenceConfig>) {
     this.storage = storage;
     this.config = { ...DEFAULT_PERSISTENCE_CONFIG, ...config };
   }
@@ -180,9 +177,7 @@ export class ContextPersistenceManager implements IContextPersistence {
       } else {
         // Filter by priority
         const items = filteredItems.get(layer) ?? [];
-        const filtered = items.filter(
-          (item) => item.priority >= this.config.minPriorityToPersist
-        );
+        const filtered = items.filter((item) => item.priority >= this.config.minPriorityToPersist);
         filteredItems.set(layer, filtered);
 
         // Recalculate usage
@@ -318,9 +313,7 @@ export class ContextPersistenceManager implements IContextPersistence {
    */
   async cleanup(): Promise<number> {
     // Clean up expired sessions
-    const expiredRemoved = await this.storage.cleanupExpired(
-      this.config.sessionExpiryMs
-    );
+    const expiredRemoved = await this.storage.cleanupExpired(this.config.sessionExpiryMs);
 
     // Enforce max sessions
     const maxRemoved = await this.enforceMaxSessions();
@@ -360,7 +353,7 @@ export class ContextPersistenceManager implements IContextPersistence {
  */
 export function createContextPersistenceManager(
   storage?: IContextStorage,
-  config?: Partial<ContextPersistenceConfig>
+  config?: Partial<ContextPersistenceConfig>,
 ): IContextPersistence {
   const storageBackend = storage ?? new InMemoryContextStorage();
   return new ContextPersistenceManager(storageBackend, config);

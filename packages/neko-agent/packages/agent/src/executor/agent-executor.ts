@@ -27,6 +27,9 @@ import type {
   StreamChunk,
 } from '@neko/shared';
 import { AgentError } from '../errors';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('AgentExecutor');
 
 /**
  * Agent executor options
@@ -183,10 +186,7 @@ export class AgentExecutor implements IAgentExecutor {
   /**
    * Execute with streaming - yields steps as they complete
    */
-  async *executeStream(
-    input: string,
-    context?: Partial<AgentContext>
-  ): AsyncIterable<AgentStep> {
+  async *executeStream(input: string, context?: Partial<AgentContext>): AsyncIterable<AgentStep> {
     const startTime = Date.now();
     const steps: AgentStep[] = [];
     this.abortController = new AbortController();
@@ -287,7 +287,8 @@ export class AgentExecutor implements IAgentExecutor {
         }
       } catch (error) {
         // Handle AbortError gracefully
-        const isAbortError = error instanceof Error &&
+        const isAbortError =
+          error instanceof Error &&
           (error.name === 'AbortError' || error.message.includes('aborted'));
 
         if (isAbortError || this.abortController.signal.aborted) {
@@ -393,7 +394,7 @@ export class AgentExecutor implements IAgentExecutor {
   private async runLoop(
     context: AgentContext,
     steps: AgentStep[],
-    startTime: number
+    startTime: number,
   ): Promise<AgentResult> {
     while (context.iteration < this.config.maxIterations) {
       // Check for abort
@@ -488,12 +489,8 @@ export class AgentExecutor implements IAgentExecutor {
 
     // Get tool filter based on active ToolSkills or injection manager
     // Extract user input from last user message for skill matching
-    const lastUserMessage = modifiedContext.messages
-      .filter(m => m.role === 'user')
-      .pop();
-    const userInput = typeof lastUserMessage?.content === 'string'
-      ? lastUserMessage.content
-      : '';
+    const lastUserMessage = modifiedContext.messages.filter((m) => m.role === 'user').pop();
+    const userInput = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
     const toolFilter = this.getToolFilter(userInput);
     const tools = this.toolRegistry.toToolDefinitions(toolFilter);
 
@@ -506,18 +503,19 @@ export class AgentExecutor implements IAgentExecutor {
 
     // Warn if response was truncated
     if (response.finishReason === 'length') {
-      console.warn('[AgentExecutor] Response truncated due to max_tokens limit.');
+      logger.warn('Response truncated due to max_tokens limit');
     }
 
     // Extract text content from message
-    const content = typeof response.message.content === 'string'
-      ? response.message.content
-      : Array.isArray(response.message.content)
+    const content =
+      typeof response.message.content === 'string'
         ? response.message.content
-            .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
-            .map(part => part.text)
-            .join('')
-        : '';
+        : Array.isArray(response.message.content)
+          ? response.message.content
+              .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+              .map((part) => part.text)
+              .join('')
+          : '';
 
     // Preserve the original tool call ID from the API response
     const toolCalls = response.message.toolCalls?.map((tc) => {
@@ -572,12 +570,8 @@ export class AgentExecutor implements IAgentExecutor {
     }
 
     // Get tool filter and definitions
-    const lastUserMessage = modifiedContext.messages
-      .filter(m => m.role === 'user')
-      .pop();
-    const userInput = typeof lastUserMessage?.content === 'string'
-      ? lastUserMessage.content
-      : '';
+    const lastUserMessage = modifiedContext.messages.filter((m) => m.role === 'user').pop();
+    const userInput = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
     const toolFilter = this.getToolFilter(userInput);
     const tools = this.toolRegistry.toToolDefinitions(toolFilter);
 
@@ -636,7 +630,7 @@ export class AgentExecutor implements IAgentExecutor {
 
     // Warn if truncated
     if (finishReason === 'length') {
-      console.warn('[AgentExecutor] Response truncated due to max_tokens limit.');
+      logger.warn('Response truncated due to max_tokens limit');
     }
 
     // Parse tool calls from accumulated data
@@ -654,13 +648,14 @@ export class AgentExecutor implements IAgentExecutor {
     const assistantMessage: ChatMessage = {
       role: 'assistant',
       content,
-      toolCalls: toolCalls.length > 0
-        ? toolCalls.map((tc) => ({
-            id: tc.id,
-            type: 'function' as const,
-            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-          }))
-        : undefined,
+      toolCalls:
+        toolCalls.length > 0
+          ? toolCalls.map((tc) => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+            }))
+          : undefined,
     };
     context.messages.push(assistantMessage);
 
@@ -682,7 +677,7 @@ export class AgentExecutor implements IAgentExecutor {
    * Act step - execute tools
    */
   private async act(
-    toolCalls: Array<{ id?: string; name: string; arguments: Record<string, unknown> }>
+    toolCalls: Array<{ id?: string; name: string; arguments: Record<string, unknown> }>,
   ): Promise<AgentStep> {
     const toolCallInfos: ToolCallInfo[] = toolCalls.map((tc, i) => ({
       id: tc.id || `call_${Date.now()}_${i}`,
@@ -697,7 +692,7 @@ export class AgentExecutor implements IAgentExecutor {
     // Execute all tool calls in parallel for better performance
     const signal = this.abortController?.signal;
     const settled = await Promise.allSettled(
-      toolCallInfos.map((info) => this.executeToolCall(info, signal))
+      toolCallInfos.map((info) => this.executeToolCall(info, signal)),
     );
 
     const results: ToolResultWithMeta[] = settled.map((s, i) => {
@@ -734,7 +729,7 @@ export class AgentExecutor implements IAgentExecutor {
    */
   private async executeToolCall(
     info: ToolCallInfo,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ): Promise<ToolResultWithMeta> {
     // Check abort signal before execution
     if (signal?.aborted) {

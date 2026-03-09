@@ -194,10 +194,12 @@ export class JsonSchemaValidator implements IJsonSchemaValidator {
     } catch (error) {
       return {
         valid: false,
-        errors: [{
-          path: '/',
-          message: `Schema compilation error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        }],
+        errors: [
+          {
+            path: '/',
+            message: `Schema compilation error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          },
+        ],
       };
     }
   }
@@ -226,7 +228,7 @@ export class JsonSchemaValidator implements IJsonSchemaValidator {
  */
 export async function validateJsonAgainstSchema(
   content: unknown,
-  schema: object
+  schema: object,
 ): Promise<ValidationResult> {
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];

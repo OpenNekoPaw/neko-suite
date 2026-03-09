@@ -202,10 +202,7 @@ describe('FileTaskRecoveryStorage', () => {
       // Advance timer to trigger debounced save
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(mockFs.writeFile).toHaveBeenCalledWith(
-        '/test/recovery.json',
-        expect.any(String)
-      );
+      expect(mockFs.writeFile).toHaveBeenCalledWith('/test/recovery.json', expect.any(String));
     });
 
     it('should debounce multiple saves', async () => {

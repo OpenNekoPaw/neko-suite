@@ -52,6 +52,11 @@ Webview (React + Vite)
 
 **音频预览**：`NativeEngine → PCM Float32 (postMessage) → Web Audio API → 扬声器`
 
+### 横切关注点
+
+- **i18n**：Webview 使用 `@neko/shared` 的 `I18nService` + `I18nProvider`。翻译文件位于 `webview/src/i18n/locales/`（en + zh-cn），命名空间 `preview`（含 video/audio 前缀）。
+- **错误边界**：Webview 入口已包裹 `ErrorBoundary`。
+
 ## 构建
 
 ```bash

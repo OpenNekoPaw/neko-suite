@@ -72,18 +72,21 @@ export class BashTool extends BuiltinTool {
           env: { ...process.env, TERM: 'dumb' },
         },
         (error, stdout, stderr) => {
-          const exitCode = error ? (error as { code?: number }).code ?? 1 : 0;
+          const exitCode = error ? ((error as { code?: number }).code ?? 1) : 0;
           const truncatedStdout = truncateOutput(stdout);
           const truncatedStderr = truncateOutput(stderr);
 
-          if (error && (error as NodeJS.ErrnoException).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+          if (
+            error &&
+            (error as NodeJS.ErrnoException).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
+          ) {
             resolve(
               this.success({
                 stdout: truncatedStdout,
                 stderr: truncatedStderr,
                 exitCode,
                 warning: 'Output truncated (exceeded 100KB limit)',
-              })
+              }),
             );
             return;
           }
@@ -93,16 +96,14 @@ export class BashTool extends BuiltinTool {
               stdout: truncatedStdout,
               stderr: truncatedStderr,
               exitCode,
-            })
+            }),
           );
-        }
+        },
       );
 
       // Handle timeout kill
       proc.on('error', (err) => {
-        resolve(
-          this.error(`Process error: ${err.message}`)
-        );
+        resolve(this.error(`Process error: ${err.message}`));
       });
     });
   }

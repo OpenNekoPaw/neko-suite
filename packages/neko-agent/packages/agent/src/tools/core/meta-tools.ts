@@ -44,10 +44,7 @@ export class SearchToolsTool extends BuiltinTool {
   private categoryRegistry: IToolCategoryRegistry;
   private skillRegistry?: IToolSkillRegistry;
 
-  constructor(
-    categoryRegistry: IToolCategoryRegistry,
-    skillRegistry?: IToolSkillRegistry
-  ) {
+  constructor(categoryRegistry: IToolCategoryRegistry, skillRegistry?: IToolSkillRegistry) {
     super();
     this.categoryRegistry = categoryRegistry;
     this.skillRegistry = skillRegistry;
@@ -120,10 +117,13 @@ export class SearchToolsTool extends BuiltinTool {
           name: category.displayName,
           description: category.description,
           toolCount: categoryTools.length,
-          tools: matchedTools.length > 0 ? matchedTools : categoryTools.slice(0, 3).map((t) => ({
-            name: t.name,
-            description: `[${t.layer}] ${t.category}`,
-          })),
+          tools:
+            matchedTools.length > 0
+              ? matchedTools
+              : categoryTools.slice(0, 3).map((t) => ({
+                  name: t.name,
+                  description: `[${t.layer}] ${t.category}`,
+                })),
           relevance,
         });
       }
@@ -230,10 +230,7 @@ export class ActivateSkillTool extends BuiltinTool {
   private injectionManager: IToolInjectionManager;
   private skillRegistry?: IToolSkillRegistry;
 
-  constructor(
-    injectionManager: IToolInjectionManager,
-    skillRegistry?: IToolSkillRegistry
-  ) {
+  constructor(injectionManager: IToolInjectionManager, skillRegistry?: IToolSkillRegistry) {
     super();
     this.injectionManager = injectionManager;
     this.skillRegistry = skillRegistry;
@@ -259,7 +256,7 @@ export class ActivateSkillTool extends BuiltinTool {
           .map((s) => s.name);
 
         return this.error(
-          `Skill "${skillName}" not found.${similar.length > 0 ? ` Did you mean: ${similar.join(', ')}?` : ' Use searchTools to find available skills.'}`
+          `Skill "${skillName}" not found.${similar.length > 0 ? ` Did you mean: ${similar.join(', ')}?` : ' Use searchTools to find available skills.'}`,
         );
       }
 
@@ -291,7 +288,7 @@ export class ActivateSkillTool extends BuiltinTool {
       });
     } catch (error) {
       return this.error(
-        `Failed to activate skill: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to activate skill: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -372,10 +369,7 @@ export class GetContextTool extends BuiltinTool {
   private injectionManager: IToolInjectionManager;
   private categoryRegistry: IToolCategoryRegistry;
 
-  constructor(
-    injectionManager: IToolInjectionManager,
-    categoryRegistry: IToolCategoryRegistry
-  ) {
+  constructor(injectionManager: IToolInjectionManager, categoryRegistry: IToolCategoryRegistry) {
     super();
     this.injectionManager = injectionManager;
     this.categoryRegistry = categoryRegistry;
@@ -423,7 +417,7 @@ export class GetContextTool extends BuiltinTool {
 export function createCoreMetaTools(
   categoryRegistry: IToolCategoryRegistry,
   injectionManager: IToolInjectionManager,
-  skillRegistry?: IToolSkillRegistry
+  skillRegistry?: IToolSkillRegistry,
 ): Tool[] {
   return [
     new SearchToolsTool(categoryRegistry, skillRegistry),

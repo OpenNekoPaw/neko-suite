@@ -20,6 +20,9 @@ import type {
   StreamChunk,
 } from '@neko/shared';
 import type { Service } from './service';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('SharedServiceAdapter');
 
 /**
  * Wraps a Platform Service to conform to @neko/shared's IService interface.
@@ -29,7 +32,7 @@ export class SharedServiceAdapter implements SharedIService {
 
   async chat(
     messages: ChatMessage[],
-    options?: SharedServiceOptions
+    options?: SharedServiceOptions,
   ): Promise<SharedServiceResponse> {
     const response = await this._service.chat(messages, options);
     return {
@@ -44,7 +47,7 @@ export class SharedServiceAdapter implements SharedIService {
 
   async *chatStream(
     messages: ChatMessage[],
-    options?: SharedServiceOptions
+    options?: SharedServiceOptions,
   ): AsyncIterable<StreamChunk> {
     const { stream, response } = this._service.chatStream(messages, options);
 
@@ -63,15 +66,16 @@ export class SharedServiceAdapter implements SharedIService {
           content = chunk.delta.content;
         } else {
           const parts = chunk.delta.content;
-          const nonTextParts = parts.filter(p => p.type !== 'text');
+          const nonTextParts = parts.filter((p) => p.type !== 'text');
           if (nonTextParts.length > 0) {
-            console.warn(
-              `[SharedServiceAdapter] chatStream: ${nonTextParts.length} non-text ContentPart(s) dropped (types: ${nonTextParts.map(p => p.type).join(', ')})`
-            );
+            logger.warn('chatStream: non-text ContentPart(s) dropped', {
+              count: nonTextParts.length,
+              types: nonTextParts.map((p) => p.type).join(', '),
+            });
           }
           content = parts
             .filter((p): p is Extract<typeof p, { type: 'text' }> => p.type === 'text')
-            .map(p => p.text)
+            .map((p) => p.text)
             .join('');
         }
         if (content) {

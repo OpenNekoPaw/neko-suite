@@ -74,7 +74,11 @@ function toolCallResponse(
       role: 'assistant',
       content: '',
       toolCalls: [
-        { id: callId, type: 'function' as const, function: { name: toolName, arguments: JSON.stringify(args) } },
+        {
+          id: callId,
+          type: 'function' as const,
+          function: { name: toolName, arguments: JSON.stringify(args) },
+        },
       ],
     } as ChatMessage,
     finishReason: 'tool_calls',
@@ -170,16 +174,18 @@ describe('AgentExecutor', () => {
         data: 'ok',
       });
 
-      const executor = new AgentExecutor(createOptions({
-        service,
-        toolRegistry,
-        config: {
-          name: 'test',
-          systemPrompt: 'test',
-          tools: [],
-          maxIterations: 2,
-        },
-      }));
+      const executor = new AgentExecutor(
+        createOptions({
+          service,
+          toolRegistry,
+          config: {
+            name: 'test',
+            systemPrompt: 'test',
+            tools: [],
+            maxIterations: 2,
+          },
+        }),
+      );
 
       const result = await executor.execute('loop forever');
 
@@ -207,7 +213,7 @@ describe('AgentExecutor', () => {
       const executor = new AgentExecutor(options);
       const steps = await collectSteps(executor.executeStream('Search foo'));
 
-      const types = steps.map(s => s.type);
+      const types = steps.map((s) => s.type);
       // First iteration: think (with tool calls) -> act -> observe
       // Second iteration: think (final response, no tool calls)
       expect(types).toEqual(['think', 'act', 'observe', 'think']);
@@ -240,14 +246,17 @@ describe('AgentExecutor', () => {
       // Make chat hang until aborted
       let rejectChat: ((err: Error) => void) | undefined;
       (service.chat as ReturnType<typeof vi.fn>).mockImplementation(
-        () => new Promise((_resolve, reject) => { rejectChat = reject; }),
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectChat = reject;
+          }),
       );
 
       const executor = new AgentExecutor(options);
       const stepsPromise = collectSteps(executor.executeStream('Hang'));
 
       // Give the generator time to start
-      await new Promise(r => setTimeout(r, 10));
+      await new Promise((r) => setTimeout(r, 10));
 
       executor.abort();
       // Reject the pending chat call with AbortError
@@ -273,7 +282,7 @@ describe('AgentExecutor', () => {
       const chatMock = service.chat as ReturnType<typeof vi.fn>;
       chatMock.mockImplementation((messages: ChatMessage[]) => {
         // Verify no duplicate user message was added
-        const userMsgs = messages.filter(m => m.role === 'user');
+        const userMsgs = messages.filter((m) => m.role === 'user');
         // Should have exactly 1 (the one already in the snapshot)
         expect(userMsgs.length).toBe(1);
         return Promise.resolve(textResponse('ok'));
@@ -296,7 +305,7 @@ describe('AgentExecutor', () => {
     it('should add user message when skipUserMessage is false/absent', async () => {
       const chatMock = service.chat as ReturnType<typeof vi.fn>;
       chatMock.mockImplementation((messages: ChatMessage[]) => {
-        const userMsgs = messages.filter(m => m.role === 'user');
+        const userMsgs = messages.filter((m) => m.role === 'user');
         expect(userMsgs.length).toBe(1);
         expect(userMsgs[0]!.content).toBe('Hello');
         return Promise.resolve(textResponse('ok'));
@@ -325,11 +334,13 @@ describe('AgentExecutor', () => {
         onExecuteEnd: vi.fn().mockResolvedValue(undefined),
       };
 
-      const executor = new AgentExecutor(createOptions({
-        service,
-        toolRegistry,
-        hooks: [hooks],
-      }));
+      const executor = new AgentExecutor(
+        createOptions({
+          service,
+          toolRegistry,
+          hooks: [hooks],
+        }),
+      );
 
       await executor.execute('Test hooks');
 
@@ -354,11 +365,13 @@ describe('AgentExecutor', () => {
         onIterationComplete: vi.fn().mockResolvedValue(undefined),
       };
 
-      const executor = new AgentExecutor(createOptions({
-        service,
-        toolRegistry,
-        hooks: [hooks],
-      }));
+      const executor = new AgentExecutor(
+        createOptions({
+          service,
+          toolRegistry,
+          hooks: [hooks],
+        }),
+      );
 
       await executor.execute('Run tool');
 

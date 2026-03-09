@@ -7,10 +7,7 @@
  * - Token-aware truncation
  */
 
-import type {
-  ContextExtractionOptions,
-  IContextBridge,
-} from './types';
+import type { ContextExtractionOptions, IContextBridge } from './types';
 
 // =============================================================================
 // Constants
@@ -37,7 +34,7 @@ export class ContextBridge implements IContextBridge {
    */
   extractSummary(
     messages: Array<{ role: string; content: string | unknown }>,
-    options: ContextExtractionOptions = {}
+    options: ContextExtractionOptions = {},
   ): string {
     const {
       maxTokens = DEFAULT_MAX_TOKENS,
@@ -79,7 +76,7 @@ export class ContextBridge implements IContextBridge {
    */
   mergeResults(
     parentMessages: Array<{ role: string; content: string }>,
-    subAgentResults: Array<{ id: string; response: string; name?: string }>
+    subAgentResults: Array<{ id: string; response: string; name?: string }>,
   ): Array<{ role: string; content: string }> {
     if (subAgentResults.length === 0) {
       return parentMessages;
@@ -121,7 +118,7 @@ export class ContextBridge implements IContextBridge {
             part !== null &&
             'type' in part &&
             part.type === 'text' &&
-            'text' in part
+            'text' in part,
         )
         .map((part) => part.text)
         .join('\n');
@@ -187,7 +184,7 @@ export function estimateTokens(text: string): number {
  */
 export function createContextSummaryForSubAgent(
   messages: Array<{ role: string; content: string | unknown }>,
-  options?: ContextExtractionOptions
+  options?: ContextExtractionOptions,
 ): string {
   const bridge = new ContextBridge();
   return bridge.extractSummary(messages, options);

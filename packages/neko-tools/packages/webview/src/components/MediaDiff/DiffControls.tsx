@@ -5,6 +5,7 @@
 
 import { memo, useState, useCallback } from 'react';
 import type { DiffViewMode } from '@neko/shared';
+import { useTranslation } from '../../i18n/I18nContext';
 import type { DiffControlsProps } from './types';
 
 // =============================================================================
@@ -61,16 +62,13 @@ interface SimilarityBadgeProps {
   similarity: number;
 }
 
-const SimilarityBadge = memo(function SimilarityBadge({
-  similarity,
-}: SimilarityBadgeProps) {
+const SimilarityBadge = memo(function SimilarityBadge({ similarity }: SimilarityBadgeProps) {
+  const { t } = useTranslation();
   // Files are identical
   if (similarity >= 1.0) {
     return (
       <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--vscode-input-background)] rounded">
-        <span className="text-sm font-bold text-green-400">
-          Identical
-        </span>
+        <span className="text-sm font-bold text-green-400">{t('mediaDiff.identical')}</span>
       </div>
     );
   }
@@ -85,11 +83,9 @@ const SimilarityBadge = memo(function SimilarityBadge({
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--vscode-input-background)] rounded">
       <span className="text-xs text-[var(--vscode-descriptionForeground)]">
-        Similarity:
+        {t('mediaDiff.similarity')}
       </span>
-      <span className={`text-sm font-bold ${colorClass}`}>
-        {percentage}%
-      </span>
+      <span className={`text-sm font-bold ${colorClass}`}>{percentage}%</span>
     </div>
   );
 });
@@ -173,6 +169,7 @@ const TimeRangeControl = memo(function TimeRangeControl({
   isLoading,
   onApply,
 }: TimeRangeControlProps) {
+  const { t } = useTranslation();
   const [startInput, setStartInput] = useState('');
   const [endInput, setEndInput] = useState('');
   const [isActive, setIsActive] = useState(false);
@@ -184,13 +181,11 @@ const TimeRangeControl = memo(function TimeRangeControl({
     // Validate
     if (start !== undefined && start !== null && start < 0) return;
     if (end !== undefined && end !== null && end > duration) return;
-    if (start !== null && end !== null && start !== undefined && end !== undefined && start >= end) return;
+    if (start !== null && end !== null && start !== undefined && end !== undefined && start >= end)
+      return;
 
     setIsActive(true);
-    onApply(
-      start !== null ? start : undefined,
-      end !== null ? end : undefined,
-    );
+    onApply(start !== null ? start : undefined, end !== null ? end : undefined);
   }, [startInput, endInput, duration, onApply]);
 
   const handleReset = useCallback(() => {
@@ -202,14 +197,16 @@ const TimeRangeControl = memo(function TimeRangeControl({
 
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-xs text-[var(--vscode-descriptionForeground)]">Range:</span>
+      <span className="text-xs text-[var(--vscode-descriptionForeground)]">
+        {t('mediaDiff.range')}
+      </span>
       <input
         type="text"
         placeholder={formatTime(0)}
         value={startInput}
         onChange={(e) => setStartInput(e.target.value)}
         className="w-14 px-1 py-0.5 text-xs bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded text-center"
-        title="Start time (e.g. 0:05.0 or 5)"
+        title={t('mediaDiff.startTimeHint')}
       />
       <span className="text-xs text-[var(--vscode-descriptionForeground)]">–</span>
       <input
@@ -218,7 +215,7 @@ const TimeRangeControl = memo(function TimeRangeControl({
         value={endInput}
         onChange={(e) => setEndInput(e.target.value)}
         className="w-14 px-1 py-0.5 text-xs bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded text-center"
-        title="End time (e.g. 1:30.0 or 90)"
+        title={t('mediaDiff.endTimeHint')}
       />
       <button
         type="button"
@@ -226,14 +223,15 @@ const TimeRangeControl = memo(function TimeRangeControl({
         disabled={isLoading}
         className={`
           px-2 py-0.5 text-xs rounded font-medium transition-colors
-          ${isLoading
-            ? 'opacity-50 cursor-not-allowed bg-[var(--vscode-input-background)] text-[var(--vscode-descriptionForeground)]'
-            : 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] cursor-pointer'
+          ${
+            isLoading
+              ? 'opacity-50 cursor-not-allowed bg-[var(--vscode-input-background)] text-[var(--vscode-descriptionForeground)]'
+              : 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] cursor-pointer'
           }
         `}
-        title="Re-analyze with selected time range"
+        title={t('mediaDiff.applyRange')}
       >
-        Apply
+        {t('mediaDiff.apply')}
       </button>
       {isActive && (
         <button
@@ -241,9 +239,9 @@ const TimeRangeControl = memo(function TimeRangeControl({
           onClick={handleReset}
           disabled={isLoading}
           className="px-1.5 py-0.5 text-xs text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] cursor-pointer"
-          title="Reset to full duration"
+          title={t('mediaDiff.resetRange')}
         >
-          Reset
+          {t('mediaDiff.reset')}
         </button>
       )}
     </div>
@@ -267,14 +265,15 @@ export const DiffControls = memo(function DiffControls({
   duration,
   onSetTimeRange,
 }: DiffControlsProps) {
+  const { t } = useTranslation();
   const viewModes: { mode: DiffViewMode; label: string; icon: string }[] = [
-    { mode: 'side-by-side', label: 'Side by Side', icon: '⬜⬜' },
-    { mode: 'slider', label: 'Slider', icon: '↔️' },
-    { mode: 'overlay', label: 'Overlay', icon: '🔲' },
+    { mode: 'side-by-side', label: t('mediaDiff.viewMode.sideBySide'), icon: '⬜⬜' },
+    { mode: 'slider', label: t('mediaDiff.viewMode.slider'), icon: '↔️' },
+    { mode: 'overlay', label: t('mediaDiff.viewMode.overlay'), icon: '🔲' },
   ];
 
   if (mediaType === 'image') {
-    viewModes.push({ mode: 'onion-skin', label: 'Onion Skin', icon: '🧅' });
+    viewModes.push({ mode: 'onion-skin', label: t('mediaDiff.viewMode.onionSkin'), icon: '🧅' });
   }
 
   return (
@@ -302,7 +301,7 @@ export const DiffControls = memo(function DiffControls({
         <>
           <div className="w-px h-6 bg-[var(--vscode-panel-border)]" />
           <SliderControl
-            label="Zoom"
+            label={t('mediaDiff.zoom')}
             value={zoom}
             min={0.1}
             max={4}
@@ -317,7 +316,7 @@ export const DiffControls = memo(function DiffControls({
         <>
           <div className="w-px h-6 bg-[var(--vscode-panel-border)]" />
           <SliderControl
-            label="Opacity"
+            label={t('mediaDiff.opacity')}
             value={opacity}
             min={0}
             max={1}
@@ -328,21 +327,20 @@ export const DiffControls = memo(function DiffControls({
         </>
       )}
 
-      {(mediaType === 'video' || mediaType === 'audio') && duration !== undefined && duration > 0 && onSetTimeRange && (
-        <>
-          <div className="w-px h-6 bg-[var(--vscode-panel-border)]" />
-          <TimeRangeControl
-            duration={duration}
-            isLoading={isLoading}
-            onApply={onSetTimeRange}
-          />
-        </>
-      )}
+      {(mediaType === 'video' || mediaType === 'audio') &&
+        duration !== undefined &&
+        duration > 0 &&
+        onSetTimeRange && (
+          <>
+            <div className="w-px h-6 bg-[var(--vscode-panel-border)]" />
+            <TimeRangeControl duration={duration} isLoading={isLoading} onApply={onSetTimeRange} />
+          </>
+        )}
 
       {isLoading && (
         <div className="flex items-center gap-2 text-xs text-[var(--vscode-descriptionForeground)]">
           <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          <span>Analyzing...</span>
+          <span>{t('mediaDiff.analyzing')}</span>
         </div>
       )}
     </div>

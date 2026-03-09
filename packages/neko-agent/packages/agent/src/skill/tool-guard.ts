@@ -155,10 +155,7 @@ export class ToolGuard implements IToolGuard {
 /**
  * Create a tool guard from skill injection
  */
-export function createToolGuard(
-  allowedTools?: string[],
-  skillName?: string
-): ToolGuard {
+export function createToolGuard(allowedTools?: string[], skillName?: string): ToolGuard {
   return new ToolGuard(allowedTools, skillName);
 }
 

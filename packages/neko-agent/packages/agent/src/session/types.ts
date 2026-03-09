@@ -15,16 +15,10 @@ import type {
 } from '@neko/shared';
 
 // Re-export validation types
-export type {
-  ValidationError,
-  ValidationWarning,
-} from '../validation/types';
+export type { ValidationError, ValidationWarning } from '../validation/types';
 
 // Re-export permission types
-export type {
-  ToolConfirmationRequest,
-  PermissionMode,
-} from '../permission/types';
+export type { ToolConfirmationRequest, PermissionMode } from '../permission/types';
 
 // =============================================================================
 // Execution Mode
@@ -83,7 +77,9 @@ export interface AgentSessionConfig {
   };
 
   /** Tool confirmation callback (required for 'ask' mode) */
-  onConfirmTool?: (request: import('../permission/types').ToolConfirmationRequest) => Promise<boolean>;
+  onConfirmTool?: (
+    request: import('../permission/types').ToolConfirmationRequest,
+  ) => Promise<boolean>;
 
   /** Validation warning callback */
   onValidationWarning?: (warning: import('../validation/types').ValidationWarning) => void;
@@ -104,17 +100,17 @@ export interface AgentSessionConfig {
  * Agent event types
  */
 export type AgentEventType =
-  | 'thinking'           // Agent is in thinking phase
-  | 'thinking_content'   // Extended thinking content (Claude)
-  | 'text'               // Text output (complete)
-  | 'text_delta'         // Streaming text chunk (incremental)
-  | 'tool_call'          // Tool invocation
-  | 'tool_result'        // Tool execution result
-  | 'tool_confirmation'  // Tool requires confirmation
-  | 'iteration'          // Iteration info
-  | 'done'               // Execution complete
-  | 'error'              // Error occurred
-  | 'messageQueued';     // Message queued while agent is running
+  | 'thinking' // Agent is in thinking phase
+  | 'thinking_content' // Extended thinking content (Claude)
+  | 'text' // Text output (complete)
+  | 'text_delta' // Streaming text chunk (incremental)
+  | 'tool_call' // Tool invocation
+  | 'tool_result' // Tool execution result
+  | 'tool_confirmation' // Tool requires confirmation
+  | 'iteration' // Iteration info
+  | 'done' // Execution complete
+  | 'error' // Error occurred
+  | 'messageQueued'; // Message queued while agent is running
 
 /**
  * Agent event

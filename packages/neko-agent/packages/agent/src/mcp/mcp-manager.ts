@@ -2,14 +2,12 @@
  * MCP Manager - Manages multiple MCP servers
  */
 
-import type {
-  IMCPManager,
-  IMCPClient,
-  MCPServerConfig,
-  MCPToolDefinition,
-} from '@neko/shared';
+import type { IMCPManager, IMCPClient, MCPServerConfig, MCPToolDefinition } from '@neko/shared';
 import { createMCPClient } from './mcp-client';
 import { AgentError } from '../errors';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('MCPManager');
 
 /**
  * MCP manager implementation
@@ -115,7 +113,7 @@ export class MCPManager implements IMCPManager {
           tools.push({ ...tool, serverId });
         }
       } catch (error) {
-        console.error(`Failed to list tools from ${serverId}:`, error);
+        logger.error('Failed to list tools', { serverId, error });
       }
     }
 
@@ -134,8 +132,8 @@ export class MCPManager implements IMCPManager {
           this.connect(config.id)
             .then(() => {})
             .catch((error) => {
-              console.error(`Failed to connect to ${config.id}:`, error);
-            })
+              logger.error('Failed to connect', { serverId: config.id, error });
+            }),
         );
       }
     }
@@ -169,7 +167,7 @@ export class MCPManager implements IMCPManager {
   async callTool(
     serverId: string,
     toolName: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
     const client = this.clients.get(serverId);
     if (!client?.isConnected()) {

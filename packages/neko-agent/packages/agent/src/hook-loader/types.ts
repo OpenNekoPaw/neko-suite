@@ -124,10 +124,7 @@ export interface IHookFileSystem {
   /** Check if path is a directory */
   isDirectory(path: string): Promise<boolean>;
   /** Watch directory for changes (optional) */
-  watch?(
-    path: string,
-    callback: (event: string, filename: string) => void
-  ): { close(): void };
+  watch?(path: string, callback: (event: string, filename: string) => void): { close(): void };
 }
 
 // =============================================================================

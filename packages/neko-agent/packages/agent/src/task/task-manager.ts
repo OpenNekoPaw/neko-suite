@@ -19,13 +19,12 @@ import type {
   SerializableTask,
   TaskExecutor,
 } from '@neko/shared';
-import {
-  BaseError,
-  ConcurrencyPool,
-  KeyedConcurrencyPool,
-} from '@neko/shared';
+import { BaseError, ConcurrencyPool, KeyedConcurrencyPool } from '@neko/shared';
 import { MemoryTaskStorage } from './task-storage';
 import { MemoryTaskRecoveryStorage } from './task-recovery-storage';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('TaskManager');
 
 /**
  * Concurrency configuration
@@ -97,7 +96,7 @@ export class TaskManager implements ITaskManager {
     if (cleanupInterval > 0) {
       this.cleanupTimer = setInterval(() => {
         this.cleanupOldTasks().catch((err) => {
-          console.error('[TaskManager] Cleanup failed:', err);
+          logger.error('Cleanup failed', { error: err });
         });
       }, cleanupInterval);
     }
@@ -216,11 +215,11 @@ export class TaskManager implements ITaskManager {
   async saveRecoveryInfo(
     taskId: string,
     externalTaskId: string,
-    providerId: string
+    providerId: string,
   ): Promise<void> {
     const task = this.tasks.get(taskId);
     if (!task) {
-      console.warn('[TaskManager] Cannot save recovery info: task not found', taskId);
+      logger.warn('Cannot save recovery info: task not found', { taskId });
       return;
     }
 
@@ -235,7 +234,7 @@ export class TaskManager implements ITaskManager {
     };
 
     await this.recoveryStorage.save(info);
-    console.log('[TaskManager] Saved recovery info:', { taskId, externalTaskId, providerId });
+    logger.info('Saved recovery info', { taskId, externalTaskId, providerId });
   }
 
   /**
@@ -288,8 +287,7 @@ export class TaskManager implements ITaskManager {
 
     this.tasks.set(id, task);
 
-    // Debug: log task submission
-    console.log('[TaskManager] Submitting task:', {
+    logger.debug('Submitting task', {
       id,
       type: input.type,
       registeredExecutors: Array.from(this.executors.keys()),
@@ -301,7 +299,7 @@ export class TaskManager implements ITaskManager {
 
     // Start execution asynchronously
     this.executeTask(task).catch((error) => {
-      console.error('[TaskManager] Task execution failed:', {
+      logger.error('Task execution failed', {
         id,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -411,7 +409,7 @@ export class TaskManager implements ITaskManager {
     const updatedOutput = {
       ...task.output,
       data: {
-        ...(task.output?.data as object || {}),
+        ...((task.output?.data as object) || {}),
         ...outputData,
       },
     };
@@ -568,7 +566,7 @@ export class TaskManager implements ITaskManager {
 
     // Persist to storage (async, don't block)
     this.storage.save(updatedTask as SerializableTask).catch((err) => {
-      console.error('[TaskManager] Failed to persist task:', err);
+      logger.error('Failed to persist task', { error: err });
     });
 
     // Notify progress callbacks

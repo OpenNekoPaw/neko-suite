@@ -8,6 +8,24 @@ import type { Service } from '../service';
 import type { ChatChunk } from '../../types/adapter';
 import type { ServiceResponse, ServiceStreamResponse } from '../../types/service';
 
+// Mock platform logger to capture warn calls
+const { mockLogger } = vi.hoisted(() => {
+  const mockLogger = {
+    warn: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    child: vi.fn(),
+  };
+  mockLogger.child.mockReturnValue(mockLogger);
+  return { mockLogger };
+});
+vi.mock('../../utils/logger', () => ({
+  getLogger: () => mockLogger,
+  getRootLogger: () => mockLogger,
+  setRootLogger: vi.fn(),
+}));
+
 // Helper: create a mock Platform Service
 function createMockService() {
   return {
@@ -24,7 +42,7 @@ function createMockService() {
 // Helper: build a ServiceStreamResponse from chunks
 function mockStreamResponse(
   chunks: ChatChunk[],
-  response?: Promise<ServiceResponse>
+  response?: Promise<ServiceResponse>,
 ): ServiceStreamResponse {
   async function* gen() {
     for (const c of chunks) yield c;
@@ -89,7 +107,7 @@ describe('SharedServiceAdapter', () => {
 
   it('chatStream() text string delta yields content StreamChunk', async () => {
     mockService.chatStream.mockReturnValue(
-      mockStreamResponse([{ ...baseChunk, delta: { content: 'hello' } }])
+      mockStreamResponse([{ ...baseChunk, delta: { content: 'hello' } }]),
     );
 
     const chunks = await collect(adapter.chatStream([]));
@@ -98,7 +116,7 @@ describe('SharedServiceAdapter', () => {
 
   it('chatStream() thinking yields thinking StreamChunk', async () => {
     mockService.chatStream.mockReturnValue(
-      mockStreamResponse([{ ...baseChunk, thinking: 'reasoning...' }])
+      mockStreamResponse([{ ...baseChunk, thinking: 'reasoning...' }]),
     );
 
     const chunks = await collect(adapter.chatStream([]));
@@ -106,9 +124,13 @@ describe('SharedServiceAdapter', () => {
   });
 
   it('chatStream() toolCalls yields tool_call StreamChunk', async () => {
-    const toolCall = { id: 'tc1', type: 'function' as const, function: { name: 'fn', arguments: '{}' } };
+    const toolCall = {
+      id: 'tc1',
+      type: 'function' as const,
+      function: { name: 'fn', arguments: '{}' },
+    };
     mockService.chatStream.mockReturnValue(
-      mockStreamResponse([{ ...baseChunk, delta: { toolCalls: [toolCall] } }])
+      mockStreamResponse([{ ...baseChunk, delta: { toolCalls: [toolCall] } }]),
     );
 
     const chunks = await collect(adapter.chatStream([]));
@@ -117,9 +139,7 @@ describe('SharedServiceAdapter', () => {
 
   it('chatStream() usage yields usage StreamChunk', async () => {
     const usage = { promptTokens: 10, completionTokens: 5, totalTokens: 15 };
-    mockService.chatStream.mockReturnValue(
-      mockStreamResponse([{ ...baseChunk, usage }])
-    );
+    mockService.chatStream.mockReturnValue(mockStreamResponse([{ ...baseChunk, usage }]));
 
     const chunks = await collect(adapter.chatStream([]));
     expect(chunks).toContainEqual({ type: 'usage', usage });
@@ -127,7 +147,7 @@ describe('SharedServiceAdapter', () => {
 
   it('chatStream() finishReason yields done StreamChunk', async () => {
     mockService.chatStream.mockReturnValue(
-      mockStreamResponse([{ ...baseChunk, finishReason: 'stop' }])
+      mockStreamResponse([{ ...baseChunk, finishReason: 'stop' }]),
     );
 
     const chunks = await collect(adapter.chatStream([]));
@@ -140,7 +160,7 @@ describe('SharedServiceAdapter', () => {
       { type: 'text' as const, text: 'World' },
     ];
     mockService.chatStream.mockReturnValue(
-      mockStreamResponse([{ ...baseChunk, delta: { content: contentParts } }])
+      mockStreamResponse([{ ...baseChunk, delta: { content: contentParts } }]),
     );
 
     const chunks = await collect(adapter.chatStream([]));
@@ -148,45 +168,37 @@ describe('SharedServiceAdapter', () => {
   });
 
   it('chatStream() ContentPart[] with non-text parts warns and drops them', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockLogger.warn.mockClear();
     const contentParts = [
       { type: 'text' as const, text: 'kept' },
       { type: 'image' as const, imageUrl: 'http://img.png' },
     ];
     mockService.chatStream.mockReturnValue(
-      mockStreamResponse([{ ...baseChunk, delta: { content: contentParts as never } }])
+      mockStreamResponse([{ ...baseChunk, delta: { content: contentParts as never } }]),
     );
 
     const chunks = await collect(adapter.chatStream([]));
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('1 non-text ContentPart(s) dropped')
-    );
+    expect(mockLogger.warn).toHaveBeenCalled();
     expect(chunks).toContainEqual({ type: 'content', content: 'kept' });
-    warnSpy.mockRestore();
   });
 
   it('chatStream() ContentPart[] with only non-text parts yields no content chunk', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const contentParts = [
-      { type: 'image' as const, imageUrl: 'http://img.png' },
-    ];
+    mockLogger.warn.mockClear();
+    const contentParts = [{ type: 'image' as const, imageUrl: 'http://img.png' }];
     mockService.chatStream.mockReturnValue(
-      mockStreamResponse([{ ...baseChunk, delta: { content: contentParts as never } }])
+      mockStreamResponse([{ ...baseChunk, delta: { content: contentParts as never } }]),
     );
 
     const chunks = await collect(adapter.chatStream([]));
 
-    expect(chunks.filter(c => c.type === 'content')).toHaveLength(0);
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(chunks.filter((c) => c.type === 'content')).toHaveLength(0);
+    expect(mockLogger.warn).toHaveBeenCalled();
   });
 
   it('chatStream() response Promise rejection does not leak', async () => {
     const rejection = Promise.reject(new Error('stream failed'));
-    mockService.chatStream.mockReturnValue(
-      mockStreamResponse([], rejection)
-    );
+    mockService.chatStream.mockReturnValue(mockStreamResponse([], rejection));
 
     // Should not throw unhandled rejection
     const chunks = await collect(adapter.chatStream([]));
@@ -196,7 +208,10 @@ describe('SharedServiceAdapter', () => {
   // ── embed() ─────────────────────────────────────────────
 
   it('embed() forwards and returns embeddings', async () => {
-    const embeddings = [[0.1, 0.2], [0.3, 0.4]];
+    const embeddings = [
+      [0.1, 0.2],
+      [0.3, 0.4],
+    ];
     mockService.embed.mockResolvedValue({
       embeddings,
       model: 'text-embedding-3',

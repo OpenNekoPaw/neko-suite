@@ -144,7 +144,7 @@ const response = await service.chat([
 // 2. 流式对话
 const { stream } = service.chatStream(messages);
 for await (const chunk of stream) {
-  console.log(chunk.delta?.content);
+  process.stdout.write(chunk.delta?.content ?? '');
 }
 
 // 3. Agent 执行（带工具调用）
@@ -160,9 +160,9 @@ const agent = platform.createAgent({
 
 for await (const step of agent.executeStream('Add fade effect')) {
   if (step.type === 'think') {
-    console.log('Response:', step.content);
+    logger.info('Response', { content: step.content });
   } else if (step.type === 'act') {
-    console.log('Tool calls:', step.toolCalls);
+    logger.info('Tool calls', { tools: step.toolCalls });
   }
 }
 
@@ -290,20 +290,28 @@ type AgentStep = {
 
 ## 错误处理
 
+`PlatformError` 继承自 `@neko/shared` 的 `BaseError`，提供工厂方法和类型安全的 category 约束：
+
 ```typescript
 import { PlatformError } from '@neko/platform';
+import type { BaseError } from '@neko/shared';
 
 try {
   await service.chat(messages);
 } catch (error) {
   if (error instanceof PlatformError) {
-    console.log('Category:', error.category);  // 'rate_limit', 'timeout', 'auth'...
-    console.log('Retryable:', error.retryable);
+    // PlatformError extends BaseError
+    logger.error('Chat failed', { category: error.category, retryable: error.retryable });
     if (error.retryAfter) {
       await sleep(error.retryAfter);
     }
   }
 }
+
+// Factory methods
+throw PlatformError.authentication('Invalid API key', { provider: 'openai' });
+throw PlatformError.rateLimit('Rate limited', { retryAfter: 5000 });
+throw PlatformError.network('Connection timeout', { url });
 ```
 
 ## 依赖关系

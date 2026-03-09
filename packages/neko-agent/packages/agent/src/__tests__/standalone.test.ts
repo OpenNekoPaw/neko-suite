@@ -264,9 +264,7 @@ describe('Standalone Mode', () => {
 
     it('should use ConversationCompressor', () => {
       const compressor = new ConversationCompressor();
-      const tokens = compressor.estimateTokens([
-        { role: 'user', content: 'Hello world' },
-      ]);
+      const tokens = compressor.estimateTokens([{ role: 'user', content: 'Hello world' }]);
       expect(tokens).toBeGreaterThan(0);
     });
   });

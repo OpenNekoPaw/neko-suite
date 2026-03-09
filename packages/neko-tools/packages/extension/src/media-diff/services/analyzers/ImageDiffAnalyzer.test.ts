@@ -12,9 +12,9 @@ import { ImageDiffAnalyzer } from './ImageDiffAnalyzer';
 // =============================================================================
 
 vi.mock('vscode', () => ({
-	commands: {
-		executeCommand: vi.fn(),
-	},
+  commands: {
+    executeCommand: vi.fn(),
+  },
 }));
 
 // =============================================================================
@@ -24,9 +24,9 @@ vi.mock('vscode', () => ({
 const mockDiff = vi.fn();
 
 vi.mock('../../../services/EngineMediaService', () => ({
-	EngineMediaService: vi.fn().mockImplementation(() => ({
-		diff: mockDiff,
-	})),
+  EngineMediaService: vi.fn().mockImplementation(() => ({
+    diff: mockDiff,
+  })),
 }));
 
 // =============================================================================
@@ -34,161 +34,161 @@ vi.mock('../../../services/EngineMediaService', () => ({
 // =============================================================================
 
 describe('ImageDiffAnalyzer', () => {
-	let analyzer: ImageDiffAnalyzer;
+  let analyzer: ImageDiffAnalyzer;
 
-	beforeEach(() => {
-		analyzer = new ImageDiffAnalyzer();
-		mockDiff.mockReset();
-	});
+  beforeEach(() => {
+    analyzer = new ImageDiffAnalyzer();
+    mockDiff.mockReset();
+  });
 
-	afterEach(() => {
-		vi.clearAllMocks();
-	});
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
 
-	describe('mediaType', () => {
-		it('should be image', () => {
-			expect(analyzer.mediaType).toBe('image');
-		});
-	});
+  describe('mediaType', () => {
+    it('should be image', () => {
+      expect(analyzer.mediaType).toBe('image');
+    });
+  });
 
-	describe('supports', () => {
-		it('should support PNG files', () => {
-			expect(analyzer.supports('/path/to/image.png')).toBe(true);
-			expect(analyzer.supports('/path/to/image.PNG')).toBe(true);
-		});
+  describe('supports', () => {
+    it('should support PNG files', () => {
+      expect(analyzer.supports('/path/to/image.png')).toBe(true);
+      expect(analyzer.supports('/path/to/image.PNG')).toBe(true);
+    });
 
-		it('should support JPEG files', () => {
-			expect(analyzer.supports('/path/to/image.jpg')).toBe(true);
-			expect(analyzer.supports('/path/to/image.jpeg')).toBe(true);
-			expect(analyzer.supports('/path/to/image.JPEG')).toBe(true);
-		});
+    it('should support JPEG files', () => {
+      expect(analyzer.supports('/path/to/image.jpg')).toBe(true);
+      expect(analyzer.supports('/path/to/image.jpeg')).toBe(true);
+      expect(analyzer.supports('/path/to/image.JPEG')).toBe(true);
+    });
 
-		it('should support GIF files', () => {
-			expect(analyzer.supports('/path/to/image.gif')).toBe(true);
-		});
+    it('should support GIF files', () => {
+      expect(analyzer.supports('/path/to/image.gif')).toBe(true);
+    });
 
-		it('should support WebP files', () => {
-			expect(analyzer.supports('/path/to/image.webp')).toBe(true);
-		});
+    it('should support WebP files', () => {
+      expect(analyzer.supports('/path/to/image.webp')).toBe(true);
+    });
 
-		it('should support BMP files', () => {
-			expect(analyzer.supports('/path/to/image.bmp')).toBe(true);
-		});
+    it('should support BMP files', () => {
+      expect(analyzer.supports('/path/to/image.bmp')).toBe(true);
+    });
 
-		it('should support SVG files', () => {
-			expect(analyzer.supports('/path/to/image.svg')).toBe(true);
-		});
+    it('should support SVG files', () => {
+      expect(analyzer.supports('/path/to/image.svg')).toBe(true);
+    });
 
-		it('should not support video files', () => {
-			expect(analyzer.supports('/path/to/video.mp4')).toBe(false);
-			expect(analyzer.supports('/path/to/video.mov')).toBe(false);
-		});
+    it('should not support video files', () => {
+      expect(analyzer.supports('/path/to/video.mp4')).toBe(false);
+      expect(analyzer.supports('/path/to/video.mov')).toBe(false);
+    });
 
-		it('should not support audio files', () => {
-			expect(analyzer.supports('/path/to/audio.mp3')).toBe(false);
-			expect(analyzer.supports('/path/to/audio.wav')).toBe(false);
-		});
+    it('should not support audio files', () => {
+      expect(analyzer.supports('/path/to/audio.mp3')).toBe(false);
+      expect(analyzer.supports('/path/to/audio.wav')).toBe(false);
+    });
 
-		it('should not support other file types', () => {
-			expect(analyzer.supports('/path/to/document.pdf')).toBe(false);
-			expect(analyzer.supports('/path/to/file.txt')).toBe(false);
-		});
+    it('should not support other file types', () => {
+      expect(analyzer.supports('/path/to/document.pdf')).toBe(false);
+      expect(analyzer.supports('/path/to/file.txt')).toBe(false);
+    });
 
-		it('should handle files without extension', () => {
-			expect(analyzer.supports('/path/to/noextension')).toBe(false);
-		});
+    it('should handle files without extension', () => {
+      expect(analyzer.supports('/path/to/noextension')).toBe(false);
+    });
 
-		it('should handle empty path', () => {
-			expect(analyzer.supports('')).toBe(false);
-		});
-	});
+    it('should handle empty path', () => {
+      expect(analyzer.supports('')).toBe(false);
+    });
+  });
 
-	describe('cancel', () => {
-		it('should not throw when cancelled', () => {
-			expect(() => analyzer.cancel()).not.toThrow();
-		});
-	});
+  describe('cancel', () => {
+    it('should not throw when cancelled', () => {
+      expect(() => analyzer.cancel()).not.toThrow();
+    });
+  });
 
-	describe('analyze', () => {
-		it('should return diff result from engine', async () => {
-			mockDiff.mockResolvedValue({
-				category: 'image',
-				identical: false,
-				diffCount: 1,
-				totalFields: 4,
-				fields: [],
-				imageDiff: {
-					ssim: 0.85,
-					psnr: 35.0,
-					mse: 10.0,
-					diffPixelPercent: 15.0,
-					diffPixelCount: 1500,
-					totalPixels: 10000,
-					widthA: 100,
-					heightA: 100,
-					widthB: 100,
-					heightB: 100,
-					heatmap: '',
-					heatmapWidth: 100,
-					heatmapHeight: 100,
-				},
-			});
+  describe('analyze', () => {
+    it('should return diff result from engine', async () => {
+      mockDiff.mockResolvedValue({
+        category: 'image',
+        identical: false,
+        diffCount: 1,
+        totalFields: 4,
+        fields: [],
+        imageDiff: {
+          ssim: 0.85,
+          psnr: 35.0,
+          mse: 10.0,
+          diffPixelPercent: 15.0,
+          diffPixelCount: 1500,
+          totalPixels: 10000,
+          widthA: 100,
+          heightA: 100,
+          widthB: 100,
+          heightB: 100,
+          heatmap: '',
+          heatmapWidth: 100,
+          heatmapHeight: 100,
+        },
+      });
 
-			const current = Buffer.from('current image data');
-			const previous = Buffer.from('previous image data');
+      const current = Buffer.from('current image data');
+      const previous = Buffer.from('previous image data');
 
-			const result = await analyzer.analyze(current, previous);
+      const result = await analyzer.analyze(current, previous);
 
-			expect(result).toHaveProperty('mediaType', 'image');
-			expect(result).toHaveProperty('similarity');
-			expect(result.similarity).toBeCloseTo(0.85, 1);
-		});
+      expect(result).toHaveProperty('mediaType', 'image');
+      expect(result).toHaveProperty('similarity');
+      expect(result.similarity).toBeCloseTo(0.85, 1);
+    });
 
-		it('should throw when engine is unavailable', async () => {
-			mockDiff.mockResolvedValue(null);
+    it('should throw when engine is unavailable', async () => {
+      mockDiff.mockResolvedValue(null);
 
-			const current = Buffer.from('current image data');
-			const previous = Buffer.from('previous image data');
+      const current = Buffer.from('current image data');
+      const previous = Buffer.from('previous image data');
 
-			await expect(analyzer.analyze(current, previous)).rejects.toThrow(
-				'Engine image diff unavailable'
-			);
-		});
+      await expect(analyzer.analyze(current, previous)).rejects.toThrow(
+        'Engine image diff unavailable',
+      );
+    });
 
-		it('should return image diff details with dimensions', async () => {
-			mockDiff.mockResolvedValue({
-				category: 'image',
-				identical: false,
-				diffCount: 0,
-				totalFields: 4,
-				fields: [],
-				imageDiff: {
-					ssim: 1.0,
-					psnr: Infinity,
-					mse: 0,
-					diffPixelPercent: 0,
-					diffPixelCount: 0,
-					totalPixels: 10000,
-					widthA: 100,
-					heightA: 100,
-					widthB: 200,
-					heightB: 200,
-					heatmap: '',
-					heatmapWidth: 200,
-					heatmapHeight: 200,
-				},
-			});
+    it('should return image diff details with dimensions', async () => {
+      mockDiff.mockResolvedValue({
+        category: 'image',
+        identical: false,
+        diffCount: 0,
+        totalFields: 4,
+        fields: [],
+        imageDiff: {
+          ssim: 1.0,
+          psnr: Infinity,
+          mse: 0,
+          diffPixelPercent: 0,
+          diffPixelCount: 0,
+          totalPixels: 10000,
+          widthA: 100,
+          heightA: 100,
+          widthB: 200,
+          heightB: 200,
+          heatmap: '',
+          heatmapWidth: 200,
+          heatmapHeight: 200,
+        },
+      });
 
-			const current = Buffer.from('current image data');
-			const previous = Buffer.from('previous image data');
+      const current = Buffer.from('current image data');
+      const previous = Buffer.from('previous image data');
 
-			const result = await analyzer.analyze(current, previous);
-			const details = result.details as any;
+      const result = await analyzer.analyze(current, previous);
+      const details = result.details as any;
 
-			expect(details.dimensions.current).toEqual({ width: 100, height: 100 });
-			expect(details.dimensions.previous).toEqual({ width: 200, height: 200 });
-			expect(details.pixelDifference).toBe(0);
-			expect(details.structuralSimilarity).toBe(1.0);
-		});
-	});
+      expect(details.dimensions.current).toEqual({ width: 100, height: 100 });
+      expect(details.dimensions.previous).toEqual({ width: 200, height: 200 });
+      expect(details.pixelDifference).toBe(0);
+      expect(details.structuralSimilarity).toBe(1.0);
+    });
+  });
 });

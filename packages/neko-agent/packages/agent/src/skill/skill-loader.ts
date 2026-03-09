@@ -46,6 +46,9 @@ import {
 import { MarkdownParser, type IMarkdownParser } from './markdown-parser';
 import { LazyLoader, type ILazyLoader, type LazySkillLoadResult } from './lazy-loader';
 import type { LazySkill, LazyCommand } from './lazy-loader';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('SkillLoader');
 
 /**
  * Skill Loader class
@@ -71,13 +74,13 @@ export class SkillLoader {
    */
   async loadLazyFromDirectory(
     skillsDir: string,
-    source: SkillSource = 'project'
+    source: SkillSource = 'project',
   ): Promise<LazySkillLoadResult> {
     return this.lazyLoader.loadLazyFromDirectory(
       skillsDir,
       source,
       (dirPath, src) => this.loadSkillFromDirectory(dirPath, src),
-      (filePath, src) => this.loadCommandFile(filePath, src)
+      (filePath, src) => this.loadCommandFile(filePath, src),
     );
   }
 
@@ -87,36 +90,26 @@ export class SkillLoader {
   async loadLazySkill(
     skillFilePath: string,
     directoryPath: string,
-    source: SkillSource
+    source: SkillSource,
   ): Promise<LazySkill | null> {
-    return this.lazyLoader.createLazySkill(
-      skillFilePath,
-      directoryPath,
-      source,
-      (dirPath, src) => this.loadSkillFromDirectory(dirPath, src)
+    return this.lazyLoader.createLazySkill(skillFilePath, directoryPath, source, (dirPath, src) =>
+      this.loadSkillFromDirectory(dirPath, src),
     );
   }
 
   /**
    * Load only frontmatter from a command file (lazy loading)
    */
-  async loadLazyCommand(
-    filePath: string,
-    source: SkillSource
-  ): Promise<LazyCommand | null> {
-    return this.lazyLoader.createLazyCommand(
-      filePath,
-      source,
-      (fp, src) => this.loadCommandFile(fp, src)
+  async loadLazyCommand(filePath: string, source: SkillSource): Promise<LazyCommand | null> {
+    return this.lazyLoader.createLazyCommand(filePath, source, (fp, src) =>
+      this.loadCommandFile(fp, src),
     );
   }
 
   /**
    * Parse only the frontmatter from markdown content (fast path)
    */
-  parseFrontmatterOnly(
-    content: string
-  ): (SkillFrontmatter | CommandFrontmatter) | null {
+  parseFrontmatterOnly(content: string): (SkillFrontmatter | CommandFrontmatter) | null {
     return this.parser.parseFrontmatterOnly(content);
   }
 
@@ -129,7 +122,7 @@ export class SkillLoader {
    */
   async loadFromDirectory(
     skillsDir: string,
-    source: SkillSource = 'project'
+    source: SkillSource = 'project',
   ): Promise<SkillLoadResult> {
     const result: SkillLoadResult = {
       skills: [],
@@ -204,10 +197,7 @@ export class SkillLoader {
   /**
    * Load a skill from a directory (including support files)
    */
-  async loadSkillFromDirectory(
-    directoryPath: string,
-    source: SkillSource
-  ): Promise<Skill | null> {
+  async loadSkillFromDirectory(directoryPath: string, source: SkillSource): Promise<Skill | null> {
     const skillFilePath = `${directoryPath}/SKILL.md`;
     const content = await this.fs.readFile(skillFilePath);
     const parsed = this.parser.parseMarkdown(content);
@@ -234,14 +224,14 @@ export class SkillLoader {
           try {
             const fileExists = await this.fs.exists(supportFilePath);
             if (!fileExists) {
-              console.warn(`[SkillLoader] Support file not found: ${supportFilePath}`);
+              logger.warn('Support file not found', { path: supportFilePath });
             }
             return fileExists ? ref : null;
           } catch {
             // Ignore errors, file just won't be in validRefs
             return null;
           }
-        })
+        }),
       )
     ).filter((ref): ref is string => ref !== null);
 
@@ -252,10 +242,10 @@ export class SkillLoader {
       try {
         toolDefinitions = await this.loadToolDefinitions(toolsFilePath);
       } catch (error) {
-        console.warn(
-          `[SkillLoader] Failed to load tools file ${toolsFilePath}:`,
-          error instanceof Error ? error.message : String(error)
-        );
+        logger.warn('Failed to load tools file', {
+          path: toolsFilePath,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
@@ -265,9 +255,9 @@ export class SkillLoader {
 
     // Parse allowed tools from frontmatter
     const parsedAllowedTools = frontmatter['allowed-tools']
-      ? (Array.isArray(frontmatter['allowed-tools'])
-          ? frontmatter['allowed-tools']
-          : [frontmatter['allowed-tools']])
+      ? Array.isArray(frontmatter['allowed-tools'])
+        ? frontmatter['allowed-tools']
+        : [frontmatter['allowed-tools']]
       : undefined;
 
     // Build content config if any content exists
@@ -287,7 +277,7 @@ export class SkillLoader {
       directoryPath,
       validRefs.length > 0 ? validRefs : undefined,
       toolDefinitions,
-      contentConfig
+      contentConfig,
     );
 
     // Validate
@@ -297,9 +287,10 @@ export class SkillLoader {
     }
 
     if (validation.warnings.length > 0) {
-      console.warn(
-        `[SkillLoader] Warnings for ${skill.name}: ${validation.warnings.join(', ')}`
-      );
+      logger.warn('Skill validation warnings', {
+        skillName: skill.name,
+        warnings: validation.warnings.join(', '),
+      });
     }
 
     return skill;
@@ -331,7 +322,7 @@ export class SkillLoader {
     const tools: SkillToolDefinition[] = [];
     for (const tool of frontmatter.tools) {
       if (!tool.name || !tool.description) {
-        console.warn(`[SkillLoader] Skipping invalid tool definition (missing name or description)`);
+        logger.warn('Skipping invalid tool definition (missing name or description)');
         continue;
       }
 
@@ -396,10 +387,10 @@ export class SkillLoader {
         });
       }
     } catch (error) {
-      console.warn(
-        `[SkillLoader] Failed to load references from ${referencesDir}:`,
-        error instanceof Error ? error.message : String(error)
-      );
+      logger.warn('Failed to load references', {
+        path: referencesDir,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     return references;
@@ -451,7 +442,11 @@ export class SkillLoader {
         try {
           const firstLine = await this.readFirstLine(filePath);
           // Check for common single-line comment patterns
-          if (firstLine?.startsWith('# ') && language !== 'typescript' && language !== 'javascript') {
+          if (
+            firstLine?.startsWith('# ') &&
+            language !== 'typescript' &&
+            language !== 'javascript'
+          ) {
             description = firstLine.substring(2).trim();
           } else if (firstLine?.startsWith('// ')) {
             description = firstLine.substring(3).trim();
@@ -476,10 +471,10 @@ export class SkillLoader {
         });
       }
     } catch (error) {
-      console.warn(
-        `[SkillLoader] Failed to load scripts from ${scriptsDir}:`,
-        error instanceof Error ? error.message : String(error)
-      );
+      logger.warn('Failed to load scripts', {
+        path: scriptsDir,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     return scripts;
@@ -488,10 +483,7 @@ export class SkillLoader {
   /**
    * Load a slash command from a single file
    */
-  async loadCommandFile(
-    filePath: string,
-    source: SkillSource
-  ): Promise<SlashCommand | null> {
+  async loadCommandFile(filePath: string, source: SkillSource): Promise<SlashCommand | null> {
     const content = await this.fs.readFile(filePath);
     const parsed = this.parser.parseMarkdown(content);
 
@@ -522,7 +514,7 @@ export class SkillLoader {
   loadSkillFromContent(
     content: string,
     source: SkillSource = 'project',
-    directoryPath?: string
+    directoryPath?: string,
   ): Skill {
     const parsed = this.parser.parseMarkdown(content);
 
@@ -530,15 +522,14 @@ export class SkillLoader {
       throw new Error('Failed to parse skill content: Invalid frontmatter');
     }
 
-    const supportFileRefs =
-      parsed.supportFileRefs.length > 0 ? parsed.supportFileRefs : undefined;
+    const supportFileRefs = parsed.supportFileRefs.length > 0 ? parsed.supportFileRefs : undefined;
 
     const skill = createSkill(
       parsed.frontmatter as SkillFrontmatter,
       parsed.content,
       source,
       directoryPath,
-      supportFileRefs
+      supportFileRefs,
     );
 
     const validation = validateSkill(skill);
@@ -555,7 +546,7 @@ export class SkillLoader {
   loadCommandFromContent(
     content: string,
     source: SkillSource = 'project',
-    filePath?: string
+    filePath?: string,
   ): SlashCommand {
     const parsed = this.parser.parseMarkdown(content);
 
@@ -606,10 +597,7 @@ export class SkillLoader {
   /**
    * @deprecated Use loadSkillFromDirectory() instead
    */
-  async loadSkillFile(
-    filePath: string,
-    source: SkillSource
-  ): Promise<Skill | null> {
+  async loadSkillFile(filePath: string, source: SkillSource): Promise<Skill | null> {
     const parts = filePath.split('/');
     parts.pop(); // Remove SKILL.md
     const directoryPath = parts.join('/');
@@ -619,11 +607,7 @@ export class SkillLoader {
   /**
    * @deprecated Use loadSkillFromContent() instead
    */
-  loadFromContent(
-    content: string,
-    source: SkillSource = 'project',
-    filePath?: string
-  ): Skill {
+  loadFromContent(content: string, source: SkillSource = 'project', filePath?: string): Skill {
     return this.loadSkillFromContent(content, source, filePath);
   }
 }
@@ -633,7 +617,7 @@ export class SkillLoader {
  */
 export function createNodeSkillLoader(
   fs: typeof import('fs/promises'),
-  path: typeof import('path')
+  path: typeof import('path'),
 ): SkillLoader {
   const nodeFs: ISkillFileSystem = {
     exists: async (p: string) => {

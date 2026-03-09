@@ -21,6 +21,9 @@ import { getMediaAdapterRegistry } from './adapters/media-adapter-registry';
 import type { ProviderRegistry } from '../provider/provider-registry';
 import type { ConfigManager } from '../config/config-manager';
 import type { MediaTaskManagerDeps } from './index';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('MediaTaskExecutor');
 
 /**
  * Media task input payload
@@ -59,7 +62,7 @@ export class MediaTaskExecutor {
   constructor(
     providerRegistry: ProviderRegistry,
     configManager: ConfigManager,
-    options: MediaTaskExecutorOptions = {}
+    options: MediaTaskExecutorOptions = {},
   ) {
     this.providerRegistry = providerRegistry;
     this.configManager = configManager;
@@ -87,7 +90,9 @@ export class MediaTaskExecutor {
     if (!taskManager.getRecoveryStorage) {
       return 0;
     }
-    const recoveryStorage = taskManager.getRecoveryStorage() as { loadAll(): Promise<TaskRecoveryInfo[]> } | undefined;
+    const recoveryStorage = taskManager.getRecoveryStorage() as
+      | { loadAll(): Promise<TaskRecoveryInfo[]> }
+      | undefined;
     if (!recoveryStorage) {
       return 0;
     }
@@ -99,7 +104,7 @@ export class MediaTaskExecutor {
         // Get provider
         const provider = this.configManager.getProvider(info.providerId);
         if (!provider) {
-          console.warn('[MediaTaskExecutor] Provider not found for recovery:', info.providerId);
+          logger.warn('Provider not found for recovery', { providerId: info.providerId });
           if (taskManager.deleteRecoveryInfo) {
             await taskManager.deleteRecoveryInfo(info.taskId);
           }
@@ -109,7 +114,7 @@ export class MediaTaskExecutor {
         // Get adapter
         const adapter = getMediaAdapterRegistry().getForType(provider.type);
         if (!adapter) {
-          console.warn('[MediaTaskExecutor] Adapter not found for recovery:', provider.type);
+          logger.warn('Adapter not found for recovery', { providerType: provider.type });
           if (taskManager.deleteRecoveryInfo) {
             await taskManager.deleteRecoveryInfo(info.taskId);
           }
@@ -121,28 +126,28 @@ export class MediaTaskExecutor {
 
         if (result.status === 'completed') {
           // Task already completed, clean up
-          console.log('[MediaTaskExecutor] Recovered task already completed:', info.taskId);
+          logger.info('Recovered task already completed', { taskId: info.taskId });
           if (taskManager.deleteRecoveryInfo) {
             await taskManager.deleteRecoveryInfo(info.taskId);
           }
         } else if (result.status === 'failed' || result.status === 'cancelled') {
           // Task failed/cancelled, clean up
-          console.log('[MediaTaskExecutor] Recovered task failed/cancelled:', info.taskId);
+          logger.info('Recovered task failed/cancelled', { taskId: info.taskId });
           if (taskManager.deleteRecoveryInfo) {
             await taskManager.deleteRecoveryInfo(info.taskId);
           }
         } else {
           // Task still pending/processing, resume polling
-          console.log('[MediaTaskExecutor] Resuming polling for task:', info.taskId);
+          logger.info('Resuming polling for task', { taskId: info.taskId });
           this.resumePolling(taskManager, info, adapter, provider);
           resumed++;
         }
       } catch (error) {
-        console.error('[MediaTaskExecutor] Recovery failed for task:', info.taskId, error);
+        logger.error('Recovery failed for task', { taskId: info.taskId, error });
         // Clean up invalid recovery info
         if (taskManager.deleteRecoveryInfo) {
-            await taskManager.deleteRecoveryInfo(info.taskId);
-          }
+          await taskManager.deleteRecoveryInfo(info.taskId);
+        }
       }
     }
 
@@ -156,7 +161,7 @@ export class MediaTaskExecutor {
     taskManager: MediaTaskManagerDeps,
     info: TaskRecoveryInfo,
     adapter: MediaAdapter,
-    provider: Provider
+    provider: Provider,
   ): void {
     // Run polling in background
     this.pollForCompletionWithRecovery(
@@ -165,20 +170,22 @@ export class MediaTaskExecutor {
       provider,
       info.taskId,
       taskManager,
-      () => {} // No progress callback for resumed tasks
-    ).then(() => {
-      // Clean up recovery info on completion
-      if (taskManager.deleteRecoveryInfo) {
-        taskManager.deleteRecoveryInfo(info.taskId).catch((err) => {
-          console.error('[MediaTaskExecutor] Failed to delete recovery info:', err);
-        });
-      }
-    }).catch((err) => {
-      console.error('[MediaTaskExecutor] Resumed polling failed:', info.taskId, err);
-      if (taskManager.deleteRecoveryInfo) {
-        taskManager.deleteRecoveryInfo(info.taskId).catch(() => {});
-      }
-    });
+      () => {}, // No progress callback for resumed tasks
+    )
+      .then(() => {
+        // Clean up recovery info on completion
+        if (taskManager.deleteRecoveryInfo) {
+          taskManager.deleteRecoveryInfo(info.taskId).catch((err) => {
+            logger.error('Failed to delete recovery info', { error: err });
+          });
+        }
+      })
+      .catch((err) => {
+        logger.error('Resumed polling failed', { taskId: info.taskId, error: err });
+        if (taskManager.deleteRecoveryInfo) {
+          taskManager.deleteRecoveryInfo(info.taskId).catch(() => {});
+        }
+      });
   }
 
   /**
@@ -187,7 +194,7 @@ export class MediaTaskExecutor {
   private createExecutor(): TaskExecutor {
     return async (
       input: TaskInput,
-      onProgress: (progress: number) => void
+      onProgress: (progress: number) => void,
     ): Promise<TaskOutput> => {
       const payload = input.payload as unknown as MediaTaskPayload & { __taskId?: string };
       const { generationType, providerId, modelId, request, __taskId } = payload;
@@ -215,13 +222,7 @@ export class MediaTaskExecutor {
       let result: MediaAdapterResult;
 
       try {
-        result = await this.submitGeneration(
-          adapter,
-          generationType,
-          request,
-          model,
-          provider
-        );
+        result = await this.submitGeneration(adapter, generationType, request, model, provider);
       } catch (error) {
         return {
           error: error instanceof Error ? error.message : String(error),
@@ -253,11 +254,7 @@ export class MediaTaskExecutor {
 
       // Save recovery info for restart recovery
       if (__taskId && this.taskManager?.saveRecoveryInfo) {
-        await this.taskManager.saveRecoveryInfo(
-          __taskId,
-          result.externalTaskId,
-          providerId
-        );
+        await this.taskManager.saveRecoveryInfo(__taskId, result.externalTaskId, providerId);
       }
 
       // Poll and return result
@@ -265,13 +262,13 @@ export class MediaTaskExecutor {
         adapter,
         result.externalTaskId,
         provider,
-        onProgress
+        onProgress,
       );
 
       // Clean up recovery info on completion
       if (__taskId && this.taskManager?.deleteRecoveryInfo) {
         await this.taskManager.deleteRecoveryInfo(__taskId).catch((err) => {
-          console.error('[MediaTaskExecutor] Failed to delete recovery info:', err);
+          logger.error('Failed to delete recovery info', { error: err });
         });
       }
 
@@ -287,7 +284,7 @@ export class MediaTaskExecutor {
     generationType: MediaGenerationType,
     request: ImageGenerationRequest | VideoGenerationRequest | AudioGenerationRequest,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<MediaAdapterResult> {
     switch (generationType) {
       case 'text-to-image':
@@ -315,7 +312,7 @@ export class MediaTaskExecutor {
     adapter: MediaAdapter,
     externalTaskId: string,
     provider: Provider,
-    onProgress: (progress: number) => void
+    onProgress: (progress: number) => void,
   ): Promise<TaskOutput> {
     let attempts = 0;
 
@@ -361,9 +358,7 @@ export class MediaTaskExecutor {
         }
       } catch (error) {
         // If polling fails, continue with reduced frequency
-        await new Promise((resolve) =>
-          setTimeout(resolve, this.pollingIntervalMs * 2)
-        );
+        await new Promise((resolve) => setTimeout(resolve, this.pollingIntervalMs * 2));
       }
     }
 
@@ -382,20 +377,15 @@ export class MediaTaskExecutor {
     provider: Provider,
     taskId: string,
     taskManager: MediaTaskManagerDeps,
-    onProgress: (progress: number) => void
+    onProgress: (progress: number) => void,
   ): Promise<TaskOutput> {
     try {
-      const output = await this.pollForCompletion(
-        adapter,
-        externalTaskId,
-        provider,
-        onProgress
-      );
+      const output = await this.pollForCompletion(adapter, externalTaskId, provider, onProgress);
 
       // Clean up recovery info on completion
       if (taskManager.deleteRecoveryInfo) {
         await taskManager.deleteRecoveryInfo(taskId).catch((err) => {
-          console.error('[MediaTaskExecutor] Failed to delete recovery info:', err);
+          logger.error('Failed to delete recovery info', { error: err });
         });
       }
 
@@ -417,7 +407,7 @@ export function createMediaTaskInput(
   generationType: MediaGenerationType,
   providerId: string,
   modelId: string,
-  request: ImageGenerationRequest | VideoGenerationRequest | AudioGenerationRequest
+  request: ImageGenerationRequest | VideoGenerationRequest | AudioGenerationRequest,
 ): TaskInput {
   const typeMap: Record<string, 'image_generation' | 'video_generation' | 'audio_generation'> = {
     'text-to-image': 'image_generation',

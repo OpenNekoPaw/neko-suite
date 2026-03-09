@@ -7,8 +7,12 @@
  */
 
 import { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useTranslation } from '../../i18n/I18nContext';
 import type { VideoDiffViewerProps } from './types';
-import { StreamingVideoDiffViewer, type StreamingVideoDiffViewerHandle } from './streaming/StreamingVideoDiffViewer';
+import {
+  StreamingVideoDiffViewer,
+  type StreamingVideoDiffViewerHandle,
+} from './streaming/StreamingVideoDiffViewer';
 import type { DiffMode } from './streaming/DiffRenderer';
 
 // =============================================================================
@@ -16,8 +20,8 @@ import type { DiffMode } from './streaming/DiffRenderer';
 // =============================================================================
 
 interface KeyframeDiff {
-	time: number;
-	similarity: number;
+  time: number;
+  similarity: number;
 }
 
 /**
@@ -25,28 +29,28 @@ interface KeyframeDiff {
  * Merges adjacent keyframes by averaging their similarity scores.
  */
 function downsampleKeyframeDiffs(
-	keyframeDiffs: KeyframeDiff[],
-	maxCount: number = 500
+  keyframeDiffs: KeyframeDiff[],
+  maxCount: number = 500,
 ): KeyframeDiff[] {
-	if (keyframeDiffs.length <= maxCount) {
-		return keyframeDiffs;
-	}
+  if (keyframeDiffs.length <= maxCount) {
+    return keyframeDiffs;
+  }
 
-	const bucketSize = Math.ceil(keyframeDiffs.length / maxCount);
-	const downsampled: KeyframeDiff[] = [];
+  const bucketSize = Math.ceil(keyframeDiffs.length / maxCount);
+  const downsampled: KeyframeDiff[] = [];
 
-	for (let i = 0; i < keyframeDiffs.length; i += bucketSize) {
-		const bucket = keyframeDiffs.slice(i, i + bucketSize);
-		const avgSimilarity = bucket.reduce((sum, kf) => sum + kf.similarity, 0) / bucket.length;
-		const midTime = bucket[Math.floor(bucket.length / 2)]?.time ?? bucket[0]?.time ?? 0;
+  for (let i = 0; i < keyframeDiffs.length; i += bucketSize) {
+    const bucket = keyframeDiffs.slice(i, i + bucketSize);
+    const avgSimilarity = bucket.reduce((sum, kf) => sum + kf.similarity, 0) / bucket.length;
+    const midTime = bucket[Math.floor(bucket.length / 2)]?.time ?? bucket[0]?.time ?? 0;
 
-		downsampled.push({
-			time: midTime,
-			similarity: avgSimilarity,
-		});
-	}
+    downsampled.push({
+      time: midTime,
+      similarity: avgSimilarity,
+    });
+  }
 
-	return downsampled;
+  return downsampled;
 }
 
 // =============================================================================
@@ -73,6 +77,7 @@ const SeekControls = memo(function SeekControls({
   diffRegions,
   isFetchingPrevious,
 }: SeekControlsProps) {
+  const { t } = useTranslation();
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -92,7 +97,9 @@ const SeekControls = memo(function SeekControls({
         }`}
         onClick={isFetchingPrevious ? undefined : onPlayPause}
         disabled={isFetchingPrevious}
-        title={isFetchingPrevious ? 'Fetching previous version…' : isPlaying ? 'Pause' : 'Play'}
+        title={
+          isFetchingPrevious ? t('mediaDiff.video.fetchingPrevious') : isPlaying ? 'Pause' : 'Play'
+        }
       >
         {isPlaying ? '\u23F8' : '\u25B6'}
       </button>
@@ -137,7 +144,10 @@ const SeekControls = memo(function SeekControls({
 interface VideoDetailsProps {
   details?: {
     duration: { current: number; previous: number };
-    resolution: { current: { width: number; height: number }; previous: { width: number; height: number } };
+    resolution: {
+      current: { width: number; height: number };
+      previous: { width: number; height: number };
+    };
     fps: { current: number; previous: number };
     codec?: { current: string; previous: string };
     keyframeDiffs?: Array<{ time: number; similarity: number }>;
@@ -145,6 +155,7 @@ interface VideoDetailsProps {
 }
 
 const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) {
+  const { t } = useTranslation();
   if (!details || !details.duration) return null;
 
   const formatDuration = (seconds: number) => {
@@ -156,14 +167,16 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
   // Downsample keyframe diffs for rendering performance
   const displayKeyframeDiffs = useMemo(
     () => downsampleKeyframeDiffs(details.keyframeDiffs ?? [], 500),
-    [details.keyframeDiffs]
+    [details.keyframeDiffs],
   );
 
   return (
     <div className="p-3 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)]">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">Duration</div>
+          <div className="text-[var(--vscode-descriptionForeground)] mb-1">
+            {t('mediaDiff.video.duration')}
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-red-400">{formatDuration(details.duration.previous)}</span>
             <span>&rarr;</span>
@@ -171,7 +184,9 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
           </div>
         </div>
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">Resolution</div>
+          <div className="text-[var(--vscode-descriptionForeground)] mb-1">
+            {t('mediaDiff.video.resolution')}
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-red-400">
               {details.resolution.previous.width}&times;{details.resolution.previous.height}
@@ -183,7 +198,9 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
           </div>
         </div>
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">Frame Rate</div>
+          <div className="text-[var(--vscode-descriptionForeground)] mb-1">
+            {t('mediaDiff.video.frameRate')}
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-red-400">{details.fps.previous.toFixed(2)} fps</span>
             <span>&rarr;</span>
@@ -192,7 +209,9 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
         </div>
         {details.codec && (
           <div>
-            <div className="text-[var(--vscode-descriptionForeground)] mb-1">Codec</div>
+            <div className="text-[var(--vscode-descriptionForeground)] mb-1">
+              {t('mediaDiff.video.codec')}
+            </div>
             <div className="flex items-center gap-2">
               <span className="text-red-400">{details.codec.previous}</span>
               <span>&rarr;</span>
@@ -204,7 +223,7 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
       {displayKeyframeDiffs.length > 0 && (
         <div className="mt-3 pt-3 border-t border-[var(--vscode-panel-border)]">
           <div className="text-[var(--vscode-descriptionForeground)] mb-2 text-xs">
-            Keyframe Similarities
+            {t('mediaDiff.video.keyframeSimilarities')}
             {details.keyframeDiffs && details.keyframeDiffs.length > 500 && (
               <span className="ml-2 text-[10px] opacity-60">
                 (showing {displayKeyframeDiffs.length} of {details.keyframeDiffs.length})
@@ -255,6 +274,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
   isLoading,
   error,
 }: VideoDiffViewerProps) {
+  const { t } = useTranslation();
   const [localTime, setLocalTime] = useState(currentTime);
   const [localSliderPosition, setLocalSliderPosition] = useState(sliderPosition);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -267,18 +287,21 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
     setLocalTime(time);
   }, []);
 
-  const duration = streamConfig?.duration ?? Math.max(
-    details?.duration?.current ?? 0,
-    details?.duration?.previous ?? 0
-  );
+  const duration =
+    streamConfig?.duration ??
+    Math.max(details?.duration?.current ?? 0, details?.duration?.previous ?? 0);
 
   // Map DiffViewMode to streaming DiffMode
   const diffMode: DiffMode =
-    viewMode === 'side-by-side' ? 'side-by-side' :
-    viewMode === 'overlay' ? 'heatmap' :
-    viewMode === 'onion-skin' ? 'flicker' :
-    viewMode === 'slider' ? 'curtain' :
-    'side-by-side';
+    viewMode === 'side-by-side'
+      ? 'side-by-side'
+      : viewMode === 'overlay'
+        ? 'heatmap'
+        : viewMode === 'onion-skin'
+          ? 'flicker'
+          : viewMode === 'slider'
+            ? 'curtain'
+            : 'side-by-side';
 
   const handleSeek = useCallback(
     (time: number) => {
@@ -289,7 +312,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
       // Remote: tell extension to seek both engine streams
       onStreamControl?.('seek', { time });
     },
-    [onTimeChange, onStreamControl]
+    [onTimeChange, onStreamControl],
   );
 
   const handleSliderChange = useCallback(
@@ -297,7 +320,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
       setLocalSliderPosition(position);
       onSliderChange?.(position);
     },
-    [onSliderChange]
+    [onSliderChange],
   );
 
   const handlePlayPause = useCallback(() => {
@@ -309,7 +332,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
     if (audioContextRef.current.state === 'suspended') {
       audioContextRef.current.resume().catch(() => {});
     }
-    setIsPlaying(prev => {
+    setIsPlaying((prev) => {
       const next = !prev;
       onStreamControl?.(next ? 'play' : 'pause');
       if (next) {
@@ -359,7 +382,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
           <div className="text-sm text-[var(--vscode-descriptionForeground)]">
-            Analyzing video...
+            {t('mediaDiff.video.analyzing')}
           </div>
         </div>
       </div>
@@ -377,7 +400,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
             <div className="text-center">
               <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
               <div className="text-sm text-[var(--vscode-descriptionForeground)]">
-                Fetching previous version…
+                {t('mediaDiff.video.fetchingPrevious')}
               </div>
             </div>
           ) : isPlaying ? (
@@ -385,7 +408,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
             <div className="text-center">
               <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
               <div className="text-sm text-[var(--vscode-descriptionForeground)]">
-                Starting video streams...
+                {t('mediaDiff.video.startingStreams')}
               </div>
             </div>
           ) : (
@@ -393,7 +416,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
               type="button"
               className="w-16 h-16 flex items-center justify-center rounded-full bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] transition-colors text-[var(--vscode-button-foreground)] text-2xl"
               onClick={handlePlayPause}
-              title="Play video diff"
+              title={t('mediaDiff.video.playTitle')}
             >
               {'\u25B6'}
             </button>

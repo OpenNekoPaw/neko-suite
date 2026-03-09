@@ -60,9 +60,7 @@ export class ReadTool extends BuiltinTool {
       const formatted = lines.map((line, i) => {
         const lineNum = String(startIdx + i + 1).padStart(padWidth, ' ');
         const truncated =
-          line.length > MAX_LINE_LENGTH
-            ? line.slice(0, MAX_LINE_LENGTH) + '... (truncated)'
-            : line;
+          line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + '... (truncated)' : line;
         return `${lineNum}\t${truncated}`;
       });
 
@@ -80,9 +78,7 @@ export class ReadTool extends BuiltinTool {
       if ((err as NodeJS.ErrnoException).code === 'EISDIR') {
         return this.error(`Path is a directory, not a file: ${filePath}`);
       }
-      return this.error(
-        `Failed to read file: ${err instanceof Error ? err.message : String(err)}`
-      );
+      return this.error(`Failed to read file: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 }

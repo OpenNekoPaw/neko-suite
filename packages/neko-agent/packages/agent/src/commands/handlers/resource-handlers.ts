@@ -191,9 +191,7 @@ export const handleTools: CommandHandler = (args, context) => {
       const t = tool as { name: string; description?: string };
       lines.push(`  ${t.name}`);
       if (t.description) {
-        const desc = t.description.length > 60
-          ? t.description.slice(0, 57) + '...'
-          : t.description;
+        const desc = t.description.length > 60 ? t.description.slice(0, 57) + '...' : t.description;
         lines.push(`      ${desc}`);
       }
     }

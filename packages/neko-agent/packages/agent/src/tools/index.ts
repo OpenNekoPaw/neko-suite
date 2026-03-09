@@ -19,16 +19,10 @@ export { BuiltinTool, createTool } from '@neko/shared';
 export { ToolRegistry, createToolRegistry } from './tool-registry';
 
 // Category registry
-export {
-  ToolCategoryRegistry,
-  createToolCategoryRegistry,
-} from './tool-category-registry';
+export { ToolCategoryRegistry, createToolCategoryRegistry } from './tool-category-registry';
 
 // Injection manager
-export {
-  ToolInjectionManager,
-  createToolInjectionManager,
-} from './tool-injection-manager';
+export { ToolInjectionManager, createToolInjectionManager } from './tool-injection-manager';
 
 // Core meta tools
 export {

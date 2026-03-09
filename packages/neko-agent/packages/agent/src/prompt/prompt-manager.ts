@@ -455,7 +455,7 @@ export class ChainPromptExecutor {
   async execute(
     chainId: string,
     executor: StepExecutor,
-    options: ChainExecutionOptions = {}
+    options: ChainExecutionOptions = {},
   ): Promise<ChainExecutionResult> {
     const chain = this.chains.get(chainId);
     if (!chain) {
@@ -526,7 +526,7 @@ export class ChainPromptExecutor {
     id: string,
     name: string,
     promptIds: string[],
-    variableMappings?: Record<number, Record<string, string>>
+    variableMappings?: Record<number, Record<string, string>>,
   ): ChainPrompt {
     const steps: ChainPromptStep[] = promptIds.map((promptId, index) => ({
       name: `step_${index + 1}`,

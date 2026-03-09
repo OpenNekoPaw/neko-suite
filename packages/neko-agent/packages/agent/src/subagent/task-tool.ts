@@ -86,7 +86,8 @@ Examples:
         model: {
           type: 'string',
           enum: ['fast', 'balanced', 'powerful'],
-          description: 'Model tier: fast (haiku), balanced (sonnet), powerful (opus). Default: balanced',
+          description:
+            'Model tier: fast (haiku), balanced (sonnet), powerful (opus). Default: balanced',
         },
         resume: {
           type: 'string',
@@ -100,7 +101,7 @@ Examples:
         },
         inherit_parent_skills: {
           type: 'boolean',
-          description: 'Whether to inherit parent agent\'s active skills (default: false)',
+          description: "Whether to inherit parent agent's active skills (default: false)",
         },
         tool_skills: {
           type: 'array',
@@ -109,7 +110,7 @@ Examples:
         },
         inherit_parent_tool_skills: {
           type: 'boolean',
-          description: 'Whether to inherit parent agent\'s active ToolSkills (default: false)',
+          description: "Whether to inherit parent agent's active ToolSkills (default: false)",
         },
       },
       required: ['description', 'prompt'],
@@ -325,7 +326,7 @@ Use this tool to:
  */
 export function registerSubAgentTools(
   registry: { register: (tool: Tool) => void },
-  subAgentManager: ISubAgentManager
+  subAgentManager: ISubAgentManager,
 ): void {
   registry.register(createTaskTool(subAgentManager));
   registry.register(createTaskOutputTool(subAgentManager));

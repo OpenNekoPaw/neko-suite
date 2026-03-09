@@ -12,7 +12,7 @@ import { en } from './locales/en';
 import { zhCN } from './locales/zh-cn';
 
 // Create service instance with detected locale
-const i18nService = new I18nService(detectWebviewLocale());
+export const i18nService = new I18nService(detectWebviewLocale());
 
 // Register bundles
 i18nService.registerBundle('canvas', 'en', en);

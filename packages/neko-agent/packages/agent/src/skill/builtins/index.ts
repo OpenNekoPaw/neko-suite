@@ -398,14 +398,7 @@ Fountain is a plain-text screenplay format:
 | Action paragraph | 2.0 seconds |
 | Minimum scene | 3.0 seconds |
 `,
-  allowedTools: [
-    'Read',
-    'Write',
-    'ListDirectory',
-    'Glob',
-    'GetTimelineInfo',
-    'ListElements',
-  ],
+  allowedTools: ['Read', 'Write', 'ListDirectory', 'Glob', 'GetTimelineInfo', 'ListElements'],
   icon: '📜',
   source: 'builtin',
   enabled: true,

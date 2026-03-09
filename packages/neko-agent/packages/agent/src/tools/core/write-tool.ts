@@ -66,7 +66,7 @@ export class WriteTool extends BuiltinTool {
       });
     } catch (err) {
       return this.error(
-        `Failed to write file: ${err instanceof Error ? err.message : String(err)}`
+        `Failed to write file: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

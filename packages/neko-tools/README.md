@@ -44,6 +44,12 @@ Webview (React)
 | 视频 | MP4、MOV、AVI、MKV、WebM、M4V |
 | 音频 | MP3、WAV、OGG、FLAC、AAC、M4A |
 
+### 横切关注点
+
+- **Logger**：Extension 入口通过 `createVSCodeLogger('Neko Tools', ...)` 初始化，输出到 VSCode OutputChannel。内部模块通过 `getLogger(source)` 获取子 logger。
+- **i18n**：Webview 使用 `@neko/shared` 的 `I18nService` + `I18nProvider`。翻译文件位于 `webview/src/i18n/locales/`（en + zh-cn），命名空间 `mediaDiff`。
+- **错误边界**：Webview 入口已包裹 `ErrorBoundary`。
+
 ### 配置
 
 | 配置 | 默认值 |

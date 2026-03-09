@@ -4,13 +4,13 @@
  */
 
 export {
-	type IMediaDiffAnalyzer,
-	AnalyzerRegistry,
-	BaseMediaDiffAnalyzer,
-	isImageDiffDetails,
-	isVideoDiffDetails,
-	isAudioDiffDetails,
-	isTimelineDiffDetails,
+  type IMediaDiffAnalyzer,
+  AnalyzerRegistry,
+  BaseMediaDiffAnalyzer,
+  isImageDiffDetails,
+  isVideoDiffDetails,
+  isAudioDiffDetails,
+  isTimelineDiffDetails,
 } from './IMediaDiffAnalyzer';
 
 export { ImageDiffAnalyzer } from './ImageDiffAnalyzer';

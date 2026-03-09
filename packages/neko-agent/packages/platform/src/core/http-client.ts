@@ -5,6 +5,10 @@
  * for both LLM and Media adapters.
  */
 
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('HttpClient');
+
 /**
  * HTTP request configuration
  */
@@ -42,9 +46,7 @@ export interface HttpError {
 /**
  * Result type for HTTP requests (union of success or error)
  */
-export type HttpResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: HttpError };
+export type HttpResult<T> = { success: true; data: T } | { success: false; error: HttpError };
 
 /**
  * Shared HTTP client with common functionality
@@ -54,10 +56,7 @@ export class HttpClient {
    * Make HTTP request and return parsed JSON
    * Throws on error (use for simple cases)
    */
-  async request<T>(
-    config: HttpRequestConfig,
-    errorPrefix: string = 'HTTP error'
-  ): Promise<T> {
+  async request<T>(config: HttpRequestConfig, errorPrefix: string = 'HTTP error'): Promise<T> {
     const response = await this.fetch(config);
 
     if (!response.ok) {
@@ -65,8 +64,8 @@ export class HttpClient {
       throw new Error(`${errorPrefix}: ${error.statusCode} ${error.code} - ${error.message}`);
     }
 
-    const data = await response.json() as T;
-    console.log(`[HttpClient] Response (${response.status}):`, {
+    const data = (await response.json()) as T;
+    logger.debug('Response received', {
       url: response.url,
       status: response.status,
     });
@@ -124,7 +123,7 @@ export class HttpClient {
    */
   async *stream(
     config: HttpRequestConfig,
-    errorPrefix: string = 'Stream error'
+    errorPrefix: string = 'Stream error',
   ): AsyncIterable<string> {
     const response = await this.fetch(config);
 
@@ -133,7 +132,7 @@ export class HttpClient {
       throw new Error(`${errorPrefix}: ${error.statusCode} ${error.code} - ${error.message}`);
     }
 
-    console.log(`[HttpClient] Stream started (${response.status}):`, {
+    logger.debug('Stream started', {
       url: response.url,
       status: response.status,
     });
@@ -191,7 +190,7 @@ export class HttpClient {
       code = body.error?.code || body.error?.type || code;
 
       // Log detailed error response
-      console.error(`[HttpClient] Error response (${response.status}):`, {
+      logger.error('Error response', {
         url: response.url,
         status: response.status,
         statusText: response.statusText,
@@ -201,7 +200,7 @@ export class HttpClient {
     } catch {
       // Use status text if JSON parsing fails
       message = response.statusText || message;
-      console.error(`[HttpClient] Error response (${response.status}):`, {
+      logger.error('Error response', {
         url: response.url,
         status: response.status,
         statusText: response.statusText,
@@ -266,10 +265,7 @@ export class HttpClient {
   /**
    * Build custom API key header (for providers like Anthropic)
    */
-  buildApiKeyHeader(
-    headerName: string,
-    apiKey: string
-  ): Record<string, string> {
+  buildApiKeyHeader(headerName: string, apiKey: string): Record<string, string> {
     return { [headerName]: apiKey };
   }
 
@@ -280,16 +276,20 @@ export class HttpClient {
     const { url, method, headers = {}, body, signal, timeout } = config;
 
     // Debug log for request (sanitize headers to avoid leaking API keys)
-    console.log(`[HttpClient] ${method} ${url}`);
+    logger.debug(`${method} ${url}`);
     const sanitizedHeaders = { ...headers };
     for (const key of Object.keys(sanitizedHeaders)) {
-      if (key.toLowerCase() === 'authorization' || key.toLowerCase() === 'api-key' || key.toLowerCase() === 'x-api-key') {
+      if (
+        key.toLowerCase() === 'authorization' ||
+        key.toLowerCase() === 'api-key' ||
+        key.toLowerCase() === 'x-api-key'
+      ) {
         sanitizedHeaders[key] = '***';
       }
     }
-    console.log(`[HttpClient] Headers:`, JSON.stringify(sanitizedHeaders, null, 2));
+    logger.debug('Request headers', { headers: sanitizedHeaders });
     if (body) {
-      console.log(`[HttpClient] Body:`, JSON.stringify(body, null, 2));
+      logger.debug('Request body', { body });
     }
 
     // Create abort signal with timeout if specified

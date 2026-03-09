@@ -22,14 +22,14 @@ function createMockFileReader(files: Record<string, string>): IFileReader {
       return path in files && !path.endsWith('/');
     },
     async isDirectory(path: string): Promise<boolean> {
-      return path.endsWith('/') || Object.keys(files).some(f => f.startsWith(path + '/'));
+      return path.endsWith('/') || Object.keys(files).some((f) => f.startsWith(path + '/'));
     },
     async glob(_pattern: string, options?: { cwd?: string }): Promise<string[]> {
       const cwd = options?.cwd ?? '';
       const prefix = cwd ? cwd + '/' : '';
       return Object.keys(files)
-        .filter(f => f.startsWith(prefix))
-        .map(f => f.slice(prefix.length));
+        .filter((f) => f.startsWith(prefix))
+        .map((f) => f.slice(prefix.length));
     },
     async stat(path: string): Promise<{ size: number; isFile: boolean; isDirectory: boolean }> {
       if (path in files) {
@@ -212,7 +212,7 @@ describe('InputProcessor', () => {
       const result = await processor.process(input);
 
       // Should only process 5 files
-      const loadedFiles = result.fileReferences.filter(r => r.content);
+      const loadedFiles = result.fileReferences.filter((r) => r.content);
       expect(loadedFiles.length).toBeLessThanOrEqual(5);
     });
 
@@ -231,8 +231,10 @@ describe('InputProcessor', () => {
 
       const result = await processor.process('Check @node_modules/pkg/index.js and @src/index.ts');
 
-      expect(result.errors.some(e => e.reference === '@node_modules/pkg/index.js')).toBe(true);
-      expect(result.fileReferences.find(r => r.path === 'src/index.ts')?.content).toBe('source code');
+      expect(result.errors.some((e) => e.reference === '@node_modules/pkg/index.js')).toBe(true);
+      expect(result.fileReferences.find((r) => r.path === 'src/index.ts')?.content).toBe(
+        'source code',
+      );
     });
 
     it('should handle line range', async () => {

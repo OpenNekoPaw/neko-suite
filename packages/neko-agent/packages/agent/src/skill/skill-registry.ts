@@ -7,6 +7,9 @@
  */
 
 import type { Skill, SlashCommand, ISkillRegistry } from '@neko/shared';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('SkillRegistry');
 
 /**
  * Skill registry implementation - Manages both skills and slash commands
@@ -31,7 +34,7 @@ export class SkillRegistry implements ISkillRegistry {
     }
 
     if (this.skills.has(skill.name)) {
-      console.warn(`[SkillRegistry] Skill '${skill.name}' already registered, overwriting`);
+      logger.warn('Skill already registered, overwriting', { skillName: skill.name });
     }
 
     this.skills.set(skill.name, skill);
@@ -71,8 +74,7 @@ export class SkillRegistry implements ISkillRegistry {
   searchSkills(keyword: string): Skill[] {
     const lower = keyword.toLowerCase();
     return this.listSkills().filter(
-      (s) =>
-        s.name.toLowerCase().includes(lower) || s.description.toLowerCase().includes(lower)
+      (s) => s.name.toLowerCase().includes(lower) || s.description.toLowerCase().includes(lower),
     );
   }
 
@@ -89,14 +91,10 @@ export class SkillRegistry implements ISkillRegistry {
     }
 
     // Remove leading / if present
-    const cmdName = command.command.startsWith('/')
-      ? command.command.slice(1)
-      : command.command;
+    const cmdName = command.command.startsWith('/') ? command.command.slice(1) : command.command;
 
     if (this.commands.has(cmdName)) {
-      console.warn(
-        `[SkillRegistry] Slash command '/${cmdName}' already registered, overwriting`
-      );
+      logger.warn('Slash command already registered, overwriting', { command: `/${cmdName}` });
     }
 
     this.commands.set(cmdName, { ...command, command: cmdName });

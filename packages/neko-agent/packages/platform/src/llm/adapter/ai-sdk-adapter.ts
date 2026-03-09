@@ -26,6 +26,9 @@ import type {
   ApiKeyValidationResult,
 } from '../../types/adapter';
 import type { Model, Provider } from '../../types/provider';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('AISdkAdapter');
 
 /**
  * Abstract base adapter using AI SDK
@@ -64,7 +67,7 @@ export abstract class AISdkAdapter implements Adapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<ChatResponse> {
     const languageModel = this.getLanguageModel(model, provider);
     const { systemPrompt, coreMessages } = this.transformMessages(messages);
@@ -88,7 +91,7 @@ export abstract class AISdkAdapter implements Adapter {
     if (options.stop !== undefined) requestOptions.stopSequences = options.stop;
 
     // Debug logging
-    console.log('[AISdkAdapter] generateText request:', {
+    logger.debug('generateText request', {
       model: model.name,
       provider: provider.id,
       providerSupportsBeta: provider.supportsBeta,
@@ -105,10 +108,10 @@ export abstract class AISdkAdapter implements Adapter {
       return this.transformGenerateTextResult(result, model.name);
     } catch (error) {
       // Log detailed AI SDK error info
-      console.error('[AISdkAdapter] generateText error:', error);
+      logger.error('generateText error', { error });
       if (error && typeof error === 'object') {
         const err = error as Record<string, unknown>;
-        console.error('[AISdkAdapter] Error details:', {
+        logger.error('Error details', {
           name: err.name,
           message: err.message,
           statusCode: err.statusCode,
@@ -129,7 +132,7 @@ export abstract class AISdkAdapter implements Adapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): AsyncIterable<ChatChunk> {
     const languageModel = this.getLanguageModel(model, provider);
     const { systemPrompt, coreMessages } = this.transformMessages(messages);
@@ -194,20 +197,22 @@ export abstract class AISdkAdapter implements Adapter {
             model: model.name,
             delta: {},
             finishReason: this.mapFinishReason(part.finishReason),
-            usage: part.usage ? {
-              promptTokens: part.usage.promptTokens ?? 0,
-              completionTokens: part.usage.completionTokens ?? 0,
-              totalTokens: (part.usage.promptTokens ?? 0) + (part.usage.completionTokens ?? 0),
-            } : undefined,
+            usage: part.usage
+              ? {
+                  promptTokens: part.usage.promptTokens ?? 0,
+                  completionTokens: part.usage.completionTokens ?? 0,
+                  totalTokens: (part.usage.promptTokens ?? 0) + (part.usage.completionTokens ?? 0),
+                }
+              : undefined,
           };
         }
       }
     } catch (error) {
       // Log detailed AI SDK error info (consistent with chat() method)
-      console.error('[AISdkAdapter] streamText error:', error);
+      logger.error('streamText error', { error });
       if (error && typeof error === 'object') {
         const err = error as Record<string, unknown>;
-        console.error('[AISdkAdapter] Stream error details:', {
+        logger.error('Stream error details', {
           name: err.name,
           message: err.message,
           statusCode: err.statusCode,
@@ -233,7 +238,7 @@ export abstract class AISdkAdapter implements Adapter {
     prompt: string,
     options: ImageGenerationOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<ImageGenerationResult>;
 
   /**
@@ -278,22 +283,25 @@ export abstract class AISdkAdapter implements Adapter {
       };
 
       // Send a minimal chat request to validate
-      await this.chat(
-        [{ role: 'user', content: 'hi' }],
-        { maxTokens: 1 },
-        testModel,
-        provider
-      );
+      await this.chat([{ role: 'user', content: 'hi' }], { maxTokens: 1 }, testModel, provider);
 
       return { valid: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
       // Detect common authentication errors
-      if (message.includes('401') || message.toLowerCase().includes('invalid api key') || message.toLowerCase().includes('unauthorized')) {
+      if (
+        message.includes('401') ||
+        message.toLowerCase().includes('invalid api key') ||
+        message.toLowerCase().includes('unauthorized')
+      ) {
         return { valid: false, error: 'Invalid API key' };
       }
-      if (message.includes('403') || message.toLowerCase().includes('access denied') || message.toLowerCase().includes('forbidden')) {
+      if (
+        message.includes('403') ||
+        message.toLowerCase().includes('access denied') ||
+        message.toLowerCase().includes('forbidden')
+      ) {
         return { valid: false, error: 'Access denied' };
       }
       if (message.includes('429') || message.toLowerCase().includes('rate limit')) {
@@ -314,7 +322,11 @@ export abstract class AISdkAdapter implements Adapter {
    * @param _provider Provider configuration
    * @param _model Model configuration (for model-level overrides)
    */
-  protected getProviderOptions(_options: ChatOptions, _provider: Provider, _model: Model): Record<string, unknown> {
+  protected getProviderOptions(
+    _options: ChatOptions,
+    _provider: Provider,
+    _model: Model,
+  ): Record<string, unknown> {
     return {};
   }
 
@@ -442,7 +454,7 @@ export abstract class AISdkAdapter implements Adapter {
    */
   private transformGenerateTextResult(
     result: Awaited<ReturnType<typeof generateText>>,
-    modelName: string
+    modelName: string,
   ): ChatResponse {
     const toolCalls = result.toolCalls?.map((tc) => ({
       id: tc.toolCallId,
@@ -477,9 +489,7 @@ export abstract class AISdkAdapter implements Adapter {
   /**
    * Map AI SDK finish reason to our format
    */
-  private mapFinishReason(
-    reason: string | undefined
-  ): ChatResponse['finishReason'] {
+  private mapFinishReason(reason: string | undefined): ChatResponse['finishReason'] {
     switch (reason) {
       case 'stop':
         return 'stop';

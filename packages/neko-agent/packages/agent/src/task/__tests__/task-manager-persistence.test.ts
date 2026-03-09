@@ -27,9 +27,7 @@ describe('TaskManager Persistence', () => {
 
   describe('persistence on submit', () => {
     it('should persist task on submit', async () => {
-      const executor: TaskExecutor = vi.fn().mockImplementation(
-        () => new Promise(() => {})
-      );
+      const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
       manager.registerExecutor('custom', executor);
 
       const taskId = await manager.submit({
@@ -78,9 +76,7 @@ describe('TaskManager Persistence', () => {
     });
 
     it('should persist cancelled status', async () => {
-      const executor: TaskExecutor = vi.fn().mockImplementation(
-        () => new Promise(() => {})
-      );
+      const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
       manager.registerExecutor('custom', executor);
 
       const taskId = await manager.submit({

@@ -6,6 +6,9 @@
  */
 
 import type { ITaskRecoveryStorage, TaskRecoveryInfo } from '@neko/shared';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('TaskRecoveryStorage');
 
 /**
  * In-memory recovery storage (default implementation)
@@ -138,7 +141,7 @@ export class FileTaskRecoveryStorage implements ITaskRecoveryStorage {
       }
     } catch (error) {
       // If file doesn't exist or is corrupted, start fresh
-      console.warn('[FileTaskRecoveryStorage] Failed to load recovery file:', error);
+      logger.warn('Failed to load recovery file', { error });
     }
 
     this.initialized = true;
@@ -155,7 +158,7 @@ export class FileTaskRecoveryStorage implements ITaskRecoveryStorage {
     this.saveTimer = setTimeout(() => {
       this.saveTimer = undefined;
       this.flush().catch((error) => {
-        console.error('[FileTaskRecoveryStorage] Failed to save:', error);
+        logger.error('Failed to save recovery file', { error });
       });
     }, 1000); // Save after 1 second of inactivity
   }
@@ -171,7 +174,7 @@ export function createFileRecoveryStorage(
     writeFile: (path: string, content: string) => Promise<void>;
     exists: (path: string) => Promise<boolean>;
     deleteFile: (path: string) => Promise<void>;
-  }
+  },
 ): FileTaskRecoveryStorage {
   return new FileTaskRecoveryStorage({
     filePath,

@@ -73,7 +73,7 @@ export class ValidationHooks implements ExecutorHooks {
   async beforeThink(context: AgentContext): Promise<AgentContext> {
     try {
       const validatedMessages = await Promise.all(
-        context.messages.map((msg) => this.validateMessage(msg))
+        context.messages.map((msg) => this.validateMessage(msg)),
       );
       return { ...context, messages: validatedMessages };
     } catch (error) {
@@ -158,7 +158,7 @@ export class ValidationHooks implements ExecutorHooks {
    */
   private replaceMermaidErrorBlocks(
     content: string,
-    blocks: MermaidBlockValidationResult[]
+    blocks: MermaidBlockValidationResult[],
   ): string {
     // Sort by startIndex descending to replace from end to start (avoid index shift)
     const errorBlocks = blocks
@@ -169,15 +169,10 @@ export class ValidationHooks implements ExecutorHooks {
 
     for (const { block } of errorBlocks) {
       // Simple fix prompt - just ask LLM to regenerate the diagram
-      const fixPrompt = [
-        '```mermaid',
-        block.content,
-        '```',
-      ].join('\n');
+      const fixPrompt = ['```mermaid', block.content, '```'].join('\n');
 
       // Replace the error block with fix prompt
-      result =
-        result.slice(0, block.startIndex) + fixPrompt + result.slice(block.endIndex);
+      result = result.slice(0, block.startIndex) + fixPrompt + result.slice(block.endIndex);
     }
 
     return result;
@@ -186,10 +181,7 @@ export class ValidationHooks implements ExecutorHooks {
   /**
    * Replace error JSON blocks with fix prompts, keeping surrounding text
    */
-  private replaceJsonErrorBlocks(
-    content: string,
-    blocks: JsonBlockValidationResult[]
-  ): string {
+  private replaceJsonErrorBlocks(content: string, blocks: JsonBlockValidationResult[]): string {
     // Sort by startIndex descending to replace from end to start (avoid index shift)
     const errorBlocks = blocks
       .filter((b) => !b.valid)
@@ -203,16 +195,11 @@ export class ValidationHooks implements ExecutorHooks {
 
       // Simple fix prompt
       const fixPrompt = block.inCodeBlock
-        ? [
-            '```json',
-            block.content,
-            '```',
-          ].join('\n')
+        ? ['```json', block.content, '```'].join('\n')
         : `/* FIX: ${errorHint} */ ${block.content}`;
 
       // Replace the error block with fix prompt
-      result =
-        result.slice(0, block.startIndex) + fixPrompt + result.slice(block.endIndex);
+      result = result.slice(0, block.startIndex) + fixPrompt + result.slice(block.endIndex);
     }
 
     return result;
@@ -228,7 +215,7 @@ export class ValidationHooks implements ExecutorHooks {
     }
 
     const validatedContent = await Promise.all(
-      message.content.map((part) => this.validateContentPart(part))
+      message.content.map((part) => this.validateContentPart(part)),
     );
 
     return { ...message, content: validatedContent };
@@ -275,9 +262,7 @@ export class ValidationHooks implements ExecutorHooks {
   /**
    * Validate a single image URL (utility method)
    */
-  async validateImage(
-    imageUrl: string
-  ): Promise<{ valid: boolean; error?: ValidationError }> {
+  async validateImage(imageUrl: string): Promise<{ valid: boolean; error?: ValidationError }> {
     try {
       await this.imageValidator.validate({ type: 'image', imageUrl });
       return { valid: true };
@@ -293,7 +278,7 @@ export class ValidationHooks implements ExecutorHooks {
    * Validate output content (utility method)
    */
   async validateOutput(
-    content: string
+    content: string,
   ): Promise<{ errors: ValidationError[]; warnings: ValidationWarning[] }> {
     return this.outputValidator.validate(content);
   }
@@ -302,8 +287,6 @@ export class ValidationHooks implements ExecutorHooks {
 /**
  * Factory function to create ValidationHooks
  */
-export function createValidationHooks(
-  options?: ValidationHooksOptions
-): ValidationHooks {
+export function createValidationHooks(options?: ValidationHooksOptions): ValidationHooks {
   return new ValidationHooks(options);
 }

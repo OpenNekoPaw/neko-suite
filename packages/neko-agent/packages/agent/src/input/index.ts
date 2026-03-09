@@ -5,15 +5,9 @@
  * with file references (@ mentions).
  */
 
-export {
-  InputProcessor,
-  createInputProcessor,
-} from './input-processor';
+export { InputProcessor, createInputProcessor } from './input-processor';
 
-export {
-  NodeFileReader,
-  createNodeFileReader,
-} from './node-file-reader';
+export { NodeFileReader, createNodeFileReader } from './node-file-reader';
 
 export {
   VSCodeFileReader,

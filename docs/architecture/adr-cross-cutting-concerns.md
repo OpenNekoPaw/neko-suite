@@ -54,3 +54,23 @@ Layer 2 - Webview     import from '@neko/shared/i18n/webview'      依赖 DOM
 | neko-canvas | 1 | ~50 |
 | neko-agent | ~26 | ~1100 |
 | neko-cut | ~27 | ~1465 |
+| neko-tools | 1 | ~50 |
+| neko-preview | 1 | ~30 |
+
+## Logger 迁移记录
+
+| 包 | 替换数 | 文件数 | 注入方式 |
+|----|--------|--------|----------|
+| neko-agent/platform | ~30 | 7 | `setPlatformRootLogger()` from extension activate |
+| neko-agent/agent | ~45 | 22 | `setAgentRootLogger()` from extension activate |
+| neko-tools | ~45 | 8 | `createVSCodeLogger()` in extension activate |
+
+**注意**：`http-client.ts` 中的 Request/Response headers/body 日志使用 `logger.debug()` 级别，避免默认输出敏感信息。
+
+## PlatformError 统一记录
+
+`PlatformError` 已从独立的 `extends Error` 迁移为 `extends BaseError`（沿用 `AgentError` 模式）：
+- 删除重复的 `ErrorCategory`、`RetryPolicy`、`BackoffStrategy` 定义，改为 import from `@neko/shared`
+- 定义 `PlatformErrorCategory = Extract<ErrorCategory, platform 相关类别>` 约束类型安全
+- 添加工厂方法：`authentication()`、`rateLimit()`、`network()`、`notFound()`
+- 保留 `calculateBackoff`、`shouldRetry`、`sleep` 的 re-export 确保向后兼容

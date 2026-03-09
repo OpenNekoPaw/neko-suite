@@ -6,6 +6,9 @@
  */
 
 import type { IFileReader } from './types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('VSCodeFileReader');
 
 /**
  * VSCode workspace API interface
@@ -97,9 +100,7 @@ export class VSCodeFileReader implements IFileReader {
     // Simple pattern matching
     const entries = await this._workspace.fs.readDirectory(cwdUri);
     const regex = this._patternToRegex(pattern);
-    return entries
-      .filter(([name]) => regex.test(name))
-      .map(([name]) => name);
+    return entries.filter(([name]) => regex.test(name)).map(([name]) => name);
   }
 
   async stat(filePath: string): Promise<{ size: number; isFile: boolean; isDirectory: boolean }> {
@@ -170,7 +171,7 @@ export class VSCodeFileReader implements IFileReader {
     try {
       await walk(dir, parts);
     } catch (error) {
-      console.warn('[VSCodeFileReader] Glob error:', error);
+      logger.warn('Glob error', { error });
     }
 
     return results;
@@ -182,7 +183,7 @@ export class VSCodeFileReader implements IFileReader {
  */
 export function createVSCodeFileReader(
   basePath: string,
-  workspace: VSCodeWorkspaceAPI
+  workspace: VSCodeWorkspaceAPI,
 ): IFileReader {
   return new VSCodeFileReader(basePath, workspace);
 }

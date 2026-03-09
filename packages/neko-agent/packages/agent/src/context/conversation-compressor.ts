@@ -14,6 +14,9 @@ import type {
   IConversationCompressor,
 } from '@neko/shared';
 import { DEFAULT_COMPRESSOR_CONFIG } from '@neko/shared';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('ConversationCompressor');
 
 /**
  * Simple token estimator (approximation: 1 token ≈ 4 characters)
@@ -49,10 +52,7 @@ export class ConversationCompressor implements IConversationCompressor {
   /** Optional summarizer for generating summaries */
   private summarizer?: ISummarizer;
 
-  constructor(
-    config?: Partial<ConversationCompressorConfig>,
-    summarizer?: ISummarizer
-  ) {
+  constructor(config?: Partial<ConversationCompressorConfig>, summarizer?: ISummarizer) {
     this.config = { ...DEFAULT_COMPRESSOR_CONFIG, ...config };
     this.summarizer = summarizer;
   }
@@ -103,7 +103,7 @@ export class ConversationCompressor implements IConversationCompressor {
       force?: boolean;
       targetTokens?: number;
       activeSkills?: string[];
-    }
+    },
   ): Promise<ConversationCompressionResult> {
     const originalTokens = this.estimateTokens(messages);
     const turns = this.getTurns(messages);
@@ -130,9 +130,8 @@ export class ConversationCompressor implements IConversationCompressor {
     const olderTurns = turns.slice(0, -recentTurnCount);
 
     // Separate system prompt turn (turn 0) from older turns — never compress it
-    const systemTurn = olderTurns.length > 0 && olderTurns[0]!.turnNumber === 0
-      ? olderTurns.shift()
-      : undefined;
+    const systemTurn =
+      olderTurns.length > 0 && olderTurns[0]!.turnNumber === 0 ? olderTurns.shift() : undefined;
 
     const compressedMessages: CompressedMessage[] = [];
     let summariesCreated = 0;
@@ -156,7 +155,7 @@ export class ConversationCompressor implements IConversationCompressor {
         const olderMessages = olderTurns.flatMap((t) => t.messages);
         const summary = await this.summarizeMessages(
           olderMessages,
-          this.config.conversationWindow.olderTurnsSummaryMaxTokens
+          this.config.conversationWindow.olderTurnsSummaryMaxTokens,
         );
 
         if (summary) {
@@ -192,10 +191,7 @@ export class ConversationCompressor implements IConversationCompressor {
       }
     }
 
-    const compressedTokens = compressedMessages.reduce(
-      (sum, m) => sum + m.compressedTokens,
-      0
-    );
+    const compressedTokens = compressedMessages.reduce((sum, m) => sum + m.compressedTokens, 0);
 
     return {
       messages: compressedMessages,
@@ -274,7 +270,7 @@ export class ConversationCompressor implements IConversationCompressor {
    */
   private async summarizeMessages(
     messages: ChatMessage[],
-    maxTokens: number
+    maxTokens: number,
   ): Promise<string | null> {
     if (!this.summarizer) {
       // Fallback: create a simple summary without LLM
@@ -289,7 +285,7 @@ export class ConversationCompressor implements IConversationCompressor {
       });
       return result.summary;
     } catch (error) {
-      console.error('[ConversationCompressor] Summarization failed:', error);
+      logger.error('Summarization failed', { error });
       return this.createSimpleSummary(messages, maxTokens);
     }
   }
@@ -390,7 +386,7 @@ export class ConversationCompressor implements IConversationCompressor {
  */
 export function createConversationCompressor(
   config?: Partial<ConversationCompressorConfig>,
-  summarizer?: ISummarizer
+  summarizer?: ISummarizer,
 ): IConversationCompressor {
   return new ConversationCompressor(config, summarizer);
 }

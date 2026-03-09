@@ -9,16 +9,10 @@
  */
 
 // Context manager
-export {
-  LayeredContextManager,
-  createLayeredContextManager,
-} from './context-manager';
+export { LayeredContextManager, createLayeredContextManager } from './context-manager';
 
 // Conversation compressor
-export {
-  ConversationCompressor,
-  createConversationCompressor,
-} from './conversation-compressor';
+export { ConversationCompressor, createConversationCompressor } from './conversation-compressor';
 
 // Context persistence
 export {

@@ -5,6 +5,7 @@
 
 import { memo, useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { AudioStreamClient } from '@neko/neko-client';
+import { useTranslation } from '../../i18n/I18nContext';
 import type { AudioDiffViewerProps } from './types';
 import type { AudioStreamConfig } from '@neko/shared';
 
@@ -113,7 +114,7 @@ const WaveformCanvas = memo(function WaveformCanvas({
       const absoluteFraction = scrollOffset + xFraction * visibleFraction;
       onSeek(absoluteFraction * duration);
     },
-    [onSeek, duration, zoom, scrollOffset]
+    [onSeek, duration, zoom, scrollOffset],
   );
 
   return (
@@ -153,6 +154,7 @@ const OverlayWaveform = memo(function OverlayWaveform({
   onScrollOffsetChange,
   onSeek,
 }: OverlayWaveformProps) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(600);
@@ -238,7 +240,15 @@ const OverlayWaveform = memo(function OverlayWaveform({
         ctx.stroke();
       }
     }
-  }, [currentWaveform, previousWaveform, currentTime, duration, containerWidth, zoom, scrollOffset]);
+  }, [
+    currentWaveform,
+    previousWaveform,
+    currentTime,
+    duration,
+    containerWidth,
+    zoom,
+    scrollOffset,
+  ]);
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -249,7 +259,7 @@ const OverlayWaveform = memo(function OverlayWaveform({
       const absoluteFraction = scrollOffset + xFraction * visibleFraction;
       onSeek(absoluteFraction * duration);
     },
-    [onSeek, duration, zoom, scrollOffset]
+    [onSeek, duration, zoom, scrollOffset],
   );
 
   // Wheel zoom: Ctrl+wheel = zoom, plain wheel = scroll
@@ -265,7 +275,10 @@ const OverlayWaveform = memo(function OverlayWaveform({
         const cursorTime = scrollOffset + cursorFraction / zoom;
         const zoomDelta = e.deltaY > 0 ? 0.8 : 1.25;
         const newZoom = Math.max(1, Math.min(64, zoom * zoomDelta));
-        const newOffset = Math.max(0, Math.min(1 - 1 / newZoom, cursorTime - cursorFraction / newZoom));
+        const newOffset = Math.max(
+          0,
+          Math.min(1 - 1 / newZoom, cursorTime - cursorFraction / newZoom),
+        );
         onZoomChange(newZoom);
         onScrollOffsetChange(newOffset);
       } else {
@@ -287,7 +300,7 @@ const OverlayWaveform = memo(function OverlayWaveform({
         lastDragXRef.current = e.clientX;
       }
     },
-    [zoom]
+    [zoom],
   );
 
   useEffect(() => {
@@ -300,7 +313,9 @@ const OverlayWaveform = memo(function OverlayWaveform({
       const newOffset = Math.max(0, Math.min(1 - 1 / zoom, scrollOffset + scrollDelta));
       onScrollOffsetChange(newOffset);
     };
-    const handleMouseUp = () => { isDraggingRef.current = false; };
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+    };
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
@@ -319,17 +334,19 @@ const OverlayWaveform = memo(function OverlayWaveform({
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-red-500/50 rounded" />
-            <span className="text-[var(--vscode-descriptionForeground)]">Previous</span>
+            <span className="text-[var(--vscode-descriptionForeground)]">
+              {t('mediaDiff.audio.previous')}
+            </span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-green-500/50 rounded" />
-            <span className="text-[var(--vscode-descriptionForeground)]">Current</span>
+            <span className="text-[var(--vscode-descriptionForeground)]">
+              {t('mediaDiff.audio.current')}
+            </span>
           </div>
         </div>
         {zoom > 1 && (
-          <span className="text-[var(--vscode-descriptionForeground)]">
-            {zoom.toFixed(1)}x
-          </span>
+          <span className="text-[var(--vscode-descriptionForeground)]">{zoom.toFixed(1)}x</span>
         )}
       </div>
       <canvas
@@ -441,6 +458,7 @@ const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
   onScrollOffsetChange,
   onSeek,
 }: ThreeTrackWaveformProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(600);
   const trackHeight = 80;
@@ -488,7 +506,10 @@ const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
         const zoomDelta = e.deltaY > 0 ? 0.8 : 1.25;
         const newZoom = Math.max(1, Math.min(64, zoom * zoomDelta));
         // Adjust scroll to keep cursor position stable
-        const newOffset = Math.max(0, Math.min(1 - 1 / newZoom, cursorTime - cursorFraction / newZoom));
+        const newOffset = Math.max(
+          0,
+          Math.min(1 - 1 / newZoom, cursorTime - cursorFraction / newZoom),
+        );
         onZoomChange(newZoom);
         onScrollOffsetChange(newOffset);
       } else {
@@ -511,7 +532,7 @@ const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
         lastDragXRef.current = e.clientX;
       }
     },
-    [zoom]
+    [zoom],
   );
 
   useEffect(() => {
@@ -524,7 +545,9 @@ const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
       const newOffset = Math.max(0, Math.min(1 - 1 / zoom, scrollOffset + scrollDelta));
       onScrollOffsetChange(newOffset);
     };
-    const handleMouseUp = () => { isDraggingRef.current = false; };
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+    };
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
@@ -534,9 +557,9 @@ const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
   }, [zoom, scrollOffset, containerWidth, onScrollOffsetChange]);
 
   const tracks = [
-    { label: 'A (Previous)', peaks: previousWaveform, color: '#ef4444' },
-    { label: 'B (Current)', peaks: currentWaveform, color: '#22c55e' },
-    { label: 'Diff |A-B|', peaks: diffWaveform, color: '#eab308' },
+    { label: t('mediaDiff.audio.trackPrevious'), peaks: previousWaveform, color: '#ef4444' },
+    { label: t('mediaDiff.audio.trackCurrent'), peaks: currentWaveform, color: '#22c55e' },
+    { label: t('mediaDiff.audio.trackDiff'), peaks: diffWaveform, color: '#eab308' },
   ];
 
   return (
@@ -548,22 +571,19 @@ const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
       {/* Zoom indicator */}
       {zoom > 1 && (
         <div className="flex items-center justify-between text-xs text-[var(--vscode-descriptionForeground)] px-1 mb-1">
-          <span>Zoom: {zoom.toFixed(1)}x</span>
+          <span>{t('mediaDiff.audio.zoom', { level: zoom.toFixed(1) })}</span>
           <span>
             {duration > 0
               ? `${(scrollOffset * duration).toFixed(1)}s – ${((scrollOffset + 1 / zoom) * duration).toFixed(1)}s`
               : ''}
           </span>
-          <span className="opacity-60">Ctrl+Wheel: zoom · Wheel: scroll</span>
+          <span className="opacity-60">{t('mediaDiff.audio.wheelHint')}</span>
         </div>
       )}
       {tracks.map((track) => (
         <div key={track.label} className="relative">
           <div className="text-xs text-[var(--vscode-descriptionForeground)] mb-0.5 flex items-center gap-2">
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: track.color }}
-            />
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: track.color }} />
             {track.label}
           </div>
           <div className="relative bg-[var(--vscode-input-background)] rounded border border-[var(--vscode-panel-border)]">
@@ -633,6 +653,7 @@ const AudioPlayerControls = memo(function AudioPlayerControls({
   onAudioStreamControl,
   isFetchingPrevious,
 }: AudioPlayerControlsProps) {
+  const { t } = useTranslation();
   const currentClientRef = useRef<AudioStreamClient | null>(null);
   const previousClientRef = useRef<AudioStreamClient | null>(null);
   const rafRef = useRef<number>(0);
@@ -730,14 +751,17 @@ const AudioPlayerControls = memo(function AudioPlayerControls({
     }
   }, [isPlaying, onAudioStreamControl]);
 
-  const handleSeek = useCallback((time: number) => {
-    onTimeChange(time);
-    // Reset audio clocks for seek
-    currentClientRef.current?.resetClock();
-    previousClientRef.current?.resetClock();
-    // Tell extension to seek engine streams
-    onAudioStreamControl?.('seek', { time });
-  }, [onTimeChange, onAudioStreamControl]);
+  const handleSeek = useCallback(
+    (time: number) => {
+      onTimeChange(time);
+      // Reset audio clocks for seek
+      currentClientRef.current?.resetClock();
+      previousClientRef.current?.resetClock();
+      // Tell extension to seek engine streams
+      onAudioStreamControl?.('seek', { time });
+    },
+    [onTimeChange, onAudioStreamControl],
+  );
 
   return (
     <div className="flex items-center gap-4 p-3 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)]">
@@ -750,7 +774,9 @@ const AudioPlayerControls = memo(function AudioPlayerControls({
         }`}
         onClick={isFetchingPrevious ? undefined : handlePlayPause}
         disabled={isFetchingPrevious}
-        title={isFetchingPrevious ? 'Fetching previous version…' : isPlaying ? 'Pause' : 'Play'}
+        title={
+          isFetchingPrevious ? t('mediaDiff.audio.fetchingPrevious') : isPlaying ? 'Pause' : 'Play'
+        }
       >
         {isPlaying ? '\u23F8' : '\u25B6'}
       </button>
@@ -765,7 +791,7 @@ const AudioPlayerControls = memo(function AudioPlayerControls({
           }`}
           onClick={() => onPlayingVersionChange('previous')}
         >
-          Previous
+          {t('mediaDiff.audio.previous')}
         </button>
         <button
           type="button"
@@ -776,7 +802,7 @@ const AudioPlayerControls = memo(function AudioPlayerControls({
           }`}
           onClick={() => onPlayingVersionChange('both')}
         >
-          Both
+          {t('mediaDiff.audio.playBoth')}
         </button>
         <button
           type="button"
@@ -787,7 +813,7 @@ const AudioPlayerControls = memo(function AudioPlayerControls({
           }`}
           onClick={() => onPlayingVersionChange('current')}
         >
-          Current
+          {t('mediaDiff.audio.current')}
         </button>
       </div>
 
@@ -825,6 +851,7 @@ interface AudioDetailsProps {
 }
 
 const AudioDetails = memo(function AudioDetails({ details }: AudioDetailsProps) {
+  const { t } = useTranslation();
   if (!details || !details.duration || !details.sampleRate || !details.channels) return null;
 
   const formatDuration = (seconds: number) => {
@@ -842,7 +869,9 @@ const AudioDetails = memo(function AudioDetails({ details }: AudioDetailsProps) 
     <div className="p-3 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)]">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">Duration</div>
+          <div className="text-[var(--vscode-descriptionForeground)] mb-1">
+            {t('mediaDiff.audio.duration')}
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-red-400">{formatDuration(details.duration.previous)}</span>
             <span>→</span>
@@ -850,7 +879,9 @@ const AudioDetails = memo(function AudioDetails({ details }: AudioDetailsProps) 
           </div>
         </div>
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">Sample Rate</div>
+          <div className="text-[var(--vscode-descriptionForeground)] mb-1">
+            {t('mediaDiff.audio.sampleRate')}
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-red-400">{details.sampleRate.previous} Hz</span>
             <span>→</span>
@@ -858,20 +889,32 @@ const AudioDetails = memo(function AudioDetails({ details }: AudioDetailsProps) 
           </div>
         </div>
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">Channels</div>
+          <div className="text-[var(--vscode-descriptionForeground)] mb-1">
+            {t('mediaDiff.audio.channels')}
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-red-400">
-              {details.channels.previous === 1 ? 'Mono' : details.channels.previous === 2 ? 'Stereo' : `${details.channels.previous}ch`}
+              {details.channels.previous === 1
+                ? t('mediaDiff.audio.mono')
+                : details.channels.previous === 2
+                  ? t('mediaDiff.audio.stereo')
+                  : `${details.channels.previous}ch`}
             </span>
             <span>→</span>
             <span className="text-green-400">
-              {details.channels.current === 1 ? 'Mono' : details.channels.current === 2 ? 'Stereo' : `${details.channels.current}ch`}
+              {details.channels.current === 1
+                ? t('mediaDiff.audio.mono')
+                : details.channels.current === 2
+                  ? t('mediaDiff.audio.stereo')
+                  : `${details.channels.current}ch`}
             </span>
           </div>
         </div>
         {details.bitrate && (
           <div>
-            <div className="text-[var(--vscode-descriptionForeground)] mb-1">Bitrate</div>
+            <div className="text-[var(--vscode-descriptionForeground)] mb-1">
+              {t('mediaDiff.audio.bitrate')}
+            </div>
             <div className="flex items-center gap-2">
               <span className="text-red-400">{formatBitrate(details.bitrate.previous)}</span>
               <span>→</span>
@@ -883,7 +926,7 @@ const AudioDetails = memo(function AudioDetails({ details }: AudioDetailsProps) 
       {details.silentRegions && details.silentRegions.length > 0 && (
         <div className="mt-3 pt-3 border-t border-[var(--vscode-panel-border)]">
           <div className="text-[var(--vscode-descriptionForeground)] mb-1 text-xs">
-            Silent Regions Detected
+            {t('mediaDiff.audio.silentRegions')}
           </div>
           <div className="flex flex-wrap gap-1">
             {details.silentRegions.map((region, i) => (
@@ -920,22 +963,20 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
   isLoading,
   error,
 }: AudioDiffViewerProps) {
+  const { t } = useTranslation();
   const [localTime, setLocalTime] = useState(currentTime);
   const [localPlayingVersion, setLocalPlayingVersion] = useState(playingVersion);
   const [zoom, setZoom] = useState(1);
   const [scrollOffset, setScrollOffset] = useState(0);
 
-  const duration = Math.max(
-    details?.duration?.current ?? 0,
-    details?.duration?.previous ?? 0
-  );
+  const duration = Math.max(details?.duration?.current ?? 0, details?.duration?.previous ?? 0);
 
   const handleTimeChange = useCallback(
     (time: number) => {
       setLocalTime(time);
       onTimeChange?.(time);
     },
-    [onTimeChange]
+    [onTimeChange],
   );
 
   const handlePlayingVersionChange = useCallback(
@@ -943,7 +984,7 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
       setLocalPlayingVersion(version);
       onPlayingVersionChange?.(version);
     },
-    [onPlayingVersionChange]
+    [onPlayingVersionChange],
   );
 
   const handleZoomChange = useCallback((newZoom: number) => {
@@ -971,7 +1012,7 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
           <div className="text-sm text-[var(--vscode-descriptionForeground)]">
-            Loading audio files...
+            {t('mediaDiff.audio.loading')}
           </div>
         </div>
       </div>
@@ -979,12 +1020,18 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
   }
 
   const displayCurrentWaveform = useMemo(
-    () => currentWaveform.length > 0 ? currentWaveform : Array.from({ length: 100 }, () => Math.random()),
-    [currentWaveform]
+    () =>
+      currentWaveform.length > 0
+        ? currentWaveform
+        : Array.from({ length: 100 }, () => Math.random()),
+    [currentWaveform],
   );
   const displayPreviousWaveform = useMemo(
-    () => previousWaveform.length > 0 ? previousWaveform : Array.from({ length: 100 }, () => Math.random()),
-    [previousWaveform]
+    () =>
+      previousWaveform.length > 0
+        ? previousWaveform
+        : Array.from({ length: 100 }, () => Math.random()),
+    [previousWaveform],
   );
 
   return (

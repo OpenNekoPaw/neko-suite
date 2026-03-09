@@ -6,12 +6,24 @@
  */
 
 import * as vscode from 'vscode';
-import { ServiceCollection, setGlobalServices, setRootLogger, setErrorHandler, getRootLogger } from './base';
+import {
+  ServiceCollection,
+  setGlobalServices,
+  setRootLogger,
+  setErrorHandler,
+  getRootLogger,
+} from './base';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus, IPlatform } from './bootstrap';
 import type { ChatMessage } from '@neko/platform';
+import { setPlatformRootLogger } from '@neko/platform';
+import { setRootLogger as setAgentRootLogger } from '@neko/agent';
 import { ChatViewProvider } from './chat';
-import { createNekoCutTools, createNekoCanvasTools, createNekoEngineEffectsTools } from './tools/extensionTools';
+import {
+  createNekoCutTools,
+  createNekoCanvasTools,
+  createNekoEngineEffectsTools,
+} from './tools/extensionTools';
 
 /**
  * Activate the extension
@@ -20,6 +32,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Initialize logger
   const logger = createVSCodeLogger('Neko Agent', 'NekoAgent', context);
   setRootLogger(logger);
+  setPlatformRootLogger(logger.child('Platform'));
+  setAgentRootLogger(logger.child('Agent'));
 
   // Initialize error handler
   setErrorHandler(new VSCodeErrorHandler(logger));
@@ -38,17 +52,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerExtensionTools(bootstrapResult.toolRegistry);
 
   // Create chat view provider
-  const chatViewProvider = new ChatViewProvider(
-    context.extensionUri,
-    context
-  );
+  const chatViewProvider = new ChatViewProvider(context.extensionUri, context);
 
   // Register chat view
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(
-      ChatViewProvider.viewType,
-      chatViewProvider
-    )
+    vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatViewProvider),
   );
 
   // Register commands
@@ -62,7 +70,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         registerExtensionTools(bootstrapResult.toolRegistry);
         extensionToolsRegistered = true;
       }
-    })
+    }),
   );
 
   getRootLogger().info('Extension activated');
@@ -84,7 +92,9 @@ function registerExtensionTools(toolRegistry: { register: (tool: unknown) => voi
   const effectsTools = createNekoEngineEffectsTools();
   effectsTools.forEach((tool) => toolRegistry.register(tool));
 
-  getRootLogger().info(`Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length} extension tools`);
+  getRootLogger().info(
+    `Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length} extension tools`,
+  );
 }
 
 /** Default max tokens for the internal chat command. */
@@ -102,14 +112,14 @@ function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.ai.chat', () => {
       vscode.commands.executeCommand('neko.aiAssistant.focus');
-    })
+    }),
   );
 
   // Send message to AI Assistant
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.ai.sendMessage', async (message: string) => {
       await chatViewProvider.sendMessageToAssistant(message, true);
-    })
+    }),
   );
 
   // Generate Image (placeholder)
@@ -121,12 +131,9 @@ function registerCommands(
       });
 
       if (prompt) {
-        await chatViewProvider.sendMessageToAssistant(
-          `Generate an image: ${prompt}`,
-          true
-        );
+        await chatViewProvider.sendMessageToAssistant(`Generate an image: ${prompt}`, true);
       }
-    })
+    }),
   );
 
   // Generate Video (placeholder)
@@ -138,12 +145,9 @@ function registerCommands(
       });
 
       if (prompt) {
-        await chatViewProvider.sendMessageToAssistant(
-          `Generate a video: ${prompt}`,
-          true
-        );
+        await chatViewProvider.sendMessageToAssistant(`Generate a video: ${prompt}`, true);
       }
-    })
+    }),
   );
 
   // Script commands
@@ -158,11 +162,8 @@ function registerCommands(
       const selection = editor.selection;
       const text = editor.document.getText(selection.isEmpty ? undefined : selection);
 
-      await chatViewProvider.sendMessageToAssistant(
-        `Generate a script based on: ${text}`,
-        true
-      );
-    })
+      await chatViewProvider.sendMessageToAssistant(`Generate a script based on: ${text}`, true);
+    }),
   );
 
   context.subscriptions.push(
@@ -174,11 +175,8 @@ function registerCommands(
       }
 
       const text = editor.document.getText();
-      await chatViewProvider.sendMessageToAssistant(
-        `Optimize this script: ${text}`,
-        true
-      );
-    })
+      await chatViewProvider.sendMessageToAssistant(`Optimize this script: ${text}`, true);
+    }),
   );
 
   context.subscriptions.push(
@@ -192,9 +190,9 @@ function registerCommands(
       const text = editor.document.getText();
       await chatViewProvider.sendMessageToAssistant(
         `Generate images for this script: ${text}`,
-        true
+        true,
       );
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -208,9 +206,9 @@ function registerCommands(
       const text = editor.document.getText();
       await chatViewProvider.sendMessageToAssistant(
         `Generate a video from this script: ${text}`,
-        true
+        true,
       );
-    })
+    }),
   );
 
   // Internal API: allows other Neko extensions to use the configured LLM
@@ -219,10 +217,7 @@ function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.agent.internalChat',
-      async (
-        messages: ChatMessage[],
-        options?: { maxTokens?: number },
-      ): Promise<string | null> => {
+      async (messages: ChatMessage[], options?: { maxTokens?: number }): Promise<string | null> => {
         try {
           const platform = services.get(IPlatform);
           if (!platform) return null;

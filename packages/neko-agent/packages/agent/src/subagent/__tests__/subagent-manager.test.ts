@@ -4,11 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SubAgentManager, SPECIALIZED_PRESETS } from '../subagent-manager';
-import type {
-  SubAgentConfig,
-  SubAgentManagerDeps,
-  SubAgentEvent,
-} from '../types';
+import type { SubAgentConfig, SubAgentManagerDeps, SubAgentEvent } from '../types';
 
 // =============================================================================
 // Mocks
@@ -137,7 +133,7 @@ describe('SubAgentManager', () => {
 
       // Next spawn should throw
       await expect(
-        manager.spawn('parent-1', 'conv-1', createTestConfig({ id: 'agent-overflow' }))
+        manager.spawn('parent-1', 'conv-1', createTestConfig({ id: 'agent-overflow' })),
       ).rejects.toThrow('Max SubAgents per parent reached');
     });
 
@@ -222,9 +218,9 @@ describe('SubAgentManager', () => {
     it('should cancel a running SubAgent', async () => {
       // Create a long-running mock
       const slowExecutor = {
-        execute: vi.fn().mockImplementation(
-          () => new Promise((resolve) => setTimeout(resolve, 10000))
-        ),
+        execute: vi
+          .fn()
+          .mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 10000))),
         abort: vi.fn(),
         getState: vi.fn().mockReturnValue('running'),
       };
@@ -245,9 +241,9 @@ describe('SubAgentManager', () => {
   describe('cancelAll', () => {
     it('should cancel all SubAgents for a parent', async () => {
       const slowExecutor = {
-        execute: vi.fn().mockImplementation(
-          () => new Promise((resolve) => setTimeout(resolve, 10000))
-        ),
+        execute: vi
+          .fn()
+          .mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 10000))),
         abort: vi.fn(),
         getState: vi.fn().mockReturnValue('running'),
       };
@@ -454,27 +450,29 @@ describe('SubAgentManager - Skill Injection', () => {
 
   it('should inject multiple skills', async () => {
     // Add another skill
-    (deps.skillService!.registry.getSkill as ReturnType<typeof vi.fn>).mockImplementation((name: string) => {
-      if (name === 'skill-a') {
-        return {
-          name: 'skill-a',
-          description: 'Skill A',
-          content: 'Content of skill A',
-          source: 'project' as const,
-          enabled: true,
-        };
-      }
-      if (name === 'skill-b') {
-        return {
-          name: 'skill-b',
-          description: 'Skill B',
-          content: 'Content of skill B',
-          source: 'project' as const,
-          enabled: true,
-        };
-      }
-      return undefined;
-    });
+    (deps.skillService!.registry.getSkill as ReturnType<typeof vi.fn>).mockImplementation(
+      (name: string) => {
+        if (name === 'skill-a') {
+          return {
+            name: 'skill-a',
+            description: 'Skill A',
+            content: 'Content of skill A',
+            source: 'project' as const,
+            enabled: true,
+          };
+        }
+        if (name === 'skill-b') {
+          return {
+            name: 'skill-b',
+            description: 'Skill B',
+            content: 'Content of skill B',
+            source: 'project' as const,
+            enabled: true,
+          };
+        }
+        return undefined;
+      },
+    );
 
     const config = createTestConfig({
       id: 'multi-skill-test',
@@ -527,12 +525,30 @@ describe('SubAgentManager - ToolSkill Injection', () => {
 
     // Update tool registry to include more tools
     (deps.toolRegistry.toToolDefinitions as ReturnType<typeof vi.fn>).mockReturnValue([
-      { type: 'function', function: { name: 'read_file', description: 'Read file', parameters: {} } },
-      { type: 'function', function: { name: 'write_file', description: 'Write file', parameters: {} } },
-      { type: 'function', function: { name: 'edit_file', description: 'Edit file', parameters: {} } },
-      { type: 'function', function: { name: 'grep', description: 'Search content', parameters: {} } },
-      { type: 'function', function: { name: 'git_status', description: 'Git status', parameters: {} } },
-      { type: 'function', function: { name: 'git_commit', description: 'Git commit', parameters: {} } },
+      {
+        type: 'function',
+        function: { name: 'read_file', description: 'Read file', parameters: {} },
+      },
+      {
+        type: 'function',
+        function: { name: 'write_file', description: 'Write file', parameters: {} },
+      },
+      {
+        type: 'function',
+        function: { name: 'edit_file', description: 'Edit file', parameters: {} },
+      },
+      {
+        type: 'function',
+        function: { name: 'grep', description: 'Search content', parameters: {} },
+      },
+      {
+        type: 'function',
+        function: { name: 'git_status', description: 'Git status', parameters: {} },
+      },
+      {
+        type: 'function',
+        function: { name: 'git_commit', description: 'Git commit', parameters: {} },
+      },
       { type: 'function', function: { name: 'git_push', description: 'Git push', parameters: {} } },
     ]);
 
@@ -574,7 +590,10 @@ describe('SubAgentManager - ToolSkill Injection', () => {
     await manager.spawn('parent-1', 'conv-1', config);
     await manager.getResult('multi-toolskill-test', 5000);
 
-    expect(deps.toolSkillRegistry!.getActiveTools).toHaveBeenCalledWith(['git-operations', 'file-editing']);
+    expect(deps.toolSkillRegistry!.getActiveTools).toHaveBeenCalledWith([
+      'git-operations',
+      'file-editing',
+    ]);
   });
 
   it('should work without toolSkillRegistry', async () => {

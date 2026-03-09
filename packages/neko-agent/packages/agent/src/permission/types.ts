@@ -122,7 +122,7 @@ export interface ToolConfirmationResponse {
  * Confirmation callback type
  */
 export type ConfirmToolCallback = (
-  request: ToolConfirmationRequest
+  request: ToolConfirmationRequest,
 ) => Promise<ToolConfirmationResponse>;
 
 /**
@@ -168,14 +168,14 @@ export const DEFAULT_READ_ONLY_TOOLS = [
  * These are used for tools like mcp__serena__find_symbol
  */
 export const READ_ONLY_MCP_PREFIXES = [
-  'find_',      // find_symbol, find_files, etc.
-  'get_',       // get_symbols_overview, get_file_info, etc.
-  'list_',      // list_files, list_directories, etc.
-  'read_',      // read_file, read_memory, etc.
-  'search_',    // search_code, search_files, etc.
-  'show_',      // show_file, show_diff, etc.
-  'describe_',  // describe_table, etc.
-  'query_',     // query_database (read-only queries)
+  'find_', // find_symbol, find_files, etc.
+  'get_', // get_symbols_overview, get_file_info, etc.
+  'list_', // list_files, list_directories, etc.
+  'read_', // read_file, read_memory, etc.
+  'search_', // search_code, search_files, etc.
+  'show_', // show_file, show_diff, etc.
+  'describe_', // describe_table, etc.
+  'query_', // query_database (read-only queries)
 ];
 
 /**

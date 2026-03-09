@@ -176,14 +176,14 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
  * Get builtin commands for CLI
  */
 export function getCliCommands(): BuiltinCommand[] {
-  return BUILTIN_COMMANDS.filter(cmd => cmd.availableInCli);
+  return BUILTIN_COMMANDS.filter((cmd) => cmd.availableInCli);
 }
 
 /**
  * Get builtin commands for extension
  */
 export function getExtensionCommands(): BuiltinCommand[] {
-  return BUILTIN_COMMANDS.filter(cmd => cmd.availableInExtension);
+  return BUILTIN_COMMANDS.filter((cmd) => cmd.availableInExtension);
 }
 
 /**
@@ -192,7 +192,7 @@ export function getExtensionCommands(): BuiltinCommand[] {
 export function getBuiltinCommand(name: string): BuiltinCommand | undefined {
   const normalized = name.toLowerCase();
   return BUILTIN_COMMANDS.find(
-    cmd => cmd.name === normalized || cmd.aliases?.includes(normalized)
+    (cmd) => cmd.name === normalized || cmd.aliases?.includes(normalized),
   );
 }
 

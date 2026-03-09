@@ -159,7 +159,7 @@ export class OutputValidator {
     // Validate against schema
     const result = await this.jsonSchemaValidator.validate(
       jsonContent,
-      this.constraints.jsonSchema
+      this.constraints.jsonSchema,
     );
 
     if (!result.valid && result.errors) {
@@ -217,7 +217,7 @@ export class OutputValidator {
    * Validate JSON blocks against schema with position info
    */
   private async validateJsonBlocksWithPosition(
-    content: string
+    content: string,
   ): Promise<JsonBlockValidationResult[]> {
     const blocks = this.jsonExtractor.extractWithPosition(content);
     const results: JsonBlockValidationResult[] = [];
@@ -235,7 +235,7 @@ export class OutputValidator {
       const block = blocks[i]!;
       const validationResult = await this.jsonSchemaValidator.validate(
         block.parsed,
-        this.constraints.jsonSchema
+        this.constraints.jsonSchema,
       );
 
       results.push({
@@ -276,8 +276,6 @@ export class OutputValidator {
 /**
  * Factory function to create OutputValidator
  */
-export function createOutputValidator(
-  constraints?: Partial<OutputConstraints>
-): OutputValidator {
+export function createOutputValidator(constraints?: Partial<OutputConstraints>): OutputValidator {
   return new OutputValidator(constraints);
 }

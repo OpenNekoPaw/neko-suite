@@ -13,6 +13,9 @@ import type {
   MCPPrompt,
 } from '@neko/shared';
 import { AgentError } from '../errors';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('MCPClient');
 
 /**
  * JSON-RPC request
@@ -51,7 +54,7 @@ abstract class BaseMCPClient implements IMCPClient {
   abstract disconnect(): Promise<void>;
   protected abstract sendRequest(
     method: string,
-    params?: Record<string, unknown>
+    params?: Record<string, unknown>,
   ): Promise<unknown>;
 
   isConnected(): boolean {
@@ -66,10 +69,7 @@ abstract class BaseMCPClient implements IMCPClient {
     return result.tools || [];
   }
 
-  async callTool(
-    name: string,
-    args: Record<string, unknown>
-  ): Promise<MCPToolResult> {
+  async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
     this.ensureConnected();
     const result = (await this.sendRequest('tools/call', {
       name,
@@ -105,7 +105,7 @@ abstract class BaseMCPClient implements IMCPClient {
 
   async getPrompt(
     name: string,
-    args?: Record<string, unknown>
+    args?: Record<string, unknown>,
   ): Promise<{ messages: Array<{ role: string; content: string }> }> {
     this.ensureConnected();
     const result = (await this.sendRequest('prompts/get', {
@@ -136,10 +136,7 @@ abstract class BaseMCPClient implements IMCPClient {
     return ++this.requestId;
   }
 
-  protected createRequest(
-    method: string,
-    params?: Record<string, unknown>
-  ): JsonRpcRequest {
+  protected createRequest(method: string, params?: Record<string, unknown>): JsonRpcRequest {
     return {
       jsonrpc: '2.0',
       id: this.nextRequestId(),
@@ -205,7 +202,7 @@ export class StdioMCPClient extends BaseMCPClient {
 
       // Handle stderr
       this.process!.stderr.on('data', (data: Buffer) => {
-        console.error(`[MCP ${this.serverId}] stderr:`, data.toString());
+        logger.error('MCP stderr', { serverId: this.serverId, data: data.toString() });
       });
 
       // Handle process exit
@@ -219,7 +216,7 @@ export class StdioMCPClient extends BaseMCPClient {
               code: 'MCP_PROCESS_EXIT',
               message: `MCP process exited with code ${code}`,
               retryable: false,
-            })
+            }),
           );
         }
         this.pendingRequests.clear();
@@ -262,10 +259,7 @@ export class StdioMCPClient extends BaseMCPClient {
     this.pendingRequests.clear();
   }
 
-  protected async sendRequest(
-    method: string,
-    params?: Record<string, unknown>
-  ): Promise<unknown> {
+  protected async sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> {
     if (!this.process) {
       throw new AgentError({
         category: 'network',
@@ -293,7 +287,7 @@ export class StdioMCPClient extends BaseMCPClient {
               code: 'MCP_TIMEOUT',
               message: `MCP request ${method} timed out`,
               retryable: true,
-            })
+            }),
           );
         }
       }, 30000);
@@ -398,10 +392,7 @@ export class HttpMCPClient extends BaseMCPClient {
     this.sessionId = null;
   }
 
-  protected async sendRequest(
-    method: string,
-    params?: Record<string, unknown>
-  ): Promise<unknown> {
+  protected async sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> {
     const request = this.createRequest(method, params);
     const timeout = this.config.timeout || 30000;
 
@@ -456,10 +447,7 @@ export class HttpMCPClient extends BaseMCPClient {
     }
   }
 
-  private async sendNotification(
-    method: string,
-    params?: Record<string, unknown>
-  ): Promise<void> {
+  private async sendNotification(method: string, params?: Record<string, unknown>): Promise<void> {
     const notification = {
       jsonrpc: '2.0',
       method,

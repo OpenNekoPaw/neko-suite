@@ -73,7 +73,7 @@ export function generateExtensionHelpText(skillCommands?: string[]): string {
   // Format each category
   for (const [, cmds] of categories) {
     for (const cmd of cmds) {
-      const aliases = cmd.aliases ? ` (${cmd.aliases.map(a => `/${a}`).join(', ')})` : '';
+      const aliases = cmd.aliases ? ` (${cmd.aliases.map((a) => `/${a}`).join(', ')})` : '';
       lines.push(`- \`/${cmd.name}\`${aliases} - ${cmd.description}`);
     }
   }
@@ -112,9 +112,7 @@ export const handleHelp: CommandHandler = (_args, _context) => {
 export function generateCliStatusText(context: CommandContext): string {
   const { config, skillService, toolRegistry } = context;
 
-  const apiKeyStatus = config?.apiKey
-    ? `***${config.apiKey.slice(-4)}`
-    : '(not set)';
+  const apiKeyStatus = config?.apiKey ? `***${config.apiKey.slice(-4)}` : '(not set)';
 
   const lines = [
     '',
@@ -162,9 +160,8 @@ export function generateExtensionStatusData(context: CommandContext): Record<str
   const { config, skillService, conversations, planMode, contextManager } = context;
 
   const activeConversationId = conversations?.getActiveId();
-  const tokenCount = activeConversationId && contextManager
-    ? contextManager.getTokenCount(activeConversationId)
-    : 0;
+  const tokenCount =
+    activeConversationId && contextManager ? contextManager.getTokenCount(activeConversationId) : 0;
 
   return {
     provider: config?.provider,

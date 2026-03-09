@@ -19,6 +19,9 @@ import type {
   ILayeredContextManager,
 } from '@neko/shared';
 import { DEFAULT_LAYERED_CONTEXT_MANAGER_CONFIG } from '@neko/shared';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('ContextManager');
 
 /**
  * Layered Context Manager implementation
@@ -401,9 +404,7 @@ export class LayeredContextManager implements ILayeredContextManager {
 
     // Remove skill-related items from session layer
     const sessionItems = this.state.items.get('session') ?? [];
-    const filtered = sessionItems.filter(
-      (item) => item.metadata?.skillId !== skillId
-    );
+    const filtered = sessionItems.filter((item) => item.metadata?.skillId !== skillId);
     this.state.items.set('session', filtered);
     this.updateLayerUsage('session');
 
@@ -450,7 +451,7 @@ export class LayeredContextManager implements ILayeredContextManager {
       try {
         listener(event);
       } catch (error) {
-        console.error('[ContextManager] Event listener error:', error);
+        logger.error('Event listener error', { error });
       }
     }
   }
@@ -460,7 +461,7 @@ export class LayeredContextManager implements ILayeredContextManager {
  * Factory function to create a layered context manager
  */
 export function createLayeredContextManager(
-  config?: Partial<LayeredContextManagerConfig>
+  config?: Partial<LayeredContextManagerConfig>,
 ): ILayeredContextManager {
   return new LayeredContextManager(config);
 }

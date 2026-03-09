@@ -6,6 +6,4 @@
  */
 
 // Session memory
-export {
-  InMemorySessionMemory,
-} from './session-memory';
+export { InMemorySessionMemory } from './session-memory';

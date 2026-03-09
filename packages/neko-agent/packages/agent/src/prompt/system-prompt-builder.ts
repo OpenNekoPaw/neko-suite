@@ -97,7 +97,7 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
 
   async loadAgentsFile(
     projectPath?: string,
-    personalPath?: string
+    personalPath?: string,
   ): Promise<AgentsLoadResult | null> {
     // Try project AGENTS.md first (higher priority)
     if (projectPath) {
@@ -197,7 +197,7 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
 
   private async _tryLoadFile(
     filePath: string,
-    source: 'project' | 'personal'
+    source: 'project' | 'personal',
   ): Promise<AgentsLoadResult | null> {
     try {
       if (!fs.existsSync(filePath)) {
@@ -218,9 +218,7 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
 /**
  * Create a system prompt builder
  */
-export function createSystemPromptBuilder(
-  config?: SystemPromptBuilderConfig
-): SystemPromptBuilder {
+export function createSystemPromptBuilder(config?: SystemPromptBuilderConfig): SystemPromptBuilder {
   return new SystemPromptBuilder(config);
 }
 

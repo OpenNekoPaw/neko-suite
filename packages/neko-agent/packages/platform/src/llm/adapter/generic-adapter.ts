@@ -14,6 +14,9 @@ import type {
   ModelInfoCapability,
 } from '../../types/adapter';
 import type { Model, Provider, ProtocolVariant } from '../../types/provider';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('GenericAdapter');
 
 interface GenericMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -146,7 +149,7 @@ export class GenericAdapter extends BaseAdapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): Promise<ChatResponse> {
     const url = this.buildUrl(provider, 'chat/completions');
     const headers = this.buildHeaders(provider);
@@ -167,7 +170,7 @@ export class GenericAdapter extends BaseAdapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-    provider: Provider
+    provider: Provider,
   ): AsyncIterable<ChatChunk> {
     const url = this.buildUrl(provider, 'chat/completions');
     const headers = this.buildHeaders(provider);
@@ -224,7 +227,7 @@ export class GenericAdapter extends BaseAdapter {
   private buildRequestBody(
     messages: ChatMessage[],
     options: ChatOptions,
-    model: Model
+    model: Model,
   ): Record<string, unknown> {
     const body: Record<string, unknown> = {
       model: options.model || model.name,
@@ -242,7 +245,7 @@ export class GenericAdapter extends BaseAdapter {
       if (options.toolChoice) body.tool_choice = options.toolChoice;
 
       // Debug: log tools structure
-      console.log('[GenericAdapter] Tools being sent:', JSON.stringify(options.tools, null, 2));
+      logger.debug('Tools being sent', { tools: options.tools });
     }
 
     return body;

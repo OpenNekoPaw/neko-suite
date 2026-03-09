@@ -23,7 +23,6 @@ import {
   BaseError,
 } from '@neko/shared';
 
-
 /**
  * Retry hooks options
  */
@@ -81,7 +80,7 @@ export class RetryHooks implements ExecutorHooks {
 
   async onToolCall(
     info: ToolCallInfo,
-    execute: () => Promise<ToolResult>
+    execute: () => Promise<ToolResult>,
   ): Promise<ToolResultWithMeta> {
     let lastError: BaseError | null = null;
     let retryCount = 0;
@@ -194,7 +193,8 @@ export class MemoryHooks implements ExecutorHooks {
 
     // Load session memory if available
     if (this.sessionMemory) {
-      const hasOnlySystemPrompt = context.messages.length <= 2 &&
+      const hasOnlySystemPrompt =
+        context.messages.length <= 2 &&
         context.messages.every((m) => m.role === 'system' || m.role === 'user');
       const userMsgCount = context.messages.filter((m) => m.role === 'user').length;
 
@@ -218,7 +218,7 @@ export class MemoryHooks implements ExecutorHooks {
     // Apply context compression via ConversationCompressor
     if (this.compressor) {
       const result = await this.compressor.compress(context.messages);
-      context.messages = result.messages.map(m => m.message);
+      context.messages = result.messages.map((m) => m.message);
     }
     return context;
   }

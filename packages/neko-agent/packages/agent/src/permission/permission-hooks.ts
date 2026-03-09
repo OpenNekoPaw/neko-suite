@@ -8,12 +8,7 @@
  * - Provides confirmation callback for ask decisions
  */
 
-import type {
-  ExecutorHooks,
-  ToolCallInfo,
-  ToolResultWithMeta,
-  ToolResult,
-} from '@neko/shared';
+import type { ExecutorHooks, ToolCallInfo, ToolResultWithMeta, ToolResult } from '@neko/shared';
 import type {
   PermissionConfig,
   PermissionMode,
@@ -22,10 +17,10 @@ import type {
   ToolConfirmationRequest,
 } from './types';
 import { DEFAULT_PERMISSION_CONFIG } from './types';
-import {
-  PermissionRuleMatcher,
-  normalizeToolCall,
-} from './rule-matcher';
+import { PermissionRuleMatcher, normalizeToolCall } from './rule-matcher';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('PermissionHooks');
 
 /**
  * Permission hooks options
@@ -126,7 +121,7 @@ export class PermissionHooks implements ExecutorHooks {
    * Confirm a pending tool call externally
    */
   confirmTool(confirmationToken: string, approved: boolean, allowAlways?: boolean): void {
-    console.log('[PermissionHooks] confirmTool called:', {
+    logger.debug('confirmTool called', {
       confirmationToken,
       approved,
       allowAlways,
@@ -142,11 +137,11 @@ export class PermissionHooks implements ExecutorHooks {
         this.addAllowRule(pattern);
       }
 
-      console.log('[PermissionHooks] Resolving Promise for:', pending.request.toolCall.name);
+      logger.debug('Resolving Promise for tool', { toolName: pending.request.toolCall.name });
       pending.resolve(approved);
       this.pendingConfirmations.delete(confirmationToken);
     } else {
-      console.warn('[PermissionHooks] No pending confirmation found for token:', confirmationToken);
+      logger.warn('No pending confirmation found for token', { confirmationToken });
     }
   }
 
@@ -164,12 +159,12 @@ export class PermissionHooks implements ExecutorHooks {
    */
   async onToolCall(
     info: ToolCallInfo,
-    execute: () => Promise<ToolResult>
+    execute: () => Promise<ToolResult>,
   ): Promise<ToolResultWithMeta | null> {
     // Check permission
     const result = this.matcher.check(info);
 
-    console.log('[PermissionHooks] onToolCall:', {
+    logger.debug('onToolCall', {
       toolName: info.name,
       toolId: info.id,
       decision: result.decision,
@@ -236,7 +231,7 @@ export class PermissionHooks implements ExecutorHooks {
       confirmationToken,
     };
 
-    console.log('[PermissionHooks] requestConfirmation: Creating Promise for', {
+    logger.debug('requestConfirmation: Creating Promise', {
       toolName: toolCall.name,
       toolId: toolCall.id,
       confirmationToken,
@@ -247,7 +242,7 @@ export class PermissionHooks implements ExecutorHooks {
 
     // If we have a callback, use it
     if (this.onConfirmTool) {
-      console.log('[PermissionHooks] Using onConfirmTool callback');
+      logger.debug('Using onConfirmTool callback');
       const response = await this.onConfirmTool(request);
 
       // Handle allow always
@@ -259,16 +254,19 @@ export class PermissionHooks implements ExecutorHooks {
     }
 
     // Otherwise, wait for external confirmation via confirmTool()
-    console.log('[PermissionHooks] Waiting for external confirmation via confirmTool()');
+    logger.debug('Waiting for external confirmation via confirmTool()');
     return new Promise<boolean>((resolve) => {
       // Timeout after 5 minutes - deny by default
-      const timeoutId = setTimeout(() => {
-        if (this.pendingConfirmations.has(confirmationToken)) {
-          console.log('[PermissionHooks] Confirmation timeout for:', confirmationToken);
-          this.pendingConfirmations.delete(confirmationToken);
-          resolve(false);
-        }
-      }, 5 * 60 * 1000);
+      const timeoutId = setTimeout(
+        () => {
+          if (this.pendingConfirmations.has(confirmationToken)) {
+            logger.warn('Confirmation timeout', { confirmationToken });
+            this.pendingConfirmations.delete(confirmationToken);
+            resolve(false);
+          }
+        },
+        5 * 60 * 1000,
+      );
 
       const wrappedResolve = (approved: boolean) => {
         clearTimeout(timeoutId);
@@ -276,7 +274,7 @@ export class PermissionHooks implements ExecutorHooks {
       };
 
       this.pendingConfirmations.set(confirmationToken, { resolve: wrappedResolve, request });
-      console.log('[PermissionHooks] Pending confirmations count:', this.pendingConfirmations.size);
+      logger.debug('Pending confirmations count', { count: this.pendingConfirmations.size });
     });
   }
 
@@ -313,8 +311,6 @@ export class PermissionHooks implements ExecutorHooks {
 /**
  * Create permission hooks with default options
  */
-export function createPermissionHooks(
-  options?: PermissionHooksOptions
-): PermissionHooks {
+export function createPermissionHooks(options?: PermissionHooksOptions): PermissionHooks {
   return new PermissionHooks(options);
 }

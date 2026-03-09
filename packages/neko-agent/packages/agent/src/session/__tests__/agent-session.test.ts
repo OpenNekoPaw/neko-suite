@@ -5,12 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentSession, PLAN_MODE_SYSTEM_REMINDER } from '../agent-session';
 import type { AgentSessionConfig, AgentEvent } from '../types';
-import type {
-  IService,
-  IToolRegistry,
-  AgentStep,
-  ChatMessage,
-} from '@neko/shared';
+import type { IService, IToolRegistry, AgentStep, ChatMessage } from '@neko/shared';
 
 // =============================================================================
 // Helpers
@@ -127,18 +122,16 @@ describe('AgentSession', () => {
   describe('execute() simple response', () => {
     it('should yield text + iteration + done events', async () => {
       const session = new AgentSession(config);
-      const steps: AgentStep[] = [
-        { type: 'think', content: 'Hello world', timestamp: Date.now() },
-      ];
+      const steps: AgentStep[] = [{ type: 'think', content: 'Hello world', timestamp: Date.now() }];
       injectMockExecutor(session, steps);
 
       const events = await collectEvents(session.execute('Hi'));
 
-      const textEvents = events.filter(e => e.type === 'text');
+      const textEvents = events.filter((e) => e.type === 'text');
       expect(textEvents.length).toBe(1);
       expect(textEvents[0]!.content).toBe('Hello world');
 
-      const doneEvents = events.filter(e => e.type === 'done');
+      const doneEvents = events.filter((e) => e.type === 'done');
       expect(doneEvents.length).toBe(1);
     });
   });
@@ -175,11 +168,11 @@ describe('AgentSession', () => {
 
       const events = await collectEvents(session.execute('Read a.ts'));
 
-      const toolCallEvents = events.filter(e => e.type === 'tool_call');
+      const toolCallEvents = events.filter((e) => e.type === 'tool_call');
       expect(toolCallEvents.length).toBe(1);
       expect(toolCallEvents[0]!.toolCall!.name).toBe('read_file');
 
-      const toolResultEvents = events.filter(e => e.type === 'tool_result');
+      const toolResultEvents = events.filter((e) => e.type === 'tool_result');
       expect(toolResultEvents.length).toBe(1);
       expect(toolResultEvents[0]!.toolResult!.success).toBe(true);
     });
@@ -192,16 +185,14 @@ describe('AgentSession', () => {
   describe('execute() user message in history', () => {
     it('should add user message to history and pass skipUserMessage', async () => {
       const session = new AgentSession(config);
-      const steps: AgentStep[] = [
-        { type: 'think', content: 'Response', timestamp: Date.now() },
-      ];
+      const steps: AgentStep[] = [{ type: 'think', content: 'Response', timestamp: Date.now() }];
       const mockExec = injectMockExecutor(session, steps);
 
       await collectEvents(session.execute('Hello'));
 
       // User message should be in history
       const history = session.getHistory();
-      const userMessages = history.filter(m => m.role === 'user');
+      const userMessages = history.filter((m) => m.role === 'user');
       expect(userMessages.length).toBe(1);
       expect(userMessages[0]!.content).toBe('Hello');
 
@@ -225,7 +216,7 @@ describe('AgentSession', () => {
 
       // Attempt execution while "running"
       const events = await collectEvents(session.execute('Second'));
-      const errorEvents = events.filter(e => e.type === 'error');
+      const errorEvents = events.filter((e) => e.type === 'error');
       expect(errorEvents.length).toBe(1);
       expect(errorEvents[0]!.error!.message).toContain('already running');
     });
@@ -274,9 +265,7 @@ describe('AgentSession', () => {
   describe('clearHistory()', () => {
     it('should preserve system prompt after clearing', async () => {
       const session = new AgentSession(config);
-      const steps: AgentStep[] = [
-        { type: 'think', content: 'Hi', timestamp: Date.now() },
-      ];
+      const steps: AgentStep[] = [{ type: 'think', content: 'Hi', timestamp: Date.now() }];
       injectMockExecutor(session, steps);
 
       await collectEvents(session.execute('Hello'));

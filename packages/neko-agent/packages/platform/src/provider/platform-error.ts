@@ -1,55 +1,76 @@
 /**
- * Platform Error - Error classification and handling
+ * Platform Error - Extends BaseError with platform-specific categories
+ *
+ * Follows the same pattern as AgentError in @neko/agent.
  */
 
-import type {
-  ErrorCategory,
-  PlatformErrorInfo,
-  RetryPolicy,
-} from '../types/error';
-import { calculateBackoff, sleep } from '@neko/shared';
+import { BaseError, type BaseErrorInfo, calculateBackoff, shouldRetry, sleep } from '@neko/shared';
+import type { PlatformErrorCategory, PlatformErrorInfo } from '../types/error';
 
-export { calculateBackoff, sleep };
+// Re-export shared utilities for backward compatibility
+export { calculateBackoff, shouldRetry, sleep };
 
 /**
  * Platform error with classification
  */
-export class PlatformError extends Error implements PlatformErrorInfo {
-  readonly category: ErrorCategory;
-  readonly code: string;
-  readonly retryable: boolean;
-  readonly retryAfter?: number;
-  readonly cause?: Error;
-  readonly context?: Record<string, unknown>;
+export class PlatformError extends BaseError {
+  override readonly category: PlatformErrorCategory;
 
   constructor(info: PlatformErrorInfo) {
-    super(info.message);
+    super(info as BaseErrorInfo);
     this.name = 'PlatformError';
     this.category = info.category;
-    this.code = info.code;
-    this.retryable = info.retryable;
-    this.retryAfter = info.retryAfter;
-    this.cause = info.cause;
-    this.context = info.context;
+  }
+
+  /**
+   * Create authentication error
+   */
+  static authentication(message: string, cause?: Error): PlatformError {
+    return new PlatformError({
+      category: 'authentication',
+      code: 'AUTH_ERROR',
+      message,
+      retryable: false,
+      cause,
+    });
+  }
+
+  /**
+   * Create rate limit error
+   */
+  static rateLimit(message: string, retryAfter?: number): PlatformError {
+    return new PlatformError({
+      category: 'rate_limit',
+      code: 'RATE_LIMIT',
+      message,
+      retryable: true,
+      retryAfter,
+    });
+  }
+
+  /**
+   * Create network error
+   */
+  static network(message: string, cause?: Error): PlatformError {
+    return new PlatformError({
+      category: 'network',
+      code: 'NETWORK_ERROR',
+      message,
+      retryable: true,
+      cause,
+    });
+  }
+
+  /**
+   * Create not found error
+   */
+  static notFound(message: string, context?: Record<string, unknown>): PlatformError {
+    return new PlatformError({
+      category: 'not_found',
+      code: 'NOT_FOUND',
+      message,
+      retryable: false,
+      context,
+    });
   }
 }
-
-/**
- * Check if error should trigger retry
- */
-export function shouldRetry(
-  error: PlatformError,
-  policy: RetryPolicy,
-  attempt: number
-): boolean {
-  if (attempt >= policy.maxRetries) {
-    return false;
-  }
-
-  if (!error.retryable) {
-    return false;
-  }
-
-  return policy.retryableCategories.includes(error.category);
-}
-

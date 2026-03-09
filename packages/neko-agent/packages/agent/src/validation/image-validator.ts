@@ -95,11 +95,9 @@ export class ImageValidator {
     const commaIndex = dataUrl.indexOf(',');
 
     if (colonIndex === -1 || commaIndex === -1) {
-      throw new ImageValidationError(
-        'INVALID_DATA_URL',
-        'Invalid data URL format',
-        { url: dataUrl.substring(0, 50) + '...' }
-      );
+      throw new ImageValidationError('INVALID_DATA_URL', 'Invalid data URL format', {
+        url: dataUrl.substring(0, 50) + '...',
+      });
     }
 
     const mimeType =
@@ -189,7 +187,7 @@ export class ImageValidator {
         {
           mimeType: info.mimeType,
           allowedFormats: this.constraints.allowedFormats,
-        }
+        },
       );
     }
   }
@@ -208,7 +206,7 @@ export class ImageValidator {
         {
           sizeBytes: info.sizeBytes,
           maxSizeBytes: this.constraints.maxSizeBytes,
-        }
+        },
       );
     }
   }
@@ -224,8 +222,6 @@ export class ImageValidator {
 /**
  * Factory function to create ImageValidator
  */
-export function createImageValidator(
-  constraints?: Partial<ImageConstraints>
-): ImageValidator {
+export function createImageValidator(constraints?: Partial<ImageConstraints>): ImageValidator {
   return new ImageValidator(constraints);
 }

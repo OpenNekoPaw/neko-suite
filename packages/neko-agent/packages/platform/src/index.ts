@@ -29,10 +29,7 @@ export {
   type IUserConfigManager,
 } from './config/user-config';
 
-export {
-  watchWorkspaceConfig,
-  type WorkspaceConfig,
-} from './config/workspace-config';
+export { watchWorkspaceConfig, type WorkspaceConfig } from './config/workspace-config';
 
 export {
   ConfigManager,
@@ -51,6 +48,7 @@ export {
 
 export { ProviderRegistry } from './provider/provider-registry';
 export { PlatformError } from './provider/platform-error';
+export { setRootLogger as setPlatformRootLogger } from './utils/logger';
 
 // =============================================================================
 // Service Layer
@@ -97,6 +95,9 @@ import { PromptManager } from './service/prompt-manager';
 // Media Generation imports
 import { MediaGenerationService } from './media/media-generation-service';
 import { createMediaPlatform } from './media';
+import { getLogger } from './utils/logger';
+
+const logger = getLogger('Platform');
 
 /**
  * Platform initialization options
@@ -178,14 +179,14 @@ export function createPlatform(options: PlatformOptions): Platform {
   if (!mediaTaskManager) {
     throw new Error(
       '[Platform] taskManager is required. ' +
-      'Provide an ITaskManager implementation (from @neko/shared) via options.taskManager.'
+        'Provide an ITaskManager implementation (from @neko/shared) via options.taskManager.',
     );
   }
 
   // Initialize task manager to load persisted tasks (fire and forget)
   if (mediaTaskManager.initialize) {
     mediaTaskManager.initialize().catch((err) => {
-      console.error('[Platform] Failed to initialize task manager:', err);
+      logger.error('Failed to initialize task manager', { error: err });
     });
   }
 

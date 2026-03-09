@@ -8,7 +8,10 @@
 
 import * as vscode from 'vscode';
 import type { EngineMediaService } from '../services/EngineMediaService';
+import { getLogger } from '../utils/logger';
 import { MediaProbeCache } from './services/MediaProbeCache';
+
+const logger = getLogger('MediaLsp');
 import { JviDiagnosticsProvider } from './providers/JviDiagnosticsProvider';
 import { JviHoverProvider } from './providers/JviHoverProvider';
 import { JviDocumentSymbolProvider } from './providers/JviDocumentSymbolProvider';
@@ -23,44 +26,41 @@ const JVI_SELECTOR: vscode.DocumentSelector = { language: 'nekotools-jvi' };
  * Call during extension activation.
  */
 export function initializeMediaLsp(
-	context: vscode.ExtensionContext,
-	engineService?: EngineMediaService,
+  context: vscode.ExtensionContext,
+  engineService?: EngineMediaService,
 ): void {
-	const probeCache = new MediaProbeCache();
+  const probeCache = new MediaProbeCache();
 
-	// ─── Phase 1: Diagnostics + Hover ──────────────────────────────────────
+  // ─── Phase 1: Diagnostics + Hover ──────────────────────────────────────
 
-	const diagnostics = new JviDiagnosticsProvider(engineService, probeCache);
-	diagnostics.activate();
-	context.subscriptions.push(diagnostics);
+  const diagnostics = new JviDiagnosticsProvider(engineService, probeCache);
+  diagnostics.activate();
+  context.subscriptions.push(diagnostics);
 
-	context.subscriptions.push(
-		vscode.languages.registerHoverProvider(
-			JVI_SELECTOR,
-			new JviHoverProvider(engineService, probeCache),
-		),
-	);
+  context.subscriptions.push(
+    vscode.languages.registerHoverProvider(
+      JVI_SELECTOR,
+      new JviHoverProvider(engineService, probeCache),
+    ),
+  );
 
-	// ─── Phase 2: Symbols + Navigation ─────────────────────────────────────
+  // ─── Phase 2: Symbols + Navigation ─────────────────────────────────────
 
-	const workspaceIndex = new MediaWorkspaceIndex();
-	context.subscriptions.push(workspaceIndex);
-	void workspaceIndex.ensureInitialized();
+  const workspaceIndex = new MediaWorkspaceIndex();
+  context.subscriptions.push(workspaceIndex);
+  void workspaceIndex.ensureInitialized();
 
-	context.subscriptions.push(
-		vscode.languages.registerDocumentSymbolProvider(
-			JVI_SELECTOR,
-			new JviDocumentSymbolProvider(),
-		),
-		vscode.languages.registerDefinitionProvider(
-			JVI_SELECTOR,
-			new JviDefinitionProvider(workspaceIndex),
-		),
-		vscode.languages.registerReferenceProvider(
-			JVI_SELECTOR,
-			new JviReferenceProvider(workspaceIndex),
-		),
-	);
+  context.subscriptions.push(
+    vscode.languages.registerDocumentSymbolProvider(JVI_SELECTOR, new JviDocumentSymbolProvider()),
+    vscode.languages.registerDefinitionProvider(
+      JVI_SELECTOR,
+      new JviDefinitionProvider(workspaceIndex),
+    ),
+    vscode.languages.registerReferenceProvider(
+      JVI_SELECTOR,
+      new JviReferenceProvider(workspaceIndex),
+    ),
+  );
 
-	console.log('[Media LSP] Initialized (Phase 1 + Phase 2)');
+  logger.info('Initialized (Phase 1 + Phase 2)');
 }

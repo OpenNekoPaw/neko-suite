@@ -2,8 +2,4 @@
  * Agent Executor Module
  */
 
-export {
-  AgentExecutor,
-  createAgentExecutor,
-  type AgentExecutorOptions,
-} from './agent-executor';
+export { AgentExecutor, createAgentExecutor, type AgentExecutorOptions } from './agent-executor';

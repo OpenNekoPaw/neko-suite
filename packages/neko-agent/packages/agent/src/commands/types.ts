@@ -305,10 +305,7 @@ export class CommandResultBuilder {
   /**
    * Set an action with type-safe data
    */
-  action<T extends CommandAction>(
-    action: T,
-    data?: CommandActionDataMap[T]
-  ): this {
+  action<T extends CommandAction>(action: T, data?: CommandActionDataMap[T]): this {
     this.result.handled = true;
     this.result.action = action;
     if (data !== undefined) {
@@ -374,7 +371,7 @@ export function commandResult(): CommandResultBuilder {
  */
 export type CommandHandler = (
   args: string[],
-  context: CommandContext
+  context: CommandContext,
 ) => CommandResult | Promise<CommandResult>;
 
 /**

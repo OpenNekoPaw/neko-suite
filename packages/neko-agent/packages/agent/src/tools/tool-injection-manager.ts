@@ -21,6 +21,9 @@ import type {
   IToolCategoryRegistry,
 } from '@neko/shared';
 import { DEFAULT_INJECTION_CONFIG, CORE_TOOLS } from '@neko/shared';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('ToolInjectionManager');
 
 /**
  * Tool Injection Manager implementation
@@ -44,7 +47,7 @@ export class ToolInjectionManager implements IToolInjectionManager {
   constructor(
     categoryRegistry: IToolCategoryRegistry,
     toolProvider?: IToolProvider,
-    config?: Partial<ToolInjectionConfig>
+    config?: Partial<ToolInjectionConfig>,
   ) {
     this.categoryRegistry = categoryRegistry;
     this.toolProvider = toolProvider;
@@ -398,7 +401,7 @@ export class ToolInjectionManager implements IToolInjectionManager {
       try {
         listener(event);
       } catch (error) {
-        console.error('[ToolInjectionManager] Event listener error:', error);
+        logger.error('Event listener error', { error });
       }
     }
   }
@@ -410,7 +413,7 @@ export class ToolInjectionManager implements IToolInjectionManager {
 export function createToolInjectionManager(
   categoryRegistry: IToolCategoryRegistry,
   toolProvider?: IToolProvider,
-  config?: Partial<ToolInjectionConfig>
+  config?: Partial<ToolInjectionConfig>,
 ): ToolInjectionManager {
   return new ToolInjectionManager(categoryRegistry, toolProvider, config);
 }

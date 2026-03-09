@@ -54,7 +54,14 @@ export const handleConfig: CommandHandler = (args, context) => {
         };
       }
 
-      const validKeys = ['provider', 'model', 'maxTokens', 'temperature', 'verbose', 'outputFormat'];
+      const validKeys = [
+        'provider',
+        'model',
+        'maxTokens',
+        'temperature',
+        'verbose',
+        'outputFormat',
+      ];
       if (!validKeys.includes(key)) {
         return {
           handled: true,

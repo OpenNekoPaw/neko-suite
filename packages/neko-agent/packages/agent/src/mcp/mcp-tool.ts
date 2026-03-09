@@ -10,6 +10,9 @@ import type {
   ToolDefinition,
 } from '@neko/shared';
 import { MCPManager } from './mcp-manager';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('MCPTool');
 
 /**
  * MCP tool wrapper - wraps an MCP tool as an agent tool
@@ -24,11 +27,7 @@ export class MCPTool implements Tool {
   private mcpManager: MCPManager;
   private originalName: string;
 
-  constructor(
-    mcpManager: MCPManager,
-    serverId: string,
-    mcpTool: MCPToolDefinition
-  ) {
+  constructor(mcpManager: MCPManager, serverId: string, mcpTool: MCPToolDefinition) {
     this.mcpManager = mcpManager;
     this.serverId = serverId;
     this.originalName = mcpTool.name;
@@ -41,11 +40,7 @@ export class MCPTool implements Tool {
   }
 
   async execute(args: Record<string, unknown>): Promise<ToolResult> {
-    const result = await this.mcpManager.callTool(
-      this.serverId,
-      this.originalName,
-      args
-    );
+    const result = await this.mcpManager.callTool(this.serverId, this.originalName, args);
 
     return {
       success: result.success,
@@ -69,10 +64,7 @@ export class MCPTool implements Tool {
 /**
  * Create MCPTool instances from MCP server tools
  */
-export async function createMCPTools(
-  mcpManager: MCPManager,
-  serverId: string
-): Promise<MCPTool[]> {
+export async function createMCPTools(mcpManager: MCPManager, serverId: string): Promise<MCPTool[]> {
   const client = mcpManager.getClient(serverId);
   if (!client?.isConnected()) {
     return [];
@@ -82,7 +74,7 @@ export async function createMCPTools(
     const mcpTools = await client.listTools();
     return mcpTools.map((tool) => new MCPTool(mcpManager, serverId, tool));
   } catch (error) {
-    console.error(`Failed to create MCP tools from ${serverId}:`, error);
+    logger.error('Failed to create MCP tools', { serverId, error });
     return [];
   }
 }
@@ -90,9 +82,7 @@ export async function createMCPTools(
 /**
  * Create all MCP tools from all connected servers
  */
-export async function createAllMCPTools(
-  mcpManager: MCPManager
-): Promise<MCPTool[]> {
+export async function createAllMCPTools(mcpManager: MCPManager): Promise<MCPTool[]> {
   const tools: MCPTool[] = [];
 
   const allTools = await mcpManager.getAllTools();
@@ -102,7 +92,7 @@ export async function createAllMCPTools(
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema,
-      })
+      }),
     );
   }
 

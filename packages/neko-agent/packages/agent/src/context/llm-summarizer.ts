@@ -11,6 +11,9 @@ import type {
   ISummarizer,
   IService,
 } from '@neko/shared';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('LLMSummarizer');
 
 /**
  * LLM Summarizer configuration
@@ -91,11 +94,7 @@ export class LLMSummarizer implements ISummarizer {
 
     // Build the prompt
     const conversationText = this.formatMessagesForSummary(messages);
-    const userPrompt = this.buildSummarizationPrompt(
-      conversationText,
-      maxTokens,
-      contextHint
-    );
+    const userPrompt = this.buildSummarizationPrompt(conversationText, maxTokens, contextHint);
 
     // Call LLM
     let lastError: Error | null = null;
@@ -110,25 +109,24 @@ export class LLMSummarizer implements ISummarizer {
             temperature: this.config.temperature,
             maxTokens: maxTokens + 200, // Extra for formatting
             model: this.config.model,
-          }
+          },
         );
 
         // Parse the response
-        const content = typeof response.message.content === 'string'
-          ? response.message.content
-          : '';
+        const content =
+          typeof response.message.content === 'string' ? response.message.content : '';
         return this.parseResponse(content, maxTokens);
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        console.warn(
-          `[LLMSummarizer] Attempt ${attempt + 1} failed:`,
-          lastError.message
-        );
+        logger.warn('Summarization attempt failed', {
+          attempt: attempt + 1,
+          error: lastError.message,
+        });
       }
     }
 
     // All retries failed - return a fallback summary
-    console.error('[LLMSummarizer] All attempts failed, using fallback');
+    logger.error('All attempts failed, using fallback');
     return this.createFallbackSummary(messages, maxTokens);
   }
 
@@ -159,7 +157,7 @@ export class LLMSummarizer implements ISummarizer {
   private buildSummarizationPrompt(
     conversationText: string,
     maxTokens: number,
-    contextHint?: string
+    contextHint?: string,
   ): string {
     let prompt = `Please summarize the following conversation segment.\n\n`;
 
@@ -184,15 +182,10 @@ export class LLMSummarizer implements ISummarizer {
   /**
    * Parse the LLM response into a structured result
    */
-  private parseResponse(
-    content: string,
-    maxTokens: number
-  ): SummarizationResult {
+  private parseResponse(content: string, maxTokens: number): SummarizationResult {
     // Extract key points if present
     const keyPoints: string[] = [];
-    const keyPointsMatch = content.match(
-      /Key Points?:?\s*([\s\S]*?)(?=Entities?:|$)/i
-    );
+    const keyPointsMatch = content.match(/Key Points?:?\s*([\s\S]*?)(?=Entities?:|$)/i);
     if (keyPointsMatch) {
       const pointsText = keyPointsMatch[1];
       const points = pointsText.match(/[-•*]\s*(.+)/g);
@@ -208,9 +201,7 @@ export class LLMSummarizer implements ISummarizer {
       const entitiesText = entitiesMatch[1];
       const entityList = entitiesText.match(/[-•*]\s*(.+)/g);
       if (entityList) {
-        entities.push(
-          ...entityList.map((e) => e.replace(/^[-•*]\s*/, '').trim())
-        );
+        entities.push(...entityList.map((e) => e.replace(/^[-•*]\s*/, '').trim()));
       }
     }
 
@@ -239,19 +230,14 @@ export class LLMSummarizer implements ISummarizer {
   /**
    * Create a fallback summary without LLM
    */
-  private createFallbackSummary(
-    messages: ChatMessage[],
-    maxTokens: number
-  ): SummarizationResult {
+  private createFallbackSummary(messages: ChatMessage[], maxTokens: number): SummarizationResult {
     const parts: string[] = [];
     let tokenCount = 0;
     const targetTokens = maxTokens * 0.8; // Leave some margin
 
     for (const msg of messages) {
-      const content =
-        typeof msg.content === 'string' ? msg.content : '[complex content]';
-      const preview =
-        content.length > 100 ? content.substring(0, 100) + '...' : content;
+      const content = typeof msg.content === 'string' ? msg.content : '[complex content]';
+      const preview = content.length > 100 ? content.substring(0, 100) + '...' : content;
       const line = `[${msg.role}]: ${preview}`;
       const lineTokens = estimateTokens(line);
 
@@ -279,7 +265,7 @@ export class LLMSummarizer implements ISummarizer {
  */
 export function createLLMSummarizer(
   service: IService,
-  config?: Partial<LLMSummarizerConfig>
+  config?: Partial<LLMSummarizerConfig>,
 ): ISummarizer {
   return new LLMSummarizer(service, config);
 }

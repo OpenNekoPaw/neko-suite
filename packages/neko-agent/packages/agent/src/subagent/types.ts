@@ -250,11 +250,7 @@ export interface ISubAgentManager {
    * @param config SubAgent configuration
    * @returns SubAgent ID
    */
-  spawn(
-    parentId: string,
-    conversationId: string,
-    config: SubAgentConfig
-  ): Promise<string>;
+  spawn(parentId: string, conversationId: string, config: SubAgentConfig): Promise<string>;
 
   /**
    * Spawn multiple SubAgents in parallel
@@ -262,7 +258,7 @@ export interface ISubAgentManager {
   spawnBatch(
     parentId: string,
     conversationId: string,
-    configs: SubAgentConfig[]
+    configs: SubAgentConfig[],
   ): Promise<string[]>;
 
   /**
@@ -376,7 +372,7 @@ export interface IContextBridge {
    */
   extractSummary(
     messages: Array<{ role: string; content: string | unknown }>,
-    options?: ContextExtractionOptions
+    options?: ContextExtractionOptions,
   ): string;
 
   /**
@@ -384,6 +380,6 @@ export interface IContextBridge {
    */
   mergeResults(
     parentMessages: Array<{ role: string; content: string }>,
-    subAgentResults: Array<{ id: string; response: string; name?: string }>
+    subAgentResults: Array<{ id: string; response: string; name?: string }>,
   ): Array<{ role: string; content: string }>;
 }

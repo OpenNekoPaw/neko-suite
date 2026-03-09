@@ -124,10 +124,10 @@ export function matchesPattern(normalizedTool: string, pattern: string): boolean
   if (patternArg?.includes('**')) {
     // Use placeholder to avoid double replacement
     const regex = patternArg
-      .replace(/\*\*/g, '\x00DOUBLE_STAR\x00')  // Placeholder for **
-      .replace(/\*/g, '[^/]*')                   // Single * matches non-slash chars
-      .replace(/\x00DOUBLE_STAR\x00/g, '.*')    // ** matches everything
-      .replace(/\//g, '\\/');                    // Escape slashes
+      .replace(/\*\*/g, '\x00DOUBLE_STAR\x00') // Placeholder for **
+      .replace(/\*/g, '[^/]*') // Single * matches non-slash chars
+      .replace(/\x00DOUBLE_STAR\x00/g, '.*') // ** matches everything
+      .replace(/\//g, '\\/'); // Escape slashes
     try {
       return new RegExp(`^${regex}$`).test(callArg || '');
     } catch {
@@ -148,10 +148,7 @@ export function matchesPattern(normalizedTool: string, pattern: string): boolean
 /**
  * Check if tool is in a list of patterns
  */
-export function isInPatternList(
-  normalizedTool: string,
-  patterns?: string[]
-): string | undefined {
+export function isInPatternList(normalizedTool: string, patterns?: string[]): string | undefined {
   if (!patterns || patterns.length === 0) {
     return undefined;
   }
@@ -198,7 +195,7 @@ export function isPlanFileWrite(toolCall: ToolCallInfo): boolean {
 export function isReadOnlyTool(
   toolCall: ToolCallInfo,
   readOnlyTools: string[] = DEFAULT_READ_ONLY_TOOLS,
-  readOnlyMcpPrefixes: string[] = READ_ONLY_MCP_PREFIXES
+  readOnlyMcpPrefixes: string[] = READ_ONLY_MCP_PREFIXES,
 ): boolean {
   const { name } = toolCall;
 
@@ -402,8 +399,6 @@ export class PermissionRuleMatcher {
 /**
  * Create a permission rule matcher
  */
-export function createPermissionRuleMatcher(
-  config: PermissionConfig
-): PermissionRuleMatcher {
+export function createPermissionRuleMatcher(config: PermissionConfig): PermissionRuleMatcher {
   return new PermissionRuleMatcher(config);
 }

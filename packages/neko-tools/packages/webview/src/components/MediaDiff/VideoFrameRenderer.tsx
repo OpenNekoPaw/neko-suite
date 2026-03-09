@@ -8,6 +8,7 @@
  */
 
 import { memo, useRef, useState, useCallback, useEffect } from 'react';
+import { useTranslation } from '../../i18n/I18nContext';
 
 // =============================================================================
 // Types
@@ -109,7 +110,7 @@ function createShader(gl: WebGLRenderingContext, type: number, source: string): 
 function createProgram(
   gl: WebGLRenderingContext,
   vertexSource: string,
-  fragmentSource: string
+  fragmentSource: string,
 ): WebGLProgram | null {
   const vs = createShader(gl, gl.VERTEX_SHADER, vertexSource);
   const fs = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
@@ -132,7 +133,7 @@ function createProgram(
 function loadImageToTexture(
   gl: WebGLRenderingContext,
   texture: WebGLTexture,
-  image: HTMLImageElement
+  image: HTMLImageElement,
 ): void {
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
@@ -144,9 +145,12 @@ function loadImageToTexture(
 
 function getFragmentShader(mode: WebGLRenderMode): string {
   switch (mode) {
-    case 'curtain': return FRAGMENT_SHADER_CURTAIN;
-    case 'heatmap': return FRAGMENT_SHADER_HEATMAP;
-    case 'flicker': return FRAGMENT_SHADER_FLICKER;
+    case 'curtain':
+      return FRAGMENT_SHADER_CURTAIN;
+    case 'heatmap':
+      return FRAGMENT_SHADER_HEATMAP;
+    case 'flicker':
+      return FRAGMENT_SHADER_FLICKER;
   }
 }
 
@@ -161,6 +165,7 @@ export const VideoFrameRenderer = memo(function VideoFrameRenderer({
   sliderPosition = 0.5,
   onSliderChange,
 }: VideoFrameRendererProps) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const glRef = useRef<WebGLRenderingContext | null>(null);
   const programRef = useRef<WebGLProgram | null>(null);
@@ -194,12 +199,7 @@ export const VideoFrameRenderer = memo(function VideoFrameRenderer({
     const posBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
     // positions: clip space, texCoords interleaved
-    const vertices = new Float32Array([
-      -1, -1,  0, 1,
-       1, -1,  1, 1,
-      -1,  1,  0, 0,
-       1,  1,  1, 0,
-    ]);
+    const vertices = new Float32Array([-1, -1, 0, 1, 1, -1, 1, 1, -1, 1, 0, 0, 1, 1, 1, 0]);
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
   }, []);
 
@@ -366,7 +366,7 @@ export const VideoFrameRenderer = memo(function VideoFrameRenderer({
       const x = (e.clientX - rect.left) / rect.width;
       onSliderChange?.(Math.max(0, Math.min(1, x)));
     },
-    [isDragging, mode, onSliderChange]
+    [isDragging, mode, onSliderChange],
   );
 
   useEffect(() => {
@@ -380,7 +380,7 @@ export const VideoFrameRenderer = memo(function VideoFrameRenderer({
   if (!webglSupported) {
     return (
       <div className="flex-1 flex items-center justify-center text-[var(--vscode-descriptionForeground)]">
-        WebGL not available — using fallback view
+        {t('mediaDiff.webglNotAvailable')}
       </div>
     );
   }
@@ -392,10 +392,7 @@ export const VideoFrameRenderer = memo(function VideoFrameRenderer({
       onMouseMove={handleMouseMove}
       style={{ cursor: mode === 'curtain' ? 'col-resize' : 'default' }}
     >
-      <canvas
-        ref={canvasRef}
-        className="block w-full h-full"
-      />
+      <canvas ref={canvasRef} className="block w-full h-full" />
       {/* Curtain divider line */}
       {mode === 'curtain' && (
         <>
@@ -404,22 +401,24 @@ export const VideoFrameRenderer = memo(function VideoFrameRenderer({
             style={{ left: `${sliderPosition * 100}%` }}
           />
           <div className="absolute top-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded pointer-events-none">
-            Previous
+            {t('mediaDiff.previous')}
           </div>
           <div className="absolute top-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded pointer-events-none">
-            Current
+            {t('mediaDiff.current')}
           </div>
         </>
       )}
       {/* Mode label */}
       {mode === 'heatmap' && (
         <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded pointer-events-none">
-          Difference Heatmap
+          {t('mediaDiff.differenceHeatmap')}
         </div>
       )}
       {mode === 'flicker' && (
         <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded pointer-events-none">
-          Flicker: {flickerShowARef.current ? 'Previous' : 'Current'}
+          {t('mediaDiff.flicker', {
+            version: flickerShowARef.current ? t('mediaDiff.previous') : t('mediaDiff.current'),
+          })}
         </div>
       )}
     </div>

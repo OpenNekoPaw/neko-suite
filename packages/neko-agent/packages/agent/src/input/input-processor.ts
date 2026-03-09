@@ -197,8 +197,8 @@ export class InputProcessor implements IInputProcessor {
 
     // Build file contents string
     const fileContents = references
-      .filter(r => r.content)
-      .map(r => this.formatFileContent(r))
+      .filter((r) => r.content)
+      .map((r) => this.formatFileContent(r))
       .join('\n\n');
 
     return {
@@ -206,7 +206,7 @@ export class InputProcessor implements IInputProcessor {
       message: input,
       fileReferences: references,
       fileContents,
-      hasFiles: references.some(r => r.content),
+      hasFiles: references.some((r) => r.content),
       errors,
     };
   }
@@ -240,9 +240,7 @@ export class InputProcessor implements IInputProcessor {
     }
 
     const ext = path.extname(ref.path);
-    const lang = this._options.includeLanguageHints
-      ? LANGUAGE_HINTS[ext] ?? ''
-      : '';
+    const lang = this._options.includeLanguageHints ? (LANGUAGE_HINTS[ext] ?? '') : '';
 
     let header = `### File: ${ref.path}`;
     if (ref.lineRange) {
@@ -314,12 +312,14 @@ export class InputProcessor implements IInputProcessor {
 
   private async _readFileContent(
     filePath: string,
-    lineRange?: { start: number; end: number }
+    lineRange?: { start: number; end: number },
   ): Promise<string> {
     // Check file size
     const stat = await this._fileReader.stat(filePath);
     if (stat.size > this._options.maxFileSize) {
-      throw new Error(`File too large (${(stat.size / 1024).toFixed(1)}KB > ${(this._options.maxFileSize / 1024).toFixed(1)}KB)`);
+      throw new Error(
+        `File too large (${(stat.size / 1024).toFixed(1)}KB > ${(this._options.maxFileSize / 1024).toFixed(1)}KB)`,
+      );
     }
 
     // Check extension
@@ -365,18 +365,14 @@ export class InputProcessor implements IInputProcessor {
 
   private _formatSingleFile(filePath: string, content: string): string {
     const ext = path.extname(filePath);
-    const lang = this._options.includeLanguageHints
-      ? LANGUAGE_HINTS[ext] ?? ''
-      : '';
+    const lang = this._options.includeLanguageHints ? (LANGUAGE_HINTS[ext] ?? '') : '';
 
     return `\n### File: ${filePath}\n\`\`\`${lang}\n${content}\n\`\`\`\n`;
   }
 
   private _shouldExclude(filePath: string): boolean {
     const normalizedPath = filePath.replace(/\\/g, '/');
-    return this._options.excludePatterns.some(pattern =>
-      normalizedPath.includes(pattern)
-    );
+    return this._options.excludePatterns.some((pattern) => normalizedPath.includes(pattern));
   }
 }
 

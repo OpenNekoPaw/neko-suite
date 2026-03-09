@@ -65,10 +65,7 @@ export interface SkillApplicationResult {
  * User confirmation callback
  * Returns true if user confirms, false if rejected
  */
-export type ConfirmSkillCallback = (
-  skill: Skill,
-  match: SkillMatch
-) => Promise<boolean>;
+export type ConfirmSkillCallback = (skill: Skill, match: SkillMatch) => Promise<boolean>;
 
 /**
  * Skill service configuration
@@ -188,9 +185,7 @@ export class SkillService {
     const allMatches = this._matcher.match(userInput, skills);
 
     // Filter by minimum relevance
-    const matches = allMatches.filter(
-      (m) => m.relevance >= this._minRelevanceThreshold
-    );
+    const matches = allMatches.filter((m) => m.relevance >= this._minRelevanceThreshold);
 
     if (matches.length === 0) {
       return {
@@ -201,7 +196,8 @@ export class SkillService {
     }
 
     const topMatch = matches[0];
-    const requiresConfirmation = topMatch !== undefined && topMatch.relevance < this._autoApplyThreshold;
+    const requiresConfirmation =
+      topMatch !== undefined && topMatch.relevance < this._autoApplyThreshold;
 
     return {
       found: true,
@@ -290,7 +286,7 @@ export class SkillService {
    */
   async discoverAndApply(
     userInput: string,
-    confirmCallback?: ConfirmSkillCallback
+    confirmCallback?: ConfirmSkillCallback,
   ): Promise<SkillApplicationResult | null> {
     // Discover skills
     const discovery = this.discover(userInput);

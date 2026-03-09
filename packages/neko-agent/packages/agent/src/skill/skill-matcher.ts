@@ -73,7 +73,11 @@ export class KeywordSkillMatcher extends SkillMatcher {
   /**
    * Match a single skill against the request
    */
-  private matchSkill(requestLower: string, requestWords: string[], skill: Skill): SkillMatch | null {
+  private matchSkill(
+    requestLower: string,
+    requestWords: string[],
+    skill: Skill,
+  ): SkillMatch | null {
     let relevance = 0;
     const reasons: string[] = [];
 
@@ -88,7 +92,9 @@ export class KeywordSkillMatcher extends SkillMatcher {
     const descriptionWords = this.tokenize(descriptionLower);
 
     // Count matching words
-    const matchingWords = requestWords.filter((word) => descriptionWords.includes(word) && word.length > 2);
+    const matchingWords = requestWords.filter(
+      (word) => descriptionWords.includes(word) && word.length > 2,
+    );
 
     if (matchingWords.length > 0) {
       // Calculate relevance based on matching word ratio

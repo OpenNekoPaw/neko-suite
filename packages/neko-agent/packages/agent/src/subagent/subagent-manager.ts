@@ -11,6 +11,7 @@
 
 import { EventEmitter } from 'events';
 import type { AgentConfig } from '@neko/shared';
+import { getLogger } from '../utils/logger';
 import type {
   SubAgentConfig,
   SubAgentResult,
@@ -24,6 +25,8 @@ import type {
   ModelTier,
   SubAgentExecutor,
 } from './types';
+
+const logger = getLogger('SubAgentManager');
 
 // =============================================================================
 // Specialized Agent Presets
@@ -145,11 +148,7 @@ export class SubAgentManager implements ISubAgentManager {
   /**
    * Spawn a new SubAgent
    */
-  async spawn(
-    parentId: string,
-    conversationId: string,
-    config: SubAgentConfig
-  ): Promise<string> {
+  async spawn(parentId: string, conversationId: string, config: SubAgentConfig): Promise<string> {
     // Check resource limits
     this.checkLimits(parentId);
 
@@ -175,7 +174,7 @@ export class SubAgentManager implements ISubAgentManager {
 
     // Start execution asynchronously
     this.executeSubAgent(instance).catch((error) => {
-      console.error(`[SubAgentManager] Execution error for ${config.id}:`, error);
+      logger.error('Execution error', { subAgentId: config.id, error });
     });
 
     return config.id;
@@ -187,7 +186,7 @@ export class SubAgentManager implements ISubAgentManager {
   async spawnBatch(
     parentId: string,
     conversationId: string,
-    configs: SubAgentConfig[]
+    configs: SubAgentConfig[],
   ): Promise<string[]> {
     const ids: string[] = [];
     for (const config of configs) {
@@ -323,17 +322,17 @@ export class SubAgentManager implements ISubAgentManager {
     const parentSubAgents = this.listByParent(parentId);
     if (parentSubAgents.length >= SubAgentManager.MAX_SUBAGENTS_PER_PARENT) {
       throw new Error(
-        `Max SubAgents per parent reached: ${SubAgentManager.MAX_SUBAGENTS_PER_PARENT}`
+        `Max SubAgents per parent reached: ${SubAgentManager.MAX_SUBAGENTS_PER_PARENT}`,
       );
     }
 
     // Check concurrent limit
     const runningCount = Array.from(this.instances.values()).filter(
-      (i) => i.status === 'running'
+      (i) => i.status === 'running',
     ).length;
     if (runningCount >= SubAgentManager.MAX_CONCURRENT_SUBAGENTS) {
       throw new Error(
-        `Max concurrent SubAgents reached: ${SubAgentManager.MAX_CONCURRENT_SUBAGENTS}`
+        `Max concurrent SubAgents reached: ${SubAgentManager.MAX_CONCURRENT_SUBAGENTS}`,
       );
     }
   }
@@ -380,8 +379,7 @@ export class SubAgentManager implements ISubAgentManager {
       // =======================================================================
       // Step 3: Build system prompt with skill injections
       // =======================================================================
-      const baseSystemPrompt =
-        config.systemPrompt || this.buildSystemPrompt(config, preset);
+      const baseSystemPrompt = config.systemPrompt || this.buildSystemPrompt(config, preset);
       const systemPrompt = this.injectSkillsToPrompt(baseSystemPrompt, config);
 
       // Create agent config
@@ -390,7 +388,8 @@ export class SubAgentManager implements ISubAgentManager {
         systemPrompt,
         tools: filteredTools,
         maxIterations: config.maxIterations || preset.defaultMaxIterations,
-        primaryModel: config.modelId || this.resolveModelId(config.modelTier || preset.defaultModelTier),
+        primaryModel:
+          config.modelId || this.resolveModelId(config.modelTier || preset.defaultModelTier),
       };
 
       // Create executor
@@ -437,8 +436,7 @@ export class SubAgentManager implements ISubAgentManager {
       this.resolveWaiters(instance);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const isCancelled =
-        errorMessage.includes('aborted') || abortController?.signal.aborted;
+      const isCancelled = errorMessage.includes('aborted') || abortController?.signal.aborted;
 
       instance.status = isCancelled ? 'cancelled' : 'failed';
       instance.result = {
@@ -465,10 +463,7 @@ export class SubAgentManager implements ISubAgentManager {
   /**
    * Build system prompt for SubAgent
    */
-  private buildSystemPrompt(
-    config: SubAgentConfig,
-    preset: SpecializedAgentPreset
-  ): string {
+  private buildSystemPrompt(config: SubAgentConfig, preset: SpecializedAgentPreset): string {
     return `${preset.systemPrompt}
 
 ## Your Task
@@ -495,7 +490,6 @@ Focus on completing this specific task efficiently and report your findings clea
     };
     return modelMap[tier];
   }
-
 
   /**
    * Collect tools from ToolSkills configuration

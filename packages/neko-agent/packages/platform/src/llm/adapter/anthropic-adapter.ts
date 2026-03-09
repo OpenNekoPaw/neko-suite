@@ -10,6 +10,9 @@ import type { LanguageModel } from 'ai';
 import { AISdkAdapter } from './ai-sdk-adapter';
 import type { ChatOptions, ModelInfo, ModelInfoCapability } from '../../types/adapter';
 import type { Model, Provider } from '../../types/provider';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('AnthropicAdapter');
 
 /**
  * Options for proxy-compatible fetch wrapper
@@ -42,7 +45,7 @@ function createProxyCompatibleFetch(options: ProxyFetchOptions): typeof fetch {
 
       // Strip anthropic-beta header if needed
       if (options.stripBetaHeader && headers.has('anthropic-beta')) {
-        console.log('[AnthropicAdapter] Stripping anthropic-beta header for proxy compatibility');
+        logger.debug('Stripping anthropic-beta header for proxy compatibility');
         headers.delete('anthropic-beta');
       }
 
@@ -50,7 +53,7 @@ function createProxyCompatibleFetch(options: ProxyFetchOptions): typeof fetch {
       if (options.useBearerAuth && options.apiKey) {
         // Remove x-api-key and add Authorization: Bearer
         if (headers.has('x-api-key')) {
-          console.log('[AnthropicAdapter] Converting x-api-key to Authorization: Bearer for proxy compatibility');
+          logger.debug('Converting x-api-key to Authorization: Bearer for proxy compatibility');
           headers.delete('x-api-key');
         }
         headers.set('Authorization', `Bearer ${options.apiKey}`);
@@ -96,7 +99,7 @@ export class AnthropicAdapter extends AISdkAdapter {
     const useBearerAuth = model.useBearerAuth ?? provider.useBearerAuth ?? false;
     const needsProxyCompat = !supportsBeta || useBearerAuth;
 
-    console.log('[AnthropicAdapter] Creating model:', {
+    logger.debug('Creating model', {
       model: model.name,
       baseURL,
       supportsBeta,
@@ -124,7 +127,11 @@ export class AnthropicAdapter extends AISdkAdapter {
   /**
    * Get Anthropic-specific provider options
    */
-  protected override getProviderOptions(options: ChatOptions, provider: Provider, model: Model): Record<string, unknown> {
+  protected override getProviderOptions(
+    options: ChatOptions,
+    provider: Provider,
+    model: Model,
+  ): Record<string, unknown> {
     const providerOptions: Record<string, unknown> = {};
 
     // Extended thinking support (requires beta features)
@@ -132,7 +139,7 @@ export class AnthropicAdapter extends AISdkAdapter {
     // Priority: model > provider > default (true)
     const supportsBeta = model.supportsBeta ?? provider.supportsBeta ?? true;
 
-    console.log('[AnthropicAdapter] getProviderOptions:', {
+    logger.debug('getProviderOptions', {
       providerId: provider.id,
       modelId: model.id,
       modelSupportsBeta: model.supportsBeta,
@@ -153,7 +160,7 @@ export class AnthropicAdapter extends AISdkAdapter {
       };
     }
 
-    console.log('[AnthropicAdapter] providerOptions result:', JSON.stringify(providerOptions, null, 2));
+    logger.debug('providerOptions result', { providerOptions });
     return providerOptions;
   }
 

@@ -14,6 +14,9 @@ import type {
   IToolRegistry,
 } from '@neko/shared';
 import { AgentError } from '../errors';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('ToolRegistry');
 
 /**
  * Default tool execution config
@@ -43,7 +46,7 @@ export class ToolRegistry implements IToolRegistry {
    */
   register(tool: Tool): void {
     if (this.tools.has(tool.name)) {
-      console.warn(`[ToolRegistry] Tool '${tool.name}' already registered, overwriting`);
+      logger.warn('Tool already registered, overwriting', { toolName: tool.name });
     }
     this.tools.set(tool.name, tool);
   }

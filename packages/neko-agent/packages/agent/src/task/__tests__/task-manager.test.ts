@@ -39,7 +39,7 @@ describe('TaskManager', () => {
   describe('submit', () => {
     it('should create a new task with pending status', async () => {
       const executor: TaskExecutor = vi.fn().mockImplementation(
-        () => new Promise(() => {}) // Never resolves
+        () => new Promise(() => {}), // Never resolves
       );
       manager.registerExecutor('image_generation', executor);
 
@@ -70,9 +70,7 @@ describe('TaskManager', () => {
     });
 
     it('should set initial progress to 0', async () => {
-      const executor: TaskExecutor = vi.fn().mockImplementation(
-        () => new Promise(() => {})
-      );
+      const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
       manager.registerExecutor('workflow', executor);
 
       const taskId = await manager.submit({ type: 'workflow', payload: {} });
@@ -118,9 +116,7 @@ describe('TaskManager', () => {
 
   describe('cancel', () => {
     it('should cancel pending task', async () => {
-      const executor: TaskExecutor = vi.fn().mockImplementation(
-        () => new Promise(() => {})
-      );
+      const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
       manager.registerExecutor('video_generation', executor);
 
       const taskId = await manager.submit({
@@ -138,9 +134,10 @@ describe('TaskManager', () => {
     it('should cancel running task', async () => {
       let resolveExecutor: () => void;
       const executor: TaskExecutor = vi.fn().mockImplementation(
-        () => new Promise<{ data: string }>((resolve) => {
-          resolveExecutor = () => resolve({ data: 'done' });
-        })
+        () =>
+          new Promise<{ data: string }>((resolve) => {
+            resolveExecutor = () => resolve({ data: 'done' });
+          }),
       );
       manager.registerExecutor('audio_generation', executor);
 
@@ -215,9 +212,7 @@ describe('TaskManager', () => {
 
     it('should filter tasks by status', async () => {
       const completedExecutor: TaskExecutor = vi.fn().mockResolvedValue({});
-      const pendingExecutor: TaskExecutor = vi.fn().mockImplementation(
-        () => new Promise(() => {})
-      );
+      const pendingExecutor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
 
       manager.registerExecutor('embedding', completedExecutor);
       manager.registerExecutor('workflow', pendingExecutor);
@@ -251,13 +246,11 @@ describe('TaskManager', () => {
       const progressCallback = vi.fn();
       let reportProgress: (progress: number) => void;
 
-      const executor: TaskExecutor = vi.fn().mockImplementation(
-        async (input, onProgress) => {
-          reportProgress = onProgress;
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          return { data: 'done' };
-        }
-      );
+      const executor: TaskExecutor = vi.fn().mockImplementation(async (input, onProgress) => {
+        reportProgress = onProgress;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return { data: 'done' };
+      });
       manager.registerExecutor('video_generation', executor);
 
       const taskId = await manager.submit({
@@ -285,13 +278,11 @@ describe('TaskManager', () => {
       const callback2 = vi.fn();
       let reportProgress: (progress: number) => void;
 
-      const executor: TaskExecutor = vi.fn().mockImplementation(
-        async (input, onProgress) => {
-          reportProgress = onProgress;
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          return {};
-        }
-      );
+      const executor: TaskExecutor = vi.fn().mockImplementation(async (input, onProgress) => {
+        reportProgress = onProgress;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return {};
+      });
       manager.registerExecutor('image_generation', executor);
 
       const taskId = await manager.submit({
@@ -313,13 +304,11 @@ describe('TaskManager', () => {
       const callback = vi.fn();
       let reportProgress: (progress: number) => void;
 
-      const executor: TaskExecutor = vi.fn().mockImplementation(
-        async (input, onProgress) => {
-          reportProgress = onProgress;
-          await new Promise((resolve) => setTimeout(resolve, 200));
-          return {};
-        }
-      );
+      const executor: TaskExecutor = vi.fn().mockImplementation(async (input, onProgress) => {
+        reportProgress = onProgress;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return {};
+      });
       manager.registerExecutor('workflow', executor);
 
       const taskId = await manager.submit({ type: 'workflow', payload: {} });
@@ -359,9 +348,7 @@ describe('TaskManager', () => {
     });
 
     it('should fail task on executor error', async () => {
-      const executor: TaskExecutor = vi.fn().mockRejectedValue(
-        new Error('Generation failed')
-      );
+      const executor: TaskExecutor = vi.fn().mockRejectedValue(new Error('Generation failed'));
       manager.registerExecutor('video_generation', executor);
 
       const taskId = await manager.submit({
@@ -417,18 +404,16 @@ describe('TaskManager', () => {
         startExecution = resolve;
       });
 
-      const executor: TaskExecutor = vi.fn().mockImplementation(
-        async (input, onProgress) => {
-          // Wait for test to be ready
-          await executionStarted;
-          onProgress(25);
-          await new Promise((r) => setTimeout(r, 10));
-          onProgress(50);
-          await new Promise((r) => setTimeout(r, 10));
-          onProgress(75);
-          return { data: 'done' };
-        }
-      );
+      const executor: TaskExecutor = vi.fn().mockImplementation(async (input, onProgress) => {
+        // Wait for test to be ready
+        await executionStarted;
+        onProgress(25);
+        await new Promise((r) => setTimeout(r, 10));
+        onProgress(50);
+        await new Promise((r) => setTimeout(r, 10));
+        onProgress(75);
+        return { data: 'done' };
+      });
       manager.registerExecutor('workflow', executor);
 
       const taskId = await manager.submit({ type: 'workflow', payload: {} });
@@ -455,7 +440,7 @@ describe('TaskManager', () => {
       // The cancel check happens at the start of retry loop, so we need
       // to test that cancelled status is set correctly
       const executor: TaskExecutor = vi.fn().mockImplementation(
-        () => new Promise(() => {}) // Never resolves
+        () => new Promise(() => {}), // Never resolves
       );
       manager.registerExecutor('mcp', executor);
 
@@ -507,9 +492,7 @@ describe('TaskManager', () => {
     });
 
     it('should fail after max retries exceeded', async () => {
-      const executor: TaskExecutor = vi.fn().mockRejectedValue(
-        new Error('Permanent failure')
-      );
+      const executor: TaskExecutor = vi.fn().mockRejectedValue(new Error('Permanent failure'));
       manager.registerExecutor('video_generation', executor);
 
       const taskId = await manager.submit({
@@ -604,31 +587,25 @@ describe('TaskManager', () => {
       vi.useRealTimers();
 
       const executor: TaskExecutor = vi.fn().mockImplementation(
-        () => new Promise(() => {}) // Never resolves
+        () => new Promise(() => {}), // Never resolves
       );
       manager.registerExecutor('custom', executor);
 
       const taskId = await manager.submit({ type: 'custom', payload: {} });
 
-      await expect(
-        manager.waitForCompletion(taskId, 200)
-      ).rejects.toThrow('timed out');
+      await expect(manager.waitForCompletion(taskId, 200)).rejects.toThrow('timed out');
     });
 
     it('should throw for non-existent task', async () => {
       vi.useRealTimers();
 
-      await expect(
-        manager.waitForCompletion('non-existent')
-      ).rejects.toThrow('not found');
+      await expect(manager.waitForCompletion('non-existent')).rejects.toThrow('not found');
     });
 
     it('should return on task failure', async () => {
       vi.useRealTimers();
 
-      const executor: TaskExecutor = vi.fn().mockRejectedValue(
-        new Error('Task failed')
-      );
+      const executor: TaskExecutor = vi.fn().mockRejectedValue(new Error('Task failed'));
       manager.registerExecutor('audio_generation', executor);
 
       const taskId = await manager.submit({
@@ -643,9 +620,7 @@ describe('TaskManager', () => {
     it('should return on task cancellation', async () => {
       vi.useRealTimers();
 
-      const executor: TaskExecutor = vi.fn().mockImplementation(
-        () => new Promise(() => {})
-      );
+      const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
       manager.registerExecutor('video_generation', executor);
 
       const taskId = await manager.submit({

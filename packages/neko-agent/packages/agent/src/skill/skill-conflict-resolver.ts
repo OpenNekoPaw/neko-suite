@@ -67,19 +67,14 @@ export class SkillConflictResolver implements ISkillConflictResolver {
   /**
    * Check if activating a skill would cause conflicts
    */
-  checkConflicts(
-    skillName: string,
-    activeSkills: string[]
-  ): SkillConflict | null {
+  checkConflicts(skillName: string, activeSkills: string[]): SkillConflict | null {
     const config = this.getConflictConfig(skillName);
     if (!config) {
       return null;
     }
 
     // Check explicit conflicts
-    const explicitConflicts = activeSkills.filter(
-      (active) => config.conflicts?.includes(active)
-    );
+    const explicitConflicts = activeSkills.filter((active) => config.conflicts?.includes(active));
     if (explicitConflicts.length > 0) {
       return {
         requestedSkill: skillName,
@@ -122,7 +117,7 @@ export class SkillConflictResolver implements ISkillConflictResolver {
    */
   resolveConflict(
     conflict: SkillConflict,
-    strategy?: ConflictResolutionStrategy
+    strategy?: ConflictResolutionStrategy,
   ): ConflictResolutionResult {
     const resolveStrategy = strategy ?? conflict.suggestedResolution;
 
@@ -147,7 +142,7 @@ export class SkillConflictResolver implements ISkillConflictResolver {
    */
   private resolveByPriority(conflict: SkillConflict): ConflictResolutionResult {
     const requestedPriority = this.getSkillPriority(conflict.requestedSkill);
-    
+
     // Find skills with lower priority that can be deactivated
     const toDeactivate: string[] = [];
     for (const activeSkill of conflict.conflictingSkills) {
@@ -185,7 +180,7 @@ export class SkillConflictResolver implements ISkillConflictResolver {
     // Check if skills can be merged
     const allSkills = [conflict.requestedSkill, ...conflict.conflictingSkills];
     const canMergeAll = allSkills.every((skill, i) =>
-      allSkills.slice(i + 1).every((other) => this.canMerge(skill, other))
+      allSkills.slice(i + 1).every((other) => this.canMerge(skill, other)),
     );
 
     if (canMergeAll) {
@@ -262,10 +257,7 @@ export class SkillConflictResolver implements ISkillConflictResolver {
     }
 
     // Check explicit mergeable declarations
-    return (
-      skill1MergeableWith.includes(skill2) ||
-      skill2MergeableWith.includes(skill1)
-    );
+    return skill1MergeableWith.includes(skill2) || skill2MergeableWith.includes(skill1);
   }
 
   /**
@@ -322,7 +314,8 @@ export class SkillConflictResolver implements ISkillConflictResolver {
         .map((s, i) => `## Phase ${i + 1}: ${s.name}\n\n${s.content}`)
         .join('\n\n---\n\n');
     } else if (mergeMode === 'composite') {
-      content = `# Composite Skill: ${skillNames.join(' + ')}\n\n` +
+      content =
+        `# Composite Skill: ${skillNames.join(' + ')}\n\n` +
         skills.map((s) => `## ${s.name}\n\n${s.content}`).join('\n\n');
     } else {
       // Parallel - just combine
@@ -331,7 +324,7 @@ export class SkillConflictResolver implements ISkillConflictResolver {
 
     // Sort by priority for execution order
     const executionOrder = [...skillNames].sort(
-      (a, b) => this.getSkillPriority(b) - this.getSkillPriority(a)
+      (a, b) => this.getSkillPriority(b) - this.getSkillPriority(a),
     );
 
     return {

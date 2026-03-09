@@ -76,21 +76,16 @@ export type {
 } from '@neko/shared';
 
 // Export plan parsing
-export {
-  parsePlanMarkdown,
-  type Plan,
-  type PlanStep,
-} from './plan';
+export { parsePlanMarkdown, type Plan, type PlanStep } from './plan';
+
+// Export logger
+export { setRootLogger, getLogger as getAgentLogger } from './utils/logger';
 
 // Export errors
 export { AgentError, type AgentErrorCategory, type AgentErrorInfo } from './errors';
 
 // Export executor
-export {
-  AgentExecutor,
-  createAgentExecutor,
-  type AgentExecutorOptions,
-} from './executor';
+export { AgentExecutor, createAgentExecutor, type AgentExecutorOptions } from './executor';
 
 // Export hooks
 export {
@@ -104,9 +99,7 @@ export {
 } from './hooks';
 
 // Export memory
-export {
-  InMemorySessionMemory,
-} from './memory';
+export { InMemorySessionMemory } from './memory';
 
 // Export MCP
 export {

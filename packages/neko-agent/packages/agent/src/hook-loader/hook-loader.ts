@@ -17,6 +17,9 @@ import type {
   HookModuleExports,
 } from './types';
 import { DEFAULT_HOOK_METADATA } from './types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('HookLoader');
 
 /**
  * HookLoader - Loads and manages custom hooks from filesystem
@@ -57,7 +60,7 @@ export class HookLoader {
    */
   async loadFromDirectory(
     hookDir: string,
-    source: HookSource = 'project'
+    source: HookSource = 'project',
   ): Promise<HookLoadResult> {
     const result: HookLoadResult = {
       hooks: [],
@@ -136,7 +139,7 @@ export class HookLoader {
     result.hooks.sort(
       (a, b) =>
         (a.metadata.priority ?? DEFAULT_HOOK_METADATA.priority) -
-        (b.metadata.priority ?? DEFAULT_HOOK_METADATA.priority)
+        (b.metadata.priority ?? DEFAULT_HOOK_METADATA.priority),
     );
 
     return result;
@@ -154,7 +157,7 @@ export class HookLoader {
     filePath: string,
     directoryPath: string,
     source: HookSource,
-    needsCompilation: boolean
+    needsCompilation: boolean,
   ): Promise<LoadedHook | null> {
     // Read file content
     const content = await this.fs.readFile(filePath);
@@ -174,10 +177,7 @@ export class HookLoader {
     }
 
     // Execute and get exports
-    const exports = this.compiler.executeModule(
-      code,
-      filePath
-    ) as HookModuleExports;
+    const exports = this.compiler.executeModule(code, filePath) as HookModuleExports;
 
     // Validate exports
     const metadata = exports.metadata;
@@ -186,7 +186,7 @@ export class HookLoader {
 
     if (!metadata?.name) {
       throw new Error(
-        'Hook must export metadata with name. Example: export const metadata = { name: "my-hook" };'
+        'Hook must export metadata with name. Example: export const metadata = { name: "my-hook" };',
       );
     }
 
@@ -200,9 +200,7 @@ export class HookLoader {
       // Alternative: default export
       hooks = defaultExport as ExecutorHooks;
     } else {
-      throw new Error(
-        'Hook must export createHook() function or default ExecutorHooks instance'
-      );
+      throw new Error('Hook must export createHook() function or default ExecutorHooks instance');
     }
 
     // Ensure hook has a name property
@@ -235,10 +233,10 @@ export class HookLoader {
    */
   watchDirectory(
     hookDir: string,
-    onReload: (hooks: LoadedHook[], errors: HookLoadError[]) => void
+    onReload: (hooks: LoadedHook[], errors: HookLoadError[]) => void,
   ): void {
     if (!this.fs.watch) {
-      console.warn('[HookLoader] File watching not supported by filesystem implementation');
+      logger.warn('File watching not supported by filesystem implementation');
       return;
     }
 
@@ -264,14 +262,17 @@ export class HookLoader {
             const result = await this.loadFromDirectory(hookDir);
             onReload(result.hooks, result.errors);
           } catch (error) {
-            console.error('[HookLoader] Failed to reload hooks:', error);
-            onReload([], [
-              {
-                file: hookDir,
-                message: 'Failed to reload hooks',
-                details: error instanceof Error ? error.message : String(error),
-              },
-            ]);
+            logger.error('Failed to reload hooks', { error });
+            onReload(
+              [],
+              [
+                {
+                  file: hookDir,
+                  message: 'Failed to reload hooks',
+                  details: error instanceof Error ? error.message : String(error),
+                },
+              ],
+            );
           }
         }, debounceMs);
       }

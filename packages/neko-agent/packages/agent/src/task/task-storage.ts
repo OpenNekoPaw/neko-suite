@@ -41,9 +41,7 @@ export class MemoryTaskStorage implements ITaskStorage {
     for (const [id, task] of this.tasks.entries()) {
       // Only cleanup completed, failed, or cancelled tasks
       if (
-        (task.status === 'completed' ||
-          task.status === 'failed' ||
-          task.status === 'cancelled') &&
+        (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') &&
         task.updatedAt < cutoff
       ) {
         this.tasks.delete(id);

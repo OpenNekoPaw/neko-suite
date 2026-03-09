@@ -123,12 +123,8 @@ export class MCPTestService {
             }
           }
         }, timeout);
-
       } catch (error) {
-        complete(
-          false,
-          error instanceof Error ? error.message : 'Unknown error'
-        );
+        complete(false, error instanceof Error ? error.message : 'Unknown error');
       }
     });
   }

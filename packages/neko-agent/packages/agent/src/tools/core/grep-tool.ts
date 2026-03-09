@@ -93,9 +93,7 @@ export class GrepTool extends BuiltinTool {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         return this.error(`Path not found: ${searchPath}`);
       }
-      return this.error(
-        `Search failed: ${err instanceof Error ? err.message : String(err)}`
-      );
+      return this.error(`Search failed: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     const truncated = matches.length > MAX_RESULTS;
@@ -121,7 +119,7 @@ export class GrepTool extends BuiltinTool {
     filePath: string,
     regex: RegExp,
     contextLines: number,
-    matches: GrepMatch[]
+    matches: GrepMatch[],
   ): Promise<void> {
     try {
       const stat = await fs.stat(filePath);
@@ -167,7 +165,7 @@ export class GrepTool extends BuiltinTool {
     regex: RegExp,
     include: string | undefined,
     contextLines: number,
-    matches: GrepMatch[]
+    matches: GrepMatch[],
   ): Promise<void> {
     if (matches.length >= MAX_RESULTS * 2) return;
 
@@ -203,9 +201,9 @@ function matchGlob(filename: string, pattern: string): boolean {
   const braceMatch = pattern.match(/^(.*)\{([^}]+)\}(.*)$/);
   if (braceMatch) {
     const [, prefix, options, suffix] = braceMatch;
-    return (options ?? '').split(',').some((opt) =>
-      matchGlob(filename, `${prefix ?? ''}${opt.trim()}${suffix ?? ''}`)
-    );
+    return (options ?? '')
+      .split(',')
+      .some((opt) => matchGlob(filename, `${prefix ?? ''}${opt.trim()}${suffix ?? ''}`));
   }
 
   // Convert simple glob to regex

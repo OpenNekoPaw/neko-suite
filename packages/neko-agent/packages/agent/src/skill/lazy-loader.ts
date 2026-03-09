@@ -15,6 +15,9 @@ import type {
   ISkillFileSystem,
 } from '@neko/shared';
 import type { IMarkdownParser } from './markdown-parser';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('LazyLoader');
 
 // =============================================================================
 // Lazy Loading Types
@@ -84,7 +87,7 @@ export interface LazySkillLoadResult {
  */
 export type SkillContentLoader = (
   directoryPath: string,
-  source: SkillSource
+  source: SkillSource,
 ) => Promise<Skill | null>;
 
 /**
@@ -92,7 +95,7 @@ export type SkillContentLoader = (
  */
 export type CommandContentLoader = (
   filePath: string,
-  source: SkillSource
+  source: SkillSource,
 ) => Promise<SlashCommand | null>;
 
 /**
@@ -106,7 +109,7 @@ export interface ILazyLoader {
     skillsDir: string,
     source: SkillSource,
     skillLoader: SkillContentLoader,
-    commandLoader: CommandContentLoader
+    commandLoader: CommandContentLoader,
   ): Promise<LazySkillLoadResult>;
 
   /**
@@ -116,7 +119,7 @@ export interface ILazyLoader {
     skillFilePath: string,
     directoryPath: string,
     source: SkillSource,
-    loader: SkillContentLoader
+    loader: SkillContentLoader,
   ): Promise<LazySkill | null>;
 
   /**
@@ -125,7 +128,7 @@ export interface ILazyLoader {
   createLazyCommand(
     filePath: string,
     source: SkillSource,
-    loader: CommandContentLoader
+    loader: CommandContentLoader,
   ): Promise<LazyCommand | null>;
 }
 
@@ -135,7 +138,7 @@ export interface ILazyLoader {
 export class LazyLoader implements ILazyLoader {
   constructor(
     private readonly fs: ISkillFileSystem,
-    private readonly parser: IMarkdownParser
+    private readonly parser: IMarkdownParser,
   ) {}
 
   /**
@@ -145,7 +148,7 @@ export class LazyLoader implements ILazyLoader {
     skillsDir: string,
     source: SkillSource,
     skillLoader: SkillContentLoader,
-    commandLoader: CommandContentLoader
+    commandLoader: CommandContentLoader,
   ): Promise<LazySkillLoadResult> {
     const result: LazySkillLoadResult = {
       skills: [],
@@ -189,7 +192,7 @@ export class LazyLoader implements ILazyLoader {
               skillFilePath,
               entryPath,
               source,
-              skillLoader
+              skillLoader,
             );
             if (lazySkill) {
               result.skills.push(lazySkill);
@@ -203,19 +206,15 @@ export class LazyLoader implements ILazyLoader {
           if (frontmatter) {
             if ('command' in frontmatter && frontmatter.command) {
               // It's a slash command
-              const lazyCommand = await this.createLazyCommand(
-                entryPath,
-                source,
-                commandLoader
-              );
+              const lazyCommand = await this.createLazyCommand(entryPath, source, commandLoader);
               if (lazyCommand) {
                 result.commands.push(lazyCommand);
               }
             } else if ('name' in frontmatter && frontmatter.name && frontmatter.description) {
               // It's a skill (but single-file skills are discouraged)
-              console.warn(
-                `[LazyLoader] Single-file skill detected: ${entryPath}. Consider using directory structure.`
-              );
+              logger.warn('Single-file skill detected, consider using directory structure', {
+                path: entryPath,
+              });
             }
           }
         }
@@ -238,16 +237,12 @@ export class LazyLoader implements ILazyLoader {
     skillFilePath: string,
     directoryPath: string,
     source: SkillSource,
-    loader: SkillContentLoader
+    loader: SkillContentLoader,
   ): Promise<LazySkill | null> {
     const content = await this.fs.readFile(skillFilePath);
     const frontmatter = this.parser.parseFrontmatterOnly(content);
 
-    if (
-      !frontmatter ||
-      !('name' in frontmatter) ||
-      'command' in frontmatter
-    ) {
+    if (!frontmatter || !('name' in frontmatter) || 'command' in frontmatter) {
       return null;
     }
 
@@ -294,12 +289,10 @@ export class LazyLoader implements ILazyLoader {
   async createLazyCommand(
     filePath: string,
     source: SkillSource,
-    loader: CommandContentLoader
+    loader: CommandContentLoader,
   ): Promise<LazyCommand | null> {
     const content = await this.fs.readFile(filePath);
-    const frontmatter = this.parser.parseFrontmatterOnly(content) as
-      | CommandFrontmatter
-      | null;
+    const frontmatter = this.parser.parseFrontmatterOnly(content) as CommandFrontmatter | null;
 
     if (!frontmatter || !frontmatter.command || !frontmatter.description) {
       return null;
@@ -341,9 +334,6 @@ export class LazyLoader implements ILazyLoader {
 /**
  * Create a lazy loader instance
  */
-export function createLazyLoader(
-  fs: ISkillFileSystem,
-  parser: IMarkdownParser
-): ILazyLoader {
+export function createLazyLoader(fs: ISkillFileSystem, parser: IMarkdownParser): ILazyLoader {
   return new LazyLoader(fs, parser);
 }

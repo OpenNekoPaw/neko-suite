@@ -281,7 +281,7 @@ describe('registerSubAgentTools', () => {
     expect(registry.register).toHaveBeenCalledTimes(2);
 
     const registeredNames = (registry.register as ReturnType<typeof vi.fn>).mock.calls.map(
-      (call) => call[0].name
+      (call) => call[0].name,
     );
     expect(registeredNames).toContain('task');
     expect(registeredNames).toContain('task_output');

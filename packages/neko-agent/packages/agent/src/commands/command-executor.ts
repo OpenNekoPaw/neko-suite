@@ -4,12 +4,7 @@
  * Unified command execution for both CLI and extension.
  */
 
-import type {
-  BuiltinCommandName,
-  CommandContext,
-  CommandResult,
-  CommandHandler,
-} from './types';
+import type { BuiltinCommandName, CommandContext, CommandResult, CommandHandler } from './types';
 import { resolveCommandName } from './types';
 import { getBuiltinCommand, isBuiltinCommand } from './builtin-commands';
 import {
@@ -71,7 +66,7 @@ export function parseSlashCommand(input: string): { command: string; args: strin
   const parts = trimmed.split(/\s+/);
   const command = parts[0]?.startsWith('/')
     ? parts[0].slice(1).toLowerCase()
-    : parts[0]?.toLowerCase() ?? '';
+    : (parts[0]?.toLowerCase() ?? '');
   const args = parts.slice(1);
   return { command, args };
 }
@@ -89,7 +84,7 @@ export function isSlashCommand(input: string): boolean {
 export async function executeBuiltinCommand(
   commandName: string,
   args: string[],
-  context: CommandContext
+  context: CommandContext,
 ): Promise<CommandResult> {
   // Resolve aliases
   const resolvedName = resolveCommandName(commandName);
@@ -138,8 +133,11 @@ export async function executeSlashCommand(
   context: CommandContext,
   skillService?: {
     getCommand(name: string): unknown | undefined;
-    applyCommand(command: unknown, args?: string): { applied: boolean; injection?: unknown; error?: string };
-  }
+    applyCommand(
+      command: unknown,
+      args?: string,
+    ): { applied: boolean; injection?: unknown; error?: string };
+  },
 ): Promise<CommandResult> {
   const { command, args } = parseSlashCommand(input);
 

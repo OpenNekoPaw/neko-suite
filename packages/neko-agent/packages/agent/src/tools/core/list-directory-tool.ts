@@ -20,8 +20,7 @@ interface DirEntry {
 
 export class ListDirectoryTool extends BuiltinTool {
   readonly name = 'ListDirectory';
-  readonly description =
-    'List contents of a directory. Returns file names, types, and sizes.';
+  readonly description = 'List contents of a directory. Returns file names, types, and sizes.';
   readonly parameters = {
     type: 'object',
     properties: {
@@ -74,16 +73,12 @@ export class ListDirectoryTool extends BuiltinTool {
         return this.error(`Path is not a directory: ${dirPath}`);
       }
       return this.error(
-        `Failed to list directory: ${err instanceof Error ? err.message : String(err)}`
+        `Failed to list directory: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
 
-  private async listDir(
-    dirPath: string,
-    depth: number,
-    prefix: string
-  ): Promise<DirEntry[]> {
+  private async listDir(dirPath: string, depth: number, prefix: string): Promise<DirEntry[]> {
     const dirents = await fs.readdir(dirPath, { withFileTypes: true });
     const results: DirEntry[] = [];
 

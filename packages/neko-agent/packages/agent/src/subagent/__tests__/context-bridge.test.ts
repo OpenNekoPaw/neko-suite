@@ -119,9 +119,7 @@ describe('ContextBridge', () => {
   describe('mergeResults', () => {
     it('should merge SubAgent results into messages', () => {
       const bridge = new ContextBridge();
-      const parentMessages = [
-        { role: 'user', content: 'Find all API endpoints' },
-      ];
+      const parentMessages = [{ role: 'user', content: 'Find all API endpoints' }];
       const results = [
         { id: 'agent-1', response: 'Found 5 endpoints in routes.ts' },
         { id: 'agent-2', response: 'Found 3 endpoints in api.ts', name: 'code-search' },
@@ -139,9 +137,7 @@ describe('ContextBridge', () => {
 
     it('should return original messages when no results', () => {
       const bridge = new ContextBridge();
-      const parentMessages = [
-        { role: 'user', content: 'Hello' },
-      ];
+      const parentMessages = [{ role: 'user', content: 'Hello' }];
 
       const merged = bridge.mergeResults(parentMessages, []);
 

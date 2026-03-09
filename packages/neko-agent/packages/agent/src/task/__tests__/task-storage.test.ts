@@ -118,31 +118,41 @@ describe('MemoryTaskStorage', () => {
       const oldTime = Date.now() - 10 * 24 * 60 * 60 * 1000; // 10 days ago
       const recentTime = Date.now() - 1 * 24 * 60 * 60 * 1000; // 1 day ago
 
-      await storage.save(createTask({
-        id: 'old_completed',
-        status: 'completed',
-        updatedAt: oldTime,
-      }));
-      await storage.save(createTask({
-        id: 'old_failed',
-        status: 'failed',
-        updatedAt: oldTime,
-      }));
-      await storage.save(createTask({
-        id: 'old_cancelled',
-        status: 'cancelled',
-        updatedAt: oldTime,
-      }));
-      await storage.save(createTask({
-        id: 'old_pending',
-        status: 'pending',
-        updatedAt: oldTime,
-      }));
-      await storage.save(createTask({
-        id: 'recent_completed',
-        status: 'completed',
-        updatedAt: recentTime,
-      }));
+      await storage.save(
+        createTask({
+          id: 'old_completed',
+          status: 'completed',
+          updatedAt: oldTime,
+        }),
+      );
+      await storage.save(
+        createTask({
+          id: 'old_failed',
+          status: 'failed',
+          updatedAt: oldTime,
+        }),
+      );
+      await storage.save(
+        createTask({
+          id: 'old_cancelled',
+          status: 'cancelled',
+          updatedAt: oldTime,
+        }),
+      );
+      await storage.save(
+        createTask({
+          id: 'old_pending',
+          status: 'pending',
+          updatedAt: oldTime,
+        }),
+      );
+      await storage.save(
+        createTask({
+          id: 'recent_completed',
+          status: 'completed',
+          updatedAt: recentTime,
+        }),
+      );
 
       const cleaned = await storage.cleanup(7 * 24 * 60 * 60 * 1000); // 7 days
       expect(cleaned).toBe(3); // old_completed, old_failed, old_cancelled
@@ -155,11 +165,13 @@ describe('MemoryTaskStorage', () => {
     it('should not cleanup running tasks', async () => {
       const oldTime = Date.now() - 10 * 24 * 60 * 60 * 1000;
 
-      await storage.save(createTask({
-        id: 'old_running',
-        status: 'running',
-        updatedAt: oldTime,
-      }));
+      await storage.save(
+        createTask({
+          id: 'old_running',
+          status: 'running',
+          updatedAt: oldTime,
+        }),
+      );
 
       const cleaned = await storage.cleanup(7 * 24 * 60 * 60 * 1000);
       expect(cleaned).toBe(0);
@@ -169,11 +181,13 @@ describe('MemoryTaskStorage', () => {
     });
 
     it('should return 0 when nothing to cleanup', async () => {
-      await storage.save(createTask({
-        id: 'recent',
-        status: 'completed',
-        updatedAt: Date.now(),
-      }));
+      await storage.save(
+        createTask({
+          id: 'recent',
+          status: 'completed',
+          updatedAt: Date.now(),
+        }),
+      );
 
       const cleaned = await storage.cleanup(7 * 24 * 60 * 60 * 1000);
       expect(cleaned).toBe(0);

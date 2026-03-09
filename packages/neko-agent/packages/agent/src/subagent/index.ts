@@ -44,10 +44,7 @@ export type {
 // Manager
 // =============================================================================
 
-export {
-  SubAgentManager,
-  SPECIALIZED_PRESETS,
-} from './subagent-manager';
+export { SubAgentManager, SPECIALIZED_PRESETS } from './subagent-manager';
 
 // =============================================================================
 // Context Bridge
@@ -64,11 +61,7 @@ export {
 // Tools
 // =============================================================================
 
-export {
-  createTaskTool,
-  createTaskOutputTool,
-  registerSubAgentTools,
-} from './task-tool';
+export { createTaskTool, createTaskOutputTool, registerSubAgentTools } from './task-tool';
 
 // =============================================================================
 // Factory Function

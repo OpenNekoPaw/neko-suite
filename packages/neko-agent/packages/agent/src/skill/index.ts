@@ -26,11 +26,7 @@
 // Core exports
 export { SkillRegistry } from './skill-registry';
 export { SkillLoader, createNodeSkillLoader } from './skill-loader';
-export {
-  type LazySkill,
-  type LazyCommand,
-  type LazySkillLoadResult,
-} from './lazy-loader';
+export { type LazySkill, type LazyCommand, type LazySkillLoadResult } from './lazy-loader';
 export { SkillInjector } from './skill-injector';
 export { SkillMatcher, KeywordSkillMatcher } from './skill-matcher';
 export {
@@ -76,10 +72,7 @@ export {
 } from './tool-group-registry';
 
 // Skill Conflict Resolver
-export {
-  SkillConflictResolver,
-  createSkillConflictResolver,
-} from './skill-conflict-resolver';
+export { SkillConflictResolver, createSkillConflictResolver } from './skill-conflict-resolver';
 
 // Markdown parser
 export {

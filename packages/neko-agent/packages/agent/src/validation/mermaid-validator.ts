@@ -82,9 +82,24 @@ export function createMermaidExtractor(): IMermaidExtractor {
  * Mermaid diagram types and their starting keywords
  */
 const MERMAID_DIAGRAM_TYPES = [
-  'graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram',
-  'erDiagram', 'gantt', 'pie', 'journey', 'gitGraph', 'mindmap', 'timeline',
-  'quadrantChart', 'requirement', 'c4Context', 'sankey', 'xychart', 'block',
+  'graph',
+  'flowchart',
+  'sequenceDiagram',
+  'classDiagram',
+  'stateDiagram',
+  'erDiagram',
+  'gantt',
+  'pie',
+  'journey',
+  'gitGraph',
+  'mindmap',
+  'timeline',
+  'quadrantChart',
+  'requirement',
+  'c4Context',
+  'sankey',
+  'xychart',
+  'block',
 ] as const;
 
 /**
@@ -143,7 +158,7 @@ export class MermaidValidator implements IMermaidValidator {
 
   private async validateWithLibrary(
     mermaid: MermaidModule['default'],
-    code: string
+    code: string,
   ): Promise<MermaidValidationResult> {
     try {
       await mermaid.parse(code);
@@ -161,8 +176,7 @@ export class MermaidValidator implements IMermaidValidator {
 
     const startsWithValidType = MERMAID_DIAGRAM_TYPES.some(
       (type) =>
-        firstLine.startsWith(type) ||
-        firstLine.toLowerCase().startsWith(type.toLowerCase())
+        firstLine.startsWith(type) || firstLine.toLowerCase().startsWith(type.toLowerCase()),
     );
 
     if (!startsWithValidType) {
@@ -189,18 +203,30 @@ export class MermaidValidator implements IMermaidValidator {
       const openBrackets = (line.match(/\[/g) || []).length;
       const closeBrackets = (line.match(/\]/g) || []).length;
       if (openBrackets !== closeBrackets) {
-        return { valid: false, error: `Unmatched brackets on line ${lineNum}`, lineNumber: lineNum };
+        return {
+          valid: false,
+          error: `Unmatched brackets on line ${lineNum}`,
+          lineNumber: lineNum,
+        };
       }
 
       const openParens = (line.match(/\(/g) || []).length;
       const closeParens = (line.match(/\)/g) || []).length;
       if (openParens !== closeParens) {
-        return { valid: false, error: `Unmatched parentheses on line ${lineNum}`, lineNumber: lineNum };
+        return {
+          valid: false,
+          error: `Unmatched parentheses on line ${lineNum}`,
+          lineNumber: lineNum,
+        };
       }
 
       const doubleQuotes = (line.match(/"/g) || []).length;
       if (doubleQuotes % 2 !== 0) {
-        return { valid: false, error: `Unmatched double quotes on line ${lineNum}`, lineNumber: lineNum };
+        return {
+          valid: false,
+          error: `Unmatched double quotes on line ${lineNum}`,
+          lineNumber: lineNum,
+        };
       }
     }
 
@@ -309,7 +335,8 @@ export class MermaidBlockChecker implements IMermaidBlockChecker {
               message: `Mermaid code block has malformed closing at line ${i + 1}. The closing \`\`\` must be on its own line.`,
               details: {
                 line: i + 1,
-                lastContent: beforeClosing.substring(0, 50) + (beforeClosing.length > 50 ? '...' : ''),
+                lastContent:
+                  beforeClosing.substring(0, 50) + (beforeClosing.length > 50 ? '...' : ''),
                 suggestion: 'Add a newline before the closing ``` marker',
               },
             });
@@ -354,8 +381,16 @@ export class MermaidBlockChecker implements IMermaidBlockChecker {
     let inCodeBlock = false;
 
     const mermaidKeywords = [
-      'graph ', 'graph\t', 'flowchart ', 'sequenceDiagram', 'classDiagram',
-      'stateDiagram', 'erDiagram', 'gantt', 'pie ', 'pie\t',
+      'graph ',
+      'graph\t',
+      'flowchart ',
+      'sequenceDiagram',
+      'classDiagram',
+      'stateDiagram',
+      'erDiagram',
+      'gantt',
+      'pie ',
+      'pie\t',
     ];
 
     for (let i = 0; i < lines.length; i++) {

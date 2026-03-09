@@ -7,6 +7,9 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { IFileReader } from './types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('NodeFileReader');
 
 /**
  * Node.js file reader implementation
@@ -74,7 +77,7 @@ export class NodeFileReader implements IFileReader {
     // Simple pattern matching
     const files = await fs.readdir(fullCwd);
     const regex = this._patternToRegex(pattern);
-    return files.filter(f => regex.test(f));
+    return files.filter((f) => regex.test(f));
   }
 
   async stat(filePath: string): Promise<{ size: number; isFile: boolean; isDirectory: boolean }> {
@@ -112,7 +115,10 @@ export class NodeFileReader implements IFileReader {
           if (entry.isDirectory()) {
             await walk(entryPath, remainingParts); // Continue with **
             await walk(entryPath, rest); // Try next part
-          } else if (rest.length === 0 || this._patternToRegex(rest[rest.length - 1]).test(entry.name)) {
+          } else if (
+            rest.length === 0 ||
+            this._patternToRegex(rest[rest.length - 1]).test(entry.name)
+          ) {
             const relativePath = path.relative(this._basePath, entryPath);
             results.push(relativePath);
           }
@@ -139,7 +145,7 @@ export class NodeFileReader implements IFileReader {
     try {
       await walk(dir, parts);
     } catch (error) {
-      console.warn('[NodeFileReader] Glob error:', error);
+      logger.warn('Glob error', { error });
     }
 
     return results;

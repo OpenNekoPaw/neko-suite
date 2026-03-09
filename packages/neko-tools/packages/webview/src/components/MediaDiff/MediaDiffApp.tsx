@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useCallback, memo } from 'react';
+import { useTranslation } from '../../i18n/I18nContext';
 import { useMediaDiffProtocol } from '../../hooks/useMediaDiffProtocol';
 import { MediaDiffViewer } from './MediaDiffViewer';
 
@@ -26,6 +27,7 @@ const ProgressOverlay = memo(function ProgressOverlay({
   stage,
   onCancel,
 }: ProgressOverlayProps) {
+  const { t } = useTranslation();
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-[var(--vscode-editor-background)]/80 backdrop-blur-sm">
       <div className="flex flex-col items-center gap-4 p-6 bg-[var(--vscode-editor-background)] rounded-lg border border-[var(--vscode-panel-border)] shadow-lg min-w-[300px]">
@@ -36,9 +38,7 @@ const ProgressOverlay = memo(function ProgressOverlay({
             style={{ width: `${progress}%` }}
           />
         </div>
-        <div className="text-sm text-[var(--vscode-foreground)]">
-          {stage}
-        </div>
+        <div className="text-sm text-[var(--vscode-foreground)]">{stage}</div>
         <div className="text-xs text-[var(--vscode-descriptionForeground)]">
           {Math.round(progress)}%
         </div>
@@ -47,7 +47,7 @@ const ProgressOverlay = memo(function ProgressOverlay({
           className="px-4 py-1.5 text-xs bg-[var(--vscode-input-background)] text-[var(--vscode-foreground)] rounded hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
           onClick={onCancel}
         >
-          Cancel
+          {t('mediaDiff.cancel')}
         </button>
       </div>
     </div>
@@ -59,7 +59,13 @@ const ProgressOverlay = memo(function ProgressOverlay({
 // =============================================================================
 
 interface GitRefSelectorProps {
-  commits: Array<{ hash: string; shortHash: string; subject: string; authorName: string; date: string }>;
+  commits: Array<{
+    hash: string;
+    shortHash: string;
+    subject: string;
+    authorName: string;
+    date: string;
+  }>;
   currentRef?: string;
   onChangeRef: (ref: string) => void;
   onLoadHistory: () => void;
@@ -71,6 +77,7 @@ const GitRefSelector = memo(function GitRefSelector({
   onChangeRef,
   onLoadHistory,
 }: GitRefSelectorProps) {
+  const { t } = useTranslation();
   if (commits.length === 0) {
     return (
       <button
@@ -78,7 +85,7 @@ const GitRefSelector = memo(function GitRefSelector({
         className="px-3 py-1.5 text-xs bg-[var(--vscode-input-background)] text-[var(--vscode-foreground)] rounded hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
         onClick={onLoadHistory}
       >
-        Load Git History
+        {t('mediaDiff.loadGitHistory')}
       </button>
     );
   }
@@ -109,6 +116,7 @@ interface ErrorDisplayProps {
 }
 
 const ErrorDisplay = memo(function ErrorDisplay({ error, onRetry }: ErrorDisplayProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex-1 flex items-center justify-center">
       <div className="text-center max-w-md p-6">
@@ -119,7 +127,7 @@ const ErrorDisplay = memo(function ErrorDisplay({ error, onRetry }: ErrorDisplay
           className="px-4 py-2 text-xs bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] rounded hover:bg-[var(--vscode-button-hoverBackground)] transition-colors"
           onClick={onRetry}
         >
-          Retry
+          {t('mediaDiff.retry')}
         </button>
       </div>
     </div>
@@ -131,6 +139,7 @@ const ErrorDisplay = memo(function ErrorDisplay({ error, onRetry }: ErrorDisplay
 // =============================================================================
 
 export default function MediaDiffApp() {
+  const { t } = useTranslation();
   const protocol = useMediaDiffProtocol();
   const {
     diffResult,
@@ -189,14 +198,14 @@ export default function MediaDiffApp() {
         sendSeek(time);
       }
     },
-    [diffResult?.mediaType, sendSeek]
+    [diffResult?.mediaType, sendSeek],
   );
 
   const handleChangeRef = useCallback(
     (ref: string) => {
       sendChangeRef(ref);
     },
-    [sendChangeRef]
+    [sendChangeRef],
   );
 
   // Error state (non-loading)
@@ -214,7 +223,7 @@ export default function MediaDiffApp() {
       {!initialState.isLocalComparison && (
         <div className="flex items-center gap-3 px-4 py-2 border-b border-[var(--vscode-panel-border)]">
           <span className="text-xs text-[var(--vscode-descriptionForeground)]">
-            Compare with:
+            {t('mediaDiff.compareWith')}
           </span>
           <GitRefSelector
             commits={commits}
@@ -272,7 +281,7 @@ export default function MediaDiffApp() {
             type="button"
             className="ml-1 text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]"
             onClick={sendCancel}
-            title="Cancel analysis"
+            title={t('mediaDiff.cancelAnalysis')}
           >
             ✕
           </button>

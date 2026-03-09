@@ -18,6 +18,9 @@ import type {
   HookOutput,
 } from '@neko/shared';
 import { matchHookMatcher } from '@neko/shared';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('SettingsHookLoader');
 
 // =============================================================================
 // Types
@@ -42,7 +45,7 @@ export interface IShellExecutor {
    */
   execute(
     command: string,
-    stdin?: string
+    stdin?: string,
   ): Promise<{ exitCode: number; stdout: string; stderr: string }>;
 }
 
@@ -87,7 +90,7 @@ export class SettingsHookLoader {
    */
   async loadFromSettings(
     projectPath: string,
-    personalPath: string
+    personalPath: string,
   ): Promise<SettingsHookLoadResult> {
     const result: SettingsHookLoadResult = {
       hooks: [],
@@ -130,7 +133,7 @@ export class SettingsHookLoader {
    */
   private parseHooksConfig(
     hooksConfig: Partial<Record<HookEvent, SettingsHookConfig[]>>,
-    source: 'project' | 'personal' | 'local'
+    source: 'project' | 'personal' | 'local',
   ): LoadedSettingsHook[] {
     const hooks: LoadedSettingsHook[] = [];
 
@@ -166,10 +169,10 @@ export class SettingsHookLoader {
    */
   async executePreToolUse(
     toolName: string,
-    toolInput: Record<string, unknown>
+    toolInput: Record<string, unknown>,
   ): Promise<HookExecutionResult> {
     const hooks = this.getHooksForEvent('PreToolUse').filter((h) =>
-      matchHookMatcher(h.matcher, toolName)
+      matchHookMatcher(h.matcher, toolName),
     );
 
     if (hooks.length === 0) {
@@ -206,12 +209,10 @@ export class SettingsHookLoader {
     toolName: string,
     toolInput: Record<string, unknown>,
     success: boolean,
-    output?: string
+    output?: string,
   ): Promise<void> {
     const event = success ? 'PostToolUse' : 'PostToolUseFailure';
-    const hooks = this.getHooksForEvent(event).filter((h) =>
-      matchHookMatcher(h.matcher, toolName)
-    );
+    const hooks = this.getHooksForEvent(event).filter((h) => matchHookMatcher(h.matcher, toolName));
 
     if (hooks.length === 0) return;
 
@@ -233,7 +234,7 @@ export class SettingsHookLoader {
    */
   private async executeHook(
     hook: LoadedSettingsHook,
-    input: HookInput
+    input: HookInput,
   ): Promise<HookExecutionResult> {
     if (hook.action.type !== 'command') {
       return { success: true, blocked: false };
@@ -241,10 +242,7 @@ export class SettingsHookLoader {
 
     try {
       const stdinJson = JSON.stringify(input);
-      const { exitCode, stdout, stderr } = await this.shell.execute(
-        hook.action.command,
-        stdinJson
-      );
+      const { exitCode, stdout, stderr } = await this.shell.execute(hook.action.command, stdinJson);
 
       // Parse stdout as JSON if possible
       let output: HookOutput | null = null;
@@ -257,10 +255,7 @@ export class SettingsHookLoader {
       }
 
       // Check exit code and output decision
-      const blocked =
-        exitCode !== 0 ||
-        output?.decision === 'block' ||
-        output?.decision === 'deny';
+      const blocked = exitCode !== 0 || output?.decision === 'block' || output?.decision === 'deny';
 
       return {
         success: exitCode === 0,
@@ -271,7 +266,7 @@ export class SettingsHookLoader {
         stderr,
       };
     } catch (error) {
-      console.error('[SettingsHookLoader] Hook execution failed:', error);
+      logger.error('Hook execution failed', { error });
       return {
         success: false,
         blocked: false,
@@ -298,8 +293,6 @@ export class SettingsHookLoader {
 /**
  * Create a SettingsHookLoader with provided options
  */
-export function createSettingsHookLoader(
-  options: SettingsHookLoaderOptions
-): SettingsHookLoader {
+export function createSettingsHookLoader(options: SettingsHookLoaderOptions): SettingsHookLoader {
   return new SettingsHookLoader(options);
 }
