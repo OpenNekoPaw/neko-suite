@@ -17,6 +17,7 @@ import type {
   MoveVariantResult,
   MergeEntitiesInput,
   MergeEntitiesResult,
+  VariantAttributes,
 } from '@neko/shared';
 import { sendRequest, sendMessage } from '../../utils/vscodeApi';
 import { getLogger } from '../../utils/logger';
@@ -24,11 +25,15 @@ import { getLogger } from '../../utils/logger';
 const logger = getLogger('AssetLibrary');
 import type { AssetFilterState, AssetSelectionState } from './types';
 import { createDefaultFilter, createDefaultSelection } from './types';
-import type { AttributeDiff } from './DiffViewer/types';
-
 // =============================================================================
 // Comparison Types
 // =============================================================================
+
+export interface AttributeDiff {
+  attribute: keyof VariantAttributes;
+  valueA: string | undefined;
+  valueB: string | undefined;
+}
 
 export interface ComparisonTarget {
   entityId: string;

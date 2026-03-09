@@ -392,7 +392,16 @@ impl HwAccelDecoder {
 
                     let frames_ctx = (*hw_frames_ctx).data as *mut ffmpeg::ffi::AVHWFramesContext;
                     let device_ctx = (*frames_ctx).device_ctx;
-                    let vaapi_ctx = (*device_ctx).hwctx as *mut ffmpeg::ffi::AVVAAPIDeviceContext;
+
+                    // AVVAAPIDeviceContext may not be exposed by ffmpeg-sys-next when
+                    // libva-dev is absent. Define a minimal repr(C) mirror: the first
+                    // field `display` (VADisplay = void*) is all we need, and repr(C)
+                    // guarantees field ordering matches the C struct.
+                    #[repr(C)]
+                    struct AvVaapiDeviceContext {
+                        display: *mut std::ffi::c_void,
+                    }
+                    let vaapi_ctx = (*device_ctx).hwctx as *mut AvVaapiDeviceContext;
                     let display = (*vaapi_ctx).display as usize;
 
                     Ok(GpuTextureHandle::Vaapi {

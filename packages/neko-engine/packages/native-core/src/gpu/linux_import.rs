@@ -422,7 +422,9 @@ impl LinuxTextureImporter {
                         })),
                     );
 
-                    Ok((y_hal, uv_hal))
+                    Ok::<(wgpu_hal::vulkan::Texture, wgpu_hal::vulkan::Texture), Error>((
+                        y_hal, uv_hal,
+                    ))
                 })
                 .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??
         };
@@ -879,7 +881,9 @@ impl CudaTextureImporter {
                     })),
                 );
 
-                Ok((y_hal, uv_hal))
+                Ok::<(wgpu_hal::vulkan::Texture, wgpu_hal::vulkan::Texture), Error>((
+                    y_hal, uv_hal,
+                ))
             })
             .ok_or_else(|| Error::Other("Failed to access Vulkan HAL".to_string()))??;
 
