@@ -1,44 +1,27 @@
 # tools/
 
-时间线工具桥接模块，连接 AI 工具和 Webview 操作（仅 UI-only/渲染/导出）。
+Extension-side AI tool definitions for neko-agent.
 
-> 说明：timeline **数据类工具**已在 Extension（`TimelineToolExecutor`）执行并写回 `.jvi`，以获得 VSCode 原生 Undo/Redo；Webview 仅保留 UI-only（如渲染/缩略图/导出）路径。
+> Timeline **data tools** execute in Extension (`TimelineToolExecutor`) and write back to `.jvi` for native Undo/Redo; only UI-only operations (render/thumbnail/export) route to Webview.
 
-## 职责
-
-将 Platform 的 AI 工具调用桥接到 Webview 的时间线操作（仅 UI-only/渲染/导出）。
-
-## 结构
+## Structure
 
 ```
 tools/
-├── index.ts              # 模块导出
-└── timeline-bridge.ts    # 时间线工具桥接
+├── index.ts              # Module exports
+└── extensionTools.ts     # Tool definitions (timeline query, media effects, shader management)
 ```
 
-## 接口
+## Key Exports
 
-| 导出 | 类型 | 用途 |
-|------|------|------|
-| `TimelineBridge` | 类 | 工具桥接器 |
-| `registerTimelineTools()` | 函数 | 注册时间线工具 |
-| `TIMELINE_TOOL_NAMES` | 常量 | 工具名称列表 |
-| `TIMELINE_TOOL_CONFIGS` | 常量 | 工具配置 |
+| Export                   | Type     | Purpose                                           |
+| ------------------------ | -------- | ------------------------------------------------- |
+| `createExtensionTools()` | Function | Create tool definitions for Platform ToolRegistry |
 
-## 依赖
+## Dependencies
 
 ```
-→ @neko/platform   # 工具注册表
-→ editor/video/       # Webview 操作
-← bootstrap/          # 工具注册
-```
-
-## 工作流程
-
-```
-Agent 调用工具
-    ↓
-分流：
-  - Extension 执行（TimelineToolExecutor）→ 写回 .jvi → 返回结果
-  - Webview 执行（TimelineBridge）→ postMessage → 返回结果
+→ @neko/platform   # Tool registry types
+→ ../chat/         # ChatViewProvider for webview bridge
+← bootstrap/       # Tool registration at activation
 ```

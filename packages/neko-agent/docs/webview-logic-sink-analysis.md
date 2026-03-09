@@ -1,6 +1,8 @@
 # Webview Business Logic Sink Analysis
 
 > Analysis of which webview logic should sink down to agent/extension layer
+>
+> **进度**: Category A-C ✅ 完成（3/6），Category D-F ⏳ 待实施
 
 ## Current Layer Responsibilities
 

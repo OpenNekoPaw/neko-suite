@@ -388,12 +388,12 @@
 ## 技术债务
 
 ### 高优先级
-- [ ] 统一错误处理机制
+- [x] 统一错误处理机制 ✅ 框架已建立（BaseError + PlatformError + 各包 Error 体系）
 - [ ] 性能监控和优化（neko-engine telemetry 已有基础）
 - [ ] 单元测试覆盖率提升（neko-agent 47 个测试最好，其他包偏少）
 
 ### 中优先级
-- [ ] 规范化 git commit message
+- [x] 规范化 git commit message ✅ Husky + commitlint 已配置
 - [ ] 类型定义文档（JSDoc 覆盖率低）
 - [ ] neko-types 83 个 `as any` 需替换为判别联合
 

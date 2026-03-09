@@ -142,9 +142,9 @@ interface IStoryboardGenerator {
 ```
 
 #### 任务清单
-- [ ] 定义 TimelineProject 类型（与 neko-cut 对接）
-- [ ] 实现 TimelineConverter（场景 → 时间线片段）
-- [ ] 实现 neko.story.toTimeline 命令
+- [x] 定义 TimelineProject 类型（与 neko-cut 对接）✅
+- [x] 实现 TimelineConverter（场景 → 时间线片段）✅
+- [x] 实现 neko.story.toTimeline 命令 ✅
 - [ ] 实现资产链接服务（查找关联资产）
 - [ ] 实现 neko.story.generateStoryboard 命令（AI 分镜）
 
@@ -171,7 +171,7 @@ extension → parser → types
 5. ✅ 悬停显示角色/场景统计
 6. ✅ 预览面板渲染剧本（标准格式）
 7. ✅ 编辑器与预览双向同步
-8. ⬜ 转换为 neko-cut 时间线
+8. ✅ 转换为 neko-cut 时间线（Fountain → ProjectData JSON 语义 Skill）
 9. ⬜ AI 生成分镜脚本
 
 ---

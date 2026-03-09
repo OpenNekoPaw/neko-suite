@@ -3,6 +3,9 @@
 > 日期：2026-03-05
 > 状态：设计分析完成，待实施
 > 范围：neko-assets 功能定位、包结构、与其他扩展的关系
+>
+> **与 [asset-management-design.md](./asset-management-design.md) 的关系**：
+> 该文档是统一架构设计（Phase 1-5），本文档是补充分析，聚焦功能边界决策和 Phase 4A Webview 设计。
 
 ---
 

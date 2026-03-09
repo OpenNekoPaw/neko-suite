@@ -2,7 +2,7 @@
 
 > Comprehensive feature list for the neko-canvas webview package
 >
-> Generated: 2024
+> Last updated: 2026-03-09
 >
 > Legend: ✅ Implemented | 🔧 Partial | ❌ Not implemented
 
@@ -10,11 +10,12 @@
 
 ## 📊 Summary Statistics
 
-- **Total Components**: 27 files
+- **Total Components**: 27+ files
 - **Total Hooks**: 6 custom hooks
-- **Total Stores**: 3 Zustand stores
-- **Node Types**: 3 (Annotation, Storyboard, Media)
-- **i18n Languages**: 2 (English, Chinese)
+- **Total Stores**: 3 Zustand stores (canvas, clipboard, history)
+- **Node Types**: 5 (Annotation, Storyboard, Media, Text, Artboard)
+- **Port System**: ✅ Typed input/output ports with validation
+- **i18n Languages**: 2 (English, Chinese) — 50 keys
 - **Keyboard Shortcuts**: 10+
 
 ---
@@ -55,6 +56,7 @@
 | Annotation (Text) | ✅ | `AnnotationNode.tsx` | Rich text editing, markdown support |
 | Storyboard (Scene) | ✅ | `StoryboardNode.tsx` | Title + description, scene planning |
 | Media (Image/Video/Audio) | ✅ | `MediaNode.tsx` | Inline playback, thumbnail view |
+| Text | ✅ | `TextNode.tsx` | Plain text node |
 | Artboard | 🔧 | `ArtboardNode.tsx` | File exists but not integrated |
 | Group | ❌ | - | Not implemented |
 

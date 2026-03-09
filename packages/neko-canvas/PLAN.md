@@ -220,23 +220,28 @@ ClipboardStore:
 
 ## 实施顺序
 
-### Phase 1: 基础设施（先做，其他依赖它）
-1. 撤销/重做系统 (historyStore)
-2. 复制/粘贴系统 (clipboardStore)
+### Phase 1: 基础设施 ✅ 已完成
+1. ✅ 撤销/重做系统 (historyStore) — 50 级历史栈 + 拖拽优化 + 重复检测
+2. ✅ 复制/粘贴系统 (clipboardStore) — Cmd+C/V/X/D + ID 重映射 + 连线保留
 
-### Phase 2: 端口系统
-3. 类型定义扩展
-4. BaseNode 端口渲染
-5. 连线验证逻辑
-6. ConnectionLayer 端口位置计算
+### Phase 2: 端口系统 ✅ 已完成
+3. ✅ 类型定义扩展 — PortDefinition + getDefaultPorts()
+4. ✅ BaseNode 端口渲染 — 输入(蓝)/输出(绿) + 类型着色
+5. ✅ 连线验证逻辑 — 类型兼容 + 防自连 + 防重复 + maxConnections
+6. ✅ ConnectionLayer 端口位置计算 — Bezier 曲线 + 方向箭头 + 动画
 
-### Phase 3: UI 面板
-7. 左侧工具栏
-8. 右键菜单增强
-9. 节点属性面板
-10. 布局重构
+### Phase 3: UI 面板 ✅ 大部分完成
+7. ✅ 左侧工具栏 (CanvasToolbar.tsx)
+8. ✅ 右键菜单增强 — 画布/节点上下文菜单（撤销/重做/复制/粘贴/删除等）
+9. ✅ 节点属性面板 (PropertyPanel.tsx) — 位置/尺寸/锁定/节点特有属性
+10. ✅ 布局重构 — 左工具栏 + 中画布 + 右属性面板
 
-### Phase 4: 集成测试
-11. 键盘快捷键完善
-12. Extension 端命令注册
-13. i18n 翻译补全
+### Phase 4: 集成测试与剩余功能
+11. ✅ 键盘快捷键完善 — 10+ 快捷键（Delete/Esc/Cmd+A/Z/C/V/X/D）
+12. ✅ Extension 端命令注册
+13. ✅ i18n 翻译补全 — 50 个 key，中英双语
+14. [ ] 框选（Box Selection）
+15. [ ] 多节点同时拖拽
+16. [ ] 节点缩放手柄
+17. [ ] 对齐辅助线/吸附（组件已有，待集成）
+18. [ ] 图层面板集成
