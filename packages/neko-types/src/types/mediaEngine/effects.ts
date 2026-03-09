@@ -4,6 +4,8 @@
  * Defines the unified GPU effect processing interface for both modes.
  */
 
+import type { VideoFrame } from './webcodecs';
+
 // =============================================================================
 // GPU Effect Types
 // =============================================================================

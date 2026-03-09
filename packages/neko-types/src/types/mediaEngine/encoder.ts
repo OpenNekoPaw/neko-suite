@@ -4,6 +4,8 @@
  * Defines the unified encoder interface for both basic and compatible modes.
  */
 
+import type { VideoFrame } from './webcodecs';
+
 // =============================================================================
 // Encoder Types
 // =============================================================================

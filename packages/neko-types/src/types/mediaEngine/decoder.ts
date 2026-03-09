@@ -6,6 +6,7 @@
  */
 
 import type { MediaInfo } from '../mediaProtocol';
+import type { VideoFrame } from './webcodecs';
 
 // =============================================================================
 // Decoder Types

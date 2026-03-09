@@ -138,7 +138,7 @@ jobs:
         run: brew install ffmpeg pkg-config
 
       - name: Check formatting
-        run: cargo fmt --workspace --check
+        run: cargo fmt --all -- --check
         working-directory: packages/neko-engine
 
       - name: Clippy lint
