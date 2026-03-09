@@ -1,15 +1,14 @@
 /**
- * useChatActions - Chat message sending, cancellation, and queue processing
+ * useChatActions - Chat message sending, cancellation, and copy
  *
- * Extracts message send/cancel/copy/queue logic from AIAssistant.
+ * Sends messages directly to Extension — AgentRunner handles queueing
+ * when the agent is already running (via _pendingMessages).
  */
 
-import { useEffect, useCallback, type Dispatch, type SetStateAction, type MutableRefObject } from 'react';
+import { useEffect, useCallback, useRef, type Dispatch, type SetStateAction, type MutableRefObject } from 'react';
 import { Message, type TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import type { AttachedFile } from '@/components/ChatView/InputArea';
-import type { UseMessageQueueReturn } from './useMessageQueue';
-import type { StreamingState } from './useConversationState';
 import { setExternalMessageContext } from '@/handlers';
 
 export interface UseChatActionsProps {
@@ -19,9 +18,7 @@ export interface UseChatActionsProps {
   activeConversationId: string | null;
   activeConversationIdRef: MutableRefObject<string | null>;
   streamingMessageIdRef: MutableRefObject<string | null>;
-  conversationStreamingRef: MutableRefObject<Map<string, StreamingState>>;
   messages: Message[];
-  messageQueue: UseMessageQueueReturn;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setIsThinking: Dispatch<SetStateAction<boolean>>;
   setStreamingMessageId: Dispatch<SetStateAction<string | null>>;
@@ -56,9 +53,7 @@ export function useChatActions({
   activeConversationId,
   activeConversationIdRef,
   streamingMessageIdRef,
-  conversationStreamingRef,
   messages,
-  messageQueue,
   setMessages,
   setIsThinking,
   setStreamingMessageId,
@@ -68,26 +63,25 @@ export function useChatActions({
   setAttachedFiles,
 }: UseChatActionsProps): UseChatActionsReturn {
 
-  // Send a user message (or queue it if agent is thinking)
+  // Lightweight dedup guard: prevent double-click within 1s
+  const lastSentRef = useRef<{ hash: string; time: number }>();
+
+  const isDuplicate = useCallback((content: string): boolean => {
+    const hash = content.trim().slice(0, 100);
+    const now = Date.now();
+    if (lastSentRef.current?.hash === hash && now - lastSentRef.current.time < 1000) return true;
+    lastSentRef.current = { hash, time: now };
+    return false;
+  }, []);
+
+  // Send a user message — always send directly to Extension.
+  // AgentRunner handles queueing if the agent is already running.
   const handleSend = useCallback((attachments?: AttachedFile[]) => {
     const trimmed = inputValue.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 
-    // Check if THIS conversation is thinking (not global isThinking)
-    const currentConvStreaming = activeConversationId
-      ? conversationStreamingRef.current.get(activeConversationId)
-      : null;
-    const isCurrentConvThinking = currentConvStreaming?.isThinking || isThinking;
-
-    // If current conversation's agent is thinking, queue the message
-    if (isCurrentConvThinking) {
-      if (activeConversationId) {
-        messageQueue.enqueue(trimmed, activeConversationId, attachments);
-      }
-      clearInput();
-      setAttachedFiles([]);
-      return;
-    }
+    // Dedup guard: prevent accidental double-click
+    if (isDuplicate(trimmed)) return;
 
     // Clear streaming state from previous turn
     setStreamingMessageId(null);
@@ -108,7 +102,7 @@ export function useChatActions({
 
     const { providerId, modelId } = parseModelSelection(selectedModel);
     VSCodeMessages.sendMessage(trimmed, providerId, modelId, attachments, undefined, activeConversationId || undefined);
-  }, [inputValue, isThinking, selectedModel, activeConversationId, conversationStreamingRef, messageQueue, setMessages, setIsThinking, setStreamingMessageId, streamingMessageIdRef, clearInput, setAttachedFiles]);
+  }, [inputValue, selectedModel, activeConversationId, isDuplicate, setMessages, setIsThinking, setStreamingMessageId, streamingMessageIdRef, clearInput, setAttachedFiles]);
 
   // Trigger send from external message (with custom message text)
   const triggerSend = useCallback((messageText: string) => {
@@ -136,38 +130,6 @@ export function useChatActions({
   useEffect(() => {
     setExternalMessageContext({ setInputValue, triggerSend });
   }, [setInputValue, triggerSend]);
-
-  // Auto-send queued messages when agent finishes thinking
-  useEffect(() => {
-    if (!isThinking && activeConversationId && messageQueue.hasMessagesForConversation(activeConversationId)) {
-      const nextMessage = messageQueue.peekForConversation(activeConversationId);
-      if (nextMessage) {
-        messageQueue.shiftForConversation(activeConversationId);
-
-        setStreamingMessageId(null);
-        streamingMessageIdRef.current = null;
-
-        const userMessage: Message = {
-          id: Date.now().toString(),
-          role: 'user',
-          content: nextMessage.content,
-          timestamp: Date.now(),
-          attachments: nextMessage.attachments,
-        };
-
-        setMessages(prev => [...prev, userMessage]);
-        setIsThinking(true);
-
-        const { providerId, modelId } = parseModelSelection(selectedModel);
-        VSCodeMessages.sendMessage(
-          nextMessage.content, providerId, modelId,
-          nextMessage.attachments, undefined,
-          nextMessage.conversationId,
-          nextMessage.messageTrackingId,
-        );
-      }
-    }
-  }, [isThinking, activeConversationId, messageQueue.queue]);
 
   // Copy last assistant response to clipboard
   const copyLastResponse = useCallback(() => {

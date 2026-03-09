@@ -13,8 +13,6 @@ import {
   type ActiveSkillIndicator,
 } from '@/components/ChatView/SkillConfirmBanner';
 import { AgentStateIndicatorCompact } from '@/components/ChatView/AgentStateIndicator';
-import type { QueuedMessage } from '@/hooks/useMessageQueue';
-
 interface ChatViewProps {
   messages: Message[];
   inputValue: string;
@@ -46,12 +44,6 @@ interface ChatViewProps {
   onInputChange: (value: string) => void;
   onSend: (attachments?: AttachedFile[]) => void;
   onCancel?: () => void;
-  /** Queued messages for preview */
-  queuedMessages?: QueuedMessage[];
-  /** Remove a queued message */
-  onRemoveQueuedMessage?: (id: string) => void;
-  /** Clear all queued messages */
-  onClearQueue?: () => void;
   /** Session-bound attached files (managed by parent) */
   attachedFiles?: AttachedFile[];
   /** Callback to update attached files */
@@ -84,9 +76,6 @@ export function ChatView({
   onInputChange,
   onSend,
   onCancel,
-  queuedMessages,
-  onRemoveQueuedMessage,
-  onClearQueue,
   attachedFiles,
   onAttachedFilesChange,
   agentState,
@@ -170,9 +159,6 @@ export function ChatView({
           onInputChange={onInputChange}
           onSend={onSend}
           onCancel={onCancel}
-          queuedMessages={queuedMessages}
-          onRemoveQueuedMessage={onRemoveQueuedMessage}
-          onClearQueue={onClearQueue}
           attachedFiles={attachedFiles}
           onAttachedFilesChange={onAttachedFilesChange}
         />

@@ -16,7 +16,6 @@ import {
   useConversationState,
   useConfigState,
   useResourceState,
-  useMessageQueue,
   useConversationSession,
   useTabManager,
   useSlashCommands,
@@ -85,9 +84,6 @@ export function AIAssistant() {
     setBackgroundTasks,
   } = resource;
 
-  // Message queue for queuing messages while agent is thinking
-  const messageQueue = useMessageQueue();
-
   // Skills state
   const [skills, setSkills] = useState<SkillSummary[]>([]);
 
@@ -119,7 +115,6 @@ export function AIAssistant() {
     conversationTokenCountRef,
     conversationCompressingRef,
     conversationAgentStateRef,
-    messageQueue,
   });
 
   // Onboarding overlay state
@@ -228,7 +223,7 @@ export function AIAssistant() {
   const { handleSend, handleCancelMessage, copyLastResponse } = useChatActions({
     inputValue, isThinking, selectedModel,
     activeConversationId, activeConversationIdRef, streamingMessageIdRef,
-    conversationStreamingRef, messages, messageQueue,
+    messages,
     setMessages, setIsThinking, setStreamingMessageId, setActiveTab, setInputValue,
     clearInput, setAttachedFiles,
   });
@@ -389,9 +384,6 @@ export function AIAssistant() {
             onInputChange={setInputValue}
             onSend={handleSend}
             onCancel={handleCancelMessage}
-            queuedMessages={activeConversationId ? messageQueue.getQueueForConversation(activeConversationId) : []}
-            onRemoveQueuedMessage={messageQueue.remove}
-            onClearQueue={activeConversationId ? () => messageQueue.clearForConversation(activeConversationId) : messageQueue.clear}
             attachedFiles={attachedFiles}
             onAttachedFilesChange={setAttachedFiles}
             agentState={agentState}

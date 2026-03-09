@@ -13,7 +13,6 @@ import { FileReferenceMenu, getFilteredFiles, parseFileReference } from './FileR
 import { AttachedFile, ProjectFile, SlashCommand } from './types';
 import { UsageIndicator } from './UsageIndicator';
 import { useTranslation } from '@/i18n/I18nContext';
-import type { QueuedMessage } from '@/hooks/useMessageQueue';
 import { useInputHistory } from '@/hooks/useInputHistory';
 import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
 
@@ -26,12 +25,6 @@ interface InputAreaProps {
   onInputChange: (value: string) => void;
   onSend: (attachments?: AttachedFile[]) => void;
   onCancel?: () => void;
-  /** Queued messages for preview */
-  queuedMessages?: QueuedMessage[];
-  /** Remove a queued message */
-  onRemoveQueuedMessage?: (id: string) => void;
-  /** Clear all queued messages */
-  onClearQueue?: () => void;
   /** Session-bound attached files (managed by parent for conversation isolation) */
   attachedFiles?: AttachedFile[];
   /** Callback to update attached files (when managed externally) */
@@ -47,9 +40,6 @@ export function InputArea({
   onInputChange,
   onSend,
   onCancel,
-  queuedMessages = [],
-  onRemoveQueuedMessage,
-  onClearQueue,
   attachedFiles: externalAttachedFiles,
   onAttachedFilesChange,
 }: InputAreaProps) {
@@ -374,47 +364,6 @@ export function InputArea({
 
   return (
     <div className="border-t border-[var(--vscode-panel-border)] p-3 flex-shrink-0">
-      {/* Queued messages preview */}
-      {queuedMessages.length > 0 && (
-        <div className="mb-2 space-y-1">
-          <div className="flex items-center justify-between px-2 py-1">
-            <span className="text-xs text-[var(--vscode-descriptionForeground)]">
-              {t('chat.input.queuedMessages', { count: queuedMessages.length })}
-            </span>
-            <button
-              onClick={onClearQueue}
-              className="text-xs text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] transition-colors"
-            >
-              {t('chat.input.clearAll')}
-            </button>
-          </div>
-          {queuedMessages.map((msg) => (
-            <div
-              key={msg.id}
-              className="flex items-start gap-2 px-3 py-2 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded-lg"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-[var(--vscode-foreground)] truncate">
-                  {msg.content}
-                </p>
-                {msg.attachments && msg.attachments.length > 0 && (
-                  <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">
-                    +{msg.attachments.length} {t('chat.input.attachments')}
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={() => onRemoveQueuedMessage?.(msg.id)}
-                className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-[var(--vscode-toolbar-hoverBackground)] text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] transition-colors"
-                title={t('chat.input.removeQueued')}
-              >
-                <CloseIcon className="w-3 h-3" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Main input container - Codex style */}
       <div className="relative bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded-xl focus-within:border-[var(--vscode-focusBorder)] transition-colors">
         {/* Slash command menu */}
@@ -452,11 +401,9 @@ export function InputArea({
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={isThinking && queuedMessages.length > 0
-              ? t('chat.input.queuePlaceholder', { count: queuedMessages.length })
-              : isThinking
-                ? t('chat.input.thinkingPlaceholder')
-                : t('chat.input.placeholder')}
+            placeholder={isThinking
+              ? t('chat.input.thinkingPlaceholder')
+              : t('chat.input.placeholder')}
             className="flex-1 px-2 py-1.5 bg-transparent text-[var(--vscode-foreground)] resize-none outline-none text-[13px] min-h-[32px] max-h-[120px] placeholder:text-[var(--vscode-descriptionForeground)]"
             rows={1}
           />
@@ -580,14 +527,6 @@ function PlusIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-    </svg>
-  );
-}
-
-function CloseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
     </svg>
   );
 }

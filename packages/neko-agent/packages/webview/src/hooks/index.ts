@@ -33,12 +33,6 @@ export {
 } from './useResourceState';
 
 export {
-  useMessageQueue,
-  type QueuedMessage,
-  type UseMessageQueueReturn,
-} from './useMessageQueue';
-
-export {
   useConversationSession,
   type UseConversationSessionProps,
   type UseConversationSessionReturn,

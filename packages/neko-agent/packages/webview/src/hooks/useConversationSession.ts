@@ -9,7 +9,6 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import type { AttachedFile } from '@/components/ChatView/InputArea';
-import type { UseMessageQueueReturn } from './useMessageQueue';
 import type { MutableRefObject } from 'react';
 
 /** Minimal Map interface for cleanup operations */
@@ -28,7 +27,6 @@ export interface UseConversationSessionProps {
   conversationTokenCountRef: MutableRefObject<ClearableMap>;
   conversationCompressingRef: MutableRefObject<ClearableMap>;
   conversationAgentStateRef: MutableRefObject<ClearableMap>;
-  messageQueue: UseMessageQueueReturn;
 }
 
 export interface UseConversationSessionReturn {
@@ -49,7 +47,6 @@ export function useConversationSession({
   conversationTokenCountRef,
   conversationCompressingRef,
   conversationAgentStateRef,
-  messageQueue,
 }: UseConversationSessionProps): UseConversationSessionReturn {
   // Per-conversation caches for input and attachments
   const conversationInputRef = useRef<Map<string, string>>(new Map());
@@ -88,8 +85,7 @@ export function useConversationSession({
     conversationTokenCountRef.current.delete(conversationId);
     conversationCompressingRef.current.delete(conversationId);
     conversationAgentStateRef.current.delete(conversationId);
-    messageQueue.clearForConversation(conversationId);
-  }, [conversationMessagesRef, conversationStreamingRef, conversationTokenCountRef, conversationCompressingRef, conversationAgentStateRef, messageQueue]);
+  }, [conversationMessagesRef, conversationStreamingRef, conversationTokenCountRef, conversationCompressingRef, conversationAgentStateRef]);
 
   const cleanupAllConversations = useCallback(() => {
     conversationMessagesRef.current.clear();
@@ -99,8 +95,7 @@ export function useConversationSession({
     conversationTokenCountRef.current.clear();
     conversationCompressingRef.current.clear();
     conversationAgentStateRef.current.clear();
-    messageQueue.clear();
-  }, [conversationMessagesRef, conversationStreamingRef, conversationTokenCountRef, conversationCompressingRef, conversationAgentStateRef, messageQueue]);
+  }, [conversationMessagesRef, conversationStreamingRef, conversationTokenCountRef, conversationCompressingRef, conversationAgentStateRef]);
 
   return {
     attachedFiles,

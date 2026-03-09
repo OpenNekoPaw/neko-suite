@@ -8,7 +8,6 @@
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
-import type { BackgroundTask } from '@/components/TaskListView';
 import type { ContentBlock, ToolCall, Plan, PlanStep, Message } from '@/components/types';
 import { updateConversation } from './message-updater';
 import {
@@ -20,52 +19,6 @@ import {
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('ToolHandlers');
-
-/**
- * Parse plan markdown content into Plan object
- * Extracts sections starting with ## or ### as steps
- */
-function parsePlanMarkdown(markdown: string, planId: string, title: string): Plan {
-  const lines = markdown.split('\n');
-  const steps: PlanStep[] = [];
-  let currentStep: string[] = [];
-  let stepIndex = 0;
-
-  for (const line of lines) {
-    const headerMatch = line.match(/^#{2,3}\s+(.+)$/);
-    if (headerMatch) {
-      if (currentStep.length > 0) {
-        steps.push({
-          id: `${planId}-step-${stepIndex}`,
-          description: currentStep.join('\n').trim(),
-          status: 'pending',
-        });
-        stepIndex++;
-      }
-      currentStep = [headerMatch[1]];
-    } else if (line.trim()) {
-      currentStep.push(line);
-    }
-  }
-
-  if (currentStep.length > 0) {
-    steps.push({
-      id: `${planId}-step-${stepIndex}`,
-      description: currentStep.join('\n').trim(),
-      status: 'pending',
-    });
-  }
-
-  if (steps.length === 0) {
-    steps.push({
-      id: `${planId}-step-0`,
-      description: markdown.trim(),
-      status: 'pending',
-    });
-  }
-
-  return { id: planId, title, steps, status: 'pending' };
-}
 
 /**
  * Find target message for tool call update
@@ -270,30 +223,22 @@ const handleToolResult: MessageHandler = (message, context) => {
           }
         }
 
-        // Handle ExitPlanMode tool result - create plan ContentBlock
-        if (resultData?.planMode && (resultData.planMode as Record<string, unknown>)?.status === 'awaiting_approval') {
-          const planId = `plan-${Date.now()}`;
-          const planTitle = (resultData.title as string) || 'Implementation Plan';
-          const planContent = (resultData.plan as string) || '';
-          const planFilePath = (resultData.filePath as string) || '';
-
-          const plan = parsePlanMarkdown(planContent, planId, planTitle);
-          (plan as Plan & { filePath?: string }).filePath = planFilePath;
-
+        // Handle ExitPlanMode tool result — use pre-parsed plan from Extension
+        if (message.plan) {
           const planBlock: ContentBlock = {
-            id: `block-plan-${planId}`,
+            id: `block-plan-${message.plan.id}`,
             type: 'plan',
             timestamp: Date.now(),
-            plan,
+            plan: message.plan,
           };
 
           updatedBlocks = [...updatedBlocks, planBlock];
 
-          logger.info('Created plan ContentBlock:', {
-            planId,
-            title: planTitle,
-            stepsCount: plan.steps.length,
-            filePath: planFilePath,
+          logger.info('Received pre-parsed plan from Extension:', {
+            planId: message.plan.id,
+            title: message.plan.title,
+            stepsCount: message.plan.steps.length,
+            filePath: message.plan.filePath,
           });
         }
 
@@ -307,50 +252,8 @@ const handleToolResult: MessageHandler = (message, context) => {
     };
   });
 
-  // 2. Create background task (independent of message update)
-  if (resultData?.backgroundMode === true && resultData?.taskId) {
-    const taskId = resultData.taskId as string;
-    const taskMessage = (resultData.message as string) || '';
-    const mediaId = (resultData.mediaId as string) || '';
-
-    const taskType = mediaId.includes('video') || taskMessage.includes('video')
-      ? 'video'
-      : 'image';
-
-    const statusMap: Record<string, 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled'> = {
-      pending: 'queued',
-      processing: 'processing',
-      completed: 'completed',
-      failed: 'failed',
-      cancelled: 'cancelled',
-    };
-    const rawStatus = (resultData.status as string) || 'pending';
-    const mappedStatus = statusMap[rawStatus] || 'queued';
-
-    const newTask: BackgroundTask = {
-      id: taskId,
-      type: taskType as 'image' | 'video',
-      name: taskMessage.slice(0, 50) || `${taskType} generation`,
-      prompt: taskMessage,
-      providerId: (resultData.routedTo as Record<string, unknown>)?.provider as string || 'unknown',
-      providerName: (resultData.routedTo as Record<string, unknown>)?.provider as string || 'AI Provider',
-      status: mappedStatus,
-      progress: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    logger.info('Creating background task:', newTask);
-
-    context.setBackgroundTasks(prevTasks => {
-      if (prevTasks.some(t => t.id === taskId)) {
-        logger.info(`Task already exists, skipping: ${taskId}`);
-        return prevTasks;
-      }
-      logger.info(`Added task to list, total: ${prevTasks.length + 1}`);
-      return [newTask, ...prevTasks];
-    });
-  }
+  // Background task creation is handled by Extension (sends 'taskCreated' message)
+  // Webview only renders task state received via task-handlers.ts
 };
 
 /**

@@ -14,31 +14,11 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Platform } from '@neko/platform';
-import type { AgentEvent } from '@neko/agent';
+import { parsePlanMarkdown, type AgentEvent, type Plan } from '@neko/agent';
 import type { ConversationHandler } from '../conversationHandler';
 import { getLogger } from '../../base';
 
 const logger = getLogger('AgentStreamProcessor');
-
-/**
- * Plan step for plan persistence
- */
-interface PlanStep {
-  id: string;
-  description: string;
-  status: 'pending' | 'approved' | 'rejected' | 'modified';
-}
-
-/**
- * Plan structure for persistence
- */
-interface Plan {
-  id: string;
-  title: string;
-  steps: PlanStep[];
-  status: 'pending' | 'approved' | 'rejected';
-  filePath?: string;
-}
 
 type AgentPhase = 'idle' | 'thinking' | 'acting' | 'streaming';
 
@@ -96,51 +76,6 @@ export interface StreamCallbacks {
 export interface AgentStreamProcessorDeps {
   platform?: Platform;
   conversations?: ConversationHandler;
-}
-
-/**
- * Parse plan markdown content into Plan object
- */
-function parsePlanMarkdown(markdown: string, planId: string, title: string): Plan {
-  const lines = markdown.split('\n');
-  const steps: PlanStep[] = [];
-  let currentStep: string[] = [];
-  let stepIndex = 0;
-
-  for (const line of lines) {
-    const headerMatch = line.match(/^#{2,3}\s+(.+)$/);
-    if (headerMatch) {
-      if (currentStep.length > 0) {
-        steps.push({
-          id: `${planId}-step-${stepIndex}`,
-          description: currentStep.join('\n').trim(),
-          status: 'pending',
-        });
-        stepIndex++;
-      }
-      currentStep = [headerMatch[1]];
-    } else if (line.trim()) {
-      currentStep.push(line);
-    }
-  }
-
-  if (currentStep.length > 0) {
-    steps.push({
-      id: `${planId}-step-${stepIndex}`,
-      description: currentStep.join('\n').trim(),
-      status: 'pending',
-    });
-  }
-
-  if (steps.length === 0) {
-    steps.push({
-      id: `${planId}-step-0`,
-      description: markdown.trim(),
-      status: 'pending',
-    });
-  }
-
-  return { id: planId, title, steps, status: 'pending' };
 }
 
 /**
@@ -356,6 +291,8 @@ export class AgentStreamProcessor {
     contentBlocks: ContentBlock[],
     toolBlocksByCallId: Map<string, ContentBlock>
   ): void {
+    let parsedPlan: Plan | undefined;
+
     if (event.toolResult) {
       const toolCall = collectedToolCalls.find(tc => tc.id === event.toolResult!.toolCallId);
       if (toolCall) {
@@ -375,7 +312,7 @@ export class AgentStreamProcessor {
         };
       }
 
-      // Check for ExitPlanMode result
+      // Check for ExitPlanMode result — parse plan and include in message
       const resultData = event.toolResult.data as Record<string, unknown> | undefined;
       if (resultData?.planMode && (resultData.planMode as Record<string, unknown>)?.status === 'awaiting_approval') {
         const planId = `plan-${Date.now()}`;
@@ -383,14 +320,14 @@ export class AgentStreamProcessor {
         const planContent = (resultData.plan as string) || '';
         const planFilePath = (resultData.filePath as string) || '';
 
-        const plan = parsePlanMarkdown(planContent, planId, planTitle);
-        plan.filePath = planFilePath;
+        parsedPlan = parsePlanMarkdown(planContent, planId, planTitle);
+        parsedPlan.filePath = planFilePath;
 
         contentBlocks.push({
-          id: `block-plan-${planId}`,
+          id: `block-plan-${parsedPlan.id}`,
           type: 'plan',
           timestamp: Date.now(),
-          plan,
+          plan: parsedPlan,
         });
       }
     }
@@ -402,6 +339,7 @@ export class AgentStreamProcessor {
       toolCallId: event.toolResult?.toolCallId,
       success: event.toolResult?.success,
       data: event.toolResult?.data,
+      plan: parsedPlan,
     });
 
     // Subscribe to background task progress
@@ -422,6 +360,29 @@ export class AgentStreamProcessor {
     }
 
     const taskId = resultData.taskId as string;
+    const taskMessage = (resultData.message as string) || '';
+    const mediaId = (resultData.mediaId as string) || '';
+    const routedTo = resultData.routedTo as Record<string, unknown> | undefined;
+
+    // Determine task type from tool result data
+    const taskType = mediaId.includes('video') || taskMessage.includes('video') ? 'video' : 'image';
+
+    // Send taskCreated so webview can display the task immediately
+    webview.postMessage({
+      type: 'taskCreated',
+      task: {
+        id: taskId,
+        type: taskType,
+        name: taskMessage.slice(0, 50) || `${taskType} generation`,
+        prompt: taskMessage,
+        providerId: (routedTo?.provider as string) || 'unknown',
+        providerName: (routedTo?.provider as string) || 'AI Provider',
+        status: 'queued',
+        progress: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    });
 
     const toWebviewUri = (filePath: string | undefined): string | undefined => {
       if (!filePath) return undefined;
