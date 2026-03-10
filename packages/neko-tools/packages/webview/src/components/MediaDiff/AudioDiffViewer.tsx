@@ -1077,5 +1077,3 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
     </div>
   );
 });
-
-export default AudioDiffViewer;
