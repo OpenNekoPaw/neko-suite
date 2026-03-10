@@ -14,6 +14,8 @@
 
 **定位**: 集成在 VSCode 内的专业创意工作套件，包含视频编辑、AI 助手、画布编辑、剧本写作、资产管理、媒体预览等多个扩展，通过共享的媒体引擎和基础设施协同工作。
 
+**架构总览**: 详细的系统架构、通信模式、数据流见 [ARCHITECTURE.md](./ARCHITECTURE.md)。本文档聚焦于开发规范和代码实践。
+
 **技术栈**:
 | 层级 | 技术 |
 |------|------|
@@ -37,76 +39,22 @@
 }
 ```
 
-**Monorepo 结构**:
-```
-packages/
-├── neko-suite/       # Extension Pack（打包分发所有扩展）
-├── neko-engine/      # 媒体引擎 Sidecar（Rust GPU/FFmpeg/HTTP）
-│   └── packages/     # native-core, native-api, native-http, native-napi, native-cli, extension
-├── neko-cut/         # 专业视频编辑器
-│   └── packages/     # extension, webview
-├── neko-agent/       # AI Agent（对话/MCP/技能/多模型）
-│   └── packages/     # agent, platform, cli, extension, webview
-├── neko-tools/       # 媒体比较/Diff 工具
-│   └── packages/     # extension, webview
-├── neko-preview/     # 轻量媒体预览
-│   └── packages/     # extension, webview
-├── neko-canvas/      # 画布/节点图编辑器
-│   └── packages/     # extension, webview
-├── neko-story/       # 剧本写作（Fountain LSP）
-│   └── packages/     # extension, parser, types, webview
-├── neko-assets/      # 资产管理（Git/LFS/云同步）
-│   └── packages/     # asset
-├── neko-model/       # 3D 创作套件（3D 人物/特效/场景/物品，规划中）
-│   └── packages/     # extension, webview
-├── neko-sketch/      # 2D 创作套件（绘画/2D 人物/特效/场景/物品，规划中）
-│   └── packages/     # extension, webview
-├── neko-audio/       # 音频工作站（规划中）
-├── neko-live/        # 虚拟制作/动捕（规划中）
-├── neko-types/       # @neko/shared — 共享基础设施（类型/Logger/i18n/Theme/Errors）
-├── neko-client/      # @neko/neko-client — 流媒体客户端（H264/PCM/fMP4）
-└── neko-proto/       # @neko/proto — Protobuf IDL（类型契约源）
-```
+**Monorepo 结构**: 详见 [ARCHITECTURE.md](./ARCHITECTURE.md) 和 [README.md](./README.md)。
 
-**各包子结构约定**：扩展类包统一采用 `packages/` 下分 `extension/`（Extension Host）和 `webview/`（React UI）的双进程结构。
+**核心包**：
+- `neko-engine` - Rust 媒体引擎（GPU/FFmpeg/HTTP）
+- `neko-types` - @neko/shared 共享基础设施（Logger/i18n/Theme/Errors）
+- `neko-client` - @neko/neko-client 流媒体客户端 + EngineClient
+- `neko-proto` - Protobuf IDL（类型契约源）
 
-**依赖关系**:
-```
-@neko/proto                          ← Protobuf 源（类型契约权威来源）
-@neko/shared (neko-types)            ← 共享基础设施（零内部依赖）
-@neko/neko-client                    ← 流媒体客户端（零内部依赖）
-
-@neko-engine/native-napi             ← Rust N-API 绑定（独立编译）
-  ↑
-neko-engine ext                      ← Sidecar 进程管理
-  ↑
-neko-cut ext → @neko/shared, @neko/platform, @neko-engine/native-napi
-neko-agent ext → @neko/agent, @neko/platform, @neko/shared
-neko-tools ext → @neko/shared
-neko-preview ext → @neko/shared
-neko-canvas ext → @neko/shared
-neko-story ext → @neko-story/parser, @neko-story/types, @neko/shared
-neko-assets ext → @neko/shared
-
-各 webview → @neko/shared, @neko/neko-client (按需), React 18
-```
-
-**VSCode 扩展激活依赖**:
-```
-neko-engine, neko-tools              ← 基础扩展（无依赖）
-neko-preview                         → neko-engine
-neko-cut, neko-agent, neko-canvas... → neko-engine + neko-tools
-neko-sketch                          → neko-canvas
-```
+**功能扩展**：neko-cut（视频编辑）、neko-agent（AI）、neko-canvas（画布）、neko-story（剧本）、neko-preview（预览）、neko-tools（工具）、neko-assets（资产）
 
 **构建命令**:
 ```bash
 pnpm build                 # 全量构建（turbo）
-pnpm build:neko-cut        # 单个扩展（turbo --filter）
-pnpm build:ui              # 仅 webview 包
-pnpm build:core            # 仅 engine native 编译
-pnpm build:extensions      # 所有扩展编译
-pnpm generate:types        # 重新生成 Protobuf TS 类型
+pnpm build:neko-cut        # 单个扩展
+pnpm test                  # 运行测试
+pnpm check                 # 代码质量检查
 ```
 
 ### ⚠️ VSCode 插件开发限制
@@ -119,7 +67,9 @@ pnpm generate:types        # 重新生成 Protobuf TS 类型
 | Webview 无 VSCode API | `vscode.workspace.*` | 通过消息协议代理 |
 | 资源路径受限 | `file://` 或 `http://` | `webview.asWebviewUri()` |
 
-**通信模式**:
+**通信模式详解**: 见 [ARCHITECTURE.md](./ARCHITECTURE.md#通信模式)。
+
+**快速参考**:
 ```
 Webview (React)  ←─ postMessage ─→  Extension Host (Node.js)
                                          │
@@ -142,9 +92,13 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 - Extension Host: `console.log('[Extension]', data)`
 - Webview DevTools: `Cmd+Shift+P → Developer: Open Webview Developer Tools`
 
+**更多细节**: 见 [ARCHITECTURE.md](./ARCHITECTURE.md#1-extension-host--webviewpostmessage-ipc)。
+
 ### 关键架构决策（ADR）
 
-深入了解某个领域前，先查阅对应的 ADR 文档：
+深入了解某个领域前，先查阅对应的 ADR 文档。完整的架构决策列表见 [ARCHITECTURE.md](./ARCHITECTURE.md#关键架构决策adr)。
+
+**开发中常用的 ADR**：
 
 | 领域 | ADR 文件 | 要点 |
 |------|----------|------|
@@ -158,8 +112,9 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 
 ### Rust 引擎开发约束
 
-neko-engine 是 Rust 实现的 Sidecar 进程，通过 N-API 和 HTTP/WebSocket 与 TS 层通信：
+neko-engine 是 Rust 实现的 Sidecar 进程，通过 N-API 和 HTTP/WebSocket 与 TS 层通信。详细架构见 [ARCHITECTURE.md](./ARCHITECTURE.md#2-extension-host--rust-enginen-api--http)。
 
+**快速参考**:
 ```
 TypeScript 层（Extension Host）
   ↕ N-API 绑定 (@neko-engine/native-napi)
@@ -172,6 +127,76 @@ Rust 层（neko-engine）
 ```
 
 **原则**: Rust 引擎是计算和数据模型的唯一权威来源。TS 层不应复制 Rust 的计算逻辑或数据转换。
+
+### GitHub MCP 集成
+
+项目已集成 GitHub MCP 服务器，提供完整的 GitHub 操作能力，用于自动化开发流程：
+
+**核心能力**：
+
+| 类别 | 工具 | 用途 |
+|------|------|------|
+| **仓库管理** | `search_repositories`, `create_repository`, `fork_repository`, `create_branch` | 仓库发现、创建、分支管理 |
+| **代码搜索** | `search_code`, `get_file_contents`, `list_commits`, `get_commit` | 跨仓库代码搜索、文件读取、提交历史 |
+| **Issue 管理** | `search_issues`, `issue_read`, `issue_write`, `add_issue_comment` | Issue 创建、查询、更新、评论 |
+| **PR 操作** | `search_pull_requests`, `pull_request_read`, `create_pull_request`, `update_pull_request`, `merge_pull_request` | PR 全生命周期管理 |
+| **代码审查** | `pull_request_review_write`, `add_comment_to_pending_review`, `request_copilot_review` | 代码审查、评论、AI 审查 |
+| **文件操作** | `create_or_update_file`, `delete_file`, `push_files` | 远程文件修改（需提供 SHA） |
+| **Copilot 集成** | `create_pull_request_with_copilot`, `assign_copilot_to_issue`, `get_copilot_job_status` | AI 辅助开发、自动化任务 |
+
+**使用原则**：
+
+```
+何时使用 GitHub MCP：
+├─ 需要跨仓库搜索代码/文档
+├─ 自动化 PR/Issue 工作流
+├─ 批量文件操作（push_files 单次提交多文件）
+├─ 集成 CI/CD 状态检查
+└─ 代码审查自动化
+
+何时使用本地 Git：
+├─ 日常开发提交（git commit/push）
+├─ 分支切换和合并
+├─ 本地历史查看
+└─ 交互式操作（rebase -i, add -p）
+```
+
+**典型场景**：
+
+```typescript
+// 场景 1：搜索相关实现参考
+mcp__github__search_code({
+  query: "EngineClient language:typescript org:neko-suite"
+})
+
+// 场景 2：批量更新配置文件
+mcp__github__push_files({
+  owner: "neko-suite",
+  repo: "neko-suite",
+  branch: "main",
+  files: [
+    { path: "package.json", content: "..." },
+    { path: "tsconfig.json", content: "..." }
+  ],
+  message: "chore: update build config"
+})
+
+// 场景 3：自动化 PR 创建
+mcp__github__create_pull_request({
+  owner: "neko-suite",
+  repo: "neko-suite",
+  title: "feat: add new feature",
+  head: "feature-branch",
+  base: "main",
+  body: "## Changes\n- ..."
+})
+```
+
+**注意事项**：
+- `create_or_update_file` 更新文件时**必须**提供正确的 `sha`（通过 `git rev-parse <branch>:<path>` 获取）
+- `push_files` 适合批量操作，单文件修改优先用本地 git
+- PR 操作前确保分支已推送到远程
+- 代码搜索结果可能不包含最新未推送的本地更改
 
 ---
 
@@ -525,151 +550,6 @@ pnpm check           # 两者同时运行
 
 ---
 
-## 5️⃣ 审查规范
-
-### 评级标准
-
-```
-🟢 优秀 - 符合 SOLID，模块清晰，易扩展
-🟡 一般 - 基本可用，有改进空间
-🔴 问题 - 违反原则，需要重构
-```
-
-### 审查要点
-
-```
-致命缺陷：违反单一职责 | 循环依赖 | 高层依赖低层 | 缺乏抽象
-改进方向：提取接口 | 依赖注入 | 增加测试 | 优化命名
-```
-
----
-
-## 6️⃣ 文档和可视化规范
-
-### 文档策略：渐进式披露 + 轻度自相似（混合策略）
-
-**混合策略规则**：
-```
-L0 CLAUDE.md     → 渐进式（不冗余，全局规范）
-L1 包 README     → 轻度自相似（允许 Context Summary ≤5 行）
-L2+ 模块 README  → 渐进式（纯引用，不重复）
-```
-
-### README 结构模板
-
-**L1 包级别**（允许 Context Summary）：
-```markdown
-# @neko-cut/extension
-
-> NekoCut 视频编辑器扩展主包
-
-## Context Summary                ← 仅 L1 允许，≤5 行关键上下文
-- 项目：Neko Suite - VSCode 创意工作套件
-- 架构：Extension Host + Webview 双进程
-- 规范：[CLAUDE.md](../../CLAUDE.md)
-
-## Quick Reference               ← 速查（30行以内）
-- 职责：...
-- 入口：...
-- 依赖：...
-
-## Architecture                  ← 按需展开
-...
-
-## Deep Dive                     ← 仅复杂模块
-...
-```
-
-**L2+ 模块级别**（纯渐进式）：
-```markdown
-# AI Service
-
-> 提供 AI 对话和代码生成能力
-
-## Quick Reference
-- 职责：封装 Claude/OpenAI API 调用
-- 入口：`createAIService()`
-- 依赖：`@neko/shared` 类型定义
-
-## Architecture
-...
-```
-
-### 层级职责划分
-
-| 层级 | 文件 | 包含内容 | 不包含 |
-|------|------|----------|--------|
-| **L0** | `CLAUDE.md` | 项目规范、架构原则、开发流程 | 具体模块细节 |
-| **L1** | `packages/*/README.md` | Context Summary + 包职责 + 公开 API | 内部实现细节 |
-| **L2** | `src/README.md` | 目录结构、模块索引 | 具体接口定义 |
-| **L3** | 核心模块 `README.md` | 接口定义、使用示例 | 已在上层说明的内容 |
-
-**反模式**（禁止）：
-```
-❌ L2+ 层重复 Context Summary
-❌ 复制粘贴上层已有的架构图
-❌ 在每个 README 中重复 SOLID 原则
-```
-
-### 何时需要 README
-
-```
-需要：3+ 源码文件 | 对外接口 | 复杂逻辑
-不需要：__tests__/ | 纯导出 index.ts | 单文件模块 | 配置目录
-
-特殊情况：逻辑复杂或有非显而易见的设计决策时，即使文件少也需要
-```
-
-### AI 读取策略
-
-```
-场景 1：定位功能
-└─ 读 CLAUDE.md 项目结构 → 找到目标包 → 读包 README Quick Reference
-
-场景 2：修改代码
-└─ 读目标模块 README → 读 Architecture 段 → 读相关源码
-
-场景 3：理解设计
-└─ 读 README Deep Dive 段（如有）→ 读相关接口定义
-
-场景 4：首次接触某包（L1 轻度自相似的价值）
-└─ 直接读包 README（Context Summary 提供足够上下文，无需回溯 L0）
-
-原则：从最高层开始，按需向下展开，绝不重复读取相同信息
-```
-
-### 引用而非内联
-
-```markdown
-✅ 正确：架构原则见 [CLAUDE.md](../../CLAUDE.md#2️⃣-设计原则)
-❌ 错误：复制整段 SOLID 原则到子模块 README
-```
-
-### 架构表达方式
-
-**AI Agent 场景优先级**：代码 > 纯文本 > Mermaid 图表
-
-**Mermaid 仅用于**：
-```
-├─ 复杂多方交互 → sequenceDiagram（3+ 参与者）
-├─ 状态机 → stateDiagram（状态转换复杂时）
-└─ 其他场景 → 优先用纯文本
-```
-
-**示例对比**：
-```
-# 模块依赖（用纯文本，AI 可从 import 验证）
-extension → platform → shared
-
-# 简单数据流（用纯文本）
-User → Webview → Extension → MediaEngine → File
-
-# 复杂交互（用 Mermaid）
-仅当文本难以表达多方并发/异步交互时使用
-```
-
----
-
 ## 7️⃣ 检查清单
 
 ### 完成任务前必查
@@ -683,6 +563,13 @@ User → Webview → Extension → MediaEngine → File
 - [ ] 契约优先：先定义接口/类型，再实现
 - [ ] 自顶向下：高层模块 → 低层模块
 - [ ] 命名清晰，错误处理完备
+- [ ] 无 `any` 类型、无 `console.log`、无 `as Type` 强制断言
+
+**Code Review 要点**
+- [ ] 🟢 优秀：符合 SOLID，模块清晰，易扩展
+- [ ] 🟡 一般：基本可用，有改进空间
+- [ ] 🔴 问题：违反原则，需要重构
+- [ ] 致命缺陷：违反单一职责 | 循环依赖 | 高层依赖低层 | 缺乏抽象
 
 **文档**
 - [ ] 按混合策略更新 README（L1 有 Context Summary）
@@ -691,6 +578,7 @@ User → Webview → Extension → MediaEngine → File
 **测试**
 - [ ] 构建通过 `pnpm build`
 - [ ] 测试通过 `pnpm test`
+- [ ] 代码质量检查通过 `pnpm check`
 - [ ] 新增接口有对应单元测试
 
 ---

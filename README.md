@@ -161,30 +161,47 @@ neko-suite/
 │   │       ├── native-http/   # Axum HTTP 服务
 │   │       ├── native-napi/   # Node.js NAPI 绑定
 │   │       ├── native-cli/    # CLI 入口
-│   │       ├── native-scene/  # [规划] 3D 场景（hecs ECS + PBR + glTF）
+│   │       ├── types/         # Rust 共享类型
 │   │       └── extension/     # TS VSCode 扩展侧
 │   ├── neko-cut/              # 视频剪辑器
 │   │   └── packages/
+│   │       ├── extension/     # VSCode 扩展侧
 │   │       └── webview/       # React UI（13 store slices）
 │   ├── neko-agent/            # AI Agent
 │   │   └── packages/
 │   │       ├── agent/         # 核心引擎（executor/session/skills/mcp）
 │   │       ├── platform/      # LLM 平台层（Claude/OpenAI adapter）
-│   │       ├── assistant/     # React UI
+│   │       ├── webview/       # React UI
 │   │       ├── extension/     # VSCode 扩展侧
-│   │       └── agent-cli/     # 交互式 CLI
-│   ├── neko-model/            # [规划] 3D 编辑器（R3F 视口 + 场景组装）
+│   │       └── cli-tui/       # 交互式 CLI
 │   ├── neko-canvas/           # 无限画布
+│   │   └── packages/
+│   │       ├── canvas/        # 画布核心逻辑
+│   │       ├── extension/     # VSCode 扩展侧
+│   │       └── webview/       # React UI
 │   ├── neko-story/            # 剧本编辑器（Fountain LSP）
+│   │   └── packages/
+│   │       ├── extension/     # VSCode 扩展侧
+│   │       ├── parser/        # Fountain 解析器
+│   │       ├── types/         # 类型定义
+│   │       └── webview/       # React UI
 │   ├── neko-preview/          # 媒体预览
-│   ├── neko-client/           # 流媒体客户端
-│   ├── neko-assets/           # 资产管理
+│   │   └── packages/
+│   │       ├── extension/     # VSCode 扩展侧
+│   │       └── webview/       # React UI
 │   ├── neko-tools/            # 媒体工具
+│   │   └── packages/
+│   │       ├── extension/     # VSCode 扩展侧
+│   │       └── webview/       # React UI
+│   ├── neko-assets/           # 资产管理
+│   │   └── packages/
+│   │       └── asset/         # 资产核心逻辑
+│   ├── neko-client/           # 流媒体客户端（H264/PCM/fMP4）+ EngineClient
 │   ├── neko-sketch/           # 绘图工具（Planned）
 │   ├── neko-audio/            # 音频工作站（Planned）
 │   ├── neko-live/             # 虚拟直播（Planned）
-│   ├── neko-types/            # 共享类型
-│   └── neko-proto/            # 协议定义
+│   ├── neko-types/            # 共享类型 + Logger + i18n + Theme
+│   └── neko-proto/            # 协议定义（Protobuf IDL）
 ├── docs/                      # 架构文档
 ├── package.json               # 根 package.json (pnpm workspaces)
 ├── ROADMAP.md                 # 开发路线图

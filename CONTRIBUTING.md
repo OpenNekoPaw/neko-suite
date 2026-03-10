@@ -67,11 +67,11 @@ pnpm build
 ```
 neko-suite/
 ├── packages/
-│   ├── neko-engine/     # Rust GPU 媒体引擎 + VSCode 扩展集成
+│   ├── neko-engine/     # Rust GPU 媒体引擎 + VSCode 扩展集成（统一 Sidecar 进程）
 │   ├── neko-cut/        # 视频剪辑器（Extension + Webview）
 │   ├── neko-agent/      # AI Agent（Extension + Platform + Webview）
-│   ├── neko-types/      # @neko/shared 共享基础设施（零依赖）
-│   ├── neko-client/     # @neko/neko-client 流媒体客户端（零依赖）
+│   ├── neko-types/      # @neko/shared 共享基础设施（Logger/i18n/Theme/Errors，零依赖）
+│   ├── neko-client/     # @neko/neko-client 流媒体客户端 + EngineClient（零依赖）
 │   ├── neko-proto/      # @neko/proto Protobuf IDL 定义
 │   └── ...              # 其他功能包（见 README.md）
 ├── docs/                # 架构决策文档（ADR）
@@ -82,6 +82,32 @@ neko-suite/
 ```
 
 各包详情见对应的 `packages/*/README.md`。
+
+**依赖关系**（统一引擎架构）:
+```
+@neko/proto                          ← Protobuf 源（类型契约权威来源）
+@neko/shared (neko-types)            ← 共享基础设施（Logger/i18n/Theme/Errors，零内部依赖）
+@neko/neko-client                    ← EngineClient HTTP dispatch + 流媒体客户端（零内部依赖）
+
+@neko-engine/native-napi             ← Rust N-API 绑定（独立编译）
+  ↑
+neko-engine ext                      ← 唯一 Sidecar 进程 + 统一 HTTP/WS 服务器
+  ↑ (通过 EngineClient HTTP/WS 通信)
+neko-cut ext → @neko/shared, @neko/neko-client, @neko/platform
+neko-agent ext → @neko/agent, @neko/platform, @neko/shared
+neko-tools ext → @neko/shared, @neko/neko-client
+neko-preview ext → @neko/shared, @neko/neko-client
+neko-canvas ext → @neko/shared
+neko-story ext → @neko-story/parser, @neko-story/types, @neko/shared
+neko-assets ext → @neko/shared
+
+各 webview → @neko/shared, @neko/neko-client (按需), React 18
+```
+
+**架构要点**：
+- **统一引擎**：所有扩展通过 `EngineClient`（位于 `@neko/neko-client`）与唯一的 neko-engine Sidecar 进程通信
+- **端口统一**：从 3 个独立端口降为 1 个统一端口（HTTP/WS）
+- **横切关注点**：Logger/i18n/Theme/Errors 统一在 `@neko/shared`，三层隔离（Core/VSCode/Webview）
 
 ---
 
@@ -186,7 +212,20 @@ pnpm check:deps          # 检查架构规则违反
 
 ### 覆盖率配置
 
-所有包的 vitest 覆盖率配置通过 `vitest.shared.ts` 统一管理（reporters、exclude 模式）。覆盖率阈值待 vitest 版本统一后启用。
+所有包的 vitest 覆盖率配置通过 `vitest.shared.ts` 统一管理（reporters、exclude 模式）。
+
+**Vitest 版本**：全部统一到 `^4.0.18`（根 + 所有子包）
+
+**覆盖率阈值**（已启用）：
+- Lines: 30%
+- Branches: 20%
+- Functions: 25%
+- Statements: 30%
+
+**v4 注意事项**：
+- 构造函数 mock 必须使用 `function` 语法，不能用箭头函数
+- 无测试文件的包需在 `package.json` 的 test 脚本加 `--passWithNoTests`
+- 对 package.json exports 解析更严格，alias 错误路径会导致 import 失败
 
 ### 一键质量检查
 
@@ -230,6 +269,48 @@ console.log(data);
 // ✅ 正确
 function isMyType(v: unknown): v is MyType { ... }
 if (isMyType(data)) { logger.info('data', data); }
+```
+
+### 统一基础设施使用
+
+**Logger**（`@neko/shared`）：
+```typescript
+// Extension Host
+import { createVSCodeLogger } from '@neko/shared/vscode/extension';
+const logger = createVSCodeLogger('MyExtension');
+logger.info('message', { data });
+
+// Webview
+import { ConsoleLogger } from '@neko/shared';
+const logger = new ConsoleLogger('MyWebview');
+```
+
+**i18n**（`@neko/shared`）：
+```typescript
+// Extension Host
+import { I18nService, getVSCodeLocale } from '@neko/shared/vscode/extension';
+const i18n = new I18nService(getVSCodeLocale());
+i18n.register('myNamespace', { 'key': 'value' });
+
+// Webview (React)
+import { I18nProvider, useTranslation } from '@neko/shared/i18n/react';
+const { t } = useTranslation();
+```
+
+**EngineClient**（`@neko/neko-client`）：
+```typescript
+// 获取引擎端口
+const { port } = await vscode.commands.executeCommand<{ port: number }>(
+  'neko.engine.ensureFrameServer'
+);
+
+// 创建客户端
+import { EngineClient } from '@neko/neko-client';
+const client = new EngineClient(port);
+
+// 调用引擎功能
+const probeResult = await client.probe(filePath);
+const waveform = await client.waveform(filePath, { width: 1000 });
 ```
 
 ### Webview 开发约束
@@ -341,7 +422,13 @@ docs: update ARCHITECTURE.md with streaming flow
 | 时间线 Skills | TypeScript + LLM API | neko-agent |
 | LSP 错误诊断 | TypeScript + LSP | neko-story |
 | 单元测试 | Vitest / cargo test | 所有包 |
-| 流式 Diff | Rust async + tokio | neko-engine + neko-tools |
+| Effects/Shader 系统 | Rust + WGSL + TypeScript | neko-engine + neko-cut |
+| i18n 翻译补充 | 多语言翻译 | 所有 webview 包 |
+
+**最新完成的架构改进**（可参考学习）：
+- 统一引擎架构（`docs/adr-unified-engine.md`）
+- 横切关注点统一（`docs/architecture/adr-cross-cutting-concerns.md`）
+- Shader/Effects 全量打通（`packages/neko-engine/packages/native-core/src/export/gpu_export_pipeline.rs`）
 
 ---
 
