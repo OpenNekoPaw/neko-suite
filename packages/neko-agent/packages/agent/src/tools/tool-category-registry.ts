@@ -77,11 +77,11 @@ export class ToolCategoryRegistry implements IToolCategoryRegistry {
    */
   categorizeTool(toolName: string, category: ToolCategory, layer?: ToolInjectionLayer): void {
     const categoryInfo = this.categories.get(category);
-    const defaultLayer = categoryInfo?.defaultLayer ?? 'skill';
+    const defaultLayer = categoryInfo?.defaultLayer ?? 'dynamic';
 
-    // Core tools are always in 'core' layer
+    // Core tools are always in the 'always' layer
     const isCoreToolName = (CORE_TOOLS as readonly string[]).includes(toolName);
-    const finalLayer = isCoreToolName ? 'core' : (layer ?? defaultLayer);
+    const finalLayer: ToolInjectionLayer = isCoreToolName ? 'always' : (layer ?? defaultLayer);
 
     const existing = this.tools.get(toolName);
 
@@ -136,32 +136,32 @@ export class ToolCategoryRegistry implements IToolCategoryRegistry {
   }
 
   /**
-   * Get all core tools
+   * Get all always-layer tools
    */
   getCoreTools(): CategorizedTool[] {
-    return this.getToolsByLayer('core');
+    return this.getToolsByLayer('always');
   }
 
   /**
-   * Get all skill-layer tools
+   * Get all dynamic-layer tools
    */
   getSkillTools(): CategorizedTool[] {
-    return this.getToolsByLayer('skill');
+    return this.getToolsByLayer('dynamic');
   }
 
   /**
-   * Get all on-demand tools
+   * @deprecated Use getSkillTools (dynamic layer now covers all non-always tools)
    */
   getOnDemandTools(): CategorizedTool[] {
-    return this.getToolsByLayer('ondemand');
+    return this.getToolsByLayer('dynamic');
   }
 
   /**
-   * Check if a tool is a core tool
+   * Check if a tool is in the always layer (core tool)
    */
   isCoreToolName(toolName: string): boolean {
     const tool = this.tools.get(toolName);
-    return tool?.layer === 'core';
+    return tool?.layer === 'always';
   }
 
   /**
@@ -169,9 +169,8 @@ export class ToolCategoryRegistry implements IToolCategoryRegistry {
    */
   getToolCountByLayer(): Record<ToolInjectionLayer, number> {
     const counts: Record<ToolInjectionLayer, number> = {
-      core: 0,
-      skill: 0,
-      ondemand: 0,
+      always: 0,
+      dynamic: 0,
     };
 
     for (const tool of this.tools.values()) {

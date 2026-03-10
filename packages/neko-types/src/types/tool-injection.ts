@@ -1,5 +1,9 @@
 /**
- * Tool Injection Types - Three-layer tool injection mechanism
+ * Tool Injection Types - Two-layer tool injection mechanism
+ *
+ * Layers:
+ * - always: Core tools always injected (file ops, shell, meta-tools, alwaysActive ToolSets)
+ * - dynamic: Tools from manually activated ToolSets
  */
 
 import type { ToolInjectionLayer } from './tool-category';
@@ -10,20 +14,15 @@ import type { ToolInjectionLayer } from './tool-category';
 export interface ToolInjectionConfig {
   /** Maximum tools per layer */
   maxToolsPerLayer: {
-    core: number;
-    skill: number;
-    ondemand: number;
+    always: number;
+    dynamic: number;
   };
 
   /** Token budget per layer */
   tokenBudgetPerLayer: {
-    core: number;
-    skill: number;
-    ondemand: number;
+    always: number;
+    dynamic: number;
   };
-
-  /** Enable on-demand tool loading */
-  enableOnDemand: boolean;
 }
 
 /**
@@ -31,16 +30,13 @@ export interface ToolInjectionConfig {
  */
 export const DEFAULT_INJECTION_CONFIG: ToolInjectionConfig = {
   maxToolsPerLayer: {
-    core: 10, // Core tools: Read, Write, Bash, ListDirectory, Grep, SearchTools, etc.
-    skill: 20,
-    ondemand: 10,
+    always: 25, // Core tools (9) + alwaysActive ToolSets (~12) + buffer
+    dynamic: 30, // Activated ToolSets
   },
   tokenBudgetPerLayer: {
-    core: 3000, // Increased for SearchTools
-    skill: 8000,
-    ondemand: 4000,
+    always: 10000,
+    dynamic: 12000,
   },
-  enableOnDemand: true,
 };
 
 /**
@@ -52,12 +48,6 @@ export interface ToolInjectionState {
 
   /** Active tool set names */
   activeToolSets: string[];
-
-  /**
-   * @deprecated Use activeToolSets
-   * Pending on-demand tool requests — will be removed in Track C
-   */
-  pendingOnDemand: string[];
 
   /** Token usage by layer */
   tokenUsage: Map<ToolInjectionLayer, number>;

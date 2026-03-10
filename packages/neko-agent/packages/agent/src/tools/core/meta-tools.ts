@@ -396,9 +396,8 @@ export class GetContextTool extends BuiltinTool {
     if (includeTools) {
       const injectedTools = state.injectedTools;
       result.tools = {
-        core: injectedTools.get('core') ?? [],
-        skill: injectedTools.get('skill') ?? [],
-        ondemand: injectedTools.get('ondemand') ?? [],
+        always: injectedTools.get('always') ?? [],
+        dynamic: injectedTools.get('dynamic') ?? [],
       };
     }
 

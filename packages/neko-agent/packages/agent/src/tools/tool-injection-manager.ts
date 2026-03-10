@@ -1,12 +1,12 @@
 /**
- * Tool Injection Manager - Implements three-layer tool injection mechanism
+ * Tool Injection Manager - Implements two-layer tool injection mechanism
  *
- * Three layers:
- * - L1 Core: Always injected (~5 tools) - Read, Write, Bash, ListDirectory, Grep
- * - L2 Skill: Injected when skill is active (~20 tools)
- * - L3 On-demand: Injected on LLM request (~10 tools)
+ * Two layers:
+ * - always: Core tools always injected — Read, Write, Bash, ListDirectory, Grep + meta-tools
+ *           + tools from alwaysActive ToolSets
+ * - dynamic: Tools from manually activated ToolSets (via ActivateToolSet or SkillService)
  *
- * Works with ToolCategoryRegistry for categorization and IToolProvider for skill-based tools.
+ * Works with ToolCategoryRegistry for categorization and IToolProvider for ToolSet-based tools.
  */
 
 import type {
@@ -38,7 +38,7 @@ export class ToolInjectionManager implements IToolInjectionManager {
   /** Category registry for tool categorization */
   private categoryRegistry: IToolCategoryRegistry;
 
-  /** Tool provider for skill-based tools (optional) */
+  /** Tool provider for ToolSet-based tools (optional) */
   private toolProvider?: IToolProvider;
 
   /** Event listeners */
@@ -60,17 +60,14 @@ export class ToolInjectionManager implements IToolInjectionManager {
    */
   private createInitialState(): ToolInjectionState {
     return {
-      injectedTools: new Map([
-        ['core', [...CORE_TOOLS]],
-        ['skill', []],
-        ['ondemand', []],
+      injectedTools: new Map<ToolInjectionLayer, string[]>([
+        ['always', [...CORE_TOOLS]],
+        ['dynamic', []],
       ]),
       activeToolSets: [],
-      pendingOnDemand: [],
-      tokenUsage: new Map([
-        ['core', 0],
-        ['skill', 0],
-        ['ondemand', 0],
+      tokenUsage: new Map<ToolInjectionLayer, number>([
+        ['always', 0],
+        ['dynamic', 0],
       ]),
     };
   }
@@ -89,7 +86,6 @@ export class ToolInjectionManager implements IToolInjectionManager {
     return {
       injectedTools: new Map(this.state.injectedTools),
       activeToolSets: [...this.state.activeToolSets],
-      pendingOnDemand: [...this.state.pendingOnDemand],
       tokenUsage: new Map(this.state.tokenUsage),
     };
   }
@@ -97,22 +93,16 @@ export class ToolInjectionManager implements IToolInjectionManager {
   /**
    * Get tools to inject for current turn
    */
-  getToolsForTurn(input: string): string[] {
+  getToolsForTurn(_input: string): string[] {
     const tools: string[] = [];
 
-    // L1: Core tools (always injected)
-    const coreTools = this.getCoreTools();
-    tools.push(...coreTools);
+    // Always layer: core tools (always present)
+    const alwaysTools = this.getAlwaysTools();
+    tools.push(...alwaysTools);
 
-    // L2: Skill tools (based on active skills + auto-activation)
-    const skillTools = this.getSkillTools(input);
-    tools.push(...skillTools);
-
-    // L3: On-demand tools (if enabled)
-    if (this.config.enableOnDemand) {
-      const onDemandTools = this.getOnDemandTools();
-      tools.push(...onDemandTools);
-    }
+    // Dynamic layer: tools from activated ToolSets + alwaysActive ToolSets
+    const dynamicTools = this.getDynamicTools();
+    tools.push(...dynamicTools);
 
     // Deduplicate and update state
     const uniqueTools = [...new Set(tools)];
@@ -122,75 +112,56 @@ export class ToolInjectionManager implements IToolInjectionManager {
   }
 
   /**
-   * Get core tools (L1)
+   * Get always-layer tools (core tools that are always injected)
    */
-  private getCoreTools(): string[] {
-    const coreTools = this.state.injectedTools.get('core') ?? [];
-    return coreTools.slice(0, this.config.maxToolsPerLayer.core);
+  private getAlwaysTools(): string[] {
+    const alwaysTools = this.state.injectedTools.get('always') ?? [];
+    return alwaysTools.slice(0, this.config.maxToolsPerLayer.always);
   }
 
   /**
-   * Get skill tools (L2) based on active skills
+   * Get dynamic-layer tools based on active ToolSets
    *
-   * Note: We no longer auto-activate skills based on keyword matching.
-   * Instead, we rely on LLM to use SearchToolSets and ActivateToolSet to
+   * Note: We rely on LLM to use SearchToolSets and ActivateToolSet to
    * discover and activate tool sets as needed. This approach:
    * - Leverages LLM's semantic understanding
-   * - Reduces maintenance of keyword lists
    * - Avoids false positives from keyword matching
    */
-  private getSkillTools(_input: string): string[] {
+  private getDynamicTools(): string[] {
     if (!this.toolProvider) {
       return [];
     }
 
     // Get tools from manually activated tool sets
-    const skillTools = this.toolProvider.getActiveTools(this.state.activeToolSets);
+    const activeTools = this.toolProvider.getActiveTools(this.state.activeToolSets);
 
-    // Also include default active tools
+    // Also include tools from alwaysActive ToolSets
     const defaultTools = this.toolProvider.getDefaultTools();
 
-    // Combine and limit
-    const allSkillTools = [...new Set([...skillTools, ...defaultTools])];
-    return allSkillTools.slice(0, this.config.maxToolsPerLayer.skill);
+    const allDynamicTools = [...new Set([...activeTools, ...defaultTools])];
+    return allDynamicTools.slice(0, this.config.maxToolsPerLayer.dynamic);
   }
 
   /**
-   * Get on-demand tools (L3)
-   */
-  private getOnDemandTools(): string[] {
-    const onDemandTools = this.state.injectedTools.get('ondemand') ?? [];
-    return onDemandTools.slice(0, this.config.maxToolsPerLayer.ondemand);
-  }
-
-  /**
-   * Update injected tools state
+   * Update injected tools state by classifying each tool into its layer
    */
   private updateInjectedTools(tools: string[]): void {
-    const coreTools: string[] = [];
-    const skillTools: string[] = [];
-    const onDemandTools: string[] = [];
+    const alwaysTools: string[] = [];
+    const dynamicTools: string[] = [];
 
     for (const toolName of tools) {
       const info = this.categoryRegistry.getToolInfo(toolName);
-      const layer = info?.layer ?? 'skill';
+      const layer = info?.layer ?? 'dynamic';
 
-      switch (layer) {
-        case 'core':
-          coreTools.push(toolName);
-          break;
-        case 'skill':
-          skillTools.push(toolName);
-          break;
-        case 'ondemand':
-          onDemandTools.push(toolName);
-          break;
+      if (layer === 'always') {
+        alwaysTools.push(toolName);
+      } else {
+        dynamicTools.push(toolName);
       }
     }
 
-    this.state.injectedTools.set('core', coreTools);
-    this.state.injectedTools.set('skill', skillTools);
-    this.state.injectedTools.set('ondemand', onDemandTools);
+    this.state.injectedTools.set('always', alwaysTools);
+    this.state.injectedTools.set('dynamic', dynamicTools);
 
     // Update token usage
     this.updateTokenUsage();
@@ -210,14 +181,26 @@ export class ToolInjectionManager implements IToolInjectionManager {
    * Activate a tool set (adds its tools to the dynamic layer)
    */
   activateToolSet(toolSetName: string): void {
-    this.activateSkillInternal(toolSetName, true);
+    this.activateToolSetInternal(toolSetName);
   }
 
   /**
    * Deactivate a tool set
    */
   deactivateToolSet(toolSetName: string): void {
-    this.deactivateSkill(toolSetName);
+    const index = this.state.activeToolSets.indexOf(toolSetName);
+    if (index === -1) {
+      return;
+    }
+
+    this.state.activeToolSets.splice(index, 1);
+
+    this.emitEvent({
+      type: 'skill_deactivated',
+      timestamp: Date.now(),
+      skillName: toolSetName,
+      layer: 'dynamic',
+    });
   }
 
   /**
@@ -228,55 +211,20 @@ export class ToolInjectionManager implements IToolInjectionManager {
   }
 
   /**
-   * Activate a skill (adds its tools to L2)
    * @deprecated Use activateToolSet
    */
   activateSkill(skillName: string): void {
-    this.activateSkillInternal(skillName, true);
+    this.activateToolSetInternal(skillName);
   }
 
   /**
-   * Internal skill/toolset activation
-   */
-  private activateSkillInternal(skillName: string, emitEvent: boolean): void {
-    if (this.state.activeToolSets.includes(skillName)) {
-      return;
-    }
-
-    this.state.activeToolSets.push(skillName);
-
-    if (emitEvent) {
-      this.emitEvent({
-        type: 'skill_activated',
-        timestamp: Date.now(),
-        skillName,
-        layer: 'skill',
-      });
-    }
-  }
-
-  /**
-   * Deactivate a skill / tool set
    * @deprecated Use deactivateToolSet
    */
   deactivateSkill(skillName: string): void {
-    const index = this.state.activeToolSets.indexOf(skillName);
-    if (index === -1) {
-      return;
-    }
-
-    this.state.activeToolSets.splice(index, 1);
-
-    this.emitEvent({
-      type: 'skill_deactivated',
-      timestamp: Date.now(),
-      skillName,
-      layer: 'skill',
-    });
+    this.deactivateToolSet(skillName);
   }
 
   /**
-   * Get active skill names
    * @deprecated Use getActiveToolSets
    */
   getActiveSkills(): string[] {
@@ -284,40 +232,21 @@ export class ToolInjectionManager implements IToolInjectionManager {
   }
 
   /**
-   * Add tool to on-demand layer
+   * Internal tool set activation
    */
-  addOnDemandTool(toolName: string): void {
-    const onDemandTools = this.state.injectedTools.get('ondemand') ?? [];
-    if (!onDemandTools.includes(toolName)) {
-      onDemandTools.push(toolName);
-      this.state.injectedTools.set('ondemand', onDemandTools);
-
-      this.emitEvent({
-        type: 'tool_injected',
-        timestamp: Date.now(),
-        toolName,
-        layer: 'ondemand',
-      });
+  private activateToolSetInternal(toolSetName: string): void {
+    if (this.state.activeToolSets.includes(toolSetName)) {
+      return;
     }
-  }
 
-  /**
-   * Remove tool from on-demand layer
-   */
-  removeOnDemandTool(toolName: string): void {
-    const onDemandTools = this.state.injectedTools.get('ondemand') ?? [];
-    const index = onDemandTools.indexOf(toolName);
-    if (index !== -1) {
-      onDemandTools.splice(index, 1);
-      this.state.injectedTools.set('ondemand', onDemandTools);
+    this.state.activeToolSets.push(toolSetName);
 
-      this.emitEvent({
-        type: 'tool_removed',
-        timestamp: Date.now(),
-        toolName,
-        layer: 'ondemand',
-      });
-    }
+    this.emitEvent({
+      type: 'skill_activated',
+      timestamp: Date.now(),
+      skillName: toolSetName,
+      layer: 'dynamic',
+    });
   }
 
   /**
@@ -338,7 +267,7 @@ export class ToolInjectionManager implements IToolInjectionManager {
   getTokenUsage(): LayerTokenUsage[] {
     const result: LayerTokenUsage[] = [];
 
-    for (const layer of ['core', 'skill', 'ondemand'] as ToolInjectionLayer[]) {
+    for (const layer of ['always', 'dynamic'] as ToolInjectionLayer[]) {
       const tools = this.state.injectedTools.get(layer) ?? [];
       const used = this.state.tokenUsage.get(layer) ?? 0;
       const budget = this.config.tokenBudgetPerLayer[layer];
@@ -402,11 +331,7 @@ export class ToolInjectionManager implements IToolInjectionManager {
    * Get total token budget
    */
   getTotalTokenBudget(): number {
-    return (
-      this.config.tokenBudgetPerLayer.core +
-      this.config.tokenBudgetPerLayer.skill +
-      this.config.tokenBudgetPerLayer.ondemand
-    );
+    return this.config.tokenBudgetPerLayer.always + this.config.tokenBudgetPerLayer.dynamic;
   }
 
   /**

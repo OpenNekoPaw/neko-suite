@@ -171,8 +171,10 @@ Extension Host
   │
   AgentExecutor（ReAct 循环）
   │  工具列表 = ToolInjectionManager.getToolsForTurn()
-  │              ├── always layer：核心工具 + alwaysActive ToolSets
-  │              └── dynamic layer：手动激活的 ToolSets
+  │              ├── always layer：核心工具（Read/Write/Bash/Grep + 元工具）
+  │              │                 + alwaysActive ToolSets 的工具
+  │              └── dynamic layer：手动激活的 ToolSets 的工具
+  │                                 （LLM 调用 ActivateToolSet / Skill 自动联动）
   │
   ├── Claude / OpenAI API（流式，@neko/platform LLM 路由）
   └── 工具调用 → ToolRegistry.execute()

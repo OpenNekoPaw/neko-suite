@@ -1,7 +1,7 @@
 # neko-agent Skill/Tool 架构重构 — 设计方案
 
 **日期**: 2026-03-10
-**状态**: ✅ 已完成（Track B/A/D；Track C 有意延期）
+**状态**: ✅ 全部完成（Track B/A/D/C）
 **范围**: `packages/neko-agent/packages/agent/` + `packages/neko-types/src/types/`
 
 ---
@@ -631,7 +631,7 @@ Track D（P2 Skill-ToolSet 联动）
 | Track B — 重命名 + 死代码清理 | ✅ 完成 | |
 | Track A — 功能断层修复 | ✅ 完成 | |
 | Track D — Skill-ToolSet 联动 | ✅ 完成 | |
-| Track C — 注入层简化 | ⏸️ 延期（P2） | `core\|skill\|ondemand` → `always\|dynamic`，影响面大，待 B/A/D 稳定后独立完成 |
+| Track C — 注入层简化 | ✅ 完成 | `'core'\|'skill'\|'ondemand'` → `'always'\|'dynamic'`，删除 `ondemand` 死代码 |
 
 ### 实施偏差
 
@@ -647,11 +647,3 @@ Track D（P2 Skill-ToolSet 联动）
 pnpm build   → ✅ 16/16 tasks 成功
 pnpm test    → ✅ 540 passed, 3 pre-existing failures (agent-executor.test.ts mock 问题，与本次重构无关)
 ```
-
-### 后续（Track C）
-
-Track C 的 `ToolInjectionLayer` 重命名（`'core' | 'skill' | 'ondemand'` → `'always' | 'dynamic'`）可在下一个独立 PR 中完成。变更范围：
-- `packages/neko-types/src/types/tool-injection.ts`
-- `packages/neko-types/src/types/tool-category.ts`
-- `packages/neko-agent/packages/agent/src/tools/tool-injection-manager.ts`
-- 删除 `addOnDemandTool` / `removeOnDemandTool` / `pendingOnDemand`

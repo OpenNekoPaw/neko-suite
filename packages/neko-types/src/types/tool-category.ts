@@ -6,11 +6,10 @@ import type { ToolCategory } from './tool';
 
 /**
  * Tool injection layer
- * - core: Always injected (~5 tools)
- * - skill: Injected when skill is active (~20 tools)
- * - ondemand: Injected on LLM request (~10 tools)
+ * - always: Core tools always injected (file ops, shell, meta-tools)
+ * - dynamic: Tools from manually activated ToolSets
  */
-export type ToolInjectionLayer = 'core' | 'skill' | 'ondemand';
+export type ToolInjectionLayer = 'always' | 'dynamic';
 
 /**
  * Tool category metadata
@@ -110,7 +109,7 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
     displayName: 'System',
     description: 'Core system operations (shell, process)',
     icon: '⚙️',
-    defaultLayer: 'core',
+    defaultLayer: 'always',
     priority: 100,
   },
   {
@@ -118,7 +117,7 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
     displayName: 'File',
     description: 'File system operations (read, write, search)',
     icon: '📁',
-    defaultLayer: 'core',
+    defaultLayer: 'always',
     priority: 90,
   },
   {
@@ -126,7 +125,7 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
     displayName: 'Project',
     description: 'Project management operations',
     icon: '📦',
-    defaultLayer: 'skill',
+    defaultLayer: 'dynamic',
     priority: 85,
   },
   {
@@ -134,7 +133,7 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
     displayName: 'Timeline',
     description: 'Video timeline operations',
     icon: '🎬',
-    defaultLayer: 'skill',
+    defaultLayer: 'dynamic',
     priority: 80,
   },
   {
@@ -142,7 +141,7 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
     displayName: 'Media',
     description: 'Media processing operations',
     icon: '🎥',
-    defaultLayer: 'skill',
+    defaultLayer: 'dynamic',
     priority: 70,
   },
   {
@@ -150,7 +149,7 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
     displayName: 'Document',
     description: 'Document processing operations',
     icon: '📄',
-    defaultLayer: 'skill',
+    defaultLayer: 'dynamic',
     priority: 65,
   },
   {
@@ -158,7 +157,7 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
     displayName: 'Generation',
     description: 'AI content generation',
     icon: '🤖',
-    defaultLayer: 'ondemand',
+    defaultLayer: 'dynamic',
     priority: 60,
   },
   {
@@ -166,7 +165,7 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
     displayName: 'Analysis',
     description: 'Content analysis operations',
     icon: '📊',
-    defaultLayer: 'ondemand',
+    defaultLayer: 'dynamic',
     priority: 50,
   },
   {
@@ -174,7 +173,7 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
     displayName: 'MCP',
     description: 'MCP server tools',
     icon: '🔌',
-    defaultLayer: 'ondemand',
+    defaultLayer: 'dynamic',
     priority: 40,
   },
   {
@@ -182,7 +181,7 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
     displayName: 'Workflow',
     description: 'Workflow engine tools',
     icon: '⚡',
-    defaultLayer: 'ondemand',
+    defaultLayer: 'dynamic',
     priority: 30,
   },
 ];

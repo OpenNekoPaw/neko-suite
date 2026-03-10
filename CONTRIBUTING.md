@@ -426,6 +426,7 @@ docs: update ARCHITECTURE.md with streaming flow
 | i18n 翻译补充 | 多语言翻译 | 所有 webview 包 |
 
 **最新完成的架构改进**（可参考学习）：
+- AI Agent 架构重构（`docs/plans/2026-03-10-neko-agent-skill-tool-refactor-design.md`）：ToolSet/Skill/Hook 三子系统重命名清理、Shell hooks 桥接、两层工具注入（`always`/`dynamic`）
 - 统一引擎架构（`docs/adr-unified-engine.md`）
 - 横切关注点统一（`docs/architecture/adr-cross-cutting-concerns.md`）
 - Shader/Effects 全量打通（`packages/neko-engine/packages/native-core/src/export/gpu_export_pipeline.rs`）

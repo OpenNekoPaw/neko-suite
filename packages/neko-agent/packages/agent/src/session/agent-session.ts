@@ -122,7 +122,7 @@ export class AgentSession implements IAgentSession {
       const defaultActiveGroups = this._toolGroupRegistry.list().filter((g) => g.defaultActive);
       for (const group of defaultActiveGroups) {
         for (const toolName of group.tools) {
-          this._toolCategoryRegistry.categorizeTool(toolName, 'system', 'skill');
+          this._toolCategoryRegistry.categorizeTool(toolName, 'system', 'dynamic');
         }
       }
     }
@@ -141,7 +141,7 @@ export class AgentSession implements IAgentSession {
     );
     for (const tool of metaTools) {
       config.toolRegistry.register(tool);
-      this._toolCategoryRegistry.categorizeTool(tool.name, 'system', 'core');
+      this._toolCategoryRegistry.categorizeTool(tool.name, 'system', 'always');
     }
 
     // Initialize executor
