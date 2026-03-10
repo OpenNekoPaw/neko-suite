@@ -4,7 +4,8 @@
   "description": "CLI for Neko AI Agent - Professional TUI with streaming, markdown, and rich interactions",
   "type": "module",
   "bin": {
-    "nekoagent": "./dist/cli.js"
+    "nekoagent": "./dist/cli.js",
+    "neko": "./dist/cli.js"
   },
   "exports": {
     ".": "./src/index.ts",
