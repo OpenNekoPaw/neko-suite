@@ -66,25 +66,20 @@
 ## 🟡 P1 — 核心功能（当前迭代）
 
 ### neko-agent（AI Skills）
-- [ ] 批量时间线操作 Skill（当前仅支持单元素操作）— [task-plan #11](./docs/archive/task-plan-2026-03-03.md)
-- [ ] AI 字幕生成 Skill（调用 Whisper / 云端 ASR）
-- [ ] 智能素材推荐（根据剧本自动检索资产库）
 - [ ] **ChatViewProvider 拆分 + AgentExecutor 流式化** Phase 4-5（Phase 1-3 ✅ 完成）— [refactoring-chat-cli.md](./packages/neko-agent/docs/refactoring-chat-cli.md)
   - Phase 1-2 ✅: Handler 拆分（ChatViewProvider 1,885→734 行 -61%，MessageHandler 1,153→466 行 -60%）
   - Phase 3 ✅: `AgentExecutor.thinkStream()` + `content_delta`/`text_delta` 全链路流式
   - Phase 4 ✅: Handler 单元测试（10 handler + 2 processor，15 文件 205 tests 全部通过）
   - Phase 5: 可选优化（会话操作提取 + deps 类型安全）
 
-### neko-assets（Phase 4）
+### neko-assets（Phase 4 精简版）
 
 > **设计说明**：neko-assets 是非破坏性引用库，只登记路径引用不复制文件。neko-engine 直接通过本地绝对路径访问媒体，与 neko-assets 完全独立。"导入"（注册文件）和"导出到编辑器"（拖拽协议）均已在 Phase 1-2 完成，**无需新增导入导出功能**，Phase 5 的 `.neko` 包分发另行实现。— [asset-management-design.md §neko-engine 关系](./docs/architecture/asset-management-design.md)
 
-- [ ] External Media Library P2: 性能优化（元数据缓存 + 增量索引 + 搜索 + 代理文件 + 批量导入）
 - [ ] ShaderAssetHandler（编译验证 + 预览 + 热重载）
 - [ ] PresetAssetHandler（LUT / 转场预设 / 导出预设）
-- [ ] ModelAssetHandler（AI 模型下载 + 校验 + 量化选择）
 - [ ] AI 生成结果自动入库（Agent 生成 → AssetRegistry.register）
-- [ ] IAIAnalysisService 实现（接入 neko-agent AI 分类）
+- [ ] FFmpegService 完整实现（分析是否使用 neko-engine）
 - 见 [asset-management-design.md §Phase 4](./docs/architecture/asset-management-design.md)
 
 ---
@@ -145,11 +140,17 @@
 - [ ] Phase 5：质量评估（黑帧检测 / VQA / SAM 智能蒙版）
 
 ### neko-agent 创意助手 — [task-plan #13](./docs/archive/task-plan-2026-03-03.md)
+- [ ] 批量时间线操作 Skill（当前仅支持单元素操作）
+- [ ] AI 字幕生成 Skill（调用 Whisper / 云端 ASR）
+- [ ] 智能素材推荐（根据剧本自动检索资产库）
 - [ ] 场景描述 → 自动配乐
-- [ ] AI 字幕（云端 ASR 集成）
 - [ ] 场景描写辅助
 
-### 跨语言架构对齐 — [cross-language-architecture.md](./docs/architecture/cross-language-architecture.md)
+### neko-assets（未来开发）
+
+- [ ] External Media Library P2: 性能优化（元数据缓存 + 增量索引 + 搜索 + 代理文件 + 批量导入）
+- [ ] ModelAssetHandler（AI 模型下载 + 校验 + 量化选择）
+- [ ] IAIAnalysisService 实现（接入 neko-agent AI 分类）
 - [ ] Step 2：Engine ComputeService（`/v1/compute/evaluate_frame`，消除 ~1285 行 TS 重复计算）
 - [ ] Step 3：UI 状态分离（Track/Element UI 字段移入前端 Store）
 

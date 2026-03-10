@@ -33,9 +33,28 @@ const config: KnipConfig = {
     'packages/neko-cut/packages/extension': {},
     'packages/neko-cut/packages/webview': {
       // Vite auto-detects entries from HTML files, explicit entry is redundant
+      ignore: [
+        // Phase 2 features (v2.0) - planned but not yet implemented
+        'src/assetLibrary.tsx',
+        'src/propertyPanel.tsx',
+        'src/components/AssetLibrary/**',
+        'src/components/ColorCorrection/**',
+        'src/components/Subtitles/**',
+        'src/components/Effects/**',
+        'src/components/Mask/**',
+        'src/components/PropertyPanel/*Standalone.tsx',
+        'src/tools/**',
+        'src/utils/colorCorrection.ts',
+        'src/utils/shapeAnimation.ts',
+        'src/utils/subtitleParser.ts',
+        'src/utils/timelineCalculations.ts',
+        'src/types/audioEffects.ts',
+      ],
     },
     'packages/neko-agent/packages/extension': {},
-    'packages/neko-agent/packages/webview': {},
+    'packages/neko-agent/packages/webview': {
+      entry: ['src/main.tsx'],
+    },
     'packages/neko-agent/packages/platform': {},
     'packages/neko-agent/packages/agent': {},
     'packages/neko-canvas/packages/extension': {},
@@ -44,8 +63,12 @@ const config: KnipConfig = {
     'packages/neko-story/packages/parser': {},
     'packages/neko-story/packages/webview': {},
     'packages/neko-tools/packages/extension': {},
-    'packages/neko-tools/packages/webview': {},
-    'packages/neko-preview/packages/webview': {},
+    'packages/neko-tools/packages/webview': {
+      entry: ['src/mediaDiff.tsx'],
+    },
+    'packages/neko-preview/packages/webview': {
+      entry: ['src/audio/main.tsx', 'src/video/main.tsx'],
+    },
     'packages/neko-preview/packages/extension': {},
     'packages/neko-assets/packages/asset': {},
     'packages/neko-engine/packages/extension': {},
