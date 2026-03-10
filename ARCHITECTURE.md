@@ -165,12 +165,12 @@ Extension Host
         │
         ▼
   AgentSession（Extension + CLI 统一抽象）
-  │  system prompt = base + active Skill.systemPrompt + injections
+  │  system prompt = base + [累积注入的 Skill 提示词]  ← Session 级，永久写入，见下方注①
   │
   ▼  PreToolUse hooks 串联（Shell → TS PermissionHooks）
   │
   AgentExecutor（ReAct 循环）
-  │  工具列表 = ToolInjectionManager.getToolsForTurn()
+  │  工具列表 = ToolInjectionManager.getToolsForTurn()  ← 每 turn 重算，见下方注②
   │              ├── always layer：核心工具（Read/Write/Bash/Grep + 元工具）
   │              │                 + alwaysActive ToolSets 的工具
   │              └── dynamic layer：手动激活的 ToolSets 的工具
@@ -180,6 +180,18 @@ Extension Host
   └── 工具调用 → ToolRegistry.execute()
         └── 时间线工具 → EngineClient → neko-engine 时间线变更
 ```
+
+**三套注入机制对比**（重要，勿混淆）：
+
+| 机制 | 实现位置 | 注入时机 | 是否可撤销 | 上下文感知 |
+|------|---------|---------|-----------|-----------|
+| **① Skill 系统提示词** | `applySkillInjection()` 追加到 `_history[0]` | Session 级一次性写入 | ❌ 无删除路径 | ❌ 不受 token 预算管控 |
+| **② ToolSet 工具列表** | `getToolsForTurn()` 每次重算 | 每 turn 动态计算 | ✅ 实时激活/停用 | ✅ always/dynamic 双层 token 预算 |
+| **③ ContextItem** | `ContextManager`（MemoryHooks 使用） | 每 turn 注入为独立消息 | ✅ LRU 淘汰 | ✅ 三层 size budget（turn/session/persistent）|
+
+> **注①**：`applySkillInjection()` 直接 mutate `_history[0].content`，多次调用（多个 slash command）会累积追加，无上限。`compressContext()` 不压缩 `_history[0]`，系统提示词可能随会话线性增长。唯一重置路径：`configure({ systemPrompt })` 整体替换。
+>
+> **注②**：`SkillService.clearActiveSkill()` 会停用关联 ToolSets（②），但**不会**从 `_history[0]` 移除已注入的提示词文本（①）。两套机制的生命周期不对称。
 
 **neko-agent 内部三子系统**：
 
