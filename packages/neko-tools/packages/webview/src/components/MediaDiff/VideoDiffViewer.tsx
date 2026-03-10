@@ -468,5 +468,3 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
     </div>
   );
 });
-
-export default VideoDiffViewer;

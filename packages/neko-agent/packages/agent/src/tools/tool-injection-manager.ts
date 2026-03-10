@@ -65,7 +65,7 @@ export class ToolInjectionManager implements IToolInjectionManager {
         ['skill', []],
         ['ondemand', []],
       ]),
-      activeSkills: [],
+      activeToolSets: [],
       pendingOnDemand: [],
       tokenUsage: new Map([
         ['core', 0],
@@ -88,7 +88,7 @@ export class ToolInjectionManager implements IToolInjectionManager {
   getState(): ToolInjectionState {
     return {
       injectedTools: new Map(this.state.injectedTools),
-      activeSkills: [...this.state.activeSkills],
+      activeToolSets: [...this.state.activeToolSets],
       pendingOnDemand: [...this.state.pendingOnDemand],
       tokenUsage: new Map(this.state.tokenUsage),
     };
@@ -133,8 +133,8 @@ export class ToolInjectionManager implements IToolInjectionManager {
    * Get skill tools (L2) based on active skills
    *
    * Note: We no longer auto-activate skills based on keyword matching.
-   * Instead, we rely on LLM to use SearchTools and ActivateSkill to
-   * discover and activate skills as needed. This approach:
+   * Instead, we rely on LLM to use SearchToolSets and ActivateToolSet to
+   * discover and activate tool sets as needed. This approach:
    * - Leverages LLM's semantic understanding
    * - Reduces maintenance of keyword lists
    * - Avoids false positives from keyword matching
@@ -144,8 +144,8 @@ export class ToolInjectionManager implements IToolInjectionManager {
       return [];
     }
 
-    // Get tools from manually activated skills
-    const skillTools = this.toolProvider.getActiveTools(this.state.activeSkills);
+    // Get tools from manually activated tool sets
+    const skillTools = this.toolProvider.getActiveTools(this.state.activeToolSets);
 
     // Also include default active tools
     const defaultTools = this.toolProvider.getDefaultTools();
@@ -207,21 +207,43 @@ export class ToolInjectionManager implements IToolInjectionManager {
   }
 
   /**
+   * Activate a tool set (adds its tools to the dynamic layer)
+   */
+  activateToolSet(toolSetName: string): void {
+    this.activateSkillInternal(toolSetName, true);
+  }
+
+  /**
+   * Deactivate a tool set
+   */
+  deactivateToolSet(toolSetName: string): void {
+    this.deactivateSkill(toolSetName);
+  }
+
+  /**
+   * Get active tool set names
+   */
+  getActiveToolSets(): string[] {
+    return [...this.state.activeToolSets];
+  }
+
+  /**
    * Activate a skill (adds its tools to L2)
+   * @deprecated Use activateToolSet
    */
   activateSkill(skillName: string): void {
     this.activateSkillInternal(skillName, true);
   }
 
   /**
-   * Internal skill activation
+   * Internal skill/toolset activation
    */
   private activateSkillInternal(skillName: string, emitEvent: boolean): void {
-    if (this.state.activeSkills.includes(skillName)) {
+    if (this.state.activeToolSets.includes(skillName)) {
       return;
     }
 
-    this.state.activeSkills.push(skillName);
+    this.state.activeToolSets.push(skillName);
 
     if (emitEvent) {
       this.emitEvent({
@@ -234,15 +256,16 @@ export class ToolInjectionManager implements IToolInjectionManager {
   }
 
   /**
-   * Deactivate a skill
+   * Deactivate a skill / tool set
+   * @deprecated Use deactivateToolSet
    */
   deactivateSkill(skillName: string): void {
-    const index = this.state.activeSkills.indexOf(skillName);
+    const index = this.state.activeToolSets.indexOf(skillName);
     if (index === -1) {
       return;
     }
 
-    this.state.activeSkills.splice(index, 1);
+    this.state.activeToolSets.splice(index, 1);
 
     this.emitEvent({
       type: 'skill_deactivated',
@@ -250,6 +273,14 @@ export class ToolInjectionManager implements IToolInjectionManager {
       skillName,
       layer: 'skill',
     });
+  }
+
+  /**
+   * Get active skill names
+   * @deprecated Use getActiveToolSets
+   */
+  getActiveSkills(): string[] {
+    return this.getActiveToolSets();
   }
 
   /**
@@ -345,13 +376,6 @@ export class ToolInjectionManager implements IToolInjectionManager {
       }
     }
     return undefined;
-  }
-
-  /**
-   * Get active skill names
-   */
-  getActiveSkills(): string[] {
-    return [...this.state.activeSkills];
   }
 
   /**

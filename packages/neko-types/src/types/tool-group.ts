@@ -1,13 +1,17 @@
 /**
- * ToolGroup Types - Dynamic tool injection based on user intent
+ * ToolGroup / ToolSet Types - Dynamic tool injection based on user intent
  *
- * ToolGroup is different from Skill:
+ * ToolSet (formerly ToolGroup) is different from Skill:
  * - Skill: Injects system prompt + optional allowedTools restriction (runtime)
- * - ToolGroup: Controls which tools are visible to LLM (before sending)
+ * - ToolSet: Controls which tools are visible to LLM (before sending)
  *
  * They work together:
- * - ToolGroup decides which tools to send to LLM (reduces tokens)
+ * - ToolSet decides which tools to send to LLM (reduces tokens)
  * - Skill's allowedTools acts as secondary guard (runtime interception)
+ *
+ * @neko-extension Not in Claude Code spec.
+ * Addresses the token cost problem of 50+ tools by allowing LLM to
+ * discover and activate tool sets on demand via SearchToolSets/ActivateToolSet.
  */
 
 import type { ToolCategory } from './tool';
@@ -19,7 +23,10 @@ import type { IToolProvider } from './tool-injection';
 export type ToolGroupSource = 'builtin' | 'project' | 'personal';
 
 /**
- * ToolGroup definition - defines a group of related tools
+ * ToolSet (ToolGroup) definition - defines a named, activatable collection of tools.
+ *
+ * LLM can discover and activate ToolSets on demand via SearchToolSets/ActivateToolSet,
+ * reducing token cost by keeping inactive tool definitions out of the context.
  */
 export interface ToolGroup {
   /** Unique group name */
@@ -31,10 +38,13 @@ export interface ToolGroup {
   /** List of tool names included in this group */
   tools: string[];
 
-  /** Keywords that trigger this group activation */
-  triggerKeywords: string[];
+  /** Whether this group is always active (injected in the always layer) */
+  alwaysActive?: boolean;
 
-  /** Whether this group is active by default */
+  /**
+   * @deprecated Use alwaysActive instead
+   * @see alwaysActive
+   */
   defaultActive?: boolean;
 
   /** Priority for conflict resolution (higher = more important) */
@@ -129,3 +139,14 @@ export interface IToolGroupRegistry extends IToolProvider {
   /** Check if a tool belongs to any group */
   getGroupsForTool(toolName: string): string[];
 }
+
+/**
+ * ToolSet — alias for ToolGroup.
+ *
+ * Preferred name going forward. "ToolSet" better communicates that it is a
+ * discrete, activatable collection, rather than an arbitrary grouping.
+ */
+export type ToolSet = ToolGroup;
+
+/** @see IToolGroupRegistry */
+export type IToolSetRegistry = IToolGroupRegistry;

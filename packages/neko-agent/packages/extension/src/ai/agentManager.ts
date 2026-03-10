@@ -14,6 +14,7 @@ import { createServiceId, getLogger } from '../base';
 const logger = getLogger('AgentManager');
 import type { Platform } from '@neko/platform';
 import type { ChatMessage } from '@neko/shared';
+import type { SkillInjection } from '@neko/agent';
 import { AgentRunner, IAgentRunner, IAgentConfig } from './agentRunner';
 
 // =============================================================================
@@ -136,6 +137,12 @@ export interface IAgentManager extends vscode.Disposable {
    * Agent 停止执行事件
    */
   readonly onDidAgentStop: vscode.Event<{ conversationId: string }>;
+
+  /**
+   * Apply a skill injection to the specified conversation's agent session.
+   * Updates the session system prompt and permission rules.
+   */
+  applySkillInjection(conversationId: string, injection: SkillInjection): void;
 }
 
 // =============================================================================
@@ -382,6 +389,11 @@ export class AgentManager implements IAgentManager {
       return { originalTokens: 0, compressedTokens: 0, ratio: 1 };
     }
     return agent.compressContext();
+  }
+
+  applySkillInjection(conversationId: string, injection: SkillInjection): void {
+    const agent = this._agents.get(conversationId);
+    agent?.applySkillInjection(injection);
   }
 
   // -------------------------------------------------------------------------

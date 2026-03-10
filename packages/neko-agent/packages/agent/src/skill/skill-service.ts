@@ -21,6 +21,7 @@ import type {
   ISkillRegistry,
   ISkillMatcher,
   ISkillInjector,
+  IToolInjectionManager,
 } from '@neko/shared';
 import { SkillRegistry } from './skill-registry';
 import { SkillInjector } from './skill-injector';
@@ -81,6 +82,11 @@ export interface SkillServiceConfig {
   minRelevanceThreshold?: number;
   /** Auto-apply skills above this threshold without confirmation */
   autoApplyThreshold?: number;
+  /**
+   * Tool injection manager for Track D: automatically activate skill.toolSets when a skill is applied.
+   * Optional — existing callers are unaffected when omitted.
+   */
+  injectionManager?: IToolInjectionManager;
 }
 
 // =============================================================================
@@ -101,6 +107,7 @@ export class SkillService {
   private readonly _injector: ISkillInjector;
   private readonly _minRelevanceThreshold: number;
   private readonly _autoApplyThreshold: number;
+  private readonly _injectionManager?: IToolInjectionManager;
 
   /** Currently active skill (if any) */
   private _activeSkill?: Skill;
@@ -112,6 +119,7 @@ export class SkillService {
     this._injector = config.injector || new SkillInjector();
     this._minRelevanceThreshold = config.minRelevanceThreshold ?? 0.3;
     this._autoApplyThreshold = config.autoApplyThreshold ?? 0.9;
+    this._injectionManager = config.injectionManager;
   }
 
   // ===========================================================================
@@ -141,6 +149,16 @@ export class SkillService {
     this._activeSkill = skill;
     this._activeToolGuard = toolGuard;
 
+    // Track D: activate associated ToolSets in the dynamic injection layer
+    if (skill.toolSets && skill.toolSets.length > 0 && this._injectionManager) {
+      const state = this._injectionManager.getState();
+      for (const toolSetName of skill.toolSets) {
+        if (!state.activeToolSets.includes(toolSetName)) {
+          this._injectionManager.activateToolSet(toolSetName);
+        }
+      }
+    }
+
     return injection;
   }
 
@@ -163,6 +181,16 @@ export class SkillService {
    * Clear active skill
    */
   clearActiveSkill(): void {
+    // Track D: deactivate toolSets that were activated with the skill
+    if (
+      this._activeSkill?.toolSets &&
+      this._activeSkill.toolSets.length > 0 &&
+      this._injectionManager
+    ) {
+      for (const toolSetName of this._activeSkill.toolSets) {
+        this._injectionManager.deactivateToolSet(toolSetName);
+      }
+    }
     this._activeSkill = undefined;
     this._activeToolGuard = undefined;
   }

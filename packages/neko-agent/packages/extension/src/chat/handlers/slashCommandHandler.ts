@@ -70,6 +70,14 @@ export class SlashCommandHandler {
           message: `Command /${cmdName} activated`,
           injection: result.injection,
         });
+
+        // Apply injection to AgentSession so the system prompt and allowed tools take effect
+        if (result.injection) {
+          const conversationId = this.deps.conversations.getActiveId();
+          if (conversationId) {
+            this.deps.agentManager?.applySkillInjection(conversationId, result.injection);
+          }
+        }
       } else {
         webview.postMessage({
           type: 'slashCommandResult',

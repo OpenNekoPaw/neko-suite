@@ -153,15 +153,46 @@ Extension Host
 ```
 用户自然语言输入
   │
+  ▼ UserPromptSubmit hooks（Shell，动态注入上下文）
+  │
   ▼
 Webview 对话 UI
-  │ postMessage
+  │ postMessage（普通消息 / /slash-command）
   ▼
-Extension Host (@neko/platform LLM 路由)
-  └── Claude / OpenAI API (流式)
-        └── 工具调用 → Neko-Script 指令
-              └── TimelineToolExecutor → neko-cut 时间线变更
+Extension Host
+  ├── SlashCommandHandler — 解析 /command，应用 SkillInjection 到 AgentSession
+  └── AgentManager — 每个会话独立 AgentRunner，LRU 最多 10 个实例
+        │
+        ▼
+  AgentSession（Extension + CLI 统一抽象）
+  │  system prompt = base + active Skill.systemPrompt + injections
+  │
+  ▼  PreToolUse hooks 串联（Shell → TS PermissionHooks）
+  │
+  AgentExecutor（ReAct 循环）
+  │  工具列表 = ToolInjectionManager.getToolsForTurn()
+  │              ├── always layer：核心工具 + alwaysActive ToolSets
+  │              └── dynamic layer：手动激活的 ToolSets
+  │
+  ├── Claude / OpenAI API（流式，@neko/platform LLM 路由）
+  └── 工具调用 → ToolRegistry.execute()
+        └── 时间线工具 → EngineClient → neko-engine 时间线变更
 ```
+
+**neko-agent 内部三子系统**：
+
+| 子系统 | 组件 | 职责 |
+|--------|------|------|
+| **Tool** | ToolRegistry, ToolCategoryRegistry, ToolInjectionManager, ToolGroupRegistry | 工具注册/执行/分层注入/集合管理 |
+| **Skill** | SkillRegistry, SkillService, SkillMatcher, SkillInjector, ToolGuard | 技能发现/应用/提示词注入/工具守卫 |
+| **Hook** | PermissionHooks, MemoryHooks, ValidationHooks, SettingsHookLoader | TS 进程内拦截 + Shell 外部钩子串联 |
+
+**概念职责边界**：
+- `Tool` = 原子能力（执行函数）
+- `ToolSet` = 工具可见性模块（按需激活，减少 token）
+- `Skill` = 行为模式（system prompt + 可选工具守卫 + 关联 ToolSets）
+- `Hook` = 执行拦截（Shell 外部与 TS 内部串联执行）
+- `SlashCommand` = 用户触发的工作流（`/slash-command` → 注入 Skill 提示词）
 
 ---
 
@@ -171,6 +202,7 @@ Extension Host (@neko/platform LLM 路由)
 |------|------|---------|
 | 统一引擎架构 | [adr-unified-engine.md](./docs/adr-unified-engine.md) | EngineClient HTTP dispatch 统一所有 Engine 调用，端口从 3 降为 1 |
 | 横切关注点 | [architecture/adr-cross-cutting-concerns.md](./docs/architecture/adr-cross-cutting-concerns.md) | Logger/i18n/Theme/Error 统一在 @neko/shared，三层隔离 |
+| AI Agent 架构 | [plans/2026-03-10-neko-agent-skill-tool-refactor-design.md](./docs/plans/2026-03-10-neko-agent-skill-tool-refactor-design.md) | ToolSet/Skill/Hook 三子系统职责划分；Shell hooks 桥接到 PermissionHooks；Skill 联动激活 ToolSets |
 | 媒体流传输 | [diff.md §4.1](./docs/diff.md) | H.264 + PCM 流式传输，非逐帧提取 |
 | Diff 并行化 | [diff.md §六](./docs/diff.md) | SSIM‖PSNR 并行 + 早期波形 + 消息队列去阻塞 |
 | 跨语言架构 | [architecture/cross-language-architecture.md](./docs/architecture/cross-language-architecture.md) | Rust 引擎为数据模型权威，TS 仅负责 UI |

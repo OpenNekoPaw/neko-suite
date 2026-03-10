@@ -86,49 +86,13 @@ export class ToolGroupRegistry implements IToolGroupRegistry {
   }
 
   /**
-   * Match ToolGroups by user input using keyword matching
+   * Match ToolGroups by user input
+   *
+   * Note: triggerKeywords have been removed. This method now always returns an
+   * empty array. Tool set discovery is handled by the LLM via SearchToolSets.
    */
-  match(input: string): ToolGroupMatch[] {
-    const inputLower = input.toLowerCase();
-    const matches: ToolGroupMatch[] = [];
-
-    for (const group of this.listEnabled()) {
-      // Skip groups with no trigger keywords (they are default active)
-      if (!group.triggerKeywords || group.triggerKeywords.length === 0) {
-        continue;
-      }
-
-      const matchedKeywords: string[] = [];
-
-      for (const keyword of group.triggerKeywords) {
-        if (inputLower.includes(keyword.toLowerCase())) {
-          matchedKeywords.push(keyword);
-        }
-      }
-
-      if (matchedKeywords.length > 0) {
-        // Calculate relevance based on matched keywords
-        // Use a formula that rewards more matches but doesn't penalize having many keywords
-        // Base relevance: 0.2 for first match, +0.1 for each additional match, capped at 1.0
-        const baseRelevance = 0.2;
-        const additionalRelevance = 0.1 * (matchedKeywords.length - 1);
-        const relevance = Math.min(baseRelevance + additionalRelevance, 1.0);
-
-        matches.push({
-          group,
-          relevance,
-          matchedKeywords,
-        });
-      }
-    }
-
-    // Sort by relevance (descending) then by priority (descending)
-    return matches.sort((a, b) => {
-      if (b.relevance !== a.relevance) {
-        return b.relevance - a.relevance;
-      }
-      return (b.group.priority || 0) - (a.group.priority || 0);
-    });
+  match(_input: string): ToolGroupMatch[] {
+    return [];
   }
 
   /**
@@ -180,13 +144,13 @@ export class ToolGroupRegistry implements IToolGroupRegistry {
   }
 
   /**
-   * Get default active tools (from groups with defaultActive: true)
+   * Get default active tools (from groups with alwaysActive: true or defaultActive: true)
    */
   getDefaultTools(): string[] {
     const tools = new Set<string>();
 
     for (const group of this.listEnabled()) {
-      if (group.defaultActive) {
+      if (group.alwaysActive || group.defaultActive) {
         for (const tool of group.tools) {
           tools.add(tool);
         }

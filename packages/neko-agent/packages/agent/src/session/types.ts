@@ -90,6 +90,13 @@ export interface AgentSessionConfig {
   /** External registries (optional, will create if not provided) */
   toolGroupRegistry?: IToolGroupRegistry;
   toolCategoryRegistry?: IToolCategoryRegistry;
+
+  /**
+   * Settings hook loader for executing shell hooks from .neko/settings.json
+   * - PreToolUse hooks: executed before each tool call in PermissionHooks
+   * - UserPromptSubmit hooks: executed before each user message in execute()
+   */
+  settingsHookLoader?: import('../hook-loader/settings-hook-loader').SettingsHookLoader;
 }
 
 // =============================================================================

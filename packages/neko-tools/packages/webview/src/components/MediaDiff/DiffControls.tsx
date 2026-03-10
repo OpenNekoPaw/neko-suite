@@ -346,5 +346,3 @@ export const DiffControls = memo(function DiffControls({
     </div>
   );
 });
-
-export default DiffControls;

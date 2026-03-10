@@ -268,6 +268,17 @@ export interface IAgentRunner extends vscode.Disposable {
    * Get all registered ToolGroups
    */
   getToolSkills(): import('@neko/shared').ConfiguredToolGroup[];
+
+  // -------------------------------------------------------------------------
+  // Skill Injection
+  // -------------------------------------------------------------------------
+
+  /**
+   * Apply a skill injection to the session context.
+   * Merges the injection's system prompt into the conversation and
+   * grants any specified tool allowances.
+   */
+  applySkillInjection(injection: import('@neko/agent').SkillInjection): void;
 }
 
 // =============================================================================
@@ -600,6 +611,14 @@ export class AgentRunner implements IAgentRunner {
       return [];
     }
     return this._toolGroupRegistry.list().map((ts) => ({ ...ts }));
+  }
+
+  // -------------------------------------------------------------------------
+  // Skill Injection
+  // -------------------------------------------------------------------------
+
+  applySkillInjection(injection: import('@neko/agent').SkillInjection): void {
+    this._session?.applySkillInjection(injection);
   }
 
   // -------------------------------------------------------------------------

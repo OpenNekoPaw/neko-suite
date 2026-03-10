@@ -16,6 +16,7 @@
  */
 
 import type { ChatMessage, AgentStep, ExecutorHooks } from '@neko/shared';
+import type { SkillInjection } from '../skill';
 
 import type {
   IAgentSession,
@@ -208,10 +209,26 @@ export class AgentSession implements IAgentSession {
     this._isRunning = true;
 
     try {
-      // Prepare input (inject plan mode reminder if needed)
+      // Execute UserPromptSubmit hooks (if configured)
       let processedInput = input;
+      if (this._config.settingsHookLoader) {
+        const hookResult = await this._config.settingsHookLoader.executeUserPromptSubmit(input);
+        if (hookResult.blocked) {
+          yield {
+            type: 'error',
+            error: new Error(hookResult.reason ?? 'Message blocked by UserPromptSubmit hook'),
+          };
+          return;
+        }
+        // Append hook stdout as additional context
+        if (hookResult.stdout?.trim()) {
+          processedInput = `${input}\n\n[Context from hooks]\n${hookResult.stdout.trim()}`;
+        }
+      }
+
+      // Prepare input (inject plan mode reminder if needed)
       if (this._executionMode === 'plan') {
-        processedInput = `${PLAN_MODE_SYSTEM_REMINDER}\n\n${input}`;
+        processedInput = `${PLAN_MODE_SYSTEM_REMINDER}\n\n${processedInput}`;
       }
 
       const maxIterations = this._config.maxIterations ?? DEFAULT_MAX_ITERATIONS;
@@ -292,6 +309,26 @@ export class AgentSession implements IAgentSession {
 
   addMessage(message: ChatMessage): void {
     this._history.push(message);
+  }
+
+  /**
+   * Apply a skill injection to the active session.
+   * Appends the injection's system prompt to the session's system prompt,
+   * and updates permission rules if allowedTools is specified.
+   */
+  applySkillInjection(injection: SkillInjection): void {
+    // Append skill system prompt to existing session system prompt
+    if (this._history.length > 0 && this._history[0].role === 'system') {
+      const current = this._history[0].content;
+      this._history[0].content = `${current}\n\n---\n\n${injection.systemPrompt}`;
+    }
+
+    // Add allowed tools to permission hooks
+    if (injection.allowedTools && injection.allowedTools.length > 0 && this._permissionHooks) {
+      for (const tool of injection.allowedTools) {
+        this._permissionHooks.addAllowRule(tool);
+      }
+    }
   }
 
   clearHistory(): void {
@@ -378,6 +415,7 @@ export class AgentSession implements IAgentSession {
         rules: {},
       },
       onToolAskStarted: (request) => this._handleToolConfirmation(request),
+      settingsHookLoader: this._config.settingsHookLoader,
     });
 
     // Compose hooks

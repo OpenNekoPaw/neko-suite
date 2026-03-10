@@ -6,6 +6,17 @@ const config: KnipConfig = {
     'esbuild', // Used as CLI bundler, not imported
     'sharp', // Native binary, loaded at runtime
     '@img/sharp-wasm32', // Sharp WASM fallback
+    // Markdown rendering peer dependencies (used by react-markdown/remark-gfm)
+    'remark-parse',
+    'remark-rehype',
+    'unified',
+    'vfile',
+    'mdast-util-gfm',
+    'micromark-extension-gfm',
+    'hast-util-to-jsx-runtime',
+    'html-url-attributes',
+    'clsx',
+    'devlop',
   ],
 
   workspaces: {
@@ -42,7 +53,12 @@ const config: KnipConfig = {
         'src/components/Subtitles/**',
         'src/components/Effects/**',
         'src/components/Mask/**',
-        'src/components/PropertyPanel/*Standalone.tsx',
+        'src/components/PropertyPanel/**',
+        'src/components/SpeedControl/**',
+        'src/components/TransitionPicker/**',
+        'src/components/PenToolEditor.tsx',
+        'src/components/ShapeRenderer.tsx',
+        'src/components/Toolbar.tsx',
         'src/tools/**',
         'src/utils/colorCorrection.ts',
         'src/utils/shapeAnimation.ts',
@@ -53,18 +69,33 @@ const config: KnipConfig = {
     },
     'packages/neko-agent/packages/extension': {},
     'packages/neko-agent/packages/webview': {
-      entry: ['src/main.tsx'],
+      ignore: [
+        // Barrel exports
+        'src/components/ChatView/InputArea/index.ts',
+        'src/config/index.ts',
+      ],
     },
     'packages/neko-agent/packages/platform': {},
     'packages/neko-agent/packages/agent': {},
     'packages/neko-canvas/packages/extension': {},
-    'packages/neko-canvas/packages/webview': {},
+    'packages/neko-canvas/packages/webview': {
+      ignore: [
+        // Barrel exports
+        'src/types/index.ts',
+        'src/utils/index.ts',
+      ],
+    },
     'packages/neko-story/packages/extension': {},
     'packages/neko-story/packages/parser': {},
     'packages/neko-story/packages/webview': {},
     'packages/neko-tools/packages/extension': {},
     'packages/neko-tools/packages/webview': {
       entry: ['src/mediaDiff.tsx'],
+      ignore: [
+        // Barrel exports and internal utilities
+        'src/components/MediaDiff/streaming/index.ts',
+        'src/components/MediaDiff/VideoFrameRenderer.tsx',
+      ],
     },
     'packages/neko-preview/packages/webview': {
       entry: ['src/audio/main.tsx', 'src/video/main.tsx'],

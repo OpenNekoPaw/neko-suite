@@ -50,10 +50,13 @@ export interface ToolInjectionState {
   /** Currently injected tools by layer */
   injectedTools: Map<ToolInjectionLayer, string[]>;
 
-  /** Active skill names */
-  activeSkills: string[];
+  /** Active tool set names */
+  activeToolSets: string[];
 
-  /** Pending on-demand tool requests */
+  /**
+   * @deprecated Use activeToolSets
+   * Pending on-demand tool requests — will be removed in Track C
+   */
   pendingOnDemand: string[];
 
   /** Token usage by layer */
@@ -96,17 +99,32 @@ export interface IToolInjectionManager {
   getToolsForTurn(input: string): string[];
 
   /**
-   * Activate a skill (adds its tools to L2)
+   * Activate a tool set (adds its tools to the dynamic layer)
+   */
+  activateToolSet(toolSetName: string): void;
+
+  /**
+   * Deactivate a tool set
+   */
+  deactivateToolSet(toolSetName: string): void;
+
+  /**
+   * Get active tool set names
+   */
+  getActiveToolSets(): string[];
+
+  /**
+   * @deprecated Use activateToolSet
    */
   activateSkill(skillName: string): void;
 
   /**
-   * Deactivate a skill
+   * @deprecated Use deactivateToolSet
    */
   deactivateSkill(skillName: string): void;
 
   /**
-   * Get active skill names
+   * @deprecated Use getActiveToolSets
    */
   getActiveSkills(): string[];
 

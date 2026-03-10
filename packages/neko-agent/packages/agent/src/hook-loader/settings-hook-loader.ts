@@ -203,6 +203,41 @@ export class SettingsHookLoader {
   }
 
   /**
+   * Execute hooks for UserPromptSubmit event
+   * Returns whether the message should be blocked, and any additional context to prepend
+   */
+  async executeUserPromptSubmit(message: string): Promise<HookExecutionResult> {
+    const hooks = this.getHooksForEvent('UserPromptSubmit');
+
+    if (hooks.length === 0) {
+      return { success: true, blocked: false };
+    }
+
+    const input: HookInput = {
+      message,
+      timestamp: new Date().toISOString(),
+    };
+
+    let combinedStdout = '';
+
+    for (const hook of hooks) {
+      const result = await this.executeHook(hook, input);
+
+      // Accumulate stdout for context injection
+      if (result.stdout?.trim()) {
+        combinedStdout += (combinedStdout ? '\n' : '') + result.stdout.trim();
+      }
+
+      // Check if hook wants to block
+      if (!result.success || result.blocked) {
+        return result;
+      }
+    }
+
+    return { success: true, blocked: false, stdout: combinedStdout || undefined };
+  }
+
+  /**
    * Execute hooks for PostToolUse event
    */
   async executePostToolUse(

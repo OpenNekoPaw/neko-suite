@@ -214,12 +214,12 @@ describe('Builtin Prompts', () => {
 
   it('should contain key instructions in default prompts', () => {
     // English
-    expect(BUILTIN_DEFAULT_PROMPT_EN).toContain('SearchTools');
-    expect(BUILTIN_DEFAULT_PROMPT_EN).toContain('ActivateSkill');
+    expect(BUILTIN_DEFAULT_PROMPT_EN).toContain('SearchToolSets');
+    expect(BUILTIN_DEFAULT_PROMPT_EN).toContain('ActivateToolSet');
 
     // Chinese
-    expect(BUILTIN_DEFAULT_PROMPT_ZH).toContain('SearchTools');
-    expect(BUILTIN_DEFAULT_PROMPT_ZH).toContain('ActivateSkill');
+    expect(BUILTIN_DEFAULT_PROMPT_ZH).toContain('SearchToolSets');
+    expect(BUILTIN_DEFAULT_PROMPT_ZH).toContain('ActivateToolSet');
   });
 
   it('should contain planning instructions in plan prompts', () => {

@@ -66,11 +66,11 @@
 ## 🟡 P1 — 核心功能（当前迭代）
 
 ### neko-agent（AI Skills）
-- [ ] **ChatViewProvider 拆分 + AgentExecutor 流式化** Phase 5（Phase 1-4 ✅ 完成）— [refactoring-chat-cli.md](./packages/neko-agent/docs/refactoring-chat-cli.md)
-  - Phase 1-2 ✅: Handler 拆分（ChatViewProvider 1,885→734 行 -61%，MessageHandler 1,153→466 行 -60%）
+- [x] **ChatViewProvider 拆分 + AgentExecutor 流式化** ✅ 全部完成 — [refactoring-chat-cli.md](./packages/neko-agent/docs/refactoring-chat-cli.md)
+  - Phase 1-2 ✅: Handler 拆分（ChatViewProvider 1,885→786 行 -58%，MessageHandler 1,153→466 行 -60%）
   - Phase 3 ✅: `AgentExecutor.thinkStream()` + `content_delta`/`text_delta` 全链路流式
   - Phase 4 ✅: Handler 单元测试（10 handler + 2 processor，15 文件 205 tests 全部通过）
-  - Phase 5: 可选优化（会话操作提取 + deps 类型安全）
+  - Phase 5 ✅: 会话操作已提取（ConversationMessageHandler 144 行），deps 类型安全已实现（updateDeps 方法）
 
 ---
 

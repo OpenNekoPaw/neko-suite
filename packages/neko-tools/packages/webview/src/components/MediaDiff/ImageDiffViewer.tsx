@@ -389,5 +389,3 @@ export const ImageDiffViewer = memo(function ImageDiffViewer({
     </div>
   );
 });
-
-export default ImageDiffViewer;

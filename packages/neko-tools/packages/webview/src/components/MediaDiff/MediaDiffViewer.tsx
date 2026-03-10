@@ -229,5 +229,3 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
     </div>
   );
 });
-
-export default MediaDiffViewer;

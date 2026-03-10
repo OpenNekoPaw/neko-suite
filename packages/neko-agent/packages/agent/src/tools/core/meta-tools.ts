@@ -16,13 +16,13 @@ import type {
 import { BuiltinTool } from '@neko/shared';
 
 /**
- * SearchTools - Meta tool for discovering available tools
+ * SearchToolSets - Meta tool for discovering available tool sets
  *
- * Allows the LLM to search for tools by keyword or category,
+ * Allows the LLM to search for tool sets by keyword or category,
  * enabling on-demand tool discovery and activation.
  */
 export class SearchToolsTool extends BuiltinTool {
-  readonly name = 'SearchTools';
+  readonly name = 'SearchToolSets';
   readonly description =
     'Search for available tools by keyword or category. Use this when you need a capability that is not currently available.';
   readonly parameters = {
@@ -153,11 +153,6 @@ export class SearchToolsTool extends BuiltinTool {
           if (skill.description.toLowerCase().includes(word)) {
             relevance += 2;
           }
-          for (const keyword of skill.triggerKeywords) {
-            if (keyword.toLowerCase().includes(word)) {
-              relevance += 2;
-            }
-          }
         }
 
         if (relevance > 0) {
@@ -179,12 +174,12 @@ export class SearchToolsTool extends BuiltinTool {
 
     if (matchedSkills.length > 0) {
       const topSkill = matchedSkills[0];
-      suggestion = `Found ${matchedSkills.length} matching skill(s). Best match: "${topSkill.name}" - ${topSkill.description}`;
-      nextAction = `To use these tools, call: ActivateSkill({ skillName: "${topSkill.name}" })`;
+      suggestion = `Found ${matchedSkills.length} matching tool set(s). Best match: "${topSkill.name}" - ${topSkill.description}`;
+      nextAction = `To use these tools, call: ActivateToolSet({ skillName: "${topSkill.name}" })`;
     } else if (matchedCategories.length > 0) {
       const topCategory = matchedCategories[0];
       suggestion = `Found ${matchedCategories.length} relevant categories. Top match: "${topCategory.name}" (${topCategory.toolCount} tools)`;
-      nextAction = 'Check the tools list above and activate the appropriate skill.';
+      nextAction = 'Check the tools list above and activate the appropriate tool set.';
     } else {
       suggestion = 'No matching tools found.';
       nextAction = 'Try different keywords or use GetContext to see all available skills.';
@@ -202,15 +197,15 @@ export class SearchToolsTool extends BuiltinTool {
 }
 
 /**
- * ActivateSkill - Meta tool for activating a skill
+ * ActivateToolSet - Meta tool for activating a tool set
  *
- * Allows the LLM to dynamically activate a skill to gain access
+ * Allows the LLM to dynamically activate a tool set to gain access
  * to its associated tools and capabilities.
  */
 export class ActivateSkillTool extends BuiltinTool {
-  readonly name = 'ActivateSkill';
+  readonly name = 'ActivateToolSet';
   readonly description =
-    'Activate a skill to gain access to its tools and capabilities. Use searchTools first to find available skills.';
+    'Activate a tool set to gain access to its tools and capabilities. Use SearchToolSets first to find available tool sets.';
   readonly parameters = {
     type: 'object',
     properties: {
@@ -245,33 +240,33 @@ export class ActivateSkillTool extends BuiltinTool {
     const skillName = args.skillName as string;
     const reason = args.reason as string | undefined;
 
-    // Check if skill exists
+    // Check if tool set exists
     if (this.skillRegistry) {
       const skill = this.skillRegistry.get(skillName);
       if (!skill) {
-        // Try to find similar skills
+        // Try to find similar tool sets
         const allSkills = this.skillRegistry.list();
         const similar = allSkills
           .filter((s) => s.name.toLowerCase().includes(skillName.toLowerCase()))
           .map((s) => s.name);
 
         return this.error(
-          `Skill "${skillName}" not found.${similar.length > 0 ? ` Did you mean: ${similar.join(', ')}?` : ' Use searchTools to find available skills.'}`,
+          `Tool set "${skillName}" not found.${similar.length > 0 ? ` Did you mean: ${similar.join(', ')}?` : ' Use SearchToolSets to find available tool sets.'}`,
         );
       }
 
       if (!skill.enabled) {
-        return this.error(`Skill "${skillName}" is disabled.`);
+        return this.error(`Tool set "${skillName}" is disabled.`);
       }
     }
 
-    // Activate the skill
+    // Activate the tool set
     try {
-      this.injectionManager.activateSkill(skillName);
+      this.injectionManager.activateToolSet(skillName);
 
       // Get the tools that are now available
       const state = this.injectionManager.getState();
-      const activeSkills = state.activeSkills;
+      const activeToolSets = state.activeToolSets;
 
       let activatedTools: string[] = [];
       if (this.skillRegistry) {
@@ -282,25 +277,25 @@ export class ActivateSkillTool extends BuiltinTool {
         activated: true,
         skillName,
         reason: reason ?? 'User requested',
-        activeSkills,
+        activeToolSets,
         newTools: activatedTools,
-        message: `Skill "${skillName}" activated. ${activatedTools.length} tools are now available.`,
+        message: `Tool set "${skillName}" activated. ${activatedTools.length} tools are now available.`,
       });
     } catch (error) {
       return this.error(
-        `Failed to activate skill: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to activate tool set: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
 }
 
 /**
- * DeactivateSkill - Meta tool for deactivating a skill
+ * DeactivateToolSet - Meta tool for deactivating a tool set
  */
 export class DeactivateSkillTool extends BuiltinTool {
-  readonly name = 'DeactivateSkill';
+  readonly name = 'DeactivateToolSet';
   readonly description =
-    'Deactivate a skill to free up context space. Use when a skill is no longer needed.';
+    'Deactivate a tool set to free up context space. Use when a tool set is no longer needed.';
   readonly parameters = {
     type: 'object',
     properties: {
@@ -328,22 +323,22 @@ export class DeactivateSkillTool extends BuiltinTool {
 
     const skillName = args.skillName as string;
 
-    // Check if skill is active
+    // Check if tool set is active
     const state = this.injectionManager.getState();
-    if (!state.activeSkills.includes(skillName)) {
-      return this.error(`Skill "${skillName}" is not currently active.`);
+    if (!state.activeToolSets.includes(skillName)) {
+      return this.error(`Tool set "${skillName}" is not currently active.`);
     }
 
-    // Deactivate the skill
-    this.injectionManager.deactivateSkill(skillName);
+    // Deactivate the tool set
+    this.injectionManager.deactivateToolSet(skillName);
 
     const newState = this.injectionManager.getState();
 
     return this.success({
       deactivated: true,
       skillName,
-      activeSkills: newState.activeSkills,
-      message: `Skill "${skillName}" deactivated.`,
+      activeToolSets: newState.activeToolSets,
+      message: `Tool set "${skillName}" deactivated.`,
     });
   }
 }
@@ -388,7 +383,7 @@ export class GetContextTool extends BuiltinTool {
     }, 0);
 
     const result: Record<string, unknown> = {
-      activeSkills: state.activeSkills,
+      activeToolSets: state.activeToolSets,
       tokenUsage: tokenUsage.map((u) => ({
         layer: u.layer,
         used: u.used,

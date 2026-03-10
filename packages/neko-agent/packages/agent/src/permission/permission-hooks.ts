@@ -18,6 +18,7 @@ import type {
 } from './types';
 import { DEFAULT_PERMISSION_CONFIG } from './types';
 import { PermissionRuleMatcher, normalizeToolCall } from './rule-matcher';
+import type { SettingsHookLoader } from '../hook-loader/settings-hook-loader';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('PermissionHooks');
@@ -40,6 +41,9 @@ export interface PermissionHooksOptions {
 
   /** Callback when entering ask flow */
   onToolAskStarted?: (request: ToolConfirmationRequest) => void;
+
+  /** Shell hook loader for executing PreToolUse hooks from settings.json */
+  settingsHookLoader?: SettingsHookLoader;
 }
 
 /**
@@ -53,6 +57,7 @@ export class PermissionHooks implements ExecutorHooks {
   private onToolDenied?: (toolCall: ToolCallInfo, reason: string) => void;
   private onToolAllowed?: (toolCall: ToolCallInfo, reason: string) => void;
   private onToolAskStarted?: (request: ToolConfirmationRequest) => void;
+  private settingsHookLoader?: SettingsHookLoader;
 
   // Pending confirmations
   private pendingConfirmations = new Map<
@@ -73,6 +78,7 @@ export class PermissionHooks implements ExecutorHooks {
     this.onToolDenied = options.onToolDenied;
     this.onToolAllowed = options.onToolAllowed;
     this.onToolAskStarted = options.onToolAskStarted;
+    this.settingsHookLoader = options.settingsHookLoader;
   }
 
   /**
@@ -159,8 +165,25 @@ export class PermissionHooks implements ExecutorHooks {
    */
   async onToolCall(
     info: ToolCallInfo,
-    execute: () => Promise<ToolResult>,
+    _execute: () => Promise<ToolResult>,
   ): Promise<ToolResultWithMeta | null> {
+    // Execute shell hooks from settings.json (PreToolUse) before TS permission rules
+    if (this.settingsHookLoader) {
+      const hookResult = await this.settingsHookLoader.executePreToolUse(
+        info.name,
+        (info.arguments ?? {}) as Record<string, unknown>,
+      );
+      if (hookResult.blocked) {
+        this.onToolDenied?.(info, hookResult.reason ?? 'Blocked by PreToolUse hook');
+        return {
+          success: false,
+          error: hookResult.reason ?? 'Tool execution blocked by hook',
+          callId: info.id,
+          name: info.name,
+        };
+      }
+    }
+
     // Check permission
     const result = this.matcher.check(info);
 

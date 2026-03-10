@@ -188,10 +188,10 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
 ];
 
 /**
- * Core tools that are always injected (L1 layer)
+ * Core tools that are always injected (always layer)
  * - Basic file operations: Read, Write, ListDirectory, Grep
  * - Shell execution: Bash
- * - Tool discovery & skill management: SearchTools, ActivateSkill, DeactivateSkill, GetContext
+ * - Tool discovery & tool set management: SearchToolSets, ActivateToolSet, DeactivateToolSet, GetContext
  */
 export const CORE_TOOLS = [
   'Read',
@@ -199,9 +199,9 @@ export const CORE_TOOLS = [
   'Bash',
   'ListDirectory',
   'Grep',
-  'SearchTools',
-  'ActivateSkill',
-  'DeactivateSkill',
+  'SearchToolSets',
+  'ActivateToolSet',
+  'DeactivateToolSet',
   'GetContext',
 ] as const;
 

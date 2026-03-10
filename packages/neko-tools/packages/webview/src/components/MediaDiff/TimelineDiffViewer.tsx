@@ -391,5 +391,3 @@ export const TimelineDiffViewer = memo(function TimelineDiffViewer({
     </div>
   );
 });
-
-export default TimelineDiffViewer;

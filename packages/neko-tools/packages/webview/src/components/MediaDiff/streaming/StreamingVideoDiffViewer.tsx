@@ -378,5 +378,3 @@ export const StreamingVideoDiffViewer = memo(
     },
   ),
 );
-
-export default StreamingVideoDiffViewer;

@@ -194,6 +194,20 @@ export interface Skill {
    * Loaded from skill directory structure for progressive disclosure
    */
   contentConfig?: SkillContentConfig;
+
+  /**
+   * ToolSets to activate when this skill is applied.
+   *
+   * When a skill is activated via SkillService.apply(), these tool sets are
+   * automatically loaded into the dynamic injection layer, making their tools
+   * available to LLM without requiring a separate ActivateToolSet call.
+   *
+   * Declared in SKILL.md frontmatter as `tool-sets: set-a, set-b`.
+   *
+   * @neko-extension Not in Claude Code spec.
+   * @example ["element-editing", "effects-transitions"]
+   */
+  toolSets?: string[];
 }
 
 // =============================================================================
@@ -462,6 +476,13 @@ export interface SkillFrontmatter {
 
   /** Enabled state */
   enabled?: boolean;
+
+  /**
+   * ToolSet names to activate when this skill is applied (comma-separated).
+   * @neko-extension Not in Claude Code spec.
+   * @example "element-editing, effects-transitions"
+   */
+  'tool-sets'?: string;
 }
 
 /**
@@ -817,6 +838,12 @@ export function createSkill(
     directoryPath,
     enabled: frontmatter.enabled ?? true,
     contentConfig,
+    toolSets: frontmatter['tool-sets']
+      ? frontmatter['tool-sets']
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
+      : undefined,
   };
 }
 
