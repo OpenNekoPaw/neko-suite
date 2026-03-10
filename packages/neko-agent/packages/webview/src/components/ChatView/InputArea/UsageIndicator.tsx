@@ -144,5 +144,3 @@ function TokenIcon({ className, style }: { className?: string; style?: React.CSS
     </svg>
   );
 }
-
-export default UsageIndicator;

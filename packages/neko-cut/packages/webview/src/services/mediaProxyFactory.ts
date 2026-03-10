@@ -30,7 +30,8 @@ export function getMediaProxy(): IMediaRequestProxy {
 }
 
 /**
- * Alias for getMediaProxy (backward compatibility)
+ * @deprecated Use getMediaProxy instead. Will be removed in v2.0.
+ * @alias getMediaProxy
  */
 export const getRemoteMediaProxy = getMediaProxy;
 

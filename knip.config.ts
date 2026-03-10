@@ -11,7 +11,7 @@ const config: KnipConfig = {
   workspaces: {
     // ── Layer 0: Library packages ──────────────────────
     'packages/neko-types': {
-      entry: ['src/index.ts', 'src/vscode/extension/index.ts'],
+      // Knip auto-detects entries from package.json exports
       ignoreDependencies: ['react'], // Optional peer dependency
     },
     'packages/neko-client': {},
@@ -32,46 +32,45 @@ const config: KnipConfig = {
     // ── Extension sub-packages ────────────────────────
     'packages/neko-cut/packages/extension': {},
     'packages/neko-cut/packages/webview': {
-      entry: ['src/main.tsx', 'src/assetLibrary.tsx', 'src/propertyPanel.tsx'],
+      // Vite auto-detects entries from HTML files, explicit entry is redundant
     },
     'packages/neko-agent/packages/extension': {},
-    'packages/neko-agent/packages/webview': { entry: ['src/main.tsx'] },
-    'packages/neko-agent/packages/platform': {
-      ignore: ['examples/**'], // Dev examples, not part of build
-    },
+    'packages/neko-agent/packages/webview': {},
+    'packages/neko-agent/packages/platform': {},
     'packages/neko-agent/packages/agent': {},
     'packages/neko-canvas/packages/extension': {},
-    'packages/neko-canvas/packages/webview': { entry: ['src/main.tsx'] },
+    'packages/neko-canvas/packages/webview': {},
     'packages/neko-story/packages/extension': {},
     'packages/neko-story/packages/parser': {},
-    'packages/neko-story/packages/webview': { entry: ['src/main.tsx'] },
-    'packages/neko-tools/packages/extension': {
-      entry: [
-        'src/asset-diff/index.ts',
-        'src/media-diff/index.ts',
-        'src/media-lsp/index.ts',
-      ],
-    },
-    'packages/neko-tools/packages/webview': { entry: ['src/mediaDiff.tsx'] },
-    'packages/neko-preview/packages/webview': {
-      entry: ['src/audio/main.tsx', 'src/video/main.tsx'],
-    },
+    'packages/neko-story/packages/webview': {},
+    'packages/neko-tools/packages/extension': {},
+    'packages/neko-tools/packages/webview': {},
+    'packages/neko-preview/packages/webview': {},
     'packages/neko-preview/packages/extension': {},
     'packages/neko-assets/packages/asset': {},
     'packages/neko-engine/packages/extension': {},
 
     // ── Skills (CLI scripts, not imported) ───────────────
-    'skills/vscode-extension-debugger': { ignore: ['**/*'] },
+    // Skills are excluded from analysis - they are runtime scripts, not imported modules
 
     // ── Skip packages ─────────────────────────────────
-    'packages/neko-proto': { ignore: ['**/*'] },
+    'packages/neko-proto': {
+      // Protobuf IDL files, not TypeScript code
+      entry: ['package.json'],
+    },
     'packages/neko-model': { ignore: ['**/*'] },
     'packages/neko-audio': { ignore: ['**/*'] },
     'packages/neko-live': { ignore: ['**/*'] },
     'packages/neko-sketch': { ignore: ['**/*'] },
-    'packages/neko-suite': { ignore: ['**/*'] },
+    'packages/neko-suite': {
+      // Meta package with only documentation
+      entry: ['package.json'],
+    },
     'packages/neko-engine/packages/native-napi': { ignore: ['**/*'] },
-    'packages/neko-engine/packages/native-cli': { ignore: ['**/*'] },
+    'packages/neko-engine/packages/native-cli': {
+      // Rust CLI binary, not TypeScript
+      entry: ['package.json'],
+    },
   },
 };
 

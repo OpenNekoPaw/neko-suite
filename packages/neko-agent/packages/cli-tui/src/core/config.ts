@@ -274,7 +274,7 @@ export function loadConfig(
   }
 
   // Convert to CLI config
-  let config = unifiedToCliConfig(mergedConfig, workDir, migratedUser, migratedWorkspace);
+  const config = unifiedToCliConfig(mergedConfig, workDir, migratedUser, migratedWorkspace);
 
   // Determine final provider (may be overridden)
   const finalProvider = overrides.provider ?? config.provider;
@@ -338,7 +338,10 @@ export function saveUserConfig(config: Partial<UnifiedConfig>): void {
   writeUserConfigFile(newConfig);
 }
 
-// Legacy alias
+/**
+ * @deprecated Use saveUserConfig instead. Will be removed in v2.0.
+ * @alias saveUserConfig
+ */
 export const saveGlobalConfig = saveUserConfig;
 
 /**

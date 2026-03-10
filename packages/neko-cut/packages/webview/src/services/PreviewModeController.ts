@@ -228,5 +228,3 @@ export function resetPreviewModeController(): void {
     instance = null;
   }
 }
-
-export default PreviewModeController;

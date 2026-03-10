@@ -177,5 +177,3 @@ const ShapeTypeIcon = memo(function ShapeTypeIcon({ type }: { type: string }) {
       return null;
   }
 });
-
-export default ShapeElementContent;

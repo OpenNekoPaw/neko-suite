@@ -261,5 +261,3 @@ export const vscodeApi: IVSCodeApiWrapper = {
   cancelRequest,
   getPendingRequestCount,
 };
-
-export default vscodeApi;
