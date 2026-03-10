@@ -144,13 +144,13 @@ export class ToolGroupRegistry implements IToolGroupRegistry {
   }
 
   /**
-   * Get default active tools (from groups with alwaysActive: true or defaultActive: true)
+   * Get default active tools (from groups with alwaysActive: true)
    */
   getDefaultTools(): string[] {
     const tools = new Set<string>();
 
     for (const group of this.listEnabled()) {
-      if (group.alwaysActive || group.defaultActive) {
+      if (group.alwaysActive) {
         for (const tool of group.tools) {
           tools.add(tool);
         }

@@ -1,11 +1,11 @@
 /**
  * Core Tools Module
  *
- * Contains the core meta tools that are always injected (L1 layer):
- * - searchTools: Discover available tools and skills
- * - activateSkill: Activate a skill to gain access to its tools
- * - deactivateSkill: Deactivate a skill to free up context
- * - getContext: Get current context information
+ * Contains the core meta tools that are always injected (always layer):
+ * - SearchToolSets: Discover available tool sets
+ * - ActivateToolSet: Activate a tool set to gain access to its tools
+ * - DeactivateToolSet: Deactivate a tool set to free up context
+ * - GetContext: Get current context information
  *
  * And core file/system tools:
  * - Read, Write, Bash, ListDirectory, Grep

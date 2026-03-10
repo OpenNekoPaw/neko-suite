@@ -119,7 +119,7 @@ export class AgentSession implements IAgentSession {
       (config.toolCategoryRegistry as ToolCategoryRegistry) ?? new ToolCategoryRegistry();
     if (!config.toolCategoryRegistry) {
       // Populate with tool categories from ToolGroupRegistry
-      const defaultActiveGroups = this._toolGroupRegistry.list().filter((g) => g.defaultActive);
+      const defaultActiveGroups = this._toolGroupRegistry.list().filter((g) => g.alwaysActive);
       for (const group of defaultActiveGroups) {
         for (const toolName of group.tools) {
           this._toolCategoryRegistry.categorizeTool(toolName, 'system', 'dynamic');

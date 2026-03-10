@@ -104,21 +104,6 @@ export interface IToolInjectionManager {
   getActiveToolSets(): string[];
 
   /**
-   * @deprecated Use activateToolSet
-   */
-  activateSkill(skillName: string): void;
-
-  /**
-   * @deprecated Use deactivateToolSet
-   */
-  deactivateSkill(skillName: string): void;
-
-  /**
-   * @deprecated Use getActiveToolSets
-   */
-  getActiveSkills(): string[];
-
-  /**
    * Reset injection state
    */
   reset(): void;

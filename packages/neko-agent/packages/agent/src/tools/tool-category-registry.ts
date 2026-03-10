@@ -150,13 +150,6 @@ export class ToolCategoryRegistry implements IToolCategoryRegistry {
   }
 
   /**
-   * @deprecated Use getSkillTools (dynamic layer now covers all non-always tools)
-   */
-  getOnDemandTools(): CategorizedTool[] {
-    return this.getToolsByLayer('dynamic');
-  }
-
-  /**
    * Check if a tool is in the always layer (core tool)
    */
   isCoreToolName(toolName: string): boolean {

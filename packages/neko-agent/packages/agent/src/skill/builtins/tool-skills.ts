@@ -279,35 +279,3 @@ export function registerBuiltinToolGroups(registry: IToolGroupRegistry): void {
     registry.register(group);
   }
 }
-
-// Legacy aliases for backward compatibility
-/** @deprecated Use coreSystemToolSet */
-export const coreSystemToolSkill = coreSystemToolSet;
-/** @deprecated Use planModeToolSet */
-export const planModeToolSkill = planModeToolSet;
-/** @deprecated Use timelineQueryToolSet */
-export const timelineQueryToolSkill = timelineQueryToolSet;
-/** @deprecated Use fileEditingToolSet */
-export const fileEditingToolSkill = fileEditingToolSet;
-/** @deprecated Use gitOperationsToolSet */
-export const gitOperationsToolSkill = gitOperationsToolSet;
-/** @deprecated Use shellExecutionToolSet */
-export const shellExecutionToolSkill = shellExecutionToolSet;
-/** @deprecated Use elementEditingToolSet */
-export const elementEditingToolSkill = elementEditingToolSet;
-/** @deprecated Use effectsTransitionsToolSet */
-export const effectsTransitionsToolSkill = effectsTransitionsToolSet;
-/** @deprecated Use animationKeyframesToolSet */
-export const animationKeyframesToolSkill = animationKeyframesToolSet;
-/** @deprecated Use colorGradingToolSet */
-export const colorGradingToolSkill = colorGradingToolSet;
-/** @deprecated Use audioEditingToolSet */
-export const audioEditingToolSkill = audioEditingToolSet;
-/** @deprecated Use trackManagementToolSet */
-export const trackManagementToolSkill = trackManagementToolSet;
-/** @deprecated Use shapeMaskToolSet */
-export const shapeMaskToolSkill = shapeMaskToolSet;
-/** @deprecated Use exportRenderToolSet */
-export const exportRenderToolSkill = exportRenderToolSet;
-/** @deprecated Use aiGenerationToolSet */
-export const aiGenerationToolSkill = aiGenerationToolSet;

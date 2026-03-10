@@ -211,27 +211,6 @@ export class ToolInjectionManager implements IToolInjectionManager {
   }
 
   /**
-   * @deprecated Use activateToolSet
-   */
-  activateSkill(skillName: string): void {
-    this.activateToolSetInternal(skillName);
-  }
-
-  /**
-   * @deprecated Use deactivateToolSet
-   */
-  deactivateSkill(skillName: string): void {
-    this.deactivateToolSet(skillName);
-  }
-
-  /**
-   * @deprecated Use getActiveToolSets
-   */
-  getActiveSkills(): string[] {
-    return this.getActiveToolSets();
-  }
-
-  /**
    * Internal tool set activation
    */
   private activateToolSetInternal(toolSetName: string): void {

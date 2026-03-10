@@ -41,12 +41,6 @@ export interface ToolGroup {
   /** Whether this group is always active (injected in the always layer) */
   alwaysActive?: boolean;
 
-  /**
-   * @deprecated Use alwaysActive instead
-   * @see alwaysActive
-   */
-  defaultActive?: boolean;
-
   /** Priority for conflict resolution (higher = more important) */
   priority?: number;
 
