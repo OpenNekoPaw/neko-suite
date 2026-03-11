@@ -208,13 +208,13 @@ Platform 采用最小化公共 API 设计，内部实���（LLM Adapter、M
 ### 1. 配置加载流程
 
 ```
-内置预设 (presets/en.ts)
-    ↓ loadBuiltinPresets()
+首次运行 → ensureUserConfig() 生成默认 ~/.neko/config.json
+    ↓
 用户配置 (~/.neko/config.json)
     ↓ FileUserConfigManager
 工作区配置 (.neko/config.json)
     ↓ WorkspaceConfig
-ConfigManager (三层合并)
+ConfigManager (两层合并: User → Workspace override by id)
     ↓ getConfig()
 最终配置
 ```
@@ -262,6 +262,5 @@ MediaAdapter.generate() → 提交到外部 API
 | **工厂模式**   | `createPlatform()`       | 统一创建平台实例                      |
 | **适配器模式** | `llm/adapter/`           | 统一不同 AI 提供商接口                |
 | **注册表模式** | `BaseRegistry`           | 动态注册和查找组件（内置+自定义双层） |
-| **分区模式**   | `BaseConfigSection`      | 各配置类型独立 CRUD + 三层合并        |
 | **策略模式**   | `ModelSelector`          | 三优先级模型选择                      |
 | **门面模式**   | `MediaGenerationService` | 封装路由+执行+轮询复杂性              |
