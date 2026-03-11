@@ -33,6 +33,12 @@ export class LLMServiceAdapter implements IService {
     this._client = createLLMClient(config);
   }
 
+  /** Rebuild internal client with updated config (e.g., after model switch) */
+  rebuild(config: CLIConfig): void {
+    this._config = config;
+    this._client = createLLMClient(config);
+  }
+
   async chat(messages: ChatMessage[], options?: ServiceOptions): Promise<ServiceResponse> {
     const response = await this._client.chat(messages, {
       maxTokens: options?.maxTokens ?? this._config.maxTokens,

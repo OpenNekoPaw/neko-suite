@@ -4,12 +4,14 @@
  * Scrollable message list container.
  * Renders all messages from the conversation store
  * with streaming state for the latest assistant message.
+ * Includes inline activity indicator (Claude Code style).
  */
 
 import React from 'react';
 import { Box } from 'ink';
 import { useConversationStore } from '../../stores/conversation-store';
 import { MessageItem } from './MessageItem';
+import { ActivityIndicator } from './ActivityIndicator';
 
 export function ChatView(): React.JSX.Element {
   const messages = useConversationStore((s) => s.messages);
@@ -33,6 +35,9 @@ export function ChatView(): React.JSX.Element {
           />
         );
       })}
+
+      {/* Inline activity indicator — Claude Code style */}
+      <ActivityIndicator />
     </Box>
   );
 }

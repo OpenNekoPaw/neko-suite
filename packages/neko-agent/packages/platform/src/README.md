@@ -161,50 +161,47 @@ Platform 采用最小化公共 API 设计，内部实���（LLM Adapter、M
 
 ### 入口
 
-| 导出 | 类型 | 用途 |
-|------|------|------|
+| 导出               | 类型     | 用途                         |
+| ------------------ | -------- | ---------------------------- |
 | `createPlatform()` | 工厂函数 | 创建完整配置的 Platform 实例 |
-| `Platform` | 接口 | 平台实例类型，包含所有管理器 |
-| `PlatformOptions` | 类型 | 平台初始化选项 |
+| `Platform`         | 接口     | 平台实例类型，包含所有管理器 |
+| `PlatformOptions`  | 类型     | 平台初始化选项               |
 
 ### 配置
 
-| 导出 | 类型 | 用途 |
-|------|------|------|
-| `ConfigManager` | 类 | 三层配置统一管理 |
-| `FileUserConfigManager` | 类 | 用户配置管理（文件后端） |
-| `getBuiltinProviderTemplates()` | 函数 | 获取内置提供商模板列表 |
-| `getBuiltinProviderTemplate()` | 函数 | 获取单个提供商模板 |
-| `getBuiltinPrompt()` | 函数 | 获取内置提示词 |
-| `watchWorkspaceConfig()` | 函数 | 监听工作区配置变化 |
+| 导出                     | 类型 | 用途                                 |
+| ------------------------ | ---- | ------------------------------------ |
+| `ConfigManager`          | 类   | 两层配置统一管理（User → Workspace） |
+| `FileUserConfigManager`  | 类   | 用户配置管理（文件后端）             |
+| `watchWorkspaceConfig()` | 函数 | 监听工作区配置变化                   |
 
 ### 服务
 
-| 导出 | 类型 | 用途 |
-|------|------|------|
-| `Service` | 类 | 统一服务接口 (chat/chatStream) |
+| 导出                | 类型 | 用途                                     |
+| ------------------- | ---- | ---------------------------------------- |
+| `Service`           | 类   | 统一服务接口 (chat/chatStream)           |
 | `toSharedService()` | 函数 | 转为 @neko/shared IService（Agent 桥接） |
-| `PromptManager` | 类 | 提示词管理 |
+| `PromptManager`     | 类   | 提示词管理                               |
 
 ### 提供商 & 媒体
 
-| 导出 | 类型 | 用途 |
-|------|------|------|
-| `ProviderRegistry` | 类 | 提供商注册表（模型→适配器路由） |
-| `PlatformError` | 类 | 统一错误类型 |
-| `MediaGenerationService` | 类 | 媒体生成服务（图片/视频/音乐） |
+| 导出                     | 类型 | 用途                            |
+| ------------------------ | ---- | ------------------------------- |
+| `ProviderRegistry`       | 类   | 提供商注册表（模型→适配器路由） |
+| `PlatformError`          | 类   | 统一错误类型                    |
+| `MediaGenerationService` | 类   | 媒体生成服务（图片/视频/音乐）  |
 
 ### 内部模块（不公开导出）
 
 以下模块为内部实现，通过 `createPlatform()` 自动组装，不通过 `@neko/platform` 公共入口暴露：
 
-| 模块 | 组件 | 说明 |
-|------|------|------|
-| `core/` | BaseRegistry, HttpClient | 注册表基类、HTTP 客户端 |
-| `llm/adapter/` | OpenAI/Anthropic/Google/Azure/Ollama/Generic Adapter | LLM 适配器（6 个） |
-| `media/adapters/` | OpenAI/Runway/Luma/MiniMax/Liblib/Suno/Vidu/Midjourney Adapter | 媒体适配器（8 个） |
-| `media/routing/` | MediaRoutingManager | 媒体路由（能力匹配+偏好过滤） |
-| `service/` | ModelSelector | 三优先级模型选择器（Service 内部使用） |
+| 模块              | 组件                                                           | 说明                                   |
+| ----------------- | -------------------------------------------------------------- | -------------------------------------- |
+| `core/`           | BaseRegistry, HttpClient                                       | 注册表基类、HTTP 客户端                |
+| `llm/adapter/`    | OpenAI/Anthropic/Google/Azure/Ollama/Generic Adapter           | LLM 适配器（6 个）                     |
+| `media/adapters/` | OpenAI/Runway/Luma/MiniMax/Liblib/Suno/Vidu/Midjourney Adapter | 媒体适配器（8 个）                     |
+| `media/routing/`  | MediaRoutingManager                                            | 媒体路由（能力匹配+偏好过滤）          |
+| `service/`        | ModelSelector                                                  | 三优先级模型选择器（Service 内部使用） |
 
 ## 数据流
 
@@ -260,11 +257,11 @@ MediaAdapter.generate() → 提交到外部 API
 
 ## 设计模式
 
-| 模式 | 应用位置 | 说明 |
-|------|----------|------|
-| **工厂模式** | `createPlatform()` | 统一创建平台实例 |
-| **适配器模式** | `llm/adapter/` | 统一不同 AI 提供商接口 |
-| **注册表模式** | `BaseRegistry` | 动态注册和查找组件（内置+自定义双层） |
-| **分区模式** | `BaseConfigSection` | 各配置类型独立 CRUD + 三层合并 |
-| **策略模式** | `ModelSelector` | 三优先级模型选择 |
-| **门面模式** | `MediaGenerationService` | 封装路由+执行+轮询复杂性 |
+| 模式           | 应用位置                 | 说明                                  |
+| -------------- | ------------------------ | ------------------------------------- |
+| **工厂模式**   | `createPlatform()`       | 统一创建平台实例                      |
+| **适配器模式** | `llm/adapter/`           | 统一不同 AI 提供商接口                |
+| **注册表模式** | `BaseRegistry`           | 动态注册和查找组件（内置+自定义双层） |
+| **分区模式**   | `BaseConfigSection`      | 各配置类型独立 CRUD + 三层合并        |
+| **策略模式**   | `ModelSelector`          | 三优先级模型选择                      |
+| **门面模式**   | `MediaGenerationService` | 封装路由+执行+轮询复杂性              |

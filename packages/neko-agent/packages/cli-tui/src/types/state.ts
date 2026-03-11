@@ -18,6 +18,8 @@ export interface Message {
   toolCalls: ToolCallState[];
   todos: TodoItem[];
   readonly timestamp: number;
+  /** True for error messages, false for informational system messages */
+  readonly isError?: boolean;
 }
 
 /**

@@ -259,7 +259,6 @@ describe('types validation', () => {
       const settings: SettingsState = {
         providers: [],
         configuredProviders: [],
-        providerTemplates: [],
         configuredModels: [],
         configuredPrompts: [],
         configuredAgents: [],
@@ -292,7 +291,6 @@ describe('types validation', () => {
       const settings: SettingsState = {
         providers: [],
         configuredProviders: [],
-        providerTemplates: [],
         configuredModels: [],
         configuredPrompts: [
           {

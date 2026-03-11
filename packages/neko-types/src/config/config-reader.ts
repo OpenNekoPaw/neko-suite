@@ -101,6 +101,26 @@ export function readWorkspaceConfig(workDir: string): UnifiedConfig | null {
  * @param filePath - Path to the configuration file
  * @param config - Configuration to write
  */
+/**
+ * Clean config object by removing undefined values, empty arrays, and empty objects.
+ * This keeps the output config.json minimal.
+ */
+function cleanConfig(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined || value === null) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    if (
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Object.keys(value as object).length === 0
+    )
+      continue;
+    result[key] = value;
+  }
+  return result;
+}
+
 export function writeConfigFile(filePath: string, config: UnifiedConfig): void {
   const dir = path.dirname(filePath);
 
@@ -108,7 +128,8 @@ export function writeConfigFile(filePath: string, config: UnifiedConfig): void {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  fs.writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf-8');
+  const cleaned = cleanConfig(config as unknown as Record<string, unknown>);
+  fs.writeFileSync(filePath, JSON.stringify(cleaned, null, 2), 'utf-8');
 }
 
 /**

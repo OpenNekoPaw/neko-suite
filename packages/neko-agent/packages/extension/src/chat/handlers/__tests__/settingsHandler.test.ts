@@ -29,7 +29,6 @@ function createMockProviders() {
   return {
     getAllProviders: vi.fn().mockReturnValue([{ id: 'anthropic', name: 'Anthropic' }]),
     getConfiguredProviders: vi.fn().mockReturnValue([{ id: 'anthropic' }]),
-    getProviderTemplates: vi.fn().mockReturnValue([]),
     getDefaultProvider: vi.fn().mockReturnValue({
       id: 'anthropic',
       getDefaultModel: () => 'claude-3',

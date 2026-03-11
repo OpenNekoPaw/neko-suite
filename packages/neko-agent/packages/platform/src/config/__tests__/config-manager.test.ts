@@ -1,32 +1,38 @@
 /**
  * ConfigManager Unit Tests
+ *
+ * Tests two-layer merge (User + Workspace) with no builtin presets.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ConfigManager } from '../config-manager';
-import { loadBuiltinPresets } from '../builtin-presets';
 import type { IUserConfigManager, UserConfig } from '../user-config';
 import type { Provider, Model } from '../../types/provider';
-import type { MCPServerPreset, WorkflowPreset, PromptPreset } from '../../types/config';
-import type { TaskDefaults } from '@neko/shared';
+import type { MCPServerPreset } from '../../types/config';
+import { RETRY_TIMEOUT_PRESETS } from '../retry-timeout-presets';
 
-// In-memory IUserConfigManager for testing
-function createMockUserConfigManager(): IUserConfigManager {
+// =============================================================================
+// Test Helpers
+// =============================================================================
+
+function createMockUserConfigManager(initial?: Partial<UserConfig>): IUserConfigManager {
   let config: UserConfig = {
     providers: [],
     models: [],
     mcpServers: [],
-    workflows: [],
-    prompts: [],
     providerOverrides: {},
     modelOverrides: {},
     mcpServerOverrides: {},
-    workflowOverrides: {},
-    promptOverrides: {},
+    ...initial,
   };
 
   return {
-    load: () => ({ ...config }),
+    load: () => ({
+      ...config,
+      providers: [...config.providers],
+      models: [...config.models],
+      mcpServers: [...config.mcpServers],
+    }),
     save: async (c: UserConfig) => {
       config = { ...c };
     },
@@ -63,257 +69,279 @@ function createMockUserConfigManager(): IUserConfigManager {
       config.mcpServers = config.mcpServers.filter((s) => s.id !== id);
       delete config.mcpServerOverrides[id];
     },
-    updateWorkflowOverride: async (id, override) => {
-      config.workflowOverrides[id] = { ...config.workflowOverrides[id], ...override };
-    },
-    addWorkflow: async (w: WorkflowPreset) => {
-      const i = config.workflows.findIndex((x) => x.id === w.id);
-      if (i >= 0) config.workflows[i] = w;
-      else config.workflows.push(w);
-    },
-    removeWorkflow: async (id: string) => {
-      config.workflows = config.workflows.filter((w) => w.id !== id);
-      delete config.workflowOverrides[id];
-    },
-    updatePromptOverride: async (id, override) => {
-      config.promptOverrides[id] = { ...config.promptOverrides[id], ...override };
-    },
-    addPrompt: async (p: PromptPreset) => {
-      const i = config.prompts.findIndex((x) => x.id === p.id);
-      if (i >= 0) config.prompts[i] = p;
-      else config.prompts.push(p);
-    },
-    removePrompt: async (id: string) => {
-      config.prompts = config.prompts.filter((p) => p.id !== id);
-      delete config.promptOverrides[id];
-    },
-    updateTaskDefaults: async (defaults: TaskDefaults | undefined) => {
-      config.taskDefaults = defaults;
-    },
     clear: async () => {
       config = {
         providers: [],
         models: [],
         mcpServers: [],
-        workflows: [],
-        prompts: [],
         providerOverrides: {},
         modelOverrides: {},
         mcpServerOverrides: {},
-        workflowOverrides: {},
-        promptOverrides: {},
       };
-    },
-    migrateProviders: async (builtinIds: Set<string>) => {
-      config.providers = config.providers.filter((p) => !p.builtin || builtinIds.has(p.id));
     },
   };
 }
 
+const SAMPLE_PROVIDER: Provider = {
+  id: 'anthropic',
+  name: 'anthropic',
+  displayName: 'Anthropic',
+  type: 'anthropic',
+  apiUrl: 'https://api.anthropic.com',
+  enabled: true,
+};
+
+const SAMPLE_MODEL: Model = {
+  id: 'anthropic-claude-sonnet-4',
+  name: 'claude-sonnet-4-20250514',
+  displayName: 'Claude Sonnet 4',
+  providerId: 'anthropic',
+  capabilities: ['chat'],
+  contextWindow: 200000,
+  enabled: true,
+};
+
+// =============================================================================
+// Tests
+// =============================================================================
+
 describe('ConfigManager', () => {
-  describe('builtin presets', () => {
-    it('should load builtin presets correctly', () => {
-      const presets = loadBuiltinPresets();
-
-      expect(presets.providers.length).toBeGreaterThan(0);
-      expect(presets.models.length).toBeGreaterThan(0);
-    });
-
-    it('should include expected providers', () => {
-      const presets = loadBuiltinPresets();
-      const providerIds = presets.providers.map((p) => p.id);
-
-      expect(providerIds).toContain('openai');
-      expect(providerIds).toContain('anthropic');
-      expect(providerIds).toContain('google');
-    });
-
-    it('should include expected models', () => {
-      const presets = loadBuiltinPresets();
-      const modelIds = presets.models.map((m) => m.id);
-
-      // Model IDs now use provider-modelname format
-      expect(modelIds).toContain('openai-gpt-4o');
-      expect(modelIds).toContain('anthropic-claude-3-5-sonnet');
-      expect(modelIds).toContain('google-gemini-2-flash');
-    });
-  });
-
-  describe('ConfigManager initialization', () => {
-    it('should initialize without options', () => {
+  describe('initialization without user config', () => {
+    it('should initialize with empty config', () => {
       const manager = new ConfigManager();
       const config = manager.getConfig();
 
-      expect(config.providers.size).toBeGreaterThan(0);
-      expect(config.models.size).toBeGreaterThan(0);
+      expect(config.providers.size).toBe(0);
+      expect(config.models.size).toBe(0);
+      expect(config.mcpServers.size).toBe(0);
     });
 
-    it('should get provider by ID', () => {
+    it('should return retry/timeout presets', () => {
       const manager = new ConfigManager();
-      const provider = manager.getProvider('openai');
+      const preset = manager.getRetryTimeoutPreset('modelCall');
 
-      expect(provider).toBeDefined();
-      expect(provider?.id).toBe('openai');
-      expect(provider?.name).toBe('openai');
-      expect(provider?.displayName).toBe('OpenAI');
-    });
-
-    it('should get model by ID', () => {
-      const manager = new ConfigManager();
-      // Model ID now uses provider-modelname format
-      const model = manager.getModel('openai-gpt-4o');
-
-      expect(model).toBeDefined();
-      expect(model?.id).toBe('openai-gpt-4o');
-      expect(model?.name).toBe('gpt-4o');
-      expect(model?.displayName).toBe('GPT-4o');
-      expect(model?.providerId).toBe('openai');
-    });
-
-    it('should return undefined for non-existent items', () => {
-      const manager = new ConfigManager();
-
-      expect(manager.getProvider('non-existent')).toBeUndefined();
-      expect(manager.getModel('non-existent')).toBeUndefined();
+      expect(preset).toBeDefined();
+      expect(preset?.retry.maxRetries).toBe(3);
     });
   });
 
-  describe('ConfigManager with user config', () => {
+  describe('user config merge', () => {
+    it('should load providers from user config', () => {
+      const ucm = createMockUserConfigManager({
+        providers: [SAMPLE_PROVIDER],
+        models: [SAMPLE_MODEL],
+      });
+      const manager = new ConfigManager({ userConfigManager: ucm });
+
+      expect(manager.getProvider('anthropic')).toBeDefined();
+      expect(manager.getProvider('anthropic')?.displayName).toBe('Anthropic');
+      expect(manager.getModel('anthropic-claude-sonnet-4')).toBeDefined();
+    });
+
+    it('should apply provider overrides', () => {
+      const ucm = createMockUserConfigManager({
+        providers: [SAMPLE_PROVIDER],
+        providerOverrides: { anthropic: { apiKey: 'sk-test-123' } },
+      });
+      const manager = new ConfigManager({ userConfigManager: ucm });
+      const provider = manager.getProvider('anthropic');
+
+      expect(provider?.apiKey).toBe('sk-test-123');
+    });
+
+    it('should apply model overrides', () => {
+      const ucm = createMockUserConfigManager({
+        models: [SAMPLE_MODEL],
+        modelOverrides: { 'anthropic-claude-sonnet-4': { enabled: false } },
+      });
+      const manager = new ConfigManager({ userConfigManager: ucm });
+      const model = manager.getModel('anthropic-claude-sonnet-4');
+
+      expect(model?.enabled).toBe(false);
+    });
+  });
+
+  describe('CRUD operations', () => {
     let manager: ConfigManager;
 
     beforeEach(() => {
-      manager = new ConfigManager({ userConfigManager: createMockUserConfigManager() });
+      manager = new ConfigManager({
+        userConfigManager: createMockUserConfigManager({
+          providers: [SAMPLE_PROVIDER],
+          models: [SAMPLE_MODEL],
+        }),
+      });
     });
 
     it('should add custom provider', async () => {
-      const customProvider: Provider = {
-        id: 'custom-provider',
-        name: 'custom-provider',
-        displayName: 'Custom Provider',
+      const custom: Provider = {
+        id: 'custom',
+        name: 'custom',
+        displayName: 'Custom',
         type: 'generic',
         apiUrl: 'https://custom.api.com',
         enabled: true,
       };
-
-      await manager.setProvider(customProvider);
-      const provider = manager.getProvider('custom-provider');
-
-      expect(provider).toBeDefined();
-      expect(provider?.displayName).toBe('Custom Provider');
+      await manager.setProvider(custom);
+      expect(manager.getProvider('custom')).toBeDefined();
+      expect(manager.getProvider('custom')?.displayName).toBe('Custom');
     });
 
-    it('should override builtin provider', async () => {
-      await manager.setProviderApiKey('openai', 'test-api-key');
-      const provider = manager.getProvider('openai');
+    it('should remove provider', async () => {
+      expect(manager.getProvider('anthropic')).toBeDefined();
+      await manager.removeProvider('anthropic');
+      expect(manager.getProvider('anthropic')).toBeUndefined();
+    });
 
-      expect(provider).toBeDefined();
-      expect(provider?.apiKey).toBe('test-api-key');
+    it('should set provider API key', async () => {
+      await manager.setProviderApiKey('anthropic', 'sk-new-key');
+      const provider = manager.getProvider('anthropic');
+      expect(provider?.apiKey).toBe('sk-new-key');
     });
 
     it('should add custom model', async () => {
-      const customModel: Model = {
+      const model: Model = {
         id: 'custom-model',
         name: 'custom-model',
         displayName: 'Custom Model',
-        providerId: 'openai',
+        providerId: 'anthropic',
         capabilities: ['chat'],
-        contextWindow: 8000,
         enabled: true,
       };
-
-      await manager.setModel(customModel);
-      const model = manager.getModel('custom-model');
-
-      expect(model).toBeDefined();
-      expect(model?.displayName).toBe('Custom Model');
+      await manager.setModel(model);
+      expect(manager.getModel('custom-model')).toBeDefined();
     });
 
-    it('should remove custom provider', async () => {
-      const customProvider: Provider = {
-        id: 'to-remove',
-        name: 'to-remove',
-        displayName: 'To Remove',
-        type: 'generic',
-        apiUrl: 'https://remove.api.com',
-        enabled: true,
-      };
-
-      await manager.setProvider(customProvider);
-      expect(manager.getProvider('to-remove')).toBeDefined();
-
-      await manager.removeProvider('to-remove');
-      expect(manager.getProvider('to-remove')).toBeUndefined();
+    it('should remove model', async () => {
+      expect(manager.getModel('anthropic-claude-sonnet-4')).toBeDefined();
+      await manager.removeModel('anthropic-claude-sonnet-4');
+      expect(manager.getModel('anthropic-claude-sonnet-4')).toBeUndefined();
     });
   });
 
-  describe('ConfigManager helper methods', () => {
+  describe('helper methods', () => {
     let manager: ConfigManager;
 
     beforeEach(() => {
-      manager = new ConfigManager();
+      manager = new ConfigManager({
+        userConfigManager: createMockUserConfigManager({
+          providers: [
+            SAMPLE_PROVIDER,
+            {
+              ...SAMPLE_PROVIDER,
+              id: 'openai',
+              name: 'openai',
+              displayName: 'OpenAI',
+              type: 'openai',
+              apiUrl: 'https://api.openai.com/v1',
+              enabled: false,
+            },
+          ],
+          models: [
+            SAMPLE_MODEL,
+            {
+              ...SAMPLE_MODEL,
+              id: 'openai-gpt-4o',
+              name: 'gpt-4o',
+              providerId: 'openai',
+              enabled: false,
+            },
+          ],
+        }),
+      });
     });
 
     it('should get all providers', () => {
-      const providers = manager.getProviders();
-      expect(providers.length).toBeGreaterThan(0);
+      expect(manager.getProviders()).toHaveLength(2);
     });
 
-    it('should get enabled providers', () => {
-      const providers = manager.getEnabledProviders();
-      expect(providers.every((p) => p.enabled)).toBe(true);
+    it('should get enabled providers only', () => {
+      const enabled = manager.getEnabledProviders();
+      expect(enabled).toHaveLength(1);
+      expect(enabled[0]?.id).toBe('anthropic');
     });
 
     it('should get all models', () => {
-      const models = manager.getModels();
-      expect(models.length).toBeGreaterThan(0);
+      expect(manager.getModels()).toHaveLength(2);
     });
 
-    it('should get enabled models', () => {
-      const models = manager.getEnabledModels();
-      expect(models.every((m) => m.enabled)).toBe(true);
+    it('should get enabled models only', () => {
+      const enabled = manager.getEnabledModels();
+      expect(enabled).toHaveLength(1);
+      expect(enabled[0]?.id).toBe('anthropic-claude-sonnet-4');
     });
 
     it('should get models by provider', () => {
-      const models = manager.getModelsByProvider('openai');
-      expect(models.length).toBeGreaterThan(0);
-      expect(models.every((m) => m.providerId === 'openai')).toBe(true);
+      const models = manager.getModelsByProvider('anthropic');
+      expect(models).toHaveLength(1);
+      expect(models[0]?.providerId).toBe('anthropic');
     });
 
-    it('should get retry/timeout preset', () => {
-      const preset = manager.getRetryTimeoutPreset('modelCall');
-      expect(preset).toBeDefined();
-      expect(preset?.retry.maxRetries).toBeGreaterThan(0);
+    it('should return undefined for non-existent items', () => {
+      expect(manager.getProvider('nonexistent')).toBeUndefined();
+      expect(manager.getModel('nonexistent')).toBeUndefined();
     });
   });
 
-  describe('ConfigManager caching', () => {
-    it('should cache config and return same reference', () => {
+  describe('retry/timeout presets', () => {
+    it('should return all built-in presets', () => {
       const manager = new ConfigManager();
+      const config = manager.getConfig();
+
+      expect(config.retryTimeoutPresets.size).toBe(4);
+      expect(config.retryTimeoutPresets.get('modelCall')).toBeDefined();
+      expect(config.retryTimeoutPresets.get('toolExecution')).toBeDefined();
+      expect(config.retryTimeoutPresets.get('mcpRequest')).toBeDefined();
+      expect(config.retryTimeoutPresets.get('workflowExecution')).toBeDefined();
+    });
+
+    it('should return correct preset values', () => {
+      const manager = new ConfigManager();
+      const preset = manager.getRetryTimeoutPreset('modelCall');
+
+      expect(preset).toEqual(RETRY_TIMEOUT_PRESETS.modelCall);
+    });
+
+    it('should return undefined for non-existent preset', () => {
+      const manager = new ConfigManager();
+      const preset = manager.getRetryTimeoutPreset('nonexistent' as any);
+
+      expect(preset).toBeUndefined();
+    });
+  });
+
+  describe('caching', () => {
+    it('should cache config and return same reference', () => {
+      const manager = new ConfigManager({
+        userConfigManager: createMockUserConfigManager({ providers: [SAMPLE_PROVIDER] }),
+      });
       const config1 = manager.getConfig();
       const config2 = manager.getConfig();
 
       expect(config1).toBe(config2);
     });
 
-    it('should invalidate cache on user config change', async () => {
-      const manager = new ConfigManager({ userConfigManager: createMockUserConfigManager() });
-
+    it('should invalidate cache on write operation', async () => {
+      const manager = new ConfigManager({
+        userConfigManager: createMockUserConfigManager({ providers: [SAMPLE_PROVIDER] }),
+      });
       const config1 = manager.getConfig();
-      await manager.setProviderApiKey('openai', 'new-key');
+      await manager.setProviderApiKey('anthropic', 'new-key');
       const config2 = manager.getConfig();
 
       expect(config1).not.toBe(config2);
     });
   });
 
-  describe('ConfigManager disposal', () => {
-    it('should dispose resources', () => {
-      const manager = new ConfigManager();
-
+  describe('disposal', () => {
+    it('should dispose without error', () => {
+      const manager = new ConfigManager({
+        userConfigManager: createMockUserConfigManager(),
+      });
       manager.dispose();
 
-      // After dispose, internal state should be cleaned up
-      expect(manager.getConfig()).toBeDefined(); // Should still work but create new cache
+      // After dispose, getConfig should still work (creates new cache)
+      expect(manager.getConfig()).toBeDefined();
     });
   });
 });

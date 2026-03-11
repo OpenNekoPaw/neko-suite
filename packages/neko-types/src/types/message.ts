@@ -3,13 +3,7 @@
 // =============================================================================
 
 import { ProjectData } from './project';
-import {
-  ConfigState,
-  MCPServerConfig,
-  WorkflowConfig,
-  PromptPresetConfig,
-  ProviderConfig,
-} from './config';
+import { ConfigState, MCPServerConfig, PromptPresetConfig, ProviderConfig } from './config';
 import type { EditOperation } from '../operations';
 
 // =============================================================================
@@ -293,7 +287,7 @@ export type MessageToWebview =
   | { type: 'configState'; config: ConfigState }
   | {
       type: 'configChanged';
-      changeType: 'provider' | 'model' | 'mcp' | 'workflow' | 'prompt';
+      changeType: 'provider' | 'model' | 'mcp' | 'prompt';
       id: string;
     }
   // Provider model discovery response (Extension -> WebView)
@@ -431,11 +425,9 @@ export type MessageFromWebview =
   // Configuration requests (WebView -> Extension)
   | { type: 'getConfig' }
   | { type: 'updateMCPServer'; server: MCPServerConfig }
-  | { type: 'updateWorkflow'; workflow: WorkflowConfig }
   | { type: 'updatePrompt'; prompt: PromptPresetConfig }
   | { type: 'updateProvider'; provider: ProviderConfig }
   | { type: 'deleteMCPServer'; id: string }
-  | { type: 'deleteWorkflow'; id: string }
   | { type: 'deletePrompt'; id: string }
   | { type: 'deleteProvider'; id: string }
   // Tool execution messages (Extension -> WebView)

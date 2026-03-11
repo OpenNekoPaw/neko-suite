@@ -48,13 +48,12 @@ vi.mock('../base', () => ({
   createServiceId: vi.fn((name: string) => name),
 }));
 
-// Mock @neko/platform — toSharedService and getBuiltinPrompt
+// Mock @neko/platform — toSharedService
 vi.mock('@neko/platform', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
     toSharedService: vi.fn((s: unknown) => s),
-    getBuiltinPrompt: vi.fn(() => undefined),
   };
 });
 

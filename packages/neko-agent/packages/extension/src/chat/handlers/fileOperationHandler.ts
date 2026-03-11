@@ -102,23 +102,11 @@ export class FileOperationHandler {
       // Create directory if not exists
       await fs.promises.mkdir(basePath, { recursive: true });
 
-      // Try to find existing prompt config to get the correct filePath
-      let fileName: string;
-      let promptName: string = promptId || 'New Prompt';
-
-      if (promptId && this.deps.platform) {
-        const existingPrompt = this.deps.platform.config
-          .getPrompts()
-          .find((p) => p.id === promptId);
-        if (existingPrompt?.filePath) {
-          fileName = path.basename(existingPrompt.filePath);
-          promptName = existingPrompt.name;
-        } else {
-          fileName = `${promptId.toLowerCase().replace(/[^a-z0-9-]/g, '-')}.md`;
-        }
-      } else {
-        fileName = 'new-prompt.md';
-      }
+      // Determine file name from prompt ID
+      const promptName: string = promptId || 'New Prompt';
+      const fileName = promptId
+        ? `${promptId.toLowerCase().replace(/[^a-z0-9-]/g, '-')}.md`
+        : 'new-prompt.md';
 
       const filePath = path.join(basePath, fileName);
 

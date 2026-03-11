@@ -181,8 +181,6 @@ export interface SettingsState {
   }>;
   // 已配置的 Provider 列表 (从 Platform ConfigManager 获取)
   configuredProviders: Array<ConfiguredProvider>;
-  // Provider 模板列表 (用于添加 Provider 的下拉框)
-  providerTemplates: Array<ProviderTemplateInfo>;
   // 已配置的 Model 列表 (从 Platform ConfigManager 获取)
   configuredModels: Array<import('@neko/shared').ModelConfig>;
   // 已配置的 Prompt 列表 (alias: configuredAgents for backward compatibility)
@@ -231,18 +229,6 @@ export interface ConfiguredProvider {
   builtin?: boolean;
   /** Additional auth fields (e.g., secretKey, accessKey) */
   authOptions?: Record<string, string>;
-}
-
-/**
- * Provider template info for dropdown selection
- * Templates are predefined provider configurations that users can add
- */
-export interface ProviderTemplateInfo {
-  id: string;
-  name: string;
-  displayName: string;
-  type: string;
-  apiUrl: string;
 }
 
 // Re-export VSCodeAPI from shared (Single Source of Truth)

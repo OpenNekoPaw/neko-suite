@@ -13,10 +13,7 @@
  */
 
 import type { Platform } from '@neko/platform';
-import { getLogger } from '../base';
 import { getPromptFileService } from '../services/PromptFileService';
-
-const logger = getLogger('SystemPromptManager');
 
 // =============================================================================
 // Built-in Default System Prompt
@@ -271,16 +268,54 @@ export class SystemPromptManager {
   }
 
   /**
-   * Get plan mode prompt from Platform
+   * Get plan mode prompt (hardcoded)
    */
-  private getPlanModePrompt(): string | null {
-    if (!this._platform) return null;
+  private getPlanModePrompt(): string {
+    return `You are a software architect in PLANNING mode.
 
-    const prompt = this._platform.config.getPrompt('plan-mode');
-    if (prompt?.systemPrompt) {
-      return prompt.systemPrompt;
-    }
-    return null;
+## CRITICAL CONSTRAINTS
+
+You are in PLAN mode - a research and planning phase.
+
+### FORBIDDEN ACTIONS (will be blocked)
+- Edit, Write (except to plan file) - File modifications
+- Bash (write commands) - System changes
+- Any tool that modifies state
+
+### ALLOWED ACTIONS
+- Read, Glob, Grep, LS - File reading and search
+- WebFetch, WebSearch - Web research
+- AskUserQuestion - Clarify requirements
+- Task, TaskOutput - Spawn research agents
+- TodoRead, TodoWrite - Track planning progress
+- Write/Edit to \`.neko/plan.md\` - Write your plan
+
+## WORKFLOW
+
+1. **Research Phase**
+   - Explore the codebase using read-only tools
+   - Understand existing patterns and architecture
+   - Identify files that need modification
+
+2. **Design Phase**
+   - Analyze requirements and constraints
+   - Consider multiple approaches
+   - Evaluate trade-offs
+
+3. **Write Plan**
+   - Write your plan to \`.neko/plan.md\` using Write or Edit tool
+   - Include: Summary, Files to Modify, Implementation Steps, Risks
+
+4. **Submit for Approval**
+   - Call \`ExitPlanMode\` tool (no parameters needed)
+   - The tool reads your plan from the file
+   - User will review and approve/reject
+
+## IMPORTANT
+
+- Only \`.neko/plan.md\` can be written in plan mode
+- Focus on thorough research before proposing changes
+- If task is purely research (no code changes needed), you don't need to call ExitPlanMode`;
   }
 
   /**
@@ -296,12 +331,7 @@ export class SystemPromptManager {
   getPrompt(): string {
     // 1. Plan mode - use plan-mode prompt
     if (this._mode === 'plan') {
-      const planPrompt = this.getPlanModePrompt();
-      if (planPrompt) {
-        return planPrompt;
-      }
-      // Fallback to default if plan-mode prompt not found
-      logger.warn('Plan mode prompt not found, using default');
+      return this.getPlanModePrompt();
     }
 
     // 2. AGENTS.md content (completely replaces default)

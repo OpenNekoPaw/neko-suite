@@ -23,7 +23,6 @@ export interface ProjectFileInfo {
 export const DEFAULT_SETTINGS: SettingsState = {
   providers: [],
   configuredProviders: [],
-  providerTemplates: [],
   configuredModels: [],
   configuredPrompts: [],
   configuredAgents: [],

@@ -6,12 +6,8 @@
  * Uses shared configuration module from @neko/shared.
  */
 
-import type {
-  MCPServerPreset,
-  WorkflowPreset,
-  PromptPreset,
-  TemplatePreset,
-} from '../types/config';
+import type { Provider, Model } from '../types/provider';
+import type { MCPServerPreset } from '../types/config';
 import type { UnifiedConfig } from '@neko/shared';
 // Node.js config reader - direct import
 import {
@@ -24,55 +20,39 @@ import {
 /**
  * Workspace configuration structure
  *
- * Workspace config supports per-project overrides for MCP, workflows, prompts,
- * and task defaults. Provider/model configuration is user-level only.
+ * Workspace config supports per-project overrides for providers, models,
+ * and MCP servers. Fields align with UnifiedConfig.
  */
 export interface WorkspaceConfig {
+  /** Workspace-specific providers */
+  providers?: Provider[];
+  /** Provider overrides */
+  providerOverrides?: Record<string, Partial<Provider>>;
+  /** Workspace-specific models */
+  models?: Model[];
+  /** Model overrides */
+  modelOverrides?: Record<string, Partial<Model>>;
   /** Workspace-specific MCP servers */
   mcpServers?: MCPServerPreset[];
-  /** Workspace-specific workflows */
-  workflows?: WorkflowPreset[];
-  /** Workspace-specific prompts */
-  prompts?: PromptPreset[];
-  /** Workspace-specific templates */
-  templates?: TemplatePreset[];
   /** MCP server overrides */
   mcpServerOverrides?: Record<string, Partial<MCPServerPreset>>;
-  /** Workflow overrides */
-  workflowOverrides?: Record<string, Partial<WorkflowPreset>>;
-  /** Prompt overrides */
-  promptOverrides?: Record<string, Partial<PromptPreset>>;
-  /** Template overrides */
-  templateOverrides?: Record<string, Partial<TemplatePreset>>;
-  /** Task-type to model defaults */
-  taskDefaults?: import('@neko/shared').TaskDefaults;
 }
 
 /**
  * Convert unified config to workspace config
- *
- * Provider/model fields from the unified file are intentionally ignored —
- * those belong to user-level config (~/.neko/config.json).
  */
 function unifiedToWorkspaceConfig(unified: UnifiedConfig | null): WorkspaceConfig | null {
   if (!unified) return null;
 
   return {
+    providers: unified.providers as Provider[] | undefined,
+    providerOverrides: unified.providerOverrides as Record<string, Partial<Provider>> | undefined,
+    models: unified.models as Model[] | undefined,
+    modelOverrides: unified.modelOverrides as Record<string, Partial<Model>> | undefined,
     mcpServers: unified.mcpServers as MCPServerPreset[] | undefined,
-    workflows: unified.workflows as WorkflowPreset[] | undefined,
-    prompts: unified.prompts as PromptPreset[] | undefined,
-    templates: unified.templates as TemplatePreset[] | undefined,
     mcpServerOverrides: unified.mcpServerOverrides as
       | Record<string, Partial<MCPServerPreset>>
       | undefined,
-    workflowOverrides: unified.workflowOverrides as
-      | Record<string, Partial<WorkflowPreset>>
-      | undefined,
-    promptOverrides: unified.promptOverrides as Record<string, Partial<PromptPreset>> | undefined,
-    templateOverrides: unified.templateOverrides as
-      | Record<string, Partial<TemplatePreset>>
-      | undefined,
-    taskDefaults: unified.taskDefaults,
   };
 }
 
@@ -81,15 +61,12 @@ function unifiedToWorkspaceConfig(unified: UnifiedConfig | null): WorkspaceConfi
  */
 function workspaceToUnifiedConfig(workspace: WorkspaceConfig): UnifiedConfig {
   return {
+    providers: workspace.providers,
+    providerOverrides: workspace.providerOverrides,
+    models: workspace.models,
+    modelOverrides: workspace.modelOverrides,
     mcpServers: workspace.mcpServers,
-    workflows: workspace.workflows,
-    prompts: workspace.prompts,
-    templates: workspace.templates,
     mcpServerOverrides: workspace.mcpServerOverrides,
-    workflowOverrides: workspace.workflowOverrides,
-    promptOverrides: workspace.promptOverrides,
-    templateOverrides: workspace.templateOverrides,
-    taskDefaults: workspace.taskDefaults,
   };
 }
 

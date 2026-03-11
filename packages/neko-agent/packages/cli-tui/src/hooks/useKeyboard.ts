@@ -8,6 +8,9 @@
 import { useInput } from 'ink';
 import { useAgentStore } from '../stores/agent-store';
 import { useUIStore } from '../stores/ui-store';
+import type { ExecutionMode } from '../types/state';
+
+const MODE_CYCLE: ExecutionMode[] = ['auto', 'plan', 'ask'];
 
 export interface KeyboardActions {
   onCancel: () => void;
@@ -20,13 +23,14 @@ export interface KeyboardActions {
  *
  * - Escape: Cancel running agent
  * - Ctrl+L: Clear conversation
+ * - Shift+Tab: Cycle execution mode (auto → plan → ask → auto)
  * - Ctrl+C: Quit (handled by Ink)
  */
 export function useKeyboard(actions: KeyboardActions): void {
   const status = useAgentStore((s) => s.status);
   const pendingApproval = useUIStore((s) => s.pendingApproval);
 
-  useInput((input, key) => {
+  useInput((_input, key) => {
     // Don't intercept when approval panel is active — it handles its own keys
     if (pendingApproval) return;
 
@@ -37,8 +41,17 @@ export function useKeyboard(actions: KeyboardActions): void {
     }
 
     // Ctrl+L → clear conversation
-    if (input === 'l' && key.ctrl) {
+    if (_input === 'l' && key.ctrl) {
       actions.onClear();
+      return;
+    }
+
+    // Shift+Tab → cycle execution mode
+    if (key.shift && key.tab) {
+      const current = useAgentStore.getState().executionMode;
+      const idx = MODE_CYCLE.indexOf(current);
+      const next = MODE_CYCLE[(idx + 1) % MODE_CYCLE.length]!;
+      useAgentStore.getState().setExecutionMode(next);
       return;
     }
   });

@@ -168,7 +168,8 @@ class BuiltinLLMClient implements ILLMClient {
       throw new Error('No response body for streaming');
     }
 
-    yield* provider === 'anthropic'
+    const providerType = this.config.providerType ?? provider;
+    yield* providerType === 'anthropic'
       ? this.parseAnthropicStream(response.body)
       : this.parseOpenAIStream(response.body);
   }
@@ -392,13 +393,19 @@ class BuiltinLLMClient implements ILLMClient {
     tools?: ToolDefinition[];
     stream: boolean;
   }): { url: string; headers: Record<string, string>; body: Record<string, unknown> } {
-    const { provider, model, apiKey, baseUrl } = this.config;
+    const { model, apiKey, baseUrl } = this.config;
+    // Use providerType for API routing (not provider ID)
+    const providerType = this.config.providerType ?? this.config.provider;
     const { maxTokens, temperature, messages, tools, stream } = options;
 
-    if (provider === 'anthropic') {
+    if (providerType === 'anthropic') {
       const systemPrompt = this.extractSystemPrompt(messages);
+      // Anthropic: resolve endpoint URL
+      const url = baseUrl
+        ? resolveApiUrl(baseUrl, 'messages')
+        : 'https://api.anthropic.com/v1/messages';
       return {
-        url: baseUrl ?? 'https://api.anthropic.com/v1/messages',
+        url,
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey!,
@@ -414,30 +421,27 @@ class BuiltinLLMClient implements ILLMClient {
           ...(tools && tools.length > 0 ? { tools: this.formatToolsForAnthropic(tools) } : {}),
         },
       };
-    } else if (provider === 'openai' || provider === 'deepseek') {
-      const url = baseUrl
-        ? `${baseUrl}/v1/chat/completions`
-        : provider === 'deepseek'
-          ? 'https://api.deepseek.com/v1/chat/completions'
-          : 'https://api.openai.com/v1/chat/completions';
-      return {
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: {
-          model,
-          max_tokens: maxTokens,
-          temperature,
-          ...(stream ? { stream: true } : {}),
-          messages: this.formatMessagesForOpenAI(messages),
-          ...(tools && tools.length > 0 ? { tools } : {}),
-        },
-      };
     }
 
-    throw new Error(`Unsupported provider: ${provider}`);
+    // OpenAI-compatible providers (openai, deepseek, generic, ollama, etc.)
+    const url = baseUrl
+      ? resolveApiUrl(baseUrl, 'chat/completions')
+      : 'https://api.openai.com/v1/chat/completions';
+    return {
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: {
+        model,
+        max_tokens: maxTokens,
+        temperature,
+        ...(stream ? { stream: true } : {}),
+        messages: this.formatMessagesForOpenAI(messages),
+        ...(tools && tools.length > 0 ? { tools } : {}),
+      },
+    };
   }
 
   private async callAPI(
@@ -609,7 +613,8 @@ class BuiltinLLMClient implements ILLMClient {
   }
 
   private parseResponse(provider: string, data: Record<string, unknown>): LLMClientResponse {
-    if (provider === 'anthropic') {
+    const providerType = this.config.providerType ?? provider;
+    if (providerType === 'anthropic') {
       return this.parseAnthropicResponse(data);
     } else {
       return this.parseOpenAIResponse(data);
@@ -686,6 +691,32 @@ class BuiltinLLMClient implements ILLMClient {
 
     return result;
   }
+}
+
+/**
+ * Resolve the full API endpoint URL from a base URL and endpoint suffix.
+ *
+ * Handles three cases:
+ * 1. baseUrl already has full path (e.g., /v1/chat/completions) → use as-is
+ * 2. baseUrl ends with version prefix (e.g., /v1) → append only the endpoint part
+ * 3. baseUrl has no API path → append full /v1/{endpoint}
+ */
+function resolveApiUrl(baseUrl: string, endpoint: string): string {
+  const normalized = baseUrl.replace(/\/+$/, '');
+  const pathname = new URL(normalized).pathname;
+
+  // Case 1: full endpoint path present (e.g., /v1/chat/completions, /v1/messages)
+  if (/\/v\d+\/.+/.test(pathname)) {
+    return normalized;
+  }
+
+  // Case 2: ends with version prefix (e.g., /v1)
+  if (/\/v\d+$/.test(pathname)) {
+    return `${normalized}/${endpoint}`;
+  }
+
+  // Case 3: no API path, append full versioned path
+  return `${normalized}/v1/${endpoint}`;
 }
 
 /** Check if HTTP status is retryable */

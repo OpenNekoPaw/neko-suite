@@ -6,7 +6,7 @@
  */
 
 import type { ProviderConfig } from '../types/config';
-import type { UnifiedConfig, NormalizedConfig, GroupConfig, TemplatePresetConfig } from './types';
+import type { UnifiedConfig, NormalizedConfig } from './types';
 import { DEFAULT_CONFIG } from './types';
 
 // =============================================================================
@@ -226,20 +226,12 @@ export function mergeConfigs(base: UnifiedConfig, override: UnifiedConfig): Unif
   // Merge array fields (combine and dedupe by ID)
   merged.providers = mergeArrayById(base.providers, override.providers);
   merged.models = mergeArrayById(base.models, override.models);
-  merged.groups = mergeArrayById(base.groups, override.groups);
   merged.mcpServers = mergeArrayById(base.mcpServers, override.mcpServers);
-  merged.workflows = mergeArrayById(base.workflows, override.workflows);
-  merged.prompts = mergeArrayById(base.prompts, override.prompts);
-  merged.templates = mergeArrayById(base.templates, override.templates);
 
   // Merge override objects
   merged.providerOverrides = mergeOverrides(base.providerOverrides, override.providerOverrides);
   merged.modelOverrides = mergeOverrides(base.modelOverrides, override.modelOverrides);
-  merged.groupOverrides = mergeOverrides(base.groupOverrides, override.groupOverrides);
   merged.mcpServerOverrides = mergeOverrides(base.mcpServerOverrides, override.mcpServerOverrides);
-  merged.workflowOverrides = mergeOverrides(base.workflowOverrides, override.workflowOverrides);
-  merged.promptOverrides = mergeOverrides(base.promptOverrides, override.promptOverrides);
-  merged.templateOverrides = mergeOverrides(base.templateOverrides, override.templateOverrides);
 
   return merged;
 }
@@ -346,14 +338,7 @@ export function normalizeConfig(config: UnifiedConfig): NormalizedConfig {
   // Apply overrides to items
   const providers = applyOverrides(config.providers ?? [], config.providerOverrides);
   const models = applyOverrides(config.models ?? [], config.modelOverrides);
-  const groups = applyOverrides(config.groups ?? [], config.groupOverrides) as GroupConfig[];
   const mcpServers = applyOverrides(config.mcpServers ?? [], config.mcpServerOverrides);
-  const workflows = applyOverrides(config.workflows ?? [], config.workflowOverrides);
-  const prompts = applyOverrides(config.prompts ?? [], config.promptOverrides);
-  const templates = applyOverrides(
-    config.templates ?? [],
-    config.templateOverrides,
-  ) as TemplatePresetConfig[];
 
   return {
     defaultProvider: config.defaultProvider ?? DEFAULT_CONFIG.defaultProvider,
@@ -365,11 +350,7 @@ export function normalizeConfig(config: UnifiedConfig): NormalizedConfig {
     outputFormat: config.outputFormat ?? DEFAULT_CONFIG.outputFormat,
     providers: arrayToMap(providers),
     models: arrayToMap(models),
-    groups: arrayToMap(groups),
     mcpServers: arrayToMap(mcpServers),
-    workflows: arrayToMap(workflows),
-    prompts: arrayToMap(prompts),
-    templates: arrayToMap(templates),
   };
 }
 

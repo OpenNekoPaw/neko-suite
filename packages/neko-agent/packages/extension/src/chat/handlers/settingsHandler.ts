@@ -38,7 +38,6 @@ export class SettingsHandler {
 
     const providers = this.deps.providers.getAllProviders();
     const configuredProviders = this.deps.providers.getConfiguredProviders();
-    const providerTemplates = this.deps.providers.getProviderTemplates();
 
     if (!this.deps.settings.selectedProviderId) {
       const defaultProvider = this.deps.providers.getDefaultProvider();
@@ -55,7 +54,6 @@ export class SettingsHandler {
       type: 'settingsData',
       providers,
       configuredProviders,
-      providerTemplates,
       selectedProviderId: this.deps.settings.selectedProviderId,
       selectedModelId: this.deps.settings.selectedModelId,
       systemPrompt: this.deps.settings.customSystemPrompt,

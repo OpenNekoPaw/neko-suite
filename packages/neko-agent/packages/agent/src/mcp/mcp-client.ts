@@ -277,7 +277,8 @@ export class StdioMCPClient extends BaseMCPClient {
       const message = JSON.stringify(request) + '\n';
       this.process!.stdin.write(message);
 
-      // Timeout after 30 seconds — store timer for cleanup
+      // Timeout — use configured value or default 30s
+      const timeoutMs = this.config.requestTimeout ?? 30000;
       const timeoutId = setTimeout(() => {
         if (this.pendingRequests.has(request.id)) {
           this.pendingRequests.delete(request.id);
@@ -285,12 +286,12 @@ export class StdioMCPClient extends BaseMCPClient {
             new AgentError({
               category: 'timeout',
               code: 'MCP_TIMEOUT',
-              message: `MCP request ${method} timed out`,
+              message: `MCP request ${method} timed out after ${timeoutMs}ms`,
               retryable: true,
             }),
           );
         }
-      }, 30000);
+      }, timeoutMs);
 
       // Wrap resolve/reject to clear timeout on completion
       const originalEntry = this.pendingRequests.get(request.id)!;
@@ -480,12 +481,14 @@ export function createMCPClient(config: MCPServerConfig): IMCPClient {
       command: config.command || '',
       args: config.args,
       env: config.env,
+      requestTimeout: config.requestTimeout,
     };
     return new StdioMCPClient(config.id, stdioConfig);
   } else {
     // Extract http config from flat MCPServerConfig
     const httpConfig: MCPHttpConfig = {
       url: config.url || '',
+      timeout: config.requestTimeout,
     };
     return new HttpMCPClient(config.id, httpConfig);
   }

@@ -98,17 +98,18 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 
 深入了解某个领域前，先查阅对应的 ADR 文档。完整的架构决策列表见 [ARCHITECTURE.md](./ARCHITECTURE.md#关键架构决策adr)。
 
-**开发中常用的 ADR**：
+**开发中常用的架构决策**：
 
-| 领域 | ADR 文件 | 要点 |
-|------|----------|------|
-| 媒体流 | `docs/diff.md` §4.1 | H264+PCM 流式传输，非逐帧提取 |
-| 横切关注点 | `docs/architecture/adr-cross-cutting-concerns.md` | Logger/i18n/Theme/Error 统一在 @neko/shared，三层隔离 |
-| 跨语言架构 | `docs/architecture/cross-language-architecture.md` | Rust 引擎为数据模型权威来源，TS 仅负责 UI |
-| 共享包设计 | `docs/architecture/shared-packages-design.md` | @neko/shared 通过 exports 子路径分层 |
-| 资产管理 | `docs/architecture/asset-management-design.md` | 统一 AssetManifest + Handler 注册表模式 |
-| 3D 能力 | `docs/architecture/3d-capability-analysis.md` | hecs ECS + native-scene，不用 Bevy；混合策略（内置轻量 + MCP 桥接 Blender） |
-| 2D 能力 | `docs/architecture/2d-capability-analysis.md` | neko-sketch 轻量绘画 + Spine/Live2D；混合策略（内置轻量 + MCP 桥接 PS/ComfyUI） |
+| 领域 | 文档 | 要点 |
+|------|------|------|
+| 媒体 Diff | [docs/architecture/diff.md](./docs/architecture/diff.md) | H264+PCM 流式传输，非逐帧提取 |
+| 媒体 LSP | [docs/architecture/lsp.md](./docs/architecture/lsp.md) | JVI 诊断 + Hover + 符号导航 + 跨文件索引 |
+| 横切关注点 | *已内化* | Logger/i18n/Theme/Error 统一在 @neko/shared，三层隔离（L0 零依赖 → L1 vscode → L2 DOM/React） |
+| 跨语言架构 | *已内化* | Rust 引擎为数据模型权威来源，TS 仅负责 UI |
+| 共享包设计 | *已内化* | @neko/shared 通过 exports 子路径分层 |
+| 资产管理 | *已内化* | 统一 AssetManifest + Handler 注册表模式 |
+| 3D 能力 | [docs/architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md) | hecs ECS + native-scene，不用 Bevy；混合策略（内置轻量 + MCP 桥接 Blender） |
+| 2D 能力 | [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md) | neko-sketch 轻量绘画 + Spine/Live2D；混合策略（内置轻量 + MCP 桥接 PS/ComfyUI） |
 
 ### Rust 引擎开发约束
 

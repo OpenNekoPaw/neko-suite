@@ -33,8 +33,8 @@ export function MessageItem({
   if (message.role === 'user') {
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Text color={tokens.info} bold>
-          {'> '}
+        <Text bold>
+          {'❯ '}
           {message.content}
         </Text>
       </Box>
@@ -43,8 +43,15 @@ export function MessageItem({
 
   if (message.role === 'system') {
     return (
-      <Box marginBottom={1}>
-        <Text color={tokens.error}>{message.content}</Text>
+      <Box
+        flexDirection="column"
+        marginBottom={1}
+        borderStyle="round"
+        borderColor={message.isError ? tokens.error : tokens.muted}
+        paddingLeft={1}
+        paddingRight={1}
+      >
+        <Text color={message.isError ? tokens.error : undefined}>{message.content}</Text>
       </Box>
     );
   }

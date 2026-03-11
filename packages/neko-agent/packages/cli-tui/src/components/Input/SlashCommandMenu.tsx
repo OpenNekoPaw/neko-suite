@@ -97,9 +97,6 @@ export const TUI_COMMANDS: SlashCommandOption[] = [
   { name: 'compact', description: 'Compress context tokens' },
   { name: 'model', description: 'Switch or list models' },
   { name: 'config', description: 'Show/set configuration' },
-  { name: 'plan', description: 'Switch to plan mode' },
-  { name: 'auto', description: 'Switch to auto mode' },
-  { name: 'ask', description: 'Switch to ask mode' },
   { name: 'status', description: 'Show current status' },
   { name: 'exit', description: 'Quit the TUI' },
 ];

@@ -139,28 +139,6 @@ export interface ProviderConfig {
 }
 
 /**
- * Provider template for adding new providers
- * Similar to ProviderConfig but without enabled/builtin flags
- */
-export interface ProviderTemplate {
-  /** Template identifier */
-  id: string;
-  /** API identifier */
-  name: string;
-  /** Display name for UI dropdown */
-  displayName: string;
-  /** Provider type for adapter selection */
-  type: ProviderType;
-  /** Default API endpoint URL */
-  apiUrl: string;
-  /**
-   * Protocol variant configuration for OpenAI-compatible APIs.
-   * Included in template to provide sensible defaults for the provider.
-   */
-  protocolVariant?: ProtocolVariant;
-}
-
-/**
  * Model capabilities
  */
 export type ModelCapability =
@@ -265,40 +243,8 @@ export interface MCPServerConfig {
   builtin?: boolean;
   homepage?: string;
   tools?: MCPToolInfo[];
-}
-
-// =============================================================================
-// Workflow Configuration
-// =============================================================================
-
-export type WorkflowEngineType =
-  | 'comfyui'
-  | 'dify'
-  | 'n8n'
-  | 'make'
-  | 'zapier'
-  | 'langflow'
-  | 'flowise'
-  | 'custom';
-
-export type WorkflowCategory = 'image-generation' | 'ai-workflow' | 'automation' | 'integration';
-
-export interface WorkflowConfig {
-  id: string;
-  name: string;
-  description: string;
-  engineType: WorkflowEngineType;
-  url: string;
-  icon?: string;
-  category: WorkflowCategory;
-  docsUrl?: string;
-  requiresApiKey?: boolean;
-  defaultPort?: number;
-  enabled: boolean;
-  builtin?: boolean;
-  /** Provider ID for authentication (alternative to apiKey) */
-  providerId?: string;
-  apiKey?: string;
+  /** Request timeout in ms (default: 30000) */
+  requestTimeout?: number;
 }
 
 // =============================================================================
@@ -351,34 +297,14 @@ export interface PromptPresetConfig {
 // Aggregated Configuration State
 // =============================================================================
 
-/**
- * Task-type to model mapping for explicit routing
- */
-export interface TaskDefaults {
-  /** Model ID for text chat tasks */
-  chat?: { modelId: string };
-  /** Model ID for vision/multimodal tasks */
-  vision?: { modelId: string };
-  /** Model ID for video generation tasks */
-  videoGeneration?: { modelId: string };
-  /** Model ID for audio generation tasks */
-  audioGeneration?: { modelId: string };
-  /** Model ID for image generation tasks */
-  imageGeneration?: { modelId: string };
-}
-
 export interface ConfigState {
   providers: ProviderConfig[];
   models: ModelConfig[];
   mcpServers: MCPServerConfig[];
-  workflows: WorkflowConfig[];
-  prompts: PromptPresetConfig[];
   /** Configured skills (semantic discovery) */
   skills?: import('./skill').ConfiguredSkill[];
   /** Configured slash commands */
   commands?: import('./skill').ConfiguredSlashCommand[];
-  /** Task-type to model defaults */
-  taskDefaults?: TaskDefaults;
 }
 
 // =============================================================================
@@ -386,13 +312,6 @@ export interface ConfigState {
 // =============================================================================
 
 export interface ConfiguredMCPServer extends MCPServerConfig {
-  /** Connection status */
-  status?: 'disconnected' | 'connecting' | 'connected' | 'error';
-  /** Error message if status is 'error' */
-  error?: string;
-}
-
-export interface ConfiguredWorkflow extends WorkflowConfig {
   /** Connection status */
   status?: 'disconnected' | 'connecting' | 'connected' | 'error';
   /** Error message if status is 'error' */

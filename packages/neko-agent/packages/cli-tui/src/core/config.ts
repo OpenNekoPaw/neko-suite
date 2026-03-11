@@ -90,12 +90,25 @@ function getApiKeyFromEnv(provider: string): string | undefined {
 // =============================================================================
 
 /**
+ * Resolved provider info from unified config
+ */
+interface ResolvedProviderInfo {
+  apiKey?: string;
+  baseUrl?: string;
+  defaultModel?: string;
+  /** Provider protocol type (e.g., 'anthropic', 'openai') for API routing */
+  type?: string;
+  /** Whether to use Bearer auth instead of provider-specific auth */
+  useBearerAuth?: boolean;
+}
+
+/**
  * Get provider config from unified config (supports both array and legacy object format)
  */
 function getProviderFromUnifiedConfig(
   providerId: string,
   config: UnifiedConfig | null,
-): { apiKey?: string; baseUrl?: string; defaultModel?: string } | undefined {
+): ResolvedProviderInfo | undefined {
   if (!config) return undefined;
 
   // New array format
@@ -106,6 +119,8 @@ function getProviderFromUnifiedConfig(
         apiKey: provider.apiKey,
         baseUrl: provider.apiUrl,
         defaultModel: undefined, // Models are separate in new format
+        type: provider.type,
+        useBearerAuth: provider.useBearerAuth,
       };
     }
   }
@@ -126,6 +141,31 @@ function getProviderFromUnifiedConfig(
   }
 
   return undefined;
+}
+
+/**
+ * Resolve provider protocol type from provider ID.
+ * Checks config providers array first, then falls back to built-in PROVIDERS,
+ * then infers from the name.
+ */
+function resolveProviderType(
+  providerId: string,
+  workspaceConfig: UnifiedConfig | null,
+  userConfig: UnifiedConfig | null,
+): string {
+  // Check workspace config first
+  const wsProvider = getProviderFromUnifiedConfig(providerId, workspaceConfig);
+  if (wsProvider?.type) return wsProvider.type;
+
+  // Check user config
+  const userProvider = getProviderFromUnifiedConfig(providerId, userConfig);
+  if (userProvider?.type) return userProvider.type;
+
+  // Check built-in providers (ID matches type for builtins)
+  if (PROVIDERS[providerId]) return providerId;
+
+  // Infer from name
+  return inferProviderType(providerId);
 }
 
 /**
@@ -190,12 +230,16 @@ function unifiedToCliConfig(
 ): CLIConfig {
   const provider = unified.defaultProvider ?? unified.provider ?? DEFAULT_CLI_CONFIG.provider;
 
+  // Resolve provider protocol type (e.g., 'anthropic', 'openai') from provider ID
+  const providerType = resolveProviderType(provider, workspaceConfig, userConfig);
+
   // Get provider-specific config
   const workspaceProviderConfig = getProviderFromUnifiedConfig(provider, workspaceConfig);
   const userProviderConfig = getProviderFromUnifiedConfig(provider, userConfig);
 
   // Get API key: env > workspace config > user config > legacy top-level
-  const envApiKey = getApiKeyFromEnv(provider);
+  // Try env key by provider ID first, then by provider type
+  const envApiKey = getApiKeyFromEnv(provider) ?? getApiKeyFromEnv(providerType);
   const apiKey =
     envApiKey ?? workspaceProviderConfig?.apiKey ?? userProviderConfig?.apiKey ?? unified.apiKey;
 
@@ -206,12 +250,15 @@ function unifiedToCliConfig(
     unified.baseUrl ??
     PROVIDERS[provider]?.baseUrl;
 
-  // Get model
+  // Get chat model
   const model =
     unified.defaultModel ??
     unified.model ??
     getDefaultModelForProvider(provider, workspaceConfig, userConfig) ??
     DEFAULT_CLI_CONFIG.model;
+
+  // Get media models (models with media generation capabilities)
+  const mediaModels = resolveMediaModels(workspaceConfig, userConfig);
 
   // Convert MCP servers
   const mcpServers =
@@ -229,7 +276,9 @@ function unifiedToCliConfig(
 
   return {
     provider,
+    providerType,
     model,
+    mediaModels,
     apiKey,
     baseUrl,
     maxTokens: unified.maxTokens ?? DEFAULT_CLI_CONFIG.maxTokens,
@@ -284,8 +333,11 @@ export function loadConfig(
     const workspaceProviderConfig = getProviderFromUnifiedConfig(finalProvider, migratedWorkspace);
     const userProviderConfig = getProviderFromUnifiedConfig(finalProvider, migratedUser);
 
+    // Update provider type for new provider
+    config.providerType = resolveProviderType(finalProvider, migratedWorkspace, migratedUser);
+
     // Update API key for new provider
-    const envApiKey = getApiKeyFromEnv(finalProvider);
+    const envApiKey = getApiKeyFromEnv(finalProvider) ?? getApiKeyFromEnv(config.providerType);
     config.apiKey =
       envApiKey ?? workspaceProviderConfig?.apiKey ?? userProviderConfig?.apiKey ?? config.apiKey;
 
@@ -589,6 +641,45 @@ export function validateConfig(config: CLIConfig): { valid: boolean; errors: str
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+/** Media generation capabilities used to identify media models */
+const MEDIA_CAPABILITIES = new Set([
+  'text_to_image',
+  'image_to_image',
+  'text_to_video',
+  'image_to_video',
+  'video_to_video',
+  'text_to_audio',
+  'text_to_music',
+  'workflow',
+  'image_generation',
+  'video_generation',
+]);
+
+/**
+ * Resolve media models from config (models with media generation capabilities).
+ * Workspace config takes precedence, then user config.
+ */
+function resolveMediaModels(
+  workspaceConfig: UnifiedConfig | null,
+  userConfig: UnifiedConfig | null,
+): string[] {
+  const ids = new Set<string>();
+
+  for (const config of [workspaceConfig, userConfig]) {
+    if (!config?.models) continue;
+    for (const m of config.models) {
+      if (ids.has(m.id)) continue;
+      if (m.enabled === false) continue;
+      const caps = m.capabilities ?? [];
+      if (caps.some((c) => MEDIA_CAPABILITIES.has(c))) {
+        ids.add(m.id);
+      }
+    }
+  }
+
+  return Array.from(ids);
+}
 
 /**
  * Infer provider type from name

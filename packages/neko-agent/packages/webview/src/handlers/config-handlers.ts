@@ -20,7 +20,6 @@ const handleSettingsData: MessageHandler = (message, context) => {
     ...prev,
     providers: message.providers || [],
     // configuredProviders: intentionally NOT set here - see handleConfigState
-    providerTemplates: message.providerTemplates || [],
     selectedProviderId: message.selectedProviderId || null,
     selectedModelId: message.selectedModelId || null,
     systemPrompt: message.systemPrompt || '',

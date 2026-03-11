@@ -35,6 +35,7 @@ export interface ConversationSlice {
   }) => void;
   updateTodos: (todos: TodoItem[]) => void;
   addError: (error: Error) => void;
+  addSystemMessage: (content: string) => void;
   clearMessages: () => void;
 }
 
@@ -165,9 +166,27 @@ export const useConversationStore = create<ConversationSlice>((set) => ({
           toolCalls: [],
           todos: [],
           timestamp: Date.now(),
+          isError: true,
         },
       ],
       isStreaming: false,
+    }));
+  },
+
+  addSystemMessage: (content) => {
+    set((state) => ({
+      messages: [
+        ...state.messages,
+        {
+          id: nextId(),
+          role: 'system' as const,
+          content,
+          toolCalls: [],
+          todos: [],
+          timestamp: Date.now(),
+          isError: false,
+        },
+      ],
     }));
   },
 

@@ -104,17 +104,6 @@ export interface ProviderConfig {
   models?: Array<{ id: string; enabled: boolean }>;
 }
 
-/**
- * Provider template info for dropdown selection
- */
-export interface ProviderTemplateInfo {
-  id: string;
-  name: string;
-  displayName: string;
-  type: string;
-  apiUrl: string;
-}
-
 // =============================================================================
 // Tab State Types (for session persistence)
 // =============================================================================

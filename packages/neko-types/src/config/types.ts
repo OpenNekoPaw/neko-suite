@@ -7,62 +7,7 @@
  * - Workspace config: .neko/config.json
  */
 
-import type {
-  ProviderConfig,
-  ModelConfig,
-  MCPServerConfig,
-  WorkflowConfig,
-  PromptPresetConfig,
-  TaskDefaults,
-} from '../types/config';
-
-// =============================================================================
-// Group Configuration (from platform)
-// =============================================================================
-
-/**
- * Model group configuration
- */
-export interface GroupConfig {
-  /** Unique group identifier */
-  id: string;
-  /** Group name */
-  name: string;
-  /** Group description */
-  description?: string;
-  /** Provider ID for this group */
-  providerId: string;
-  /** Model ID for this group */
-  modelId: string;
-  /** Whether group is enabled */
-  enabled: boolean;
-  /** Whether this is a builtin group */
-  builtin?: boolean;
-}
-
-// =============================================================================
-// Template Configuration
-// =============================================================================
-
-/**
- * Template preset configuration
- */
-export interface TemplatePresetConfig {
-  /** Unique template identifier */
-  id: string;
-  /** Template name */
-  name: string;
-  /** Template description */
-  description?: string;
-  /** Template content */
-  content: string;
-  /** Template type */
-  type?: string;
-  /** Whether template is enabled */
-  enabled: boolean;
-  /** Whether this is a builtin template */
-  builtin?: boolean;
-}
+import type { ProviderConfig, ModelConfig, MCPServerConfig } from '../types/config';
 
 // =============================================================================
 // Unified Configuration Format
@@ -132,20 +77,8 @@ export interface UnifiedConfig {
   /** Model configurations */
   models?: ModelConfig[];
 
-  /** Model group configurations */
-  groups?: GroupConfig[];
-
   /** MCP server configurations */
   mcpServers?: MCPServerConfig[];
-
-  /** Workflow configurations */
-  workflows?: WorkflowConfig[];
-
-  /** Prompt preset configurations */
-  prompts?: PromptPresetConfig[];
-
-  /** Template configurations */
-  templates?: TemplatePresetConfig[];
 
   // ==========================================================================
   // Override Configuration
@@ -157,23 +90,8 @@ export interface UnifiedConfig {
   /** Model overrides (keyed by model ID) */
   modelOverrides?: Record<string, Partial<ModelConfig>>;
 
-  /** Group overrides (keyed by group ID) */
-  groupOverrides?: Record<string, Partial<GroupConfig>>;
-
   /** MCP server overrides (keyed by server ID) */
   mcpServerOverrides?: Record<string, Partial<MCPServerConfig>>;
-
-  /** Workflow overrides (keyed by workflow ID) */
-  workflowOverrides?: Record<string, Partial<WorkflowConfig>>;
-
-  /** Prompt overrides (keyed by prompt ID) */
-  promptOverrides?: Record<string, Partial<PromptPresetConfig>>;
-
-  /** Template overrides (keyed by template ID) */
-  templateOverrides?: Record<string, Partial<TemplatePresetConfig>>;
-
-  /** Task-type to model defaults */
-  taskDefaults?: TaskDefaults;
 
   // ==========================================================================
   // Legacy Fields (for backward compatibility)
@@ -242,20 +160,8 @@ export interface NormalizedConfig {
   /** Model configurations (keyed by ID) */
   models: Map<string, ModelConfig>;
 
-  /** Group configurations (keyed by ID) */
-  groups: Map<string, GroupConfig>;
-
   /** MCP server configurations (keyed by ID) */
   mcpServers: Map<string, MCPServerConfig>;
-
-  /** Workflow configurations (keyed by ID) */
-  workflows: Map<string, WorkflowConfig>;
-
-  /** Prompt configurations (keyed by ID) */
-  prompts: Map<string, PromptPresetConfig>;
-
-  /** Template configurations (keyed by ID) */
-  templates: Map<string, TemplatePresetConfig>;
 }
 
 // =============================================================================
@@ -265,10 +171,7 @@ export interface NormalizedConfig {
 /**
  * Default configuration values
  */
-export const DEFAULT_CONFIG: Omit<
-  NormalizedConfig,
-  'providers' | 'models' | 'groups' | 'mcpServers' | 'workflows' | 'prompts' | 'templates'
-> = {
+export const DEFAULT_CONFIG: Omit<NormalizedConfig, 'providers' | 'models' | 'mcpServers'> = {
   defaultProvider: 'anthropic',
   defaultModel: 'claude-sonnet-4-20250514',
   maxTokens: 8192,

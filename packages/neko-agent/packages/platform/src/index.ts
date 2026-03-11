@@ -2,9 +2,9 @@
  * Neko Suite Platform - AI Service Platform
  *
  * A unified AI service layer providing:
- * - Multi-provider support (OpenAI, Anthropic, Google, Azure, Ollama)
- * - Configuration management with three-tier priority
- * - Model selection driven by taskDefaults config
+ * - Multi-provider support (OpenAI, Anthropic, Google, DeepSeek)
+ * - Configuration management with two-tier priority (User → Workspace)
+ * - Model selection with provider/model configuration
  */
 
 // =============================================================================
@@ -16,12 +16,6 @@ export * from './types';
 // =============================================================================
 // Configuration Layer
 // =============================================================================
-
-export {
-  getBuiltinProviderTemplates,
-  getBuiltinProviderTemplate,
-  getBuiltinPrompt,
-} from './config/builtin-presets';
 
 export {
   FileUserConfigManager,
@@ -107,8 +101,6 @@ export interface PlatformOptions {
   userConfigManager?: IUserConfigManager;
   /** Workspace path for .neko/config.json */
   workspacePath?: string;
-  /** Locale for i18n (e.g., 'en', 'zh-cn') */
-  locale?: string;
   /**
    * Task manager instance for media generation
    * NOTE: TaskManager implementation is now in @neko/agent package.
@@ -155,11 +147,10 @@ export interface Platform {
  * Create a fully configured platform instance
  */
 export function createPlatform(options: PlatformOptions): Platform {
-  // Initialize configuration manager with locale support
+  // Initialize configuration manager
   const configOptions: ConfigManagerOptions = {
     userConfigManager: options.userConfigManager,
     workspacePath: options.workspacePath,
-    locale: options.locale,
   };
   const configManager = new ConfigManager(configOptions);
 

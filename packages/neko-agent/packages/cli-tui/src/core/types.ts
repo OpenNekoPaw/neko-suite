@@ -8,10 +8,14 @@ import type { AgentConfig, AgentResult, MCPServerConfig } from '@neko/agent';
  * CLI configuration
  */
 export interface CLIConfig {
-  /** API provider (anthropic, openai, etc.) */
+  /** Provider ID (e.g., 'anthropic', 'cpass', 'my-openai') */
   provider: string;
-  /** Model ID */
+  /** Provider protocol type for API routing (e.g., 'anthropic', 'openai') */
+  providerType: string;
+  /** Chat model ID */
   model: string;
+  /** Media model IDs (for image/video/audio generation, empty if none) */
+  mediaModels: string[];
   /** API key (from env or config) */
   apiKey?: string;
   /** API base URL (optional) */
@@ -113,7 +117,9 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
  */
 export const DEFAULT_CLI_CONFIG: CLIConfig = {
   provider: 'anthropic',
+  providerType: 'anthropic',
   model: 'claude-sonnet-4-20250514',
+  mediaModels: [],
   maxTokens: 8192,
   temperature: 0.7,
   verbose: false,

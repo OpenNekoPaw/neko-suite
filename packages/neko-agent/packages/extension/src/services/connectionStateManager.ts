@@ -1,7 +1,7 @@
 /**
  * Connection State Manager
  *
- * Manages connection status for MCP servers and Workflow engines.
+ * Manages connection status for MCP servers.
  * Provides a unified interface for tracking, querying, and broadcasting connection states.
  */
 
@@ -21,7 +21,7 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'er
 export interface ConnectionState {
   id: string;
   name: string;
-  type: 'mcp' | 'workflow';
+  type: 'mcp';
   status: ConnectionStatus;
   error?: string;
   lastChecked?: number;
@@ -32,7 +32,7 @@ export interface ConnectionState {
  */
 export interface ConnectionStateChangeEvent {
   id: string;
-  type: 'mcp' | 'workflow';
+  type: 'mcp';
   oldStatus: ConnectionStatus;
   newStatus: ConnectionStatus;
   error?: string;
@@ -46,7 +46,7 @@ export type ConnectionStateListener = (event: ConnectionStateChangeEvent) => voi
 /**
  * Connection State Manager
  *
- * Singleton service that manages connection states for MCP and Workflow services.
+ * Singleton service that manages connection states for MCP services.
  */
 export class ConnectionStateManager implements vscode.Disposable {
   private states: Map<string, ConnectionState> = new Map();
@@ -58,7 +58,7 @@ export class ConnectionStateManager implements vscode.Disposable {
   updateState(
     id: string,
     name: string,
-    type: 'mcp' | 'workflow',
+    type: 'mcp',
     status: ConnectionStatus,
     error?: string,
   ): void {
@@ -92,7 +92,7 @@ export class ConnectionStateManager implements vscode.Disposable {
   /**
    * Get connection state for a service
    */
-  getState(id: string, type: 'mcp' | 'workflow'): ConnectionState | undefined {
+  getState(id: string, type: 'mcp'): ConnectionState | undefined {
     return this.states.get(`${type}:${id}`);
   }
 
@@ -101,13 +101,6 @@ export class ConnectionStateManager implements vscode.Disposable {
    */
   getMCPStates(): ConnectionState[] {
     return Array.from(this.states.values()).filter((s) => s.type === 'mcp');
-  }
-
-  /**
-   * Get all Workflow connection states
-   */
-  getWorkflowStates(): ConnectionState[] {
-    return Array.from(this.states.values()).filter((s) => s.type === 'workflow');
   }
 
   /**
@@ -142,7 +135,7 @@ export class ConnectionStateManager implements vscode.Disposable {
   /**
    * Remove state for a service
    */
-  removeState(id: string, type: 'mcp' | 'workflow'): void {
+  removeState(id: string, type: 'mcp'): void {
     this.states.delete(`${type}:${id}`);
   }
 

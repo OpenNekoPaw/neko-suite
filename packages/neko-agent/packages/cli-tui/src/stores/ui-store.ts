@@ -2,7 +2,7 @@
  * UI Store
  *
  * Manages TUI-specific UI state: tool approval panel,
- * scroll position, focus, terminal dimensions.
+ * selection menus, scroll position, focus, terminal dimensions.
  */
 
 import { create } from 'zustand';
@@ -18,9 +18,30 @@ export interface PendingApproval {
   resolve: (approved: boolean) => void;
 }
 
+/**
+ * Selection menu item
+ */
+export interface SelectionMenuItem {
+  readonly id: string;
+  readonly label: string;
+  readonly description?: string;
+  /** Whether this item is currently active/selected */
+  readonly active?: boolean;
+}
+
+/**
+ * Pending selection menu request
+ */
+export interface PendingSelection {
+  readonly title: string;
+  readonly items: SelectionMenuItem[];
+  resolve: (selectedId: string | null) => void;
+}
+
 export interface UISlice {
   // State
   readonly pendingApproval: PendingApproval | null;
+  readonly pendingSelection: PendingSelection | null;
   readonly scrollOffset: number;
   readonly inputFocused: boolean;
   readonly slashMenuOpen: boolean;
@@ -29,6 +50,8 @@ export interface UISlice {
   // Actions
   showToolApproval: (approval: PendingApproval) => void;
   dismissToolApproval: () => void;
+  showSelection: (selection: PendingSelection) => void;
+  dismissSelection: () => void;
   setScrollOffset: (offset: number) => void;
   scrollUp: (lines?: number) => void;
   scrollDown: (lines?: number) => void;
@@ -40,6 +63,7 @@ export interface UISlice {
 
 export const useUIStore = create<UISlice>((set) => ({
   pendingApproval: null,
+  pendingSelection: null,
   scrollOffset: 0,
   inputFocused: true,
   slashMenuOpen: false,
@@ -54,6 +78,14 @@ export const useUIStore = create<UISlice>((set) => ({
 
   dismissToolApproval: () => {
     set({ pendingApproval: null, inputFocused: true });
+  },
+
+  showSelection: (selection) => {
+    set({ pendingSelection: selection, inputFocused: false });
+  },
+
+  dismissSelection: () => {
+    set({ pendingSelection: null, inputFocused: true });
   },
 
   setScrollOffset: (offset) => {

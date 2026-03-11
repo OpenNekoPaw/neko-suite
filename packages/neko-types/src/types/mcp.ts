@@ -27,6 +27,8 @@ export interface MCPStdioConfig {
   env?: Record<string, string>;
   /** Working directory */
   cwd?: string;
+  /** Request timeout in ms (default: 30000) */
+  requestTimeout?: number;
 }
 
 /**

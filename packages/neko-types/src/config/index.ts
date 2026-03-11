@@ -28,7 +28,7 @@
  */
 
 // Types (browser-safe)
-export type { UnifiedConfig, NormalizedConfig, GroupConfig, TemplatePresetConfig } from './types';
+export type { UnifiedConfig, NormalizedConfig } from './types';
 
 export { DEFAULT_CONFIG, CONFIG_DIR_NAME, CONFIG_FILE_NAME } from './types';
 

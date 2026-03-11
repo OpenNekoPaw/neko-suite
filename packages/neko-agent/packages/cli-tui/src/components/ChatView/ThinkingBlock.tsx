@@ -2,8 +2,7 @@
  * ThinkingBlock Component
  *
  * Displays Claude's extended thinking content.
- * Shows a collapsed summary by default with the thinking indicator.
- * Phase 3+ will add: expandable/collapsible toggle.
+ * Claude Code style: "* Thinking..." with italic muted text.
  */
 
 import React from 'react';
@@ -16,7 +15,7 @@ interface ThinkingBlockProps {
   readonly content: string;
   /** Whether thinking is still in progress */
   readonly isThinking: boolean;
-  /** Max lines to show (default: 3) */
+  /** Max preview lines to show (default: 3) */
   readonly maxLines?: number;
 }
 
@@ -31,28 +30,36 @@ export function ThinkingBlock({
 
   return (
     <Box flexDirection="column" marginBottom={0}>
-      {/* Header */}
-      <Box>
-        {isThinking ? (
+      {/* Header — Claude Code style */}
+      {isThinking ? (
+        <Box>
+          <Text color={tokens.muted} italic>
+            {'* '}
+          </Text>
           <Spinner label="Thinking..." />
-        ) : (
-          <Text color={tokens.muted}>💭 Thought for {lines.length} lines</Text>
-        )}
-      </Box>
+        </Box>
+      ) : (
+        <Text color={tokens.muted} italic>
+          * Thought for {lines.length} lines
+        </Text>
+      )}
 
       {/* Preview lines */}
-      {displayLines.map((line, idx) => (
-        <Box key={idx} marginLeft={2}>
-          <Text dimColor italic>
-            {truncate(line, 80)}
-          </Text>
-        </Box>
-      ))}
-
-      {hasMore ? (
-        <Box marginLeft={2}>
-          <Text dimColor>... {lines.length - maxLines} more lines</Text>
-        </Box>
+      {!isThinking && displayLines.length > 0 ? (
+        <>
+          {displayLines.map((line, idx) => (
+            <Box key={idx} marginLeft={2}>
+              <Text dimColor italic>
+                {truncate(line, 80)}
+              </Text>
+            </Box>
+          ))}
+          {hasMore ? (
+            <Box marginLeft={2}>
+              <Text dimColor>... {lines.length - maxLines} more lines</Text>
+            </Box>
+          ) : null}
+        </>
       ) : null}
     </Box>
   );

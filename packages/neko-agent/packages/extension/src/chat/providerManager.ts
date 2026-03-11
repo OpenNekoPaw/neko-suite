@@ -1,18 +1,16 @@
 /**
  * Provider Manager
  *
- * Manages AI provider configurations using the new Platform API.
+ * Manages AI provider configurations using the Platform API.
  * Provides a UI-friendly interface for provider management.
  */
 
 import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
-import { getBuiltinProviderTemplates } from '@neko/platform';
-import type { ProviderTemplate } from '@neko/shared';
-import { ProviderConfig, ConfiguredProvider, ProviderInfo, ProviderTemplateInfo } from './types';
+import { ProviderConfig, ConfiguredProvider, ProviderInfo } from './types';
 
 /**
- * Provider Manager using new Platform API
+ * Provider Manager using Platform API
  */
 export class ProviderManager {
   private readonly _platform: Platform;
@@ -86,15 +84,12 @@ export class ProviderManager {
     | { id: string; isConfigured: boolean; getDefaultModel: () => string }
     | undefined {
     const config = this._platform.config.getConfig();
-    const userConfig = this._platform.config.getUserConfig();
     const providers = Array.from(config.providers.values());
     const models = Array.from(config.models.values());
 
     // Find an enabled provider that has an API key configured
-    // The apiKey is already merged in config.providers from user.providers or providerOverrides
     const provider = providers.find((p) => {
       if (p.enabled === false) return false;
-      // Provider is configured if it has an apiKey (from merged config)
       return !!p.apiKey;
     });
 
@@ -123,7 +118,6 @@ export class ProviderManager {
 
     if (!provider) return undefined;
 
-    // Check if provider has API key configured (already merged in config.providers)
     const isConfigured = !!provider.apiKey;
 
     const models = Array.from(config.models.values()).filter((m) => m.providerId === provider.id);
@@ -181,20 +175,5 @@ export class ProviderManager {
    */
   async toggleModel(_providerType: string, modelId: string, enabled: boolean): Promise<void> {
     await this._platform.config.updateModelOverride(modelId, { enabled });
-  }
-
-  /**
-   * Get provider templates for dropdown selection
-   * Templates are predefined provider configurations that users can choose from
-   */
-  getProviderTemplates(): ProviderTemplateInfo[] {
-    const templates = getBuiltinProviderTemplates();
-    return templates.map((t) => ({
-      id: t.id,
-      name: t.name,
-      displayName: t.displayName || t.name,
-      type: t.type,
-      apiUrl: t.apiUrl || '',
-    }));
   }
 }

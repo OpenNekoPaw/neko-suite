@@ -1,28 +1,21 @@
 /**
  * Configuration Manager
- * Merges configuration from three tiers: Builtin → User → Workspace
  *
- * Refactored to use ConfigSection pattern and specialized services.
+ * Simplified two-layer merge: User Config → Workspace Config (overrides).
+ * No more builtin presets or config sections — user config is the source of truth.
  */
 
 import type { Provider, Model } from '../types/provider';
 import type { RetryTimeoutPreset, BuiltinPresetName } from '../types/error';
-import type { MCPServerPreset, WorkflowPreset, PromptPreset } from '../types/config';
-import type { ChatModelOption, TaskDefaults } from '@neko/shared';
-import { loadBuiltinPresets, setLocale, type BuiltinPresets } from './builtin-presets';
+import type { MCPServerPreset } from '../types/config';
+import type { ChatModelOption } from '@neko/shared';
 import { type UserConfig, type IUserConfigManager } from './user-config';
 import {
   loadWorkspaceConfig,
   watchWorkspaceConfig,
   type WorkspaceConfig,
 } from './workspace-config';
-import {
-  createConfigSections,
-  type ConfigSections,
-  type ProviderSection,
-  type ModelSection,
-} from './config-section-impls';
-import type { MergeContext } from './base-config-section';
+import { RETRY_TIMEOUT_PRESETS } from './retry-timeout-presets';
 import { ChatModelService } from './chat-model-service';
 import {
   ConfigExportService,
@@ -39,8 +32,6 @@ export interface MergedConfig {
   models: Map<string, Model>;
   retryTimeoutPresets: Map<string, RetryTimeoutPreset>;
   mcpServers: Map<string, MCPServerPreset>;
-  workflows: Map<string, WorkflowPreset>;
-  prompts: Map<string, PromptPreset>;
 }
 
 /**
@@ -49,40 +40,33 @@ export interface MergedConfig {
 export interface ConfigManagerOptions {
   userConfigManager?: IUserConfigManager;
   workspacePath?: string;
-  locale?: string;
 }
 
 /**
  * ConfigManager - Unified configuration management
  *
  * Priority (highest to lowest):
- * 1. Workspace config (.neko/config.json)
- * 2. User config (~/.neko/config.json)
- * 3. Builtin presets
+ * 1. Workspace config (.neko/config.json) — full override by id
+ * 2. User config (~/.neko/config.json) — source of truth
  */
 export class ConfigManager {
-  private builtinPresets: BuiltinPresets;
   private userConfigManager: IUserConfigManager | null = null;
   private workspaceConfig: WorkspaceConfig | null = null;
   private workspacePath: string | null = null;
   private stopWatching: (() => void) | null = null;
-  private sections: ConfigSections;
-  private retryTimeoutPresets: Map<string, RetryTimeoutPreset> = new Map();
   private configMerged = false;
   private cachedConfig: MergedConfig | null = null;
+
+  // Merged data
+  private providers: Map<string, Provider> = new Map();
+  private models: Map<string, Model> = new Map();
+  private mcpServers: Map<string, MCPServerPreset> = new Map();
 
   // Specialized services
   private readonly chatModelService = new ChatModelService();
   private readonly configExportService = new ConfigExportService();
 
   constructor(options: ConfigManagerOptions = {}) {
-    // Set locale before loading builtin presets
-    if (options.locale) {
-      setLocale(options.locale);
-    }
-
-    this.builtinPresets = loadBuiltinPresets();
-
     this.userConfigManager = options.userConfigManager ?? null;
 
     if (options.workspacePath) {
@@ -93,13 +77,6 @@ export class ConfigManager {
         this.invalidateCache();
       });
     }
-
-    // Initialize config sections
-    this.sections = createConfigSections({
-      userConfigManager: this.userConfigManager,
-      onInvalidate: () => this.invalidateCache(),
-      onNotify: () => {}, // Listener infrastructure removed; onNotify kept as no-op for config section contract
-    });
   }
 
   /**
@@ -111,12 +88,10 @@ export class ConfigManager {
       return this.cachedConfig;
     }
     this.cachedConfig = {
-      providers: new Map(this.sections.providers.getAll().map((p) => [p.id, p])),
-      models: new Map(this.sections.models.getAll().map((m) => [m.id, m])),
-      retryTimeoutPresets: this.retryTimeoutPresets,
-      mcpServers: new Map(this.sections.mcpServers.getAll().map((s) => [s.id, s])),
-      workflows: new Map(this.sections.workflows.getAll().map((w) => [w.id, w])),
-      prompts: new Map(this.sections.prompts.getAll().map((p) => [p.id, p])),
+      providers: new Map(this.providers),
+      models: new Map(this.models),
+      retryTimeoutPresets: new Map(Object.entries(RETRY_TIMEOUT_PRESETS)),
+      mcpServers: new Map(this.mcpServers),
     };
     return this.cachedConfig;
   }
@@ -130,32 +105,11 @@ export class ConfigManager {
         providers: [],
         models: [],
         mcpServers: [],
-        workflows: [],
-        prompts: [],
         providerOverrides: {},
         modelOverrides: {},
         mcpServerOverrides: {},
-        workflowOverrides: {},
-        promptOverrides: {},
-        taskDefaults: undefined,
       }
     );
-  }
-
-  /**
-   * Get task defaults (workspace config takes priority over user config)
-   */
-  getTaskDefaults(): TaskDefaults | undefined {
-    const user = this.userConfigManager?.load().taskDefaults;
-    const workspace = this.workspaceConfig?.taskDefaults;
-    return workspace ?? user;
-  }
-
-  /**
-   * Save user configuration (for taskDefaults and other direct user config updates)
-   */
-  async saveUserConfig(config: UserConfig): Promise<void> {
-    await this.userConfigManager?.save(config);
   }
 
   // ==========================================================================
@@ -164,37 +118,51 @@ export class ConfigManager {
 
   getProvider(id: string): Provider | undefined {
     this.ensureMerged();
-    return this.sections.providers.get(id);
+    return this.providers.get(id);
   }
 
   getProviders(): Provider[] {
     this.ensureMerged();
-    return this.sections.providers.getAll();
+    return Array.from(this.providers.values());
   }
 
   getEnabledProviders(): Provider[] {
     this.ensureMerged();
-    return this.sections.providers.getEnabled();
+    return Array.from(this.providers.values()).filter((p) => p.enabled !== false);
   }
 
   async setProvider(provider: Provider): Promise<void> {
-    await this.sections.providers.set(provider);
+    this.ensureUserConfigManager();
+    await this.userConfigManager!.addProvider(provider);
+    this.invalidateCache();
   }
 
   async removeProvider(providerId: string): Promise<void> {
-    await this.sections.providers.remove(providerId);
+    this.ensureUserConfigManager();
+    await this.userConfigManager!.removeProvider(providerId);
+    this.invalidateCache();
   }
 
   async setProviderApiKey(providerId: string, apiKey: string): Promise<void> {
-    await (this.sections.providers as ProviderSection).setApiKey(providerId, apiKey);
+    this.ensureUserConfigManager();
+    await this.userConfigManager!.updateProviderOverride(providerId, {
+      apiKey,
+    } as Partial<Provider>);
+    this.invalidateCache();
   }
 
   async updateProviderOverride(providerId: string, override: Partial<Provider>): Promise<void> {
-    await this.sections.providers.updateOverride(providerId, override);
+    this.ensureUserConfigManager();
+    await this.userConfigManager!.updateProviderOverride(providerId, override);
+    this.invalidateCache();
   }
 
   async removeProviderOverride(providerId: string): Promise<void> {
-    await this.sections.providers.removeOverride(providerId);
+    this.ensureUserConfigManager();
+    const config = this.userConfigManager!.load();
+    delete config.providerOverrides[providerId];
+    await this.userConfigManager!.save(config);
+    this.invalidateCache();
   }
 
   // ==========================================================================
@@ -203,22 +171,22 @@ export class ConfigManager {
 
   getModel(id: string): Model | undefined {
     this.ensureMerged();
-    return this.sections.models.get(id);
+    return this.models.get(id);
   }
 
   getModels(): Model[] {
     this.ensureMerged();
-    return this.sections.models.getAll();
+    return Array.from(this.models.values());
   }
 
   getEnabledModels(): Model[] {
     this.ensureMerged();
-    return this.sections.models.getEnabled();
+    return Array.from(this.models.values()).filter((m) => m.enabled !== false);
   }
 
   getModelsByProvider(providerId: string): Model[] {
     this.ensureMerged();
-    return (this.sections.models as ModelSection).getByProvider(providerId);
+    return Array.from(this.models.values()).filter((m) => m.providerId === providerId);
   }
 
   /**
@@ -235,15 +203,26 @@ export class ConfigManager {
   }
 
   async setModel(model: Model): Promise<void> {
-    await this.sections.models.set(model);
+    this.ensureUserConfigManager();
+    await this.userConfigManager!.addModel(model);
+    this.invalidateCache();
   }
 
   async removeModel(modelId: string): Promise<void> {
-    await this.sections.models.remove(modelId);
+    this.ensureUserConfigManager();
+    await this.userConfigManager!.removeModel(modelId);
+    this.invalidateCache();
   }
 
   async updateModelOverride(modelId: string, override: Partial<Model>): Promise<void> {
-    await this.sections.models.updateOverride(modelId, override);
+    this.ensureUserConfigManager();
+    const config = this.userConfigManager!.load();
+    config.modelOverrides[modelId] = {
+      ...config.modelOverrides[modelId],
+      ...override,
+    };
+    await this.userConfigManager!.save(config);
+    this.invalidateCache();
   }
 
   // ==========================================================================
@@ -252,97 +231,38 @@ export class ConfigManager {
 
   getMCPServer(id: string): MCPServerPreset | undefined {
     this.ensureMerged();
-    return this.sections.mcpServers.get(id);
+    return this.mcpServers.get(id);
   }
 
   getMCPServers(): MCPServerPreset[] {
     this.ensureMerged();
-    return this.sections.mcpServers.getAll();
+    return Array.from(this.mcpServers.values());
   }
 
   getEnabledMCPServers(): MCPServerPreset[] {
     this.ensureMerged();
-    return this.sections.mcpServers.getEnabled();
+    return Array.from(this.mcpServers.values()).filter((s) => s.enabled !== false);
   }
 
   async setMCPServer(server: MCPServerPreset): Promise<void> {
-    await this.sections.mcpServers.set(server);
+    this.ensureUserConfigManager();
+    await this.userConfigManager!.addMCPServer(server);
+    this.invalidateCache();
   }
 
   async removeMCPServer(serverId: string): Promise<void> {
-    await this.sections.mcpServers.remove(serverId);
+    this.ensureUserConfigManager();
+    await this.userConfigManager!.removeMCPServer(serverId);
+    this.invalidateCache();
   }
 
   async updateMCPServerOverride(
     serverId: string,
     override: Partial<MCPServerPreset>,
   ): Promise<void> {
-    await this.sections.mcpServers.updateOverride(serverId, override);
-  }
-
-  // ==========================================================================
-  // Workflow Methods
-  // ==========================================================================
-
-  getWorkflow(id: string): WorkflowPreset | undefined {
-    this.ensureMerged();
-    return this.sections.workflows.get(id);
-  }
-
-  getWorkflows(): WorkflowPreset[] {
-    this.ensureMerged();
-    return this.sections.workflows.getAll();
-  }
-
-  getEnabledWorkflows(): WorkflowPreset[] {
-    this.ensureMerged();
-    return this.sections.workflows.getEnabled();
-  }
-
-  async setWorkflow(workflow: WorkflowPreset): Promise<void> {
-    await this.sections.workflows.set(workflow);
-  }
-
-  async removeWorkflow(workflowId: string): Promise<void> {
-    await this.sections.workflows.remove(workflowId);
-  }
-
-  async updateWorkflowOverride(
-    workflowId: string,
-    override: Partial<WorkflowPreset>,
-  ): Promise<void> {
-    await this.sections.workflows.updateOverride(workflowId, override);
-  }
-
-  // ==========================================================================
-  // Prompt Methods
-  // ==========================================================================
-
-  getPrompt(id: string): PromptPreset | undefined {
-    this.ensureMerged();
-    return this.sections.prompts.get(id);
-  }
-
-  getPrompts(): PromptPreset[] {
-    this.ensureMerged();
-    return this.sections.prompts.getAll();
-  }
-
-  getEnabledPrompts(): PromptPreset[] {
-    this.ensureMerged();
-    return this.sections.prompts.getEnabled();
-  }
-
-  async setPrompt(prompt: PromptPreset): Promise<void> {
-    await this.sections.prompts.set(prompt);
-  }
-
-  async removePrompt(promptId: string): Promise<void> {
-    await this.sections.prompts.remove(promptId);
-  }
-
-  async updatePromptOverride(promptId: string, override: Partial<PromptPreset>): Promise<void> {
-    await this.sections.prompts.updateOverride(promptId, override);
+    this.ensureUserConfigManager();
+    await this.userConfigManager!.updateMCPServerOverride(serverId, override);
+    this.invalidateCache();
   }
 
   // ==========================================================================
@@ -350,25 +270,18 @@ export class ConfigManager {
   // ==========================================================================
 
   getRetryTimeoutPreset(name: BuiltinPresetName): RetryTimeoutPreset | undefined {
-    this.ensureMerged();
-    return this.retryTimeoutPresets.get(name);
+    return RETRY_TIMEOUT_PRESETS[name];
   }
 
   // ==========================================================================
   // Import/Export Methods
   // ==========================================================================
 
-  /**
-   * Export result
-   */
   exportConfig(options: { includeSecrets?: boolean } = {}): ConfigExportData {
     const config = this.getConfig();
     return this.configExportService.exportConfig(config.providers, config.models, options);
   }
 
-  /**
-   * Import configuration from export data
-   */
   async importConfig(
     data: ConfigExportData,
     options: { overwrite?: boolean; includeSecrets?: boolean } = {},
@@ -376,9 +289,6 @@ export class ConfigManager {
     return this.configExportService.importConfig(data, this, options);
   }
 
-  /**
-   * Add a custom provider configuration
-   */
   async addCustomProvider(config: CustomProviderConfig): Promise<ConfigImportResult> {
     return this.configExportService.addCustomProvider(config, this);
   }
@@ -409,8 +319,19 @@ export class ConfigManager {
     this.cachedConfig = null;
   }
 
+  private ensureUserConfigManager(): void {
+    if (!this.userConfigManager) {
+      throw new Error('User config storage not available');
+    }
+  }
+
   /**
-   * Ensure all sections are merged from the three-tier config
+   * Merge user config + workspace config into flat Maps.
+   *
+   * 1. Load user config arrays → Map by id
+   * 2. Apply user overrides on top
+   * 3. If workspace config exists, merge workspace items + overrides (highest priority)
+   * 4. Substitute MCP workspace paths
    */
   private ensureMerged(): void {
     if (this.configMerged) {
@@ -420,52 +341,26 @@ export class ConfigManager {
     const userConfig = this.userConfigManager?.load();
     const workspace = this.workspaceConfig;
 
-    // Merge each section (providers/models: user config only, no workspace override)
-    this.sections.providers.merge(
-      this.builtinPresets.providers,
-      this.createMergeContext(userConfig?.providers ?? [], userConfig?.providerOverrides ?? {}),
-    );
+    // --- Providers ---
+    this.providers.clear();
+    this.mergeArrayToMap(this.providers, userConfig?.providers);
+    this.applyOverrides(this.providers, userConfig?.providerOverrides);
+    this.mergeArrayToMap(this.providers, workspace?.providers);
+    this.applyOverrides(this.providers, workspace?.providerOverrides);
 
-    this.sections.models.merge(
-      this.builtinPresets.models,
-      this.createMergeContext(userConfig?.models ?? [], userConfig?.modelOverrides ?? {}),
-    );
+    // --- Models ---
+    this.models.clear();
+    this.mergeArrayToMap(this.models, userConfig?.models);
+    this.applyOverrides(this.models, userConfig?.modelOverrides);
+    this.mergeArrayToMap(this.models, workspace?.models);
+    this.applyOverrides(this.models, workspace?.modelOverrides);
 
-    this.sections.mcpServers.merge(
-      this.builtinPresets.mcpServers,
-      this.createMergeContext(
-        userConfig?.mcpServers ?? [],
-        userConfig?.mcpServerOverrides ?? {},
-        workspace?.mcpServers,
-        workspace?.mcpServerOverrides,
-      ),
-    );
-
-    this.sections.workflows.merge(
-      this.builtinPresets.workflows,
-      this.createMergeContext(
-        userConfig?.workflows ?? [],
-        userConfig?.workflowOverrides ?? {},
-        workspace?.workflows,
-        workspace?.workflowOverrides,
-      ),
-    );
-
-    this.sections.prompts.merge(
-      this.builtinPresets.prompts,
-      this.createMergeContext(
-        userConfig?.prompts ?? [],
-        userConfig?.promptOverrides ?? {},
-        workspace?.prompts,
-        workspace?.promptOverrides,
-      ),
-    );
-
-    // Merge retry/timeout presets (only from builtin)
-    this.retryTimeoutPresets.clear();
-    for (const [name, preset] of Object.entries(this.builtinPresets.retryTimeoutPresets)) {
-      this.retryTimeoutPresets.set(name, { ...preset });
-    }
+    // --- MCP Servers ---
+    this.mcpServers.clear();
+    this.mergeArrayToMap(this.mcpServers, userConfig?.mcpServers);
+    this.applyOverrides(this.mcpServers, userConfig?.mcpServerOverrides);
+    this.mergeArrayToMap(this.mcpServers, workspace?.mcpServers);
+    this.applyOverrides(this.mcpServers, workspace?.mcpServerOverrides);
 
     // Substitute workspace path in MCP server configurations
     this.substituteMCPWorkspacePath();
@@ -474,40 +369,45 @@ export class ConfigManager {
   }
 
   /**
-   * Substitute placeholder paths in MCP server configurations with actual workspace path.
-   * This replaces '/path/to/allowed/dir' in filesystem MCP server args with workspacePath.
+   * Merge an array of items into a Map by id.
+   * Items with existing ids are fully replaced.
+   */
+  private mergeArrayToMap<T extends { id: string }>(target: Map<string, T>, items?: T[]): void {
+    if (!items) return;
+    for (const item of items) {
+      target.set(item.id, { ...item });
+    }
+  }
+
+  /**
+   * Apply overrides to existing items in the Map.
+   * Only modifies items that already exist.
+   */
+  private applyOverrides<T extends { id: string }>(
+    target: Map<string, T>,
+    overrides?: Record<string, Partial<T>>,
+  ): void {
+    if (!overrides) return;
+    for (const [id, override] of Object.entries(overrides)) {
+      const existing = target.get(id);
+      if (existing) {
+        target.set(id, { ...existing, ...override });
+      }
+    }
+  }
+
+  /**
+   * Substitute ${workspaceFolder} placeholder in MCP server configurations.
    */
   private substituteMCPWorkspacePath(): void {
     if (!this.workspacePath) return;
 
-    const mcpServers = this.sections.mcpServers.getAll();
-    for (const server of mcpServers) {
-      // Only process filesystem MCP server
-      if (server.id !== 'filesystem' || !server.args) continue;
-
-      // Find and replace the placeholder path in args
-      const PLACEHOLDER_PATH = '/path/to/allowed/dir';
+    this.mcpServers.forEach((server, id) => {
+      if (!server.args) return;
       const updatedArgs = server.args.map((arg) =>
-        arg === PLACEHOLDER_PATH ? this.workspacePath! : arg,
+        arg.replace(/\$\{workspaceFolder\}/g, this.workspacePath!),
       );
-
-      // Update the server configuration in the items map
-      // We directly mutate because we're within the merge process
-      (server as { args: string[] }).args = updatedArgs;
-    }
-  }
-
-  private createMergeContext<T>(
-    userItems: T[],
-    userOverrides: Record<string, Partial<T>>,
-    workspaceItems?: T[],
-    workspaceOverrides?: Record<string, Partial<T>>,
-  ): MergeContext<T> {
-    return {
-      userItems,
-      userOverrides,
-      workspaceItems,
-      workspaceOverrides,
-    };
+      this.mcpServers.set(id, { ...server, args: updatedArgs });
+    });
   }
 }

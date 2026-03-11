@@ -132,9 +132,7 @@ function createMockAgentManager() {
 /** Minimal Platform-shaped object */
 function createMockPlatform() {
   return {
-    config: {
-      getPrompt: vi.fn().mockReturnValue(undefined),
-    },
+    config: {},
     tools: { get: vi.fn() },
     service: { chat: vi.fn(), chatStream: vi.fn() },
   };

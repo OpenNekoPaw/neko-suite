@@ -14,23 +14,19 @@ import type { Platform } from '@neko/platform';
 import { getLogger } from '../../base';
 import type {
   ConfigState,
-  PromptPresetConfig,
   ProviderConfig,
   ModelConfig,
   ConfiguredSkill,
   ConfiguredSlashCommand,
   ConfiguredHook,
   ConfiguredToolGroup,
-  TaskDefaults,
 } from '@neko/shared';
-import { getPromptFileService } from '../PromptFileService';
 import { getSkillFileService } from '../SkillFileService';
 import { getHookFileService } from '../HookFileService';
 import type { ConnectionStateManager, ConnectionStateChangeEvent } from '../connectionStateManager';
 
 import type { PostMessageFn } from './types';
 import { broadcastToWebviews } from './broadcastHelper';
-import { PromptSyncHandler } from './promptSyncHandler';
 import { SkillSyncHandler } from './skillSyncHandler';
 import { HookSyncHandler } from './hookSyncHandler';
 import { ToolSkillHandler } from './toolSkillHandler';
@@ -49,7 +45,6 @@ export class ConfigBridge implements vscode.Disposable {
   private activeWebviews: Set<PostMessageFn> = new Set();
 
   // Domain handlers
-  private readonly promptSync: PromptSyncHandler;
   private readonly skillSync: SkillSyncHandler;
   private readonly hookSync: HookSyncHandler;
   private readonly toolSkill: ToolSkillHandler;
@@ -61,7 +56,6 @@ export class ConfigBridge implements vscode.Disposable {
     context?: vscode.ExtensionContext,
   ) {
     // Initialize domain handlers
-    this.promptSync = new PromptSyncHandler(platform, getPromptFileService());
     this.skillSync = new SkillSyncHandler(getSkillFileService(), this.activeWebviews, context);
     this.hookSync = new HookSyncHandler(getHookFileService(), this.activeWebviews);
     this.toolSkill = new ToolSkillHandler(this.activeWebviews, context);
@@ -79,7 +73,6 @@ export class ConfigBridge implements vscode.Disposable {
     }
 
     // Initialize all handlers
-    this.promptSync.init();
     this.skillSync.init();
     this.hookSync.init();
     void this.configFile.init();
@@ -161,10 +154,6 @@ export class ConfigBridge implements vscode.Disposable {
           });
           return true;
 
-        case 'updatePrompt':
-          await this.promptSync.handleUpdate(message.prompt as PromptPresetConfig, postMessage);
-          return true;
-
         case 'updateProvider':
           await cm.setProvider(message.provider as ProviderConfig);
           this.notifyChange(postMessage, 'provider', (message.provider as ProviderConfig).id);
@@ -173,13 +162,6 @@ export class ConfigBridge implements vscode.Disposable {
         case 'updateModel':
           await cm.setModel(message.model as ModelConfig);
           this.notifyChange(postMessage, 'model', (message.model as ModelConfig).id);
-          return true;
-
-        case 'deletePrompt':
-          await this.promptSync.handleDelete(
-            (message.promptId || message.id) as string,
-            postMessage,
-          );
           return true;
 
         case 'deleteProvider':
@@ -204,14 +186,6 @@ export class ConfigBridge implements vscode.Disposable {
           const modelId = message.modelId as string | undefined;
           const requestId = message.requestId as string;
           this.handleValidateApiKey(providerId, modelId, requestId, postMessage);
-          return true;
-        }
-
-        case 'updateTaskDefaults': {
-          const userCfg = cm.getUserConfig();
-          userCfg.taskDefaults = message.taskDefaults as TaskDefaults | undefined;
-          await cm.saveUserConfig(userCfg);
-          this.notifyChange(postMessage, 'all', 'taskDefaults');
           return true;
         }
 
@@ -262,11 +236,8 @@ export class ConfigBridge implements vscode.Disposable {
       providers: cm.getProviders(),
       models: cm.getModels(),
       mcpServers: cm.getMCPServers(),
-      workflows: [],
-      prompts: cm.getPrompts(),
       skills: this.skillSync.getSkills(),
       commands: this.skillSync.getCommands(),
-      taskDefaults: cm.getUserConfig().taskDefaults,
     };
   }
 
@@ -279,7 +250,7 @@ export class ConfigBridge implements vscode.Disposable {
 
   private notifyChange(
     postMessage: PostMessageFn,
-    changeType: 'provider' | 'model' | 'mcp' | 'workflow' | 'prompt' | 'all' | 'taskDefaults',
+    changeType: 'provider' | 'model' | 'mcp' | 'all',
     id: string,
   ): void {
     postMessage({ type: 'configChanged', changeType, id });

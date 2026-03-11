@@ -279,13 +279,7 @@ export class MessageHandler {
       // Configure agent
       const effectiveModelId = modelId;
 
-      let systemPrompt = this._settings.customSystemPrompt || this._getSystemPrompt();
-      if (promptId && this._platform) {
-        const promptConfig = this._platform.config.getPrompt(promptId);
-        if (promptConfig && promptConfig.systemPrompt) {
-          systemPrompt = promptConfig.systemPrompt;
-        }
-      }
+      const systemPrompt = this._settings.customSystemPrompt || this._getSystemPrompt();
 
       await agentRunner.configure({
         platform: this._platform,

@@ -24,8 +24,9 @@ import {
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { CLIConfig } from '../core/types';
-import { createLLMServiceAdapter } from '../core/llm-service-adapter';
+import { createLLMServiceAdapter, LLMServiceAdapter } from '../core/llm-service-adapter';
 import type { IService } from '@neko/shared';
+import { useConfigStore } from '../stores/config-store';
 import { useAgentStore } from '../stores/agent-store';
 import { useConversationStore } from '../stores/conversation-store';
 import { useUIStore } from '../stores/ui-store';
@@ -46,6 +47,8 @@ export interface AgentSessionHandle {
   clearHistory: () => void;
   /** Confirm or reject a tool call */
   confirmTool: (toolCallId: string, approved: boolean) => void;
+  /** Switch model and rebuild LLM service */
+  updateModel: (model: string) => void;
   /** Whether session is initialized */
   readonly isReady: boolean;
 }
@@ -71,6 +74,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const adapterRef = useRef<IEventAdapter | null>(null);
   const inputProcessorRef = useRef<InputProcessor | null>(null);
   const mcpManagerRef = useRef<MCPManager | null>(null);
+  const serviceAdapterRef = useRef<LLMServiceAdapter | null>(null);
   const isReadyRef = useRef(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
 
@@ -110,6 +114,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
         // 4. LLM Service
         const llmService = createLLMServiceAdapter(config, service);
+        if (llmService instanceof LLMServiceAdapter) {
+          serviceAdapterRef.current = llmService;
+        }
 
         // 5. System Prompt
         const executionMode = useAgentStore.getState().executionMode;
@@ -239,20 +246,26 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     }
   }, []);
 
+  const updateModel = useCallback((model: string) => {
+    const currentConfig = useConfigStore.getState().config;
+    const newConfig = { ...currentConfig, model };
+    useConfigStore.getState().setConfig({ model });
+    if (serviceAdapterRef.current) {
+      serviceAdapterRef.current.rebuild(newConfig);
+    }
+  }, []);
+
   return {
     submit,
     cancel,
     clearHistory,
     confirmTool,
+    updateModel,
     isReady: isReadyRef.current,
   };
 }
 
-/** Helper to get workDir without importing config store at module level */
+/** Helper to get workDir from config store */
 function useConfigStore_getWorkDir(): string {
-  // Lazily import to avoid circular deps
-  const { useConfigStore } = require('../stores/config-store') as {
-    useConfigStore: { getState: () => { config: { workDir: string } } };
-  };
   return useConfigStore.getState().config.workDir;
 }

@@ -1,14 +1,12 @@
 /**
- * ModelSelector - Simple model resolver replacing GroupManager
+ * ModelSelector - Simple model resolver
  *
  * Resolution priority:
  *   1. Caller-specified modelId (explicit override)
- *   2. taskDefaults[taskType] from user/workspace config
- *   3. First enabled model with matching capability and configured apiKey
- *   4. Throws PlatformError(NOT_FOUND, NO_AVAILABLE_MODEL)
+ *   2. First enabled model with matching capability and configured apiKey
+ *   3. Throws PlatformError(NOT_FOUND, NO_AVAILABLE_MODEL)
  */
 
-import type { TaskDefaults } from '@neko/shared';
 import type { Model } from '../types/provider';
 import type { ConfigManager } from '../config/config-manager';
 import type { ProviderRegistry } from '../provider/provider-registry';
@@ -80,20 +78,7 @@ export class ModelSelector {
       return { modelId, providerId: model.providerId, attempt };
     }
 
-    // Priority 2: taskDefaults from config
-    const taskDefaults = this.config.getTaskDefaults();
-    const defaultModelId = this.getTaskDefaultModelId(taskDefaults, taskType);
-    if (defaultModelId && !excludeModels.includes(defaultModelId)) {
-      const model = this.config.getModel(defaultModelId);
-      if (model?.enabled) {
-        const provider = this.config.getProvider(model.providerId);
-        if (provider?.enabled && provider.apiKey) {
-          return { modelId: defaultModelId, providerId: model.providerId, attempt };
-        }
-      }
-    }
-
-    // Priority 3: first available model with matching capability and apiKey
+    // Priority 2: first available model with matching capability and apiKey
     const capabilityName = taskType === 'embedding' ? 'embedding' : 'chat';
     const candidates = this.config.getEnabledModels().filter((m: Model) => {
       if (excludeModels.includes(m.id)) return false;
@@ -123,14 +108,5 @@ export class ModelSelector {
    */
   shouldFallback(error: PlatformError): boolean {
     return ['rate_limit', 'timeout', 'server', 'network'].includes(error.category);
-  }
-
-  private getTaskDefaultModelId(
-    taskDefaults: TaskDefaults | undefined,
-    taskType: ModelTaskType,
-  ): string | undefined {
-    if (!taskDefaults) return undefined;
-    if (taskType === 'chat') return taskDefaults.chat?.modelId;
-    return undefined; // no taskDefaults entry for embedding
   }
 }

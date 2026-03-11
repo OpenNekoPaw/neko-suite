@@ -16,6 +16,7 @@ import { ChatView } from './ChatView/ChatView';
 import { InputEditor } from './Input/InputEditor';
 import { StatusBar } from './StatusBar/StatusBar';
 import { ToolApprovalPanel } from './ToolApproval/ToolApprovalPanel';
+import { SelectionMenu } from './Selection/SelectionMenu';
 import { ErrorBoundary } from './shared/ErrorBoundary';
 import { useAgentSession } from '../hooks/useAgentSession';
 import { useKeyboard } from '../hooks/useKeyboard';
@@ -36,6 +37,7 @@ interface AppProps {
 export function App({ config, service }: AppProps): React.JSX.Element {
   const status = useAgentStore((s) => s.status);
   const pendingApproval = useUIStore((s) => s.pendingApproval);
+  const pendingSelection = useUIStore((s) => s.pendingSelection);
 
   // Track terminal size changes
   useTerminalSize();
@@ -46,13 +48,13 @@ export function App({ config, service }: AppProps): React.JSX.Element {
   }, [config]);
 
   // Initialize agent session
-  const { submit, cancel, clearHistory, confirmTool } = useAgentSession({
+  const { submit, cancel, clearHistory, confirmTool, updateModel } = useAgentSession({
     config,
     service,
   });
 
   // Slash command handling
-  const { handleCommand, onClear } = useSlashCommands({ clearHistory });
+  const { handleCommand, onClear } = useSlashCommands({ clearHistory, updateModel });
 
   // Global keyboard shortcuts
   useKeyboard({
@@ -90,6 +92,7 @@ export function App({ config, service }: AppProps): React.JSX.Element {
   }, [pendingApproval, confirmTool]);
 
   const isRunning = status === 'running' || status === 'waiting_confirmation';
+  const inputDisabled = isRunning || !!pendingSelection;
 
   return (
     <ErrorBoundary label="Neko TUI">
@@ -108,8 +111,15 @@ export function App({ config, service }: AppProps): React.JSX.Element {
           />
         ) : null}
 
+        {/* Selection menu — shows for /model etc. */}
+        {pendingSelection ? <SelectionMenu selection={pendingSelection} /> : null}
+
         {/* Input — fixed at bottom, with slash command support */}
-        <InputEditor onSubmit={handleSubmit} onSlashCommand={handleCommand} disabled={isRunning} />
+        <InputEditor
+          onSubmit={handleSubmit}
+          onSlashCommand={handleCommand}
+          disabled={inputDisabled}
+        />
 
         {/* Status bar — fixed at very bottom */}
         <StatusBar />

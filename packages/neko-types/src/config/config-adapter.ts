@@ -182,15 +182,7 @@ export abstract class BaseConfigAdapter<T> implements IConfigAdapter<T> {
 /**
  * Configuration change event types
  */
-export type ConfigChangeType =
-  | 'provider'
-  | 'model'
-  | 'mcp'
-  | 'workflow'
-  | 'prompt'
-  | 'skill'
-  | 'hook'
-  | 'full';
+export type ConfigChangeType = 'provider' | 'model' | 'mcp' | 'skill' | 'hook' | 'full';
 
 /**
  * Configuration change event
@@ -269,14 +261,4 @@ export interface IUnifiedConfigManager {
    * Get MCP server by ID
    */
   getMCPServer(id: string): import('../types/config').MCPServerConfig | undefined;
-
-  /**
-   * Get workflow by ID
-   */
-  getWorkflow(id: string): import('../types/config').WorkflowConfig | undefined;
-
-  /**
-   * Get prompt by ID
-   */
-  getPrompt(id: string): import('../types/config').PromptPresetConfig | undefined;
 }

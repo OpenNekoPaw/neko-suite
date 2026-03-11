@@ -4,18 +4,6 @@
 
 export { ConfigManager, type ConfigManagerOptions, type MergedConfig } from './config-manager';
 export {
-  loadBuiltinPresets,
-  getBuiltinProvider,
-  getBuiltinProviderTemplates,
-  getBuiltinProviderTemplate,
-  getBuiltinModel,
-  getBuiltinRetryTimeoutPreset,
-  getBuiltinMCPServer,
-  getBuiltinWorkflow,
-  getBuiltinPrompt,
-  type BuiltinPresets,
-} from './builtin-presets';
-export {
   FileUserConfigManager,
   type UserConfig,
   type IUserConfigManager,
@@ -33,3 +21,5 @@ export {
   type ConfigImportResult,
   type CustomProviderConfig,
 } from './config-export-service';
+export { RETRY_TIMEOUT_PRESETS } from './retry-timeout-presets';
+export { DEFAULT_USER_CONFIG, ensureUserConfig } from './default-config';
