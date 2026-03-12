@@ -1,12 +1,13 @@
 /**
  * Workspace Configuration Loader
- * Loads configuration from .neko/config.json
  *
- * This is shared with cli for unified configuration.
+ * Loads MCP server configuration from .neko/config.json.
+ * Workspace config only manages MCP servers — providers and models
+ * are user-level only (~/.neko/config.json).
+ *
  * Uses shared configuration module from @neko/shared.
  */
 
-import type { Provider, Model } from '../types/provider';
 import type { MCPServerPreset } from '../types/config';
 import type { UnifiedConfig } from '@neko/shared';
 // Node.js config reader - direct import
@@ -20,18 +21,10 @@ import {
 /**
  * Workspace configuration structure
  *
- * Workspace config supports per-project overrides for providers, models,
- * and MCP servers. Fields align with UnifiedConfig.
+ * Only MCP servers are workspace-scoped.
+ * Providers/models are user-level only (aligned with Claude Code / Cursor).
  */
 export interface WorkspaceConfig {
-  /** Workspace-specific providers */
-  providers?: Provider[];
-  /** Provider overrides */
-  providerOverrides?: Record<string, Partial<Provider>>;
-  /** Workspace-specific models */
-  models?: Model[];
-  /** Model overrides */
-  modelOverrides?: Record<string, Partial<Model>>;
   /** Workspace-specific MCP servers */
   mcpServers?: MCPServerPreset[];
   /** MCP server overrides */
@@ -39,16 +32,12 @@ export interface WorkspaceConfig {
 }
 
 /**
- * Convert unified config to workspace config
+ * Convert unified config to workspace config (extract MCP fields only)
  */
 function unifiedToWorkspaceConfig(unified: UnifiedConfig | null): WorkspaceConfig | null {
   if (!unified) return null;
 
   return {
-    providers: unified.providers as Provider[] | undefined,
-    providerOverrides: unified.providerOverrides as Record<string, Partial<Provider>> | undefined,
-    models: unified.models as Model[] | undefined,
-    modelOverrides: unified.modelOverrides as Record<string, Partial<Model>> | undefined,
     mcpServers: unified.mcpServers as MCPServerPreset[] | undefined,
     mcpServerOverrides: unified.mcpServerOverrides as
       | Record<string, Partial<MCPServerPreset>>
@@ -61,10 +50,6 @@ function unifiedToWorkspaceConfig(unified: UnifiedConfig | null): WorkspaceConfi
  */
 function workspaceToUnifiedConfig(workspace: WorkspaceConfig): UnifiedConfig {
   return {
-    providers: workspace.providers,
-    providerOverrides: workspace.providerOverrides,
-    models: workspace.models,
-    modelOverrides: workspace.modelOverrides,
     mcpServers: workspace.mcpServers,
     mcpServerOverrides: workspace.mcpServerOverrides,
   };
@@ -72,8 +57,6 @@ function workspaceToUnifiedConfig(workspace: WorkspaceConfig): UnifiedConfig {
 
 /**
  * Load workspace configuration from file
- *
- * Uses shared configuration reader for unified format.
  */
 export function loadWorkspaceConfig(workspacePath: string): WorkspaceConfig | null {
   const unified = readWorkspaceConfigFile(workspacePath);
@@ -82,8 +65,6 @@ export function loadWorkspaceConfig(workspacePath: string): WorkspaceConfig | nu
 
 /**
  * Save workspace configuration to file
- *
- * Uses shared configuration writer for unified format.
  */
 export function saveWorkspaceConfig(workspacePath: string, config: WorkspaceConfig): void {
   const unified = workspaceToUnifiedConfig(config);
@@ -92,8 +73,6 @@ export function saveWorkspaceConfig(workspacePath: string, config: WorkspaceConf
 
 /**
  * Watch workspace configuration for changes
- *
- * Uses shared configuration watcher for unified format.
  */
 export function watchWorkspaceConfig(
   workspacePath: string,

@@ -1,8 +1,8 @@
 /**
  * Configuration Manager
  *
- * Simplified two-layer merge: User Config → Workspace Config (overrides).
- * No more builtin presets or config sections — user config is the source of truth.
+ * Providers/models: user config only (~/.neko/config.json).
+ * MCP servers: user + workspace merge (.neko/config.json overrides by id).
  */
 
 import type { Provider, Model } from '../types/provider';
@@ -45,9 +45,8 @@ export interface ConfigManagerOptions {
 /**
  * ConfigManager - Unified configuration management
  *
- * Priority (highest to lowest):
- * 1. Workspace config (.neko/config.json) — full override by id
- * 2. User config (~/.neko/config.json) — source of truth
+ * - Providers/Models: user config only (~/.neko/config.json)
+ * - MCP Servers: user + workspace merge (workspace overrides by id)
  */
 export class ConfigManager {
   private userConfigManager: IUserConfigManager | null = null;
@@ -326,12 +325,10 @@ export class ConfigManager {
   }
 
   /**
-   * Merge user config + workspace config into flat Maps.
+   * Merge user config + workspace MCP config into flat Maps.
    *
-   * 1. Load user config arrays → Map by id
-   * 2. Apply user overrides on top
-   * 3. If workspace config exists, merge workspace items + overrides (highest priority)
-   * 4. Substitute MCP workspace paths
+   * - Providers/Models: user config only (no workspace layer)
+   * - MCP Servers: user + workspace merge (workspace overrides by id)
    */
   private ensureMerged(): void {
     if (this.configMerged) {
@@ -341,21 +338,17 @@ export class ConfigManager {
     const userConfig = this.userConfigManager?.load();
     const workspace = this.workspaceConfig;
 
-    // --- Providers ---
+    // --- Providers (user only) ---
     this.providers.clear();
     this.mergeArrayToMap(this.providers, userConfig?.providers);
     this.applyOverrides(this.providers, userConfig?.providerOverrides);
-    this.mergeArrayToMap(this.providers, workspace?.providers);
-    this.applyOverrides(this.providers, workspace?.providerOverrides);
 
-    // --- Models ---
+    // --- Models (user only) ---
     this.models.clear();
     this.mergeArrayToMap(this.models, userConfig?.models);
     this.applyOverrides(this.models, userConfig?.modelOverrides);
-    this.mergeArrayToMap(this.models, workspace?.models);
-    this.applyOverrides(this.models, workspace?.modelOverrides);
 
-    // --- MCP Servers ---
+    // --- MCP Servers (user + workspace) ---
     this.mcpServers.clear();
     this.mergeArrayToMap(this.mcpServers, userConfig?.mcpServers);
     this.applyOverrides(this.mcpServers, userConfig?.mcpServerOverrides);
