@@ -500,22 +500,23 @@ Extension：
 
 ### Phase S.2：2D 人物 + 骨骼动画
 
-**目标**：Spine/Live2D 加载预览、逐帧动画、AI 辅助
+**目标**：Inochi2D（inox2d）加载预览 + 参数驱动、逐帧动画、AI 辅助
 
 ```
-Spine 集成：
+Inochi2D 集成（native-puppet 后端 + WebGL2 前端）：
+├─ native-puppet crate（bevy_ecs + inox2d，BSD 2-Clause）
+├─ INP 文件加载 → ECS World → PuppetSnapshot
+├─ 参数驱动变形（滑块 UI → HTTP API → 重算顶点）
+├─ 物理模拟（弹簧/摆锤，头发/配饰）
+├─ WebGL2 渲染（前端接收变形后顶点数据）
+└─ 节点层级查看器 + 参数面板
+
+Spine 集成（⚠️ 需 Spine Runtimes License）：
 ├─ spine-ts 运行时（WebGL 渲染器）
 ├─ .skel/.json + .atlas 加载
 ├─ 动画播放/混合控制
 ├─ 骨骼树查看器 + 皮肤切换
 └─ 编辑器 UI（时间轴 + 关键帧）
-
-Live2D 集成：
-├─ Cubism SDK Web 运行时
-├─ .moc3 + .model3.json 加载
-├─ 参数滑块面板（30+ 标准参数）
-├─ 表情/动作播放
-└─ 物理参数调整
 
 逐帧动画：
 ├─ 洋葱皮渲染（前帧绿/后帧红）
@@ -656,8 +657,10 @@ neko-sketch 在 AI 视频工作流中的核心价值：
 
 | 依赖 | 用途 | 许可 |
 |------|------|------|
-| **spine-ts** | Spine 骨骼运行时 | MIT（运行时免费） |
-| **Cubism SDK Web** | Live2D 渲染 | 需 Live2D 商业许可 |
+| **inox2d** | Inochi2D 格式解析 + 变形计算 | BSD 2-Clause |
+| **bevy_ecs** | ECS 框架（native-puppet 后端） | MIT / Apache 2.0 |
+| **spine-ts** | Spine 骨骼运行时 | ⚠️ Spine Runtimes License（非 MIT） |
+| ~~Cubism SDK Web~~ | ~~Live2D 渲染~~ | ❌ 已否决（商业许可 + 法律风险） |
 | **PixiJS** | 可选 2D WebGL 渲染框架 | MIT |
 | **Pointer Events API** | 压感/倾斜输入 | Web 标准 |
 | WGSL shaders（复用） | 滤镜/混合模式 | 内部资产 |
@@ -668,5 +671,29 @@ neko-sketch 在 AI 视频工作流中的核心价值：
 |------|------|------|
 | Webview 沙箱 | VSCode 安全策略 | 对 2D 创作几乎无影响 |
 | 无本地文件访问 | 沙箱限制 | PSD 文件通过 Extension Host 读写 |
-| Live2D 商业许可 | Cubism SDK 协议 | 需评估是否纳入分发 |
-| 外部编辑器依赖 | Spine/Live2D 骨骼绑定在外部工具完成 | neko-sketch 定位为运行时 + 预览 + 参数控制 |
+| ~~Live2D 商业许可~~ | ~~Cubism SDK 协议~~ | ❌ 已否决，改用 inox2d（BSD 2-Clause） |
+| Spine Runtimes License | 非 MIT，需遵守 Spine 许可条款 | 运行时免费但有分发限制 |
+| inox2d 功能限制 | 动画/MeshGroup 未实现 | 仅支持参数驱动变形，等上游完善 |
+| 外部编辑器依赖 | Spine/Inochi2D 骨骼绑定在外部工具完成 | neko-sketch 定位为运行时 + 预览 + 参数控制 |
+
+## 附录：否决决策记录
+
+### ADR-2D-001: Live2D Cubism SDK 否决
+
+- **日期**：2026-03-12
+- **决策**：不集成 Live2D Cubism SDK Web
+- **原因**：neko-sketch 作为"可扩展应用"属于 Cubism SDK 许可证中需要单独审批签约的类别，法律风险高
+- **替代方案**：使用 inox2d（Inochi2D 开源实现，BSD 2-Clause）
+
+### ADR-2D-002: Spine 许可证标注修正
+
+- **日期**：2026-03-12
+- **修正**：spine-ts 运行时许可证**不是 MIT**，而是 Spine Runtimes License
+- **影响**：运行时免费使用但有分发条件限制，需在项目中正确标注
+
+### ADR-2D-003: inox2d + Bevy 全框架否决
+
+- **日期**：2026-03-12
+- **决策**：不使用 Bevy 全框架集成 inox2d
+- **原因**：WASM 体积 3.5-30MB、渲染管线冲突、与项目 ADR（bevy_ecs 独立 crate，不用 Bevy 全框架）矛盾
+- **采纳方案**：native-puppet crate（bevy_ecs 0.15 + inox2d），对称 native-scene 模式

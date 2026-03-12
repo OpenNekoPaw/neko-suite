@@ -69,7 +69,10 @@ packages/neko-sketch/
 │           │   └── image-import.ts        # Base64 → ImageBitmap → new layer
 │           ├── i18n/                     # I18nService + en/zh-cn bundles
 │           ├── types/                    # All type definitions
-│           ├── animation/    # S.2 placeholder
+│           ├── animation/    # S.2: Inochi2D puppet animation
+│           │   ├── types.ts              # PuppetSnapshot, PuppetDelta, DeformedMesh
+│           │   ├── inochi2d-controller.ts # IInochi2DController → EngineClient HTTP
+│           │   └── index.ts              # Public exports
 │           ├── effects/      # S.3 placeholder
 │           └── scene/        # S.3 placeholder
 ```
