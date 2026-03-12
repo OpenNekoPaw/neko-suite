@@ -1,7 +1,7 @@
 # 3D 能力集成架构分析
 
 > 日期：2025-06（更新：2026-03-12）
-> 状态：架构决策
+> 状态：架构决策（Phase 3.1 ✅ 已实现）
 > 范围：neko-engine / neko-model / neko-canvas / neko-live
 
 ---
@@ -35,13 +35,13 @@
 | **架构范式冲突** | 视频编辑器是时间线驱动（timeline-driven），不是游戏引擎的帧循环（frame-loop）|
 | **N-API 边界不兼容** | Bevy 的 App::run() 会接管主线程控制权，与 N-API 的异步模型冲突 |
 
-**bevy_ecs 独立 crate（0.18）可以使用：**
+**bevy_ecs 独立 crate（0.15）可以使用：**
 
 | 维度 | 分析 |
 |------|------|
 | **零 wgpu 依赖** | bevy_ecs 不依赖 wgpu / bevy_render，纯数据结构 + 调度器 |
 | **无主线程接管** | 不含 App::run()，手动调用 `Schedule::run()` 按需驱动 |
-| **兼容性已验证** | 实测 bevy_ecs 0.18 + wgpu 0.19 + thiserror 1.x 共存编译通过 |
+| **兼容性已验证** | 实测 bevy_ecs 0.15 + wgpu 0.19 + thiserror 1.x 共存编译通过（Phase 3.1 ✅） |
 
 **依赖兼容性实测（2026-03-12）：**
 
@@ -201,19 +201,18 @@ pub struct GpuContext {
 
 ```
 neko-engine/packages/
-├── native-scene/        # 新增：3D 场景管理
+├── native-scene/        # 3D 场景管理（Phase 3.1 ✅ 已实现）
 │   ├── src/
-│   │   ├── scene_graph.rs    # 场景图数据结构
-│   │   ├── renderer.rs       # PBR 渲染器
-│   │   ├── mesh.rs           # 网格管理
-│   │   ├── material.rs       # 材质系统
-│   │   ├── light.rs          # 灯光系统
-│   │   ├── camera.rs         # 3D 相机
-│   │   └── gltf_loader.rs    # glTF 导入
-│   └── Cargo.toml
+│   │   ├── lib.rs           # Public API exports
+│   │   ├── components.rs    # ECS 组件（Transform/Mesh/Material/Light/Camera/Skeleton/Animation）
+│   │   ├── world.rs         # SceneWorld trait + BevySceneWorld 实现
+│   │   ├── hierarchy.rs     # Parent/Children 层级索引
+│   │   ├── systems.rs       # ECS System（transform_propagation, animation_tick）
+│   │   └── loader.rs        # glTF/glb 加载 → ECS 实体
+│   └── Cargo.toml           # bevy_ecs 0.15, glam 0.29, gltf 1.4
 │
 ├── native-core/         # 现有：核心引擎
-├── native-api/          # 现有：API 门面
+├── native-api/          # 现有：API 门面（含 ScenesController）
 ├── native-napi/         # 现有：Node.js 绑定
 └── native-http/         # 现有：HTTP/WebSocket 服务
 ```
@@ -738,22 +737,22 @@ encoder_config.use_zero_copy_gpu = true;           // IOSurface 零拷贝
 
 ### 5.3 技术选型
 
-**前端 3D 库：React Three Fiber (R3F)**
+**前端 3D 库：React Three Fiber (R3F)（Phase 3.1 ✅ 已集成）**
 
 ```json
-// 新增依赖（@neko/scene-view）
+// neko-model webview 实际依赖
 {
-  "@react-three/fiber": "^8.x",
-  "@react-three/drei": "^9.x",
-  "three": "^0.160",
-  "@types/three": "^0.160"
+  "three": "^0.170.0",
+  "@react-three/fiber": "^8.17",
+  "@react-three/drei": "^9.120",
+  "zustand": "^4.4.7"
 }
 ```
 
 兼容性：
 - 与现有 React 18 + Zustand 架构一致
-- @react-three/drei 提供 Gizmo、Grid、环境光等开箱即用
-- 支持 WebGPU renderer（three.js r160+）
+- @react-three/drei 提供 OrbitControls、TransformControls、Grid、useGLTF、useAnimations 等开箱即用
+- **注意**：R3F v8 依赖 zustand v4 的 default export（`import create from 'zustand'`），而 pnpm 根 node_modules 下可能有 zustand v5（无 default export）。已通过 Vite `resolveId` 插件将 zustand 导入重定向到本地 v4 副本解决
 
 ---
 
@@ -910,26 +909,39 @@ VS Code 是 MIT 开源，有先例（Cursor, Windsurf, VSCodium）。
 
 ## 9. 实施路线图
 
-### Phase 1：基础 3D 视口 + 场景组装 + 骨骼动画
+### Phase 1：基础 3D 视口 + 场景组装 + 骨骼动画 ✅
 
 **目标**：导入 glTF/VRM 模型、摆放、打光、预览，支持骨骼动画播放
+**状态**：已完成（2026-03-12）
 
 ```
-前端：
-├─ @neko/scene-view 库（R3F 视口组件）
-├─ neko-model 扩展骨架
-├─ 基础 Gizmo（平移/旋转/缩放）
-├─ 材质编辑面板 + 灯光编辑面板
-├─ glTF/VRM 加载（含 Skeleton + Morph Targets）
-├─ AnimationMixer 骨骼动画播放
-└─ Morph Target 系统（GPU 顶点变形）
+前端（✅ 已完成）：
+├─ neko-model 扩展骨架（CustomReadonlyEditorProvider for .gltf/.glb/.vrm）
+├─ R3F 3D 视口（Canvas + OrbitControls + Grid + 灯光）
+├─ 基础 Gizmo（TransformControls 平移/旋转/缩放）
+├─ glTF 加载（useGLTF + useAnimations）
+├─ AnimationMixer 骨骼动画播放 UI
+├─ 场景树面板（SceneTree）
+├─ Zustand 状态管理（modelStore）
+└─ ModelEditorProvider ↔ EngineClient 后端对接
 
-后端：
-├─ native-scene crate 骨架
-├─ glTF 加载器（含骨骼 + morph targets 解析）
-├─ bevy_ecs World + Components + 索引层级树
-├─ Schedule 按需调度（Changed<T> 增量更新）
-└─ ActionRouter 新增 scenes/meshes/materials 路由
+后端（✅ 已完成）：
+├─ native-scene crate（bevy_ecs 0.15 + glam 0.29 + gltf 1.4）
+│   ├─ SceneWorld trait + BevySceneWorld 实现
+│   ├─ ECS Components（Transform/Mesh/Material/Light/Camera/Skeleton/Animation）
+│   ├─ Systems（transform_propagation + animation_tick）
+│   ├─ glTF/glb loader → ECS 实体
+│   └─ 8 个单元测试
+├─ SceneService（native-core, ServiceContainer 集成）
+├─ ScenesController（native-api, 9 个 actions）
+├─ ActionRouter scenes 路由注册
+└─ EngineClient scenes 方法（loadModel/getSceneSnapshot/updateSceneTransform/getAnimationClips/tickScene）
+
+待完善（TODO P2）：
+├─ 动画关键帧数据从 glTF buffer 提取（目前为空 vec）
+├─ Morph Target 动画
+├─ 正交相机支持
+└─ Skeleton joint_entities 填充
 ```
 
 ### Phase 2：AI 捏脸 + 基础建模
