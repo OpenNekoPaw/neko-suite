@@ -18,7 +18,7 @@
 - **专业级时间线** - 多轨道、关键帧动画、色彩校正、特效蒙版、精确到帧的编辑
 - **Rust GPU 渲染** - wgpu + WebCodecs 加速，12 个 WGSL shader，4K 实时预览与导出
 - **Git 原生支持** - .jvi 项目文件为文本格式，支持版本控制和协作
-- **模块化架构** - 15 个包按需组合，独立升级
+- **模块化架构** - 16 个包按需组合，独立升级
 
 ---
 
@@ -52,7 +52,7 @@ pnpm run dev
 
 ## 模块架构
 
-Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 15 个包：
+Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 16 个包：
 
 ### 核心三角（开发重心）
 
@@ -81,11 +81,16 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 15 �
 | **neko-tools** | 媒体工具 - Diff 比较 + Git 媒体 | WIP 50% | 17 TS, 3 tests |
 | **neko-canvas** | 无限画布 - 节点系统 + 连线 | WIP 40% | 58 TS/TSX |
 
+### 新兴模块
+
+| 模块 | 职能 | 状态 | 规模 |
+|------|------|------|------|
+| **neko-model** | 3D 编辑器 - glTF/VRM 视口 + 场景组装 + 骨骼动画（[架构设计](./docs/architecture/3d-capability-analysis.md)） | Early 30% | 9 TS/TSX + 7 Rust |
+
 ### 规划中
 
 | 模块 | 职能 | 状态 |
 |------|------|------|
-| **neko-model** | 3D 编辑器 - glTF/PBR/场景组装（[架构设计](./docs/architecture/3d-capability-analysis.md)） | Planned |
 | **neko-sketch** | 绘图工具 - 压感手绘 | Planned |
 | **neko-audio** | 音频工作站 - 波形编辑 | Planned |
 | **neko-live** | 虚拟直播 - 动捕 AR | Planned |
@@ -105,7 +110,7 @@ VS Code Extension Host ←─ HTTP/NAPI ─→ neko-engine (Rust)
                                               ├─ FFmpeg 编解码（硬件加速 + decoder pool）
                                               ├─ 关键帧缓存服务
                                               ├─ 导出管线（GPU export + audio mixer）
-                                              └─ [规划] native-scene 3D 场景（hecs ECS + PBR）
+                                              └─ native-scene 3D 场景（bevy_ecs + glTF loader）
 ```
 
 ### 2. AI Agent Skills 驱动
@@ -161,6 +166,7 @@ neko-suite/
 │   │       ├── native-http/   # Axum HTTP 服务
 │   │       ├── native-napi/   # Node.js NAPI 绑定
 │   │       ├── native-cli/    # CLI 入口
+│   │       ├── native-scene/  # Rust 3D 场景 ECS（bevy_ecs + glTF）
 │   │       ├── types/         # Rust 共享类型
 │   │       └── extension/     # TS VSCode 扩展侧
 │   ├── neko-cut/              # 视频剪辑器
@@ -197,6 +203,10 @@ neko-suite/
 │   │   └── packages/
 │   │       └── asset/         # 资产核心逻辑
 │   ├── neko-client/           # 流媒体客户端（H264/PCM/fMP4）+ EngineClient
+│   ├── neko-model/            # 3D 编辑器（R3F 视口 + 骨骼动画）
+│   │   └── packages/
+│   │       ├── extension/     # VSCode 扩展侧
+│   │       └── webview/       # React Three Fiber UI
 │   ├── neko-sketch/           # 绘图工具（Planned）
 │   ├── neko-audio/            # 音频工作站（Planned）
 │   ├── neko-live/             # 虚拟直播（Planned）
@@ -231,6 +241,7 @@ neko-suite/
 | **视频** | MP4, MOV, AVI, MKV, WebM, M4V |
 | **音频** | MP3, WAV, OGG, FLAC, AAC, M4A |
 | **图片** | PNG, JPG, JPEG, GIF, WebP, BMP, SVG |
+| **3D 模型** | glTF, GLB, VRM |
 | **项目** | .jvi (视频项目), .jvc (画布项目), .nks (剧本) |
 
 ---

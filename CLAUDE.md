@@ -47,7 +47,7 @@
 - `neko-client` - @neko/neko-client 流媒体客户端 + EngineClient
 - `neko-proto` - Protobuf IDL（类型契约源）
 
-**功能扩展**：neko-cut（视频编辑）、neko-agent（AI）、neko-canvas（画布）、neko-sketch（2D 创作）、neko-story（剧本）、neko-preview（预览）、neko-tools（工具）、neko-assets（资产）
+**功能扩展**：neko-cut（视频编辑）、neko-agent（AI）、neko-canvas（画布）、neko-model（3D 编辑）、neko-sketch（2D 创作）、neko-story（剧本）、neko-preview（预览）、neko-tools（工具）、neko-assets（资产）
 
 **构建命令**:
 ```bash
@@ -121,10 +121,11 @@ TypeScript 层（Extension Host）
   ↕ N-API 绑定 (@neko-engine/native-napi)
   ↕ HTTP/WebSocket (axum)
 Rust 层（neko-engine）
-  ├─ native-core: GPU 渲染(wgpu)、FFmpeg 编解码、音视频处理
-  ├─ native-api:  ActionRouter、控制器注册
-  ├─ native-http: REST API + WebSocket 流
-  └─ types:       共享 Rust 类型
+  ├─ native-core:  GPU 渲染(wgpu)、FFmpeg 编解码、音视频处理
+  ├─ native-scene: 3D 场景 ECS（bevy_ecs + glTF loader）
+  ├─ native-api:   ActionRouter、控制器注册
+  ├─ native-http:  REST API + WebSocket 流
+  └─ types:        共享 Rust 类型
 ```
 
 **原则**: Rust 引擎是计算和数据模型的唯一权威来源。TS 层不应复制 Rust 的计算逻辑或数据转换。

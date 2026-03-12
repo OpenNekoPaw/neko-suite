@@ -18,6 +18,7 @@ packages/neko-engine/
 │   ├── native-core/    # Rust: GPU 渲染 + FFmpeg 编解码 + 音频处理
 │   ├── native-api/     # Rust: Controller 层 + ActionRouter + 资源管理
 │   ├── native-http/    # Rust: axum HTTP/WebSocket 服务
+│   ├── native-scene/  # Rust: 3D 场景 ECS（bevy_ecs + glTF loader）
 │   ├── native-napi/    # Rust: Node.js N-API 绑定（napi-rs）
 │   ├── native-cli/     # Rust: 独立 CLI 二进制
 │   ├── types/          # Rust: 共享 DTO（跨 crate 契约）
@@ -63,7 +64,8 @@ packages/neko-engine/
 │  │    SessionManager   — 会话生命周期             │    │
 │  │    Controllers:                               │    │
 │  │      video, audio, timeline, stream,          │    │
-│  │      effects, canvas, node, image, task       │    │
+│  │      effects, canvas, node, image, task,      │    │
+│  │      scenes, models                           │    │
 │  └──────────────┬────────────────────────────────┘    │
 │                 │                                     │
 │  ┌─ Core Layer ──────────────────────────────────┐    │
@@ -75,7 +77,7 @@ packages/neko-engine/
 │  │    export/    — GPU 导出管线 + 媒体合成         │    │
 │  │    animation/ — 关键帧插值 + 缓动函数          │    │
 │  │    domain/    — 领域模型（Timeline/Transform/Loudness）│    │
-│  │    services/  — 服务 trait（IVideo/IAudio/IExport）│   │
+│  │    services/  — 服务 trait（IVideo/IAudio/IExport/IScene）│
 │  │    frame_server/ — HTTP 帧服务 + 媒体探测      │    │
 │  └───────────────────────────────────────────────┘    │
 │                                                       │
@@ -92,9 +94,9 @@ packages/neko-engine/
 ## 依赖方向
 
 ```
-native-cli ──→ native-http ──→ native-api ──→ native-core
-                                    │              │
-                                    └──→ types ◀───┘
+native-cli ──→ native-http ──→ native-api ──→ native-core ──→ native-scene
+                                    │              │              │
+                                    └──→ types ◀───┘──────────────┘
 
 native-napi ──→ native-core + types
 
@@ -178,7 +180,7 @@ Webview H264StreamClient / AudioStreamClient
 | 模式 | 应用 |
 |------|------|
 | **分层 MVC** | native-core（Model）→ native-api（Controller）→ native-http（View） |
-| **Trait Service** | IVideoService、IAudioService、IExportService — 面向 trait 编程 |
+| **Trait Service** | IVideoService、IAudioService、IExportService、ISceneService — 面向 trait 编程 |
 | **Registry** | ResourceRegistry、StreamRegistry — 动态资源管理 |
 | **Facade** | EngineApi — 统一入口，隐藏内部复杂性 |
 | **Router** | ActionRouter — 请求分发到对应 Controller |

@@ -12,7 +12,7 @@
 
 - **职责**：GPU 渲染、硬件编解码、帧缓存、导出——所有重计算的权威来源
 - **入口**：`packages/extension/src/extension.ts`
-- **子包**：`native-core`（Rust）、`native-napi`（N-API 绑定）、`native-http`（axum）、`extension`（VSCode）
+- **子包**：`native-core`（Rust）、`native-scene`（3D ECS）、`native-napi`（N-API 绑定）、`native-http`（axum）、`extension`（VSCode）
 - **依赖**：`@neko-engine/native-napi`、`@neko/shared`
 - **被依赖**：几乎所有其他扩展（extensionDependency）
 
@@ -45,10 +45,14 @@ native-core (Rust)
 
 ```
 packages/
-├── native-napi/   # N-API 绑定（napi-rs 编译为 .node）
+├── native-core/   # Rust 核心（GPU/FFmpeg/服务层）
+├── native-api/    # Controller + ActionRouter
+├── native-scene/  # 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
 ├── native-http/   # HTTP/WebSocket 服务（axum）
-├── extension/     # VSCode 扩展集成
-└── types/         # 共享 Rust 类型
+├── native-napi/   # N-API 绑定（napi-rs 编译为 .node）
+├── native-cli/    # 独立 CLI 二进制
+├── types/         # 共享 Rust 类型
+└── extension/     # VSCode 扩展集成
 ```
 
 ## Deep Dive
@@ -71,6 +75,9 @@ packages/
 | `axum` | HTTP/WebSocket |
 | `napi-rs` | Node.js 绑定 |
 | `ebur128` | ITU-R BS.1770-4 响度测量 |
+| `bevy_ecs` | 3D 场景 Entity-Component-System |
+| `gltf` | glTF/GLB 3D 模型解析 |
+| `glam` | 3D 数学库（Vec3/Quat/Mat4） |
 
 ### 构建
 

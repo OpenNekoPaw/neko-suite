@@ -21,7 +21,7 @@
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
 | **neko-canvas** | WIP | 40% | 节点系统 + 连线 + 视口裁剪 + Undo/Redo + Copy/Paste |
 | **neko-proto** | Early | 30% | timeline.proto 定义，生成类型在 neko-types |
-| **neko-model** | Planned | 0% | 3D 创作套件，架构设计已完成 |
+| **neko-model** | Early | 30% | 3D 创作套件，Phase 3.1 基础能力已实现（R3F 视口 + native-scene ECS + glTF loader） |
 | **neko-sketch** | Planned | 5% | 2D 创作套件，架构设计已完成 |
 | **neko-audio** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-live** | Planned | 5% | 仅扩展入口骨架 |
@@ -64,7 +64,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ## Phase 3: 视觉增强 + 3D 能力
 
-> 目标：专业视觉效果和 3D 场景编辑 — **进度 ~25%**
+> 目标：专业视觉效果和 3D 场景编辑 — **进度 ~35%**
 
 ### neko-canvas — 已完成
 - 节点系统（6 种节点 + 连线）+ 画布交互（拖拽/缩放/吸附/MiniMap）+ 媒体内嵌 + Undo/Redo + Copy/Paste
@@ -72,11 +72,11 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 ### neko-canvas — 待完成
 - WebGPU 渲染 + 特效系统 + 自定义转场 + 导出
 
-### neko-model (3D) — Planned
+### neko-model (3D) — Early
 
 > 架构设计见 [docs/architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md)
 
-- Phase 3.1：基础 3D 视口 + 场景组装（native-scene + glTF/VRM + R3F + 骨骼动画）
+- Phase 3.1 ✅：基础 3D 视口 + 场景组装（native-scene bevy_ecs + glTF/VRM + R3F + 骨骼动画 + SceneTree + TransformGizmo + EngineClient 集成）
 - Phase 3.2：AI 捏脸 + 基础建模（Morph Target + VRM 表情 + CSG）
 - Phase 3.3：轻量渲染 + 时间线集成（PBR + 粒子 + SceneRenderOutput → GpuLayer）
 - Phase 3.4：AI 辅助 3D + 3DGS + MCP 桥接（Text-to-3D + Image-to-3D + Blender MCP）
@@ -136,4 +136,4 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ---
 
-*最后更新: 2026-03-11*
+*最后更新: 2026-03-12*

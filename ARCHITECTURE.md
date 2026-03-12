@@ -108,6 +108,7 @@ neko-cut      →  @neko/neko-client + neko-tools + neko-preview
 neko-agent    →  @neko/neko-client + neko-tools + neko-preview
 neko-tools    →  @neko/neko-client
 neko-canvas   →  neko-engine + neko-tools + neko-preview
+neko-model    →  neko-engine + @neko/neko-client + neko-tools + neko-preview
 neko-sketch   →  neko-canvas
 neko-story    →  @neko-story/parser + @neko/shared
 neko-assets   →  @neko/asset + @neko/shared
@@ -222,7 +223,7 @@ Extension Host
 | 跨语言架构 | [architecture/cross-language-architecture.md](./docs/architecture/cross-language-architecture.md) | Rust 引擎为数据模型权威，TS 仅负责 UI |
 | 共享包设计 | [architecture/shared-packages-design.md](./docs/architecture/shared-packages-design.md) | @neko/shared 通过子路径分层导出 |
 | 资产管理 | [architecture/asset-management-design.md](./docs/architecture/asset-management-design.md) | 统一 AssetManifest + Handler 注册表模式 |
-| 3D 能力 | [architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md) | hecs ECS + native-scene，不用 Bevy |
+| 3D 能力 | [architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md) | bevy_ecs 独立 crate + native-scene + R3F 前端，不用 Bevy 全框架 |
 
 ---
 
