@@ -104,7 +104,17 @@ pub mod actions {
 
     pub const CANVAS: &[&str] = &["composite", "capture", "export", "diff"];
 
-    pub const SCENES: &[&str] = &["composite", "capture", "stream"];
+    pub const SCENES: &[&str] = &[
+        "load",
+        "graph",
+        "transform",
+        "animate",
+        "tick",
+        "snapshot",
+        "composite",
+        "capture",
+        "stream",
+    ];
 
     pub const EFFECTS: &[&str] = &["apply", "list", "info", "register"];
 }

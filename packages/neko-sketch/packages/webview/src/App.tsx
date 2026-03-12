@@ -61,7 +61,9 @@ export function App() {
 
         case 'document:save': {
           const state = store.getState();
-          const doc = serializeDocument(state.canvas, state.layers, state.viewport);
+          const canvas = document.getElementById('sketch-canvas') as HTMLCanvasElement | null;
+          const gl = canvas?.getContext('webgl2') ?? null;
+          const doc = serializeDocument(state.canvas, state.layers, state.viewport, gl);
           vscode.postMessage({ type: 'document:save', data: doc });
           markClean();
           break;

@@ -4,8 +4,8 @@
 
 use crate::gpu::GpuContext;
 use crate::services::impls::{
-    AudioService, ExportService, ImageService, NodeService, TaskService, TimelineService,
-    VideoService,
+    AudioService, ExportService, ImageService, NodeService, SceneService, TaskService,
+    TimelineService, VideoService,
 };
 use std::sync::Arc;
 
@@ -29,6 +29,8 @@ pub struct ServiceContainer {
     timeline_service: Arc<TimelineService>,
     /// Export service (requires GPU)
     export_service: Option<Arc<ExportService>>,
+    /// Scene service (3D scene management)
+    scene_service: Arc<SceneService>,
 }
 
 impl ServiceContainer {
@@ -57,6 +59,7 @@ impl ServiceContainer {
         let image_service = Arc::new(ImageService::new(gpu_ctx.clone()));
         let timeline_service =
             Arc::new(TimelineService::new(gpu_ctx.clone(), task_service.clone()));
+        let scene_service = Arc::new(SceneService::new());
 
         // Export service requires GPU
         let export_service = gpu_ctx
@@ -72,6 +75,7 @@ impl ServiceContainer {
             image_service,
             timeline_service,
             export_service,
+            scene_service,
         })
     }
 
@@ -85,6 +89,7 @@ impl ServiceContainer {
         let audio_service = Arc::new(AudioService::new(None, task_service.clone()));
         let image_service = Arc::new(ImageService::new(None));
         let timeline_service = Arc::new(TimelineService::new(None, task_service.clone()));
+        let scene_service = Arc::new(SceneService::new());
 
         Self {
             gpu_ctx: None,
@@ -95,6 +100,7 @@ impl ServiceContainer {
             image_service,
             timeline_service,
             export_service: None,
+            scene_service,
         }
     }
 
@@ -136,6 +142,11 @@ impl ServiceContainer {
     /// Get the export service (requires GPU)
     pub fn export_service(&self) -> Option<&Arc<ExportService>> {
         self.export_service.as_ref()
+    }
+
+    /// Get the scene service
+    pub fn scene_service(&self) -> &Arc<SceneService> {
+        &self.scene_service
     }
 
     /// Check if GPU is available

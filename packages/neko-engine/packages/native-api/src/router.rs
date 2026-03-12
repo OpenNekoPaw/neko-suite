@@ -8,8 +8,8 @@ use crate::controllers::{
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_native_core::services::{
-    AudioService, EffectsService, ExportService, ImageService, NodeService, TaskService,
-    TimelineService, VideoService,
+    AudioService, EffectsService, ExportService, ImageService, NodeService, SceneService,
+    TaskService, TimelineService, VideoService,
 };
 use neko_types::registry::{self, groups};
 use neko_types::{ActionRequest, ActionResponse};
@@ -41,6 +41,7 @@ impl ActionRouter {
         timeline_service: Arc<TimelineService>,
         export_service: Option<Arc<ExportService>>,
         effects_service: Option<Arc<EffectsService>>,
+        scene_service: Option<Arc<SceneService>>,
         resource_registry: Arc<ResourceRegistry>,
         stream_registry: Arc<StreamRegistry>,
     ) -> Self {
@@ -67,7 +68,7 @@ impl ActionRouter {
             effects_controller: EffectsController::new(effects_service),
             models_controller: ModelsController::new(),
             canvas_controller: CanvasController::new(),
-            scenes_controller: ScenesController::new(),
+            scenes_controller: ScenesController::new(scene_service),
         }
     }
 
@@ -179,6 +180,7 @@ mod tests {
         let audio_service = Arc::new(AudioService::new(None, task_service.clone()));
         let image_service = Arc::new(ImageService::new(None));
         let timeline_service = Arc::new(TimelineService::new(None, task_service.clone()));
+        let scene_service = Some(Arc::new(SceneService::new()));
         let resource_registry = Arc::new(ResourceRegistry::new());
         let stream_registry = Arc::new(StreamRegistry::new());
 
@@ -191,6 +193,7 @@ mod tests {
             timeline_service,
             None, // No GPU = no export service in tests
             None, // No GPU = no effects service in tests
+            scene_service,
             resource_registry,
             stream_registry,
         )
@@ -285,7 +288,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_route_scenes_not_implemented() {
+    async fn test_route_scenes_snapshot_works() {
+        let router = create_test_router();
+
+        let request = ActionRequest::new("scenes", "snapshot");
+        let result = router.route(request).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_route_scenes_composite_not_implemented() {
         let router = create_test_router();
 
         let request = ActionRequest::new("scenes", "composite");
@@ -308,7 +320,10 @@ mod tests {
         assert_eq!(canvas_actions, &["composite", "capture", "export", "diff"]);
 
         let scenes_actions = router.actions("scenes").unwrap();
-        assert_eq!(scenes_actions, &["composite", "capture", "stream"]);
+        assert!(scenes_actions.contains(&"load"));
+        assert!(scenes_actions.contains(&"graph"));
+        assert!(scenes_actions.contains(&"transform"));
+        assert!(scenes_actions.contains(&"composite"));
     }
 
     #[test]

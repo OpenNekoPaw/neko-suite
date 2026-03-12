@@ -6,8 +6,8 @@ use crate::router::ActionRouter;
 use crate::session::SessionManager;
 use neko_native_core::gpu::GpuContext;
 use neko_native_core::services::{
-    AudioService, EffectsService, ExportService, ImageService, NodeService, TaskService,
-    TimelineService, VideoService,
+    AudioService, EffectsService, ExportService, ImageService, NodeService, SceneService,
+    TaskService, TimelineService, VideoService,
 };
 use neko_types::{ActionRequest, ActionResponse};
 use std::sync::Arc;
@@ -93,6 +93,9 @@ impl EngineApi {
             }
         });
 
+        // Create scene service
+        let scene_service = Some(Arc::new(SceneService::new()));
+
         // Create router
         let router = ActionRouter::new(
             task_service,
@@ -103,6 +106,7 @@ impl EngineApi {
             timeline_service,
             export_service,
             effects_service,
+            scene_service,
             resource_registry.clone(),
             stream_registry.clone(),
         );

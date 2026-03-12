@@ -44,7 +44,7 @@ impl ISceneService for SceneService {
     }
 
     fn get_snapshot(&self) -> Result<SceneSnapshot> {
-        let world = self
+        let mut world = self
             .world
             .lock()
             .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
@@ -84,7 +84,7 @@ impl ISceneService for SceneService {
     }
 
     fn get_animation_clips(&self) -> Result<Vec<AnimationClipInfo>> {
-        let world = self
+        let mut world = self
             .world
             .lock()
             .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;

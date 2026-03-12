@@ -12,6 +12,7 @@ import { createBrushSlice, type BrushSlice } from './slices/brushSlice';
 import { createViewportSlice, type ViewportSlice } from './slices/viewportSlice';
 import { createHistorySlice, type HistorySlice } from './slices/historySlice';
 import { createUISlice, type UISlice } from './slices/uiSlice';
+import { createSelectionSlice, type SelectionSlice } from './slices/selectionSlice';
 
 export type SketchStore = DocumentSlice &
   LayerSlice &
@@ -19,7 +20,8 @@ export type SketchStore = DocumentSlice &
   BrushSlice &
   ViewportSlice &
   HistorySlice &
-  UISlice;
+  UISlice &
+  SelectionSlice;
 
 export const useSketchStore = create<SketchStore>()((...a) => ({
   ...createDocumentSlice(...a),
@@ -29,4 +31,5 @@ export const useSketchStore = create<SketchStore>()((...a) => ({
   ...createViewportSlice(...a),
   ...createHistorySlice(...a),
   ...createUISlice(...a),
+  ...createSelectionSlice(...a),
 }));

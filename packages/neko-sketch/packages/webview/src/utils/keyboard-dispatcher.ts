@@ -36,15 +36,16 @@ export function dispatchKeyboardAction(
       break;
 
     case 'selectAll':
-      // TODO(P2): select all pixels on active layer
+      store.selectAll();
       break;
 
     case 'deleteSelected':
-      // TODO(P2): clear selected region on active layer
+      deleteSelectedRegion(store);
       break;
 
     case 'escape':
       // Clear selection, cancel current operation
+      store.clearSelection();
       store.setActiveTool('brush');
       break;
 
@@ -73,6 +74,60 @@ export function dispatchKeyboardAction(
       exportCanvas(store, vscode);
       break;
   }
+}
+
+/**
+ * Clear pixels in the selected region on the active layer.
+ * Writes transparent pixels to the WebGL texture via the canvas 2D fallback.
+ */
+function deleteSelectedRegion(store: SketchStore): void {
+  const { selection, activeLayerId, layers } = store;
+  if (!selection || !activeLayerId) return;
+
+  const layer = layers.find((l) => l.id === activeLayerId);
+  if (!layer || layer.locked || !layer.texture) return;
+
+  // Get the WebGL canvas to access the GL context
+  const canvas = document.getElementById('sketch-canvas') as HTMLCanvasElement | null;
+  if (!canvas) return;
+
+  const gl = canvas.getContext('webgl2');
+  if (!gl) return;
+
+  // Build a transparent pixel buffer for the full layer, zeroing selected pixels
+  const { width, height, data } = selection;
+
+  // Create a temporary FBO to read/write the layer texture
+  const fbo = gl.createFramebuffer();
+  if (!fbo) return;
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, layer.texture, 0);
+
+  // Read existing pixels
+  const existing = new Uint8Array(width * height * 4);
+  gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, existing);
+
+  // Zero out selected pixels
+  for (let i = 0; i < data.length; i++) {
+    if (data[i]! > 0) {
+      const offset = i * 4;
+      existing[offset] = 0;
+      existing[offset + 1] = 0;
+      existing[offset + 2] = 0;
+      existing[offset + 3] = 0;
+    }
+  }
+
+  // Write back
+  gl.bindTexture(gl.TEXTURE_2D, layer.texture);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, existing);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(fbo);
+
+  store.markDirty();
 }
 
 function cycleBrushSize(store: SketchStore): void {

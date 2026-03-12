@@ -401,6 +401,85 @@ export class EngineClient {
   }
 
   // =========================================================================
+  // Scenes (3D) API
+  // =========================================================================
+
+  /**
+   * Load a 3D model (glTF/glb/VRM) into the scene.
+   * Dispatches `scenes:load`.
+   * Returns the scene snapshot with all nodes and animations.
+   */
+  async loadModel(source: string): Promise<Record<string, unknown>> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'load',
+      options: { source },
+    });
+    this.assertOk(resp, 'scenes:load');
+    return (resp.data as Record<string, unknown>) ?? {};
+  }
+
+  /**
+   * Get the current scene graph snapshot.
+   * Dispatches `scenes:snapshot`.
+   */
+  async getSceneSnapshot(): Promise<Record<string, unknown>> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'snapshot',
+      options: {},
+    });
+    this.assertOk(resp, 'scenes:snapshot');
+    return (resp.data as Record<string, unknown>) ?? {};
+  }
+
+  /**
+   * Update a node's transform in the scene.
+   * Dispatches `scenes:transform`.
+   */
+  async updateSceneTransform(
+    nodeId: string,
+    position: [number, number, number],
+    rotation: [number, number, number, number],
+    scale: [number, number, number],
+  ): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'transform',
+      options: { node_id: nodeId, position, rotation, scale },
+    });
+    this.assertOk(resp, 'scenes:transform');
+  }
+
+  /**
+   * Get available animation clips.
+   * Dispatches `scenes:animate`.
+   */
+  async getAnimationClips(): Promise<unknown[]> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'animate',
+      options: {},
+    });
+    this.assertOk(resp, 'scenes:animate');
+    return (resp.data as unknown[]) ?? [];
+  }
+
+  /**
+   * Advance scene animation by a tick.
+   * Dispatches `scenes:tick`.
+   */
+  async tickScene(clipName: string, time: number): Promise<Record<string, unknown>> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'tick',
+      options: { clip_name: clipName, time },
+    });
+    this.assertOk(resp, 'scenes:tick');
+    return (resp.data as Record<string, unknown>) ?? {};
+  }
+
+  // =========================================================================
   // Health
   // =========================================================================
 

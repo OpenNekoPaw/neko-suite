@@ -327,9 +327,21 @@ define_actions!(CanvasAction {
 });
 
 define_actions!(SceneAction {
-    /// Composite scene
+    /// Load a 3D model (glTF/glb/VRM) into the scene
+    Load => "load",
+    /// Get scene graph hierarchy
+    Graph => "graph",
+    /// Update node transform
+    Transform => "transform",
+    /// List/control animation clips
+    Animate => "animate",
+    /// Advance animation by one frame
+    Tick => "tick",
+    /// Get full scene snapshot
+    Snapshot => "snapshot",
+    /// Composite scene (GPU render)
     Composite => "composite",
-    /// Capture scene snapshot
+    /// Capture scene frame
     Capture => "capture",
     /// Stream scene rendering
     Stream => "stream",

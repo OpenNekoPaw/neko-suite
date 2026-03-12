@@ -117,7 +117,59 @@ export function deserializeDocument(data: unknown): {
 
 // ─── Serialization (save) ───
 
-function serializeLayer(layer: LayerData): NksLayerData {
+/** Reads RGBA pixels from a WebGL texture and returns base64-encoded PNG data */
+function readTextureAsBase64(
+  gl: WebGL2RenderingContext,
+  texture: WebGLTexture,
+  w: number,
+  h: number,
+): string | undefined {
+  const fbo = gl.createFramebuffer();
+  if (!fbo) return undefined;
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(fbo);
+    return undefined;
+  }
+
+  const pixels = new Uint8Array(w * h * 4);
+  gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(fbo);
+
+  // Check if layer is fully transparent (skip empty layers)
+  let hasContent = false;
+  for (let i = 3; i < pixels.length; i += 4) {
+    if (pixels[i]! > 0) {
+      hasContent = true;
+      break;
+    }
+  }
+  if (!hasContent) return undefined;
+
+  // Write RGBA to an offscreen canvas, then export as base64 PNG
+  const offscreen = document.createElement('canvas');
+  offscreen.width = w;
+  offscreen.height = h;
+  const ctx = offscreen.getContext('2d');
+  if (!ctx) return undefined;
+
+  const imageData = new ImageData(new Uint8ClampedArray(pixels.buffer), w, h);
+  ctx.putImageData(imageData, 0, 0);
+  const dataUrl = offscreen.toDataURL('image/png');
+  return dataUrl.split(',')[1];
+}
+
+function serializeLayer(layer: LayerData, gl: WebGL2RenderingContext | null): NksLayerData {
+  let data: string | undefined;
+  if (layer.texture && gl) {
+    data = readTextureAsBase64(gl, layer.texture, layer.width, layer.height);
+  }
+
   return {
     id: layer.id,
     name: layer.name,
@@ -132,8 +184,8 @@ function serializeLayer(layer: LayerData): NksLayerData {
     offsetY: layer.offsetY,
     clippingMask: layer.clippingMask,
     maskLayerId: layer.maskLayerId,
-    children: layer.children.map(serializeLayer),
-    // TODO(P2): read pixel data from WebGL texture
+    children: layer.children.map((c) => serializeLayer(c, gl)),
+    data,
   };
 }
 
@@ -142,6 +194,7 @@ export function serializeDocument(
   canvas: CanvasConfig,
   layers: LayerData[],
   viewport: ViewportState,
+  gl?: WebGL2RenderingContext | null,
 ): NksDocument {
   return {
     version: '1.0',
@@ -151,7 +204,7 @@ export function serializeDocument(
       dpi: canvas.dpi,
       backgroundColor: canvas.backgroundColor,
     },
-    layers: layers.map(serializeLayer),
+    layers: layers.map((l) => serializeLayer(l, gl ?? null)),
     brushPresets: [],
     palette: [],
     viewport: {
