@@ -1,9 +1,35 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+// Force all zustand imports to resolve to local v4 copy (which has default export).
+// Root node_modules has zustand v5 (used by other packages), but @react-three/fiber v8
+// requires `import create from 'zustand'` (default import) only available in v4.
+const localZustandDir = path.resolve(__dirname, 'node_modules/zustand');
+
+/**
+ * Vite plugin to redirect all zustand imports to local v4 copy.
+ * Cannot use simple alias because we need to handle both `zustand`
+ * and `zustand/middleware`, `zustand/vanilla`, etc.
+ */
+function zustandLocalResolvePlugin(): Plugin {
+  return {
+    name: 'zustand-local-resolve',
+    enforce: 'pre',
+    resolveId(source) {
+      if (source === 'zustand' || source.startsWith('zustand/')) {
+        const subpath = source === 'zustand' ? '' : source.slice('zustand'.length);
+        return this.resolve(path.join(localZustandDir, subpath), undefined, {
+          skipSelf: true,
+        });
+      }
+      return null;
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), zustandLocalResolvePlugin()],
   base: './',
   resolve: {
     preserveSymlinks: true,
@@ -13,13 +39,6 @@ export default defineConfig({
       {
         find: '@neko/neko-client',
         replacement: path.resolve(__dirname, '../../../neko-client/src'),
-      },
-      // R3F v8 does `import create from 'zustand'` (default import),
-      // but zustand v4.4+ only exports named. This shim bridges the gap.
-      // Exact match only — zustand/middleware etc. resolve normally.
-      {
-        find: /^zustand$/,
-        replacement: path.resolve(__dirname, './src/zustand-compat.ts'),
       },
     ],
   },
