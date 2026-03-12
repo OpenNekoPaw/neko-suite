@@ -1,0 +1,22 @@
+{
+  "name": "@neko-sketch/extension",
+  "private": true,
+  "version": "0.0.1",
+  "description": "NekoSketch VS Code extension host",
+  "main": "./dist/extension.js",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "npm run build -- --watch",
+    "lint": "eslint src --ext ts"
+  },
+  "dependencies": {
+    "@neko/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.19.8",
+    "typescript": "^5.3.2"
+  }
+}

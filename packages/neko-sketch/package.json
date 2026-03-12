@@ -1,7 +1,7 @@
 {
   "name": "neko-sketch",
   "displayName": "Neko Sketch",
-  "description": "Krita-level drawing tools with pressure sensitivity for canvas enhancement",
+  "description": "Professional 2D drawing and painting tools with pressure sensitivity",
   "version": "0.0.1",
   "publisher": "neko",
   "l10n": "./l10n",
@@ -22,39 +22,148 @@
     "sketch",
     "brush",
     "painting",
-    "pressure"
+    "pressure",
+    "2d"
   ],
   "extensionKind": [
     "workspace"
   ],
-  "extensionDependencies": [
-    "neko.neko-canvas"
-  ],
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "customEditors": [
+      {
+        "viewType": "neko.sketchEditor",
+        "displayName": "%neko.sketch.editor.title%",
+        "selector": [
+          {
+            "filenamePattern": "*.nks"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "neko.sketchLayerOutline",
+          "name": "%neko.sketch.layerOutline.title%",
+          "when": "activeCustomEditorId == 'neko.sketchEditor'",
+          "icon": "$(layers)"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "neko.sketch.enable",
-        "title": "Enable Sketch Mode",
-        "category": "Neko Sketch"
+        "command": "neko.sketch.new",
+        "title": "%neko.sketch.new.title%",
+        "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.selectBrush",
         "title": "Select Brush",
-        "category": "Neko Sketch"
+        "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.adjustSize",
         "title": "Adjust Brush Size",
-        "category": "Neko Sketch"
+        "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.pickColor",
         "title": "Pick Color",
-        "category": "Neko Sketch"
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.deleteSelected",
+        "title": "Delete Selected",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.escape",
+        "title": "Cancel / Deselect",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.selectAll",
+        "title": "Select All",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.undo",
+        "title": "Undo",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.redo",
+        "title": "Redo",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.import",
+        "title": "Import Image",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.export",
+        "title": "Export...",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.selectLayerFromOutline",
+        "title": "Select Layer",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.resetZoom",
+        "title": "Reset Zoom",
+        "category": "NekoSketch"
       }
     ],
+    "keybindings": [
+      {
+        "command": "neko.sketch.deleteSelected",
+        "key": "delete",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.deleteSelected",
+        "key": "backspace",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.escape",
+        "key": "escape",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.selectAll",
+        "key": "ctrl+a",
+        "mac": "cmd+a",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.undo",
+        "key": "ctrl+z",
+        "mac": "cmd+z",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.redo",
+        "key": "ctrl+shift+z",
+        "mac": "cmd+shift+z",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "neko.sketch.new",
+          "group": "navigation@10",
+          "when": "explorerResourceIsFolder"
+        }
+      ]
+    },
     "configuration": {
       "title": "Neko Sketch",
       "properties": {
@@ -65,8 +174,8 @@
         },
         "neko.sketch.defaultBrush": {
           "type": "string",
-          "enum": ["pencil", "pen", "brush", "airbrush", "eraser"],
-          "default": "brush",
+          "enum": ["pencil", "pen", "watercolor", "airbrush", "eraser", "marker", "pixel"],
+          "default": "pen",
           "description": "Default brush type"
         }
       }
@@ -74,9 +183,13 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "watch": "npm run compile -- --watch",
-    "lint": "eslint src --ext ts,tsx",
+    "compile": "npm run compile:extension && npm run compile:webview && npm run copy:extension && npm run copy:webview",
+    "compile:extension": "cd packages/extension && npm run build",
+    "compile:webview": "cd packages/webview && npm run build",
+    "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp packages/webview/dist/*.html dist/webview/ 2>/dev/null || true && cp -R packages/webview/dist/assets/* dist/webview/assets/ 2>/dev/null || true",
+    "copy:extension": "mkdir -p dist && cp packages/extension/dist/extension.js dist/extension.js",
+    "watch": "npm run compile:extension -- --watch",
+    "lint": "eslint packages --ext ts,tsx",
     "test": "vitest --passWithNoTests",
     "package": "vsce package"
   },

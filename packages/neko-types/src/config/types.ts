@@ -67,6 +67,9 @@ export interface UnifiedConfig {
   /** Output format (agent-cli) */
   outputFormat?: 'text' | 'json' | 'markdown';
 
+  /** Extended thinking budget in tokens (0 = disabled, Anthropic/DeepSeek only) */
+  thinkingBudget?: number;
+
   // ==========================================================================
   // Resource Configuration (Array Format)
   // ==========================================================================

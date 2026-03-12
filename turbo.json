@@ -31,6 +31,11 @@
       "outputs": ["dist/**", "out/**"],
       "cache": true
     },
+    "neko-model#compile": {
+      "dependsOn": ["neko-engine#compile", "neko-tools#compile"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
     "@neko/cli#build:exe": {
       "dependsOn": ["@neko/agent#build", "@neko/shared#build"],
       "outputs": ["../../neko"],
@@ -62,7 +67,7 @@
       "cache": true
     },
     "neko-sketch#compile": {
-      "dependsOn": ["neko-canvas#compile"],
+      "dependsOn": [],
       "outputs": ["dist/**", "out/**"],
       "cache": true
     },

@@ -1,6 +1,7 @@
 .vscode/**
 src/**
-packages/**
+packages/**/src/**
+packages/**/node_modules/**
 node_modules/**
 *.ts
 !dist/**

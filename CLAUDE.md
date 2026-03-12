@@ -47,7 +47,7 @@
 - `neko-client` - @neko/neko-client 流媒体客户端 + EngineClient
 - `neko-proto` - Protobuf IDL（类型契约源）
 
-**功能扩展**：neko-cut（视频编辑）、neko-agent（AI）、neko-canvas（画布）、neko-story（剧本）、neko-preview（预览）、neko-tools（工具）、neko-assets（资产）
+**功能扩展**：neko-cut（视频编辑）、neko-agent（AI）、neko-canvas（画布）、neko-sketch（2D 创作）、neko-story（剧本）、neko-preview（预览）、neko-tools（工具）、neko-assets（资产）
 
 **构建命令**:
 ```bash
@@ -108,7 +108,7 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 跨语言架构 | *已内化* | Rust 引擎为数据模型权威来源，TS 仅负责 UI |
 | 共享包设计 | *已内化* | @neko/shared 通过 exports 子路径分层 |
 | 资产管理 | *已内化* | 统一 AssetManifest + Handler 注册表模式 |
-| 3D 能力 | [docs/architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md) | hecs ECS + native-scene，不用 Bevy；混合策略（内置轻量 + MCP 桥接 Blender） |
+| 3D 能力 | [docs/architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md) | bevy_ecs 独立 crate + native-scene，不用 Bevy 全框架；混合策略（内置轻量 + MCP 桥接 Blender） |
 | 2D 能力 | [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md) | neko-sketch 轻量绘画 + Spine/Live2D；混合策略（内置轻量 + MCP 桥接 PS/ComfyUI） |
 
 ### Rust 引擎开发约束

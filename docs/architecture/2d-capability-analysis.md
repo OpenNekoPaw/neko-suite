@@ -1,7 +1,7 @@
 # 2D 创作能力架构分析
 
-> 日期：2026-03-09
-> 状态：架构决策
+> 日期：2026-03-09（更新：2026-03-12）
+> 状态：S.1 已实施完成
 > 范围：neko-sketch / neko-cut / neko-canvas / neko-agent
 
 ---
@@ -425,9 +425,27 @@ neko-sketch webview → @neko/shared, spine-ts, cubism-sdk-web, react
 
 ## 10. 实施路线图
 
-### Phase S.1：绘画基础
+### Phase S.1：绘画基础 ✅ COMPLETE
 
 **目标**：画笔/形状/图层/混合模式/压感
+
+**实施状态**（2026-03-12）：
+- WebGL2 渲染引擎：上下文管理、着色器编译缓存、纹理/FBO 生命周期、ping-pong 合成管线
+- 12 种 GLSL 混合模式（从 neko-engine WGSL 转译）
+- 画笔系统：7 种笔刷（pencil/pen/watercolor/airbrush/eraser/marker/pixel）
+- Catmull-Rom 样条插值 + 4 种压感曲线
+- 图层系统：CRUD、分组、深层查找（纯函数）
+- 选区系统：矩形/全选/反选（Uint8Array bitmask）
+- 撤销/重做：区域快照模式，100 步上限
+- Zustand 状态管理：7 个 slice 组合（document/layer/tool/brush/viewport/history/UI）
+- React UI：Canvas/Toolbar/BrushPanel/ColorPanel/LayerPanel/StatusBar
+- Extension Host：CustomEditorProvider(.nks)、LayerOutline TreeView、StatusBar、13 命令
+- 文档 I/O：.nks JSON 序列化/反序列化、save/load/revert
+- 键盘分发：undo/redo/工具切换/缩放重置/导入导出
+- 图片导入：base64 → ImageBitmap → 新图层
+- i18n：运行时语言切换（en/zh-cn）
+
+详细架构见 `packages/neko-sketch/ARCHITECTURE.md`。
 
 ```
 前端：
