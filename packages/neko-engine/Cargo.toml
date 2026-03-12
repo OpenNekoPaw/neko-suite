@@ -7,6 +7,7 @@ members = [
     "packages/native-http",
     "packages/native-napi",
     "packages/native-cli",
+    "packages/native-scene",
 ]
 
 [workspace.package]
@@ -58,6 +59,11 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-tracy = { version = "0.11", default-features = false, features = ["enable"] }
 tracy-client = { version = "0.17", default-features = false }
+
+# 3D scene ECS
+bevy_ecs = "0.15"
+glam = { version = "0.29", features = ["serde"] }
+gltf = { version = "1.4", features = ["KHR_lights_punctual"] }
 
 # Utilities
 bytemuck = { version = "1.14", features = ["derive"] }

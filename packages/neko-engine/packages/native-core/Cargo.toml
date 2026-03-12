@@ -12,6 +12,12 @@ crate-type = ["lib"]
 # Shared types
 neko-types = { path = "../types" }
 
+# 3D scene management
+neko-native-scene = { path = "../native-scene" }
+
+# Math (re-export from native-scene)
+glam.workspace = true
+
 # GPU - wgpu for cross-platform GPU compute
 wgpu.workspace = true
 wgpu-hal.workspace = true

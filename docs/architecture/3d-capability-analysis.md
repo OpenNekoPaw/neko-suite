@@ -1,6 +1,6 @@
 # 3D 能力集成架构分析
 
-> 日期：2025-06（更新：2026-03-09）
+> 日期：2025-06（更新：2026-03-12）
 > 状态：架构决策
 > 范围：neko-engine / neko-model / neko-canvas / neko-live
 
@@ -23,23 +23,44 @@
 
 ## 1. ECS 引擎评估
 
-### 1.1 Bevy ECS 集成评估
+### 1.1 Bevy 全框架 vs bevy_ecs 独立 crate
 
-**结论：❌ 不推荐集成 Bevy**
+**结论：❌ 不集成 Bevy 全框架，✅ 使用 bevy_ecs 独立 crate**
+
+**Bevy 全框架（bevy_render + bevy_app + ...）不适用：**
 
 | 维度 | 分析 |
 |------|------|
-| **wgpu 版本冲突** | Bevy 使用 wgpu 0.20+，neko-engine 使用 wgpu 0.19。同进程两个 wgpu 版本会导致 GPU 资源无法共享 |
+| **wgpu 版本冲突** | Bevy 全框架使用 wgpu 0.20+，neko-engine 使用 wgpu 0.19。GPU 资源无法共享 |
 | **架构范式冲突** | 视频编辑器是时间线驱动（timeline-driven），不是游戏引擎的帧循环（frame-loop）|
 | **N-API 边界不兼容** | Bevy 的 App::run() 会接管主线程控制权，与 N-API 的异步模型冲突 |
-| **过度设计** | 视频编辑器 3D 场景通常 < 100 个实体，ECS 的性能优势无法体现 |
+
+**bevy_ecs 独立 crate（0.18）可以使用：**
+
+| 维度 | 分析 |
+|------|------|
+| **零 wgpu 依赖** | bevy_ecs 不依赖 wgpu / bevy_render，纯数据结构 + 调度器 |
+| **无主线程接管** | 不含 App::run()，手动调用 `Schedule::run()` 按需驱动 |
+| **兼容性已验证** | 实测 bevy_ecs 0.18 + wgpu 0.19 + thiserror 1.x 共存编译通过 |
+
+**依赖兼容性实测（2026-03-12）：**
+
+| 共享依赖 | neko-engine 版本 | bevy_ecs 版本 | 冲突？ |
+|---------|-----------------|--------------|--------|
+| thiserror | 1.0.69 | 2.0.18 | ✅ 双版本共存，Cargo 原生支持 |
+| bitflags | 1.3.2 + 2.x | 2.11.0 | ✅ 已有多版本 |
+| hashbrown | 0.14.5 | 0.16.1 | ✅ 双版本共存 |
+| smallvec | 1.1.1 | 1.15.1 | ✅ semver 兼容 |
+| bumpalo | 0.10.4 | 3.20.2 | ✅ 双版本共存 |
+
+**编译增量**：首次 +11 秒，新增 ~25 个 transitive crate（均纯 Rust，无系统依赖）。
 
 ### 1.2 是否需要 ECS？
 
-**结论：✅ 需要轻量 ECS（但不是 Bevy）**
+**结论：✅ 需要 ECS（使用 bevy_ecs 独立 crate）**
 
-> **修正**：之前将"不需要 Bevy"等同于"不需要 ECS"，这是错误的。
-> Bevy 是框架（带渲染器，有 wgpu 冲突），ECS 是架构模式（纯数据结构，零冲突）。
+> **关键区分**：Bevy 全框架（带渲染器，有 wgpu 冲突）≠ bevy_ecs（纯 ECS 库，零 GPU 依赖）。
+> bevy_ecs 可独立使用，不需要 bevy_app / bevy_render / bevy_window 等任何 GPU 相关包。
 
 **纯 Scene Graph 在 1000+ 实体时的性能问题：**
 
@@ -65,25 +86,62 @@ ECS 优势：
 **rapier3d 的能力边界：**
 rapier3d 只管物理（碰撞检测、刚体模拟，10K+ 没问题），不管 Transform 传播、渲染批处理、视锥体剔除。因此 rapier3d 不能替代 ECS 在渲染侧的性能优势。
 
-**推荐方案：hecs（轻量 ECS）+ rapier3d（物理）+ 索引层级树（层级管理）**
+**推荐方案：bevy_ecs（独立 crate）+ rapier3d（物理）+ 索引层级树（层级管理）**
 
-可选的 Rust ECS crate（均不依赖 wgpu，与 wgpu 0.19 零冲突）：
+ECS crate 选型对比（均不依赖 wgpu，与 wgpu 0.19 零冲突）：
 
 | Crate | 依赖重量 | 特点 | 推荐度 |
 |-------|---------|------|--------|
-| **hecs** | 极轻 | 极简 API，无调度器，自己用 rayon 并行 | ⭐⭐⭐ 最推荐 |
-| **shipyard** | 轻 | Sparse Set 存储，组件增删 O(1) | ⭐⭐ |
-| **bevy_ecs** | 中等偏重 | 功能最全，变更检测、并行调度 | ⭐（依赖较重） |
+| **bevy_ecs** | 中等（~25 crate） | 变更检测、并行调度、事件系统、Commands | ⭐⭐⭐ 最推荐 |
+| **hecs** | 极轻（~3 crate） | 极简 API，无调度器，自己用 rayon 并行 | ⭐⭐ 备选 |
+| **shipyard** | 轻 | Sparse Set 存储，组件增删 O(1) | ⭐ |
 | **legion** | 轻 | 自带并行调度，但维护放缓 | ⚠️ |
 
-**混合架构：ECS 数据 + 索引层级树**
+**选择 bevy_ecs 而非 hecs 的理由：**
+
+| 特性 | hecs | bevy_ecs | 对 3D 场景编辑的价值 |
+|------|------|----------|---------------------|
+| 变更检测 | ❌ 无 | ✅ `Changed<T>` / `Added<T>` | 只重渲染变化的实体，性能关键 |
+| 事件系统 | ❌ 无 | ✅ `Events<T>` | 对象选中/删除/属性变更传播 |
+| 资源系统 | ❌ 无 | ✅ `Res<T>` / `ResMut<T>` | SceneConfig、CameraState 全局管理 |
+| Commands | ❌ 无 | ✅ 延迟执行 | 撤销/重做天然匹配 |
+| 并行调度 | 手动 rayon | ✅ 内置 Schedule | Transform 传播自动并行 |
+| 维护状态 | 低频更新 | ✅ 活跃（Bevy 核心） | 长期可靠 |
+
+**bevy_ecs 集成方式（手动驱动，不用 Bevy 帧循环）：**
+
+```rust
+use bevy_ecs::prelude::*;
+
+// Components — 纯数据结构
+#[derive(Component)]
+struct Transform3D { position: Vec3, rotation: Quat, scale: Vec3 }
+#[derive(Component)]
+struct MeshComponent { /* ... */ }
+
+// 手动创建 World（不依赖 Bevy App 框架）
+let mut world = World::new();
+world.spawn((Transform3D::default(), MeshComponent { /* ... */ }));
+
+// Systems — 利用 Changed<T> 增量更新
+fn propagate_transforms(query: Query<(&Transform3D, &Parent), Changed<Transform3D>>) {
+    // Changed<Transform3D> → 只处理变化的实体
+}
+
+// 按需调度（请求驱动，不是帧循环）
+let mut schedule = Schedule::default();
+schedule.add_systems(propagate_transforms);
+schedule.run(&mut world);  // 仅在编辑操作时调用
+```
+
+**混合架构：bevy_ecs 数据 + 索引层级树**
 
 ```
 ┌─────────────────────────────────────┐
-│  ECS World (hecs)                   │
+│  ECS World (bevy_ecs)               │
 │  ┌──────────┬────────┬──────────┐   │
-│  │Transform │ Mesh   │ Material │   │  ← 连续内存，迭代快
-│  │[N 个]    │[N 个]  │[N 个]    │   │
+│  │Transform │ Mesh   │ Material │   │  ← Archetype 存储，迭代快
+│  │[N 个]    │[N 个]  │[N 个]    │   │  ← Changed<T> 变更检测
 │  └──────────┴────────┴──────────┘   │
 └─────────────────────────────────────┘
            ↕ entity ID 关联
@@ -95,9 +153,23 @@ rapier3d 只管物理（碰撞检测、刚体模拟，10K+ 没问题），不管
 │  └─────────────────────────────┘    │
 └─────────────────────────────────────┘
 
-渲染循环 → 直接迭代 ECS 组件数组（快）
-编辑操作 → 通过 Hierarchy Index 父子管理（直观）
-Transform 传播 → 深度排序后线性扫描（可并行子树）
+渲染循环 → Query<(&Transform3D, &Mesh), Changed<Transform3D>>（增量）
+编辑操作 → Commands 延迟执行 + 通过 Hierarchy Index 父子管理
+Transform 传播 → Schedule 自动并行调度
+事件通知 → Events<ObjectSelected> / Events<PropertyChanged>
+```
+
+**API 稳定性风险缓解：**
+
+bevy_ecs 每个 Bevy 大版本可能有 breaking change。建议在 native-scene 中包装一层 trait 抽象：
+
+```rust
+/// Thin abstraction over bevy_ecs::World for future-proofing
+pub trait SceneWorld {
+    fn spawn_object(&mut self, components: impl Bundle) -> Entity;
+    fn query_changed<T: Component>(&mut self) -> Vec<(Entity, &T)>;
+    fn run_systems(&mut self);
+}
 ```
 
 ---
@@ -318,14 +390,18 @@ Morph Target → 控制面部形状（静态结构：脸型/鼻高/眼距）
 - 预定义 52 个标准表情 Blend Shape（喜怒哀乐 + 口型 + 眼神）
 - UniVRM Humanoid 标准化骨骼命名，面部追踪可直接映射
 
-**后端数据结构（native-scene）**：
+**后端数据结构（native-scene，bevy_ecs Component）**：
 
 ```rust
+use bevy_ecs::prelude::*;
+
+#[derive(Component)]
 pub struct Skeleton {
     pub bones: Vec<Bone>,
     pub inverse_bind_matrices: Vec<Mat4>,
 }
 
+#[derive(Component)]
 pub struct SkinnedMesh {
     pub mesh: Mesh,
     pub skeleton: Arc<Skeleton>,
@@ -333,6 +409,7 @@ pub struct SkinnedMesh {
     pub joint_indices: Vec<[u16; 4]>,
 }
 
+#[derive(Component)]
 pub struct AnimationClip {
     pub name: String,
     pub duration: f32,
@@ -850,7 +927,8 @@ VS Code 是 MIT 开源，有先例（Cursor, Windsurf, VSCodium）。
 后端：
 ├─ native-scene crate 骨架
 ├─ glTF 加载器（含骨骼 + morph targets 解析）
-├─ hecs ECS 数据结构 + 索引层级树
+├─ bevy_ecs World + Components + 索引层级树
+├─ Schedule 按需调度（Changed<T> 增量更新）
 └─ ActionRouter 新增 scenes/meshes/materials 路由
 ```
 
@@ -1077,11 +1155,11 @@ AI 视频生成（neko-agent MediaGenerationService）
 | 约束 | 原因 | 影响 |
 |------|------|------|
 | GpuContext 单进程 | `Arc<wgpu::Device>` 不可跨进程 | 3D 必须在 neko-engine 内 |
-| 1000+ 实体性能 | Scene Graph 指针追踪导致缓存失效 | 需要轻量 ECS（hecs），非纯 Scene Graph |
+| 1000+ 实体性能 | Scene Graph 指针追踪导致缓存失效 | 需要 ECS（bevy_ecs），非纯 Scene Graph |
 | Webview 沙箱 | VS Code 安全策略 | 3D 交互受限，需 Fork 或流方案 |
 | 人编辑为主 | 产品定位 | R3F 交互视口必须，AI 为辅助 |
 | H.264 延迟 ~10-18ms | 已有零拷贝优化 | 纯流方案可能够用 |
-| wgpu 0.19 | 现有代码基础 | 不能直接用 Bevy |
+| wgpu 0.19 | 现有代码基础 | 不能用 Bevy 全框架，可用 bevy_ecs 独立 crate |
 
 ---
 
