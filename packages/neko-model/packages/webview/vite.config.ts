@@ -7,11 +7,21 @@ export default defineConfig({
   base: './',
   resolve: {
     preserveSymlinks: true,
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@neko/shared': path.resolve(__dirname, '../../../neko-types/src'),
-      '@neko/neko-client': path.resolve(__dirname, '../../../neko-client/src'),
-    },
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, './src') },
+      { find: '@neko/shared', replacement: path.resolve(__dirname, '../../../neko-types/src') },
+      {
+        find: '@neko/neko-client',
+        replacement: path.resolve(__dirname, '../../../neko-client/src'),
+      },
+      // R3F v8 does `import create from 'zustand'` (default import),
+      // but zustand v4.4+ only exports named. This shim bridges the gap.
+      // Exact match only — zustand/middleware etc. resolve normally.
+      {
+        find: /^zustand$/,
+        replacement: path.resolve(__dirname, './src/zustand-compat.ts'),
+      },
+    ],
   },
   server: {
     fs: {
@@ -29,7 +39,7 @@ export default defineConfig({
         entryFileNames: 'assets/index.js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: (assetInfo) => {
-          if (assetInfo.name === 'style.css') {
+          if (assetInfo.names?.[0] === 'style.css') {
             return 'assets/index.css';
           }
           return 'assets/[name].[ext]';

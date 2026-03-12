@@ -47,6 +47,34 @@ export function App(): React.JSX.Element {
         case 'loadModel':
           setModelUrl(message.uri);
           break;
+        case 'sceneSnapshot': {
+          // Backend scene snapshot — populate scene tree with ECS data
+          const { snapshot } = message;
+          if (snapshot.nodes) {
+            useModelStore.getState().setSceneNodes(snapshot.nodes);
+          }
+          if (snapshot.animations) {
+            const clipInfos: AnimationClipInfo[] = snapshot.animations.map(
+              (a: AnimationClipInfo) => ({
+                name: a.name,
+                duration: a.duration,
+                channelCount: a.channelCount,
+              }),
+            );
+            setAnimationClips(clipInfos);
+          }
+          break;
+        }
+        case 'sceneDelta': {
+          // Incremental transform updates from engine tick
+          const { delta } = message;
+          for (const update of delta.updatedTransforms) {
+            useModelStore
+              .getState()
+              .updateNodeTransform(update.nodeId, update.position, update.rotation, update.scale);
+          }
+          break;
+        }
         case 'keyboardAction':
           switch (message.action) {
             case 'escape':
