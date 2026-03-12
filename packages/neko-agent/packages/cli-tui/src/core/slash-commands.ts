@@ -16,7 +16,7 @@ import {
   getCliCommands,
 } from '@neko/agent';
 import type { CLIConfig } from './types';
-import { PROVIDERS } from './types';
+import { listProviders, getProviderModels } from './config';
 
 /**
  * Slash command result (CLI-specific)
@@ -270,32 +270,34 @@ function handleConfig(args: string[], context: SlashCommandContext): SlashComman
     }
 
     case 'providers': {
+      const providers = listProviders(config.workDir);
       const lines = ['', 'Available Providers:', ''];
-      for (const [id, provider] of Object.entries(PROVIDERS)) {
-        const envSet = process.env[provider.envKey] ? '✓' : '✗';
-        lines.push(`  ${id} (${provider.name})`);
-        lines.push(`    Default Model: ${provider.defaultModel}`);
-        lines.push(`    Env Key: ${provider.envKey} ${envSet}`);
+      for (const p of providers) {
+        const keyStatus = p.hasApiKey ? '✓' : '✗';
+        lines.push(`  ${p.id} (${p.displayName})`);
+        lines.push(`    Type: ${p.type}`);
+        lines.push(`    API Key: ${keyStatus}`);
+        lines.push(`    Models: ${p.models.length > 0 ? p.models.join(', ') : '(none)'}`);
         lines.push('');
       }
       return { handled: true, output: lines.join('\n'), continueExecution: true };
     }
 
     case 'models': {
-      const provider = PROVIDERS[config.provider];
-      if (!provider) {
+      const models = getProviderModels(config.provider, config.workDir);
+      if (models.length === 0) {
         return {
           handled: true,
           continueExecution: true,
-          error: `Unknown provider: ${config.provider}`,
+          error: `No models configured for provider: ${config.provider}`,
         };
       }
 
       const lines = [
         '',
-        `Available Models for ${provider.name}:`,
+        `Available Models for ${config.provider}:`,
         '',
-        ...provider.models.map((m) => `  ${m === config.model ? '* ' : '  '}${m}`),
+        ...models.map((m) => `  ${m === config.model ? '* ' : '  '}${m}`),
         '',
         '(* = current model)',
         '',

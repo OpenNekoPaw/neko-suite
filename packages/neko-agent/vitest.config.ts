@@ -10,6 +10,7 @@ export default defineConfig({
       'packages/platform/src/**/*.test.ts',
       'packages/agent/src/**/*.test.ts',
       'packages/cli/src/**/*.test.ts',
+      'packages/cli-tui/src/**/*.test.ts',
     ],
     exclude: [
       '**/node_modules/**',

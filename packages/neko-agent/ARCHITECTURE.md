@@ -19,67 +19,91 @@ packages/neko-agent/
 │   ├── platform/     # @neko/platform — AI 服务平台（多模型路由）
 │   ├── extension/    # @neko-agent/extension — VSCode Extension Host
 │   ├── webview/      # @neko-agent/webview — React 对话 UI
-│   └── cli/          # @neko/cli — 命令行界面
+│   └── cli-tui/      # @neko/cli — Ink TUI 终端界面
 ```
 
 **依赖方向**（严格单向）：
 
 ```
-extension ──→ agent ──→ shared
-    │            │
-    └──→ platform ──→ shared + ai-sdk
-    │
-    └──→ shared
+webview ──(postMessage)──→ extension ──→ agent ──→ platform ──→ shared
+                               │                      │
+                               └──→ shared             └──→ ai-sdk
 
-cli ──→ agent ──→ shared
-
-webview ──→ shared（独立进程，仅通过 postMessage 通信）
+cli-tui ──→ agent ──→ platform ──→ shared
+  │                      │
+  └──→ shared            └──→ ai-sdk
 ```
+
+> **说明**：`agent` 通过 `IService` 接口抽象 LLM 调用，`platform` 提供 `IService` 的具体实现（多模型路由）。
+> `cli-tui` 同样通过 `LLMServiceAdapter` 实现 `IService`，桥接内置 `LLMClient` 到 `agent` 层。
 
 ---
 
 ## 整体架构
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  VSCode Extension Host           │
-│                                                 │
-│  ┌─────────────────────────────────────┐        │
-│  │     @neko-agent/extension           │        │
-│  │                                     │        │
-│  │  Bootstrap → ChatViewProvider       │        │
-│  │         │         │                 │        │
-│  │  ServiceCollection                  │        │
-│  │    ├─ ChatMessageHandler            │        │
-│  │    ├─ ConversationManager           │        │
-│  │    ├─ SystemPromptManager           │        │
-│  │    ├─ AgentRunner / AgentManager    │        │
-│  │    └─ ConfigBridge                  │        │
-│  └──────────┬──────────────────────────┘        │
-│             │ 调用                               │
-│  ┌──────────▼──────────┐  ┌───────────────────┐ │
-│  │    @neko/agent       │  │  @neko/platform   │ │
-│  │                     │  │                   │ │
-│  │  AgentExecutor      │  │  LLMRoutingMgr    │ │
-│  │  ├─ ToolRegistry    │  │  ├─ Adapters      │ │
-│  │  ├─ SkillRegistry   │  │  │  (Claude,      │ │
-│  │  ├─ MCPClient       │  │  │   OpenAI,      │ │
-│  │  ├─ ConvCompressor  │  │  │   Google,      │ │
-│  │  ├─ PermissionSystem│  │  │   Ollama)      │ │
-│  │  └─ HookComposer    │  │  ├─ MediaService  │ │
-│  └─────────────────────┘  │  └─ ToolRegistry  │ │
-│                           └───────────────────┘ │
-│         │ postMessage                            │
-│  ┌──────▼──────────────────────────────┐        │
-│  │     Webview (React)                  │        │
-│  │     @neko-agent/webview             │        │
-│  │                                     │        │
-│  │  ChatView → MessageItem             │        │
-│  │  ToolCallDisplay                    │        │
-│  │  SettingsView                       │        │
-│  │  Zustand State (conversation/config)│        │
-│  └─────────────────────────────────────┘        │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                   VSCode Extension Host                  │
+│                                                         │
+│  ┌──────────────────────────────────────────┐           │
+│  │     @neko-agent/extension                │           │
+│  │                                          │           │
+│  │  Bootstrap → ChatViewProvider            │           │
+│  │         │         │                      │           │
+│  │  ServiceCollection                       │           │
+│  │    ├─ ChatMessageHandler                 │           │
+│  │    ├─ ConversationManager                │           │
+│  │    ├─ SystemPromptManager                │           │
+│  │    ├─ AgentRunner / AgentManager         │           │
+│  │    └─ ConfigBridge                       │           │
+│  └──────────┬───────────────────────────────┘           │
+│             │                                            │
+│  ┌──────────▼──────────┐     ┌────────────────────────┐ │
+│  │    @neko/agent       │────→│    @neko/platform      │ │
+│  │                     │     │                        │ │
+│  │  AgentExecutor      │     │  LLMRoutingMgr         │ │
+│  │  ├─ ToolRegistry    │     │  ├─ Adapters (Claude,  │ │
+│  │  ├─ SkillRegistry   │     │  │   OpenAI, Google,   │ │
+│  │  ├─ MCPClient       │     │  │   Ollama)           │ │
+│  │  ├─ ConvCompressor  │     │  ├─ MediaService       │ │
+│  │  ├─ PermissionSystem│     │  └─ ToolRegistry       │ │
+│  │  └─ HookComposer    │     └────────────────────────┘ │
+│  └─────────────────────┘                                 │
+│         ▲ postMessage                                    │
+│  ┌──────┴──────────────────────────────┐                │
+│  │     Webview (React)                  │                │
+│  │     @neko-agent/webview             │                │
+│  │                                     │                │
+│  │  ChatView → MessageItem             │                │
+│  │  ToolCallDisplay / SettingsView     │                │
+│  │  Zustand State (conversation/config)│                │
+│  └─────────────────────────────────────┘                │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│                  CLI 终端（独立进程）                      │
+│                                                         │
+│  ┌──────────────────────────────────────────┐           │
+│  │     @neko/cli (cli-tui)  — UI 展示层     │           │
+│  │                                          │           │
+│  │  App (Ink React)                         │           │
+│  │    ├─ ChatView + Input + StatusBar       │           │
+│  │    ├─ Zustand Stores                     │           │
+│  │    │  (agent/conversation/config/ui)     │           │
+│  │    └─ useAgentSession Hook               │           │
+│  │         │                                │           │
+│  │  LLMClient → LLMServiceAdapter(IService) │           │
+│  └──────────┬───────────────────────────────┘           │
+│             │                                            │
+│  ┌──────────▼──────────┐                                │
+│  │    @neko/agent       │                                │
+│  │  AgentSession        │                                │
+│  │  ├─ ToolRegistry     │                                │
+│  │  ├─ MCPManager       │                                │
+│  │  ├─ SkillService     │                                │
+│  │  └─ SystemPromptBuilder                              │
+│  └─────────────────────┘                                │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---

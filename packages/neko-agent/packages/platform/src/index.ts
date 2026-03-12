@@ -135,8 +135,8 @@ export interface Platform {
   tools: IToolRegistry;
   /** Prompt manager */
   prompts: PromptManager;
-  /** Media generation service */
-  media: MediaGenerationService;
+  /** Media generation service (undefined when taskManager not provided) */
+  media: MediaGenerationService | undefined;
   /** Create a service instance */
   createService: () => Service;
   /** Dispose resources */
@@ -164,31 +164,31 @@ export function createPlatform(options: PlatformOptions): Platform {
   const promptManager = new PromptManager();
 
   // ==========================================================================
-  // Initialize Media Generation Service
+  // Initialize Media Generation Service (optional — requires taskManager)
   // ==========================================================================
   const mediaTaskManager = options.taskManager;
-  if (!mediaTaskManager) {
-    throw new Error(
-      '[Platform] taskManager is required. ' +
-        'Provide an ITaskManager implementation (from @neko/shared) via options.taskManager.',
-    );
-  }
+  let mediaGenerationService: MediaGenerationService | undefined;
 
-  // Initialize task manager to load persisted tasks (fire and forget)
-  if (mediaTaskManager.initialize) {
-    mediaTaskManager.initialize().catch((err) => {
-      logger.error('Failed to initialize task manager', { error: err });
+  if (mediaTaskManager) {
+    // Initialize task manager to load persisted tasks (fire and forget)
+    if (mediaTaskManager.initialize) {
+      mediaTaskManager.initialize().catch((err) => {
+        logger.error('Failed to initialize task manager', { error: err });
+      });
+    }
+
+    // Initialize media platform with all components
+    const mediaPlatform = createMediaPlatform({
+      configManager,
+      providerRegistry,
+      taskManager: mediaTaskManager,
     });
+
+    mediaGenerationService = mediaPlatform.service;
+  } else {
+    logger.info('taskManager not provided — media generation disabled');
+    mediaGenerationService = undefined;
   }
-
-  // Initialize media platform with all components
-  const mediaPlatform = createMediaPlatform({
-    configManager,
-    providerRegistry,
-    taskManager: mediaTaskManager,
-  });
-
-  const mediaGenerationService = mediaPlatform.service;
 
   // Factory function — model selection is handled inside Service via ModelSelector
   const createService = (): Service => {
@@ -199,7 +199,7 @@ export function createPlatform(options: PlatformOptions): Platform {
   };
 
   const dispose = (): void => {
-    if (mediaTaskManager.dispose) {
+    if (mediaTaskManager?.dispose) {
       mediaTaskManager.dispose();
     }
     providerRegistry.dispose();

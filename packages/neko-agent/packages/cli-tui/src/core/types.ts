@@ -2,7 +2,7 @@
  * Agent CLI Types
  */
 
-import type { AgentConfig, AgentResult, MCPServerConfig } from '@neko/agent';
+import type { AgentResult, MCPServerConfig } from '@neko/agent';
 
 /**
  * CLI configuration
@@ -34,6 +34,8 @@ export interface CLIConfig {
   skillsDir?: string;
   /** Output format */
   outputFormat: 'text' | 'json' | 'markdown';
+  /** Extended thinking budget in tokens (0 = disabled, Anthropic/DeepSeek only) */
+  thinkingBudget: number;
 }
 
 /**
@@ -68,51 +70,6 @@ export interface CLIResult {
 }
 
 /**
- * Provider configuration
- */
-export interface ProviderConfig {
-  id: string;
-  name: string;
-  envKey: string;
-  defaultModel: string;
-  models: string[];
-  baseUrl?: string;
-}
-
-/**
- * Default provider configurations
- */
-export const PROVIDERS: Record<string, ProviderConfig> = {
-  anthropic: {
-    id: 'anthropic',
-    name: 'Anthropic',
-    envKey: 'ANTHROPIC_API_KEY',
-    defaultModel: 'claude-sonnet-4-20250514',
-    models: [
-      'claude-sonnet-4-20250514',
-      'claude-opus-4-20250514',
-      'claude-3-5-sonnet-20241022',
-      'claude-3-5-haiku-20241022',
-    ],
-  },
-  openai: {
-    id: 'openai',
-    name: 'OpenAI',
-    envKey: 'OPENAI_API_KEY',
-    defaultModel: 'gpt-4o',
-    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini'],
-  },
-  deepseek: {
-    id: 'deepseek',
-    name: 'DeepSeek',
-    envKey: 'DEEPSEEK_API_KEY',
-    defaultModel: 'deepseek-chat',
-    models: ['deepseek-chat', 'deepseek-reasoner'],
-    baseUrl: 'https://api.deepseek.com',
-  },
-};
-
-/**
  * Default CLI configuration
  */
 export const DEFAULT_CLI_CONFIG: CLIConfig = {
@@ -126,4 +83,5 @@ export const DEFAULT_CLI_CONFIG: CLIConfig = {
   workDir: process.cwd(),
   mcpServers: [],
   outputFormat: 'text',
+  thinkingBudget: 0,
 };

@@ -48,7 +48,7 @@ export function App({ config, service }: AppProps): React.JSX.Element {
   }, [config]);
 
   // Initialize agent session
-  const { submit, cancel, clearHistory, confirmTool, updateModel } = useAgentSession({
+  const { submit, cancel, clearHistory, confirmTool, updateModel, updateMode } = useAgentSession({
     config,
     service,
   });
@@ -66,6 +66,7 @@ export function App({ config, service }: AppProps): React.JSX.Element {
     onQuit: () => {
       process.exit(0);
     },
+    onModeChange: updateMode,
   });
 
   // Handle user prompt submission

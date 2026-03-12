@@ -20,11 +20,18 @@ import {
   createCoreTools,
   type IAgentSession,
   type InputProcessor,
+  type SystemPromptBuilder,
 } from '@neko/agent';
+import {
+  createPlatform,
+  FileUserConfigManager,
+  toSharedService,
+  type Platform,
+} from '@neko/platform';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { CLIConfig } from '../core/types';
-import { createLLMServiceAdapter, LLMServiceAdapter } from '../core/llm-service-adapter';
+import type { ExecutionMode } from '../types/state';
 import type { IService } from '@neko/shared';
 import { useConfigStore } from '../stores/config-store';
 import { useAgentStore } from '../stores/agent-store';
@@ -49,6 +56,8 @@ export interface AgentSessionHandle {
   confirmTool: (toolCallId: string, approved: boolean) => void;
   /** Switch model and rebuild LLM service */
   updateModel: (model: string) => void;
+  /** Switch execution mode and rebuild system prompt */
+  updateMode: (mode: ExecutionMode) => void;
   /** Whether session is initialized */
   readonly isReady: boolean;
 }
@@ -74,7 +83,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const adapterRef = useRef<IEventAdapter | null>(null);
   const inputProcessorRef = useRef<InputProcessor | null>(null);
   const mcpManagerRef = useRef<MCPManager | null>(null);
-  const serviceAdapterRef = useRef<LLMServiceAdapter | null>(null);
+  const platformRef = useRef<Platform | null>(null);
+  const promptBuilderRef = useRef<SystemPromptBuilder | null>(null);
   const isReadyRef = useRef(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
 
@@ -112,20 +122,32 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           }
         }
 
-        // 4. LLM Service
-        const llmService = createLLMServiceAdapter(config, service);
-        if (llmService instanceof LLMServiceAdapter) {
-          serviceAdapterRef.current = llmService;
+        // 4. LLM Service — use Platform for multi-provider routing
+        let llmService: IService;
+        if (service) {
+          // Extension mode: use injected service directly
+          llmService = service;
+        } else {
+          // Standalone CLI mode: create Platform
+          const platform = createPlatform({
+            userConfigManager: new FileUserConfigManager(),
+            workspacePath: config.workDir,
+            toolRegistry,
+          });
+          platformRef.current = platform;
+          llmService = toSharedService(platform.createService());
         }
 
         // 5. System Prompt
         const executionMode = useAgentStore.getState().executionMode;
+        const detectedLocale = detectLocale();
         const promptBuilder = createSystemPromptBuilder({
-          locale: 'en',
+          locale: detectedLocale,
           mode: executionMode === 'plan' ? 'plan' : 'default',
         });
         await promptBuilder.loadAgentsFile(config.workDir, getDefaultPersonalPath());
-        const systemPrompt = promptBuilder.build();
+        promptBuilderRef.current = promptBuilder;
+        const systemPrompt = buildSystemPromptWithContext(promptBuilder, config);
 
         // 6. Create Session
         const session = createAgentSession({
@@ -178,6 +200,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
     return () => {
       sessionRef.current?.dispose();
+      platformRef.current?.dispose();
       mcpManagerRef.current?.disconnectAll().catch(() => {});
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -247,12 +270,34 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   }, []);
 
   const updateModel = useCallback((model: string) => {
-    const currentConfig = useConfigStore.getState().config;
-    const newConfig = { ...currentConfig, model };
     useConfigStore.getState().setConfig({ model });
-    if (serviceAdapterRef.current) {
-      serviceAdapterRef.current.rebuild(newConfig);
+    // Platform's Service uses ModelSelector which reads from ConfigManager,
+    // so we just need to pass the new modelId to the session
+    const session = sessionRef.current;
+    if (session) {
+      session.configure({ modelId: model });
     }
+  }, []);
+
+  const updateMode = useCallback((mode: ExecutionMode) => {
+    const session = sessionRef.current;
+    if (!session) return;
+    const config = useConfigStore.getState().config;
+    const locale = detectLocale();
+    const builder = createSystemPromptBuilder({
+      locale,
+      mode: mode === 'plan' ? 'plan' : 'default',
+    });
+    // Reuse previously loaded AGENTS.md via sync rebuild
+    if (promptBuilderRef.current) {
+      builder.setAgentsContent(
+        promptBuilderRef.current.getAgentsContent(),
+        promptBuilderRef.current.getAgentsSource(),
+      );
+    }
+    const systemPrompt = buildSystemPromptWithContext(builder, config);
+    session.configure({ systemPrompt });
+    session.setExecutionMode(mode);
   }, []);
 
   return {
@@ -261,6 +306,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     clearHistory,
     confirmTool,
     updateModel,
+    updateMode,
     isReady: isReadyRef.current,
   };
 }
@@ -268,4 +314,23 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 /** Helper to get workDir from config store */
 function useConfigStore_getWorkDir(): string {
   return useConfigStore.getState().config.workDir;
+}
+
+/** Detect locale from environment */
+function detectLocale(): 'en' | 'zh' {
+  const lang = process.env.LANG ?? process.env.LANGUAGE ?? process.env.LC_ALL ?? '';
+  return lang.startsWith('zh') ? 'zh' : 'en';
+}
+
+/** Build system prompt with runtime context appended */
+function buildSystemPromptWithContext(builder: SystemPromptBuilder, config: CLIConfig): string {
+  const base = builder.build();
+  const context = [
+    `\n\n---\n\n## Runtime Context`,
+    `- Working directory: ${config.workDir}`,
+    `- OS: ${process.platform} ${process.arch}`,
+    `- Model: ${config.model}`,
+    `- Provider: ${config.provider}`,
+  ];
+  return base + context.join('\n');
 }

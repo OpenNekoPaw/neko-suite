@@ -16,6 +16,7 @@ export interface KeyboardActions {
   onCancel: () => void;
   onClear: () => void;
   onQuit: () => void;
+  onModeChange?: (mode: ExecutionMode) => void;
 }
 
 /**
@@ -52,6 +53,7 @@ export function useKeyboard(actions: KeyboardActions): void {
       const idx = MODE_CYCLE.indexOf(current);
       const next = MODE_CYCLE[(idx + 1) % MODE_CYCLE.length]!;
       useAgentStore.getState().setExecutionMode(next);
+      actions.onModeChange?.(next);
       return;
     }
   });

@@ -23,16 +23,21 @@ import {
   createCoreTools,
   type InputProcessor,
 } from '@neko/agent';
+import {
+  createPlatform,
+  FileUserConfigManager,
+  toSharedService,
+  type Platform,
+} from '@neko/platform';
 
 type ExecutionMode = 'plan' | 'ask' | 'auto';
 import type { IService } from '@neko/shared';
 import type { SkillService } from '@neko/agent';
 import type { CLIConfig, RunOptions, CLIResult } from './types';
-import { PROVIDERS } from './types';
-import { createLLMServiceAdapter } from './llm-service-adapter';
-import { theme, TOOL_ICONS } from './theme';
+import { theme } from './theme';
 import { formatToolCall } from './formatter';
 import { isSlashCommand, handleSlashCommand, type SlashCommandContext } from './slash-commands';
+import { getProviderModels } from './config';
 
 /**
  * Agent runner options
@@ -104,8 +109,19 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       }
     }
 
-    // Create LLM service adapter
-    const llmService = createLLMServiceAdapter(config, service);
+    // Create LLM service via Platform
+    let llmService: IService;
+    let platform: Platform | undefined;
+    if (service) {
+      llmService = service;
+    } else {
+      platform = createPlatform({
+        userConfigManager: new FileUserConfigManager(),
+        workspacePath: config.workDir,
+        toolRegistry,
+      });
+      llmService = toSharedService(platform.createService());
+    }
 
     // Build system prompt
     const promptBuilder = createSystemPromptBuilder({
@@ -125,7 +141,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       temperature: config.temperature,
       maxTokens: config.maxTokens,
       hooks: hooks ? [hooks as ExecutorHooks] : undefined,
-      onConfirmTool: async (request) => {
+      onConfirmTool: async (_request) => {
         // In non-interactive mode, auto-approve all tools
         if (!runOptions.interactive) {
           return true;
@@ -285,6 +301,7 @@ function handleAgentEvent(
         collector?.steps.push({
           type: 'act',
           content: event.toolCall.name,
+          timestamp: Date.now(),
           toolCalls: [
             {
               id: event.toolCall.id,
@@ -300,6 +317,7 @@ function handleAgentEvent(
       if (event.toolResult && collector) {
         collector.steps.push({
           type: 'observe',
+          timestamp: Date.now(),
           content: event.toolResult.success
             ? String(event.toolResult.data ?? '')
             : `Error: ${event.toolResult.error ?? 'unknown'}`,
@@ -486,8 +504,19 @@ async function initializeInteractiveSession(
     }
   }
 
-  // Create LLM service adapter
-  let llmService = createLLMServiceAdapter(config, service);
+  // Create LLM service via Platform
+  let platform: Platform | undefined;
+  let llmService: IService;
+  if (service) {
+    llmService = service;
+  } else {
+    platform = createPlatform({
+      userConfigManager: new FileUserConfigManager(),
+      workspacePath: config.workDir,
+      toolRegistry,
+    });
+    llmService = toSharedService(platform.createService());
+  }
 
   // Build system prompt
   const promptBuilder = createSystemPromptBuilder({ locale: 'en' });
@@ -548,7 +577,11 @@ async function initializeInteractiveSession(
 
   // Rebuild LLM service and update session config after /model or /config changes
   const rebuildService = (newConfig: CLIConfig, svc?: IService) => {
-    llmService = createLLMServiceAdapter(newConfig, svc);
+    if (svc) {
+      llmService = svc;
+    } else if (platform) {
+      llmService = toSharedService(platform.createService());
+    }
     session.configure({
       service: llmService,
       modelId: newConfig.model,
@@ -649,17 +682,15 @@ export async function runInteractive(
           if (trimmed.startsWith('/model')) {
             const newModel = trimmed.slice(6).trim();
             if (!newModel) {
-              // List available models
-              const provider = PROVIDERS[sessionConfig.provider];
-              if (provider) {
-                console.log(`\n${theme.muted('Current:')} ${sessionConfig.model}`);
-                console.log(theme.muted(`Available (${provider.name}):`));
-                for (const m of provider.models) {
+              // List available models from Platform ConfigManager
+              const models = getProviderModels(sessionConfig.provider, sessionConfig.workDir);
+              console.log(`\n${theme.muted('Current:')} ${sessionConfig.model}`);
+              if (models.length > 0) {
+                console.log(theme.muted(`Available (${sessionConfig.provider}):`));
+                for (const m of models) {
                   const marker = m === sessionConfig.model ? theme.success('* ') : '  ';
                   console.log(`  ${marker}${m}`);
                 }
-              } else {
-                console.log(`${theme.muted('Current model:')} ${sessionConfig.model}`);
               }
             } else {
               sessionConfig = { ...sessionConfig, model: newModel };

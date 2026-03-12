@@ -405,7 +405,7 @@ export class AgentStreamProcessor {
       }
     };
 
-    const unsubscribe = this.deps.platform.media.onProgress(taskId, async (task) => {
+    const unsubscribe = this.deps.platform.media?.onProgress(taskId, async (task) => {
       let resultUrls = task.outputs?.map((o) => o.url).filter(Boolean) || [];
       let thumbnailUrl = task.outputs?.[0]?.url;
 
@@ -419,7 +419,7 @@ export class AgentStreamProcessor {
             ...output,
             url: localPaths[index] || output.url,
           }));
-          await this.deps.platform?.media.updateTaskOutputs(task.id, updatedOutputs);
+          await this.deps.platform?.media?.updateTaskOutputs(task.id, updatedOutputs);
         }
       }
 
@@ -540,7 +540,7 @@ export class AgentStreamProcessor {
       const updatedMessages = conversation.messages.map((message) => {
         if (!message.toolCalls && !message.contentBlocks) return message;
 
-        let updatedMessage = { ...message };
+        const updatedMessage = { ...message };
 
         if (message.toolCalls) {
           const updatedToolCalls = message.toolCalls.map((toolCall) => {

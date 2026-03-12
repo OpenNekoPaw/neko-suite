@@ -1,34 +1,29 @@
 /**
  * @neko/cli — Professional CLI for Neko AI Agent
  *
- * Unified package: Ink-based TUI + core CLI capabilities (config, runner, LLM client).
+ * Unified package: Ink-based TUI + core CLI capabilities (config, runner).
  * Public API exports for programmatic usage.
  */
 
 // ============================================================================
-// Core (migrated from old @neko/cli)
+// Core
 // ============================================================================
 
 // Core Types
-export type { CLIConfig, RunOptions, CLIResult, ProviderConfig } from './core/types';
+export type { CLIConfig, RunOptions, CLIResult } from './core/types';
 
-export { PROVIDERS, DEFAULT_CLI_CONFIG } from './core/types';
+export { DEFAULT_CLI_CONFIG } from './core/types';
 
 // Config
 export {
   loadConfig,
-  saveGlobalConfig,
-  saveUserConfig,
-  saveWorkspaceConfig,
-  setProviderConfig,
-  setProviderApiKey,
-  setProviderDefaultModel,
-  addProviderModel,
-  getProviderModels,
   validateConfig,
-  getProviderConfig,
+  getProviderModels,
   listProviders,
   listConfiguredProviders,
+  getApiKeyFromEnv,
+  createConfigManager,
+  type ProviderInfo,
   getConfigLocations,
   getUserConfigDir,
   getUserConfigPath,
@@ -38,6 +33,13 @@ export {
   getGlobalConfigPath,
   getProjectConfigPath,
 } from './core/config';
+
+// Platform Bootstrap
+export {
+  createCLIPlatform,
+  type CLIPlatformOptions,
+  type CLIPlatformResult,
+} from './core/platform-bootstrap';
 
 // Runner
 export {
@@ -55,18 +57,6 @@ export {
   type SlashCommandResult,
   type SlashCommandContext,
 } from './core/slash-commands';
-
-// LLM Client
-export {
-  createLLMClient,
-  type ILLMClient,
-  type LLMClientOptions,
-  type LLMClientResponse,
-  type ToolCall,
-} from './core/llm-client';
-
-// LLM Service Adapter
-export { LLMServiceAdapter, createLLMServiceAdapter } from './core/llm-service-adapter';
 
 // Formatter
 export { formatResult, formatText, formatJson, formatMarkdown } from './core/formatter';

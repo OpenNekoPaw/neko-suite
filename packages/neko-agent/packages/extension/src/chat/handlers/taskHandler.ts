@@ -65,7 +65,7 @@ export class TaskHandler {
   async handleRemoveTask(webview: vscode.Webview, taskId: string): Promise<void> {
     // Delete from Platform's media task manager
     if (this.deps.platform) {
-      await this.deps.platform.media.deleteTask(taskId);
+      await this.deps.platform.media?.deleteTask(taskId);
     }
 
     // Notify webview
@@ -81,7 +81,7 @@ export class TaskHandler {
   async handleViewTaskResult(taskId: string): Promise<void> {
     // First try Platform's media service (for media generation tasks)
     if (this.deps.platform) {
-      const mediaTask = await this.deps.platform.media.getTask(taskId);
+      const mediaTask = await this.deps.platform.media?.getTask(taskId);
       if (mediaTask && mediaTask.outputs && mediaTask.outputs.length > 0) {
         const firstOutput = mediaTask.outputs[0];
         if (firstOutput?.url) {

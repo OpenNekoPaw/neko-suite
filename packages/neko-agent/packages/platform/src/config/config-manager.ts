@@ -156,6 +156,19 @@ export class ConfigManager {
     this.invalidateCache();
   }
 
+  /**
+   * Apply a runtime-only override to a provider (not persisted to disk).
+   * Useful for injecting env var API keys without modifying config files.
+   */
+  setRuntimeProviderOverride(providerId: string, override: Partial<Provider>): void {
+    this.ensureMerged();
+    const existing = this.providers.get(providerId);
+    if (existing) {
+      this.providers.set(providerId, { ...existing, ...override });
+      this.cachedConfig = null; // invalidate cached snapshot only
+    }
+  }
+
   async removeProviderOverride(providerId: string): Promise<void> {
     this.ensureUserConfigManager();
     const config = this.userConfigManager!.load();

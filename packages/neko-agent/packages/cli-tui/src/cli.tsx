@@ -14,7 +14,6 @@ import React from 'react';
 import { render } from 'ink';
 import { Command } from 'commander';
 import { loadConfig, validateConfig, listProviders, getProviderModels } from './core/config';
-import { PROVIDERS } from './core/types';
 import type { CLIConfig } from './core/types';
 import { runAgent } from './core/runner';
 import { formatResult } from './core/formatter';
@@ -84,10 +83,11 @@ configCmd
     const providers = listProviders();
     console.log(chalk.bold('\nAvailable Providers:\n'));
     for (const p of providers) {
-      const envSet = process.env[p.envKey] ? chalk.green('✓') : chalk.red('✗');
-      console.log(`  ${chalk.cyan(p.id)} (${p.name})`);
-      console.log(`    Default Model: ${p.defaultModel}`);
-      console.log(`    Env Key: ${p.envKey} ${envSet}`);
+      const keyStatus = p.hasApiKey ? chalk.green('✓') : chalk.red('✗');
+      console.log(`  ${chalk.cyan(p.id)} (${p.displayName})`);
+      console.log(`    Type: ${p.type}`);
+      console.log(`    API Key: ${keyStatus}`);
+      console.log(`    Models: ${p.models.length > 0 ? p.models.join(', ') : '(none)'}`);
       console.log('');
     }
   });
@@ -99,13 +99,12 @@ configCmd
   .action((opts: Record<string, unknown>) => {
     const config = loadConfig();
     const providerId = (opts['provider'] as string) ?? config.provider;
-    const provider = PROVIDERS[providerId];
-    if (!provider) {
-      console.error(chalk.red(`Unknown provider: ${providerId}`));
+    const models = getProviderModels(providerId);
+    if (models.length === 0) {
+      console.error(chalk.red(`No models configured for provider: ${providerId}`));
       process.exit(1);
     }
-    const models = getProviderModels(providerId);
-    console.log(chalk.bold(`\nModels for ${provider.name}:\n`));
+    console.log(chalk.bold(`\nModels for ${providerId}:\n`));
     for (const m of models) {
       const marker = m === config.model ? chalk.green('* ') : '  ';
       console.log(`  ${marker}${m}`);
