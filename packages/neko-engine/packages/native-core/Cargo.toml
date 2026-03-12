@@ -15,6 +15,9 @@ neko-types = { path = "../types" }
 # 3D scene management
 neko-native-scene = { path = "../native-scene" }
 
+# 2D puppet management (Inochi2D/inox2d)
+neko-native-puppet = { path = "../native-puppet" }
+
 # Math (re-export from native-scene)
 glam.workspace = true
 

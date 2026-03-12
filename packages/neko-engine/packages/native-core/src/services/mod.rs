@@ -9,6 +9,7 @@ mod export;
 mod image;
 mod node;
 mod playback;
+mod puppet;
 mod scene;
 mod task;
 mod timeline;
@@ -22,6 +23,7 @@ pub use export::IExportService;
 pub use image::IImageService;
 pub use node::{GpuInfo, INodeService};
 pub use playback::IStreamPlayback;
+pub use puppet::IPuppetService;
 pub use scene::ISceneService;
 pub use task::ITaskService;
 pub use timeline::{ITimelineService, StreamStats, TimelineStreamResult};
@@ -29,6 +31,6 @@ pub use video::IVideoService;
 
 // Re-export implementations
 pub use impls::{
-    AudioService, EffectsService, ExportService, ImageService, NodeService, SceneService,
-    ServiceContainer, TaskService, TimelineService, VideoService,
+    AudioService, EffectsService, ExportService, ImageService, NodeService, PuppetService,
+    SceneService, ServiceContainer, TaskService, TimelineService, VideoService,
 };

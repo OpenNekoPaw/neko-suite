@@ -65,8 +65,8 @@ neko-sketch（2D 创作）
 | **绘画工具** | Canvas 2D / WebGL 2D | 画笔/形状/选区/图层 | ✅ 完全可行 |
 | **压感支持** | Pointer Events API | pressure / tiltX / tiltY | ✅ 完全可行 |
 | **图层系统** | 离屏 Canvas 合成 | 25+ 混合模式 | ✅ 完全可行 |
-| **Spine 骨骼** | spine-ts 运行时 | WebGL 渲染 + 编辑器 UI | ✅ 完全可行 |
-| **Live2D** | Cubism SDK Web | WebGL 渲染 + 参数控制 | ✅ 完全可行 |
+| **Spine 骨骼** | spine-ts 运行时 | WebGL 渲染 + 编辑器 UI | ✅ 完全可行（⚠️ Spine Runtimes License，非 MIT） |
+| **Inochi2D** | inox2d + native-puppet | ECS 后端 + WebGL 前端渲染 | ✅ 完全可行（BSD 2-Clause） |
 | **逐帧动画** | Canvas 序列帧 | 洋葱皮 + 帧管理 | ✅ 完全可行 |
 | **2D 粒子** | Canvas / WebGL | 平面粒子系统 | ✅ 完全可行 |
 | **2D 滤镜** | WebGL shader / WGSL 复用 | 模糊/发光/色彩/扭曲 | ✅ 完全可行 |
@@ -151,7 +151,7 @@ Layer Stack（自底向上合成）：
 | **适用风格** | 游戏角色、骨骼驱动 | 立绘 / 日式角色、参数驱动 |
 | **变形方式** | 网格变形（mesh deformation） | 参数化变形（cubism physics） |
 | **动画原理** | 骨骼 → 插槽 → 附件 → 网格 | 参数值 → 部件 → Artmesh 变形 |
-| **Web 运行时** | spine-ts（MIT 许可） | Cubism SDK Web（需商业许可） |
+| **Web 运行时** | spine-ts（⚠️ Spine Runtimes License，非 MIT） | Cubism SDK Web（需商业许可） |
 | **文件格式** | `.skel` + `.atlas` + `.png` | `.moc3` + `.model3.json` + textures |
 | **编辑器** | Spine Editor（独立付费软件） | Live2D Cubism Editor（独立付费软件） |
 | **性能** | 轻量，WebGL 渲染高效 | 中等，参数较多时计算量大 |
@@ -212,50 +212,85 @@ Root Bone
 └── Shadow (transform constraint)
 ```
 
-### 4.3 Live2D 集成
+### 4.3 Inochi2D / inox2d 集成（替代 Live2D）
 
-**Live2D Cubism 架构**：
+> **ADR: Live2D → inox2d 替代决策**
+>
+> - **Live2D 否决理由**：Cubism SDK 许可证限制——neko-sketch 作为"可扩展应用"需单独审批签约，法律风险高
+> - **inox2d 选择理由**：BSD 2-Clause 开源许可，Inochi2D 格式兼容，社区活跃
+> - **inox2d + Bevy 全框架否决**：WASM 体积 3.5-30MB、渲染管线冲突、与项目 ADR（不用 Bevy 全框架）矛盾
+> - **最终方案**：参照 3D 的 native-scene + bevy_ecs 模式，将 inox2d 集成到 neko-engine 端（native-puppet crate）
+
+**native-puppet 架构（对称 native-scene）**：
 
 ```
-Cubism Editor（外部工具）→ 导出 .moc3 + .model3.json + textures
+Inochi2D Editor（外部工具）→ 导出 .inp 文件
     │
     ▼
-neko-sketch 加载 + 预览 + 参数驱动
+neko-engine: native-puppet crate（bevy_ecs 0.15 + inox2d）
     │
-    ├─ Cubism SDK Web（WebGL 渲染器）
-    │   ├─ CubismModel → Part → Artmesh
-    │   ├─ CubismPhysics（物理模拟：头发/衣物）
-    │   └─ CubismMotion（动画/表情）
+    ├─ loader.rs     — INP 解析 → ECS World
+    ├─ components.rs — PuppetNodeId, Transform2D, MeshData, ParameterBinding...
+    ├─ systems.rs    — parameter_update, physics_tick, transform_propagation_2d
+    ├─ world.rs      — trait PuppetWorld + BevyPuppetWorld
+    │
+    ▼
+PuppetService (native-core) → PuppetsController (native-api)
+    │
+    ├─ POST /v1/puppets/load     — 加载 INP 文件 → PuppetSnapshot
+    ├─ POST /v1/puppets/param    — 设置参数 → 重算变形
+    ├─ POST /v1/puppets/tick     — 物理步进 → PuppetDelta
+    ├─ GET  /v1/puppets/snapshot — 完整快照
+    ├─ GET  /v1/puppets/params   — 参数列表
+    └─ GET  /v1/puppets/meshes   — 变形后网格数据
+    │
+    ▼
+neko-sketch webview: Inochi2DController → WebGL2 渲染
     │
     └─ 编辑器 UI
-        ├─ 参数滑块面板（ParamAngleX/Y/Z, ParamEyeL/R, ...）
-        ├─ 表情列表 + 动作列表
-        ├─ 物理参数调整
-        └─ 面部追踪联动（→ neko-live）
+        ├─ 参数滑块面板（从 PuppetSnapshot.parameters 动态生成）
+        ├─ 节点层级查看器
+        └─ 物理模拟开关
+```
+
+**数据流**：
+
+```
+INP 文件 → EngineClient.loadPuppet(data) → PuppetSnapshot
+                                              ├─ nodes: 节点层级
+                                              ├─ parameters: 参数定义
+                                              └─ meshes: 初始顶点+UV+索引
+
+参数变更 → EngineClient.setPuppetParameter(name, value)
+                                              ↓ Rust 端重算变形
+                                              ↓
+物理步进 → EngineClient.tickPuppet(deltaMs) → PuppetDelta
+                                              └─ deformed_meshes: 变形后顶点
+                                              ↓
+前端 WebGL2 → 更新 VAO 顶点数据 → 按 z-order 渲染
 ```
 
 ```typescript
-// Live2D parameter control
-interface Live2DController {
-  loadModel(modelPath: string): Promise<void>;
-  setParameter(id: string, value: number): void;  // -1.0 ~ 1.0
-  playMotion(group: string, index: number): void;
-  setExpression(name: string): void;
-  getParameters(): Live2DParameter[];  // available parameters
+// Inochi2D controller (replaces Live2DController)
+interface IInochi2DController {
+  load(data: ArrayBuffer): Promise<PuppetSnapshot>;
+  setParameter(name: string, value: number): Promise<void>;
+  getParameters(): Promise<ParameterInfo[]>;
+  tick(deltaMs?: number): Promise<DeformedMesh[]>;
+  getMeshes(): Promise<DeformedMesh[]>;
+  getSnapshot(): PuppetSnapshot | null;
+  isLoaded(): boolean;
 }
-
-// Standard Live2D parameters (partial)
-type Live2DStandardParams = {
-  ParamAngleX: number;    // head rotation X
-  ParamAngleY: number;    // head rotation Y
-  ParamAngleZ: number;    // head rotation Z
-  ParamEyeLOpen: number;  // left eye open
-  ParamEyeROpen: number;  // right eye open
-  ParamMouthOpenY: number; // mouth open
-  ParamBodyAngleX: number; // body sway
-  // ... 30+ standard parameters
-};
 ```
+
+**inox2d 当前限制**：
+
+| 限制 | 影响 | 应对 |
+|------|------|------|
+| 动画未实现 | 无法播放预设动画 | 手动参数驱动（滑块 UI），等上游实现后补充 |
+| MeshGroup 未实现 | 新版模型可能异常 | 限制支持 Inochi2D 0.7 格式 |
+| Composite-as-mask 会 panic | 特定模型崩溃 | 加载时检测并跳过，日志警告 |
+| 无 wgpu 渲染器 | 不能直接用 neko-engine GPU | native-puppet 只做数据计算，渲染在前端 WebGL2 |
 
 ### 4.4 逐帧动画
 

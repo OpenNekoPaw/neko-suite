@@ -8,6 +8,7 @@ members = [
     "packages/native-napi",
     "packages/native-cli",
     "packages/native-scene",
+    "packages/native-puppet",
 ]
 
 [workspace.package]

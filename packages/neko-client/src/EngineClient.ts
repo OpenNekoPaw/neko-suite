@@ -480,6 +480,102 @@ export class EngineClient {
   }
 
   // =========================================================================
+  // 2D Puppets (Inochi2D / inox2d)
+  // =========================================================================
+
+  /**
+   * Load a puppet from INP binary data.
+   * Dispatches `puppets:load` with base64-encoded data in the body.
+   */
+  async loadPuppet(data: ArrayBuffer): Promise<Record<string, unknown>> {
+    // Convert ArrayBuffer to base64
+    const bytes = new Uint8Array(data);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]!);
+    }
+    const base64Data = btoa(binary);
+
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'load',
+      options: {},
+      body: { data: base64Data },
+    });
+    this.assertOk(resp, 'puppets:load');
+    return (resp.data as Record<string, unknown>) ?? {};
+  }
+
+  /**
+   * Get the current puppet snapshot.
+   * Dispatches `puppets:snapshot`.
+   */
+  async getPuppetSnapshot(): Promise<Record<string, unknown>> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'snapshot',
+      options: {},
+    });
+    this.assertOk(resp, 'puppets:snapshot');
+    return (resp.data as Record<string, unknown>) ?? {};
+  }
+
+  /**
+   * Set a puppet parameter value.
+   * Dispatches `puppets:param`.
+   */
+  async setPuppetParameter(name: string, value: number): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'param',
+      options: { name, value },
+    });
+    this.assertOk(resp, 'puppets:param');
+  }
+
+  /**
+   * Get all puppet parameter definitions.
+   * Dispatches `puppets:params`.
+   */
+  async getPuppetParameters(): Promise<unknown[]> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'params',
+      options: {},
+    });
+    this.assertOk(resp, 'puppets:params');
+    return (resp.data as unknown[]) ?? [];
+  }
+
+  /**
+   * Advance puppet physics simulation.
+   * Dispatches `puppets:tick`.
+   */
+  async tickPuppet(deltaMs?: number): Promise<Record<string, unknown>> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'tick',
+      options: { delta_ms: deltaMs },
+    });
+    this.assertOk(resp, 'puppets:tick');
+    return (resp.data as Record<string, unknown>) ?? {};
+  }
+
+  /**
+   * Get current deformed mesh data.
+   * Dispatches `puppets:meshes`.
+   */
+  async getPuppetMeshes(): Promise<unknown[]> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'meshes',
+      options: {},
+    });
+    this.assertOk(resp, 'puppets:meshes');
+    return (resp.data as unknown[]) ?? [];
+  }
+
+  // =========================================================================
   // Health
   // =========================================================================
 

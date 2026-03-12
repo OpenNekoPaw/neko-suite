@@ -13,6 +13,7 @@ import { createViewportSlice, type ViewportSlice } from './slices/viewportSlice'
 import { createHistorySlice, type HistorySlice } from './slices/historySlice';
 import { createUISlice, type UISlice } from './slices/uiSlice';
 import { createSelectionSlice, type SelectionSlice } from './slices/selectionSlice';
+import { createAnimationSlice, type AnimationSlice } from './slices/animationSlice';
 
 export type SketchStore = DocumentSlice &
   LayerSlice &
@@ -21,7 +22,8 @@ export type SketchStore = DocumentSlice &
   ViewportSlice &
   HistorySlice &
   UISlice &
-  SelectionSlice;
+  SelectionSlice &
+  AnimationSlice;
 
 export const useSketchStore = create<SketchStore>()((...a) => ({
   ...createDocumentSlice(...a),
@@ -32,4 +34,5 @@ export const useSketchStore = create<SketchStore>()((...a) => ({
   ...createHistorySlice(...a),
   ...createUISlice(...a),
   ...createSelectionSlice(...a),
+  ...createAnimationSlice(...a),
 }));

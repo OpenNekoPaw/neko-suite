@@ -1,3 +1,12 @@
-// S.2: Spine/Live2D/frame-by-frame animation
-// TODO(P2): SpineController, Live2DController, FrameManager, OnionSkinRenderer
-export {};
+// S.2: Animation system interfaces
+//
+// Currently supports:
+// - Inochi2D puppets via inox2d (native-puppet engine backend)
+//
+// Future:
+// - Frame-by-frame animation (S.2c)
+// - Onion skin rendering
+
+export type { IInochi2DController } from './inochi2d-controller';
+export { Inochi2DController } from './inochi2d-controller';
+export type { PuppetSnapshot, PuppetDelta, DeformedMesh, ParameterInfo } from './types';

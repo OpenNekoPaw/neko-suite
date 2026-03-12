@@ -2,14 +2,14 @@
 
 use crate::controllers::{
     AudioController, CanvasController, Controller, EffectsController, ImageController,
-    ModelsController, NodeController, ScenesController, StreamController, TaskController,
-    TimelineController, VideoController,
+    ModelsController, NodeController, PuppetsController, ScenesController, StreamController,
+    TaskController, TimelineController, VideoController,
 };
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_native_core::services::{
-    AudioService, EffectsService, ExportService, ImageService, NodeService, SceneService,
-    TaskService, TimelineService, VideoService,
+    AudioService, EffectsService, ExportService, ImageService, NodeService, PuppetService,
+    SceneService, TaskService, TimelineService, VideoService,
 };
 use neko_types::registry::{self, groups};
 use neko_types::{ActionRequest, ActionResponse};
@@ -28,6 +28,7 @@ pub struct ActionRouter {
     models_controller: ModelsController,
     canvas_controller: CanvasController,
     scenes_controller: ScenesController,
+    puppets_controller: PuppetsController,
 }
 
 impl ActionRouter {
@@ -42,6 +43,7 @@ impl ActionRouter {
         export_service: Option<Arc<ExportService>>,
         effects_service: Option<Arc<EffectsService>>,
         scene_service: Option<Arc<SceneService>>,
+        puppet_service: Option<Arc<PuppetService>>,
         resource_registry: Arc<ResourceRegistry>,
         stream_registry: Arc<StreamRegistry>,
     ) -> Self {
@@ -69,6 +71,7 @@ impl ActionRouter {
             models_controller: ModelsController::new(),
             canvas_controller: CanvasController::new(),
             scenes_controller: ScenesController::new(scene_service),
+            puppets_controller: PuppetsController::new(puppet_service),
         }
     }
 
@@ -128,6 +131,11 @@ impl ActionRouter {
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
+            groups::PUPPETS => {
+                self.puppets_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
             groups::STREAMS => {
                 self.stream_controller
                     .handle(&request.action, resource_id, request.options, request.body)
@@ -162,6 +170,7 @@ impl ActionRouter {
             groups::MODELS => Some(self.models_controller.actions()),
             groups::CANVAS => Some(self.canvas_controller.actions()),
             groups::SCENES => Some(self.scenes_controller.actions()),
+            groups::PUPPETS => Some(self.puppets_controller.actions()),
             groups::STREAMS => Some(self.stream_controller.actions()),
             groups::EFFECTS => Some(self.effects_controller.actions()),
             _ => None,
@@ -181,6 +190,7 @@ mod tests {
         let image_service = Arc::new(ImageService::new(None));
         let timeline_service = Arc::new(TimelineService::new(None, task_service.clone()));
         let scene_service = Some(Arc::new(SceneService::new()));
+        let puppet_service = Some(Arc::new(PuppetService::new()));
         let resource_registry = Arc::new(ResourceRegistry::new());
         let stream_registry = Arc::new(StreamRegistry::new());
 
@@ -194,6 +204,7 @@ mod tests {
             None, // No GPU = no export service in tests
             None, // No GPU = no effects service in tests
             scene_service,
+            puppet_service,
             resource_registry,
             stream_registry,
         )
@@ -255,6 +266,7 @@ mod tests {
         assert!(groups.contains(&"models"));
         assert!(groups.contains(&"canvas"));
         assert!(groups.contains(&"scenes"));
+        assert!(groups.contains(&"puppets"));
         assert!(groups.contains(&"streams"));
         assert!(groups.contains(&"effects"));
         // "exports" group has been removed; export is now a timelines action

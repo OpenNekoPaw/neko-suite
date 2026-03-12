@@ -11,7 +11,8 @@
 //! - EffectsController: effects:* actions (custom shader effects)
 //! - ModelsController: models:* actions (placeholder)
 //! - CanvasController: canvas:* actions (placeholder)
-//! - ScenesController: scenes:* actions (placeholder)
+//! - ScenesController: scenes:* actions (3D scene management)
+//! - PuppetsController: puppets:* actions (2D puppet management)
 
 mod audio;
 mod canvas;
@@ -19,6 +20,7 @@ mod effects;
 mod image;
 mod models;
 mod node;
+mod puppets;
 mod scenes;
 mod stream;
 mod task;
@@ -32,6 +34,7 @@ pub use effects::EffectsController;
 pub use image::ImageController;
 pub use models::ModelsController;
 pub use node::NodeController;
+pub use puppets::PuppetsController;
 pub use scenes::ScenesController;
 pub use stream::StreamController;
 pub use task::TaskController;
