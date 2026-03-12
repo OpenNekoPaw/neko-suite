@@ -37,11 +37,11 @@
 |------|-------------------|------------------|
 | 坐标空间 | 像素平面（x, y） | 三维空间（x, y, z） |
 | 渲染管线 | Canvas 2D / WebGL 2D | wgpu PBR / R3F Three.js |
-| 人物 | 2D 立绘 / Live2D / Spine | 3D 骨骼 mesh / VRM |
+| 人物 | 2D 立绘 / Inochi2D / Spine | 3D 骨骼 mesh / VRM |
 | 特效 | 2D 滤镜 / 平面粒子 | GPU 粒子（体积）/ 后处理 |
 | 场景 | 图层叠加 / 视差滚动 | HDR 环境 / 天空盒 / 地形 |
 | 物品 | 像素/矢量绘制 | 参数化几何体 / CSG |
-| 动画 | 逐帧 / Spine / Live2D | 3D 骨骼 / Morph Target |
+| 动画 | 逐帧 / Spine / Inochi2D | 3D 骨骼 / Morph Target |
 | 输出 | PNG/SVG/PSD + 序列帧 | glTF/GLB/VRM + 视频渲染 |
 | 典型用户 | 插画师、2D 动画师、UI 设计 | 3D 建模师、场景设计 |
 
@@ -53,7 +53,7 @@ neko-sketch（2D 创作）
 ├── 输出 → neko-canvas（2D 资产嵌入画布节点）
 ├── 联动 → neko-model（2D 纹理 → 3D 材质贴图）
 ├── 辅助 → neko-agent（AI 生成/风格迁移/自动分层）
-└── 资产 → neko-assets（2D 资产管理：PSD/Spine/Live2D 文件）
+└── 资产 → neko-assets（2D 资产管理：PSD/Spine/Inochi2D 文件）
 ```
 
 ---
@@ -146,18 +146,18 @@ Layer Stack（自底向上合成）：
 
 ### 4.1 两种主流方案对比
 
-| 维度 | Spine | Live2D |
-|------|-------|--------|
+| 维度 | Spine | Inochi2D（替代 Live2D） |
+|------|-------|------------------------|
 | **适用风格** | 游戏角色、骨骼驱动 | 立绘 / 日式角色、参数驱动 |
-| **变形方式** | 网格变形（mesh deformation） | 参数化变形（cubism physics） |
-| **动画原理** | 骨骼 → 插槽 → 附件 → 网格 | 参数值 → 部件 → Artmesh 变形 |
-| **Web 运行时** | spine-ts（⚠️ Spine Runtimes License，非 MIT） | Cubism SDK Web（需商业许可） |
-| **文件格式** | `.skel` + `.atlas` + `.png` | `.moc3` + `.model3.json` + textures |
-| **编辑器** | Spine Editor（独立付费软件） | Live2D Cubism Editor（独立付费软件） |
-| **性能** | 轻量，WebGL 渲染高效 | 中等，参数较多时计算量大 |
-| **社区** | 游戏行业广泛 | VTuber / 虚拟形象广泛 |
+| **变形方式** | 网格变形（mesh deformation） | 参数化变形（物理弹簧/摆锤） |
+| **动画原理** | 骨骼 → 插槽 → 附件 → 网格 | 参数值 → 部件 → 网格变形 |
+| **运行时** | spine-ts（⚠️ Spine Runtimes License） | inox2d（BSD 2-Clause） |
+| **文件格式** | `.skel` + `.atlas` + `.png` | `.inp`（INP 归档格式） |
+| **编辑器** | Spine Editor（独立付费软件） | Inochi2D Creator（开源免费） |
+| **性能** | 轻量，WebGL 渲染高效 | 轻量，Rust 后端数据计算 + WebGL 前端渲染 |
+| **社区** | 游戏行业广泛 | VTuber / 虚拟形象，开源社区活跃 |
 
-**建议两者都支持**，优先 Spine（开源运行时 + 游戏行业标准），Live2D 作为 VTuber 场景补充。
+**建议两者都支持**：Spine（游戏行业标准）+ Inochi2D（开源替代 Live2D，无许可风险）。
 
 ### 4.2 Spine 骨骼集成
 

@@ -52,8 +52,8 @@ packages/neko-sketch/
 │           ├── tools/
 │           │   └── tool-manager.ts       # Cursor mapping per tool type
 │           ├── stores/
-│           │   ├── sketch-store.ts       # Combined Zustand store (7 slices)
-│           │   └── slices/               # document, layer, tool, brush, viewport, history, UI
+│           │   ├── sketch-store.ts       # Combined Zustand store (8 slices)
+│           │   └── slices/               # document, layer, tool, brush, viewport, history, UI, animation
 │           ├── components/
 │           │   ├── SketchCanvas.tsx       # WebGL canvas + pointer input + brush engine
 │           │   ├── Toolbar.tsx            # 9 tool buttons
@@ -166,12 +166,22 @@ Webview → Extension:
 | Image import | ✅ | Base64 → ImageBitmap → new layer |
 | i18n locale switch | ✅ | Runtime setLocale via extension message |
 
-### S.2: Skeletal Animation — PLANNED
+### S.2: Puppet Animation — IN PROGRESS
 
-- Spine integration (`@esotericsoftware/spine-webgl`, MIT)
-- Live2D integration (Cubism SDK Web, commercial license TBD)
-- Frame-by-frame animation (onion skin + frame timeline)
-- Animation Zustand slice
+| Module | Status | Details |
+|--------|--------|---------|
+| native-puppet crate | ✅ | bevy_ecs 0.15 + inox2d, INP loading → ECS World |
+| ECS components | ✅ | PuppetNode, Transform2D, DeformRegion, DrawOrder, Param, PhysicsConfig |
+| Hierarchy management | ✅ | Parent-child tree traversal, subtree collect |
+| PuppetWorld trait | ✅ | load_model / set_param / tick / snapshot / get_deformed_meshes |
+| INP loader | ✅ | Stub (inox2d API TBD), returns PuppetLoadResult |
+| Deformation system | ✅ | Rotation + warp mesh deform, param → vertex pipeline |
+| PuppetService | ✅ | native-core integration, world lifecycle management |
+| PuppetsController | ✅ | 7 HTTP actions via ActionRouter |
+| Frontend controller | ✅ | IInochi2DController → EngineClient HTTP dispatch |
+| Animation Zustand slice | ✅ | puppet state, param cache, loading/playing status |
+| Spine integration | 📋 | ⚠️ Spine Runtimes License (not MIT) |
+| Frame-by-frame animation | 📋 | Onion skin + frame timeline |
 
 ### S.3: Effects & Scenes — PLANNED
 
