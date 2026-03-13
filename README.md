@@ -16,7 +16,7 @@
 
 - **AI 驱动创作** - 通过 Agent Skills + MCP 协议将自然语言转化为剪辑操作
 - **专业级时间线** - 多轨道、关键帧动画、色彩校正、特效蒙版、精确到帧的编辑
-- **Rust GPU 渲染** - wgpu + WebCodecs 加速，12 个 WGSL shader，4K 实时预览与导出
+- **Rust GPU 渲染** - wgpu PBR + IBL + 后处理 + 粒子系统，17 个 WGSL shader，4K 实时预览与导出
 - **Git 原生支持** - .jvi 项目文件为文本格式，支持版本控制和协作
 - **模块化架构** - 16 个包按需组合，独立升级
 
@@ -58,7 +58,7 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 16 �
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
-| **neko-engine** | Rust GPU 媒体引擎 - wgpu 渲染 + 编解码 + 导出 | Alpha 70% | 164 Rust + 12 TS |
+| **neko-engine** | Rust GPU 媒体引擎 - wgpu PBR 渲染 + 编解码 + 导出 + 粒子/后处理 | Alpha 80% | 170+ Rust + 12 TS |
 | **neko-cut** | 视频剪辑器 - 时间线 + 预览 + 色彩校正 + 特效 | Alpha 65% | 200 TS/TSX |
 | **neko-agent** | AI Agent - 多 LLM + MCP + Skills + CLI | Alpha 70% | 418 TS/TSX, 47 tests |
 
@@ -85,7 +85,7 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 16 �
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
-| **neko-model** | 3D 编辑器 - glTF/VRM 视口 + 场景组装 + 骨骼动画（[架构设计](./docs/architecture/3d-capability-analysis.md)） | Early 45% | 9 TS/TSX + 7 Rust |
+| **neko-model** | 3D 编辑器 - glTF/VRM 视口 + PBR 渲染 + CSG/文字/几何体建模 + 骨骼表情（[架构设计](./docs/architecture/3d-capability-analysis.md)） | Alpha 65% | 25+ TS/TSX + 12 Rust |
 | **neko-sketch** | 2D 创作 - 压感手绘 + 滤镜/粒子/场景/像素/矢量 + Inochi2D 动画（[架构设计](./docs/architecture/2d-capability-analysis.md)） | Alpha S.1✅ S.2✅ S.3✅ | 90+ TS/TSX + Rust, 42 tests |
 
 ### 规划中
@@ -106,7 +106,7 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 16 �
 ```
 VS Code Extension Host ←─ HTTP/NAPI ─→ neko-engine (Rust)
                                               │
-                                              ├─ wgpu GPU 渲染（12 WGSL shaders, 26 GPU 模块）
+                                              ├─ wgpu GPU 渲染（17 WGSL shaders, 30+ GPU 模块, PBR + IBL + 粒子 + 后处理）
                                               ├─ FFmpeg 编解码（硬件加速 + decoder pool）
                                               ├─ 关键帧缓存服务
                                               ├─ 导出管线（GPU export + audio mixer）

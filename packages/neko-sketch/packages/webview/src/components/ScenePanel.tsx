@@ -31,16 +31,16 @@ export function ScenePanel() {
     (templateId: string) => {
       const tpl = SCENE_TEMPLATES.find((tp) => tp.id === templateId);
       if (!tpl) return;
-      createScene(tpl.name);
+      createScene(t(tpl.nameKey));
       // Add template layers to the newly created scene
       const state = useSketchStore.getState();
       const newScene = state.scenes[state.scenes.length - 1];
       if (!newScene) return;
       for (const layer of tpl.layers) {
-        addSceneLayer(newScene.id, layer);
+        addSceneLayer(newScene.id, { ...layer, name: t(layer.nameKey) });
       }
     },
-    [createScene, addSceneLayer],
+    [createScene, addSceneLayer, t],
   );
 
   const handleAddLayer = useCallback(() => {
@@ -97,7 +97,7 @@ export function ScenePanel() {
               className="block w-full text-left text-xs py-0.5 px-1 rounded hover:bg-[var(--vscode-list-hoverBackground)]"
               onClick={() => handleCreateFromTemplate(tpl.id)}
             >
-              {tpl.name}
+              {t(tpl.nameKey)}
             </button>
           ))}
         </div>

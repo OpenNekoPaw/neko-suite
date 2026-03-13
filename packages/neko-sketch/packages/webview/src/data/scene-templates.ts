@@ -7,9 +7,9 @@ import type { SceneLayerType } from '../types/scene';
 
 export interface SceneTemplate {
   readonly id: string;
-  readonly name: string;
+  readonly nameKey: string;
   readonly layers: readonly {
-    readonly name: string;
+    readonly nameKey: string;
     readonly type: SceneLayerType;
     readonly zIndex: number;
     readonly parallaxFactor: readonly [number, number];
@@ -21,10 +21,10 @@ export interface SceneTemplate {
 export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
   {
     id: 'platformer',
-    name: 'Platformer (3-layer parallax)',
+    nameKey: 'sketch.template.platformer',
     layers: [
       {
-        name: 'Sky',
+        nameKey: 'sketch.template.layer.sky',
         type: 'parallax',
         zIndex: 0,
         parallaxFactor: [0.2, 0.1],
@@ -32,7 +32,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         visible: true,
       },
       {
-        name: 'Mountains',
+        nameKey: 'sketch.template.layer.mountains',
         type: 'parallax',
         zIndex: 1,
         parallaxFactor: [0.5, 0.3],
@@ -40,7 +40,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         visible: true,
       },
       {
-        name: 'Foreground',
+        nameKey: 'sketch.template.layer.foreground',
         type: 'parallax',
         zIndex: 2,
         parallaxFactor: [1.0, 1.0],
@@ -51,10 +51,10 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
   },
   {
     id: 'topdown-rpg',
-    name: 'Top-Down RPG (2-layer)',
+    nameKey: 'sketch.template.topdownRpg',
     layers: [
       {
-        name: 'Ground',
+        nameKey: 'sketch.template.layer.ground',
         type: 'tilemap',
         zIndex: 0,
         parallaxFactor: [1, 1],
@@ -62,7 +62,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         visible: true,
       },
       {
-        name: 'Objects',
+        nameKey: 'sketch.template.layer.objects',
         type: 'sprite',
         zIndex: 1,
         parallaxFactor: [1, 1],
@@ -73,10 +73,10 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
   },
   {
     id: 'visual-novel',
-    name: 'Visual Novel (BG + FG)',
+    nameKey: 'sketch.template.visualNovel',
     layers: [
       {
-        name: 'Background',
+        nameKey: 'sketch.template.layer.background',
         type: 'parallax',
         zIndex: 0,
         parallaxFactor: [0.8, 0.8],
@@ -84,7 +84,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         visible: true,
       },
       {
-        name: 'Characters',
+        nameKey: 'sketch.template.layer.characters',
         type: 'sprite',
         zIndex: 1,
         parallaxFactor: [1, 1],
@@ -95,10 +95,10 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
   },
   {
     id: 'side-scroller',
-    name: 'Side Scroller (4-layer)',
+    nameKey: 'sketch.template.sideScroller',
     layers: [
       {
-        name: 'Sky',
+        nameKey: 'sketch.template.layer.sky',
         type: 'parallax',
         zIndex: 0,
         parallaxFactor: [0.1, 0],
@@ -106,7 +106,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         visible: true,
       },
       {
-        name: 'Far BG',
+        nameKey: 'sketch.template.layer.farBg',
         type: 'parallax',
         zIndex: 1,
         parallaxFactor: [0.3, 0.1],
@@ -114,7 +114,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         visible: true,
       },
       {
-        name: 'Near BG',
+        nameKey: 'sketch.template.layer.nearBg',
         type: 'parallax',
         zIndex: 2,
         parallaxFactor: [0.6, 0.3],
@@ -122,7 +122,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         visible: true,
       },
       {
-        name: 'Gameplay',
+        nameKey: 'sketch.template.layer.gameplay',
         type: 'parallax',
         zIndex: 3,
         parallaxFactor: [1.0, 1.0],

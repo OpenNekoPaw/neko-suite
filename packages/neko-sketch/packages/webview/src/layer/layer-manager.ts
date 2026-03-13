@@ -5,6 +5,7 @@
  * Operates on the Zustand store's layer data.
  */
 import type { LayerData, LayerType } from '../types';
+import { t } from '../i18n';
 
 let nextId = 1;
 
@@ -113,7 +114,7 @@ export function duplicateLayer(layers: LayerData[], id: string): LayerData[] {
   const duplicate: LayerData = {
     ...source,
     id: generateLayerId(),
-    name: `${source.name} copy`,
+    name: t('sketch.layer.copySuffix', { name: source.name }),
     texture: null, // Texture must be cloned separately by the renderer
     children: [],
   };
@@ -144,7 +145,7 @@ export function updateLayer(
 export function groupLayers(
   layers: LayerData[],
   layerIds: string[],
-  groupName = 'Group',
+  groupName = t('sketch.layer.defaultGroup'),
 ): LayerData[] {
   const group = createLayer(groupName, 0, 0, 'group');
   const grouped: LayerData[] = [];

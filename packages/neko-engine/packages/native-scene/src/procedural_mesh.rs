@@ -4,9 +4,10 @@
 //! (48-byte GPU layout) happens in `AssetCache` at upload time.
 
 use glam::Vec3;
+use serde::{Deserialize, Serialize};
 
 /// CPU-side vertex with position, normal, and UV.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ProceduralVertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
@@ -14,7 +15,7 @@ pub struct ProceduralVertex {
 }
 
 /// CPU-side indexed triangle mesh produced by procedural generators.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProceduralMesh {
     pub vertices: Vec<ProceduralVertex>,
     pub indices: Vec<u32>,

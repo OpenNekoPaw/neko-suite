@@ -11,7 +11,7 @@
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
 | **neko-types** | Alpha | 90% | 共享类型 + 横切关注点统一 + Operations 类型安全 + 文档完善 |
-| **neko-engine** | Alpha | 80% | GPU 渲染 + 编解码 + FIFO 导出 + 统一 HTTP/WS + 响度标准化 + 预加载优化 |
+| **neko-engine** | Alpha | 85% | GPU PBR 渲染 + 编解码 + FIFO 导出 + 统一 HTTP/WS + 响度标准化 + 预加载优化 + 粒子/后处理/IBL |
 | **neko-cut** | Alpha | 82% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 拖拽修复 |
 | **neko-agent** | Alpha | 75% | Agent 引擎 + LLM 平台 + CLI + UI + Handler 拆分 + 流式化 + 剧本→时间线 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
@@ -21,7 +21,7 @@
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
 | **neko-canvas** | WIP | 40% | 节点系统 + 连线 + 视口裁剪 + Undo/Redo + Copy/Paste |
 | **neko-proto** | Early | 30% | timeline.proto 定义，生成类型在 neko-types |
-| **neko-model** | Early | 45% | 3D 创作套件，Phase 3.1 ✅ + Phase 3.2 部分完成（参数化面部编辑器 + Morph Target + VRM 表情 + 延迟测试） |
+| **neko-model** | Alpha | 65% | 3D 创作套件，Phase 3.1 ✅ + Phase 3.2 ✅ + Phase 3.3 ✅（PBR 渲染 + 粒子 + 后处理 + 时间线集成 + CSG/文字/几何体建模 + 骨骼表情） |
 | **neko-sketch** | Alpha | 85% | S.1 ✅ 绘画基础；S.2 ✅ 骨骼动画；S.3 ✅ 高级 2D（滤镜/粒子/场景/绘制/资产）；S.4 规划中 |
 | **neko-audio** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-live** | Planned | 5% | 仅扩展入口骨架 |
@@ -64,7 +64,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ## Phase 3: 视觉增强 + 3D 能力
 
-> 目标：专业视觉效果和 3D 场景编辑 — **进度 ~45%**
+> 目标：专业视觉效果和 3D 场景编辑 — **进度 ~75%**
 
 ### neko-canvas — 已完成
 - 节点系统（6 种节点 + 连线）+ 画布交互（拖拽/缩放/吸附/MiniMap）+ 媒体内嵌 + Undo/Redo + Copy/Paste
@@ -77,14 +77,25 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 > 架构设计见 [docs/architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md)
 
 - Phase 3.1 ✅：基础 3D 视口 + 场景组装（native-scene bevy_ecs + glTF/VRM + R3F + 骨骼动画 + SceneTree + TransformGizmo + EngineClient 集成）
-- Phase 3.2 🔄：AI 捏脸 + 基础建模（**进度 57%**）
+- Phase 3.2 ✅：AI 捏脸 + 基础建模
   - ✅ 参数化面部编辑器（22 个参数，5 个分类）
   - ✅ Morph Target 驱动捏脸（自动绑定 morphTargetInfluences）
   - ✅ VRM 表情预设（@pixiv/three-vrm，17 个标准表情）
   - ✅ 延迟测试工具（100 次测试 + 统计 + 建议）
+  - ✅ CSG 布尔运算（BSP 树算法，Union/Difference/Intersection）
+  - ✅ 3D 文字挤出（cosmic-text 字形轮廓 → ear-clipping 三角化 → Z 轴挤出）
+  - ✅ 参数化几何体（6 种标准形状：Cube/Sphere/Cylinder/Cone/Torus/Plane）
+  - ✅ 骨骼驱动表情 UI（口型同步 6 音素 + 眼球追踪 + 眉毛滑块）
+  - ✅ ProceduralMesh 统一抽象 + AssetCache.register_procedural_mesh() GPU 管线
+  - ✅ 前端 4 面板（骨骼表情 / CSG / 3D 文字 / 几何体创建）+ 通信层
   - ⬜ AI MCP Tools（face.generate_params / face.from_image / face.adjust）
-  - ⬜ CSG 布尔运算 + 3D 文字 + 参数化几何体
-- Phase 3.3：轻量渲染 + 时间线集成（PBR + 粒子 + SceneRenderOutput → GpuLayer）
+- Phase 3.3 ✅：PBR 渲染 + 时间线集成（12 步完成）
+  - ✅ PBR 材质管线（Metallic-Roughness + Normal/AO/Emissive 贴图）
+  - ✅ IBL 环境光照（HDRI → Cubemap → Irradiance + Prefiltered + BRDF LUT）
+  - ✅ 粒子系统（GPU 实例化 + 6 种发射器 + 力场 + 碰撞）
+  - ✅ 后处理管线（Bloom + Tone Mapping + FXAA + Vignette + Color Grading）
+  - ✅ SceneRenderOutput → GpuLayer 时间线集成
+  - ✅ 前端 scene3d 类型集成（neko-cut 时间线 + neko-canvas 节点）
 - Phase 3.4：AI 辅助 3D + 3DGS + MCP 桥接（Text-to-3D + Image-to-3D + Blender MCP）
 
 ### neko-sketch (2D) — Alpha
@@ -110,6 +121,8 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
   - ✅ 资产集成（精灵表/场景 JSON 导出 + VSCode 命令注册）
   - ✅ 渲染管线集成（filterFn 回调 + SketchRenderer.renderWithEffects）
   - ✅ 单元测试（7 文件 42 测试：pixel-tool/vector-tool/morph-engine/parallax/particle/frame/atmosphere）
+  - ✅ 画板响应修复（RAF 连续渲染 + ResizeObserver 自适应 + dirty flag 模式）
+  - ✅ 国际化支持（I18nProvider + useTranslation hook + 130 翻译 key + 中英双语 13 组件全覆盖）
 - Phase S.4：AI 辅助 + 跨模块集成（sketch.generate / style_transfer / → neko-cut/canvas）
 
 ---
@@ -158,4 +171,4 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ---
 
-*最后更新: 2026-03-13（neko-sketch S.3 高级 2D 功能全量完成：滤镜/粒子/场景/像素/矢量/资产集成 + 42 单元测试；升级为 Alpha 85%）*
+*最后更新: 2026-03-13（neko-model Phase 3.2 基础建模 ✅ + Phase 3.3 PBR 渲染 ✅ 全栈完成）*

@@ -61,62 +61,62 @@
       },
       {
         "command": "neko.sketch.selectBrush",
-        "title": "Select Brush",
+        "title": "%neko.sketch.selectBrush.title%",
         "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.adjustSize",
-        "title": "Adjust Brush Size",
+        "title": "%neko.sketch.adjustSize.title%",
         "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.pickColor",
-        "title": "Pick Color",
+        "title": "%neko.sketch.pickColor.title%",
         "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.deleteSelected",
-        "title": "Delete Selected",
+        "title": "%neko.sketch.deleteSelected.title%",
         "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.escape",
-        "title": "Cancel / Deselect",
+        "title": "%neko.sketch.escape.title%",
         "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.selectAll",
-        "title": "Select All",
+        "title": "%neko.sketch.selectAll.title%",
         "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.undo",
-        "title": "Undo",
+        "title": "%neko.sketch.undo.title%",
         "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.redo",
-        "title": "Redo",
+        "title": "%neko.sketch.redo.title%",
         "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.import",
-        "title": "Import Image",
+        "title": "%neko.sketch.import.title%",
         "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.export",
-        "title": "Export...",
+        "title": "%neko.sketch.export.title%",
         "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.selectLayerFromOutline",
-        "title": "Select Layer",
+        "title": "%neko.sketch.selectLayerFromOutline.title%",
         "category": "NekoSketch"
       },
       {
         "command": "neko.sketch.resetZoom",
-        "title": "Reset Zoom",
+        "title": "%neko.sketch.resetZoom.title%",
         "category": "NekoSketch"
       }
     ],
@@ -165,18 +165,18 @@
       ]
     },
     "configuration": {
-      "title": "Neko Sketch",
+      "title": "%neko.sketch.config.title%",
       "properties": {
         "neko.sketch.pressureSensitivity": {
           "type": "boolean",
           "default": true,
-          "description": "Enable pressure sensitivity for drawing tablets"
+          "description": "%neko.sketch.config.pressureSensitivity%"
         },
         "neko.sketch.defaultBrush": {
           "type": "string",
           "enum": ["pencil", "pen", "watercolor", "airbrush", "eraser", "marker", "pixel"],
           "default": "pen",
-          "description": "Default brush type"
+          "description": "%neko.sketch.config.defaultBrush%"
         }
       }
     }

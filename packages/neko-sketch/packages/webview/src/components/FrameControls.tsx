@@ -20,9 +20,9 @@ export function FrameControls() {
   const currentLayer = frameLayers.find((l) => l.id === selectedLayerId);
 
   const handleAddLayer = useCallback(() => {
-    const name = `Layer ${frameLayers.length + 1}`;
+    const name = t('sketch.layer.defaultName', { index: String(frameLayers.length + 1) });
     addFrameLayer(name);
-  }, [frameLayers.length, addFrameLayer]);
+  }, [frameLayers.length, addFrameLayer, t]);
 
   if (frameLayers.length === 0) {
     return (

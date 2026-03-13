@@ -1,0 +1,20 @@
+{
+  "neko.sketch.editor.title": "素描编辑器",
+  "neko.sketch.layerOutline.title": "图层",
+  "neko.sketch.new.title": "新建素描",
+  "neko.sketch.selectBrush.title": "选择画笔",
+  "neko.sketch.adjustSize.title": "调整画笔大小",
+  "neko.sketch.pickColor.title": "拾取颜色",
+  "neko.sketch.deleteSelected.title": "删除选中",
+  "neko.sketch.escape.title": "取消 / 取消选择",
+  "neko.sketch.selectAll.title": "全选",
+  "neko.sketch.undo.title": "撤销",
+  "neko.sketch.redo.title": "重做",
+  "neko.sketch.import.title": "导入图片",
+  "neko.sketch.export.title": "导出...",
+  "neko.sketch.selectLayerFromOutline.title": "选择图层",
+  "neko.sketch.resetZoom.title": "重置缩放",
+  "neko.sketch.config.title": "Neko 素描",
+  "neko.sketch.config.pressureSensitivity": "启用绘图板压感",
+  "neko.sketch.config.defaultBrush": "默认画笔类型"
+}

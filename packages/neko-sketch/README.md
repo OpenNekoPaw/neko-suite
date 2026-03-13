@@ -1,6 +1,6 @@
 # Neko Sketch
 
-> 2D 创作套件：压感手绘 + Inochi2D 骨骼动画 + 逐帧动画
+> 2D 创作套件：压感手绘 + Inochi2D 骨骼动画 + 逐帧动画 + 滤镜/粒子/场景/像素/矢量 + 中英双语 i18n
 
 ## Context Summary
 
@@ -11,11 +11,12 @@
 
 ## Quick Reference
 
-- **职责**：2D 绘画创作、Inochi2D 立绘动画预览与参数驱动、逐帧动画编辑
+- **职责**：2D 绘画创作、Inochi2D 立绘动画预览与参数驱动、逐帧动画编辑、高级 2D 特效
 - **入口**：`packages/extension/src/extension.ts`
 - **依赖**：`@neko/shared`、`@neko/neko-client`（通过 EngineClient 访问 native-puppet）
 - **激活依赖**：`neko-engine`（extensionDependency，native-puppet sidecar）
-- **状态**：S.1 ✅ 绘画基础完成 | S.2 ⚙️ 骨骼动画进行中
+- **国际化**：I18nProvider + useTranslation hook，130 翻译 key，中英双语 13 组件全覆盖
+- **状态**：S.1 ✅ 绘画基础 | S.2 ✅ 骨骼动画 | S.3 ✅ 高级 2D + i18n
 
 ## Architecture
 
@@ -24,16 +25,21 @@ Pointer Events API（压感/倾斜输入）
   │
   ▼
 Webview（React 18 + WebGL2）
-  ├── 绘画引擎（ping-pong FBO + 12 GLSL 混合模式）
+  ├── 绘画引擎（RAF 连续渲染 + ping-pong FBO + 12 GLSL 混合模式）
   ├── 画笔系统（7 种笔刷 + Catmull-Rom 插值 + 4 压感曲线）
   ├── 图层系统（CRUD + 分组 + 混合模式）
   ├── 选区系统（Uint8Array bitmask）
   ├── 历史系统（区域快照，100 步）
+  ├── 滤镜管线（FilterPipeline ping-pong FBO + 6 内置 GLSL 滤镜）
+  ├── 粒子系统（ParticleSimulation 对象池 + WebGL2 实例化渲染）
+  ├── 场景系统（视差渲染 + 4 模板 + 氛围效果 5 预设）
+  ├── 像素/矢量绘制（Bresenham + 贝塞尔路径 + SVG 导出）
+  ├── 国际化（I18nProvider + useTranslation，130 key 中英双语）
   ├── Inochi2D 动画控制器
   │     ├── 参数滑块驱动（POST /v1/puppets/param）
   │     ├── bevy_animation 动画回放（POST /v1/puppets/anim/play）
   │     └── WebSocket 实时流（WS /v1/puppets/stream，供 neko-live）
-  └── 逐帧动画编辑器（S.2）
+  └── 逐帧动画编辑器
         │ postMessage / EngineClient HTTP
         ▼
 Extension Host（Node.js）
@@ -59,8 +65,9 @@ Extension Host（Node.js）
 
 | 层级 | 技术 |
 |------|------|
-| 前端渲染 | WebGL2（自建引擎，ping-pong FBO 合成） |
-| 状态管理 | Zustand（8 slices） |
+| 前端渲染 | WebGL2（自建引擎，RAF 连续渲染 + ping-pong FBO 合成） |
+| 状态管理 | Zustand（13+ slices） |
+| 国际化 | @neko/shared I18nService + I18nProvider + useTranslation |
 | 输入 | Pointer Events API（pressure / tiltX / tiltY） |
 | 2D 骨骼后端 | neko-engine native-puppet（bevy_ecs + inox2d + bevy_animation） |
 | 通信 | EngineClient HTTP + WebSocket（@neko/neko-client） |

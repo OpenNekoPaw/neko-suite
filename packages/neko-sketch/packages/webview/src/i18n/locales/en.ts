@@ -149,6 +149,58 @@ export const en: MessageBundle = {
   'sketch.file.import': 'Import',
   'sketch.file.export': 'Export',
 
+  // Animation panel
+  'sketch.panel.animation': 'Animation',
+  'sketch.animation.noClips': 'No animation clips',
+  'sketch.animation.liveStream': 'Live stream active',
+  'sketch.animation.stop': 'Stop animation',
+  'sketch.animation.play': 'Play animation',
+  'sketch.animation.seek': 'Seek position',
+  'sketch.animation.disablePhysics': 'Disable physics',
+  'sketch.animation.enablePhysics': 'Enable physics',
+  'sketch.animation.disablePhysicsSim': 'Disable physics simulation',
+  'sketch.animation.enablePhysicsSim': 'Enable physics simulation',
+
+  // Parameter panel
+  'sketch.panel.parameters': 'Parameters',
+  'sketch.parameter.resetDefault': 'Reset to default',
+  'sketch.parameter.resetParam': 'Reset {name} to default',
+
+  // Frame timeline
+  'sketch.timeline.stop': 'Stop playback',
+  'sketch.timeline.play': 'Play animation',
+  'sketch.timeline.fps': 'FPS:',
+  'sketch.timeline.fpsLabel': 'Frames per second',
+  'sketch.timeline.onionSkin': 'Toggle onion skin (O)',
+  'sketch.timeline.onionSkinLabel': 'Toggle onion skin',
+  'sketch.timeline.frames': 'Animation frames',
+  'sketch.timeline.frame': 'Frame {index}',
+  'sketch.timeline.frameKey': 'Frame {index} (key)',
+
+  // Scene templates
+  'sketch.template.platformer': 'Platformer (3-layer parallax)',
+  'sketch.template.topdownRpg': 'Top-Down RPG (2-layer)',
+  'sketch.template.visualNovel': 'Visual Novel (BG + FG)',
+  'sketch.template.sideScroller': 'Side Scroller (4-layer)',
+  'sketch.template.layer.sky': 'Sky',
+  'sketch.template.layer.mountains': 'Mountains',
+  'sketch.template.layer.foreground': 'Foreground',
+  'sketch.template.layer.ground': 'Ground',
+  'sketch.template.layer.objects': 'Objects',
+  'sketch.template.layer.background': 'Background',
+  'sketch.template.layer.characters': 'Characters',
+  'sketch.template.layer.farBg': 'Far BG',
+  'sketch.template.layer.nearBg': 'Near BG',
+  'sketch.template.layer.gameplay': 'Gameplay',
+
+  // Default names
+  'sketch.layer.defaultName': 'Layer {index}',
+  'sketch.layer.copySuffix': '{name} copy',
+  'sketch.layer.defaultGroup': 'Group',
+
+  // Filter toggle
+  'sketch.filter.toggle': 'Toggle {name}',
+
   // Status bar
   'sketch.status.ready': 'Ready',
   'sketch.status.layers': 'layers',

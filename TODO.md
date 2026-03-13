@@ -92,6 +92,8 @@
 - [x] S.3 资产集成（精灵表/场景 JSON 导出 + VSCode 命令）✅
 - [x] S.3 渲染管线集成（filterFn 回调 + SketchRenderer.renderWithEffects）✅
 - [x] S.3 单元测试（7 文件 42 测试）✅
+- [x] 画板响应修复（RAF 连续渲染 + ResizeObserver 自适应 + dirty flag）✅
+- [x] 国际化支持（I18nProvider + useTranslation hook + 130 翻译 key + 中英双语）✅
 
 ### neko-tools（媒体 Diff）
 - [ ] Diff 后端增强（Phase 3）
@@ -207,7 +209,7 @@
 | 高 | neko-engine 性能监控（telemetry 基础已有，需接入指标面板） | 性能盲区 |
 | 中 | AI SDK 依赖倒置（`AISdkAdapter` 直接依赖 Vercel AI SDK） | 可替换性差 |
 | 中 | neko-types JSDoc 覆盖率低 | 开发体验差 |
-| 低 | 国际化扩展（neko-cut/neko-agent 已完成，其他包待补） | 国际化缺口 |
+| 低 | 国际化扩展（neko-cut/neko-agent/neko-sketch 已完成，其他包待补） | 国际化缺口 |
 
 ---
 
@@ -224,4 +226,4 @@
 
 ---
 
-*最后更新：2026-03-13（neko-model Phase 2 基础建模完成：CSG BSP 布尔运算、cosmic-text 3D 文字挤出、参数化几何体 6 种形状、骨骼驱动表情 UI，ProceduralMesh 统一抽象 + AssetCache GPU 管线注入；neko-engine Phase 3 PBR 渲染 12 Step 全部完成）*
+*最后更新：2026-03-13（neko-model Phase 2 基础建模 7/7：骨骼表情 + CSG 布尔运算 + 3D 文字挤出 + 参数化几何体，前后端全栈）*

@@ -9,6 +9,7 @@ use crate::systems;
 use bevy_ecs::prelude::*;
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 
 /// Snapshot of the scene graph for serialization to the frontend
@@ -77,6 +78,8 @@ pub trait SceneWorld: Send + Sync {
     ) -> Result<(), String>;
     fn tick(&mut self, clip_name: &str, time: f32) -> SceneDelta;
     fn get_animation_clips(&mut self) -> Vec<AnimationClipInfo>;
+    /// Restore scene from a snapshot (used when loading .nkm projects).
+    fn restore_snapshot(&mut self, snapshot: &SceneSnapshot);
 }
 
 /// Implementation using bevy_ecs::World
@@ -240,6 +243,48 @@ impl SceneWorld for BevySceneWorld {
             }
         }
         clips
+    }
+
+    fn restore_snapshot(&mut self, snapshot: &SceneSnapshot) {
+        // Clear existing world
+        self.world.clear_all();
+
+        // Rebuild ECS entities from snapshot nodes
+        let mut id_to_entity: HashMap<String, Entity> = HashMap::new();
+
+        for node in &snapshot.nodes {
+            let entity = self
+                .world
+                .spawn((
+                    SceneNodeId(node.id.clone()),
+                    NodeName(node.name.clone()),
+                    Transform {
+                        position: Vec3::from(node.position),
+                        rotation: glam::Quat::from_array(node.rotation),
+                        scale: Vec3::from(node.scale),
+                    },
+                    GlobalTransform::identity(),
+                ))
+                .id();
+
+            id_to_entity.insert(node.id.clone(), entity);
+        }
+
+        // Restore parent-child relationships
+        for node in &snapshot.nodes {
+            if let Some(ref parent_id) = node.parent_id {
+                if let (Some(&child_e), Some(&parent_e)) =
+                    (id_to_entity.get(&node.id), id_to_entity.get(parent_id))
+                {
+                    self.world
+                        .entity_mut(child_e)
+                        .insert(hierarchy::Parent(parent_e));
+                }
+            }
+        }
+
+        // Propagate transforms
+        systems::transform_propagation(&mut self.world);
     }
 }
 

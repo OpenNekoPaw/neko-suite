@@ -149,6 +149,58 @@ export const zhCN: MessageBundle = {
   'sketch.file.import': '导入',
   'sketch.file.export': '导出',
 
+  // Animation panel
+  'sketch.panel.animation': '动画',
+  'sketch.animation.noClips': '无动画片段',
+  'sketch.animation.liveStream': '实时流已连接',
+  'sketch.animation.stop': '停止动画',
+  'sketch.animation.play': '播放动画',
+  'sketch.animation.seek': '拖动进度',
+  'sketch.animation.disablePhysics': '禁用物理',
+  'sketch.animation.enablePhysics': '启用物理',
+  'sketch.animation.disablePhysicsSim': '禁用物理模拟',
+  'sketch.animation.enablePhysicsSim': '启用物理模拟',
+
+  // Parameter panel
+  'sketch.panel.parameters': '参数',
+  'sketch.parameter.resetDefault': '重置为默认值',
+  'sketch.parameter.resetParam': '重置 {name} 为默认值',
+
+  // Frame timeline
+  'sketch.timeline.stop': '停止播放',
+  'sketch.timeline.play': '播放动画',
+  'sketch.timeline.fps': 'FPS:',
+  'sketch.timeline.fpsLabel': '每秒帧数',
+  'sketch.timeline.onionSkin': '切换洋葱皮 (O)',
+  'sketch.timeline.onionSkinLabel': '切换洋葱皮',
+  'sketch.timeline.frames': '动画帧',
+  'sketch.timeline.frame': '第 {index} 帧',
+  'sketch.timeline.frameKey': '第 {index} 帧 (关键帧)',
+
+  // Scene templates
+  'sketch.template.platformer': '平台游戏（3 层视差）',
+  'sketch.template.topdownRpg': '俯视角 RPG（2 层）',
+  'sketch.template.visualNovel': '视觉小说（背景 + 前景）',
+  'sketch.template.sideScroller': '横版卷轴（4 层）',
+  'sketch.template.layer.sky': '天空',
+  'sketch.template.layer.mountains': '山脉',
+  'sketch.template.layer.foreground': '前景',
+  'sketch.template.layer.ground': '地面',
+  'sketch.template.layer.objects': '物体',
+  'sketch.template.layer.background': '背景',
+  'sketch.template.layer.characters': '角色',
+  'sketch.template.layer.farBg': '远景',
+  'sketch.template.layer.nearBg': '近景',
+  'sketch.template.layer.gameplay': '游戏层',
+
+  // Default names
+  'sketch.layer.defaultName': '图层 {index}',
+  'sketch.layer.copySuffix': '{name} 副本',
+  'sketch.layer.defaultGroup': '编组',
+
+  // Filter toggle
+  'sketch.filter.toggle': '切换 {name}',
+
   // Status bar
   'sketch.status.ready': '就绪',
   'sketch.status.layers': '个图层',

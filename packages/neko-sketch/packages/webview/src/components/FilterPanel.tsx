@@ -127,7 +127,7 @@ function FilterItem({
           type="checkbox"
           checked={enabled}
           onChange={() => onToggle(id)}
-          aria-label={`Toggle ${def.name}`}
+          aria-label={t('sketch.filter.toggle', { name: def.name })}
         />
         <span className="text-xs flex-1">{def.name}</span>
         <button

@@ -3,6 +3,7 @@
  */
 import type { StateCreator } from 'zustand';
 import type { LayerData } from '../../types';
+import { t } from '../../i18n';
 import {
   createLayer,
   addLayer,
@@ -40,7 +41,7 @@ export const createLayerSlice: StateCreator<LayerSlice> = (set, get) => ({
     const state = get();
     const canvas = (state as unknown as { canvas: { width: number; height: number } }).canvas;
     const newLayer = createLayer(
-      name ?? `Layer ${state.layers.length + 1}`,
+      name ?? t('sketch.layer.defaultName', { index: String(state.layers.length + 1) }),
       canvas?.width ?? 1920,
       canvas?.height ?? 1080,
     );

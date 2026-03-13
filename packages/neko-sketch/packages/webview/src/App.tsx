@@ -13,7 +13,6 @@ import {
   BrushPanel,
   ColorPanel,
   LayerPanel,
-  StatusBar,
   AnimationPanel,
   ParameterPanel,
   PuppetNodeTree,
@@ -52,6 +51,26 @@ export function App() {
   const markClean = store((s) => s.markClean);
   const clearHistory = store((s) => s.clearHistory);
   const puppetLoaded = store((s) => s.puppetLoaded);
+
+  // Sync status bar info to VSCode native status bar
+  const viewport = store((s) => s.viewport);
+  const canvasState = store((s) => s.canvas);
+  const activeTool = store((s) => s.activeTool);
+  const layerCount = store((s) => s.layers).length;
+  const brushSize = store((s) => s.brushSettings).size;
+
+  useEffect(() => {
+    vscode.postMessage({
+      type: 'status:update',
+      data: {
+        zoom: viewport.zoom,
+        canvasSize: `${canvasState.width} x ${canvasState.height}`,
+        activeTool,
+        layerCount,
+        brushSize,
+      },
+    });
+  }, [viewport.zoom, canvasState.width, canvasState.height, activeTool, layerCount, brushSize]);
 
   // Puppet animation controller (created lazily when engine port is available)
   const controllerRef = useRef<Inochi2DController | null>(null);
@@ -156,7 +175,6 @@ export function App() {
           </div>
         </div>
         <FrameTimeline />
-        <StatusBar />
       </div>
     </I18nProvider>
   );

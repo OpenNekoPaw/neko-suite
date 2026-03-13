@@ -6,9 +6,11 @@
  */
 import { useCallback, useRef, useEffect } from 'react';
 import { useSketchStore } from '../stores';
+import { useTranslation } from '../i18n/I18nContext';
 import { useFramePlayback } from '../hooks/useFramePlayback';
 
 export function FrameTimeline() {
+  const { t } = useTranslation();
   const frameLayers = useSketchStore((s) => s.frameLayers);
   const selectedLayerId = useSketchStore((s) => s.selectedFrameLayerId);
   const currentIndex = useSketchStore((s) => s.currentFrameIndex);
@@ -66,14 +68,14 @@ export function FrameTimeline() {
     return () => window.removeEventListener('keydown', handler);
   }, [toggle, toggleOnionSkin]);
 
-  if (frameLayers.length === 0) return null;
-
   const handleFpsChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       setFps(parseInt(e.target.value, 10) || 12);
     },
     [setFps],
   );
+
+  if (frameLayers.length === 0) return null;
 
   return (
     <div className="flex flex-col border-t border-[var(--sketch-border)] bg-[var(--vscode-editor-background)]">
@@ -82,12 +84,12 @@ export function FrameTimeline() {
         <button
           className="px-2 py-0.5 rounded border border-[var(--vscode-button-border)]"
           onClick={toggle}
-          aria-label={isPlaying ? 'Stop playback' : 'Play animation'}
+          aria-label={isPlaying ? t('sketch.timeline.stop') : t('sketch.timeline.play')}
         >
           {isPlaying ? '■' : '▶'}
         </button>
 
-        <span className="opacity-60">FPS:</span>
+        <span className="opacity-60">{t('sketch.timeline.fps')}</span>
         <input
           type="number"
           min={1}
@@ -95,7 +97,7 @@ export function FrameTimeline() {
           value={fps}
           onChange={handleFpsChange}
           className="w-10 text-xs text-center bg-transparent border border-[var(--vscode-input-border)] rounded px-1"
-          aria-label="Frames per second"
+          aria-label={t('sketch.timeline.fpsLabel')}
         />
 
         <button
@@ -105,8 +107,8 @@ export function FrameTimeline() {
               : ''
           }`}
           onClick={toggleOnionSkin}
-          title="Toggle onion skin (O)"
-          aria-label="Toggle onion skin"
+          title={t('sketch.timeline.onionSkin')}
+          aria-label={t('sketch.timeline.onionSkinLabel')}
           aria-pressed={onionSkin.enabled}
         >
           🧅
@@ -124,7 +126,7 @@ export function FrameTimeline() {
         ref={scrollRef}
         className="flex items-stretch overflow-x-auto px-1 pb-1 gap-0.5"
         role="listbox"
-        aria-label="Animation frames"
+        aria-label={t('sketch.timeline.frames')}
       >
         {currentLayer?.frames.map((frame) => (
           <div
@@ -137,7 +139,11 @@ export function FrameTimeline() {
                 : 'border-[var(--vscode-input-border)] hover:bg-[var(--vscode-list-hoverBackground)]'
             } ${frame.isKeyframe ? 'font-bold' : 'opacity-60'}`}
             onClick={() => setCurrentFrameIndex(frame.index)}
-            title={`Frame ${frame.index + 1}${frame.isKeyframe ? ' (key)' : ''}`}
+            title={
+              frame.isKeyframe
+                ? t('sketch.timeline.frameKey', { index: String(frame.index + 1) })
+                : t('sketch.timeline.frame', { index: String(frame.index + 1) })
+            }
           >
             {frame.imageData ? (
               <span className="text-[10px]">{frame.index + 1}</span>

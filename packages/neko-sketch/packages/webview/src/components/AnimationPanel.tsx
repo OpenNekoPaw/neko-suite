@@ -6,6 +6,7 @@
  */
 import { useCallback } from 'react';
 import { useSketchStore } from '../stores';
+import { useTranslation } from '../i18n/I18nContext';
 import type { AnimationClipInfo } from '../animation/types';
 
 interface AnimationPanelProps {
@@ -18,6 +19,7 @@ interface AnimationPanelProps {
 }
 
 export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) {
+  const { t } = useTranslation();
   const show = useSketchStore((s) => s.showLayerPanel); // reuse panel visibility flag
   const puppetLoaded = useSketchStore((s) => s.puppetLoaded);
   const animations = useSketchStore((s) => s.animations);
@@ -59,17 +61,17 @@ export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) 
   if (!show || !puppetLoaded) return null;
 
   return (
-    <div className="sketch-panel" role="region" aria-label="Animation">
+    <div className="sketch-panel" role="region" aria-label={t('sketch.panel.animation')}>
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
-        <h3 className="sketch-panel-title m-0">Animation</h3>
+        <h3 className="sketch-panel-title m-0">{t('sketch.panel.animation')}</h3>
         <div className="flex items-center gap-1">
           <PhysicsToggle />
           {streamConnected && (
             <span
-              title="Live stream active"
+              title={t('sketch.animation.liveStream')}
               className="w-2 h-2 rounded-full bg-green-500 inline-block"
-              aria-label="Live stream active"
+              aria-label={t('sketch.animation.liveStream')}
             />
           )}
         </div>
@@ -77,7 +79,7 @@ export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) 
 
       {/* Clip list */}
       {animations.length === 0 ? (
-        <p className="text-xs opacity-50 px-1">No animation clips</p>
+        <p className="text-xs opacity-50 px-1">{t('sketch.animation.noClips')}</p>
       ) : (
         <div className="flex flex-col gap-0.5 mb-2">
           {animations.map((clip) => (
@@ -99,7 +101,7 @@ export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) 
             <button
               className="text-xs px-2 py-0.5 rounded border border-[var(--vscode-button-border)]"
               onClick={isPlaying ? onStop : () => onPlay(currentAnimation, false)}
-              aria-label={isPlaying ? 'Stop animation' : 'Play animation'}
+              aria-label={isPlaying ? t('sketch.animation.stop') : t('sketch.animation.play')}
             >
               {isPlaying ? '■' : '▶'}
             </button>
@@ -115,7 +117,7 @@ export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) 
             step={0.1}
             value={seekPercent}
             className="w-full h-1 accent-[var(--vscode-button-background)]"
-            aria-label="Seek position"
+            aria-label={t('sketch.animation.seek')}
             onChange={handleSeek}
           />
         </div>
@@ -125,6 +127,7 @@ export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) 
 }
 
 function PhysicsToggle() {
+  const { t } = useTranslation();
   const isPlaying = useSketchStore((s) => s.isPlayingPhysics);
   const setPlaying = useSketchStore((s) => s.setPlayingPhysics);
 
@@ -136,8 +139,10 @@ function PhysicsToggle() {
           : ''
       }`}
       onClick={() => setPlaying(!isPlaying)}
-      title={isPlaying ? 'Disable physics' : 'Enable physics'}
-      aria-label={isPlaying ? 'Disable physics simulation' : 'Enable physics simulation'}
+      title={isPlaying ? t('sketch.animation.disablePhysics') : t('sketch.animation.enablePhysics')}
+      aria-label={
+        isPlaying ? t('sketch.animation.disablePhysicsSim') : t('sketch.animation.enablePhysicsSim')
+      }
       aria-pressed={isPlaying}
     >
       ⚡

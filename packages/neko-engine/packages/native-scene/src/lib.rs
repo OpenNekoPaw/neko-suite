@@ -5,10 +5,12 @@
 
 pub mod components;
 pub mod csg;
+pub mod exporter;
 pub mod hierarchy;
 pub mod loader;
 pub mod procedural;
 pub mod procedural_mesh;
+pub mod project;
 pub mod systems;
 pub mod world;
 

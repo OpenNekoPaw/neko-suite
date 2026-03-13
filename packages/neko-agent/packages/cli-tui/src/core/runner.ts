@@ -72,6 +72,17 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
   const startTime = Date.now();
 
   try {
+    // Block if configured model was not found — do not waste API calls
+    if (config.modelNotFound) {
+      const models = getProviderModels(config.provider, config.workDir);
+      const available = models.length > 0 ? ` Available: ${models.join(', ')}` : '';
+      return {
+        success: false,
+        error: `Model "${config.modelNotFound}" not found in config.${available} Use --model to specify a valid model.`,
+        duration: Date.now() - startTime,
+      };
+    }
+
     // Initialize MCP Manager
     const mcpManager = new MCPManager();
 
@@ -112,13 +123,6 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     // Create LLM service via Platform
     let llmService: IService;
     let platform: Platform | undefined;
-
-    // Warn if configured model was not found
-    if (config.modelNotFound) {
-      onOutput?.(
-        `⚠ Model "${config.modelNotFound}" not found in config, using "${config.model}" instead. Run /model to switch.\n`,
-      );
-    }
 
     if (service) {
       llmService = service;

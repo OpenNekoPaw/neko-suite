@@ -6,6 +6,7 @@
  */
 import { useCallback } from 'react';
 import { useSketchStore } from '../stores';
+import { useTranslation } from '../i18n/I18nContext';
 import type { IInochi2DController } from '../animation';
 
 interface ParameterPanelProps {
@@ -13,6 +14,7 @@ interface ParameterPanelProps {
 }
 
 export function ParameterPanel({ controller }: ParameterPanelProps) {
+  const { t } = useTranslation();
   const show = useSketchStore((s) => s.showLayerPanel);
   const puppetLoaded = useSketchStore((s) => s.puppetLoaded);
   const parameters = useSketchStore((s) => s.puppetParameters);
@@ -31,8 +33,8 @@ export function ParameterPanel({ controller }: ParameterPanelProps) {
   if (!show || !puppetLoaded || parameters.length === 0) return null;
 
   return (
-    <div className="sketch-panel" role="region" aria-label="Parameters">
-      <h3 className="sketch-panel-title m-0 mb-1">Parameters</h3>
+    <div className="sketch-panel" role="region" aria-label={t('sketch.panel.parameters')}>
+      <h3 className="sketch-panel-title m-0 mb-1">{t('sketch.panel.parameters')}</h3>
 
       <div className="flex flex-col gap-1">
         {parameters.map((param) => (
@@ -59,6 +61,7 @@ function ParameterSlider(props: {
   defaultValue: number;
   onChange: (name: string, value: number) => void;
 }) {
+  const { t } = useTranslation();
   const { name, min, max, value, defaultValue, onChange } = props;
   const range = max - min;
   const step = range > 0 ? range / 100 : 0.01;
@@ -83,8 +86,8 @@ function ParameterSlider(props: {
         <button
           className="text-[10px] opacity-50 hover:opacity-100 px-1"
           onClick={handleReset}
-          title="Reset to default"
-          aria-label={`Reset ${name} to default`}
+          title={t('sketch.parameter.resetDefault')}
+          aria-label={t('sketch.parameter.resetParam', { name })}
         >
           ↺
         </button>

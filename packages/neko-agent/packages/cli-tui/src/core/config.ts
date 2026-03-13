@@ -24,6 +24,7 @@ import {
   getConfigLocations,
   readUserConfig,
   readWorkspaceConfig,
+  writeUserConfig,
 } from '@neko/shared/config/config-reader.ts';
 
 // Re-export path utilities for backward compatibility
@@ -127,21 +128,19 @@ export function loadConfig(
     const rawWorkspace = readWorkspaceConfig(workDir) ?? {};
 
     // Model: override > defaultModel scalar > first enabled model for provider > default
-    let model =
+    const model =
       overrides.model ??
       rawWorkspace.defaultModel ??
       rawUser.defaultModel ??
       findDefaultModel(cm, providerId) ??
       DEFAULT_CLI_CONFIG.model;
 
-    // Validate model exists in ConfigManager; fall back to first available if not
+    // Check if the configured model exists in ConfigManager.
+    // If not, mark it as modelNotFound but do NOT fallback —
+    // callers must block and let the user choose before proceeding.
     let modelNotFound: string | undefined;
     if (!cm.getModel(model)) {
-      const fallback = findDefaultModel(cm, providerId);
-      if (fallback) {
-        modelNotFound = model;
-        model = fallback;
-      }
+      modelNotFound = model;
     }
 
     // Base URL
@@ -292,6 +291,15 @@ export function listConfiguredProviders(workDir?: string): string[] {
   } finally {
     cm.dispose();
   }
+}
+
+/**
+ * Update defaultModel in user config and persist to disk.
+ */
+export function updateDefaultModel(modelId: string): void {
+  const raw = readUserConfig() ?? {};
+  raw.defaultModel = modelId;
+  writeUserConfig(raw);
 }
 
 // =============================================================================

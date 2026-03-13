@@ -1,0 +1,20 @@
+{
+  "neko.sketch.editor.title": "Sketch Editor",
+  "neko.sketch.layerOutline.title": "Layers",
+  "neko.sketch.new.title": "New Sketch",
+  "neko.sketch.selectBrush.title": "Select Brush",
+  "neko.sketch.adjustSize.title": "Adjust Brush Size",
+  "neko.sketch.pickColor.title": "Pick Color",
+  "neko.sketch.deleteSelected.title": "Delete Selected",
+  "neko.sketch.escape.title": "Cancel / Deselect",
+  "neko.sketch.selectAll.title": "Select All",
+  "neko.sketch.undo.title": "Undo",
+  "neko.sketch.redo.title": "Redo",
+  "neko.sketch.import.title": "Import Image",
+  "neko.sketch.export.title": "Export...",
+  "neko.sketch.selectLayerFromOutline.title": "Select Layer",
+  "neko.sketch.resetZoom.title": "Reset Zoom",
+  "neko.sketch.config.title": "Neko Sketch",
+  "neko.sketch.config.pressureSensitivity": "Enable pressure sensitivity for drawing tablets",
+  "neko.sketch.config.defaultBrush": "Default brush type"
+}

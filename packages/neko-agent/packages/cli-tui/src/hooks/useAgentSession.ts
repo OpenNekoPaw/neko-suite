@@ -33,10 +33,11 @@ import * as path from 'node:path';
 import type { CLIConfig } from '../core/types';
 import type { ExecutionMode } from '../types/state';
 import type { IService } from '@neko/shared';
+import { getProviderModels, updateDefaultModel } from '../core/config';
 import { useConfigStore } from '../stores/config-store';
 import { useAgentStore } from '../stores/agent-store';
 import { useConversationStore } from '../stores/conversation-store';
-import { useUIStore } from '../stores/ui-store';
+import { useUIStore, type SelectionMenuItem } from '../stores/ui-store';
 import { createEventAdapter, type IEventAdapter } from '../adapters/event-adapter';
 
 export interface UseAgentSessionOptions {
@@ -92,6 +93,55 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   useEffect(() => {
     const init = async () => {
       try {
+        // Resolve effective model — block on model picker if defaultModel is invalid
+        let effectiveModel = config.model;
+
+        if (config.modelNotFound) {
+          const chatModels = getProviderModels(config.provider, config.workDir);
+          if (chatModels.length > 0) {
+            useConversationStore
+              .getState()
+              .addSystemMessage(
+                `Model "${config.modelNotFound}" not found. Please select a model:`,
+              );
+            const items: SelectionMenuItem[] = chatModels.map((m) => ({
+              id: m,
+              label: m,
+            }));
+            const selectedId = await new Promise<string | null>((resolve) => {
+              useUIStore.getState().showSelection({
+                title: 'Select Model',
+                items,
+                resolve: (id) => {
+                  useUIStore.getState().dismissSelection();
+                  resolve(id);
+                },
+              });
+            });
+            if (selectedId) {
+              effectiveModel = selectedId;
+              updateDefaultModel(selectedId);
+              useConfigStore.getState().setConfig({ model: selectedId });
+              useConversationStore.getState().addSystemMessage(`Model set to: ${selectedId}`);
+            } else {
+              // User dismissed without selecting — use first available
+              effectiveModel = chatModels[0]!;
+              useConversationStore
+                .getState()
+                .addSystemMessage(`No model selected, using: ${effectiveModel}`);
+            }
+          } else {
+            useAgentStore
+              .getState()
+              .setError(
+                new Error(
+                  `Model "${config.modelNotFound}" not found and no models available. Configure models first.`,
+                ),
+              );
+            return;
+          }
+        }
+
         // 1. MCP Manager
         const mcpManager = new MCPManager();
         mcpManagerRef.current = mcpManager;
@@ -147,9 +197,12 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         });
         await promptBuilder.loadAgentsFile(config.workDir, getDefaultPersonalPath());
         promptBuilderRef.current = promptBuilder;
-        const systemPrompt = buildSystemPromptWithContext(promptBuilder, config);
+        const systemPrompt = buildSystemPromptWithContext(promptBuilder, {
+          ...config,
+          model: effectiveModel,
+        });
 
-        // 6. Create Session
+        // 6. Create Session (with validated model)
         const session = createAgentSession({
           service: llmService,
           toolRegistry,
@@ -158,7 +211,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           maxIterations: 50,
           temperature: config.temperature,
           maxTokens: config.maxTokens,
-          modelId: config.model,
+          modelId: effectiveModel,
           onConfirmTool: async (request) => {
             // Show approval UI and wait for user decision
             return new Promise<boolean>((resolve) => {
@@ -189,15 +242,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           agentStore: useAgentStore.getState(),
           uiStore: useUIStore.getState(),
         });
-
-        // Warn if configured model was not found
-        if (config.modelNotFound) {
-          useConversationStore
-            .getState()
-            .addSystemMessage(
-              `⚠ Model "${config.modelNotFound}" not found in config, using "${config.model}" instead. Use /model to switch.`,
-            );
-        }
 
         isReadyRef.current = true;
       } catch (error) {
