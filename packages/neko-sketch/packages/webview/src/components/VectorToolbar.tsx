@@ -4,6 +4,7 @@
  * Shape tools (path, rectangle, ellipse, polygon) and fill/stroke controls.
  */
 import { useState } from 'react';
+import { t } from '../i18n';
 
 export type VectorShapeTool = 'path' | 'rectangle' | 'ellipse' | 'polygon' | 'star';
 
@@ -25,8 +26,8 @@ export function VectorToolbar({ onShapeSelect, activeShape }: VectorToolbarProps
   const [starPoints, setStarPoints] = useState(5);
 
   return (
-    <div className="sketch-panel" role="region" aria-label="Vector Tools">
-      <h3 className="sketch-panel-title m-0 mb-1">Vector</h3>
+    <div className="sketch-panel" role="region" aria-label={t('sketch.panel.vector')}>
+      <h3 className="sketch-panel-title m-0 mb-1">{t('sketch.panel.vector')}</h3>
 
       {/* Shape selector */}
       <div className="flex items-center gap-0.5 mb-1">
@@ -51,7 +52,7 @@ export function VectorToolbar({ onShapeSelect, activeShape }: VectorToolbarProps
       {/* Polygon sides */}
       {activeShape === 'polygon' && (
         <div className="flex items-center gap-1 text-[10px] mb-0.5">
-          <span className="w-10 opacity-60">Sides</span>
+          <span className="w-10 opacity-60">{t('sketch.vector.sides')}</span>
           <input
             type="range"
             min={3}
@@ -60,7 +61,7 @@ export function VectorToolbar({ onShapeSelect, activeShape }: VectorToolbarProps
             value={polygonSides}
             onChange={(e) => setPolygonSides(parseInt(e.target.value, 10))}
             className="flex-1 h-3"
-            aria-label="Polygon sides"
+            aria-label={t('sketch.vector.sidesLabel')}
           />
           <span className="w-4 text-right tabular-nums">{polygonSides}</span>
         </div>
@@ -69,7 +70,7 @@ export function VectorToolbar({ onShapeSelect, activeShape }: VectorToolbarProps
       {/* Star points */}
       {activeShape === 'star' && (
         <div className="flex items-center gap-1 text-[10px] mb-0.5">
-          <span className="w-10 opacity-60">Points</span>
+          <span className="w-10 opacity-60">{t('sketch.vector.points')}</span>
           <input
             type="range"
             min={3}
@@ -78,7 +79,7 @@ export function VectorToolbar({ onShapeSelect, activeShape }: VectorToolbarProps
             value={starPoints}
             onChange={(e) => setStarPoints(parseInt(e.target.value, 10))}
             className="flex-1 h-3"
-            aria-label="Star points"
+            aria-label={t('sketch.vector.pointsLabel')}
           />
           <span className="w-4 text-right tabular-nums">{starPoints}</span>
         </div>

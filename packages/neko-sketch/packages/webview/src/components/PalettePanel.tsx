@@ -5,6 +5,7 @@
  */
 import { useState, useCallback } from 'react';
 import { useSketchStore } from '../stores';
+import { t } from '../i18n';
 
 interface PaletteDef {
   readonly name: string;
@@ -123,14 +124,14 @@ export function PalettePanel() {
   );
 
   return (
-    <div className="sketch-panel" role="region" aria-label="Palette">
+    <div className="sketch-panel" role="region" aria-label={t('sketch.panel.palette')}>
       <div className="flex items-center gap-1 mb-1">
-        <h3 className="sketch-panel-title m-0 flex-1">Palette</h3>
+        <h3 className="sketch-panel-title m-0 flex-1">{t('sketch.panel.palette')}</h3>
         <select
           className="text-xs bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0.5"
           value={selectedPalette}
           onChange={(e) => setSelectedPalette(parseInt(e.target.value, 10))}
-          aria-label="Select palette"
+          aria-label={t('sketch.palette.select')}
         >
           {BUILTIN_PALETTES.map((p, i) => (
             <option key={p.name} value={i}>

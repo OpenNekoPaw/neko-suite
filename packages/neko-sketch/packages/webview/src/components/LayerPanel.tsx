@@ -2,6 +2,7 @@
  * LayerPanel - layer list with visibility/lock toggles
  */
 import { useSketchStore } from '../stores';
+import { t } from '../i18n';
 import type { LayerData } from '../types';
 
 export function LayerPanel() {
@@ -16,10 +17,14 @@ export function LayerPanel() {
   if (!show) return null;
 
   return (
-    <div className="sketch-panel" role="region" aria-label="Layers">
+    <div className="sketch-panel" role="region" aria-label={t('sketch.panel.layers')}>
       <div className="flex items-center justify-between mb-1">
-        <h3 className="sketch-panel-title m-0">Layers</h3>
-        <button aria-label="Add layer" className="text-xs px-1" onClick={() => addNewLayer()}>
+        <h3 className="sketch-panel-title m-0">{t('sketch.panel.layers')}</h3>
+        <button
+          aria-label={t('sketch.layer.add')}
+          className="text-xs px-1"
+          onClick={() => addNewLayer()}
+        >
           +
         </button>
       </div>
@@ -65,7 +70,7 @@ function LayerItem(props: {
       }}
     >
       <button
-        aria-label={layer.visible ? 'Hide layer' : 'Show layer'}
+        aria-label={layer.visible ? t('sketch.layer.hide') : t('sketch.layer.show')}
         className="opacity-60 hover:opacity-100"
         onClick={(e) => {
           e.stopPropagation();
@@ -75,7 +80,7 @@ function LayerItem(props: {
         {layer.visible ? 'V' : '-'}
       </button>
       <button
-        aria-label={layer.locked ? 'Unlock layer' : 'Lock layer'}
+        aria-label={layer.locked ? t('sketch.layer.unlock') : t('sketch.layer.lock')}
         className="opacity-60 hover:opacity-100"
         onClick={(e) => {
           e.stopPropagation();
@@ -86,7 +91,7 @@ function LayerItem(props: {
       </button>
       <span className="flex-1 truncate">{layer.name}</span>
       <button
-        aria-label="Remove layer"
+        aria-label={t('sketch.layer.remove')}
         className="opacity-40 hover:opacity-100"
         onClick={(e) => {
           e.stopPropagation();

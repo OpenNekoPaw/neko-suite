@@ -2,6 +2,7 @@
  * StatusBar - zoom, canvas size, tool, layer count
  */
 import { useSketchStore } from '../stores';
+import { t } from '../i18n';
 
 export function StatusBar() {
   const viewport = useSketchStore((s) => s.viewport);
@@ -16,7 +17,9 @@ export function StatusBar() {
         {canvas.width} x {canvas.height}
       </span>
       <span>{activeTool}</span>
-      <span>{layers.length} layers</span>
+      <span>
+        {layers.length} {t('sketch.status.layers')}
+      </span>
     </div>
   );
 }

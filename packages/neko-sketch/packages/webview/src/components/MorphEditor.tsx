@@ -4,6 +4,7 @@
  * Displays morph targets with weight sliders and animation preview.
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { t } from '../i18n';
 import type { MorphTarget, MorphAnimation } from '../types/morph';
 import { sampleAnimation } from '../engine/morph-engine';
 
@@ -64,22 +65,22 @@ export function MorphEditor({ targets, animation, onWeightChange }: MorphEditorP
 
   if (targets.length === 0) {
     return (
-      <div className="sketch-panel" role="region" aria-label="Morph Targets">
-        <h3 className="sketch-panel-title m-0 mb-1">Morph</h3>
-        <p className="text-xs opacity-50 m-0">No morph targets</p>
+      <div className="sketch-panel" role="region" aria-label={t('sketch.panel.morph')}>
+        <h3 className="sketch-panel-title m-0 mb-1">{t('sketch.panel.morph')}</h3>
+        <p className="text-xs opacity-50 m-0">{t('sketch.morph.noTargets')}</p>
       </div>
     );
   }
 
   return (
-    <div className="sketch-panel" role="region" aria-label="Morph Targets">
+    <div className="sketch-panel" role="region" aria-label={t('sketch.panel.morph')}>
       <div className="flex items-center gap-1 mb-1">
-        <h3 className="sketch-panel-title m-0 flex-1">Morph</h3>
+        <h3 className="sketch-panel-title m-0 flex-1">{t('sketch.panel.morph')}</h3>
         {animation && (
           <button
             className="text-xs px-1.5 py-0.5 rounded border border-[var(--vscode-button-border)]"
             onClick={togglePlay}
-            aria-label={isPlaying ? 'Stop morph animation' : 'Play morph animation'}
+            aria-label={isPlaying ? t('sketch.morph.stop') : t('sketch.morph.play')}
           >
             {isPlaying ? '■' : '▶'}
           </button>
@@ -106,7 +107,9 @@ export function MorphEditor({ targets, animation, onWeightChange }: MorphEditorP
 
       {animation && (
         <div className="text-[10px] opacity-50 mt-1">
-          {isPlaying ? `${currentTime.toFixed(1)}s / ${animation.duration.toFixed(1)}s` : 'Stopped'}
+          {isPlaying
+            ? `${currentTime.toFixed(1)}s / ${animation.duration.toFixed(1)}s`
+            : t('sketch.morph.stopped')}
         </div>
       )}
     </div>

@@ -2,16 +2,17 @@
  * BrushPanel - brush settings UI
  */
 import { useSketchStore } from '../stores';
+import { t } from '../i18n';
 import type { BrushType } from '../types';
 
-const BRUSH_TYPES: { type: BrushType; label: string }[] = [
-  { type: 'pencil', label: 'Pencil' },
-  { type: 'pen', label: 'Pen' },
-  { type: 'watercolor', label: 'Watercolor' },
-  { type: 'airbrush', label: 'Airbrush' },
-  { type: 'eraser', label: 'Eraser' },
-  { type: 'marker', label: 'Marker' },
-  { type: 'pixel', label: 'Pixel' },
+const BRUSH_TYPES: { type: BrushType; key: string }[] = [
+  { type: 'pencil', key: 'sketch.brush.pencil' },
+  { type: 'pen', key: 'sketch.brush.pen' },
+  { type: 'watercolor', key: 'sketch.brush.watercolor' },
+  { type: 'airbrush', key: 'sketch.brush.airbrush' },
+  { type: 'eraser', key: 'sketch.brush.eraser' },
+  { type: 'marker', key: 'sketch.brush.marker' },
+  { type: 'pixel', key: 'sketch.brush.pixel' },
 ];
 
 export function BrushPanel() {
@@ -24,11 +25,11 @@ export function BrushPanel() {
   if (!show) return null;
 
   return (
-    <div className="sketch-panel" role="region" aria-label="Brush settings">
-      <h3 className="sketch-panel-title">Brush</h3>
+    <div className="sketch-panel" role="region" aria-label={t('sketch.panel.brush')}>
+      <h3 className="sketch-panel-title">{t('sketch.panel.brush')}</h3>
 
       <div className="sketch-panel-row">
-        <label htmlFor="brush-type">Type</label>
+        <label htmlFor="brush-type">{t('sketch.brush.type')}</label>
         <select
           id="brush-type"
           value={brushSettings.type}
@@ -36,14 +37,14 @@ export function BrushPanel() {
         >
           {BRUSH_TYPES.map((b) => (
             <option key={b.type} value={b.type}>
-              {b.label}
+              {t(b.key)}
             </option>
           ))}
         </select>
       </div>
 
       <div className="sketch-panel-row">
-        <label htmlFor="brush-size">Size: {brushSettings.size}px</label>
+        <label htmlFor="brush-size">{t('sketch.brush.size', { size: brushSettings.size })}</label>
         <input
           id="brush-size"
           type="range"
@@ -57,7 +58,9 @@ export function BrushPanel() {
       </div>
 
       <div className="sketch-panel-row">
-        <label htmlFor="brush-opacity">Opacity: {Math.round(brushSettings.opacity * 100)}%</label>
+        <label htmlFor="brush-opacity">
+          {t('sketch.brush.opacity', { opacity: Math.round(brushSettings.opacity * 100) })}
+        </label>
         <input
           id="brush-opacity"
           type="range"

@@ -5,6 +5,7 @@
  */
 import { useCallback } from 'react';
 import { useSketchStore } from '../stores';
+import { t } from '../i18n';
 import type { SceneLayerType } from '../types/scene';
 import { SCENE_TEMPLATES } from '../data/scene-templates';
 
@@ -22,12 +23,12 @@ export function ScenePanel() {
   const activeScene = scenes.find((s) => s.id === activeSceneId);
 
   const handleCreate = useCallback(() => {
-    createScene(`Scene ${scenes.length + 1}`);
+    createScene(t('sketch.scene.defaultName', { index: scenes.length + 1 }));
   }, [createScene, scenes.length]);
 
   const handleCreateFromTemplate = useCallback(
     (templateId: string) => {
-      const tpl = SCENE_TEMPLATES.find((t) => t.id === templateId);
+      const tpl = SCENE_TEMPLATES.find((tp) => tp.id === templateId);
       if (!tpl) return;
       createScene(tpl.name);
       // Add template layers to the newly created scene
@@ -45,7 +46,7 @@ export function ScenePanel() {
     if (!activeSceneId) return;
     const count = activeScene?.layers.length ?? 0;
     addSceneLayer(activeSceneId, {
-      name: `Layer ${count + 1}`,
+      name: t('sketch.scene.defaultLayerName', { index: count + 1 }),
       type: 'parallax' as SceneLayerType,
       zIndex: count,
       parallaxFactor: [1, 1],
@@ -55,8 +56,8 @@ export function ScenePanel() {
   }, [activeSceneId, activeScene, addSceneLayer]);
 
   return (
-    <div className="sketch-panel" role="region" aria-label="Scene">
-      <h3 className="sketch-panel-title m-0 mb-1">Scene</h3>
+    <div className="sketch-panel" role="region" aria-label={t('sketch.panel.scene')}>
+      <h3 className="sketch-panel-title m-0 mb-1">{t('sketch.panel.scene')}</h3>
 
       {/* Scene selector */}
       <div className="flex items-center gap-1 mb-1">
@@ -64,10 +65,10 @@ export function ScenePanel() {
           className="flex-1 text-xs bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0.5"
           value={activeSceneId ?? ''}
           onChange={(e) => setActiveScene(e.target.value || null)}
-          aria-label="Active scene"
+          aria-label={t('sketch.scene.activeScene')}
         >
           <option value="" disabled>
-            Select scene...
+            {t('sketch.scene.selectScene')}
           </option>
           {scenes.map((s) => (
             <option key={s.id} value={s.id}>
@@ -78,8 +79,8 @@ export function ScenePanel() {
         <button
           className="text-xs px-1.5 py-0.5 rounded border border-[var(--vscode-button-border)]"
           onClick={handleCreate}
-          title="New scene"
-          aria-label="Create scene"
+          title={t('sketch.scene.newScene')}
+          aria-label={t('sketch.scene.createScene')}
         >
           +
         </button>
@@ -88,7 +89,7 @@ export function ScenePanel() {
       {/* Templates */}
       {scenes.length === 0 && (
         <div className="mb-1">
-          <p className="text-[10px] opacity-50 m-0 mb-0.5">Or use a template:</p>
+          <p className="text-[10px] opacity-50 m-0 mb-0.5">{t('sketch.scene.useTemplate')}</p>
           {SCENE_TEMPLATES.map((tpl) => (
             <button
               key={tpl.id}
@@ -107,7 +108,7 @@ export function ScenePanel() {
           {/* Camera controls */}
           <div className="text-[10px] mb-1">
             <div className="flex items-center gap-1">
-              <span className="opacity-60 w-10">Zoom</span>
+              <span className="opacity-60 w-10">{t('sketch.scene.zoom')}</span>
               <input
                 type="range"
                 min={0.1}
@@ -116,7 +117,7 @@ export function ScenePanel() {
                 value={activeScene.camera.zoom}
                 onChange={(e) => updateCamera(activeScene.id, { zoom: parseFloat(e.target.value) })}
                 className="flex-1 h-3"
-                aria-label="Camera zoom"
+                aria-label={t('sketch.scene.cameraZoom')}
               />
               <span className="w-8 text-right tabular-nums">
                 {activeScene.camera.zoom.toFixed(1)}x
@@ -126,11 +127,11 @@ export function ScenePanel() {
 
           {/* Layers */}
           <div className="flex items-center gap-1 mb-0.5">
-            <span className="text-xs opacity-60 flex-1">Layers</span>
+            <span className="text-xs opacity-60 flex-1">{t('sketch.scene.layers')}</span>
             <button
               className="text-xs px-1 rounded border border-[var(--vscode-button-border)]"
               onClick={handleAddLayer}
-              aria-label="Add scene layer"
+              aria-label={t('sketch.scene.addLayer')}
             >
               +
             </button>
@@ -157,13 +158,13 @@ export function ScenePanel() {
                   })
                 }
                 className="w-12 h-2"
-                title="Parallax X"
-                aria-label={`${layer.name} parallax X`}
+                title={t('sketch.scene.parallaxX')}
+                aria-label={`${layer.name} ${t('sketch.scene.parallaxX')}`}
               />
               <button
                 className="text-red-400 text-[10px] px-0.5"
                 onClick={() => removeSceneLayer(activeScene.id, layer.id)}
-                aria-label={`Remove ${layer.name}`}
+                aria-label={t('sketch.scene.removeLayer', { name: layer.name })}
               >
                 ✕
               </button>
@@ -175,7 +176,7 @@ export function ScenePanel() {
             className="mt-1 text-xs text-red-400 hover:text-red-300"
             onClick={() => deleteScene(activeScene.id)}
           >
-            Delete scene
+            {t('sketch.scene.deleteScene')}
           </button>
         </>
       )}

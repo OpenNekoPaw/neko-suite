@@ -5,16 +5,17 @@
  */
 import { useCallback } from 'react';
 import { useSketchStore } from '../stores';
+import { t } from '../i18n';
 import { FilterRegistry } from '../engine/filter-registry';
 import type { FilterCategory, FilterDef } from '../types/filter';
 
 const registry = new FilterRegistry();
 
-const CATEGORY_LABELS: Record<FilterCategory, string> = {
-  blur: 'Blur',
-  color: 'Color',
-  distort: 'Distort',
-  stylize: 'Stylize',
+const CATEGORY_KEYS: Record<FilterCategory, string> = {
+  blur: 'sketch.filter.category.blur',
+  color: 'sketch.filter.category.color',
+  distort: 'sketch.filter.category.distort',
+  stylize: 'sketch.filter.category.stylize',
 };
 
 export function FilterPanel() {
@@ -44,21 +45,21 @@ export function FilterPanel() {
   );
 
   return (
-    <div className="sketch-panel" role="region" aria-label="Filters">
-      <h3 className="sketch-panel-title m-0 mb-1">Filters</h3>
+    <div className="sketch-panel" role="region" aria-label={t('sketch.panel.filters')}>
+      <h3 className="sketch-panel-title m-0 mb-1">{t('sketch.panel.filters')}</h3>
 
       {/* Add filter selector */}
       <select
         className="w-full text-xs bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0.5 mb-1"
         onChange={handleAdd}
         defaultValue=""
-        aria-label="Add filter"
+        aria-label={t('sketch.filter.addFilter')}
       >
         <option value="" disabled>
-          + Add Filter...
+          + {t('sketch.filter.addFilter')}
         </option>
         {(['blur', 'color', 'distort', 'stylize'] as FilterCategory[]).map((cat) => (
-          <optgroup key={cat} label={CATEGORY_LABELS[cat]}>
+          <optgroup key={cat} label={t(CATEGORY_KEYS[cat])}>
             {registry.listByCategory(cat).map((def) => (
               <option key={def.id} value={def.id}>
                 {def.name}
@@ -69,7 +70,9 @@ export function FilterPanel() {
       </select>
 
       {/* Applied filters list */}
-      {filters.length === 0 && <p className="text-xs opacity-50 m-0">No filters applied</p>}
+      {filters.length === 0 && (
+        <p className="text-xs opacity-50 m-0">{t('sketch.filter.noFilters')}</p>
+      )}
       {filters.map((applied) => {
         const def = registry.get(applied.filterId);
         if (!def) return null;
@@ -128,8 +131,8 @@ function FilterItem({
         <button
           className="text-xs px-1 text-red-400 hover:text-red-300"
           onClick={() => onRemove(id)}
-          title="Remove filter"
-          aria-label={`Remove ${def.name}`}
+          title={t('sketch.filter.remove')}
+          aria-label={`${t('sketch.filter.remove')} ${def.name}`}
         >
           ✕
         </button>

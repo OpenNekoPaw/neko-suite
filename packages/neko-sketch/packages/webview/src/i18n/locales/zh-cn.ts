@@ -1,6 +1,7 @@
 import type { MessageBundle } from '@neko/shared';
 
 export const zhCN: MessageBundle = {
+  // Toolbar tools
   'sketch.toolbar.brush': '画笔',
   'sketch.toolbar.eraser': '橡皮擦',
   'sketch.toolbar.select': '选择',
@@ -10,6 +11,9 @@ export const zhCN: MessageBundle = {
   'sketch.toolbar.eyedropper': '吸管',
   'sketch.toolbar.fill': '填充',
   'sketch.toolbar.zoom': '缩放',
+  'sketch.toolbar.ariaLabel': '绘图工具',
+
+  // Layer panel
   'sketch.layer.new': '新建图层',
   'sketch.layer.delete': '删除图层',
   'sketch.layer.duplicate': '复制图层',
@@ -17,6 +21,15 @@ export const zhCN: MessageBundle = {
   'sketch.layer.flatten': '合并可见',
   'sketch.layer.group': '编组',
   'sketch.layer.ungroup': '取消编组',
+  'sketch.panel.layers': '图层',
+  'sketch.layer.add': '添加图层',
+  'sketch.layer.show': '显示图层',
+  'sketch.layer.hide': '隐藏图层',
+  'sketch.layer.lock': '锁定图层',
+  'sketch.layer.unlock': '解锁图层',
+  'sketch.layer.remove': '移除图层',
+
+  // Brush panel
   'sketch.brush.pencil': '铅笔',
   'sketch.brush.pen': '钢笔',
   'sketch.brush.watercolor': '水彩',
@@ -25,9 +38,118 @@ export const zhCN: MessageBundle = {
   'sketch.brush.marker': '马克笔',
   'sketch.brush.pixel': '像素',
   'sketch.panel.brush': '画笔设置',
+  'sketch.brush.type': '类型',
+  'sketch.brush.size': '大小: {size}px',
+  'sketch.brush.opacity': '不透明度: {opacity}%',
+
+  // Color panel
   'sketch.panel.color': '颜色',
-  'sketch.panel.layers': '图层',
+  'sketch.color.brushColor': '画笔颜色',
+  'sketch.color.colorLabel': '颜色 {color}',
+
+  // Filter panel
+  'sketch.panel.filters': '滤镜',
+  'sketch.filter.addFilter': '添加滤镜...',
+  'sketch.filter.noFilters': '未应用滤镜',
+  'sketch.filter.remove': '移除滤镜',
+  'sketch.filter.category.blur': '模糊',
+  'sketch.filter.category.color': '色彩',
+  'sketch.filter.category.distort': '扭曲',
+  'sketch.filter.category.stylize': '风格化',
+
+  // Particle panel
+  'sketch.panel.particles': '粒子',
+  'sketch.particle.togglePreview': '切换粒子预览',
+  'sketch.particle.addEmitter': '添加发射器',
+  'sketch.particle.noEmitters': '无发射器',
+  'sketch.particle.remove': '移除 {name}',
+  'sketch.particle.shape': '形状',
+  'sketch.particle.shapeLabel': '发射器形状',
+  'sketch.particle.shape.point': '点',
+  'sketch.particle.shape.line': '线',
+  'sketch.particle.shape.circle': '圆',
+  'sketch.particle.shape.rect': '矩形',
+  'sketch.particle.blend': '混合',
+  'sketch.particle.blendLabel': '混合模式',
+  'sketch.particle.blend.additive': '叠加',
+  'sketch.particle.blend.normal': '正常',
+  'sketch.particle.blend.multiply': '正片叠底',
+  'sketch.particle.rate': '速率',
+  'sketch.particle.speed': '速度',
+  'sketch.particle.size': '大小',
+  'sketch.particle.direction': '方向',
+  'sketch.particle.spread': '扩散',
+
+  // Atmosphere panel
+  'sketch.panel.atmosphere': '氛围',
+  'sketch.atmosphere.preset': '预设',
+  'sketch.atmosphere.presetLabel': '氛围预设',
+  'sketch.atmosphere.preset.none': '无',
+  'sketch.atmosphere.preset.fog': '雾气',
+  'sketch.atmosphere.preset.rain': '雨',
+  'sketch.atmosphere.preset.snow': '雪',
+  'sketch.atmosphere.preset.fireflies': '萤火虫',
+  'sketch.atmosphere.preset.dust': '灰尘',
+  'sketch.atmosphere.intensity': '强度',
+  'sketch.atmosphere.windX': '风向 X',
+
+  // Scene panel
+  'sketch.panel.scene': '场景',
+  'sketch.scene.selectScene': '选择场景...',
+  'sketch.scene.newScene': '新建场景',
+  'sketch.scene.createScene': '创建场景',
+  'sketch.scene.useTemplate': '或使用模板:',
+  'sketch.scene.zoom': '缩放',
+  'sketch.scene.cameraZoom': '相机缩放',
+  'sketch.scene.layers': '图层',
+  'sketch.scene.addLayer': '添加场景图层',
+  'sketch.scene.parallaxX': '视差 X',
+  'sketch.scene.removeLayer': '移除 {name}',
+  'sketch.scene.deleteScene': '删除场景',
+  'sketch.scene.activeScene': '活动场景',
+  'sketch.scene.defaultName': '场景 {index}',
+  'sketch.scene.defaultLayerName': '图层 {index}',
+
+  // Frame controls
+  'sketch.panel.frames': '帧',
+  'sketch.frame.newFrameLayer': '+ 新帧图层',
+  'sketch.frame.frameLayer': '帧图层',
+  'sketch.frame.addFrameLayer': '添加帧图层',
+  'sketch.frame.addFrame': '添加帧',
+  'sketch.frame.addFrameKey': '添加帧 (F6)',
+  'sketch.frame.addFrameButton': '+ 帧',
+  'sketch.frame.addBlank': '添加空帧',
+  'sketch.frame.addBlankButton': '+ 空白',
+  'sketch.frame.duplicate': '复制帧',
+  'sketch.frame.duplicateTooltip': '复制当前帧',
+  'sketch.frame.delete': '删除帧',
+  'sketch.frame.deleteTooltip': '删除当前帧',
+  'sketch.frame.exportSpriteSheet': '导出精灵表',
+  'sketch.frame.exportSpriteSheetTooltip': '导出为精灵表',
+
+  // Morph editor
+  'sketch.panel.morph': '变形目标',
+  'sketch.morph.noTargets': '无变形目标',
+  'sketch.morph.play': '播放变形动画',
+  'sketch.morph.stop': '停止变形动画',
+  'sketch.morph.stopped': '已停止',
+
+  // Vector toolbar
+  'sketch.panel.vector': '矢量工具',
+  'sketch.vector.sides': '边数',
+  'sketch.vector.sidesLabel': '多边形边数',
+  'sketch.vector.points': '顶点',
+  'sketch.vector.pointsLabel': '星形顶点数',
+
+  // Palette panel
+  'sketch.panel.palette': '调色板',
+  'sketch.palette.select': '选择调色板',
+
+  // File
   'sketch.file.import': '导入',
   'sketch.file.export': '导出',
+
+  // Status bar
   'sketch.status.ready': '就绪',
+  'sketch.status.layers': '个图层',
 };

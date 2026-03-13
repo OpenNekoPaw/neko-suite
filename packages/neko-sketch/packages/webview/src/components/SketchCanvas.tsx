@@ -87,6 +87,8 @@ export function SketchCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<SketchRenderer | null>(null);
   const brushRef = useRef<BrushEngine | null>(null);
+  const rafRef = useRef<number>(0);
+  const needsRenderRef = useRef(true);
 
   // Pixel tool state
   const pixelDataRef = useRef<ImageData | null>(null);
@@ -111,6 +113,7 @@ export function SketchCanvas() {
     renderer.init(el, canvas.width, canvas.height);
     rendererRef.current = renderer;
     brushRef.current = new BrushEngine(renderer.pipeline);
+    needsRenderRef.current = true;
     return () => {
       renderer.dispose();
       rendererRef.current = null;
@@ -118,12 +121,54 @@ export function SketchCanvas() {
     };
   }, [canvas.width, canvas.height]);
 
-  // Render loop
+  // Resize observer — keep WebGL viewport in sync with container
   useEffect(() => {
-    const renderer = rendererRef.current;
-    if (!renderer) return;
-    renderer.render(layers, viewport);
+    const el = canvasRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.round(width * dpr);
+      const h = Math.round(height * dpr);
+      if (w > 0 && h > 0 && (el.width !== w || el.height !== h)) {
+        el.width = w;
+        el.height = h;
+        rendererRef.current?.resize(w, h);
+        needsRenderRef.current = true;
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Mark dirty when layers or viewport change
+  useEffect(() => {
+    needsRenderRef.current = true;
   }, [layers, viewport]);
+
+  // Continuous render loop via requestAnimationFrame
+  useEffect(() => {
+    let running = true;
+    const loop = () => {
+      if (!running) return;
+      if (needsRenderRef.current) {
+        const renderer = rendererRef.current;
+        if (renderer) {
+          const state = useSketchStore.getState();
+          renderer.render(state.layers, state.viewport);
+          needsRenderRef.current = false;
+        }
+      }
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => {
+      running = false;
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   // Determine which tools accept pointer input
   const isDrawTool =
@@ -167,6 +212,7 @@ export function SketchCanvas() {
           toPixelBrushSize(brushSettings.size),
         );
         lastPixelPosRef.current = { x: ix, y: iy };
+        needsRenderRef.current = true;
         return;
       }
 
@@ -186,6 +232,7 @@ export function SketchCanvas() {
       const tex = renderer.textures.createTexture(canvas.width, canvas.height);
       const fbo = renderer.textures.createFramebuffer(tex);
       brushRef.current?.beginStroke(point, brushSettings, fbo);
+      needsRenderRef.current = true;
     },
     [brushSettings, activeLayerId, activeTool, canvas.width, canvas.height, viewport],
   );
@@ -216,6 +263,7 @@ export function SketchCanvas() {
           toPixelBrushSize(brushSettings.size),
         );
         lastPixelPosRef.current = { x: ix, y: iy };
+        needsRenderRef.current = true;
         return;
       }
 
@@ -225,6 +273,7 @@ export function SketchCanvas() {
       }
 
       brushRef.current?.addPoint(point);
+      needsRenderRef.current = true;
     },
     [activeTool, brushSettings, viewport],
   );
@@ -252,6 +301,7 @@ export function SketchCanvas() {
         pixelDataRef.current = null;
         lastPixelPosRef.current = null;
         markDirty();
+        needsRenderRef.current = true;
         return;
       }
 
@@ -335,6 +385,7 @@ export function SketchCanvas() {
 
         vectorStartRef.current = null;
         markDirty();
+        needsRenderRef.current = true;
         return;
       }
 
@@ -342,6 +393,7 @@ export function SketchCanvas() {
       const result = brushRef.current?.endStroke();
       if (result) {
         markDirty();
+        needsRenderRef.current = true;
       }
     },
     [activeTool, activeLayerId, markDirty, canvas.width, canvas.height, viewport, brushSettings],
