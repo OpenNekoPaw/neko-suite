@@ -2,10 +2,11 @@
  * LayerPanel - layer list with visibility/lock toggles
  */
 import { useSketchStore } from '../stores';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 import type { LayerData } from '../types';
 
 export function LayerPanel() {
+  const { t } = useTranslation();
   const layers = useSketchStore((s) => s.layers);
   const activeLayerId = useSketchStore((s) => s.activeLayerId);
   const setActiveLayer = useSketchStore((s) => s.setActiveLayer);
@@ -54,6 +55,7 @@ function LayerItem(props: {
   onToggleLock: () => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   const { layer, isActive, onSelect, onToggleVisible, onToggleLock, onRemove } = props;
 
   return (

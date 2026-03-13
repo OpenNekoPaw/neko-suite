@@ -2,7 +2,7 @@
  * BrushPanel - brush settings UI
  */
 import { useSketchStore } from '../stores';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 import type { BrushType } from '../types';
 
 const BRUSH_TYPES: { type: BrushType; key: string }[] = [
@@ -16,6 +16,7 @@ const BRUSH_TYPES: { type: BrushType; key: string }[] = [
 ];
 
 export function BrushPanel() {
+  const { t } = useTranslation();
   const brushSettings = useSketchStore((s) => s.brushSettings);
   const setBrushType = useSketchStore((s) => s.setBrushType);
   const setBrushSize = useSketchStore((s) => s.setBrushSize);

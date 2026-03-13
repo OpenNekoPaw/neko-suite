@@ -36,6 +36,8 @@ export interface CLIConfig {
   outputFormat: 'text' | 'json' | 'markdown';
   /** Extended thinking budget in tokens (0 = disabled, Anthropic/DeepSeek only) */
   thinkingBudget: number;
+  /** Original defaultModel value that was not found in models list (triggers model switch UI) */
+  modelNotFound?: string;
 }
 
 /**

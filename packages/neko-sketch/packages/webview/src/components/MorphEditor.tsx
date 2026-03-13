@@ -4,7 +4,7 @@
  * Displays morph targets with weight sliders and animation preview.
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 import type { MorphTarget, MorphAnimation } from '../types/morph';
 import { sampleAnimation } from '../engine/morph-engine';
 
@@ -15,6 +15,7 @@ interface MorphEditorProps {
 }
 
 export function MorphEditor({ targets, animation, onWeightChange }: MorphEditorProps) {
+  const { t } = useTranslation();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const rafRef = useRef<number | null>(null);

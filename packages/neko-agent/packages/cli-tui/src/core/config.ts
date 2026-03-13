@@ -127,12 +127,22 @@ export function loadConfig(
     const rawWorkspace = readWorkspaceConfig(workDir) ?? {};
 
     // Model: override > defaultModel scalar > first enabled model for provider > default
-    const model =
+    let model =
       overrides.model ??
       rawWorkspace.defaultModel ??
       rawUser.defaultModel ??
       findDefaultModel(cm, providerId) ??
       DEFAULT_CLI_CONFIG.model;
+
+    // Validate model exists in ConfigManager; fall back to first available if not
+    let modelNotFound: string | undefined;
+    if (!cm.getModel(model)) {
+      const fallback = findDefaultModel(cm, providerId);
+      if (fallback) {
+        modelNotFound = model;
+        model = fallback;
+      }
+    }
 
     // Base URL
     const baseUrl = overrides.baseUrl ?? provider?.apiUrl;
@@ -189,6 +199,7 @@ export function loadConfig(
       skillsDir,
       outputFormat: overrides.outputFormat ?? DEFAULT_CLI_CONFIG.outputFormat,
       thinkingBudget,
+      modelNotFound,
     };
 
     return config;

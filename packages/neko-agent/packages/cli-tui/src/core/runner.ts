@@ -112,6 +112,14 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     // Create LLM service via Platform
     let llmService: IService;
     let platform: Platform | undefined;
+
+    // Warn if configured model was not found
+    if (config.modelNotFound) {
+      onOutput?.(
+        `⚠ Model "${config.modelNotFound}" not found in config, using "${config.model}" instead. Run /model to switch.\n`,
+      );
+    }
+
     if (service) {
       llmService = service;
     } else {

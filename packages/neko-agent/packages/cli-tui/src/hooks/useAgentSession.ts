@@ -190,6 +190,15 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           uiStore: useUIStore.getState(),
         });
 
+        // Warn if configured model was not found
+        if (config.modelNotFound) {
+          useConversationStore
+            .getState()
+            .addSystemMessage(
+              `⚠ Model "${config.modelNotFound}" not found in config, using "${config.model}" instead. Use /model to switch.`,
+            );
+        }
+
         isReadyRef.current = true;
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));

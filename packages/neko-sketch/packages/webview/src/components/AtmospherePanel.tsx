@@ -4,7 +4,7 @@
  * Preset selection with intensity, color, and wind parameters.
  */
 import { useSketchStore } from '../stores';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 import type { AtmospherePreset } from '../types/scene';
 
 const PRESETS: { value: AtmospherePreset; key: string }[] = [
@@ -17,6 +17,7 @@ const PRESETS: { value: AtmospherePreset; key: string }[] = [
 ];
 
 export function AtmospherePanel() {
+  const { t } = useTranslation();
   const scenes = useSketchStore((s) => s.scenes);
   const activeSceneId = useSketchStore((s) => s.activeSceneId);
   const setAtmosphere = useSketchStore((s) => s.setAtmosphere);

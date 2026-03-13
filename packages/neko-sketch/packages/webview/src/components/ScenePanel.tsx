@@ -5,11 +5,12 @@
  */
 import { useCallback } from 'react';
 import { useSketchStore } from '../stores';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 import type { SceneLayerType } from '../types/scene';
 import { SCENE_TEMPLATES } from '../data/scene-templates';
 
 export function ScenePanel() {
+  const { t } = useTranslation();
   const scenes = useSketchStore((s) => s.scenes);
   const activeSceneId = useSketchStore((s) => s.activeSceneId);
   const createScene = useSketchStore((s) => s.createScene);
@@ -24,7 +25,7 @@ export function ScenePanel() {
 
   const handleCreate = useCallback(() => {
     createScene(t('sketch.scene.defaultName', { index: scenes.length + 1 }));
-  }, [createScene, scenes.length]);
+  }, [createScene, scenes.length, t]);
 
   const handleCreateFromTemplate = useCallback(
     (templateId: string) => {
@@ -53,7 +54,7 @@ export function ScenePanel() {
       objects: [],
       visible: true,
     });
-  }, [activeSceneId, activeScene, addSceneLayer]);
+  }, [activeSceneId, activeScene, addSceneLayer, t]);
 
   return (
     <div className="sketch-panel" role="region" aria-label={t('sketch.panel.scene')}>

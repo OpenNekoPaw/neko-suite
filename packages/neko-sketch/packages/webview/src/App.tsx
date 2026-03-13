@@ -28,7 +28,8 @@ import {
 import { deserializeDocument, serializeDocument } from './utils/document-serializer';
 import { dispatchKeyboardAction } from './utils/keyboard-dispatcher';
 import { importImageAsLayer } from './utils/image-import';
-import { setLocale } from './i18n';
+import { i18nService, setLocale } from './i18n';
+import { I18nProvider } from './i18n/I18nContext';
 import { usePuppetPlayback } from './hooks/usePuppetPlayback';
 import { Inochi2DController } from './animation';
 import type { SupportedLocale } from '@neko/shared';
@@ -128,34 +129,36 @@ export function App() {
   }, [handleMessage]);
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden">
-      <div className="flex flex-1 overflow-hidden">
-        <Toolbar />
-        <div className="sketch-canvas-container">
-          <SketchCanvas />
+    <I18nProvider service={i18nService}>
+      <div className="flex flex-col h-screen w-screen overflow-hidden">
+        <div className="flex flex-1 overflow-hidden">
+          <Toolbar />
+          <div className="sketch-canvas-container">
+            <SketchCanvas />
+          </div>
+          <div className="flex flex-col w-60 border-l border-[var(--sketch-border)] overflow-y-auto">
+            <BrushPanel />
+            <ColorPanel />
+            <PalettePanel />
+            <LayerPanel />
+            <FilterPanel />
+            <FrameControls />
+            <ParticlePanel />
+            <ScenePanel />
+            <AtmospherePanel />
+            {puppetLoaded && (
+              <>
+                <PuppetNodeTree />
+                <ParameterPanel controller={controllerRef.current} />
+                <AnimationPanel onPlay={onPlay} onStop={onStop} onSeek={onSeek} />
+              </>
+            )}
+          </div>
         </div>
-        <div className="flex flex-col w-60 border-l border-[var(--sketch-border)] overflow-y-auto">
-          <BrushPanel />
-          <ColorPanel />
-          <PalettePanel />
-          <LayerPanel />
-          <FilterPanel />
-          <FrameControls />
-          <ParticlePanel />
-          <ScenePanel />
-          <AtmospherePanel />
-          {puppetLoaded && (
-            <>
-              <PuppetNodeTree />
-              <ParameterPanel controller={controllerRef.current} />
-              <AnimationPanel onPlay={onPlay} onStop={onStop} onSeek={onSeek} />
-            </>
-          )}
-        </div>
+        <FrameTimeline />
+        <StatusBar />
       </div>
-      <FrameTimeline />
-      <StatusBar />
-    </div>
+    </I18nProvider>
   );
 }
 

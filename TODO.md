@@ -9,7 +9,7 @@
 ### 后续开发步骤
 
 1. ~~验证 Phase 3 Rust 编译~~ ✅ `cargo build` 通过（仅 warnings，无 errors）
-2. neko-model Phase 2 继续推进 — 当前迭代 P1 核心，CSG 布尔运算和 3D 文字挤出是最高复杂度项
+2. ~~neko-model Phase 2 基础建模~~ ✅ 7/7 完成（骨骼表情 + CSG + 3D 文字 + 参数化几何体，前后端全栈）
 3. ~~neko-sketch 逐帧动画~~ ✅ S.2 + S.3 全部完成
 
 ---
@@ -41,7 +41,7 @@
 ### neko-model（3D 编辑器 Phase 2）
 
 **目标**：AI 捏脸 + 基础建模 + 延迟验证
-**进度**：4/7 完成（57%）
+**进度**：11/15 完成（73%）
 
 **已完成** ✅：
 - [x] 前端：参数化面部编辑器（R3F 视口 + 分类滑块面板：脸型/眼/鼻/嘴/眉，22 个参数）
@@ -49,15 +49,15 @@
 - [x] 前端：VRM 表情预设（`@pixiv/three-vrm@^3.5.1`，17 个标准表情：情绪/口型/眼神）
 - [x] 前端：延迟测试工具（100 次测试 + Min/Max/Avg/P95 统计 + 建议）
 - [x] 后端：`scenes:latency_test` action（立即返回，用于 RTT 测量）
+- [x] 前端：骨骼驱动表情（口型 6 音素 + 眼球追踪 128x128 + 眉毛 3 滑块）
+- [x] 前端：CSG 操作 UI（并集/差集/交集 + 操作数选择 + 执行）
+- [x] 前端：3D 文字编辑器（文本输入 + 字号/挤出深度滑块）
+- [x] 前端：参数化几何体面板（6 种形状 + 动态参数滑块）
+- [x] 后端：CSG 布尔运算（BSP 树分割法，三角网格级别）
+- [x] 后端：3D 文字挤出（cosmic-text 0.12 字形轮廓 + ear-clipping 三角化 + Z 轴挤出）
+- [x] 后端：参数化几何体生成（Cube/Sphere/Cylinder/Cone/Torus/Plane + ProceduralMesh 统一抽象）
 
 **待完成** ⬜：
-- [ ] 前端：骨骼驱动表情（口型/眼球追踪/眉毛）
-- [ ] 前端：CSG 操作 UI（并集/差集/交集）
-- [ ] 前端：3D 文字编辑器
-- [ ] 前端：参数化几何体面板
-- [ ] 后端：CSG 布尔运算（三角网格级别）
-- [ ] 后端：3D 文字挤出（`cosmic-text`）
-- [ ] 后端：参数化几何体生成
 - [ ] 后端：JPEG 单帧模式（备选方案 B，根据延迟测试结果决定）
 - [ ] AI MCP Tools：`face.generate_params`（文本 → 参数向量）
 - [ ] AI MCP Tools：`face.from_image`（图片 → 参数向量）
@@ -224,4 +224,4 @@
 
 ---
 
-*最后更新：2026-03-13（neko-sketch S.2 + S.3 全部完成：逐帧动画 + 滤镜/粒子/场景/像素/矢量/资产集成 + 渲染管线接入 + 42 单元测试）*
+*最后更新：2026-03-13（neko-model Phase 2 基础建模完成：CSG BSP 布尔运算、cosmic-text 3D 文字挤出、参数化几何体 6 种形状、骨骼驱动表情 UI，ProceduralMesh 统一抽象 + AssetCache GPU 管线注入；neko-engine Phase 3 PBR 渲染 12 Step 全部完成）*

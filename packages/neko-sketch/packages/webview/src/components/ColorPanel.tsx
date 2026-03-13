@@ -2,9 +2,10 @@
  * ColorPanel - color picker and palette
  */
 import { useSketchStore } from '../stores';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 
 export function ColorPanel() {
+  const { t } = useTranslation();
   const color = useSketchStore((s) => s.brushSettings.color);
   const setBrushColor = useSketchStore((s) => s.setBrushColor);
   const show = useSketchStore((s) => s.showColorPanel);

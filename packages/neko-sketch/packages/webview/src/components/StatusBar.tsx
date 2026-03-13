@@ -2,9 +2,10 @@
  * StatusBar - zoom, canvas size, tool, layer count
  */
 import { useSketchStore } from '../stores';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 
 export function StatusBar() {
+  const { t } = useTranslation();
   const viewport = useSketchStore((s) => s.viewport);
   const canvas = useSketchStore((s) => s.canvas);
   const activeTool = useSketchStore((s) => s.activeTool);

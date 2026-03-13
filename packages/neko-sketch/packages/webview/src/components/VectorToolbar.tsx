@@ -4,7 +4,7 @@
  * Shape tools (path, rectangle, ellipse, polygon) and fill/stroke controls.
  */
 import { useState } from 'react';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 
 export type VectorShapeTool = 'path' | 'rectangle' | 'ellipse' | 'polygon' | 'star';
 
@@ -22,6 +22,7 @@ const SHAPE_ICONS: Record<VectorShapeTool, string> = {
 };
 
 export function VectorToolbar({ onShapeSelect, activeShape }: VectorToolbarProps) {
+  const { t } = useTranslation();
   const [polygonSides, setPolygonSides] = useState(6);
   const [starPoints, setStarPoints] = useState(5);
 

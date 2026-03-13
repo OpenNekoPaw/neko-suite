@@ -2,7 +2,7 @@
  * Toolbar - vertical tool selector
  */
 import { useSketchStore } from '../stores';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 import type { ToolType } from '../types';
 
 const TOOLS: { type: ToolType; icon: string; key: string }[] = [
@@ -18,6 +18,7 @@ const TOOLS: { type: ToolType; icon: string; key: string }[] = [
 ];
 
 export function Toolbar() {
+  const { t } = useTranslation();
   const activeTool = useSketchStore((s) => s.activeTool);
   const setActiveTool = useSketchStore((s) => s.setActiveTool);
 

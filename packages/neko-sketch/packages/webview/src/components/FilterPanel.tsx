@@ -5,7 +5,7 @@
  */
 import { useCallback } from 'react';
 import { useSketchStore } from '../stores';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 import { FilterRegistry } from '../engine/filter-registry';
 import type { FilterCategory, FilterDef } from '../types/filter';
 
@@ -19,6 +19,7 @@ const CATEGORY_KEYS: Record<FilterCategory, string> = {
 };
 
 export function FilterPanel() {
+  const { t } = useTranslation();
   const filters = useSketchStore((s) => s.filters);
   const addFilter = useSketchStore((s) => s.addFilter);
   const removeFilter = useSketchStore((s) => s.removeFilter);
@@ -116,6 +117,7 @@ function FilterItem({
   onRemove,
   onUpdateParam,
 }: FilterItemProps) {
+  const { t } = useTranslation();
   return (
     <div
       className={`mb-1 p-1 rounded border border-[var(--vscode-input-border)] ${enabled ? '' : 'opacity-50'}`}

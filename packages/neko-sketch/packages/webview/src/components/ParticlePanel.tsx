@@ -5,10 +5,11 @@
  */
 import { useCallback } from 'react';
 import { useSketchStore } from '../stores';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 import type { ParticleEmitterConfig, EmitterShape, ParticleBlendMode } from '../types/particle';
 
 export function ParticlePanel() {
+  const { t } = useTranslation();
   const emitters = useSketchStore((s) => s.emitters);
   const isPreview = useSketchStore((s) => s.isParticlePreviewActive);
   const addEmitter = useSketchStore((s) => s.addEmitter);
@@ -63,6 +64,7 @@ interface EmitterItemProps {
 }
 
 function EmitterItem({ emitter, onUpdate, onRemove }: EmitterItemProps) {
+  const { t } = useTranslation();
   const id = emitter.id;
 
   return (

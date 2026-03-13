@@ -5,7 +5,7 @@
  */
 import { useState, useCallback } from 'react';
 import { useSketchStore } from '../stores';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 
 interface PaletteDef {
   readonly name: string;
@@ -111,6 +111,7 @@ const BUILTIN_PALETTES: readonly PaletteDef[] = [
 ];
 
 export function PalettePanel() {
+  const { t } = useTranslation();
   const [selectedPalette, setSelectedPalette] = useState(0);
   const setBrushColor = useSketchStore((s) => s.setBrushColor);
 

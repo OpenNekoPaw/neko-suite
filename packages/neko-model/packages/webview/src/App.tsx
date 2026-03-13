@@ -265,7 +265,7 @@ export function App(): React.JSX.Element {
           />
         </div>
 
-        {/* Right Sidebar: Expression Preset, Latency Tester, Face Editor, or Transform Panel */}
+        {/* Right Sidebar: Panel routing by priority */}
         {isExpressionPresetOpen ? (
           <ExpressionPresetPanel
             onApplyExpression={handleApplyExpression}
@@ -275,6 +275,14 @@ export function App(): React.JSX.Element {
           <LatencyTester />
         ) : isFaceEditorOpen ? (
           <FaceEditorPanel />
+        ) : isBoneExpressionOpen ? (
+          <BoneExpressionPanel />
+        ) : isShapeCreatorOpen ? (
+          <ShapeCreatorPanel />
+        ) : isTextEditorOpen ? (
+          <TextEditorPanel />
+        ) : isCsgPanelOpen ? (
+          <CsgPanel />
         ) : (
           <TransformPanel
             node={selectedNode}

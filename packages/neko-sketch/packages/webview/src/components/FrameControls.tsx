@@ -5,9 +5,10 @@
  */
 import { useCallback } from 'react';
 import { useSketchStore } from '../stores';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n/I18nContext';
 
 export function FrameControls() {
+  const { t } = useTranslation();
   const frameLayers = useSketchStore((s) => s.frameLayers);
   const selectedLayerId = useSketchStore((s) => s.selectedFrameLayerId);
   const addFrame = useSketchStore((s) => s.addFrame);
