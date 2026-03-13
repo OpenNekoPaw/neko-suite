@@ -6,11 +6,37 @@
 
 ## 🔴 P0 — 阻塞性（本迭代必须完成）
 
-*当前无阻塞项*
+### 后续开发步骤
+
+1. ~~验证 Phase 3 Rust 编译~~ ✅ `cargo build` 通过（仅 warnings，无 errors）
+2. neko-model Phase 2 继续推进 — 当前迭代 P1 核心，CSG 布尔运算和 3D 文字挤出是最高复杂度项
+3. neko-sketch 逐帧动画 — S.2 最后一项，完成后可标记阶段完成
 
 ---
 
 ## 🟡 P1 — 核心功能（当前迭代）
+
+### neko-engine（3D PBR 渲染 Phase 3）✅ 已完成
+
+**目标**：轻量 PBR 渲染 + 场景组装 + 时间线集成（打通 3D 场景 → GPU 纹理 → 2D 合成管线）
+**进度**：12/12 完成（100%）
+
+**已完成** ✅：
+- [x] Step 1: GPU 资产缓存（AssetCache，glTF → GPU mesh/material，按 URI 去重）
+- [x] Step 2: PBR 渲染管线（Forward rendering, Cook-Torrance BRDF, `pbr_forward.wgsl`）
+- [x] Step 3: SceneRenderOutput → GpuLayer 桥接（Rgba16Float 零拷贝进 TextureCompositor）
+- [x] Step 4: Scene3D 元素类型（ElementType::Scene3D + Scene3DElementData + CameraOverride）
+- [x] Step 5: SceneService 扩展（ISceneService::render_frame，Mutex 内 tick+render 同一锁）
+- [x] Step 6: GpuExportPipeline 集成（collect_visible_scene3d → render → GpuLayer）
+- [x] Step 7: ScenesController 渲染 API（capture/composite/stream 三个 action）
+- [x] Step 8: 动画插值增强（Translation/Scale LERP + Rotation SLERP + MorphWeights LERP）
+- [x] Step 9: IBL 环境系统（irradiance map + prefilter map + BRDF LUT + skybox）
+- [x] Step 10: 后处理链（Tone Mapping ACES/Reinhard/Uncharted2 + bloom + vignette + color grading）
+- [x] Step 11: GPU 粒子系统（compute shader 模拟 + billboard 渲染，fire/smoke/magic/debris 预设）
+- [x] Step 12: 前端集成（TS 类型 + neko-cut 时间线 dispatch + neko-canvas 节点类型 + AI action 映射）
+
+**新增文件**：`scene_renderer/` 模块（asset_cache/pbr_pipeline/environment/post_process/particles/vertex）+ 5 个 WGSL shaders
+**修改文件**：gpu_export_pipeline.rs、domain/timeline.rs、services/scene.rs、editor-types.ts、TimelineElementContent.tsx、extendedCanvas.ts、LayerPanel.tsx、aiAction.ts 等
 
 ### neko-model（3D 编辑器 Phase 2）
 
@@ -189,4 +215,4 @@
 
 ---
 
-*最后更新：2026-03-13（neko-sketch S.2 骨骼动画基本完成：native-puppet INP 解析、bevy_animation 桥接、WS 60fps 流、AnimationPanel UI；仅逐帧动画编辑器待实现）*
+*最后更新：2026-03-13（neko-engine Phase 3 PBR 渲染全部完成：12 Step 交付，3D 场景 → GPU 纹理 → 2D 合成管线打通；neko-sketch S.2 骨骼动画基本完成，仅逐帧动画编辑器待实现）*

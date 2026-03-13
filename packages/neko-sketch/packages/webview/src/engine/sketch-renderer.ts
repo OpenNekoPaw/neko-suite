@@ -2,7 +2,8 @@
  * Sketch Renderer
  *
  * Top-level facade that assembles WebGLContext + ShaderManager +
- * TextureManager + RenderPipeline into a single renderer.
+ * TextureManager + RenderPipeline + FilterPipeline + ParticleRenderer
+ * into a single renderer with effects support.
  */
 import type {
   ISketchRenderer,
@@ -12,16 +13,26 @@ import type {
   IRenderPipeline,
 } from './types';
 import type { LayerData, ViewportState } from '../types';
+import type { AppliedFilter } from '../types/filter';
+import type { ParticleEmitterConfig } from '../types/particle';
 import { WebGLContext } from './webgl-context';
 import { ShaderManager } from './shader-manager';
 import { TextureManager } from './texture-manager';
 import { RenderPipeline } from './render-pipeline';
+import { FilterPipeline } from './filter-pipeline';
+import { FilterRegistry } from './filter-registry';
+import { ParticleRenderer } from './particle-renderer';
+import { ParticleSimulation } from './particle-simulation';
 
 export class SketchRenderer implements ISketchRenderer {
   private _context!: IWebGLContext;
   private _shaders!: IShaderManager;
   private _textures!: ITextureManager;
   private _pipeline!: IRenderPipeline;
+  private _filterPipeline!: FilterPipeline;
+  private _filterRegistry!: FilterRegistry;
+  private _particleRenderer!: ParticleRenderer;
+  private _particleSim!: ParticleSimulation;
   private initialized = false;
 
   get context(): IWebGLContext {
@@ -36,6 +47,18 @@ export class SketchRenderer implements ISketchRenderer {
   get pipeline(): IRenderPipeline {
     return this._pipeline;
   }
+  get filterPipeline(): FilterPipeline {
+    return this._filterPipeline;
+  }
+  get filterRegistry(): FilterRegistry {
+    return this._filterRegistry;
+  }
+  get particleRenderer(): ParticleRenderer {
+    return this._particleRenderer;
+  }
+  get particleSim(): ParticleSimulation {
+    return this._particleSim;
+  }
 
   init(canvas: HTMLCanvasElement, width: number, height: number): void {
     if (this.initialized) {
@@ -49,6 +72,10 @@ export class SketchRenderer implements ISketchRenderer {
     this._shaders = new ShaderManager(gl);
     this._textures = new TextureManager(gl);
     this._pipeline = new RenderPipeline(gl, this._shaders, this._textures);
+    this._filterRegistry = new FilterRegistry();
+    this._filterPipeline = new FilterPipeline(gl, this._textures);
+    this._particleRenderer = new ParticleRenderer(gl);
+    this._particleSim = new ParticleSimulation();
 
     this.initialized = true;
   }
@@ -63,8 +90,60 @@ export class SketchRenderer implements ISketchRenderer {
     this._pipeline.compositeLayerStack(layers, viewport);
   }
 
+  /**
+   * Render with optional filter chain and particle overlay.
+   *
+   * @param layers       - Layer stack to composite
+   * @param viewport     - Current viewport transform
+   * @param filters      - Applied filters to run after compositing
+   * @param emitters     - Active particle emitter configs
+   * @param particlePreview - Whether particle preview is enabled
+   * @param dt           - Delta time in seconds for particle simulation
+   */
+  renderWithEffects(
+    layers: ReadonlyArray<LayerData>,
+    viewport: ViewportState,
+    filters: readonly AppliedFilter[],
+    emitters: readonly ParticleEmitterConfig[],
+    particlePreview: boolean,
+    dt: number,
+  ): void {
+    if (!this.initialized) return;
+
+    // Build filter callback for enabled filters
+    const enabledFilters = filters.filter((f) => f.enabled);
+    const filterFn =
+      enabledFilters.length > 0
+        ? (tex: WebGLTexture, w: number, h: number) =>
+            this._filterPipeline.applyFilters(tex, w, h, enabledFilters, this._filterRegistry)
+        : undefined;
+
+    // Composite layers with optional filter chain
+    this._pipeline.compositeLayerStack(layers, viewport, filterFn);
+
+    // Render particles on top if preview is active
+    if (particlePreview && emitters.length > 0) {
+      const gl = this._context.gl;
+      const cw = gl.canvas.width;
+      const ch = gl.canvas.height;
+
+      for (const emitter of emitters) {
+        this._particleSim.emit(emitter, dt);
+      }
+      this._particleSim.update(dt);
+
+      const { data, count } = this._particleSim.getInstanceData();
+      if (count > 0) {
+        const blendMode = emitters[0]?.blendMode ?? 'additive';
+        this._particleRenderer.render(data, count, cw, ch, blendMode);
+      }
+    }
+  }
+
   dispose(): void {
     if (!this.initialized) return;
+    this._filterPipeline.dispose();
+    this._particleRenderer.dispose();
     this._pipeline.dispose();
     this._textures.dispose();
     this._shaders.dispose();

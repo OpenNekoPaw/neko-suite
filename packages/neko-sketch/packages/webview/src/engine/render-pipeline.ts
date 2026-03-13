@@ -89,7 +89,11 @@ export class RenderPipeline implements IRenderPipeline {
     this.compHeight = height;
   }
 
-  compositeLayerStack(layers: ReadonlyArray<LayerData>, viewport: ViewportState): void {
+  compositeLayerStack(
+    layers: ReadonlyArray<LayerData>,
+    viewport: ViewportState,
+    filterFn?: (compositeTex: WebGLTexture, width: number, height: number) => WebGLTexture,
+  ): void {
     const gl = this.gl;
     if (layers.length === 0) return;
 
@@ -151,6 +155,12 @@ export class RenderPipeline implements IRenderPipeline {
       current = 1 - current;
     }
 
+    // Apply filter chain if provided
+    let outputTex = texs[current]!;
+    if (filterFn) {
+      outputTex = filterFn(outputTex, cw, ch);
+    }
+
     // Blit final composite to screen with viewport transform
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, cw, ch);
@@ -163,7 +173,7 @@ export class RenderPipeline implements IRenderPipeline {
     const trLoc = gl.getUniformLocation(blitProgram, 'u_transform');
 
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, texs[current]!);
+    gl.bindTexture(gl.TEXTURE_2D, outputTex);
     gl.uniform1i(texLoc, 0);
     gl.uniform1f(opLoc, 1.0);
     gl.uniformMatrix3fv(trLoc, false, transform);

@@ -102,6 +102,48 @@ export function FrameControls() {
           </button>
         </div>
       )}
+
+      {/* Sprite sheet export */}
+      {currentLayer && currentLayer.frames.length > 1 && (
+        <button
+          className="w-full text-xs py-0.5 mt-1 rounded border border-[var(--vscode-button-border)] hover:bg-[var(--vscode-button-hoverBackground)]"
+          onClick={() => {
+            void (async () => {
+              try {
+                const { exportSpriteSheet } = await import('../utils/spritesheet-export');
+                const state = useSketchStore.getState();
+                const result = await exportSpriteSheet(currentLayer.frames, {
+                  frameWidth: state.canvas.width,
+                  frameHeight: state.canvas.height,
+                });
+                // Download sprite sheet image
+                const url = URL.createObjectURL(result.image);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${currentLayer.name}_spritesheet.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+                // Download JSON metadata
+                const metaBlob = new Blob([JSON.stringify(result.meta, null, 2)], {
+                  type: 'application/json',
+                });
+                const metaUrl = URL.createObjectURL(metaBlob);
+                const b = document.createElement('a');
+                b.href = metaUrl;
+                b.download = `${currentLayer.name}_spritesheet.json`;
+                b.click();
+                URL.revokeObjectURL(metaUrl);
+              } catch {
+                // Export failed
+              }
+            })();
+          }}
+          title="Export as sprite sheet"
+          aria-label="Export sprite sheet"
+        >
+          Export Sprite Sheet
+        </button>
+      )}
     </div>
   );
 }

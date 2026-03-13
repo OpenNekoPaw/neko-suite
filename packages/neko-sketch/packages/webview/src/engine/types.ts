@@ -40,7 +40,11 @@ export interface ITextureManager {
 
 /** Render pipeline for compositing and drawing */
 export interface IRenderPipeline {
-  compositeLayerStack(layers: ReadonlyArray<LayerData>, viewport: ViewportState): void;
+  compositeLayerStack(
+    layers: ReadonlyArray<LayerData>,
+    viewport: ViewportState,
+    filterFn?: (compositeTex: WebGLTexture, width: number, height: number) => WebGLTexture,
+  ): void;
   renderStrokeSegment(
     points: Float32Array,
     color: [number, number, number, number],

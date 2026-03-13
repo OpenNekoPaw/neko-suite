@@ -73,6 +73,18 @@ export function dispatchKeyboardAction(
     case 'export':
       exportCanvas(store, vscode);
       break;
+
+    case 'exportSpriteSheet':
+      exportSpriteSheet(store, vscode);
+      break;
+
+    case 'exportScene':
+      exportScene(store, vscode);
+      break;
+
+    case 'importAsset':
+      vscode.postMessage({ type: 'file:import' });
+      break;
   }
 }
 
@@ -139,6 +151,54 @@ function cycleBrushSize(store: SketchStore): void {
   } else {
     store.setBrushSize(5);
   }
+}
+
+function exportSpriteSheet(store: SketchStore, vscode: VsCodeApi): void {
+  const { frameLayers, selectedFrameLayerId, canvas } = store;
+  const layer = frameLayers.find((l) => l.id === selectedFrameLayerId);
+  if (!layer || layer.frames.length === 0) return;
+
+  // Dynamically import to avoid circular dependency
+  void (async () => {
+    const { exportSpriteSheet: doExport } = await import('./spritesheet-export');
+    const { blobToBase64 } = await import('./asset-export');
+    try {
+      const result = await doExport(layer.frames, {
+        frameWidth: canvas.width,
+        frameHeight: canvas.height,
+      });
+      const dataUrl = await blobToBase64(result.image);
+      const base64 = dataUrl.split(',')[1] ?? '';
+      vscode.postMessage({
+        type: 'file:export',
+        data: {
+          format: 'spritesheet',
+          data: base64,
+          metadata: result.meta,
+          name: `${layer.name}_spritesheet`,
+        },
+      });
+    } catch {
+      // Export failed silently
+    }
+  })();
+}
+
+function exportScene(store: SketchStore, vscode: VsCodeApi): void {
+  const { scenes, activeSceneId } = store;
+  const scene = scenes.find((s) => s.id === activeSceneId);
+  if (!scene) return;
+
+  const json = JSON.stringify(scene, null, 2);
+  vscode.postMessage({
+    type: 'file:export',
+    data: {
+      format: 'json',
+      data: btoa(json),
+      name: `${scene.name}_scene`,
+      metadata: { type: 'scene' },
+    },
+  });
 }
 
 function exportCanvas(store: SketchStore, vscode: VsCodeApi): void {

@@ -120,6 +120,39 @@ export function getOnionSkinGhosts(
   return ghosts;
 }
 
+/** Compute onion skin ghost frames for a single layer */
+export function computeOnionSkinGhosts(
+  layer: FrameLayer,
+  currentIndex: number,
+  config: OnionSkinConfig,
+): OnionSkinGhost[] {
+  if (!config.enabled) return [];
+
+  const ghosts: OnionSkinGhost[] = [];
+  const prevTint: readonly [number, number, number] = [0, 0.8, 0.2]; // green
+  const nextTint: readonly [number, number, number] = [0.8, 0.2, 0]; // red
+
+  // Previous frames (closest first, decreasing opacity)
+  for (let i = 1; i <= config.prevCount; i++) {
+    const frame = layer.frames.find((f) => f.index === currentIndex - i);
+    if (frame?.imageData) {
+      const opacity = config.prevOpacity * (1 - (i - 1) / config.prevCount);
+      ghosts.push({ frame, opacity, tint: prevTint });
+    }
+  }
+
+  // Next frames (closest first, decreasing opacity)
+  for (let i = 1; i <= config.nextCount; i++) {
+    const frame = layer.frames.find((f) => f.index === currentIndex + i);
+    if (frame?.imageData) {
+      const opacity = config.nextOpacity * (1 - (i - 1) / config.nextCount);
+      ghosts.push({ frame, opacity, tint: nextTint });
+    }
+  }
+
+  return ghosts;
+}
+
 /** Get total frame count across a layer (accounting for frame durations) */
 export function getTotalFrameCount(layer: FrameLayer): number {
   return layer.frames.reduce((sum, f) => sum + f.duration, 0);
