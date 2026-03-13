@@ -208,7 +208,7 @@ export function getActionsForElementType(
  * Map TimelineElement type to AIActionElementType
  */
 export function mapElementTypeToAIType(
-  elementType: 'media' | 'text' | 'audio' | 'shape' | 'subtitle',
+  elementType: 'media' | 'text' | 'audio' | 'shape' | 'subtitle' | 'scene3d',
   mediaType?: 'video' | 'image',
 ): AIActionElementType {
   switch (elementType) {
@@ -222,6 +222,8 @@ export function mapElementTypeToAIType(
       return 'shape';
     case 'subtitle':
       return 'text'; // Treat subtitle as text for AI actions
+    case 'scene3d':
+      return 'video'; // Treat scene3d as video for AI actions
     default:
       return 'video';
   }

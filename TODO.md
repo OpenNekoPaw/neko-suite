@@ -62,6 +62,16 @@
 - [ ] Diff 后端增强（Phase 3）
   - [ ] 音频静音检测（协议已定义，未实现）
   - [ ] 视频场景切割检测
+- [ ] AI 生成内容对比（基于现有 MediaDiff 扩展，无需新子包）
+  - [ ] CompareView N 文件网格对比（现有仅支持 2 文件）
+  - [ ] AI 元数据面板（展示 prompt / model / seed 等生成参数）
+  - [ ] 用户评分/标注组件（主观质量评价）
+  - [ ] neko-agent 集成入口（`neko.tools.compareAIResults` 命令）
+- [ ] 自定义 AI API 诊断（在 neko-agent 配置页内置，非独立包）
+  - [ ] 连通性测试（鉴权验证）
+  - [ ] 延迟测试（首 token 时间 / 总响应时间）
+  - [ ] 兼容性检测（streaming / tool_use 支持）
+  - [ ] 配额检查（速率限制 / 余额）
 
 ### neko-canvas
 - [ ] 功能补全：Port 系统 + UI 面板

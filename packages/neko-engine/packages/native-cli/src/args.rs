@@ -345,6 +345,8 @@ define_actions!(SceneAction {
     Capture => "capture",
     /// Stream scene rendering
     Stream => "stream",
+    /// Latency test (echo)
+    LatencyTest => "latency_test",
 });
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ export type EngineTrackType =
   | 'effect'
   | 'subtitle'
   | 'shape'
+  | 'scene3d'
   | 'media';
 
 export type EngineBlendMode =
@@ -297,6 +298,28 @@ export interface EngineSubtitleElementData {
   shadow?: EngineTextShadow;
 }
 
+export interface EngineScene3DElementData {
+  /** Source glTF/GLB/VRM file path */
+  src: string;
+  /** Camera node ID from model */
+  cameraNodeId?: string;
+  /** Active animation clip name */
+  animationClip?: string;
+  /** Loop animation playback (default: false) */
+  animationLoop?: boolean;
+  /** Animation playback speed multiplier (default: 1.0) */
+  animationSpeed?: number;
+  /** Background color [r,g,b,a] — null = transparent */
+  backgroundColor?: [number, number, number, number];
+  /** Camera override parameters */
+  cameraOverride?: {
+    position: [number, number, number];
+    target: [number, number, number];
+    up?: [number, number, number];
+    fovY?: number;
+  };
+}
+
 export interface EngineElement {
   /** Element ID */
   id: string;
@@ -321,6 +344,7 @@ export interface EngineElement {
   text?: EngineTextElementData;
   shape?: EngineShapeElementData;
   subtitle?: EngineSubtitleElementData;
+  scene3d?: EngineScene3DElementData;
 }
 
 export interface EngineSpeedProperties {
@@ -563,6 +587,16 @@ export const ENGINE_SUBTITLE_KEYS = [
   'strokeColor',
   'strokeWidth',
   'shadow',
+] as const;
+
+export const ENGINE_SCENE3D_KEYS = [
+  'src',
+  'cameraNodeId',
+  'animationClip',
+  'animationLoop',
+  'animationSpeed',
+  'backgroundColor',
+  'cameraOverride',
 ] as const;
 
 export const ENGINE_TRACK_KEYS = [

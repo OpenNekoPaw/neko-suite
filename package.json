@@ -67,5 +67,21 @@
     "turbo": "^2.8.3",
     "typescript-eslint": "^8.56.1",
     "vitest": "^4.0.18"
+  },
+  "pnpm": {
+    "overrides": {
+      "d3-array": "^3.2.4",
+      "d3-shape": "^3.2.0",
+      "d3-selection": "^3.0.0",
+      "d3-transition": "^3.0.0",
+      "d3-interpolate": "^3.0.0",
+      "d3-color": "^3.1.0",
+      "d3-format": "^3.1.0",
+      "d3-path": "^3.1.0"
+    },
+    "onlyBuiltDependencies": [
+      "sharp",
+      "webgpu"
+    ]
   }
 }

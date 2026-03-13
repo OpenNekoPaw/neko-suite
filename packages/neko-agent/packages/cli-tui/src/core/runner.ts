@@ -140,6 +140,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       maxIterations: runOptions.maxIterations,
       temperature: config.temperature,
       maxTokens: config.maxTokens,
+      modelId: config.model,
       hooks: hooks ? [hooks as ExecutorHooks] : undefined,
       onConfirmTool: async (_request) => {
         // In non-interactive mode, auto-approve all tools
@@ -544,6 +545,7 @@ async function initializeInteractiveSession(
     maxIterations: 50,
     temperature: config.temperature,
     maxTokens: config.maxTokens,
+    modelId: config.model,
     onConfirmTool: async (request) => {
       // Check always-allowed set
       if (alwaysAllowedTools.has(request.toolCall.name)) {

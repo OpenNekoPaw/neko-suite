@@ -110,21 +110,33 @@ fn apply_clip_at_time(
             }
         };
 
-        // Interpolate value at time
-        let idx = find_keyframe_index(&channel.timestamps, time);
         if channel.timestamps.is_empty() {
             continue;
         }
+
+        let (idx, t) = find_keyframe_lerp(&channel.timestamps, time);
+        let has_next = idx + 1 < channel.timestamps.len();
 
         match channel.property {
             AnimationProperty::Translation => {
                 if channel.values.len() >= (idx + 1) * 3 {
                     let base = idx * 3;
-                    let pos = glam::Vec3::new(
+                    let a = glam::Vec3::new(
                         channel.values[base],
                         channel.values[base + 1],
                         channel.values[base + 2],
                     );
+                    let pos = if has_next && channel.values.len() >= (idx + 2) * 3 {
+                        let next_base = (idx + 1) * 3;
+                        let b = glam::Vec3::new(
+                            channel.values[next_base],
+                            channel.values[next_base + 1],
+                            channel.values[next_base + 2],
+                        );
+                        a.lerp(b, t)
+                    } else {
+                        a
+                    };
                     if let Some(mut transform) = world.get_mut::<Transform>(target_entity) {
                         transform.position = pos;
                     }
@@ -133,12 +145,24 @@ fn apply_clip_at_time(
             AnimationProperty::Rotation => {
                 if channel.values.len() >= (idx + 1) * 4 {
                     let base = idx * 4;
-                    let rot = glam::Quat::from_xyzw(
+                    let a = glam::Quat::from_xyzw(
                         channel.values[base],
                         channel.values[base + 1],
                         channel.values[base + 2],
                         channel.values[base + 3],
                     );
+                    let rot = if has_next && channel.values.len() >= (idx + 2) * 4 {
+                        let next_base = (idx + 1) * 4;
+                        let b = glam::Quat::from_xyzw(
+                            channel.values[next_base],
+                            channel.values[next_base + 1],
+                            channel.values[next_base + 2],
+                            channel.values[next_base + 3],
+                        );
+                        a.slerp(b, t)
+                    } else {
+                        a
+                    };
                     if let Some(mut transform) = world.get_mut::<Transform>(target_entity) {
                         transform.rotation = rot;
                     }
@@ -147,11 +171,22 @@ fn apply_clip_at_time(
             AnimationProperty::Scale => {
                 if channel.values.len() >= (idx + 1) * 3 {
                     let base = idx * 3;
-                    let scl = glam::Vec3::new(
+                    let a = glam::Vec3::new(
                         channel.values[base],
                         channel.values[base + 1],
                         channel.values[base + 2],
                     );
+                    let scl = if has_next && channel.values.len() >= (idx + 2) * 3 {
+                        let next_base = (idx + 1) * 3;
+                        let b = glam::Vec3::new(
+                            channel.values[next_base],
+                            channel.values[next_base + 1],
+                            channel.values[next_base + 2],
+                        );
+                        a.lerp(b, t)
+                    } else {
+                        a
+                    };
                     if let Some(mut transform) = world.get_mut::<Transform>(target_entity) {
                         transform.scale = scl;
                     }
@@ -162,7 +197,6 @@ fn apply_clip_at_time(
                 if n_frames == 0 || channel.values.is_empty() {
                     continue;
                 }
-                // Number of morph targets = total values / number of frames
                 let morph_count = channel.values.len() / n_frames;
                 if morph_count == 0 {
                     continue;
@@ -171,7 +205,19 @@ fn apply_clip_at_time(
                 if channel.values.len() < base + morph_count {
                     continue;
                 }
-                let weights = channel.values[base..base + morph_count].to_vec();
+                let weights = if has_next && channel.values.len() >= (idx + 2) * morph_count {
+                    let next_base = (idx + 1) * morph_count;
+                    // LERP each morph weight
+                    (0..morph_count)
+                        .map(|i| {
+                            let a = channel.values[base + i];
+                            let b = channel.values[next_base + i];
+                            a + (b - a) * t
+                        })
+                        .collect()
+                } else {
+                    channel.values[base..base + morph_count].to_vec()
+                };
                 if let Some(mut mw) = world.get_mut::<MorphWeights>(target_entity) {
                     mw.weights = weights;
                 } else {
@@ -182,14 +228,30 @@ fn apply_clip_at_time(
     }
 }
 
-/// Find the keyframe index for the given time
-fn find_keyframe_index(timestamps: &[f32], time: f32) -> usize {
-    for (i, &t) in timestamps.iter().enumerate() {
-        if t > time {
-            return if i > 0 { i - 1 } else { 0 };
+/// Find the keyframe index and interpolation factor for the given time.
+///
+/// Returns (lower_index, t) where t is the blend factor [0.0, 1.0]
+/// between keyframe[lower_index] and keyframe[lower_index + 1].
+fn find_keyframe_lerp(timestamps: &[f32], time: f32) -> (usize, f32) {
+    if timestamps.is_empty() {
+        return (0, 0.0);
+    }
+    if timestamps.len() == 1 || time <= timestamps[0] {
+        return (0, 0.0);
+    }
+    for i in 1..timestamps.len() {
+        if time < timestamps[i] {
+            let span = timestamps[i] - timestamps[i - 1];
+            let t = if span > 0.0 {
+                (time - timestamps[i - 1]) / span
+            } else {
+                0.0
+            };
+            return (i - 1, t);
         }
     }
-    timestamps.len().saturating_sub(1)
+    // Past the last keyframe
+    (timestamps.len() - 1, 0.0)
 }
 
 #[cfg(test)]
@@ -258,17 +320,30 @@ mod tests {
     }
 
     #[test]
-    fn test_find_keyframe_index() {
+    fn test_find_keyframe_lerp() {
         let timestamps = vec![0.0, 0.5, 1.0, 1.5, 2.0];
-        assert_eq!(find_keyframe_index(&timestamps, 0.0), 0);
-        assert_eq!(find_keyframe_index(&timestamps, 0.3), 0);
-        assert_eq!(find_keyframe_index(&timestamps, 0.7), 1);
-        assert_eq!(find_keyframe_index(&timestamps, 2.5), 4);
+        let (idx, t) = find_keyframe_lerp(&timestamps, 0.0);
+        assert_eq!(idx, 0);
+        assert!((t - 0.0).abs() < f32::EPSILON);
+
+        let (idx, t) = find_keyframe_lerp(&timestamps, 0.25);
+        assert_eq!(idx, 0);
+        assert!((t - 0.5).abs() < f32::EPSILON);
+
+        let (idx, t) = find_keyframe_lerp(&timestamps, 0.75);
+        assert_eq!(idx, 1);
+        assert!((t - 0.5).abs() < f32::EPSILON);
+
+        let (idx, t) = find_keyframe_lerp(&timestamps, 2.5);
+        assert_eq!(idx, 4);
+        assert!((t - 0.0).abs() < f32::EPSILON);
     }
 
     #[test]
-    fn test_find_keyframe_index_empty() {
-        assert_eq!(find_keyframe_index(&[], 1.0), 0);
+    fn test_find_keyframe_lerp_empty() {
+        let (idx, t) = find_keyframe_lerp(&[], 1.0);
+        assert_eq!(idx, 0);
+        assert!((t - 0.0).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -311,11 +386,13 @@ mod tests {
         assert!((mw.weights[0] - 0.0).abs() < f32::EPSILON);
         assert!((mw.weights[1] - 1.0).abs() < f32::EPSILON);
 
-        // t=0.7 → idx=1 (since timestamps[2]=1.0 > 0.7), weights=[0.5, 0.5]
+        // t=0.7 → between idx=1 (t=0.5) and idx=2 (t=1.0), blend factor = 0.4
+        // frame1=[0.5, 0.5], frame2=[1.0, 0.0]
+        // lerp: [0.5 + 0.5*0.4, 0.5 + (-0.5)*0.4] = [0.7, 0.3]
         animation_tick(&mut world, "morph_test", 0.7);
         let mw = world.get::<MorphWeights>(target).expect("MorphWeights should be set");
-        assert!((mw.weights[0] - 0.5).abs() < f32::EPSILON);
-        assert!((mw.weights[1] - 0.5).abs() < f32::EPSILON);
+        assert!((mw.weights[0] - 0.7).abs() < 0.01);
+        assert!((mw.weights[1] - 0.3).abs() < 0.01);
 
         // t=1.0 → idx=2 (last frame, all timestamps exhausted), weights=[1.0, 0.0]
         animation_tick(&mut world, "morph_test", 1.0);

@@ -32,6 +32,8 @@ export interface AnimationSlice {
   playState: AnimationPlayState;
   /** Whether the WebSocket stream to the engine is active */
   streamConnected: boolean;
+  /** Current animation elapsed time in ms (from stream delta) */
+  animationTimeMs: number;
 
   // ── Actions ───────────────────────────────────────────────────────────────
   setPuppetLoaded: (loaded: boolean) => void;
@@ -45,6 +47,7 @@ export interface AnimationSlice {
   setCurrentAnimation: (name: string | null) => void;
   setPlayState: (state: AnimationPlayState) => void;
   setStreamConnected: (connected: boolean) => void;
+  setAnimationTimeMs: (timeMs: number) => void;
 
   resetAnimation: () => void;
 }
@@ -62,6 +65,7 @@ export const createAnimationSlice: StateCreator<AnimationSlice> = (set) => ({
   currentAnimation: null,
   playState: 'idle',
   streamConnected: false,
+  animationTimeMs: 0,
 
   // ── Actions ───────────────────────────────────────────────────────────────
   setPuppetLoaded: (loaded) => set({ puppetLoaded: loaded }),
@@ -82,6 +86,7 @@ export const createAnimationSlice: StateCreator<AnimationSlice> = (set) => ({
   setCurrentAnimation: (name) => set({ currentAnimation: name }),
   setPlayState: (state) => set({ playState: state }),
   setStreamConnected: (connected) => set({ streamConnected: connected }),
+  setAnimationTimeMs: (timeMs) => set({ animationTimeMs: timeMs }),
 
   resetAnimation: () =>
     set({
@@ -94,5 +99,6 @@ export const createAnimationSlice: StateCreator<AnimationSlice> = (set) => ({
       currentAnimation: null,
       playState: 'idle',
       streamConnected: false,
+      animationTimeMs: 0,
     }),
 });

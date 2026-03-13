@@ -42,6 +42,10 @@ export interface MeshSnapshot {
 
 export interface PuppetDelta {
   deformed_meshes: DeformedMesh[];
+  /** Current animation elapsed time in ms (undefined if no animation active) */
+  animation_time_ms?: number;
+  /** Whether the animation is currently playing (undefined if no animation active) */
+  animation_playing?: boolean;
 }
 
 export interface DeformedMesh {

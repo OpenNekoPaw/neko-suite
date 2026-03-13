@@ -14,6 +14,7 @@
 //!   per texture: u32-BE length + u8 encoding + raw bytes
 //!   (optional) "EXT_SECT" + extended vendor data
 
+use crate::animation::{AnimationClip, Keyframe, ParameterCurve};
 use crate::components::*;
 use crate::hierarchy;
 use bevy_ecs::prelude::*;
@@ -29,6 +30,7 @@ pub struct LoadResult {
     pub root_entity: Entity,
     pub entity_count: usize,
     pub parameter_count: usize,
+    pub animations: Vec<AnimationClip>,
 }
 
 /// Error type for puppet loading
@@ -193,6 +195,76 @@ fn extract_mesh(node: &Value) -> Option<MeshData> {
     })
 }
 
+// ─── Animation parsing ───────────────────────────────────────────────────────
+
+/// Parse animation clips from the `puppet.anim` JSON array.
+///
+/// Each clip contains: name, duration (ms), loop flag, and a set of
+/// parameter curves with keyframes.
+fn parse_animations(puppet_json: &Value) -> Vec<AnimationClip> {
+    let anim_arr = match puppet_json.get("anim").and_then(|v| v.as_array()) {
+        Some(arr) => arr,
+        None => return Vec::new(),
+    };
+
+    anim_arr
+        .iter()
+        .filter_map(|anim_obj| {
+            let name = anim_obj.get("name").and_then(|v| v.as_str())?.to_string();
+            let duration_ms = json_f32(anim_obj, "duration");
+            let loop_default = anim_obj
+                .get("loop")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let curves = parse_animation_curves(anim_obj);
+
+            Some(AnimationClip {
+                name,
+                duration_ms,
+                loop_default,
+                curves,
+            })
+        })
+        .collect()
+}
+
+/// Parse parameter curves from a single animation clip JSON object.
+///
+/// Expects `anim_obj.channels[]` where each channel has:
+///   - `param`: parameter name string
+///   - `keyframes[]`: array of { time, value } objects
+fn parse_animation_curves(anim_obj: &Value) -> Vec<ParameterCurve> {
+    let channels = match anim_obj.get("channels").and_then(|v| v.as_array()) {
+        Some(arr) => arr,
+        None => return Vec::new(),
+    };
+
+    channels
+        .iter()
+        .filter_map(|ch| {
+            let param_name = ch.get("param").and_then(|v| v.as_str())?.to_string();
+
+            let keyframes: Vec<Keyframe> = ch
+                .get("keyframes")
+                .and_then(|v| v.as_array())
+                .map(|kfs| {
+                    kfs.iter()
+                        .map(|kf| Keyframe {
+                            time_ms: json_f32(kf, "time"),
+                            value: json_f32(kf, "value"),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            Some(ParameterCurve {
+                param_name,
+                keyframes,
+            })
+        })
+        .collect()
+}
+
 // ─── Main loader ──────────────────────────────────────────────────────────────
 
 /// Load an INP puppet file into the ECS world.
@@ -346,16 +418,22 @@ pub fn load_inp(world: &mut World, data: &[u8]) -> Result<LoadResult, LoadError>
         }
     }
 
+    // 6. Parse animation clips from puppet.anim
+    let animations = parse_animations(puppet_json);
+    let anim_count = animations.len();
+
     tracing::info!(
-        "Loaded puppet: {} entities, {} parameters",
+        "Loaded puppet: {} entities, {} parameters, {} animations",
         entity_count,
-        param_count
+        param_count,
+        anim_count
     );
 
     Ok(LoadResult {
         root_entity,
         entity_count,
         parameter_count: param_count,
+        animations,
     })
 }
 
@@ -462,5 +540,98 @@ mod tests {
     fn test_extract_mesh_none_without_mesh_key() {
         let node = serde_json::json!({ "type": "Node" });
         assert!(extract_mesh(&node).is_none());
+    }
+
+    #[test]
+    fn test_parse_animations_empty() {
+        let puppet = serde_json::json!({});
+        let anims = parse_animations(&puppet);
+        assert!(anims.is_empty());
+    }
+
+    #[test]
+    fn test_parse_animations_single_clip() {
+        let puppet = serde_json::json!({
+            "anim": [{
+                "name": "idle",
+                "duration": 2000.0,
+                "loop": true,
+                "channels": [{
+                    "param": "eye_open",
+                    "keyframes": [
+                        { "time": 0.0, "value": 1.0 },
+                        { "time": 1000.0, "value": 0.0 },
+                        { "time": 2000.0, "value": 1.0 }
+                    ]
+                }]
+            }]
+        });
+        let anims = parse_animations(&puppet);
+        assert_eq!(anims.len(), 1);
+        assert_eq!(anims[0].name, "idle");
+        assert_eq!(anims[0].duration_ms, 2000.0);
+        assert!(anims[0].loop_default);
+        assert_eq!(anims[0].curves.len(), 1);
+        assert_eq!(anims[0].curves[0].param_name, "eye_open");
+        assert_eq!(anims[0].curves[0].keyframes.len(), 3);
+        assert_eq!(anims[0].curves[0].keyframes[1].time_ms, 1000.0);
+        assert_eq!(anims[0].curves[0].keyframes[1].value, 0.0);
+    }
+
+    #[test]
+    fn test_parse_animations_skips_nameless() {
+        let puppet = serde_json::json!({
+            "anim": [
+                { "duration": 500.0, "loop": false, "channels": [] },
+                { "name": "wave", "duration": 1000.0, "loop": false, "channels": [] }
+            ]
+        });
+        let anims = parse_animations(&puppet);
+        assert_eq!(anims.len(), 1);
+        assert_eq!(anims[0].name, "wave");
+    }
+
+    #[test]
+    fn test_load_inp_with_animations() {
+        let payload = serde_json::json!({
+            "puppet": {
+                "meta": { "name": "AnimPuppet" },
+                "nodes": {
+                    "uuid": 0, "name": "Root", "type": "Node",
+                    "enabled": true, "zsort": 0.0,
+                    "transform": { "trans": [0,0,0], "rot": [0,0,0], "scale": [1,1] },
+                    "children": []
+                },
+                "param": [{
+                    "name": "mouth_open",
+                    "min": [0.0], "max": [1.0], "defaults": [0.0]
+                }],
+                "anim": [{
+                    "name": "talk",
+                    "duration": 500.0,
+                    "loop": true,
+                    "channels": [{
+                        "param": "mouth_open",
+                        "keyframes": [
+                            { "time": 0.0, "value": 0.0 },
+                            { "time": 250.0, "value": 1.0 },
+                            { "time": 500.0, "value": 0.0 }
+                        ]
+                    }]
+                }]
+            }
+        });
+        let json_bytes = payload.to_string().into_bytes();
+        let mut data = Vec::new();
+        data.extend_from_slice(MAGIC);
+        data.extend_from_slice(&(json_bytes.len() as u32).to_be_bytes());
+        data.extend_from_slice(&json_bytes);
+
+        let mut world = World::new();
+        let result = load_inp(&mut world, &data).unwrap();
+        assert_eq!(result.animations.len(), 1);
+        assert_eq!(result.animations[0].name, "talk");
+        assert_eq!(result.animations[0].curves.len(), 1);
+        assert_eq!(result.parameter_count, 1);
     }
 }

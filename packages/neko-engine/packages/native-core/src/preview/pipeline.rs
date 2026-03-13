@@ -113,7 +113,7 @@ impl PreviewPipeline {
             use_zero_copy_gpu: true, // Enable zero-copy for preview
         };
 
-        let gpu_pipeline = GpuExportPipeline::new(timeline, export_settings, ctx)?;
+        let gpu_pipeline = GpuExportPipeline::new(timeline, export_settings, ctx, None)?;
         let encoder = HwAccelEncoder::new();
 
         Ok(Self {

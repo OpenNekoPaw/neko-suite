@@ -158,6 +158,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           maxIterations: 50,
           temperature: config.temperature,
           maxTokens: config.maxTokens,
+          modelId: config.model,
           onConfirmTool: async (request) => {
             // Show approval UI and wait for user decision
             return new Promise<boolean>((resolve) => {

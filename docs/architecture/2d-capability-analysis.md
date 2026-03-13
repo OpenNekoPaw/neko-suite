@@ -222,12 +222,16 @@ INP 文件 → loadPuppet() → PuppetSnapshot
 物理步进 → POST /v1/puppets/tick  → PuppetDelta { deformed_meshes }
 前端 WebGL2 → 更新 VAO → 按 z-order 渲染
 
-── 模式 2：bevy_animation 动画回放 ──
-POST /v1/puppets/anim/play { name, loop }
+── 模式 2：bevy_animation 动画回放（编辑器预览）──
+POST /v1/puppets/anim/play { name, loop }   ← HTTP 命令启动动画
   → bevy_animation AnimationPlayer 启动
+WS /v1/puppets/stream 自动连接（usePuppetPlayback hook 编排）
   → 每 tick: AnimationClip 曲线求值 → ParameterCurve → 写入 inox2d 参数值
-  → 物理步进 → 变形计算 → PuppetDelta
-  ← HTTP 响应（请求-响应）或 WS 推送（流模式）
+  → 物理步进 → 变形计算 → PuppetDelta { deformed_meshes, animation_time_ms, animation_playing }
+  → WS 推送 60fps
+  → 前端更新 seek slider + deformed meshes
+  → animation_playing === false 时自动断开 stream
+注意：stream 活跃时不得调用 HTTP tick()，避免 double-tick
 
 ── 模式 3：WebSocket 实时流（neko-live 面部追踪）──
 WS /v1/puppets/stream 建立连接

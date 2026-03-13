@@ -1025,6 +1025,7 @@ impl Element {
         match &self.element_type {
             ElementType::Media(m) => Some(m.src.clone()),
             ElementType::Audio(a) => Some(a.src.clone()),
+            ElementType::Scene3D(s) => Some(s.src.clone()),
             _ => None,
         }
     }
@@ -1042,6 +1043,11 @@ impl Element {
     /// Check if this is a text element
     pub fn is_text(&self) -> bool {
         matches!(self.element_type, ElementType::Text(_))
+    }
+
+    /// Check if this is a 3D scene element
+    pub fn is_scene3d(&self) -> bool {
+        matches!(self.element_type, ElementType::Scene3D(_))
     }
 
     /// Convert element transform to GPU Transform2D
@@ -1171,6 +1177,9 @@ pub enum ElementType {
     /// Subtitle element
     #[serde(rename = "subtitle")]
     Subtitle(SubtitleElementData),
+    /// 3D scene element (glTF/GLB model)
+    #[serde(rename = "scene3d")]
+    Scene3D(Scene3DElementData),
 }
 
 /// Media element data (video/image)
@@ -1381,6 +1390,56 @@ pub struct SubtitleElementData {
     /// Drop shadow
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shadow: Option<TextShadow>,
+}
+
+/// Camera override for 3D scene rendering
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CameraOverride {
+    pub position: [f32; 3],
+    pub target: [f32; 3],
+    #[serde(default = "default_camera_up")]
+    pub up: [f32; 3],
+    #[serde(default = "default_fov")]
+    pub fov_y: f32,
+}
+
+fn default_camera_up() -> [f32; 3] {
+    [0.0, 1.0, 0.0]
+}
+
+fn default_fov() -> f32 {
+    45.0
+}
+
+/// 3D scene element data (glTF/GLB model)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Scene3DElementData {
+    /// Source glTF/GLB file path
+    pub src: String,
+    /// Use a camera node from the model
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub camera_node_id: Option<String>,
+    /// Active animation clip name
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub animation_clip: Option<String>,
+    /// Loop animation playback
+    #[serde(default)]
+    pub animation_loop: bool,
+    /// Animation playback speed multiplier
+    #[serde(default = "default_animation_speed")]
+    pub animation_speed: f64,
+    /// Background color (None = transparent for compositing)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background_color: Option<[f32; 4]>,
+    /// Override camera parameters (instead of using model camera)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub camera_override: Option<CameraOverride>,
+}
+
+fn default_animation_speed() -> f64 {
+    1.0
 }
 
 /// Text shadow properties (Phase 2)

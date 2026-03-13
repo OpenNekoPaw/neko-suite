@@ -37,7 +37,7 @@ type AssertKeysSubset<A, B> =
 // Omit oneof fields (media/audio/text/shape/subtitle) — these are
 // element-type-specific data, not base element properties.
 type _CheckBaseElement = AssertKeysSubset<
-  Omit<EngineElement, 'media' | 'audio' | 'text' | 'shape' | 'subtitle'>,
+  Omit<EngineElement, 'media' | 'audio' | 'text' | 'shape' | 'subtitle' | 'scene3d'>,
   BaseTimelineElement
 >;
 type _CheckSubtitle = AssertKeysSubset<EngineSubtitleElementData, SubtitleElement>;
@@ -192,9 +192,33 @@ export interface SubtitleElement extends BaseTimelineElement {
   };
 }
 
+export interface Scene3DElement extends BaseTimelineElement {
+  type: 'scene3d';
+  /** Source glTF/GLB/VRM file path */
+  src: string;
+  /** Camera node ID from model (optional) */
+  cameraNodeId?: string;
+  /** Active animation clip name */
+  animationClip?: string;
+  /** Loop animation playback (default: false) */
+  animationLoop?: boolean;
+  /** Animation playback speed multiplier (default: 1.0) */
+  animationSpeed?: number;
+  /** Background color [r,g,b,a] — null = transparent */
+  backgroundColor?: [number, number, number, number];
+  /** Camera override parameters */
+  cameraOverride?: {
+    position: [number, number, number];
+    target: [number, number, number];
+    up?: [number, number, number];
+    fovY?: number;
+  };
+}
+
 export type TimelineElement =
   | MediaElement
   | TextElement
   | AudioElement
   | ShapeElement
-  | SubtitleElement;
+  | SubtitleElement
+  | Scene3DElement;

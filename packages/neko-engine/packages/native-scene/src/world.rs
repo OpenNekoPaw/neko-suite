@@ -90,6 +90,11 @@ impl BevySceneWorld {
             world: World::new(),
         }
     }
+
+    /// Access the inner ECS World (for GPU rendering queries)
+    pub fn ecs_world_mut(&mut self) -> &mut World {
+        &mut self.world
+    }
 }
 
 impl Default for BevySceneWorld {

@@ -14,6 +14,10 @@ import { createHistorySlice, type HistorySlice } from './slices/historySlice';
 import { createUISlice, type UISlice } from './slices/uiSlice';
 import { createSelectionSlice, type SelectionSlice } from './slices/selectionSlice';
 import { createAnimationSlice, type AnimationSlice } from './slices/animationSlice';
+import { createFrameSlice, type FrameSlice } from './slices/frameSlice';
+import { createFilterSlice, type FilterSlice } from './slices/filterSlice';
+import { createParticleSlice, type ParticleSlice } from './slices/particleSlice';
+import { createSceneSlice, type SceneSlice } from './slices/sceneSlice';
 
 export type SketchStore = DocumentSlice &
   LayerSlice &
@@ -23,7 +27,11 @@ export type SketchStore = DocumentSlice &
   HistorySlice &
   UISlice &
   SelectionSlice &
-  AnimationSlice;
+  AnimationSlice &
+  FrameSlice &
+  FilterSlice &
+  ParticleSlice &
+  SceneSlice;
 
 export const useSketchStore = create<SketchStore>()((...a) => ({
   ...createDocumentSlice(...a),
@@ -35,4 +43,8 @@ export const useSketchStore = create<SketchStore>()((...a) => ({
   ...createUISlice(...a),
   ...createSelectionSlice(...a),
   ...createAnimationSlice(...a),
+  ...createFrameSlice(...a),
+  ...createFilterSlice(...a),
+  ...createParticleSlice(...a),
+  ...createSceneSlice(...a),
 }));

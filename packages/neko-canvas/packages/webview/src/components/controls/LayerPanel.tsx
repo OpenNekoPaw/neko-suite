@@ -44,6 +44,7 @@ const NODE_TYPE_ICONS: Record<string, string> = {
   group: '📁',
   text: 'T',
   artboard: '⬜',
+  scene3d: '🧊',
 };
 
 const NODE_TYPE_LABELS: Record<string, string> = {
@@ -53,6 +54,7 @@ const NODE_TYPE_LABELS: Record<string, string> = {
   group: 'Group',
   text: 'Text',
   artboard: 'Artboard',
+  scene3d: '3D Scene',
 };
 
 // =============================================================================

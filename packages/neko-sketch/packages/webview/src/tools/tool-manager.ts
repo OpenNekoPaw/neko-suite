@@ -23,6 +23,8 @@ const TOOL_CURSORS: Record<ToolType, string> = {
   eyedropper: 'crosshair',
   fill: 'crosshair',
   zoom: 'zoom-in',
+  pixel: 'crosshair',
+  vector: 'default',
 };
 
 export class ToolManager implements IToolManager {

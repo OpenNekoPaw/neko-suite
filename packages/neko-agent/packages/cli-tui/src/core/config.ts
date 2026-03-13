@@ -122,8 +122,17 @@ export function loadConfig(
     const envApiKey = getApiKeyFromEnv(providerId) ?? getApiKeyFromEnv(providerType);
     const apiKey = overrides.apiKey ?? envApiKey ?? provider?.apiKey;
 
-    // Model: override > first enabled model for provider > default
-    const model = overrides.model ?? findDefaultModel(cm, providerId) ?? DEFAULT_CLI_CONFIG.model;
+    // Read scalar fields from raw UnifiedConfig (not UserConfig which lacks them)
+    const rawUser = readUserConfig() ?? {};
+    const rawWorkspace = readWorkspaceConfig(workDir) ?? {};
+
+    // Model: override > defaultModel scalar > first enabled model for provider > default
+    const model =
+      overrides.model ??
+      rawWorkspace.defaultModel ??
+      rawUser.defaultModel ??
+      findDefaultModel(cm, providerId) ??
+      DEFAULT_CLI_CONFIG.model;
 
     // Base URL
     const baseUrl = overrides.baseUrl ?? provider?.apiUrl;
@@ -150,9 +159,6 @@ export function loadConfig(
       })
       .map((m) => m.id);
 
-    // Read scalar fields from raw UnifiedConfig (not UserConfig which lacks them)
-    const rawUser = readUserConfig() ?? {};
-    const rawWorkspace = readWorkspaceConfig(workDir) ?? {};
     // Workspace overrides user for scalars
     const maxTokens =
       overrides.maxTokens ??

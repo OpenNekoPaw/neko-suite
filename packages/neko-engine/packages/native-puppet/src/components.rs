@@ -43,11 +43,19 @@ impl Default for GlobalTransform2D {
     }
 }
 
-/// Binding from a puppet parameter to this node's deformation
+/// Binding from a puppet parameter to this node's deformation.
+///
+/// If `vertex_displacements` is non-empty, it provides per-vertex [dx, dy]
+/// offsets that are scaled by the normalised parameter value and weight.
+/// Otherwise falls back to a uniform X-axis offset (legacy behaviour).
 #[derive(Component, Debug, Clone, Serialize, Deserialize)]
 pub struct ParameterBinding {
     pub param_name: String,
     pub weight: f32,
+    /// Per-vertex displacement vectors at max parameter value.
+    /// Length must match `MeshData.vertices` when populated.
+    #[serde(default)]
+    pub vertex_displacements: Vec<[f32; 2]>,
 }
 
 /// Static mesh data (vertices, UVs, indices) — loaded once from INP

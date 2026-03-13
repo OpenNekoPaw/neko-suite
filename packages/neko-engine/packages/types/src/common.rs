@@ -67,6 +67,8 @@ pub enum TrackType {
     Effect,
     Subtitle,
     Shape,
+    /// 3D scene element (glTF/GLB model)
+    Scene3d,
     /// Alias for Video (used in JVI files)
     #[serde(alias = "media")]
     Media,

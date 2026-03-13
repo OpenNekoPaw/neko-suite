@@ -17,6 +17,7 @@ use std::time::Instant;
 use crate::decoder::{global_pool, HwAccelDecoder, HwAccelType};
 use crate::domain::{Element, ElementType, Timeline};
 use crate::error::{Error, Result};
+use crate::gpu::scene_renderer::CameraParams;
 use crate::gpu::{
     BlurParams, BlurType, ChromaticAberrationParams, CustomShaderProcessor, GlowParams,
     GpuBlurProcessor, GpuContext, GpuLayer, GpuLayerBuilder, GpuStyleProcessor, Nv12OutputBuffers,
@@ -24,6 +25,7 @@ use crate::gpu::{
     TextureCompositeResult, TextureCompositor, VignetteParams,
 };
 use crate::telemetry::spans::span;
+use crate::services::{ISceneService, SceneService};
 use neko_types::TrackType;
 
 use super::types::ExportSettings;
@@ -397,6 +399,8 @@ pub struct GpuExportPipeline {
     text_renderer: Option<TextRenderer>,
     /// Effect dispatcher for per-element GPU effects (None when GPU unavailable)
     effect_dispatcher: Option<EffectDispatcher>,
+    /// Scene service for 3D element rendering
+    scene_service: Option<Arc<SceneService>>,
     /// Zero-copy RGBA→NV12 converter (macOS only, outputs to IOSurface)
     #[cfg(target_os = "macos")]
     zerocopy_converter: Option<crate::gpu::RgbaToNv12TextureConverter>,
@@ -404,7 +408,12 @@ pub struct GpuExportPipeline {
 
 impl GpuExportPipeline {
     /// Create a new GPU export pipeline
-    pub fn new(timeline: Timeline, settings: ExportSettings, ctx: Arc<GpuContext>) -> Result<Self> {
+    pub fn new(
+        timeline: Timeline,
+        settings: ExportSettings,
+        ctx: Arc<GpuContext>,
+        scene_service: Option<Arc<SceneService>>,
+    ) -> Result<Self> {
         let total_frames = timeline.total_frames_at_fps(settings.fps);
         let output_width = settings.width;
         let output_height = settings.height;
@@ -431,6 +440,7 @@ impl GpuExportPipeline {
             layer_texture_pool: LayerTexturePool::new(),
             text_renderer: None,
             effect_dispatcher,
+            scene_service,
             #[cfg(target_os = "macos")]
             zerocopy_converter: None,
         })
@@ -586,6 +596,22 @@ impl GpuExportPipeline {
             );
             for (text, z_idx) in &text_elements {
                 if let Some(layer) = self.render_text_to_gpu_layer(text, *z_idx) {
+                    gpu_layers.push(layer);
+                }
+            }
+        }
+
+        // Render 3D scene elements
+        let scene3d_z_start = (media_elements.len() + text_elements.len()) as i32;
+        let scene3d_elements = self.collect_visible_scene3d(time, scene3d_z_start);
+        if !scene3d_elements.is_empty() {
+            tracing::debug!(
+                "Rendering {} scene3d elements at time {:.2}s",
+                scene3d_elements.len(),
+                time
+            );
+            for (scene3d, z_idx) in &scene3d_elements {
+                if let Some(layer) = self.render_scene3d_to_gpu_layer(scene3d, time, *z_idx) {
                     gpu_layers.push(layer);
                 }
             }
@@ -832,6 +858,31 @@ impl GpuExportPipeline {
         result
     }
 
+    /// Collect visible 3D scene elements at a given time
+    fn collect_visible_scene3d(&self, time: f64, z_index_start: i32) -> Vec<(Element, i32)> {
+        let mut result = Vec::new();
+        let mut z_index = z_index_start;
+
+        for track in &self.timeline.tracks {
+            if track.muted || !matches!(track.track_type, TrackType::Scene3d) {
+                continue;
+            }
+
+            for element in &track.elements {
+                if !element.is_visible_at(time) {
+                    continue;
+                }
+
+                if element.is_scene3d() {
+                    result.push((element.clone(), z_index));
+                    z_index += 1;
+                }
+            }
+        }
+
+        result
+    }
+
     /// Render a text element to a GpuLayer
     fn render_text_to_gpu_layer(&mut self, element: &Element, z_index: i32) -> Option<GpuLayer> {
         let text_data = match &element.element_type {
@@ -910,6 +961,83 @@ impl GpuExportPipeline {
             text_data.content,
             width,
             height,
+            z_index
+        );
+
+        Some(layer)
+    }
+
+    /// Render a 3D scene element to a GpuLayer
+    fn render_scene3d_to_gpu_layer(
+        &self,
+        element: &Element,
+        time: f64,
+        z_index: i32,
+    ) -> Option<GpuLayer> {
+        let scene_data = match &element.element_type {
+            ElementType::Scene3D(s) => s,
+            _ => return None,
+        };
+
+        let service = self.scene_service.as_ref()?;
+
+        // Calculate animation time: relative to element start, scaled by speed
+        let source_time = element.get_source_time(time);
+        let scene_time = (source_time * scene_data.animation_speed) as f32;
+
+        // Build camera override if specified
+        let camera_override = scene_data.camera_override.as_ref().map(|c| CameraParams {
+            position: glam::Vec3::new(c.position[0], c.position[1], c.position[2]),
+            target: glam::Vec3::new(c.target[0], c.target[1], c.target[2]),
+            up: glam::Vec3::new(c.up[0], c.up[1], c.up[2]),
+            fov_y: c.fov_y.to_radians(),
+            ..CameraParams::default()
+        });
+
+        // Render the 3D scene
+        let output = service
+            .render_frame(
+                scene_data.animation_clip.as_deref(),
+                scene_time,
+                (self.output_width, self.output_height),
+                camera_override.as_ref(),
+                scene_data.background_color,
+            )
+            .map_err(|e| {
+                tracing::warn!("Scene3D render failed for {}: {}", scene_data.src, e);
+                e
+            })
+            .ok()?;
+
+        // Build transform from element (or default to identity)
+        let transform = if !element.transform.is_identity() {
+            element.to_transform_2d()
+        } else {
+            // Default: center the scene in the output
+            crate::gpu::Transform2D {
+                x: self.output_width as f32 / 2.0,
+                y: self.output_height as f32 / 2.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                rotation: 0.0,
+                anchor_x: 0.5,
+                anchor_y: 0.5,
+                _padding: 0.0,
+            }
+        };
+
+        let layer = output.into_gpu_layer(
+            transform,
+            element.opacity as f32,
+            element.to_gpu_blend_mode(),
+            z_index,
+        );
+
+        tracing::debug!(
+            "Rendered scene3d '{}' to {}x{} (z_index={})",
+            scene_data.src,
+            self.output_width,
+            self.output_height,
             z_index
         );
 
@@ -1196,7 +1324,7 @@ mod tests {
         let mut timeline = Timeline::new(Resolution::full_hd(), 30.0);
         timeline.duration = 10.0;
 
-        let pipeline = GpuExportPipeline::new(timeline, create_test_settings(), ctx).unwrap();
+        let pipeline = GpuExportPipeline::new(timeline, create_test_settings(), ctx, None).unwrap();
         assert_eq!(pipeline.total_frames(), 300);
         assert_eq!(pipeline.output_dimensions(), (1920, 1080));
     }
@@ -1211,7 +1339,7 @@ mod tests {
         let mut timeline = Timeline::new(Resolution::full_hd(), 30.0);
         timeline.duration = 10.0;
 
-        let mut pipeline = GpuExportPipeline::new(timeline, create_test_settings(), ctx).unwrap();
+        let mut pipeline = GpuExportPipeline::new(timeline, create_test_settings(), ctx, None).unwrap();
         pipeline.initialize().unwrap();
 
         let result = pipeline.process_frame(5.0, [0.0, 0.0, 0.0, 1.0]).unwrap();

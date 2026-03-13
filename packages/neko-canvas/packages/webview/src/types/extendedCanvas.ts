@@ -18,7 +18,8 @@ export type ExtendedNodeType =
   | 'annotation'
   | 'group'
   | 'text' // 富文本节点
-  | 'artboard'; // 画板节点
+  | 'artboard' // 画板节点
+  | 'scene3d'; // 3D 场景节点
 
 /**
  * 富文本节点 - 支持格式化文本

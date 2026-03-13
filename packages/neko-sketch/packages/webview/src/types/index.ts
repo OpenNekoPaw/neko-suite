@@ -88,7 +88,9 @@ export type ToolType =
   | 'transform'
   | 'eyedropper'
   | 'fill'
-  | 'zoom';
+  | 'zoom'
+  | 'pixel'
+  | 'vector';
 
 export type ShapeType = 'rectangle' | 'ellipse' | 'line';
 
@@ -159,7 +161,8 @@ export type ExtensionToWebviewMessage =
   | { type: 'file:imported'; name: string; data: string; path: string }
   | { type: 'file:exportResult'; success: boolean; path?: string; error?: string }
   | { type: 'keyboardAction'; action: string }
-  | { type: 'setLocale'; locale: string };
+  | { type: 'setLocale'; locale: string }
+  | { type: 'enginePort'; port: number };
 
 export type WebviewToExtensionMessage =
   | { type: 'ready' }

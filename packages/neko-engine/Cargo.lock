@@ -1900,6 +1900,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
+ "glam",
  "neko-native-core",
  "neko-types",
  "serde",
@@ -1943,6 +1944,7 @@ dependencies = [
  "async-stream",
  "axum",
  "base64 0.22.1",
+ "bevy_ecs",
  "block",
  "bytemuck",
  "bytes",
@@ -1952,6 +1954,7 @@ dependencies = [
  "ebur128",
  "ffmpeg-next",
  "glam",
+ "gltf",
  "half",
  "http-body-util",
  "hyper",

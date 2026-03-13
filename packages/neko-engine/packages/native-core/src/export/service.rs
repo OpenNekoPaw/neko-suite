@@ -464,6 +464,7 @@ impl ExportService {
             config.timeline.clone(),
             config.settings.clone(),
             Arc::clone(&gpu_ctx),
+            None,
         )?;
         gpu_pipeline.initialize()?;
 

@@ -24,8 +24,16 @@ export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) 
   const currentAnimation = useSketchStore((s) => s.currentAnimation);
   const playState = useSketchStore((s) => s.playState);
   const streamConnected = useSketchStore((s) => s.streamConnected);
+  const animationTimeMs = useSketchStore((s) => s.animationTimeMs);
 
   const isPlaying = playState === 'playing';
+
+  // Compute seek slider value from stream-driven animation time
+  const currentClip = animations.find((c) => c.name === currentAnimation);
+  const seekPercent =
+    currentClip && currentClip.duration_ms > 0
+      ? Math.min(100, (animationTimeMs / currentClip.duration_ms) * 100)
+      : 0;
 
   const handleClipClick = useCallback(
     (clip: AnimationClipInfo) => {
@@ -55,13 +63,16 @@ export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) 
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
         <h3 className="sketch-panel-title m-0">Animation</h3>
-        {streamConnected && (
-          <span
-            title="Live stream active"
-            className="w-2 h-2 rounded-full bg-green-500 inline-block"
-            aria-label="Live stream active"
-          />
-        )}
+        <div className="flex items-center gap-1">
+          <PhysicsToggle />
+          {streamConnected && (
+            <span
+              title="Live stream active"
+              className="w-2 h-2 rounded-full bg-green-500 inline-block"
+              aria-label="Live stream active"
+            />
+          )}
+        </div>
       </div>
 
       {/* Clip list */}
@@ -96,12 +107,13 @@ export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) 
             <span className="text-xs opacity-60 truncate flex-1">{currentAnimation}</span>
           </div>
 
-          {/* Seek slider */}
+          {/* Seek slider — controlled by stream-driven animationTimeMs */}
           <input
             type="range"
             min={0}
             max={100}
             step={0.1}
+            value={seekPercent}
             className="w-full h-1 accent-[var(--vscode-button-background)]"
             aria-label="Seek position"
             onChange={handleSeek}
@@ -109,6 +121,27 @@ export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) 
         </div>
       )}
     </div>
+  );
+}
+
+function PhysicsToggle() {
+  const isPlaying = useSketchStore((s) => s.isPlayingPhysics);
+  const setPlaying = useSketchStore((s) => s.setPlayingPhysics);
+
+  return (
+    <button
+      className={`text-[10px] px-1.5 py-0.5 rounded border border-[var(--vscode-button-border)] ${
+        isPlaying
+          ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
+          : ''
+      }`}
+      onClick={() => setPlaying(!isPlaying)}
+      title={isPlaying ? 'Disable physics' : 'Enable physics'}
+      aria-label={isPlaying ? 'Disable physics simulation' : 'Enable physics simulation'}
+      aria-pressed={isPlaying}
+    >
+      ⚡
+    </button>
   );
 }
 

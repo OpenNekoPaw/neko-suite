@@ -75,44 +75,74 @@ fn compute_local_matrix(transform: &Transform2D) -> Mat3 {
 ///
 /// For each entity with MeshData + ParameterBinding, compute DeformedVertices
 /// by interpolating between the base vertices based on parameter weights.
+///
+/// Two deformation modes:
+/// 1. **Per-vertex displacement** (preferred): if `ParameterBinding.vertex_displacements`
+///    is populated, each vertex is displaced by `displacement * t * weight` where
+///    `t` is the normalised parameter value in [0, 1].
+/// 2. **Legacy uniform offset**: if no per-vertex data, apply a uniform X-axis
+///    offset of `param_value * weight` to every vertex.
 pub fn parameter_update(world: &mut World) {
-    // Collect parameter current values from PuppetParameters on root
-    let param_values: Vec<(String, f32)> = {
+    // Collect parameter current values + ranges from PuppetParameters on root
+    let param_info: Vec<(String, f32, f32, f32)> = {
         let mut query = world.query::<&PuppetParameters>();
         let mut values = Vec::new();
         for params in query.iter(world) {
             for p in &params.params {
-                values.push((p.name.clone(), p.current));
+                values.push((p.name.clone(), p.current, p.min, p.max));
             }
         }
         values
     };
 
     // Collect entities that need deformation
-    let entities: Vec<(Entity, Vec<Vec2>, String, f32)> = {
+    let entities: Vec<(Entity, Vec<Vec2>, String, f32, Vec<[f32; 2]>)> = {
         let mut query = world.query::<(Entity, &MeshData, &ParameterBinding)>();
         query
             .iter(world)
             .map(|(e, mesh, binding)| {
-                (e, mesh.vertices.clone(), binding.param_name.clone(), binding.weight)
+                (
+                    e,
+                    mesh.vertices.clone(),
+                    binding.param_name.clone(),
+                    binding.weight,
+                    binding.vertex_displacements.clone(),
+                )
             })
             .collect()
     };
 
-    for (entity, base_vertices, param_name, weight) in entities {
-        // Find current parameter value
-        let param_value = param_values
+    for (entity, base_vertices, param_name, weight, displacements) in entities {
+        // Find current parameter value and range
+        let (param_value, param_min, param_max) = param_info
             .iter()
-            .find(|(name, _)| *name == param_name)
-            .map(|(_, v)| *v)
-            .unwrap_or(0.0);
+            .find(|(name, _, _, _)| *name == param_name)
+            .map(|(_, v, mn, mx)| (*v, *mn, *mx))
+            .unwrap_or((0.0, 0.0, 1.0));
 
-        // Simple linear deformation: offset vertices by weighted parameter value
-        // TODO(P1): implement proper inox2d deformation grid interpolation
-        let deformed: Vec<Vec2> = base_vertices
-            .iter()
-            .map(|v| *v + Vec2::new(param_value * weight, 0.0))
-            .collect();
+        let deformed: Vec<Vec2> = if !displacements.is_empty() {
+            // Per-vertex displacement mode: normalise parameter to [0, 1] range
+            let range = (param_max - param_min).max(1e-6);
+            let t = ((param_value - param_min) / range).clamp(0.0, 1.0);
+
+            base_vertices
+                .iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    if let Some(disp) = displacements.get(i) {
+                        *v + Vec2::new(disp[0] * t * weight, disp[1] * t * weight)
+                    } else {
+                        *v
+                    }
+                })
+                .collect()
+        } else {
+            // Legacy uniform X-axis offset
+            base_vertices
+                .iter()
+                .map(|v| *v + Vec2::new(param_value * weight, 0.0))
+                .collect()
+        };
 
         if let Some(mut dv) = world.get_mut::<DeformedVertices>(entity) {
             dv.0 = deformed;
@@ -374,7 +404,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parameter_update_basic() {
+    fn test_parameter_update_legacy_uniform() {
         let mut world = World::new();
 
         // Create puppet root with parameters
@@ -391,7 +421,7 @@ mod tests {
             },
         ));
 
-        // Create a mesh node bound to mouth_open
+        // Create a mesh node bound to mouth_open (no vertex_displacements → legacy mode)
         world.spawn((
             MeshData {
                 vertices: vec![Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0)],
@@ -401,6 +431,7 @@ mod tests {
             ParameterBinding {
                 param_name: "mouth_open".to_string(),
                 weight: 1.0,
+                vertex_displacements: vec![],
             },
         ));
 
@@ -408,8 +439,89 @@ mod tests {
 
         let mut query = world.query::<&DeformedVertices>();
         let dv = query.iter(&world).next().unwrap();
-        // With param=0.5 and weight=1.0, x offset should be 0.5
+        // Legacy mode: param=0.5, weight=1.0 → x offset = 0.5
         assert!((dv.0[0].x - 0.5).abs() < 1e-6);
         assert!((dv.0[1].x - 1.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_parameter_update_per_vertex_displacement() {
+        let mut world = World::new();
+
+        world.spawn((
+            PuppetRoot,
+            PuppetParameters {
+                params: vec![ParameterDef {
+                    name: "eye_close".to_string(),
+                    min: 0.0,
+                    max: 1.0,
+                    default: 0.0,
+                    current: 0.5,
+                }],
+            },
+        ));
+
+        // Per-vertex displacement: vertex 0 moves (0, -10), vertex 1 moves (0, 10)
+        world.spawn((
+            MeshData {
+                vertices: vec![Vec2::new(0.0, 5.0), Vec2::new(0.0, -5.0)],
+                uvs: vec![Vec2::ZERO; 2],
+                indices: vec![0, 1],
+            },
+            ParameterBinding {
+                param_name: "eye_close".to_string(),
+                weight: 1.0,
+                vertex_displacements: vec![[0.0, -10.0], [0.0, 10.0]],
+            },
+        ));
+
+        parameter_update(&mut world);
+
+        let mut query = world.query::<&DeformedVertices>();
+        let dv = query.iter(&world).next().unwrap();
+        // t = (0.5 - 0.0) / (1.0 - 0.0) = 0.5, weight = 1.0
+        // vertex 0: (0, 5) + (0, -10) * 0.5 * 1.0 = (0, 0)
+        // vertex 1: (0, -5) + (0, 10) * 0.5 * 1.0 = (0, 0)
+        assert!((dv.0[0].y - 0.0).abs() < 1e-6);
+        assert!((dv.0[1].y - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_parameter_update_per_vertex_at_max() {
+        let mut world = World::new();
+
+        world.spawn((
+            PuppetRoot,
+            PuppetParameters {
+                params: vec![ParameterDef {
+                    name: "smile".to_string(),
+                    min: 0.0,
+                    max: 1.0,
+                    default: 0.0,
+                    current: 1.0,
+                }],
+            },
+        ));
+
+        world.spawn((
+            MeshData {
+                vertices: vec![Vec2::new(0.0, 0.0)],
+                uvs: vec![Vec2::ZERO],
+                indices: vec![0],
+            },
+            ParameterBinding {
+                param_name: "smile".to_string(),
+                weight: 1.0,
+                vertex_displacements: vec![[5.0, 3.0]],
+            },
+        ));
+
+        parameter_update(&mut world);
+
+        let mut query = world.query::<&DeformedVertices>();
+        let dv = query.iter(&world).next().unwrap();
+        // t = 1.0, weight = 1.0 → full displacement
+        assert!((dv.0[0].x - 5.0).abs() < 1e-6);
+        assert!((dv.0[0].y - 3.0).abs() < 1e-6);
     }
 }

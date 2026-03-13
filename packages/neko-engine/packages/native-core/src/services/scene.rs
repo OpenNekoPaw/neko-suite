@@ -2,6 +2,8 @@
 //!
 //! Provides an interface for loading, querying, and manipulating 3D scenes.
 
+use crate::gpu::scene_renderer::{CameraParams, SceneRenderOutput};
+use crate::gpu::PbrRenderError;
 use neko_native_scene::world::{AnimationClipInfo, SceneDelta, SceneSnapshot};
 use std::path::Path;
 
@@ -28,4 +30,17 @@ pub trait ISceneService: Send + Sync {
 
     /// Get available animation clips
     fn get_animation_clips(&self) -> crate::error::Result<Vec<AnimationClipInfo>>;
+
+    /// Render the current scene to a GPU texture.
+    ///
+    /// Performs tick + render in the same lock scope to avoid race conditions.
+    /// Returns None if GPU is not available.
+    fn render_frame(
+        &self,
+        clip_name: Option<&str>,
+        time: f32,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+    ) -> crate::error::Result<SceneRenderOutput>;
 }

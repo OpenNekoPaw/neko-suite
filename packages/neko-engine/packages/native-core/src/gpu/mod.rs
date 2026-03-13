@@ -33,6 +33,7 @@ mod style_processor;
 mod text_renderer;
 mod texture;
 mod texture_compositor;
+pub mod scene_renderer;
 mod transition_processor;
 
 // Platform-specific zero-copy import modules
@@ -94,3 +95,4 @@ pub use windows_import::WindowsTextureImporter;
 pub use gpu_layer::{GpuLayer, GpuLayerBuilder};
 pub use text_renderer::{TextRenderer, TextShadowStyle, TextStyle};
 pub use texture_compositor::{TextureCompositeResult, TextureCompositor};
+pub use scene_renderer::{AssetCache, CameraParams, PbrRenderError, PbrRenderer, PbrVertex, SceneRenderOutput};

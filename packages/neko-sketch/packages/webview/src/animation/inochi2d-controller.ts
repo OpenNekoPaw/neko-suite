@@ -64,12 +64,32 @@ export interface IInochi2DController {
 
   /** Disconnect the active stream (no-op if not connected) */
   disconnectStream(): void;
+
+  /**
+   * Start a managed preview stream for the editor.
+   * Connects the WebSocket, invokes onDelta for each frame,
+   * and calls onStatusChange when connection state changes.
+   * Automatically reconnects on unexpected disconnect while active.
+   */
+  startPreviewStream(
+    onDelta: (delta: PuppetDelta) => void,
+    onStatusChange?: (connected: boolean) => void,
+  ): void;
+
+  /** Stop the managed preview stream */
+  stopPreviewStream(): void;
+
+  /** Whether the preview stream is currently active */
+  isStreaming(): boolean;
 }
 
 /** Concrete implementation using EngineClient HTTP dispatch */
 export class Inochi2DController implements IInochi2DController {
   private snapshot: PuppetSnapshot | null = null;
   private activeStream: WebSocket | null = null;
+  private previewActive = false;
+  private previewOnDelta: ((delta: PuppetDelta) => void) | null = null;
+  private previewOnStatus: ((connected: boolean) => void) | null = null;
 
   constructor(private readonly engine: EngineClient) {}
 
@@ -147,5 +167,65 @@ export class Inochi2DController implements IInochi2DController {
       this.activeStream.close();
       this.activeStream = null;
     }
+  }
+
+  startPreviewStream(
+    onDelta: (delta: PuppetDelta) => void,
+    onStatusChange?: (connected: boolean) => void,
+  ): void {
+    this.stopPreviewStream();
+
+    this.previewActive = true;
+    this.previewOnDelta = onDelta;
+    this.previewOnStatus = onStatusChange ?? null;
+
+    this.openPreviewWs();
+  }
+
+  stopPreviewStream(): void {
+    this.previewActive = false;
+    this.previewOnDelta = null;
+    this.previewOnStatus = null;
+    this.disconnectStream();
+  }
+
+  isStreaming(): boolean {
+    return this.previewActive && this.activeStream?.readyState === WebSocket.OPEN;
+  }
+
+  /** Internal: open the WebSocket and wire up reconnect on unexpected close */
+  private openPreviewWs(): void {
+    this.disconnectStream();
+
+    const ws = this.engine.openPuppetStream();
+    this.activeStream = ws;
+
+    ws.addEventListener('open', () => {
+      this.previewOnStatus?.(true);
+    });
+
+    ws.addEventListener('message', (event: MessageEvent) => {
+      if (!this.previewActive) return;
+      try {
+        const delta = JSON.parse(event.data as string) as PuppetDelta;
+        this.previewOnDelta?.(delta);
+      } catch {
+        // Ignore malformed frames
+      }
+    });
+
+    ws.addEventListener('close', () => {
+      this.previewOnStatus?.(false);
+      // Reconnect if the stream was closed unexpectedly while still active
+      if (this.previewActive) {
+        setTimeout(() => {
+          if (this.previewActive) this.openPreviewWs();
+        }, 500);
+      }
+    });
+
+    ws.addEventListener('error', () => {
+      // The 'close' handler will fire after 'error', which handles reconnect
+    });
   }
 }

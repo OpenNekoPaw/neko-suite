@@ -61,7 +61,10 @@ impl ServiceContainer {
         let image_service = Arc::new(ImageService::new(gpu_ctx.clone()));
         let timeline_service =
             Arc::new(TimelineService::new(gpu_ctx.clone(), task_service.clone()));
-        let scene_service = Arc::new(SceneService::new());
+        let scene_service = match &gpu_ctx {
+            Some(ctx) => Arc::new(SceneService::with_gpu(Arc::clone(ctx))),
+            None => Arc::new(SceneService::new()),
+        };
         let puppet_service = Arc::new(PuppetService::new());
 
         // Export service requires GPU

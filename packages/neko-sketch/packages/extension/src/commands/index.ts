@@ -151,4 +151,25 @@ export function registerCommands(
       editorProvider.postKeyboardAction('resetZoom');
     }),
   );
+
+  // Export sprite sheet
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.sketch.exportSpriteSheet', () => {
+      editorProvider.postKeyboardAction('exportSpriteSheet');
+    }),
+  );
+
+  // Export scene
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.sketch.exportScene', () => {
+      editorProvider.postKeyboardAction('exportScene');
+    }),
+  );
+
+  // Import asset
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.sketch.importAsset', () => {
+      editorProvider.postKeyboardAction('importAsset');
+    }),
+  );
 }

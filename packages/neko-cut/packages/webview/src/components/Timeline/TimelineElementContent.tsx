@@ -560,6 +560,9 @@ const SimpleElementContent = memo(function SimpleElementContent({
     if (trackType === 'shape' || element.type === 'shape') {
       return 'bg-cyan-700/80'; // Cyan for shapes
     }
+    if (trackType === 'scene3d' || element.type === 'scene3d') {
+      return 'bg-indigo-700/80'; // Indigo for 3D scenes
+    }
     // Media - check if video or image
     if ('src' in element) {
       const ext = (element as MediaElement).src.toLowerCase().split('.').pop() || '';
@@ -634,6 +637,16 @@ export const TimelineElementContent = memo(function TimelineElementContent({
 
   if (trackType === 'text' || element.type === 'text') {
     return <TextElementContent element={element as TextElement} />;
+  }
+
+  // Scene3D track or scene3d element — show model name
+  if (trackType === 'scene3d' || element.type === 'scene3d') {
+    return (
+      <div className="absolute inset-0 flex items-center gap-1.5 px-2 overflow-hidden pointer-events-none">
+        <span className="text-xs opacity-60 select-none">3D</span>
+        <span className="text-xs text-white truncate select-none">{element.name}</span>
+      </div>
+    );
   }
 
   // Default: media track or media element

@@ -54,10 +54,16 @@ pub struct MeshSnapshot {
     pub texture_index: Option<usize>,
 }
 
-/// Delta change from a puppet tick (deformed vertices only)
+/// Delta change from a puppet tick (deformed vertices + optional animation progress)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PuppetDelta {
     pub deformed_meshes: Vec<DeformedMesh>,
+    /// Current animation elapsed time in milliseconds (None if no animation active)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub animation_time_ms: Option<f32>,
+    /// Whether the animation is currently playing (None if no animation active)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub animation_playing: Option<bool>,
 }
 
 /// Deformed mesh data for a single drawable node
@@ -127,19 +133,16 @@ impl PuppetWorld for BevyPuppetWorld {
         // Clear previous world state
         self.world = World::new();
 
-        loader::load_inp(&mut self.world, data)?;
+        let load_result = loader::load_inp(&mut self.world, data)?;
 
         // Attach animation components to the puppet root entity
         {
-            let root_entity: Option<Entity> = {
-                let mut q = self.world.query_filtered::<Entity, With<PuppetRoot>>();
-                q.iter(&self.world).next()
+            let lib = AnimationLibrary {
+                clips: load_result.animations,
             };
-            if let Some(root) = root_entity {
-                self.world
-                    .entity_mut(root)
-                    .insert((AnimationLibrary::default(), AnimationPlayback::default()));
-            }
+            self.world
+                .entity_mut(load_result.root_entity)
+                .insert((lib, AnimationPlayback::default()));
         }
 
         // Run initial transform propagation
@@ -279,9 +282,24 @@ impl PuppetWorld for BevyPuppetWorld {
         // 3. Apply parameter-driven deformation
         systems::parameter_update(&mut self.world);
 
-        // 4. Return deformed meshes
+        // 4. Read animation playback state for the delta
+        let (animation_time_ms, animation_playing) = {
+            let mut q = self
+                .world
+                .query_filtered::<&AnimationPlayback, With<PuppetRoot>>();
+            match q.iter(&self.world).next() {
+                Some(pb) if pb.clip_index.is_some() => {
+                    (Some(pb.elapsed_ms), Some(pb.playing))
+                }
+                _ => (None, None),
+            }
+        };
+
+        // 5. Return deformed meshes + animation progress
         PuppetDelta {
             deformed_meshes: self.get_deformed_meshes(),
+            animation_time_ms,
+            animation_playing,
         }
     }
 
@@ -431,6 +449,8 @@ mod tests {
         let mut world = BevyPuppetWorld::new();
         let delta = world.tick(16.0);
         assert!(delta.deformed_meshes.is_empty());
+        assert!(delta.animation_time_ms.is_none());
+        assert!(delta.animation_playing.is_none());
     }
 
     #[test]

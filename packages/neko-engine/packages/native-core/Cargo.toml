@@ -15,11 +15,17 @@ neko-types = { path = "../types" }
 # 3D scene management
 neko-native-scene = { path = "../native-scene" }
 
+# ECS (for querying scene World in PBR renderer)
+bevy_ecs.workspace = true
+
 # 2D puppet management (Inochi2D/inox2d)
 neko-native-puppet = { path = "../native-puppet" }
 
 # Math (re-export from native-scene)
 glam.workspace = true
+
+# glTF parsing (for AssetCache GPU resource loading)
+gltf.workspace = true
 
 # GPU - wgpu for cross-platform GPU compute
 wgpu.workspace = true
@@ -65,6 +71,7 @@ tracy-client = { workspace = true, optional = true }
 bytemuck.workspace = true
 crossbeam-channel.workspace = true
 tokio-util = { version = "0.7", features = ["rt"] }
+half = "2.4"
 
 # Image encoding - pure Rust JPEG encoder
 image.workspace = true
@@ -102,7 +109,6 @@ windows = { version = "0.52", features = [
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
 tempfile = "3"
-half = "2.4"
 
 [features]
 default = []
