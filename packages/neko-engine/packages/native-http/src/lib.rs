@@ -5,7 +5,8 @@
 //! - `POST /v1/dispatch` — Generic ActionRequest dispatch
 //! - `POST /v1/:group` — Group-level dispatch (action in body)
 //! - `POST /v1/:group/:id/:action` — RESTful resource-level dispatch
-//! - `GET /v1/streams/:stream_id` — WebSocket frame streaming
+//! - `GET /v1/streams/:stream_id` — WebSocket media frame streaming
+//! - `GET /v1/puppets/stream` — WebSocket puppet delta stream (~60fps for neko-live)
 //! - `GET /health` — Health check
 //!
 //! # Usage

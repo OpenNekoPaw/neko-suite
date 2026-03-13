@@ -85,24 +85,38 @@ pub struct Light {
     pub intensity: f32,
 }
 
+/// Camera projection mode
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum CameraProjection {
+    Perspective { fov: f32, aspect_ratio: f32 },
+    Orthographic { xmag: f32, ymag: f32 },
+}
+
 /// Camera component
 #[derive(Component, Clone, Debug, Serialize, Deserialize)]
 pub struct Camera {
-    pub fov: f32,
+    pub projection: CameraProjection,
     pub near: f32,
     pub far: f32,
-    pub aspect_ratio: f32,
 }
 
 impl Default for Camera {
     fn default() -> Self {
         Self {
-            fov: 45.0_f32.to_radians(),
+            projection: CameraProjection::Perspective {
+                fov: 45.0_f32.to_radians(),
+                aspect_ratio: 16.0 / 9.0,
+            },
             near: 0.1,
             far: 1000.0,
-            aspect_ratio: 16.0 / 9.0,
         }
     }
+}
+
+/// Morph target (blend shape) weights applied to a mesh
+#[derive(Component, Clone, Debug, Default)]
+pub struct MorphWeights {
+    pub weights: Vec<f32>,
 }
 
 /// Skeleton component for skeletal animation

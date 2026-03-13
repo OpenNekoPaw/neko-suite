@@ -6,8 +6,8 @@ use crate::router::ActionRouter;
 use crate::session::SessionManager;
 use neko_native_core::gpu::GpuContext;
 use neko_native_core::services::{
-    AudioService, EffectsService, ExportService, ImageService, NodeService, PuppetService,
-    SceneService, TaskService, TimelineService, VideoService,
+    AudioService, EffectsService, ExportService, ImageService, IPuppetService, NodeService,
+    PuppetService, SceneService, TaskService, TimelineService, VideoService,
 };
 use neko_types::{ActionRequest, ActionResponse};
 use std::sync::Arc;
@@ -27,6 +27,8 @@ pub struct EngineApi {
     session_manager: Arc<SessionManager>,
     /// GPU context (if available)
     gpu_ctx: Option<Arc<GpuContext>>,
+    /// Puppet service — exposed for WS stream endpoint
+    puppet_service: Option<Arc<dyn IPuppetService>>,
 }
 
 impl EngineApi {
@@ -97,7 +99,9 @@ impl EngineApi {
         let scene_service = Some(Arc::new(SceneService::new()));
 
         // Create puppet service (2D puppet management)
-        let puppet_service = Some(Arc::new(PuppetService::new()));
+        // Keep an Arc clone so the WS stream endpoint shares the same ECS world
+        let puppet_svc = Arc::new(PuppetService::new());
+        let puppet_service_dyn: Option<Arc<dyn IPuppetService>> = Some(puppet_svc.clone());
 
         // Create router
         let router = ActionRouter::new(
@@ -110,7 +114,7 @@ impl EngineApi {
             export_service,
             effects_service,
             scene_service,
-            puppet_service,
+            Some(puppet_svc),
             resource_registry.clone(),
             stream_registry.clone(),
         );
@@ -121,6 +125,7 @@ impl EngineApi {
             stream_registry,
             session_manager,
             gpu_ctx,
+            puppet_service: puppet_service_dyn,
         })
     }
 
@@ -175,6 +180,11 @@ impl EngineApi {
     /// Get the stream registry
     pub fn stream_registry(&self) -> &Arc<StreamRegistry> {
         &self.stream_registry
+    }
+
+    /// Get the puppet service (shared with controller layer)
+    pub fn puppet_service(&self) -> Option<Arc<dyn IPuppetService>> {
+        self.puppet_service.clone()
     }
 
     /// Get the session manager

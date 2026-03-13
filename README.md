@@ -86,12 +86,12 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 16 �
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
 | **neko-model** | 3D 编辑器 - glTF/VRM 视口 + 场景组装 + 骨骼动画（[架构设计](./docs/architecture/3d-capability-analysis.md)） | Early 30% | 9 TS/TSX + 7 Rust |
+| **neko-sketch** | 2D 创作 - 压感手绘 + Inochi2D 动画 + 逐帧动画（[架构设计](./docs/architecture/2d-capability-analysis.md)） | Alpha S.1✅ S.2⚙️ | 60+ TS/TSX + Rust |
 
 ### 规划中
 
 | 模块 | 职能 | 状态 |
 |------|------|------|
-| **neko-sketch** | 绘图工具 - 压感手绘 | Planned |
 | **neko-audio** | 音频工作站 - 波形编辑 | Planned |
 | **neko-live** | 虚拟直播 - 动捕 AR | Planned |
 
@@ -110,7 +110,8 @@ VS Code Extension Host ←─ HTTP/NAPI ─→ neko-engine (Rust)
                                               ├─ FFmpeg 编解码（硬件加速 + decoder pool）
                                               ├─ 关键帧缓存服务
                                               ├─ 导出管线（GPU export + audio mixer）
-                                              └─ native-scene 3D 场景（bevy_ecs + glTF loader）
+                                              ├─ native-scene 3D 场景（bevy_ecs + glTF loader）
+                                              └─ native-puppet 2D 骨骼（bevy_ecs + inox2d + bevy_animation）
 ```
 
 ### 2. AI Agent Skills 驱动
@@ -167,6 +168,7 @@ neko-suite/
 │   │       ├── native-napi/   # Node.js NAPI 绑定
 │   │       ├── native-cli/    # CLI 入口
 │   │       ├── native-scene/  # Rust 3D 场景 ECS（bevy_ecs + glTF）
+│   │       ├── native-puppet/ # Rust 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）
 │   │       ├── types/         # Rust 共享类型
 │   │       └── extension/     # TS VSCode 扩展侧
 │   ├── neko-cut/              # 视频剪辑器
@@ -207,7 +209,10 @@ neko-suite/
 │   │   └── packages/
 │   │       ├── extension/     # VSCode 扩展侧
 │   │       └── webview/       # React Three Fiber UI
-│   ├── neko-sketch/           # 绘图工具（Planned）
+│   ├── neko-sketch/           # 2D 创作（压感手绘 + Inochi2D 动画）
+│   │   └── packages/
+│   │       ├── extension/     # VSCode 扩展侧（CustomEditorProvider .nks）
+│   │       └── webview/       # React 18 + WebGL2 UI
 │   ├── neko-audio/            # 音频工作站（Planned）
 │   ├── neko-live/             # 虚拟直播（Planned）
 │   ├── neko-types/            # 共享类型 + Logger + i18n + Theme
@@ -276,6 +281,7 @@ ext install neko.neko-suite
 - [docs/editoperation.md](./docs/editoperation.md) - 编辑操作设计
 - [docs/architecture/](./docs/architecture/) - 架构设计文档
   - [3D 能力集成分析](./docs/architecture/3d-capability-analysis.md) - neko-model + native-scene 架构决策
+  - [2D 能力集成分析](./docs/architecture/2d-capability-analysis.md) - neko-sketch + native-puppet 架构决策
   - [跨语言架构](./docs/architecture/cross-language-architecture.md) - Rust/TS 跨语言设计
   - [共享包设计](./docs/architecture/shared-packages-design.md) - 包间共享策略
   - [跨仓共享设计](./docs/architecture/cross-repo-sharing-design.md) - 跨仓库共享方案

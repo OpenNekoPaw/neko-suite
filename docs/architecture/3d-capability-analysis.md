@@ -912,7 +912,7 @@ VS Code 是 MIT 开源，有先例（Cursor, Windsurf, VSCodium）。
 ### Phase 1：基础 3D 视口 + 场景组装 + 骨骼动画 ✅
 
 **目标**：导入 glTF/VRM 模型、摆放、打光、预览，支持骨骼动画播放
-**状态**：已完成（2026-03-12）
+**状态**：全部完成（2026-03-13）
 
 ```
 前端（✅ 已完成）：
@@ -925,23 +925,28 @@ VS Code 是 MIT 开源，有先例（Cursor, Windsurf, VSCodium）。
 ├─ Zustand 状态管理（modelStore）
 └─ ModelEditorProvider ↔ EngineClient 后端对接
 
-后端（✅ 已完成）：
+后端（✅ 全部完成，含 2026-03-13 补全项）：
 ├─ native-scene crate（bevy_ecs 0.15 + glam 0.29 + gltf 1.4）
 │   ├─ SceneWorld trait + BevySceneWorld 实现
-│   ├─ ECS Components（Transform/Mesh/Material/Light/Camera/Skeleton/Animation）
-│   ├─ Systems（transform_propagation + animation_tick）
+│   ├─ ECS Components
+│   │   ├─ Transform/Mesh/Material/Light/Skeleton/AnimationTarget（原有）
+│   │   ├─ Camera：CameraProjection::Perspective + Orthographic（✅ 2026-03-13）
+│   │   └─ MorphWeights：Blend Shape 权重组件（✅ 2026-03-13）
+│   ├─ Systems
+│   │   ├─ transform_propagation（原有）
+│   │   ├─ animation_tick（Translation/Rotation/Scale 原有）
+│   │   └─ animation_tick MorphWeights 分支（✅ 2026-03-13）
 │   ├─ glTF/glb loader → ECS 实体
-│   └─ 8 个单元测试
+│   │   ├─ 关键帧数据从 glTF buffer 提取（timestamps + values）（✅ 2026-03-13）
+│   │   ├─ 正交相机（xmag/ymag/znear/zfar）（✅ 2026-03-13）
+│   │   ├─ 两遍扫描：Pass1 建立 node_entity_map，Pass2 填充 joint_entities（✅ 2026-03-13）
+│   │   └─ IBM（Inverse Bind Matrices）从 buffer 直接读取（✅ 2026-03-13）
+│   └─ 12 个单元测试（含新增 MorphWeights 动画测试、正交相机测试）
+├─ SceneWorld.tick() → SceneDelta 含 updated_morph_weights（✅ 2026-03-13）
 ├─ SceneService（native-core, ServiceContainer 集成）
 ├─ ScenesController（native-api, 9 个 actions）
 ├─ ActionRouter scenes 路由注册
 └─ EngineClient scenes 方法（loadModel/getSceneSnapshot/updateSceneTransform/getAnimationClips/tickScene）
-
-待完善（TODO P2）：
-├─ 动画关键帧数据从 glTF buffer 提取（目前为空 vec）
-├─ Morph Target 动画
-├─ 正交相机支持
-└─ Skeleton joint_entities 填充
 ```
 
 ### Phase 2：AI 捏脸 + 基础建模
@@ -1189,3 +1194,62 @@ AI 视频生成（neko-agent MediaGenerationService）
 | `native-core/src/services/impls/container.rs` | ServiceContainer DI（扩展 3D 服务） |
 | `native-api/src/engine.rs` | EngineApi 门面（扩展 3D 路由组） |
 | `native-http/src/routes/streaming.rs` | WebSocket 流路由（扩展 3D 视口流） |
+
+---
+
+## 更新日志
+
+### 2026-03-13：Phase 2 部分完成
+
+**已完成**：
+1. ✅ 参数化面部编辑器 UI（22 个参数，5 个分类）
+2. ✅ Morph Target 驱动捏脸（ModelLoader.tsx 自动绑定 morphTargetInfluences）
+3. ✅ 延迟测试工具
+   - 后端：`scenes:latency_test` action（立即返回）
+   - Extension：`latency:test` 消息处理 → dispatch
+   - 前端：LatencyTester 组件（100 次测试 + Min/Max/Avg/P95 统计）
+   - UI：工具栏按钮 + 右侧面板 + 实时 RTT 显示 + 延迟建议
+
+**待完成**：
+- ⬜ VRM 表情预设集成（@pixiv/three-vrm）
+- ⬜ AI MCP Tools（face.generate_params / face.from_image / face.adjust）
+- ⬜ CSG 建模、3D 文字、参数化几何体
+
+### 2026-03-13 更新：Phase 2 进度
+
+**已完成功能**：
+1. ✅ 参数化面部编辑器（22 个参数，5 个分类）
+2. ✅ Morph Target 驱动捏脸（自动绑定 morphTargetInfluences）
+3. ✅ 延迟测试工具（100 次测试 + 统计 + 建议）
+
+**构建验证**：
+- Webview 构建：✅ 1.26 MB
+- Extension 构建：✅ 63.6 KB
+- TypeScript 类型检查：✅ 全部通过
+
+**下一步**：
+- VRM 表情预设集成（@pixiv/three-vrm）
+- AI MCP Tools（face.* 三个工具）
+
+### 2026-03-13 更新：VRM 表情预设集成完成
+
+**新增功能**：
+- ✅ 安装 @pixiv/three-vrm@^3.5.1
+- ✅ VRM 1.0 标准表情预设（17 个表情，3 个分类）
+- ✅ ExpressionPresetPanel 组件（情绪/口型/眼神）
+- ✅ ModelLoader VRM 加载支持（自动检测 .vrm 文件）
+- ✅ applyVRMExpression 方法（表情应用）
+- ✅ 工具栏"VRM 表情"按钮（VRM 未加载时禁用）
+
+**构建验证**：
+- TypeScript 类型检查：✅ 通过
+- Vite 构建：✅ 成功（1.40 MB + 46 KB GLTFLoader）
+
+**Phase 2 进度**：4/7 完成
+- ✅ 参数化面部编辑器 UI
+- ✅ Morph Target 驱动捏脸
+- ✅ 延迟测试工具
+- ✅ VRM 表情预设集成
+- ⬜ AI MCP Tools
+- ⬜ CSG 建模
+- ⬜ 3D 文字 / 参数化几何体

@@ -45,6 +45,7 @@ pub struct AnimationClipInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SceneDelta {
     pub updated_transforms: Vec<TransformUpdate>,
+    pub updated_morph_weights: Vec<MorphWeightsUpdate>,
 }
 
 /// A single transform update
@@ -54,6 +55,13 @@ pub struct TransformUpdate {
     pub position: [f32; 3],
     pub rotation: [f32; 4],
     pub scale: [f32; 3],
+}
+
+/// Morph weight update for a single mesh node
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MorphWeightsUpdate {
+    pub node_id: String,
+    pub weights: Vec<f32>,
 }
 
 /// Abstraction for scene management operations
@@ -198,8 +206,19 @@ impl SceneWorld for BevySceneWorld {
             });
         }
 
+        // Collect updated morph weights (only nodes that have the component)
+        let mut updated_morph_weights = Vec::new();
+        let mut mw_query = self.world.query::<(&SceneNodeId, &MorphWeights)>();
+        for (node_id, morph_weights) in mw_query.iter(&self.world) {
+            updated_morph_weights.push(MorphWeightsUpdate {
+                node_id: node_id.0.clone(),
+                weights: morph_weights.weights.clone(),
+            });
+        }
+
         SceneDelta {
             updated_transforms,
+            updated_morph_weights,
         }
     }
 

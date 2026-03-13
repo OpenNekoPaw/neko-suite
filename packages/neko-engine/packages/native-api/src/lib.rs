@@ -47,3 +47,7 @@ pub use neko_native_core::export::{
     ExportHwEncoder, ExportJobConfig, ExportPreset, ExportSettings, ExportVideoCodec,
 };
 pub use neko_native_core::jvi::JviLoader;
+
+// Re-export puppet types needed by native-http for the WS stream endpoint
+pub use neko_native_core::services::IPuppetService;
+pub use neko_native_core::PuppetDelta;

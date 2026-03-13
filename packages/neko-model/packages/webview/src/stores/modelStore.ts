@@ -24,6 +24,17 @@ export interface ModelState {
   modelUrl: string | null;
   isLoading: boolean;
 
+  // Face Editor
+  faceParams: Record<string, number>;
+  isFaceEditorOpen: boolean;
+
+  // Latency Tester
+  isLatencyTesterOpen: boolean;
+
+  // VRM Expression Presets
+  isVRMLoaded: boolean;
+  isExpressionPresetOpen: boolean;
+
   // Actions — Scene
   setSceneNodes: (nodes: SceneNodeSnapshot[]) => void;
   selectNode: (id: string | null) => void;
@@ -49,6 +60,20 @@ export interface ModelState {
     rotation: [number, number, number, number],
     scale: [number, number, number],
   ) => void;
+
+  // Actions — Face Editor
+  setFaceParam: (name: string, value: number) => void;
+  setFaceParams: (params: Record<string, number>) => void;
+  resetFaceParams: () => void;
+  randomizeFaceParams: () => void;
+  toggleFaceEditor: () => void;
+
+  // Actions — Latency Tester
+  toggleLatencyTester: () => void;
+
+  // Actions — VRM Expression Presets
+  setVRMLoaded: (loaded: boolean) => void;
+  toggleExpressionPreset: () => void;
 }
 
 export const useModelStore = create<ModelState>((set) => ({
@@ -61,6 +86,11 @@ export const useModelStore = create<ModelState>((set) => ({
   transformMode: 'translate',
   modelUrl: null,
   isLoading: false,
+  faceParams: {},
+  isFaceEditorOpen: false,
+  isLatencyTesterOpen: false,
+  isVRMLoaded: false,
+  isExpressionPresetOpen: false,
 
   // Scene actions
   setSceneNodes: (nodes) => set({ sceneNodes: nodes }),
@@ -94,4 +124,33 @@ export const useModelStore = create<ModelState>((set) => ({
         node.id === nodeId ? { ...node, position, rotation, scale } : node,
       ),
     })),
+
+  // Face Editor actions
+  setFaceParam: (name, value) =>
+    set((state) => ({
+      faceParams: { ...state.faceParams, [name]: value },
+    })),
+
+  setFaceParams: (params) => set({ faceParams: params }),
+
+  resetFaceParams: () => set({ faceParams: {} }),
+
+  randomizeFaceParams: () =>
+    set((state) => {
+      const randomized: Record<string, number> = {};
+      // Randomize all existing params
+      for (const key of Object.keys(state.faceParams)) {
+        randomized[key] = Math.random();
+      }
+      return { faceParams: randomized };
+    }),
+
+  toggleFaceEditor: () => set((state) => ({ isFaceEditorOpen: !state.isFaceEditorOpen })),
+
+  toggleLatencyTester: () => set((state) => ({ isLatencyTesterOpen: !state.isLatencyTesterOpen })),
+
+  setVRMLoaded: (loaded) => set({ isVRMLoaded: loaded }),
+
+  toggleExpressionPreset: () =>
+    set((state) => ({ isExpressionPresetOpen: !state.isExpressionPresetOpen })),
 }));

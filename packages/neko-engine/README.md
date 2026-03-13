@@ -10,9 +10,9 @@
 
 ## Quick Reference
 
-- **职责**：GPU 渲染、硬件编解码、帧缓存、导出——所有重计算的权威来源
+- **职责**：GPU 渲染、硬件编解码、帧缓存、导出、3D/2D 场景 ECS——所有重计算的权威来源
 - **入口**：`packages/extension/src/extension.ts`
-- **子包**：`native-core`（Rust）、`native-scene`（3D ECS）、`native-napi`（N-API 绑定）、`native-http`（axum）、`extension`（VSCode）
+- **子包**：`native-core`（Rust）、`native-scene`（3D ECS）、`native-puppet`（2D 骨骼 ECS）、`native-napi`（N-API 绑定）、`native-http`（axum）、`extension`（VSCode）
 - **依赖**：`@neko-engine/native-napi`、`@neko/shared`
 - **被依赖**：几乎所有其他扩展（extensionDependency）
 
@@ -39,20 +39,28 @@ native-core (Rust)
   ├── frame_server/  → HTTP 帧服务、媒体探测
   ├── export/        → GPU 导出管线、音视频混流
   └── jvi/           → JVI 项目格式解析
+
+native-puppet (Rust)  ← 2D 骨骼动画 ECS
+  ├── loader.rs      → INP 解析 → ECS World + AnimationClip 注册
+  ├── components.rs  → PuppetNode, Transform2D, ParameterBinding, AnimationTarget
+  ├── systems.rs     → parameter_update, physics_tick, animation_tick
+  ├── animation.rs   → bevy_animation AnimationClip → ParameterCurve → inox2d 参数值
+  └── world.rs       → PuppetWorld trait + BevyPuppetWorld
 ```
 
 ### 包结构
 
 ```
 packages/
-├── native-core/   # Rust 核心（GPU/FFmpeg/服务层）
-├── native-api/    # Controller + ActionRouter
-├── native-scene/  # 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
-├── native-http/   # HTTP/WebSocket 服务（axum）
-├── native-napi/   # N-API 绑定（napi-rs 编译为 .node）
-├── native-cli/    # 独立 CLI 二进制
-├── types/         # 共享 Rust 类型
-└── extension/     # VSCode 扩展集成
+├── native-core/    # Rust 核心（GPU/FFmpeg/服务层）
+├── native-api/     # Controller + ActionRouter
+├── native-scene/   # 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
+├── native-puppet/  # 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）
+├── native-http/    # HTTP/WebSocket 服务（axum）
+├── native-napi/    # N-API 绑定（napi-rs 编译为 .node）
+├── native-cli/     # 独立 CLI 二进制
+├── types/          # 共享 Rust 类型
+└── extension/      # VSCode 扩展集成
 ```
 
 ## Deep Dive
@@ -75,7 +83,9 @@ packages/
 | `axum` | HTTP/WebSocket |
 | `napi-rs` | Node.js 绑定 |
 | `ebur128` | ITU-R BS.1770-4 响度测量 |
-| `bevy_ecs` | 3D 场景 Entity-Component-System |
+| `bevy_ecs` | 3D/2D 场景 Entity-Component-System |
+| `bevy_animation` | 动画曲线系统（AnimationClip → ParameterCurve） |
+| `inox2d` | Inochi2D 格式解析 + 2D 参数化变形计算 |
 | `gltf` | glTF/GLB 3D 模型解析 |
 | `glam` | 3D 数学库（Vec3/Quat/Mat4） |
 

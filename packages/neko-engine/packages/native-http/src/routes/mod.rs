@@ -2,6 +2,7 @@
 
 pub mod dispatch;
 pub mod health;
+pub mod puppet_stream;
 pub mod streaming;
 
 use axum::routing::{get, post};
@@ -23,10 +24,15 @@ pub fn build_router(engine: Arc<EngineApi>) -> Router {
             "/v1/:group/:id/:action",
             post(dispatch::handle_resource_dispatch),
         )
-        // WebSocket streaming
+        // WebSocket media streaming
         .route(
             "/v1/streams/:stream_id",
             get(streaming::handle_stream_websocket),
+        )
+        // WebSocket puppet delta stream (60fps PuppetDelta push for neko-live)
+        .route(
+            "/v1/puppets/stream",
+            get(puppet_stream::handle_puppet_stream),
         )
         .with_state(engine)
 }

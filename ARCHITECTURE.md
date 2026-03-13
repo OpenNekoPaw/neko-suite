@@ -34,9 +34,11 @@ Neko Suite 是深度集成于 VS Code 的创意工作套件，核心挑战是在
 ┌──────────▼──────────────────────────────────────────────────────┐
 │                   neko-engine (Rust Sidecar)                    │
 │                                                                 │
-│  native-core: wgpu GPU · FFmpeg 编解码 · 动画 · 导出 · 缓存      │
-│  native-http: axum HTTP/WebSocket 服务（统一端口）               │
-│  native-napi: Node.js N-API 绑定                                │
+│  native-core:   wgpu GPU · FFmpeg 编解码 · 动画 · 导出 · 缓存    │
+│  native-scene:  3D 场景 ECS（bevy_ecs + glTF/VRM loader）        │
+│  native-puppet: 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）│
+│  native-http:   axum HTTP/WebSocket 服务（统一端口）             │
+│  native-napi:   Node.js N-API 绑定                              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -109,7 +111,7 @@ neko-agent    →  @neko/neko-client + neko-tools + neko-preview
 neko-tools    →  @neko/neko-client
 neko-canvas   →  neko-engine + neko-tools + neko-preview
 neko-model    →  neko-engine + @neko/neko-client + neko-tools + neko-preview
-neko-sketch   →  neko-canvas
+neko-sketch   →  neko-engine + @neko/neko-client + @neko/shared
 neko-story    →  @neko-story/parser + @neko/shared
 neko-assets   →  @neko/asset + @neko/shared
 ```
@@ -224,6 +226,7 @@ Extension Host
 | 共享包设计 | [architecture/shared-packages-design.md](./docs/architecture/shared-packages-design.md) | @neko/shared 通过子路径分层导出 |
 | 资产管理 | [architecture/asset-management-design.md](./docs/architecture/asset-management-design.md) | 统一 AssetManifest + Handler 注册表模式 |
 | 3D 能力 | [architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md) | bevy_ecs 独立 crate + native-scene + R3F 前端，不用 Bevy 全框架 |
+| 2D 能力 | [architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md) | native-puppet（bevy_ecs + inox2d + bevy_animation），替代 Spine/Live2D；WS 实时流供 neko-live |
 
 ---
 

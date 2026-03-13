@@ -3,6 +3,7 @@
 //! Isolates bevy_ecs API details behind a stable interface.
 //! Mirrors native-scene's SceneWorld pattern.
 
+use crate::animation::{AnimationClipInfo, AnimationLibrary, AnimationPlayback};
 use crate::components::*;
 use crate::hierarchy;
 use crate::loader::{self, LoadError};
@@ -81,13 +82,25 @@ pub trait PuppetWorld: Send + Sync {
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), String>;
 
     /// Get all parameter definitions
-    fn get_parameters(&self) -> Vec<ParameterInfo>;
+    fn get_parameters(&mut self) -> Vec<ParameterInfo>;
 
     /// Advance physics by delta_ms and return deformed mesh data
     fn tick(&mut self, delta_ms: f32) -> PuppetDelta;
 
     /// Get deformed mesh data for the current state
-    fn get_deformed_meshes(&self) -> Vec<DeformedMesh>;
+    fn get_deformed_meshes(&mut self) -> Vec<DeformedMesh>;
+
+    /// Get all animation clip descriptions
+    fn get_animations(&mut self) -> Vec<AnimationClipInfo>;
+
+    /// Play a named animation clip (loop controls whether it repeats)
+    fn play_animation(&mut self, name: &str, loop_anim: bool) -> Result<(), String>;
+
+    /// Stop the currently playing animation
+    fn stop_animation(&mut self);
+
+    /// Seek the current animation to a specific time position (milliseconds)
+    fn seek_animation(&mut self, time_ms: f32);
 }
 
 /// Implementation using bevy_ecs::World
@@ -115,6 +128,19 @@ impl PuppetWorld for BevyPuppetWorld {
         self.world = World::new();
 
         loader::load_inp(&mut self.world, data)?;
+
+        // Attach animation components to the puppet root entity
+        {
+            let root_entity: Option<Entity> = {
+                let mut q = self.world.query_filtered::<Entity, With<PuppetRoot>>();
+                q.iter(&self.world).next()
+            };
+            if let Some(root) = root_entity {
+                self.world
+                    .entity_mut(root)
+                    .insert((AnimationLibrary::default(), AnimationPlayback::default()));
+            }
+        }
 
         // Run initial transform propagation
         systems::transform_propagation_2d(&mut self.world);
@@ -226,7 +252,7 @@ impl PuppetWorld for BevyPuppetWorld {
         Ok(())
     }
 
-    fn get_parameters(&self) -> Vec<ParameterInfo> {
+    fn get_parameters(&mut self) -> Vec<ParameterInfo> {
         let mut result = Vec::new();
         let mut query = self.world.query::<&PuppetParameters>();
         for params in query.iter(&self.world) {
@@ -244,19 +270,22 @@ impl PuppetWorld for BevyPuppetWorld {
     }
 
     fn tick(&mut self, delta_ms: f32) -> PuppetDelta {
-        // Run physics step
+        // 1. Advance animation and write parameter values (must run before parameter_update)
+        systems::animation_tick(&mut self.world, delta_ms);
+
+        // 2. Run physics step
         systems::physics_tick(&mut self.world, delta_ms);
 
-        // Apply parameter-driven deformation
+        // 3. Apply parameter-driven deformation
         systems::parameter_update(&mut self.world);
 
-        // Get deformed meshes
+        // 4. Return deformed meshes
         PuppetDelta {
             deformed_meshes: self.get_deformed_meshes(),
         }
     }
 
-    fn get_deformed_meshes(&self) -> Vec<DeformedMesh> {
+    fn get_deformed_meshes(&mut self) -> Vec<DeformedMesh> {
         let mut meshes = Vec::new();
 
         let mut query = self.world.query::<(
@@ -299,6 +328,68 @@ impl PuppetWorld for BevyPuppetWorld {
 
         meshes
     }
+
+    fn get_animations(&mut self) -> Vec<AnimationClipInfo> {
+        let mut q = self.world.query_filtered::<&AnimationLibrary, With<PuppetRoot>>();
+        match q.iter(&self.world).next() {
+            Some(lib) => lib.clips.iter().map(|c| c.info()).collect(),
+            None => Vec::new(),
+        }
+    }
+
+    fn play_animation(&mut self, name: &str, loop_anim: bool) -> Result<(), String> {
+        // Find the clip index
+        let clip_index = {
+            let mut q = self.world.query_filtered::<&AnimationLibrary, With<PuppetRoot>>();
+            match q.iter(&self.world).next() {
+                Some(lib) => lib
+                    .clips
+                    .iter()
+                    .position(|c| c.name == name)
+                    .ok_or_else(|| format!("Animation clip '{}' not found", name))?,
+                None => return Err("No animation library on puppet root".to_string()),
+            }
+        };
+
+        // Update playback state
+        let root_entity: Option<Entity> = {
+            let mut q = self.world.query_filtered::<Entity, With<PuppetRoot>>();
+            q.iter(&self.world).next()
+        };
+        if let Some(root) = root_entity {
+            if let Some(mut pb) = self.world.get_mut::<AnimationPlayback>(root) {
+                pb.clip_index = Some(clip_index);
+                pb.elapsed_ms = 0.0;
+                pb.playing = true;
+                pb.looping = loop_anim;
+            }
+        }
+        Ok(())
+    }
+
+    fn stop_animation(&mut self) {
+        let root_entity: Option<Entity> = {
+            let mut q = self.world.query_filtered::<Entity, With<PuppetRoot>>();
+            q.iter(&self.world).next()
+        };
+        if let Some(root) = root_entity {
+            if let Some(mut pb) = self.world.get_mut::<AnimationPlayback>(root) {
+                pb.playing = false;
+            }
+        }
+    }
+
+    fn seek_animation(&mut self, time_ms: f32) {
+        let root_entity: Option<Entity> = {
+            let mut q = self.world.query_filtered::<Entity, With<PuppetRoot>>();
+            q.iter(&self.world).next()
+        };
+        if let Some(root) = root_entity {
+            if let Some(mut pb) = self.world.get_mut::<AnimationPlayback>(root) {
+                pb.elapsed_ms = time_ms.max(0.0);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -323,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_get_deformed_meshes_empty() {
-        let world = BevyPuppetWorld::new();
+        let mut world = BevyPuppetWorld::new();
         let meshes = world.get_deformed_meshes();
         assert!(meshes.is_empty());
     }
@@ -344,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_get_parameters_empty() {
-        let world = BevyPuppetWorld::new();
+        let mut world = BevyPuppetWorld::new();
         let params = world.get_parameters();
         assert!(params.is_empty());
     }

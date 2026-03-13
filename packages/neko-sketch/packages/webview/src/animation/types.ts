@@ -51,3 +51,10 @@ export interface DeformedMesh {
   opacity: number;
   z_order: number;
 }
+
+/** Frontend-facing description of a named animation clip */
+export interface AnimationClipInfo {
+  name: string;
+  duration_ms: number;
+  loop_default: boolean;
+}

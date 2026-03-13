@@ -18,7 +18,8 @@ packages/neko-engine/
 │   ├── native-core/    # Rust: GPU 渲染 + FFmpeg 编解码 + 音频处理
 │   ├── native-api/     # Rust: Controller 层 + ActionRouter + 资源管理
 │   ├── native-http/    # Rust: axum HTTP/WebSocket 服务
-│   ├── native-scene/  # Rust: 3D 场景 ECS（bevy_ecs + glTF loader）
+│   ├── native-scene/   # Rust: 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
+│   ├── native-puppet/  # Rust: 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）
 │   ├── native-napi/    # Rust: Node.js N-API 绑定（napi-rs）
 │   ├── native-cli/     # Rust: 独立 CLI 二进制
 │   ├── types/          # Rust: 共享 DTO（跨 crate 契约）
@@ -49,10 +50,18 @@ packages/neko-engine/
 │                                                       │
 │  ┌─ View Layer ──────────────────────────────────┐    │
 │  │  native-http (axum)                           │    │
-│  │    POST /v1/dispatch     — 通用 ActionRequest  │    │
-│  │    POST /v1/:group/:id   — RESTful 资源操作    │    │
-│  │    GET  /v1/streams/:id  — WebSocket 流        │    │
-│  │    GET  /health          — 健康检查            │    │
+│  │    POST /v1/dispatch          — 通用 ActionRequest    │    │
+│  │    POST /v1/:group/:id        — RESTful 资源操作      │    │
+│  │    GET  /v1/streams/:id       — WebSocket 媒体流      │    │
+│  │    POST /v1/puppets/load      — 加载 INP 文件         │    │
+│  │    POST /v1/puppets/param     — 设置参数              │    │
+│  │    POST /v1/puppets/tick      — 物理步进              │    │
+│  │    POST /v1/puppets/anim/play — 播放动画片段          │    │
+│  │    POST /v1/puppets/anim/stop — 停止动画              │    │
+│  │    POST /v1/puppets/anim/seek — 跳转时间点            │    │
+│  │    GET  /v1/puppets/anims     — 动画片段列表          │    │
+│  │    WS   /v1/puppets/stream    — 60fps PuppetDelta 推送│    │
+│  │    GET  /health               — 健康检查              │    │
 │  └──────────────┬────────────────────────────────┘    │
 │                 │                                     │
 │  ┌─ Controller Layer ────────────────────────────┐    │
@@ -65,7 +74,7 @@ packages/neko-engine/
 │  │    Controllers:                               │    │
 │  │      video, audio, timeline, stream,          │    │
 │  │      effects, canvas, node, image, task,      │    │
-│  │      scenes, models                           │    │
+│  │      scenes, models, puppets                  │    │
 │  └──────────────┬────────────────────────────────┘    │
 │                 │                                     │
 │  ┌─ Core Layer ──────────────────────────────────┐    │
@@ -96,7 +105,10 @@ packages/neko-engine/
 ```
 native-cli ──→ native-http ──→ native-api ──→ native-core ──→ native-scene
                                     │              │              │
+                                    ├──→ native-puppet            │
                                     └──→ types ◀───┘──────────────┘
+                                                  ▲
+                                            native-puppet
 
 native-napi ──→ native-core + types
 
@@ -208,6 +220,8 @@ Webview H264StreamClient / AudioStreamClient
 | 编解码 | FFmpeg (ffmpeg-next) + 平台硬件加速 |
 | HTTP 服务 | axum + tokio 异步运行时 |
 | N-API 绑定 | napi-rs（Node.js ≥18） |
+| 2D 骨骼 ECS | bevy_ecs 0.15 + inox2d（BSD 2-Clause）+ bevy_animation |
+| 3D 场景 ECS | bevy_ecs 0.15 + gltf + glam |
 | 序列化 | serde + serde_json |
 | 错误处理 | thiserror + anyhow |
 | 性能分析 | Tracy profiler（可选 feature） |

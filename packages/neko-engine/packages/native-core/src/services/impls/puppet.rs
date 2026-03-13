@@ -5,6 +5,7 @@
 
 use crate::error::{Error, Result};
 use crate::services::puppet::IPuppetService;
+use neko_native_puppet::animation::AnimationClipInfo;
 use neko_native_puppet::world::{
     BevyPuppetWorld, DeformedMesh, ParameterInfo, PuppetDelta, PuppetSnapshot, PuppetWorld,
 };
@@ -62,7 +63,7 @@ impl IPuppetService for PuppetService {
     }
 
     fn get_parameters(&self) -> Result<Vec<ParameterInfo>> {
-        let world = self
+        let mut world = self
             .world
             .lock()
             .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
@@ -80,12 +81,50 @@ impl IPuppetService for PuppetService {
     }
 
     fn get_deformed_meshes(&self) -> Result<Vec<DeformedMesh>> {
-        let world = self
+        let mut world = self
             .world
             .lock()
             .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
 
         Ok(world.get_deformed_meshes())
+    }
+
+    fn get_animations(&self) -> Result<Vec<AnimationClipInfo>> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+
+        Ok(world.get_animations())
+    }
+
+    fn play_animation(&self, name: &str, loop_anim: bool) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+
+        world.play_animation(name, loop_anim).map_err(Error::Other)
+    }
+
+    fn stop_animation(&self) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+
+        world.stop_animation();
+        Ok(())
+    }
+
+    fn seek_animation(&self, time_ms: f32) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+
+        world.seek_animation(time_ms);
+        Ok(())
     }
 }
 

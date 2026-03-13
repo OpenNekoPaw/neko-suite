@@ -150,6 +150,62 @@ impl Controller for PuppetsController {
                 ))
             }
 
+            "anims" => {
+                let service = self.service()?;
+                let anims = service
+                    .get_animations()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::to_value(anims)
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
+            "anim_play" => {
+                #[derive(Debug, Deserialize)]
+                struct AnimPlayOptions {
+                    name: String,
+                    #[serde(default)]
+                    loop_anim: bool,
+                }
+                let opts: AnimPlayOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .play_animation(&opts.name, opts.loop_anim)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "anim_stop" => {
+                let service = self.service()?;
+                service
+                    .stop_animation()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "anim_seek" => {
+                #[derive(Debug, Deserialize)]
+                struct AnimSeekOptions {
+                    time_ms: f32,
+                }
+                let opts: AnimSeekOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .seek_animation(opts.time_ms)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
                 action: action.to_string(),
@@ -208,6 +264,10 @@ mod tests {
         assert!(actions.contains(&"params"));
         assert!(actions.contains(&"tick"));
         assert!(actions.contains(&"meshes"));
+        assert!(actions.contains(&"anims"));
+        assert!(actions.contains(&"anim_play"));
+        assert!(actions.contains(&"anim_stop"));
+        assert!(actions.contains(&"anim_seek"));
     }
 
     #[tokio::test]

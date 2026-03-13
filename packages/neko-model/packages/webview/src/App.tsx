@@ -1,12 +1,17 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Viewport3D } from './components/Viewport3D';
-import { ModelLoader } from './components/ModelLoader';
+import { ModelLoader, type ModelLoaderHandle } from './components/ModelLoader';
 import { AnimationPlayer } from './components/AnimationPlayer';
 import { SceneTree } from './components/SceneTree';
 import { TransformPanel } from './components/panels/TransformPanel';
+import { FaceEditorPanel } from './components/face';
+import { LatencyTester } from './components/LatencyTester';
+import { ExpressionPresetPanel } from './components/vrm';
 import { useModelStore } from './stores/modelStore';
 import type { AnimationClipInfo, ExtensionMessage } from './types';
 import type { AnimationClip } from 'three';
+import type { VRM } from '@pixiv/three-vrm';
+import type { VRMExpressionPreset } from './types/vrmExpressions';
 
 // Acquire VSCode API if available
 declare function acquireVsCodeApi(): {
@@ -22,6 +27,7 @@ const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : nul
  * Uses Zustand store for all state management.
  */
 export function App(): React.JSX.Element {
+  const modelLoaderRef = useRef<ModelLoaderHandle>(null);
   const modelUrl = useModelStore((s) => s.modelUrl);
   const sceneNodes = useModelStore((s) => s.sceneNodes);
   const selectedNodeId = useModelStore((s) => s.selectedNodeId);
@@ -29,6 +35,14 @@ export function App(): React.JSX.Element {
   const activeAnimation = useModelStore((s) => s.activeAnimation);
   const playbackState = useModelStore((s) => s.playbackState);
   const transformMode = useModelStore((s) => s.transformMode);
+  const isFaceEditorOpen = useModelStore((s) => s.isFaceEditorOpen);
+  const isLatencyTesterOpen = useModelStore((s) => s.isLatencyTesterOpen);
+  const isExpressionPresetOpen = useModelStore((s) => s.isExpressionPresetOpen);
+  const isVRMLoaded = useModelStore((s) => s.isVRMLoaded);
+  const toggleFaceEditor = useModelStore((s) => s.toggleFaceEditor);
+  const toggleLatencyTester = useModelStore((s) => s.toggleLatencyTester);
+  const toggleExpressionPreset = useModelStore((s) => s.toggleExpressionPreset);
+  const setVRMLoaded = useModelStore((s) => s.setVRMLoaded);
 
   const setModelUrl = useModelStore((s) => s.setModelUrl);
   const selectNode = useModelStore((s) => s.selectNode);
@@ -85,6 +99,9 @@ export function App(): React.JSX.Element {
               break;
           }
           break;
+        case 'latency:response':
+          // Echo back latency response (handled by LatencyTester component)
+          break;
         default:
           break;
       }
@@ -108,10 +125,56 @@ export function App(): React.JSX.Element {
     [setAnimationClips],
   );
 
+  const handleVRMLoaded = useCallback(
+    (vrm: VRM | null) => {
+      setVRMLoaded(vrm !== null);
+    },
+    [setVRMLoaded],
+  );
+
+  const handleApplyExpression = useCallback((expression: VRMExpressionPreset) => {
+    modelLoaderRef.current?.applyVRMExpression(expression);
+  }, []);
+
   const selectedNode = sceneNodes.find((n) => n.id === selectedNodeId) ?? null;
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
+      {/* Toolbar */}
+      <div className="h-8 bg-[var(--vscode-titleBar-activeBackground)] border-b border-[var(--vscode-panel-border)] flex items-center px-2 gap-2">
+        <button
+          onClick={toggleFaceEditor}
+          className={`px-2 py-1 text-xs rounded transition-colors ${
+            isFaceEditorOpen
+              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
+              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
+          }`}
+        >
+          面部编辑器
+        </button>
+        <button
+          onClick={toggleLatencyTester}
+          className={`px-2 py-1 text-xs rounded transition-colors ${
+            isLatencyTesterOpen
+              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
+              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
+          }`}
+        >
+          延迟测试
+        </button>
+        <button
+          onClick={toggleExpressionPreset}
+          disabled={!isVRMLoaded}
+          className={`px-2 py-1 text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+            isExpressionPresetOpen
+              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
+              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
+          }`}
+        >
+          VRM 表情
+        </button>
+      </div>
+
       <div className="flex-1 flex overflow-hidden">
         {/* Scene Tree (left sidebar) */}
         {sceneNodes.length > 0 && (
@@ -123,8 +186,10 @@ export function App(): React.JSX.Element {
           {modelUrl ? (
             <Viewport3D>
               <ModelLoader
+                ref={modelLoaderRef}
                 url={modelUrl}
                 onAnimationsLoaded={handleAnimationsLoaded}
+                onVRMLoaded={handleVRMLoaded}
                 activeAnimation={activeAnimation}
                 isPlaying={playbackState === 'playing'}
               />
@@ -147,12 +212,23 @@ export function App(): React.JSX.Element {
           />
         </div>
 
-        {/* Transform Panel (right sidebar) */}
-        <TransformPanel
-          node={selectedNode}
-          transformMode={transformMode}
-          onTransformModeChange={setTransformMode}
-        />
+        {/* Right Sidebar: Expression Preset, Latency Tester, Face Editor, or Transform Panel */}
+        {isExpressionPresetOpen ? (
+          <ExpressionPresetPanel
+            onApplyExpression={handleApplyExpression}
+            isVRMLoaded={isVRMLoaded}
+          />
+        ) : isLatencyTesterOpen ? (
+          <LatencyTester />
+        ) : isFaceEditorOpen ? (
+          <FaceEditorPanel />
+        ) : (
+          <TransformPanel
+            node={selectedNode}
+            transformMode={transformMode}
+            onTransformModeChange={setTransformMode}
+          />
+        )}
       </div>
     </div>
   );

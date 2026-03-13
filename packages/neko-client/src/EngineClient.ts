@@ -575,6 +575,69 @@ export class EngineClient {
     return (resp.data as unknown[]) ?? [];
   }
 
+  /**
+   * Get all available animation clip descriptions.
+   * Dispatches `puppets:anims`.
+   */
+  async getPuppetAnimations(): Promise<unknown[]> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'anims',
+      options: {},
+    });
+    this.assertOk(resp, 'puppets:anims');
+    return (resp.data as unknown[]) ?? [];
+  }
+
+  /**
+   * Play a named animation clip.
+   * Dispatches `puppets:anim_play`.
+   */
+  async playPuppetAnimation(name: string, loopAnim = false): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'anim_play',
+      options: { name, loop_anim: loopAnim },
+    });
+    this.assertOk(resp, 'puppets:anim_play');
+  }
+
+  /**
+   * Stop the current animation.
+   * Dispatches `puppets:anim_stop`.
+   */
+  async stopPuppetAnimation(): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'anim_stop',
+      options: {},
+    });
+    this.assertOk(resp, 'puppets:anim_stop');
+  }
+
+  /**
+   * Seek the current animation to a time position.
+   * Dispatches `puppets:anim_seek`.
+   */
+  async seekPuppetAnimation(timeMs: number): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'anim_seek',
+      options: { time_ms: timeMs },
+    });
+    this.assertOk(resp, 'puppets:anim_seek');
+  }
+
+  /**
+   * Open a WebSocket connection to the puppet delta stream.
+   * The server pushes PuppetDelta at ~60fps while the connection is active.
+   * Returns the raw WebSocket — caller is responsible for closing it.
+   */
+  openPuppetStream(): WebSocket {
+    const url = `ws://127.0.0.1:${this.port}/v1/puppets/stream`;
+    return new WebSocket(url);
+  }
+
   // =========================================================================
   // Health
   // =========================================================================

@@ -31,6 +31,10 @@ pub mod preview;
 pub mod services;
 pub mod telemetry;
 
+// Re-export puppet world types so higher-level crates (native-api, native-http)
+// can access them without depending directly on neko-native-puppet
+pub use neko_native_puppet::world::PuppetDelta;
+
 /// Prelude — commonly used types for convenience
 pub mod prelude {
     pub use crate::domain::{FrameData, StreamConfig, Timeline};

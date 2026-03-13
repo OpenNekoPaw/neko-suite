@@ -97,6 +97,9 @@ Webview → Extension:
   file:export      { format, data }          # Export canvas (base64)
   status:update    { SketchStatusInfo }      # Update status bar
   layer:outline    { LayerOutlineData }      # Update layer tree view
+
+Note: Puppet/animation communication goes directly via EngineClient HTTP/WS,
+      not through the extension postMessage protocol.
 ```
 
 ## Key Design Decisions
@@ -111,6 +114,10 @@ Webview → Extension:
 | GLSL blend modes from WGSL | 12 modes translated from neko-engine `blend_modes.wgsl` |
 | Independent from neko-canvas | Own CustomEditorProvider, no `extensionDependencies` |
 | .nks JSON format | Simple, human-readable, version-controlled |
+| native-puppet in neko-engine | Symmetric to native-scene; no WASM (size/threading limits); full bevy_ecs + bevy_animation |
+| bevy_animation over inox2d anim | inox2d animation not yet implemented upstream; bevy_animation ParameterCurve bridges the gap |
+| inox2d over Spine/Live2D | BSD 2-Clause license; Spine Runtimes License rejected (ADR-2D-004); Live2D rejected (ADR-2D-001) |
+| WS /v1/puppets/stream | Real-time face-tracking (neko-live) requires <2ms latency; HTTP round-trip not sufficient at 60fps |
 
 ## .nks Document Format
 
@@ -166,22 +173,25 @@ Webview → Extension:
 | Image import | ✅ | Base64 → ImageBitmap → new layer |
 | i18n locale switch | ✅ | Runtime setLocale via extension message |
 
-### S.2: Puppet Animation — IN PROGRESS
+### S.2: Puppet Animation — MOSTLY COMPLETE (frame-by-frame pending)
 
 | Module | Status | Details |
 |--------|--------|---------|
-| native-puppet crate | ✅ | bevy_ecs 0.15 + inox2d, INP loading → ECS World |
-| ECS components | ✅ | PuppetNode, Transform2D, DeformRegion, DrawOrder, Param, PhysicsConfig |
+| native-puppet crate | ✅ | bevy_ecs 0.15 + inox2d + bevy_animation, INP loading → ECS World |
+| ECS components | ✅ | PuppetNode, Transform2D, DeformRegion, DrawOrder, Param, PhysicsConfig, AnimationTarget |
 | Hierarchy management | ✅ | Parent-child tree traversal, subtree collect |
 | PuppetWorld trait | ✅ | load_model / set_param / tick / snapshot / get_deformed_meshes |
 | INP loader | ✅ | Stub (inox2d API TBD), returns PuppetLoadResult |
 | Deformation system | ✅ | Rotation + warp mesh deform, param → vertex pipeline |
 | PuppetService | ✅ | native-core integration, world lifecycle management |
-| PuppetsController | ✅ | 7 HTTP actions via ActionRouter |
+| PuppetsController | ✅ | HTTP actions via ActionRouter (load/param/tick/meshes/snapshot/params) |
 | Frontend controller | ✅ | IInochi2DController → EngineClient HTTP dispatch |
 | Animation Zustand slice | ✅ | puppet state, param cache, loading/playing status |
-| Spine integration | 📋 | ⚠️ Spine Runtimes License (not MIT) |
+| bevy_animation bridge | ✅ | animation.rs: ParameterCurve keyframe curves → inox2d param values; anim_play/anim_stop/anim_seek/anims endpoints |
+| WebSocket stream | ✅ | WS /v1/puppets/stream — 60fps PuppetDelta push for neko-live |
+| Animation UI | ✅ | AnimationPanel.tsx: clip list + playback controls; animationSlice extended |
 | Frame-by-frame animation | 📋 | Onion skin + frame timeline |
+| ~~Spine integration~~ | ❌ | Rejected (ADR-2D-004): Spine Runtimes License + overlap with inox2d |
 
 ### S.3: Effects & Scenes — PLANNED
 
@@ -197,13 +207,10 @@ Webview → Extension:
 - Export to neko-canvas (PNG/SVG → canvas node)
 - Asset registration in neko-assets
 
-## Remaining P2 TODOs
+## Remaining TODOs
 
 | Location | TODO | Priority |
 |----------|------|----------|
-| `document-serializer.ts` | Read pixel data from WebGL texture on save | P2 |
-| `keyboard-dispatcher.ts` | selectAll — select all pixels on active layer | P2 |
-| `keyboard-dispatcher.ts` | deleteSelected — clear selected region | P2 |
-| `animation/` | S.2 full implementation | S.2 |
+| `animation/` | Frame-by-frame editor (onion skin + frame timeline) | S.2 |
 | `effects/` | S.3 full implementation | S.3 |
 | `scene/` | S.3 full implementation | S.3 |

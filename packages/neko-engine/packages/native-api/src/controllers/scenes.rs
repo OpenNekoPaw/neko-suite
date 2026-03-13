@@ -134,6 +134,12 @@ impl Controller for ScenesController {
                 ))
             }
 
+            "latency_test" => {
+                // Immediately return success for latency measurement
+                // No service call needed - just echo back
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
             // Placeholder actions (future phases)
             "composite" | "capture" | "stream" => Err(ApiError::ServiceError(format!(
                 "scenes:{} not yet implemented",
@@ -201,6 +207,7 @@ mod tests {
         assert!(actions.contains(&"composite"));
         assert!(actions.contains(&"capture"));
         assert!(actions.contains(&"stream"));
+        assert!(actions.contains(&"latency_test"));
     }
 
     #[tokio::test]
@@ -250,5 +257,16 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("not yet implemented"));
+    }
+
+    #[tokio::test]
+    async fn test_latency_test_returns_immediately() {
+        let controller = create_test_controller();
+        let result = controller
+            .handle("latency_test", None, Value::Null, None)
+            .await;
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.is_ok());
     }
 }

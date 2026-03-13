@@ -50,7 +50,8 @@ export type ExtensionMessage =
   | { type: 'enginePort'; port: number }
   | { type: 'keyboardAction'; action: string }
   | { type: 'sceneSnapshot'; snapshot: SceneSnapshot }
-  | { type: 'sceneDelta'; delta: SceneDelta };
+  | { type: 'sceneDelta'; delta: SceneDelta }
+  | { type: 'latency:response'; timestamp: number };
 
 /** Messages from Webview to Extension Host */
 export type WebviewMessage =
@@ -65,4 +66,5 @@ export type WebviewMessage =
     }
   | { type: 'playAnimation'; clipName: string }
   | { type: 'pauseAnimation' }
-  | { type: 'stopAnimation' };
+  | { type: 'stopAnimation' }
+  | { type: 'latency:test'; timestamp: number };

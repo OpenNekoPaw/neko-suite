@@ -116,6 +116,7 @@ pub mod actions {
         "composite",
         "capture",
         "stream",
+        "latency_test",
     ];
 
     pub const PUPPETS: &[&str] = &[
@@ -125,6 +126,10 @@ pub mod actions {
         "params",
         "tick",
         "meshes",
+        "anims",
+        "anim_play",
+        "anim_stop",
+        "anim_seek",
     ];
 
     pub const EFFECTS: &[&str] = &["apply", "list", "info", "register"];

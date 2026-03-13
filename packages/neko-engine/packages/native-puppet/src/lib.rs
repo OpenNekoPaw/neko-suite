@@ -4,6 +4,7 @@
 //! and mesh output using bevy_ecs. Mirrors the native-scene architecture
 //! for 3D scenes but targets 2D Inochi2D puppet models (.inp files).
 
+pub mod animation;
 pub mod components;
 pub mod hierarchy;
 pub mod loader;

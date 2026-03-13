@@ -3,6 +3,7 @@
 //! Called manually (not via a scheduler) — mirrors native-scene pattern.
 //! Systems operate on bevy_ecs::World directly.
 
+use crate::animation::{AnimationLibrary, AnimationPlayback};
 use crate::components::*;
 use crate::hierarchy;
 use bevy_ecs::prelude::*;
@@ -149,6 +150,122 @@ pub fn apply_global_transforms(world: &mut World) {
             dv.0 = vertices;
         }
     }
+}
+
+/// Advance animation playback and write sampled parameter values.
+///
+/// Must be called before parameter_update so that animation-driven values
+/// are already in PuppetParameters when deformation runs.
+///
+/// Steps:
+///   1. Find the root entity carrying AnimationPlayback + AnimationLibrary
+///   2. If playing, advance elapsed_ms by delta_ms (with loop/stop handling)
+///   3. Sample all parameter curves at new elapsed_ms
+///   4. Write sampled values into PuppetParameters.current
+pub fn animation_tick(world: &mut World, delta_ms: f32) {
+    // 1. Find root entity (carries AnimationPlayback)
+    let root_entity: Option<Entity> = {
+        let mut q = world.query_filtered::<Entity, With<PuppetRoot>>();
+        q.iter(world).next()
+    };
+    let root_entity = match root_entity {
+        Some(e) => e,
+        None => return,
+    };
+
+    // 2. Read playback state (cloned to release the immutable borrow on world)
+    let (clip_index, old_elapsed, looping) = {
+        match world.get::<AnimationPlayback>(root_entity) {
+            Some(pb) if pb.playing => match pb.clip_index {
+                Some(idx) => (idx, pb.elapsed_ms, pb.looping),
+                None => return,
+            },
+            _ => return,
+        }
+    };
+
+    // 3. Read animation curves (cloned so we can mutate world later)
+    //    Format: Vec<(param_name, Vec<(time_ms, value)>)>
+    let (duration, raw_curves): (f32, Vec<(String, Vec<(f32, f32)>)>) = {
+        match world.get::<AnimationLibrary>(root_entity) {
+            Some(lib) => match lib.clips.get(clip_index) {
+                Some(clip) => {
+                    let curves = clip
+                        .curves
+                        .iter()
+                        .map(|c| {
+                            let kfs = c.keyframes.iter().map(|k| (k.time_ms, k.value)).collect();
+                            (c.param_name.clone(), kfs)
+                        })
+                        .collect();
+                    (clip.duration_ms, curves)
+                }
+                None => return,
+            },
+            None => return,
+        }
+    };
+
+    // 4. Compute new elapsed time
+    let advanced = old_elapsed + delta_ms;
+    let (new_elapsed, still_playing) = if advanced >= duration {
+        if looping {
+            (advanced % duration.max(0.001), true)
+        } else {
+            (duration, false)
+        }
+    } else {
+        (advanced, true)
+    };
+
+    // 5. Sample curves at new_elapsed using linear interpolation
+    let param_updates: Vec<(String, f32)> = raw_curves
+        .iter()
+        .map(|(name, kfs)| (name.clone(), sample_linear(kfs, new_elapsed)))
+        .collect();
+
+    // 6. Update playback state
+    if let Some(mut pb) = world.get_mut::<AnimationPlayback>(root_entity) {
+        pb.elapsed_ms = new_elapsed;
+        pb.playing = still_playing;
+    }
+
+    // 7. Apply sampled values to PuppetParameters
+    let mut q = world.query::<&mut PuppetParameters>();
+    for mut params in q.iter_mut(world) {
+        for p in &mut params.params {
+            if let Some((_, val)) = param_updates.iter().find(|(n, _)| n == &p.name) {
+                p.current = val.clamp(p.min, p.max);
+            }
+        }
+    }
+}
+
+/// Linear interpolation helper for sampled keyframe data
+fn sample_linear(keyframes: &[(f32, f32)], time_ms: f32) -> f32 {
+    if keyframes.is_empty() {
+        return 0.0;
+    }
+    if keyframes.len() == 1 {
+        return keyframes[0].1;
+    }
+    let last = keyframes.last().unwrap();
+    if time_ms >= last.0 {
+        return last.1;
+    }
+    let first = keyframes.first().unwrap();
+    if time_ms <= first.0 {
+        return first.1;
+    }
+    for i in 0..keyframes.len() - 1 {
+        let (t0, v0) = keyframes[i];
+        let (t1, v1) = keyframes[i + 1];
+        if time_ms >= t0 && time_ms <= t1 {
+            let t = (time_ms - t0) / (t1 - t0);
+            return v0 + t * (v1 - v0);
+        }
+    }
+    last.1
 }
 
 /// Run a single physics simulation step.

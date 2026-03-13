@@ -21,8 +21,8 @@
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
 | **neko-canvas** | WIP | 40% | 节点系统 + 连线 + 视口裁剪 + Undo/Redo + Copy/Paste |
 | **neko-proto** | Early | 30% | timeline.proto 定义，生成类型在 neko-types |
-| **neko-model** | Early | 30% | 3D 创作套件，Phase 3.1 基础能力已实现（R3F 视口 + native-scene ECS + glTF loader） |
-| **neko-sketch** | Planned | 5% | 2D 创作套件，架构设计已完成 |
+| **neko-model** | Early | 45% | 3D 创作套件，Phase 3.1 ✅ + Phase 3.2 部分完成（参数化面部编辑器 + Morph Target + VRM 表情 + 延迟测试） |
+| **neko-sketch** | Alpha | 70% | S.1 ✅ 绘画基础；S.2 ✅ 骨骼动画（逐帧动画待完成）；S.3/S.4 规划中 |
 | **neko-audio** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-live** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-suite** | Stable | 90% | Extension Pack 门户 |
@@ -72,23 +72,35 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 ### neko-canvas — 待完成
 - WebGPU 渲染 + 特效系统 + 自定义转场 + 导出
 
-### neko-model (3D) — Early
+### neko-model (3D) — Alpha
 
 > 架构设计见 [docs/architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md)
 
 - Phase 3.1 ✅：基础 3D 视口 + 场景组装（native-scene bevy_ecs + glTF/VRM + R3F + 骨骼动画 + SceneTree + TransformGizmo + EngineClient 集成）
-- Phase 3.2：AI 捏脸 + 基础建模（Morph Target + VRM 表情 + CSG）
+- Phase 3.2 🔄：AI 捏脸 + 基础建模（**进度 57%**）
+  - ✅ 参数化面部编辑器（22 个参数，5 个分类）
+  - ✅ Morph Target 驱动捏脸（自动绑定 morphTargetInfluences）
+  - ✅ VRM 表情预设（@pixiv/three-vrm，17 个标准表情）
+  - ✅ 延迟测试工具（100 次测试 + 统计 + 建议）
+  - ⬜ AI MCP Tools（face.generate_params / face.from_image / face.adjust）
+  - ⬜ CSG 布尔运算 + 3D 文字 + 参数化几何体
 - Phase 3.3：轻量渲染 + 时间线集成（PBR + 粒子 + SceneRenderOutput → GpuLayer）
 - Phase 3.4：AI 辅助 3D + 3DGS + MCP 桥接（Text-to-3D + Image-to-3D + Blender MCP）
 
-### neko-sketch (2D) — Planned
+### neko-sketch (2D) — Alpha
 
 > 架构设计见 [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md)
 
-- Phase S.1：绘画基础（画笔/压感/图层/选区）
-- Phase S.2：2D 人物 + 骨骼动画（Spine + Live2D + 逐帧动画）
-- Phase S.3：2D 特效 + 场景 + 物品
-- Phase S.4：AI 辅助 + 跨模块集成
+- Phase S.1 ✅：绘画基础（WebGL2 引擎 + 7 种笔刷 + 压感 + 12 混合模式 + 图层/选区/历史 + .nks I/O）
+- Phase S.2 🔄：2D 骨骼动画（**基本完成**，逐帧动画待实现）
+  - ✅ native-puppet crate（bevy_ecs 0.15 + inox2d + bevy_animation）
+  - ✅ INP 手动解析（绕过 inox2d 0.3.0 `pub(crate)` 限制）
+  - ✅ bevy_animation ParameterCurve 桥接层（anim_play/stop/seek/anims 端点）
+  - ✅ `GET /v1/puppets/stream`（60fps WebSocket PuppetDelta 推送，供 neko-live）
+  - ✅ AnimationPanel UI（动画列表 + 播放控制 + IInochi2DController.connectStream）
+  - ⬜ 逐帧动画（洋葱皮 + 帧管理 + 序列帧导出）
+- Phase S.3：2D 特效 + 场景（粒子 / GLSL 滤镜 / Sprite Sheet / 视差场景）
+- Phase S.4：AI 辅助 + 跨模块集成（sketch.generate / style_transfer / → neko-cut/canvas）
 
 ---
 
@@ -136,4 +148,4 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ---
 
-*最后更新: 2026-03-12*
+*最后更新: 2026-03-13（neko-sketch 升级为 Alpha 70%；S.2 骨骼动画基本完成）*

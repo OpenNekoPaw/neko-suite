@@ -12,7 +12,32 @@
 
 ## 🟡 P1 — 核心功能（当前迭代）
 
-*当前无活跃 P1 任务*
+### neko-model（3D 编辑器 Phase 2）
+
+**目标**：AI 捏脸 + 基础建模 + 延迟验证
+**进度**：4/7 完成（57%）
+
+**已完成** ✅：
+- [x] 前端：参数化面部编辑器（R3F 视口 + 分类滑块面板：脸型/眼/鼻/嘴/眉，22 个参数）
+- [x] 前端：Morph Target 驱动捏脸（自动绑定 morphTargetInfluences）
+- [x] 前端：VRM 表情预设（`@pixiv/three-vrm@^3.5.1`，17 个标准表情：情绪/口型/眼神）
+- [x] 前端：延迟测试工具（100 次测试 + Min/Max/Avg/P95 统计 + 建议）
+- [x] 后端：`scenes:latency_test` action（立即返回，用于 RTT 测量）
+
+**待完成** ⬜：
+- [ ] 前端：骨骼驱动表情（口型/眼球追踪/眉毛）
+- [ ] 前端：CSG 操作 UI（并集/差集/交集）
+- [ ] 前端：3D 文字编辑器
+- [ ] 前端：参数化几何体面板
+- [ ] 后端：CSG 布尔运算（三角网格级别）
+- [ ] 后端：3D 文字挤出（`cosmic-text`）
+- [ ] 后端：参数化几何体生成
+- [ ] 后端：JPEG 单帧模式（备选方案 B，根据延迟测试结果决定）
+- [ ] AI MCP Tools：`face.generate_params`（文本 → 参数向量）
+- [ ] AI MCP Tools：`face.from_image`（图片 → 参数向量）
+- [ ] AI MCP Tools：`face.adjust`（自然语言微调）
+
+**关键里程碑**：实测 H.264 流延迟 < 15ms → 方案 A 够用 | 15-30ms → 启用方案 B | > 30ms → 启动方案 C
 
 ---
 
@@ -23,6 +48,15 @@
 - [ ] 高精度波形 Zoom（按需加载超过 800 点的精细波形）
 - [ ] 渲染能力补齐：shapes / keyframes（effects ✅ subtitles ✅ letter_spacing ⚠️ cosmic-text 限制）
 - [ ] 转场系统接入 export pipeline（buffer→texture 架构 mismatch）
+
+### neko-sketch（S.2 骨骼动画）
+- [x] bevy_animation ParameterCurve 桥接层（AnimationTarget → inox2d 参数值）✅
+- [x] inox2d 真实 INP 解析（手动解析 INP 二进制格式，绕过 inox2d 0.3.0 `pub(crate)` 限制）✅
+- [x] anim/play、anim/stop、anim/seek、anims HTTP 端点 ✅
+- [x] `GET /v1/puppets/stream` 60fps WebSocket PuppetDelta 推送 ✅
+- [x] AnimationPanel UI（动画列表 + 播放控制 + Seek slider）✅
+- [x] IInochi2DController.connectStream（WebSocket 接入）✅
+- [ ] 逐帧动画：洋葱皮渲染 + 帧管理 + 序列帧导出（S.2 最后一项）
 
 ### neko-tools（媒体 Diff）
 - [ ] Diff 后端增强（Phase 3）
@@ -141,10 +175,8 @@
 | @neko/media-analysis | 从 neko-tools 提取纯 Diff 算法包 | — |
 | neko-audio | 波形编辑 + 均衡器 + 录音 | Phase 4 |
 | neko-live | 动捕 + 虚拟形象 + 直播 | Phase 5 |
-| neko-sketch | 压感手绘 + 笔刷系统 | Phase 3 |
-| neko-model (3D) | native-scene + R3F 视口 | [3d-capability](./docs/architecture/3d-capability-analysis.md) |
 | neko-assets Phase 5 | 社区分发（.neko 包格式 + 远程注册表） | — |
 
 ---
 
-*最后更新：2026-03-11（文档清理：删除全部已完成条目，修复悬空引用）*
+*最后更新：2026-03-13（neko-sketch S.2 骨骼动画基本完成：native-puppet INP 解析、bevy_animation 桥接、WS 60fps 流、AnimationPanel UI；仅逐帧动画编辑器待实现）*

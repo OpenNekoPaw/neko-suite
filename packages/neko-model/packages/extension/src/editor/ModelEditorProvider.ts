@@ -156,6 +156,41 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         break;
       }
 
+      case 'latency:test': {
+        // Latency test: forward to engine and echo back response
+        const client = await this.ensureEngineClient();
+        if (!client) {
+          // No engine available, just echo back immediately
+          webviewPanel.webview.postMessage({
+            type: 'latency:response',
+            timestamp: message.timestamp,
+          });
+          break;
+        }
+
+        try {
+          // Call engine latency_test action
+          await client.dispatch({
+            group: 'scenes',
+            action: 'latency_test',
+            options: {},
+          });
+          // Echo back to webview
+          webviewPanel.webview.postMessage({
+            type: 'latency:response',
+            timestamp: message.timestamp,
+          });
+        } catch (err) {
+          this.logError('latency_test', err);
+          // Still echo back even on error
+          webviewPanel.webview.postMessage({
+            type: 'latency:response',
+            timestamp: message.timestamp,
+          });
+        }
+        break;
+      }
+
       default:
         break;
     }

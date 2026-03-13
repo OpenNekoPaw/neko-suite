@@ -3,7 +3,7 @@
 //! - transform_propagation: computes GlobalTransform from hierarchy
 //! - animation_tick: advances animation playback
 
-use crate::components::{AnimationProperty, AnimationTarget, GlobalTransform, Transform};
+use crate::components::{AnimationProperty, AnimationTarget, GlobalTransform, MorphWeights, Transform};
 use crate::hierarchy::{Children, Parent};
 use bevy_ecs::prelude::*;
 
@@ -158,7 +158,25 @@ fn apply_clip_at_time(
                 }
             }
             AnimationProperty::MorphWeights => {
-                // TODO(P2): implement morph target animation
+                let n_frames = channel.timestamps.len();
+                if n_frames == 0 || channel.values.is_empty() {
+                    continue;
+                }
+                // Number of morph targets = total values / number of frames
+                let morph_count = channel.values.len() / n_frames;
+                if morph_count == 0 {
+                    continue;
+                }
+                let base = idx * morph_count;
+                if channel.values.len() < base + morph_count {
+                    continue;
+                }
+                let weights = channel.values[base..base + morph_count].to_vec();
+                if let Some(mut mw) = world.get_mut::<MorphWeights>(target_entity) {
+                    mw.weights = weights;
+                } else {
+                    world.entity_mut(target_entity).insert(MorphWeights { weights });
+                }
             }
         }
     }
@@ -251,5 +269,60 @@ mod tests {
     #[test]
     fn test_find_keyframe_index_empty() {
         assert_eq!(find_keyframe_index(&[], 1.0), 0);
+    }
+
+    #[test]
+    fn test_morph_weights_animation() {
+        use crate::components::*;
+
+        let mut world = World::new();
+
+        // Spawn an entity targeted by morph weight animation
+        let target = world
+            .spawn((
+                SceneNodeId("node_0".to_string()),
+                NodeName("Mesh".to_string()),
+                Transform::default(),
+                GlobalTransform::identity(),
+            ))
+            .id();
+
+        // 3 keyframes, 2 morph targets, duration 1.5 (so t=1.0 doesn't wrap to 0)
+        // Flattened values: [frame0_w0, frame0_w1, frame1_w0, frame1_w1, frame2_w0, frame2_w1]
+        let clip = AnimationClipData {
+            name: "morph_test".to_string(),
+            duration: 1.5,
+            channels: vec![AnimationChannel {
+                target_node: "node_0".to_string(),
+                property: AnimationProperty::MorphWeights,
+                timestamps: vec![0.0, 0.5, 1.0],
+                values: vec![0.0, 1.0, 0.5, 0.5, 1.0, 0.0],
+            }],
+        };
+
+        let root = world
+            .spawn(AnimationTarget { clips: vec![clip] })
+            .id();
+
+        // t=0.0 → idx=0, weights=[0.0, 1.0]
+        animation_tick(&mut world, "morph_test", 0.0);
+        let mw = world.get::<MorphWeights>(target).expect("MorphWeights should be set");
+        assert_eq!(mw.weights.len(), 2);
+        assert!((mw.weights[0] - 0.0).abs() < f32::EPSILON);
+        assert!((mw.weights[1] - 1.0).abs() < f32::EPSILON);
+
+        // t=0.7 → idx=1 (since timestamps[2]=1.0 > 0.7), weights=[0.5, 0.5]
+        animation_tick(&mut world, "morph_test", 0.7);
+        let mw = world.get::<MorphWeights>(target).expect("MorphWeights should be set");
+        assert!((mw.weights[0] - 0.5).abs() < f32::EPSILON);
+        assert!((mw.weights[1] - 0.5).abs() < f32::EPSILON);
+
+        // t=1.0 → idx=2 (last frame, all timestamps exhausted), weights=[1.0, 0.0]
+        animation_tick(&mut world, "morph_test", 1.0);
+        let mw = world.get::<MorphWeights>(target).expect("MorphWeights should be set");
+        assert!((mw.weights[0] - 1.0).abs() < f32::EPSILON);
+        assert!((mw.weights[1] - 0.0).abs() < f32::EPSILON);
+
+        let _ = root; // suppress unused warning
     }
 }
