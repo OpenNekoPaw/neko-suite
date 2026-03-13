@@ -22,6 +22,7 @@ pub mod domain;
 pub mod encoder;
 pub mod error;
 pub mod export;
+pub mod generators;
 pub mod frame_server;
 pub mod gpu;
 pub mod jvi;

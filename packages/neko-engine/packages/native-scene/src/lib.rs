@@ -6,6 +6,8 @@
 pub mod components;
 pub mod hierarchy;
 pub mod loader;
+pub mod procedural;
+pub mod procedural_mesh;
 pub mod systems;
 pub mod world;
 

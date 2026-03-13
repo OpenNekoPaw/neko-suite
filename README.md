@@ -85,8 +85,8 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 16 �
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
-| **neko-model** | 3D 编辑器 - glTF/VRM 视口 + 场景组装 + 骨骼动画（[架构设计](./docs/architecture/3d-capability-analysis.md)） | Early 30% | 9 TS/TSX + 7 Rust |
-| **neko-sketch** | 2D 创作 - 压感手绘 + Inochi2D 动画 + 逐帧动画（[架构设计](./docs/architecture/2d-capability-analysis.md)） | Alpha S.1✅ S.2⚙️ | 60+ TS/TSX + Rust |
+| **neko-model** | 3D 编辑器 - glTF/VRM 视口 + 场景组装 + 骨骼动画（[架构设计](./docs/architecture/3d-capability-analysis.md)） | Early 45% | 9 TS/TSX + 7 Rust |
+| **neko-sketch** | 2D 创作 - 压感手绘 + 滤镜/粒子/场景/像素/矢量 + Inochi2D 动画（[架构设计](./docs/architecture/2d-capability-analysis.md)） | Alpha S.1✅ S.2✅ S.3✅ | 90+ TS/TSX + Rust, 42 tests |
 
 ### 规划中
 

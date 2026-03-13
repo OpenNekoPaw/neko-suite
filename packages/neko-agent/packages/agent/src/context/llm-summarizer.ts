@@ -108,7 +108,7 @@ export class LLMSummarizer implements ISummarizer {
           {
             temperature: this.config.temperature,
             maxTokens: maxTokens + 200, // Extra for formatting
-            model: this.config.model,
+            modelId: this.config.model,
           },
         );
 

@@ -22,7 +22,7 @@
 | **neko-canvas** | WIP | 40% | 节点系统 + 连线 + 视口裁剪 + Undo/Redo + Copy/Paste |
 | **neko-proto** | Early | 30% | timeline.proto 定义，生成类型在 neko-types |
 | **neko-model** | Early | 45% | 3D 创作套件，Phase 3.1 ✅ + Phase 3.2 部分完成（参数化面部编辑器 + Morph Target + VRM 表情 + 延迟测试） |
-| **neko-sketch** | Alpha | 70% | S.1 ✅ 绘画基础；S.2 ✅ 骨骼动画（逐帧动画待完成）；S.3/S.4 规划中 |
+| **neko-sketch** | Alpha | 85% | S.1 ✅ 绘画基础；S.2 ✅ 骨骼动画；S.3 ✅ 高级 2D（滤镜/粒子/场景/绘制/资产）；S.4 规划中 |
 | **neko-audio** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-live** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-suite** | Stable | 90% | Extension Pack 门户 |
@@ -64,7 +64,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ## Phase 3: 视觉增强 + 3D 能力
 
-> 目标：专业视觉效果和 3D 场景编辑 — **进度 ~35%**
+> 目标：专业视觉效果和 3D 场景编辑 — **进度 ~45%**
 
 ### neko-canvas — 已完成
 - 节点系统（6 种节点 + 连线）+ 画布交互（拖拽/缩放/吸附/MiniMap）+ 媒体内嵌 + Undo/Redo + Copy/Paste
@@ -92,14 +92,24 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 > 架构设计见 [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md)
 
 - Phase S.1 ✅：绘画基础（WebGL2 引擎 + 7 种笔刷 + 压感 + 12 混合模式 + 图层/选区/历史 + .nks I/O）
-- Phase S.2 🔄：2D 骨骼动画（**基本完成**，逐帧动画待实现）
+- Phase S.2 ✅：2D 骨骼动画 + 逐帧动画
   - ✅ native-puppet crate（bevy_ecs 0.15 + inox2d + bevy_animation）
   - ✅ INP 手动解析（绕过 inox2d 0.3.0 `pub(crate)` 限制）
   - ✅ bevy_animation ParameterCurve 桥接层（anim_play/stop/seek/anims 端点）
   - ✅ `GET /v1/puppets/stream`（60fps WebSocket PuppetDelta 推送，供 neko-live）
   - ✅ AnimationPanel UI（动画列表 + 播放控制 + IInochi2DController.connectStream）
-  - ⬜ 逐帧动画（洋葱皮 + 帧管理 + 序列帧导出）
-- Phase S.3：2D 特效 + 场景（粒子 / GLSL 滤镜 / Sprite Sheet / 视差场景）
+  - ✅ 逐帧动画（洋葱皮渲染 + 帧管理 + 精灵表导出）
+- Phase S.3 ✅：高级 2D 功能
+  - ✅ 滤镜系统（FilterPipeline ping-pong FBO + FilterRegistry 6 内置 GLSL 滤镜 + FilterPanel UI）
+  - ✅ 粒子系统（ParticleSimulation 对象池 + ParticleRenderer WebGL2 实例化 + ParticlePanel UI）
+  - ✅ 精灵表导出（OffscreenCanvas 网格装箱 + Aseprite/TexturePacker 兼容 JSON）
+  - ✅ 变形动画（MorphEngine 顶点变形 + 关键帧插值 + MorphEditor UI）
+  - ✅ 场景系统（Scene/SceneLayer/CameraConfig + 视差渲染 + 4 个场景模板 + 氛围效果 5 预设）
+  - ✅ 像素绘制（Bresenham 直线 + flood fill + 1x/2x/4x/8x 画笔 + 像素网格）
+  - ✅ 矢量绘制（贝塞尔路径 + 矩形/椭圆/多边形/星形 + SVG 导出 + Canvas2D 渲染）
+  - ✅ 资产集成（精灵表/场景 JSON 导出 + VSCode 命令注册）
+  - ✅ 渲染管线集成（filterFn 回调 + SketchRenderer.renderWithEffects）
+  - ✅ 单元测试（7 文件 42 测试：pixel-tool/vector-tool/morph-engine/parallax/particle/frame/atmosphere）
 - Phase S.4：AI 辅助 + 跨模块集成（sketch.generate / style_transfer / → neko-cut/canvas）
 
 ---
@@ -148,4 +158,4 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ---
 
-*最后更新: 2026-03-13（neko-sketch 升级为 Alpha 70%；S.2 骨骼动画基本完成）*
+*最后更新: 2026-03-13（neko-sketch S.3 高级 2D 功能全量完成：滤镜/粒子/场景/像素/矢量/资产集成 + 42 单元测试；升级为 Alpha 85%）*

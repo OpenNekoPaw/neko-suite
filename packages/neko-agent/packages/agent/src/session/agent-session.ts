@@ -437,7 +437,7 @@ export class AgentSession implements IAgentSession {
         maxIterations: this._config.maxIterations ?? DEFAULT_MAX_ITERATIONS,
         primaryModel: this._config.modelId,
         serviceOptions: {
-          model: this._config.modelId,
+          modelId: this._config.modelId,
           temperature: this._config.temperature,
           maxTokens: this._config.maxTokens,
           thinkingBudget: this._config.thinkingBudget,

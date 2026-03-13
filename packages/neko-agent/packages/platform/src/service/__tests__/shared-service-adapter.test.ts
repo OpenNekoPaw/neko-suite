@@ -87,9 +87,9 @@ describe('SharedServiceAdapter', () => {
     mockService.chat.mockResolvedValue(platformResponse);
 
     const messages = [{ role: 'user' as const, content: 'hi' }];
-    const result = await adapter.chat(messages, { model: 'gpt-4' });
+    const result = await adapter.chat(messages, { modelId: 'gpt-4' });
 
-    expect(mockService.chat).toHaveBeenCalledWith(messages, { model: 'gpt-4' });
+    expect(mockService.chat).toHaveBeenCalledWith(messages, { modelId: 'gpt-4' });
     expect(result).toEqual({
       id: 'r1',
       model: 'gpt-4',

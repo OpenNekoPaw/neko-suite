@@ -10,7 +10,7 @@
 
 1. ~~验证 Phase 3 Rust 编译~~ ✅ `cargo build` 通过（仅 warnings，无 errors）
 2. neko-model Phase 2 继续推进 — 当前迭代 P1 核心，CSG 布尔运算和 3D 文字挤出是最高复杂度项
-3. neko-sketch 逐帧动画 — S.2 最后一项，完成后可标记阶段完成
+3. ~~neko-sketch 逐帧动画~~ ✅ S.2 + S.3 全部完成
 
 ---
 
@@ -75,14 +75,23 @@
 - [ ] 渲染能力补齐：shapes / keyframes（effects ✅ subtitles ✅ letter_spacing ⚠️ cosmic-text 限制）
 - [ ] 转场系统接入 export pipeline（buffer→texture 架构 mismatch）
 
-### neko-sketch（S.2 骨骼动画）
+### neko-sketch（S.2 骨骼动画 + S.3 高级 2D）✅ 已完成
 - [x] bevy_animation ParameterCurve 桥接层（AnimationTarget → inox2d 参数值）✅
 - [x] inox2d 真实 INP 解析（手动解析 INP 二进制格式，绕过 inox2d 0.3.0 `pub(crate)` 限制）✅
 - [x] anim/play、anim/stop、anim/seek、anims HTTP 端点 ✅
 - [x] `GET /v1/puppets/stream` 60fps WebSocket PuppetDelta 推送 ✅
 - [x] AnimationPanel UI（动画列表 + 播放控制 + Seek slider）✅
 - [x] IInochi2DController.connectStream（WebSocket 接入）✅
-- [ ] 逐帧动画：洋葱皮渲染 + 帧管理 + 序列帧导出（S.2 最后一项）
+- [x] 逐帧动画：洋葱皮渲染 + 帧管理 + 精灵表导出 ✅
+- [x] S.3 滤镜系统（FilterPipeline + FilterRegistry 6 内置 GLSL + FilterPanel UI）✅
+- [x] S.3 粒子系统（ParticleSimulation 对象池 + ParticleRenderer WebGL2 实例化 + ParticlePanel UI）✅
+- [x] S.3 变形动画（MorphEngine 顶点变形 + 关键帧插值 + MorphEditor UI）✅
+- [x] S.3 场景系统（视差渲染 + 4 场景模板 + 氛围效果 5 预设 + ScenePanel/AtmospherePanel）✅
+- [x] S.3 像素绘制（Bresenham + flood fill + 1x/2x/4x/8x 画笔）✅
+- [x] S.3 矢量绘制（贝塞尔路径 + 矩形/椭圆/多边形/星形 + SVG 导出）✅
+- [x] S.3 资产集成（精灵表/场景 JSON 导出 + VSCode 命令）✅
+- [x] S.3 渲染管线集成（filterFn 回调 + SketchRenderer.renderWithEffects）✅
+- [x] S.3 单元测试（7 文件 42 测试）✅
 
 ### neko-tools（媒体 Diff）
 - [ ] Diff 后端增强（Phase 3）
@@ -215,4 +224,4 @@
 
 ---
 
-*最后更新：2026-03-13（neko-engine Phase 3 PBR 渲染全部完成：12 Step 交付，3D 场景 → GPU 纹理 → 2D 合成管线打通；neko-sketch S.2 骨骼动画基本完成，仅逐帧动画编辑器待实现）*
+*最后更新：2026-03-13（neko-sketch S.2 + S.3 全部完成：逐帧动画 + 滤镜/粒子/场景/像素/矢量/资产集成 + 渲染管线接入 + 42 单元测试）*

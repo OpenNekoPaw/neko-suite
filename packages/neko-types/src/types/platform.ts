@@ -64,7 +64,7 @@ export interface ToolDefinition {
  */
 export interface ServiceOptions {
   /** Model ID to use */
-  model?: string;
+  modelId?: string;
   /** Temperature for generation (0-2) */
   temperature?: number;
   /** Maximum tokens to generate */
