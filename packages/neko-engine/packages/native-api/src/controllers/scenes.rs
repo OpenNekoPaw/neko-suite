@@ -219,6 +219,54 @@ impl Controller for ScenesController {
                 "scenes:stream not yet implemented (requires WebSocket)".to_string(),
             )),
 
+            "create_shape" => {
+                let service = self.service()?;
+                let snapshot = service
+                    .create_shape(options)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "Shape created",
+                    serde_json::to_value(snapshot)
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
+            "create_text" => {
+                let service = self.service()?;
+                let snapshot = service
+                    .create_text_mesh(options)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "Text mesh created",
+                    serde_json::to_value(snapshot)
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
+            "csg_boolean" => {
+                #[derive(Debug, Deserialize)]
+                struct CsgOptions {
+                    entity_a: String,
+                    entity_b: String,
+                    operation: String,
+                }
+                let opts: CsgOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                let snapshot = service
+                    .csg_boolean(&opts.entity_a, &opts.entity_b, &opts.operation)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "CSG operation complete",
+                    serde_json::to_value(snapshot)
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
                 action: action.to_string(),
@@ -281,6 +329,9 @@ mod tests {
         assert!(actions.contains(&"capture"));
         assert!(actions.contains(&"stream"));
         assert!(actions.contains(&"latency_test"));
+        assert!(actions.contains(&"create_shape"));
+        assert!(actions.contains(&"create_text"));
+        assert!(actions.contains(&"csg_boolean"));
     }
 
     #[tokio::test]

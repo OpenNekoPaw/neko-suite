@@ -117,6 +117,9 @@ pub mod actions {
         "capture",
         "stream",
         "latency_test",
+        "create_shape",
+        "create_text",
+        "csg_boolean",
     ];
 
     pub const PUPPETS: &[&str] = &[

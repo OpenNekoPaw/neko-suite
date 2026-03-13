@@ -156,6 +156,73 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         break;
       }
 
+      case 'createShape': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          const snapshot = await client.createShape(
+            message.shapeType as string,
+            message.params as Record<string, number>,
+          );
+          webviewPanel.webview.postMessage({ type: 'sceneSnapshot', snapshot });
+        } catch (err) {
+          this.logError('createShape', err);
+        }
+        break;
+      }
+
+      case 'createTextMesh': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          const snapshot = await client.createTextMesh(
+            message.text as string,
+            message.fontSize as number,
+            message.extrusionDepth as number,
+          );
+          webviewPanel.webview.postMessage({ type: 'sceneSnapshot', snapshot });
+        } catch (err) {
+          this.logError('createTextMesh', err);
+        }
+        break;
+      }
+
+      case 'csgBoolean': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          const snapshot = await client.csgBoolean(
+            message.entityA as string,
+            message.entityB as string,
+            message.operation as 'union' | 'difference' | 'intersection',
+          );
+          webviewPanel.webview.postMessage({ type: 'sceneSnapshot', snapshot });
+        } catch (err) {
+          this.logError('csgBoolean', err);
+        }
+        break;
+      }
+
+      case 'updateBoneTransform': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          await client.updateSceneTransform(
+            message.nodeId as string,
+            [0, 0, 0], // position unchanged
+            message.rotation as [number, number, number, number],
+            [1, 1, 1], // scale unchanged
+          );
+        } catch (err) {
+          this.logError('updateBoneTransform', err);
+        }
+        break;
+      }
+
       case 'latency:test': {
         // Latency test: forward to engine and echo back response
         const client = await this.ensureEngineClient();

@@ -4,6 +4,7 @@
 //! and animation systems using bevy_ecs.
 
 pub mod components;
+pub mod csg;
 pub mod hierarchy;
 pub mod loader;
 pub mod procedural;

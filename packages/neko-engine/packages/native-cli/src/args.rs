@@ -347,6 +347,12 @@ define_actions!(SceneAction {
     Stream => "stream",
     /// Latency test (echo)
     LatencyTest => "latency_test",
+    /// Create a parametric shape (cube, sphere, cylinder, etc.)
+    CreateShape => "create_shape",
+    /// Create extruded 3D text mesh
+    CreateText => "create_text",
+    /// Perform CSG boolean operation on two entities
+    CsgBoolean => "csg_boolean",
 });
 
 // ---------------------------------------------------------------------------

@@ -147,6 +147,80 @@ impl AssetCache {
         self.materials.get(&(uri.to_string(), usize::MAX))
     }
 
+    /// Register a programmatically-generated mesh into the GPU cache.
+    ///
+    /// Uses a synthetic URI (e.g. "procedural://shape_001") to avoid
+    /// collisions with glTF-loaded assets. Also ensures a default material
+    /// exists for the URI.
+    pub fn register_procedural_mesh(
+        &mut self,
+        uri: &str,
+        primitive_index: usize,
+        mesh: &neko_native_scene::procedural_mesh::ProceduralMesh,
+    ) -> Result<(), AssetCacheError> {
+        let key = (uri.to_string(), primitive_index);
+        if self.meshes.contains_key(&key) {
+            return Ok(());
+        }
+
+        // Convert ProceduralVertex → PbrVertex (add default tangent)
+        let vertices: Vec<PbrVertex> = mesh
+            .vertices
+            .iter()
+            .map(|v| PbrVertex {
+                position: v.position,
+                normal: v.normal,
+                uv: v.uv,
+                tangent: [1.0, 0.0, 0.0, 1.0],
+            })
+            .collect();
+
+        let vertex_buffer =
+            self.ctx
+                .device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("procedural_vertex_buffer"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+
+        let index_buffer =
+            self.ctx
+                .device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("procedural_index_buffer"),
+                    contents: bytemuck::cast_slice(&mesh.indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
+
+        self.meshes.insert(
+            key,
+            GpuMesh {
+                vertex_buffer,
+                index_buffer,
+                index_count: mesh.indices.len() as u32,
+                index_format: wgpu::IndexFormat::Uint32,
+            },
+        );
+
+        // Ensure default material exists for this procedural URI
+        let default_key = (uri.to_string(), usize::MAX);
+        if !self.materials.contains_key(&default_key) {
+            let gpu_mat = self.create_default_material();
+            self.materials.insert(default_key, gpu_mat);
+        }
+
+        tracing::debug!(
+            "AssetCache registered procedural mesh '{}' [{}]: {} verts, {} indices",
+            uri,
+            primitive_index,
+            vertices.len(),
+            mesh.indices.len(),
+        );
+
+        Ok(())
+    }
+
     /// Load a single glTF primitive into GPU buffers
     fn load_primitive(
         &self,

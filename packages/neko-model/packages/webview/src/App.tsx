@@ -7,6 +7,10 @@ import { TransformPanel } from './components/panels/TransformPanel';
 import { FaceEditorPanel } from './components/face';
 import { LatencyTester } from './components/LatencyTester';
 import { ExpressionPresetPanel } from './components/vrm';
+import { BoneExpressionPanel } from './components/bone-expression';
+import { CsgPanel } from './components/csg';
+import { TextEditorPanel } from './components/text-editor';
+import { ShapeCreatorPanel } from './components/shape-creator';
 import { useModelStore } from './stores/modelStore';
 import type { AnimationClipInfo, ExtensionMessage } from './types';
 import type { AnimationClip } from 'three';
@@ -43,6 +47,14 @@ export function App(): React.JSX.Element {
   const toggleLatencyTester = useModelStore((s) => s.toggleLatencyTester);
   const toggleExpressionPreset = useModelStore((s) => s.toggleExpressionPreset);
   const setVRMLoaded = useModelStore((s) => s.setVRMLoaded);
+  const isBoneExpressionOpen = useModelStore((s) => s.isBoneExpressionOpen);
+  const isCsgPanelOpen = useModelStore((s) => s.isCsgPanelOpen);
+  const isTextEditorOpen = useModelStore((s) => s.isTextEditorOpen);
+  const isShapeCreatorOpen = useModelStore((s) => s.isShapeCreatorOpen);
+  const toggleBoneExpression = useModelStore((s) => s.toggleBoneExpression);
+  const toggleCsgPanel = useModelStore((s) => s.toggleCsgPanel);
+  const toggleTextEditor = useModelStore((s) => s.toggleTextEditor);
+  const toggleShapeCreator = useModelStore((s) => s.toggleShapeCreator);
 
   const setModelUrl = useModelStore((s) => s.setModelUrl);
   const selectNode = useModelStore((s) => s.selectNode);
@@ -172,6 +184,47 @@ export function App(): React.JSX.Element {
           }`}
         >
           VRM 表情
+        </button>
+        <div className="w-px h-4 bg-[var(--vscode-panel-border)]" />
+        <button
+          onClick={toggleBoneExpression}
+          className={`px-2 py-1 text-xs rounded transition-colors ${
+            isBoneExpressionOpen
+              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
+              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
+          }`}
+        >
+          骨骼表情
+        </button>
+        <button
+          onClick={toggleShapeCreator}
+          className={`px-2 py-1 text-xs rounded transition-colors ${
+            isShapeCreatorOpen
+              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
+              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
+          }`}
+        >
+          几何体
+        </button>
+        <button
+          onClick={toggleTextEditor}
+          className={`px-2 py-1 text-xs rounded transition-colors ${
+            isTextEditorOpen
+              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
+              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
+          }`}
+        >
+          3D 文字
+        </button>
+        <button
+          onClick={toggleCsgPanel}
+          className={`px-2 py-1 text-xs rounded transition-colors ${
+            isCsgPanelOpen
+              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
+              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
+          }`}
+        >
+          CSG
         </button>
       </div>
 

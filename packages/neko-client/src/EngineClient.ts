@@ -479,6 +479,59 @@ export class EngineClient {
     return (resp.data as Record<string, unknown>) ?? {};
   }
 
+  /**
+   * Create a parametric shape in the 3D scene.
+   * Dispatches `scenes:create_shape`.
+   */
+  async createShape(
+    shapeType: string,
+    params: Record<string, number>,
+  ): Promise<Record<string, unknown>> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'create_shape',
+      options: { type: shapeType, ...params },
+    });
+    this.assertOk(resp, 'scenes:create_shape');
+    return (resp.data as Record<string, unknown>) ?? {};
+  }
+
+  /**
+   * Create extruded 3D text in the scene.
+   * Dispatches `scenes:create_text`.
+   */
+  async createTextMesh(
+    text: string,
+    fontSize: number,
+    extrusionDepth: number,
+  ): Promise<Record<string, unknown>> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'create_text',
+      options: { text, fontSize, extrusionDepth },
+    });
+    this.assertOk(resp, 'scenes:create_text');
+    return (resp.data as Record<string, unknown>) ?? {};
+  }
+
+  /**
+   * Perform CSG boolean operation on two scene entities.
+   * Dispatches `scenes:csg_boolean`.
+   */
+  async csgBoolean(
+    entityA: string,
+    entityB: string,
+    operation: 'union' | 'difference' | 'intersection',
+  ): Promise<Record<string, unknown>> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'csg_boolean',
+      options: { entityA, entityB, operation },
+    });
+    this.assertOk(resp, 'scenes:csg_boolean');
+    return (resp.data as Record<string, unknown>) ?? {};
+  }
+
   // =========================================================================
   // 2D Puppets (Inochi2D / inox2d)
   // =========================================================================

@@ -35,6 +35,14 @@ export interface ModelState {
   isVRMLoaded: boolean;
   isExpressionPresetOpen: boolean;
 
+  // Phase 2 panels
+  isBoneExpressionOpen: boolean;
+  isCsgPanelOpen: boolean;
+  isTextEditorOpen: boolean;
+  isShapeCreatorOpen: boolean;
+  csgOperandA: string | null;
+  csgOperandB: string | null;
+
   // Actions — Scene
   setSceneNodes: (nodes: SceneNodeSnapshot[]) => void;
   selectNode: (id: string | null) => void;
@@ -74,6 +82,13 @@ export interface ModelState {
   // Actions — VRM Expression Presets
   setVRMLoaded: (loaded: boolean) => void;
   toggleExpressionPreset: () => void;
+
+  // Actions — Phase 2 panels
+  toggleBoneExpression: () => void;
+  toggleCsgPanel: () => void;
+  toggleTextEditor: () => void;
+  toggleShapeCreator: () => void;
+  setCsgOperand: (slot: 'A' | 'B', nodeId: string | null) => void;
 }
 
 export const useModelStore = create<ModelState>((set) => ({
@@ -91,6 +106,12 @@ export const useModelStore = create<ModelState>((set) => ({
   isLatencyTesterOpen: false,
   isVRMLoaded: false,
   isExpressionPresetOpen: false,
+  isBoneExpressionOpen: false,
+  isCsgPanelOpen: false,
+  isTextEditorOpen: false,
+  isShapeCreatorOpen: false,
+  csgOperandA: null,
+  csgOperandB: null,
 
   // Scene actions
   setSceneNodes: (nodes) => set({ sceneNodes: nodes }),
@@ -153,4 +174,16 @@ export const useModelStore = create<ModelState>((set) => ({
 
   toggleExpressionPreset: () =>
     set((state) => ({ isExpressionPresetOpen: !state.isExpressionPresetOpen })),
+
+  toggleBoneExpression: () =>
+    set((state) => ({ isBoneExpressionOpen: !state.isBoneExpressionOpen })),
+
+  toggleCsgPanel: () => set((state) => ({ isCsgPanelOpen: !state.isCsgPanelOpen })),
+
+  toggleTextEditor: () => set((state) => ({ isTextEditorOpen: !state.isTextEditorOpen })),
+
+  toggleShapeCreator: () => set((state) => ({ isShapeCreatorOpen: !state.isShapeCreatorOpen })),
+
+  setCsgOperand: (slot, nodeId) =>
+    set(slot === 'A' ? { csgOperandA: nodeId } : { csgOperandB: nodeId }),
 }));

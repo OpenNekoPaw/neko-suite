@@ -31,6 +31,26 @@ pub trait ISceneService: Send + Sync {
     /// Get available animation clips
     fn get_animation_clips(&self) -> crate::error::Result<Vec<AnimationClipInfo>>;
 
+    /// Create a parametric shape and add it to the scene
+    fn create_shape(
+        &self,
+        params: serde_json::Value,
+    ) -> crate::error::Result<neko_native_scene::world::SceneSnapshot>;
+
+    /// Create extruded 3D text and add it to the scene
+    fn create_text_mesh(
+        &self,
+        params: serde_json::Value,
+    ) -> crate::error::Result<neko_native_scene::world::SceneSnapshot>;
+
+    /// Perform CSG boolean operation on two scene entities
+    fn csg_boolean(
+        &self,
+        entity_a: &str,
+        entity_b: &str,
+        operation: &str,
+    ) -> crate::error::Result<neko_native_scene::world::SceneSnapshot>;
+
     /// Render the current scene to a GPU texture.
     ///
     /// Performs tick + render in the same lock scope to avoid race conditions.

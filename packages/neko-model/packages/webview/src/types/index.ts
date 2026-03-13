@@ -67,4 +67,17 @@ export type WebviewMessage =
   | { type: 'playAnimation'; clipName: string }
   | { type: 'pauseAnimation' }
   | { type: 'stopAnimation' }
-  | { type: 'latency:test'; timestamp: number };
+  | { type: 'latency:test'; timestamp: number }
+  | { type: 'createShape'; shapeType: string; params: Record<string, number> }
+  | { type: 'createTextMesh'; text: string; fontSize: number; extrusionDepth: number }
+  | {
+      type: 'csgBoolean';
+      entityA: string;
+      entityB: string;
+      operation: 'union' | 'difference' | 'intersection';
+    }
+  | {
+      type: 'updateBoneTransform';
+      nodeId: string;
+      rotation: [number, number, number, number];
+    };

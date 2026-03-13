@@ -1,0 +1,1 @@
+export { BoneExpressionPanel } from './BoneExpressionPanel';
