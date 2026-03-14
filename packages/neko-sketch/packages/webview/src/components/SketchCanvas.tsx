@@ -10,6 +10,9 @@
  *
  * Filter / particle integration:
  *   - Render loop uses renderWithEffects() to apply the filter chain and particle overlay.
+ *
+ * Vector drag preview:
+ *   - A separate 2D canvas overlay shows the shape outline while dragging.
  */
 import { useRef, useEffect, useCallback } from 'react';
 import { useSketchStore } from '../stores';
@@ -24,6 +27,8 @@ import type { PixelBrushSize } from '../tools/pixel-tool';
 import { createRectangle, createEllipse } from '../tools/vector-tool';
 import { renderPaths } from '../engine/vector-renderer';
 import { computeOnionSkinGhosts } from '../utils/frame-manager';
+import { atmosphereToEmitter } from '../data/atmosphere-presets';
+import { PixelGrid } from './PixelGrid';
 
 // ─── Helpers ───
 
@@ -150,16 +155,81 @@ function renderOnionSkinOverlay(
   ctx.restore();
 }
 
-/** Clear the onion skin overlay canvas. */
-function clearOnionCanvas(onionCanvas: HTMLCanvasElement | null): void {
-  if (!onionCanvas) return;
-  const ctx = onionCanvas.getContext('2d');
-  if (ctx) ctx.clearRect(0, 0, onionCanvas.width, onionCanvas.height);
+/** Clear a 2D overlay canvas. */
+function clearOverlayCanvas(canvas: HTMLCanvasElement | null): void {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+/**
+ * Render a vector shape drag preview on a 2D overlay canvas.
+ *
+ * Draws a translucent filled shape with a dashed stroke outline in document
+ * coordinates, transformed to screen coordinates using the current viewport.
+ */
+function renderVectorPreview(
+  previewCanvas: HTMLCanvasElement,
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  shapeType: string,
+  color: readonly [number, number, number, number],
+  docW: number,
+  docH: number,
+  viewport: ViewportState,
+): void {
+  const phW = previewCanvas.width;
+  const phH = previewCanvas.height;
+  const ctx = previewCanvas.getContext('2d');
+  if (!ctx || phW === 0 || phH === 0) return;
+
+  ctx.clearRect(0, 0, phW, phH);
+
+  const { zoom, panX, panY } = viewport;
+  const scaleX = (zoom * phW) / docW;
+  const scaleY = (zoom * phH) / docH;
+  const tx = (phW / 2) * (1 - zoom) + panX;
+  const ty = (phH / 2) * (1 - zoom) + panY;
+
+  const [r, g, b, a] = color;
+  const rr = Math.round(r * 255);
+  const gg = Math.round(g * 255);
+  const bb = Math.round(b * 255);
+
+  const minX = Math.min(start.x, end.x);
+  const minY = Math.min(start.y, end.y);
+  const w = Math.abs(end.x - start.x);
+  const h = Math.abs(end.y - start.y);
+  if (w < 1 && h < 1) return;
+
+  ctx.save();
+  ctx.setTransform(scaleX, 0, 0, scaleY, tx, ty);
+
+  // Thin dashed line in document-pixel units
+  const invScale = 1 / Math.min(scaleX, scaleY);
+  ctx.lineWidth = invScale;
+  ctx.setLineDash([4 * invScale, 4 * invScale]);
+  ctx.fillStyle = `rgba(${rr},${gg},${bb},${(a * 0.2).toFixed(2)})`;
+  ctx.strokeStyle = `rgba(${rr},${gg},${bb},${a.toFixed(2)})`;
+
+  ctx.beginPath();
+  if (shapeType === 'ellipse') {
+    const cx = (start.x + end.x) / 2;
+    const cy = (start.y + end.y) / 2;
+    ctx.ellipse(cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2);
+  } else {
+    ctx.rect(minX, minY, w, h);
+  }
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 export function SketchCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onionCanvasRef = useRef<HTMLCanvasElement>(null);
+  const vectorPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<SketchRenderer | null>(null);
   const brushRef = useRef<BrushEngine | null>(null);
   const rafRef = useRef<number>(0);
@@ -192,6 +262,10 @@ export function SketchCanvas() {
   const emitters = useSketchStore((s) => s.emitters);
   const isParticlePreviewActive = useSketchStore((s) => s.isParticlePreviewActive);
 
+  // S.3: scene atmosphere effects
+  const scenes = useSketchStore((s) => s.scenes);
+  const activeSceneId = useSketchStore((s) => s.activeSceneId);
+
   // P0: frame mode
   const selectedFrameLayerId = useSketchStore((s) => s.selectedFrameLayerId);
   const currentFrameIndex = useSketchStore((s) => s.currentFrameIndex);
@@ -219,10 +293,11 @@ export function SketchCanvas() {
     };
   }, [canvas.width, canvas.height]);
 
-  // Resize observer — keep WebGL + onion-skin canvas in sync with container
+  // Resize observer — keep WebGL + overlay canvases in sync with container
   useEffect(() => {
     const el = canvasRef.current;
     const onionEl = onionCanvasRef.current;
+    const vectorEl = vectorPreviewCanvasRef.current;
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -237,9 +312,15 @@ export function SketchCanvas() {
         rendererRef.current?.resize(w, h);
         needsRenderRef.current = true;
       }
-      if (onionEl && w > 0 && h > 0) {
-        onionEl.width = w;
-        onionEl.height = h;
+      if (w > 0 && h > 0) {
+        if (onionEl) {
+          onionEl.width = w;
+          onionEl.height = h;
+        }
+        if (vectorEl) {
+          vectorEl.width = w;
+          vectorEl.height = h;
+        }
       }
     });
     observer.observe(el);
@@ -249,7 +330,17 @@ export function SketchCanvas() {
   // Mark dirty when rendering-relevant state changes
   useEffect(() => {
     needsRenderRef.current = true;
-  }, [layers, viewport, filters, emitters, isParticlePreviewActive, currentFrameIndex, onionSkin]);
+  }, [
+    layers,
+    viewport,
+    filters,
+    emitters,
+    isParticlePreviewActive,
+    currentFrameIndex,
+    onionSkin,
+    scenes,
+    activeSceneId,
+  ]);
 
   // Continuous render loop — uses renderWithEffects for filter/particle support (P1)
   useEffect(() => {
@@ -264,12 +355,24 @@ export function SketchCanvas() {
           const dt = Math.min((now - lastTimeRef.current) / 1000, 0.1);
           lastTimeRef.current = now;
 
+          // Combine manual emitters with atmosphere effect from the active scene
+          const activeScene = state.activeSceneId
+            ? state.scenes.find((s) => s.id === state.activeSceneId)
+            : null;
+          const atmosphereEmitter = activeScene
+            ? atmosphereToEmitter(activeScene.atmosphere)
+            : null;
+          const emittersForRender = [
+            ...(state.isParticlePreviewActive ? state.emitters : []),
+            ...(atmosphereEmitter ? [atmosphereEmitter] : []),
+          ];
+
           renderer.renderWithEffects(
             state.layers,
             state.viewport,
             state.filters,
-            state.emitters,
-            state.isParticlePreviewActive,
+            emittersForRender,
+            emittersForRender.length > 0,
             dt,
           );
 
@@ -292,10 +395,10 @@ export function SketchCanvas() {
                   state.viewport,
                 );
               } else {
-                clearOnionCanvas(onionEl);
+                clearOverlayCanvas(onionEl);
               }
             } else {
-              clearOnionCanvas(onionEl);
+              clearOverlayCanvas(onionEl);
             }
           }
 
@@ -462,7 +565,26 @@ export function SketchCanvas() {
       }
 
       if (activeTool === 'vector') {
-        // TODO(P2): render drag preview overlay
+        const start = vectorStartRef.current;
+        const vectorEl = vectorPreviewCanvasRef.current;
+        if (!start || !vectorEl) return;
+        const { x: ex, y: ey } = screenToCanvas(
+          point.x,
+          point.y,
+          viewport.zoom,
+          viewport.panX,
+          viewport.panY,
+        );
+        renderVectorPreview(
+          vectorEl,
+          start,
+          { x: ex, y: ey },
+          useSketchStore.getState().activeShapeType,
+          hexToRGBA(brushSettings.color),
+          canvas.width,
+          canvas.height,
+          viewport,
+        );
         return;
       }
 
@@ -593,6 +715,7 @@ export function SketchCanvas() {
         }
 
         vectorStartRef.current = null;
+        clearOverlayCanvas(vectorPreviewCanvasRef.current);
         markDirty();
         needsRenderRef.current = true;
         return;
@@ -642,6 +765,14 @@ export function SketchCanvas() {
         className="absolute inset-0 w-full h-full pointer-events-none"
         aria-hidden="true"
       />
+      {/* Vector drag preview — dashed outline shown while drawing shapes */}
+      <canvas
+        ref={vectorPreviewCanvasRef}
+        className="absolute inset-0 w-full h-full pointer-events-none"
+        aria-hidden="true"
+      />
+      {/* Pixel grid — visible only in pixel tool at sufficient zoom */}
+      <PixelGrid canvasWidth={canvas.width} canvasHeight={canvas.height} />
     </div>
   );
 }

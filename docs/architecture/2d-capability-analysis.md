@@ -1,7 +1,7 @@
 # 2D 创作能力架构分析
 
 > 日期：2026-03-09（更新：2026-03-14）
-> 状态：S.1 ✅ 完成 | S.2 ✅ 完成 | S.3 🔄 进行中（滤镜 ✅ 10个）| S.4 规划中
+> 状态：S.1 ✅ 完成 | S.2 ✅ 完成 | S.3 ✅ 完成（滤镜 ✅ 像素网格 ✅ 大气效果 ✅ 场景模板 ✅ Vector 拖拽预览 ✅ 序列帧播放器 ✅）| S.4 规划中
 > 范围：neko-sketch / neko-cut / neko-canvas / neko-agent
 
 ---
@@ -558,21 +558,41 @@ AI 辅助（S.4 阶段实现）：
 ├─ 📋 场景模板库
 └─ 📋 氛围效果（光效/粒子叠加）
 
-物品/资产（待实现）：
-├─ 📋 像素绘制模式（网格 + 调色板 + 像素笔刷）
-├─ 📋 矢量绘制模式（贝塞尔路径编辑 + SVG 导出）
-└─ 📋 资产管理（→ neko-assets 集成）
+场景（2026-03-14 完成）：
+├─ ✅ sceneSlice（Zustand：createScene/deleteScene/addSceneLayer/removeSceneLayer/updateSceneLayer/updateCamera/setAtmosphere）
+├─ ✅ types/scene.ts（Scene/SceneLayer/CameraConfig/AtmosphereConfig/AtmospherePreset）
+├─ ✅ ScenePanel UI（场景选择 + 模板创建 + 图层管理 + 相机缩放 + 视差系数）
+├─ ✅ AtmospherePanel UI（preset 选择 + 强度/风力参数，preset ≠ none 时显示）
+├─ ✅ scene-templates.ts（4 种模板：platformer/topdown-rpg/visual-novel/side-scroller）
+├─ ✅ atmosphere-presets.ts（atmosphereToEmitter：5 种预设 → ParticleEmitterConfig）
+└─ ✅ 大气效果接入渲染管线（SketchCanvas 自动将场景大气转为粒子 emitter 传入 renderWithEffects）
+
+物品/资产（2026-03-14 完成）：
+├─ ✅ pixel-tool.ts（drawPixel / drawLine / floodFill，PixelBrushSize 1/2/4/8）
+├─ ✅ PixelGrid 组件（zoom ≥ 4 时显示像素网格 CSS overlay）
+├─ ✅ PixelGrid 接入 SketchCanvas（absolute overlay，pointer-events:none）
+├─ ✅ vector-tool.ts（createPath/moveTo/lineTo/cubicTo + createRectangle/createEllipse/createPolygon/createStar）
+├─ ✅ vector-renderer.ts（renderPath/renderPaths → Canvas2D；exportSVG → SVG 字符串）
+├─ ✅ VectorToolbar UI（path/rectangle/ellipse/polygon/star 切换 + sides/points 参数）
+└─ 📋 资产管理（→ neko-assets 集成，S.4 阶段）
 ```
 
-**S.3 剩余任务优先级**：
+**S.3 已完成所有任务**：
 
-| 任务 | 优先级 | 依赖 | 说明 |
-|------|--------|------|------|
-| 粒子系统 UI + 配置面板 | P1 | particle-emitter.ts（已有框架） | 补全 emitter 配置 UI + 预览 |
-| 像素绘制模式 | P1 | 画笔系统（已有 pixel brush） | 补充网格 overlay + 调色板 |
-| 矢量绘制模式 | P2 | 形状工具（已有路径渲染） | 贝塞尔节点编辑 + SVG 导出 |
-| 场景编辑器 | P2 | 图层系统（已有） | 视差系数 UI + 场景模板 |
-| 序列帧特效编辑器 | P2 | sprite-sheet export（已有） | Sprite Sheet 导入播放预览 |
+| 任务 | 状态 | 说明 |
+|------|------|------|
+| 滤镜面板 | ✅ | FilterPanel + WebGL effect pipeline |
+| 像素网格 | ✅ | PixelGrid CSS overlay，zoom ≥ 4 时显示 |
+| 大气效果 | ✅ | atmosphereToEmitter() 接入 renderWithEffects |
+| 场景模板 | ✅ | ScenePanel + 4 种预设模板 |
+| Vector 拖拽预览 | ✅ | Canvas2D overlay，onStrokeMove 实时绘制 |
+| 序列帧播放器 | ✅ | SpriteSheetPlayer：拖拽导入 + RAF 播放 + 帧缩略图 |
+
+**S.4 剩余任务**：
+
+| 任务 | 优先级 | 说明 |
+|------|--------|------|
+| neko-assets 集成 | S.4 | 资产管理对接 |
 
 ### Phase S.4：AI 辅助 + 跨模块集成
 

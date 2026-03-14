@@ -23,6 +23,7 @@ import {
   ScenePanel,
   AtmospherePanel,
   PalettePanel,
+  SpriteSheetPlayer,
 } from './components';
 import { deserializeDocument, serializeDocument } from './utils/document-serializer';
 import { dispatchKeyboardAction } from './utils/keyboard-dispatcher';
@@ -162,6 +163,7 @@ export function App() {
             <LayerPanel />
             <FilterPanel />
             <FrameControls />
+            <SpriteSheetPlayer />
             <ParticlePanel />
             <ScenePanel />
             <AtmospherePanel />

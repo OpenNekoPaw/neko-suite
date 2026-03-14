@@ -88,6 +88,8 @@
 - [x] S.3 单元测试（7 文件 42 测试）✅
 - [x] 画板响应修复（RAF 连续渲染 + ResizeObserver 自适应 + dirty flag）✅
 - [x] 国际化支持（I18nProvider + useTranslation hook + 130 翻译 key + 中英双语）✅
+- [x] S.3 P2 Vector 拖拽预览（Canvas2D overlay，onStrokeMove 实时绘制矩形/椭圆）✅
+- [x] S.3 P2 序列帧播放器（SpriteSheetPlayer：拖拽导入 PNG+JSON + RAF 播放 + 帧缩略图）✅
 
 ### neko-tools（媒体 Diff）
 - [ ] Diff 后端增强（Phase 3）
@@ -220,9 +222,9 @@
 | @neko/types 重组 | domain/ 分层 + exports 子路径隔离 | — |
 | @neko/media-analysis | 从 neko-tools 提取纯 Diff 算法包 | — |
 | neko-audio | 波形编辑 + 均衡器 + 录音 | Phase 4 |
-| neko-live | 动捕 + 虚拟形象 + 直播 | Phase 5 |
+| neko-live | 动捕 + 虚拟形象 + 直播（前置：neko-audio；VMC 需 Extension Host UDP 中转；渲染：Three.js 实时预览 + wgpu 录制输出混合策略；虚拟摄像头推流非跨平台待调研） | Phase 5 |
 | neko-assets Phase 5 | 社区分发（.neko 包格式 + 远程注册表） | — |
 
 ---
 
-*最后更新：2026-03-14（neko-model Phase 2 ✅ 11/11 完成；AI MCP Tools 移至 P3；neko-agent 构建修复：mermaid deps + d3 alias）*
+*最后更新：2026-03-14（neko-model Phase 2 ✅ 11/11 完成；AI MCP Tools 移至 P3；neko-agent 构建修复：mermaid deps + d3 alias；neko-live 架构分析：混合渲染策略确定，VMC 中转方案明确；neko-sketch S.3 ✅ 全部完成：P2 Vector 拖拽预览 + 序列帧播放器）*

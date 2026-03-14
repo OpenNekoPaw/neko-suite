@@ -16,3 +16,4 @@ export { AtmospherePanel } from './AtmospherePanel';
 export { PixelGrid } from './PixelGrid';
 export { PalettePanel } from './PalettePanel';
 export { VectorToolbar } from './VectorToolbar';
+export { SpriteSheetPlayer } from './SpriteSheetPlayer';

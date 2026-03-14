@@ -201,6 +201,24 @@ export const zhCN: MessageBundle = {
   // Filter toggle
   'sketch.filter.toggle': '切换 {name}',
 
+  // Sprite sheet player
+  'sketch.panel.spritesheet': '精灵表播放器',
+  'sketch.spritesheet.cols': '列数',
+  'sketch.spritesheet.colsLabel': '网格列数',
+  'sketch.spritesheet.rows': '行数',
+  'sketch.spritesheet.rowsLabel': '网格行数',
+  'sketch.spritesheet.importLabel': '导入精灵表',
+  'sketch.spritesheet.dropHint': '拖入 PNG（+ JSON）或点击导入',
+  'sketch.spritesheet.reimport': '拖入或点击替换',
+  'sketch.spritesheet.noFrames': '精灵表中未找到帧',
+  'sketch.spritesheet.preview': '帧预览',
+  'sketch.spritesheet.seek': '跳转帧',
+  'sketch.spritesheet.fps': 'FPS',
+  'sketch.spritesheet.fpsLabel': '播放帧率',
+  'sketch.spritesheet.play': '播放动画',
+  'sketch.spritesheet.stop': '停止动画',
+  'sketch.spritesheet.frameList': '帧缩略图',
+
   // Status bar
   'sketch.status.ready': '就绪',
   'sketch.status.layers': '个图层',

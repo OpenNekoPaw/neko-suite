@@ -201,6 +201,24 @@ export const en: MessageBundle = {
   // Filter toggle
   'sketch.filter.toggle': 'Toggle {name}',
 
+  // Sprite sheet player
+  'sketch.panel.spritesheet': 'Sprite Sheet Player',
+  'sketch.spritesheet.cols': 'Cols',
+  'sketch.spritesheet.colsLabel': 'Grid columns',
+  'sketch.spritesheet.rows': 'Rows',
+  'sketch.spritesheet.rowsLabel': 'Grid rows',
+  'sketch.spritesheet.importLabel': 'Import sprite sheet',
+  'sketch.spritesheet.dropHint': 'Drop PNG (+ JSON) or click to import',
+  'sketch.spritesheet.reimport': 'Drop or click to replace',
+  'sketch.spritesheet.noFrames': 'No frames found in sprite sheet',
+  'sketch.spritesheet.preview': 'Frame preview',
+  'sketch.spritesheet.seek': 'Seek frame',
+  'sketch.spritesheet.fps': 'FPS',
+  'sketch.spritesheet.fpsLabel': 'Playback FPS',
+  'sketch.spritesheet.play': 'Play animation',
+  'sketch.spritesheet.stop': 'Stop animation',
+  'sketch.spritesheet.frameList': 'Frame thumbnails',
+
   // Status bar
   'sketch.status.ready': 'Ready',
   'sketch.status.layers': 'layers',
