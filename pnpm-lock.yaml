@@ -235,6 +235,9 @@ importers:
       mdast-util-gfm:
         specifier: ^3.1.0
         version: 3.1.0
+      mermaid:
+        specifier: ^11.12.2
+        version: 11.12.2
       micromark-extension-gfm:
         specifier: ^3.0.0
         version: 3.0.0
@@ -281,9 +284,6 @@ importers:
       jsdom:
         specifier: ^27.0.1
         version: 27.4.0
-      mermaid:
-        specifier: ^11.12.2
-        version: 11.12.2
       postcss:
         specifier: ^8.4.32
         version: 8.5.6

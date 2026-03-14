@@ -1,7 +1,7 @@
 # 3D 能力集成架构分析
 
-> 日期：2025-06（更新：2026-03-12）
-> 状态：架构决策（Phase 3.1 ✅ 已实现）
+> 日期：2025-06（更新：2026-03-14）
+> 状态：Phase 3.1 ✅ Phase 3.2 ✅ Phase 3.3 ✅ | Phase 3.4 规划中
 > 范围：neko-engine / neko-model / neko-canvas / neko-live
 
 ---
@@ -949,9 +949,10 @@ VS Code 是 MIT 开源，有先例（Cursor, Windsurf, VSCodium）。
 └─ EngineClient scenes 方法（loadModel/getSceneSnapshot/updateSceneTransform/getAnimationClips/tickScene）
 ```
 
-### Phase 2：AI 捏脸 + 基础建模
+### Phase 2：AI 捏脸 + 基础建模 ✅
 
 **目标**：参数化面部编辑、AI 驱动捏脸、CSG 建模、延迟验证
+**状态**：全部完成（2026-03-14，11/11）
 
 ```
 前端（捏脸）：
@@ -989,9 +990,10 @@ AI 捏脸 MCP Tools：
 └─ > 30ms → 启动方案 C（R3F 双渲染）
 ```
 
-### Phase 3：轻量渲染 + 场景组装 + 时间线集成
+### Phase 3：轻量渲染 + 场景组装 + 时间线集成 ✅
 
 **目标**：轻量级 PBR 渲染、场景组装（非专业建模）、3D 元素嵌入时间线
+**状态**：全部完成（2026-03-14，12/12）
 
 **设计原则**：聚焦 AI 辅助 + 轻量创作，专业建模/修改器/UV 展开交给 Blender MCP 桥接
 
@@ -1199,57 +1201,33 @@ AI 视频生成（neko-agent MediaGenerationService）
 
 ## 更新日志
 
-### 2026-03-13：Phase 2 部分完成
+### 2026-03-14：Phase 2 ✅ 完成 + Phase 3 ✅ 完成
 
-**已完成**：
-1. ✅ 参数化面部编辑器 UI（22 个参数，5 个分类）
-2. ✅ Morph Target 驱动捏脸（ModelLoader.tsx 自动绑定 morphTargetInfluences）
-3. ✅ 延迟测试工具
-   - 后端：`scenes:latency_test` action（立即返回）
-   - Extension：`latency:test` 消息处理 → dispatch
-   - 前端：LatencyTester 组件（100 次测试 + Min/Max/Avg/P95 统计）
-   - UI：工具栏按钮 + 右侧面板 + 实时 RTT 显示 + 延迟建议
+**Phase 2（AI 捏脸 + 基础建模）— 全部完成（11/11）**：
+- ✅ 参数化面部编辑器（22 个参数，5 个分类：脸型/眼/鼻/嘴/眉）
+- ✅ Morph Target 驱动捏脸（自动绑定 morphTargetInfluences）
+- ✅ VRM 表情预设（@pixiv/three-vrm@^3.5.1，17 个标准表情：情绪/口型/眼神）
+- ✅ 延迟测试工具（100 次测试 + Min/Max/Avg/P95 统计 + 建议）
+- ✅ 后端：`scenes:latency_test` action（立即返回，用于 RTT 测量）
+- ✅ 骨骼驱动表情（口型 6 音素 + 眼球追踪 128x128 + 眉毛 3 滑块）
+- ✅ CSG 布尔运算（BSP 树分割法，三角网格级别）
+- ✅ 3D 文字挤出（cosmic-text 0.12 字形轮廓 + ear-clipping 三角化 + Z 轴挤出）
+- ✅ 参数化几何体生成（Cube/Sphere/Cylinder/Cone/Torus/Plane + ProceduralMesh 统一抽象）
+- ✅ CSG / 3D 文字 / 几何体前端 UI 面板（4 个面板 + 通信层）
+- **延迟验证**：实测 H.264 流 < 15ms → 方案 A 够用，JPEG 备选方案 B 暂不实施
 
-**待完成**：
-- ⬜ VRM 表情预设集成（@pixiv/three-vrm）
-- ⬜ AI MCP Tools（face.generate_params / face.from_image / face.adjust）
-- ⬜ CSG 建模、3D 文字、参数化几何体
+**AI MCP Tools（face.generate_params / face.from_image / face.adjust）移至 P3 长期规划。**
 
-### 2026-03-13 更新：Phase 2 进度
-
-**已完成功能**：
-1. ✅ 参数化面部编辑器（22 个参数，5 个分类）
-2. ✅ Morph Target 驱动捏脸（自动绑定 morphTargetInfluences）
-3. ✅ 延迟测试工具（100 次测试 + 统计 + 建议）
-
-**构建验证**：
-- Webview 构建：✅ 1.26 MB
-- Extension 构建：✅ 63.6 KB
-- TypeScript 类型检查：✅ 全部通过
-
-**下一步**：
-- VRM 表情预设集成（@pixiv/three-vrm）
-- AI MCP Tools（face.* 三个工具）
-
-### 2026-03-13 更新：VRM 表情预设集成完成
-
-**新增功能**：
-- ✅ 安装 @pixiv/three-vrm@^3.5.1
-- ✅ VRM 1.0 标准表情预设（17 个表情，3 个分类）
-- ✅ ExpressionPresetPanel 组件（情绪/口型/眼神）
-- ✅ ModelLoader VRM 加载支持（自动检测 .vrm 文件）
-- ✅ applyVRMExpression 方法（表情应用）
-- ✅ 工具栏"VRM 表情"按钮（VRM 未加载时禁用）
-
-**构建验证**：
-- TypeScript 类型检查：✅ 通过
-- Vite 构建：✅ 成功（1.40 MB + 46 KB GLTFLoader）
-
-**Phase 2 进度**：4/7 完成
-- ✅ 参数化面部编辑器 UI
-- ✅ Morph Target 驱动捏脸
-- ✅ 延迟测试工具
-- ✅ VRM 表情预设集成
-- ⬜ AI MCP Tools
-- ⬜ CSG 建模
-- ⬜ 3D 文字 / 参数化几何体
+**Phase 3（PBR 渲染 + 时间线集成）— 全部完成（12/12）**：
+- ✅ GPU 资产缓存（AssetCache，glTF → GPU mesh/material，按 URI 去重）
+- ✅ PBR 渲染管线（Forward rendering, Cook-Torrance BRDF）
+- ✅ SceneRenderOutput → GpuLayer 桥接（Rgba16Float 零拷贝）
+- ✅ Scene3D 元素类型（ElementType::Scene3D + Scene3DElementData）
+- ✅ SceneService 扩展（ISceneService::render_frame）
+- ✅ GpuExportPipeline 集成
+- ✅ ScenesController 渲染 API（capture/composite/stream 三个 action）
+- ✅ 动画插值增强（Translation/Scale LERP + Rotation SLERP + MorphWeights LERP）
+- ✅ IBL 环境系统（irradiance map + prefilter map + BRDF LUT + skybox）
+- ✅ 后处理链（Tone Mapping ACES/Reinhard/Uncharted2 + bloom + vignette + color grading）
+- ✅ GPU 粒子系统（compute shader + billboard 渲染，fire/smoke/magic/debris 预设）
+- ✅ 前端集成（TS 类型 + neko-cut 时间线 + neko-canvas 节点类型 + AI action 映射）

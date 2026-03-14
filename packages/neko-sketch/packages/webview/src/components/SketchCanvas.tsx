@@ -3,6 +3,13 @@
  *
  * Initializes the WebGL renderer, handles resize, and
  * connects pointer input to the brush engine, pixel tool, and vector tool.
+ *
+ * Frame mode integration:
+ *   - On currentFrameIndex change: save outgoing frame pixels, load incoming frame pixels.
+ *   - Onion skin overlay rendered via a 2D canvas positioned over the WebGL canvas.
+ *
+ * Filter / particle integration:
+ *   - Render loop uses renderWithEffects() to apply the filter chain and particle overlay.
  */
 import { useRef, useEffect, useCallback } from 'react';
 import { useSketchStore } from '../stores';
@@ -10,10 +17,13 @@ import { SketchRenderer } from '../engine';
 import { BrushEngine } from '../brush';
 import { usePointerInput } from '../hooks/usePointerInput';
 import type { StrokePoint } from '../types';
+import type { OnionSkinGhost } from '../types/frame';
+import type { ViewportState } from '../types';
 import { drawPixel, drawLine } from '../tools/pixel-tool';
 import type { PixelBrushSize } from '../tools/pixel-tool';
 import { createRectangle, createEllipse } from '../tools/vector-tool';
 import { renderPaths } from '../engine/vector-renderer';
+import { computeOnionSkinGhosts } from '../utils/frame-manager';
 
 // ─── Helpers ───
 
@@ -60,7 +70,6 @@ function readTextureToImageData(
   const fbo = renderer.textures.createFramebuffer(texture);
   const pixels = renderer.textures.readPixels(fbo, 0, 0, w, h);
   renderer.textures.deleteFramebuffer(fbo);
-  // Copy into a fresh Uint8ClampedArray backed by a plain ArrayBuffer
   const buffer = new ArrayBuffer(pixels.length);
   const clamped = new Uint8ClampedArray(buffer);
   clamped.set(pixels);
@@ -83,12 +92,79 @@ function uploadImageDataToTexture(
   );
 }
 
+/**
+ * Render onion skin ghosts onto the 2D overlay canvas.
+ *
+ * The transform matches the WebGL viewport: document pixel (0,0) is placed at
+ * physical screen position (phW/2*(1-zoom)+panX, phH/2*(1-zoom)+panY), and each
+ * document pixel spans zoom*(phW/docW) × zoom*(phH/docH) physical pixels.
+ */
+function renderOnionSkinOverlay(
+  onionCanvas: HTMLCanvasElement,
+  ghosts: readonly OnionSkinGhost[],
+  docW: number,
+  docH: number,
+  viewport: ViewportState,
+): void {
+  const phW = onionCanvas.width;
+  const phH = onionCanvas.height;
+  const ctx = onionCanvas.getContext('2d');
+  if (!ctx || phW === 0 || phH === 0) return;
+
+  ctx.clearRect(0, 0, phW, phH);
+  if (ghosts.length === 0) return;
+
+  const { zoom, panX, panY } = viewport;
+  const scaleX = (zoom * phW) / docW;
+  const scaleY = (zoom * phH) / docH;
+  const tx = (phW / 2) * (1 - zoom) + panX;
+  const ty = (phH / 2) * (1 - zoom) + panY;
+
+  // Reuse a single OffscreenCanvas for tinting all ghosts
+  const tmp = new OffscreenCanvas(docW, docH);
+  const tmpCtx = tmp.getContext('2d');
+  if (!tmpCtx) return;
+
+  ctx.save();
+
+  for (const ghost of ghosts) {
+    if (!ghost.frame.imageData) continue;
+
+    // Draw frame pixels
+    tmpCtx.clearRect(0, 0, docW, docH);
+    tmpCtx.putImageData(ghost.frame.imageData, 0, 0);
+
+    // Tint: multiply the existing pixels with the ghost colour
+    tmpCtx.globalCompositeOperation = 'source-atop';
+    const [r, g, b] = ghost.tint;
+    tmpCtx.fillStyle = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},0.5)`;
+    tmpCtx.fillRect(0, 0, docW, docH);
+    tmpCtx.globalCompositeOperation = 'source-over';
+
+    // Composite onto the overlay canvas at the correct viewport position
+    ctx.setTransform(scaleX, 0, 0, scaleY, tx, ty);
+    ctx.globalAlpha = ghost.opacity;
+    ctx.drawImage(tmp, 0, 0);
+  }
+
+  ctx.restore();
+}
+
+/** Clear the onion skin overlay canvas. */
+function clearOnionCanvas(onionCanvas: HTMLCanvasElement | null): void {
+  if (!onionCanvas) return;
+  const ctx = onionCanvas.getContext('2d');
+  if (ctx) ctx.clearRect(0, 0, onionCanvas.width, onionCanvas.height);
+}
+
 export function SketchCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const onionCanvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<SketchRenderer | null>(null);
   const brushRef = useRef<BrushEngine | null>(null);
   const rafRef = useRef<number>(0);
   const needsRenderRef = useRef(true);
+  const lastTimeRef = useRef(performance.now());
 
   // Pixel tool state
   const pixelDataRef = useRef<ImageData | null>(null);
@@ -97,6 +173,12 @@ export function SketchCanvas() {
   // Vector tool state
   const vectorStartRef = useRef<{ x: number; y: number } | null>(null);
 
+  // Frame mode: track previous frame index to detect switches
+  const prevFrameIndexRef = useRef(-1);
+  // Ref so the render loop / stroke handlers can read playing state without deps
+  const isFramePlayingRef = useRef(false);
+
+  // ── Store subscriptions ──
   const canvas = useSketchStore((s) => s.canvas);
   const viewport = useSketchStore((s) => s.viewport);
   const layers = useSketchStore((s) => s.layers);
@@ -104,6 +186,22 @@ export function SketchCanvas() {
   const activeTool = useSketchStore((s) => s.activeTool);
   const activeLayerId = useSketchStore((s) => s.activeLayerId);
   const markDirty = useSketchStore((s) => s.markDirty);
+
+  // P1: filters and particles
+  const filters = useSketchStore((s) => s.filters);
+  const emitters = useSketchStore((s) => s.emitters);
+  const isParticlePreviewActive = useSketchStore((s) => s.isParticlePreviewActive);
+
+  // P0: frame mode
+  const selectedFrameLayerId = useSketchStore((s) => s.selectedFrameLayerId);
+  const currentFrameIndex = useSketchStore((s) => s.currentFrameIndex);
+  const onionSkin = useSketchStore((s) => s.onionSkin);
+  const isFramePlaying = useSketchStore((s) => s.isFramePlaying);
+
+  // Keep isFramePlayingRef in sync without adding it as render-loop dep
+  useEffect(() => {
+    isFramePlayingRef.current = isFramePlaying;
+  }, [isFramePlaying]);
 
   // Initialize renderer
   useEffect(() => {
@@ -121,9 +219,10 @@ export function SketchCanvas() {
     };
   }, [canvas.width, canvas.height]);
 
-  // Resize observer — keep WebGL viewport in sync with container
+  // Resize observer — keep WebGL + onion-skin canvas in sync with container
   useEffect(() => {
     const el = canvasRef.current;
+    const onionEl = onionCanvasRef.current;
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -138,17 +237,21 @@ export function SketchCanvas() {
         rendererRef.current?.resize(w, h);
         needsRenderRef.current = true;
       }
+      if (onionEl && w > 0 && h > 0) {
+        onionEl.width = w;
+        onionEl.height = h;
+      }
     });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
 
-  // Mark dirty when layers or viewport change
+  // Mark dirty when rendering-relevant state changes
   useEffect(() => {
     needsRenderRef.current = true;
-  }, [layers, viewport]);
+  }, [layers, viewport, filters, emitters, isParticlePreviewActive, currentFrameIndex, onionSkin]);
 
-  // Continuous render loop via requestAnimationFrame
+  // Continuous render loop — uses renderWithEffects for filter/particle support (P1)
   useEffect(() => {
     let running = true;
     const loop = () => {
@@ -157,7 +260,45 @@ export function SketchCanvas() {
         const renderer = rendererRef.current;
         if (renderer) {
           const state = useSketchStore.getState();
-          renderer.render(state.layers, state.viewport);
+          const now = performance.now();
+          const dt = Math.min((now - lastTimeRef.current) / 1000, 0.1);
+          lastTimeRef.current = now;
+
+          renderer.renderWithEffects(
+            state.layers,
+            state.viewport,
+            state.filters,
+            state.emitters,
+            state.isParticlePreviewActive,
+            dt,
+          );
+
+          // Onion skin overlay (P0)
+          const onionEl = onionCanvasRef.current;
+          if (onionEl) {
+            if (state.onionSkin.enabled && state.selectedFrameLayerId) {
+              const frameLayer = state.frameLayers.find((l) => l.id === state.selectedFrameLayerId);
+              if (frameLayer) {
+                const ghosts = computeOnionSkinGhosts(
+                  frameLayer,
+                  state.currentFrameIndex,
+                  state.onionSkin,
+                );
+                renderOnionSkinOverlay(
+                  onionEl,
+                  ghosts,
+                  state.canvas.width,
+                  state.canvas.height,
+                  state.viewport,
+                );
+              } else {
+                clearOnionCanvas(onionEl);
+              }
+            } else {
+              clearOnionCanvas(onionEl);
+            }
+          }
+
           needsRenderRef.current = false;
         }
       }
@@ -169,6 +310,60 @@ export function SketchCanvas() {
       cancelAnimationFrame(rafRef.current);
     };
   }, []);
+
+  // ── Frame save/restore on frame index change (P0) ──
+  useEffect(() => {
+    if (!selectedFrameLayerId) {
+      prevFrameIndexRef.current = -1;
+      return;
+    }
+
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+
+    const prevIdx = prevFrameIndexRef.current;
+    const state = useSketchStore.getState();
+
+    // Save the outgoing frame only when the user manually switches (not during playback)
+    if (prevIdx >= 0 && prevIdx !== currentFrameIndex && !isFramePlayingRef.current) {
+      const activeLayer = state.layers.find((l) => l.id === state.activeLayerId);
+      if (activeLayer?.texture) {
+        const imgData = readTextureToImageData(
+          renderer,
+          activeLayer.texture,
+          state.canvas.width,
+          state.canvas.height,
+        );
+        state.updateFrameImageData(selectedFrameLayerId, prevIdx, imgData);
+      }
+    }
+
+    prevFrameIndexRef.current = currentFrameIndex;
+
+    // Load the incoming frame's pixels into the active layer texture
+    const frameLayer = state.frameLayers.find((l) => l.id === selectedFrameLayerId);
+    const newFrame = frameLayer?.frames.find((f) => f.index === currentFrameIndex);
+    const activeLayer = state.layers.find((l) => l.id === state.activeLayerId);
+
+    if (activeLayer?.texture) {
+      if (newFrame?.imageData) {
+        uploadImageDataToTexture(renderer, activeLayer.texture, newFrame.imageData);
+      } else {
+        // Clear texture for blank frames
+        const empty = new Uint8Array(state.canvas.width * state.canvas.height * 4);
+        renderer.textures.updateTexture(
+          activeLayer.texture,
+          0,
+          0,
+          state.canvas.width,
+          state.canvas.height,
+          empty,
+        );
+      }
+    }
+
+    needsRenderRef.current = true;
+  }, [currentFrameIndex, selectedFrameLayerId]);
 
   // Determine which tools accept pointer input
   const isDrawTool =
@@ -184,7 +379,6 @@ export function SketchCanvas() {
       if (!renderer) return;
 
       if (activeTool === 'pixel') {
-        // Read current layer texture into ImageData for pixel editing
         const layer = useSketchStore.getState().layers.find((l) => l.id === activeLayerId);
         if (!layer) return;
 
@@ -294,9 +488,17 @@ export function SketchCanvas() {
 
         uploadImageDataToTexture(renderer, texture, imageData);
 
-        // Persist texture reference back to the store
         const state = useSketchStore.getState();
         state.setLayers(state.layers.map((l) => (l.id === activeLayerId ? { ...l, texture } : l)));
+
+        // Persist to current frame if in frame mode
+        if (state.selectedFrameLayerId && !isFramePlayingRef.current) {
+          state.updateFrameImageData(
+            state.selectedFrameLayerId,
+            state.currentFrameIndex,
+            imageData,
+          );
+        }
 
         pixelDataRef.current = null;
         lastPixelPosRef.current = null;
@@ -320,7 +522,6 @@ export function SketchCanvas() {
         const w = Math.abs(endX - start.x);
         const h = Math.abs(endY - start.y);
 
-        // Ignore gestures too small to be intentional
         if (w < 2 && h < 2) {
           vectorStartRef.current = null;
           return;
@@ -342,7 +543,6 @@ export function SketchCanvas() {
             ? [createEllipse(cx, cy, w / 2, h / 2, fill)]
             : [createRectangle(minX, minY, w, h, fill)];
 
-        // Render paths to an offscreen Canvas2D, then composite onto the layer texture
         const offscreen = new OffscreenCanvas(canvas.width, canvas.height);
         const ctx = offscreen.getContext('2d');
         if (!ctx) {
@@ -362,7 +562,6 @@ export function SketchCanvas() {
         const texture =
           layer.texture ?? renderer.textures.createTexture(canvas.width, canvas.height);
 
-        // Read existing layer content and alpha-over composite the shape
         const readFbo = renderer.textures.createFramebuffer(texture);
         const existing = renderer.textures.readPixels(readFbo, 0, 0, canvas.width, canvas.height);
         renderer.textures.deleteFramebuffer(readFbo);
@@ -383,6 +582,16 @@ export function SketchCanvas() {
         const state = useSketchStore.getState();
         state.setLayers(state.layers.map((l) => (l.id === activeLayerId ? { ...l, texture } : l)));
 
+        // Persist to current frame if in frame mode
+        if (state.selectedFrameLayerId && !isFramePlayingRef.current) {
+          const savedData = readTextureToImageData(renderer, texture, canvas.width, canvas.height);
+          state.updateFrameImageData(
+            state.selectedFrameLayerId,
+            state.currentFrameIndex,
+            savedData,
+          );
+        }
+
         vectorStartRef.current = null;
         markDirty();
         needsRenderRef.current = true;
@@ -392,6 +601,24 @@ export function SketchCanvas() {
       // Default: brush / eraser
       const result = brushRef.current?.endStroke();
       if (result) {
+        // Persist to current frame if in frame mode
+        const state = useSketchStore.getState();
+        if (state.selectedFrameLayerId && !isFramePlayingRef.current && renderer) {
+          const activeLayer = state.layers.find((l) => l.id === state.activeLayerId);
+          if (activeLayer?.texture) {
+            const imgData = readTextureToImageData(
+              renderer,
+              activeLayer.texture,
+              canvas.width,
+              canvas.height,
+            );
+            state.updateFrameImageData(
+              state.selectedFrameLayerId,
+              state.currentFrameIndex,
+              imgData,
+            );
+          }
+        }
         markDirty();
         needsRenderRef.current = true;
       }
@@ -402,11 +629,19 @@ export function SketchCanvas() {
   usePointerInput(canvasRef, { onStrokeStart, onStrokeMove, onStrokeEnd }, isDrawTool);
 
   return (
-    <canvas
-      ref={canvasRef}
-      id="sketch-canvas"
-      className="block w-full h-full"
-      style={{ touchAction: 'none' }}
-    />
+    <div className="relative block w-full h-full">
+      <canvas
+        ref={canvasRef}
+        id="sketch-canvas"
+        className="block w-full h-full"
+        style={{ touchAction: 'none' }}
+      />
+      {/* Onion skin overlay — pointer-events:none so it does not block drawing */}
+      <canvas
+        ref={onionCanvasRef}
+        className="absolute inset-0 w-full h-full pointer-events-none"
+        aria-hidden="true"
+      />
+    </div>
   );
 }

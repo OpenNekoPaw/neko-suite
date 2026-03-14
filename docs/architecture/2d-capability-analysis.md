@@ -1,7 +1,7 @@
 # 2D 创作能力架构分析
 
-> 日期：2026-03-09（更新：2026-03-13）
-> 状态：S.1 ✅ 完成 | S.2 ✅ 基本完成（逐帧动画待实现）| S.3/S.4 规划中
+> 日期：2026-03-09（更新：2026-03-14）
+> 状态：S.1 ✅ 完成 | S.2 ✅ 完成 | S.3 🔄 进行中（滤镜 ✅ 10个）| S.4 规划中
 > 范围：neko-sketch / neko-cut / neko-canvas / neko-agent
 
 ---
@@ -490,11 +490,11 @@ Extension：
 └─ 命令注册 + 消息路由
 ```
 
-### Phase S.2：2D 人物 + 骨骼动画 ✅ 基本完成（逐帧动画待实现）
+### Phase S.2：2D 人物 + 骨骼动画 ✅ COMPLETE
 
 **目标**：Inochi2D（inox2d）加载预览 + bevy_animation 动画回放 + 参数驱动、逐帧动画、AI 辅助
 
-**实施状态**（2026-03-13）：
+**实施状态**（2026-03-14）：
 
 ```
 Inochi2D 集成（native-puppet 后端 + WebGL2 前端）：
@@ -511,11 +511,16 @@ Inochi2D 集成（native-puppet 后端 + WebGL2 前端）：
 ├─ ✅ AnimationPanel UI（动画列表 + 播放控制 + Seek slider）
 └─ ✅ 节点层级快照 + 参数面板
 
-逐帧动画：
-├─ 📋 洋葱皮渲染（前帧绿/后帧红）
-├─ 📋 帧管理（添加/复制/删除/重排）
-├─ 📋 FPS 控制 + 循环播放
-└─ 📋 序列帧导出（PNG 序列 / sprite sheet）
+逐帧动画（2026-03-14 完成）：
+├─ ✅ FrameLayer / AnimFrame 类型系统（types/frame.ts）
+├─ ✅ frameSlice（Zustand：addFrame/duplicateFrame/removeFrame/nextFrame/prevFrame/updateFrameImageData）
+├─ ✅ frame-manager 纯函数工具（createFrame/insertFrame/duplicateFrame/removeFrame）
+├─ ✅ useFramePlayback hook（RAF 循环，isFramePlaying → nextFrame/updateFrameImageData）
+├─ ✅ 帧切换保存/恢复（SketchCanvas：FBO readPixels → ImageData → frameSlice，texSubImage2D 还原）
+├─ ✅ 洋葱皮渲染（OffscreenCanvas tinting：前帧绿 / 后帧红，2D canvas overlay，viewport 同步）
+├─ ✅ FrameTimeline UI（时间轴 + 帧缩略图）
+├─ ✅ FrameControls UI（添加/复制/删除帧 + FPS 控制 + 播放/暂停）
+└─ ✅ 序列帧导出（spritesheet-export.ts：PNG 序列 / Aseprite / TexturePacker JSON 格式）
 
 AI 辅助（S.4 阶段实现）：
 ├─ 📋 2D 角色 AI 生成（Text-to-Image）
@@ -523,28 +528,51 @@ AI 辅助（S.4 阶段实现）：
 └─ 📋 AI 辅助骨骼绑定建议
 ```
 
-### Phase S.3：2D 特效 + 场景 + 物品
+### Phase S.3：2D 特效 + 场景 + 物品 🔄 进行中
 
 **目标**：粒子/滤镜/场景编辑/资产绘制
 
-```
-特效：
-├─ 2D 粒子系统（WebGL，可配置发射器/轨迹/生命周期）
-├─ 2D 滤镜（复用 WGSL shader 转 GLSL：模糊/发光/色彩/扭曲）
-├─ 序列帧特效编辑器（sprite sheet 制作 + 预览）
-└─ 形变动画（路径动画 + 弹性形变）
+**实施状态**（2026-03-14）：
 
-场景：
-├─ 多图层场景编辑器
-├─ 视差滚动系统（每图层独立 parallax 系数）
-├─ 场景模板库
-└─ 氛围效果（光效/粒子叠加）
-
-物品/资产：
-├─ 像素绘制模式（网格 + 调色板 + 像素笔刷）
-├─ 矢量绘制模式（贝塞尔路径编辑 + SVG 导出）
-└─ 资产管理（→ neko-assets 集成）
 ```
+特效 - 滤镜（2026-03-14 完成）：
+├─ ✅ FilterPipeline（filter-pipeline.ts：ping-pong FBO，applyFilters()）
+├─ ✅ FilterRegistry（filter-registry.ts：10 个内置滤镜定义）
+├─ ✅ 10 个内置 GLSL ES 3.0 滤镜（filter-shaders.ts）：
+│   ├─ blur 类：gaussian-blur（radius 0-50）
+│   ├─ color 类：brightness-contrast / hue-saturation / exposure(-3..3 stops) / temperature / (lightness)
+│   ├─ stylize 类：sharpen / vignette / glow(intensity+radius) / film-grain
+│   └─ distort 类：chromatic-aberration
+├─ ✅ filterSlice（Zustand：addFilter/removeFilter/updateFilter/reorderFilters/toggleFilter）
+├─ ✅ FilterPanel UI（filter-panel.tsx：拖拽排序 + 参数滑块 + 启用/禁用）
+└─ ✅ 渲染管线接入（SketchCanvas → renderer.renderWithEffects() → filter chain）
+
+特效 - 粒子（待实现）：
+├─ 📋 2D 粒子系统（WebGL，可配置发射器/轨迹/生命周期）
+│      注：particle-emitter.ts 已有基础框架（emitParticles/updateParticles），待完善 UI
+└─ 📋 序列帧特效编辑器（sprite sheet 制作 + 预览）
+
+场景（待实现）：
+├─ 📋 多图层场景编辑器
+├─ 📋 视差滚动系统（每图层独立 parallax 系数）
+├─ 📋 场景模板库
+└─ 📋 氛围效果（光效/粒子叠加）
+
+物品/资产（待实现）：
+├─ 📋 像素绘制模式（网格 + 调色板 + 像素笔刷）
+├─ 📋 矢量绘制模式（贝塞尔路径编辑 + SVG 导出）
+└─ 📋 资产管理（→ neko-assets 集成）
+```
+
+**S.3 剩余任务优先级**：
+
+| 任务 | 优先级 | 依赖 | 说明 |
+|------|--------|------|------|
+| 粒子系统 UI + 配置面板 | P1 | particle-emitter.ts（已有框架） | 补全 emitter 配置 UI + 预览 |
+| 像素绘制模式 | P1 | 画笔系统（已有 pixel brush） | 补充网格 overlay + 调色板 |
+| 矢量绘制模式 | P2 | 形状工具（已有路径渲染） | 贝塞尔节点编辑 + SVG 导出 |
+| 场景编辑器 | P2 | 图层系统（已有） | 视差系数 UI + 场景模板 |
+| 序列帧特效编辑器 | P2 | sprite-sheet export（已有） | Sprite Sheet 导入播放预览 |
 
 ### Phase S.4：AI 辅助 + 跨模块集成
 
@@ -706,6 +734,17 @@ neko-sketch 在 AI 视频工作流中的核心价值：
   - `systems.rs`：`animation_tick` system 在 `parameter_update` 之前运行，将曲线求值结果写入 `ParameterBinding`
   - 上游 inox2d 实现动画后可无缝替换，bevy_animation 层作为过渡兼容保留
 - **WebSocket 实时流**：新增 `WS /v1/puppets/stream`，native-puppet 以 60fps 主动推送 `PuppetDelta`，供 neko-live 面部追踪驱动，避免 HTTP round-trip 延迟
+
+### ADR-2D-006: 滤镜系统接入渲染管线
+
+- **日期**：2026-03-14
+- **决策**：在 `SketchCanvas` 渲染循环中将 `renderer.render()` 替换为 `renderer.renderWithEffects()`，接通 `FilterPipeline` → `FilterRegistry` → `filterSlice` 完整链路
+- **背景**：`FilterPipeline`、`FilterRegistry`、`FilterPanel` 和 `filterSlice` 已经完整实现，但渲染循环调用的仍是不含滤镜的 `render()` 方法，导致所有滤镜设置完全无效
+- **变更内容**：
+  1. `SketchCanvas.tsx`：RAF 循环改为 `renderer.renderWithEffects(layers, viewport, filters, emitters, isParticlePreviewActive, dt)`
+  2. 新增 4 个 GLSL ES 3.0 滤镜着色器（`filter-shaders.ts`）：exposure / temperature / glow / film-grain（从 neko-engine WGSL 转译）
+  3. `filter-registry.ts`：注册新增 4 个滤镜，内置滤镜总数达 10 个
+- **架构意义**：滤镜管线与逐帧动画相互独立，滤镜应用于合成后的完整图层栈，而非单帧；onion skin overlay 在滤镜之后由 2D canvas 覆盖渲染，不受滤镜影响
 
 ### ADR-2D-004: Spine 整体否决，统一 inox2d
 

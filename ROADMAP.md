@@ -171,4 +171,4 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ---
 
-*最后更新: 2026-03-13（neko-model Phase 3.2 基础建模 ✅ + Phase 3.3 PBR 渲染 ✅ 全栈完成）*
+*最后更新: 2026-03-14（neko-model Phase 3.2 ✅ + Phase 3.3 ✅ 全栈完成；neko-sketch S.1/S.2/S.3 ✅；neko-agent 构建修复 d3/mermaid）*

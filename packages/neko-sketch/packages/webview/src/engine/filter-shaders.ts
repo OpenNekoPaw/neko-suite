@@ -173,3 +173,94 @@ void main() {
   fragColor = vec4(r, g, b, a);
 }
 `;
+
+// ── Additional filters translated from neko-engine WGSL shaders ──────────────
+
+/** Exposure — adjust brightness in stops (powers of 2). */
+export const EXPOSURE_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_texCoord;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform float u_exposure; // stops: -3.0 .. 3.0
+
+void main() {
+  vec4 color = texture(u_texture, v_texCoord);
+  vec3 rgb = color.rgb * pow(2.0, u_exposure);
+  fragColor = vec4(clamp(rgb, 0.0, 1.0), color.a);
+}
+`;
+
+/** Color Temperature — shift white balance (cool to warm). */
+export const TEMPERATURE_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_texCoord;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform float u_temperature; // -1.0 (cool/blue) .. 1.0 (warm/orange)
+
+void main() {
+  vec4 color = texture(u_texture, v_texCoord);
+  float t = u_temperature * 0.3;
+  vec3 rgb = vec3(
+    clamp(color.r + t,        0.0, 1.0),
+    clamp(color.g + t * 0.2,  0.0, 1.0),
+    clamp(color.b - t,        0.0, 1.0)
+  );
+  fragColor = vec4(rgb, color.a);
+}
+`;
+
+/** Glow — bright-pass accumulation via 5x5 tap, added back with u_intensity. */
+export const GLOW_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_texCoord;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform vec2 u_resolution;
+uniform float u_intensity; // 0.0 .. 3.0
+uniform float u_radius;    // 1.0 .. 20.0
+
+void main() {
+  vec2 texel = 1.0 / u_resolution;
+  vec4 base  = texture(u_texture, v_texCoord);
+
+  vec4  glow  = vec4(0.0);
+  float total = 0.0;
+
+  for (int dy = -2; dy <= 2; dy++) {
+    for (int dx = -2; dx <= 2; dx++) {
+      vec2  off       = vec2(float(dx), float(dy)) * texel * u_radius;
+      vec4  s         = texture(u_texture, v_texCoord + off);
+      float lum       = dot(s.rgb, vec3(0.2126, 0.7152, 0.0722));
+      float w         = max(0.0, lum - 0.5) * 2.0;
+      glow  += s * w;
+      total += w;
+    }
+  }
+
+  if (total > 0.0) glow /= total;
+  vec3 rgb = clamp(base.rgb + glow.rgb * u_intensity, 0.0, 1.0);
+  fragColor = vec4(rgb, base.a);
+}
+`;
+
+/** Film Grain — static per-pixel noise overlay. */
+export const FILM_GRAIN_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_texCoord;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform float u_amount; // 0.0 .. 0.3
+
+float rand(vec2 co) {
+  return fract(sin(dot(co * 1000.0, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+void main() {
+  vec4  color = texture(u_texture, v_texCoord);
+  float grain = (rand(v_texCoord) - 0.5) * 2.0;
+  vec3  rgb   = clamp(color.rgb + grain * u_amount, 0.0, 1.0);
+  fragColor   = vec4(rgb, color.a);
+}
+`;

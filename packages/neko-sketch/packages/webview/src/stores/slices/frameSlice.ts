@@ -44,6 +44,9 @@ export interface FrameSlice {
   setOnionSkinConfig: (config: Partial<OnionSkinConfig>) => void;
 
   resetFrames: () => void;
+
+  /** Persist pixel data for a specific frame (called on frame switch / stroke end) */
+  updateFrameImageData: (layerId: string, frameIndex: number, imageData: ImageData | null) => void;
 }
 
 export const createFrameSlice: StateCreator<FrameSlice> = (set, get) => ({
@@ -193,4 +196,16 @@ export const createFrameSlice: StateCreator<FrameSlice> = (set, get) => ({
       isFramePlaying: false,
       onionSkin: DEFAULT_ONION_SKIN,
     }),
+
+  updateFrameImageData: (layerId, frameIndex, imageData) =>
+    set((s) => ({
+      frameLayers: s.frameLayers.map((l) =>
+        l.id === layerId
+          ? {
+              ...l,
+              frames: l.frames.map((f) => (f.index === frameIndex ? { ...f, imageData } : f)),
+            }
+          : l,
+      ),
+    })),
 });

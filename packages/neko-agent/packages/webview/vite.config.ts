@@ -1,18 +1,28 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { createRequire } from 'module';
+
+// Resolve d3 dist bundle to avoid pnpm sub-package resolution issues.
+// d3's main entry is src/index.js (unbundled), which imports d3-array etc.
+// as bare specifiers. In pnpm strict mode these are not accessible via the
+// standard node_modules lookup. Using the self-contained dist bundle avoids
+// the problem entirely.
+const require = createRequire(import.meta.url);
+// d3 main entry is src/index.js (unbundled). Navigate up two dirs to find the
+// package root and use the self-contained dist bundle instead.
+const d3Main = require.resolve('d3'); // → .../d3/src/index.js
+const d3Dist = path.join(d3Main, '../../dist/d3.min.js');
 
 export default defineConfig({
   plugins: [react()],
   base: './',
   resolve: {
-    preserveSymlinks: true,
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@neko/shared': path.resolve(__dirname, '../../../neko-types/src'),
+      'd3': d3Dist,
     },
-    // Dedupe d3 modules to use single version
-    dedupe: ['d3', 'd3-array', 'd3-contour', 'd3-shape', 'd3-scale', 'd3-selection', 'd3-transition'],
   },
   server: {
     fs: {
@@ -43,18 +53,8 @@ export default defineConfig({
       },
     },
     modulePreload: false,
-    commonjsOptions: {
-      // Handle mermaid's d3 dependencies
-      include: [/node_modules/],
-    },
   },
   optimizeDeps: {
-    include: [
-      '@neko/shared',
-      'mermaid',
-      'd3',
-      'd3-array',
-      'd3-contour',
-    ],
+    include: ['@neko/shared', 'mermaid'],
   },
 });

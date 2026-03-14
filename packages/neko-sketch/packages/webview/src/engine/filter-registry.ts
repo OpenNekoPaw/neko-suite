@@ -11,6 +11,10 @@ import {
   SHARPEN_FRAG,
   VIGNETTE_FRAG,
   CHROMATIC_ABERRATION_FRAG,
+  EXPOSURE_FRAG,
+  TEMPERATURE_FRAG,
+  GLOW_FRAG,
+  FILM_GRAIN_FRAG,
 } from './filter-shaders';
 
 const BUILTIN_FILTERS: readonly FilterDef[] = [
@@ -119,6 +123,83 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
       { name: 'u_offset', label: 'Offset', type: 'float', default: 3, min: 0, max: 20, step: 0.5 },
     ],
     fragmentShader: CHROMATIC_ABERRATION_FRAG,
+  },
+  {
+    id: 'exposure',
+    name: 'Exposure',
+    category: 'color',
+    params: [
+      {
+        name: 'u_exposure',
+        label: 'Stops',
+        type: 'float',
+        default: 0,
+        min: -3,
+        max: 3,
+        step: 0.1,
+      },
+    ],
+    fragmentShader: EXPOSURE_FRAG,
+  },
+  {
+    id: 'temperature',
+    name: 'Color Temperature',
+    category: 'color',
+    params: [
+      {
+        name: 'u_temperature',
+        label: 'Temperature',
+        type: 'float',
+        default: 0,
+        min: -1,
+        max: 1,
+        step: 0.01,
+      },
+    ],
+    fragmentShader: TEMPERATURE_FRAG,
+  },
+  {
+    id: 'glow',
+    name: 'Glow',
+    category: 'stylize',
+    params: [
+      {
+        name: 'u_intensity',
+        label: 'Intensity',
+        type: 'float',
+        default: 0.8,
+        min: 0,
+        max: 3,
+        step: 0.1,
+      },
+      {
+        name: 'u_radius',
+        label: 'Radius',
+        type: 'float',
+        default: 4,
+        min: 1,
+        max: 20,
+        step: 0.5,
+      },
+    ],
+    fragmentShader: GLOW_FRAG,
+  },
+  {
+    id: 'film-grain',
+    name: 'Film Grain',
+    category: 'stylize',
+    params: [
+      {
+        name: 'u_amount',
+        label: 'Amount',
+        type: 'float',
+        default: 0.05,
+        min: 0,
+        max: 0.3,
+        step: 0.005,
+      },
+    ],
+    fragmentShader: FILM_GRAIN_FRAG,
   },
 ];
 

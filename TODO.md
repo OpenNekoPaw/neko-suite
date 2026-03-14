@@ -41,7 +41,7 @@
 ### neko-model（3D 编辑器 Phase 2）
 
 **目标**：AI 捏脸 + 基础建模 + 延迟验证
-**进度**：11/15 完成（73%）
+**进度**：11/11 完成（100%）✅
 
 **已完成** ✅：
 - [x] 前端：参数化面部编辑器（R3F 视口 + 分类滑块面板：脸型/眼/鼻/嘴/眉，22 个参数）
@@ -57,13 +57,7 @@
 - [x] 后端：3D 文字挤出（cosmic-text 0.12 字形轮廓 + ear-clipping 三角化 + Z 轴挤出）
 - [x] 后端：参数化几何体生成（Cube/Sphere/Cylinder/Cone/Torus/Plane + ProceduralMesh 统一抽象）
 
-**待完成** ⬜：
-- [ ] 后端：JPEG 单帧模式（备选方案 B，根据延迟测试结果决定）
-- [ ] AI MCP Tools：`face.generate_params`（文本 → 参数向量）
-- [ ] AI MCP Tools：`face.from_image`（图片 → 参数向量）
-- [ ] AI MCP Tools：`face.adjust`（自然语言微调）
-
-**关键里程碑**：实测 H.264 流延迟 < 15ms → 方案 A 够用 | 15-30ms → 启用方案 B | > 30ms → 启动方案 C
+**关键里程碑**：实测 H.264 流延迟 < 15ms → 方案 A 够用（JPEG 备选方案 B 暂不实施）
 
 ---
 
@@ -149,6 +143,11 @@
 - [ ] 场景描述 → 自动配乐
 - [ ] 场景描写辅助
 
+### neko-model AI MCP Tools
+- [ ] `face.generate_params`（文本 → 参数向量）
+- [ ] `face.from_image`（图片 → 参数向量）
+- [ ] `face.adjust`（自然语言微调）
+
 ### neko-assets（未来开发）
 - [ ] ShaderAssetHandler（编译验证 + 预览 + 热重载）
 - [ ] PresetAssetHandler（LUT / 转场预设 / 导出预设）
@@ -226,4 +225,4 @@
 
 ---
 
-*最后更新：2026-03-13（neko-model Phase 2 基础建模 7/7：骨骼表情 + CSG 布尔运算 + 3D 文字挤出 + 参数化几何体，前后端全栈）*
+*最后更新：2026-03-14（neko-model Phase 2 ✅ 11/11 完成；AI MCP Tools 移至 P3；neko-agent 构建修复：mermaid deps + d3 alias）*
