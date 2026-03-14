@@ -41,7 +41,8 @@
         "selector": [
           { "filenamePattern": "*.gltf" },
           { "filenamePattern": "*.glb" },
-          { "filenamePattern": "*.vrm" }
+          { "filenamePattern": "*.vrm" },
+          { "filenamePattern": "*.nkm" }
         ],
         "priority": "default"
       }

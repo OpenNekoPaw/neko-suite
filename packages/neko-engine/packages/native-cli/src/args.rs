@@ -353,6 +353,12 @@ define_actions!(SceneAction {
     CreateText => "create_text",
     /// Perform CSG boolean operation on two entities
     CsgBoolean => "csg_boolean",
+    /// Export scene to GLB format
+    ExportGltf => "export_gltf",
+    /// Save scene as .nkm project file
+    SaveProject => "save_project",
+    /// Load .nkm project file
+    LoadProject => "load_project",
 });
 
 // ---------------------------------------------------------------------------

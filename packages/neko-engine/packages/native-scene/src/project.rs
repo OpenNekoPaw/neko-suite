@@ -34,6 +34,9 @@ pub struct NkmProject {
     pub procedural_meshes: HashMap<String, ProceduralMesh>,
     /// Full scene graph snapshot (nodes + animations).
     pub scene_snapshot: SceneSnapshot,
+    /// Mapping from node ID to mesh URI (for restoring MeshRef components).
+    #[serde(default)]
+    pub node_mesh_map: HashMap<String, String>,
     /// Opaque frontend editor state (selected node, camera position, active panel, etc.).
     pub editor_state: serde_json::Value,
 }
@@ -63,6 +66,7 @@ impl NkmProject {
         source_models: Vec<String>,
         procedural_meshes: HashMap<String, ProceduralMesh>,
         scene_snapshot: SceneSnapshot,
+        node_mesh_map: HashMap<String, String>,
         editor_state: serde_json::Value,
     ) -> Self {
         Self {
@@ -70,6 +74,7 @@ impl NkmProject {
             source_models,
             procedural_meshes,
             scene_snapshot,
+            node_mesh_map,
             editor_state,
         }
     }
@@ -114,6 +119,11 @@ mod tests {
                     has_skeleton: false,
                 }],
                 animations: vec![],
+            },
+            {
+                let mut map = HashMap::new();
+                map.insert("node_0".into(), "procedural://cube_1".into());
+                map
             },
             serde_json::json!({ "selectedNode": "node_0" }),
         )

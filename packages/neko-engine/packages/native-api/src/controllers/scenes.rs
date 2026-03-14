@@ -267,6 +267,74 @@ impl Controller for ScenesController {
                 ))
             }
 
+            "export_gltf" => {
+                let service = self.service()?;
+                let glb_data = service
+                    .export_glb()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                // Return GLB as base64-encoded string
+                use base64::Engine;
+                let encoded = base64::engine::general_purpose::STANDARD.encode(&glb_data);
+
+                Ok(ActionResponse::ok(
+                    "GLB exported",
+                    serde_json::json!({
+                        "format": "glb",
+                        "encoding": "base64",
+                        "data": encoded,
+                        "byteLength": glb_data.len()
+                    }),
+                ))
+            }
+
+            "save_project" => {
+                #[derive(Debug, Deserialize)]
+                #[serde(rename_all = "camelCase")]
+                struct SaveOptions {
+                    path: String,
+                    editor_state: Option<serde_json::Value>,
+                }
+                let opts: SaveOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .save_project(
+                        &opts.path,
+                        opts.editor_state.unwrap_or(serde_json::Value::Null),
+                    )
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "Project saved",
+                    serde_json::json!({ "path": opts.path }),
+                ))
+            }
+
+            "load_project" => {
+                #[derive(Debug, Deserialize)]
+                struct LoadProjectOptions {
+                    path: String,
+                }
+                let opts: LoadProjectOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                let (snapshot, editor_state) = service
+                    .load_project(&opts.path)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "Project loaded",
+                    serde_json::json!({
+                        "snapshot": serde_json::to_value(&snapshot)
+                            .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                        "editorState": editor_state
+                    }),
+                ))
+            }
+
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
                 action: action.to_string(),
@@ -332,6 +400,9 @@ mod tests {
         assert!(actions.contains(&"create_shape"));
         assert!(actions.contains(&"create_text"));
         assert!(actions.contains(&"csg_boolean"));
+        assert!(actions.contains(&"export_gltf"));
+        assert!(actions.contains(&"save_project"));
+        assert!(actions.contains(&"load_project"));
     }
 
     #[tokio::test]

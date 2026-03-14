@@ -114,6 +114,33 @@ export function App(): React.JSX.Element {
         case 'latency:response':
           // Echo back latency response (handled by LatencyTester component)
           break;
+        case 'exportComplete':
+          // Export GLB completed — no-op (extension shows save dialog)
+          break;
+        case 'projectSaved':
+          // Project saved — no-op (extension shows save dialog)
+          break;
+        case 'projectLoaded': {
+          // Restore scene and editor state from .nkm project
+          const { snapshot: projSnapshot, editorState } = message;
+          if (projSnapshot.nodes) {
+            useModelStore.getState().setSceneNodes(projSnapshot.nodes);
+          }
+          if (projSnapshot.animations) {
+            const clipInfos: AnimationClipInfo[] = projSnapshot.animations.map(
+              (a: AnimationClipInfo) => ({
+                name: a.name,
+                duration: a.duration,
+                channelCount: a.channelCount,
+              }),
+            );
+            setAnimationClips(clipInfos);
+          }
+          if (editorState && typeof editorState === 'object') {
+            useModelStore.getState().restoreEditorState(editorState as Record<string, unknown>);
+          }
+          break;
+        }
         default:
           break;
       }
@@ -225,6 +252,22 @@ export function App(): React.JSX.Element {
           }`}
         >
           CSG
+        </button>
+        <div className="w-px h-4 bg-[var(--vscode-panel-border)]" />
+        <button
+          onClick={() => vscode?.postMessage({ type: 'exportGlb' })}
+          className="px-2 py-1 text-xs rounded transition-colors bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]"
+        >
+          导出 GLB
+        </button>
+        <button
+          onClick={() => {
+            const editorState = useModelStore.getState().getEditorState();
+            vscode?.postMessage({ type: 'saveProject', editorState });
+          }}
+          className="px-2 py-1 text-xs rounded transition-colors bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]"
+        >
+          保存项目
         </button>
       </div>
 

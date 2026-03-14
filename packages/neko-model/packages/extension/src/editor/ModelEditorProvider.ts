@@ -100,16 +100,24 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   ): Promise<void> {
     switch (message.type) {
       case 'ready': {
-        // Send model file URI to webview for R3F direct loading
-        const modelUri = webviewPanel.webview.asWebviewUri(document.uri);
-        webviewPanel.webview.postMessage({
-          type: 'loadModel',
-          uri: modelUri.toString(),
-          filePath: document.uri.fsPath,
-        });
+        const filePath = document.uri.fsPath;
+        const isProject = filePath.endsWith('.nkm');
 
-        // Also load in engine backend if available
-        await this.loadModelInEngine(document.uri.fsPath, webviewPanel);
+        if (isProject) {
+          // Load .nkm project file via engine backend
+          await this.loadProjectInEngine(filePath, webviewPanel);
+        } else {
+          // Send model file URI to webview for R3F direct loading
+          const modelUri = webviewPanel.webview.asWebviewUri(document.uri);
+          webviewPanel.webview.postMessage({
+            type: 'loadModel',
+            uri: modelUri.toString(),
+            filePath,
+          });
+
+          // Also load in engine backend if available
+          await this.loadModelInEngine(filePath, webviewPanel);
+        }
         break;
       }
 
@@ -258,6 +266,65 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         break;
       }
 
+      case 'exportGlb': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          const result = await client.exportGlb();
+          // Decode base64 and write to file
+          const saveUri = await vscode.window.showSaveDialog({
+            filters: { 'GLB Files': ['glb'] },
+            defaultUri: vscode.Uri.file(document.uri.fsPath.replace(/\.[^.]+$/, '.glb')),
+          });
+          if (saveUri) {
+            const binaryStr = Buffer.from(result.data, 'base64');
+            await vscode.workspace.fs.writeFile(saveUri, binaryStr);
+            webviewPanel.webview.postMessage({
+              type: 'exportComplete',
+              success: true,
+              filePath: saveUri.fsPath,
+            });
+          }
+        } catch (err) {
+          this.logError('exportGlb', err);
+          webviewPanel.webview.postMessage({
+            type: 'exportComplete',
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+        break;
+      }
+
+      case 'saveProject': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          const saveUri = await vscode.window.showSaveDialog({
+            filters: { 'Neko Model Project': ['nkm'] },
+            defaultUri: vscode.Uri.file(document.uri.fsPath.replace(/\.[^.]+$/, '.nkm')),
+          });
+          if (saveUri) {
+            await client.saveProject(saveUri.fsPath, message.editorState);
+            webviewPanel.webview.postMessage({
+              type: 'projectSaved',
+              success: true,
+              filePath: saveUri.fsPath,
+            });
+          }
+        } catch (err) {
+          this.logError('saveProject', err);
+          webviewPanel.webview.postMessage({
+            type: 'projectSaved',
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+        break;
+      }
+
       default:
         break;
     }
@@ -281,6 +348,28 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       });
     } catch (err) {
       this.logError('loadModel', err);
+    }
+  }
+
+  /**
+   * Load a .nkm project file via the engine backend and send snapshot + editor state to webview.
+   */
+  private async loadProjectInEngine(
+    filePath: string,
+    webviewPanel: vscode.WebviewPanel,
+  ): Promise<void> {
+    const client = await this.ensureEngineClient();
+    if (!client) return;
+
+    try {
+      const result = await client.loadProject(filePath);
+      webviewPanel.webview.postMessage({
+        type: 'projectLoaded',
+        snapshot: result.snapshot,
+        editorState: result.editorState,
+      });
+    } catch (err) {
+      this.logError('loadProject', err);
     }
   }
 

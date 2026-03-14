@@ -10,7 +10,9 @@ use crate::services::scene::ISceneService;
 use neko_native_scene::components::{
     GlobalTransform, MeshRef, NodeName, SceneNodeId, Transform,
 };
+use neko_native_scene::exporter::{self, ExportNode};
 use neko_native_scene::procedural_mesh::ProceduralMesh;
+use neko_native_scene::project::NkmProject;
 use neko_native_scene::world::{
     AnimationClipInfo, BevySceneWorld, SceneDelta, SceneSnapshot, SceneWorld,
 };
@@ -348,6 +350,142 @@ impl ISceneService for SceneService {
                 background_color,
             )
             .map_err(|e| Error::Other(format!("PBR render failed: {}", e)))
+    }
+
+    fn export_glb(&self) -> Result<Vec<u8>> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+
+        let snapshot = world.get_snapshot();
+
+        // Build ExportNodes by querying MeshRef URIs from ECS
+        let export_nodes: Vec<ExportNode> = {
+            let ecs = world.ecs_world_mut();
+            snapshot
+                .nodes
+                .iter()
+                .map(|node| {
+                    let mesh_uri = if node.has_mesh {
+                        find_mesh_uri(ecs, &node.id).ok()
+                    } else {
+                        None
+                    };
+                    ExportNode {
+                        snapshot: node.clone(),
+                        mesh_uri,
+                    }
+                })
+                .collect()
+        };
+
+        let pm = self
+            .procedural_meshes
+            .lock()
+            .map_err(|e| Error::Other(format!("Procedural meshes lock poisoned: {}", e)))?;
+
+        exporter::export_glb(&export_nodes, &pm)
+            .map_err(|e| Error::Other(format!("GLB export failed: {}", e)))
+    }
+
+    fn save_project(
+        &self,
+        path: &str,
+        editor_state: serde_json::Value,
+    ) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+
+        let snapshot = world.get_snapshot();
+
+        // Build node_id → mesh_uri mapping from ECS
+        let node_mesh_map: HashMap<String, String> = {
+            let ecs = world.ecs_world_mut();
+            let mut query = ecs.query::<(&SceneNodeId, &MeshRef)>();
+            query
+                .iter(ecs)
+                .map(|(id, mesh_ref)| (id.0.clone(), mesh_ref.uri.clone()))
+                .collect()
+        };
+
+        let pm = self
+            .procedural_meshes
+            .lock()
+            .map_err(|e| Error::Other(format!("Procedural meshes lock poisoned: {}", e)))?;
+
+        let project = NkmProject::from_scene(
+            vec![], // TODO(P2): track source model paths
+            pm.clone(),
+            snapshot,
+            node_mesh_map,
+            editor_state,
+        );
+
+        project
+            .save(Path::new(path))
+            .map_err(|e| Error::Other(format!("Project save failed: {}", e)))
+    }
+
+    fn load_project(
+        &self,
+        path: &str,
+    ) -> Result<(SceneSnapshot, serde_json::Value)> {
+        let project = NkmProject::load(Path::new(path))
+            .map_err(|e| Error::Other(format!("Project load failed: {}", e)))?;
+
+        // Restore scene world from snapshot
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+
+        world.restore_snapshot(&project.scene_snapshot);
+
+        // Restore procedural meshes and re-register in GPU cache
+        {
+            let mut pm = self
+                .procedural_meshes
+                .lock()
+                .map_err(|e| Error::Other(format!("Procedural meshes lock poisoned: {}", e)))?;
+            *pm = project.procedural_meshes.clone();
+
+            if let Some(cache_mutex) = &self.asset_cache {
+                let mut cache = cache_mutex
+                    .lock()
+                    .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
+                for (uri, mesh) in &*pm {
+                    if let Err(e) = cache.register_procedural_mesh(uri, 0, mesh) {
+                        tracing::warn!("Failed to re-register mesh '{}' in GPU cache: {}", uri, e);
+                    }
+                }
+            }
+        }
+
+        // Re-add MeshRef components using the saved node_mesh_map
+        {
+            let ecs = world.ecs_world_mut();
+            for (node_id, mesh_uri) in &project.node_mesh_map {
+                let entity = {
+                    let mut query = ecs.query::<(bevy_ecs::prelude::Entity, &SceneNodeId)>();
+                    query
+                        .iter(ecs)
+                        .find(|(_, id)| id.0 == *node_id)
+                        .map(|(e, _)| e)
+                };
+                if let Some(entity) = entity {
+                    ecs.entity_mut(entity).insert(MeshRef {
+                        uri: mesh_uri.clone(),
+                        primitive_index: 0,
+                    });
+                }
+            }
+        }
+
+        let final_snapshot = world.get_snapshot();
+        Ok((final_snapshot, project.editor_state))
     }
 }
 

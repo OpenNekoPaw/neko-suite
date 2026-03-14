@@ -89,9 +89,13 @@ export interface ModelState {
   toggleTextEditor: () => void;
   toggleShapeCreator: () => void;
   setCsgOperand: (slot: 'A' | 'B', nodeId: string | null) => void;
+
+  // Actions — Project
+  getEditorState: () => Record<string, unknown>;
+  restoreEditorState: (state: Record<string, unknown>) => void;
 }
 
-export const useModelStore = create<ModelState>((set) => ({
+export const useModelStore = create<ModelState>((set, get) => ({
   // Initial state
   sceneNodes: [],
   selectedNodeId: null,
@@ -186,4 +190,29 @@ export const useModelStore = create<ModelState>((set) => ({
 
   setCsgOperand: (slot, nodeId) =>
     set(slot === 'A' ? { csgOperandA: nodeId } : { csgOperandB: nodeId }),
+
+  // Project actions
+  getEditorState: () => {
+    const s = get();
+    return {
+      selectedNodeId: s.selectedNodeId,
+      transformMode: s.transformMode,
+      isFaceEditorOpen: s.isFaceEditorOpen,
+      isBoneExpressionOpen: s.isBoneExpressionOpen,
+      isCsgPanelOpen: s.isCsgPanelOpen,
+      isTextEditorOpen: s.isTextEditorOpen,
+      isShapeCreatorOpen: s.isShapeCreatorOpen,
+    };
+  },
+
+  restoreEditorState: (state) =>
+    set({
+      selectedNodeId: (state['selectedNodeId'] as string | null) ?? null,
+      transformMode: (state['transformMode'] as ModelState['transformMode']) ?? 'translate',
+      isFaceEditorOpen: (state['isFaceEditorOpen'] as boolean) ?? false,
+      isBoneExpressionOpen: (state['isBoneExpressionOpen'] as boolean) ?? false,
+      isCsgPanelOpen: (state['isCsgPanelOpen'] as boolean) ?? false,
+      isTextEditorOpen: (state['isTextEditorOpen'] as boolean) ?? false,
+      isShapeCreatorOpen: (state['isShapeCreatorOpen'] as boolean) ?? false,
+    }),
 }));

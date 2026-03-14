@@ -63,4 +63,20 @@ pub trait ISceneService: Send + Sync {
         camera_override: Option<&CameraParams>,
         background_color: Option<[f32; 4]>,
     ) -> crate::error::Result<SceneRenderOutput>;
+
+    /// Export the current scene to GLB binary format
+    fn export_glb(&self) -> crate::error::Result<Vec<u8>>;
+
+    /// Save the current scene as a .nkm project file
+    fn save_project(
+        &self,
+        path: &str,
+        editor_state: serde_json::Value,
+    ) -> crate::error::Result<()>;
+
+    /// Load a .nkm project file and restore the scene
+    fn load_project(
+        &self,
+        path: &str,
+    ) -> crate::error::Result<(SceneSnapshot, serde_json::Value)>;
 }

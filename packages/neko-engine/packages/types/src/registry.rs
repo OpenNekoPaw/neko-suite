@@ -120,6 +120,9 @@ pub mod actions {
         "create_shape",
         "create_text",
         "csg_boolean",
+        "export_gltf",
+        "save_project",
+        "load_project",
     ];
 
     pub const PUPPETS: &[&str] = &[

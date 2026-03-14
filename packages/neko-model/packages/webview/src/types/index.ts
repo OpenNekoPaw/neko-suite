@@ -51,7 +51,10 @@ export type ExtensionMessage =
   | { type: 'keyboardAction'; action: string }
   | { type: 'sceneSnapshot'; snapshot: SceneSnapshot }
   | { type: 'sceneDelta'; delta: SceneDelta }
-  | { type: 'latency:response'; timestamp: number };
+  | { type: 'latency:response'; timestamp: number }
+  | { type: 'exportComplete'; success: boolean; filePath?: string; error?: string }
+  | { type: 'projectSaved'; success: boolean; filePath?: string; error?: string }
+  | { type: 'projectLoaded'; snapshot: SceneSnapshot; editorState: unknown };
 
 /** Messages from Webview to Extension Host */
 export type WebviewMessage =
@@ -80,4 +83,6 @@ export type WebviewMessage =
       type: 'updateBoneTransform';
       nodeId: string;
       rotation: [number, number, number, number];
-    };
+    }
+  | { type: 'exportGlb' }
+  | { type: 'saveProject'; editorState: unknown };

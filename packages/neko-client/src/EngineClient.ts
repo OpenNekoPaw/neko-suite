@@ -532,6 +532,58 @@ export class EngineClient {
     return (resp.data as Record<string, unknown>) ?? {};
   }
 
+  /**
+   * Export the current scene to GLB binary format.
+   * Returns base64-encoded GLB data.
+   * Dispatches `scenes:export_gltf`.
+   */
+  async exportGlb(): Promise<{ data: string; byteLength: number }> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'export_gltf',
+      options: {},
+    });
+    this.assertOk(resp, 'scenes:export_gltf');
+    const result = resp.data as Record<string, unknown>;
+    return {
+      data: result['data'] as string,
+      byteLength: result['byteLength'] as number,
+    };
+  }
+
+  /**
+   * Save the current scene as a .nkm project file.
+   * Dispatches `scenes:save_project`.
+   */
+  async saveProject(path: string, editorState: unknown): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'save_project',
+      options: { path, editorState },
+    });
+    this.assertOk(resp, 'scenes:save_project');
+  }
+
+  /**
+   * Load a .nkm project file and restore the scene.
+   * Dispatches `scenes:load_project`.
+   */
+  async loadProject(
+    path: string,
+  ): Promise<{ snapshot: Record<string, unknown>; editorState: unknown }> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'load_project',
+      options: { path },
+    });
+    this.assertOk(resp, 'scenes:load_project');
+    const result = resp.data as Record<string, unknown>;
+    return {
+      snapshot: result['snapshot'] as Record<string, unknown>,
+      editorState: result['editorState'],
+    };
+  }
+
   // =========================================================================
   // 2D Puppets (Inochi2D / inox2d)
   // =========================================================================
