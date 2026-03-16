@@ -21,6 +21,8 @@ export interface PuppetStore {
   puppetParameters: ParameterInfo[];
   deformedMeshes: DeformedMesh[];
   isPlayingPhysics: boolean;
+  /** Whether the .nkp has no puppet.src linked (shows import UI) */
+  noPuppetSource: boolean;
 
   // ── Animation clip state ─────────────────────────────────────────────────
   /** All available animation clips from the loaded puppet */
@@ -41,6 +43,7 @@ export interface PuppetStore {
   setDeformedMeshes: (meshes: DeformedMesh[]) => void;
   updateParameterValue: (name: string, value: number) => void;
   setPlayingPhysics: (playing: boolean) => void;
+  setNoPuppetSource: (noPuppetSource: boolean) => void;
 
   setAnimations: (clips: AnimationClipInfo[]) => void;
   setCurrentAnimation: (name: string | null) => void;
@@ -58,6 +61,7 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
   puppetParameters: [],
   deformedMeshes: [],
   isPlayingPhysics: false,
+  noPuppetSource: false,
 
   // ── Animation clip state ─────────────────────────────────────────────────
   animations: [],
@@ -80,6 +84,7 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
     })),
 
   setPlayingPhysics: (playing) => set({ isPlayingPhysics: playing }),
+  setNoPuppetSource: (noPuppetSource) => set({ noPuppetSource }),
 
   setAnimations: (clips) => set({ animations: clips }),
   setCurrentAnimation: (name) => set({ currentAnimation: name }),

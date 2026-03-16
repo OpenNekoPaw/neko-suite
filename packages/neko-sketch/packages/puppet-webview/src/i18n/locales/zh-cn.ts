@@ -25,6 +25,10 @@ export const zhCN: MessageBundle = {
   'puppet.morph.stop': '停止变形动画',
   'puppet.morph.stopped': '已停止',
 
+  // Import
+  'puppet.import.title': '导入 Puppet (.inp)',
+  'puppet.import.dropHint': '拖入 .inp 文件或点击导入',
+
   // Status
   'puppet.status.ready': '就绪',
   'puppet.status.loading': '正在加载 Puppet...',

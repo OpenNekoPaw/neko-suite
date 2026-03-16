@@ -108,6 +108,8 @@ export const en: MessageBundle = {
   'sketch.scene.removeLayer': 'Remove {name}',
   'sketch.scene.deleteScene': 'Delete scene',
   'sketch.scene.activeScene': 'Active scene',
+  'sketch.scene.canvasLayer': 'Canvas layer',
+  'sketch.scene.canvasLayerNone': '(none)',
   'sketch.scene.defaultName': 'Scene {index}',
   'sketch.scene.defaultLayerName': 'Layer {index}',
 

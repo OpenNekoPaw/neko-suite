@@ -25,6 +25,10 @@ export const en: MessageBundle = {
   'puppet.morph.stop': 'Stop morph animation',
   'puppet.morph.stopped': 'Stopped',
 
+  // Import
+  'puppet.import.title': 'Import Puppet (.inp)',
+  'puppet.import.dropHint': 'Drop .inp file or click to import',
+
   // Status
   'puppet.status.ready': 'Ready',
   'puppet.status.loading': 'Loading puppet...',

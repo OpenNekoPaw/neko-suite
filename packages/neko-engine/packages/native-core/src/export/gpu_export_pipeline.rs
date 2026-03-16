@@ -38,14 +38,16 @@ use super::types::ExportSettings;
 ///
 /// Phase 2: operates on `&[u8]` RGBA buffers (CPU round-trip per effect).
 /// Future: GPU texture-to-texture pass for zero-copy effect chains.
-struct EffectDispatcher {
+///
+/// Used by both export pipeline and composite preview pipeline.
+pub struct EffectDispatcher {
     custom_shader: CustomShaderProcessor,
     blur_processor: GpuBlurProcessor,
     style_processor: GpuStyleProcessor,
 }
 
 impl EffectDispatcher {
-    fn new(ctx: Arc<GpuContext>) -> Result<Self> {
+    pub fn new(ctx: Arc<GpuContext>) -> Result<Self> {
         Ok(Self {
             custom_shader: CustomShaderProcessor::new(ctx.clone())?,
             blur_processor: GpuBlurProcessor::new(ctx.clone())?,
@@ -55,7 +57,7 @@ impl EffectDispatcher {
 
     /// Apply all enabled effects on an element in stack order.
     /// Returns the processed RGBA pixel buffer.
-    fn apply_effects(
+    pub fn apply_effects(
         &self,
         mut pixels: Vec<u8>,
         width: u32,

@@ -8,6 +8,7 @@ import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import type { SceneLayerType } from '../types/scene';
 import { SCENE_TEMPLATES } from '../data/scene-templates';
+import type { LayerData } from '../types';
 
 export function ScenePanel() {
   const { t } = useTranslation();
@@ -20,6 +21,7 @@ export function ScenePanel() {
   const removeSceneLayer = useSketchStore((s) => s.removeSceneLayer);
   const updateSceneLayer = useSketchStore((s) => s.updateSceneLayer);
   const updateCamera = useSketchStore((s) => s.updateCamera);
+  const canvasLayers: readonly LayerData[] = useSketchStore((s) => s.layers);
 
   const activeScene = scenes.find((s) => s.id === activeSceneId);
 
@@ -37,7 +39,7 @@ export function ScenePanel() {
       const newScene = state.scenes[state.scenes.length - 1];
       if (!newScene) return;
       for (const layer of tpl.layers) {
-        addSceneLayer(newScene.id, { ...layer, name: t(layer.nameKey) });
+        addSceneLayer(newScene.id, { ...layer, name: t(layer.nameKey), canvasLayerId: null });
       }
     },
     [createScene, addSceneLayer, t],
@@ -53,6 +55,7 @@ export function ScenePanel() {
       parallaxFactor: [1, 1],
       objects: [],
       visible: true,
+      canvasLayerId: null,
     });
   }, [activeSceneId, activeScene, addSceneLayer, t]);
 
@@ -141,34 +144,60 @@ export function ScenePanel() {
           {activeScene.layers.map((layer) => (
             <div
               key={layer.id}
-              className="flex items-center gap-1 text-[10px] mb-0.5 px-1 py-0.5 rounded border border-[var(--vscode-input-border)]"
+              className="flex flex-col gap-0.5 text-[10px] mb-0.5 px-1 py-0.5 rounded border border-[var(--vscode-input-border)]"
             >
-              <span className="flex-1 truncate">{layer.name}</span>
-              <span className="opacity-40 text-[9px]">
-                {layer.parallaxFactor[0].toFixed(1)}/{layer.parallaxFactor[1].toFixed(1)}
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={2}
-                step={0.1}
-                value={layer.parallaxFactor[0]}
-                onChange={(e) =>
-                  updateSceneLayer(activeScene.id, layer.id, {
-                    parallaxFactor: [parseFloat(e.target.value), layer.parallaxFactor[1]],
-                  })
-                }
-                className="w-12 h-2"
-                title={t('sketch.scene.parallaxX')}
-                aria-label={`${layer.name} ${t('sketch.scene.parallaxX')}`}
-              />
-              <button
-                className="text-red-400 text-[10px] px-0.5"
-                onClick={() => removeSceneLayer(activeScene.id, layer.id)}
-                aria-label={t('sketch.scene.removeLayer', { name: layer.name })}
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-1">
+                <span className="flex-1 truncate">{layer.name}</span>
+                <button
+                  className="text-red-400 text-[10px] px-0.5"
+                  onClick={() => removeSceneLayer(activeScene.id, layer.id)}
+                  aria-label={t('sketch.scene.removeLayer', { name: layer.name })}
+                >
+                  ✕
+                </button>
+              </div>
+              {/* Canvas layer binding */}
+              <div className="flex items-center gap-1">
+                <span className="opacity-60 w-10">{t('sketch.scene.canvasLayer')}</span>
+                <select
+                  className="flex-1 text-[10px] bg-transparent border border-[var(--vscode-input-border)] rounded px-0.5"
+                  value={layer.canvasLayerId ?? ''}
+                  onChange={(e) =>
+                    updateSceneLayer(activeScene.id, layer.id, {
+                      canvasLayerId: e.target.value || null,
+                    })
+                  }
+                  aria-label={`${layer.name} ${t('sketch.scene.canvasLayer')}`}
+                >
+                  <option value="">{t('sketch.scene.canvasLayerNone')}</option>
+                  {canvasLayers.map((cl) => (
+                    <option key={cl.id} value={cl.id}>
+                      {cl.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* Parallax factor */}
+              <div className="flex items-center gap-1">
+                <span className="opacity-40 text-[9px]">
+                  {layer.parallaxFactor[0].toFixed(1)}/{layer.parallaxFactor[1].toFixed(1)}
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  value={layer.parallaxFactor[0]}
+                  onChange={(e) =>
+                    updateSceneLayer(activeScene.id, layer.id, {
+                      parallaxFactor: [parseFloat(e.target.value), layer.parallaxFactor[1]],
+                    })
+                  }
+                  className="flex-1 h-2"
+                  title={t('sketch.scene.parallaxX')}
+                  aria-label={`${layer.name} ${t('sketch.scene.parallaxX')}`}
+                />
+              </div>
             </div>
           ))}
 

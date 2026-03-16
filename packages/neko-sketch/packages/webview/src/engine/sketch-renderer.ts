@@ -107,6 +107,7 @@ export class SketchRenderer implements ISketchRenderer {
     emitters: readonly ParticleEmitterConfig[],
     particlePreview: boolean,
     dt: number,
+    layerTransforms?: ReadonlyMap<string, Float32Array>,
   ): void {
     if (!this.initialized) return;
 
@@ -118,8 +119,8 @@ export class SketchRenderer implements ISketchRenderer {
             this._filterPipeline.applyFilters(tex, w, h, enabledFilters, this._filterRegistry)
         : undefined;
 
-    // Composite layers with optional filter chain
-    this._pipeline.compositeLayerStack(layers, viewport, filterFn);
+    // Composite layers with optional filter chain and per-layer parallax transforms
+    this._pipeline.compositeLayerStack(layers, viewport, filterFn, layerTransforms);
 
     // Render particles on top if preview is active
     if (particlePreview && emitters.length > 0) {

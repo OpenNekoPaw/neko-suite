@@ -31,6 +31,8 @@ export interface SceneLayer {
   readonly parallaxFactor: readonly [number, number];
   readonly objects: readonly SceneObject[];
   readonly visible: boolean;
+  /** Links this scene layer to a canvas LayerData by id for parallax rendering */
+  readonly canvasLayerId: string | null;
 }
 
 // ─── Camera ───

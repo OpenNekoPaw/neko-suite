@@ -7,7 +7,7 @@
 use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType};
 use crate::domain::{FrameData, MediaReference, StreamConfig, Timeline, TimelineProjectInfo};
 use crate::error::{Error, Result};
-use crate::export::{AudioMixer, ExportSettings, ExportStats};
+use crate::export::{AudioMixer, EffectDispatcher, ExportSettings, ExportStats};
 use crate::gpu::{
     BlendMode as GpuBlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext,
     LayerPixelFormat, Nv12Renderer, Nv12TextureImporter,
@@ -431,7 +431,24 @@ impl ITimelineService for TimelineService {
                 .await
                 .map_err(|e| Error::Other(format!("Element decode task failed: {}", e)))??;
 
-            let (rgba_data, src_width, src_height) = decoded_rgba;
+            let (mut rgba_data, src_width, src_height) = decoded_rgba;
+
+            // Apply effects to decoded RGBA frame (Phase 2 GPU pipeline)
+            if !element.effects.is_empty() {
+                match EffectDispatcher::new(gpu_ctx.clone()) {
+                    Ok(dispatcher) => {
+                        match dispatcher.apply_effects(rgba_data, src_width, src_height, &element.effects) {
+                            Ok(processed) => rgba_data = processed,
+                            Err(e) => {
+                                tracing::warn!("Effects processing failed for element '{}', using unprocessed frame: {}", element.id, e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to create EffectDispatcher for composite: {}", e);
+                    }
+                }
+            }
 
             // Build transform — apply same coordinate conversion as GpuExportPipeline
             let mut transform = element.to_transform_2d();

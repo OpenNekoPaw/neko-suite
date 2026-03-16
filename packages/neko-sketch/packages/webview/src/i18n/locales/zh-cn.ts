@@ -108,6 +108,8 @@ export const zhCN: MessageBundle = {
   'sketch.scene.removeLayer': '移除 {name}',
   'sketch.scene.deleteScene': '删除场景',
   'sketch.scene.activeScene': '活动场景',
+  'sketch.scene.canvasLayer': '画布图层',
+  'sketch.scene.canvasLayerNone': '（无）',
   'sketch.scene.defaultName': '场景 {index}',
   'sketch.scene.defaultLayerName': '图层 {index}',
 

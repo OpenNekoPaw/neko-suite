@@ -47,10 +47,20 @@
         "displayName": "%neko.sketch.puppet.title%",
         "selector": [
           {
-            "filenamePattern": "*.inp"
+            "filenamePattern": "*.nkp"
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "neko.puppetEditor",
+        "displayName": "%neko.sketch.puppet.title%",
+        "selector": [
+          {
+            "filenamePattern": "*.inp"
+          }
+        ],
+        "priority": "option"
       },
       {
         "viewType": "neko.sketchEditor",
@@ -77,6 +87,11 @@
       {
         "command": "neko.sketch.new",
         "title": "%neko.sketch.new.title%",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.puppet.new",
+        "title": "%neko.puppet.new.title%",
         "category": "NekoSketch"
       },
       {
@@ -180,6 +195,11 @@
         {
           "command": "neko.sketch.new",
           "group": "navigation@10",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "neko.puppet.new",
+          "group": "navigation@11",
           "when": "explorerResourceIsFolder"
         }
       ]

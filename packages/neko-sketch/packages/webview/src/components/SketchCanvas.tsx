@@ -28,6 +28,7 @@ import { createRectangle, createEllipse } from '../tools/vector-tool';
 import { renderPaths } from '../engine/vector-renderer';
 import { computeOnionSkinGhosts } from '../utils/frame-manager';
 import { atmosphereToEmitter } from '../data/atmosphere-presets';
+import { computeParallaxOffsets, buildParallaxTransform } from '../engine/parallax-renderer';
 import { PixelGrid } from './PixelGrid';
 
 // ─── Helpers ───
@@ -382,24 +383,23 @@ export function SketchCanvas() {
       const entry = entries[0];
       if (!entry) return;
       const { width, height } = entry.contentRect;
+      if (width <= 0 || height <= 0) return;
       const dpr = window.devicePixelRatio || 1;
       const w = Math.round(width * dpr);
       const h = Math.round(height * dpr);
-      if (w > 0 && h > 0 && (el.width !== w || el.height !== h)) {
-        el.width = w;
-        el.height = h;
-        rendererRef.current?.resize(w, h);
+      if (el.width !== w || el.height !== h) {
+        // WebGLContext.resize expects CSS pixels and applies DPR internally.
+        rendererRef.current?.resize(width, height);
         needsRenderRef.current = true;
       }
-      if (w > 0 && h > 0) {
-        if (onionEl) {
-          onionEl.width = w;
-          onionEl.height = h;
-        }
-        if (vectorEl) {
-          vectorEl.width = w;
-          vectorEl.height = h;
-        }
+      // Keep overlay canvases at device pixel resolution
+      if (onionEl) {
+        onionEl.width = w;
+        onionEl.height = h;
+      }
+      if (vectorEl) {
+        vectorEl.width = w;
+        vectorEl.height = h;
       }
     });
     observer.observe(el);
@@ -477,6 +477,27 @@ export function SketchCanvas() {
             layersToRender = mutable;
           }
 
+          // Compute per-layer parallax transforms when a scene is active
+          let layerTransforms: Map<string, Float32Array> | undefined;
+          if (activeScene) {
+            const views = computeParallaxOffsets(activeScene.layers, activeScene.camera);
+            const el = canvasRef.current;
+            if (el) {
+              const cssW = el.clientWidth;
+              const cssH = el.clientHeight;
+              layerTransforms = new Map();
+              for (const view of views) {
+                const sl = activeScene.layers.find((l) => l.id === view.layerId);
+                if (sl?.canvasLayerId) {
+                  layerTransforms.set(
+                    sl.canvasLayerId,
+                    buildParallaxTransform(view, activeScene.camera, cssW, cssH),
+                  );
+                }
+              }
+            }
+          }
+
           renderer.renderWithEffects(
             layersToRender,
             state.viewport,
@@ -484,6 +505,7 @@ export function SketchCanvas() {
             emittersForRender,
             emittersForRender.length > 0,
             dt,
+            layerTransforms,
           );
 
           // Onion skin overlay (P0)
@@ -873,7 +895,9 @@ export function SketchCanvas() {
           const layerPixels = renderer.textures.readPixels(layerFbo, 0, 0, w, h);
           renderer.textures.deleteFramebuffer(layerFbo);
 
-          // Alpha composite stroke over layer
+          // Alpha composite stroke over layer.
+          // Stroke FBO pixels are in premultiplied alpha format (GPU blending
+          // outputs rgb = color.rgb * alpha, a = alpha). Layer pixels are straight.
           const isEraser = activeTool === 'eraser';
           for (let i = 0; i < strokePixels.length; i += 4) {
             const sa = strokePixels[i + 3]! / 255;
@@ -882,17 +906,29 @@ export function SketchCanvas() {
                 // Eraser: reduce layer alpha
                 layerPixels[i + 3] = Math.round(Math.max(0, layerPixels[i + 3]! * (1 - sa)));
               } else {
-                // Normal: alpha composite
-                layerPixels[i] = Math.round(strokePixels[i]! * sa + layerPixels[i]! * (1 - sa));
-                layerPixels[i + 1] = Math.round(
-                  strokePixels[i + 1]! * sa + layerPixels[i + 1]! * (1 - sa),
-                );
-                layerPixels[i + 2] = Math.round(
-                  strokePixels[i + 2]! * sa + layerPixels[i + 2]! * (1 - sa),
-                );
-                layerPixels[i + 3] = Math.round(
-                  Math.min(255, strokePixels[i + 3]! + layerPixels[i + 3]! * (1 - sa)),
-                );
+                // Premultiplied-over-straight composite:
+                // Convert layer to premultiplied, blend, then convert back.
+                const da = layerPixels[i + 3]! / 255;
+                const outA = sa + da * (1 - sa);
+                if (outA > 0) {
+                  const invA = 1 / outA;
+                  layerPixels[i] = Math.round(
+                    Math.min(255, (strokePixels[i]! + layerPixels[i]! * da * (1 - sa)) * invA),
+                  );
+                  layerPixels[i + 1] = Math.round(
+                    Math.min(
+                      255,
+                      (strokePixels[i + 1]! + layerPixels[i + 1]! * da * (1 - sa)) * invA,
+                    ),
+                  );
+                  layerPixels[i + 2] = Math.round(
+                    Math.min(
+                      255,
+                      (strokePixels[i + 2]! + layerPixels[i + 2]! * da * (1 - sa)) * invA,
+                    ),
+                  );
+                }
+                layerPixels[i + 3] = Math.round(Math.min(255, outA * 255));
               }
             }
           }

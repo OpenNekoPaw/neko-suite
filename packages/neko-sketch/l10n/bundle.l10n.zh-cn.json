@@ -2,5 +2,8 @@
   "neko.sketch.editor.title": "素描编辑器",
   "neko.sketch.layerOutline.title": "图层",
   "neko.sketch.new.title": "新建素描",
-  "neko.sketch.new.noFolder": "未打开工作区文件夹"
+  "neko.sketch.new.noFolder": "未打开工作区文件夹",
+  "neko.puppet.new.title": "新建 Puppet",
+  "neko.puppet.new.noFolder": "未打开工作区文件夹",
+  "neko.puppet.import.filter": "Inochi2D Puppet"
 }

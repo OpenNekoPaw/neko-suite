@@ -15,6 +15,7 @@ export interface SceneTemplate {
     readonly parallaxFactor: readonly [number, number];
     readonly objects: readonly [];
     readonly visible: boolean;
+    readonly canvasLayerId: string | null;
   }[];
 }
 
@@ -30,6 +31,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         parallaxFactor: [0.2, 0.1],
         objects: [],
         visible: true,
+        canvasLayerId: null,
       },
       {
         nameKey: 'sketch.template.layer.mountains',
@@ -38,6 +40,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         parallaxFactor: [0.5, 0.3],
         objects: [],
         visible: true,
+        canvasLayerId: null,
       },
       {
         nameKey: 'sketch.template.layer.foreground',
@@ -46,6 +49,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         parallaxFactor: [1.0, 1.0],
         objects: [],
         visible: true,
+        canvasLayerId: null,
       },
     ],
   },
@@ -60,6 +64,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         parallaxFactor: [1, 1],
         objects: [],
         visible: true,
+        canvasLayerId: null,
       },
       {
         nameKey: 'sketch.template.layer.objects',
@@ -68,6 +73,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         parallaxFactor: [1, 1],
         objects: [],
         visible: true,
+        canvasLayerId: null,
       },
     ],
   },
@@ -82,6 +88,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         parallaxFactor: [0.8, 0.8],
         objects: [],
         visible: true,
+        canvasLayerId: null,
       },
       {
         nameKey: 'sketch.template.layer.characters',
@@ -90,6 +97,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         parallaxFactor: [1, 1],
         objects: [],
         visible: true,
+        canvasLayerId: null,
       },
     ],
   },
@@ -104,6 +112,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         parallaxFactor: [0.1, 0],
         objects: [],
         visible: true,
+        canvasLayerId: null,
       },
       {
         nameKey: 'sketch.template.layer.farBg',
@@ -112,6 +121,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         parallaxFactor: [0.3, 0.1],
         objects: [],
         visible: true,
+        canvasLayerId: null,
       },
       {
         nameKey: 'sketch.template.layer.nearBg',
@@ -120,6 +130,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         parallaxFactor: [0.6, 0.3],
         objects: [],
         visible: true,
+        canvasLayerId: null,
       },
       {
         nameKey: 'sketch.template.layer.gameplay',
@@ -128,6 +139,7 @@ export const SCENE_TEMPLATES: readonly SceneTemplate[] = [
         parallaxFactor: [1.0, 1.0],
         objects: [],
         visible: true,
+        canvasLayerId: null,
       },
     ],
   },

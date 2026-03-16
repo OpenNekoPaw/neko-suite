@@ -93,6 +93,7 @@ export class RenderPipeline implements IRenderPipeline {
     layers: ReadonlyArray<LayerData>,
     viewport: ViewportState,
     filterFn?: (compositeTex: WebGLTexture, width: number, height: number) => WebGLTexture,
+    layerTransforms?: ReadonlyMap<string, Float32Array>,
   ): void {
     const gl = this.gl;
     if (layers.length === 0) return;
@@ -148,7 +149,7 @@ export class RenderPipeline implements IRenderPipeline {
 
       gl.uniform1f(opacityLoc, layer.opacity);
       gl.uniform1i(modeLoc, modeIndex);
-      gl.uniformMatrix3fv(transformLoc, false, identity3());
+      gl.uniformMatrix3fv(transformLoc, false, layerTransforms?.get(layer.id) ?? identity3());
 
       this.drawQuad();
 
@@ -220,7 +221,9 @@ export class RenderPipeline implements IRenderPipeline {
     gl.bufferData(gl.ARRAY_BUFFER, points, gl.DYNAMIC_DRAW);
 
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // Use separate blend for alpha channel to avoid squaring alpha.
+    // RGB: standard alpha blend; Alpha: additive (correct coverage accumulation).
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.POINTS, 0, pointCount);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -259,18 +262,25 @@ export class RenderPipeline implements IRenderPipeline {
 
   private buildViewportTransform(
     viewport: ViewportState,
-    canvasW: number,
-    canvasH: number,
+    _canvasW: number,
+    _canvasH: number,
   ): Float32Array {
     const { panX, panY, zoom } = viewport;
-    // Scale + translate in NDC.
-    // Must match the inverse model used by screenToCanvas():
-    //   docX = screenX / zoom - panX / zoom
-    // Forward: clipX = zoom * ndcX + (zoom - 1) + panX/canvasW * 2
+    // panX/panY are in CSS pixels (from pointer events / zoom handler).
+    // gl.canvas.width is in device pixels (CSS * DPR). We must use CSS pixel
+    // dimensions for the pan-to-NDC conversion to avoid DPR-dependent offset.
+    const el = this.gl.canvas as HTMLCanvasElement;
+    const cssW = el.clientWidth || _canvasW;
+    const cssH = el.clientHeight || _canvasH;
+
+    // Forward transform matching screenToCanvas() inverse:
+    //   docX = (screenX - panX) / zoom  →  screenX = zoom * docX + panX
+    // Composite texture u = docX/docW, ndcX = 2u - 1.
+    // Since init sets style.width = docW, cssW ≈ docW → sx = zoom.
     const sx = zoom;
     const sy = zoom;
-    const tx = zoom - 1 + (panX / canvasW) * 2;
-    const ty = 1 - zoom - (panY / canvasH) * 2;
+    const tx = zoom - 1 + (panX / cssW) * 2;
+    const ty = 1 - zoom - (panY / cssH) * 2;
 
     return new Float32Array([sx, 0, 0, 0, sy, 0, tx, ty, 1]);
   }

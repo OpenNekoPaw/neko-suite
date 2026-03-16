@@ -40,14 +40,17 @@ export function computeParallaxOffsets(
  */
 export function buildParallaxTransform(
   view: ParallaxLayerView,
-  camera: CameraConfig,
+  _camera: CameraConfig,
   canvasWidth: number,
   canvasHeight: number,
 ): Float32Array {
-  const sx = camera.zoom;
-  const sy = camera.zoom;
+  // No scaling — zoom is handled by the viewport transform in the final blit pass.
+  // canvasWidth/Height must be CSS pixels (consistent with viewport transform).
+  const sx = 1.0;
+  const sy = 1.0;
   const tx = (view.offsetX / canvasWidth) * 2;
-  const ty = (view.offsetY / canvasHeight) * 2;
+  // Flip Y: texture coords have Y-up, but camera.y positive is downward
+  const ty = -(view.offsetY / canvasHeight) * 2;
 
   return new Float32Array([sx, 0, 0, 0, sy, 0, tx, ty, 1]);
 }

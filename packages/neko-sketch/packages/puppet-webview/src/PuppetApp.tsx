@@ -13,7 +13,7 @@ import { PuppetNodeTree } from './components/PuppetNodeTree';
 import { Inochi2DController } from './animation';
 import { usePuppetPlayback } from './hooks/usePuppetPlayback';
 import { i18nService, setLocale } from './i18n';
-import { I18nProvider } from './i18n/I18nContext';
+import { I18nProvider, useTranslation } from './i18n/I18nContext';
 import type { SupportedLocale } from '@neko/shared';
 import { EngineClient } from '@neko/neko-client';
 
@@ -26,10 +26,65 @@ interface VsCodeApi {
   setState(state: unknown): void;
 }
 
+/** Debounce timer ref for parameter save */
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Send current parameters to extension for persistence */
+function saveParametersToExtension(): void {
+  const params = usePuppetStore.getState().puppetParameters;
+  const paramMap: Record<string, number> = {};
+  for (const p of params) {
+    paramMap[p.name] = p.current;
+  }
+  vscode.postMessage({ type: 'state:save', parameters: paramMap });
+}
+
+/** Debounced parameter save (300ms) */
+function debouncedSaveParameters(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveParametersToExtension, 300);
+}
+
+function PuppetLoadedPlaceholder() {
+  const { t } = useTranslation();
+  return <span>{t('puppet.status.loaded')}</span>;
+}
+
+function PuppetWaitingPlaceholder() {
+  const { t } = useTranslation();
+  return <span>{t('puppet.status.loading')}</span>;
+}
+
+/** Import UI shown when .nkp has no puppet.src linked */
+function PuppetImportUI() {
+  const { t } = useTranslation();
+
+  const handleImport = useCallback(() => {
+    vscode.postMessage({ type: 'puppet:import' });
+  }, []);
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm">
+      <div className="opacity-50">{t('puppet.import.dropHint')}</div>
+      <button
+        type="button"
+        onClick={handleImport}
+        className="px-4 py-2 rounded bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] cursor-pointer"
+      >
+        {t('puppet.import.title')}
+      </button>
+    </div>
+  );
+}
+
 export function PuppetApp() {
   const controllerRef = useRef<Inochi2DController | null>(null);
   const { onPlay, onStop, onSeek } = usePuppetPlayback(controllerRef.current);
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
+  const noPuppetSource = usePuppetStore((s) => s.noPuppetSource);
+
+  /** Pending parameter overrides received before puppet loads */
+  const pendingStateRef = useRef<Record<string, number> | null>(null);
 
   // Notify extension that webview is ready
   useEffect(() => {
@@ -65,14 +120,55 @@ export function PuppetApp() {
           const store = usePuppetStore.getState();
           store.setPuppetSnapshot(snapshot);
           store.setPuppetLoaded(true);
+          store.setNoPuppetSource(false);
 
           // Load parameters and animations
           const params = await ctrl.getParameters();
           store.setPuppetParameters(params);
 
+          // Apply pending parameter overrides if any
+          const pending = pendingStateRef.current;
+          if (pending) {
+            pendingStateRef.current = null;
+            for (const p of params) {
+              const override = pending[p.name];
+              if (override !== undefined) {
+                store.updateParameterValue(p.name, override);
+                void ctrl.setParameter(p.name, override);
+              }
+            }
+          }
+
           const anims = await ctrl.getAnimations();
           store.setAnimations(anims);
         });
+        break;
+      }
+
+      case 'loadState': {
+        // Parameter overrides from .nkp project
+        const store = usePuppetStore.getState();
+        if (store.puppetLoaded && controllerRef.current) {
+          // Apply immediately
+          const ctrl = controllerRef.current;
+          for (const [name, value] of Object.entries(msg.parameters)) {
+            store.updateParameterValue(name, value);
+            void ctrl.setParameter(name, value);
+          }
+        } else {
+          // Buffer until puppet loads
+          pendingStateRef.current = msg.parameters;
+        }
+        break;
+      }
+
+      case 'noPuppetSource': {
+        usePuppetStore.getState().setNoPuppetSource(true);
+        break;
+      }
+
+      case 'puppetImported': {
+        usePuppetStore.getState().setNoPuppetSource(false);
         break;
       }
 
@@ -91,13 +187,33 @@ export function PuppetApp() {
     return () => window.removeEventListener('message', handleMessage);
   }, [handleMessage]);
 
+  // Subscribe to parameter changes and debounce-save to extension
+  useEffect(() => {
+    let prev = usePuppetStore.getState().puppetParameters;
+    const unsub = usePuppetStore.subscribe((state) => {
+      if (state.puppetParameters !== prev) {
+        prev = state.puppetParameters;
+        if (state.puppetLoaded) {
+          debouncedSaveParameters();
+        }
+      }
+    });
+    return unsub;
+  }, []);
+
   return (
     <I18nProvider service={i18nService}>
       <div className="flex flex-col h-screen w-screen overflow-hidden">
         <div className="flex flex-1 overflow-hidden">
-          {/* Future: mesh rendering canvas goes here */}
+          {/* Main content area */}
           <div className="flex-1 flex items-center justify-center text-sm opacity-50">
-            {puppetLoaded ? 'Puppet loaded — mesh rendering TODO' : 'Waiting for puppet data...'}
+            {noPuppetSource ? (
+              <PuppetImportUI />
+            ) : puppetLoaded ? (
+              <PuppetLoadedPlaceholder />
+            ) : (
+              <PuppetWaitingPlaceholder />
+            )}
           </div>
 
           {/* Right side panels */}

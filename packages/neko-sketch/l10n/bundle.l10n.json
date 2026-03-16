@@ -4,5 +4,8 @@
   "neko.sketch.new.title": "New Sketch",
   "neko.sketch.new.noFolder": "No workspace folder open",
   "neko.sketch.puppet.title": "Puppet Editor",
-  "neko.sketch.editImage.title": "Edit in Sketch"
+  "neko.sketch.editImage.title": "Edit in Sketch",
+  "neko.puppet.new.title": "New Puppet",
+  "neko.puppet.new.noFolder": "No workspace folder open",
+  "neko.puppet.import.filter": "Inochi2D Puppet"
 }
