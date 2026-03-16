@@ -234,15 +234,25 @@ class OpenAIHttpHelper {
     const id = modelId.toLowerCase();
     const capabilities: ModelInfoCapability[] = [];
 
+    // Reasoning models (o1, o3, codex, etc.) — no temperature/topP support
+    const isReasoning =
+      id.startsWith('o1') || id.startsWith('o3') || id.startsWith('o4') || id.includes('codex');
+
     // Chat models
     if (
       id.startsWith('gpt-') ||
       id.startsWith('o1') ||
+      id.startsWith('o3') ||
+      id.startsWith('o4') ||
       id.startsWith('chatgpt') ||
       id.includes('chat') ||
-      id.includes('instruct')
+      id.includes('instruct') ||
+      id.includes('codex')
     ) {
       capabilities.push('chat', 'stream');
+      if (isReasoning) {
+        capabilities.push('reasoning' as ModelInfoCapability);
+      }
       // Vision models
       if (id.includes('vision') || id.includes('gpt-4o') || id.includes('gpt-4-turbo')) {
         capabilities.push('vision');

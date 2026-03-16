@@ -10,6 +10,7 @@ import type {
   AgentStep,
   ServiceResponse,
   ChatMessage,
+  StreamChunk,
   ExecutorHooks,
 } from '@neko/shared';
 
@@ -23,6 +24,31 @@ async function collectSteps(iterable: AsyncIterable<AgentStep>): Promise<AgentSt
     steps.push(step);
   }
   return steps;
+}
+
+/** Create an async iterable from StreamChunks matching a ServiceResponse */
+async function* responseToStream(resp: ServiceResponse): AsyncIterable<StreamChunk> {
+  const content = typeof resp.message.content === 'string' ? resp.message.content : '';
+  if (content) {
+    yield { type: 'content', content };
+  }
+  if (resp.message.toolCalls) {
+    for (const tc of resp.message.toolCalls) {
+      yield {
+        type: 'tool_call',
+        toolCall: {
+          id: tc.id,
+          type: tc.type,
+          function: tc.function,
+        },
+      };
+    }
+  }
+  yield {
+    type: 'done',
+    finishReason: resp.finishReason,
+    usage: resp.usage,
+  };
 }
 
 // =============================================================================
@@ -202,8 +228,14 @@ describe('AgentExecutor', () => {
   describe('executeStream() with tool calls', () => {
     it('should yield think, act, observe steps then final think', async () => {
       const chatMock = service.chat as ReturnType<typeof vi.fn>;
-      chatMock.mockResolvedValueOnce(toolCallResponse('grep', { pattern: 'foo' }));
-      chatMock.mockResolvedValueOnce(textResponse('Found matches.'));
+      const chatStreamMock = service.chatStream as ReturnType<typeof vi.fn>;
+      const tcResp = toolCallResponse('grep', { pattern: 'foo' });
+      const finalResp = textResponse('Found matches.');
+
+      chatMock.mockResolvedValueOnce(tcResp);
+      chatMock.mockResolvedValueOnce(finalResp);
+      chatStreamMock.mockReturnValueOnce(responseToStream(tcResp));
+      chatStreamMock.mockReturnValueOnce(responseToStream(finalResp));
 
       (toolRegistry.execute as ReturnType<typeof vi.fn>).mockResolvedValue({
         success: true,
@@ -215,8 +247,8 @@ describe('AgentExecutor', () => {
 
       const types = steps.map((s) => s.type);
       // First iteration: think (with tool calls) -> act -> observe
-      // Second iteration: think (final response, no tool calls)
-      expect(types).toEqual(['think', 'act', 'observe', 'think']);
+      // Second iteration: content_delta (streaming) -> think (final response)
+      expect(types).toEqual(['think', 'act', 'observe', 'content_delta', 'think']);
     });
   });
 
@@ -226,14 +258,18 @@ describe('AgentExecutor', () => {
 
   describe('executeStream() no tools', () => {
     it('should yield single think step and return', async () => {
-      (service.chat as ReturnType<typeof vi.fn>).mockResolvedValue(textResponse('Just text.'));
+      const resp = textResponse('Just text.');
+      (service.chat as ReturnType<typeof vi.fn>).mockResolvedValue(resp);
+      (service.chatStream as ReturnType<typeof vi.fn>).mockReturnValue(responseToStream(resp));
 
       const executor = new AgentExecutor(options);
       const steps = await collectSteps(executor.executeStream('Hello'));
 
-      expect(steps.length).toBe(1);
-      expect(steps[0]!.type).toBe('think');
+      // Stream yields content_delta first, then think
+      expect(steps.length).toBe(2);
+      expect(steps[0]!.type).toBe('content_delta');
       expect(steps[0]!.content).toBe('Just text.');
+      expect(steps[1]!.type).toBe('think');
     });
   });
 
@@ -243,14 +279,20 @@ describe('AgentExecutor', () => {
 
   describe('abort()', () => {
     it('should stop executeStream with abort message', async () => {
-      // Make chat hang until aborted
-      let rejectChat: ((err: Error) => void) | undefined;
-      (service.chat as ReturnType<typeof vi.fn>).mockImplementation(
-        () =>
-          new Promise((_resolve, reject) => {
-            rejectChat = reject;
-          }),
-      );
+      // Make chatStream hang until aborted by returning an async iterable that never resolves
+      let rejectStream: ((err: Error) => void) | undefined;
+
+      (service.chatStream as ReturnType<typeof vi.fn>).mockReturnValue({
+        [Symbol.asyncIterator]() {
+          return {
+            next() {
+              return new Promise((_resolve, reject) => {
+                rejectStream = reject;
+              });
+            },
+          };
+        },
+      });
 
       const executor = new AgentExecutor(options);
       const stepsPromise = collectSteps(executor.executeStream('Hang'));
@@ -259,11 +301,11 @@ describe('AgentExecutor', () => {
       await new Promise((r) => setTimeout(r, 10));
 
       executor.abort();
-      // Reject the pending chat call with AbortError
-      if (rejectChat) {
+      // Reject the pending stream with AbortError
+      if (rejectStream) {
         const err = new Error('aborted');
         err.name = 'AbortError';
-        rejectChat(err);
+        rejectStream(err);
       }
 
       const steps = await stepsPromise;

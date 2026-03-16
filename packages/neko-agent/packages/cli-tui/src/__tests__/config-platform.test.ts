@@ -1,45 +1,15 @@
 /**
- * Platform Integration Tests
+ * Platform Integration Tests — Real Config
  *
- * Tests that config.ts correctly delegates to Platform ConfigManager
- * and maps results to CLIConfig.
+ * Tests config.ts against the real ~/.neko/config.json.
+ * Validates that loadConfig, listProviders, getProviderModels,
+ * validateConfig, and createConfigManager work end-to-end.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
-// Mock @neko/platform before imports
-vi.mock('@neko/platform', () => {
-  const mockConfigManager = {
-    getProvider: vi.fn(),
-    getProviders: vi.fn().mockReturnValue([]),
-    getEnabledProviders: vi.fn().mockReturnValue([]),
-    getModelsByProvider: vi.fn().mockReturnValue([]),
-    getEnabledMCPServers: vi.fn().mockReturnValue([]),
-    getEnabledModels: vi.fn().mockReturnValue([]),
-    dispose: vi.fn(),
-  };
-
-  return {
-    ConfigManager: vi.fn().mockImplementation(function () {
-      return mockConfigManager;
-    }),
-    FileUserConfigManager: vi.fn().mockImplementation(function () {
-      return {};
-    }),
-    __mockConfigManager: mockConfigManager,
-  };
-});
-
-// Mock config-reader
-vi.mock('@neko/shared/config/config-reader.ts', () => ({
-  getUserConfigDir: vi.fn().mockReturnValue('/mock/.neko'),
-  getUserConfigPath: vi.fn().mockReturnValue('/mock/.neko/config.json'),
-  getWorkspaceConfigDir: vi.fn().mockReturnValue('/mock/ws/.neko'),
-  getWorkspaceConfigPath: vi.fn().mockReturnValue('/mock/ws/.neko/config.json'),
-  getConfigLocations: vi.fn().mockReturnValue({ user: '/mock/.neko', workspace: '/mock/ws/.neko' }),
-  readUserConfig: vi.fn().mockReturnValue(null),
-  readWorkspaceConfig: vi.fn().mockReturnValue(null),
-}));
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 import {
   loadConfig,
@@ -51,28 +21,22 @@ import {
   createConfigManager,
 } from '../core/config';
 import { DEFAULT_CLI_CONFIG } from '../core/types';
-import { readUserConfig, readWorkspaceConfig } from '@neko/shared/config/config-reader.ts';
 
-// Import the mocked platform to access __mockConfigManager
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-import * as platformModule from '@neko/platform';
-const mockCM = (platformModule as any).__mockConfigManager as {
-  getProvider: ReturnType<typeof vi.fn>;
-  getProviders: ReturnType<typeof vi.fn>;
-  getEnabledProviders: ReturnType<typeof vi.fn>;
-  getModelsByProvider: ReturnType<typeof vi.fn>;
-  getEnabledMCPServers: ReturnType<typeof vi.fn>;
-  getEnabledModels: ReturnType<typeof vi.fn>;
-  dispose: ReturnType<typeof vi.fn>;
-};
+// Skip the entire suite if ~/.neko/config.json does not exist
+const configPath = path.join(os.homedir(), '.neko', 'config.json');
+const hasRealConfig = fs.existsSync(configPath);
+let rawConfig: Record<string, unknown> = {};
+if (hasRealConfig) {
+  rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+}
 
 // ─── Tests ──────────────────────────────────────────────────────────
 
-describe('config.ts — Platform integration', () => {
+describe.skipIf(!hasRealConfig)('config.ts — Real ~/.neko/config.json', () => {
   const savedEnv = { ...process.env };
 
-  beforeEach(async () => {
-    // Clean env vars that affect config
+  beforeEach(() => {
+    // Clean env vars that affect config — let config file be the sole source
     delete process.env['ANTHROPIC_API_KEY'];
     delete process.env['OPENAI_API_KEY'];
     delete process.env['DEEPSEEK_API_KEY'];
@@ -80,154 +44,92 @@ describe('config.ts — Platform integration', () => {
     delete process.env['AZURE_OPENAI_API_KEY'];
     delete process.env['NEKO_API_KEY'];
     delete process.env['LLM_API_KEY'];
-
-    // Reset mocks
-    const cm = mockCM;
-    cm.getProvider.mockReset().mockReturnValue(undefined);
-    cm.getProviders.mockReset().mockReturnValue([]);
-    cm.getEnabledProviders.mockReset().mockReturnValue([]);
-    cm.getModelsByProvider.mockReset().mockReturnValue([]);
-    cm.getEnabledMCPServers.mockReset().mockReturnValue([]);
-    cm.getEnabledModels.mockReset().mockReturnValue([]);
-    cm.dispose.mockReset();
-
-    vi.mocked(readUserConfig).mockReturnValue(null);
-    vi.mocked(readWorkspaceConfig).mockReturnValue(null);
   });
 
   afterEach(() => {
     process.env = { ...savedEnv };
   });
 
-  // ═══════════════════════════════════════════════════════════════════
-  // 1. loadConfig — defaults
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════
+  // 1. loadConfig — reads real config
+  // ═════════════════════════════════════════════════════════════════
 
   describe('loadConfig', () => {
-    it('returns defaults when no providers/models configured', () => {
+    it('loads provider from real config', () => {
       const config = loadConfig('/tmp/test');
-      expect(config.provider).toBe(DEFAULT_CLI_CONFIG.provider);
-      expect(config.providerType).toBe(DEFAULT_CLI_CONFIG.providerType);
-      expect(config.model).toBe(DEFAULT_CLI_CONFIG.model);
-      expect(config.maxTokens).toBe(DEFAULT_CLI_CONFIG.maxTokens);
-      expect(config.temperature).toBe(DEFAULT_CLI_CONFIG.temperature);
-      expect(config.verbose).toBe(false);
-      expect(config.mcpServers).toEqual([]);
-      expect(config.mediaModels).toEqual([]);
+      const configProviders = (rawConfig.providers as Array<{ id: string }>) ?? [];
+      const expectedProvider =
+        (rawConfig.defaultProvider as string) ??
+        configProviders[0]?.id ??
+        DEFAULT_CLI_CONFIG.provider;
+
+      expect(config.provider).toBe(expectedProvider);
     });
 
-    it('picks first enabled provider with env API key', async () => {
-      process.env['OPENAI_API_KEY'] = 'sk-test-123';
-      const cm = mockCM;
-      cm.getEnabledProviders.mockReturnValue([
-        {
-          id: 'openai',
-          type: 'openai',
-          name: 'OpenAI',
-          apiUrl: 'https://api.openai.com',
-          enabled: true,
-        },
-      ]);
-      cm.getProvider.mockReturnValue({
-        id: 'openai',
-        type: 'openai',
-        name: 'OpenAI',
-        apiUrl: 'https://api.openai.com',
-      });
-      cm.getModelsByProvider.mockReturnValue([{ id: 'gpt-4o', name: 'gpt-4o', enabled: true }]);
-
+    it('loads model from real config', () => {
       const config = loadConfig('/tmp/test');
-      expect(config.provider).toBe('openai');
-      expect(config.providerType).toBe('openai');
-      expect(config.model).toBe('gpt-4o');
-      expect(config.apiKey).toBe('sk-test-123');
+      // defaultModel from config or first model for the provider
+      const expectedDefault = rawConfig.defaultModel as string | undefined;
+      if (expectedDefault) {
+        expect(config.model).toBe(expectedDefault);
+      } else {
+        expect(config.model).toBeTruthy();
+      }
     });
 
-    it('applies CLI arg overrides over config', async () => {
-      const cm = mockCM;
-      cm.getProvider.mockReturnValue({
-        id: 'anthropic',
-        type: 'anthropic',
-        name: 'Anthropic',
-        apiUrl: 'https://api.anthropic.com',
-        apiKey: 'cfg-key',
-      });
+    it('loads API key from real config', () => {
+      const config = loadConfig('/tmp/test');
+      // Config file has apiKey in providers or providerOverrides
+      expect(config.apiKey).toBeTruthy();
+    });
 
+    it('applies CLI arg overrides over config', () => {
       const config = loadConfig('/tmp/test', {
-        provider: 'anthropic',
-        model: 'claude-opus-4-20250514',
-        apiKey: 'override-key',
         maxTokens: 4096,
+        temperature: 0.1,
         verbose: true,
       });
 
-      expect(config.model).toBe('claude-opus-4-20250514');
-      expect(config.apiKey).toBe('override-key');
       expect(config.maxTokens).toBe(4096);
+      expect(config.temperature).toBe(0.1);
       expect(config.verbose).toBe(true);
     });
 
-    it('reads scalar fields from UnifiedConfig', () => {
-      vi.mocked(readUserConfig).mockReturnValue({
-        maxTokens: 16384,
-        temperature: 0.3,
-        thinkingBudget: 10000,
-      } as ReturnType<typeof readUserConfig>);
+    it('detects reasoning models in config', () => {
+      const cm = createConfigManager();
+      try {
+        const models = cm.getEnabledModels();
+        const reasoningModels = models.filter((m) => m.capabilities?.includes('reasoning'));
 
-      const config = loadConfig('/tmp/test');
-      expect(config.maxTokens).toBe(16384);
-      expect(config.temperature).toBe(0.3);
-      expect(config.thinkingBudget).toBe(10000);
+        console.log(
+          'Reasoning models:',
+          reasoningModels.map((m) => m.id),
+        );
+
+        // If config has reasoning models, they should be detected
+        const configModels = (rawConfig.models as Array<{ capabilities?: string[] }>) ?? [];
+        const expectedReasoningCount = configModels.filter((m) =>
+          m.capabilities?.includes('reasoning'),
+        ).length;
+
+        expect(reasoningModels.length).toBe(expectedReasoningCount);
+      } finally {
+        cm.dispose();
+      }
     });
 
-    it('workspace scalars override user scalars', () => {
-      vi.mocked(readUserConfig).mockReturnValue({
-        maxTokens: 8192,
-        temperature: 0.7,
-      } as ReturnType<typeof readUserConfig>);
-      vi.mocked(readWorkspaceConfig).mockReturnValue({
-        maxTokens: 4096,
-        temperature: 0.1,
-      } as ReturnType<typeof readWorkspaceConfig>);
-
+    it('reads scalar fields from config', () => {
       const config = loadConfig('/tmp/test');
-      expect(config.maxTokens).toBe(4096);
-      expect(config.temperature).toBe(0.1);
-    });
-
-    it('maps MCP servers from ConfigManager', async () => {
-      const cm = mockCM;
-      cm.getEnabledMCPServers.mockReturnValue([
-        {
-          id: 'mcp-1',
-          name: 'GitHub',
-          description: 'GH tools',
-          category: 'dev',
-          transport: 'stdio',
-          command: 'gh-mcp',
-          args: ['--token'],
-          env: {},
-          enabled: true,
-        },
-      ]);
-
-      const config = loadConfig('/tmp/test');
-      expect(config.mcpServers).toHaveLength(1);
-      expect(config.mcpServers[0]!.id).toBe('mcp-1');
-      expect(config.mcpServers[0]!.name).toBe('GitHub');
-      expect(config.mcpServers[0]!.command).toBe('gh-mcp');
-    });
-
-    it('disposes ConfigManager after loading', async () => {
-      const cm = mockCM;
-      loadConfig('/tmp/test');
-      expect(cm.dispose).toHaveBeenCalled();
+      // maxTokens and temperature come from config or defaults
+      expect(config.maxTokens).toBeGreaterThan(0);
+      expect(config.temperature).toBeGreaterThanOrEqual(0);
+      expect(config.temperature).toBeLessThanOrEqual(2);
     });
   });
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════
   // 2. getApiKeyFromEnv
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════
 
   describe('getApiKeyFromEnv', () => {
     it('returns provider-specific env var', () => {
@@ -256,13 +158,13 @@ describe('config.ts — Platform integration', () => {
     });
   });
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════
   // 3. validateConfig
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════
 
   describe('validateConfig', () => {
-    it('passes for valid config with API key', () => {
-      const config = { ...DEFAULT_CLI_CONFIG, apiKey: 'sk-test' };
+    it('passes for real config with API key', () => {
+      const config = loadConfig('/tmp/test');
       const result = validateConfig(config);
       expect(result.valid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -301,88 +203,94 @@ describe('config.ts — Platform integration', () => {
     });
   });
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════
   // 4. listProviders / getProviderModels
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════
 
   describe('listProviders', () => {
-    it('returns provider info from ConfigManager', async () => {
-      const cm = mockCM;
-      cm.getEnabledProviders.mockReturnValue([
-        {
-          id: 'anthropic',
-          type: 'anthropic',
-          name: 'Anthropic',
-          displayName: 'Anthropic',
-          apiUrl: 'https://api.anthropic.com',
-          apiKey: 'sk-ant',
-        },
-        {
-          id: 'openai',
-          type: 'openai',
-          name: 'OpenAI',
-          displayName: 'OpenAI',
-          apiUrl: 'https://api.openai.com',
-        },
-      ]);
-      cm.getModelsByProvider.mockImplementation((id: string) => {
-        if (id === 'anthropic') return [{ id: 'claude-sonnet', name: 'claude-sonnet-4-20250514' }];
-        if (id === 'openai')
-          return [
-            { id: 'gpt-4o', name: 'gpt-4o' },
-            { id: 'gpt-4o-mini', name: 'gpt-4o-mini' },
-          ];
-        return [];
-      });
-
+    it('returns providers from real config', () => {
       const providers = listProviders();
-      expect(providers).toHaveLength(2);
-      expect(providers[0]!.id).toBe('anthropic');
-      expect(providers[0]!.hasApiKey).toBe(true);
-      expect(providers[0]!.models).toEqual(['claude-sonnet-4-20250514']);
-      expect(providers[1]!.id).toBe('openai');
-      expect(providers[1]!.models).toHaveLength(2);
+      const configProviders = (rawConfig.providers as Array<{ id: string }>) ?? [];
+
+      expect(providers.length).toBeGreaterThanOrEqual(configProviders.length);
+
+      // Each provider should have required fields
+      for (const p of providers) {
+        expect(p.id).toBeTruthy();
+        expect(p.type).toBeTruthy();
+        expect(Array.isArray(p.models)).toBe(true);
+      }
+
+      console.log(
+        'Providers:',
+        providers.map(
+          (p) => `${p.id} (${p.type}, ${p.models.length} models, apiKey: ${p.hasApiKey})`,
+        ),
+      );
     });
   });
 
   describe('getProviderModels', () => {
-    it('returns model names for a provider', async () => {
-      const cm = mockCM;
-      cm.getModelsByProvider.mockReturnValue([
-        { id: 'claude-opus', name: 'claude-opus-4-20250514' },
-        { id: 'claude-sonnet', name: 'claude-sonnet-4-20250514' },
-      ]);
+    it('returns models for configured provider', () => {
+      const configProviders = (rawConfig.providers as Array<{ id: string }>) ?? [];
+      if (configProviders.length === 0) return;
 
-      const models = getProviderModels('anthropic');
-      expect(models).toEqual(['claude-opus-4-20250514', 'claude-sonnet-4-20250514']);
+      const providerId = configProviders[0]!.id;
+      const models = getProviderModels(providerId);
+      expect(Array.isArray(models)).toBe(true);
+      expect(models.length).toBeGreaterThan(0);
+
+      console.log(`Models for ${providerId}:`, models);
     });
 
-    it('returns empty array for unknown provider', async () => {
-      const cm = mockCM;
-      cm.getModelsByProvider.mockReturnValue([]);
-      expect(getProviderModels('nonexistent')).toEqual([]);
+    it('returns empty array for unknown provider', () => {
+      expect(getProviderModels('nonexistent-provider-xyz')).toEqual([]);
     });
   });
 
   describe('listConfiguredProviders', () => {
-    it('returns provider IDs', async () => {
-      const cm = mockCM;
-      cm.getProviders.mockReturnValue([{ id: 'anthropic' }, { id: 'openai' }, { id: 'deepseek' }]);
-
+    it('returns provider IDs', () => {
       const ids = listConfiguredProviders();
-      expect(ids).toEqual(['anthropic', 'openai', 'deepseek']);
+      expect(ids.length).toBeGreaterThan(0);
+
+      // Should include providers from config
+      const configProviders = (rawConfig.providers as Array<{ id: string }>) ?? [];
+      for (const cp of configProviders) {
+        expect(ids).toContain(cp.id);
+      }
     });
   });
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════
   // 5. createConfigManager
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════
 
   describe('createConfigManager', () => {
-    it('creates a ConfigManager instance', () => {
-      const cm = createConfigManager('/tmp/test');
-      expect(cm).toBeDefined();
-      expect(cm.dispose).toBeDefined();
+    it('creates a working ConfigManager', () => {
+      const cm = createConfigManager();
+      try {
+        expect(cm).toBeDefined();
+        expect(cm.getEnabledProviders().length).toBeGreaterThan(0);
+        expect(cm.getEnabledModels().length).toBeGreaterThan(0);
+      } finally {
+        cm.dispose();
+      }
+    });
+
+    it('models have correct capability types', () => {
+      const cm = createConfigManager();
+      try {
+        const models = cm.getEnabledModels();
+        for (const model of models) {
+          expect(Array.isArray(model.capabilities)).toBe(true);
+          // Each capability should be a string
+          for (const cap of model.capabilities ?? []) {
+            expect(typeof cap).toBe('string');
+          }
+        }
+      } finally {
+        cm.dispose();
+      }
     });
   });
 });

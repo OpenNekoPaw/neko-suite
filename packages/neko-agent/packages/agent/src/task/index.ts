@@ -5,7 +5,12 @@
  */
 
 export { TaskManager, type TaskManagerOptions, type ConcurrencyConfig } from './task-manager';
-export { MemoryTaskStorage } from './task-storage';
+export {
+  MemoryTaskStorage,
+  FileTaskStorage,
+  createFileTaskStorage,
+  type FileTaskStorageOptions,
+} from './task-storage';
 export {
   MemoryTaskRecoveryStorage,
   FileTaskRecoveryStorage,

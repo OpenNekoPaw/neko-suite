@@ -23,12 +23,14 @@ import {
   createCoreTools,
   type InputProcessor,
 } from '@neko/agent';
+import * as os from 'node:os';
 import {
   createPlatform,
   FileUserConfigManager,
   toSharedService,
   type Platform,
 } from '@neko/platform';
+import { TaskManager, createFileTaskStorage } from '@neko/agent';
 
 type ExecutionMode = 'plan' | 'ask' | 'auto';
 import type { IService } from '@neko/shared';
@@ -127,10 +129,13 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     if (service) {
       llmService = service;
     } else {
+      const taskStoragePath = path.join(os.homedir(), '.neko', 'tasks.json');
+      const taskManager = new TaskManager({ storage: createFileTaskStorage(taskStoragePath) });
       platform = createPlatform({
         userConfigManager: new FileUserConfigManager(),
         workspacePath: config.workDir,
         toolRegistry,
+        taskManager,
       });
       llmService = toSharedService(platform.createService());
     }
@@ -523,10 +528,13 @@ async function initializeInteractiveSession(
   if (service) {
     llmService = service;
   } else {
+    const taskStoragePath = path.join(os.homedir(), '.neko', 'tasks.json');
+    const taskManager = new TaskManager({ storage: createFileTaskStorage(taskStoragePath) });
     platform = createPlatform({
       userConfigManager: new FileUserConfigManager(),
       workspacePath: config.workDir,
       toolRegistry,
+      taskManager,
     });
     llmService = toSharedService(platform.createService());
   }

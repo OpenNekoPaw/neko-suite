@@ -6,12 +6,15 @@
  * only reads from config files.
  */
 
+import * as path from 'path';
+import * as os from 'os';
 import {
   createPlatform,
   FileUserConfigManager,
   toSharedService,
   type Platform,
 } from '@neko/platform';
+import { TaskManager, createFileTaskStorage } from '@neko/agent';
 import type { IService, IToolRegistry } from '@neko/shared';
 
 // Well-known env var names per provider
@@ -61,10 +64,16 @@ function collectEnvApiKeys(): Record<string, string> {
 export function createCLIPlatform(options: CLIPlatformOptions): CLIPlatformResult {
   const userConfigManager = new FileUserConfigManager();
 
+  // File-based task storage for media generation (save to ~/.neko/tasks.json)
+  const taskStoragePath = path.join(os.homedir(), '.neko', 'tasks.json');
+  const taskStorage = createFileTaskStorage(taskStoragePath);
+  const taskManager = new TaskManager({ storage: taskStorage });
+
   const platform = createPlatform({
     userConfigManager,
     workspacePath: options.workspacePath,
     toolRegistry: options.toolRegistry,
+    taskManager,
   });
 
   // Inject env var API keys at runtime (not persisted)

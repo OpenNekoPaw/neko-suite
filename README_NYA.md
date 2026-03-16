@@ -33,10 +33,11 @@
 | 技能 | 描述 | 猫娘评价 |
 |------|------|----------|
 | **AI 剪辑魔法** | 说说你想要什么，我来帮你剪！ | "主人只需要动动嘴，剩下交给我喵～" |
-| **专业时间线** | 多轨道 + 关键帧 + 特效蒙版 | "比猫爪还灵活的时间线喵！" |
-| **Rust GPU 渲染** | wgpu 加速，4K 实时预览 | "速度快得连猫都追不上喵！" |
+| **专业时间线** | 多轨道 + 关键帧 + 29 种编辑操作 | "比猫爪还灵活的时间线喵！" |
+| **Rust GPU 渲染** | wgpu PBR + 粒子 + 后处理，4K 实时预览 | "速度快得连猫都追不上喵！" |
+| **3D/2D 创作** | 3D 建模 + 压感手绘 + 骨骼动画 | "猫娘也会画画和捏泥巴喵！" |
 | **Git 原生支持** | .jvi 文件可以版本控制 | "不怕改坏，随时后悔喵～" |
-| **模块化架构** | 15 个小模块，按需食用 | "像猫粮一样，吃多少开多少包喵！" |
+| **模块化架构** | 16 个小模块，按需食用 | "像猫粮一样，吃多少开多少包喵！" |
 
 ---
 
@@ -88,7 +89,7 @@ pnpm run dev
 │   GPU渲染喵"      我的玩具喵"      我来操刀喵"         │
 │                                                     │
 │   Rust + wgpu    React 时间线     Claude + MCP      │
-│   Alpha 70%      Alpha 65%       Alpha 70%          │
+│   Alpha 85%      Alpha 82%       Alpha 75%          │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -96,28 +97,33 @@ pnpm run dev
 
 | 猫娘 | 技能 | 状态 |
 |------|------|------|
-| **neko-types** 📦 | 共享类型小猫，传递主人的命令 | Alpha 80% |
-| **neko-client** 🌊 | 流媒体猫娘，H264/fMP4/PCM 超流畅 | Alpha 75% |
-| **neko-proto** 📜 | 协议守护猫，确保消息不出错 | Early 30% |
+| **neko-types** 📦 | 共享类型小猫，Logger/i18n/Theme 全靠她 | Alpha 90% |
+| **neko-client** 🌊 | 流媒体猫娘，H264/fMP4/PCM + EngineClient | Alpha 80% |
+| **neko-proto** 📜 | 协议守护猫，timeline + diff IDL 全齐了 | Stable 100% |
 | **neko-suite** 🏠 | 大家庭的猫窝，管理所有插件 | Stable 90% |
 
 ### 功能模块猫娘（各有专长喵！）
 
 | 猫娘 | 专长 | 当前状态 |
 |------|------|----------|
-| **neko-preview** 👁️ | 媒体预览，"让主人看视频喵！" | WIP 60% |
-| **neko-story** 📖 | 剧本创作，"Fountain 格式写剧本喵！" | WIP 55% |
-| **neko-assets** 🗂️ | 资产管理，"帮主人整理素材库喵！" | WIP 55% |
-| **neko-tools** 🔧 | 媒体工具，"视频对比分析喵！" | WIP 50% |
-| **neko-canvas** 🎨 | 无限画布，"节点系统，无限延伸喵！" | WIP 40% |
+| **neko-preview** 👁️ | 媒体预览，"WebCodecs 播放 + 波形喵！" | Alpha 70% |
+| **neko-story** 📖 | 剧本创作，"Fountain LSP + PDF 导出喵！" | WIP 75% |
+| **neko-assets** 🗂️ | 资产管理，"外部媒体库 + 多云支持喵！" | Alpha 85% |
+| **neko-tools** 🔧 | 媒体工具，"视频对比分析 + 并行优化喵！" | WIP 62% |
+| **neko-canvas** 🎨 | 无限画布，"5 种节点 + 拖放 + 快捷键喵！" | Alpha 65% |
+
+### 创作猫娘（已经出师了喵！）
+
+| 猫娘 | 专长 | 当前状态 |
+|------|------|----------|
+| **neko-model** 🧊 | 3D 创作，"PBR + 粒子 + CSG + 骨骼表情，glTF 不难喵！" | Alpha 65% |
+| **neko-sketch** ✏️ | 2D 创作，"7 种笔刷 + 滤镜/粒子/场景 + 骨骼动画喵！" | Alpha 85% |
 
 ### 还在修炼的猫娘（敬请期待喵）
 
 ```
-neko-model  →  3D 建模猫娘，学习中... ( ˘•ω•˘ ).｡oO(glTF好难喵)
-neko-sketch →  绘画猫娘，磨练画技中... ✏️ 喵～
 neko-audio  →  音频猫娘，练习唱歌中... 🎵 喵喵喵～
-neko-live   →  直播猫娘，准备出道中... 📡 喵！
+neko-live   →  直播猫娘，准备出道中... 📡 动捕 + VRM + RTMP 推流喵！
 ```
 
 ---
@@ -129,11 +135,12 @@ neko-live   →  直播猫娘，准备出道中... 📡 喵！
 ```
 VS Code 主人 ←─ HTTP/NAPI ─→ neko-engine（猫娘的 Rust 铠甲）
                                     │
-                                    ├─ wgpu 魔法阵（12 个 WGSL 咒文，26 个 GPU 模块）
-                                    ├─ FFmpeg 炼金术（硬件加速 + 解码器池）
-                                    ├─ 关键帧记忆宝库
-                                    ├─ 导出魔法通道（GPU 高速导出）
-                                    └─ [修炼中] native-scene 3D 幻境（hecs ECS + PBR）
+                                    ├─ wgpu 魔法阵（25+ WGSL 咒文，PBR + IBL + 粒子 + 后处理）
+                                    ├─ FFmpeg 炼金术（硬件加速 VideoToolbox/NVENC）
+                                    ├─ 关键帧记忆宝库 + 预加载优化
+                                    ├─ 导出魔法通道（GPU 高速导出 + 响度标准化）
+                                    ├─ native-scene 3D 幻境（bevy_ecs + glTF/VRM + 物理）
+                                    └─ native-puppet 2D 骨骼（bevy_ecs + inox2d + 60fps 流）
 ```
 
 > "穿上 Rust 铠甲的猫娘，4K 视频说处理就处理，喵！"
@@ -186,7 +193,9 @@ VS Code 主人 ←─ HTTP/NAPI ─→ neko-engine（猫娘的 Rust 铠甲）
 | **视频** | MP4, MOV, AVI, MKV, WebM, M4V | "常见格式统统吃下喵！" |
 | **音频** | MP3, WAV, OGG, FLAC, AAC, M4A | "耳朵好灵敏喵～" |
 | **图片** | PNG, JPG, GIF, WebP, BMP, SVG | "看！猫咪图片！喵！" |
-| **项目** | .jvi / .jvc / .nks | "这是猫娘专属格式喵！" |
+| **3D 模型** | glTF, GLB, VRM, .nkm | "3D 也难不倒猫娘喵！" |
+| **2D 动画** | INP (Inochi2D), .nks | "骨骼动画，扭起来喵！" |
+| **项目** | .jvi / .jvc | "这是猫娘专属格式喵！" |
 
 ---
 
@@ -203,13 +212,16 @@ VS Code 主人 ←─ HTTP/NAPI ─→ neko-engine（猫娘的 Rust 铠甲）
 Extension   →  VS Code API + TypeScript + esbuild
               (穿着正装工作，专业！喵！)
 
-引擎内核    →  Rust + wgpu + FFmpeg + WebCodecs
+引擎内核    →  Rust + wgpu + FFmpeg + axum + bevy_ecs
               (这是猫娘的骨骼，超级坚硬喵！)
 
-AI 大脑     →  Claude API + OpenAI API + MCP Protocol
-              (聪明的大脑，喵！)
+AI 大脑     →  Vercel AI SDK (Claude/OpenAI/Google) + MCP
+              (聪明的大脑，多模型切换喵！)
 
-测试工具    →  Vitest + cargo test
+流媒体      →  H.264 + PCM + fMP4 over WebSocket
+              (实时流转，丝滑顺畅喵！)
+
+测试工具    →  Vitest v4 + cargo test
               (认真的猫娘不偷懒喵～)
 
 构建系统    →  pnpm workspaces + Turbo
@@ -276,9 +288,10 @@ neko-suite/（猫娘的大别墅 🏠）
 │   ├── neko-client/       # 流媒体猫娘（H264/PCM/fMP4）
 │   ├── neko-types/        # 类型猫娘（Logger/i18n/Theme）
 │   ├── neko-proto/        # 协议猫娘（Protobuf）
-│   ├── neko-sketch/       # 绘画猫娘（修炼中...）
+│   ├── neko-model/        # 3D 创作猫娘（PBR + CSG + 骨骼表情）
+│   ├── neko-sketch/       # 2D 创作猫娘（手绘 + 动画 + 滤镜/粒子）
 │   ├── neko-audio/        # 音频猫娘（修炼中...）
-│   └── neko-live/         # 直播猫娘（修炼中...）
+│   └── neko-live/         # 直播猫娘（修炼中... 动捕 + VRM + 推流）
 ├── docs/                  # 猫娘图书馆 📚
 ├── ROADMAP.md             # 主人的愿望清单 ⭐
 ├── CLAUDE.md              # 猫娘的工作守则

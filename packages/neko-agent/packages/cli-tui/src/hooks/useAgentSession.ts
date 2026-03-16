@@ -28,8 +28,10 @@ import {
   toSharedService,
   type Platform,
 } from '@neko/platform';
+import { TaskManager, createFileTaskStorage } from '@neko/agent';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import type { CLIConfig } from '../core/types';
 import type { ExecutionMode } from '../types/state';
 import type { IService } from '@neko/shared';
@@ -178,11 +180,14 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           // Extension mode: use injected service directly
           llmService = service;
         } else {
-          // Standalone CLI mode: create Platform
+          // Standalone CLI mode: create Platform with media generation support
+          const taskStoragePath = path.join(os.homedir(), '.neko', 'tasks.json');
+          const taskManager = new TaskManager({ storage: createFileTaskStorage(taskStoragePath) });
           const platform = createPlatform({
             userConfigManager: new FileUserConfigManager(),
             workspacePath: config.workDir,
             toolRegistry,
+            taskManager,
           });
           platformRef.current = platform;
           llmService = toSharedService(platform.createService());

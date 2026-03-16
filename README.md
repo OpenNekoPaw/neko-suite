@@ -16,7 +16,8 @@
 
 - **AI 驱动创作** - 通过 Agent Skills + MCP 协议将自然语言转化为剪辑操作
 - **专业级时间线** - 多轨道、关键帧动画、色彩校正、特效蒙版、精确到帧的编辑
-- **Rust GPU 渲染** - wgpu PBR + IBL + 后处理 + 粒子系统，17 个 WGSL shader，4K 实时预览与导出
+- **Rust GPU 渲染** - wgpu PBR + IBL + 后处理 + 粒子系统，25+ WGSL shader，4K 实时预览与导出
+- **3D/2D 创作** - glTF/VRM 3D 编辑 + 压感手绘 + 骨骼动画 + 滤镜/粒子/场景系统
 - **Git 原生支持** - .jvi 项目文件为文本格式，支持版本控制和协作
 - **模块化架构** - 16 个包按需组合，独立升级
 
@@ -58,42 +59,42 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 16 �
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
-| **neko-engine** | Rust GPU 媒体引擎 - wgpu PBR 渲染 + 编解码 + 导出 + 粒子/后处理 | Alpha 80% | 170+ Rust + 12 TS |
-| **neko-cut** | 视频剪辑器 - 时间线 + 预览 + 色彩校正 + 特效 | Alpha 65% | 200 TS/TSX |
-| **neko-agent** | AI Agent - 多 LLM + MCP + Skills + CLI | Alpha 70% | 418 TS/TSX, 47 tests |
+| **neko-engine** | Rust GPU 媒体引擎 - wgpu PBR 渲染 + 编解码 + 导出 + 粒子/后处理 + 3D 场景/2D 骨骼 ECS | Alpha 85% | 170+ Rust + 12 TS |
+| **neko-cut** | 视频剪辑器 - 时间线 + 预览 + 色彩校正 + 特效 + 29 EditOperation | Alpha 82% | 200 TS/TSX |
+| **neko-agent** | AI Agent - 多 LLM + MCP + Skills + CLI + 视频生成 | Alpha 75% | 418 TS/TSX, 47 tests |
 
 ### 基础设施
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
-| **neko-types** | 共享类型 + 操作系统（撤销重做） | Alpha 80% | 102 TS, 10 tests |
-| **neko-client** | 流媒体客户端 - H264/fMP4/PCM | Alpha 75% | 8 TS |
-| **neko-proto** | 协议定义（timeline.proto） | Early 30% | 1 proto |
+| **neko-types** | 共享类型 + 横切关注点（Logger/i18n/Theme/Errors） | Alpha 90% | 102 TS, 10 tests |
+| **neko-client** | 流媒体客户端 - H264/fMP4/PCM + EngineClient HTTP dispatch | Alpha 80% | 8 TS |
+| **neko-proto** | 协议定义（timeline.proto + diff.proto 完整 IDL） | Stable 100% | 2 proto |
 | **neko-suite** | Extension Pack 门户 | Stable 90% | 配置包 |
 
 ### 功能模块
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
-| **neko-preview** | 媒体预览 - 视频/音频播放器 | WIP 60% | 19 TS/TSX |
-| **neko-story** | 剧本编辑器 - Fountain LSP + 预览 | WIP 55% | 32 TS/TSX, 3 tests |
-| **neko-assets** | 资产管理 - 实体/文件/变体服务 | WIP 55% | 22 TS, 5 tests |
-| **neko-tools** | 媒体工具 - Diff 比较 + Git 媒体 | WIP 50% | 17 TS, 3 tests |
-| **neko-canvas** | 无限画布 - 节点系统 + 连线 | WIP 40% | 58 TS/TSX |
+| **neko-preview** | 媒体预览 - Video/Audio Provider + WebCodecs 播放器 + 波形 | Alpha 70% | 19 TS/TSX |
+| **neko-story** | 剧本编辑器 - Fountain LSP + 预览 + 时间线生成 + PDF 导出 | WIP 75% | 32 TS/TSX, 3 tests |
+| **neko-assets** | 资产管理 - 注册表 + 缩略图 + 外部媒体库 + 多云支持 | Alpha 85% | 22 TS, 5 tests |
+| **neko-tools** | 媒体工具 - Diff 比较 + 并行优化 + 协议增强 | WIP 62% | 17 TS, 3 tests |
+| **neko-canvas** | 无限画布 - 5 种节点 + 多选 + 属性面板 + 拖放 + 快捷键 | Alpha 65% | 58 TS/TSX |
 
 ### 新兴模块
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
-| **neko-model** | 3D 编辑器 - glTF/VRM 视口 + PBR 渲染 + CSG/文字/几何体建模 + 骨骼表情（[架构设计](./docs/architecture/3d-capability-analysis.md)） | Alpha 65% | 25+ TS/TSX + 12 Rust |
-| **neko-sketch** | 2D 创作 - 压感手绘 + 滤镜/粒子/场景/像素/矢量 + Inochi2D 动画（[架构设计](./docs/architecture/2d-capability-analysis.md)） | Alpha S.1✅ S.2✅ S.3✅ | 90+ TS/TSX + Rust, 42 tests |
+| **neko-model** | 3D 创作 - glTF/VRM 视口 + PBR/IBL + 粒子/后处理 + CSG/文字/几何体 + 骨骼表情 + 时间线集成（[架构](./docs/architecture/3d-capability-analysis.md)） | Alpha 65% | 25+ TS/TSX + 12 Rust |
+| **neko-sketch** | 2D 创作 - 压感手绘 7 笔刷 + 滤镜/粒子/场景/像素/矢量 + 逐帧/骨骼动画 + 精灵表 + i18n（[架构](./docs/architecture/2d-capability-analysis.md)） | Alpha 85% | 90+ TS/TSX + Rust, 42 tests |
 
 ### 规划中
 
 | 模块 | 职能 | 状态 |
 |------|------|------|
-| **neko-audio** | 音频工作站 - 波形编辑 | Planned |
-| **neko-live** | 虚拟直播 - 动捕 AR | Planned |
+| **neko-audio** | 音频工作站 - 波形编辑 + 均衡器/压缩/降噪 + 录音 | Planned |
+| **neko-live** | 虚拟制片 - MediaPipe/VMC 动捕 + VRM 虚拟形象 + RTMP 推流 + OBS 集成 | Planned |
 
 ---
 
@@ -101,17 +102,17 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 16 �
 
 ### 1. Rust Sidecar 引擎
 
-核心计算逻辑驻留在 **neko-engine** Rust 独立进程中（5 个 crate），通过 HTTP API / NAPI 与 VS Code 通讯，彻底解决编辑器卡顿问题。
+核心计算逻辑驻留在 **neko-engine** Rust 独立进程中（7 个 crate），通过统一 HTTP/WS + NAPI 与 VS Code 通讯，彻底解决编辑器卡顿问题。
 
 ```
-VS Code Extension Host ←─ HTTP/NAPI ─→ neko-engine (Rust)
-                                              │
-                                              ├─ wgpu GPU 渲染（17 WGSL shaders, 30+ GPU 模块, PBR + IBL + 粒子 + 后处理）
-                                              ├─ FFmpeg 编解码（硬件加速 + decoder pool）
-                                              ├─ 关键帧缓存服务
-                                              ├─ 导出管线（GPU export + audio mixer）
-                                              ├─ native-scene 3D 场景（bevy_ecs + glTF loader）
-                                              └─ native-puppet 2D 骨骼（bevy_ecs + inox2d + bevy_animation）
+VS Code Extension Host ←─ HTTP/WS/NAPI ─→ neko-engine (Rust Sidecar)
+                                                │
+                                                ├─ wgpu GPU 渲染（25+ WGSL shaders, PBR + IBL + 粒子 + 后处理）
+                                                ├─ FFmpeg 编解码（硬件加速 VideoToolbox/NVENC/VAAPI）
+                                                ├─ 关键帧缓存 + 预加载优化
+                                                ├─ 导出管线（GPU export + audio mixer + 响度标准化）
+                                                ├─ native-scene 3D 场景（bevy_ecs + glTF/VRM + PBR + 物理）
+                                                └─ native-puppet 2D 骨骼（bevy_ecs + inox2d + 60fps WS 流）
 ```
 
 ### 2. AI Agent Skills 驱动
@@ -205,11 +206,11 @@ neko-suite/
 │   │   └── packages/
 │   │       └── asset/         # 资产核心逻辑
 │   ├── neko-client/           # 流媒体客户端（H264/PCM/fMP4）+ EngineClient
-│   ├── neko-model/            # 3D 编辑器（R3F 视口 + 骨骼动画）
+│   ├── neko-model/            # 3D 创作（R3F + PBR/IBL + CSG + 骨骼表情）
 │   │   └── packages/
-│   │       ├── extension/     # VSCode 扩展侧
+│   │       ├── extension/     # VSCode 扩展侧（.gltf/.glb/.vrm/.nkm）
 │   │       └── webview/       # React Three Fiber UI
-│   ├── neko-sketch/           # 2D 创作（压感手绘 + Inochi2D 动画）
+│   ├── neko-sketch/           # 2D 创作（手绘 + 滤镜/粒子/场景 + 骨骼/逐帧动画）
 │   │   └── packages/
 │   │       ├── extension/     # VSCode 扩展侧（CustomEditorProvider .nks）
 │   │       └── webview/       # React 18 + WebGL2 UI
@@ -232,9 +233,10 @@ neko-suite/
 |------|------|
 | **Frontend** | React 18 + Zustand + Tailwind CSS + Vite |
 | **Extension** | VS Code Extension API + TypeScript + esbuild |
-| **Engine** | Rust + wgpu + FFmpeg + WebCodecs |
-| **AI** | Claude API + OpenAI API + MCP Protocol |
-| **Testing** | Vitest |
+| **Engine** | Rust + wgpu + FFmpeg + axum + tokio + bevy_ecs |
+| **AI** | Vercel AI SDK (Claude/OpenAI/Google) + MCP Protocol |
+| **Streaming** | H.264 + PCM + fMP4 over WebSocket |
+| **Testing** | Vitest v4 + cargo test |
 | **Code Quality** | ESLint + TypeScript strict + Knip + dependency-cruiser |
 | **Build** | pnpm workspaces + Turbo (Monorepo) |
 
@@ -247,8 +249,9 @@ neko-suite/
 | **视频** | MP4, MOV, AVI, MKV, WebM, M4V |
 | **音频** | MP3, WAV, OGG, FLAC, AAC, M4A |
 | **图片** | PNG, JPG, JPEG, GIF, WebP, BMP, SVG |
-| **3D 模型** | glTF, GLB, VRM |
-| **项目** | .jvi (视频项目), .jvc (画布项目), .nks (剧本) |
+| **3D 模型** | glTF, GLB, VRM, .nkm |
+| **2D 动画** | INP (Inochi2D), .nks (Neko Sketch) |
+| **项目** | .jvi (视频项目), .jvc (画布项目) |
 
 ---
 

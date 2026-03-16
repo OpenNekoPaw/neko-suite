@@ -6,58 +6,17 @@
 
 ## 🔴 P0 — 阻塞性（本迭代必须完成）
 
-### 后续开发步骤
-
-1. ~~验证 Phase 3 Rust 编译~~ ✅ `cargo build` 通过（仅 warnings，无 errors）
-2. ~~neko-model Phase 2 基础建模~~ ✅ 7/7 完成（骨骼表情 + CSG + 3D 文字 + 参数化几何体，前后端全栈）
-3. ~~neko-sketch 逐帧动画~~ ✅ S.2 + S.3 全部完成
+### 构建/测试修复
+1. [ ] `@neko-model/webview` 测试脚本缺少 `--passWithNoTests`（导致 `pnpm test` 级联失败）
+2. [ ] `neko-sketch/packages/extension/package.json` 入口 `./src/index.ts` 文件不存在（Knip 报错）
 
 ---
 
 ## 🟡 P1 — 核心功能（当前迭代）
 
-### neko-engine（3D PBR 渲染 Phase 3）✅ 已完成
+### neko-engine（3D PBR 渲染 Phase 3）✅ 已完成（12/12）
 
-**目标**：轻量 PBR 渲染 + 场景组装 + 时间线集成（打通 3D 场景 → GPU 纹理 → 2D 合成管线）
-**进度**：12/12 完成（100%）
-
-**已完成** ✅：
-- [x] Step 1: GPU 资产缓存（AssetCache，glTF → GPU mesh/material，按 URI 去重）
-- [x] Step 2: PBR 渲染管线（Forward rendering, Cook-Torrance BRDF, `pbr_forward.wgsl`）
-- [x] Step 3: SceneRenderOutput → GpuLayer 桥接（Rgba16Float 零拷贝进 TextureCompositor）
-- [x] Step 4: Scene3D 元素类型（ElementType::Scene3D + Scene3DElementData + CameraOverride）
-- [x] Step 5: SceneService 扩展（ISceneService::render_frame，Mutex 内 tick+render 同一锁）
-- [x] Step 6: GpuExportPipeline 集成（collect_visible_scene3d → render → GpuLayer）
-- [x] Step 7: ScenesController 渲染 API（capture/composite/stream 三个 action）
-- [x] Step 8: 动画插值增强（Translation/Scale LERP + Rotation SLERP + MorphWeights LERP）
-- [x] Step 9: IBL 环境系统（irradiance map + prefilter map + BRDF LUT + skybox）
-- [x] Step 10: 后处理链（Tone Mapping ACES/Reinhard/Uncharted2 + bloom + vignette + color grading）
-- [x] Step 11: GPU 粒子系统（compute shader 模拟 + billboard 渲染，fire/smoke/magic/debris 预设）
-- [x] Step 12: 前端集成（TS 类型 + neko-cut 时间线 dispatch + neko-canvas 节点类型 + AI action 映射）
-
-**新增文件**：`scene_renderer/` 模块（asset_cache/pbr_pipeline/environment/post_process/particles/vertex）+ 5 个 WGSL shaders
-**修改文件**：gpu_export_pipeline.rs、domain/timeline.rs、services/scene.rs、editor-types.ts、TimelineElementContent.tsx、extendedCanvas.ts、LayerPanel.tsx、aiAction.ts 等
-
-### neko-model（3D 编辑器 Phase 2）
-
-**目标**：AI 捏脸 + 基础建模 + 延迟验证
-**进度**：11/11 完成（100%）✅
-
-**已完成** ✅：
-- [x] 前端：参数化面部编辑器（R3F 视口 + 分类滑块面板：脸型/眼/鼻/嘴/眉，22 个参数）
-- [x] 前端：Morph Target 驱动捏脸（自动绑定 morphTargetInfluences）
-- [x] 前端：VRM 表情预设（`@pixiv/three-vrm@^3.5.1`，17 个标准表情：情绪/口型/眼神）
-- [x] 前端：延迟测试工具（100 次测试 + Min/Max/Avg/P95 统计 + 建议）
-- [x] 后端：`scenes:latency_test` action（立即返回，用于 RTT 测量）
-- [x] 前端：骨骼驱动表情（口型 6 音素 + 眼球追踪 128x128 + 眉毛 3 滑块）
-- [x] 前端：CSG 操作 UI（并集/差集/交集 + 操作数选择 + 执行）
-- [x] 前端：3D 文字编辑器（文本输入 + 字号/挤出深度滑块）
-- [x] 前端：参数化几何体面板（6 种形状 + 动态参数滑块）
-- [x] 后端：CSG 布尔运算（BSP 树分割法，三角网格级别）
-- [x] 后端：3D 文字挤出（cosmic-text 0.12 字形轮廓 + ear-clipping 三角化 + Z 轴挤出）
-- [x] 后端：参数化几何体生成（Cube/Sphere/Cylinder/Cone/Torus/Plane + ProceduralMesh 统一抽象）
-
-**关键里程碑**：实测 H.264 流延迟 < 15ms → 方案 A 够用（JPEG 备选方案 B 暂不实施）
+### neko-model（3D 编辑器 Phase 2）✅ 已完成（11/11）
 
 ---
 
@@ -69,27 +28,11 @@
 - [ ] 渲染能力补齐：shapes / keyframes（effects ✅ subtitles ✅ letter_spacing ⚠️ cosmic-text 限制）
 - [ ] 转场系统接入 export pipeline（buffer→texture 架构 mismatch）
 
-### neko-sketch（S.2 骨骼动画 + S.3 高级 2D）✅ 已完成
-- [x] bevy_animation ParameterCurve 桥接层（AnimationTarget → inox2d 参数值）✅
-- [x] inox2d 真实 INP 解析（手动解析 INP 二进制格式，绕过 inox2d 0.3.0 `pub(crate)` 限制）✅
-- [x] anim/play、anim/stop、anim/seek、anims HTTP 端点 ✅
-- [x] `GET /v1/puppets/stream` 60fps WebSocket PuppetDelta 推送 ✅
-- [x] AnimationPanel UI（动画列表 + 播放控制 + Seek slider）✅
-- [x] IInochi2DController.connectStream（WebSocket 接入）✅
-- [x] 逐帧动画：洋葱皮渲染 + 帧管理 + 精灵表导出 ✅
-- [x] S.3 滤镜系统（FilterPipeline + FilterRegistry 6 内置 GLSL + FilterPanel UI）✅
-- [x] S.3 粒子系统（ParticleSimulation 对象池 + ParticleRenderer WebGL2 实例化 + ParticlePanel UI）✅
-- [x] S.3 变形动画（MorphEngine 顶点变形 + 关键帧插值 + MorphEditor UI）✅
-- [x] S.3 场景系统（视差渲染 + 4 场景模板 + 氛围效果 5 预设 + ScenePanel/AtmospherePanel）✅
-- [x] S.3 像素绘制（Bresenham + flood fill + 1x/2x/4x/8x 画笔）✅
-- [x] S.3 矢量绘制（贝塞尔路径 + 矩形/椭圆/多边形/星形 + SVG 导出）✅
-- [x] S.3 资产集成（精灵表/场景 JSON 导出 + VSCode 命令）✅
-- [x] S.3 渲染管线集成（filterFn 回调 + SketchRenderer.renderWithEffects）✅
-- [x] S.3 单元测试（7 文件 42 测试）✅
-- [x] 画板响应修复（RAF 连续渲染 + ResizeObserver 自适应 + dirty flag）✅
-- [x] 国际化支持（I18nProvider + useTranslation hook + 130 翻译 key + 中英双语）✅
-- [x] S.3 P2 Vector 拖拽预览（Canvas2D overlay，onStrokeMove 实时绘制矩形/椭圆）✅
-- [x] S.3 P2 序列帧播放器（SpriteSheetPlayer：拖拽导入 PNG+JSON + RAF 播放 + 帧缩略图）✅
+### neko-sketch（S.2 + S.3）✅ 已完成
+
+### neko-canvas
+- [ ] 节点 resize/rotate + 框选 + 分组节点
+- [ ] Port 系统 + UI 面板
 
 ### neko-tools（媒体 Diff）
 - [ ] Diff 后端增强（Phase 3）
@@ -106,8 +49,7 @@
   - [ ] 兼容性检测（streaming / tool_use 支持）
   - [ ] 配额检查（速率限制 / 余额）
 
-### neko-canvas
-- [ ] 功能补全：Port 系统 + UI 面板
+### neko-canvas（高级功能）
 - [ ] WebGPU 渲染管线（当前 Canvas 2D 降级实现）
 - [ ] 特效系统（复用 neko-engine WGSL shaders）
 - [ ] 自定义转场（复用 engine 转场类型）
@@ -158,6 +100,29 @@
 - [ ] ModelAssetHandler（AI 模型下载 + 校验 + 量化选择）
 - [ ] IAIAnalysisService 实现（接入 neko-agent AI 分类）
 
+### neko-live 虚拟制片（Phase 5，前置 neko-audio）
+- [ ] Phase 5.1：核心追踪
+  - [ ] Webview 脚手架（React + Zustand + Three.js + @pixiv/three-vrm）
+  - [ ] Extension Host VmcReceiver（Node.js dgram UDP → postMessage 中转）
+  - [ ] MediaPipe Face/Pose 集成（468 面部 + 33 姿态点 → VRM BlendShape 映射）
+  - [ ] 骨骼/表情驱动（复用 neko-model BoneExpression + 口型同步 6 音素）
+  - [ ] 60fps 实时预览流（复用 neko-sketch puppet_stream WebSocket）
+- [ ] Phase 5.2：录制与输出
+  - [ ] 追踪标定系统（坐标系校准 + 参数微调）
+  - [ ] 录制管道（复用 neko-engine ExportService + GPU 导出管线）
+  - [ ] 音视频同步（依赖 neko-audio AudioMixer）
+  - [ ] MP4 导出 → neko-cut 时间线集成
+- [ ] Phase 5.3：直播推流
+  - [ ] RTMP/SRT 推流（native-core FFmpeg 输出，绕过虚拟摄像头驱动）
+  - [ ] OBS WebSocket 集成
+  - [ ] neko-sketch 2D puppet 联动（INP → 实时驱动）
+
+### VR/AR 沉浸式创作（远期 Phase 7）
+- [ ] Phase 7.1：neko-engine 立体渲染（双 Pass wgpu + 镜头畸变校正 + XR pose 同步）
+- [ ] Phase 7.2：Electron/Tauri WebXR 外部 App（沉浸式预览 + 手部追踪 → 骨骼映射）
+- [ ] Phase 7.3：AR 能力（ARKit/ARCore 原生集成 + 平面检测 + 光照估计）
+- [ ] Phase 7.4：AI 辅助 XR（neko-agent VR 场景生成 MCP Tools + 手势识别 + 语音指令）
+
 ### 跨语言架构对齐
 - [ ] Step 2：Engine ComputeService（`/v1/compute/evaluate_frame`，消除 ~1285 行 TS 重复计算）
 - [ ] Step 3：UI 状态分离（Track/Element UI 字段移入前端 Store）
@@ -172,7 +137,11 @@
 - [ ] Release workflow（`.github/workflows/release.yml`，tag 触发 vsix 打包）
 - [ ] ESLint warn → error 升级（`no-console` + `no-explicit-any`）
 
-### 代码质量（2026-03-14 更新）
+### 代码质量（2026-03-16 更新）
+
+**扫描基线**：`pnpm build` ✅ | `pnpm test` ❌（@neko-model/webview 无测试文件）| `pnpm check` ❌（Knip 未使用导出）
+
+**源码 TODO 扫描**：12 处（P0: 0 | P1: 0 | P2: 2 | 一般: 3 | 误报: 7）— 无阻塞项
 
 **扫描基线**：Knip 5 未使用文件 | 435 未使用导出 | 16 未使用依赖 | **0 循环依赖** ✅
 
@@ -271,9 +240,10 @@
 | @neko/types 重组 | domain/ 分层 + exports 子路径隔离 | — |
 | @neko/media-analysis | 从 neko-tools 提取纯 Diff 算法包 | — |
 | neko-audio | 波形编辑 + 均衡器 + 录音 | Phase 4 |
-| neko-live | 动捕 + 虚拟形象 + 直播（前置：neko-audio；VMC 需 Extension Host UDP 中转；渲染：Three.js 实时预览 + wgpu 录制输出混合策略；虚拟摄像头推流非跨平台待调研） | Phase 5 |
+| neko-live | 动捕 + 虚拟形象 + 直播（前置 neko-audio；5.1 MediaPipe/VMC 追踪 + VRM 预览；5.2 录制 + 音视频同步；5.3 RTMP→OBS 推流；虚拟摄像头不做，改 RTMP） | Phase 5 |
 | neko-assets Phase 5 | 社区分发（.neko 包格式 + 远程注册表） | — |
+| neko-vr | VR/AR 沉浸式创作（立体渲染 + Electron WebXR App + 手部追踪；前置 Phase 3 + 5） | Phase 7 |
 
 ---
 
-*最后更新：2026-03-14（技术债分析完成：console.log ✅ 100%、循环依赖 ✅ 100%、as any ✅ 80%、未使用导出 📊 962 处分析；neko-model Phase 2 ✅ 11/11 完成；neko-sketch S.3 ✅ 全部完成）*
+*最后更新：2026-03-16（新增 P3 neko-live 虚拟制片 13 项 + VR/AR 4 项；P0 2 项构建修复未变；技术债基线不变）*

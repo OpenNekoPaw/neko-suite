@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "description": "NekoSketch VS Code extension host",
   "main": "./dist/extension.js",
-  "types": "./src/index.ts",
+  "types": "./src/extension.ts",
   "scripts": {
     "build": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
     "watch": "npm run build -- --watch",

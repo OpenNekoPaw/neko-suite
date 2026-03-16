@@ -84,10 +84,14 @@ export abstract class AISdkAdapter implements Adapter {
       ...this.getProviderOptions(options, provider, model),
     };
 
+    // Reasoning models (o1, o3, deepseek-r1, etc.) don't support sampling params
+    const isReasoning = model.capabilities?.includes('reasoning');
+
     // Only add optional parameters if they are defined
-    if (options.temperature !== undefined) requestOptions.temperature = options.temperature;
+    if (!isReasoning && options.temperature !== undefined)
+      requestOptions.temperature = options.temperature;
     if (options.maxTokens !== undefined) requestOptions.maxOutputTokens = options.maxTokens;
-    if (options.topP !== undefined) requestOptions.topP = options.topP;
+    if (!isReasoning && options.topP !== undefined) requestOptions.topP = options.topP;
     if (options.stop !== undefined) requestOptions.stopSequences = options.stop;
 
     // Debug logging
@@ -140,22 +144,25 @@ export abstract class AISdkAdapter implements Adapter {
     const tools = options.tools ? this.transformTools(options.tools) : undefined;
 
     try {
+      // Reasoning models (o1, o3, deepseek-r1, etc.) don't support sampling params
+      const isReasoning = model.capabilities?.includes('reasoning');
+
       const result = streamText({
         model: languageModel,
         system: systemPrompt,
         messages: coreMessages,
-        temperature: options.temperature,
+        temperature: isReasoning ? undefined : options.temperature,
         maxOutputTokens: options.maxTokens,
-        topP: options.topP,
-        frequencyPenalty: options.frequencyPenalty,
-        presencePenalty: options.presencePenalty,
+        topP: isReasoning ? undefined : options.topP,
+        frequencyPenalty: isReasoning ? undefined : options.frequencyPenalty,
+        presencePenalty: isReasoning ? undefined : options.presencePenalty,
         stopSequences: options.stop,
         tools,
         abortSignal: options.signal,
         ...this.getProviderOptions(options, provider, model),
       });
 
-      let chunkId = `chatcmpl-${Date.now()}`;
+      const chunkId = `chatcmpl-${Date.now()}`;
 
       for await (const part of result.fullStream) {
         if (part.type === 'text-delta') {

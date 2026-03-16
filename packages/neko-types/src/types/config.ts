@@ -152,6 +152,7 @@ export type ModelCapability =
   | 'embedding'
   | 'code'
   | 'audio'
+  | 'reasoning'
   // Media generation capabilities
   | 'text_to_image'
   | 'image_to_image'

@@ -414,11 +414,14 @@ export {
 export {
   TaskManager,
   MemoryTaskStorage,
+  FileTaskStorage,
+  createFileTaskStorage,
   MemoryTaskRecoveryStorage,
   FileTaskRecoveryStorage,
   createFileRecoveryStorage,
   type TaskManagerOptions,
   type ConcurrencyConfig,
+  type FileTaskStorageOptions,
   type FileTaskRecoveryStorageOptions,
   // Re-exported types from shared
   type Task,

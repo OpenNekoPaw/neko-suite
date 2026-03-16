@@ -15,12 +15,12 @@
 | **neko-cut** | Alpha | 82% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 拖拽修复 |
 | **neko-agent** | Alpha | 75% | Agent 引擎 + LLM 平台 + CLI + UI + Handler 拆分 + 流式化 + 剧本→时间线 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
-| **neko-preview** | WIP | 60% | 视频/音频预览 Provider + 播放器 UI |
+| **neko-preview** | Alpha | 70% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + i18n |
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
-| **neko-assets** | Alpha | 65% | Phase 1-3 ✅ + 外部媒体库 P0/P1 ✅，Phase 4-5 待开发 |
+| **neko-assets** | Alpha | 85% | Phase 1-3 ✅ + 外部媒体库 ✅ + AI 分类 + 缩略图 + 多云支持 + 跨扩展集成，Phase 4-5 待开发 |
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
-| **neko-canvas** | WIP | 40% | 节点系统 + 连线 + 视口裁剪 + Undo/Redo + Copy/Paste |
-| **neko-proto** | Early | 30% | timeline.proto 定义，生成类型在 neko-types |
+| **neko-canvas** | Alpha | 65% | 无限画布 + 5 种节点 + 多选 + 属性面板 + 上下文菜单 + 拖放 + 快捷键 + i18n |
+| **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL，Rust/TS 双端类型源 |
 | **neko-model** | Alpha | 65% | 3D 创作套件，Phase 3.1 ✅ + Phase 3.2 ✅ + Phase 3.3 ✅（PBR 渲染 + 粒子 + 后处理 + 时间线集成 + CSG/文字/几何体建模 + 骨骼表情） |
 | **neko-sketch** | Alpha | 85% | S.1 ✅ 绘画基础；S.2 ✅ 骨骼动画；S.3 ✅ 高级 2D（滤镜/粒子/场景/绘制/资产）；S.4 规划中 |
 | **neko-audio** | Planned | 5% | 仅扩展入口骨架 |
@@ -67,9 +67,13 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 > 目标：专业视觉效果和 3D 场景编辑 — **进度 ~75%**
 
 ### neko-canvas — 已完成
-- 节点系统（6 种节点 + 连线）+ 画布交互（拖拽/缩放/吸附/MiniMap）+ 媒体内嵌 + Undo/Redo + Copy/Paste
+- 无限画布（5%-1600% 缩放 + 网格背景 + 视口裁剪）
+- 5 种节点（Annotation/Storyboard/Media/Text/Artboard）+ 内联文本编辑
+- 多选（Cmd+click）+ 属性面板 + 上下文菜单 + 拖放导入 + 10+ 快捷键 + i18n
 
 ### neko-canvas — 待完成
+- 节点 resize/rotate + 框选 + 分组
+- Port 系统 + 连线
 - WebGPU 渲染 + 特效系统 + 自定义转场 + 导出
 
 ### neko-model (3D) — Alpha
@@ -131,16 +135,80 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 > 目标：专业音频编辑 — **进度 ~15%**
 
-- neko-preview：VideoPreviewProvider + AudioPreviewProvider ✅，多格式预览待完成
+- neko-preview：VideoPreviewProvider + AudioPreviewProvider ✅ + WebCodecs 播放器 + 波形可视化 + i18n，高级预览待完成
 - neko-audio：波形编辑 + 音频效果（均衡器/压缩/降噪）+ 录音
 
 ---
 
 ## Phase 5: 虚拟制片
 
-> 目标：虚拟直播和动捕 — **进度 ~0%**
+> 目标：虚拟直播和动捕 — **进度 ~0%** | **前置：Phase 4（neko-audio）**
 
-- neko-live：动作捕捉 + 虚拟形象（VRM）+ 直播集成（OBS/虚拟摄像头）
+**价值定位**：VTuber / 独立创作者 / 直播场景，录制内容可直接进入 neko-cut 时间线，形成闭环创作流。
+
+**现有可复用基础**（~80%）：
+- VRM 加载 + 17 个表情预设 + 口型同步 6 音素 + 眼球追踪（neko-model）
+- native-puppet 2D 骨骼 ECS + 60fps WebSocket PuppetDelta 流（neko-sketch S.2）
+- H.264 硬件编码 8-11ms + ExportService 录制管线（neko-engine）
+- EngineClient puppet* 方法（neko-client）
+
+**需新建**：
+- VMC 协议接收（Extension Host dgram UDP 中转，~200 行 TS）
+- MediaPipe Face/Pose 集成（Webview 内推理，~300 行 TS）
+- RTMP/SRT 推流（native-core FFmpeg 输出，~500 行 Rust）
+
+**里程碑**：
+- Phase 5.1：核心追踪（MediaPipe + VMC + Three.js VRM 预览 + 骨骼驱动）— 3-4 周
+- Phase 5.2：录制与输出（标定 + 音视频同步 + MP4 导出 → neko-cut）— 2-3 周
+- Phase 5.3：直播推流（RTMP/SRT → OBS + neko-sketch 2D puppet 联动）— 2-3 周
+
+**架构决策**：
+- 渲染：混合策略（Three.js 实时预览 <1ms + wgpu 录制输出 8-11ms）
+- 延迟：追踪→渲染 20-40ms（满足直播体感）
+- 虚拟摄像头：**不做原生驱动**（非跨平台），改用 RTMP 推流到 OBS 生成
+
+---
+
+## Phase 7: VR/AR 沉浸式创作（远期规划）
+
+> 目标：VR/AR 场景编辑 + 沉浸式预览 — **进度 ~0%** | **前置：Phase 3 + Phase 5**
+
+**架构决策**：VSCode Webview 沙箱无 WebXR API，采用混合策略：
+
+```
+Layer 1: VSCode 内（编辑/导出）
+├─ neko-model 3D 场景编辑 + XR 元数据标注（交互区域/锚点/空间音频）
+├─ VR/AR 预览参数配置（IPD/FOV/控制器映射）
+└─ 场景导出（glTF + XR 扩展）
+
+Layer 2: 外部 App（沉浸式预览，Electron/Tauri）
+├─ WebXR Device API（immersive-vr / immersive-ar）
+├─ neko-engine WebSocket 实时同步（双眼立体渲染）
+├─ 手柄/手部追踪 → 骨骼映射（复用 native-scene Skeleton）
+└─ 触觉反馈路由
+
+Layer 3: MCP 桥接（专业导出）
+├─ Unity MCP → VR 应用打包
+├─ Unreal MCP → 高保真 VR 体验
+└─ ComfyUI MCP → AI 生成 VR 环境
+```
+
+**现有可复用基础**：
+- wgpu PBR 渲染管线 → 扩展双 Pass 立体渲染（~300 行 Rust）
+- bevy_ecs Skeleton + VRM → 手部/面部追踪映射
+- WebSocket 60fps 流 → 已验证 <20ms 延迟
+- EngineClient 零 VSCode 依赖 → 外部 App 直接复用
+
+**需新建**：
+- `native-core/src/vr/stereo_renderer.rs` — 双眼渲染 + 镜头畸变校正
+- `neko-vr/` 扩展 — VSCode XR 元数据编辑 + Electron 沉浸式预览
+- AR 平面检测需原生平台集成（ARKit/ARCore），属 Phase 7.3+
+
+**里程碑**：
+- Phase 7.1：立体渲染 + EngineClient XR 端点（2-3 周）
+- Phase 7.2：Electron WebXR 外部 App + 手部追踪（3-4 周）
+- Phase 7.3：AR 能力（平面检测 + 光照估计 + 图像追踪）（4-6 周）
+- Phase 7.4：AI 辅助 XR（neko-agent VR 场景生成 + 手势识别 + 语音指令）
 
 ---
 
@@ -149,7 +217,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 > 目标：统一资产管理 + AI 模型资产化 + 社区分发 — **进度 ~55%**
 
 - Phase 1-3 ✅：统一核心 + 深度集成 + 注册表 + 缩略图
-- Phase 3.5 ✅：外部媒体库（健康检查 + 路径变量 + TreeView）
+- Phase 3.5 ✅：外部媒体库（健康检查 + 路径变量 + TreeView + 多云支持）
 - Phase 4（待开发）：Handler 实现（Shader/Preset/Model）+ AI 模型资产化 + IAIAnalysisService
 - Phase 5（待开发）：社区分发（`.neko` 包格式 + 远程注册表 + CLI）
 
@@ -171,4 +239,4 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ---
 
-*最后更新: 2026-03-14（neko-model Phase 3.2 ✅ + Phase 3.3 ✅ 全栈完成；neko-sketch S.1/S.2/S.3 ✅；neko-agent 构建修复 d3/mermaid）*
+*最后更新: 2026-03-16（Phase 5 虚拟制片详细规划；Phase 7 VR/AR 远期规划；neko-sketch S.3 P2 完成；neko-agent 任务持久化；neko-engine glTF 导出器）*

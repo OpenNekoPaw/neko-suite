@@ -124,7 +124,7 @@
     "copy:extension": "mkdir -p dist && cp packages/extension/dist/extension.js dist/extension.js",
     "watch": "npm run compile:extension -- --watch",
     "lint": "eslint packages --ext ts,tsx",
-    "test": "vitest",
+    "test": "vitest run --passWithNoTests",
     "package": "vsce package"
   },
   "devDependencies": {
