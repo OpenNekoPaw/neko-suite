@@ -401,6 +401,7 @@ export {
   type AgentSessionConfig,
   type AgentEvent,
   type AgentEventType,
+  type ExecutionMode,
   type ExecutionContext,
   type CompressionResult,
   // Re-exported from permission

@@ -6,7 +6,7 @@
  */
 import * as vscode from 'vscode';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
-import { SketchEditorProvider } from './editor';
+import { SketchEditorProvider, PuppetEditorProvider } from './editor';
 import { LayerOutlineProvider, SketchStatusBar } from './views';
 import { setRootLogger, getRootLogger } from './utils/logger';
 import { setErrorHandler } from './utils/errorHandler';
@@ -14,6 +14,7 @@ import { registerCommands } from './commands';
 
 // Extension state
 let sketchEditorProvider: SketchEditorProvider;
+let puppetEditorProvider: PuppetEditorProvider;
 let layerOutlineProvider: LayerOutlineProvider;
 let sketchStatusBar: SketchStatusBar;
 
@@ -39,6 +40,9 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBar: sketchStatusBar,
   });
 
+  // Create puppet editor provider
+  puppetEditorProvider = new PuppetEditorProvider(context);
+
   // Register custom editor for .nks files
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
@@ -49,6 +53,19 @@ export function activate(context: vscode.ExtensionContext): void {
           retainContextWhenHidden: true,
         },
         supportsMultipleEditorsPerDocument: false,
+      },
+    ),
+  );
+
+  // Register custom editor for .inp puppet files
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(
+      PuppetEditorProvider.viewType,
+      puppetEditorProvider,
+      {
+        webviewOptions: {
+          retainContextWhenHidden: true,
+        },
       },
     ),
   );

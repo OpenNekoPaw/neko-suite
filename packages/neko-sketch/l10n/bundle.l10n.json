@@ -2,5 +2,7 @@
   "neko.sketch.editor.title": "Sketch Editor",
   "neko.sketch.layerOutline.title": "Layers",
   "neko.sketch.new.title": "New Sketch",
-  "neko.sketch.new.noFolder": "No workspace folder open"
+  "neko.sketch.new.noFolder": "No workspace folder open",
+  "neko.sketch.puppet.title": "Puppet Editor",
+  "neko.sketch.editImage.title": "Edit in Sketch"
 }

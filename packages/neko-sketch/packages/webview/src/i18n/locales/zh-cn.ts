@@ -12,6 +12,7 @@ export const zhCN: MessageBundle = {
   'sketch.toolbar.fill': '填充',
   'sketch.toolbar.zoom': '缩放',
   'sketch.toolbar.ariaLabel': '绘图工具',
+  'sketch.sidebar.toggle': '切换侧栏',
 
   // Layer panel
   'sketch.layer.new': '新建图层',
@@ -127,13 +128,6 @@ export const zhCN: MessageBundle = {
   'sketch.frame.exportSpriteSheet': '导出精灵表',
   'sketch.frame.exportSpriteSheetTooltip': '导出为精灵表',
 
-  // Morph editor
-  'sketch.panel.morph': '变形目标',
-  'sketch.morph.noTargets': '无变形目标',
-  'sketch.morph.play': '播放变形动画',
-  'sketch.morph.stop': '停止变形动画',
-  'sketch.morph.stopped': '已停止',
-
   // Vector toolbar
   'sketch.panel.vector': '矢量工具',
   'sketch.vector.sides': '边数',
@@ -148,23 +142,6 @@ export const zhCN: MessageBundle = {
   // File
   'sketch.file.import': '导入',
   'sketch.file.export': '导出',
-
-  // Animation panel
-  'sketch.panel.animation': '动画',
-  'sketch.animation.noClips': '无动画片段',
-  'sketch.animation.liveStream': '实时流已连接',
-  'sketch.animation.stop': '停止动画',
-  'sketch.animation.play': '播放动画',
-  'sketch.animation.seek': '拖动进度',
-  'sketch.animation.disablePhysics': '禁用物理',
-  'sketch.animation.enablePhysics': '启用物理',
-  'sketch.animation.disablePhysicsSim': '禁用物理模拟',
-  'sketch.animation.enablePhysicsSim': '启用物理模拟',
-
-  // Parameter panel
-  'sketch.panel.parameters': '参数',
-  'sketch.parameter.resetDefault': '重置为默认值',
-  'sketch.parameter.resetParam': '重置 {name} 为默认值',
 
   // Frame timeline
   'sketch.timeline.stop': '停止播放',

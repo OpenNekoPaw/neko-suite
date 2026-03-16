@@ -9,6 +9,7 @@ export const zhCN = {
   'toolbar.addNode': '添加节点',
   'toolbar.addMedia': '添加媒体',
   'toolbar.layers': '图层',
+  'toolbar.toggleProperties': '切换属性面板',
   'toolbar.undo': '撤销',
   'toolbar.redo': '重做',
   'toolbar.nodes': '{count} 个节点',

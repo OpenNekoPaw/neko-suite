@@ -35,82 +35,6 @@ import { IAgentContext } from './agentContext';
 import type { HookManager } from './hookManager';
 
 // =============================================================================
-// Plan Mode System Prompt (hardcoded, previously loaded from presets JSON)
-// =============================================================================
-
-const PLAN_MODE_SYSTEM_PROMPT = `You are a software architect in PLANNING mode.
-
-## CRITICAL CONSTRAINTS
-
-You are in PLAN mode - a research and planning phase.
-
-### FORBIDDEN ACTIONS (will be blocked)
-- Edit, Write (except to plan file) - File modifications
-- Bash (write commands) - System changes
-- Any tool that modifies state
-
-### ALLOWED ACTIONS
-- Read, Glob, Grep, LS - File reading and search
-- WebFetch, WebSearch - Web research
-- AskUserQuestion - Clarify requirements
-- Task, TaskOutput - Spawn research agents
-- TodoRead, TodoWrite - Track planning progress
-- Write/Edit to \`.neko/plan.md\` - Write your plan
-
-## WORKFLOW
-
-1. **Research Phase**
-   - Explore the codebase using read-only tools
-   - Understand existing patterns and architecture
-   - Identify files that need modification
-
-2. **Design Phase**
-   - Analyze requirements and constraints
-   - Consider multiple approaches
-   - Evaluate trade-offs
-
-3. **Write Plan**
-   - Write your plan to \`.neko/plan.md\` using Write or Edit tool
-   - Include: Summary, Files to Modify, Implementation Steps, Risks
-
-4. **Submit for Approval**
-   - Call \`ExitPlanMode\` tool (no parameters needed)
-   - The tool reads your plan from the file
-   - User will review and approve/reject
-
-## PLAN FORMAT (write to .neko/plan.md)
-
-\`\`\`markdown
-# [Plan Title]
-
-## Summary
-[One-line description of the change]
-
-## Files to Modify
-- \`path/to/file.ts\` - Brief explanation
-- ...
-
-## Implementation Steps
-1. Step one
-2. Step two
-...
-
-## Key Decisions
-- Decision 1: rationale
-- ...
-
-## Risks/Considerations
-- Risk 1: mitigation
-- ...
-\`\`\`
-
-## IMPORTANT
-
-- Only \`.neko/plan.md\` can be written in plan mode
-- Focus on thorough research before proposing changes
-- If task is purely research (no code changes needed), you don't need to call ExitPlanMode`;
-
-// =============================================================================
 // Service Identifier
 // =============================================================================
 
@@ -355,6 +279,12 @@ export interface IAgentRunner extends vscode.Disposable {
    * grants any specified tool allowances.
    */
   applySkillInjection(injection: import('@neko/agent').SkillInjection): void;
+
+  /**
+   * Check if a tool is allowed by the active skill.
+   * Returns true if no skill restrictions are active.
+   */
+  isToolAllowed(toolName: string): boolean;
 }
 
 // =============================================================================
@@ -697,39 +627,27 @@ export class AgentRunner implements IAgentRunner {
     this._session?.applySkillInjection(injection);
   }
 
+  isToolAllowed(toolName: string): boolean {
+    return this._session?.isToolAllowed(toolName) ?? true;
+  }
+
   // -------------------------------------------------------------------------
   // Private Methods
   // -------------------------------------------------------------------------
 
   private _resolveSystemPrompt(config: IAgentConfig): string {
-    // If custom system prompt is provided, use it
+    // Custom override takes precedence
     if (config.systemPrompt) {
       return config.systemPrompt;
     }
 
-    // If prompt builder has AGENTS.md content, use it
-    if (this._promptBuilder) {
-      const agentsContent = this._promptBuilder.getAgentsContent();
-      if (agentsContent) {
-        return agentsContent;
-      }
-    }
-
-    // Use plan mode preset if in plan mode
-    if (config.executionMode === 'plan') {
-      logger.info('Using plan-mode system prompt');
-      return PLAN_MODE_SYSTEM_PROMPT;
-    }
-
-    // Use prompt builder's built-in prompt
+    // Delegate entirely to SystemPromptBuilder (already configured with locale + mode)
     if (this._promptBuilder) {
       return this._promptBuilder.build();
     }
 
-    // Fallback default prompt
-    return `You are a helpful AI assistant for video editing.
-You can use the available tools to help users edit their videos.
-When using tools, always explain what you are doing.`;
+    // Should not reach here — fallback
+    return '';
   }
 
   private _handleToolConfirmation(request: ToolConfirmationRequest): Promise<boolean> {

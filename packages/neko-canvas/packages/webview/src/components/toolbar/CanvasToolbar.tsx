@@ -26,6 +26,8 @@ export interface CanvasToolbarProps {
   onRedo: () => void;
   onToggleLayerPanel: () => void;
   isLayerPanelOpen: boolean;
+  onTogglePropertyPanel: () => void;
+  isPropertyPanelOpen: boolean;
 }
 
 type ExpandedPanel = 'add' | null;
@@ -42,6 +44,8 @@ export function CanvasToolbar({
   onRedo,
   onToggleLayerPanel,
   isLayerPanelOpen,
+  onTogglePropertyPanel,
+  isPropertyPanelOpen,
 }: CanvasToolbarProps) {
   const [expandedPanel, setExpandedPanel] = useState<ExpandedPanel>(null);
   const canUndo = useHistoryStore((s) => s.canUndo());
@@ -171,6 +175,18 @@ export function CanvasToolbar({
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Property Panel Toggle */}
+      <ToolbarButton
+        icon={
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM15 5v14h-2V5h2z" />
+          </svg>
+        }
+        title={t('toolbar.toggleProperties')}
+        isActive={isPropertyPanelOpen}
+        onClick={onTogglePropertyPanel}
+      />
 
       {/* ============================================================= */}
       {/* Expanded Panels (positioned to the right of the toolbar)      */}

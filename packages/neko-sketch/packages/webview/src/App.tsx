@@ -4,7 +4,7 @@
  * Assembles the sketch editor layout:
  * Toolbar | Canvas | Side panels (Brush/Color/Layers)
  */
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback } from 'react';
 import type { ExtensionToWebviewMessage } from './types';
 import { useSketchStore } from './stores';
 import {
@@ -13,9 +13,6 @@ import {
   BrushPanel,
   ColorPanel,
   LayerPanel,
-  AnimationPanel,
-  ParameterPanel,
-  PuppetNodeTree,
   FrameTimeline,
   FrameControls,
   FilterPanel,
@@ -30,10 +27,7 @@ import { dispatchKeyboardAction } from './utils/keyboard-dispatcher';
 import { importImageAsLayer } from './utils/image-import';
 import { i18nService, setLocale } from './i18n';
 import { I18nProvider } from './i18n/I18nContext';
-import { usePuppetPlayback } from './hooks/usePuppetPlayback';
-import { Inochi2DController } from './animation';
 import type { SupportedLocale } from '@neko/shared';
-import { EngineClient } from '@neko/neko-client';
 
 // Acquire VSCode API once
 const vscode = (window as unknown as { acquireVsCodeApi: () => VsCodeApi }).acquireVsCodeApi();
@@ -52,8 +46,6 @@ export function App() {
   const setActiveLayer = store((s) => s.setActiveLayer);
   const markClean = store((s) => s.markClean);
   const clearHistory = store((s) => s.clearHistory);
-  const puppetLoaded = store((s) => s.puppetLoaded);
-
   // Sync status bar info to VSCode native status bar
   const viewport = store((s) => s.viewport);
   const canvasState = store((s) => s.canvas);
@@ -73,10 +65,6 @@ export function App() {
       },
     });
   }, [viewport.zoom, canvasState.width, canvasState.height, activeTool, layerCount, brushSize]);
-
-  // Puppet animation controller (created lazily when engine port is available)
-  const controllerRef = useRef<Inochi2DController | null>(null);
-  const { onPlay, onStop, onSeek } = usePuppetPlayback(controllerRef.current);
 
   // Notify extension that webview is ready
   useEffect(() => {
@@ -138,12 +126,6 @@ export function App() {
           break;
         }
 
-        case 'enginePort': {
-          const engine = new EngineClient(msg.port);
-          controllerRef.current = new Inochi2DController(engine);
-          break;
-        }
-
         default:
           break;
       }
@@ -164,25 +146,20 @@ export function App() {
           <div className="sketch-canvas-container">
             <SketchCanvas />
           </div>
-          <div className="flex flex-col w-60 border-l border-[var(--sketch-border)] overflow-y-auto">
-            <BrushPanel />
-            <ColorPanel />
-            <PalettePanel />
-            <LayerPanel />
-            <FilterPanel />
-            <FrameControls />
-            <SpriteSheetPlayer />
-            <ParticlePanel />
-            <ScenePanel />
-            <AtmospherePanel />
-            {puppetLoaded && (
-              <>
-                <PuppetNodeTree />
-                <ParameterPanel controller={controllerRef.current} />
-                <AnimationPanel onPlay={onPlay} onStop={onStop} onSeek={onSeek} />
-              </>
-            )}
-          </div>
+          {store((s) => s.showSidebar) && (
+            <div className="flex flex-col w-60 border-l border-[var(--sketch-border)] overflow-y-auto">
+              <BrushPanel />
+              <ColorPanel />
+              <PalettePanel />
+              <LayerPanel />
+              <FilterPanel />
+              <FrameControls />
+              <SpriteSheetPlayer />
+              <ParticlePanel />
+              <ScenePanel />
+              <AtmospherePanel />
+            </div>
+          )}
         </div>
         <FrameTimeline />
       </div>

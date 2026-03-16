@@ -503,6 +503,8 @@ export function CanvasApp() {
           onRedo={redo}
           onToggleLayerPanel={() => setIsLayerPanelOpen((prev) => !prev)}
           isLayerPanelOpen={isLayerPanelOpen}
+          onTogglePropertyPanel={() => setIsPropertyPanelOpen((prev) => !prev)}
+          isPropertyPanelOpen={isPropertyPanelOpen}
         />
 
         <div
@@ -609,6 +611,20 @@ export function CanvasApp() {
               </div>
             </div>
           )}
+
+          {/* Connection hint overlay */}
+          {isConnecting && (
+            <div
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded text-xs pointer-events-none animate-pulse"
+              style={{
+                backgroundColor: 'var(--toolbar-bg)',
+                color: 'var(--toolbar-fg)',
+                border: '1px solid var(--toolbar-border)',
+              }}
+            >
+              {t('status.connecting')}
+            </div>
+          )}
         </div>
 
         {isPropertyPanelOpen && (
@@ -620,44 +636,6 @@ export function CanvasApp() {
             onToggleLock={handleToggleLock}
           />
         )}
-      </div>
-
-      {/* Status Bar */}
-      <div
-        className="h-[22px] flex items-center px-2 text-[11px] shrink-0 gap-0"
-        style={{ backgroundColor: 'var(--statusbar-bg)', color: 'var(--statusbar-fg)' }}
-      >
-        <span className="px-1.5 hover:bg-white/10 cursor-default">
-          {t('status.zoom', { level: (viewport.zoom * 100).toFixed(0) })}
-        </span>
-        <span className="px-1.5 hover:bg-white/10 cursor-default">
-          {t('status.pan', { x: viewport.pan.x.toFixed(0), y: viewport.pan.y.toFixed(0) })}
-        </span>
-        {isConnecting && <span className="px-1.5 animate-pulse">{t('status.connecting')}</span>}
-        {selectedNodeIds.length > 0 && (
-          <span className="px-1.5 hover:bg-white/10 cursor-default">
-            {t('status.selected', { count: selectedNodeIds.length })}
-          </span>
-        )}
-        <div className="flex-1" />
-        <button
-          className="px-1.5 h-full flex items-center hover:bg-white/10 transition-colors"
-          style={{ color: 'var(--statusbar-fg)', opacity: isPropertyPanelOpen ? 1 : 0.7 }}
-          onClick={() => setIsPropertyPanelOpen((prev) => !prev)}
-          title="Toggle Properties Panel"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <path d="M15 3v18" />
-          </svg>
-        </button>
       </div>
     </div>
   );

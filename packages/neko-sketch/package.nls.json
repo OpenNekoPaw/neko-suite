@@ -16,5 +16,7 @@
   "neko.sketch.resetZoom.title": "Reset Zoom",
   "neko.sketch.config.title": "Neko Sketch",
   "neko.sketch.config.pressureSensitivity": "Enable pressure sensitivity for drawing tablets",
-  "neko.sketch.config.defaultBrush": "Default brush type"
+  "neko.sketch.config.defaultBrush": "Default brush type",
+  "neko.sketch.puppet.title": "Puppet Editor",
+  "neko.sketch.editImage.title": "Edit in Sketch"
 }

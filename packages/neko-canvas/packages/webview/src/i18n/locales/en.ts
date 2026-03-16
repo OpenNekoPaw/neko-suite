@@ -9,6 +9,7 @@ export const en = {
   'toolbar.addNode': 'Add Node',
   'toolbar.addMedia': 'Add Media',
   'toolbar.layers': 'Layers',
+  'toolbar.toggleProperties': 'Toggle Properties',
   'toolbar.undo': 'Undo',
   'toolbar.redo': 'Redo',
   'toolbar.nodes': '{count} nodes',

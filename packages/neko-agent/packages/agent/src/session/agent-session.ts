@@ -93,6 +93,8 @@ export class AgentSession implements IAgentSession {
   private _isRunning = false;
   /** Tracks whether content_delta steps were emitted for current think cycle */
   private _hasStreamedDeltas = false;
+  /** Allowed tools from the active skill injection (undefined = no restrictions) */
+  private _activeSkillAllowedTools: string[] | undefined;
   private _pendingConfirmations = new Map<
     string,
     {
@@ -329,6 +331,9 @@ export class AgentSession implements IAgentSession {
     });
     this._syncSystemPrompt();
 
+    // Track allowed tools for runtime isToolAllowed() checks
+    this._activeSkillAllowedTools = injection.allowedTools;
+
     // Add allowed tools to permission hooks
     if (injection.allowedTools && injection.allowedTools.length > 0 && this._permissionHooks) {
       for (const tool of injection.allowedTools) {
@@ -343,6 +348,16 @@ export class AgentSession implements IAgentSession {
   removeSkillInjection(name: string): void {
     this._promptComposer.removeSection(`skill:${name}`);
     this._syncSystemPrompt();
+    this._activeSkillAllowedTools = undefined;
+  }
+
+  /**
+   * Check if a tool is allowed by the active skill.
+   * Returns true if no skill restrictions are active.
+   */
+  isToolAllowed(toolName: string): boolean {
+    if (!this._activeSkillAllowedTools?.length) return true;
+    return this._activeSkillAllowedTools.includes(toolName);
   }
 
   clearHistory(): void {

@@ -284,6 +284,12 @@ export interface IAgentSession {
   removeSkillInjection(name: string): void;
 
   /**
+   * Check if a tool is allowed by the active skill.
+   * Returns true if no skill restrictions are active.
+   */
+  isToolAllowed(toolName: string): boolean;
+
+  /**
    * Clear conversation history
    */
   clearHistory(): void;

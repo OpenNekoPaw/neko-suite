@@ -21,6 +21,8 @@ export function Toolbar() {
   const { t } = useTranslation();
   const activeTool = useSketchStore((s) => s.activeTool);
   const setActiveTool = useSketchStore((s) => s.setActiveTool);
+  const showSidebar = useSketchStore((s) => s.showSidebar);
+  const toggleSidebar = useSketchStore((s) => s.toggleSidebar);
 
   return (
     <div className="sketch-toolbar" role="toolbar" aria-label={t('sketch.toolbar.ariaLabel')}>
@@ -39,6 +41,19 @@ export function Toolbar() {
           </button>
         );
       })}
+      <div className="mt-auto">
+        <button
+          title={t('sketch.sidebar.toggle')}
+          aria-label={t('sketch.sidebar.toggle')}
+          aria-pressed={showSidebar}
+          className={showSidebar ? 'active' : ''}
+          onClick={toggleSidebar}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM15 5v14h-2V5h2z" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

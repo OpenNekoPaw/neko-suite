@@ -20,10 +20,9 @@ import type {
   SkillInjection,
   SkillDiscoveryResult,
   SkillApplicationResult,
-  IToolGuard,
   SkillService,
 } from '@neko/agent';
-import { toSkillSummary, createToolGuard } from '@neko/agent';
+import { toSkillSummary } from '@neko/agent';
 import type { SkillToolDefinition } from '@neko/shared';
 import { getLogger } from '../../base';
 
@@ -31,18 +30,20 @@ const logger = getLogger('SkillHandler');
 
 export interface SkillHandlerDeps {
   skillService?: SkillService;
+  /** AgentManager for applying skill injection to the active session */
+  agentManager?: import('../../ai/agentManager').IAgentManager;
+  /** Returns the currently active conversation ID */
+  getActiveConversationId?: () => string | undefined;
 }
 
 /**
- * Skill application state - Tracks active skill for tool restriction
+ * Skill application state - Tracks active skill for UI state
  */
 export interface ActiveSkillState {
   /** Applied skill */
   skill: Skill;
   /** Injection result */
   injection: SkillInjection;
-  /** Tool guard for runtime enforcement */
-  toolGuard?: IToolGuard;
   /** Timestamp when skill was applied */
   appliedAt: number;
 }
@@ -169,25 +170,13 @@ export class SkillHandler {
   // ===========================================================================
 
   /**
-   * Check if a tool call is allowed by the active skill
-   *
-   * @param toolName Tool name to check
-   * @param args Tool arguments
-   * @returns true if allowed, false if blocked
+   * Check if a tool call is allowed by the active skill.
+   * Delegates to AgentSession via agentManager.
    */
-  isToolAllowed(toolName: string, args?: Record<string, unknown>): boolean {
-    if (!this._activeSkill?.toolGuard) {
-      return true; // No restrictions
-    }
-
-    return this._activeSkill.toolGuard.check({ name: toolName, arguments: args }).allowed;
-  }
-
-  /**
-   * Get the active skill's tool guard
-   */
-  getActiveToolGuard(): IToolGuard | undefined {
-    return this._activeSkill?.toolGuard;
+  isToolAllowed(toolName: string, conversationId?: string): boolean {
+    if (!conversationId) return true;
+    const agent = this._deps.agentManager?.get(conversationId);
+    return agent?.isToolAllowed(toolName) ?? true;
   }
 
   /**
@@ -236,21 +225,24 @@ export class SkillHandler {
     // Apply the skill
     const injection = skillService.apply(skill);
 
-    // Create tool guard for runtime enforcement
-    const toolGuard = createToolGuard(injection.allowedTools, skill.name);
-
-    // Store active skill state
+    // Store active skill state (tool guard is now managed by AgentSession)
     this._activeSkill = {
       skill,
       injection,
-      toolGuard,
       appliedAt: Date.now(),
     };
 
     // Send injection to webview with tool definitions
     this._sendSkillInjection(webview, injection, skill);
 
-    return { applied: true, injection, skill, toolGuard };
+    // Apply injection to the active AgentSession so LLM receives the skill prompt
+    // AgentSession internally tracks allowedTools for isToolAllowed() checks
+    const conversationId = this._deps.getActiveConversationId?.();
+    if (conversationId) {
+      this._deps.agentManager?.applySkillInjection(conversationId, injection);
+    }
+
+    return { applied: true, injection, skill };
   }
 
   /**

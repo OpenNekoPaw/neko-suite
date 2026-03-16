@@ -235,7 +235,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             this._populateSkillRegistry(skillService, result),
           ),
         );
-        this._skillHandler.setDependencies({ skillService });
+        this._skillHandler.setDependencies({
+          skillService,
+          agentManager: this._agentManager,
+          getActiveConversationId: () => this._conversations.getActiveId(),
+        });
 
         // Update handler dependencies via type-safe updateDeps()
         this._taskHandler.updateDeps({

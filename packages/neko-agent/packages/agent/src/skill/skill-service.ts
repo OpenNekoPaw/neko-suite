@@ -54,8 +54,6 @@ export interface SkillApplicationResult {
   applied: boolean;
   /** Injection result (if applied) */
   injection?: SkillInjection;
-  /** Tool guard for runtime enforcement */
-  toolGuard?: IToolGuard;
   /** Applied skill */
   skill?: Skill;
   /** Error message if failed */
@@ -253,17 +251,13 @@ export class SkillService {
       // Create injection (no argument interpolation for skills)
       const injection = this._injector.injectSkill(skill);
 
-      // Create tool guard
-      const toolGuard = createToolGuard(injection.allowedTools, skill.name);
-
-      // Set as active
+      // Set as active (tool guard is now managed by AgentSession)
       this._activeSkill = skill;
-      this._activeToolGuard = toolGuard;
+      this._activeToolGuard = createToolGuard(injection.allowedTools, skill.name);
 
       return {
         applied: true,
         injection,
-        toolGuard,
         skill,
       };
     } catch (error) {
@@ -275,7 +269,7 @@ export class SkillService {
   }
 
   /**
-   * Apply a slash command with full result (including tool guard)
+   * Apply a slash command with full result
    *
    * @param command Slash command to apply
    * @param args Optional arguments for interpolation
@@ -286,13 +280,9 @@ export class SkillService {
       // Create injection with argument interpolation
       const injection = this._injector.injectCommand(command, args);
 
-      // Create tool guard
-      const toolGuard = createToolGuard(injection.allowedTools, command.command);
-
       return {
         applied: true,
         injection,
-        toolGuard,
       };
     } catch (error) {
       return {

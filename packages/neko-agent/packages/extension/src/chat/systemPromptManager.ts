@@ -1,169 +1,26 @@
 /**
  * System Prompt Manager
  *
- * Manages system prompts with the following priority:
- * 1. Mode-specific prompt (plan-mode when in plan mode)
- * 2. Project AGENTS.md (if exists)
- * 3. Personal AGENTS.md (if exists)
- * 4. Built-in default prompt
+ * Delegates prompt building to @neko/agent's SystemPromptBuilder.
+ * Extension layer only manages:
+ * - Mode state (default/plan)
+ * - AGENTS.md loading trigger
+ * - Platform prompt registry bridge
  *
- * Supports:
- * - Plan mode toggle
- * - User/workspace override via AGENTS.md
+ * All prompt content (builtin defaults, plan mode, locale variants)
+ * lives in @neko/agent — no duplicates here.
  */
 
+import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
-import { getPromptFileService } from '../services/PromptFileService';
+import {
+  createSystemPromptBuilder,
+  getDefaultPersonalPath,
+  type SystemPromptBuilder,
+  type PromptMode,
+} from '@neko/agent';
 
-// =============================================================================
-// Built-in Default System Prompt
-// =============================================================================
-
-const BUILTIN_DEFAULT_PROMPT = `You are a professional AI assistant for video editing and software development.
-
-## Core Principles
-- Be concise and accurate
-- Follow existing code patterns
-- Consider security and performance
-- Handle errors properly
-
-## Output Guidelines
-
-### Markdown Format
-- Use proper Markdown syntax
-- Use headings (##, ###) to organize sections
-- Mark code blocks with language type
-- Use tables for structured data
-
-### Mermaid Diagrams
-When creating Mermaid diagrams:
-- Wrap text with special characters in quotes: \`A["Text (with parens)"]\`
-- Use consistent arrow styles: \`-->\` for flow
-- Keep node labels concise
-
-## Dynamic Tool System
-
-Your tool list is **dynamic**. You start with basic tools, but can discover and activate more capabilities as needed.
-
-### Always Available Tools (Core)
-- \`SearchToolSets\` - Search for available tool sets and capabilities
-- \`ActivateToolSet\` - Activate a tool set to gain its tools
-- \`DeactivateToolSet\` - Deactivate a tool set when no longer needed
-- \`GetContext\` - View current active tool sets and available tools
-
-### When to Use SearchToolSets (CRITICAL)
-
-**Use SearchToolSets when user asks about or wants to perform video editing operations:**
-- "Can I export video?" → SearchToolSets({ query: "export video" })
-- "Is export supported?" → SearchToolSets({ query: "export" })
-- "导出视频" → SearchToolSets({ query: "export video" })
-- "Add effects" → SearchToolSets({ query: "effects" })
-- "Edit timeline" → SearchToolSets({ query: "timeline" })
-
-**DO NOT use Grep/Read to search code when user asks about capabilities!**
-SearchToolSets queries your available tools, not the codebase.
-
-### Tool Discovery Workflow
-
-1. **IMMEDIATELY call \`SearchToolSets\`** with relevant keywords
-2. **Activate the matching tool set** using \`ActivateToolSet\`
-3. **Execute the task** with newly available tools
-
-### Example Workflow
-\`\`\`
-User: "Can I export video?" or "Export my video"
-
-Step 1: Call SearchToolSets({ query: "export video" })
-Step 2: SearchToolSets returns export-render tool set with ExportVideo tool
-Step 3: Call ActivateToolSet({ skillName: "export-render" })
-Step 4: Now you can use ExportVideo tool
-\`\`\`
-
-⚠️ **NEVER say "I don't have this capability" without first calling SearchToolSets!**
-⚠️ **NEVER use Grep to check if a feature is supported - use SearchToolSets instead!**
-
-## Media Generation Rules
-**Important**: When generating media:
-- Generate only **one** item by default unless user requests more
-- Use tool calls (generate_image, generate_video, generate_tts)
-- Do not embed URLs directly in responses
-`;
-
-const BUILTIN_DEFAULT_PROMPT_ZH = `你是一个专业的视频编辑和软件开发 AI 助手。
-
-## 核心原则
-- 简洁准确
-- 遵循现有代码模式
-- 考虑安全性和性能
-- 正确处理错误
-
-## 输出规范
-
-### Markdown 格式
-- 使用正确的 Markdown 语法
-- 用标题（##、###）划分章节
-- 代码块要标注语言类型
-- 结构化数据用表格展示
-
-### Mermaid 图表
-创建 Mermaid 图表时：
-- 包含特殊字符的文本要用引号包裹：\`A["文本 (带括号)"]\`
-- 使用统一的箭头样式：\`-->\` 表示流程
-- 节点标签保持简短
-
-## 动态工具系统
-
-你的工具列表是**动态的**。你初始只有基础工具，但可以根据需要发现和激活更多能力。
-
-### 始终可用的工具（核心）
-- \`SearchToolSets\` - 搜索可用的工具集和能力
-- \`ActivateToolSet\` - 激活工具集以获得其工具
-- \`DeactivateToolSet\` - 停用不再需要的工具集
-- \`GetContext\` - 查看当前激活的工具集和可用工具
-
-### 何时使用 SearchToolSets（关键）
-
-**当用户询问或想要执行视频编辑操作时，使用 SearchToolSets：**
-- "能导出视频吗？" → SearchToolSets({ query: "export video 导出" })
-- "支持导出吗？" → SearchToolSets({ query: "export 导出" })
-- "导出视频" → SearchToolSets({ query: "export video 导出" })
-- "添加特效" → SearchToolSets({ query: "effects 特效" })
-- "编辑时间线" → SearchToolSets({ query: "timeline 时间线" })
-
-**不要用 Grep/Read 搜索代码来判断是否支持某功能！**
-SearchToolSets 查询的是你可用的工具，而不是代码库。
-
-### 工具发现流程
-
-1. **立即调用 \`SearchToolSets\`** 搜索相关关键词
-2. **激活匹配的工具集** 使用 \`ActivateToolSet\`
-3. **执行任务** 使用新获得的工具
-
-### 示例流程
-\`\`\`
-用户："能导出视频吗？" 或 "导出视频"
-
-步骤 1：调用 SearchToolSets({ query: "export video 导出" })
-步骤 2：SearchToolSets 返回 export-render 工具集，包含 ExportVideo 工具
-步骤 3：调用 ActivateToolSet({ skillName: "export-render" })
-步骤 4：现在可以使用 ExportVideo 工具
-\`\`\`
-
-⚠️ **永远不要说"我没有这个能力"而不先调用 SearchToolSets！**
-⚠️ **永远不要用 Grep 检查是否支持某功能 - 用 SearchToolSets！**
-
-## 媒体生成规则
-**重要**：生成媒体内容时：
-- 默认只生成**一个**，除非用户明确要求更多
-- 必须使用工具调用（generate_image、generate_video、generate_tts）
-- 不要在回复中直接嵌入 URL
-`;
-
-// =============================================================================
-// Types
-// =============================================================================
-
-export type PromptMode = 'default' | 'plan';
+export type { PromptMode };
 
 // =============================================================================
 // SystemPromptManager
@@ -171,13 +28,11 @@ export type PromptMode = 'default' | 'plan';
 
 export class SystemPromptManager {
   private _platform?: Platform;
-  private _agentsContent: string | null = null;
-  private _agentsSource: 'personal' | 'project' | null = null;
-  private _mode: PromptMode = 'default';
-  private _locale: string = 'en';
+  private _builder: SystemPromptBuilder;
 
   constructor(platform?: Platform) {
     this._platform = platform;
+    this._builder = createSystemPromptBuilder({ locale: 'en' });
   }
 
   /**
@@ -191,52 +46,43 @@ export class SystemPromptManager {
    * Set locale for built-in prompts
    */
   setLocale(locale: string): void {
-    this._locale = locale.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+    this._builder.setLocale(locale.toLowerCase().startsWith('zh') ? 'zh' : 'en');
   }
 
   /**
    * Get current mode
    */
   getMode(): PromptMode {
-    return this._mode;
+    return this._builder.getMode();
   }
 
   /**
    * Set prompt mode (default or plan)
    */
   setMode(mode: PromptMode): void {
-    this._mode = mode;
+    this._builder.setMode(mode);
   }
 
   /**
    * Toggle between default and plan mode
    */
   togglePlanMode(): PromptMode {
-    this._mode = this._mode === 'plan' ? 'default' : 'plan';
-    return this._mode;
+    return this._builder.togglePlanMode();
   }
 
   /**
    * Check if in plan mode
    */
   isPlanMode(): boolean {
-    return this._mode === 'plan';
+    return this._builder.isPlanMode();
   }
 
   /**
    * Load AGENTS.md content (call this during initialization)
    */
   async loadAgentsFile(): Promise<void> {
-    const promptFileService = getPromptFileService();
-    const result = await promptFileService.loadAgentsFile();
-
-    if (result) {
-      this._agentsContent = result.content;
-      this._agentsSource = result.source;
-    } else {
-      this._agentsContent = null;
-      this._agentsSource = null;
-    }
+    const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    await this._builder.loadAgentsFile(workspacePath, getDefaultPersonalPath());
   }
 
   /**
@@ -250,111 +96,26 @@ export class SystemPromptManager {
    * Get AGENTS.md content
    */
   getAgentsContent(): string | null {
-    return this._agentsContent;
+    return this._builder.getAgentsContent();
   }
 
   /**
    * Get AGENTS.md source
    */
   getAgentsSource(): 'personal' | 'project' | null {
-    return this._agentsSource;
-  }
-
-  /**
-   * Get built-in default prompt based on locale
-   */
-  private getBuiltinDefaultPrompt(): string {
-    return this._locale === 'zh' ? BUILTIN_DEFAULT_PROMPT_ZH : BUILTIN_DEFAULT_PROMPT;
-  }
-
-  /**
-   * Get plan mode prompt (hardcoded)
-   */
-  private getPlanModePrompt(): string {
-    return `You are a software architect in PLANNING mode.
-
-## CRITICAL CONSTRAINTS
-
-You are in PLAN mode - a research and planning phase.
-
-### FORBIDDEN ACTIONS (will be blocked)
-- Edit, Write (except to plan file) - File modifications
-- Bash (write commands) - System changes
-- Any tool that modifies state
-
-### ALLOWED ACTIONS
-- Read, Glob, Grep, LS - File reading and search
-- WebFetch, WebSearch - Web research
-- AskUserQuestion - Clarify requirements
-- Task, TaskOutput - Spawn research agents
-- TodoRead, TodoWrite - Track planning progress
-- Write/Edit to \`.neko/plan.md\` - Write your plan
-
-## WORKFLOW
-
-1. **Research Phase**
-   - Explore the codebase using read-only tools
-   - Understand existing patterns and architecture
-   - Identify files that need modification
-
-2. **Design Phase**
-   - Analyze requirements and constraints
-   - Consider multiple approaches
-   - Evaluate trade-offs
-
-3. **Write Plan**
-   - Write your plan to \`.neko/plan.md\` using Write or Edit tool
-   - Include: Summary, Files to Modify, Implementation Steps, Risks
-
-4. **Submit for Approval**
-   - Call \`ExitPlanMode\` tool (no parameters needed)
-   - The tool reads your plan from the file
-   - User will review and approve/reject
-
-## IMPORTANT
-
-- Only \`.neko/plan.md\` can be written in plan mode
-- Focus on thorough research before proposing changes
-- If task is purely research (no code changes needed), you don't need to call ExitPlanMode`;
+    return this._builder.getAgentsSource();
   }
 
   /**
    * Get current system prompt
    *
-   * Priority:
+   * Priority (handled by SystemPromptBuilder):
    * 1. Plan mode prompt (if in plan mode)
    * 2. AGENTS.md content (project > personal)
    * 3. Built-in default prompt
-   *
-   * Note: AGENTS.md completely replaces the default prompt when present
    */
   getPrompt(): string {
-    // 1. Plan mode - use plan-mode prompt
-    if (this._mode === 'plan') {
-      return this.getPlanModePrompt();
-    }
-
-    // 2. AGENTS.md content (completely replaces default)
-    if (this._agentsContent) {
-      return this._agentsContent;
-    }
-
-    // 3. Built-in default prompt
-    return this.getBuiltinDefaultPrompt();
-  }
-
-  /**
-   * Get prompt with optional skill injection
-   * @param skillPrompt Optional skill prompt to append
-   */
-  getPromptWithSkill(skillPrompt?: string): string {
-    const basePrompt = this.getPrompt();
-
-    if (skillPrompt) {
-      return `${basePrompt}\n\n# Active Skill\n\n${skillPrompt}`;
-    }
-
-    return basePrompt;
+    return this._builder.build();
   }
 
   /**

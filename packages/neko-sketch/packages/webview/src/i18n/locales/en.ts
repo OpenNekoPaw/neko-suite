@@ -12,6 +12,7 @@ export const en: MessageBundle = {
   'sketch.toolbar.fill': 'Fill',
   'sketch.toolbar.zoom': 'Zoom',
   'sketch.toolbar.ariaLabel': 'Drawing tools',
+  'sketch.sidebar.toggle': 'Toggle Sidebar',
 
   // Layer panel
   'sketch.layer.new': 'New Layer',
@@ -127,13 +128,6 @@ export const en: MessageBundle = {
   'sketch.frame.exportSpriteSheet': 'Export Sprite Sheet',
   'sketch.frame.exportSpriteSheetTooltip': 'Export as sprite sheet',
 
-  // Morph editor
-  'sketch.panel.morph': 'Morph Targets',
-  'sketch.morph.noTargets': 'No morph targets',
-  'sketch.morph.play': 'Play morph animation',
-  'sketch.morph.stop': 'Stop morph animation',
-  'sketch.morph.stopped': 'Stopped',
-
   // Vector toolbar
   'sketch.panel.vector': 'Vector Tools',
   'sketch.vector.sides': 'Sides',
@@ -148,23 +142,6 @@ export const en: MessageBundle = {
   // File
   'sketch.file.import': 'Import',
   'sketch.file.export': 'Export',
-
-  // Animation panel
-  'sketch.panel.animation': 'Animation',
-  'sketch.animation.noClips': 'No animation clips',
-  'sketch.animation.liveStream': 'Live stream active',
-  'sketch.animation.stop': 'Stop animation',
-  'sketch.animation.play': 'Play animation',
-  'sketch.animation.seek': 'Seek position',
-  'sketch.animation.disablePhysics': 'Disable physics',
-  'sketch.animation.enablePhysics': 'Enable physics',
-  'sketch.animation.disablePhysicsSim': 'Disable physics simulation',
-  'sketch.animation.enablePhysicsSim': 'Enable physics simulation',
-
-  // Parameter panel
-  'sketch.panel.parameters': 'Parameters',
-  'sketch.parameter.resetDefault': 'Reset to default',
-  'sketch.parameter.resetParam': 'Reset {name} to default',
 
   // Frame timeline
   'sketch.timeline.stop': 'Stop playback',

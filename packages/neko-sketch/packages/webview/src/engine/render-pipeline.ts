@@ -263,11 +263,14 @@ export class RenderPipeline implements IRenderPipeline {
     canvasH: number,
   ): Float32Array {
     const { panX, panY, zoom } = viewport;
-    // Scale + translate in NDC
+    // Scale + translate in NDC.
+    // Must match the inverse model used by screenToCanvas():
+    //   docX = screenX / zoom - panX / zoom
+    // Forward: clipX = zoom * ndcX + (zoom - 1) + panX/canvasW * 2
     const sx = zoom;
     const sy = zoom;
-    const tx = (panX / canvasW) * 2;
-    const ty = (panY / canvasH) * 2;
+    const tx = zoom - 1 + (panX / canvasW) * 2;
+    const ty = 1 - zoom - (panY / canvasH) * 2;
 
     return new Float32Array([sx, 0, 0, 0, sy, 0, tx, ty, 1]);
   }

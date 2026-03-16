@@ -146,20 +146,22 @@ describe('SkillHandler', () => {
   });
 
   describe('isToolAllowed', () => {
-    it('should return true when no active skill', () => {
+    it('should return true when no conversationId', () => {
       handler = new SkillHandler();
       expect(handler.isToolAllowed('bash')).toBe(true);
     });
 
-    it('should return true when active skill has no toolGuard', () => {
-      handler = new SkillHandler({ skillService: skillService as any });
-      // Set active skill without toolGuard via handleExecuteSkill
-      const skill = { name: 'free-skill', description: 'No restrictions' };
-      skillService.registry.getSkill.mockReturnValue(skill);
+    it('should delegate to agentManager when conversationId provided', () => {
+      const mockAgent = { isToolAllowed: vi.fn().mockReturnValue(true) };
+      const mockAgentManager = { get: vi.fn().mockReturnValue(mockAgent) } as any;
+      handler = new SkillHandler({
+        skillService: skillService as any,
+        agentManager: mockAgentManager,
+      });
 
-      handler.handleExecuteSkill(webview as any, 'free-skill', {});
-      // The mock createToolGuard returns { check: () => ({ allowed: true }) }
-      expect(handler.isToolAllowed('bash')).toBe(true);
+      expect(handler.isToolAllowed('bash', 'conv-1')).toBe(true);
+      expect(mockAgentManager.get).toHaveBeenCalledWith('conv-1');
+      expect(mockAgent.isToolAllowed).toHaveBeenCalledWith('bash');
     });
   });
 
