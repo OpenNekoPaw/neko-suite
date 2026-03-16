@@ -70,9 +70,6 @@ export function AIAssistant() {
 
   const { settings, setSettings, projectFiles, setProjectFiles, updateSettings } = config;
 
-  // Local model presets setter (no longer in useConfigState but still required by useMessageHandler)
-  const [, setModelPresets] = useState<unknown[]>([]);
-
   const { backgroundTasks, setBackgroundTasks } = resource;
 
   // Skills state
@@ -162,7 +159,6 @@ export function AIAssistant() {
     setSettings,
     setSelectedModel,
     setBackgroundTasks,
-    setModelPresets,
     setProjectFiles,
     setAgentState,
     conversationAgentStateRef,
@@ -190,10 +186,7 @@ export function AIAssistant() {
     VSCodeMessages.getSettings();
     VSCodeMessages.getTasks();
     VSCodeMessages.getAgentStates();
-    VSCodeMessages.getModelPresets();
     VSCodeMessages.getConfig();
-    VSCodeMessages.getSkills();
-    VSCodeMessages.getHooks();
     VSCodeMessages.getTabState();
   }, []);
 
@@ -228,7 +221,6 @@ export function AIAssistant() {
     setIsThinking,
     setStreamingMessageId,
     setActiveTab,
-    setInputValue,
     clearInput,
     setAttachedFiles,
   });

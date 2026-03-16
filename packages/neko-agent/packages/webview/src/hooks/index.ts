@@ -27,7 +27,6 @@ export {
 export {
   useResourceState,
   type ResourceState,
-  type PromiseResolvers,
   type ResourceStateActions,
   type UseResourceStateReturn,
 } from './useResourceState';

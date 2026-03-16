@@ -1,8 +1,7 @@
 /**
  * Config Message Handlers
  *
- * Handles: settingsData, projectFiles, configState, configChanged,
- *          modelPresetsData, modelPresetConfigured, modelPresetToggled, modelPresetConfigRemoved
+ * Handles: settingsData, projectFiles, configState, configChanged, mcpServerTestResult
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
@@ -47,53 +46,26 @@ const handleProjectFiles: MessageHandler = (message, context) => {
 
 /**
  * Handle 'configState' message - Configuration from Platform
+ * Only extracts providers (used by AccountBar for isAiConfigured check)
  */
 const handleConfigState: MessageHandler = (message, context) => {
   if (message.config) {
-    // Map providers from ConfigState to ConfiguredProvider format
     const mappedProviders = (message.config.providers || []).map(
       (p: import('@neko/shared').ProviderConfig) => ({
         id: p.id,
         type: p.type,
-        name: p.displayName || p.name, // Use displayName for UI, fallback to name
+        name: p.displayName || p.name,
         apiKey: p.apiKey,
-        baseUrl: p.apiUrl, // Map apiUrl to baseUrl for local type compatibility
+        baseUrl: p.apiUrl,
         enabled: p.enabled,
         builtin: p.builtin,
       }),
     );
 
-    // Get enabled prompts and validate selectedPromptId
-    const newPrompts = message.config.prompts || [];
-    const enabledPrompts = newPrompts.filter((p: { enabled?: boolean }) => p.enabled !== false);
-
-    context.setSettings((prev) => {
-      // If current selectedPromptId is not in enabled prompts, update to first enabled one
-      const currentPromptValid = enabledPrompts.some(
-        (p: { id: string }) => p.id === prev.selectedPromptId,
-      );
-      const newSelectedPromptId = currentPromptValid
-        ? prev.selectedPromptId
-        : enabledPrompts[0]?.id || prev.selectedPromptId;
-
-      return {
-        ...prev,
-        // Providers
-        configuredProviders: mappedProviders,
-        // Models (independent from providers)
-        configuredModels: message.config.models || [],
-        // MCP servers
-        configuredMCPServers: message.config.mcpServers || [],
-        // Prompts (agents)
-        configuredPrompts: newPrompts,
-        configuredAgents: newPrompts,
-        // Skills and Commands
-        configuredSkills: message.config.skills || [],
-        configuredCommands: message.config.commands || [],
-        // Update selectedPromptId if current one is disabled
-        selectedPromptId: newSelectedPromptId,
-      };
-    });
+    context.setSettings((prev) => ({
+      ...prev,
+      configuredProviders: mappedProviders,
+    }));
   }
 };
 
@@ -109,43 +81,6 @@ const handleConfigChanged: MessageHandler = (_message, _context) => {
 };
 
 /**
- * Handle 'modelPresetsData' message - Model presets list
- */
-const handleModelPresetsData: MessageHandler = (message, context) => {
-  context.setModelPresets(message.models || []);
-};
-
-/**
- * Handle 'modelPresetConfigured' message - Model preset configured
- */
-const handleModelPresetConfigured: MessageHandler = (message, _context) => {
-  // Refresh presets after configuration
-  if (message.success) {
-    VSCodeMessages.getModelPresets();
-  }
-};
-
-/**
- * Handle 'modelPresetToggled' message - Model preset toggled
- */
-const handleModelPresetToggled: MessageHandler = (message, _context) => {
-  // Refresh presets after toggle
-  if (message.success) {
-    VSCodeMessages.getModelPresets();
-  }
-};
-
-/**
- * Handle 'modelPresetConfigRemoved' message - Model preset config removed
- */
-const handleModelPresetConfigRemoved: MessageHandler = (message, _context) => {
-  // Refresh presets after removal
-  if (message.success) {
-    VSCodeMessages.getModelPresets();
-  }
-};
-
-/**
  * Handle 'mcpServerTestResult' message - MCP server test result
  * Note: Actual handling is done via addEventListener in index.tsx
  * This handler just marks the message as handled for the registry
@@ -155,46 +90,9 @@ const handleMCPServerTestResult: MessageHandler = (_message, _context) => {
 };
 
 /**
- * Handle 'skillsData' message - Skills and commands from extension
+ * Skills/hooks data handlers removed — webview does not consume this data.
+ * Skills and hooks are managed internally by Extension (ConfigBridge accessors).
  */
-const handleSkillsData: MessageHandler = (message, context) => {
-  context.setSettings((prev) => ({
-    ...prev,
-    configuredSkills: message.skills || [],
-    configuredCommands: message.commands || [],
-  }));
-};
-
-/**
- * Handle 'skillsChanged' message - Skills/commands changed event
- */
-const handleSkillsChanged: MessageHandler = (message, context) => {
-  context.setSettings((prev) => ({
-    ...prev,
-    configuredSkills: message.skills || [],
-    configuredCommands: message.commands || [],
-  }));
-};
-
-/**
- * Handle 'hooksData' message - Hooks from extension
- */
-const handleHooksData: MessageHandler = (message, context) => {
-  context.setSettings((prev) => ({
-    ...prev,
-    configuredHooks: message.hooks || [],
-  }));
-};
-
-/**
- * Handle 'hooksChanged' message - Hooks changed event
- */
-const handleHooksChanged: MessageHandler = (message, context) => {
-  context.setSettings((prev) => ({
-    ...prev,
-    configuredHooks: message.hooks || [],
-  }));
-};
 
 /**
  * All config handler registrations
@@ -204,13 +102,5 @@ export const configHandlers: HandlerRegistration[] = [
   { type: 'projectFiles', handler: handleProjectFiles },
   { type: 'configState', handler: handleConfigState },
   { type: 'configChanged', handler: handleConfigChanged },
-  { type: 'modelPresetsData', handler: handleModelPresetsData },
-  { type: 'modelPresetConfigured', handler: handleModelPresetConfigured },
-  { type: 'modelPresetToggled', handler: handleModelPresetToggled },
-  { type: 'modelPresetConfigRemoved', handler: handleModelPresetConfigRemoved },
   { type: 'mcpServerTestResult', handler: handleMCPServerTestResult },
-  { type: 'skillsData', handler: handleSkillsData },
-  { type: 'skillsChanged', handler: handleSkillsChanged },
-  { type: 'hooksData', handler: handleHooksData },
-  { type: 'hooksChanged', handler: handleHooksChanged },
 ];

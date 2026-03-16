@@ -138,8 +138,6 @@ export interface MessageHandlerContext
   setActiveConversationId: React.Dispatch<React.SetStateAction<string | null>>;
   // Background tasks
   setBackgroundTasks: React.Dispatch<React.SetStateAction<BackgroundTask[]>>;
-  // Model presets (kept for backward compatibility; setter is a no-op in current UI)
-  setModelPresets: React.Dispatch<React.SetStateAction<unknown[]>>;
   // Project files
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
   // SSO/Onboarding

@@ -71,6 +71,25 @@ export interface UnifiedConfig {
   thinkingBudget?: number;
 
   // ==========================================================================
+  // Extension-specific Settings
+  // ==========================================================================
+
+  /** Custom system prompt override */
+  customSystemPrompt?: string;
+
+  /** Auto execute tools without confirmation */
+  autoExecuteTools?: boolean;
+
+  /** Enable streaming responses */
+  streamResponses?: boolean;
+
+  /** Show tool call details in UI */
+  showToolCalls?: boolean;
+
+  /** Execution mode: plan (read-only), ask (confirm tools), auto (full auto) */
+  executionMode?: 'plan' | 'ask' | 'auto';
+
+  // ==========================================================================
   // Resource Configuration (Array Format)
   // ==========================================================================
 
@@ -182,6 +201,19 @@ export const DEFAULT_CONFIG: Omit<NormalizedConfig, 'providers' | 'models' | 'mc
   verbose: false,
   outputFormat: 'text',
 };
+
+/**
+ * Default values for extension-specific settings and thinkingBudget.
+ * Kept separate from NormalizedConfig to avoid polluting CLI-only types.
+ */
+export const DEFAULT_EXTENSION_CONFIG = {
+  thinkingBudget: 10000,
+  customSystemPrompt: '',
+  autoExecuteTools: true,
+  streamResponses: true,
+  showToolCalls: true,
+  executionMode: 'ask' as const,
+} satisfies Partial<UnifiedConfig>;
 
 // =============================================================================
 // Configuration File Paths

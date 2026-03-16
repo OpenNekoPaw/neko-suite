@@ -259,16 +259,6 @@ describe('types validation', () => {
       const settings: SettingsState = {
         providers: [],
         configuredProviders: [],
-        configuredModels: [],
-        configuredPrompts: [],
-        configuredAgents: [],
-        selectedPromptId: 'default',
-        selectedAgentId: 'default',
-        configuredMCPServers: [],
-        configuredSkills: [],
-        configuredCommands: [],
-        configuredHooks: [],
-        configuredToolSkills: [],
         selectedProviderId: null,
         selectedModelId: null,
         systemPrompt: '',
@@ -287,28 +277,10 @@ describe('types validation', () => {
       expect(settings.maxTokens).toBe(4096);
     });
 
-    it('should have consistent prompt/agent fields', () => {
+    it('should accept settings with provider and model selected', () => {
       const settings: SettingsState = {
         providers: [],
         configuredProviders: [],
-        configuredModels: [],
-        configuredPrompts: [
-          {
-            id: 'p1',
-            name: 'Test',
-            type: 'chat',
-            systemPrompt: 'You are helpful',
-            enabled: true,
-          } as any,
-        ],
-        configuredAgents: [],
-        selectedPromptId: 'p1',
-        selectedAgentId: 'p1',
-        configuredMCPServers: [],
-        configuredSkills: [],
-        configuredCommands: [],
-        configuredHooks: [],
-        configuredToolSkills: [],
         selectedProviderId: 'openai',
         selectedModelId: 'gpt-4',
         systemPrompt: '',
@@ -322,9 +294,8 @@ describe('types validation', () => {
         chatModelOptions: [],
         ssoSession: null,
       };
-      // Both should reference the same prompt system
-      expect(settings.selectedPromptId).toBe('p1');
-      expect(settings.configuredPrompts.length).toBe(1);
+      expect(settings.selectedProviderId).toBe('openai');
+      expect(settings.selectedModelId).toBe('gpt-4');
     });
   });
 });

@@ -105,6 +105,13 @@ export interface IUserConfigManager {
   addMCPServer(server: MCPServerPreset): Promise<void>;
   removeMCPServer(serverId: string): Promise<void>;
   clear(): Promise<void>;
+
+  /** Load raw UnifiedConfig (includes scalar fields like temperature, maxTokens, etc.) */
+  loadRaw(): UnifiedConfig;
+  /** Update a single scalar field in the config file */
+  updateScalar<K extends keyof UnifiedConfig>(key: K, value: UnifiedConfig[K]): Promise<void>;
+  /** Update multiple scalar fields in the config file */
+  updateScalars(updates: Partial<UnifiedConfig>): Promise<void>;
 }
 
 // =============================================================================
@@ -251,6 +258,29 @@ export class FileUserConfigManager implements IUserConfigManager {
     config.mcpServers = config.mcpServers.filter((s) => s.id !== serverId);
     delete config.mcpServerOverrides[serverId];
     await this.save(config);
+  }
+
+  // ==========================================================================
+  // Scalar Field Methods
+  // ==========================================================================
+
+  loadRaw(): UnifiedConfig {
+    return readUserConfigFile() ?? {};
+  }
+
+  async updateScalar<K extends keyof UnifiedConfig>(
+    key: K,
+    value: UnifiedConfig[K],
+  ): Promise<void> {
+    const raw = this.loadRaw();
+    (raw as Record<string, unknown>)[key] = value;
+    writeUserConfigFile(raw);
+  }
+
+  async updateScalars(updates: Partial<UnifiedConfig>): Promise<void> {
+    const raw = this.loadRaw();
+    Object.assign(raw, updates);
+    writeUserConfigFile(raw);
   }
 
   // ==========================================================================

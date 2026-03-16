@@ -55,35 +55,6 @@ const handleThinking: MessageHandler = (message, context) => {
 };
 
 /**
- * Handle 'response' message - Complete response received (non-streaming)
- */
-const handleResponse: MessageHandler = (message, context) => {
-  const newId = Date.now().toString();
-
-  updateConversation(context, message.conversationId, (msgs) => ({
-    messages: [
-      ...msgs,
-      {
-        id: newId,
-        role: 'assistant' as const,
-        content: message.message,
-        timestamp: Date.now(),
-        contentBlocks: [
-          {
-            id: `block-${newId}`,
-            type: 'text' as const,
-            timestamp: Date.now(),
-            content: message.message,
-            isStreaming: false,
-          },
-        ],
-      },
-    ],
-    isThinking: false,
-  }));
-};
-
-/**
  * Handle 'streamText' message - Streaming text chunk
  */
 const handleStreamText: MessageHandler = (message, context) => {
@@ -237,31 +208,6 @@ const handleStreamThinking: MessageHandler = (message, context) => {
 };
 
 /**
- * Handle 'thinkingComplete' message - AI finished thinking
- */
-const handleThinkingComplete: MessageHandler = (message, context) => {
-  updateConversation(context, message.conversationId, (msgs, streamingId) => {
-    if (!streamingId) return { messages: msgs };
-
-    return {
-      messages: msgs.map((msg) => {
-        if (msg.id !== streamingId) return msg;
-
-        const updatedBlocks = (msg.contentBlocks || []).map((b) =>
-          b.type === 'thinking' ? { ...b, isThinkingComplete: true } : b,
-        );
-
-        return {
-          ...msg,
-          isThinkingComplete: true,
-          contentBlocks: updatedBlocks,
-        };
-      }),
-    };
-  });
-};
-
-/**
  * Handle 'messageQueued' message - Message was queued while agent is running
  */
 const handleMessageQueued: MessageHandler = (message, context) => {
@@ -391,11 +337,9 @@ const handleAgentStateSnapshot: MessageHandler = (message, context) => {
  */
 export const streamingHandlers: HandlerRegistration[] = [
   { type: 'thinking', handler: handleThinking },
-  { type: 'response', handler: handleResponse },
   { type: 'streamText', handler: handleStreamText },
   { type: 'streamComplete', handler: handleStreamComplete },
   { type: 'streamThinking', handler: handleStreamThinking },
-  { type: 'thinkingComplete', handler: handleThinkingComplete },
   { type: 'messageCancelled', handler: handleMessageCancelled },
   { type: 'messageQueued', handler: handleMessageQueued },
   { type: 'agentPhase', handler: handleAgentPhase },

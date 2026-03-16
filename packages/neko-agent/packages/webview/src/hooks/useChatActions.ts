@@ -6,7 +6,6 @@
  */
 
 import {
-  useEffect,
   useCallback,
   useRef,
   type Dispatch,
@@ -16,7 +15,6 @@ import {
 import { Message, type TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import type { MessageAttachment } from '@/components/ChatView/InputArea';
-import { setExternalMessageContext } from '@/handlers';
 
 export interface UseChatActionsProps {
   inputValue: string;
@@ -30,7 +28,7 @@ export interface UseChatActionsProps {
   setIsThinking: Dispatch<SetStateAction<boolean>>;
   setStreamingMessageId: Dispatch<SetStateAction<string | null>>;
   setActiveTab: Dispatch<SetStateAction<TabType>>;
-  setInputValue: Dispatch<SetStateAction<string>>;
+
   clearInput: () => void;
   setAttachedFiles: (files: MessageAttachment[]) => void;
 }
@@ -65,7 +63,6 @@ export function useChatActions({
   setIsThinking,
   setStreamingMessageId,
   setActiveTab,
-  setInputValue,
   clearInput,
   setAttachedFiles,
 }: UseChatActionsProps): UseChatActionsReturn {
@@ -171,11 +168,6 @@ export function useChatActions({
       activeConversationIdRef,
     ],
   );
-
-  // Set external message context for handlers
-  useEffect(() => {
-    setExternalMessageContext({ setInputValue, triggerSend });
-  }, [setInputValue, triggerSend]);
 
   // Copy last assistant response to clipboard
   const copyLastResponse = useCallback(() => {

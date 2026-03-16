@@ -30,7 +30,7 @@
 // Types (browser-safe)
 export type { UnifiedConfig, NormalizedConfig } from './types';
 
-export { DEFAULT_CONFIG, CONFIG_DIR_NAME, CONFIG_FILE_NAME } from './types';
+export { DEFAULT_CONFIG, DEFAULT_EXTENSION_CONFIG, CONFIG_DIR_NAME, CONFIG_FILE_NAME } from './types';
 
 // Normalizer (browser-safe - pure functions, no Node.js dependencies)
 export {

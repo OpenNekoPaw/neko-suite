@@ -102,37 +102,6 @@ export const VSCodeMessages = {
     postMessage({ type: 'getSettings' });
   },
 
-  /**
-   * Add a new model configuration
-   * @param model - Model configuration object
-   */
-  addModel: (model: {
-    type: string;
-    name?: string;
-    apiKey?: string;
-    baseUrl?: string;
-    models: Array<{ id: string; enabled: boolean }>;
-  }) => {
-    postMessage({ type: 'addModel', model });
-  },
-
-  /**
-   * Remove a model configuration
-   * @param modelType - The model type to remove
-   */
-  removeModel: (modelType: string) => {
-    postMessage({ type: 'removeModel', modelType });
-  },
-
-  /**
-   * Toggle a provider's enabled state
-   * @param providerType - The provider type
-   * @param enabled - Whether to enable or disable
-   */
-  toggleProvider: (providerType: string, enabled: boolean) => {
-    postMessage({ type: 'toggleProvider', providerType, enabled });
-  },
-
   /** Clear all conversation history */
   clearHistory: () => {
     postMessage({ type: 'clearHistory' });
@@ -165,18 +134,11 @@ export const VSCodeMessages = {
   },
 
   /**
-   * Test an MCP server connection
-   * @param server - MCP server configuration
+   * Cancel the current AI message generation
+   * Stops the agent execution and streaming response
    */
-  testMCPServer: (server: {
-    id: string;
-    name: string;
-    command: string;
-    args?: string[];
-    env?: Record<string, string>;
-    requestId?: string;
-  }) => {
-    postMessage({ type: 'testMCPServer', server });
+  cancelMessage: () => {
+    postMessage({ type: 'cancelMessage' });
   },
 
   /** Request the list of background tasks */
@@ -218,224 +180,14 @@ export const VSCodeMessages = {
     postMessage({ type: 'clearCompletedTasks' });
   },
 
-  /** Request model presets from configuration */
-  getModelPresets: () => {
-    postMessage({ type: 'getModelPresets' });
-  },
-
-  /**
-   * Configure a model preset with API credentials
-   * @param modelId - The model ID
-   * @param apiKey - API key for the model
-   * @param baseUrl - Optional custom base URL
-   */
-  configureModelPreset: (modelId: string, apiKey: string, baseUrl?: string) => {
-    postMessage({ type: 'configureModelPreset', modelId, apiKey, baseUrl });
-  },
-
-  /**
-   * Toggle a model preset's enabled state
-   * @param modelId - The model ID
-   * @param enabled - Whether to enable or disable
-   */
-  toggleModelPreset: (modelId: string, enabled: boolean) => {
-    postMessage({ type: 'toggleModelPreset', modelId, enabled });
-  },
-
-  /**
-   * Remove configuration for a model preset
-   * @param modelId - The model ID
-   */
-  removeModelPresetConfig: (modelId: string) => {
-    postMessage({ type: 'removeModelPresetConfig', modelId });
-  },
-
-  /**
-   * Export model configuration
-   * @param includeSecrets - Whether to include API keys
-   */
-  exportModelConfig: (includeSecrets: boolean) => {
-    postMessage({ type: 'exportModelConfig', includeSecrets });
-  },
-
-  /**
-   * Import model configuration from JSON
-   * @param jsonString - JSON configuration string
-   * @param options - Import options
-   */
-  importModelConfig: (
-    jsonString: string,
-    options: { overwrite?: boolean; includeSecrets?: boolean },
-  ) => {
-    postMessage({ type: 'importModelConfig', jsonString, options });
-  },
-
-  /**
-   * Add a custom model configuration
-   * @param configJson - Model configuration as JSON string
-   * @param apiKey - Optional API key
-   */
-  addCustomModel: (configJson: string, apiKey?: string) => {
-    postMessage({ type: 'addCustomModel', configJson, apiKey });
-  },
-
   /** Request full configuration from extension */
   getConfig: () => {
     postMessage({ type: 'getConfig' });
   },
 
-  /**
-   * Update an MCP server configuration
-   * @param server - MCP server configuration
-   */
-  updateMCPServer: (server: import('@neko/shared').MCPServerConfig) => {
-    postMessage({ type: 'updateMCPServer', server });
-  },
-
-  /**
-   * Delete an MCP server
-   * @param serverId - The server ID to delete
-   */
-  deleteMCPServer: (serverId: string) => {
-    postMessage({ type: 'deleteMCPServer', serverId });
-  },
-
-  /**
-   * Update a prompt preset
-   * @param prompt - Prompt preset configuration
-   */
-  updatePrompt: (prompt: import('@neko/shared').PromptPresetConfig) => {
-    postMessage({ type: 'updatePrompt', prompt });
-  },
-
-  /**
-   * Delete a prompt preset
-   * @param promptId - The prompt ID to delete
-   */
-  deletePrompt: (promptId: string) => {
-    postMessage({ type: 'deletePrompt', promptId });
-  },
-
-  /**
-   * Update a provider configuration
-   * @param provider - Provider configuration
-   */
-  updateProvider: (provider: import('@neko/shared').ProviderConfig) => {
-    postMessage({ type: 'updateProvider', provider });
-  },
-
-  /**
-   * Delete a provider
-   * @param providerId - The provider ID to delete
-   */
-  deleteProvider: (providerId: string) => {
-    postMessage({ type: 'deleteProvider', providerId });
-  },
-
-  /**
-   * Update a model configuration
-   * @param model - Model configuration
-   */
-  updateModel: (model: import('@neko/shared').ModelConfig) => {
-    postMessage({ type: 'updateModel', model });
-  },
-
-  /**
-   * Delete a model
-   * @param modelId - The model ID to delete
-   */
-  deleteModel: (modelId: string) => {
-    postMessage({ type: 'deleteModel', modelId });
-  },
-
-  // Template operations
-
-  /**
-   * Request the list of available templates
-   * @param category - Optional category filter
-   */
-  getTemplates: (category?: string) => {
-    postMessage({ type: 'getTemplates', category });
-  },
-
-  /**
-   * Execute a template
-   * @param templateId - The template ID to execute
-   * @param params - Template parameters
-   */
-  executeTemplate: (templateId: string, params: Record<string, unknown>) => {
-    postMessage({ type: 'executeTemplate', templateId, params });
-  },
-
-  /**
-   * Cancel a running template execution
-   * @param templateId - The template ID to cancel
-   */
-  cancelTemplateExecution: (templateId: string) => {
-    postMessage({ type: 'cancelTemplateExecution', templateId });
-  },
-
-  /**
-   * Get template detail
-   * @param templateId - The template ID
-   */
-  getTemplateDetail: (templateId: string) => {
-    postMessage({ type: 'getTemplateDetail', templateId });
-  },
-
-  /**
-   * Export a template as JSON
-   * @param templateId - The template ID to export
-   */
-  exportTemplate: (templateId: string) => {
-    postMessage({ type: 'exportTemplate', templateId });
-  },
-
-  /**
-   * List available models from a provider's API
-   * @param providerId - The provider ID to query
-   * @param requestId - Unique request ID for correlation
-   */
-  listProviderModels: (providerId: string, requestId: string) => {
-    postMessage({ type: 'listProviderModels', providerId, requestId });
-  },
-
-  /**
-   * Validate a provider's API key
-   * @param providerId - The provider ID to validate
-   * @param modelId - Optional model ID - when specified, uses this model for validation test
-   * @param requestId - Unique request ID for correlation
-   */
-  validateApiKey: (providerId: string, modelId: string | undefined, requestId: string) => {
-    postMessage({ type: 'validateApiKey', providerId, modelId, requestId });
-  },
-
-  /**
-   * Cancel the current AI message generation
-   * Stops the agent execution and streaming response
-   */
-  cancelMessage: () => {
-    postMessage({ type: 'cancelMessage' });
-  },
-
-  /**
-   * Stop agent execution for a specific conversation
-   * @param conversationId - The conversation ID to stop
-   */
-  stopAgent: (conversationId: string) => {
-    postMessage({ type: 'stopAgent', conversationId });
-  },
-
   // ==========================================================================
   // Skill Operations
   // ==========================================================================
-
-  /**
-   * Request the list of available skills
-   */
-  getSkills: () => {
-    postMessage({ type: 'getSkills' });
-  },
 
   /**
    * Execute a skill by ID
@@ -447,14 +199,6 @@ export const VSCodeMessages = {
   },
 
   /**
-   * Cancel a running skill execution
-   * @param skillId - The skill ID to cancel
-   */
-  cancelSkill: (skillId: string) => {
-    postMessage({ type: 'cancelSkill', skillId });
-  },
-
-  /**
    * Respond to a skill confirmation request
    * @param skillName - The skill name
    * @param confirmed - Whether the user confirmed
@@ -462,77 +206,6 @@ export const VSCodeMessages = {
    */
   confirmSkill: (skillName: string, confirmed: boolean, conversationId?: string) => {
     postMessage({ type: 'skillConfirmResponse', skillName, confirmed, conversationId });
-  },
-
-  /**
-   * Invoke a skill via slash command
-   * @param command - Slash command (without /)
-   * @param args - Optional arguments
-   */
-  invokeSlashCommand: (command: string, args?: string) => {
-    postMessage({ type: 'invokeSlashCommand', command, args });
-  },
-
-  /**
-   * Update a skill configuration
-   * @param skill - Skill configuration to update
-   */
-  updateSkill: (skill: import('@neko/shared').ConfiguredSkill) => {
-    postMessage({ type: 'updateSkill', skill });
-  },
-
-  /**
-   * Delete a skill
-   * @param skillName - The skill name to delete
-   */
-  deleteSkill: (skillName: string) => {
-    postMessage({ type: 'deleteSkill', skillName });
-  },
-
-  /**
-   * Duplicate a skill (copies entire directory including references, scripts, etc.)
-   * @param skill - The skill to duplicate
-   * @param newName - The name for the duplicated skill
-   * @param targetSource - Target source ('personal' or 'project')
-   */
-  duplicateSkill: (
-    skill: import('@neko/shared').ConfiguredSkill,
-    newName: string,
-    targetSource: 'personal' | 'project',
-  ) => {
-    postMessage({ type: 'duplicateSkill', skill, newName, targetSource });
-  },
-
-  /**
-   * Create a new skill
-   * @param skillName - The name for the new skill
-   * @param source - Target source ('personal' or 'project')
-   */
-  createSkill: (skillName: string, source: 'personal' | 'project') => {
-    postMessage({ type: 'createSkill', skillName, source });
-  },
-
-  /**
-   * Update a command configuration
-   * @param command - Command configuration to update
-   */
-  updateCommand: (command: import('@neko/shared').ConfiguredSlashCommand) => {
-    postMessage({ type: 'updateCommand', command });
-  },
-
-  /**
-   * Delete a command
-   * @param commandName - The command name to delete
-   */
-  deleteCommand: (commandName: string) => {
-    postMessage({ type: 'deleteCommand', commandName });
-  },
-
-  /**
-   * Request hooks from extension
-   */
-  getHooks: () => {
-    postMessage({ type: 'getHooks' });
   },
 
   // ==========================================================================
@@ -647,32 +320,6 @@ export const VSCodeMessages = {
     postMessage({ type: 'openFile', filePath, options });
   },
 
-  /**
-   * Open workspace config file for prompts
-   * Creates the file if it doesn't exist
-   */
-  openPromptConfig: (source: 'personal' | 'project', promptId?: string) => {
-    postMessage({ type: 'openPromptConfig', source, promptId });
-  },
-
-  /**
-   * Open AGENTS.md file in VSCode editor
-   * @param source - File source (personal or project)
-   * Creates the file if it doesn't exist
-   */
-  openAgentsFile: (source: 'personal' | 'project') => {
-    postMessage({ type: 'openAgentsFile', source });
-  },
-
-  /**
-   * Open settings.json file in VSCode editor (for Hooks configuration)
-   * @param source - File source (personal, project, or local)
-   * Creates the file if it doesn't exist
-   */
-  openSettingsFile: (source: 'personal' | 'project' | 'local') => {
-    postMessage({ type: 'openSettingsFile', source });
-  },
-
   // ==========================================================================
   // Prompt Mode
   // ==========================================================================
@@ -686,41 +333,11 @@ export const VSCodeMessages = {
   },
 
   /**
-   * Toggle between default and plan mode
+   * Invoke a skill via slash command
+   * @param command - Slash command (without /)
+   * @param args - Optional arguments
    */
-  togglePlanMode: () => {
-    postMessage({ type: 'togglePlanMode' });
-  },
-
-  /**
-   * Get current prompt mode
-   */
-  getPromptMode: () => {
-    postMessage({ type: 'getPromptMode' });
-  },
-
-  /**
-   * Open a skill-related file in VSCode editor
-   * @param skillName - The skill name
-   * @param source - Skill source (personal or project)
-   * @param fileType - Type of file to open: 'skill' for SKILL.md, 'reference' for reference doc, 'script' for script
-   * @param filePath - Optional relative path for reference/script files
-   */
-  openSkillFile: (
-    skillName: string,
-    source: 'personal' | 'project',
-    fileType: 'skill' | 'reference' | 'script',
-    filePath?: string,
-  ) => {
-    postMessage({ type: 'openSkillFile', skillName, source, fileType, filePath });
-  },
-
-  /**
-   * Open a command file in VSCode editor
-   * @param commandName - The command name (without leading /)
-   * @param source - Command source (personal or project)
-   */
-  openCommandFile: (commandName: string, source: 'personal' | 'project') => {
-    postMessage({ type: 'openCommandFile', commandName, source });
+  invokeSlashCommand: (command: string, args?: string) => {
+    postMessage({ type: 'invokeSlashCommand', command, args });
   },
 };

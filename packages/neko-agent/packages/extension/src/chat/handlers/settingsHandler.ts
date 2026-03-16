@@ -36,9 +36,6 @@ export class SettingsHandler {
   sendSettings(webview: vscode.Webview): void {
     if (!this.deps.providers) return;
 
-    const providers = this.deps.providers.getAllProviders();
-    const configuredProviders = this.deps.providers.getConfiguredProviders();
-
     if (!this.deps.settings.selectedProviderId) {
       const defaultProvider = this.deps.providers.getDefaultProvider();
       if (defaultProvider) {
@@ -52,8 +49,6 @@ export class SettingsHandler {
 
     webview.postMessage({
       type: 'settingsData',
-      providers,
-      configuredProviders,
       selectedProviderId: this.deps.settings.selectedProviderId,
       selectedModelId: this.deps.settings.selectedModelId,
       systemPrompt: this.deps.settings.customSystemPrompt,

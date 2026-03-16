@@ -1,7 +1,7 @@
 /**
  * Skill Message Handlers
  *
- * Handles: skillsList, skillConfirmRequest, skillInjection, skillCleared
+ * Handles: skillsList, skillInjection
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
@@ -11,19 +11,6 @@ import type { MessageHandler, HandlerRegistration } from './types';
  */
 const handleSkillsList: MessageHandler = (message, context) => {
   context.setSkills(message.skills || []);
-};
-
-/**
- * Handle 'skillConfirmRequest' - Skill confirmation banner
- */
-const handleSkillConfirmRequest: MessageHandler = (message, context) => {
-  context.setPendingSkillConfirm({
-    skillName: message.skillName,
-    skillDescription: message.skillDescription,
-    relevance: message.relevance,
-    reason: message.reason,
-    conversationId: message.conversationId || context.activeConversationIdRef.current || '',
-  });
 };
 
 /**
@@ -45,22 +32,7 @@ const handleSkillInjection: MessageHandler = (message, context) => {
   });
 };
 
-/**
- * Handle 'skillCleared' - Skill cleared for a conversation
- */
-const handleSkillCleared: MessageHandler = (message, context) => {
-  const conversationId = message.conversationId || context.activeConversationIdRef.current || '';
-  context.setActiveSkill((prev) => {
-    if (prev && prev.conversationId === conversationId) {
-      return null;
-    }
-    return prev;
-  });
-};
-
 export const skillHandlers: HandlerRegistration[] = [
   { type: 'skillsList', handler: handleSkillsList },
-  { type: 'skillConfirmRequest', handler: handleSkillConfirmRequest },
   { type: 'skillInjection', handler: handleSkillInjection },
-  { type: 'skillCleared', handler: handleSkillCleared },
 ];

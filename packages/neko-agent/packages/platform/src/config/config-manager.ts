@@ -8,7 +8,8 @@
 import type { Provider, Model } from '../types/provider';
 import type { RetryTimeoutPreset, BuiltinPresetName } from '../types/error';
 import type { MCPServerPreset } from '../types/config';
-import type { ChatModelOption } from '@neko/shared';
+import type { ChatModelOption, UnifiedConfig } from '@neko/shared';
+import { DEFAULT_CONFIG, DEFAULT_EXTENSION_CONFIG } from '@neko/shared';
 import { type UserConfig, type IUserConfigManager } from './user-config';
 import {
   loadWorkspaceConfig,
@@ -275,6 +276,68 @@ export class ConfigManager {
     this.ensureUserConfigManager();
     await this.userConfigManager!.updateMCPServerOverride(serverId, override);
     this.invalidateCache();
+  }
+
+  // ==========================================================================
+  // Scalar Config Methods (read/write ~/.neko/config.json scalars)
+  // ==========================================================================
+
+  /** Read a scalar field from config.json with default fallback */
+  getScalar<K extends keyof UnifiedConfig>(key: K): NonNullable<UnifiedConfig[K]> | undefined {
+    const raw = this.userConfigManager?.loadRaw();
+    return (raw?.[key] as NonNullable<UnifiedConfig[K]>) ?? undefined;
+  }
+
+  getDefaultProviderScalar(): string {
+    return this.getScalar('defaultProvider') ?? DEFAULT_CONFIG.defaultProvider;
+  }
+
+  getDefaultModelScalar(): string {
+    return this.getScalar('defaultModel') ?? DEFAULT_CONFIG.defaultModel;
+  }
+
+  getTemperature(): number {
+    return this.getScalar('temperature') ?? DEFAULT_CONFIG.temperature;
+  }
+
+  getMaxTokens(): number {
+    return this.getScalar('maxTokens') ?? DEFAULT_CONFIG.maxTokens;
+  }
+
+  getThinkingBudget(): number {
+    return this.getScalar('thinkingBudget') ?? DEFAULT_EXTENSION_CONFIG.thinkingBudget;
+  }
+
+  getExecutionMode(): 'plan' | 'ask' | 'auto' {
+    return this.getScalar('executionMode') ?? DEFAULT_EXTENSION_CONFIG.executionMode;
+  }
+
+  getAutoExecuteTools(): boolean {
+    return this.getScalar('autoExecuteTools') ?? DEFAULT_EXTENSION_CONFIG.autoExecuteTools;
+  }
+
+  getCustomSystemPrompt(): string {
+    return this.getScalar('customSystemPrompt') ?? DEFAULT_EXTENSION_CONFIG.customSystemPrompt;
+  }
+
+  getStreamResponses(): boolean {
+    return this.getScalar('streamResponses') ?? DEFAULT_EXTENSION_CONFIG.streamResponses;
+  }
+
+  getShowToolCalls(): boolean {
+    return this.getScalar('showToolCalls') ?? DEFAULT_EXTENSION_CONFIG.showToolCalls;
+  }
+
+  /** Write a single scalar field to config.json */
+  async setScalar<K extends keyof UnifiedConfig>(key: K, value: UnifiedConfig[K]): Promise<void> {
+    this.ensureUserConfigManager();
+    await this.userConfigManager!.updateScalar(key, value);
+  }
+
+  /** Write multiple scalar fields to config.json */
+  async setScalars(updates: Partial<UnifiedConfig>): Promise<void> {
+    this.ensureUserConfigManager();
+    await this.userConfigManager!.updateScalars(updates);
   }
 
   // ==========================================================================

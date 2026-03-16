@@ -202,7 +202,7 @@ export class PlanModeHandler {
       temperature: this.deps.settings.temperature,
       maxTokens: this.deps.settings.maxTokens,
       executionMode: 'auto' as const,
-      thinkingBudget: 10000,
+      thinkingBudget: this.deps.settings.thinkingBudget,
     };
   }
 

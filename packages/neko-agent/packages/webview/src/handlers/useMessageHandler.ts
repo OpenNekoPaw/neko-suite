@@ -63,9 +63,6 @@ export interface UseMessageHandlerProps {
   // State setters - Tasks
   setBackgroundTasks: React.Dispatch<React.SetStateAction<BackgroundTask[]>>;
 
-  // State setters - Model Presets (kept for backward compatibility; no-op in current UI)
-  setModelPresets: React.Dispatch<React.SetStateAction<unknown[]>>;
-
   // State setters - Project
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
 
@@ -121,7 +118,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setSettings,
     setSelectedModel,
     setBackgroundTasks,
-    setModelPresets,
+
     setProjectFiles,
     setAgentState,
     conversationAgentStateRef,
@@ -184,7 +181,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setSettings,
       setSelectedModel,
       setBackgroundTasks,
-      setModelPresets,
+
       setProjectFiles,
       setAgentState,
       conversationAgentStateRef,
@@ -219,7 +216,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setSettings,
       setSelectedModel,
       setBackgroundTasks,
-      setModelPresets,
+
       setProjectFiles,
       setAgentState,
       conversationAgentStateRef,

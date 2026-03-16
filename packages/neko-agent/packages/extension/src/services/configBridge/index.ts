@@ -14,8 +14,6 @@ import type { Platform } from '@neko/platform';
 import { getLogger } from '../../base';
 import type {
   ConfigState,
-  ProviderConfig,
-  ModelConfig,
   ConfiguredSkill,
   ConfiguredSlashCommand,
   ConfiguredHook,
@@ -107,8 +105,6 @@ export class ConfigBridge implements vscode.Disposable {
     message: { type: string; [key: string]: unknown },
     postMessage: PostMessageFn,
   ): Promise<boolean> {
-    const cm = this.platform.config;
-
     try {
       switch (message.type) {
         case 'getConfig':
@@ -154,41 +150,6 @@ export class ConfigBridge implements vscode.Disposable {
           });
           return true;
 
-        case 'updateProvider':
-          await cm.setProvider(message.provider as ProviderConfig);
-          this.notifyChange(postMessage, 'provider', (message.provider as ProviderConfig).id);
-          return true;
-
-        case 'updateModel':
-          await cm.setModel(message.model as ModelConfig);
-          this.notifyChange(postMessage, 'model', (message.model as ModelConfig).id);
-          return true;
-
-        case 'deleteProvider':
-          await cm.removeProvider((message.providerId || message.id) as string);
-          this.notifyChange(postMessage, 'provider', (message.providerId || message.id) as string);
-          return true;
-
-        case 'deleteModel':
-          await cm.removeModel((message.modelId || message.id) as string);
-          this.notifyChange(postMessage, 'model', (message.modelId || message.id) as string);
-          return true;
-
-        case 'listProviderModels': {
-          const providerId = message.providerId as string;
-          const requestId = message.requestId as string;
-          this.handleListProviderModels(providerId, requestId, postMessage);
-          return true;
-        }
-
-        case 'validateApiKey': {
-          const providerId = message.providerId as string;
-          const modelId = message.modelId as string | undefined;
-          const requestId = message.requestId as string;
-          this.handleValidateApiKey(providerId, modelId, requestId, postMessage);
-          return true;
-        }
-
         case 'openUserConfigFile':
           await this.configFile.handleOpenUserConfigFile();
           return true;
@@ -230,14 +191,10 @@ export class ConfigBridge implements vscode.Disposable {
 
   // ---- Private helpers ----
 
-  private buildConfigState(): ConfigState {
+  private buildConfigState(): Pick<ConfigState, 'providers'> {
     const cm = this.platform.config;
     return {
       providers: cm.getProviders(),
-      models: cm.getModels(),
-      mcpServers: cm.getMCPServers(),
-      skills: this.skillSync.getSkills(),
-      commands: this.skillSync.getCommands(),
     };
   }
 
@@ -246,76 +203,6 @@ export class ConfigBridge implements vscode.Disposable {
       ...this.buildConfigState(),
       connectionStates: this.connectionStateManager?.getStatesMap() || {},
     };
-  }
-
-  private notifyChange(
-    postMessage: PostMessageFn,
-    changeType: 'provider' | 'model' | 'mcp' | 'all',
-    id: string,
-  ): void {
-    postMessage({ type: 'configChanged', changeType, id });
-  }
-
-  private async handleListProviderModels(
-    providerId: string,
-    requestId: string,
-    postMessage: PostMessageFn,
-  ): Promise<void> {
-    try {
-      const service = this.platform.createService();
-      const models = await service.listProviderModelsDetailed(providerId);
-      postMessage({
-        type: 'providerModelsResult',
-        requestId,
-        providerId,
-        success: true,
-        models,
-      });
-    } catch (error) {
-      logger.error(`Error listing models for ${providerId}:`, error);
-      postMessage({
-        type: 'providerModelsResult',
-        requestId,
-        providerId,
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  private async handleValidateApiKey(
-    providerId: string,
-    modelId: string | undefined,
-    requestId: string,
-    postMessage: PostMessageFn,
-  ): Promise<void> {
-    try {
-      const service = this.platform.createService();
-      const result = await service.validateProviderApiKey(providerId, modelId);
-      postMessage({
-        type: 'validateApiKeyResult',
-        requestId,
-        providerId,
-        modelId,
-        success: true,
-        valid: result.valid,
-        error: result.error,
-      });
-    } catch (error) {
-      logger.error(
-        `Error validating API key for ${providerId}${modelId ? ` model ${modelId}` : ''}:`,
-        error,
-      );
-      postMessage({
-        type: 'validateApiKeyResult',
-        requestId,
-        providerId,
-        modelId,
-        success: false,
-        valid: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
   }
 
   private broadcastConnectionStateChange(event: ConnectionStateChangeEvent): void {

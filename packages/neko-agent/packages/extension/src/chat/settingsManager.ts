@@ -1,128 +1,158 @@
 /**
  * Settings Manager
- * Handles AI Assistant settings state and persistence
+ *
+ * Facade over ConfigManager — reads/writes scalar AI settings from ~/.neko/config.json.
+ * No longer uses VSCode workspaceState.
+ *
+ * Supports late initialization: can be constructed without a ConfigManager and
+ * will return defaults until setConfigManager() is called.
  */
 
-import * as vscode from 'vscode';
-import { AIAssistantSettings, DEFAULT_SETTINGS } from './types';
+import type { ConfigManager } from '@neko/platform';
+import { DEFAULT_EXTENSION_CONFIG, DEFAULT_CONFIG } from '@neko/shared';
+import type { AIAssistantSettings } from './types';
+import { DEFAULT_SETTINGS } from './types';
+
+/** Field mapping: AIAssistantSettings key → UnifiedConfig key */
+const FIELD_MAP: Record<string, string> = {
+  selectedProviderId: 'defaultProvider',
+  selectedModelId: 'defaultModel',
+};
 
 export class SettingsManager {
-  private _settings: AIAssistantSettings;
+  private _configManager: ConfigManager | null;
 
-  constructor(private readonly _context: vscode.ExtensionContext) {
-    // Load saved settings or use defaults
-    const savedSettings =
-      this._context.workspaceState.get<Partial<AIAssistantSettings>>('aiAssistant.settings');
-    this._settings = { ...DEFAULT_SETTINGS, ...savedSettings };
+  constructor(configManager?: ConfigManager) {
+    this._configManager = configManager ?? null;
   }
 
   /**
-   * Get all settings
+   * Late-bind ConfigManager (called when Platform becomes available)
+   */
+  setConfigManager(configManager: ConfigManager): void {
+    this._configManager = configManager;
+  }
+
+  /**
+   * Get all settings (snapshot)
    */
   get settings(): AIAssistantSettings {
-    return { ...this._settings };
+    if (!this._configManager) return { ...DEFAULT_SETTINGS };
+    return {
+      selectedProviderId: this._configManager.getDefaultProviderScalar() ?? null,
+      selectedModelId: this._configManager.getDefaultModelScalar() ?? null,
+      customSystemPrompt: this._configManager.getCustomSystemPrompt(),
+      autoExecuteTools: this._configManager.getAutoExecuteTools(),
+      streamResponses: this._configManager.getStreamResponses(),
+      showToolCalls: this._configManager.getShowToolCalls(),
+      temperature: this._configManager.getTemperature(),
+      maxTokens: this._configManager.getMaxTokens(),
+      executionMode: this._configManager.getExecutionMode(),
+    };
   }
 
   /**
    * Get specific setting value
    */
   get<K extends keyof AIAssistantSettings>(key: K): AIAssistantSettings[K] {
-    return this._settings[key];
+    return this.settings[key];
   }
 
   /**
    * Update settings
    */
   update(updates: Partial<AIAssistantSettings>): void {
-    this._settings = { ...this._settings, ...updates };
-    this._persist();
+    if (!this._configManager) return;
+    const mapped: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(updates)) {
+      const configKey = FIELD_MAP[key] ?? key;
+      mapped[configKey] = value;
+    }
+    void this._configManager.setScalars(mapped);
   }
 
   /**
    * Update a single setting
    */
   set<K extends keyof AIAssistantSettings>(key: K, value: AIAssistantSettings[K]): void {
-    this._settings[key] = value;
-    this._persist();
+    if (!this._configManager) return;
+    const configKey = FIELD_MAP[key as string] ?? (key as string);
+    void this._configManager.setScalar(
+      configKey as keyof import('@neko/shared').UnifiedConfig,
+      value as never,
+    );
   }
 
   /**
    * Reset settings to defaults
    */
   reset(): void {
-    this._settings = { ...DEFAULT_SETTINGS };
-    this._persist();
+    if (!this._configManager) return;
+    void this._configManager.setScalars({
+      defaultProvider: undefined,
+      defaultModel: undefined,
+      customSystemPrompt: undefined,
+      autoExecuteTools: undefined,
+      streamResponses: undefined,
+      showToolCalls: undefined,
+      temperature: undefined,
+      maxTokens: undefined,
+      executionMode: undefined,
+      thinkingBudget: undefined,
+    });
   }
 
-  /**
-   * Persist settings to workspace state
-   */
-  private _persist(): void {
-    this._context.workspaceState.update('aiAssistant.settings', this._settings);
-  }
+  // ===========================================================================
+  // Convenience Properties (backward compatible)
+  // ===========================================================================
 
-  /**
-   * Get selected provider ID
-   */
   get selectedProviderId(): string | null {
-    return this._settings.selectedProviderId;
+    return this._configManager?.getDefaultProviderScalar() ?? null;
   }
 
   set selectedProviderId(value: string | null) {
-    this.set('selectedProviderId', value);
+    void this._configManager?.setScalar('defaultProvider', value ?? undefined);
   }
 
-  /**
-   * Get selected model ID
-   */
   get selectedModelId(): string | null {
-    return this._settings.selectedModelId;
+    return this._configManager?.getDefaultModelScalar() ?? null;
   }
 
   set selectedModelId(value: string | null) {
-    this.set('selectedModelId', value);
+    void this._configManager?.setScalar('defaultModel', value ?? undefined);
   }
 
-  /**
-   * Get execution mode
-   */
   get executionMode(): 'plan' | 'ask' | 'auto' {
-    return this._settings.executionMode;
+    return this._configManager?.getExecutionMode() ?? DEFAULT_EXTENSION_CONFIG.executionMode;
   }
 
   set executionMode(value: 'plan' | 'ask' | 'auto') {
-    this.set('executionMode', value);
+    void this._configManager?.setScalar('executionMode', value);
   }
 
-  /**
-   * Get custom system prompt
-   */
   get customSystemPrompt(): string {
-    return this._settings.customSystemPrompt;
+    return (
+      this._configManager?.getCustomSystemPrompt() ?? DEFAULT_EXTENSION_CONFIG.customSystemPrompt
+    );
   }
 
   set customSystemPrompt(value: string) {
-    this.set('customSystemPrompt', value);
+    void this._configManager?.setScalar('customSystemPrompt', value);
   }
 
-  /**
-   * Get auto execute tools setting
-   */
   get autoExecuteTools(): boolean {
-    return this._settings.autoExecuteTools;
+    return this._configManager?.getAutoExecuteTools() ?? DEFAULT_EXTENSION_CONFIG.autoExecuteTools;
   }
 
-  /**
-   * Get temperature
-   */
   get temperature(): number {
-    return this._settings.temperature;
+    return this._configManager?.getTemperature() ?? DEFAULT_CONFIG.temperature;
   }
 
-  /**
-   * Get max tokens
-   */
   get maxTokens(): number {
-    return this._settings.maxTokens;
+    return this._configManager?.getMaxTokens() ?? DEFAULT_CONFIG.maxTokens;
+  }
+
+  get thinkingBudget(): number {
+    return this._configManager?.getThinkingBudget() ?? DEFAULT_EXTENSION_CONFIG.thinkingBudget;
   }
 }

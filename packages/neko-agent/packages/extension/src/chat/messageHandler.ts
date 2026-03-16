@@ -290,7 +290,7 @@ export class MessageHandler {
         maxTokens: this._settings.maxTokens,
         modelId: effectiveModelId,
         executionMode: this._settings.executionMode,
-        thinkingBudget: 10000,
+        thinkingBudget: this._settings.thinkingBudget,
       });
 
       // Create agent context

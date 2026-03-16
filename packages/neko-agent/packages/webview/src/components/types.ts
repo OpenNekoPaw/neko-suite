@@ -179,28 +179,8 @@ export interface SettingsState {
       description: string;
     }>;
   }>;
-  // 已配置的 Provider 列表 (从 Platform ConfigManager 获取)
+  // Provider list (from Platform ConfigManager, used by AccountBar)
   configuredProviders: Array<ConfiguredProvider>;
-  // 已配置的 Model 列表 (从 Platform ConfigManager 获取)
-  configuredModels: Array<import('@neko/shared').ModelConfig>;
-  // 已配置的 Prompt 列表 (alias: configuredAgents for backward compatibility)
-  configuredPrompts: Array<import('@neko/shared').PromptPresetConfig>;
-  /** @deprecated Use configuredPrompts instead */
-  configuredAgents: Array<import('@neko/shared').PromptPresetConfig>;
-  // 当前选中的 Prompt ID (alias: selectedAgentId for backward compatibility)
-  selectedPromptId: string | null;
-  /** @deprecated Use selectedPromptId instead */
-  selectedAgentId: string | null;
-  // 已配置的 MCP 服务器列表
-  configuredMCPServers: Array<import('@neko/shared').MCPServerConfig>;
-  // 已配置的 Skills 列表
-  configuredSkills: Array<import('@neko/shared').ConfiguredSkill>;
-  // 已配置的 Slash Commands 列表
-  configuredCommands: Array<import('@neko/shared').ConfiguredSlashCommand>;
-  // 已配置的 Hooks 列表
-  configuredHooks: Array<import('@neko/shared').ConfiguredHook>;
-  // 已配置的 ToolSkills 列表 (动态工具注入)
-  configuredToolSkills: Array<import('@neko/shared').ConfiguredToolGroup>;
   selectedProviderId: string | null;
   selectedModelId: string | null;
   systemPrompt: string;

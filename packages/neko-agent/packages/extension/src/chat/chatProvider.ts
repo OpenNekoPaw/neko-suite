@@ -4,7 +4,6 @@
  *
  * Refactored to use specialized handlers for different domains:
  * - TaskHandler: Task management
- * - ModelPresetHandler: Model preset configuration
  * - TemplateHandler: Template execution
  */
 
@@ -32,7 +31,6 @@ import { WebviewMessage, MessageAttachment, TabState, OpenTab } from './types';
 import { ConfigBridge } from '../services/configBridge';
 import {
   TaskHandler,
-  ModelPresetHandler,
   SkillHandler,
   FileOperationHandler,
   PlanModeHandler,
@@ -64,7 +62,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   // Handlers
   private readonly _taskHandler: TaskHandler;
-  private readonly _modelPresetHandler: ModelPresetHandler;
   private readonly _skillHandler: SkillHandler;
   private readonly _fileOperationHandler: FileOperationHandler;
   private readonly _planModeHandler: PlanModeHandler;
@@ -90,7 +87,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private readonly _context: vscode.ExtensionContext,
   ) {
     // Initialize managers
-    this._settings = new SettingsManager(_context);
+    this._settings = new SettingsManager();
     this._systemPrompt = new SystemPromptManager();
     this._conversations = new ConversationHandler(_context);
 
@@ -99,7 +96,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     // Initialize handlers with empty deps (will be updated after service init)
     this._taskHandler = new TaskHandler({});
-    this._modelPresetHandler = new ModelPresetHandler({});
     this._skillHandler = new SkillHandler({});
     this._fileOperationHandler = new FileOperationHandler({});
     this._planModeHandler = new PlanModeHandler({
@@ -186,6 +182,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       this._taskManager = getService(ITaskManager);
 
       if (this._platform) {
+        // Inject ConfigManager into SettingsManager (late binding)
+        this._settings.setConfigManager(this._platform.config);
+
         // Inject Platform into SystemPromptManager
         this._systemPrompt.setPlatform(this._platform);
 
@@ -618,49 +617,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._fileOperationHandler.handleDownloadSvg(
             message.svg as string,
             message.filename as string,
-          );
-          break;
-
-        // Model Presets handling (delegated to ModelPresetHandler)
-        case 'getModelPresets':
-          this._modelPresetHandler.sendModelPresets(webview);
-          break;
-        case 'configureModelPreset':
-          this._modelPresetHandler.handleConfigureModelPreset(
-            webview,
-            message.modelId as string,
-            message.apiKey as string,
-            message.baseUrl as string | undefined,
-          );
-          break;
-        case 'toggleModelPreset':
-          this._modelPresetHandler.handleToggleModelPreset(
-            webview,
-            message.modelId as string,
-            message.enabled as boolean,
-          );
-          break;
-        case 'removeModelPresetConfig':
-          this._modelPresetHandler.handleRemoveModelPresetConfig(
-            webview,
-            message.modelId as string,
-          );
-          break;
-        case 'exportModelConfig':
-          this._modelPresetHandler.handleExportModelConfig(message.includeSecrets as boolean);
-          break;
-        case 'importModelConfig':
-          this._modelPresetHandler.handleImportModelConfig(
-            webview,
-            message.jsonString as string,
-            message.options as { overwrite?: boolean; includeSecrets?: boolean },
-          );
-          break;
-        case 'addCustomModel':
-          this._modelPresetHandler.handleAddCustomModel(
-            webview,
-            message.configJson as string,
-            message.apiKey as string | undefined,
           );
           break;
 
