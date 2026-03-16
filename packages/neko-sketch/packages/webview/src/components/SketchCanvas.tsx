@@ -19,7 +19,7 @@ import { useSketchStore } from '../stores';
 import { SketchRenderer } from '../engine';
 import { BrushEngine } from '../brush';
 import { usePointerInput } from '../hooks/usePointerInput';
-import type { StrokePoint } from '../types';
+import type { StrokePoint, LayerData } from '../types';
 import type { OnionSkinGhost } from '../types/frame';
 import type { ViewportState } from '../types';
 import { drawPixel, drawLine } from '../tools/pixel-tool';
@@ -243,6 +243,10 @@ export function SketchCanvas() {
   // Vector tool state
   const vectorStartRef = useRef<{ x: number; y: number } | null>(null);
 
+  // Brush stroke scratch texture (created in onStrokeStart, merged in onStrokeEnd)
+  const strokeTexRef = useRef<WebGLTexture | null>(null);
+  const strokeFboRef = useRef<WebGLFramebuffer | null>(null);
+
   // Frame mode: track previous frame index to detect switches
   const prevFrameIndexRef = useRef(-1);
   // Ref so the render loop / stroke handlers can read playing state without deps
@@ -292,6 +296,81 @@ export function SketchCanvas() {
       brushRef.current = null;
     };
   }, [canvas.width, canvas.height]);
+
+  // Initialize layer textures — restore pending data from .nks and create fill layer textures
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+
+    let changed = false;
+    const updated = layers.map((layer) => {
+      // Skip layers that already have a texture
+      if (layer.texture) return layer;
+
+      // Restore saved pixel data (base64 PNG from .nks file)
+      if (layer.pendingData) {
+        const img = new Image();
+        img.src = `data:image/png;base64,${layer.pendingData}`;
+        // Synchronous decode via canvas is not possible; schedule async restore
+        const layerId = layer.id;
+        void img.decode().then(() => {
+          const offscreen = document.createElement('canvas');
+          offscreen.width = layer.width;
+          offscreen.height = layer.height;
+          const ctx = offscreen.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0);
+          const imageData = ctx.getImageData(0, 0, layer.width, layer.height);
+          const r = rendererRef.current;
+          if (!r) return;
+          const tex = r.textures.createTexture(
+            layer.width,
+            layer.height,
+            new Uint8Array(imageData.data.buffer),
+          );
+          const state = useSketchStore.getState();
+          state.setLayers(
+            state.layers.map((l) =>
+              l.id === layerId ? { ...l, texture: tex, pendingData: undefined } : l,
+            ),
+          );
+          needsRenderRef.current = true;
+        });
+        // Clear pendingData immediately to avoid re-triggering
+        changed = true;
+        return { ...layer, pendingData: undefined };
+      }
+
+      // Create solid-color texture for fill layers
+      if (layer.type === 'fill') {
+        const w = layer.width;
+        const h = layer.height;
+        const pixels = new Uint8Array(w * h * 4);
+        // Parse background color from canvas config
+        const bgColor = canvas.backgroundColor ?? '#ffffff';
+        const hex = bgColor.startsWith('#') ? bgColor.slice(1) : bgColor;
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        for (let i = 0; i < pixels.length; i += 4) {
+          pixels[i] = r;
+          pixels[i + 1] = g;
+          pixels[i + 2] = b;
+          pixels[i + 3] = 255;
+        }
+        const tex = renderer.textures.createTexture(w, h, pixels);
+        changed = true;
+        return { ...layer, texture: tex };
+      }
+
+      return layer;
+    });
+
+    if (changed) {
+      useSketchStore.getState().setLayers(updated);
+      needsRenderRef.current = true;
+    }
+  }, [layers, canvas.backgroundColor]);
 
   // Resize observer — keep WebGL + overlay canvases in sync with container
   useEffect(() => {
@@ -367,8 +446,39 @@ export function SketchCanvas() {
             ...(atmosphereEmitter ? [atmosphereEmitter] : []),
           ];
 
+          // Inject active stroke texture as a temporary overlay for real-time preview
+          let layersToRender: ReadonlyArray<LayerData> = state.layers;
+          if (strokeTexRef.current && state.activeLayerId) {
+            const strokeLayer: LayerData = {
+              id: '__stroke_preview',
+              name: '',
+              type: 'raster',
+              width: state.canvas.width,
+              height: state.canvas.height,
+              visible: true,
+              locked: false,
+              opacity: state.brushSettings.opacity,
+              blendMode: 'normal',
+              offsetX: 0,
+              offsetY: 0,
+              clippingMask: false,
+              maskLayerId: null,
+              children: [],
+              texture: strokeTexRef.current,
+            };
+            // Insert stroke layer right after the active layer
+            const mutable = [...state.layers];
+            const idx = mutable.findIndex((l) => l.id === state.activeLayerId);
+            if (idx >= 0) {
+              mutable.splice(idx + 1, 0, strokeLayer);
+            } else {
+              mutable.push(strokeLayer);
+            }
+            layersToRender = mutable;
+          }
+
           renderer.renderWithEffects(
-            state.layers,
+            layersToRender,
             state.viewport,
             state.filters,
             emittersForRender,
@@ -477,7 +587,7 @@ export function SketchCanvas() {
 
   const onStrokeStart = useCallback(
     (point: StrokePoint) => {
-      if (!activeLayerId) return;
+      if (!activeLayerId || spaceHeldRef.current) return;
       const renderer = rendererRef.current;
       if (!renderer) return;
 
@@ -525,10 +635,25 @@ export function SketchCanvas() {
         return;
       }
 
-      // Default: brush / eraser
+      // Default: brush / eraser — draw to scratch texture, merge on stroke end
+      const { x, y } = screenToCanvas(
+        point.x,
+        point.y,
+        viewport.zoom,
+        viewport.panX,
+        viewport.panY,
+      );
       const tex = renderer.textures.createTexture(canvas.width, canvas.height);
       const fbo = renderer.textures.createFramebuffer(tex);
-      brushRef.current?.beginStroke(point, brushSettings, fbo);
+      strokeTexRef.current = tex;
+      strokeFboRef.current = fbo;
+      brushRef.current?.beginStroke(
+        { ...point, x, y },
+        brushSettings,
+        fbo,
+        canvas.width,
+        canvas.height,
+      );
       needsRenderRef.current = true;
     },
     [brushSettings, activeLayerId, activeTool, canvas.width, canvas.height, viewport],
@@ -588,7 +713,14 @@ export function SketchCanvas() {
         return;
       }
 
-      brushRef.current?.addPoint(point);
+      const { x: bx, y: by } = screenToCanvas(
+        point.x,
+        point.y,
+        viewport.zoom,
+        viewport.panX,
+        viewport.panY,
+      );
+      brushRef.current?.addPoint({ ...point, x: bx, y: by });
       needsRenderRef.current = true;
     },
     [activeTool, brushSettings, viewport],
@@ -721,20 +853,58 @@ export function SketchCanvas() {
         return;
       }
 
-      // Default: brush / eraser
+      // Default: brush / eraser — merge scratch texture into active layer
       const result = brushRef.current?.endStroke();
-      if (result) {
-        // Persist to current frame if in frame mode
+      if (result && renderer && activeLayerId && strokeTexRef.current && strokeFboRef.current) {
         const state = useSketchStore.getState();
-        if (state.selectedFrameLayerId && !isFramePlayingRef.current && renderer) {
-          const activeLayer = state.layers.find((l) => l.id === state.activeLayerId);
-          if (activeLayer?.texture) {
-            const imgData = readTextureToImageData(
-              renderer,
-              activeLayer.texture,
-              canvas.width,
-              canvas.height,
-            );
+        const layer = state.layers.find((l) => l.id === activeLayerId);
+        if (layer) {
+          const w = canvas.width;
+          const h = canvas.height;
+
+          // Get or create layer texture
+          const layerTex = layer.texture ?? renderer.textures.createTexture(w, h);
+
+          // Read stroke pixels from scratch FBO
+          const strokePixels = renderer.textures.readPixels(strokeFboRef.current, 0, 0, w, h);
+
+          // Read existing layer pixels
+          const layerFbo = renderer.textures.createFramebuffer(layerTex);
+          const layerPixels = renderer.textures.readPixels(layerFbo, 0, 0, w, h);
+          renderer.textures.deleteFramebuffer(layerFbo);
+
+          // Alpha composite stroke over layer
+          const isEraser = activeTool === 'eraser';
+          for (let i = 0; i < strokePixels.length; i += 4) {
+            const sa = strokePixels[i + 3]! / 255;
+            if (sa > 0) {
+              if (isEraser) {
+                // Eraser: reduce layer alpha
+                layerPixels[i + 3] = Math.round(Math.max(0, layerPixels[i + 3]! * (1 - sa)));
+              } else {
+                // Normal: alpha composite
+                layerPixels[i] = Math.round(strokePixels[i]! * sa + layerPixels[i]! * (1 - sa));
+                layerPixels[i + 1] = Math.round(
+                  strokePixels[i + 1]! * sa + layerPixels[i + 1]! * (1 - sa),
+                );
+                layerPixels[i + 2] = Math.round(
+                  strokePixels[i + 2]! * sa + layerPixels[i + 2]! * (1 - sa),
+                );
+                layerPixels[i + 3] = Math.round(
+                  Math.min(255, strokePixels[i + 3]! + layerPixels[i + 3]! * (1 - sa)),
+                );
+              }
+            }
+          }
+
+          renderer.textures.updateTexture(layerTex, 0, 0, w, h, layerPixels);
+          state.setLayers(
+            state.layers.map((l) => (l.id === activeLayerId ? { ...l, texture: layerTex } : l)),
+          );
+
+          // Persist to current frame if in frame mode
+          if (state.selectedFrameLayerId && !isFramePlayingRef.current) {
+            const imgData = readTextureToImageData(renderer, layerTex, w, h);
             state.updateFrameImageData(
               state.selectedFrameLayerId,
               state.currentFrameIndex,
@@ -742,6 +912,13 @@ export function SketchCanvas() {
             );
           }
         }
+
+        // Cleanup scratch texture
+        renderer.textures.deleteFramebuffer(strokeFboRef.current);
+        renderer.textures.deleteTexture(strokeTexRef.current);
+        strokeTexRef.current = null;
+        strokeFboRef.current = null;
+
         markDirty();
         needsRenderRef.current = true;
       }
@@ -750,6 +927,95 @@ export function SketchCanvas() {
   );
 
   usePointerInput(canvasRef, { onStrokeStart, onStrokeMove, onStrokeEnd }, isDrawTool);
+
+  // ── Zoom & Pan interactions ──
+  const panBy = useSketchStore((s) => s.panBy);
+  const isPanningRef = useRef(false);
+  const panLastPosRef = useRef<{ x: number; y: number } | null>(null);
+  const spaceHeldRef = useRef(false);
+
+  // Wheel zoom (centered on cursor)
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const state = useSketchStore.getState();
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const newZoom = Math.max(0.1, Math.min(32, state.viewport.zoom * factor));
+      const rect = el.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      // Adjust pan so the point under the cursor stays in place
+      const dz = newZoom / state.viewport.zoom;
+      const newPanX = cx - dz * (cx - state.viewport.panX);
+      const newPanY = cy - dz * (cy - state.viewport.panY);
+      useSketchStore.getState().setViewport({ zoom: newZoom, panX: newPanX, panY: newPanY });
+      needsRenderRef.current = true;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // Middle-button drag pan + Space+drag pan
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+
+    const onDown = (e: PointerEvent) => {
+      // Middle mouse button (button=1) or space+left click
+      if (e.button === 1 || (e.button === 0 && spaceHeldRef.current)) {
+        e.preventDefault();
+        isPanningRef.current = true;
+        panLastPosRef.current = { x: e.clientX, y: e.clientY };
+        el.setPointerCapture(e.pointerId);
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!isPanningRef.current || !panLastPosRef.current) return;
+      const dx = e.clientX - panLastPosRef.current.x;
+      const dy = e.clientY - panLastPosRef.current.y;
+      panLastPosRef.current = { x: e.clientX, y: e.clientY };
+      panBy(dx, dy);
+      needsRenderRef.current = true;
+    };
+    const onUp = (e: PointerEvent) => {
+      if (isPanningRef.current) {
+        isPanningRef.current = false;
+        panLastPosRef.current = null;
+        el.releasePointerCapture(e.pointerId);
+      }
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat) {
+        spaceHeldRef.current = true;
+        el.style.cursor = 'grab';
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        spaceHeldRef.current = false;
+        el.style.cursor = '';
+      }
+    };
+
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [panBy]);
 
   return (
     <div className="relative block w-full h-full">

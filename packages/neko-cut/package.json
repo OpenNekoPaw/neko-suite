@@ -46,15 +46,6 @@
         "priority": "default"
       }
     ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "neko-properties",
-          "title": "%neko.properties.title%",
-          "icon": "$(symbol-property)"
-        }
-      ]
-    },
     "views": {
       "explorer": [
         {
@@ -63,14 +54,6 @@
           "contextualTitle": "%neko.outline.contextualTitle%",
           "icon": "$(list-tree)",
           "when": "activeCustomEditorId == 'neko.videoEditor'"
-        }
-      ],
-      "neko-properties": [
-        {
-          "type": "webview",
-          "id": "neko.propertyPanel",
-          "name": "%neko.properties.name%",
-          "contextualTitle": "%neko.properties.contextualTitle%"
         }
       ]
     },

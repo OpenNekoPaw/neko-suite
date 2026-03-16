@@ -17,31 +17,6 @@ import { getService, getLogger } from '../../base';
 const logger = getLogger('VideoEditorProvider');
 import { IStatusBar } from '../../views/statusBar';
 import { IVideoProjectOutlineProvider } from '../../views/outlineProvider';
-import type { TimelineElement, ProjectDefaults } from '@neko/shared';
-
-/**
- * 元素选择事件数据
- */
-export interface IElementSelectedEvent {
-  element: TimelineElement | null;
-  trackId: string | null;
-  currentTime: number;
-}
-
-/**
- * 当前时间更新事件数据
- */
-export interface ICurrentTimeUpdateEvent {
-  currentTime: number;
-}
-
-/**
- * 项目默认值更新事件数据
- */
-export interface IProjectDefaultsUpdateEvent {
-  defaults: ProjectDefaults | null;
-}
-
 export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
   private static readonly viewType = 'neko.videoEditor';
   private activeWebviews: Map<string, vscode.Webview> = new Map();
@@ -54,29 +29,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
   /** Deferred cleanup subscriptions (cancelled when editor is reopened during export) */
   private deferredCleanupSubs: Map<string, vscode.Disposable[]> = new Map();
 
-  // 事件发射器 - 用于解耦与 PropertyPanel 的通信
-  private readonly _onElementSelected = new vscode.EventEmitter<IElementSelectedEvent>();
-  public readonly onElementSelected = this._onElementSelected.event;
-
-  private readonly _onCurrentTimeUpdate = new vscode.EventEmitter<ICurrentTimeUpdateEvent>();
-  public readonly onCurrentTimeUpdate = this._onCurrentTimeUpdate.event;
-
-  private readonly _onProjectDefaultsUpdate =
-    new vscode.EventEmitter<IProjectDefaultsUpdateEvent>();
-  public readonly onProjectDefaultsUpdate = this._onProjectDefaultsUpdate.event;
-
   constructor(private readonly context: vscode.ExtensionContext) {}
-
-  /**
-   * Handle messages from the PropertyPanel
-   * Forwards the message to the active webview
-   */
-  public handlePropertyPanelMessage(message: unknown): void {
-    const webview = this.getActiveWebview();
-    if (webview) {
-      webview.postMessage(message);
-    }
-  }
 
   /**
    * Pin the editor tab for the given document URI to prevent accidental closure during export
@@ -548,24 +501,6 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
           return;
         }
 
-        // Forward element selection via event (decoupled from PropertyPanel)
-        if (message.type === 'elementSelected') {
-          this._onElementSelected.fire({
-            element: message.element,
-            trackId: message.trackId,
-            currentTime: message.currentTime,
-          });
-          return;
-        }
-
-        // Forward current time updates via event
-        if (message.type === 'currentTimeUpdate') {
-          this._onCurrentTimeUpdate.fire({
-            currentTime: message.currentTime,
-          });
-          return;
-        }
-
         // Handle export start request (Webview → ExportService → NativeEngine)
         if (message.type === 'export:start') {
           const exportService = this.exportServices.get(docUri);
@@ -817,10 +752,6 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
         // Update outline with current project data
         const content = model!.getProjectData();
         outlineProvider?.updateProject(content);
-        // Notify project defaults update via event
-        this._onProjectDefaultsUpdate.fire({
-          defaults: content.defaults || null,
-        });
         // Request initial status from webview
         webviewPanel.webview.postMessage({ type: 'requestStatus' });
       } else {
@@ -851,10 +782,6 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
       if (webviewPanel.visible) {
         outlineProvider?.updateProject(content);
       }
-      // Notify project defaults update via event
-      this._onProjectDefaultsUpdate.fire({
-        defaults: content.defaults || null,
-      });
     };
 
     // Listen for model changes (来自 VideoEditorModel 的事件)

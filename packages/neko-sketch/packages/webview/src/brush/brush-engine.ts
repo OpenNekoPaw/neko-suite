@@ -12,7 +12,13 @@ import { pressureToSize, pressureToOpacity } from './pressure-mapper';
 import { BRUSH_PROFILES } from './brush-profiles';
 
 export interface IBrushEngine {
-  beginStroke(point: StrokePoint, settings: BrushSettings, layerFBO: WebGLFramebuffer): void;
+  beginStroke(
+    point: StrokePoint,
+    settings: BrushSettings,
+    layerFBO: WebGLFramebuffer,
+    width: number,
+    height: number,
+  ): void;
   addPoint(point: StrokePoint): void;
   endStroke(): StrokeResult | null;
   isActive(): boolean;
@@ -23,6 +29,8 @@ export class BrushEngine implements IBrushEngine {
   private points: StrokePoint[] = [];
   private settings: BrushSettings | null = null;
   private layerFBO: WebGLFramebuffer | null = null;
+  private fboWidth = 0;
+  private fboHeight = 0;
   private active = false;
   private bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 
@@ -30,10 +38,18 @@ export class BrushEngine implements IBrushEngine {
     this.pipeline = pipeline;
   }
 
-  beginStroke(point: StrokePoint, settings: BrushSettings, layerFBO: WebGLFramebuffer): void {
+  beginStroke(
+    point: StrokePoint,
+    settings: BrushSettings,
+    layerFBO: WebGLFramebuffer,
+    width: number,
+    height: number,
+  ): void {
     this.points = [point];
     this.settings = settings;
     this.layerFBO = layerFBO;
+    this.fboWidth = width;
+    this.fboHeight = height;
     this.active = true;
     this.bounds = { minX: point.x, minY: point.y, maxX: point.x, maxY: point.y };
 
@@ -107,7 +123,14 @@ export class BrushEngine implements IBrushEngine {
       color[3] = opacity;
     }
 
-    this.pipeline.renderStrokeSegment(data, color, this.settings.size, this.layerFBO);
+    this.pipeline.renderStrokeSegment(
+      data,
+      color,
+      this.settings.size,
+      this.layerFBO,
+      this.fboWidth,
+      this.fboHeight,
+    );
   }
 
   private updateBounds(point: StrokePoint): void {
@@ -122,6 +145,8 @@ export class BrushEngine implements IBrushEngine {
     this.points = [];
     this.settings = null;
     this.layerFBO = null;
+    this.fboWidth = 0;
+    this.fboHeight = 0;
     this.active = false;
     this.bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   }

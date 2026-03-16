@@ -63,7 +63,7 @@ export function FilterPanel() {
           <optgroup key={cat} label={t(CATEGORY_KEYS[cat])}>
             {registry.listByCategory(cat).map((def) => (
               <option key={def.id} value={def.id}>
-                {def.name}
+                {t(def.name)}
               </option>
             ))}
           </optgroup>
@@ -127,14 +127,14 @@ function FilterItem({
           type="checkbox"
           checked={enabled}
           onChange={() => onToggle(id)}
-          aria-label={t('sketch.filter.toggle', { name: def.name })}
+          aria-label={t('sketch.filter.toggle', { name: t(def.name) })}
         />
-        <span className="text-xs flex-1">{def.name}</span>
+        <span className="text-xs flex-1">{t(def.name)}</span>
         <button
           className="text-xs px-1 text-red-400 hover:text-red-300"
           onClick={() => onRemove(id)}
           title={t('sketch.filter.remove')}
-          aria-label={`${t('sketch.filter.remove')} ${def.name}`}
+          aria-label={`${t('sketch.filter.remove')} ${t(def.name)}`}
         >
           ✕
         </button>
@@ -145,7 +145,7 @@ function FilterItem({
           if (p.type === 'float' || p.type === 'int') {
             return (
               <div key={p.name} className="flex items-center gap-1 text-[10px]">
-                <span className="w-16 opacity-60 truncate">{p.label}</span>
+                <span className="w-16 opacity-60 truncate">{t(p.label)}</span>
                 <input
                   type="range"
                   min={p.min ?? 0}
@@ -160,7 +160,7 @@ function FilterItem({
                     )
                   }
                   className="flex-1 h-3"
-                  aria-label={p.label}
+                  aria-label={t(p.label)}
                 />
                 <span className="w-8 text-right tabular-nums">{(val as number).toFixed(2)}</span>
               </div>

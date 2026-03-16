@@ -42,6 +42,21 @@ export {
   type BuiltinPromptKey,
 } from './builtin-prompts';
 
+// System Prompt Composer
+export { SystemPromptComposer, createSystemPromptComposer } from './system-prompt-composer';
+
+export type {
+  ISystemPromptComposer,
+  PromptLayer,
+  PromptSection,
+  PromptSectionInput,
+  PromptLayerBudget,
+  LayerUsage,
+  SystemPromptComposerOptions,
+} from './system-prompt-composer-types';
+
+export { PROMPT_LAYER_ORDER, DEFAULT_PROMPT_LAYER_BUDGET } from './system-prompt-composer-types';
+
 // Re-export types from @neko/shared for convenience
 export type {
   Prompt,

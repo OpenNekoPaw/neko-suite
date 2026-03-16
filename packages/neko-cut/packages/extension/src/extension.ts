@@ -17,7 +17,6 @@ import {
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { VideoEditorProvider } from './editor/video/videoEditorProvider';
-import { PropertyPanelViewProvider } from './propertyPanel/propertyPanelViewProvider';
 import { registerCommands } from './commands';
 
 /**
@@ -43,7 +42,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Create providers
   const videoEditorProvider = new VideoEditorProvider(context);
-  const propertyPanelProvider = new PropertyPanelViewProvider(context.extensionUri, context);
 
   // Register custom editor (CustomTextEditorProvider for .jvi files)
   context.subscriptions.push(
@@ -53,14 +51,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       },
       supportsMultipleEditorsPerDocument: false,
     }),
-  );
-
-  // Register property panel view
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(
-      PropertyPanelViewProvider.viewType,
-      propertyPanelProvider,
-    ),
   );
 
   // Register outline view
@@ -91,38 +81,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     }),
   );
-
-  // Connect property panel to element selection
-  videoEditorProvider.onElementSelected((event) => {
-    propertyPanelProvider.updateSelectedElement(event.element, event.trackId, event.currentTime);
-  });
-
-  // Connect property panel to current time updates
-  videoEditorProvider.onCurrentTimeUpdate((event) => {
-    propertyPanelProvider.updateCurrentTime(event.currentTime);
-  });
-
-  // Connect property panel to project defaults updates
-  videoEditorProvider.onProjectDefaultsUpdate((event) => {
-    propertyPanelProvider.updateProjectDefaults(event.defaults);
-  });
-
-  // Connect property panel changes back to editor
-  propertyPanelProvider.onDidChangeProperty((message) => {
-    videoEditorProvider.handlePropertyPanelMessage(message);
-  });
-
-  propertyPanelProvider.onDidChangeDefaults((message) => {
-    videoEditorProvider.handlePropertyPanelMessage(message);
-  });
-
-  propertyPanelProvider.onDidAddKeyframe((message) => {
-    videoEditorProvider.handlePropertyPanelMessage(message);
-  });
-
-  propertyPanelProvider.onDidRemoveKeyframe((message) => {
-    videoEditorProvider.handlePropertyPanelMessage(message);
-  });
 
   getRootLogger().info('Extension activated');
 }

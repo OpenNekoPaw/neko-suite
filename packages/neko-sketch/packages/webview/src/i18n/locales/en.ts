@@ -198,6 +198,32 @@ export const en: MessageBundle = {
   'sketch.layer.copySuffix': '{name} copy',
   'sketch.layer.defaultGroup': 'Group',
 
+  // Filter names
+  'sketch.filter.gaussianBlur': 'Gaussian Blur',
+  'sketch.filter.brightnessContrast': 'Brightness / Contrast',
+  'sketch.filter.hueSaturation': 'Hue / Saturation',
+  'sketch.filter.sharpen': 'Sharpen',
+  'sketch.filter.vignette': 'Vignette',
+  'sketch.filter.chromaticAberration': 'Chromatic Aberration',
+  'sketch.filter.exposure': 'Exposure',
+  'sketch.filter.colorTemperature': 'Color Temperature',
+  'sketch.filter.glow': 'Glow',
+  'sketch.filter.filmGrain': 'Film Grain',
+
+  // Filter parameter labels
+  'sketch.filter.param.radius': 'Radius',
+  'sketch.filter.param.brightness': 'Brightness',
+  'sketch.filter.param.contrast': 'Contrast',
+  'sketch.filter.param.hue': 'Hue',
+  'sketch.filter.param.saturation': 'Saturation',
+  'sketch.filter.param.lightness': 'Lightness',
+  'sketch.filter.param.amount': 'Amount',
+  'sketch.filter.param.softness': 'Softness',
+  'sketch.filter.param.offset': 'Offset',
+  'sketch.filter.param.stops': 'Stops',
+  'sketch.filter.param.temperature': 'Temperature',
+  'sketch.filter.param.intensity': 'Intensity',
+
   // Filter toggle
   'sketch.filter.toggle': 'Toggle {name}',
 

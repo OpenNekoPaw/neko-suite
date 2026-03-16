@@ -144,6 +144,12 @@ export interface UIStateSlice {
   setSnapIndicatorTime: (time: number | null) => void;
   dragTargetTrackId: string | null;
   setDragTargetTrackId: (trackId: string | null) => void;
+
+  // Property panel (inline)
+  propertyPanelVisible: boolean;
+  propertyPanelWidth: number;
+  togglePropertyPanel: () => void;
+  setPropertyPanelWidth: (width: number) => void;
 }
 
 export const createUIStateSlice: StateCreator<UIStateSlice, [], [], UIStateSlice> = (set) => ({
@@ -233,4 +239,11 @@ export const createUIStateSlice: StateCreator<UIStateSlice, [], [], UIStateSlice
   setSnapIndicatorTime: (time) => set({ snapIndicatorTime: time }),
 
   setDragTargetTrackId: (trackId) => set({ dragTargetTrackId: trackId }),
+
+  // Property panel (inline)
+  propertyPanelVisible: true,
+  propertyPanelWidth: 280,
+  togglePropertyPanel: () => set((s) => ({ propertyPanelVisible: !s.propertyPanelVisible })),
+  setPropertyPanelWidth: (width) =>
+    set({ propertyPanelWidth: Math.max(200, Math.min(400, width)) }),
 });

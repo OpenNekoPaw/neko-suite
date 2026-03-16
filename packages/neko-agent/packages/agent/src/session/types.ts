@@ -274,6 +274,16 @@ export interface IAgentSession {
   addMessage(message: ChatMessage): void;
 
   /**
+   * Apply skill injection (reversible via removeSkillInjection)
+   */
+  applySkillInjection(injection: import('../skill').SkillInjection): void;
+
+  /**
+   * Remove a previously injected skill prompt
+   */
+  removeSkillInjection(name: string): void;
+
+  /**
    * Clear conversation history
    */
   clearHistory(): void;

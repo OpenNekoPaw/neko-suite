@@ -49,6 +49,7 @@ export function App() {
   const setCanvas = store((s) => s.setCanvas);
   const setLayers = store((s) => s.setLayers);
   const setViewport = store((s) => s.setViewport);
+  const setActiveLayer = store((s) => s.setActiveLayer);
   const markClean = store((s) => s.markClean);
   const clearHistory = store((s) => s.clearHistory);
   const puppetLoaded = store((s) => s.puppetLoaded);
@@ -93,6 +94,13 @@ export function App() {
             setCanvas(parsed.canvas);
             setLayers(parsed.layers);
             setViewport(parsed.viewport);
+            // Auto-select the topmost raster layer (or last layer) for immediate editing
+            const rasterLayer = [...parsed.layers].reverse().find((l) => l.type === 'raster');
+            const fallback = parsed.layers[parsed.layers.length - 1];
+            const target = rasterLayer ?? fallback;
+            if (target) {
+              setActiveLayer(target.id);
+            }
           }
           markClean();
           break;
@@ -140,7 +148,7 @@ export function App() {
           break;
       }
     },
-    [setCanvas, setLayers, setViewport, markClean, clearHistory],
+    [setCanvas, setLayers, setViewport, setActiveLayer, markClean, clearHistory],
   );
 
   useEffect(() => {

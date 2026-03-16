@@ -96,6 +96,7 @@ export function deserializeLayers(raw: NksLayerData[]): LayerData[] {
     maskLayerId: l.maskLayerId ?? null,
     children: deserializeLayers(l.children ?? []),
     texture: null,
+    pendingData: l.data,
   }));
 }
 

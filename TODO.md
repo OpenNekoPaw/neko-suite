@@ -6,9 +6,9 @@
 
 ## 🔴 P0 — 阻塞性（本迭代必须完成）
 
-### 构建/测试修复
-1. [ ] `@neko-model/webview` 测试脚本缺少 `--passWithNoTests`（导致 `pnpm test` 级联失败）
-2. [ ] `neko-sketch/packages/extension/package.json` 入口 `./src/index.ts` 文件不存在（Knip 报错）
+### 构建/测试修复 ✅ 已完成
+1. [x] `@neko-model/webview` 测试脚本缺少 `--passWithNoTests`（已修复）
+2. [x] `neko-sketch/packages/extension/package.json` 入口 `./src/index.ts` 文件不存在（Knip 配置已修正：从整体 ignore 改为分子包正确配置入口）
 
 ---
 
@@ -139,7 +139,7 @@
 
 ### 代码质量（2026-03-16 更新）
 
-**扫描基线**：`pnpm build` ✅ | `pnpm test` ❌（@neko-model/webview 无测试文件）| `pnpm check` ❌（Knip 未使用导出）
+**扫描基线**：`pnpm build` ✅ | `pnpm test` ✅ | `pnpm check` ❌（Knip 未使用导出）
 
 **源码 TODO 扫描**：12 处（P0: 0 | P1: 0 | P2: 2 | 一般: 3 | 误报: 7）— 无阻塞项
 
@@ -246,4 +246,4 @@
 
 ---
 
-*最后更新：2026-03-16（新增 P3 neko-live 虚拟制片 13 项 + VR/AR 4 项；P0 2 项构建修复未变；技术债基线不变）*
+*最后更新：2026-03-16（P0 构建修复 2 项已完成；Knip 配置修正 neko-sketch/neko-model 子包入口；扫描基线 pnpm test ✅）*

@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useShallowStore } from './hooks/useShallowStore';
 import { useVSCodeMessaging } from './hooks/useVSCodeMessaging';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { PreviewPanel } from './components/PreviewPanel';
 import { PreviewControls } from './components/PreviewControls';
 import { Timeline } from './components/Timeline';
-import type { TimelineElement } from './types';
+import { PropertyPanelInline } from './components/PropertyPanel/PropertyPanelInline';
 import { useEditorStore } from './stores/editor-store';
 import { getLogger } from './utils/logger';
 
@@ -46,11 +46,10 @@ function App() {
     setPreviewVolume: state.setPreviewVolume,
     togglePreviewMute: state.togglePreviewMute,
   }));
-  const selectedElements = useEditorStore((state) => state.selectedElements);
-  const updateElement = useEditorStore((state) => state.updateElement);
-  const updateProject = useEditorStore((state) => state.updateProject);
-  const addKeyframe = useEditorStore((state) => state.addKeyframe);
-  const removeKeyframe = useEditorStore((state) => state.removeKeyframe);
+  const propertyPanelVisible = useEditorStore((state) => state.propertyPanelVisible);
+  const propertyPanelWidth = useEditorStore((state) => state.propertyPanelWidth);
+  const setPropertyPanelWidth = useEditorStore((state) => state.setPropertyPanelWidth);
+  const togglePropertyPanel = useEditorStore((state) => state.togglePropertyPanel);
   const { sendMessage } = useVSCodeMessaging();
   const animationFrameRef = useRef<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -100,85 +99,7 @@ function App() {
     }
   }, [project, isCapturingScreenshot]);
 
-  // Get the first selected element for property panel
-  const selectedElement = useMemo((): TimelineElement | null => {
-    if (!project || selectedElements.length === 0) return null;
-    const { trackId, elementId } = selectedElements[0];
-    const track = project.tracks.find((t) => t.id === trackId);
-    return track?.elements.find((e) => e.id === elementId) ?? null;
-  }, [project, selectedElements]);
-
-  // Get the track ID of the selected element
-  const selectedTrackId = selectedElements.length > 0 ? selectedElements[0].trackId : null;
-
-  // Send element selection to extension for Property Panel
-  useEffect(() => {
-    sendMessage({
-      type: 'elementSelected',
-      element: selectedElement,
-      trackId: selectedTrackId,
-      currentTime: currentTime,
-    });
-  }, [selectedElement, selectedTrackId, sendMessage]);
-
-  // Send current time updates to extension for Property Panel (throttled)
-  const lastTimeRef = useRef(currentTime);
-  useEffect(() => {
-    // Only send if time changed significantly (avoid spamming)
-    if (Math.abs(currentTime - lastTimeRef.current) > 0.01) {
-      lastTimeRef.current = currentTime;
-      sendMessage({
-        type: 'currentTimeUpdate',
-        currentTime: currentTime,
-      });
-    }
-  }, [currentTime, sendMessage]);
-
-  // Listen for property changes from the Property Panel
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      const message = event.data;
-
-      switch (message.type) {
-        case 'updateElementFromPropertyPanel':
-          if (message.trackId && message.elementId && message.changes) {
-            updateElement(message.trackId, message.elementId, message.changes);
-          }
-          break;
-
-        case 'updateDefaultsFromPropertyPanel':
-          if (message.changes) {
-            updateProject({ defaults: { ...project?.defaults, ...message.changes } });
-          }
-          break;
-
-        case 'addKeyframeFromPropertyPanel':
-          if (message.trackId && message.elementId && message.propertyPath) {
-            // Add keyframe at current time with the provided value
-            addKeyframe(
-              message.trackId,
-              message.elementId,
-              message.propertyPath,
-              currentTime,
-              message.value,
-            );
-          }
-          break;
-
-        case 'removeKeyframeFromPropertyPanel':
-          if (message.trackId && message.elementId && message.propertyPath) {
-            // Remove keyframe at current time
-            removeKeyframe(message.trackId, message.elementId, message.propertyPath, currentTime);
-          }
-          break;
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [updateElement, updateProject, project?.defaults, addKeyframe, removeKeyframe, currentTime]);
-
-  // Handle resize with pointer capture to prevent cursor sticking when mouse leaves webview
+  // Handle vertical resize with pointer capture to prevent cursor sticking when mouse leaves webview
   const resizeHandleRef = useRef<HTMLDivElement>(null);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
@@ -209,6 +130,32 @@ function App() {
     // Release pointer capture
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
     setIsResizing(false);
+  }, []);
+
+  // Handle horizontal resize for PropertyPanel width
+  const [isHResizing, setIsHResizing] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const handleHResizeStart = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    setIsHResizing(true);
+  }, []);
+
+  const handleHResizeMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isHResizing || !rootRef.current) return;
+      const rootRect = rootRef.current.getBoundingClientRect();
+      // Width = distance from pointer to right edge
+      const newWidth = rootRect.right - e.clientX;
+      setPropertyPanelWidth(newWidth);
+    },
+    [isHResizing, setPropertyPanelWidth],
+  );
+
+  const handleHResizeEnd = useCallback((e: React.PointerEvent) => {
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    setIsHResizing(false);
   }, []);
 
   // Playback loop with optimized timing (avoid excessive seek calls)
@@ -283,55 +230,83 @@ function App() {
   }
 
   return (
-    <div ref={containerRef} className="flex flex-col h-full bg-vscode-bg">
-      {/* Preview Panel with Controls */}
-      <div
-        className="flex flex-col overflow-hidden min-h-0"
-        style={{ flex: isFullscreen ? 1 : previewRatio }}
-      >
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <PreviewPanel onCaptureScreenshot={handleCaptureScreenshot} />
+    <div ref={rootRef} className="flex h-full bg-vscode-bg">
+      {/* Left: Preview + Timeline (vertical split) */}
+      <div ref={containerRef} className="flex flex-col flex-1 min-w-0">
+        {/* Preview Panel with Controls */}
+        <div
+          className="flex flex-col overflow-hidden min-h-0"
+          style={{ flex: isFullscreen ? 1 : previewRatio }}
+        >
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <PreviewPanel onCaptureScreenshot={handleCaptureScreenshot} />
+          </div>
+          <PreviewControls
+            currentTime={currentTime}
+            totalDuration={getTotalDuration()}
+            isPlaying={isPlaying}
+            seek={seek}
+            togglePlayback={togglePlayback}
+            previewQuality={previewQuality}
+            setPreviewQuality={setPreviewQuality}
+            previewVolume={previewVolume}
+            previewMuted={previewMuted}
+            setPreviewVolume={setPreviewVolume}
+            togglePreviewMute={togglePreviewMute}
+            resolution={project.resolution}
+            fps={project.fps}
+            isFullscreen={isFullscreen}
+            onFullscreenToggle={toggleFullscreen}
+            onCaptureScreenshot={handleCaptureScreenshot}
+            isCapturingScreenshot={isCapturingScreenshot}
+            propertyPanelVisible={propertyPanelVisible}
+            onTogglePropertyPanel={togglePropertyPanel}
+          />
         </div>
-        <PreviewControls
-          currentTime={currentTime}
-          totalDuration={getTotalDuration()}
-          isPlaying={isPlaying}
-          seek={seek}
-          togglePlayback={togglePlayback}
-          previewQuality={previewQuality}
-          setPreviewQuality={setPreviewQuality}
-          previewVolume={previewVolume}
-          previewMuted={previewMuted}
-          setPreviewVolume={setPreviewVolume}
-          togglePreviewMute={togglePreviewMute}
-          resolution={project.resolution}
-          fps={project.fps}
-          isFullscreen={isFullscreen}
-          onFullscreenToggle={toggleFullscreen}
-          onCaptureScreenshot={handleCaptureScreenshot}
-          isCapturingScreenshot={isCapturingScreenshot}
-        />
+
+        {/* Vertical Resize Handle - hidden in fullscreen */}
+        {!isFullscreen && (
+          <div
+            ref={resizeHandleRef}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            className={`h-1 flex-shrink-0 cursor-ns-resize border-t border-vscode-panel-border transition-colors ${
+              isResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
+            }`}
+            style={{ touchAction: 'none' }}
+          />
+        )}
+
+        {/* Timeline with Controls - hidden in fullscreen */}
+        {!isFullscreen && (
+          <div className="overflow-hidden flex flex-col min-h-0" style={{ flex: 1 - previewRatio }}>
+            <Timeline />
+          </div>
+        )}
       </div>
 
-      {/* Resize Handle - hidden in fullscreen */}
-      {!isFullscreen && (
-        <div
-          ref={resizeHandleRef}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          className={`h-1 flex-shrink-0 cursor-ns-resize border-t border-vscode-panel-border transition-colors ${
-            isResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
-          }`}
-          style={{ touchAction: 'none' }}
-        />
-      )}
-
-      {/* Timeline with Controls - hidden in fullscreen */}
-      {!isFullscreen && (
-        <div className="overflow-hidden flex flex-col min-h-0" style={{ flex: 1 - previewRatio }}>
-          <Timeline />
-        </div>
+      {/* Right: Inline PropertyPanel (collapsible) */}
+      {propertyPanelVisible && (
+        <>
+          {/* Horizontal Resize Handle */}
+          <div
+            onPointerDown={handleHResizeStart}
+            onPointerMove={handleHResizeMove}
+            onPointerUp={handleHResizeEnd}
+            className={`w-1 flex-shrink-0 cursor-ew-resize border-l border-vscode-panel-border transition-colors ${
+              isHResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
+            }`}
+            style={{ touchAction: 'none' }}
+          />
+          {/* PropertyPanel */}
+          <div
+            className="flex-shrink-0 overflow-y-auto overflow-x-hidden border-l border-vscode-panel-border"
+            style={{ width: propertyPanelWidth }}
+          >
+            <PropertyPanelInline />
+          </div>
+        </>
       )}
     </div>
   );

@@ -20,21 +20,29 @@ import {
 const BUILTIN_FILTERS: readonly FilterDef[] = [
   {
     id: 'gaussian-blur',
-    name: 'Gaussian Blur',
+    name: 'sketch.filter.gaussianBlur',
     category: 'blur',
     params: [
-      { name: 'u_radius', label: 'Radius', type: 'float', default: 5, min: 0, max: 50, step: 0.5 },
+      {
+        name: 'u_radius',
+        label: 'sketch.filter.param.radius',
+        type: 'float',
+        default: 5,
+        min: 0,
+        max: 50,
+        step: 0.5,
+      },
     ],
     fragmentShader: GAUSSIAN_BLUR_FRAG,
   },
   {
     id: 'brightness-contrast',
-    name: 'Brightness / Contrast',
+    name: 'sketch.filter.brightnessContrast',
     category: 'color',
     params: [
       {
         name: 'u_brightness',
-        label: 'Brightness',
+        label: 'sketch.filter.param.brightness',
         type: 'float',
         default: 0,
         min: -1,
@@ -43,7 +51,7 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
       },
       {
         name: 'u_contrast',
-        label: 'Contrast',
+        label: 'sketch.filter.param.contrast',
         type: 'float',
         default: 0,
         min: -1,
@@ -55,13 +63,21 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
   },
   {
     id: 'hue-saturation',
-    name: 'Hue / Saturation',
+    name: 'sketch.filter.hueSaturation',
     category: 'color',
     params: [
-      { name: 'u_hue', label: 'Hue', type: 'float', default: 0, min: -0.5, max: 0.5, step: 0.01 },
+      {
+        name: 'u_hue',
+        label: 'sketch.filter.param.hue',
+        type: 'float',
+        default: 0,
+        min: -0.5,
+        max: 0.5,
+        step: 0.01,
+      },
       {
         name: 'u_saturation',
-        label: 'Saturation',
+        label: 'sketch.filter.param.saturation',
         type: 'float',
         default: 0,
         min: -1,
@@ -70,7 +86,7 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
       },
       {
         name: 'u_lightness',
-        label: 'Lightness',
+        label: 'sketch.filter.param.lightness',
         type: 'float',
         default: 0,
         min: -1,
@@ -82,21 +98,29 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
   },
   {
     id: 'sharpen',
-    name: 'Sharpen',
+    name: 'sketch.filter.sharpen',
     category: 'stylize',
     params: [
-      { name: 'u_amount', label: 'Amount', type: 'float', default: 0.5, min: 0, max: 3, step: 0.1 },
+      {
+        name: 'u_amount',
+        label: 'sketch.filter.param.amount',
+        type: 'float',
+        default: 0.5,
+        min: 0,
+        max: 3,
+        step: 0.1,
+      },
     ],
     fragmentShader: SHARPEN_FRAG,
   },
   {
     id: 'vignette',
-    name: 'Vignette',
+    name: 'sketch.filter.vignette',
     category: 'stylize',
     params: [
       {
         name: 'u_radius',
-        label: 'Radius',
+        label: 'sketch.filter.param.radius',
         type: 'float',
         default: 0.75,
         min: 0,
@@ -105,7 +129,7 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
       },
       {
         name: 'u_softness',
-        label: 'Softness',
+        label: 'sketch.filter.param.softness',
         type: 'float',
         default: 0.45,
         min: 0,
@@ -117,21 +141,29 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
   },
   {
     id: 'chromatic-aberration',
-    name: 'Chromatic Aberration',
+    name: 'sketch.filter.chromaticAberration',
     category: 'distort',
     params: [
-      { name: 'u_offset', label: 'Offset', type: 'float', default: 3, min: 0, max: 20, step: 0.5 },
+      {
+        name: 'u_offset',
+        label: 'sketch.filter.param.offset',
+        type: 'float',
+        default: 3,
+        min: 0,
+        max: 20,
+        step: 0.5,
+      },
     ],
     fragmentShader: CHROMATIC_ABERRATION_FRAG,
   },
   {
     id: 'exposure',
-    name: 'Exposure',
+    name: 'sketch.filter.exposure',
     category: 'color',
     params: [
       {
         name: 'u_exposure',
-        label: 'Stops',
+        label: 'sketch.filter.param.stops',
         type: 'float',
         default: 0,
         min: -3,
@@ -143,12 +175,12 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
   },
   {
     id: 'temperature',
-    name: 'Color Temperature',
+    name: 'sketch.filter.colorTemperature',
     category: 'color',
     params: [
       {
         name: 'u_temperature',
-        label: 'Temperature',
+        label: 'sketch.filter.param.temperature',
         type: 'float',
         default: 0,
         min: -1,
@@ -160,12 +192,12 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
   },
   {
     id: 'glow',
-    name: 'Glow',
+    name: 'sketch.filter.glow',
     category: 'stylize',
     params: [
       {
         name: 'u_intensity',
-        label: 'Intensity',
+        label: 'sketch.filter.param.intensity',
         type: 'float',
         default: 0.8,
         min: 0,
@@ -174,7 +206,7 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
       },
       {
         name: 'u_radius',
-        label: 'Radius',
+        label: 'sketch.filter.param.radius',
         type: 'float',
         default: 4,
         min: 1,
@@ -186,12 +218,12 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
   },
   {
     id: 'film-grain',
-    name: 'Film Grain',
+    name: 'sketch.filter.filmGrain',
     category: 'stylize',
     params: [
       {
         name: 'u_amount',
-        label: 'Amount',
+        label: 'sketch.filter.param.amount',
         type: 'float',
         default: 0.05,
         min: 0,

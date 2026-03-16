@@ -50,6 +50,8 @@ export interface IRenderPipeline {
     color: [number, number, number, number],
     size: number,
     targetFBO: WebGLFramebuffer,
+    targetWidth: number,
+    targetHeight: number,
   ): void;
   clear(fbo: WebGLFramebuffer): void;
   dispose(): void;

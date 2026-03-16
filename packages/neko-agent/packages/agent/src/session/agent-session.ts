@@ -41,6 +41,7 @@ import {
   createCoreMetaTools,
   DEFAULT_INJECTION_CONFIG,
 } from '../tools';
+import { SystemPromptComposer } from '../prompt/system-prompt-composer';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('AgentSession');
@@ -83,6 +84,9 @@ export class AgentSession implements IAgentSession {
   private _toolGroupRegistry: ToolGroupRegistry;
   private _toolCategoryRegistry: ToolCategoryRegistry;
   private _toolInjectionManager: ToolInjectionManager;
+
+  // Prompt composition
+  private _promptComposer: SystemPromptComposer;
 
   // State
   private _history: ChatMessage[] = [];
@@ -147,8 +151,10 @@ export class AgentSession implements IAgentSession {
     // Initialize executor
     this._initializeExecutor();
 
-    // Initialize history with system prompt
-    this._history.push({ role: 'system', content: config.systemPrompt });
+    // Initialize prompt composer and history with system prompt
+    this._promptComposer = new SystemPromptComposer();
+    this._promptComposer.setBase(config.systemPrompt);
+    this._history.push({ role: 'system', content: this._promptComposer.compose() });
   }
 
   // ---------------------------------------------------------------------------
@@ -166,11 +172,8 @@ export class AgentSession implements IAgentSession {
 
     // Update system prompt in history if changed
     if (config.systemPrompt !== undefined) {
-      if (this._history.length > 0 && this._history[0].role === 'system') {
-        this._history[0].content = config.systemPrompt;
-      } else {
-        this._history.unshift({ role: 'system', content: config.systemPrompt });
-      }
+      this._promptComposer.setBase(config.systemPrompt);
+      this._syncSystemPrompt();
     }
 
     // Reinitialize executor with new config
@@ -237,6 +240,7 @@ export class AgentSession implements IAgentSession {
       // Add user message to history first, then pass snapshot (including user message)
       // to executor with skipUserMessage flag so it doesn't duplicate
       this._history.push({ role: 'user', content: processedInput });
+      this._syncSystemPrompt(); // Ensure system prompt is fresh before snapshot
       const messagesSnapshot = [...this._history];
 
       for await (const step of this._executor.executeStream(processedInput, {
@@ -313,15 +317,17 @@ export class AgentSession implements IAgentSession {
 
   /**
    * Apply a skill injection to the active session.
-   * Appends the injection's system prompt to the session's system prompt,
-   * and updates permission rules if allowedTools is specified.
+   * Uses the prompt composer for reversible section management.
    */
   applySkillInjection(injection: SkillInjection): void {
-    // Append skill system prompt to existing session system prompt
-    if (this._history.length > 0 && this._history[0].role === 'system') {
-      const current = this._history[0].content;
-      this._history[0].content = `${current}\n\n---\n\n${injection.systemPrompt}`;
-    }
+    // Add skill prompt as a composable section (reversible)
+    this._promptComposer.setSection({
+      id: `skill:${injection.name}`,
+      layer: 'skill',
+      content: injection.systemPrompt,
+      priority: 50,
+    });
+    this._syncSystemPrompt();
 
     // Add allowed tools to permission hooks
     if (injection.allowedTools && injection.allowedTools.length > 0 && this._permissionHooks) {
@@ -331,10 +337,17 @@ export class AgentSession implements IAgentSession {
     }
   }
 
+  /**
+   * Remove a previously injected skill prompt (reversible injection).
+   */
+  removeSkillInjection(name: string): void {
+    this._promptComposer.removeSection(`skill:${name}`);
+    this._syncSystemPrompt();
+  }
+
   clearHistory(): void {
-    // Keep system prompt
-    const systemPrompt = this._history.find((m) => m.role === 'system');
-    this._history = systemPrompt ? [systemPrompt] : [];
+    // Rebuild from composer to preserve current prompt composition
+    this._history = [{ role: 'system', content: this._promptComposer.compose() }];
   }
 
   loadHistory(messages: ChatMessage[]): void {
@@ -384,6 +397,14 @@ export class AgentSession implements IAgentSession {
   // ---------------------------------------------------------------------------
   // Private Methods
   // ---------------------------------------------------------------------------
+
+  /** Sync the composed system prompt into _history[0] */
+  private _syncSystemPrompt(): void {
+    const composed = this._promptComposer.compose();
+    if (this._history.length > 0 && this._history[0]?.role === 'system') {
+      this._history[0].content = composed;
+    }
+  }
 
   private _initializeExecutor(): void {
     // Create memory hooks

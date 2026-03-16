@@ -96,7 +96,6 @@ export default defineConfig(({ command }) => {
     rollupOptions: {
       input: {
         index: path.resolve(__dirname, 'index.html'),
-        propertyPanel: path.resolve(__dirname, 'propertyPanel.html'),
         assetLibrary: path.resolve(__dirname, 'assetLibrary.html'),
       },
       output: {

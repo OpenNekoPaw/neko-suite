@@ -65,6 +65,8 @@ export interface LayerData {
   readonly maskLayerId: string | null;
   readonly children: LayerData[];
   texture: WebGLTexture | null;
+  /** Base64 PNG data from .nks file, consumed once to create WebGL texture */
+  pendingData?: string;
 }
 
 // ─── Tool Types ───

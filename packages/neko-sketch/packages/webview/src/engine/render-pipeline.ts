@@ -190,13 +190,15 @@ export class RenderPipeline implements IRenderPipeline {
     color: [number, number, number, number],
     size: number,
     targetFBO: WebGLFramebuffer,
+    targetWidth: number,
+    targetHeight: number,
   ): void {
     const gl = this.gl;
     const pointCount = points.length / 3; // x, y, pressure per point
     if (pointCount === 0) return;
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
-    gl.viewport(0, 0, this.compWidth, this.compHeight);
+    gl.viewport(0, 0, targetWidth, targetHeight);
 
     const program = this.shaders.getProgram('stroke');
     gl.useProgram(program);
@@ -209,7 +211,8 @@ export class RenderPipeline implements IRenderPipeline {
     gl.uniform4fv(colorLoc, color);
     gl.uniform1f(sizeLoc, size);
     gl.uniform1f(hardnessLoc, 0.7);
-    gl.uniformMatrix3fv(transformLoc, false, identity3());
+    // Orthographic projection: map document pixel coords → clip space
+    gl.uniformMatrix3fv(transformLoc, false, ortho3(targetWidth, targetHeight));
 
     // Upload stroke points
     gl.bindVertexArray(this.strokeVAO);
@@ -292,4 +295,10 @@ export class RenderPipeline implements IRenderPipeline {
 /** Identity 3x3 matrix (column-major) */
 function identity3(): Float32Array {
   return new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+}
+
+/** Orthographic projection mapping pixel coords (0..w, 0..h) to clip space (-1..1) */
+function ortho3(w: number, h: number): Float32Array {
+  // Column-major: scale x by 2/w, y by -2/h (flip Y), translate by (-1, +1)
+  return new Float32Array([2 / w, 0, 0, 0, -2 / h, 0, -1, 1, 1]);
 }

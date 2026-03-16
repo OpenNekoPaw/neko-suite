@@ -113,9 +113,13 @@ const config: KnipConfig = {
       entry: ['package.json'],
     },
     'packages/neko-model': { ignore: ['**/*'] },
+    'packages/neko-model/packages/extension': {},
+    'packages/neko-model/packages/webview': {},
     'packages/neko-audio': { ignore: ['**/*'] },
     'packages/neko-live': { ignore: ['**/*'] },
-    'packages/neko-sketch': { ignore: ['**/*'] },
+    'packages/neko-sketch': {},
+    'packages/neko-sketch/packages/extension': {},
+    'packages/neko-sketch/packages/webview': {},
     'packages/neko-suite': {
       // Meta package with only documentation
       entry: ['package.json'],

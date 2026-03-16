@@ -198,6 +198,32 @@ export const zhCN: MessageBundle = {
   'sketch.layer.copySuffix': '{name} 副本',
   'sketch.layer.defaultGroup': '编组',
 
+  // Filter names
+  'sketch.filter.gaussianBlur': '高斯模糊',
+  'sketch.filter.brightnessContrast': '亮度 / 对比度',
+  'sketch.filter.hueSaturation': '色相 / 饱和度',
+  'sketch.filter.sharpen': '锐化',
+  'sketch.filter.vignette': '暗角',
+  'sketch.filter.chromaticAberration': '色差',
+  'sketch.filter.exposure': '曝光',
+  'sketch.filter.colorTemperature': '色温',
+  'sketch.filter.glow': '辉光',
+  'sketch.filter.filmGrain': '胶片颗粒',
+
+  // Filter parameter labels
+  'sketch.filter.param.radius': '半径',
+  'sketch.filter.param.brightness': '亮度',
+  'sketch.filter.param.contrast': '对比度',
+  'sketch.filter.param.hue': '色相',
+  'sketch.filter.param.saturation': '饱和度',
+  'sketch.filter.param.lightness': '明度',
+  'sketch.filter.param.amount': '强度',
+  'sketch.filter.param.softness': '柔和度',
+  'sketch.filter.param.offset': '偏移',
+  'sketch.filter.param.stops': '档位',
+  'sketch.filter.param.temperature': '色温',
+  'sketch.filter.param.intensity': '强度',
+
   // Filter toggle
   'sketch.filter.toggle': '切换 {name}',
 

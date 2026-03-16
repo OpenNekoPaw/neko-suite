@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sketch-bg: var(--vscode-editor-background, #1e1e1e);
+  --sketch-fg: var(--vscode-editor-foreground, #cccccc);
+  --sketch-border: var(--vscode-panel-border, #333333);
+  --sketch-panel-bg: var(--vscode-sideBar-background, #252526);
+  --sketch-active: var(--vscode-focusBorder, #007fd4);
+  --sketch-hover: var(--vscode-list-hoverBackground, #2a2d2e);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--sketch-bg);
+  color: var(--sketch-fg);
+  font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+}
+
+/* Panel styling */
+.sketch-panel {
+  background: var(--sketch-panel-bg);
+  border: 1px solid var(--sketch-border);
+  padding: 8px;
+}
+
+.sketch-panel-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--sketch-border);
+  margin-bottom: 6px;
+}
+
+.sketch-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Slider */
+.sketch-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--sketch-border);
+  outline: none;
+}
+
+.sketch-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--sketch-active);
+  cursor: pointer;
+}
