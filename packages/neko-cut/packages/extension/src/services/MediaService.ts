@@ -954,6 +954,25 @@ export class MediaService implements vscode.Disposable {
       };
       opacity?: number;
       zIndex?: number;
+      effects?: Array<{
+        type: string;
+        parameters: Record<string, unknown>;
+        order: number;
+      }>;
+      masks?: Array<{
+        shape: unknown;
+        inverted: boolean;
+        feather: number;
+        expansion: number;
+        opacity: number;
+        blendMode: string;
+      }>;
+      transition?: {
+        type: string;
+        progress: number;
+        pairedLayerIndex: number;
+        easing: string;
+      };
     }>,
     width: number,
     height: number,
@@ -979,6 +998,12 @@ export class MediaService implements vscode.Disposable {
             transform: layer.transform,
             opacity: layer.opacity ?? 1,
             zIndex: layer.zIndex ?? index,
+            // Pass through effects for engine GPU processing
+            ...(layer.effects && layer.effects.length > 0 && { effects: layer.effects }),
+            // Pass through masks for engine GPU rasterization
+            ...(layer.masks && layer.masks.length > 0 && { masks: layer.masks }),
+            // Pass through transition for paired layer blending
+            ...(layer.transition && { transition: layer.transition }),
           })),
         },
       ],

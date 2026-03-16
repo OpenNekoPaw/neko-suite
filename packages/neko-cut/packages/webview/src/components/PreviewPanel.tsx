@@ -26,7 +26,10 @@ import {
 } from '@neko/neko-client';
 import type { ProjectData, MediaElement, CompositeLayerConfig } from '@neko/shared';
 import type { ElementTransform } from '../types/animation';
+import type { EditorElement } from '../types/editor-types';
 import { getComputedTransform } from '../utils/animation';
+import { getEffectParametersAtTime } from '../types/effects';
+import { buildCompositeMasks } from '../utils/composite-helpers';
 
 // =============================================================================
 // Helper Functions
@@ -95,13 +98,38 @@ function buildCompositeLayers(project: ProjectData, time: number): CompositeLaye
         opacity = element.opacity ?? 1;
       }
 
-      layers.push({
+      const layer: CompositeLayerConfig = {
         source: mediaElement.src,
         sourceTime,
         transform: { x, y, scaleX, scaleY, rotation, anchorX, anchorY },
         opacity,
         zIndex: zIndex++,
-      });
+      };
+
+      // Flow effects to composite layer (engine field on BaseTimelineElement)
+      if (element.effects && element.effects.length > 0) {
+        const localTime = element.trimStart + (time - element.startTime);
+        layer.effects = element.effects
+          .filter((e) => e.enabled)
+          .sort((a, b) => a.order - b.order)
+          .map((e) => ({
+            type: e.type,
+            parameters: getEffectParametersAtTime(e, localTime) as Record<
+              string,
+              number | string | boolean
+            >,
+            order: e.order,
+          }));
+      }
+
+      // Flow masks to composite layer (UI field on EditorElement)
+      const editorElement = element as EditorElement;
+      if (editorElement.masks && editorElement.masks.length > 0) {
+        const localTime = element.trimStart + (time - element.startTime);
+        layer.masks = buildCompositeMasks(editorElement.masks, localTime);
+      }
+
+      layers.push(layer);
     }
   }
 
