@@ -7,10 +7,10 @@
 | 模块          | 职责           | 主要导出                                                                                                                                                       |
 | ------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `components/` | UI 渲染        | `AIAssistant`, `ChatView`, `AccountBar`, `OnboardingFlow`                                                                                                      |
-| `handlers/`   | 消息分发       | `createConfiguredRegistry`, `useMessageHandler`, `updateConversation`（含 skill/SSO/context）                                                                  |
+| `handlers/`   | 消息分发       | `createConfiguredRegistry`, `useMessageHandler`, `updateConversation`（9 个 handler 模块）                                                                     |
 | `utils/`      | 工具函数       | `message-helpers`（deriveToolCalls, updateToolCallInBlocks）, `logger`                                                                                         |
 | `hooks/`      | 状态管理       | `useConversationState`, `useConfigState`, `useConversationSession`, `useTabManager`, `useSlashCommands`, `useChatActions`, `usePlanActions`, `useSkillActions` |
-| `messages/`   | Extension 通信 | `VSCodeMessages`（69 个消息构建方法）, `postMessage`, `vscode`                                                                                                 |
+| `messages/`   | Extension 通信 | `VSCodeMessages`（28 个消息构建方法）, `postMessage`, `vscode`                                                                                                 |
 | `config/`     | 预设数据       | `PROVIDER_PRESETS`, `PROMPT_PRESETS`                                                                                                                           |
 | `i18n/`       | 多语言         | `useI18n`, `t()`                                                                                                                                               |
 
