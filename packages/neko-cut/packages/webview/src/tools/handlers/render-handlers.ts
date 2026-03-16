@@ -7,7 +7,13 @@
 
 import type { ToolHandler, ToolHandlerResult } from '../types';
 import { useEditorStore } from '../../stores/editor-store';
-import type { ExportRequest, ExportResponse, ExportSettings } from '@neko/shared';
+import type {
+  ExportRequest,
+  ExportResponse,
+  ExportSettings,
+  MediaElement,
+  ProjectData,
+} from '@neko/shared';
 import { generateId } from '../../utils';
 import { getMediaProxy } from '../../services/mediaProxyFactory';
 import { hasMediaSource, isTimeInElement } from '../../types/capabilities';
@@ -61,21 +67,20 @@ function dataUrlToBase64(dataUrl: string): string {
 }
 
 function findTopmostMediaElementAtTime(
-  project: { tracks: Array<{ elements: Array<unknown> }> },
+  project: ProjectData,
   time: number,
-): { element: { src: string; startTime: number; trimStart?: number }; sourceTime: number } | null {
-  // Track 顺序通常从下到上：后面的轨道更“上层”，因此倒序找第一个命中的媒体元素
+): { element: MediaElement; sourceTime: number } | null {
+  // Track 顺序通常从下到上：后面的轨道更”上层”，因此倒序找第一个命中的媒体元素
   for (let trackIndex = project.tracks.length - 1; trackIndex >= 0; trackIndex--) {
     const track = project.tracks[trackIndex];
     for (const el of track.elements) {
       if (!hasMediaSource(el)) continue;
-      const element = el as { type?: string; src: string; startTime: number; trimStart?: number };
-      if (element.type !== 'media') continue;
-      if (!isTimeInElement(element as any, time)) continue;
+      if (el.type !== 'media') continue;
+      if (!isTimeInElement(el, time)) continue;
 
-      const trimStart = element.trimStart ?? 0;
-      const sourceTime = Math.max(0, trimStart + (time - element.startTime));
-      return { element, sourceTime };
+      const trimStart = el.trimStart ?? 0;
+      const sourceTime = Math.max(0, trimStart + (time - el.startTime));
+      return { element: el as MediaElement, sourceTime };
     }
   }
   return null;
@@ -112,7 +117,7 @@ const renderFrame: ToolHandler = async (params): Promise<ToolHandlerResult> => {
   const outputQuality = quality ?? 90;
 
   try {
-    const found = findTopmostMediaElementAtTime(project as any, time);
+    const found = findTopmostMediaElementAtTime(project, time);
     if (!found) {
       return { success: false, error: 'No media element found at specified time' };
     }
@@ -219,7 +224,7 @@ const renderClip: ToolHandler = async (params): Promise<ToolHandlerResult> => {
       height: outputHeight,
       fps: outputFps,
       format: outputFormat,
-      quality: outputQuality as any,
+      quality: outputQuality,
       audioBitrate: 192,
       timeRange: { start: startTime, end: endTime },
     };
@@ -229,7 +234,7 @@ const renderClip: ToolHandler = async (params): Promise<ToolHandlerResult> => {
       requestId,
       timestamp: Date.now(),
       payload: {
-        project: project as any,
+        project,
         outputPath: `clip_${Date.now()}.${outputFormat}`,
         settings,
       },
@@ -354,15 +359,15 @@ const getThumbnail: ToolHandler = async (params): Promise<ToolHandlerResult> => 
     let target: { src: string; sourceTime: number } | null = null;
     if (elementId) {
       for (const track of project.tracks) {
-        const found = track.elements.find((e) => (e as any).id === elementId);
-        if (found && hasMediaSource(found) && (found as any).type === 'media') {
-          const trimStart = (found as any).trimStart ?? 0;
-          target = { src: (found as any).src, sourceTime: Math.max(0, trimStart + 0.1) };
+        const found = track.elements.find((e) => e.id === elementId);
+        if (found && hasMediaSource(found) && found.type === 'media') {
+          const trimStart = found.trimStart ?? 0;
+          target = { src: found.src, sourceTime: Math.max(0, trimStart + 0.1) };
           break;
         }
       }
     } else {
-      const found = findTopmostMediaElementAtTime(project as any, renderTime);
+      const found = findTopmostMediaElementAtTime(project, renderTime);
       if (found) {
         target = { src: found.element.src, sourceTime: found.sourceTime };
       }

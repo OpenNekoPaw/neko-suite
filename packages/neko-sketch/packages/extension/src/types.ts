@@ -2,20 +2,7 @@
  * Sketch document types - .nks file format
  */
 
-/** Layer blend mode types (subset of @neko/shared BlendModeType) */
-export type SketchBlendMode =
-  | 'normal'
-  | 'multiply'
-  | 'screen'
-  | 'overlay'
-  | 'darken'
-  | 'lighten'
-  | 'color-dodge'
-  | 'color-burn'
-  | 'hard-light'
-  | 'soft-light'
-  | 'difference'
-  | 'exclusion';
+export type { SketchBlendMode } from '@neko/shared';
 
 /** Layer types in a sketch document */
 export type LayerType = 'raster' | 'group' | 'vector' | 'text' | 'fill' | 'adjustment';

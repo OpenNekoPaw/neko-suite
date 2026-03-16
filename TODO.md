@@ -172,18 +172,64 @@
 - [ ] Release workflow（`.github/workflows/release.yml`，tag 触发 vsix 打包）
 - [ ] ESLint warn → error 升级（`no-console` + `no-explicit-any`）
 
-### 代码质量（2026-03-09 审计基线）
+### 代码质量（2026-03-14 更新）
 
-**扫描基线**：Knip 132 未使用文件 | 421 未使用导出 | 22 未使用依赖 | 7 循环依赖
+**扫描基线**：Knip 5 未使用文件 | 435 未使用导出 | 16 未使用依赖 | **0 循环依赖** ✅
 
-**`as any`：541 处（生产 89 + 测试 452）**
+**循环依赖修复** ✅ **完成（2026-03-14）**
+- neko-types: 2 处 → 0（ToolFilterOptions 移至 tool.ts）
+- neko-cut webview: 3 处 → 0（已自动修复）
+- neko-agent platform: 2 处 → 0（已自动修复）
+- **成果**：7 → 0（100% 清理）
+
+**`console.log` 清理** ✅ **完成（2026-03-14）**
+- neko-tools webview: 21 处 → 0（迁移至 Logger）
+- neko-client: 3 处 → 0（EngineClient + H264StreamClient）
+- neko-model: 4 处 → 0（extension + webview 组件）
+- neko-story: 1 处 → 0（ErrorBoundary）
+- neko-audio/neko-live: 2 处 → 0（extension 激活日志）
+- **保留**：ExportIntegrationTest.ts / simpleExportTest.js（CLI 测试脚本）
+- **保留**：cli-tui 包（CLI 工具的标准 stdout/stderr 输出）
+
+**`as any`：470 处（生产 18 + 测试 452）** — 生产代码减少 71 处 ✅（80% 改善）
 
 | 包 | 生产 | 测试 | 热点 |
 |----|------|------|------|
-| neko-cut | 0 ✅ | 242 | render-handlers.ts (9) |
-| neko-agent | 14 | 216 | 测试文件 |
-| neko-tools | 5 | 5 | MediaDiffViewer.tsx |
-| 其他 | 5 | 4 | 低债务 |
+| neko-cut | 9 | 242 | TimelineTrack.tsx (4) |
+| neko-canvas | 3 | 0 | TextNode/ArtboardNode/LayerPanel |
+| neko-agent | 2 | 216 | serviceBootstrap.ts |
+| neko-preview | 1 | 0 | useVscodeMessage.ts |
+| 其他 | 3 | 194 | 低债务 |
+
+**已修复（2026-03-14）**：
+- render-handlers.ts: 9 处 → 0（类型守卫 + ProjectData 类型）
+- MediaDiffViewer.tsx: 5 处 → 0（联合类型断言）
+- keyframeHandler.ts: 3 处 → 0（交叉类型 `TimelineElement & { keyframes: ... }`）
+- maskHandler.ts: 3 处 → 0（移除不必要的 `as any`）
+
+**ESLint 配置优化（2026-03-14）** ✅：
+- 测试文件关闭 `@typescript-eslint/no-explicit-any` 规则（452 处不再警告）
+- 测试文件关闭 `@typescript-eslint/no-non-null-assertion` 规则
+- 生产代码保持严格检查（18 处仍会警告）
+
+**未使用导出分析（2026-03-14）** 📊：
+- 总计：962 处（435 导出 + 527 类型）
+- Barrel exports (index.ts): 146 处（34%）
+- Phase 2 类型定义: ~200 处（21%）- 规划功能，暂不清理
+- Hook 类型定义: ~100 处（10%）
+- 工具函数/常量: ~100 处（10%）
+- 其他: ~416 处（43%）
+
+**按包分布**：
+- neko-cut webview: ~350 处（types.ts 164 + services/index.ts 36）
+- neko-agent webview: ~200 处（hooks/index.ts 29 + handlers）
+- neko-canvas webview: ~120 处（components/index.ts 34 + hooks/index.ts 46）
+
+**清理策略**：
+- P1: 16 个未使用 devDependencies（`pnpm check:unused:fix`）
+- P2: ~150 处 barrel exports 和工具函数
+- P3: ~200 处 Hook 类型定义
+- 保留: ~600 处 Phase 2 功能类型和公共 API
 
 **大文件（>1000 LOC）：5 个待拆分**
 
@@ -199,7 +245,10 @@
 
 | 优先级 | 任务 | 预期收益 |
 |--------|------|----------|
+| P1 | 清理 16 个未使用 devDependencies | 减少安装时间 |
+| P2 | 清理 ~150 处 barrel exports | 减少 bundle size |
 | P2 | neko-cut 测试补充（6% → 15%） | 回归保护 |
+| P3 | 清理 ~200 处 Hook 类型定义 | 代码整洁 |
 | P3 | ESLint warn → error 升级 | 质量守门 |
 | P3 | Release workflow（vsix 打包发布） | 自动化发布 |
 
@@ -227,4 +276,4 @@
 
 ---
 
-*最后更新：2026-03-14（neko-model Phase 2 ✅ 11/11 完成；AI MCP Tools 移至 P3；neko-agent 构建修复：mermaid deps + d3 alias；neko-live 架构分析：混合渲染策略确定，VMC 中转方案明确；neko-sketch S.3 ✅ 全部完成：P2 Vector 拖拽预览 + 序列帧播放器）*
+*最后更新：2026-03-14（技术债分析完成：console.log ✅ 100%、循环依赖 ✅ 100%、as any ✅ 80%、未使用导出 📊 962 处分析；neko-model Phase 2 ✅ 11/11 完成；neko-sketch S.3 ✅ 全部完成）*

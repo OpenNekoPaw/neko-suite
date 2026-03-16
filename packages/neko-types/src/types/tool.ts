@@ -2,8 +2,6 @@
  * Tool Types - Tool definition and execution (shared)
  */
 
-import type { ToolFilterOptions } from './tool-group';
-
 /**
  * Tool category
  */
@@ -18,6 +16,20 @@ export type ToolCategory =
   | 'generation'
   | 'analysis'
   | 'document';
+
+/**
+ * Tool filter options for toToolDefinitions()
+ */
+export interface ToolFilterOptions {
+  /** Include only these tool names */
+  include?: string[];
+
+  /** Exclude these tool names */
+  exclude?: string[];
+
+  /** Include only tools from these categories */
+  categories?: ToolCategory[];
+}
 
 /**
  * Tool execution result

@@ -75,4 +75,20 @@ export default tseslint.config(
       'react-hooks/exhaustive-deps': 'warn',
     },
   },
+
+  // Test files — relaxed rules for pragmatic test writing
+  {
+    files: [
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+      '**/*.spec.tsx',
+      '**/__tests__/**/*.ts',
+      '**/__tests__/**/*.tsx',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off', // Allow `as any` in tests for mocking
+      '@typescript-eslint/no-non-null-assertion': 'off', // Allow `!` in tests for known values
+    },
+  },
 );

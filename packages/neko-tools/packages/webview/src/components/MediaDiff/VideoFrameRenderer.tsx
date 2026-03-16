@@ -8,7 +8,10 @@
  */
 
 import { memo, useRef, useState, useCallback, useEffect } from 'react';
+import { ConsoleLogger, LogLevel } from '@neko/shared';
 import { useTranslation } from '../../i18n/I18nContext';
+
+const logger = new ConsoleLogger('VideoFrameRenderer', LogLevel.Info);
 
 // =============================================================================
 // Types
@@ -100,7 +103,7 @@ function createShader(gl: WebGLRenderingContext, type: number, source: string): 
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+    logger.error('Shader compile error', gl.getShaderInfoLog(shader));
     gl.deleteShader(shader);
     return null;
   }
@@ -123,7 +126,7 @@ function createProgram(
   gl.linkProgram(program);
 
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error('Program link error:', gl.getProgramInfoLog(program));
+    logger.error('Program link error', gl.getProgramInfoLog(program));
     gl.deleteProgram(program);
     return null;
   }

@@ -235,6 +235,7 @@ neko-suite/
 | **Engine** | Rust + wgpu + FFmpeg + WebCodecs |
 | **AI** | Claude API + OpenAI API + MCP Protocol |
 | **Testing** | Vitest |
+| **Code Quality** | ESLint + TypeScript strict + Knip + dependency-cruiser |
 | **Build** | pnpm workspaces + Turbo (Monorepo) |
 
 ---

@@ -4,7 +4,14 @@
  */
 
 import { memo, useState, useCallback, useMemo } from 'react';
-import type { DiffViewMode, MediaType, VideoDiffDetails, AudioDiffDetails } from '@neko/shared';
+import type {
+  DiffViewMode,
+  MediaType,
+  VideoDiffDetails,
+  AudioDiffDetails,
+  ImageDiffDetails,
+  TimelineDiffDetails,
+} from '@neko/shared';
 import type { MediaDiffViewerProps } from './types';
 import { DiffControls } from './DiffControls';
 import { ImageDiffViewer } from './ImageDiffViewer';
@@ -115,7 +122,12 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
 
   const renderViewer = () => {
     // Identical files — show message instead of diff viewer
-    if (diffResult?.similarity === 1.0 && (diffResult?.details as any)?.identical) {
+    if (
+      diffResult?.similarity === 1.0 &&
+      diffResult?.details &&
+      'identical' in diffResult.details &&
+      diffResult.details.identical
+    ) {
       return (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
@@ -136,7 +148,7 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
             viewMode={viewMode}
             currentSrc={currentSrc}
             previousSrc={previousSrc}
-            details={diffResult?.details as any}
+            details={diffResult?.details as ImageDiffDetails | undefined}
             heatmapSrc={heatmapSrc}
             sliderPosition={sliderPosition}
             onSliderChange={setSliderPosition}
@@ -155,7 +167,7 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
             viewMode={viewMode}
             currentSrc={currentSrc}
             previousSrc={previousSrc}
-            details={diffResult?.details as any}
+            details={diffResult?.details as VideoDiffDetails | undefined}
             currentFrameSrc={currentFrameSrc}
             previousFrameSrc={previousFrameSrc}
             currentTime={currentTime}
@@ -176,7 +188,7 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
             viewMode={viewMode}
             currentSrc={currentSrc}
             previousSrc={previousSrc}
-            details={diffResult?.details as any}
+            details={diffResult?.details as AudioDiffDetails | undefined}
             currentWaveform={currentWaveform}
             previousWaveform={previousWaveform}
             currentTime={currentTime}
@@ -194,7 +206,7 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
       case 'timeline':
         return (
           <TimelineDiffViewer
-            details={diffResult?.details as any}
+            details={diffResult?.details as TimelineDiffDetails | undefined}
             onInspectElement={onInspectElement}
             elementThumbnails={elementThumbnails}
           />

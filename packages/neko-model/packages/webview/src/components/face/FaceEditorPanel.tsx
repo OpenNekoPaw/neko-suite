@@ -1,4 +1,7 @@
 import React, { useEffect } from 'react';
+import { ConsoleLogger, LogLevel } from '@neko/shared';
+
+const logger = new ConsoleLogger('FaceEditorPanel', LogLevel.Info);
 import { FaceParameterCategory } from './FaceParameterCategory';
 import { useModelStore } from '../../stores/modelStore';
 import {
@@ -43,7 +46,7 @@ export function FaceEditorPanel(): React.JSX.Element {
 
   const handleAIGenerate = () => {
     // TODO: Call AI MCP Tool (face.generate_params)
-    console.log('[FaceEditor] AI Generate clicked - not implemented yet');
+    logger.info('AI Generate clicked — not implemented yet');
   };
 
   const categories: FaceCategory[] = ['face', 'eyes', 'nose', 'mouth', 'eyebrows'];

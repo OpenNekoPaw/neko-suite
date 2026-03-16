@@ -14,7 +14,6 @@
  * discover and activate tool sets on demand via SearchToolSets/ActivateToolSet.
  */
 
-import type { ToolCategory } from './tool';
 import type { IToolProvider } from './tool-injection';
 
 /**
@@ -71,19 +70,7 @@ export interface ToolGroupMatch {
   matchedKeywords: string[];
 }
 
-/**
- * Tool filter options for toToolDefinitions()
- */
-export interface ToolFilterOptions {
-  /** Include only these tool names */
-  include?: string[];
-
-  /** Exclude these tool names */
-  exclude?: string[];
-
-  /** Include only tools from these categories */
-  categories?: ToolCategory[];
-}
+// Note: ToolFilterOptions moved to tool.ts to break circular dependency
 
 /**
  * Configured ToolGroup (with UI/settings extensions)

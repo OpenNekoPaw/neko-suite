@@ -5,9 +5,12 @@
 
 import { memo, useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { AudioStreamClient } from '@neko/neko-client';
+import { ConsoleLogger, LogLevel } from '@neko/shared';
 import { useTranslation } from '../../i18n/I18nContext';
 import type { AudioDiffViewerProps } from './types';
 import type { AudioStreamConfig } from '@neko/shared';
+
+const logger = new ConsoleLogger('AudioDiffViewer', LogLevel.Info);
 
 // =============================================================================
 // Waveform Canvas
@@ -677,13 +680,13 @@ const AudioPlayerControls = memo(function AudioPlayerControls({
     const currentClient = new AudioStreamClient({
       websocketUrl: `${baseUrl}/${currentAudioStreamId}`,
       volume: playingVersion === 'previous' ? 0 : 1,
-      onError: (err) => console.error('[AudioDiff] Current stream error:', err),
+      onError: (err) => logger.error('Current stream error', err),
     });
 
     const previousClient = new AudioStreamClient({
       websocketUrl: `${baseUrl}/${previousAudioStreamId}`,
       volume: playingVersion === 'current' ? 0 : 1,
-      onError: (err) => console.error('[AudioDiff] Previous stream error:', err),
+      onError: (err) => logger.error('Previous stream error', err),
     });
 
     currentClientRef.current = currentClient;

@@ -24,12 +24,8 @@ import {
   FrameScheduler,
   PlaybackPerformanceMonitor,
 } from '@neko/neko-client';
-import type {
-  ProjectData,
-  MediaElement,
-  CompositeLayerConfig,
-  ElementTransform,
-} from '@neko/shared';
+import type { ProjectData, MediaElement, CompositeLayerConfig } from '@neko/shared';
+import type { ElementTransform } from '../types/animation';
 import { getComputedTransform } from '../utils/animation';
 
 // =============================================================================

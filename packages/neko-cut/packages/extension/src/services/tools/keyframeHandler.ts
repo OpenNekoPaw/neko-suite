@@ -79,13 +79,14 @@ export class KeyframeHandler implements IToolHandler {
 
     keyframes[property] = propertyKeyframes;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updatedElement = { ...(found.element as any), keyframes } as TimelineElement;
+    const updatedElement = { ...found.element, keyframes } as TimelineElement & {
+      keyframes: Record<string, LegacyKeyframe[]>;
+    };
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
       found.elementIndex,
-      updatedElement,
+      updatedElement as TimelineElement,
     );
 
     return {
@@ -135,13 +136,14 @@ export class KeyframeHandler implements IToolHandler {
 
     if (!updated) return { success: false, error: `Keyframe not found: ${keyframeId}` };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updatedElement = { ...(found.element as any), keyframes } as TimelineElement;
+    const updatedElement = { ...found.element, keyframes } as TimelineElement & {
+      keyframes: Record<string, LegacyKeyframe[]>;
+    };
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
       found.elementIndex,
-      updatedElement,
+      updatedElement as TimelineElement,
     );
     return {
       success: true,
@@ -173,13 +175,14 @@ export class KeyframeHandler implements IToolHandler {
 
     if (!removed) return { success: false, error: `Keyframe not found: ${keyframeId}` };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updatedElement = { ...(found.element as any), keyframes } as TimelineElement;
+    const updatedElement = { ...found.element, keyframes } as TimelineElement & {
+      keyframes: Record<string, LegacyKeyframe[]>;
+    };
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
       found.elementIndex,
-      updatedElement,
+      updatedElement as TimelineElement,
     );
     return { success: true, data: { message: 'Keyframe removed successfully' }, updatedProject };
   }

@@ -384,6 +384,11 @@ readonly onDidChange = this._onDidChange.event;
 | 忽略异步错误 | try-catch 或 .catch |
 | `as Type` 强制断言 | 类型守卫函数 |
 
+**ESLint 规则**（`eslint.config.mjs`）：
+- 生产代码：`@typescript-eslint/no-explicit-any: 'warn'`（会警告但不阻塞）
+- 测试文件：`'off'`（允许 `as any` 用于 mock 和测试数据）
+- 测试文件模式：`**/*.test.ts`, `**/*.spec.ts`, `**/__tests__/**`
+
 ### 常见陷阱
 
 | 陷阱 | 现象 | 解决方案 |

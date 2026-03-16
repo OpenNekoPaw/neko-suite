@@ -43,3 +43,22 @@ export type BlendModeType =
   | 'saturation'
   | 'color'
   | 'luminosity';
+
+/**
+ * CSS/WebGL-compatible blend mode subset (12 modes, kebab-case).
+ * Used by 2D canvas renderers (neko-sketch WebGL compositor).
+ * Distinct from BlendModeType which uses camelCase for the Rust engine protocol.
+ */
+export type SketchBlendMode =
+  | 'normal'
+  | 'multiply'
+  | 'screen'
+  | 'overlay'
+  | 'darken'
+  | 'lighten'
+  | 'color-dodge'
+  | 'color-burn'
+  | 'hard-light'
+  | 'soft-light'
+  | 'difference'
+  | 'exclusion';

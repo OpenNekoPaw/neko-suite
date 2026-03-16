@@ -183,6 +183,11 @@ pnpm lint:fix        # 自动修复可修复问题
 
 Pre-commit hook 会自动执行 `eslint --fix` + `prettier --write`。
 
+**规则说明**：
+- 生产代码：`@typescript-eslint/no-explicit-any: 'warn'`（警告但不阻塞）
+- 测试文件：`'off'`（允许 `as any` 用于 mock 和测试数据）
+- 测试文件模式：`**/*.test.ts`, `**/*.spec.ts`, `**/__tests__/**`
+
 ### 僵尸代码检测（Knip）
 
 [Knip](https://knip.dev) 检测未使用的文件、导出和依赖项，配置见 `knip.config.ts`。
@@ -191,6 +196,16 @@ Pre-commit hook 会自动执行 `eslint --fix` + `prettier --write`。
 pnpm check:unused        # 检测未使用代码
 pnpm check:unused:fix    # 自动移除未使用的导出和依赖
 ```
+
+**当前基线**（2026-03-14）：
+- 未使用文件: 5 个
+- 未使用导出: 435 个（函数/常量）
+- 未使用类型: 527 个
+- 未使用 devDependencies: 16 个
+
+**清理策略**：
+- 约 35% 可安全清理（barrel exports、工具函数）
+- 约 65% 应保留（Phase 2 功能类型、公共 API）
 
 ### 架构规则校验（dependency-cruiser）
 
@@ -202,13 +217,13 @@ pnpm check:deps          # 检查架构规则违反
 
 当前强制执行的规则：
 
-| 规则 | 级别 | 说明 |
-|------|------|------|
-| `no-circular` | error | 禁止循环依赖 |
-| `layer0-no-internal-deps` | error | Layer 0（@neko/shared, @neko/neko-client）不依赖其他内部包 |
-| `webview-no-vscode` | error | Webview 包禁止导入 `vscode` 模块 |
-| `extension-no-react` | error | Extension 包禁止导入 React/ReactDOM |
-| `no-cross-extension-deps-*` | warn | 扩展包之间不能直接互相依赖 |
+| 规则 | 级别 | 说明 | 状态 |
+|------|------|------|------|
+| `no-circular` | error | 禁止循环依赖 | ✅ 0 违反 |
+| `layer0-no-internal-deps` | error | Layer 0（@neko/shared, @neko/neko-client）不依赖其他内部包 | ✅ 通过 |
+| `webview-no-vscode` | error | Webview 包禁止导入 `vscode` 模块 | ✅ 通过 |
+| `extension-no-react` | error | Extension 包禁止导入 React/ReactDOM | ✅ 通过 |
+| `no-cross-extension-deps-*` | warn | 扩展包之间不能直接互相依赖 | ✅ 通过 |
 
 ### 覆盖率配置
 

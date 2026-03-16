@@ -12,9 +12,12 @@
 
 import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef, memo } from 'react';
 import { H264StreamClient, AudioStreamClient } from '@neko/neko-client';
+import { ConsoleLogger, LogLevel } from '@neko/shared';
 import { FramePairBuffer } from './FramePairBuffer';
 import { DiffRenderer, type DiffMode } from './DiffRenderer';
 import type { StreamConfig } from '@neko/shared';
+
+const logger = new ConsoleLogger('StreamingVideoDiff', LogLevel.Info);
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -142,7 +145,7 @@ export const StreamingVideoDiffViewer = memo(
           fps,
         } = streamConfig;
 
-        console.log('[StreamingDiff] Pipeline setup:', {
+        logger.debug('Pipeline setup', {
           port,
           currentStreamId,
           previousStreamId,
@@ -167,9 +170,10 @@ export const StreamingVideoDiffViewer = memo(
           onPair: (pair) => {
             pairCount++;
             if (pairCount <= 3 || pairCount % 30 === 0) {
-              console.log(
-                `[StreamingDiff] Pair #${pairCount}: PTS A=${pair.frameA.timestamp} B=${pair.frameB.timestamp}`,
-              );
+              logger.debug(`Pair #${pairCount}`, {
+                ptsA: pair.frameA.timestamp,
+                ptsB: pair.frameB.timestamp,
+              });
             }
             renderer.renderPair(pair.frameA, pair.frameB);
             // Report current time from frame PTS
@@ -179,9 +183,7 @@ export const StreamingVideoDiffViewer = memo(
           onSingle: (frame, side) => {
             singleCount++;
             if (singleCount <= 3 || singleCount % 30 === 0) {
-              console.log(
-                `[StreamingDiff] Single #${singleCount}: side=${side} PTS=${frame.timestamp}`,
-              );
+              logger.debug(`Single #${singleCount}`, { side, pts: frame.timestamp });
             }
             renderer.renderSingle(frame, side);
             // Report current time
@@ -219,21 +221,22 @@ export const StreamingVideoDiffViewer = memo(
           onFrame: (frame) => {
             frameCountA++;
             if (frameCountA <= 5 || frameCountA % 60 === 0) {
-              console.log(
-                `[StreamingDiff] Frame A #${frameCountA}: PTS=${frame.timestamp} size=${frame.displayWidth}x${frame.displayHeight}`,
-              );
+              logger.debug(`Frame A #${frameCountA}`, {
+                pts: frame.timestamp,
+                size: `${frame.displayWidth}x${frame.displayHeight}`,
+              });
             }
             filterFrame(frame, (f) => buffer.feedA(f));
           },
           onError: (err) => {
-            console.error('[StreamingDiff] Stream A error:', err);
+            logger.error('Stream A error', err);
             onError?.(err.message);
           },
           onConnectionChange: (connected) => {
-            console.log(`[StreamingDiff] Stream A connection: ${connected ? 'OPEN' : 'CLOSED'}`);
+            logger.debug(`Stream A connection: ${connected ? 'OPEN' : 'CLOSED'}`);
           },
           onStreamEnd: () => {
-            console.log('[StreamingDiff] Stream A ended (EOF)');
+            logger.debug('Stream A ended (EOF)');
             buffer.markEndOfStream('A');
             onStreamEnd?.();
           },
@@ -246,21 +249,22 @@ export const StreamingVideoDiffViewer = memo(
           onFrame: (frame) => {
             frameCountB++;
             if (frameCountB <= 5 || frameCountB % 60 === 0) {
-              console.log(
-                `[StreamingDiff] Frame B #${frameCountB}: PTS=${frame.timestamp} size=${frame.displayWidth}x${frame.displayHeight}`,
-              );
+              logger.debug(`Frame B #${frameCountB}`, {
+                pts: frame.timestamp,
+                size: `${frame.displayWidth}x${frame.displayHeight}`,
+              });
             }
             filterFrame(frame, (f) => buffer.feedB(f));
           },
           onError: (err) => {
-            console.error('[StreamingDiff] Stream B error:', err);
+            logger.error('Stream B error', err);
             onError?.(err.message);
           },
           onConnectionChange: (connected) => {
-            console.log(`[StreamingDiff] Stream B connection: ${connected ? 'OPEN' : 'CLOSED'}`);
+            logger.debug(`Stream B connection: ${connected ? 'OPEN' : 'CLOSED'}`);
           },
           onStreamEnd: () => {
-            console.log('[StreamingDiff] Stream B ended (EOF)');
+            logger.debug('Stream B ended (EOF)');
             buffer.markEndOfStream('B');
             onStreamEnd?.();
           },
@@ -274,7 +278,7 @@ export const StreamingVideoDiffViewer = memo(
         void clientB.connect();
 
         // 5. Create AudioStreamClient if audio track exists
-        console.log('[StreamingDiff] Audio setup:', {
+        logger.debug('Audio setup', {
           currentAudioStreamId,
           hasAudioContext: !!audioContext,
           audioContextState: audioContext?.state,
@@ -284,19 +288,19 @@ export const StreamingVideoDiffViewer = memo(
             websocketUrl: `${baseUrl}/${currentAudioStreamId}`,
             volume: 1.0,
             onError: (err) => {
-              console.error('[StreamingDiff] Audio error:', err);
+              logger.error('Audio error', err);
             },
             onConnectionChange: (connected) => {
-              console.log(`[StreamingDiff] Audio connection: ${connected ? 'OPEN' : 'CLOSED'}`);
+              logger.debug(`Audio connection: ${connected ? 'OPEN' : 'CLOSED'}`);
             },
             onStreamEnd: () => {
-              console.log('[StreamingDiff] Audio stream ended (EOF)');
+              logger.debug('Audio stream ended (EOF)');
             },
           });
           audioClientRef.current = audioClient;
           void audioClient.connect(audioContext);
         } else {
-          console.log('[StreamingDiff] No audio stream ID — skipping audio');
+          logger.debug('No audio stream ID — skipping audio');
         }
 
         // 6. Cleanup

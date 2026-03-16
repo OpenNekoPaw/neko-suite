@@ -2,6 +2,9 @@
  * Core types for neko-sketch webview
  */
 
+import type { SketchBlendMode } from '@neko/shared';
+export type { SketchBlendMode };
+
 // ─── Brush Types ───
 
 export type BrushType =
@@ -43,19 +46,8 @@ export interface StrokeResult {
 
 export type LayerType = 'raster' | 'group' | 'vector' | 'text' | 'fill' | 'adjustment';
 
-export type BlendMode =
-  | 'normal'
-  | 'multiply'
-  | 'screen'
-  | 'overlay'
-  | 'darken'
-  | 'lighten'
-  | 'color-dodge'
-  | 'color-burn'
-  | 'hard-light'
-  | 'soft-light'
-  | 'difference'
-  | 'exclusion';
+/** CSS/WebGL blend mode for sketch layers. @see SketchBlendMode from @neko/shared */
+export type BlendMode = SketchBlendMode;
 
 export interface LayerData {
   readonly id: string;

@@ -439,11 +439,7 @@ export class H264StreamClient {
         this.eofTimer = null;
         if (!this.disposed && !this.streamEndFired) {
           this.streamEndFired = true;
-          console.log(
-            '[H264StreamClient] EOF detected (no packets for',
-            H264StreamClient.EOF_TIMEOUT_MS,
-            'ms)',
-          );
+          logger.debug(`EOF detected (no packets for ${H264StreamClient.EOF_TIMEOUT_MS}ms)`);
           this.config.onStreamEnd();
         }
       }, H264StreamClient.EOF_TIMEOUT_MS);

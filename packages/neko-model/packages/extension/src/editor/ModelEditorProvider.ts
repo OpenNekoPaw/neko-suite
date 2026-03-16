@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
 import { EngineClient } from '@neko/neko-client';
+import { ConsoleLogger, LogLevel } from '@neko/shared';
+
+const logger = new ConsoleLogger('ModelEditorProvider', LogLevel.Info);
 
 /**
  * Custom editor provider for 3D model files (.gltf, .glb, .vrm)
@@ -375,7 +378,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
 
   private logError(action: string, err: unknown): void {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[ModelEditorProvider] ${action} failed: ${msg}`);
+    logger.error(`${action} failed`, msg);
   }
 
   private getHtmlForWebview(webview: vscode.Webview, documentUri: vscode.Uri): string {

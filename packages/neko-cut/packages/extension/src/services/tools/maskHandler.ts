@@ -63,9 +63,8 @@ export class MaskHandler implements IToolHandler {
     if (mergedParams.feather !== undefined) mask.feather = mergedParams.feather;
     mask.order = existingMasks.length;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updatedElement = {
-      ...(found.element as any),
+      ...found.element,
       masks: [...existingMasks, mask],
     } as TimelineElement;
     const updatedProject = updateElementAt(
@@ -130,8 +129,7 @@ export class MaskHandler implements IToolHandler {
       ...(merged.opacity !== undefined && { opacity: merged.opacity }),
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updatedElement = { ...(found.element as any), masks } as TimelineElement;
+    const updatedElement = { ...found.element, masks } as TimelineElement;
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
@@ -159,8 +157,7 @@ export class MaskHandler implements IToolHandler {
     if (updatedMasks.length === masks.length)
       return { success: false, error: `Mask not found: ${maskId}` };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updatedElement = { ...(found.element as any), masks: updatedMasks } as TimelineElement;
+    const updatedElement = { ...found.element, masks: updatedMasks } as TimelineElement;
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,

@@ -14,6 +14,7 @@
  *   const info = await client.probe('videos', '/path/to/file.mp4');
  */
 
+import { getLogger } from './utils/logger';
 import type {
   ActionRequest,
   ActionResponse,
@@ -36,6 +37,8 @@ export interface EngineClientConfig {
   /** Request timeout in milliseconds (default: 120_000 for long diff operations) */
   timeout?: number;
 }
+
+const logger = getLogger('EngineClient');
 
 export class EngineClient {
   readonly port: number;
@@ -187,7 +190,7 @@ export class EngineClient {
     });
 
     if (resp.status === 'error') {
-      console.error(`[EngineClient] diff(${group}) failed:`, resp.error?.message);
+      logger.error(`diff(${group}) failed`, resp.error?.message);
       return null;
     }
 
@@ -287,7 +290,7 @@ export class EngineClient {
     });
     // stop/pause may return 'ok' or silently succeed
     if (resp.status === 'error') {
-      console.warn(`[EngineClient] controlStream(${action}) warning:`, resp.error?.message);
+      logger.warn(`controlStream(${action}) warning`, resp.error?.message);
     }
     return resp;
   }

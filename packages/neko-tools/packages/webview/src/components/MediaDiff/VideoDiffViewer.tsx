@@ -7,7 +7,10 @@
  */
 
 import { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { ConsoleLogger, LogLevel } from '@neko/shared';
 import { useTranslation } from '../../i18n/I18nContext';
+
+const logger = new ConsoleLogger('VideoDiffViewer', LogLevel.Info);
 import type { VideoDiffViewerProps } from './types';
 import {
   StreamingVideoDiffViewer,
@@ -352,7 +355,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
   // Handle stream end (one video finished) — do NOT auto-pause,
   // the longer video continues rendering via renderSingle
   const handleStreamEnd = useCallback(() => {
-    console.log('[VideoDiffViewer] One stream ended, other continues');
+    logger.debug('One stream ended, other continues');
   }, []);
 
   // ── Dual-mode: render static frames through DiffRenderer when paused ────

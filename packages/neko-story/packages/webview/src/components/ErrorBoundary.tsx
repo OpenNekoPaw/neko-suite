@@ -1,4 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { ConsoleLogger, LogLevel } from '@neko/shared';
+
+const logger = new ConsoleLogger('ErrorBoundary', LogLevel.Info);
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -20,7 +23,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error('[ErrorBoundary] Caught error:', error, errorInfo);
+    logger.error('Caught error', { error, componentStack: errorInfo.componentStack });
   }
 
   override render(): ReactNode {

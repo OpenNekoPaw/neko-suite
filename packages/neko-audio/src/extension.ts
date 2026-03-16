@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
+import { ConsoleLogger, LogLevel } from '@neko/shared';
+
+const logger = new ConsoleLogger('NekoAudio', LogLevel.Info);
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('Neko Audio extension activated');
+  logger.info('extension activated');
 
   // Register commands
   context.subscriptions.push(

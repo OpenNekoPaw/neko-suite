@@ -12,9 +12,6 @@ export * from './track';
 // Easing types
 export * from './easing';
 
-// Animation system
-export * from './animation';
-
 // Blend modes
 export * from './blendMode';
 
@@ -56,9 +53,6 @@ export * from './subtitle';
 
 // Timeline tracks
 export * from './timelineTrack';
-
-// UI state (separated from engine model)
-export * from './ui-state';
 
 // Project
 export * from './project';

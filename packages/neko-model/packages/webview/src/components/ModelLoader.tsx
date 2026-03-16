@@ -2,8 +2,11 @@ import React, { useEffect, useRef, useMemo, useState, useImperativeHandle } from
 import { useGLTF, useAnimations } from '@react-three/drei';
 import type { AnimationClip, Group, Mesh, SkinnedMesh } from 'three';
 import { VRM, VRMExpressionPresetName } from '@pixiv/three-vrm';
+import { ConsoleLogger, LogLevel } from '@neko/shared';
 import { useModelStore } from '../stores/modelStore';
 import type { VRMExpressionPreset } from '../types/vrmExpressions';
+
+const logger = new ConsoleLogger('ModelLoader', LogLevel.Info);
 
 interface ModelLoaderProps {
   url: string;
@@ -56,7 +59,7 @@ export const ModelLoader = React.forwardRef<ModelLoaderHandle, ModelLoaderProps>
             onVRMLoaded?.(null);
           }
         } catch (error) {
-          console.error('[ModelLoader] Failed to load VRM:', error);
+          logger.error('Failed to load VRM', error);
           setVrm(null);
           onVRMLoaded?.(null);
         }
@@ -69,7 +72,7 @@ export const ModelLoader = React.forwardRef<ModelLoaderHandle, ModelLoaderProps>
     useImperativeHandle(ref, () => ({
       applyVRMExpression: (expression: VRMExpressionPreset) => {
         if (!vrm || !vrm.expressionManager) {
-          console.warn('[ModelLoader] VRM or expressionManager not available');
+          logger.warn('VRM or expressionManager not available');
           return;
         }
 
