@@ -705,7 +705,10 @@ export function parseAllowedTools(toolsStr: string | undefined): string[] | unde
 }
 
 /**
- * Check if a tool is allowed
+ * Check if a tool is allowed (Bash patterns only).
+ *
+ * @deprecated Use `matchesPattern` + `normalizeToolCall` from `@neko/agent/tools/tool-pattern-matcher`
+ * for full pattern support including path globs, domain matching, and MCP tools.
  */
 export function isToolAllowed(tool: string, allowedTools?: string[]): boolean {
   if (!allowedTools || allowedTools.length === 0) {

@@ -2,7 +2,7 @@
  * Permission Rule Matcher
  *
  * Matches tool calls against permission rules (deny/allow/ask).
- * Reuses pattern matching logic from skill/types.ts isToolAllowed().
+ * Pattern matching logic is centralized in tools/tool-pattern-matcher.ts.
  *
  * Pattern syntax:
  * - "Read" - Exact tool name
@@ -20,147 +20,9 @@ import type {
 } from './types';
 import { DEFAULT_READ_ONLY_TOOLS, READ_ONLY_MCP_PREFIXES, PLAN_FILE_PATH } from './types';
 
-/**
- * Normalize tool call to string format for matching
- *
- * @example
- * { name: 'Bash', arguments: { command: 'git status' } } → 'Bash(git status)'
- * { name: 'Read', arguments: { path: 'src/index.ts' } } → 'Read(src/index.ts)'
- */
-export function normalizeToolCall(toolCall: ToolCallInfo): string {
-  const { name, arguments: args } = toolCall;
-
-  // Handle Bash tool - extract command
-  if (name === 'Bash' && args?.command) {
-    return `Bash(${String(args.command)})`;
-  }
-
-  // Handle Read/Edit/Write tools - extract path
-  if (['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(name)) {
-    const path = args?.file_path || args?.path || args?.pattern;
-    if (path) {
-      return `${name}(${String(path)})`;
-    }
-  }
-
-  // Handle WebFetch - extract domain
-  if (name === 'WebFetch' && args?.url) {
-    try {
-      const url = new URL(String(args.url));
-      return `WebFetch(domain:${url.hostname})`;
-    } catch {
-      return `WebFetch(${String(args.url)})`;
-    }
-  }
-
-  // Handle MCP tools
-  if (name.startsWith('mcp__')) {
-    return name;
-  }
-
-  return name;
-}
-
-/**
- * Check if a normalized tool string matches a pattern
- *
- * Pattern formats:
- * - "Bash" - Match all Bash calls
- * - "Bash(npm:*)" - Match Bash commands starting with "npm"
- * - "Bash(git status)" - Exact match
- * - "Read(src/**)" - Path glob pattern
- * - "WebFetch(domain:github.com)" - Domain match
- */
-export function matchesPattern(normalizedTool: string, pattern: string): boolean {
-  // Exact match
-  if (pattern === normalizedTool) {
-    return true;
-  }
-
-  // Tool name only match (e.g., "Bash" matches all Bash calls)
-  const toolName = normalizedTool.split('(')[0];
-  if (pattern === toolName) {
-    return true;
-  }
-
-  // Pattern with arguments
-  const patternMatch = pattern.match(/^(\w+)\((.+)\)$/);
-  const toolMatch = normalizedTool.match(/^(\w+)\((.+)\)$/);
-
-  if (!patternMatch || !toolMatch) {
-    return false;
-  }
-
-  const [, patternTool, patternArg] = patternMatch;
-  const [, callTool, callArg] = toolMatch;
-
-  // Tool name must match
-  if (patternTool !== callTool) {
-    return false;
-  }
-
-  // Handle domain matching for WebFetch
-  if (patternArg?.startsWith('domain:') && callArg?.startsWith('domain:')) {
-    const patternDomain = patternArg.slice(7);
-    const callDomain = callArg.slice(7);
-
-    // Wildcard domain match (*.github.com)
-    if (patternDomain.startsWith('*.')) {
-      const suffix = patternDomain.slice(1); // .github.com
-      return callDomain.endsWith(suffix) || callDomain === patternDomain.slice(2);
-    }
-
-    return patternDomain === callDomain;
-  }
-
-  // Handle command prefix match (npm:* or git:*)
-  if (patternArg?.endsWith(':*')) {
-    const cmdPrefix = patternArg.slice(0, -2);
-    // Match "npm" or "npm run build" etc.
-    return callArg === cmdPrefix || callArg?.startsWith(cmdPrefix + ' ');
-  }
-
-  // Handle ** glob pattern for paths (check before single * to avoid early match)
-  if (patternArg?.includes('**')) {
-    // Use placeholder to avoid double replacement
-    const regex = patternArg
-      .replace(/\*\*/g, '\x00DOUBLE_STAR\x00') // Placeholder for **
-      .replace(/\*/g, '[^/]*') // Single * matches non-slash chars
-      .replace(/\x00DOUBLE_STAR\x00/g, '.*') // ** matches everything
-      .replace(/\//g, '\\/'); // Escape slashes
-    try {
-      return new RegExp(`^${regex}$`).test(callArg || '');
-    } catch {
-      return false;
-    }
-  }
-
-  // Handle glob-style wildcard match (single *)
-  if (patternArg?.endsWith('*')) {
-    const prefix = patternArg.slice(0, -1);
-    return callArg?.startsWith(prefix) || false;
-  }
-
-  // Exact argument match
-  return patternArg === callArg;
-}
-
-/**
- * Check if tool is in a list of patterns
- */
-export function isInPatternList(normalizedTool: string, patterns?: string[]): string | undefined {
-  if (!patterns || patterns.length === 0) {
-    return undefined;
-  }
-
-  for (const pattern of patterns) {
-    if (matchesPattern(normalizedTool, pattern)) {
-      return pattern;
-    }
-  }
-
-  return undefined;
-}
+// Re-export pattern matching utilities from centralized module for backward compatibility
+export { normalizeToolCall, matchesPattern, isInPatternList } from '../tools/tool-pattern-matcher';
+import { normalizeToolCall, isInPatternList } from '../tools/tool-pattern-matcher';
 
 /**
  * Check if a tool call is writing to the plan file

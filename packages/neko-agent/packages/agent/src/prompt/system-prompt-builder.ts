@@ -1,18 +1,22 @@
 /**
- * System Prompt Builder - Unified system prompt construction
+ * System Prompt Builder — Initialization-phase prompt construction from static sources
  *
- * This class provides a unified way to build system prompts for both CLI and Extension.
- * It handles:
- * - AGENTS.md loading (project > personal priority)
- * - Multi-language support (EN/ZH)
- * - Mode switching (default/plan)
- * - Skill prompt injection
+ * Responsibility: Load AGENTS.md from disk, handle locale/mode switching, and produce
+ * the initial system prompt string. This output is typically passed to
+ * SystemPromptComposer.setBase() for runtime management.
+ *
+ * Lifecycle:
+ *   Builder.build() → initial prompt string → Composer.setBase() → runtime sections
+ *
+ * NOT to be confused with SystemPromptComposer, which handles runtime section-based
+ * composition with token budgets and reversible injection.
  *
  * Usage:
  * ```typescript
  * const builder = new SystemPromptBuilder({ locale: 'en' });
  * await builder.loadAgentsFile('/path/to/project', '/home/user/.neko');
- * const prompt = builder.build();
+ * const basePrompt = builder.build();
+ * // Then: composer.setBase(basePrompt);
  * ```
  */
 

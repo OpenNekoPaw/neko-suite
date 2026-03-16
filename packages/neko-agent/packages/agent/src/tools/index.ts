@@ -65,5 +65,13 @@ export type {
   InjectionEventListener,
 } from '@neko/shared';
 
+// Pattern matching utilities (shared by permission and skill modules)
+export {
+  normalizeToolCall,
+  matchesPattern,
+  isInPatternList,
+  type ToolCallLike,
+} from './tool-pattern-matcher';
+
 // Re-export injection constants
 export { DEFAULT_INJECTION_CONFIG, CORE_TOOLS } from '@neko/shared';

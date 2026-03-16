@@ -1,12 +1,17 @@
 /**
- * System Prompt Composer
+ * System Prompt Composer — Runtime section-based prompt composition with token budgets
  *
- * Manages system prompt as composable, layered sections.
- * Each section can be independently added, replaced, or removed.
- * Replaces the old pattern of mutating _history[0].content directly.
+ * Responsibility: Manage the system prompt as composable, layered sections that can be
+ * independently added, replaced, or removed at runtime. Each layer has a token budget.
+ *
+ * Lifecycle:
+ *   SystemPromptBuilder.build() → base prompt → Composer.setBase() → runtime sections
  *
  * Layer order: base → skill → environment → ephemeral
  * Within each layer, sections are sorted by priority (descending).
+ *
+ * NOT to be confused with SystemPromptBuilder, which handles one-time initialization
+ * from AGENTS.md and locale/mode switching.
  */
 
 import type {

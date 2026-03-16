@@ -1,8 +1,14 @@
 /**
- * Tool Registry - Manages tool registration and execution
+ * Tool Registry — Tool execution dispatch (one of four registries in agent)
  *
- * Implements IToolRegistry interface from @neko/shared.
- * Provides central management for all tools available to the agent.
+ * Responsibility: Register tools by name, dispatch execution, produce LLM tool definitions.
+ * This is the ONLY registry that actually executes tools.
+ *
+ * Registry landscape:
+ * - ToolRegistry (this)       → execution dispatch (register/execute/toToolDefinitions)
+ * - ToolCategoryRegistry      → functional categorization + injection layer assignment
+ * - ToolGroupRegistry (skill) → semantic ToolSet grouping for LLM-driven discovery
+ * - SkillRegistry (skill)     → Skill + SlashCommand storage and lifecycle
  */
 
 import type {

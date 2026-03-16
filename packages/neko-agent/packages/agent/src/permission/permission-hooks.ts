@@ -117,6 +117,13 @@ export class PermissionHooks implements ExecutorHooks {
   }
 
   /**
+   * Remove an allow rule dynamically (e.g., when clearing skill injection)
+   */
+  removeAllowRule(pattern: string): void {
+    this.matcher.removeRule('allow', pattern);
+  }
+
+  /**
    * Get current rules
    */
   getRules(): PermissionRules {

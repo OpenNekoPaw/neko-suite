@@ -95,6 +95,8 @@ export class AgentSession implements IAgentSession {
   private _hasStreamedDeltas = false;
   /** Allowed tools from the active skill injection (undefined = no restrictions) */
   private _activeSkillAllowedTools: string[] | undefined;
+  /** Tracks permission allow rules injected by the active skill, for cleanup on removal */
+  private _skillInjectedAllowRules: string[] = [];
   private _pendingConfirmations = new Map<
     string,
     {
@@ -334,10 +336,12 @@ export class AgentSession implements IAgentSession {
     // Track allowed tools for runtime isToolAllowed() checks
     this._activeSkillAllowedTools = injection.allowedTools;
 
-    // Add allowed tools to permission hooks
+    // Add allowed tools to permission hooks and track for cleanup
+    this._skillInjectedAllowRules = [];
     if (injection.allowedTools && injection.allowedTools.length > 0 && this._permissionHooks) {
       for (const tool of injection.allowedTools) {
         this._permissionHooks.addAllowRule(tool);
+        this._skillInjectedAllowRules.push(tool);
       }
     }
   }
@@ -349,6 +353,14 @@ export class AgentSession implements IAgentSession {
     this._promptComposer.removeSection(`skill:${name}`);
     this._syncSystemPrompt();
     this._activeSkillAllowedTools = undefined;
+
+    // Clean up permission allow rules injected by the skill
+    if (this._permissionHooks && this._skillInjectedAllowRules.length > 0) {
+      for (const rule of this._skillInjectedAllowRules) {
+        this._permissionHooks.removeAllowRule(rule);
+      }
+    }
+    this._skillInjectedAllowRules = [];
   }
 
   /**

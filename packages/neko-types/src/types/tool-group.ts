@@ -108,7 +108,10 @@ export interface IToolGroupRegistry extends IToolProvider {
   /** List enabled ToolGroups */
   listEnabled(): ToolGroup[];
 
-  /** Match ToolGroups by user input */
+  /**
+   * Match ToolGroups by user input.
+   * @deprecated Always returns []. Discovery is now LLM-driven via SearchToolSets.
+   */
   match(input: string): ToolGroupMatch[];
 
   /** Get active tools based on active groups */

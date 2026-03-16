@@ -5,7 +5,7 @@
  * only those tools can be used during skill execution.
  */
 
-import { isToolAllowed } from '@neko/shared';
+import { normalizeToolCall, isInPatternList } from '../tools/tool-pattern-matcher';
 
 /**
  * Tool call input for guard checking
@@ -79,13 +79,13 @@ export class ToolGuard implements IToolGuard {
       };
     }
 
-    // Normalize tool name for Bash commands
-    const toolName = this.normalizeToolName(toolCall);
+    // Normalize tool call to canonical string format (e.g., "Bash(git status)", "Read(src/file.ts)")
+    const normalized = normalizeToolCall(toolCall);
 
-    // Check against allowed list
-    const allowed = isToolAllowed(toolName, this.allowedTools);
+    // Check against allowed list using unified pattern matching
+    const matched = isInPatternList(normalized, this.allowedTools);
 
-    if (allowed) {
+    if (matched !== undefined) {
       return {
         allowed: true,
         toolCall,
@@ -93,7 +93,7 @@ export class ToolGuard implements IToolGuard {
     }
 
     // Build rejection reason
-    const reason = this.buildRejectionReason(toolName);
+    const reason = this.buildRejectionReason(normalized);
 
     return {
       allowed: false,
@@ -121,24 +121,6 @@ export class ToolGuard implements IToolGuard {
    */
   hasRestrictions(): boolean {
     return this.allowedTools !== undefined && this.allowedTools.length > 0;
-  }
-
-  /**
-   * Normalize tool name for comparison
-   *
-   * For Bash commands, we need to extract the command being run
-   * e.g., Bash with command "git status" → "Bash(git status)"
-   */
-  private normalizeToolName(toolCall: ToolCallInput): string {
-    const { name, arguments: args } = toolCall;
-
-    // Handle Bash tool specially
-    if (name === 'Bash' && args?.command) {
-      const command = String(args.command);
-      return `Bash(${command})`;
-    }
-
-    return name;
   }
 
   /**

@@ -1,11 +1,16 @@
 /**
- * ToolGroupRegistry - Manages ToolGroup registration and matching
+ * ToolGroupRegistry — Semantic ToolSet grouping for LLM-driven discovery
  *
- * Responsibilities:
- * - Register/unregister ToolGroups
- * - Match user input to relevant ToolGroups
- * - Resolve dependencies between ToolGroups
- * - Provide active tool list based on active groups
+ * Responsibility: Manage named collections of tools (ToolSets/ToolGroups) that
+ * represent semantic capabilities (e.g., "GitHub", "Analysis", "Media").
+ * Discovery is handled by the LLM via the SearchToolSets meta-tool.
+ *
+ * NOT to be confused with:
+ * - ToolRegistry (tools/)         → tool execution dispatch
+ * - ToolCategoryRegistry (tools/) → functional categorization + injection layer
+ * - SkillRegistry (skill/)        → Skill + SlashCommand storage and lifecycle
+ *
+ * Note: "ToolGroup" and "ToolSet" are aliases (IToolSetRegistry = IToolGroupRegistry).
  */
 
 import type { ToolGroup, ToolGroupMatch, IToolGroupRegistry } from '@neko/shared';
@@ -86,10 +91,11 @@ export class ToolGroupRegistry implements IToolGroupRegistry {
   }
 
   /**
-   * Match ToolGroups by user input
+   * Match ToolGroups by user input.
    *
-   * Note: triggerKeywords have been removed. This method now always returns an
-   * empty array. Tool set discovery is handled by the LLM via SearchToolSets.
+   * @deprecated triggerKeywords have been removed. This method always returns an
+   * empty array. Tool set discovery is now handled by the LLM via SearchToolSets
+   * meta-tool. Will be removed in a future major version.
    */
   match(_input: string): ToolGroupMatch[] {
     return [];

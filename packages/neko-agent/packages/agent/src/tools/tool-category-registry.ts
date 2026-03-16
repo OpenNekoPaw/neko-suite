@@ -1,8 +1,12 @@
 /**
- * Tool Category Registry - Manages tool categorization and layer assignment
+ * Tool Category Registry — Functional categorization + injection layer assignment
  *
- * Provides central management for tool categories and their injection layers.
- * Works with ToolInjectionManager to implement three-layer tool injection.
+ * Responsibility: Classify tools into functional categories (file, system, ai, etc.)
+ * and assign injection layers ('always' vs 'dynamic') for ToolInjectionManager.
+ *
+ * NOT to be confused with:
+ * - ToolGroupRegistry (skill/) → semantic ToolSet grouping for LLM-driven discovery
+ * - ToolRegistry (tools/)      → tool execution dispatch
  */
 
 import type {

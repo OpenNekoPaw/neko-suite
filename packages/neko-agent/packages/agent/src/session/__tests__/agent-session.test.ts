@@ -281,7 +281,77 @@ describe('AgentSession', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 9. dispose()
+  // 9. Skill injection — permission rule lifecycle
+  // -------------------------------------------------------------------------
+
+  describe('skill injection permission rule cleanup', () => {
+    it('should add allow rules on applySkillInjection and remove on removeSkillInjection', () => {
+      const session = new AgentSession(config);
+
+      // Access internal _permissionHooks
+      const permHooks = (session as unknown as Record<string, unknown>)['_permissionHooks'] as
+        | { addAllowRule: ReturnType<typeof vi.fn>; removeAllowRule: ReturnType<typeof vi.fn> }
+        | undefined;
+
+      // If permissionHooks exist, spy on them
+      if (permHooks) {
+        const addSpy = vi.spyOn(permHooks, 'addAllowRule');
+        const removeSpy = vi.spyOn(permHooks, 'removeAllowRule');
+
+        session.applySkillInjection({
+          name: 'test-skill',
+          systemPrompt: 'Test prompt',
+          allowedTools: ['Read', 'Bash(git:*)'],
+          type: 'skill',
+        });
+
+        expect(addSpy).toHaveBeenCalledWith('Read');
+        expect(addSpy).toHaveBeenCalledWith('Bash(git:*)');
+
+        session.removeSkillInjection('test-skill');
+
+        expect(removeSpy).toHaveBeenCalledWith('Read');
+        expect(removeSpy).toHaveBeenCalledWith('Bash(git:*)');
+      }
+    });
+
+    it('should clear tracked rules even without permissionHooks', () => {
+      const session = new AgentSession(config);
+
+      session.applySkillInjection({
+        name: 'test-skill',
+        systemPrompt: 'Test prompt',
+        allowedTools: ['Read'],
+        type: 'skill',
+      });
+
+      // Should not throw when removing
+      expect(() => session.removeSkillInjection('test-skill')).not.toThrow();
+    });
+
+    it('should remove prompt section on removeSkillInjection', () => {
+      const session = new AgentSession(config);
+
+      session.applySkillInjection({
+        name: 'test-skill',
+        systemPrompt: 'Skill-specific instructions',
+        type: 'skill',
+      });
+
+      // System prompt should include skill content
+      const historyBefore = session.getHistory();
+      expect(historyBefore[0]!.content).toContain('Skill-specific instructions');
+
+      session.removeSkillInjection('test-skill');
+
+      // System prompt should no longer include skill content
+      const historyAfter = session.getHistory();
+      expect(historyAfter[0]!.content).not.toContain('Skill-specific instructions');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 10. dispose()
   // -------------------------------------------------------------------------
 
   describe('dispose()', () => {
