@@ -15,7 +15,6 @@ import type {
   IAgentExecutor,
   AgentCheckpoint,
   ChatMessage,
-  ToolResult,
   IToolRegistry,
   IService,
   ExecutorHooks,
@@ -24,7 +23,6 @@ import type {
   IToolGroupRegistry,
   ToolFilterOptions,
   IToolInjectionManager,
-  StreamChunk,
 } from '@neko/shared';
 import { AgentError } from '../errors';
 import { getLogger } from '../utils/logger';
@@ -129,20 +127,7 @@ export class AgentExecutor implements IAgentExecutor {
     const steps: AgentStep[] = [];
 
     this.abortController = new AbortController();
-
-    // Initialize context
-    const agentContext: AgentContext = {
-      messages: context?.messages || [{ role: 'system', content: this.config.systemPrompt }],
-      state: 'init',
-      iteration: 0,
-      toolResults: [],
-      metadata: context?.metadata || {},
-    };
-
-    // Add user input (unless caller already included it in the snapshot)
-    if (!context?.skipUserMessage) {
-      agentContext.messages.push({ role: 'user', content: input });
-    }
+    const agentContext = this.initContext(input, context);
 
     // Hook: onExecuteStart
     await this.runHooks('onExecuteStart', input, agentContext);
@@ -190,20 +175,7 @@ export class AgentExecutor implements IAgentExecutor {
     const startTime = Date.now();
     const steps: AgentStep[] = [];
     this.abortController = new AbortController();
-
-    // Initialize context
-    const agentContext: AgentContext = {
-      messages: context?.messages || [{ role: 'system', content: this.config.systemPrompt }],
-      state: 'init',
-      iteration: 0,
-      toolResults: [],
-      metadata: context?.metadata || {},
-    };
-
-    // Add user input (unless caller already included it in the snapshot)
-    if (!context?.skipUserMessage) {
-      agentContext.messages.push({ role: 'user', content: input });
-    }
+    const agentContext = this.initContext(input, context);
 
     // Hook: onExecuteStart
     await this.runHooks('onExecuteStart', input, agentContext);
@@ -254,18 +226,9 @@ export class AgentExecutor implements IAgentExecutor {
           steps.push(observeStep);
           yield observeStep;
 
-          // Add to context
+          // Add tool results to context
           const toolResults = (actStep.toolResults as ToolResultWithMeta[]) || [];
-          for (const result of toolResults) {
-            const toolContent = result.success
-              ? JSON.stringify(result.data)
-              : JSON.stringify({ error: result.error });
-            agentContext.messages.push({
-              role: 'tool',
-              content: toolContent,
-              toolCallId: result.callId,
-            } as ChatMessage);
-          }
+          agentContext.messages.push(...this.buildToolResultMessages(toolResults));
 
           // Hook: onIterationComplete
           await this.runHooks('onIterationComplete', agentContext.iteration, agentContext);
@@ -389,6 +352,53 @@ export class AgentExecutor implements IAgentExecutor {
   }
 
   /**
+   * Initialize agent context from input and optional partial context
+   */
+  private initContext(input: string, context?: Partial<AgentContext>): AgentContext {
+    const agentContext: AgentContext = {
+      messages: context?.messages || [{ role: 'system', content: this.config.systemPrompt }],
+      state: 'init',
+      iteration: 0,
+      toolResults: [],
+      metadata: context?.metadata || {},
+    };
+
+    if (!context?.skipUserMessage) {
+      agentContext.messages.push({ role: 'user', content: input });
+    }
+
+    return agentContext;
+  }
+
+  /**
+   * Build tool result messages for context history
+   */
+  private buildToolResultMessages(results: ToolResultWithMeta[]): ChatMessage[] {
+    return results.map(
+      (result) =>
+        ({
+          role: 'tool',
+          content: result.success
+            ? JSON.stringify(result.data)
+            : JSON.stringify({ error: result.error }),
+          toolCallId: result.callId,
+        }) as ChatMessage,
+    );
+  }
+
+  /**
+   * Parse tool call arguments from raw JSON string with fallback
+   */
+  private static parseToolCallArgs(rawArgs: string): Record<string, unknown> {
+    try {
+      return JSON.parse(rawArgs);
+    } catch {
+      // LLM returned malformed JSON — pass raw string as fallback
+      return { _raw: rawArgs };
+    }
+  }
+
+  /**
    * Main execution loop
    */
   private async runLoop(
@@ -426,16 +436,7 @@ export class AgentExecutor implements IAgentExecutor {
 
         // Add tool results to context
         const toolResults = (actStep.toolResults as ToolResultWithMeta[]) || [];
-        for (const result of toolResults) {
-          const toolContent = result.success
-            ? JSON.stringify(result.data)
-            : JSON.stringify({ error: result.error });
-          context.messages.push({
-            role: 'tool',
-            content: toolContent,
-            toolCallId: result.callId,
-          } as ChatMessage);
-        }
+        context.messages.push(...this.buildToolResultMessages(toolResults));
 
         // Hook: onIterationComplete
         await this.runHooks('onIterationComplete', context.iteration, context);
@@ -476,9 +477,14 @@ export class AgentExecutor implements IAgentExecutor {
   }
 
   /**
-   * Think step - get model response
+   * Prepare context for a think step: run beforeThink hooks, extract tool filter,
+   * build tool definitions and service options.
    */
-  private async think(context: AgentContext): Promise<AgentStep> {
+  private async prepareThinkContext(context: AgentContext): Promise<{
+    modifiedContext: AgentContext;
+    tools: ReturnType<IToolRegistry['toToolDefinitions']>;
+    options: Record<string, unknown>;
+  }> {
     // Hook: beforeThink - can modify context
     let modifiedContext = context;
     for (const hook of this.hooks) {
@@ -487,19 +493,29 @@ export class AgentExecutor implements IAgentExecutor {
       }
     }
 
-    // Get tool filter based on active ToolSkills or injection manager
     // Extract user input from last user message for skill matching
     const lastUserMessage = modifiedContext.messages.filter((m) => m.role === 'user').pop();
     const userInput = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
     const toolFilter = this.getToolFilter(userInput);
     const tools = this.toolRegistry.toToolDefinitions(toolFilter);
 
-    const response = await this.service.chat(modifiedContext.messages, {
+    const options = {
       ...this.config.serviceOptions,
       tools: tools.length > 0 ? tools : undefined,
-      toolChoice: tools.length > 0 ? 'auto' : undefined,
+      toolChoice: (tools.length > 0 ? 'auto' : undefined) as 'auto' | undefined,
       signal: this.abortController?.signal,
-    });
+    };
+
+    return { modifiedContext, tools, options };
+  }
+
+  /**
+   * Think step - get model response
+   */
+  private async think(context: AgentContext): Promise<AgentStep> {
+    const { modifiedContext, options } = await this.prepareThinkContext(context);
+
+    const response = await this.service.chat(modifiedContext.messages, options);
 
     // Warn if response was truncated
     if (response.finishReason === 'length') {
@@ -518,20 +534,11 @@ export class AgentExecutor implements IAgentExecutor {
           : '';
 
     // Preserve the original tool call ID from the API response
-    const toolCalls = response.message.toolCalls?.map((tc) => {
-      let parsedArgs: Record<string, unknown> = {};
-      try {
-        parsedArgs = JSON.parse(tc.function.arguments);
-      } catch {
-        // LLM returned malformed JSON — pass raw string as fallback
-        parsedArgs = { _raw: tc.function.arguments };
-      }
-      return {
-        id: tc.id,
-        name: tc.function.name,
-        arguments: parsedArgs,
-      };
-    });
+    const toolCalls = response.message.toolCalls?.map((tc) => ({
+      id: tc.id,
+      name: tc.function.name,
+      arguments: AgentExecutor.parseToolCallArgs(tc.function.arguments),
+    }));
 
     // Add assistant message to context
     context.messages.push(response.message);
@@ -561,26 +568,7 @@ export class AgentExecutor implements IAgentExecutor {
    * non-streaming think() if chatStream is not available.
    */
   private async *thinkStream(context: AgentContext): AsyncGenerator<AgentStep> {
-    // Hook: beforeThink - can modify context
-    let modifiedContext = context;
-    for (const hook of this.hooks) {
-      if (hook.beforeThink) {
-        modifiedContext = (await hook.beforeThink(modifiedContext)) || modifiedContext;
-      }
-    }
-
-    // Get tool filter and definitions
-    const lastUserMessage = modifiedContext.messages.filter((m) => m.role === 'user').pop();
-    const userInput = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
-    const toolFilter = this.getToolFilter(userInput);
-    const tools = this.toolRegistry.toToolDefinitions(toolFilter);
-
-    const options = {
-      ...this.config.serviceOptions,
-      tools: tools.length > 0 ? tools : undefined,
-      toolChoice: tools.length > 0 ? 'auto' : undefined,
-      signal: this.abortController?.signal,
-    };
+    const { modifiedContext, options } = await this.prepareThinkContext(context);
 
     // Accumulate streaming response
     let content = '';
@@ -634,15 +622,11 @@ export class AgentExecutor implements IAgentExecutor {
     }
 
     // Parse tool calls from accumulated data
-    const toolCalls = [...toolCallMap.values()].map((tc) => {
-      let parsedArgs: Record<string, unknown> = {};
-      try {
-        parsedArgs = JSON.parse(tc.arguments);
-      } catch {
-        parsedArgs = { _raw: tc.arguments };
-      }
-      return { id: tc.id, name: tc.name, arguments: parsedArgs };
-    });
+    const toolCalls = [...toolCallMap.values()].map((tc) => ({
+      id: tc.id,
+      name: tc.name,
+      arguments: AgentExecutor.parseToolCallArgs(tc.arguments),
+    }));
 
     // Build assistant message and add to context
     const assistantMessage: ChatMessage = {

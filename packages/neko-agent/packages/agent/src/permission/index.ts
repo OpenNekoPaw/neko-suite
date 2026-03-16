@@ -40,6 +40,9 @@ export {
   isPlanFileWrite,
 } from './rule-matcher';
 
+// Permission Manager Interface
+export type { IPermissionManager } from './permission-manager-types';
+
 // Permission Hooks
 export {
   PermissionHooks,

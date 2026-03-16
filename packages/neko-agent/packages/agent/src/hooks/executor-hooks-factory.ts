@@ -10,7 +10,7 @@
 
 import type { ExecutorHooks } from '@neko/shared';
 import type { ConversationCompressor } from '../context';
-import type { PermissionHooks } from '../permission/permission-hooks';
+import type { IPermissionManager } from '../permission/permission-manager-types';
 import type { PermissionMode, PermissionRules } from '../permission/types';
 import type { ToolConfirmationRequest } from '../permission/types';
 import type { ValidationWarning, ValidationError } from '../validation/types';
@@ -72,8 +72,8 @@ export interface ExecutorHooksFactoryResult {
   /** Composed hooks array (ordered: memory → validation → permission → custom) */
   hooks: ExecutorHooks[];
 
-  /** Reference to permission hooks for runtime state management (add/remove rules, set mode) */
-  permissionHooks: PermissionHooks;
+  /** Reference to permission manager for runtime state management (add/remove rules, set mode) */
+  permissionHooks: IPermissionManager;
 }
 
 // =============================================================================

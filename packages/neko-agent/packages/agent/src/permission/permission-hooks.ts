@@ -16,6 +16,7 @@ import type {
   ConfirmToolCallback,
   ToolConfirmationRequest,
 } from './types';
+import type { IPermissionManager } from './permission-manager-types';
 import { DEFAULT_PERMISSION_CONFIG } from './types';
 import { PermissionRuleMatcher, normalizeToolCall } from './rule-matcher';
 import type { SettingsHookLoader } from '../hook-loader/settings-hook-loader';
@@ -49,7 +50,7 @@ export interface PermissionHooksOptions {
 /**
  * Permission Hooks - Implements permission checking in agent execution
  */
-export class PermissionHooks implements ExecutorHooks {
+export class PermissionHooks implements ExecutorHooks, IPermissionManager {
   name = 'permission';
 
   private matcher: PermissionRuleMatcher;

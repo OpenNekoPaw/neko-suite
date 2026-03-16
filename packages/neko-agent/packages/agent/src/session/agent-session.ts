@@ -31,30 +31,20 @@ import type {
 import type { ToolConfirmationRequest } from '../permission/types';
 
 import { AgentExecutor } from '../executor';
-import { ConversationCompressor } from '../context';
+import { type ConversationCompressor } from '../context';
 import { createExecutorHooks } from '../hooks';
-import { type PermissionHooks, type PermissionMode } from '../permission';
-import { ToolGroupRegistry, registerBuiltinToolGroups } from '../skill';
-import {
-  ToolCategoryRegistry,
-  ToolInjectionManager,
-  createCoreMetaTools,
-  DEFAULT_INJECTION_CONFIG,
-} from '../tools';
-import { SystemPromptComposer } from '../prompt/system-prompt-composer';
+import { type IPermissionManager, type PermissionMode } from '../permission';
+import { type ToolGroupRegistry } from '../skill';
+import { type ToolInjectionManager } from '../tools';
+import { type SystemPromptComposer } from '../prompt/system-prompt-composer';
 import { getLogger } from '../utils/logger';
+import { initializeSession, DEFAULT_MAX_ITERATIONS } from './agent-session-initializer';
 
 const logger = getLogger('AgentSession');
 
 // =============================================================================
 // Constants
 // =============================================================================
-
-/** Default max context tokens */
-const DEFAULT_MAX_CONTEXT_TOKENS = 100000;
-
-/** Default max iterations */
-const DEFAULT_MAX_ITERATIONS = 50;
 
 /** Plan mode system reminder injected into user input */
 export const PLAN_MODE_SYSTEM_REMINDER = `
@@ -78,11 +68,10 @@ export class AgentSession implements IAgentSession {
   // Core components
   private _executor: AgentExecutor | null = null;
   private _compressor: ConversationCompressor;
-  private _permissionHooks: PermissionHooks | null = null;
+  private _permissionHooks: IPermissionManager | null = null;
 
-  // Registries
+  // Registries (used by _rebuildExecutor on configure())
   private _toolGroupRegistry: ToolGroupRegistry;
-  private _toolCategoryRegistry: ToolCategoryRegistry;
   private _toolInjectionManager: ToolInjectionManager;
 
   // Prompt composition
@@ -107,59 +96,22 @@ export class AgentSession implements IAgentSession {
     this._config = config;
     this._executionMode = config.executionMode ?? 'auto';
 
-    // Initialize conversation compressor
-    this._compressor = new ConversationCompressor({
-      triggers: {
-        tokenThreshold: config.contextSettings?.maxTokens ?? DEFAULT_MAX_CONTEXT_TOKENS,
-        turnThreshold: 20,
-      },
+    // Delegate component creation to initializer (SRP: init logic separate from runtime)
+    const components = initializeSession(config, {
+      onToolConfirmation: (request) => this._handleToolConfirmation(request),
     });
 
-    // Initialize registries
-    this._toolGroupRegistry =
-      (config.toolGroupRegistry as ToolGroupRegistry) ?? new ToolGroupRegistry();
-    if (!config.toolGroupRegistry) {
-      registerBuiltinToolGroups(this._toolGroupRegistry);
-    }
+    // Assign initialized components
+    this._compressor = components.compressor;
+    this._toolGroupRegistry = components.toolGroupRegistry;
+    this._toolInjectionManager = components.toolInjectionManager;
+    this._promptComposer = components.promptComposer;
+    this._executor = components.executor;
+    this._permissionHooks = components.permissionHooks;
+    this._history = components.history;
 
-    this._toolCategoryRegistry =
-      (config.toolCategoryRegistry as ToolCategoryRegistry) ?? new ToolCategoryRegistry();
-    if (!config.toolCategoryRegistry) {
-      // Populate with tool categories from ToolGroupRegistry
-      const defaultActiveGroups = this._toolGroupRegistry.list().filter((g) => g.alwaysActive);
-      for (const group of defaultActiveGroups) {
-        for (const toolName of group.tools) {
-          this._toolCategoryRegistry.categorizeTool(toolName, 'system', 'dynamic');
-        }
-      }
-    }
-
-    this._toolInjectionManager = new ToolInjectionManager(
-      this._toolCategoryRegistry,
-      this._toolGroupRegistry,
-      DEFAULT_INJECTION_CONFIG,
-    );
-
-    // Register core meta tools
-    const metaTools = createCoreMetaTools(
-      this._toolCategoryRegistry,
-      this._toolInjectionManager,
-      this._toolGroupRegistry,
-    );
-    for (const tool of metaTools) {
-      config.toolRegistry.register(tool);
-      this._toolCategoryRegistry.categorizeTool(tool.name, 'system', 'always');
-    }
-
-    // Initialize executor
-    this._initializeExecutor();
-
-    // Initialize prompt composer and history with system prompt
-    this._promptComposer = new SystemPromptComposer();
-    this._promptComposer.setBase(config.systemPrompt);
-    this._history.push({ role: 'system', content: this._promptComposer.compose() });
-
-    // Initialize skill injection coordinator
+    // SkillInjectionCoordinator requires closures over Session fields
+    // (e.g. _permissionHooks changes on configure()), so created here
     this._skillCoordinator = new SkillInjectionCoordinator({
       promptComposer: this._promptComposer,
       getPermissionHooks: () => this._permissionHooks,
@@ -187,7 +139,7 @@ export class AgentSession implements IAgentSession {
     }
 
     // Reinitialize executor with new config
-    this._initializeExecutor();
+    this._rebuildExecutor();
   }
 
   getExecutionMode(): ExecutionMode {
@@ -414,7 +366,7 @@ export class AgentSession implements IAgentSession {
     }
   }
 
-  private _initializeExecutor(): void {
+  private _rebuildExecutor(): void {
     // Create hooks chain via factory (OCP: new hooks don't require Session changes)
     const permissionMode: PermissionMode =
       this._executionMode === 'plan' ? 'plan' : this._executionMode === 'auto' ? 'auto' : 'ask';

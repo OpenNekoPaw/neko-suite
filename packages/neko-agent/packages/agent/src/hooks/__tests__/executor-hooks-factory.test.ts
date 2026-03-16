@@ -41,7 +41,8 @@ describe('createExecutorHooks', () => {
     });
 
     expect(result.permissionHooks).toBeDefined();
-    expect(result.permissionHooks.name).toBe('permission');
+    // The returned IPermissionManager is also an ExecutorHooks (PermissionHooks class)
+    expect((result.permissionHooks as unknown as { name: string }).name).toBe('permission');
   });
 
   it('should place hooks in correct order: memory → validation → permission', () => {

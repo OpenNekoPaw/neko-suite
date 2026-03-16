@@ -17,7 +17,7 @@
 
 import type { SkillInjection } from '@neko/shared';
 import type { ISystemPromptComposer } from '../prompt/system-prompt-composer-types';
-import type { PermissionHooks } from '../permission/permission-hooks';
+import type { IPermissionManager } from '../permission/permission-manager-types';
 
 // =============================================================================
 // Types
@@ -30,8 +30,8 @@ export interface SkillInjectionCoordinatorDeps {
   /** Prompt composer for section management */
   promptComposer: ISystemPromptComposer;
 
-  /** Permission hooks for allow rule management (may be null during init) */
-  getPermissionHooks: () => PermissionHooks | null;
+  /** Permission manager for allow rule management (may be null during init) */
+  getPermissionHooks: () => IPermissionManager | null;
 
   /** Callback to sync composed prompt into history[0] */
   syncSystemPrompt: () => void;

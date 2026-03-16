@@ -22,6 +22,7 @@ pub mod custom_shader_processor;
 mod encoder_bridge;
 mod gpu_layer;
 mod gpu_pipeline;
+mod mask_rasterizer;
 mod hal_import;
 mod nv12_import;
 mod nv12_renderer;
@@ -93,6 +94,7 @@ pub use windows_export::{ExportedNv12Handles, WindowsExportBackingStore, Windows
 pub use windows_import::WindowsTextureImporter;
 
 pub use gpu_layer::{GpuLayer, GpuLayerBuilder};
+pub use mask_rasterizer::MaskRasterizer;
 pub use text_renderer::{TextRenderer, TextShadowStyle, TextStyle};
 pub use texture_compositor::{TextureCompositeResult, TextureCompositor};
 pub use scene_renderer::{AssetCache, CameraParams, PbrRenderError, PbrRenderer, PbrVertex, SceneRenderOutput};

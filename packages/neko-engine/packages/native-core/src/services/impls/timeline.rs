@@ -10,8 +10,8 @@ use crate::error::{Error, Result};
 use crate::export::{AudioMixer, EffectDispatcher, ExportSettings, ExportStats};
 use crate::gpu::{
     BlendMode as GpuBlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext,
-    GpuTransitionProcessor, LayerPixelFormat, Nv12Renderer, Nv12TextureImporter, TransitionParams,
-    TransitionType,
+    GpuTransitionProcessor, LayerPixelFormat, MaskRasterizer, Nv12Renderer, Nv12TextureImporter,
+    TransitionParams, TransitionType,
 };
 use crate::jvi::JviLoader;
 use crate::monitor::SystemMonitor;
@@ -435,20 +435,24 @@ impl ITimelineService for TimelineService {
             let (mut rgba_data, src_width, src_height) = decoded_rgba;
 
             // Apply effects to decoded RGBA frame (Phase 2 GPU pipeline)
+            // Note: apply_effects takes ownership of the pixel buffer, so we must
+            // always reassign the result or clone before calling.
             if !element.effects.is_empty() {
-                match EffectDispatcher::new(gpu_ctx.clone()) {
+                rgba_data = match EffectDispatcher::new(gpu_ctx.clone()) {
                     Ok(dispatcher) => {
-                        match dispatcher.apply_effects(rgba_data, src_width, src_height, &element.effects) {
-                            Ok(processed) => rgba_data = processed,
+                        match dispatcher.apply_effects(rgba_data.clone(), src_width, src_height, &element.effects) {
+                            Ok(processed) => processed,
                             Err(e) => {
                                 tracing::warn!("Effects processing failed for element '{}', using unprocessed frame: {}", element.id, e);
+                                rgba_data
                             }
                         }
                     }
                     Err(e) => {
                         tracing::warn!("Failed to create EffectDispatcher for composite: {}", e);
+                        rgba_data
                     }
-                }
+                };
             }
 
             // Build transform — apply same coordinate conversion as GpuExportPipeline
@@ -480,6 +484,36 @@ impl ITimelineService for TimelineService {
                 transform.y *= height as f32;
             }
 
+            // Rasterize masks to grayscale data for GPU compositor
+            let (mask_data, mask_inverted) = if !element.masks.is_empty() {
+                match MaskRasterizer::new(gpu_ctx.clone()) {
+                    Ok(rasterizer) => {
+                        match rasterizer.rasterize_masks(&element.masks, src_width, src_height) {
+                            Ok(data) if !data.is_empty() => {
+                                // Use inverted flag from first mask (primary)
+                                let inverted = element.masks[0].inverted;
+                                (Some(data), inverted)
+                            }
+                            Ok(_) => (None, false),
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Mask rasterization failed for element '{}': {}",
+                                    element.id,
+                                    e
+                                );
+                                (None, false)
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to create MaskRasterizer: {}", e);
+                        (None, false)
+                    }
+                }
+            } else {
+                (None, false)
+            };
+
             layers.push(CompositeLayer {
                 data: rgba_data,
                 width: src_width,
@@ -489,8 +523,8 @@ impl ITimelineService for TimelineService {
                 opacity: element.opacity as f32,
                 blend_mode: Self::convert_blend_mode(&element.blend_mode),
                 z_index: z_index as i32,
-                mask: None,
-                mask_inverted: false,
+                mask: mask_data,
+                mask_inverted,
             });
         }
 

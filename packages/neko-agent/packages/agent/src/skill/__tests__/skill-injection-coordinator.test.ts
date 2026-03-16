@@ -24,7 +24,7 @@ function createMockDeps() {
   const deps: SkillInjectionCoordinatorDeps = {
     promptComposer: mockComposer,
     getPermissionHooks: () =>
-      mockPermissionHooks as unknown as import('../../permission/permission-hooks').PermissionHooks,
+      mockPermissionHooks as unknown as import('../../permission/permission-manager-types').IPermissionManager,
     syncSystemPrompt: () => {
       syncCalls++;
     },
