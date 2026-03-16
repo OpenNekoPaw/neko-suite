@@ -937,6 +937,9 @@ pub struct Element {
     /// Transition to next element (Phase 2)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transition_out: Option<TransitionEffect>,
+    /// Masks applied to this element (GPU rasterized)
+    #[serde(default)]
+    pub masks: Vec<ElementMask>,
 }
 
 fn default_opacity() -> f64 {
@@ -1536,6 +1539,66 @@ pub struct TransitionEffect {
     #[serde(default)]
     pub feather: f32,
 }
+
+/// Bezier control point for mask paths
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BezierControlPoint {
+    pub position: [f32; 2],
+    pub handle_in: [f32; 2],
+    pub handle_out: [f32; 2],
+}
+
+/// Mask shape geometry (mirrors TS CompositeMaskShape)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum MaskShapeData {
+    #[serde(rename = "rectangle")]
+    Rectangle {
+        center_x: f32,
+        center_y: f32,
+        width: f32,
+        height: f32,
+        rotation: f32,
+        corner_radius: f32,
+    },
+    #[serde(rename = "ellipse")]
+    Ellipse {
+        center_x: f32,
+        center_y: f32,
+        width: f32,
+        height: f32,
+        rotation: f32,
+    },
+    #[serde(rename = "polygon")]
+    Polygon {
+        points: Vec<[f32; 2]>,
+    },
+    #[serde(rename = "bezier")]
+    Bezier {
+        control_points: Vec<BezierControlPoint>,
+        closed: bool,
+    },
+}
+
+/// A mask applied to an element (mirrors TS CompositeMask)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementMask {
+    pub shape: MaskShapeData,
+    #[serde(default)]
+    pub inverted: bool,
+    #[serde(default)]
+    pub feather: f32,
+    #[serde(default)]
+    pub expansion: f32,
+    #[serde(default = "default_mask_opacity")]
+    pub opacity: f32,
+    #[serde(default)]
+    pub blend_mode: String,
+}
+
+fn default_mask_opacity() -> f32 { 1.0 }
 
 /// Audio properties within an element
 #[derive(Debug, Clone, Serialize, Deserialize)]

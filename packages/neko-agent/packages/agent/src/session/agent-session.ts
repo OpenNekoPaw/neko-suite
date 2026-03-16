@@ -15,8 +15,9 @@
  * - Converts AgentStep to AgentEvent for unified event streaming
  */
 
-import type { ChatMessage, AgentStep, ExecutorHooks } from '@neko/shared';
+import type { ChatMessage, AgentStep } from '@neko/shared';
 import type { SkillInjection } from '../skill';
+import { SkillInjectionCoordinator } from '../skill';
 
 import type {
   IAgentSession,
@@ -31,9 +32,8 @@ import type { ToolConfirmationRequest } from '../permission/types';
 
 import { AgentExecutor } from '../executor';
 import { ConversationCompressor } from '../context';
-import { MemoryHooks } from '../hooks';
-import { createValidationHooks } from '../validation';
-import { createPermissionHooks, type PermissionHooks, type PermissionMode } from '../permission';
+import { createExecutorHooks } from '../hooks';
+import { type PermissionHooks, type PermissionMode } from '../permission';
 import { ToolGroupRegistry, registerBuiltinToolGroups } from '../skill';
 import {
   ToolCategoryRegistry,
@@ -88,15 +88,14 @@ export class AgentSession implements IAgentSession {
   // Prompt composition
   private _promptComposer: SystemPromptComposer;
 
+  // Skill injection (3-track coordinator)
+  private _skillCoordinator!: SkillInjectionCoordinator;
+
   // State
   private _history: ChatMessage[] = [];
   private _isRunning = false;
   /** Tracks whether content_delta steps were emitted for current think cycle */
   private _hasStreamedDeltas = false;
-  /** Allowed tools from the active skill injection (undefined = no restrictions) */
-  private _activeSkillAllowedTools: string[] | undefined;
-  /** Tracks permission allow rules injected by the active skill, for cleanup on removal */
-  private _skillInjectedAllowRules: string[] = [];
   private _pendingConfirmations = new Map<
     string,
     {
@@ -159,6 +158,13 @@ export class AgentSession implements IAgentSession {
     this._promptComposer = new SystemPromptComposer();
     this._promptComposer.setBase(config.systemPrompt);
     this._history.push({ role: 'system', content: this._promptComposer.compose() });
+
+    // Initialize skill injection coordinator
+    this._skillCoordinator = new SkillInjectionCoordinator({
+      promptComposer: this._promptComposer,
+      getPermissionHooks: () => this._permissionHooks,
+      syncSystemPrompt: () => this._syncSystemPrompt(),
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -257,8 +263,10 @@ export class AgentSession implements IAgentSession {
           ...context?.metadata,
         },
       })) {
-        // Convert step to events
-        yield* this._convertStepToEvents(step, ++iteration, maxIterations);
+        ++iteration;
+        // Record history first (side effects), then emit events (pure)
+        this._recordStepInHistory(step, iteration);
+        yield* this._stepToEvents(step, iteration, maxIterations);
       }
 
       // Emit done event
@@ -321,46 +329,18 @@ export class AgentSession implements IAgentSession {
 
   /**
    * Apply a skill injection to the active session.
-   * Uses the prompt composer for reversible section management.
+   * Delegates to SkillInjectionCoordinator for atomic 3-track injection.
    */
   applySkillInjection(injection: SkillInjection): void {
-    // Add skill prompt as a composable section (reversible)
-    this._promptComposer.setSection({
-      id: `skill:${injection.name}`,
-      layer: 'skill',
-      content: injection.systemPrompt,
-      priority: 50,
-    });
-    this._syncSystemPrompt();
-
-    // Track allowed tools for runtime isToolAllowed() checks
-    this._activeSkillAllowedTools = injection.allowedTools;
-
-    // Add allowed tools to permission hooks and track for cleanup
-    this._skillInjectedAllowRules = [];
-    if (injection.allowedTools && injection.allowedTools.length > 0 && this._permissionHooks) {
-      for (const tool of injection.allowedTools) {
-        this._permissionHooks.addAllowRule(tool);
-        this._skillInjectedAllowRules.push(tool);
-      }
-    }
+    this._skillCoordinator.apply(injection);
   }
 
   /**
    * Remove a previously injected skill prompt (reversible injection).
+   * Delegates to SkillInjectionCoordinator for atomic 3-track cleanup.
    */
   removeSkillInjection(name: string): void {
-    this._promptComposer.removeSection(`skill:${name}`);
-    this._syncSystemPrompt();
-    this._activeSkillAllowedTools = undefined;
-
-    // Clean up permission allow rules injected by the skill
-    if (this._permissionHooks && this._skillInjectedAllowRules.length > 0) {
-      for (const rule of this._skillInjectedAllowRules) {
-        this._permissionHooks.removeAllowRule(rule);
-      }
-    }
-    this._skillInjectedAllowRules = [];
+    this._skillCoordinator.remove(name);
   }
 
   /**
@@ -368,8 +348,9 @@ export class AgentSession implements IAgentSession {
    * Returns true if no skill restrictions are active.
    */
   isToolAllowed(toolName: string): boolean {
-    if (!this._activeSkillAllowedTools?.length) return true;
-    return this._activeSkillAllowedTools.includes(toolName);
+    const allowedTools = this._skillCoordinator.getActiveSkillAllowedTools();
+    if (!allowedTools?.length) return true;
+    return allowedTools.includes(toolName);
   }
 
   clearHistory(): void {
@@ -434,45 +415,21 @@ export class AgentSession implements IAgentSession {
   }
 
   private _initializeExecutor(): void {
-    // Create memory hooks
-    const memoryHooks = new MemoryHooks({
-      compressor: this._compressor,
-    });
+    // Create hooks chain via factory (OCP: new hooks don't require Session changes)
+    const permissionMode: PermissionMode =
+      this._executionMode === 'plan' ? 'plan' : this._executionMode === 'auto' ? 'auto' : 'ask';
 
-    // Create validation hooks
-    const validationHooks = createValidationHooks({
-      imageConstraints: {
-        maxSizeBytes: 5 * 1024 * 1024, // 5MB
-        allowedFormats: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
-      },
-      outputConstraints: {
-        mermaidPreValidate: true,
-        onValidationFail: 'retry',
-      },
+    const { hooks, permissionHooks } = createExecutorHooks({
+      compressor: this._compressor,
+      permissionMode,
+      onToolAskStarted: (request) => this._handleToolConfirmation(request),
+      settingsHookLoader: this._config.settingsHookLoader,
+      customHooks: this._config.hooks,
       onValidationWarning: this._config.onValidationWarning,
       onValidationError: this._config.onValidationError,
     });
 
-    // Create permission hooks
-    const permissionMode: PermissionMode =
-      this._executionMode === 'plan' ? 'plan' : this._executionMode === 'auto' ? 'auto' : 'ask';
-
-    this._permissionHooks = createPermissionHooks({
-      config: {
-        mode: permissionMode,
-        rules: {},
-      },
-      onToolAskStarted: (request) => this._handleToolConfirmation(request),
-      settingsHookLoader: this._config.settingsHookLoader,
-    });
-
-    // Compose hooks
-    const hooks: ExecutorHooks[] = [
-      memoryHooks,
-      validationHooks,
-      this._permissionHooks,
-      ...(this._config.hooks ?? []),
-    ];
+    this._permissionHooks = permissionHooks;
 
     // Create executor
     this._executor = new AgentExecutor({
@@ -517,7 +474,74 @@ export class AgentSession implements IAgentSession {
     }
   }
 
-  private *_convertStepToEvents(
+  /**
+   * Record a step's messages into session history (side effects only).
+   * Separated from event emission for SRP.
+   */
+  private _recordStepInHistory(step: AgentStep, iteration: number): void {
+    switch (step.type) {
+      case 'content_delta':
+        // Deltas are accumulated — no history write needed
+        break;
+
+      case 'think':
+        if (step.toolCalls && step.toolCalls.length > 0) {
+          // Assistant message with tool calls
+          this._history.push({
+            role: 'assistant',
+            content: step.content ?? '',
+            toolCalls: step.toolCalls.map((tc, i) => ({
+              id: tc.id || `call_${iteration}_${i}`,
+              type: 'function' as const,
+              function: {
+                name: tc.name,
+                arguments: JSON.stringify(tc.arguments),
+              },
+            })),
+          });
+        } else if (step.content) {
+          // Final text response (no tool calls)
+          this._history.push({ role: 'assistant', content: step.content });
+        }
+        break;
+
+      case 'act':
+        if (step.toolResults) {
+          for (let i = 0; i < step.toolResults.length; i++) {
+            const result = step.toolResults[i] as {
+              callId?: string;
+              success: boolean;
+              data?: unknown;
+              error?: string;
+            };
+            this._history.push({
+              role: 'tool',
+              content: result.success
+                ? JSON.stringify(result.data)
+                : JSON.stringify({ error: result.error }),
+              toolCallId: result.callId || `call_${iteration}_${i}`,
+            } as ChatMessage);
+          }
+        }
+        break;
+
+      case 'respond':
+        if (step.content) {
+          this._history.push({ role: 'assistant', content: step.content });
+        }
+        break;
+
+      case 'observe':
+        // No history write
+        break;
+    }
+  }
+
+  /**
+   * Convert an AgentStep to AgentEvent(s) (pure event generation, no side effects).
+   * Separated from history recording for SRP.
+   */
+  private *_stepToEvents(
     step: AgentStep,
     iteration: number,
     maxIterations: number,
@@ -532,7 +556,6 @@ export class AgentSession implements IAgentSession {
 
     switch (step.type) {
       case 'content_delta':
-        // Streaming text chunk
         if (step.content) {
           yield { type: 'text_delta', content: step.content };
           this._hasStreamedDeltas = true;
@@ -540,7 +563,6 @@ export class AgentSession implements IAgentSession {
         break;
 
       case 'think':
-        // Extended thinking content
         if (step.thinking) {
           yield { type: 'thinking_content', thinking: step.thinking };
         }
@@ -549,20 +571,8 @@ export class AgentSession implements IAgentSession {
           yield { type: 'text', content: step.content };
         }
         this._hasStreamedDeltas = false; // Reset for next think cycle
-        // Tool calls — add assistant message (with toolCalls) to history
+
         if (step.toolCalls && step.toolCalls.length > 0) {
-          this._history.push({
-            role: 'assistant',
-            content: step.content ?? '',
-            toolCalls: step.toolCalls.map((tc, i) => ({
-              id: tc.id || `call_${iteration}_${i}`,
-              type: 'function' as const,
-              function: {
-                name: tc.name,
-                arguments: JSON.stringify(tc.arguments),
-              },
-            })),
-          });
           for (let i = 0; i < step.toolCalls.length; i++) {
             const tc = step.toolCalls[i];
             yield {
@@ -574,14 +584,10 @@ export class AgentSession implements IAgentSession {
               },
             };
           }
-        } else if (step.content) {
-          // No tool calls — final text response, add to history
-          this._history.push({ role: 'assistant', content: step.content });
         }
         break;
 
       case 'act':
-        // Tool results — add to history
         if (step.toolResults) {
           for (let i = 0; i < step.toolResults.length; i++) {
             const result = step.toolResults[i] as {
@@ -590,14 +596,6 @@ export class AgentSession implements IAgentSession {
               data?: unknown;
               error?: string;
             };
-            // Add tool result to history for context continuity
-            this._history.push({
-              role: 'tool',
-              content: result.success
-                ? JSON.stringify(result.data)
-                : JSON.stringify({ error: result.error }),
-              toolCallId: result.callId || `call_${iteration}_${i}`,
-            } as ChatMessage);
             yield {
               type: 'tool_result',
               toolResult: {
@@ -612,19 +610,14 @@ export class AgentSession implements IAgentSession {
         break;
 
       case 'observe':
-        // Observe step doesn't emit events
         break;
 
       case 'respond':
-        // Extended thinking content
         if (step.thinking) {
           yield { type: 'thinking_content', thinking: step.thinking };
         }
-        // Final response
         if (step.content) {
           yield { type: 'text', content: step.content };
-          // Add to history
-          this._history.push({ role: 'assistant', content: step.content });
         }
         break;
     }

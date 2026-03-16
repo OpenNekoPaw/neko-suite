@@ -11,3 +11,9 @@ export {
   type RetryHooksOptions,
   type MemoryHooksOptions,
 } from './hooks';
+
+export {
+  createExecutorHooks,
+  type ExecutorHooksFactoryConfig,
+  type ExecutorHooksFactoryResult,
+} from './executor-hooks-factory';

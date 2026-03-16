@@ -61,6 +61,13 @@ export {
 // ToolGroup Registry
 export { ToolGroupRegistry, createToolGroupRegistry } from './tool-group-registry';
 
+// Skill Injection Coordinator
+export {
+  SkillInjectionCoordinator,
+  createSkillInjectionCoordinator,
+  type SkillInjectionCoordinatorDeps,
+} from './skill-injection-coordinator';
+
 // Skill Conflict Resolver
 export { SkillConflictResolver, createSkillConflictResolver } from './skill-conflict-resolver';
 

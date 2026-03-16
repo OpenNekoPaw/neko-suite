@@ -10,7 +10,8 @@ use crate::error::{Error, Result};
 use crate::export::{AudioMixer, EffectDispatcher, ExportSettings, ExportStats};
 use crate::gpu::{
     BlendMode as GpuBlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext,
-    LayerPixelFormat, Nv12Renderer, Nv12TextureImporter,
+    GpuTransitionProcessor, LayerPixelFormat, Nv12Renderer, Nv12TextureImporter, TransitionParams,
+    TransitionType,
 };
 use crate::jvi::JviLoader;
 use crate::monitor::SystemMonitor;
