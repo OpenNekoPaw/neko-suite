@@ -33,6 +33,8 @@ interface PropertyRowProps {
   hasKeyframes: boolean;
   isAtKeyframe: boolean;
   onChange: (value: number | string | boolean) => void;
+  /** Called when the value is finalized (slider release, input blur) */
+  onCommit?: (value: number | string | boolean) => void;
   onAddKeyframe: () => void;
   onRemoveKeyframe?: () => void;
   disabled?: boolean;
@@ -44,6 +46,7 @@ export const PropertyRow = memo(function PropertyRow({
   hasKeyframes,
   isAtKeyframe,
   onChange,
+  onCommit,
   onAddKeyframe,
   onRemoveKeyframe,
   disabled = false,
@@ -77,8 +80,27 @@ export const PropertyRow = memo(function PropertyRow({
   const handleSelectChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       onChange(e.target.value);
+      onCommit?.(e.target.value);
     },
-    [onChange],
+    [onChange, onCommit],
+  );
+
+  // Commit on slider mouseup / input blur
+  const handleNumberCommit = useCallback(
+    (e: React.SyntheticEvent<HTMLInputElement>) => {
+      const val = parseFloat(e.currentTarget.value);
+      if (!isNaN(val)) {
+        onCommit?.(val);
+      }
+    },
+    [onCommit],
+  );
+
+  const handleStringCommit = useCallback(
+    (e: React.FocusEvent<HTMLInputElement>) => {
+      onCommit?.(e.target.value);
+    },
+    [onCommit],
   );
 
   const renderInput = () => {
@@ -92,6 +114,7 @@ export const PropertyRow = memo(function PropertyRow({
             max={definition.max}
             step={definition.step ?? 1}
             onChange={handleNumberChange}
+            onBlur={handleNumberCommit}
             disabled={disabled}
             className="w-20 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-2 py-1 text-[11px] outline-none focus:border-[var(--vscode-focusBorder)] disabled:opacity-50"
           />
@@ -107,6 +130,7 @@ export const PropertyRow = memo(function PropertyRow({
               max={definition.max ?? 1}
               step={definition.step ?? 0.01}
               onChange={handleNumberChange}
+              onPointerUp={handleNumberCommit}
               disabled={disabled}
               className="flex-1 h-1 accent-[var(--vscode-button-background)]"
             />
@@ -117,6 +141,7 @@ export const PropertyRow = memo(function PropertyRow({
               max={definition.max}
               step={definition.step ?? 0.01}
               onChange={handleNumberChange}
+              onBlur={handleNumberCommit}
               disabled={disabled}
               className="w-14 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-1.5 py-0.5 text-[10px] outline-none focus:border-[var(--vscode-focusBorder)] disabled:opacity-50"
             />
@@ -129,6 +154,7 @@ export const PropertyRow = memo(function PropertyRow({
             type="text"
             value={typeof value === 'string' ? value : ''}
             onChange={handleStringChange}
+            onBlur={handleStringCommit}
             disabled={disabled}
             className="flex-1 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-2 py-1 text-[11px] outline-none focus:border-[var(--vscode-focusBorder)] disabled:opacity-50"
           />
@@ -140,6 +166,9 @@ export const PropertyRow = memo(function PropertyRow({
             type="checkbox"
             checked={typeof value === 'boolean' ? value : false}
             onChange={handleBooleanChange}
+            onBlur={() => {
+              if (typeof value === 'boolean') onCommit?.(value);
+            }}
             disabled={disabled}
             className="w-4 h-4 accent-[var(--vscode-button-background)]"
           />

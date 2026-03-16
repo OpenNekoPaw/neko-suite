@@ -29,7 +29,7 @@ import type { ElementTransform } from '../types/animation';
 import type { EditorElement } from '../types/editor-types';
 import { getComputedTransform } from '../utils/animation';
 import { getEffectParametersAtTime } from '../types/effects';
-import { buildCompositeMasks } from '../utils/composite-helpers';
+import { buildCompositeMasks, applyTransitions } from '../utils/composite-helpers';
 
 // =============================================================================
 // Helper Functions
@@ -99,6 +99,7 @@ function buildCompositeLayers(project: ProjectData, time: number): CompositeLaye
       }
 
       const layer: CompositeLayerConfig = {
+        elementId: element.id,
         source: mediaElement.src,
         sourceTime,
         transform: { x, y, scaleX, scaleY, rotation, anchorX, anchorY },
@@ -132,6 +133,33 @@ function buildCompositeLayers(project: ProjectData, time: number): CompositeLaye
       layers.push(layer);
     }
   }
+
+  // Apply transitions between adjacent elements on the same track
+  const trackElements = project.tracks.map((track) => ({
+    elements: track.elements
+      .filter((e) => e.type === 'media')
+      .sort((a, b) => a.startTime - b.startTime)
+      .map((e) => ({
+        id: e.id,
+        startTime: e.startTime,
+        duration: e.duration,
+        transitionIn: e.transitionIn
+          ? {
+              type: e.transitionIn.type,
+              duration: e.transitionIn.duration,
+              easing: e.transitionIn.easing,
+            }
+          : undefined,
+        transitionOut: e.transitionOut
+          ? {
+              type: e.transitionOut.type,
+              duration: e.transitionOut.duration,
+              easing: e.transitionOut.easing,
+            }
+          : undefined,
+      })),
+  }));
+  applyTransitions(layers, trackElements, time);
 
   return layers;
 }

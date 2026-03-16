@@ -22,6 +22,8 @@ interface BaseMediaRequest {
  * Composite layer configuration for Extension-side rendering
  */
 export interface CompositeLayerConfig {
+  /** Source element ID (for transition matching) */
+  elementId?: string;
   /** Video/image file path */
   source: string;
   /** Source media time point (seconds) */

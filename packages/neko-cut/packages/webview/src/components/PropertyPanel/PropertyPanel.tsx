@@ -282,7 +282,10 @@ interface PropertyPanelProps {
   element: TimelineElement | null;
   projectDefaults: ProjectDefaults | null;
   currentTime: number;
+  /** Real-time preview update (raw set, no undo history) */
   onElementChange: (elementId: string, changes: Partial<TimelineElement>) => void;
+  /** Finalized commit (pushed to undo history). Called on slider release / input blur. */
+  onElementCommit?: (elementId: string, changes: Partial<TimelineElement>) => void;
   onDefaultsChange: (changes: Partial<ProjectDefaults>) => void;
   onAddKeyframe: (
     elementId: string,
@@ -299,6 +302,7 @@ export const PropertyPanel = memo(function PropertyPanel({
   projectDefaults,
   currentTime,
   onElementChange,
+  onElementCommit,
   onDefaultsChange,
   onAddKeyframe,
   onRemoveKeyframe,
@@ -508,6 +512,59 @@ export const PropertyPanel = memo(function PropertyPanel({
     [dataSource, isEditingDefaults, element, projectDefaults, onDefaultsChange, onElementChange],
   );
 
+  // Handle property commit (finalized value → undo history)
+  // Mirrors handlePropertyChange logic but routes to onElementCommit
+  const handlePropertyCommit = useCallback(
+    (propertyPath: string, value: number | string | boolean, definition: PropertyDefinition) => {
+      if (!element || isEditingDefaults || !onElementCommit) return;
+
+      // Special handling for duration
+      if (propertyPath === 'duration' && typeof value === 'number') {
+        const newEffectiveDuration = Math.max(0.1, value);
+        const newDuration = newEffectiveDuration + element.trimStart + element.trimEnd;
+        onElementCommit(element.id, { duration: newDuration } as Partial<TimelineElement>);
+        return;
+      }
+
+      const parts = propertyPath.split('.');
+
+      if (parts.length === 1) {
+        onElementCommit(element.id, { [propertyPath]: value } as Partial<TimelineElement>);
+      } else {
+        const rootKey = parts[0] as keyof TimelineElement;
+        const subKey = parts[1];
+        let existingValue = element[rootKey];
+
+        if (rootKey === 'animTransform' && !existingValue) {
+          existingValue = createDefaultElementTransform();
+        }
+
+        if (definition.animatable && typeof value === 'number') {
+          const existingObj = existingValue as Record<string, unknown> | undefined;
+          const animProp = existingObj?.[subKey] as AnimatableProperty | undefined;
+          const newAnimProp: AnimatableProperty = animProp
+            ? { ...animProp, baseValue: value }
+            : createAnimatableProperty(value);
+
+          onElementCommit(element.id, {
+            [rootKey]: {
+              ...(existingValue as object),
+              [subKey]: newAnimProp,
+            },
+          } as Partial<TimelineElement>);
+        } else {
+          onElementCommit(element.id, {
+            [rootKey]: {
+              ...(existingValue as object),
+              [subKey]: value,
+            },
+          } as Partial<TimelineElement>);
+        }
+      }
+    },
+    [element, isEditingDefaults, onElementCommit],
+  );
+
   // Handle add keyframe
   const handleAddKeyframe = useCallback(
     (propertyPath: string, definition: PropertyDefinition) => {
@@ -526,30 +583,31 @@ export const PropertyPanel = memo(function PropertyPanel({
     (speed: SpeedProperties) => {
       if (!element) return;
       onElementChange(element.id, { speed } as Partial<TimelineElement>);
+      onElementCommit?.(element.id, { speed } as Partial<TimelineElement>);
     },
-    [element, onElementChange],
+    [element, onElementChange, onElementCommit],
   );
 
   // Handle in-transition change
   const handleInTransitionChange = useCallback(
     (transition: Transition | null) => {
       if (!element) return;
-      onElementChange(element.id, {
-        inTransition: transition ?? undefined,
-      } as Partial<TimelineElement>);
+      const changes = { inTransition: transition ?? undefined } as Partial<TimelineElement>;
+      onElementChange(element.id, changes);
+      onElementCommit?.(element.id, changes);
     },
-    [element, onElementChange],
+    [element, onElementChange, onElementCommit],
   );
 
   // Handle out-transition change
   const handleOutTransitionChange = useCallback(
     (transition: Transition | null) => {
       if (!element) return;
-      onElementChange(element.id, {
-        outTransition: transition ?? undefined,
-      } as Partial<TimelineElement>);
+      const changes = { outTransition: transition ?? undefined } as Partial<TimelineElement>;
+      onElementChange(element.id, changes);
+      onElementCommit?.(element.id, changes);
     },
-    [element, onElementChange],
+    [element, onElementChange, onElementCommit],
   );
 
   // Handle remove keyframe
@@ -565,26 +623,32 @@ export const PropertyPanel = memo(function PropertyPanel({
   const handleColorCorrectionChange = useCallback(
     (colorCorrection: ColorCorrection) => {
       if (!element) return;
-      onElementChange(element.id, { colorCorrection } as Partial<TimelineElement>);
+      const changes = { colorCorrection } as Partial<TimelineElement>;
+      onElementChange(element.id, changes);
+      onElementCommit?.(element.id, changes);
     },
-    [element, onElementChange],
+    [element, onElementChange, onElementCommit],
   );
 
   // Handle effects change
   const handleEffectsChange = useCallback(
     (effects: EffectInstance[]) => {
       if (!element) return;
-      onElementChange(element.id, { effects } as Partial<TimelineElement>);
+      const changes = { effects } as Partial<TimelineElement>;
+      onElementChange(element.id, changes);
+      onElementCommit?.(element.id, changes);
     },
-    [element, onElementChange],
+    [element, onElementChange, onElementCommit],
   );
 
   const handleMasksChange = useCallback(
     (masks: MaskInstance[]) => {
       if (!element) return;
-      onElementChange(element.id, { masks } as Partial<TimelineElement>);
+      const changes = { masks } as Partial<TimelineElement>;
+      onElementChange(element.id, changes);
+      onElementCommit?.(element.id, changes);
     },
-    [element, onElementChange],
+    [element, onElementChange, onElementCommit],
   );
 
   // Handle loudness normalization - apply recommended gain
@@ -614,6 +678,7 @@ export const PropertyPanel = memo(function PropertyPanel({
             hasKeyframes={propertyHasKeyframes(fullPath)}
             isAtKeyframe={isAtKeyframe(fullPath)}
             onChange={(val) => handlePropertyChange(fullPath, val, def)}
+            onCommit={(val) => handlePropertyCommit(fullPath, val, def)}
             onAddKeyframe={() => handleAddKeyframe(fullPath, def)}
             onRemoveKeyframe={() => handleRemoveKeyframe(fullPath)}
             disabled={!element}
@@ -628,6 +693,7 @@ export const PropertyPanel = memo(function PropertyPanel({
       propertyHasKeyframes,
       isAtKeyframe,
       handlePropertyChange,
+      handlePropertyCommit,
       handleAddKeyframe,
       handleRemoveKeyframe,
       isEditingDefaults,
