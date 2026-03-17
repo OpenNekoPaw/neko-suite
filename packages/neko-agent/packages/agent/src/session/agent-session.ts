@@ -15,7 +15,7 @@
  * - Converts AgentStep to AgentEvent for unified event streaming
  */
 
-import type { ChatMessage } from '@neko/shared';
+import type { ChatMessage, Skill } from '@neko/shared';
 import type { SkillInjection } from '../skill';
 import { SkillInjectionCoordinator } from '../skill';
 import { stepToEvents, recordStepInHistory, type StreamState } from './step-event-converter';
@@ -33,13 +33,16 @@ import type { ToolConfirmationRequest } from '../permission/types';
 
 import { AgentExecutor } from '../executor';
 import { type ConversationCompressor } from '../context';
-import { createExecutorHooks } from '../hooks';
 import { type IPermissionManager, type PermissionMode } from '../permission';
 import { type ToolGroupRegistry } from '../skill';
 import { type ToolInjectionManager } from '../tools';
 import { type SystemPromptComposer } from '../prompt/system-prompt-composer';
 import { getLogger } from '../utils/logger';
-import { initializeSession, DEFAULT_MAX_ITERATIONS } from './agent-session-initializer';
+import {
+  initializeSession,
+  createConfiguredExecutor,
+  DEFAULT_MAX_ITERATIONS,
+} from './agent-session-initializer';
 
 const logger = getLogger('AgentSession');
 
@@ -117,6 +120,7 @@ export class AgentSession implements IAgentSession {
       promptComposer: this._promptComposer,
       getPermissionHooks: () => this._permissionHooks,
       syncSystemPrompt: () => this._syncSystemPrompt(),
+      getToolInjectionManager: () => this._toolInjectionManager,
     });
   }
 
@@ -282,10 +286,13 @@ export class AgentSession implements IAgentSession {
 
   /**
    * Apply a skill injection to the active session.
-   * Delegates to SkillInjectionCoordinator for atomic 3-track injection.
+   * Delegates to SkillInjectionCoordinator for atomic multi-track injection.
+   *
+   * @param injection The injection payload
+   * @param skill Optional full Skill object for active skill tracking + Track D (ToolSets)
    */
-  applySkillInjection(injection: SkillInjection): void {
-    this._skillCoordinator.apply(injection);
+  applySkillInjection(injection: SkillInjection, skill?: Skill): void {
+    this._skillCoordinator.apply(injection, skill);
   }
 
   /**
@@ -297,13 +304,28 @@ export class AgentSession implements IAgentSession {
   }
 
   /**
+   * Get the currently active skill (if any).
+   * Delegates to SkillInjectionCoordinator — the sole state owner.
+   */
+  getActiveSkill(): Skill | undefined {
+    return this._skillCoordinator.getActiveSkill();
+  }
+
+  /**
+   * Clear the active skill — reverses all injection tracks (prompt, permissions, ToolSets).
+   * Delegates to SkillInjectionCoordinator.clearActive().
+   */
+  clearActiveSkill(): void {
+    this._skillCoordinator.clearActive();
+  }
+
+  /**
    * Check if a tool is allowed by the active skill.
+   * Uses ToolGuard pattern matching via Coordinator.
    * Returns true if no skill restrictions are active.
    */
   isToolAllowed(toolName: string): boolean {
-    const allowedTools = this._skillCoordinator.getActiveSkillAllowedTools();
-    if (!allowedTools?.length) return true;
-    return allowedTools.includes(toolName);
+    return this._skillCoordinator.isToolAllowed(toolName);
   }
 
   clearHistory(): void {
@@ -368,43 +390,20 @@ export class AgentSession implements IAgentSession {
   }
 
   private _rebuildExecutor(): void {
-    // Create hooks chain via factory (OCP: new hooks don't require Session changes)
     const permissionMode: PermissionMode =
       this._executionMode === 'plan' ? 'plan' : this._executionMode === 'auto' ? 'auto' : 'ask';
 
-    const { hooks, permissionHooks } = createExecutorHooks({
-      compressor: this._compressor,
+    const { executor, permissionHooks } = createConfiguredExecutor({
+      config: this._config,
       permissionMode,
-      onToolAskStarted: (request) => this._handleToolConfirmation(request),
-      settingsHookLoader: this._config.settingsHookLoader,
-      customHooks: this._config.hooks,
-      onValidationWarning: this._config.onValidationWarning,
-      onValidationError: this._config.onValidationError,
+      compressor: this._compressor,
+      toolGroupRegistry: this._toolGroupRegistry,
+      toolInjectionManager: this._toolInjectionManager,
+      onToolConfirmation: (request) => this._handleToolConfirmation(request),
     });
 
     this._permissionHooks = permissionHooks;
-
-    // Create executor
-    this._executor = new AgentExecutor({
-      service: this._config.service,
-      toolRegistry: this._config.toolRegistry,
-      config: {
-        name: 'agent-session',
-        systemPrompt: this._config.systemPrompt,
-        tools: this._config.toolRegistry.toToolDefinitions(),
-        maxIterations: this._config.maxIterations ?? DEFAULT_MAX_ITERATIONS,
-        primaryModel: this._config.modelId,
-        serviceOptions: {
-          modelId: this._config.modelId,
-          temperature: this._config.temperature,
-          maxTokens: this._config.maxTokens,
-          thinkingBudget: this._config.thinkingBudget,
-        },
-      },
-      hooks,
-      toolSkillRegistry: this._toolGroupRegistry,
-      toolInjectionManager: this._toolInjectionManager,
-    });
+    this._executor = executor;
   }
 
   private _handleToolConfirmation(request: ToolConfirmationRequest): void {

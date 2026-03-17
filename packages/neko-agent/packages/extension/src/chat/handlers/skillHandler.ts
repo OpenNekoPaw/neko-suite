@@ -136,13 +136,16 @@ export class SkillHandler {
     }
 
     // Apply the slash command with argument interpolation
-    const injection = skillService.applyCommand(slashCommand, args);
+    const result = skillService.applyCommand(slashCommand, args);
+    if (!result.applied || !result.injection) {
+      return result;
+    }
 
     // Send injection to webview for conversation context
     // Note: SlashCommand doesn't have toolDefinitions, only Skill does
-    this._sendSkillInjection(webview, injection);
+    this._sendSkillInjection(webview, result.injection);
 
-    return { applied: true, injection };
+    return result;
   }
 
   // ===========================================================================
@@ -187,11 +190,15 @@ export class SkillHandler {
   }
 
   /**
-   * Clear the active skill (e.g., when conversation ends)
+   * Clear the active skill (e.g., when conversation ends).
+   * Delegates to AgentManager → AgentSession → SkillInjectionCoordinator.
    */
   clearActiveSkill(): void {
     this._activeSkill = undefined;
-    this._deps.skillService?.clearActiveSkill();
+    const conversationId = this._deps.getActiveConversationId?.();
+    if (conversationId) {
+      this._deps.agentManager?.clearActiveSkill(conversationId);
+    }
   }
 
   // ===========================================================================
@@ -236,10 +243,10 @@ export class SkillHandler {
     this._sendSkillInjection(webview, injection, skill);
 
     // Apply injection to the active AgentSession so LLM receives the skill prompt
-    // AgentSession internally tracks allowedTools for isToolAllowed() checks
+    // Pass skill for Coordinator to track active skill state + activate ToolSets
     const conversationId = this._deps.getActiveConversationId?.();
     if (conversationId) {
-      this._deps.agentManager?.applySkillInjection(conversationId, injection);
+      this._deps.agentManager?.applySkillInjection(conversationId, injection, skill);
     }
 
     return { applied: true, injection, skill };

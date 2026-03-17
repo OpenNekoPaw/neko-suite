@@ -15,8 +15,6 @@ import type {
   ISkillRegistry,
   ISkillMatcher,
   ISkillInjector,
-  IToolInjectionManager,
-  ToolInjectionState,
 } from '@neko/shared';
 
 // =============================================================================
@@ -87,34 +85,6 @@ function makeMockMatcher(results: SkillMatch[] = []): ISkillMatcher {
   return {
     match: vi.fn(() => results),
   };
-}
-
-function makeMockInjectionManager(): IToolInjectionManager {
-  const activeToolSets: string[] = [];
-  return {
-    getState: vi.fn(
-      () =>
-        ({
-          activeToolSets: [...activeToolSets],
-          injectedTools: new Map(),
-          tokenUsage: new Map(),
-        }) as ToolInjectionState,
-    ),
-    activateToolSet: vi.fn((name: string) => {
-      activeToolSets.push(name);
-    }),
-    deactivateToolSet: vi.fn((name: string) => {
-      const idx = activeToolSets.indexOf(name);
-      if (idx >= 0) activeToolSets.splice(idx, 1);
-    }),
-    getToolsForTurn: vi.fn(() => []),
-    configure: vi.fn(),
-    reset: vi.fn(),
-    getActiveToolSets: vi.fn(() => [...activeToolSets]),
-    isToolInjected: vi.fn(() => false),
-    getToolLayer: vi.fn(),
-    getTokenUsage: vi.fn(() => []),
-  } as unknown as IToolInjectionManager;
 }
 
 // =============================================================================
@@ -230,9 +200,9 @@ describe('SkillService', () => {
     expect(service.skillCount).toBe(0);
   });
 
-  // --- match ---
+  // --- discover (replaces match) ---
 
-  it('match delegates to matcher and registry', () => {
+  it('discover delegates to matcher and registry', () => {
     const skill = makeSkill({ name: 'commit-helper', description: 'Help with git commits' });
     const matchResults: SkillMatch[] = [{ skill, relevance: 0.8, reason: 'keyword match' }];
     const registry = makeMockRegistry();
@@ -241,64 +211,33 @@ describe('SkillService', () => {
     registry.registerSkill(skill);
 
     const service = new SkillService({ registry, matcher });
-    const results = service.match('commit my changes');
+    const result = service.discover('commit my changes');
 
     expect(matcher.match).toHaveBeenCalled();
-    expect(results).toHaveLength(1);
-    expect(results[0]?.skill.name).toBe('commit-helper');
+    expect(result.found).toBe(true);
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0]?.skill.name).toBe('commit-helper');
   });
 
   // --- apply ---
 
-  it('apply creates injection and sets active skill', () => {
+  it('apply returns injection payload (stateless)', () => {
     const service = createSkillService();
     const skill = makeSkill({ name: 'active-skill' });
 
-    service.apply(skill);
+    const injection = service.apply(skill);
 
-    expect(service.getActiveSkill()).toBeDefined();
-    expect(service.getActiveSkill()?.name).toBe('active-skill');
+    expect(injection).toBeDefined();
+    expect(injection.name).toBe('active-skill');
   });
 
-  it('apply creates tool guard', () => {
+  it('apply returns injection with allowedTools', () => {
     const service = createSkillService();
     const skill = makeSkill({ allowedTools: ['Read', 'Write'] });
 
-    service.apply(skill);
+    const injection = service.apply(skill);
 
-    expect(service.getToolGuard()).toBeDefined();
-    expect(service.getToolGuard()?.hasRestrictions()).toBe(true);
-  });
-
-  // --- clearActiveSkill ---
-
-  it('clearActiveSkill clears active state', () => {
-    const service = createSkillService();
-    const skill = makeSkill();
-
-    service.apply(skill);
-    expect(service.getActiveSkill()).toBeDefined();
-
-    service.clearActiveSkill();
-    expect(service.getActiveSkill()).toBeUndefined();
-  });
-
-  // --- isToolAllowed ---
-
-  it('isToolAllowed returns true when no active guard', () => {
-    const service = createSkillService();
-
-    expect(service.isToolAllowed('AnyTool')).toBe(true);
-  });
-
-  it('isToolAllowed checks guard when skill active', () => {
-    const service = createSkillService();
-    const skill = makeSkill({ allowedTools: ['Read'] });
-
-    service.apply(skill);
-
-    expect(service.isToolAllowed('Read')).toBe(true);
-    expect(service.isToolAllowed('Write')).toBe(false);
+    expect(injection.allowedTools).toEqual(['Read', 'Write']);
   });
 
   // --- discover ---
@@ -382,27 +321,32 @@ describe('SkillService', () => {
     expect(result?.error).toContain('declined');
   });
 
-  // --- Track D: ToolSet integration ---
+  // --- applyCommand ---
 
-  it('apply activates toolSets via injectionManager', () => {
-    const injectionManager = makeMockInjectionManager();
-    const service = new SkillService({ injectionManager });
-    const skill = makeSkill({ toolSets: ['web-tools', 'file-tools'] });
+  it('applyCommand returns SkillApplicationResult with injection', () => {
+    const service = createSkillService();
+    const command = makeCommand({ content: 'Run with $ARGUMENTS' });
 
-    service.apply(skill);
+    const result = service.applyCommand(command, 'foo bar');
 
-    expect(injectionManager.activateToolSet).toHaveBeenCalledWith('web-tools');
-    expect(injectionManager.activateToolSet).toHaveBeenCalledWith('file-tools');
+    expect(result.applied).toBe(true);
+    expect(result.injection).toBeDefined();
+    expect(result.injection?.systemPrompt).toBe('Run with foo bar');
   });
 
-  it('clearActiveSkill deactivates toolSets', () => {
-    const injectionManager = makeMockInjectionManager();
-    const service = new SkillService({ injectionManager });
-    const skill = makeSkill({ toolSets: ['web-tools'] });
+  it('applyCommand returns applied:false on error', () => {
+    const badInjector: ISkillInjector = {
+      injectSkill: vi.fn(),
+      injectCommand: vi.fn(() => {
+        throw new Error('injection failed');
+      }),
+    };
+    const service = new SkillService({ injector: badInjector });
+    const command = makeCommand();
 
-    service.apply(skill);
-    service.clearActiveSkill();
+    const result = service.applyCommand(command);
 
-    expect(injectionManager.deactivateToolSet).toHaveBeenCalledWith('web-tools');
+    expect(result.applied).toBe(false);
+    expect(result.error).toContain('injection failed');
   });
 });

@@ -278,7 +278,22 @@ export interface IAgentRunner extends vscode.Disposable {
    * Merges the injection's system prompt into the conversation and
    * grants any specified tool allowances.
    */
-  applySkillInjection(injection: import('@neko/agent').SkillInjection): void;
+  applySkillInjection(
+    injection: import('@neko/agent').SkillInjection,
+    skill?: import('@neko/shared').Skill,
+  ): void;
+
+  /**
+   * Get the currently active skill (if any).
+   * Delegates to AgentSession's SkillInjectionCoordinator.
+   */
+  getActiveSkill(): import('@neko/shared').Skill | undefined;
+
+  /**
+   * Clear the active skill — reverses all injection tracks.
+   * Delegates to AgentSession's SkillInjectionCoordinator.
+   */
+  clearActiveSkill(): void;
 
   /**
    * Check if a tool is allowed by the active skill.
@@ -623,8 +638,19 @@ export class AgentRunner implements IAgentRunner {
   // Skill Injection
   // -------------------------------------------------------------------------
 
-  applySkillInjection(injection: import('@neko/agent').SkillInjection): void {
-    this._session?.applySkillInjection(injection);
+  applySkillInjection(
+    injection: import('@neko/agent').SkillInjection,
+    skill?: import('@neko/agent').Skill,
+  ): void {
+    this._session?.applySkillInjection(injection, skill);
+  }
+
+  getActiveSkill(): import('@neko/shared').Skill | undefined {
+    return this._session?.getActiveSkill();
+  }
+
+  clearActiveSkill(): void {
+    this._session?.clearActiveSkill();
   }
 
   isToolAllowed(toolName: string): boolean {

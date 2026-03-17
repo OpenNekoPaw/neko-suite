@@ -1,23 +1,25 @@
 /**
  * Skill Injection Coordinator — Atomic multi-track skill injection/removal
  *
- * Responsibility: Coordinate the three independent injection tracks when a skill
- * is applied or removed, ensuring atomicity and proper cleanup.
+ * Responsibility: Coordinate all injection tracks when a skill is applied or
+ * removed, ensuring atomicity and proper cleanup. Single source of truth for
+ * active skill state.
  *
  * Tracks:
  * - Track A: System prompt section (via SystemPromptComposer)
  * - Track B: Permission allow rules (via PermissionHooks)
- * - Track C: Active allowed tools state (for runtime isToolAllowed checks)
+ * - Track C: Active allowed tools state + ToolGuard (for runtime isToolAllowed)
+ * - Track D: ToolSet activation (via IToolInjectionManager)
  *
  * NOT to be confused with:
- * - SkillService — skill discovery, matching, and lifecycle orchestration
+ * - SkillService — stateless orchestration: discovery, matching, injection preparation
  * - SkillInjector — prepares SkillInjection from Skill/SlashCommand objects
- * - ToolGuard — runtime tool restriction enforcement during execution
  */
 
-import type { SkillInjection } from '@neko/shared';
+import type { Skill, SkillInjection, IToolInjectionManager } from '@neko/shared';
 import type { ISystemPromptComposer } from '../prompt/system-prompt-composer-types';
 import type { IPermissionManager } from '../permission/permission-manager-types';
+import { createToolGuard, type IToolGuard } from './tool-guard';
 
 // =============================================================================
 // Types
@@ -35,6 +37,9 @@ export interface SkillInjectionCoordinatorDeps {
 
   /** Callback to sync composed prompt into history[0] */
   syncSystemPrompt: () => void;
+
+  /** Tool injection manager for Track D: ToolSet activation (optional) */
+  getToolInjectionManager?: () => IToolInjectionManager | null;
 }
 
 /**
@@ -42,8 +47,11 @@ export interface SkillInjectionCoordinatorDeps {
  */
 interface ActiveInjection {
   name: string;
+  skill?: Skill;
   allowRules: string[];
   allowedTools: string[] | undefined;
+  toolGuard: IToolGuard;
+  activatedToolSets: string[];
 }
 
 // =============================================================================
@@ -58,14 +66,21 @@ export class SkillInjectionCoordinator {
     this._deps = deps;
   }
 
+  // ---------------------------------------------------------------------------
+  // Core: Apply / Remove
+  // ---------------------------------------------------------------------------
+
   /**
-   * Apply a skill injection across all three tracks.
+   * Apply a skill injection across all tracks with optional Skill reference.
    * Automatically removes any previous active injection first.
+   *
+   * @param injection The injection payload (prompt, allowedTools, name)
+   * @param skill Optional full Skill object for active skill tracking
    */
-  apply(injection: SkillInjection): void {
+  apply(injection: SkillInjection, skill?: Skill): void {
     // Auto-cleanup previous injection to prevent accumulation
     if (this._activeInjection) {
-      this.remove(this._activeInjection.name);
+      this._removeInternal(this._activeInjection.name);
     }
 
     // Track A: Add prompt section (always first — rollback if subsequent tracks fail)
@@ -78,6 +93,7 @@ export class SkillInjectionCoordinator {
     this._deps.syncSystemPrompt();
 
     const allowRules: string[] = [];
+    const activatedToolSets: string[] = [];
     try {
       // Track B: Add permission allow rules
       const permissionHooks = this._deps.getPermissionHooks();
@@ -88,11 +104,30 @@ export class SkillInjectionCoordinator {
         }
       }
 
-      // Track C: Record allowed tools for runtime checks
+      // Track C: Record state + create ToolGuard
+      const toolGuard = createToolGuard(injection.allowedTools, injection.name);
+
+      // Track D: Activate associated ToolSets
+      if (skill?.toolSets && skill.toolSets.length > 0) {
+        const manager = this._deps.getToolInjectionManager?.();
+        if (manager) {
+          const state = manager.getState();
+          for (const toolSetName of skill.toolSets) {
+            if (!state.activeToolSets.includes(toolSetName)) {
+              manager.activateToolSet(toolSetName);
+              activatedToolSets.push(toolSetName);
+            }
+          }
+        }
+      }
+
       this._activeInjection = {
         name: injection.name,
+        skill,
         allowRules,
         allowedTools: injection.allowedTools,
+        toolGuard,
+        activatedToolSets,
       };
     } catch (error) {
       // Rollback Track A: remove prompt section
@@ -107,32 +142,44 @@ export class SkillInjectionCoordinator {
         }
       }
 
+      // Rollback partial Track D: deactivate any ToolSets already activated
+      const manager = this._deps.getToolInjectionManager?.();
+      if (manager) {
+        for (const ts of activatedToolSets) {
+          manager.deactivateToolSet(ts);
+        }
+      }
+
       throw error;
     }
   }
 
   /**
-   * Remove a skill injection, reversing all three tracks.
+   * Remove a skill injection by name, reversing all tracks.
    */
   remove(name: string): void {
-    // Track A: Remove prompt section
-    this._deps.promptComposer.removeSection(`skill:${name}`);
-    this._deps.syncSystemPrompt();
+    this._removeInternal(name);
+  }
 
-    // Track B: Remove permission allow rules
-    if (this._activeInjection && this._activeInjection.name === name) {
-      const permissionHooks = this._deps.getPermissionHooks();
-      if (permissionHooks && this._activeInjection.allowRules.length > 0) {
-        for (const rule of this._activeInjection.allowRules) {
-          permissionHooks.removeAllowRule(rule);
-        }
-      }
+  /**
+   * Clear the active injection (convenience for remove without knowing the name).
+   * Also reverses Track D (ToolSet deactivation).
+   */
+  clearActive(): void {
+    if (this._activeInjection) {
+      this._removeInternal(this._activeInjection.name);
     }
+  }
 
-    // Track C: Clear state
-    if (this._activeInjection?.name === name) {
-      this._activeInjection = null;
-    }
+  // ---------------------------------------------------------------------------
+  // Active Skill Queries
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get the full Skill object for the currently active injection.
+   */
+  getActiveSkill(): Skill | undefined {
+    return this._activeInjection?.skill;
   }
 
   /**
@@ -141,6 +188,15 @@ export class SkillInjectionCoordinator {
    */
   getActiveSkillAllowedTools(): string[] | undefined {
     return this._activeInjection?.allowedTools;
+  }
+
+  /**
+   * Check if a tool is allowed by the active skill using ToolGuard pattern matching.
+   * Returns true if no skill restrictions are active.
+   */
+  isToolAllowed(toolName: string): boolean {
+    if (!this._activeInjection) return true;
+    return this._activeInjection.toolGuard.check({ name: toolName }).allowed;
   }
 
   /**
@@ -155,6 +211,42 @@ export class SkillInjectionCoordinator {
    */
   getActiveInjectionName(): string | undefined {
     return this._activeInjection?.name;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Internal remove logic — reverses all four tracks.
+   */
+  private _removeInternal(name: string): void {
+    // Track A: Remove prompt section
+    this._deps.promptComposer.removeSection(`skill:${name}`);
+    this._deps.syncSystemPrompt();
+
+    if (this._activeInjection && this._activeInjection.name === name) {
+      // Track B: Remove permission allow rules
+      const permissionHooks = this._deps.getPermissionHooks();
+      if (permissionHooks && this._activeInjection.allowRules.length > 0) {
+        for (const rule of this._activeInjection.allowRules) {
+          permissionHooks.removeAllowRule(rule);
+        }
+      }
+
+      // Track D: Deactivate ToolSets
+      if (this._activeInjection.activatedToolSets.length > 0) {
+        const manager = this._deps.getToolInjectionManager?.();
+        if (manager) {
+          for (const ts of this._activeInjection.activatedToolSets) {
+            manager.deactivateToolSet(ts);
+          }
+        }
+      }
+
+      // Track C: Clear state
+      this._activeInjection = null;
+    }
   }
 }
 

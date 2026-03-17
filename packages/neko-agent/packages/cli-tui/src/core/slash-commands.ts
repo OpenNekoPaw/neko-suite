@@ -80,11 +80,10 @@ function toCommandContext(context: SlashCommandContext): CommandContext {
           },
           skillCount: context.skillService.skillCount,
           commandCount: context.skillService.commandCount,
-          getActiveSkill: () => {
-            const skill = context.skillService!.getActiveSkill();
-            return skill ? { name: skill.name } : null;
-          },
-          clearActiveSkill: () => context.skillService!.clearActiveSkill(),
+          // Active skill state is owned by SkillInjectionCoordinator (via AgentSession).
+          // CLI slash command context doesn't hold a session, so these are no-ops.
+          getActiveSkill: () => null,
+          clearActiveSkill: () => {},
         }
       : undefined,
     toolRegistry: context.toolRegistry
@@ -152,8 +151,8 @@ export async function handleSlashCommand(
       ? {
           getCommand: (name: string) => context.skillService!.registry.getCommand(name),
           applyCommand: (cmd: unknown, cmdArgs?: string) => {
-            const result = context.skillService!.applyCommandWithResult(
-              cmd as Parameters<typeof context.skillService.applyCommandWithResult>[0],
+            const result = context.skillService!.applyCommand(
+              cmd as Parameters<typeof context.skillService.applyCommand>[0],
               cmdArgs,
             );
             return {

@@ -142,7 +142,23 @@ export interface IAgentManager extends vscode.Disposable {
    * Apply a skill injection to the specified conversation's agent session.
    * Updates the session system prompt and permission rules.
    */
-  applySkillInjection(conversationId: string, injection: SkillInjection): void;
+  applySkillInjection(
+    conversationId: string,
+    injection: SkillInjection,
+    skill?: import('@neko/shared').Skill,
+  ): void;
+
+  /**
+   * Get the currently active skill for the specified conversation.
+   * Delegates to AgentRunner → AgentSession → SkillInjectionCoordinator.
+   */
+  getActiveSkill(conversationId: string): import('@neko/shared').Skill | undefined;
+
+  /**
+   * Clear the active skill for the specified conversation.
+   * Reverses all injection tracks via SkillInjectionCoordinator.
+   */
+  clearActiveSkill(conversationId: string): void;
 }
 
 // =============================================================================
@@ -391,9 +407,23 @@ export class AgentManager implements IAgentManager {
     return agent.compressContext();
   }
 
-  applySkillInjection(conversationId: string, injection: SkillInjection): void {
+  applySkillInjection(
+    conversationId: string,
+    injection: SkillInjection,
+    skill?: import('@neko/shared').Skill,
+  ): void {
     const agent = this._agents.get(conversationId);
-    agent?.applySkillInjection(injection);
+    agent?.applySkillInjection(injection, skill);
+  }
+
+  getActiveSkill(conversationId: string): import('@neko/shared').Skill | undefined {
+    const agent = this._agents.get(conversationId);
+    return agent?.getActiveSkill();
+  }
+
+  clearActiveSkill(conversationId: string): void {
+    const agent = this._agents.get(conversationId);
+    agent?.clearActiveSkill();
   }
 
   // -------------------------------------------------------------------------

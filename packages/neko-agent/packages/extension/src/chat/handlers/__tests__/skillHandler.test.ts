@@ -20,9 +20,13 @@ function createMockSkillService() {
       getSkill: vi.fn().mockReturnValue(null),
     },
     applyCommand: vi.fn().mockReturnValue({
-      name: 'commit',
-      systemPrompt: 'You are a commit assistant',
-      allowedTools: ['bash'],
+      applied: true,
+      injection: {
+        name: 'commit',
+        systemPrompt: 'You are a commit assistant',
+        allowedTools: ['bash'],
+        type: 'slash-command' as const,
+      },
     }),
     apply: vi.fn().mockReturnValue({
       name: 'review',
@@ -31,7 +35,6 @@ function createMockSkillService() {
     }),
     discover: vi.fn().mockReturnValue(null),
     discoverAndApply: vi.fn().mockResolvedValue(null),
-    clearActiveSkill: vi.fn(),
   };
 }
 
@@ -123,7 +126,7 @@ describe('SkillHandler', () => {
           systemPrompt: 'You are a commit assistant',
         }),
       );
-      expect(result).toEqual({ applied: true, injection: expect.any(Object) });
+      expect(result).toEqual(expect.objectContaining({ applied: true }));
     });
   });
 
@@ -221,16 +224,21 @@ describe('SkillHandler', () => {
   });
 
   describe('clearActiveSkill', () => {
-    it('should clear active skill and notify service', () => {
+    it('should clear active skill and delegate to agentManager', () => {
       const mockSkill = { name: 'review', description: 'Review code' };
       skillService.registry.getSkill.mockReturnValue(mockSkill);
-      handler = new SkillHandler({ skillService: skillService as any });
+      const mockAgentManager = { clearActiveSkill: vi.fn(), applySkillInjection: vi.fn() } as any;
+      handler = new SkillHandler({
+        skillService: skillService as any,
+        agentManager: mockAgentManager,
+        getActiveConversationId: () => 'conv-1',
+      });
       handler.handleExecuteSkill(webview as any, 'review', {});
 
       handler.clearActiveSkill();
 
       expect(handler.getActiveSkill()).toBeUndefined();
-      expect(skillService.clearActiveSkill).toHaveBeenCalled();
+      expect(mockAgentManager.clearActiveSkill).toHaveBeenCalledWith('conv-1');
     });
   });
 

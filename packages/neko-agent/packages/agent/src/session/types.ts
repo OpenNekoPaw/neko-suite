@@ -275,13 +275,30 @@ export interface IAgentSession {
 
   /**
    * Apply skill injection (reversible via removeSkillInjection)
+   * @param injection The injection payload
+   * @param skill Optional full Skill object for active skill tracking + Track D (ToolSets)
    */
-  applySkillInjection(injection: import('../skill').SkillInjection): void;
+  applySkillInjection(
+    injection: import('../skill').SkillInjection,
+    skill?: import('@neko/shared').Skill,
+  ): void;
 
   /**
    * Remove a previously injected skill prompt
    */
   removeSkillInjection(name: string): void;
+
+  /**
+   * Get the currently active skill (if any).
+   * Delegates to SkillInjectionCoordinator.
+   */
+  getActiveSkill(): import('@neko/shared').Skill | undefined;
+
+  /**
+   * Clear the active skill — reverses all injection tracks.
+   * Delegates to SkillInjectionCoordinator.clearActive().
+   */
+  clearActiveSkill(): void;
 
   /**
    * Check if a tool is allowed by the active skill.

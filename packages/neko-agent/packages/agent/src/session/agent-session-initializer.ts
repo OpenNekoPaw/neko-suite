@@ -134,10 +134,69 @@ export function initializeSession(
   const permissionMode: PermissionMode =
     executionMode === 'plan' ? 'plan' : executionMode === 'auto' ? 'auto' : 'ask';
 
+  const { executor, permissionHooks } = createConfiguredExecutor({
+    config,
+    permissionMode,
+    compressor,
+    toolGroupRegistry,
+    toolInjectionManager,
+    onToolConfirmation: (request) => callbacks.onToolConfirmation(request),
+  });
+
+  // Step 7: System prompt composer + initial history
+  const promptComposer = new SystemPromptComposer();
+  promptComposer.setBase(config.systemPrompt);
+  const history: ChatMessage[] = [{ role: 'system', content: promptComposer.compose() }];
+
+  return {
+    compressor,
+    toolGroupRegistry,
+    toolCategoryRegistry,
+    toolInjectionManager,
+    promptComposer,
+    executor,
+    permissionHooks,
+    history,
+  };
+}
+
+// =============================================================================
+// Executor Factory (shared by initializeSession + AgentSession._rebuildExecutor)
+// =============================================================================
+
+/**
+ * Dependencies for creating a configured executor
+ */
+export interface CreateExecutorDeps {
+  config: AgentSessionConfig;
+  permissionMode: PermissionMode;
+  compressor: ConversationCompressor;
+  toolGroupRegistry: ToolGroupRegistry;
+  toolInjectionManager: ToolInjectionManager;
+  onToolConfirmation: (request: ToolConfirmationRequest) => void;
+}
+
+/**
+ * Create an executor with hooks chain. Shared by initializeSession and
+ * AgentSession._rebuildExecutor to eliminate duplication.
+ */
+export function createConfiguredExecutor(deps: CreateExecutorDeps): {
+  executor: AgentExecutor;
+  permissionHooks: IPermissionManager;
+} {
+  const {
+    config,
+    permissionMode,
+    compressor,
+    toolGroupRegistry,
+    toolInjectionManager,
+    onToolConfirmation,
+  } = deps;
+
   const { hooks, permissionHooks } = createExecutorHooks({
     compressor,
     permissionMode,
-    onToolAskStarted: (request) => callbacks.onToolConfirmation(request),
+    onToolAskStarted: onToolConfirmation,
     settingsHookLoader: config.settingsHookLoader,
     customHooks: config.hooks,
     onValidationWarning: config.onValidationWarning,
@@ -165,19 +224,5 @@ export function initializeSession(
     toolInjectionManager,
   });
 
-  // Step 7: System prompt composer + initial history
-  const promptComposer = new SystemPromptComposer();
-  promptComposer.setBase(config.systemPrompt);
-  const history: ChatMessage[] = [{ role: 'system', content: promptComposer.compose() }];
-
-  return {
-    compressor,
-    toolGroupRegistry,
-    toolCategoryRegistry,
-    toolInjectionManager,
-    promptComposer,
-    executor,
-    permissionHooks,
-    history,
-  };
+  return { executor, permissionHooks };
 }

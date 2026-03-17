@@ -1,13 +1,15 @@
 /**
- * Skill Service - Orchestrates skill discovery, confirmation, and execution
+ * Skill Service — Stateless orchestration of skill discovery and injection
  *
  * This service integrates:
  * - SkillMatcher: Semantic skill discovery
- * - SkillInjector: Prompt injection
- * - ToolGuard: Runtime tool restrictions
+ * - SkillInjector: Prompt injection preparation
  * - User confirmation flow
  *
- * IMPORTANT: This service focuses on orchestration only.
+ * IMPORTANT: This service is fully stateless — it only builds injection payloads
+ * and performs discovery/matching. Active skill state is owned exclusively by
+ * SkillInjectionCoordinator (accessed via AgentSession).
+ *
  * For registry operations (register, get, list), use the registry directly:
  *   const registry = skillService.registry;
  *   registry.registerSkill(skill);
@@ -21,44 +23,19 @@ import type {
   ISkillRegistry,
   ISkillMatcher,
   ISkillInjector,
-  IToolInjectionManager,
+  SkillDiscoveryResult,
+  SkillApplicationResult,
 } from '@neko/shared';
 import { SkillRegistry } from './skill-registry';
 import { SkillInjector } from './skill-injector';
 import { KeywordSkillMatcher } from './skill-matcher';
-import { createToolGuard, type IToolGuard } from './tool-guard';
 
 // =============================================================================
 // Types
 // =============================================================================
 
-/**
- * Skill discovery result
- */
-export interface SkillDiscoveryResult {
-  /** Whether any skills were matched */
-  found: boolean;
-  /** Matched skills (sorted by relevance) */
-  matches: SkillMatch[];
-  /** Top match (if any) */
-  topMatch?: SkillMatch;
-  /** Whether confirmation is required */
-  requiresConfirmation: boolean;
-}
-
-/**
- * Skill application result
- */
-export interface SkillApplicationResult {
-  /** Whether skill was applied */
-  applied: boolean;
-  /** Injection result (if applied) */
-  injection?: SkillInjection;
-  /** Applied skill */
-  skill?: Skill;
-  /** Error message if failed */
-  error?: string;
-}
+// SkillDiscoveryResult and SkillApplicationResult are imported from @neko/shared
+export type { SkillDiscoveryResult, SkillApplicationResult };
 
 /**
  * User confirmation callback
@@ -80,11 +57,6 @@ export interface SkillServiceConfig {
   minRelevanceThreshold?: number;
   /** Auto-apply skills above this threshold without confirmation */
   autoApplyThreshold?: number;
-  /**
-   * Tool injection manager for Track D: automatically activate skill.toolSets when a skill is applied.
-   * Optional — existing callers are unaffected when omitted.
-   */
-  injectionManager?: IToolInjectionManager;
 }
 
 // =============================================================================
@@ -92,10 +64,13 @@ export interface SkillServiceConfig {
 // =============================================================================
 
 /**
- * Skill Service implementation
+ * Skill Service — Stateless orchestration
  *
- * Focuses on orchestration: discovery, application, and runtime enforcement.
+ * Focuses on: discovery, matching, injection preparation.
  * For registry operations, access the registry directly via `skillService.registry`.
+ *
+ * Active skill state is NOT managed here — use SkillInjectionCoordinator
+ * (via AgentSession) for getActiveSkill/clearActiveSkill/isToolAllowed.
  */
 export class SkillService {
   /** Skill registry - use directly for register/get/list operations */
@@ -105,11 +80,6 @@ export class SkillService {
   private readonly _injector: ISkillInjector;
   private readonly _minRelevanceThreshold: number;
   private readonly _autoApplyThreshold: number;
-  private readonly _injectionManager?: IToolInjectionManager;
-
-  /** Currently active skill (if any) */
-  private _activeSkill?: Skill;
-  private _activeToolGuard?: IToolGuard;
 
   constructor(config: SkillServiceConfig = {}) {
     this.registry = config.registry || new SkillRegistry();
@@ -117,7 +87,6 @@ export class SkillService {
     this._injector = config.injector || new SkillInjector();
     this._minRelevanceThreshold = config.minRelevanceThreshold ?? 0.3;
     this._autoApplyThreshold = config.autoApplyThreshold ?? 0.9;
-    this._injectionManager = config.injectionManager;
   }
 
   // ===========================================================================
@@ -125,72 +94,25 @@ export class SkillService {
   // ===========================================================================
 
   /**
-   * Match user input to skills
-   */
-  match(input: string, limit?: number): SkillMatch[] {
-    const skills = this.registry.listSkills();
-    const matches = this._matcher.match(input, skills);
-    return limit ? matches.slice(0, limit) : matches;
-  }
-
-  /**
-   * Apply a skill (inject into conversation)
+   * Apply a skill — prepare injection payload (no argument interpolation)
    */
   apply(skill: Skill): SkillInjection {
-    // Create injection (no argument interpolation for skills)
-    const injection = this._injector.injectSkill(skill);
-
-    // Create tool guard
-    const toolGuard = createToolGuard(injection.allowedTools, skill.name);
-
-    // Set as active
-    this._activeSkill = skill;
-    this._activeToolGuard = toolGuard;
-
-    // Track D: activate associated ToolSets in the dynamic injection layer
-    if (skill.toolSets && skill.toolSets.length > 0 && this._injectionManager) {
-      const state = this._injectionManager.getState();
-      for (const toolSetName of skill.toolSets) {
-        if (!state.activeToolSets.includes(toolSetName)) {
-          this._injectionManager.activateToolSet(toolSetName);
-        }
-      }
-    }
-
-    return injection;
+    return this._injector.injectSkill(skill);
   }
 
   /**
    * Apply a slash command with arguments
    */
-  applyCommand(command: SlashCommand, args?: string): SkillInjection {
-    // Create injection with argument interpolation
-    return this._injector.injectCommand(command, args);
-  }
-
-  /**
-   * Get currently active skill (if any)
-   */
-  getActiveSkill(): Skill | undefined {
-    return this._activeSkill;
-  }
-
-  /**
-   * Clear active skill
-   */
-  clearActiveSkill(): void {
-    // Track D: deactivate toolSets that were activated with the skill
-    if (
-      this._activeSkill?.toolSets &&
-      this._activeSkill.toolSets.length > 0 &&
-      this._injectionManager
-    ) {
-      for (const toolSetName of this._activeSkill.toolSets) {
-        this._injectionManager.deactivateToolSet(toolSetName);
-      }
+  applyCommand(command: SlashCommand, args?: string): SkillApplicationResult {
+    try {
+      const injection = this._injector.injectCommand(command, args);
+      return { applied: true, injection };
+    } catch (error) {
+      return {
+        applied: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
-    this._activeSkill = undefined;
-    this._activeToolGuard = undefined;
   }
 
   // ===========================================================================
@@ -204,13 +126,8 @@ export class SkillService {
    * @returns Discovery result with matched skills
    */
   discover(userInput: string): SkillDiscoveryResult {
-    // Get all enabled skills
     const skills = this.registry.listSkills();
-
-    // Run matcher
     const allMatches = this._matcher.match(userInput, skills);
-
-    // Filter by minimum relevance
     const matches = allMatches.filter((m) => m.relevance >= this._minRelevanceThreshold);
 
     if (matches.length === 0) {
@@ -233,70 +150,8 @@ export class SkillService {
     };
   }
 
-  // ===========================================================================
-  // Application with Full Result
-  // ===========================================================================
-
-  /**
-   * Apply a skill with full result (including tool guard)
-   *
-   * Note: For skills, args are NOT supported (no interpolation).
-   * Use applyCommandWithResult() for slash commands with arguments.
-   *
-   * @param skill Skill to apply
-   * @returns Application result
-   */
-  applyWithResult(skill: Skill): SkillApplicationResult {
-    try {
-      // Create injection (no argument interpolation for skills)
-      const injection = this._injector.injectSkill(skill);
-
-      // Set as active (tool guard is now managed by AgentSession)
-      this._activeSkill = skill;
-      this._activeToolGuard = createToolGuard(injection.allowedTools, skill.name);
-
-      return {
-        applied: true,
-        injection,
-        skill,
-      };
-    } catch (error) {
-      return {
-        applied: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-  }
-
-  /**
-   * Apply a slash command with full result
-   *
-   * @param command Slash command to apply
-   * @param args Optional arguments for interpolation
-   * @returns Application result
-   */
-  applyCommandWithResult(command: SlashCommand, args?: string): SkillApplicationResult {
-    try {
-      // Create injection with argument interpolation
-      const injection = this._injector.injectCommand(command, args);
-
-      return {
-        applied: true,
-        injection,
-      };
-    } catch (error) {
-      return {
-        applied: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-  }
-
   /**
    * Discover and apply skill with optional confirmation
-   *
-   * Note: Skills do NOT support arguments. Use registry.getCommand() and applyCommand()
-   * for slash commands with arguments.
    *
    * @param userInput User's message
    * @param confirmCallback Callback for user confirmation (if required)
@@ -306,7 +161,6 @@ export class SkillService {
     userInput: string,
     confirmCallback?: ConfirmSkillCallback,
   ): Promise<SkillApplicationResult | null> {
-    // Discover skills
     const discovery = this.discover(userInput);
 
     if (!discovery.found || !discovery.topMatch) {
@@ -315,7 +169,6 @@ export class SkillService {
 
     const { topMatch, requiresConfirmation } = discovery;
 
-    // If confirmation required and callback provided, ask user
     if (requiresConfirmation && confirmCallback) {
       const confirmed = await confirmCallback(topMatch.skill, topMatch);
       if (!confirmed) {
@@ -326,31 +179,8 @@ export class SkillService {
       }
     }
 
-    // Apply the skill (no args for semantic discovery)
-    return this.applyWithResult(topMatch.skill);
-  }
-
-  // ===========================================================================
-  // Runtime
-  // ===========================================================================
-
-  /**
-   * Get the active tool guard
-   */
-  getToolGuard(): IToolGuard | undefined {
-    return this._activeToolGuard;
-  }
-
-  /**
-   * Check if a tool call is allowed by the active skill
-   */
-  isToolAllowed(toolName: string, args?: Record<string, unknown>): boolean {
-    if (!this._activeToolGuard) {
-      return true;
-    }
-
-    const result = this._activeToolGuard.check({ name: toolName, arguments: args });
-    return result.allowed;
+    const injection = this.apply(topMatch.skill);
+    return { applied: true, injection, skill: topMatch.skill };
   }
 
   // ===========================================================================
