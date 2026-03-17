@@ -10,7 +10,7 @@ const mockVSCodeApi = {
 
 // Setup global mock before module loads
 beforeAll(() => {
-  globalThis.acquireVsCodeApi = () => mockVSCodeApi;
+  (globalThis as Record<string, unknown>).acquireVsCodeApi = () => mockVSCodeApi;
 });
 
 // Dynamic import to ensure mock is set up first

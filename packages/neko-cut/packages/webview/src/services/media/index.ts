@@ -22,10 +22,4 @@ export {
 } from './CompatibleModeRenderer';
 
 // Performance Monitor
-export {
-  PerformanceMonitor,
-  isStreamStatsResponse,
-  isMediaBitrateResponse,
-  type StreamStats,
-  type MediaBitrateInfo,
-} from './PerformanceMonitor';
+export { PerformanceMonitor, type StreamStats, type MediaBitrateInfo } from './PerformanceMonitor';

@@ -8,16 +8,6 @@ export * from './types';
 export * from './registry';
 export * from './useMessageHandler';
 
-export { streamingHandlers } from './streaming-handlers';
-export { toolHandlers } from './tool-handlers';
-export { conversationHandlers } from './conversation-handlers';
-export { configHandlers } from './config-handlers';
-export { taskHandlers } from './task-handlers';
-export { tabHandlers } from './tab-handlers';
-export { commandHandlers } from './command-handlers';
-export { skillHandlers } from './skill-handlers';
-export { contextHandlers } from './context-handlers';
-
 import { MessageHandlerRegistry } from './registry';
 import { streamingHandlers } from './streaming-handlers';
 import { toolHandlers } from './tool-handlers';

@@ -2,9 +2,6 @@
  * Canvas Nodes - Public exports
  */
 
-export { BaseNode } from './BaseNode';
-export type { BaseNodeProps } from './BaseNode';
-
 export { MediaNode } from './MediaNode';
 export type { MediaNodeProps } from './MediaNode';
 
@@ -17,7 +14,7 @@ export type { AnnotationNodeProps } from './AnnotationNode';
 export { TextNode } from './TextNode';
 export type { TextNodeProps } from './TextNode';
 
-export { ArtboardNode, createArtboardData } from './ArtboardNode';
+export { ArtboardNode } from './ArtboardNode';
 export type { ArtboardNodeProps } from './ArtboardNode';
 
 export { GroupNode } from './GroupNode';
