@@ -214,9 +214,9 @@
 
 | 优先级 | 任务 | 预期收益 |
 |--------|------|----------|
-| P1 | 清理 16 个未使用 devDependencies | 减少安装时间 |
-| P2 | 清理 ~150 处 barrel exports | 减少 bundle size |
-| P2 | neko-cut 测试补充（6% → 15%） | 回归保护 |
+| P1 | ~~清理 16 个未使用 devDependencies~~ ✅ | 减少安装时间 |
+| P2 | ~~清理 ~150 处 barrel exports~~ ✅ | 减少 bundle size |
+| P2 | ~~neko-cut 测试补充（6% → 15%）~~ ✅ 468 tests / 12 files | 回归保护 |
 | P3 | 清理 ~200 处 Hook 类型定义 | 代码整洁 |
 | P3 | ESLint warn → error 升级 | 质量守门 |
 | P3 | Release workflow（vsix 打包发布） | 自动化发布 |
