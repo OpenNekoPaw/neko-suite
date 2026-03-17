@@ -145,24 +145,7 @@ impl ProjectConverter {
                 let blend_mode = media
                     .blend_mode
                     .as_deref()
-                    .map(|s| match s.to_lowercase().as_str() {
-                        "multiply" => BlendMode::Multiply,
-                        "screen" => BlendMode::Screen,
-                        "overlay" => BlendMode::Overlay,
-                        "darken" => BlendMode::Darken,
-                        "lighten" => BlendMode::Lighten,
-                        "colordodge" | "color_dodge" => BlendMode::ColorDodge,
-                        "colorburn" | "color_burn" => BlendMode::ColorBurn,
-                        "hardlight" | "hard_light" => BlendMode::HardLight,
-                        "softlight" | "soft_light" => BlendMode::SoftLight,
-                        "difference" => BlendMode::Difference,
-                        "exclusion" => BlendMode::Exclusion,
-                        "hue" => BlendMode::Hue,
-                        "saturation" => BlendMode::Saturation,
-                        "color" => BlendMode::Color,
-                        "luminosity" => BlendMode::Luminosity,
-                        _ => BlendMode::Normal,
-                    })
+                    .map(BlendMode::from_str)
                     .unwrap_or(BlendMode::Normal);
 
                 let audio_props = media.audio.map(|a| AudioProperties {
