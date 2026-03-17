@@ -53,10 +53,12 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - Skill 系统重构：Coordinator 唯一状态源 + SkillService 去状态化（SRP）
 
 ### neko-agent — 待完成
-- 批量时间线操作 Skill
-- AI 字幕生成 / 自动配乐 / 画面描述
 - 分镜→批量视频生成 → 自动排列到时间线
-- MCP 桥接专业软件（Blender / ComfyUI / Photoshop）
+
+### neko-agent — 延后到后续 Phase
+- 批量时间线操作 Skill（→ Phase 6 资产管理与协作阶段，配合跨扩展集成）
+- AI 字幕生成 / 自动配乐 / 画面描述（→ Phase 4 音频工作站阶段，依赖 neko-audio）
+- MCP 桥接专业软件 Blender / ComfyUI / Photoshop（→ Phase 3.4 AI 辅助 3D + neko-model）
 
 ### neko-story ✅
 - Fountain 解析器 + LSP（补全/定义/悬停/符号/诊断）+ Webview 渲染 + 时间线生成 + PDF 导出
