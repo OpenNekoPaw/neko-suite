@@ -15,9 +15,10 @@
  * - Converts AgentStep to AgentEvent for unified event streaming
  */
 
-import type { ChatMessage, AgentStep } from '@neko/shared';
+import type { ChatMessage } from '@neko/shared';
 import type { SkillInjection } from '../skill';
 import { SkillInjectionCoordinator } from '../skill';
+import { stepToEvents, recordStepInHistory, type StreamState } from './step-event-converter';
 
 import type {
   IAgentSession,
@@ -83,8 +84,8 @@ export class AgentSession implements IAgentSession {
   // State
   private _history: ChatMessage[] = [];
   private _isRunning = false;
-  /** Tracks whether content_delta steps were emitted for current think cycle */
-  private _hasStreamedDeltas = false;
+  /** Tracks streaming state across step conversions */
+  private _streamState: StreamState = { hasStreamedDeltas: false };
   private _pendingConfirmations = new Map<
     string,
     {
@@ -217,8 +218,8 @@ export class AgentSession implements IAgentSession {
       })) {
         ++iteration;
         // Record history first (side effects), then emit events (pure)
-        this._recordStepInHistory(step, iteration);
-        yield* this._stepToEvents(step, iteration, maxIterations);
+        recordStepInHistory(step, iteration, this._history);
+        yield* stepToEvents(step, iteration, maxIterations, this._streamState);
       }
 
       // Emit done event
@@ -423,155 +424,6 @@ export class AgentSession implements IAgentSession {
           this.confirmTool(toolCallId, false);
           logger.error('Tool confirmation failed', { error: err });
         });
-    }
-  }
-
-  /**
-   * Record a step's messages into session history (side effects only).
-   * Separated from event emission for SRP.
-   */
-  private _recordStepInHistory(step: AgentStep, iteration: number): void {
-    switch (step.type) {
-      case 'content_delta':
-        // Deltas are accumulated — no history write needed
-        break;
-
-      case 'think':
-        if (step.toolCalls && step.toolCalls.length > 0) {
-          // Assistant message with tool calls
-          this._history.push({
-            role: 'assistant',
-            content: step.content ?? '',
-            toolCalls: step.toolCalls.map((tc, i) => ({
-              id: tc.id || `call_${iteration}_${i}`,
-              type: 'function' as const,
-              function: {
-                name: tc.name,
-                arguments: JSON.stringify(tc.arguments),
-              },
-            })),
-          });
-        } else if (step.content) {
-          // Final text response (no tool calls)
-          this._history.push({ role: 'assistant', content: step.content });
-        }
-        break;
-
-      case 'act':
-        if (step.toolResults) {
-          for (let i = 0; i < step.toolResults.length; i++) {
-            const result = step.toolResults[i] as {
-              callId?: string;
-              success: boolean;
-              data?: unknown;
-              error?: string;
-            };
-            this._history.push({
-              role: 'tool',
-              content: result.success
-                ? JSON.stringify(result.data)
-                : JSON.stringify({ error: result.error }),
-              toolCallId: result.callId || `call_${iteration}_${i}`,
-            } as ChatMessage);
-          }
-        }
-        break;
-
-      case 'respond':
-        if (step.content) {
-          this._history.push({ role: 'assistant', content: step.content });
-        }
-        break;
-
-      case 'observe':
-        // No history write
-        break;
-    }
-  }
-
-  /**
-   * Convert an AgentStep to AgentEvent(s) (pure event generation, no side effects).
-   * Separated from history recording for SRP.
-   */
-  private *_stepToEvents(
-    step: AgentStep,
-    iteration: number,
-    maxIterations: number,
-  ): Generator<AgentEvent> {
-    // Skip iteration event for streaming deltas (sub-events within a think cycle)
-    if (step.type !== 'content_delta') {
-      yield {
-        type: 'iteration',
-        iteration: { current: iteration, max: maxIterations },
-      };
-    }
-
-    switch (step.type) {
-      case 'content_delta':
-        if (step.content) {
-          yield { type: 'text_delta', content: step.content };
-          this._hasStreamedDeltas = true;
-        }
-        break;
-
-      case 'think':
-        if (step.thinking) {
-          yield { type: 'thinking_content', thinking: step.thinking };
-        }
-        // Only emit full text if we didn't already stream deltas
-        if (step.content && !this._hasStreamedDeltas) {
-          yield { type: 'text', content: step.content };
-        }
-        this._hasStreamedDeltas = false; // Reset for next think cycle
-
-        if (step.toolCalls && step.toolCalls.length > 0) {
-          for (let i = 0; i < step.toolCalls.length; i++) {
-            const tc = step.toolCalls[i];
-            yield {
-              type: 'tool_call',
-              toolCall: {
-                id: tc.id || `call_${iteration}_${i}`,
-                name: tc.name,
-                arguments: tc.arguments,
-              },
-            };
-          }
-        }
-        break;
-
-      case 'act':
-        if (step.toolResults) {
-          for (let i = 0; i < step.toolResults.length; i++) {
-            const result = step.toolResults[i] as {
-              callId?: string;
-              success: boolean;
-              data?: unknown;
-              error?: string;
-            };
-            yield {
-              type: 'tool_result',
-              toolResult: {
-                toolCallId: result.callId || `call_${iteration}_${i}`,
-                success: result.success,
-                data: result.data,
-                error: result.error,
-              },
-            };
-          }
-        }
-        break;
-
-      case 'observe':
-        break;
-
-      case 'respond':
-        if (step.thinking) {
-          yield { type: 'thinking_content', thinking: step.thinking };
-        }
-        if (step.content) {
-          yield { type: 'text', content: step.content };
-        }
-        break;
     }
   }
 }

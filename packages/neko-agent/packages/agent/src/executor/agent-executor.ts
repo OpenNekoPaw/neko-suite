@@ -1,6 +1,9 @@
 /**
  * Agent Executor - Unified ReAct pattern agent execution with hooks support
  *
+ * Orchestrates the think → act → observe loop. Phase-specific logic
+ * is delegated to think-phase.ts and act-phase.ts.
+ *
  * Features are implemented via composable hooks:
  * - RetryHooks: multi-model fallback, tool retry
  * - MemoryHooks: session memory, context management
@@ -14,20 +17,18 @@ import type {
   AgentResult,
   IAgentExecutor,
   AgentCheckpoint,
-  ChatMessage,
   IToolRegistry,
   IService,
   ExecutorHooks,
-  ToolCallInfo,
   ToolResultWithMeta,
   IToolGroupRegistry,
-  ToolFilterOptions,
   IToolInjectionManager,
 } from '@neko/shared';
 import { AgentError } from '../errors';
-import { getLogger } from '../utils/logger';
 
-const logger = getLogger('AgentExecutor');
+import { runHooks } from './hook-runner';
+import { think, thinkStream, type ThinkDeps } from './think-phase';
+import { act, observe, buildToolResultMessages, type ActDeps } from './act-phase';
 
 /**
  * Agent executor options
@@ -96,30 +97,6 @@ export class AgentExecutor implements IAgentExecutor {
   }
 
   /**
-   * Get tool filter based on ToolInjectionManager
-   * @param input User input for skill matching (used by injection manager)
-   */
-  private getToolFilter(input?: string): ToolFilterOptions | undefined {
-    // Use ToolInjectionManager for three-layer injection
-    if (this.toolInjectionManager && input) {
-      const tools = this.toolInjectionManager.getToolsForTurn(input);
-      if (tools.length > 0) {
-        return { include: tools };
-      }
-    }
-
-    // Fallback: get default tools from ToolSkillRegistry
-    if (this.toolSkillRegistry) {
-      const defaultTools = this.toolSkillRegistry.getDefaultTools();
-      if (defaultTools.length > 0) {
-        return { include: defaultTools };
-      }
-    }
-
-    return undefined; // No filtering, use all tools
-  }
-
-  /**
    * Execute agent with user input
    */
   async execute(input: string, context?: Partial<AgentContext>): Promise<AgentResult> {
@@ -130,7 +107,7 @@ export class AgentExecutor implements IAgentExecutor {
     const agentContext = this.initContext(input, context);
 
     // Hook: onExecuteStart
-    await this.runHooks('onExecuteStart', input, agentContext);
+    await runHooks(this.hooks, 'onExecuteStart', input, agentContext);
 
     this.setState('think');
 
@@ -138,7 +115,7 @@ export class AgentExecutor implements IAgentExecutor {
       const result = await this.runLoop(agentContext, steps, startTime);
 
       // Hook: onExecuteEnd
-      await this.runHooks('onExecuteEnd', result);
+      await runHooks(this.hooks, 'onExecuteEnd', result);
 
       return result;
     } catch (error) {
@@ -159,10 +136,10 @@ export class AgentExecutor implements IAgentExecutor {
       };
 
       // Hook: onExecuteEnd (even on error)
-      await this.runHooks('onExecuteEnd', result);
+      await runHooks(this.hooks, 'onExecuteEnd', result);
 
       // Hook: onError
-      await this.runHooks('onError', error as Error, agentContext);
+      await runHooks(this.hooks, 'onError', error as Error, agentContext);
 
       return result;
     }
@@ -178,7 +155,7 @@ export class AgentExecutor implements IAgentExecutor {
     const agentContext = this.initContext(input, context);
 
     // Hook: onExecuteStart
-    await this.runHooks('onExecuteStart', input, agentContext);
+    await runHooks(this.hooks, 'onExecuteStart', input, agentContext);
 
     this.setState('think');
 
@@ -198,7 +175,7 @@ export class AgentExecutor implements IAgentExecutor {
         // THINK (streaming — yields content_delta then final think step)
         this.setState('think');
         let thinkStep: AgentStep | undefined;
-        for await (const step of this.thinkStream(agentContext)) {
+        for await (const step of thinkStream(this.thinkDeps, agentContext)) {
           if (step.type === 'content_delta') {
             yield step; // Stream delta to consumer
           } else {
@@ -216,22 +193,22 @@ export class AgentExecutor implements IAgentExecutor {
         if (thinkStep.toolCalls && thinkStep.toolCalls.length > 0) {
           // ACT
           this.setState('act');
-          const actStep = await this.act(thinkStep.toolCalls);
+          const actStep = await act(this.actDeps, thinkStep.toolCalls);
           steps.push(actStep);
           yield actStep;
 
           // OBSERVE
           this.setState('observe');
-          const observeStep = this.observe((actStep.toolResults as ToolResultWithMeta[]) || []);
+          const observeStep = observe((actStep.toolResults as ToolResultWithMeta[]) || []);
           steps.push(observeStep);
           yield observeStep;
 
           // Add tool results to context
           const toolResults = (actStep.toolResults as ToolResultWithMeta[]) || [];
-          agentContext.messages.push(...this.buildToolResultMessages(toolResults));
+          agentContext.messages.push(...buildToolResultMessages(toolResults));
 
           // Hook: onIterationComplete
-          await this.runHooks('onIterationComplete', agentContext.iteration, agentContext);
+          await runHooks(this.hooks, 'onIterationComplete', agentContext.iteration, agentContext);
         } else {
           // Final response - thinkStep already contains the response content
           this.setState('respond');
@@ -244,7 +221,7 @@ export class AgentExecutor implements IAgentExecutor {
             iterations: agentContext.iteration,
             timing: { startTime, endTime, duration: endTime - startTime },
           };
-          await this.runHooks('onExecuteEnd', result);
+          await runHooks(this.hooks, 'onExecuteEnd', result);
 
           return;
         }
@@ -278,7 +255,7 @@ export class AgentExecutor implements IAgentExecutor {
       error: new Error('Max iterations reached'),
       timing: { startTime, endTime, duration: endTime - startTime },
     };
-    await this.runHooks('onExecuteEnd', result);
+    await runHooks(this.hooks, 'onExecuteEnd', result);
 
     yield {
       type: 'respond',
@@ -351,6 +328,28 @@ export class AgentExecutor implements IAgentExecutor {
     this.onStateChange?.(state);
   }
 
+  /** Build ThinkDeps from current instance state */
+  private get thinkDeps(): ThinkDeps {
+    return {
+      service: this.service,
+      toolRegistry: this.toolRegistry,
+      hooks: this.hooks,
+      config: this.config,
+      toolInjectionManager: this.toolInjectionManager,
+      toolSkillRegistry: this.toolSkillRegistry,
+      abortController: this.abortController,
+    };
+  }
+
+  /** Build ActDeps from current instance state */
+  private get actDeps(): ActDeps {
+    return {
+      toolRegistry: this.toolRegistry,
+      hooks: this.hooks,
+      abortController: this.abortController,
+    };
+  }
+
   /**
    * Initialize agent context from input and optional partial context
    */
@@ -371,34 +370,6 @@ export class AgentExecutor implements IAgentExecutor {
   }
 
   /**
-   * Build tool result messages for context history
-   */
-  private buildToolResultMessages(results: ToolResultWithMeta[]): ChatMessage[] {
-    return results.map(
-      (result) =>
-        ({
-          role: 'tool',
-          content: result.success
-            ? JSON.stringify(result.data)
-            : JSON.stringify({ error: result.error }),
-          toolCallId: result.callId,
-        }) as ChatMessage,
-    );
-  }
-
-  /**
-   * Parse tool call arguments from raw JSON string with fallback
-   */
-  private static parseToolCallArgs(rawArgs: string): Record<string, unknown> {
-    try {
-      return JSON.parse(rawArgs);
-    } catch {
-      // LLM returned malformed JSON — pass raw string as fallback
-      return { _raw: rawArgs };
-    }
-  }
-
-  /**
    * Main execution loop
    */
   private async runLoop(
@@ -416,7 +387,7 @@ export class AgentExecutor implements IAgentExecutor {
 
       // THINK: Get model response
       this.setState('think');
-      const thinkStep = await this.think(context);
+      const thinkStep = await think(this.thinkDeps, context);
       steps.push(thinkStep);
       this.onStep?.(thinkStep);
 
@@ -424,22 +395,22 @@ export class AgentExecutor implements IAgentExecutor {
       if (thinkStep.toolCalls && thinkStep.toolCalls.length > 0) {
         // ACT: Execute tools
         this.setState('act');
-        const actStep = await this.act(thinkStep.toolCalls);
+        const actStep = await act(this.actDeps, thinkStep.toolCalls);
         steps.push(actStep);
         this.onStep?.(actStep);
 
         // OBSERVE: Process results
         this.setState('observe');
-        const observeStep = this.observe((actStep.toolResults as ToolResultWithMeta[]) || []);
+        const observeStep = observe((actStep.toolResults as ToolResultWithMeta[]) || []);
         steps.push(observeStep);
         this.onStep?.(observeStep);
 
         // Add tool results to context
         const toolResults = (actStep.toolResults as ToolResultWithMeta[]) || [];
-        context.messages.push(...this.buildToolResultMessages(toolResults));
+        context.messages.push(...buildToolResultMessages(toolResults));
 
         // Hook: onIterationComplete
-        await this.runHooks('onIterationComplete', context.iteration, context);
+        await runHooks(this.hooks, 'onIterationComplete', context.iteration, context);
       } else {
         // No tool calls, we have the final response
         this.setState('respond');
@@ -474,300 +445,6 @@ export class AgentExecutor implements IAgentExecutor {
         duration: endTime - startTime,
       },
     };
-  }
-
-  /**
-   * Prepare context for a think step: run beforeThink hooks, extract tool filter,
-   * build tool definitions and service options.
-   */
-  private async prepareThinkContext(context: AgentContext): Promise<{
-    modifiedContext: AgentContext;
-    tools: ReturnType<IToolRegistry['toToolDefinitions']>;
-    options: Record<string, unknown>;
-  }> {
-    // Hook: beforeThink - can modify context
-    let modifiedContext = context;
-    for (const hook of this.hooks) {
-      if (hook.beforeThink) {
-        modifiedContext = (await hook.beforeThink(modifiedContext)) || modifiedContext;
-      }
-    }
-
-    // Extract user input from last user message for skill matching
-    const lastUserMessage = modifiedContext.messages.filter((m) => m.role === 'user').pop();
-    const userInput = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
-    const toolFilter = this.getToolFilter(userInput);
-    const tools = this.toolRegistry.toToolDefinitions(toolFilter);
-
-    const options = {
-      ...this.config.serviceOptions,
-      tools: tools.length > 0 ? tools : undefined,
-      toolChoice: (tools.length > 0 ? 'auto' : undefined) as 'auto' | undefined,
-      signal: this.abortController?.signal,
-    };
-
-    return { modifiedContext, tools, options };
-  }
-
-  /**
-   * Think step - get model response
-   */
-  private async think(context: AgentContext): Promise<AgentStep> {
-    const { modifiedContext, options } = await this.prepareThinkContext(context);
-
-    const response = await this.service.chat(modifiedContext.messages, options);
-
-    // Warn if response was truncated
-    if (response.finishReason === 'length') {
-      logger.warn('Response truncated due to max_tokens limit');
-    }
-
-    // Extract text content from message
-    const content =
-      typeof response.message.content === 'string'
-        ? response.message.content
-        : Array.isArray(response.message.content)
-          ? response.message.content
-              .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
-              .map((part) => part.text)
-              .join('')
-          : '';
-
-    // Preserve the original tool call ID from the API response
-    const toolCalls = response.message.toolCalls?.map((tc) => ({
-      id: tc.id,
-      name: tc.function.name,
-      arguments: AgentExecutor.parseToolCallArgs(tc.function.arguments),
-    }));
-
-    // Add assistant message to context
-    context.messages.push(response.message);
-
-    const step: AgentStep = {
-      type: 'think',
-      content,
-      thinking: response.thinking,
-      toolCalls: toolCalls?.map((tc) => ({
-        id: tc.id,
-        name: tc.name,
-        arguments: tc.arguments,
-      })),
-      timestamp: Date.now(),
-    };
-
-    // Hook: afterThink
-    await this.runHooks('afterThink', step, context);
-
-    return step;
-  }
-
-  /**
-   * Think step with streaming — yields content_delta steps then final think step.
-   *
-   * Uses service.chatStream() for token-by-token output. Falls back to
-   * non-streaming think() if chatStream is not available.
-   */
-  private async *thinkStream(context: AgentContext): AsyncGenerator<AgentStep> {
-    const { modifiedContext, options } = await this.prepareThinkContext(context);
-
-    // Accumulate streaming response
-    let content = '';
-    const toolCallMap = new Map<string, { id: string; name: string; arguments: string }>();
-    let finishReason: string | undefined;
-
-    for await (const chunk of this.service.chatStream(modifiedContext.messages, options)) {
-      if (this.abortController?.signal.aborted) break;
-
-      switch (chunk.type) {
-        case 'content':
-          if (chunk.content) {
-            content += chunk.content;
-            yield {
-              type: 'content_delta',
-              content: chunk.content,
-              timestamp: Date.now(),
-            };
-          }
-          break;
-
-        case 'tool_call':
-          if (chunk.toolCall) {
-            const tc = chunk.toolCall;
-            const id = tc.id ?? `auto_${toolCallMap.size}`;
-            const existing = toolCallMap.get(id);
-            if (existing) {
-              // Append incremental arguments
-              if (tc.function?.arguments) {
-                existing.arguments += tc.function.arguments;
-              }
-            } else {
-              toolCallMap.set(id, {
-                id,
-                name: tc.function?.name ?? '',
-                arguments: tc.function?.arguments ?? '',
-              });
-            }
-          }
-          break;
-
-        case 'done':
-          finishReason = chunk.finishReason;
-          break;
-      }
-    }
-
-    // Warn if truncated
-    if (finishReason === 'length') {
-      logger.warn('Response truncated due to max_tokens limit');
-    }
-
-    // Parse tool calls from accumulated data
-    const toolCalls = [...toolCallMap.values()].map((tc) => ({
-      id: tc.id,
-      name: tc.name,
-      arguments: AgentExecutor.parseToolCallArgs(tc.arguments),
-    }));
-
-    // Build assistant message and add to context
-    const assistantMessage: ChatMessage = {
-      role: 'assistant',
-      content,
-      toolCalls:
-        toolCalls.length > 0
-          ? toolCalls.map((tc) => ({
-              id: tc.id,
-              type: 'function' as const,
-              function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-            }))
-          : undefined,
-    };
-    context.messages.push(assistantMessage);
-
-    // Yield final think step
-    const step: AgentStep = {
-      type: 'think',
-      content,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      timestamp: Date.now(),
-    };
-
-    // Hook: afterThink
-    await this.runHooks('afterThink', step, context);
-
-    yield step;
-  }
-
-  /**
-   * Act step - execute tools
-   */
-  private async act(
-    toolCalls: Array<{ id?: string; name: string; arguments: Record<string, unknown> }>,
-  ): Promise<AgentStep> {
-    const toolCallInfos: ToolCallInfo[] = toolCalls.map((tc, i) => ({
-      id: tc.id || `call_${Date.now()}_${i}`,
-      name: tc.name,
-      arguments: tc.arguments,
-      index: i,
-    }));
-
-    // Hook: beforeAct
-    await this.runHooks('beforeAct', toolCallInfos);
-
-    // Execute all tool calls in parallel for better performance
-    const signal = this.abortController?.signal;
-    const settled = await Promise.allSettled(
-      toolCallInfos.map((info) => this.executeToolCall(info, signal)),
-    );
-
-    const results: ToolResultWithMeta[] = settled.map((s, i) => {
-      if (s.status === 'fulfilled') {
-        return s.value;
-      }
-      const info = toolCallInfos[i]!;
-      return {
-        success: false,
-        error: (s.reason as Error).message ?? 'Unknown error',
-        callId: info.id,
-        name: info.name,
-      };
-    });
-
-    // Hook: afterAct
-    await this.runHooks('afterAct', results);
-
-    return {
-      type: 'act',
-      content: `Executed ${toolCalls.length} tool(s)`,
-      toolCalls: toolCalls.map((tc) => ({
-        id: tc.id,
-        name: tc.name,
-        arguments: tc.arguments,
-      })),
-      toolResults: results,
-      timestamp: Date.now(),
-    };
-  }
-
-  /**
-   * Execute a single tool call through the hook chain
-   */
-  private async executeToolCall(
-    info: ToolCallInfo,
-    signal?: AbortSignal,
-  ): Promise<ToolResultWithMeta> {
-    // Check abort signal before execution
-    if (signal?.aborted) {
-      return { success: false, error: 'Execution aborted', callId: info.id, name: info.name };
-    }
-
-    const execute = () => this.toolRegistry.execute(info.name, info.arguments);
-
-    // Check if any hook wants to handle the tool call
-    for (const hook of this.hooks) {
-      if (hook.onToolCall) {
-        const result = await hook.onToolCall(info, execute);
-        if (result !== null) return result;
-      }
-    }
-
-    // No hook handled it, execute directly
-    const toolResult = await execute();
-    return { ...toolResult, callId: info.id, name: info.name };
-  }
-
-  /**
-   * Observe step - summarize results
-   */
-  private observe(results: ToolResultWithMeta[]): AgentStep {
-    const summary = results
-      .map((r, i) => {
-        const retryInfo = r.retryCount && r.retryCount > 0 ? ` (retried ${r.retryCount}x)` : '';
-        if (r.success) {
-          return `Tool ${i + 1} (${r.name}): Success${retryInfo}`;
-        } else {
-          return `Tool ${i + 1} (${r.name}): Failed - ${r.error}${retryInfo}`;
-        }
-      })
-      .join('\n');
-
-    return {
-      type: 'observe',
-      content: summary,
-      toolResults: results,
-      timestamp: Date.now(),
-    };
-  }
-
-  /**
-   * Run hooks for a specific event
-   */
-  private async runHooks(event: keyof ExecutorHooks, ...args: unknown[]): Promise<void> {
-    for (const hook of this.hooks) {
-      const handler = hook[event];
-      if (typeof handler === 'function') {
-        await (handler as (...args: unknown[]) => Promise<void> | void).apply(hook, args);
-      }
-    }
   }
 }
 

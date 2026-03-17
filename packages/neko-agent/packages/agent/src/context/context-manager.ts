@@ -19,6 +19,7 @@ import type {
   ILayeredContextManager,
 } from '@neko/shared';
 import { DEFAULT_LAYERED_CONTEXT_MANAGER_CONFIG } from '@neko/shared';
+import { TokenBudgetManager } from './token-budget-manager';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('ContextManager');
@@ -29,6 +30,9 @@ const logger = getLogger('ContextManager');
 export class LayeredContextManager implements ILayeredContextManager {
   /** Configuration */
   private config: LayeredContextManagerConfig;
+
+  /** Token budget tracking (delegated) */
+  private budgetManager: TokenBudgetManager;
 
   /** Current state */
   private state: ContextState;
@@ -41,6 +45,7 @@ export class LayeredContextManager implements ILayeredContextManager {
 
   constructor(config?: Partial<LayeredContextManagerConfig>) {
     this.config = { ...DEFAULT_LAYERED_CONTEXT_MANAGER_CONFIG, ...config };
+    this.budgetManager = new TokenBudgetManager(this.config);
     this.state = this.createInitialState();
   }
 
@@ -55,12 +60,7 @@ export class LayeredContextManager implements ILayeredContextManager {
         ['turn', []],
         ['conversation', []],
       ]),
-      usage: new Map([
-        ['permanent', 0],
-        ['session', 0],
-        ['turn', 0],
-        ['conversation', 0],
-      ]),
+      usage: this.budgetManager.getUsageMap(),
       activeSkills: [],
       activeToolCategories: [],
       turnCount: 0,
@@ -73,6 +73,7 @@ export class LayeredContextManager implements ILayeredContextManager {
    */
   configure(config: Partial<LayeredContextManagerConfig>): void {
     this.config = { ...this.config, ...config };
+    this.budgetManager.configure(config);
   }
 
   /**
@@ -88,7 +89,7 @@ export class LayeredContextManager implements ILayeredContextManager {
   getState(): ContextState {
     return {
       items: new Map(this.state.items),
-      usage: new Map(this.state.usage),
+      usage: this.budgetManager.getUsageMap(),
       activeSkills: [...this.state.activeSkills],
       activeToolCategories: [...this.state.activeToolCategories],
       turnCount: this.state.turnCount,
@@ -128,7 +129,7 @@ export class LayeredContextManager implements ILayeredContextManager {
         timestamp: now,
         layer: item.layer,
         data: {
-          used: this.state.usage.get(item.layer),
+          used: this.budgetManager.getUsageMap().get(item.layer),
           budget: this.config.budget[item.layer],
         },
       });
@@ -190,63 +191,38 @@ export class LayeredContextManager implements ILayeredContextManager {
    */
   private updateLayerUsage(layer: ContextLayer): void {
     const items = this.state.items.get(layer) ?? [];
-    const usage = items.reduce((sum, item) => sum + item.tokenCount, 0);
-    this.state.usage.set(layer, usage);
+    this.budgetManager.updateLayerUsage(
+      layer,
+      items.map((i) => i.tokenCount),
+    );
   }
 
   /**
    * Get token usage summary
    */
   getUsage(): LayerUsage[] {
-    const layers: ContextLayer[] = ['permanent', 'session', 'turn', 'conversation'];
-    return layers.map((layer) => {
-      const used = this.state.usage.get(layer) ?? 0;
-      const budget = this.config.budget[layer];
-      return {
-        layer,
-        used,
-        budget,
-        percentage: budget > 0 ? used / budget : 0,
-      };
-    });
+    return this.budgetManager.getUsage();
   }
 
   /**
    * Get total token usage
    */
   getTotalUsage(): number {
-    let total = 0;
-    for (const usage of this.state.usage.values()) {
-      total += usage;
-    }
-    return total;
+    return this.budgetManager.getTotalUsage();
   }
 
   /**
    * Check if a layer is over budget
    */
   isOverBudget(layer: ContextLayer): boolean {
-    const used = this.state.usage.get(layer) ?? 0;
-    const budget = this.config.budget[layer];
-    return used > budget;
+    return this.budgetManager.isOverBudget(layer);
   }
 
   /**
    * Check if total usage exceeds threshold
    */
   shouldCompress(): boolean {
-    const totalUsage = this.getTotalUsage();
-    const threshold = this.config.budget.total * this.config.compressionThreshold;
-
-    if (totalUsage >= threshold) {
-      return true;
-    }
-
-    if (this.state.turnCount >= this.config.turnCompressionThreshold) {
-      return true;
-    }
-
-    return false;
+    return this.budgetManager.shouldCompress(this.state.turnCount);
   }
 
   /**
@@ -426,6 +402,7 @@ export class LayeredContextManager implements ILayeredContextManager {
    * Reset context state
    */
   reset(): void {
+    this.budgetManager.reset();
     this.state = this.createInitialState();
     this.skillUsage.clear();
 
