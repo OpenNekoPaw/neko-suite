@@ -68,7 +68,7 @@ export class SkillInjectionCoordinator {
       this.remove(this._activeInjection.name);
     }
 
-    // Track A: Add prompt section
+    // Track A: Add prompt section (always first — rollback if subsequent tracks fail)
     this._deps.promptComposer.setSection({
       id: `skill:${injection.name}`,
       layer: 'skill',
@@ -77,22 +77,38 @@ export class SkillInjectionCoordinator {
     });
     this._deps.syncSystemPrompt();
 
-    // Track B: Add permission allow rules
     const allowRules: string[] = [];
-    const permissionHooks = this._deps.getPermissionHooks();
-    if (injection.allowedTools && injection.allowedTools.length > 0 && permissionHooks) {
-      for (const tool of injection.allowedTools) {
-        permissionHooks.addAllowRule(tool);
-        allowRules.push(tool);
+    try {
+      // Track B: Add permission allow rules
+      const permissionHooks = this._deps.getPermissionHooks();
+      if (injection.allowedTools && injection.allowedTools.length > 0 && permissionHooks) {
+        for (const tool of injection.allowedTools) {
+          permissionHooks.addAllowRule(tool);
+          allowRules.push(tool);
+        }
       }
-    }
 
-    // Track C: Record allowed tools for runtime checks
-    this._activeInjection = {
-      name: injection.name,
-      allowRules,
-      allowedTools: injection.allowedTools,
-    };
+      // Track C: Record allowed tools for runtime checks
+      this._activeInjection = {
+        name: injection.name,
+        allowRules,
+        allowedTools: injection.allowedTools,
+      };
+    } catch (error) {
+      // Rollback Track A: remove prompt section
+      this._deps.promptComposer.removeSection(`skill:${injection.name}`);
+      this._deps.syncSystemPrompt();
+
+      // Rollback partial Track B: remove any rules already added
+      const ph = this._deps.getPermissionHooks();
+      if (ph) {
+        for (const rule of allowRules) {
+          ph.removeAllowRule(rule);
+        }
+      }
+
+      throw error;
+    }
   }
 
   /**

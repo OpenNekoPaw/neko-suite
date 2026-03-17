@@ -210,6 +210,65 @@ describe('SkillInjectionCoordinator', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Rollback on failure
+  // ---------------------------------------------------------------------------
+
+  describe('rollback on Track B failure', () => {
+    it('should rollback prompt section when addAllowRule throws', () => {
+      const failingPermission = {
+        addAllowRule: vi.fn().mockImplementation(() => {
+          throw new Error('Permission error');
+        }),
+        removeAllowRule: vi.fn(),
+      };
+      const failDeps = {
+        ...deps,
+        getPermissionHooks: () =>
+          failingPermission as unknown as import('../../permission/permission-manager-types').IPermissionManager,
+      };
+      const coord = new SkillInjectionCoordinator(failDeps);
+
+      expect(() => coord.apply(createInjection({ allowedTools: ['Read'] }))).toThrow(
+        'Permission error',
+      );
+
+      // Track A should be rolled back
+      expect(deps.mockComposer.removeSection).toHaveBeenCalledWith('skill:test-skill');
+      // No active injection
+      expect(coord.hasActiveInjection()).toBe(false);
+    });
+
+    it('should rollback partially added rules when later addAllowRule throws', () => {
+      let callCount = 0;
+      const partialFailPermission = {
+        addAllowRule: vi.fn().mockImplementation((_rule: string) => {
+          callCount++;
+          if (callCount === 2) throw new Error('Second rule failed');
+        }),
+        removeAllowRule: vi.fn(),
+      };
+      const failDeps = {
+        ...deps,
+        getPermissionHooks: () =>
+          partialFailPermission as unknown as import('../../permission/permission-manager-types').IPermissionManager,
+      };
+      const coord = new SkillInjectionCoordinator(failDeps);
+
+      expect(() =>
+        coord.apply(createInjection({ allowedTools: ['Read', 'Write', 'Bash'] })),
+      ).toThrow('Second rule failed');
+
+      // First rule should be rolled back
+      expect(partialFailPermission.removeAllowRule).toHaveBeenCalledWith('Read');
+      // Second rule was never added, third rule was never reached
+      expect(partialFailPermission.removeAllowRule).not.toHaveBeenCalledWith('Write');
+      expect(partialFailPermission.removeAllowRule).not.toHaveBeenCalledWith('Bash');
+      // No active injection
+      expect(coord.hasActiveInjection()).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // State queries
   // ---------------------------------------------------------------------------
 
