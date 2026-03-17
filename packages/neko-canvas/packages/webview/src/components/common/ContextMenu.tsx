@@ -187,9 +187,14 @@ export interface CanvasMenuContext {
   onCopy?: () => void;
   onCut?: () => void;
   onPaste?: () => void;
+  onPasteInPlace?: () => void;
   onDuplicate?: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  onGroup?: () => void;
+  onUngroup?: () => void;
+  canGroup?: boolean;
+  canUngroup?: boolean;
   canPaste?: boolean;
   canUndo?: boolean;
   canRedo?: boolean;
@@ -212,6 +217,13 @@ export function buildCanvasMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
       icon: '📋',
       shortcut: '⌘V',
       action: () => ctx.onPaste?.(),
+      disabled: !ctx.canPaste,
+    },
+    {
+      label: t('menu.pasteInPlace'),
+      icon: '📌',
+      shortcut: '⇧⌘V',
+      action: () => ctx.onPasteInPlace?.(),
       disabled: !ctx.canPaste,
     },
     { separator: true },
@@ -248,6 +260,21 @@ export function buildNodeMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
     { label: t('menu.duplicate'), icon: '⧉', shortcut: '⌘D', action: () => ctx.onDuplicate?.() },
     { separator: true },
     { label: t('menu.delete'), icon: '🗑', shortcut: '⌫', action: ctx.onDelete },
+    { separator: true },
+    {
+      label: t('menu.group'),
+      icon: '📁',
+      shortcut: '⌘G',
+      action: () => ctx.onGroup?.(),
+      disabled: !ctx.canGroup,
+    },
+    {
+      label: t('menu.ungroup'),
+      icon: '📂',
+      shortcut: '⇧⌘G',
+      action: () => ctx.onUngroup?.(),
+      disabled: !ctx.canUngroup,
+    },
     { separator: true },
     { label: t('menu.bringToFront'), icon: '⬆', action: () => {} },
     { label: t('menu.sendToBack'), icon: '⬇', action: () => {} },

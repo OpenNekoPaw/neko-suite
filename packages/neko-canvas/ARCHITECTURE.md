@@ -56,8 +56,9 @@ packages/neko-canvas/
 │  │    │         ├─ MediaNode (视频/音频/图片)       │      │
 │  │    │         ├─ StoryboardNode (故事板卡片)      │      │
 │  │    │         ├─ AnnotationNode (文字注释)        │      │
-│  │    │         ├─ TextNode (排版文字)              │      │
-│  │    │         └─ ArtboardNode (画板/画框)         │      │
+│  │    │         ├─ TextNode (排版文字 + 富文本工具栏) │      │
+│  │    │         ├─ ArtboardNode (画板/画框 + 导出)  │      │
+│  │    │         └─ GroupNode (分组 + 子节点列表)     │      │
 │  │    │                                            │      │
 │  │    ├─ Controls                                  │      │
 │  │    │    ├─ ZoomControls (缩放控制)               │      │
@@ -102,7 +103,15 @@ packages/neko-canvas/
 | `AnnotationNode` | 文字注释 | 自由文本 |
 | `TextNode` | 排版文字 | 富文本编辑 |
 | `ArtboardNode` | 画板/画框 | 固定尺寸容器 |
-| `GroupNode` | 分组 | 层级组织 |
+| `GroupNode` | 分组 | 子节点列表 + 标签 + 颜色 + 组/取消组 |
+
+### 节点增强功能
+
+| 功能 | 节点 | 说明 |
+|------|------|------|
+| 富文本工具栏 | `TextNode` | 字号、粗体、对齐（左/中/右）、文字颜色 |
+| 画板导出 | `ArtboardNode` | postMessage → Extension 保存对话框，导出配置 JSON |
+| 分组管理 | `GroupNode` | BaseNode 包装、子节点列表、标签/颜色编辑 |
 
 ### 连接系统
 
@@ -111,6 +120,7 @@ packages/neko-canvas/
   → 拖拽连线时实时预览
   → 类型验证（image/video/audio/text/any）
   → 端口最大连接数限制
+  → 连接标签编辑（PropertyPanel 内 label/type 属性面板）
 ```
 
 ---
@@ -190,6 +200,7 @@ resolveDroppedFiles(paths) — 解析拖放的文件
 media:probe(path)          — 媒体探测
 media:play/seek/pause/stop — 播放控制
 media:captureFrame         — 截取帧
+exportArtboard(data)       — 导出画板配置
 ```
 
 ### Extension → Webview

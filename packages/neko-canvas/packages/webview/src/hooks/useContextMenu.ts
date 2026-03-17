@@ -36,7 +36,10 @@ export interface UseContextMenuOptions {
   handleCopy: () => void;
   handleCut: () => void;
   handlePaste: () => void;
+  handlePasteInPlace: () => void;
   handleDuplicate: () => void;
+  handleGroup: () => void;
+  handleUngroup: () => void;
   undo: () => void;
   redo: () => void;
 }
@@ -66,7 +69,10 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
     handleCopy,
     handleCut,
     handlePaste,
+    handlePasteInPlace,
     handleDuplicate,
+    handleGroup,
+    handleUngroup,
     undo,
     redo,
   } = options;
@@ -98,7 +104,14 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
         onCopy: handleCopy,
         onCut: handleCut,
         onPaste: handlePaste,
+        onPasteInPlace: handlePasteInPlace,
         onDuplicate: handleDuplicate,
+        onGroup: handleGroup,
+        onUngroup: handleUngroup,
+        canGroup: selectedNodeIds.length >= 2,
+        canUngroup:
+          selectedNodeIds.length === 1 &&
+          (nodes.find((n) => n.id === selectedNodeIds[0])?.type as string) === 'group',
         onUndo: undo,
         onRedo: redo,
         canPaste: useClipboardStore.getState().canPaste(),
@@ -123,7 +136,10 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
       handleCopy,
       handleCut,
       handlePaste,
+      handlePasteInPlace,
       handleDuplicate,
+      handleGroup,
+      handleUngroup,
       undo,
       redo,
     ],

@@ -19,7 +19,7 @@
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
 | **neko-assets** | Alpha | 85% | Phase 1-3 ✅ + 外部媒体库 ✅ + AI 分类 + 缩略图 + 多云支持 + 跨扩展集成，Phase 4-5 待开发 |
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
-| **neko-canvas** | Alpha | 65% | 无限画布 + 5 种节点 + 多选 + 属性面板 + 上下文菜单 + 拖放 + 快捷键 + i18n |
+| **neko-canvas** | Alpha | 75% | 无限画布 + 6 种节点 + 连接标签 + 图层面板 + 富文本 + 分组 + 画板导出 + 原地粘贴 + i18n |
 | **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL，Rust/TS 双端类型源 |
 | **neko-model** | Alpha | 65% | 3D 创作套件，Phase 3.1 ✅ + Phase 3.2 ✅ + Phase 3.3 ✅（PBR 渲染 + 粒子 + 后处理 + 时间线集成 + CSG/文字/几何体建模 + 骨骼表情） |
 | **neko-sketch** | Alpha | 85% | S.1 ✅ 绘画基础；S.2 ✅ 骨骼动画；S.3 ✅ 高级 2D（滤镜/粒子/场景/绘制/资产）；S.4 规划中 |
@@ -50,6 +50,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - Agent CLI（交互式 + MCP + 文件引用）
 - ChatViewProvider Handler 拆分（-61%）+ AgentExecutor 流式化
 - AI 视频生成（MediaGenerationService + 8 MediaAdapter + 智能路由）
+- Skill 系统重构：Coordinator 唯一状态源 + SkillService 去状态化（SRP）
 
 ### neko-agent — 待完成
 - 批量时间线操作 Skill
@@ -68,12 +69,17 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ### neko-canvas — 已完成
 - 无限画布（5%-1600% 缩放 + 网格背景 + 视口裁剪）
-- 5 种节点（Annotation/Storyboard/Media/Text/Artboard）+ 内联文本编辑
+- 6 种节点（Annotation/Storyboard/Media/Text/Artboard/Group）+ 内联文本编辑
 - 多选（Cmd+click）+ 属性面板 + 上下文菜单 + 拖放导入 + 10+ 快捷键 + i18n
+- GroupNode 分组管理（子节点列表 + 标签 + 颜色 + 组/取消组操作）
+- TextNode 富文本工具栏（字号/粗体/对齐/颜色）
+- 连接标签编辑（PropertyPanel 内 label/type 编辑）
+- 图层面板（LayerPanel 集成，节点可见性 + 拖拽排序）
+- 画板导出（ArtboardNode → postMessage → Extension 保存对话框）
+- 原地粘贴（Shift+Cmd+V，零偏移复制）
 
 ### neko-canvas — 待完成
-- 节点 resize/rotate + 框选 + 分组
-- Port 系统 + 连线
+- 节点 resize/rotate + 框选
 - WebGPU 渲染 + 特效系统 + 自定义转场 + 导出
 
 ### neko-model (3D) — Alpha
@@ -223,6 +229,68 @@ Layer 3: MCP 桥接（专业导出）
 
 ---
 
+## Phase 8: 交互视频创作
+
+> 目标：在 neko-suite 内完成交互视频（分支叙事视频）的编辑、预览和导出 — **进度 ~0%** | **前置：Phase 1 + Phase 2 + Phase 3（canvas）**
+
+**价值定位**：B 站互动视频 / YouTube 交互内容 / 品牌互动营销 / 教育培训分支课件。neko-suite 作为创作工具链天然适合交互视频——核心是视频编辑（而非游戏运行时），与现有 neko-cut / neko-story / neko-canvas 高度重合。
+
+**现有可复用基础**（~70%）：
+- neko-cut 时间线编辑器 + 29 种 EditOperation + 字幕/特效轨
+- neko-engine GPU 渲染 + 18 种转场 + H.264 硬件加速 + Seek/Loop/变速
+- neko-story Fountain 剧本 + LSP + TimelineConverter
+- neko-canvas 节点系统（6 种节点 + 端口连接 + 类型校验 + 连接标签 + 分组管理）
+- H264StreamClient + AudioStreamClient + FrameScheduler A/V 同步
+- neko-agent AI 辅助（剧本分析 / 分支建议 / 自动字幕）
+
+**需新建**：
+
+| 模块 | 内容 | 估计工作量 |
+|------|------|-----------|
+| **分支节点** | neko-canvas 新增 `ChoicePointNode` + `BranchNode`，可视化编排分支流程图 | ~500 行 TS |
+| **选择点标记** | neko-cut 时间线新增 `ChoiceMarker` 轨道类型（时间点 + 选项文本 + 跳转目标） | ~400 行 TS |
+| **交互预览器** | Webview 播放器叠加选项 UI（播放到选择点暂停 → 显示按钮 → 用户选择 → Seek 跳转） | ~800 行 TS |
+| **分支验证** | 可达性检查 + 死路检测 + 循环检测 + 分支覆盖率统计 | ~300 行 TS |
+| **平台导出器** | 分段视频渲染 + 交互描述 JSON（适配 B 站 IVG / YouTube / Web 播放器） | ~600 行 TS + Rust |
+
+**架构设计**：
+
+```
+创作流程：
+neko-story (剧本 + 分支标记)
+    ↓ 导出分支结构
+neko-canvas (分支流程图可视化编排)
+    ↓ 关联视频片段
+neko-cut (各分支片段剪辑 + 选择点标记)
+    ↓ GPU 渲染导出
+neko-engine (分段渲染 + 转场 + 特效)
+    ↓
+分段视频 + 交互描述文件（JSON）
+
+播放/预览流程：
+交互描述 → 加载片段 A → 播放
+    → 到达选择点 → 暂停 + 显示选项
+    → 用户选择 → Seek/切换片段 B 或 C
+    → 继续...
+```
+
+**里程碑**：
+- Phase 8.1：分支编辑基础（canvas ChoicePointNode + cut ChoiceMarker + 分支数据模型）— 2-3 周
+- Phase 8.2：交互预览器（Webview 播放器 + 选项叠加 UI + 分支跳转逻辑）— 2-3 周
+- Phase 8.3：分支验证 + AI 辅助（可达性检查 + neko-agent 分支建议 / 剧本分析）— 1-2 周
+- Phase 8.4：平台导出（B 站 IVG 格式 + Web HTML5 播放器 + 通用 JSON Schema）— 2-3 周
+
+**导出目标平台**：
+
+| 平台 | 格式 | 说明 |
+|------|------|------|
+| B 站互动视频 | IVG（JSON + 分段视频） | 国内最大互动视频平台 |
+| YouTube | 卡片 / 结束画面标注 | 基于 YouTube API |
+| Web 独立发布 | HTML5 播放器 + fMP4 分段 | 自托管，零依赖 |
+| 通用交互视频 | JSON Schema + HLS/DASH | 可对接任意播放器 |
+
+---
+
 ## 贡献指南
 
 欢迎参与 Neko Suite 的开发！请查看以下资源：
@@ -239,4 +307,4 @@ Layer 3: MCP 桥接（专业导出）
 
 ---
 
-*最后更新: 2026-03-16（Phase 5 虚拟制片详细规划；Phase 7 VR/AR 远期规划；neko-sketch S.3 P2 完成；neko-agent 任务持久化；neko-engine glTF 导出器）*
+*最后更新: 2026-03-17（neko-agent Skill 系统重构：Coordinator 唯一状态源 + SkillService 去状态化；neko-canvas 6 功能增强：GroupNode 分组 + TextNode 富文本 + 连接标签 + 图层面板 + 画板导出 + 原地粘贴；Phase 8 交互视频创作规划；Phase 5 虚拟制片详细规划；Phase 7 VR/AR 远期规划）*

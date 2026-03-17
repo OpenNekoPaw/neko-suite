@@ -26,6 +26,7 @@ export interface UseClipboardReturn {
   handleCopy: () => void;
   handleCut: () => void;
   handlePaste: () => void;
+  handlePasteInPlace: () => void;
   handleDuplicate: () => void;
 }
 
@@ -47,8 +48,8 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
     deleteSelected();
   }, [selectedNodeIds, nodes, connections, deleteSelected]);
 
-  const handlePaste = useCallback(() => {
-    const result = useClipboardStore.getState().paste();
+  const doPaste = useCallback((offset?: { x: number; y: number }) => {
+    const result = useClipboardStore.getState().paste(offset);
     if (!result) return;
 
     const { canvasData: currentData } = useCanvasStore.getState();
@@ -72,6 +73,10 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
       selectNodes(result.nodes.map((n) => n.id));
     }
   }, []);
+
+  const handlePaste = useCallback(() => doPaste(), [doPaste]);
+
+  const handlePasteInPlace = useCallback(() => doPaste({ x: 0, y: 0 }), [doPaste]);
 
   const handleDuplicate = useCallback(() => {
     if (selectedNodeIds.length === 0) return;
@@ -97,5 +102,5 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
     }
   }, [selectedNodeIds, nodes, connections]);
 
-  return { handleCopy, handleCut, handlePaste, handleDuplicate };
+  return { handleCopy, handleCut, handlePaste, handlePasteInPlace, handleDuplicate };
 }

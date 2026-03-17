@@ -9,7 +9,7 @@
  */
 
 import { useCallback } from 'react';
-import type { CanvasNode } from '@neko/shared';
+import type { CanvasNode, CanvasConnection, ConnectionType } from '@neko/shared';
 import { t } from '../../i18n';
 
 // =============================================================================
@@ -18,10 +18,13 @@ import { t } from '../../i18n';
 
 export interface PropertyPanelProps {
   selectedNodes: CanvasNode[];
+  selectedConnections?: CanvasConnection[];
   onUpdateNode: (id: string, updates: Partial<CanvasNode>) => void;
   onUpdateNodeData: (id: string, data: Record<string, unknown>) => void;
+  onUpdateConnection?: (id: string, updates: Partial<CanvasConnection>) => void;
   onDeleteNode: (id: string) => void;
   onToggleLock: (id: string) => void;
+  width?: number;
 }
 
 // =============================================================================
@@ -30,11 +33,32 @@ export interface PropertyPanelProps {
 
 export function PropertyPanel({
   selectedNodes,
+  selectedConnections = [],
   onUpdateNode,
   onUpdateNodeData,
+  onUpdateConnection,
   onDeleteNode,
   onToggleLock,
+  width = 240,
 }: PropertyPanelProps) {
+  // Show connection properties when a connection is selected and no nodes
+  if (selectedNodes.length === 0 && selectedConnections.length === 1) {
+    const conn = selectedConnections[0]!;
+    return (
+      <div
+        className="flex flex-col h-full overflow-y-auto"
+        style={{
+          backgroundColor: 'var(--toolbar-bg)',
+          borderLeft: '1px solid var(--toolbar-border)',
+          width,
+        }}
+      >
+        <PanelHeader title={t('panel.connection')} />
+        <ConnectionProperties connection={conn} onUpdate={onUpdateConnection} />
+      </div>
+    );
+  }
+
   if (selectedNodes.length === 0) {
     return (
       <div
@@ -42,7 +66,7 @@ export function PropertyPanel({
         style={{
           backgroundColor: 'var(--toolbar-bg)',
           borderLeft: '1px solid var(--toolbar-border)',
-          width: 240,
+          width,
         }}
       >
         <PanelHeader title={t('panel.properties')} />
@@ -267,7 +291,8 @@ function NodeSpecificProperties({
 }) {
   const data = node.data as Record<string, unknown>;
 
-  switch (node.type) {
+  const nodeType = node.type as string;
+  switch (nodeType) {
     case 'annotation':
       return (
         <PanelSection title={t('panel.content')}>
@@ -337,6 +362,178 @@ function NodeSpecificProperties({
         </PanelSection>
       );
 
+    case 'text': {
+      const textStyle = (data.style as Record<string, unknown>) ?? {};
+      return (
+        <PanelSection title={t('panel.textStyle')}>
+          <div className="space-y-2">
+            <div>
+              <label
+                className="text-xs block mb-1"
+                style={{ color: 'var(--toolbar-fg-secondary)' }}
+              >
+                {t('panel.fontSize')}
+              </label>
+              <select
+                className="w-full text-xs px-2 py-1 rounded border outline-none"
+                style={{
+                  backgroundColor: 'var(--control-bg)',
+                  borderColor: 'var(--control-border)',
+                  color: 'var(--toolbar-fg)',
+                }}
+                value={(textStyle.fontSize as number) ?? 14}
+                onChange={(e) =>
+                  onUpdateData({
+                    style: { ...textStyle, fontSize: Number(e.target.value) },
+                  })
+                }
+              >
+                {[10, 12, 14, 16, 18, 20, 24, 28, 32].map((s) => (
+                  <option key={s} value={s}>
+                    {s}px
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+                {t('panel.fontWeight')}
+              </label>
+              <button
+                className="text-xs px-2 py-0.5 rounded border transition-colors"
+                style={{
+                  backgroundColor:
+                    textStyle.fontWeight === 'bold' ? 'var(--node-selected)' : 'var(--control-bg)',
+                  borderColor: 'var(--control-border)',
+                  color: 'var(--toolbar-fg)',
+                  fontWeight: 'bold',
+                }}
+                onClick={() =>
+                  onUpdateData({
+                    style: {
+                      ...textStyle,
+                      fontWeight: textStyle.fontWeight === 'bold' ? 'normal' : 'bold',
+                    },
+                  })
+                }
+              >
+                B
+              </button>
+            </div>
+            <div>
+              <label
+                className="text-xs block mb-1"
+                style={{ color: 'var(--toolbar-fg-secondary)' }}
+              >
+                {t('panel.textAlign')}
+              </label>
+              <div className="flex gap-1">
+                {(['left', 'center', 'right'] as const).map((align) => (
+                  <button
+                    key={align}
+                    className="flex-1 text-xs py-0.5 rounded border transition-colors"
+                    style={{
+                      backgroundColor:
+                        (textStyle.textAlign ?? 'left') === align
+                          ? 'var(--node-selected)'
+                          : 'var(--control-bg)',
+                      borderColor: 'var(--control-border)',
+                      color: 'var(--toolbar-fg)',
+                    }}
+                    onClick={() => onUpdateData({ style: { ...textStyle, textAlign: align } })}
+                  >
+                    {align.charAt(0).toUpperCase() + align.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+                {t('panel.textColor')}
+              </label>
+              <input
+                type="color"
+                className="w-6 h-6 rounded cursor-pointer border-0 p-0"
+                value={(textStyle.color as string) ?? '#e5e5e5'}
+                onChange={(e) => onUpdateData({ style: { ...textStyle, color: e.target.value } })}
+              />
+            </div>
+          </div>
+        </PanelSection>
+      );
+    }
+
+    case 'group': {
+      const childIds = (data.childIds as string[]) ?? [];
+      return (
+        <PanelSection title={t('panel.group')}>
+          <div className="space-y-2">
+            <div>
+              <label
+                className="text-xs block mb-1"
+                style={{ color: 'var(--toolbar-fg-secondary)' }}
+              >
+                {t('panel.groupLabel')}
+              </label>
+              <input
+                type="text"
+                className="w-full text-xs px-2 py-1 rounded border outline-none"
+                style={{
+                  backgroundColor: 'var(--control-bg)',
+                  borderColor: 'var(--control-border)',
+                  color: 'var(--toolbar-fg)',
+                }}
+                value={(data.label as string) ?? ''}
+                onChange={(e) => onUpdateData({ label: e.target.value })}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+                {t('panel.groupColor')}
+              </label>
+              <input
+                type="color"
+                className="w-6 h-6 rounded cursor-pointer border-0 p-0"
+                value={(data.color as string) ?? '#6b7280'}
+                onChange={(e) => onUpdateData({ color: e.target.value })}
+              />
+            </div>
+            <div>
+              <label
+                className="text-xs block mb-1"
+                style={{ color: 'var(--toolbar-fg-secondary)' }}
+              >
+                {t('panel.groupChildren')} ({childIds.length})
+              </label>
+              <div className="space-y-0.5 max-h-[120px] overflow-auto">
+                {childIds.length === 0 ? (
+                  <span
+                    className="text-[10px] italic"
+                    style={{ color: 'var(--toolbar-fg-secondary)' }}
+                  >
+                    {t('group.empty')}
+                  </span>
+                ) : (
+                  childIds.map((id) => (
+                    <div
+                      key={id}
+                      className="text-[10px] px-1.5 py-0.5 rounded truncate"
+                      style={{
+                        backgroundColor: 'var(--control-bg)',
+                        color: 'var(--toolbar-fg)',
+                      }}
+                    >
+                      {id.slice(-8)}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </PanelSection>
+      );
+    }
+
     case 'media':
       return (
         <PanelSection title={t('panel.media')}>
@@ -367,6 +564,79 @@ function NodeSpecificProperties({
     default:
       return null;
   }
+}
+
+function ConnectionProperties({
+  connection,
+  onUpdate,
+}: {
+  connection: CanvasConnection;
+  onUpdate?: (id: string, updates: Partial<CanvasConnection>) => void;
+}) {
+  return (
+    <>
+      <PanelSection title={t('panel.connectionLabel')}>
+        <input
+          type="text"
+          className="w-full text-xs px-2 py-1 rounded border outline-none"
+          style={{
+            backgroundColor: 'var(--control-bg)',
+            borderColor: 'var(--control-border)',
+            color: 'var(--toolbar-fg)',
+          }}
+          value={connection.label ?? ''}
+          placeholder={t('panel.connectionLabelPlaceholder')}
+          onChange={(e) => onUpdate?.(connection.id, { label: e.target.value || undefined })}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = 'var(--node-selected)';
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = 'var(--control-border)';
+          }}
+        />
+      </PanelSection>
+
+      <PanelSection title={t('panel.connectionType')}>
+        <select
+          className="w-full text-xs px-2 py-1 rounded border outline-none"
+          style={{
+            backgroundColor: 'var(--control-bg)',
+            borderColor: 'var(--control-border)',
+            color: 'var(--toolbar-fg)',
+          }}
+          value={connection.type ?? 'default'}
+          onChange={(e) => onUpdate?.(connection.id, { type: e.target.value as ConnectionType })}
+        >
+          <option value="default">Default</option>
+          <option value="sequence">Sequence</option>
+          <option value="reference">Reference</option>
+        </select>
+      </PanelSection>
+
+      <PanelSection title={t('panel.connectionInfo')}>
+        <div className="space-y-1 text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+          <div className="flex justify-between">
+            <span>ID</span>
+            <span className="truncate max-w-[120px]" style={{ color: 'var(--toolbar-fg)' }}>
+              {connection.id.slice(-8)}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Source</span>
+            <span className="truncate max-w-[120px]" style={{ color: 'var(--toolbar-fg)' }}>
+              {connection.sourceId.slice(-8)}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Target</span>
+            <span className="truncate max-w-[120px]" style={{ color: 'var(--toolbar-fg)' }}>
+              {connection.targetId.slice(-8)}
+            </span>
+          </div>
+        </div>
+      </PanelSection>
+    </>
+  );
 }
 
 // =============================================================================

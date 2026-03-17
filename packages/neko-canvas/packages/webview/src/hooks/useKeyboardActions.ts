@@ -33,6 +33,7 @@ export interface UseKeyboardActionsOptions {
   handleCopy: () => void;
   handleCut: () => void;
   handlePaste: () => void;
+  handlePasteInPlace: () => void;
   handleDuplicate: () => void;
   reportAction: (action: string, label: string, detail?: string) => void;
 }
@@ -65,6 +66,7 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
     handleCopy,
     handleCut,
     handlePaste,
+    handlePasteInPlace,
     handleDuplicate,
     reportAction,
   } = options;
@@ -124,6 +126,10 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
           handlePaste();
           reportAction('paste', 'Paste');
           break;
+        case 'pasteInPlace':
+          handlePasteInPlace();
+          reportAction('paste', 'Paste In Place');
+          break;
         case 'duplicate':
           handleDuplicate();
           reportAction('paste', 'Duplicate');
@@ -147,6 +153,7 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
       handleCopy,
       handleCut,
       handlePaste,
+      handlePasteInPlace,
       handleDuplicate,
       selectNode,
       selectConnection,
@@ -192,7 +199,7 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
         e.preventDefault();
-        handleKeyboardAction('paste');
+        handleKeyboardAction(e.shiftKey ? 'pasteInPlace' : 'paste');
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
         e.preventDefault();

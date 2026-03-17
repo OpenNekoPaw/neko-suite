@@ -33,6 +33,7 @@ export const zhCN = {
   'menu.copy': '复制',
   'menu.cut': '剪切',
   'menu.paste': '粘贴',
+  'menu.pasteInPlace': '原地粘贴',
   'menu.selectAll': '全选',
   'menu.fitContent': '适应内容',
   'menu.resetView': '重置视图',
@@ -42,6 +43,8 @@ export const zhCN = {
   'menu.unlock': '解锁',
   'menu.bringToFront': '置于顶层',
   'menu.sendToBack': '置于底层',
+  'menu.group': '编组',
+  'menu.ungroup': '取消编组',
   'menu.undo': '撤销',
   'menu.redo': '重做',
 
@@ -57,6 +60,9 @@ export const zhCN = {
   'node.clickToView': '点击查看',
   'node.backToThumbnail': '返回缩略图',
 
+  // Group
+  'group.empty': '无子节点',
+
   // Property panel
   'panel.properties': '属性',
   'panel.noSelection': '选择节点查看属性',
@@ -71,6 +77,20 @@ export const zhCN = {
   'panel.description': '描述',
   'panel.type': '类型',
   'panel.duration': '时长',
+  'panel.connection': '连接',
+  'panel.connectionLabel': '标签',
+  'panel.connectionLabelPlaceholder': '添加标签...',
+  'panel.connectionType': '类型',
+  'panel.connectionInfo': '信息',
+  'panel.textStyle': '文本样式',
+  'panel.fontSize': '字体大小',
+  'panel.fontWeight': '字重',
+  'panel.textAlign': '对齐',
+  'panel.textColor': '颜色',
+  'panel.group': '分组',
+  'panel.groupLabel': '标签',
+  'panel.groupColor': '颜色',
+  'panel.groupChildren': '子节点',
 
   // Loading
   loading: '加载画布中...',

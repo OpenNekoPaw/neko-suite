@@ -33,6 +33,7 @@ export const en = {
   'menu.copy': 'Copy',
   'menu.cut': 'Cut',
   'menu.paste': 'Paste',
+  'menu.pasteInPlace': 'Paste In Place',
   'menu.selectAll': 'Select All',
   'menu.fitContent': 'Fit Content',
   'menu.resetView': 'Reset View',
@@ -42,6 +43,8 @@ export const en = {
   'menu.unlock': 'Unlock',
   'menu.bringToFront': 'Bring to Front',
   'menu.sendToBack': 'Send to Back',
+  'menu.group': 'Group',
+  'menu.ungroup': 'Ungroup',
   'menu.undo': 'Undo',
   'menu.redo': 'Redo',
 
@@ -57,6 +60,9 @@ export const en = {
   'node.clickToView': 'Click to view',
   'node.backToThumbnail': 'Back to thumbnail',
 
+  // Group
+  'group.empty': 'No children',
+
   // Property panel
   'panel.properties': 'Properties',
   'panel.noSelection': 'Select a node to view properties',
@@ -71,6 +77,20 @@ export const en = {
   'panel.description': 'Description',
   'panel.type': 'Type',
   'panel.duration': 'Duration',
+  'panel.connection': 'Connection',
+  'panel.connectionLabel': 'Label',
+  'panel.connectionLabelPlaceholder': 'Add label...',
+  'panel.connectionType': 'Type',
+  'panel.connectionInfo': 'Info',
+  'panel.textStyle': 'Text Style',
+  'panel.fontSize': 'Font Size',
+  'panel.fontWeight': 'Weight',
+  'panel.textAlign': 'Align',
+  'panel.textColor': 'Color',
+  'panel.group': 'Group',
+  'panel.groupLabel': 'Label',
+  'panel.groupColor': 'Color',
+  'panel.groupChildren': 'Children',
 
   // Loading
   loading: 'Loading canvas...',

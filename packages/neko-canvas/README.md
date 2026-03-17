@@ -16,6 +16,8 @@
 - **子包**：`extension/`（Host）、`webview/`（React UI）
 - **依赖**：`@neko/shared`
 - **激活依赖**：neko-engine、neko-tools、neko-preview
+- **节点类型**：Media / Storyboard / Annotation / Text / Artboard / Group（6 种）
+- **核心功能**：富文本编辑、分组管理、连接标签、图层面板、画板导出、原地粘贴
 
 ## Architecture
 

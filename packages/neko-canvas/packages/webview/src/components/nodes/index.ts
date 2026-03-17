@@ -19,3 +19,6 @@ export type { TextNodeProps } from './TextNode';
 
 export { ArtboardNode, createArtboardData } from './ArtboardNode';
 export type { ArtboardNodeProps } from './ArtboardNode';
+
+export { GroupNode } from './GroupNode';
+export type { GroupNodeProps } from './GroupNode';

@@ -3,6 +3,7 @@
  * 提供固定尺寸的容器区域，用于独立编辑和导出
  */
 
+import { useCallback } from 'react';
 import type { CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import type { ArtboardCanvasNode } from '../../types/extendedCanvas';
@@ -31,6 +32,29 @@ export function ArtboardNode({ node, viewport, isSelected, onSelect, onMove }: A
 
   // 获取预设信息
   const presetInfo = preset ? ARTBOARD_PRESETS[preset] : null;
+
+  // Export handler: send artboard metadata to extension for saving
+  const handleExport = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const vscodeApi = (window as unknown as Record<string, unknown>).vscode as
+        | { postMessage: (msg: unknown) => void }
+        | undefined;
+      if (vscodeApi) {
+        vscodeApi.postMessage({
+          type: 'exportArtboard',
+          data: {
+            name: name || 'Untitled Artboard',
+            preset,
+            width: presetInfo?.width ?? node.size.width,
+            height: presetInfo?.height ?? node.size.height,
+            backgroundColor: backgroundColor || '#1a1a1a',
+          },
+        });
+      }
+    },
+    [name, preset, presetInfo, node.size, backgroundColor],
+  );
 
   return (
     <BaseNode
@@ -100,10 +124,7 @@ export function ArtboardNode({ node, viewport, isSelected, onSelect, onMove }: A
             <button
               className="hover:text-gray-300 transition-colors"
               title="Export"
-              onClick={(e) => {
-                e.stopPropagation();
-                // TODO: 实现导出功能
-              }}
+              onClick={handleExport}
             >
               ↗ Export
             </button>

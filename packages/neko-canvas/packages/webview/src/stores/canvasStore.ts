@@ -52,8 +52,19 @@ export interface CanvasStore {
     position: { x: number; y: number },
   ) => void;
 
+  // ==================== Reorder Actions ====================
+  /** Reorder a node to a new zIndex (for layer panel drag) */
+  reorderNode: (id: string, newZIndex: number) => void;
+
+  // ==================== Group Actions ====================
+  /** Group selected nodes into an existing or new group */
+  groupNodes: (childIds: string[]) => string;
+  /** Ungroup: remove group node, release children */
+  ungroupNodes: (groupId: string) => void;
+
   // ==================== Connection Actions ====================
   addConnection: (connection: Omit<CanvasConnection, 'id'>) => string;
+  updateConnection: (id: string, updates: Partial<CanvasConnection>) => void;
   removeConnection: (id: string) => void;
   startConnection: (nodeId: string, anchor: string) => void;
   completeConnection: (nodeId: string, anchor: string) => void;
@@ -252,6 +263,98 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     });
   },
 
+  // ==================== Reorder Actions ====================
+  reorderNode: (id, newZIndex) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    recordHistory(canvasData);
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: canvasData.nodes.map((node) =>
+          node.id === id ? { ...node, zIndex: newZIndex } : node,
+        ),
+      },
+    });
+  },
+
+  // ==================== Group Actions ====================
+  groupNodes: (childIds) => {
+    const { canvasData } = get();
+    if (!canvasData || childIds.length === 0) return '';
+
+    recordHistory(canvasData);
+
+    // Calculate bounding box of children
+    const children = canvasData.nodes.filter((n) => childIds.includes(n.id));
+    if (children.length === 0) return '';
+
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    for (const child of children) {
+      minX = Math.min(minX, child.position.x);
+      minY = Math.min(minY, child.position.y);
+      maxX = Math.max(maxX, child.position.x + child.size.width);
+      maxY = Math.max(maxY, child.position.y + child.size.height);
+    }
+
+    const padding = 20;
+    const id = generateId();
+    const maxZ = Math.max(...canvasData.nodes.map((n) => n.zIndex), 0);
+
+    const groupNode = {
+      id,
+      type: 'group' as const,
+      position: { x: minX - padding, y: minY - padding },
+      size: { width: maxX - minX + padding * 2, height: maxY - minY + padding * 2 },
+      zIndex: maxZ + 1,
+      locked: false,
+      data: {
+        childIds,
+        label: 'Group',
+      },
+    };
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: [...canvasData.nodes, groupNode],
+      },
+      selection: { nodeIds: [id], connectionIds: [] },
+    });
+
+    return id;
+  },
+
+  ungroupNodes: (groupId) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    const groupNode = canvasData.nodes.find((n) => n.id === groupId);
+    if (!groupNode || (groupNode.type as string) !== 'group') return;
+
+    recordHistory(canvasData);
+
+    const groupData = groupNode.data as { childIds: string[] };
+    const childIds = groupData.childIds ?? [];
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: canvasData.nodes.filter((n) => n.id !== groupId),
+        // Remove connections to/from the group node
+        connections: canvasData.connections.filter(
+          (c) => c.sourceId !== groupId && c.targetId !== groupId,
+        ),
+      },
+      selection: { nodeIds: childIds, connectionIds: [] },
+    });
+  },
+
   // ==================== Connection Actions ====================
   addConnection: (connection) => {
     const { canvasData } = get();
@@ -270,6 +373,22 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     });
 
     return id;
+  },
+
+  updateConnection: (id, updates) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    recordHistory(canvasData);
+
+    set({
+      canvasData: {
+        ...canvasData,
+        connections: canvasData.connections.map((conn) =>
+          conn.id === id ? { ...conn, ...updates } : conn,
+        ),
+      },
+    });
   },
 
   removeConnection: (id) => {

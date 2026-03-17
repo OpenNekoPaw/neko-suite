@@ -4,7 +4,7 @@
  * Assembles the sketch editor layout:
  * Toolbar | Canvas | Side panels (Brush/Color/Layers)
  */
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import type { ExtensionToWebviewMessage } from './types';
 import { useSketchStore } from './stores';
 import {
@@ -52,6 +52,33 @@ export function App() {
   const activeTool = store((s) => s.activeTool);
   const layerCount = store((s) => s.layers).length;
   const brushSize = store((s) => s.brushSettings).size;
+  const sidebarWidth = store((s) => s.sidebarWidth);
+  const setSidebarWidth = store((s) => s.setSidebarWidth);
+
+  // Horizontal resize for sidebar
+  const [isHResizing, setIsHResizing] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const handleHResizeStart = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    setIsHResizing(true);
+  }, []);
+
+  const handleHResizeMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isHResizing || !rootRef.current) return;
+      const rootRect = rootRef.current.getBoundingClientRect();
+      const newWidth = rootRect.right - e.clientX;
+      setSidebarWidth(newWidth);
+    },
+    [isHResizing, setSidebarWidth],
+  );
+
+  const handleHResizeEnd = useCallback((e: React.PointerEvent) => {
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    setIsHResizing(false);
+  }, []);
 
   useEffect(() => {
     vscode.postMessage({
@@ -141,24 +168,39 @@ export function App() {
   return (
     <I18nProvider service={i18nService}>
       <div className="flex flex-col h-screen w-screen overflow-hidden">
-        <div className="flex flex-1 overflow-hidden">
+        <div ref={rootRef} className="flex flex-1 overflow-hidden">
           <Toolbar />
           <div className="sketch-canvas-container">
             <SketchCanvas />
           </div>
           {store((s) => s.showSidebar) && (
-            <div className="flex flex-col w-60 border-l border-[var(--sketch-border)] overflow-y-auto">
-              <BrushPanel />
-              <ColorPanel />
-              <PalettePanel />
-              <LayerPanel />
-              <FilterPanel />
-              <FrameControls />
-              <SpriteSheetPlayer />
-              <ParticlePanel />
-              <ScenePanel />
-              <AtmospherePanel />
-            </div>
+            <>
+              {/* Horizontal Resize Handle */}
+              <div
+                onPointerDown={handleHResizeStart}
+                onPointerMove={handleHResizeMove}
+                onPointerUp={handleHResizeEnd}
+                className={`w-1 flex-shrink-0 cursor-ew-resize border-l border-vscode-panel-border transition-colors ${
+                  isHResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
+                }`}
+                style={{ touchAction: 'none' }}
+              />
+              <div
+                className="flex flex-col flex-shrink-0 border-l border-[var(--sketch-border)] overflow-y-auto"
+                style={{ width: sidebarWidth }}
+              >
+                <BrushPanel />
+                <ColorPanel />
+                <PalettePanel />
+                <LayerPanel />
+                <FilterPanel />
+                <FrameControls />
+                <SpriteSheetPlayer />
+                <ParticlePanel />
+                <ScenePanel />
+                <AtmospherePanel />
+              </div>
+            </>
           )}
         </div>
         <FrameTimeline />

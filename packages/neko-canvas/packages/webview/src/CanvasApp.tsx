@@ -5,6 +5,7 @@ import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
 import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
 import { PropertyPanel } from './components/panels/PropertyPanel';
+import { LayerPanel } from './components/controls/LayerPanel';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
 import { useVSCodeMessages } from './hooks/useVSCodeMessages';
 import { useNodeHelpers } from './hooks/useNodeHelpers';
@@ -59,6 +60,32 @@ export function CanvasApp() {
   // Panel state
   const [isLayerPanelOpen, setIsLayerPanelOpen] = useState(false);
   const [isPropertyPanelOpen, setIsPropertyPanelOpen] = useState(true);
+  const [propertyPanelWidth, setPropertyPanelWidth] = useState(240);
+
+  // Horizontal resize for PropertyPanel
+  const [isHResizing, setIsHResizing] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const handleHResizeStart = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    setIsHResizing(true);
+  }, []);
+
+  const handleHResizeMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isHResizing || !rootRef.current) return;
+      const rootRect = rootRef.current.getBoundingClientRect();
+      const newWidth = Math.max(200, Math.min(400, rootRect.right - e.clientX));
+      setPropertyPanelWidth(newWidth);
+    },
+    [isHResizing],
+  );
+
+  const handleHResizeEnd = useCallback((e: React.PointerEvent) => {
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    setIsHResizing(false);
+  }, []);
 
   const {
     setCanvasData,
@@ -83,6 +110,11 @@ export function CanvasApp() {
     moveNodeEnd,
     resizeNode,
     resizeNodeEnd,
+    updateConnection,
+    reorderNode,
+    removeNode,
+    groupNodes,
+    ungroupNodes,
   } = useCanvasStore();
 
   // Derive computed values from canvasData
@@ -149,7 +181,7 @@ export function CanvasApp() {
   // Clipboard
   // =========================================================================
 
-  const { handleCopy, handleCut, handlePaste, handleDuplicate } = useClipboard({
+  const { handleCopy, handleCut, handlePaste, handlePasteInPlace, handleDuplicate } = useClipboard({
     selectedNodeIds,
     nodes,
     connections,
@@ -225,6 +257,18 @@ export function CanvasApp() {
   // Context menu
   // =========================================================================
 
+  const handleGroup = useCallback(() => {
+    if (selectedNodeIds.length >= 2) {
+      groupNodes(selectedNodeIds);
+    }
+  }, [selectedNodeIds, groupNodes]);
+
+  const handleUngroup = useCallback(() => {
+    if (selectedNodeIds.length === 1) {
+      ungroupNodes(selectedNodeIds[0]!);
+    }
+  }, [selectedNodeIds, ungroupNodes]);
+
   const { contextMenu, setContextMenu, handleContextMenu, closeContextMenu } = useContextMenu({
     selectedNodeIds,
     nodes,
@@ -238,7 +282,10 @@ export function CanvasApp() {
     handleCopy,
     handleCut,
     handlePaste,
+    handlePasteInPlace,
     handleDuplicate,
+    handleGroup,
+    handleUngroup,
     undo,
     redo,
   });
@@ -266,6 +313,7 @@ export function CanvasApp() {
     handleCopy,
     handleCut,
     handlePaste,
+    handlePasteInPlace,
     handleDuplicate,
     reportAction,
   });
@@ -425,6 +473,7 @@ export function CanvasApp() {
   // =========================================================================
 
   const selectedNodes = nodes.filter((n) => selectedNodeIds.includes(n.id));
+  const selectedConnections = connections.filter((c) => selectedConnectionIds.includes(c.id));
 
   const handleUpdateNode = useCallback(
     (id: string, updates: Partial<import('@neko/shared').CanvasNode>) => {
@@ -494,7 +543,7 @@ export function CanvasApp() {
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 flex overflow-hidden">
+      <div ref={rootRef} className="flex-1 flex overflow-hidden">
         <CanvasToolbar
           onAddText={handleAddText}
           onAddScene={handleAddScene}
@@ -506,6 +555,19 @@ export function CanvasApp() {
           onTogglePropertyPanel={() => setIsPropertyPanelOpen((prev) => !prev)}
           isPropertyPanelOpen={isPropertyPanelOpen}
         />
+
+        {isLayerPanelOpen && (
+          <div className="w-[200px] flex-shrink-0">
+            <LayerPanel
+              nodes={nodes}
+              selectedNodeIds={selectedNodeIds}
+              onSelectNode={handleNodeSelect}
+              onReorderNode={reorderNode}
+              onToggleLock={handleToggleLock}
+              onDeleteNode={removeNode}
+            />
+          </div>
+        )}
 
         <div
           ref={canvasContainerRef}
@@ -628,13 +690,28 @@ export function CanvasApp() {
         </div>
 
         {isPropertyPanelOpen && (
-          <PropertyPanel
-            selectedNodes={selectedNodes}
-            onUpdateNode={handleUpdateNode}
-            onUpdateNodeData={handleNodeUpdateData}
-            onDeleteNode={handleDeleteNode}
-            onToggleLock={handleToggleLock}
-          />
+          <>
+            {/* Horizontal Resize Handle */}
+            <div
+              onPointerDown={handleHResizeStart}
+              onPointerMove={handleHResizeMove}
+              onPointerUp={handleHResizeEnd}
+              className={`w-1 flex-shrink-0 cursor-ew-resize border-l border-vscode-panel-border transition-colors ${
+                isHResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
+              }`}
+              style={{ touchAction: 'none' }}
+            />
+            <PropertyPanel
+              selectedNodes={selectedNodes}
+              selectedConnections={selectedConnections}
+              onUpdateNode={handleUpdateNode}
+              onUpdateNodeData={handleNodeUpdateData}
+              onUpdateConnection={updateConnection}
+              onDeleteNode={handleDeleteNode}
+              onToggleLock={handleToggleLock}
+              width={propertyPanelWidth}
+            />
+          </>
         )}
       </div>
     </div>

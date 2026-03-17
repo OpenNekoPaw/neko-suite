@@ -565,6 +565,43 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         }
         break;
       }
+
+      case 'exportArtboard': {
+        // Export artboard metadata as JSON configuration file
+        const artboardData = message.data as Record<string, unknown>;
+        const artboardName = (artboardData.name as string) || 'Untitled Artboard';
+        const safeName = artboardName.replace(/[^a-zA-Z0-9_\-\s]/g, '').trim();
+
+        const saveUri = await vscode.window.showSaveDialog({
+          defaultUri: vscode.Uri.joinPath(
+            vscode.Uri.file(document.uri.fsPath).with({
+              path: document.uri.fsPath.replace(/[^/\\]+$/, ''),
+            }),
+            `${safeName}.artboard.json`,
+          ),
+          filters: {
+            'Artboard Config': ['json'],
+            'All Files': ['*'],
+          },
+        });
+
+        if (saveUri) {
+          try {
+            const exportData = {
+              type: 'artboard',
+              ...artboardData,
+              exportedAt: new Date().toISOString(),
+            };
+            const content = JSON.stringify(exportData, null, 2);
+            await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf-8'));
+            vscode.window.showInformationMessage(`Artboard exported: ${saveUri.fsPath}`);
+          } catch (error) {
+            logger.error(`Failed to export artboard: ${error}`);
+            vscode.window.showErrorMessage(`Failed to export artboard`);
+          }
+        }
+        break;
+      }
     }
   }
 

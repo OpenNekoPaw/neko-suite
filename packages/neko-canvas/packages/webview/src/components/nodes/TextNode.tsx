@@ -21,6 +21,7 @@ export interface TextNodeProps {
   onSelect?: (nodeId: string, multi: boolean) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
   onContentChange?: (nodeId: string, content: string) => void;
+  onStyleChange?: (nodeId: string, style: Partial<TextNodeStyle>) => void;
 }
 
 // =============================================================================
@@ -34,6 +35,7 @@ export function TextNode({
   onSelect,
   onMove,
   onContentChange,
+  onStyleChange,
 }: TextNodeProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(node.data.content);
@@ -120,6 +122,14 @@ export function TextNode({
           <span>Text</span>
         </div>
 
+        {/* Format toolbar (visible during editing) */}
+        {isEditing && (
+          <TextFormatToolbar
+            style={style}
+            onStyleChange={(updates) => onStyleChange?.(node.id, updates)}
+          />
+        )}
+
         {/* 文本内容区域 */}
         {isEditing ? (
           <textarea
@@ -160,5 +170,82 @@ export function TextNode({
         )}
       </div>
     </BaseNode>
+  );
+}
+
+// =============================================================================
+// Sub-components
+// =============================================================================
+
+const FONT_SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32];
+
+function TextFormatToolbar({
+  style,
+  onStyleChange,
+}: {
+  style: TextNodeStyle;
+  onStyleChange: (updates: Partial<TextNodeStyle>) => void;
+}) {
+  return (
+    <div
+      className="flex items-center gap-1 mb-1 pb-1 border-b border-gray-700 flex-wrap"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {/* Font size */}
+      <select
+        className="text-xs px-1 py-0.5 rounded border border-gray-600 bg-gray-800 text-gray-300 outline-none"
+        value={style.fontSize ?? 14}
+        onChange={(e) => onStyleChange({ fontSize: Number(e.target.value) })}
+      >
+        {FONT_SIZES.map((size) => (
+          <option key={size} value={size}>
+            {size}px
+          </option>
+        ))}
+      </select>
+
+      {/* Bold toggle */}
+      <button
+        className={clsx(
+          'px-1.5 py-0.5 rounded text-xs font-bold transition-colors',
+          style.fontWeight === 'bold'
+            ? 'bg-blue-600 text-white'
+            : 'bg-gray-800 text-gray-400 hover:text-gray-200',
+        )}
+        onClick={() =>
+          onStyleChange({ fontWeight: style.fontWeight === 'bold' ? 'normal' : 'bold' })
+        }
+        title="Bold"
+      >
+        B
+      </button>
+
+      {/* Text align */}
+      {(['left', 'center', 'right'] as const).map((align) => (
+        <button
+          key={align}
+          className={clsx(
+            'px-1.5 py-0.5 rounded text-xs transition-colors',
+            style.textAlign === align
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-800 text-gray-400 hover:text-gray-200',
+          )}
+          onClick={() => onStyleChange({ textAlign: align })}
+          title={align.charAt(0).toUpperCase() + align.slice(1)}
+        >
+          {align === 'left' ? '≡' : align === 'center' ? '≡' : '≡'}
+        </button>
+      ))}
+
+      {/* Color picker */}
+      <input
+        type="color"
+        className="w-5 h-5 rounded cursor-pointer border-0 p-0"
+        value={style.color ?? '#e5e5e5'}
+        onChange={(e) => onStyleChange({ color: e.target.value })}
+        title="Text Color"
+      />
+    </div>
   );
 }

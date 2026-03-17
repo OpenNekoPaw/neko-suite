@@ -14,8 +14,17 @@ import type {
 } from '@neko/shared';
 import { CanvasGrid } from './CanvasGrid';
 import { CanvasViewport } from './CanvasViewport';
-import { MediaNode, StoryboardNode, AnnotationNode } from './nodes';
+import {
+  MediaNode,
+  StoryboardNode,
+  AnnotationNode,
+  TextNode,
+  ArtboardNode,
+  GroupNode,
+} from './nodes';
 import { ConnectionLayer } from './connections';
+import type { TextCanvasNode } from '../types/extendedCanvas';
+import type { ArtboardCanvasNode } from '../types/extendedCanvas';
 import { useViewportTransform } from '../hooks/useViewportTransform';
 import { useViewportCulling } from '../hooks/useViewportCulling';
 import { useConnectionDrag } from '../hooks/useConnectionDrag';
@@ -195,6 +204,7 @@ export function InfiniteCanvas({
 
           return renderNode(
             node,
+            nodes,
             viewport,
             isSelected,
             onNodeSelect,
@@ -230,6 +240,7 @@ export function InfiniteCanvas({
 
 function renderNode(
   node: CanvasNode,
+  allNodes: CanvasNode[],
   viewport: ViewportType,
   isSelected: boolean,
   onSelect?: (nodeId: string, multi: boolean) => void,
@@ -260,34 +271,36 @@ function renderNode(
     onUpdateData,
   };
 
-  switch (node.type) {
+  const nodeType = node.type as string;
+  switch (nodeType) {
     case 'media':
       return <MediaNode key={node.id} node={node as MediaCanvasNode} {...commonProps} />;
     case 'storyboard':
       return <StoryboardNode key={node.id} node={node as StoryboardCanvasNode} {...commonProps} />;
     case 'annotation':
       return <AnnotationNode key={node.id} node={node as AnnotationCanvasNode} {...commonProps} />;
-    case 'group':
-      // Group node - render as a simple container for now
+    case 'text':
       return (
-        <div
+        <TextNode
           key={node.id}
-          className="absolute rounded-lg border-2 border-dashed"
-          style={{
-            left: node.position.x,
-            top: node.position.y,
-            width: node.size.width,
-            height: node.size.height,
-            zIndex: node.zIndex,
-            borderColor: 'var(--node-border)',
-            backgroundColor: 'var(--node-bg)',
-            opacity: 0.3,
-          }}
-        >
-          <div className="p-2 text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
-            {node.data.label || 'Group'}
-          </div>
-        </div>
+          node={node as unknown as TextCanvasNode}
+          {...commonProps}
+          onContentChange={(nodeId, content) => onUpdateData?.(nodeId, { content })}
+          onStyleChange={(nodeId, style) => onUpdateData?.(nodeId, { style })}
+        />
+      );
+    case 'artboard':
+      return (
+        <ArtboardNode key={node.id} node={node as unknown as ArtboardCanvasNode} {...commonProps} />
+      );
+    case 'group':
+      return (
+        <GroupNode
+          key={node.id}
+          node={node as import('@neko/shared').GroupCanvasNode}
+          allNodes={allNodes}
+          {...commonProps}
+        />
       );
     default:
       return null;

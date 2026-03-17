@@ -397,6 +397,34 @@ export interface ISkillRegistry {
 }
 
 /**
+ * Result of discovering skills matching user input
+ */
+export interface SkillDiscoveryResult {
+  /** Whether any skills were matched */
+  found: boolean;
+  /** Matched skills (sorted by relevance) */
+  matches: SkillMatch[];
+  /** Top match (if any) */
+  topMatch?: SkillMatch;
+  /** Whether confirmation is required */
+  requiresConfirmation: boolean;
+}
+
+/**
+ * Result of applying a skill or slash command
+ */
+export interface SkillApplicationResult {
+  /** Whether skill was applied */
+  applied: boolean;
+  /** Injection result (if applied) */
+  injection?: SkillInjection;
+  /** Applied skill */
+  skill?: Skill;
+  /** Error message if failed */
+  error?: string;
+}
+
+/**
  * Skill service interface - Full-featured service for agent runtime
  *
  * Focuses on orchestration: discovery, application, and runtime enforcement.
@@ -419,19 +447,28 @@ export interface ISkillService {
   readonly commandCount: number;
 
   /**
-   * Match user input to skills
-   */
-  match(input: string, limit?: number): SkillMatch[];
-
-  /**
    * Apply a skill (inject into conversation)
    */
   apply(skill: Skill): SkillInjection;
 
   /**
-   * Apply a slash command with arguments
+   * Apply a slash command with arguments.
+   * Returns a SkillApplicationResult with applied status, injection payload, and optional error.
    */
-  applyCommand(command: SlashCommand, args?: string): SkillInjection;
+  applyCommand(command: SlashCommand, args?: string): SkillApplicationResult;
+
+  /**
+   * Discover skills matching user input
+   */
+  discover(input: string, limit?: number): SkillDiscoveryResult;
+
+  /**
+   * Discover and apply a matching skill, with optional confirmation callback
+   */
+  discoverAndApply(
+    userInput: string,
+    onConfirm?: (skill: Skill) => Promise<boolean>,
+  ): Promise<SkillApplicationResult | null>;
 
   /**
    * Get currently active skill (if any)
@@ -439,9 +476,14 @@ export interface ISkillService {
   getActiveSkill(): Skill | undefined;
 
   /**
-   * Clear active skill
+   * Clear active skill and remove all injected prompts/permissions
    */
   clearActiveSkill(): void;
+
+  /**
+   * Check whether a tool is allowed under the current active skill's restrictions
+   */
+  isToolAllowed(toolName: string): boolean;
 }
 
 // =============================================================================
