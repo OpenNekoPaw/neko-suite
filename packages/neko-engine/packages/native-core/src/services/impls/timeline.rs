@@ -384,7 +384,7 @@ impl ITimelineService for TimelineService {
         let width = timeline.resolution.width;
         let height = timeline.resolution.height;
 
-        // Collect visible elements at this time
+        // Collect visible elements at this time (Vec for indexed access in transition processing)
         let visible_elements = timeline.elements_at_time(time);
 
         // Decode each element's frame and build composite layers
@@ -526,6 +526,110 @@ impl ITimelineService for TimelineService {
                 mask: mask_data,
                 mask_inverted,
             });
+        }
+
+        // Process transitions: blend paired layers via GpuTransitionProcessor
+        // Transition info comes from the TS composite path (pre-calculated progress)
+        let mut transition_skip: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        {
+            // Collect transition pairs: (from_layer_index, to_layer_index, transition_info)
+            let mut transition_pairs: Vec<(usize, usize, String, f64)> = Vec::new();
+            for (idx, element) in visible_elements.iter().enumerate() {
+                if let Some(ref trans) = element.transition {
+                    let to_idx = trans.paired_layer_index;
+                    if to_idx < layers.len() && idx < layers.len() && idx != to_idx {
+                        transition_pairs.push((
+                            idx,
+                            to_idx,
+                            trans.transition_type.clone(),
+                            trans.progress,
+                        ));
+                    }
+                }
+            }
+
+            for (from_idx, to_idx, transition_type, progress) in &transition_pairs {
+                let from_idx = *from_idx;
+                let to_idx = *to_idx;
+
+                // Composite each layer individually to canvas-sized RGBA
+                let compositor = GpuCompositor::new(gpu_ctx.clone())?;
+                let from_result = compositor.composite(
+                    &[layers[from_idx].clone()],
+                    width,
+                    height,
+                    [0.0, 0.0, 0.0, 0.0],
+                )?;
+                let to_result = compositor.composite(
+                    &[layers[to_idx].clone()],
+                    width,
+                    height,
+                    [0.0, 0.0, 0.0, 0.0],
+                )?;
+
+                // Apply GPU transition
+                let params = TransitionParams::new(
+                    TransitionType::from_str(transition_type),
+                    *progress as f32,
+                );
+
+                let blended = match GpuTransitionProcessor::new(gpu_ctx.clone()) {
+                    Ok(processor) => {
+                        match processor.apply_transition(
+                            &from_result.data,
+                            &to_result.data,
+                            width,
+                            height,
+                            &params,
+                        ) {
+                            Ok(data) => data,
+                            Err(e) => {
+                                tracing::warn!("Transition processing failed: {}", e);
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to create TransitionProcessor: {}", e);
+                        continue;
+                    }
+                };
+
+                // Replace from_layer with blended result (full canvas, identity transform)
+                layers[from_idx] = CompositeLayer {
+                    data: blended,
+                    width,
+                    height,
+                    pixel_format: LayerPixelFormat::Rgba,
+                    transform: crate::gpu::Transform2D {
+                        x: width as f32 / 2.0,
+                        y: height as f32 / 2.0,
+                        scale_x: 1.0,
+                        scale_y: 1.0,
+                        rotation: 0.0,
+                        anchor_x: 0.5,
+                        anchor_y: 0.5,
+                        _padding: 0.0,
+                    },
+                    opacity: 1.0,
+                    blend_mode: GpuBlendMode::Normal,
+                    z_index: layers[from_idx].z_index,
+                    mask: None,
+                    mask_inverted: false,
+                };
+
+                // Mark to_layer for removal (will be skipped during final composite)
+                transition_skip.insert(to_idx);
+            }
+        }
+
+        // Remove transition-consumed layers (iterate in reverse to maintain indices)
+        let mut skip_indices: Vec<usize> = transition_skip.into_iter().collect();
+        skip_indices.sort_unstable_by(|a, b| b.cmp(a));
+        for idx in skip_indices {
+            if idx < layers.len() {
+                layers.remove(idx);
+            }
         }
 
         // Composite all layers

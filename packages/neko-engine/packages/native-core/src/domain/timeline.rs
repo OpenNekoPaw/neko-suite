@@ -940,6 +940,9 @@ pub struct Element {
     /// Masks applied to this element (GPU rasterized)
     #[serde(default)]
     pub masks: Vec<ElementMask>,
+    /// Composite transition info (set by TS composite path, used in composite rendering)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition: Option<CompositeTransitionInfo>,
 }
 
 fn default_opacity() -> f64 {
@@ -1538,6 +1541,23 @@ pub struct TransitionEffect {
     /// Edge feather/softness (0.0 - 1.0)
     #[serde(default)]
     pub feather: f32,
+}
+
+/// Transition info for composite rendering path.
+/// Pre-calculated by TS side with progress and paired layer index.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompositeTransitionInfo {
+    /// Transition type string (e.g., "fade", "wipe_left")
+    #[serde(rename = "type")]
+    pub transition_type: String,
+    /// Pre-calculated progress (0.0 to 1.0)
+    pub progress: f64,
+    /// Index of the paired (incoming) layer in the composite layers array
+    pub paired_layer_index: usize,
+    /// Easing function name (already applied to progress by TS side)
+    #[serde(default)]
+    pub easing: String,
 }
 
 /// Bezier control point for mask paths

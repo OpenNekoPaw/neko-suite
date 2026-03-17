@@ -55,6 +55,8 @@ export interface CompositeLayerConfig {
   masks?: CompositeMask[];
   /** Transition to/from paired layer */
   transition?: CompositeTransition;
+  /** Blend mode for compositing (e.g. 'normal', 'multiply', 'screen') */
+  blendMode?: string;
 }
 
 // =============================================================================

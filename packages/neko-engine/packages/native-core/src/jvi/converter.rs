@@ -200,6 +200,7 @@ impl ProjectConverter {
                     speed: None,
                     transition_in: None,
                     transition_out: None,
+                    transition: None,
                 })
             }
             JviElement::Audio(audio) => {
@@ -245,6 +246,7 @@ impl ProjectConverter {
                     speed: None,
                     transition_in: None,
                     transition_out: None,
+                    transition: None,
                 })
             }
             JviElement::Text(text) => {
@@ -292,6 +294,7 @@ impl ProjectConverter {
                     speed: None,
                     transition_in: None,
                     transition_out: None,
+                    transition: None,
                 })
             }
             JviElement::Shape(shape) => Ok(Element {
@@ -313,6 +316,7 @@ impl ProjectConverter {
                 speed: None,
                 transition_in: None,
                 transition_out: None,
+                transition: None,
             }),
             JviElement::Subtitle(sub) => Ok(Element {
                 id: sub.id,
@@ -333,6 +337,7 @@ impl ProjectConverter {
                 speed: None,
                 transition_in: None,
                 transition_out: None,
+                transition: None,
             }),
         }
     }

@@ -5,9 +5,17 @@
  * and the engine-compatible composite types (CompositeMask, CompositeEffect, CompositeTransition).
  */
 
-import type { CompositeMask, CompositeMaskShape, CompositeLayerConfig } from '@neko/shared';
+import type {
+  CompositeMask,
+  CompositeMaskShape,
+  CompositeEffect,
+  CompositeLayerConfig,
+} from '@neko/shared';
 import type { MaskInstance, MaskShape } from '../types/mask';
 import { getComputedMaskAtTime } from '../types/mask';
+import type { ColorCorrection } from '../types/colorCorrection';
+import { DEFAULT_BASIC_COLOR_ADJUSTMENT } from '../types/colorCorrection';
+import type { EffectInstance } from '@neko/shared';
 
 /**
  * Convert MaskInstance[] to CompositeMask[] for engine rendering.
@@ -144,4 +152,93 @@ function convertMaskShape(shape: MaskShape): CompositeMaskShape {
         closed: shape.closed,
       };
   }
+}
+
+/**
+ * Convert ColorCorrection basic parameters to a CompositeEffect for engine rendering.
+ * Maps UI ranges (-100..100) to engine ranges (-1.0..1.0).
+ * Returns null if correction is disabled or all values are at identity.
+ */
+export function colorCorrectionToCompositeEffect(cc: ColorCorrection): CompositeEffect | null {
+  if (!cc.enabled) return null;
+
+  const b = cc.basic;
+  const def = DEFAULT_BASIC_COLOR_ADJUSTMENT;
+
+  // Check if all basic params are at default (identity)
+  const isIdentity =
+    b.brightness === def.brightness &&
+    b.exposure === def.exposure &&
+    b.contrast === def.contrast &&
+    b.highlights === def.highlights &&
+    b.shadows === def.shadows &&
+    b.whites === def.whites &&
+    b.blacks === def.blacks &&
+    b.temperature === def.temperature &&
+    b.tint === def.tint &&
+    b.saturation === def.saturation &&
+    b.vibrance === def.vibrance &&
+    b.gamma === def.gamma &&
+    b.hueShift === def.hueShift;
+
+  if (isIdentity) return null;
+
+  return {
+    type: 'color-correction',
+    parameters: {
+      // Map UI ranges to engine ranges
+      brightness: b.brightness / 100, // -100..100 → -1.0..1.0
+      exposure: b.exposure, // -5..5 → -5.0..5.0 (already engine range)
+      contrast: 1.0 + b.contrast / 100, // -100..100 → 0.0..2.0 (1.0 = no change)
+      highlights: b.highlights / 100, // -100..100 → -1.0..1.0
+      shadows: b.shadows / 100, // -100..100 → -1.0..1.0
+      whites: b.whites / 100, // -100..100 → -1.0..1.0
+      blacks: b.blacks / 100, // -100..100 → -1.0..1.0
+      temperature: b.temperature / 100, // -100..100 → -1.0..1.0
+      tint: b.tint / 100, // -100..100 → -1.0..1.0
+      saturation: 1.0 + b.saturation / 100, // -100..100 → 0.0..2.0 (1.0 = no change)
+      vibrance: b.vibrance / 100, // -100..100 → -1.0..1.0
+      gamma: b.gamma, // 0.1..3.0 → 0.1..3.0 (already engine range)
+      hueShift: b.hueShift, // -180..180 → -180..180 (already engine range)
+    },
+    order: -1, // Apply before user effects (lowest priority)
+  };
+}
+
+/** Well-known ID for the auto-generated color-correction effect */
+const COLOR_CORRECTION_EFFECT_ID = '__color-correction__';
+
+/**
+ * Convert ColorCorrection to an EffectInstance for the element.effects array.
+ * This allows color correction to flow through the streaming path (element.update → engine).
+ * Returns null if correction is disabled or at identity.
+ */
+export function colorCorrectionToEffectInstance(cc: ColorCorrection): EffectInstance | null {
+  const composite = colorCorrectionToCompositeEffect(cc);
+  if (!composite) return null;
+
+  return {
+    id: COLOR_CORRECTION_EFFECT_ID,
+    type: composite.type,
+    enabled: true,
+    parameters: composite.parameters,
+    order: composite.order,
+  };
+}
+
+/**
+ * Merge a color-correction effect into an existing effects array.
+ * Replaces any existing color-correction effect, or adds a new one.
+ * Returns a new array (does not mutate input).
+ */
+export function mergeColorCorrectionEffect(
+  effects: EffectInstance[],
+  cc: ColorCorrection,
+): EffectInstance[] {
+  const filtered = effects.filter((e) => e.id !== COLOR_CORRECTION_EFFECT_ID);
+  const ccEffect = colorCorrectionToEffectInstance(cc);
+  if (ccEffect) {
+    return [ccEffect, ...filtered];
+  }
+  return filtered;
 }

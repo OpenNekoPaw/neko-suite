@@ -192,6 +192,44 @@ impl EffectDispatcher {
                 )
             }
 
+            // Color correction → GpuStyleProcessor
+            "color-correction" => {
+                let brightness = Self::get_f32(params, "brightness", 0.0);
+                let contrast = Self::get_f32(params, "contrast", 1.0);
+                let saturation = Self::get_f32(params, "saturation", 1.0);
+                let exposure = Self::get_f32(params, "exposure", 0.0);
+                let gamma = Self::get_f32(params, "gamma", 1.0);
+                let hue_shift = Self::get_f32(params, "hueShift", 0.0);
+                let vibrance = Self::get_f32(params, "vibrance", 0.0);
+                let temperature = Self::get_f32(params, "temperature", 0.0);
+                let tint = Self::get_f32(params, "tint", 0.0);
+                let highlights = Self::get_f32(params, "highlights", 0.0);
+                let shadows = Self::get_f32(params, "shadows", 0.0);
+                let whites = Self::get_f32(params, "whites", 0.0);
+                let blacks = Self::get_f32(params, "blacks", 0.0);
+                self.style_processor.apply_color_correction(
+                    pixels,
+                    width,
+                    height,
+                    &crate::gpu::ColorCorrectionParams {
+                        brightness,
+                        contrast,
+                        saturation,
+                        exposure,
+                        gamma,
+                        hue_shift,
+                        vibrance,
+                        temperature,
+                        tint,
+                        highlights,
+                        shadows,
+                        whites,
+                        blacks,
+                        _padding: [0.0; 3],
+                    },
+                )
+            }
+
             // Preset shaders → CustomShaderProcessor (noise, pixelate, etc.)
             "noise" | "pixelate" | "edge-detect" | "posterize" | "rgb-split" | "wave-distort" => {
                 // Map TS kebab-case to Rust snake_case shader IDs

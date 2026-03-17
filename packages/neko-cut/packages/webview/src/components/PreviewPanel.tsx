@@ -29,7 +29,11 @@ import type { ElementTransform } from '../types/animation';
 import type { EditorElement } from '../types/editor-types';
 import { getComputedTransform } from '../utils/animation';
 import { getEffectParametersAtTime } from '../types/effects';
-import { buildCompositeMasks, applyTransitions } from '../utils/composite-helpers';
+import {
+  buildCompositeMasks,
+  applyTransitions,
+  colorCorrectionToCompositeEffect,
+} from '../utils/composite-helpers';
 
 // =============================================================================
 // Helper Functions
@@ -105,6 +109,8 @@ function buildCompositeLayers(project: ProjectData, time: number): CompositeLaye
         transform: { x, y, scaleX, scaleY, rotation, anchorX, anchorY },
         opacity,
         zIndex: zIndex++,
+        ...(element.blendMode &&
+          element.blendMode !== 'normal' && { blendMode: element.blendMode }),
       };
 
       // Flow effects to composite layer (engine field on BaseTimelineElement)
@@ -123,8 +129,17 @@ function buildCompositeLayers(project: ProjectData, time: number): CompositeLaye
           }));
       }
 
-      // Flow masks to composite layer (UI field on EditorElement)
+      // Flow colorCorrection to composite layer as a color-correction effect
       const editorElement = element as EditorElement;
+      if (editorElement.colorCorrection) {
+        const ccEffect = colorCorrectionToCompositeEffect(editorElement.colorCorrection);
+        if (ccEffect) {
+          if (!layer.effects) layer.effects = [];
+          layer.effects.unshift(ccEffect); // Apply before other effects
+        }
+      }
+
+      // Flow masks to composite layer (UI field on EditorElement)
       if (editorElement.masks && editorElement.masks.length > 0) {
         const localTime = element.trimStart + (time - element.startTime);
         layer.masks = buildCompositeMasks(editorElement.masks, localTime);

@@ -973,6 +973,7 @@ export class MediaService implements vscode.Disposable {
         pairedLayerIndex: number;
         easing: string;
       };
+      blendMode?: string;
     }>,
     width: number,
     height: number,
@@ -1004,6 +1005,8 @@ export class MediaService implements vscode.Disposable {
             ...(layer.masks && layer.masks.length > 0 && { masks: layer.masks }),
             // Pass through transition for paired layer blending
             ...(layer.transition && { transition: layer.transition }),
+            // Pass through blend mode for GPU compositing
+            ...(layer.blendMode && { blendMode: layer.blendMode }),
           })),
         },
       ],

@@ -27,6 +27,9 @@ import type {
 import { getKeyframeAtTime, hasKeyframes } from '../../utils/animation';
 import { createAnimatableProperty, createDefaultElementTransform } from '../../types/animation';
 import { hasMediaSource } from '../../types/capabilities';
+import { mergeColorCorrectionEffect } from '../../utils/composite-helpers';
+import { BLEND_MODE_DEFINITIONS, BLEND_MODE_CATEGORY_I18N_KEYS } from '../../types/blendModes';
+import type { BlendModeCategory } from '../../types/blendModes';
 
 // =============================================================================
 // Property Definitions
@@ -308,6 +311,8 @@ export const PropertyPanel = memo(function PropertyPanel({
   onRemoveKeyframe,
   onExecuteAIAction,
 }: PropertyPanelProps) {
+  const { t } = useTranslation();
+
   // Determine if we're editing defaults or an element
   const isEditingDefaults = !element;
 
@@ -619,11 +624,15 @@ export const PropertyPanel = memo(function PropertyPanel({
     [element, onRemoveKeyframe],
   );
 
-  // Handle color correction change
+  // Handle color correction change — also sync to element.effects for engine rendering
   const handleColorCorrectionChange = useCallback(
     (colorCorrection: ColorCorrection) => {
       if (!element) return;
-      const changes = { colorCorrection } as Partial<TimelineElement>;
+      // Merge color correction as a synthetic effect in element.effects
+      // so it flows through the element.update → engine streaming path
+      const currentEffects = element.effects ?? [];
+      const mergedEffects = mergeColorCorrectionEffect(currentEffects, colorCorrection);
+      const changes = { colorCorrection, effects: mergedEffects } as Partial<TimelineElement>;
       onElementChange(element.id, changes);
       onElementCommit?.(element.id, changes);
     },
@@ -645,6 +654,17 @@ export const PropertyPanel = memo(function PropertyPanel({
     (masks: MaskInstance[]) => {
       if (!element) return;
       const changes = { masks } as Partial<TimelineElement>;
+      onElementChange(element.id, changes);
+      onElementCommit?.(element.id, changes);
+    },
+    [element, onElementChange, onElementCommit],
+  );
+
+  // Handle blend mode change (discrete value, commit immediately)
+  const handleBlendModeChange = useCallback(
+    (blendMode: string) => {
+      if (!element) return;
+      const changes = { blendMode } as Partial<TimelineElement>;
       onElementChange(element.id, changes);
       onElementCommit?.(element.id, changes);
     },
@@ -728,6 +748,37 @@ export const PropertyPanel = memo(function PropertyPanel({
         defaultExpanded={!isDisabled}
       >
         {renderPropertyRows(TRANSFORM_PROPERTIES, 'animTransform')}
+        {/* Blend Mode selector */}
+        <div className="flex items-center gap-2 px-1 py-0.5">
+          <label className="text-xs text-muted-foreground whitespace-nowrap min-w-[72px]">
+            {t('blendMode.title')}
+          </label>
+          <select
+            className="flex-1 h-6 text-xs bg-input border border-border rounded px-1 text-foreground"
+            value={element?.blendMode ?? 'normal'}
+            onChange={(e) => handleBlendModeChange(e.target.value)}
+            disabled={isDisabled}
+          >
+            {(
+              [
+                'normal',
+                'darken',
+                'lighten',
+                'contrast',
+                'inversion',
+                'component',
+              ] as BlendModeCategory[]
+            ).map((cat) => (
+              <optgroup key={cat} label={t(BLEND_MODE_CATEGORY_I18N_KEYS[cat])}>
+                {BLEND_MODE_DEFINITIONS.filter((d) => d.category === cat).map((d) => (
+                  <option key={d.mode} value={d.mode}>
+                    {t(d.nameKey)}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
       </PropertyGroup>
 
       {/* Text Properties - always show */}

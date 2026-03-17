@@ -216,6 +216,102 @@ impl ChromaticAberrationParams {
     }
 }
 
+/// Color correction parameters (maps to BasicColorAdjustment from TS)
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+pub struct ColorCorrectionParams {
+    /// Brightness (-1.0 to 1.0)
+    pub brightness: f32,
+    /// Contrast multiplier (0.0 to 3.0, 1.0 = no change)
+    pub contrast: f32,
+    /// Saturation multiplier (0.0 to 3.0, 1.0 = no change)
+    pub saturation: f32,
+    /// Exposure in stops (-5.0 to 5.0, 0.0 = no change)
+    pub exposure: f32,
+    /// Gamma (0.1 to 3.0, 1.0 = no change)
+    pub gamma: f32,
+    /// Hue shift in degrees (-180 to 180, 0.0 = no change)
+    pub hue_shift: f32,
+    /// Vibrance (-1.0 to 1.0, 0.0 = no change)
+    pub vibrance: f32,
+    /// Temperature shift (-1.0 to 1.0, 0.0 = no change)
+    pub temperature: f32,
+    /// Tint shift (-1.0 to 1.0, 0.0 = no change)
+    pub tint: f32,
+    /// Highlights (-1.0 to 1.0, 0.0 = no change)
+    pub highlights: f32,
+    /// Shadows (-1.0 to 1.0, 0.0 = no change)
+    pub shadows: f32,
+    /// Whites (-1.0 to 1.0, 0.0 = no change)
+    pub whites: f32,
+    /// Blacks (-1.0 to 1.0, 0.0 = no change)
+    pub blacks: f32,
+    /// Padding for 16-byte alignment
+    pub _padding: [f32; 3],
+}
+
+impl Default for ColorCorrectionParams {
+    fn default() -> Self {
+        Self {
+            brightness: 0.0,
+            contrast: 1.0,
+            saturation: 1.0,
+            exposure: 0.0,
+            gamma: 1.0,
+            hue_shift: 0.0,
+            vibrance: 0.0,
+            temperature: 0.0,
+            tint: 0.0,
+            highlights: 0.0,
+            shadows: 0.0,
+            whites: 0.0,
+            blacks: 0.0,
+            _padding: [0.0; 3],
+        }
+    }
+}
+
+impl ColorCorrectionParams {
+    /// Check if all parameters are at identity (no visible change)
+    pub fn is_identity(&self) -> bool {
+        self.brightness.abs() < 0.001
+            && (self.contrast - 1.0).abs() < 0.001
+            && (self.saturation - 1.0).abs() < 0.001
+            && self.exposure.abs() < 0.001
+            && (self.gamma - 1.0).abs() < 0.001
+            && self.hue_shift.abs() < 0.01
+            && self.vibrance.abs() < 0.001
+            && self.temperature.abs() < 0.001
+            && self.tint.abs() < 0.001
+            && self.highlights.abs() < 0.001
+            && self.shadows.abs() < 0.001
+            && self.whites.abs() < 0.001
+            && self.blacks.abs() < 0.001
+    }
+}
+
+/// Uniform buffer for color correction shader
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+struct ColorCorrectionUniforms {
+    width: u32,
+    height: u32,
+    brightness: f32,
+    contrast: f32,
+    saturation: f32,
+    exposure: f32,
+    gamma: f32,
+    hue_shift: f32,
+    vibrance: f32,
+    temperature: f32,
+    tint: f32,
+    highlights: f32,
+    shadows: f32,
+    whites: f32,
+    blacks: f32,
+    _padding: f32,
+}
+
 /// Uniform buffer for vignette shader
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
@@ -274,6 +370,7 @@ pub struct GpuStyleProcessor {
     film_grain_pipeline: wgpu::ComputePipeline,
     glow_pipeline: wgpu::ComputePipeline,
     chromatic_aberration_pipeline: wgpu::ComputePipeline,
+    color_correction_pipeline: wgpu::ComputePipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     buffer_pool: BufferPool,
 }
@@ -306,6 +403,11 @@ impl GpuStyleProcessor {
                     shaders::CHROMATIC_ABERRATION_COMPUTE_SHADER.into(),
                 ),
             });
+
+        let color_correction_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Color Correction Shader"),
+            source: wgpu::ShaderSource::Wgsl(shaders::COLOR_CORRECTION_SHADER.into()),
+        });
 
         // Create bind group layout (same for all)
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -385,6 +487,14 @@ impl GpuStyleProcessor {
                 entry_point: "main",
             });
 
+        let color_correction_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Color Correction Pipeline"),
+                layout: Some(&pipeline_layout),
+                module: &color_correction_shader,
+                entry_point: "main",
+            });
+
         // Create buffer pool
         let buffer_pool = BufferPool::new(ctx.device().clone(), wgpu::BufferUsages::STORAGE, 8);
 
@@ -394,6 +504,7 @@ impl GpuStyleProcessor {
             film_grain_pipeline,
             glow_pipeline,
             chromatic_aberration_pipeline,
+            color_correction_pipeline,
             bind_group_layout,
             buffer_pool,
         })
@@ -500,6 +611,46 @@ impl GpuStyleProcessor {
             width,
             height,
             &self.chromatic_aberration_pipeline,
+            &uniforms,
+        )
+    }
+
+    /// Apply color correction to a frame
+    pub fn apply_color_correction(
+        &self,
+        input: &[u8],
+        width: u32,
+        height: u32,
+        params: &ColorCorrectionParams,
+    ) -> Result<Vec<u8>> {
+        if params.is_identity() {
+            return Ok(input.to_vec());
+        }
+
+        let uniforms = ColorCorrectionUniforms {
+            width,
+            height,
+            brightness: params.brightness,
+            contrast: params.contrast,
+            saturation: params.saturation,
+            exposure: params.exposure,
+            gamma: params.gamma,
+            hue_shift: params.hue_shift,
+            vibrance: params.vibrance,
+            temperature: params.temperature,
+            tint: params.tint,
+            highlights: params.highlights,
+            shadows: params.shadows,
+            whites: params.whites,
+            blacks: params.blacks,
+            _padding: 0.0,
+        };
+
+        self.run_effect(
+            input,
+            width,
+            height,
+            &self.color_correction_pipeline,
             &uniforms,
         )
     }
