@@ -206,6 +206,11 @@ struct TransitionUniforms {
 }
 
 /// GPU transition processor using compute shaders
+///
+/// **Deprecated**: Use [`TextureTransitionProcessor`](super::TextureTransitionProcessor) for
+/// the texture-based export/preview pipeline. This buffer-based processor is only used by
+/// the legacy composite path in `services/impls/timeline.rs`.
+#[deprecated(note = "Use TextureTransitionProcessor for the texture-based pipeline")]
 pub struct GpuTransitionProcessor {
     ctx: Arc<GpuContext>,
     pipeline: wgpu::ComputePipeline,

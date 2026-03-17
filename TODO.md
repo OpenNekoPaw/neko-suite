@@ -26,7 +26,7 @@
 - [ ] WebGPU 实时预览优化（降低 GPU→CPU 回读延迟）
 - [ ] 高精度波形 Zoom（按需加载超过 800 点的精细波形）
 - [ ] 渲染能力补齐：shapes / keyframes（effects ✅ subtitles ✅ letter_spacing ⚠️ cosmic-text 限制）
-- [ ] 转场系统接入 export pipeline（buffer→texture 架构 mismatch）
+- [x] 转场系统接入 export pipeline（TextureTransitionProcessor，18 种转场 GPU texture 路径）
 
 ### neko-sketch（S.2 + S.3）✅ 已完成
 

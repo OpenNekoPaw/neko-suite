@@ -530,6 +530,8 @@ impl ITimelineService for TimelineService {
 
         // Process transitions: blend paired layers via GpuTransitionProcessor
         // Transition info comes from the TS composite path (pre-calculated progress)
+        // NOTE: This uses the legacy buffer-based path. The new texture-based pipeline
+        // uses TextureTransitionProcessor in gpu_export_pipeline.rs instead.
         let mut transition_skip: std::collections::HashSet<usize> = std::collections::HashSet::new();
         {
             // Collect transition pairs: (from_layer_index, to_layer_index, transition_info)
@@ -573,6 +575,7 @@ impl ITimelineService for TimelineService {
                     *progress as f32,
                 );
 
+                #[allow(deprecated)]
                 let blended = match GpuTransitionProcessor::new(gpu_ctx.clone()) {
                     Ok(processor) => {
                         match processor.apply_transition(

@@ -35,6 +35,7 @@ mod text_renderer;
 mod texture;
 mod texture_compositor;
 pub mod scene_renderer;
+mod texture_transition_processor;
 mod transition_processor;
 
 // Platform-specific zero-copy import modules
@@ -74,6 +75,7 @@ pub use style_processor::{
     GpuStyleProcessor, VignetteParams,
 };
 pub use texture::{TextureFormat, TextureHandle, TexturePool};
+pub use texture_transition_processor::TextureTransitionProcessor;
 pub use transition_processor::{GpuTransitionProcessor, TransitionParams, TransitionType};
 
 // Platform-specific exports

@@ -22,7 +22,8 @@ use crate::gpu::{
     BlurParams, BlurType, ChromaticAberrationParams, CustomShaderProcessor, GlowParams,
     GpuBlurProcessor, GpuContext, GpuLayer, GpuLayerBuilder, GpuStyleProcessor, Nv12OutputBuffers,
     Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter, SharpenParams, TextRenderer,
-    TextureCompositeResult, TextureCompositor, VignetteParams,
+    TextureCompositeResult, TextureCompositor, TextureTransitionProcessor, TransitionParams,
+    TransitionType, VignetteParams,
 };
 use crate::telemetry::spans::span;
 use crate::services::{ISceneService, SceneService};
@@ -439,6 +440,8 @@ pub struct GpuExportPipeline {
     text_renderer: Option<TextRenderer>,
     /// Effect dispatcher for per-element GPU effects (None when GPU unavailable)
     effect_dispatcher: Option<EffectDispatcher>,
+    /// Texture-based transition processor for GPU zero-copy transitions
+    transition_processor: TextureTransitionProcessor,
     /// Scene service for 3D element rendering
     scene_service: Option<Arc<SceneService>>,
     /// Zero-copy RGBA→NV12 converter (macOS only, outputs to IOSurface)
@@ -463,6 +466,7 @@ impl GpuExportPipeline {
         let compositor = TextureCompositor::new(ctx.clone())?;
         let rgba_to_nv12 = RgbaToNv12Converter::new(ctx.clone())?;
         let effect_dispatcher = EffectDispatcher::new(ctx.clone()).ok();
+        let transition_processor = TextureTransitionProcessor::new(ctx.clone())?;
 
         Ok(Self {
             ctx,
@@ -480,6 +484,7 @@ impl GpuExportPipeline {
             layer_texture_pool: LayerTexturePool::new(),
             text_renderer: None,
             effect_dispatcher,
+            transition_processor,
             scene_service,
             #[cfg(target_os = "macos")]
             zerocopy_converter: None,
@@ -658,6 +663,9 @@ impl GpuExportPipeline {
         }
 
         tracing::debug!("Created {} GPU layers for compositing", gpu_layers.len());
+
+        // Apply transitions: blend paired layers via texture-based GPU transition
+        self.apply_transitions(&media_elements, &mut gpu_layers)?;
 
         let layer_refs: Vec<&GpuLayer> = gpu_layers.iter().collect();
         let result = {
@@ -846,6 +854,111 @@ impl GpuExportPipeline {
     // =========================================================================
     // Internal methods
     // =========================================================================
+
+    /// Apply texture-based transitions between paired layers.
+    ///
+    /// Scans media elements for transition info, pre-composites each pair to
+    /// canvas-sized textures, applies the GPU transition effect, and replaces
+    /// the pair with a single blended layer.
+    fn apply_transitions(
+        &self,
+        media_elements: &[(Element, i32)],
+        gpu_layers: &mut Vec<GpuLayer>,
+    ) -> Result<()> {
+        // Collect transition pairs: (from_layer_idx, to_layer_idx, type, progress)
+        let mut transition_pairs: Vec<(usize, usize, String, f64)> = Vec::new();
+        for (idx, (element, _)) in media_elements.iter().enumerate() {
+            if let Some(ref trans) = element.transition {
+                let to_idx = trans.paired_layer_index;
+                if to_idx < gpu_layers.len() && idx < gpu_layers.len() && idx != to_idx {
+                    transition_pairs.push((
+                        idx,
+                        to_idx,
+                        trans.transition_type.clone(),
+                        trans.progress,
+                    ));
+                }
+            }
+        }
+
+        if transition_pairs.is_empty() {
+            return Ok(());
+        }
+
+        tracing::debug!(
+            "Processing {} transition pair(s)",
+            transition_pairs.len()
+        );
+
+        let mut removal_indices: Vec<usize> = Vec::new();
+
+        for (from_idx, to_idx, transition_type, progress) in &transition_pairs {
+            let from_idx = *from_idx;
+            let to_idx = *to_idx;
+
+            // Pre-composite each layer individually to canvas-sized Rgba16Float texture
+            let from_result = self.compositor.composite(
+                &[&gpu_layers[from_idx]],
+                self.output_width,
+                self.output_height,
+                [0.0, 0.0, 0.0, 0.0], // transparent background
+            )?;
+            let to_result = self.compositor.composite(
+                &[&gpu_layers[to_idx]],
+                self.output_width,
+                self.output_height,
+                [0.0, 0.0, 0.0, 0.0],
+            )?;
+
+            // Apply GPU transition
+            let params = TransitionParams::new(
+                TransitionType::from_str(transition_type),
+                *progress as f32,
+            );
+
+            let (blended_texture, _blended_view) = self.transition_processor.apply_transition(
+                &from_result.view,
+                &to_result.view,
+                self.output_width,
+                self.output_height,
+                &params,
+            )?;
+
+            // Replace from_layer with blended result (identity transform, full canvas)
+            gpu_layers[from_idx] = GpuLayer::from_rgba(
+                blended_texture,
+                self.output_width,
+                self.output_height,
+                crate::gpu::Transform2D {
+                    x: self.output_width as f32 / 2.0,
+                    y: self.output_height as f32 / 2.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    rotation: 0.0,
+                    anchor_x: 0.5,
+                    anchor_y: 0.5,
+                    _padding: 0.0,
+                },
+                1.0,
+                crate::gpu::BlendMode::Normal,
+                gpu_layers[from_idx].z_index,
+            );
+
+            // Mark to_layer for removal
+            removal_indices.push(to_idx);
+        }
+
+        // Remove consumed to_layers in reverse order to maintain valid indices
+        removal_indices.sort_unstable();
+        removal_indices.dedup();
+        for idx in removal_indices.into_iter().rev() {
+            if idx < gpu_layers.len() {
+                gpu_layers.remove(idx);
+            }
+        }
+
+        Ok(())
+    }
 
     /// Collect visible media elements at a given time
     fn collect_visible_media(&self, time: f64) -> Vec<(Element, i32)> {

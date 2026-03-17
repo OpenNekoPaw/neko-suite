@@ -1765,6 +1765,8 @@ mod tests {
             speed: None,
             transition_in: None,
             transition_out: None,
+            masks: Vec::new(),
+            transition: None,
         };
 
         assert!(!element.is_visible_at(4.9));
@@ -1800,6 +1802,8 @@ mod tests {
             speed: None,
             transition_in: None,
             transition_out: None,
+            masks: Vec::new(),
+            transition: None,
         };
 
         assert_eq!(element.get_source_time(5.0), 2.0);
