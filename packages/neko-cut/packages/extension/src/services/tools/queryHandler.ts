@@ -5,6 +5,7 @@
 import type { ProjectData } from '@neko/shared';
 import { getTotalDuration } from '@neko/shared';
 import type { IToolHandler, ToolApplyResult } from './types';
+import type { ToolElement } from './helpers';
 
 export class QueryHandler implements IToolHandler {
   readonly toolNames = ['GetTimelineInfo', 'GetElementInfo', 'ListElements'] as const;
@@ -50,7 +51,7 @@ export class QueryHandler implements IToolHandler {
     if (!elementId) return { success: false, error: 'elementId is required' };
 
     for (const track of project.tracks) {
-      const element = track.elements.find((e) => e.id === elementId);
+      const element = track.elements.find((e) => e.id === elementId) as ToolElement | undefined;
       if (!element) continue;
 
       const info: Record<string, unknown> = {
@@ -67,49 +68,31 @@ export class QueryHandler implements IToolHandler {
         transform: element.transform,
       };
 
+      // Use discriminated union narrowing for type-specific fields
       if (element.type === 'media' || element.type === 'audio') {
-        const elementAny = element as unknown as {
-          src?: unknown;
-          audio?: unknown;
-          speed?: unknown;
-          muted?: unknown;
-        };
-        if (typeof elementAny.src === 'string') info.src = elementAny.src;
-        if (elementAny.audio) info.audio = elementAny.audio;
-        if (elementAny.speed) info.speed = elementAny.speed;
-        if (typeof elementAny.muted === 'boolean') info.muted = elementAny.muted;
+        info.src = element.src;
+        if (element.audio) info.audio = element.audio;
+        if (element.speed) info.speed = element.speed;
+        info.muted = element.muted;
       }
 
       if (element.type === 'text') {
-        const textAny = element as unknown as {
-          content?: unknown;
-          fontSize?: unknown;
-          fontFamily?: unknown;
-          color?: unknown;
-          textAlign?: unknown;
-        };
-        info.content = textAny.content;
-        info.fontSize = textAny.fontSize;
-        info.fontFamily = textAny.fontFamily;
-        info.color = textAny.color;
-        info.textAlign = textAny.textAlign;
+        info.content = element.content;
+        info.fontSize = element.fontSize;
+        info.fontFamily = element.fontFamily;
+        info.color = element.color;
+        info.textAlign = element.textAlign;
       }
 
       if (element.type === 'shape') {
-        const shapeAny = element as unknown as { shapes?: unknown };
-        if (shapeAny.shapes) info.shapes = shapeAny.shapes;
+        info.shapeType = element.shapeType;
       }
 
-      const elementAny = element as unknown as {
-        effects?: unknown;
-        transitionIn?: unknown;
-        transitionOut?: unknown;
-        keyframes?: unknown;
-      };
-      if (elementAny.effects) info.effects = elementAny.effects;
-      if (elementAny.transitionIn) info.transitionIn = elementAny.transitionIn;
-      if (elementAny.transitionOut) info.transitionOut = elementAny.transitionOut;
-      if (elementAny.keyframes) info.keyframes = elementAny.keyframes;
+      // UI extension fields (available via ToolElement)
+      if (element.effects.length > 0) info.effects = element.effects;
+      if (element.transitionIn) info.transitionIn = element.transitionIn;
+      if (element.transitionOut) info.transitionOut = element.transitionOut;
+      if (element.keyframes) info.keyframes = element.keyframes;
 
       return { success: true, data: info };
     }
@@ -144,13 +127,12 @@ export class QueryHandler implements IToolHandler {
           effectiveDuration: element.duration - element.trimStart - element.trimEnd,
         };
 
-        if (element.type === 'media' || element.type === 'audio') {
-          const elementAny = element as unknown as { src?: unknown };
-          if (typeof elementAny.src === 'string') info.src = elementAny.src;
+        // Use discriminated union narrowing
+        if (element.type === 'media' || element.type === 'audio' || element.type === 'scene3d') {
+          info.src = element.src;
         }
         if (element.type === 'text') {
-          const textAny = element as unknown as { content?: unknown };
-          if (typeof textAny.content === 'string') info.content = textAny.content;
+          info.content = element.content;
         }
 
         elements.push(info);

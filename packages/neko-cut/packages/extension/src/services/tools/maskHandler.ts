@@ -2,9 +2,9 @@
  * Handler for mask operations: AddMask, UpdateMask, RemoveMask.
  */
 
-import type { ProjectData, TimelineElement } from '@neko/shared';
+import type { ProjectData } from '@neko/shared';
 import type { IToolHandler, ToolApplyResult } from './types';
-import { findElement, updateElementAt } from './helpers';
+import { findElement, updateElementAt, mergeElement } from './helpers';
 import { createMaskInstance } from './shapeFactories';
 
 export class MaskHandler implements IToolHandler {
@@ -53,8 +53,7 @@ export class MaskHandler implements IToolHandler {
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const elementAny = found.element as unknown as { masks?: unknown[] };
-    const existingMasks = (elementAny.masks || []) as Array<Record<string, unknown>>;
+    const existingMasks = (found.element.masks || []) as Array<Record<string, unknown>>;
 
     const mask = createMaskInstance(maskType, name || `Mask ${existingMasks.length + 1}`);
 
@@ -63,10 +62,9 @@ export class MaskHandler implements IToolHandler {
     if (mergedParams.feather !== undefined) mask.feather = mergedParams.feather;
     mask.order = existingMasks.length;
 
-    const updatedElement = {
-      ...found.element,
+    const updatedElement = mergeElement(found.element, {
       masks: [...existingMasks, mask],
-    } as TimelineElement;
+    });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
@@ -107,8 +105,7 @@ export class MaskHandler implements IToolHandler {
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const elementAny = found.element as unknown as { masks?: Array<Record<string, unknown>> };
-    const masks = [...(elementAny.masks || [])];
+    const masks = [...(found.element.masks || [])] as Array<Record<string, unknown>>;
     const idx = masks.findIndex((m) => m.id === maskId);
     if (idx === -1) return { success: false, error: `Mask not found: ${maskId}` };
 
@@ -129,7 +126,7 @@ export class MaskHandler implements IToolHandler {
       ...(merged.opacity !== undefined && { opacity: merged.opacity }),
     };
 
-    const updatedElement = { ...found.element, masks } as TimelineElement;
+    const updatedElement = mergeElement(found.element, { masks });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
@@ -151,13 +148,12 @@ export class MaskHandler implements IToolHandler {
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const elementAny = found.element as unknown as { masks?: Array<Record<string, unknown>> };
-    const masks = elementAny.masks || [];
+    const masks = (found.element.masks || []) as Array<Record<string, unknown>>;
     const updatedMasks = masks.filter((m) => m.id !== maskId);
     if (updatedMasks.length === masks.length)
       return { success: false, error: `Mask not found: ${maskId}` };
 
-    const updatedElement = { ...found.element, masks: updatedMasks } as TimelineElement;
+    const updatedElement = mergeElement(found.element, { masks: updatedMasks });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,

@@ -5,10 +5,10 @@
  * SeparateAudio, SetAudioProperties, SetPlaybackSpeed.
  */
 
-import type { ProjectData, TimelineElement, TimelineTrack } from '@neko/shared';
+import type { ProjectData, TimelineTrack } from '@neko/shared';
 import { DEFAULT_AUDIO_PROPERTIES, DEFAULT_COLOR_CORRECTION, generateId } from '@neko/shared';
 import type { IToolHandler, ToolApplyResult } from './types';
-import { findElement, updateElementAt } from './helpers';
+import { findElement, updateElementAt, mergeElement, createElement } from './helpers';
 
 export class TrackAudioHandler implements IToolHandler {
   readonly toolNames = [
@@ -167,9 +167,8 @@ export class TrackAudioHandler implements IToolHandler {
       | undefined;
     const ccParams = nested ?? (params as Record<string, unknown>);
 
-    const elementAny = found.element as unknown as { colorCorrection?: unknown };
     const existingCC =
-      (elementAny.colorCorrection as Record<string, unknown> | undefined) ??
+      (found.element.colorCorrection as Record<string, unknown> | undefined) ??
       DEFAULT_COLOR_CORRECTION;
 
     const existingBasic =
@@ -192,10 +191,7 @@ export class TrackAudioHandler implements IToolHandler {
       },
     };
 
-    const updatedElement = {
-      ...found.element,
-      colorCorrection: updatedCC,
-    } as unknown as TimelineElement;
+    const updatedElement = mergeElement(found.element, { colorCorrection: updatedCC });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
@@ -219,10 +215,9 @@ export class TrackAudioHandler implements IToolHandler {
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const updatedElement = {
-      ...found.element,
+    const updatedElement = mergeElement(found.element, {
       colorCorrection: DEFAULT_COLOR_CORRECTION,
-    } as unknown as TimelineElement;
+    });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
@@ -245,16 +240,10 @@ export class TrackAudioHandler implements IToolHandler {
     if (found.element.type !== 'media')
       return { success: false, error: 'Audio can only be separated from media elements' };
 
-    const elementAny = found.element as unknown as {
-      linkedAudioId?: unknown;
-      src?: string;
-      audio?: unknown;
-      muted?: boolean;
-    };
-    if (elementAny.linkedAudioId)
+    // TS narrows to MediaElement after type check
+    const mediaElement = found.element;
+    if (mediaElement.linkedAudioId)
       return { success: false, error: 'Audio has already been separated from this element' };
-    if (typeof elementAny.src !== 'string')
-      return { success: false, error: 'Media element src is required' };
 
     // Find or create target audio track
     let audioTrackId = targetTrackId;
@@ -276,25 +265,22 @@ export class TrackAudioHandler implements IToolHandler {
     }
 
     const audioElementId = generateId();
-    const audioElement: TimelineElement = {
+    const audioElement = createElement({
       id: audioElementId,
       type: 'audio',
       name: `${found.element.name} (Audio)`,
-      src: elementAny.src,
+      src: mediaElement.src,
       startTime: found.element.startTime,
       duration: found.element.duration,
       trimStart: found.element.trimStart,
       trimEnd: found.element.trimEnd,
-      audio: (elementAny.audio as Record<string, unknown> | undefined) ?? {
-        ...DEFAULT_AUDIO_PROPERTIES,
-      },
-    } as unknown as TimelineElement;
+      audio: found.element.audio ?? { ...DEFAULT_AUDIO_PROPERTIES },
+    });
 
-    const updatedVideoElement = {
-      ...found.element,
+    const updatedVideoElement = mergeElement(found.element, {
       muted: true,
       linkedAudioId: audioElementId,
-    } as unknown as TimelineElement;
+    });
 
     let updatedTracks = project.tracks.map((t) => t);
 
@@ -358,9 +344,9 @@ export class TrackAudioHandler implements IToolHandler {
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const elementAny = found.element as unknown as { audio?: Record<string, unknown> };
-    const existingAudio =
-      elementAny.audio ?? ({ ...DEFAULT_AUDIO_PROPERTIES } as unknown as Record<string, unknown>);
+    const existingAudio = (found.element.audio as Record<string, unknown> | undefined) ?? {
+      ...DEFAULT_AUDIO_PROPERTIES,
+    };
 
     const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
 
@@ -373,10 +359,7 @@ export class TrackAudioHandler implements IToolHandler {
       ...(fadeOut !== undefined && { fadeOut: Math.max(0, fadeOut) }),
     };
 
-    const updatedElement = {
-      ...found.element,
-      audio: updatedAudio,
-    } as unknown as TimelineElement;
+    const updatedElement = mergeElement(found.element, { audio: updatedAudio });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
@@ -408,14 +391,13 @@ export class TrackAudioHandler implements IToolHandler {
       return { success: false, error: 'Speed can only be set on media or audio elements' };
     }
 
-    const updatedElement = {
-      ...found.element,
+    const updatedElement = mergeElement(found.element, {
       speed: {
         speed,
         preservePitch: maintainPitch ?? true,
         reverse: false,
       },
-    } as unknown as TimelineElement;
+    });
 
     const updatedProject = updateElementAt(
       project,

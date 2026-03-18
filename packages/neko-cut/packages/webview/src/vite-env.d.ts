@@ -1,5 +1,11 @@
 /// <reference types="vite/client" />
 
+// Global augmentations for webview runtime APIs
+interface Window {
+  /** Injected by PreviewPanel for screenshot capture */
+  __previewPanelCaptureScreenshot?: () => Promise<void>;
+}
+
 // Vite worker imports
 declare module '*?worker&inline' {
   const workerConstructor: {

@@ -4,9 +4,9 @@
  * ListTransitions, SetTransition, RemoveTransition.
  */
 
-import type { ProjectData, TimelineElement } from '@neko/shared';
+import type { ProjectData, EffectParameterValue } from '@neko/shared';
 import type { IToolHandler, ToolApplyResult } from './types';
-import { findElement, updateElementAt } from './helpers';
+import { findElement, updateElementAt, mergeElement } from './helpers';
 import { BUILT_IN_EFFECTS, TRANSITION_PRESETS } from './constants';
 
 export class EffectTransitionHandler implements IToolHandler {
@@ -68,8 +68,7 @@ export class EffectTransitionHandler implements IToolHandler {
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const elementAny = found.element as unknown as { effects?: unknown[] };
-    const existingEffects = (elementAny.effects || []) as unknown[];
+    const existingEffects = found.element.effects || [];
 
     const effectId = `effect-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     const newEffect = {
@@ -80,10 +79,9 @@ export class EffectTransitionHandler implements IToolHandler {
       order: existingEffects.length,
     };
 
-    const updatedElement = {
-      ...found.element,
+    const updatedElement = mergeElement(found.element, {
       effects: [...existingEffects, newEffect],
-    } as unknown as TimelineElement;
+    });
 
     const updatedProject = updateElementAt(
       project,
@@ -115,20 +113,20 @@ export class EffectTransitionHandler implements IToolHandler {
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const elementAny = found.element as unknown as {
-      effects?: Array<{ id: string; parameters?: Record<string, unknown> }>;
-    };
-    const effects = [...(elementAny.effects || [])];
+    const effects = [...(found.element.effects || [])];
     const idx = effects.findIndex((e) => e.id === effectId);
     if (idx === -1) return { success: false, error: `Effect not found: ${effectId}` };
 
     const existingEffect = effects[idx]!;
     effects[idx] = {
       ...existingEffect,
-      parameters: { ...(existingEffect.parameters || {}), ...effectParams },
+      parameters: {
+        ...(existingEffect.parameters || {}),
+        ...(effectParams as Record<string, EffectParameterValue>),
+      },
     };
 
-    const updatedElement = { ...found.element, effects } as unknown as TimelineElement;
+    const updatedElement = mergeElement(found.element, { effects });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
@@ -150,16 +148,12 @@ export class EffectTransitionHandler implements IToolHandler {
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const elementAny = found.element as unknown as { effects?: Array<{ id: string }> };
-    const effects = elementAny.effects || [];
+    const effects = found.element.effects || [];
     const updatedEffects = effects.filter((e) => e.id !== effectId);
     if (updatedEffects.length === effects.length)
       return { success: false, error: `Effect not found: ${effectId}` };
 
-    const updatedElement = {
-      ...found.element,
-      effects: updatedEffects,
-    } as unknown as TimelineElement;
+    const updatedElement = mergeElement(found.element, { effects: updatedEffects });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
@@ -219,10 +213,7 @@ export class EffectTransitionHandler implements IToolHandler {
     };
 
     const transitionKey = placement === 'in' ? 'transitionIn' : 'transitionOut';
-    const updatedElement = {
-      ...found.element,
-      [transitionKey]: transition,
-    } as unknown as TimelineElement;
+    const updatedElement = mergeElement(found.element, { [transitionKey]: transition });
 
     const updatedProject = updateElementAt(
       project,
@@ -246,14 +237,13 @@ export class EffectTransitionHandler implements IToolHandler {
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
     const transitionKey = placement === 'in' ? 'transitionIn' : 'transitionOut';
-    const updatedElementAny = { ...(found.element as unknown as Record<string, unknown>) };
-    delete updatedElementAny[transitionKey];
+    const updatedElement = mergeElement(found.element, { [transitionKey]: undefined });
 
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
       found.elementIndex,
-      updatedElementAny as unknown as TimelineElement,
+      updatedElement,
     );
     return {
       success: true,

@@ -5,7 +5,13 @@
 import type { ProjectData, TimelineElement, TimelineTrack } from '@neko/shared';
 import { CENTERED_TRANSFORM, DEFAULT_AUDIO_PROPERTIES, generateId } from '@neko/shared';
 import type { IToolHandler, ToolApplyResult } from './types';
-import { findElement, updateElementAt, removeElementAt } from './helpers';
+import {
+  findElement,
+  updateElementAt,
+  removeElementAt,
+  mergeElement,
+  createElement,
+} from './helpers';
 
 export class ElementHandler implements IToolHandler {
   readonly toolNames = [
@@ -67,51 +73,46 @@ export class ElementHandler implements IToolHandler {
       ...(transform?.rotation !== undefined && { rotation: transform.rotation }),
     };
 
+    const baseFields = {
+      id: elementId,
+      name: '',
+      startTime,
+      duration,
+      trimStart: 0,
+      trimEnd: 0,
+      transform: elementTransform,
+    };
+
     let newElement: TimelineElement;
 
     switch (type) {
       case 'media': {
         if (!src) return { success: false, error: 'src is required for media elements' };
-        newElement = {
-          id: elementId,
+        newElement = createElement({
+          ...baseFields,
           type: 'media',
           name: src.split('/').pop() || 'media',
           src,
-          startTime,
-          duration,
-          trimStart: 0,
-          trimEnd: 0,
-          transform: elementTransform,
-        } as unknown as TimelineElement;
+        });
         break;
       }
       case 'audio': {
         if (!src) return { success: false, error: 'src is required for audio elements' };
-        newElement = {
-          id: elementId,
+        newElement = createElement({
+          ...baseFields,
           type: 'audio',
           name: src.split('/').pop() || 'audio',
           src,
-          startTime,
-          duration,
-          trimStart: 0,
-          trimEnd: 0,
-          transform: elementTransform,
           audio: { ...DEFAULT_AUDIO_PROPERTIES },
-        } as unknown as TimelineElement;
+        });
         break;
       }
       case 'text': {
-        newElement = {
-          id: elementId,
+        newElement = createElement({
+          ...baseFields,
           type: 'text',
           name: 'Text',
           content: content || 'New Text',
-          startTime,
-          duration,
-          trimStart: 0,
-          trimEnd: 0,
-          transform: elementTransform,
           fontSize: 48,
           fontFamily: 'Arial',
           fontWeight: 'normal',
@@ -124,21 +125,16 @@ export class ElementHandler implements IToolHandler {
           y: 0.5,
           rotation: 0,
           opacity: 1,
-        } as unknown as TimelineElement;
+        });
         break;
       }
       case 'shape': {
-        newElement = {
-          id: elementId,
+        newElement = createElement({
+          ...baseFields,
           type: 'shape',
           name: 'Shape',
-          startTime,
-          duration,
-          trimStart: 0,
-          trimEnd: 0,
-          transform: elementTransform,
           shapes: [],
-        } as unknown as TimelineElement;
+        });
         break;
       }
       default:
@@ -204,7 +200,7 @@ export class ElementHandler implements IToolHandler {
       updates.content = content;
     }
 
-    const updatedElement = { ...element, ...updates } as TimelineElement;
+    const updatedElement = mergeElement(element, updates);
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
@@ -256,11 +252,10 @@ export class ElementHandler implements IToolHandler {
     if (newTrimStart + newTrimEnd >= element.duration)
       return { success: false, error: 'Total trim cannot exceed element duration' };
 
-    const updatedElement = {
-      ...element,
+    const updatedElement = mergeElement(element, {
       trimStart: newTrimStart,
       trimEnd: newTrimEnd,
-    } as TimelineElement;
+    });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
@@ -296,17 +291,15 @@ export class ElementHandler implements IToolHandler {
 
     const actualSplitPoint = element.trimStart + splitTime;
 
-    const leftElement: TimelineElement = {
-      ...element,
+    const leftElement = mergeElement(element, {
       trimEnd: element.duration - actualSplitPoint,
-    } as TimelineElement;
+    });
 
-    const rightElement: TimelineElement = {
-      ...element,
+    const rightElement = mergeElement(element, {
       id: generateId(),
       startTime: element.startTime + splitTime,
       trimStart: actualSplitPoint,
-    } as TimelineElement;
+    });
 
     const track = project.tracks[found.trackIndex]!;
     const updatedElements = [...track.elements];

@@ -86,7 +86,7 @@ function App() {
       setIsCapturingScreenshot(true);
 
       // Call the PreviewPanel's capture function via window global
-      const captureFunc = (window as any).__previewPanelCaptureScreenshot;
+      const captureFunc = window.__previewPanelCaptureScreenshot;
       if (captureFunc) {
         await captureFunc();
       } else {

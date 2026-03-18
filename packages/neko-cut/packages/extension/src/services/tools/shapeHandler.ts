@@ -4,7 +4,7 @@
 
 import type { ProjectData, TimelineTrack, ShapeType, Shape, ShapeInstance } from '@neko/shared';
 import type { IToolHandler, ToolApplyResult } from './types';
-import { normalizePercent } from './helpers';
+import { normalizePercent, type ToolTrack } from './helpers';
 import {
   createRectangleShape,
   createEllipseShape,
@@ -94,8 +94,8 @@ export class ShapeHandler implements IToolHandler {
     const resolvedStyle = applyStyleOverrides(baseStyle, style);
     const shapeInstance = createShapeInstance(shape, name, resolvedStyle);
 
-    const trackAny = project.tracks[trackIndex]! as unknown as { shapes?: ShapeInstance[] };
-    const existingShapes = trackAny.shapes || [];
+    const track = project.tracks[trackIndex]! as ToolTrack;
+    const existingShapes = track.shapes || [];
 
     const updatedTrack = {
       ...project.tracks[trackIndex]!,
@@ -130,9 +130,10 @@ export class ShapeHandler implements IToolHandler {
     let targetShapeIndex = -1;
 
     for (let i = 0; i < project.tracks.length; i++) {
-      const trackAny = project.tracks[i]! as unknown as { shapes?: ShapeInstance[] };
-      if (!trackAny.shapes) continue;
-      const index = trackAny.shapes.findIndex((s) => s.id === targetId);
+      const track = project.tracks[i]! as ToolTrack;
+      const trackShapes = track.shapes as unknown as ShapeInstance[] | undefined;
+      if (!trackShapes) continue;
+      const index = trackShapes.findIndex((s) => s.id === targetId);
       if (index !== -1) {
         targetTrackIndex = i;
         targetShapeIndex = index;
@@ -144,33 +145,36 @@ export class ShapeHandler implements IToolHandler {
       return { success: false, error: `Shape not found: ${targetId}` };
     }
 
-    const trackAny = project.tracks[targetTrackIndex]! as unknown as { shapes: ShapeInstance[] };
-    const sourceShape = trackAny.shapes[targetShapeIndex]!;
+    const track = project.tracks[targetTrackIndex]! as ToolTrack;
+    const shapes = track.shapes as unknown as ShapeInstance[];
+    const sourceShape = shapes[targetShapeIndex]!;
     const shapeInstance = {
       ...sourceShape,
       shape: structuredClone(sourceShape.shape),
       style: structuredClone(sourceShape.style),
     };
 
-    const shape = shapeInstance.shape as unknown as Record<string, unknown>;
+    const shapeRecord = shapeInstance.shape as unknown as Record<string, unknown>;
 
-    if (position && 'centerX' in shape && 'centerY' in shape) {
-      if (typeof position.x === 'number') (shape as { centerX: number }).centerX = position.x;
-      if (typeof position.y === 'number') (shape as { centerY: number }).centerY = position.y;
+    if (position && 'centerX' in shapeRecord && 'centerY' in shapeRecord) {
+      if (typeof position.x === 'number') (shapeRecord as { centerX: number }).centerX = position.x;
+      if (typeof position.y === 'number') (shapeRecord as { centerY: number }).centerY = position.y;
     }
 
     if (size) {
-      if ('width' in shape && 'height' in shape) {
-        if (typeof size.width === 'number') (shape as { width: number }).width = size.width;
-        if (typeof size.height === 'number') (shape as { height: number }).height = size.height;
-      } else if ('radiusX' in shape && 'radiusY' in shape) {
-        if (typeof size.width === 'number') (shape as { radiusX: number }).radiusX = size.width / 2;
+      if ('width' in shapeRecord && 'height' in shapeRecord) {
+        if (typeof size.width === 'number') (shapeRecord as { width: number }).width = size.width;
         if (typeof size.height === 'number')
-          (shape as { radiusY: number }).radiusY = size.height / 2;
+          (shapeRecord as { height: number }).height = size.height;
+      } else if ('radiusX' in shapeRecord && 'radiusY' in shapeRecord) {
+        if (typeof size.width === 'number')
+          (shapeRecord as { radiusX: number }).radiusX = size.width / 2;
+        if (typeof size.height === 'number')
+          (shapeRecord as { radiusY: number }).radiusY = size.height / 2;
       }
     }
 
-    shapeInstance.shape = shape as unknown as Shape;
+    shapeInstance.shape = shapeRecord as unknown as Shape;
 
     if (style) {
       const updatedStyle = applyStyleOverrides(structuredClone(shapeInstance.style), style);
@@ -180,7 +184,7 @@ export class ShapeHandler implements IToolHandler {
     if (visible !== undefined) shapeInstance.visible = visible;
     if (locked !== undefined) shapeInstance.locked = locked;
 
-    const updatedShapes = [...trackAny.shapes];
+    const updatedShapes = [...shapes];
     updatedShapes[targetShapeIndex] = shapeInstance;
 
     const updatedTrack = {

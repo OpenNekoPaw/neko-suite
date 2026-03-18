@@ -75,7 +75,7 @@ export const AIActionsButton = memo(function AIActionsButton({
   // Determine element type for AI actions
   const elementType: AIActionElementType | null = useMemo(() => {
     if (!element) return null;
-    const mediaType = element.type === 'media' ? (element as any).mediaType : undefined;
+    const mediaType = element.type === 'media' ? element.mediaType : undefined;
     return mapElementTypeToAIType(element.type, mediaType);
   }, [element]);
 

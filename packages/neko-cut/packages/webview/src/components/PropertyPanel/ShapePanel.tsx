@@ -24,6 +24,7 @@ import type {
   PolygonShape,
   StarShape,
   LineShape,
+  BezierShape,
 } from '../../types/shape';
 import { useTranslation } from '../../i18n/I18nContext';
 
@@ -985,7 +986,7 @@ export const ShapePanel = memo(function ShapePanel({
         return (
           <div className="text-[11px] text-[var(--vscode-descriptionForeground)]">
             <p>
-              {t('shape.properties.closed')}: {(shape.shape as any).closed ? 'Yes' : 'No'}
+              {t('shape.properties.closed')}: {(shape.shape as BezierShape).closed ? 'Yes' : 'No'}
             </p>
             <p className="mt-1 text-[10px]">(Bezier points can be edited directly on canvas)</p>
           </div>

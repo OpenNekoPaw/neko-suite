@@ -677,8 +677,7 @@ export const TimelineTrack = memo(function TimelineTrack({
 
       // Media-specific options
       if (element.type === 'media') {
-        const mediaElement = element as any;
-        const hasLinkedAudio = Boolean(mediaElement.linkedAudioId);
+        const hasLinkedAudio = Boolean(element.linkedAudioId);
 
         items.push({ label: '', separator: true, onClick: () => {} });
 
@@ -703,7 +702,7 @@ export const TimelineTrack = memo(function TimelineTrack({
         items.push({ label: '', separator: true, onClick: () => {} });
 
         // Get AI actions based on element type
-        const isImage = mediaElement.src && isImageFile(mediaElement.src);
+        const isImage = element.src && isImageFile(element.src);
         const aiType = mapElementTypeToAIType(element.type, isImage ? 'image' : 'video');
         const aiActions = getActionsForElementType(aiType);
 
@@ -712,7 +711,7 @@ export const TimelineTrack = memo(function TimelineTrack({
             label: t('timeline.contextMenu.aiOperations'),
             onClick: () => {},
             submenu: aiActions.map((action: AIQuickAction) => ({
-              label: t(action.label as any),
+              label: t(action.label),
               onClick: () => {
                 if (onExecuteAIAction) {
                   onExecuteAIAction(action.id, [element.id]);
@@ -735,7 +734,7 @@ export const TimelineTrack = memo(function TimelineTrack({
             label: t('timeline.contextMenu.aiOperations'),
             onClick: () => {},
             submenu: textAiActions.map((action: AIQuickAction) => ({
-              label: t(action.label as any),
+              label: t(action.label),
               onClick: () => {
                 if (onExecuteAIAction) {
                   onExecuteAIAction(action.id, [element.id]);
@@ -758,7 +757,7 @@ export const TimelineTrack = memo(function TimelineTrack({
             label: t('timeline.contextMenu.aiOperations'),
             onClick: () => {},
             submenu: audioAiActions.map((action: AIQuickAction) => ({
-              label: t(action.label as any),
+              label: t(action.label),
               onClick: () => {
                 if (onExecuteAIAction) {
                   onExecuteAIAction(action.id, [element.id]);

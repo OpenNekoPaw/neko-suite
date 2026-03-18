@@ -411,7 +411,7 @@ export const SubtitlePanel = memo(function SubtitlePanel({
                 onClick={() => handleApplyTemplate(template.id)}
               >
                 <div className="text-[11px] font-medium text-[var(--vscode-foreground)] mb-1">
-                  {t(`subtitles.template.${template.id}` as any) || template.name}
+                  {t(`subtitles.template.${template.id}`) || template.name}
                 </div>
                 <div className="text-[10px] text-[var(--vscode-descriptionForeground)]">
                   {template.description}

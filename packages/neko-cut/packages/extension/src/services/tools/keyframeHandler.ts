@@ -3,9 +3,15 @@
  * GetKeyframes, AddKeyframe, UpdateKeyframe, RemoveKeyframe, AddAudioKeyframe.
  */
 
-import type { ProjectData, TimelineElement } from '@neko/shared';
+import type { ProjectData } from '@neko/shared';
 import type { IToolHandler, ToolApplyResult } from './types';
-import { findElement, updateElementAt, getLegacyKeyframes, type LegacyKeyframe } from './helpers';
+import {
+  findElement,
+  updateElementAt,
+  mergeElement,
+  getLegacyKeyframes,
+  type LegacyKeyframe,
+} from './helpers';
 
 export class KeyframeHandler implements IToolHandler {
   readonly toolNames = [
@@ -79,14 +85,12 @@ export class KeyframeHandler implements IToolHandler {
 
     keyframes[property] = propertyKeyframes;
 
-    const updatedElement = { ...found.element, keyframes } as TimelineElement & {
-      keyframes: Record<string, LegacyKeyframe[]>;
-    };
+    const updatedElement = mergeElement(found.element, { keyframes });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
       found.elementIndex,
-      updatedElement as TimelineElement,
+      updatedElement,
     );
 
     return {
@@ -136,14 +140,12 @@ export class KeyframeHandler implements IToolHandler {
 
     if (!updated) return { success: false, error: `Keyframe not found: ${keyframeId}` };
 
-    const updatedElement = { ...found.element, keyframes } as TimelineElement & {
-      keyframes: Record<string, LegacyKeyframe[]>;
-    };
+    const updatedElement = mergeElement(found.element, { keyframes });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
       found.elementIndex,
-      updatedElement as TimelineElement,
+      updatedElement,
     );
     return {
       success: true,
@@ -175,14 +177,12 @@ export class KeyframeHandler implements IToolHandler {
 
     if (!removed) return { success: false, error: `Keyframe not found: ${keyframeId}` };
 
-    const updatedElement = { ...found.element, keyframes } as TimelineElement & {
-      keyframes: Record<string, LegacyKeyframe[]>;
-    };
+    const updatedElement = mergeElement(found.element, { keyframes });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
       found.elementIndex,
-      updatedElement as TimelineElement,
+      updatedElement,
     );
     return { success: true, data: { message: 'Keyframe removed successfully' }, updatedProject };
   }
@@ -211,8 +211,7 @@ export class KeyframeHandler implements IToolHandler {
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const elementAny = found.element as unknown as { audioKeyframes?: Record<string, unknown[]> };
-    const audioKeyframes = { ...(elementAny.audioKeyframes || {}) } as Record<string, unknown[]>;
+    const audioKeyframes = { ...(found.element.audioKeyframes || {}) } as Record<string, unknown[]>;
     const propertyKeyframes = [...(audioKeyframes[property] || [])];
 
     const keyframeId = `akf-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
@@ -224,7 +223,7 @@ export class KeyframeHandler implements IToolHandler {
 
     audioKeyframes[property] = propertyKeyframes;
 
-    const updatedElement = { ...found.element, audioKeyframes } as unknown as TimelineElement;
+    const updatedElement = mergeElement(found.element, { audioKeyframes });
     const updatedProject = updateElementAt(
       project,
       found.trackIndex,
