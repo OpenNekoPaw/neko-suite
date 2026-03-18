@@ -14,7 +14,7 @@
 - **入口**：`packages/extension/src/extension.ts`
 - **依赖**：`@neko/shared`、`@neko/neko-client`
 - **激活依赖**：neko-engine、neko-tools
-- **状态**：Alpha（90%）
+- **状态**：Alpha（93%）
 - **测试**：3 文件 / 78 测试（vitest v4）
 
 ## Architecture
@@ -70,7 +70,7 @@
 
 | 命令 | 说明 |
 |------|------|
-| `neko.audio.new` | 新建 .nka 音频项目（选择源文件 → 生成 JSON） |
+| `neko.audio.new` | 新建 .nka 音频项目（右键文件夹 / 命令面板，空模板 + 内联重命名） |
 | `neko.audio.record` | 切换录音面板 |
 | `neko.audio.denoise` | AI 降噪 |
 | `neko.audio.normalize` | 响度标准化 |
@@ -85,17 +85,20 @@
 {
   "version": "1.0",
   "name": "My Audio",
-  "audioSource": {
-    "filePath": "./source.wav",  // relative to .nka
-    "duration": 120.5,
-    "sampleRate": 44100,
-    "channels": 2,
-    "format": "wav"
-  },
+  "audioSource": null,           // null = empty project, or:
+  // "audioSource": {
+  //   "filePath": "./source.wav",  // relative to .nka
+  //   "duration": 120.5,
+  //   "sampleRate": 44100,
+  //   "channels": 2,
+  //   "format": "wav"
+  // },
   "effectsChain": [],  // AudioEffectInstance[]
   "markers": []        // { id, time, label, color? }[]
 }
 ```
+
+**创建流程**：右键文件夹 → "新建音频" → 创建空 .nka 文件 → 内联重命名（与画布/素描/剧本一致）
 
 ### 技术栈
 

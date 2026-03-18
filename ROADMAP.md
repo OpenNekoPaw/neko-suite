@@ -23,7 +23,7 @@
 | **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL，Rust/TS 双端类型源 |
 | **neko-model** | Alpha | 65% | 3D 创作套件，Phase 3.1-3.3 ✅（PBR 渲染 + 粒子 + 后处理 + 时间线集成 + CSG/文字/几何体建模 + 骨骼表情） |
 | **neko-sketch** | Alpha | 85% | S.1-S.3 ✅（绘画 + 骨骼动画 + 高级 2D）；S.4 规划中 |
-| **neko-audio** | Alpha | 92% | 完整音频工作站：波形编辑 + 播放 + 频谱分析 + 12 种效果链 + Engine 麦克风录制 + AI 降噪/标准化 + 导出 + .nka 项目 + 78 测试 |
+| **neko-audio** | Alpha | 93% | 完整音频工作站：波形编辑 + 播放 + 频谱分析 + 12 种效果链 + Engine 麦克风录制 + AI 降噪/标准化 + 导出 + .nka 项目 + 右键新建 + l10n + 78 测试 |
 | **neko-live** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-suite** | Stable | 90% | Extension Pack 门户 |
 
@@ -92,6 +92,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - Phase G: AI 降噪 + 标准化 + 导出（denoise/normalize/exportAs）✅
 - Phase H: 命令集成 + .nka 项目 + ExportPanel + 速度同步 ✅
 - Phase I: 响度面板 + Toast 通知 + AudioStreamClient public API + 78 测试 ✅
+- Phase J: 右键新建音频项目（explorer/context 菜单 + 空模板 + 内联重命名）+ l10n + 空项目 null audioSource 支持 ✅
 
 ### neko-audio — 待完成
 - ~~Engine 代理麦克风录制~~ ✅（`cpal` 采集 + WAV 写入 + `/v1/monitor` 电平端点 + 双模式 useRecording）
@@ -260,4 +261,4 @@ neko-engine (分段渲染 + 转场 + 特效)
 
 ---
 
-*最后更新: 2026-03-18（neko-engine 设备代理 P1-P3 完成：cpal 麦克风 + midir MIDI + gilrs Gamepad + camera 框架 + 15 个新 EngineClient 方法）*
+*最后更新: 2026-03-18（neko-audio Phase J：右键新建 + l10n + 空项目支持；neko-engine 设备代理 P1-P3 完成）*
