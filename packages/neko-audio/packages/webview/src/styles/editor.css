@@ -1,0 +1,194 @@
+/* Audio Editor Styles */
+
+:root {
+  --editor-bg: var(--vscode-editor-background, #1e1e1e);
+  --editor-fg: var(--vscode-editor-foreground, #cccccc);
+  --editor-border: var(--vscode-panel-border, #444444);
+  --toolbar-bg: var(--vscode-titleBar-activeBackground, #333333);
+  --button-bg: var(--vscode-button-background, #0078d4);
+  --button-fg: var(--vscode-button-foreground, #ffffff);
+  --button-hover: var(--vscode-button-hoverBackground, #1a8cff);
+  --input-bg: var(--vscode-input-background, #3c3c3c);
+  --input-fg: var(--vscode-input-foreground, #cccccc);
+  --input-border: var(--vscode-input-border, #555555);
+  --accent: var(--vscode-focusBorder, #007acc);
+  --waveform-played: #4a9eff;
+  --waveform-unplayed: #264f78;
+  --waveform-cursor: #ffffff;
+  --selection-bg: rgba(74, 158, 255, 0.2);
+  --selection-border: rgba(74, 158, 255, 0.6);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--editor-bg);
+  color: var(--editor-fg);
+  font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+}
+
+/* Layout */
+.audio-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.audio-editor__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--editor-border);
+  min-height: 36px;
+  flex-shrink: 0;
+}
+
+.audio-editor__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px;
+  gap: 8px;
+}
+
+.audio-editor__waveform {
+  flex: 1;
+  min-height: 120px;
+  position: relative;
+}
+
+.audio-editor__controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--toolbar-bg);
+  border-top: 1px solid var(--editor-border);
+  flex-shrink: 0;
+}
+
+/* Loading */
+.audio-editor__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--editor-fg);
+  opacity: 0.7;
+}
+
+/* Error */
+.audio-editor__error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  color: var(--vscode-errorForeground, #f44);
+  padding: 20px;
+  text-align: center;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--button-bg);
+  color: var(--button-fg);
+  transition: background 0.1s;
+}
+
+.btn:hover {
+  background: var(--button-hover);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--icon {
+  padding: 4px;
+  background: transparent;
+  color: var(--editor-fg);
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.btn--icon:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.btn--active {
+  background: var(--accent);
+}
+
+/* Time display */
+.time-display {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--editor-fg);
+}
+
+/* Slider */
+.slider {
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--input-bg);
+  outline: none;
+  cursor: pointer;
+}
+
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--button-bg);
+  cursor: pointer;
+}
+
+/* File info */
+.file-info {
+  font-size: 11px;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}
+
+/* Divider */
+.divider {
+  width: 1px;
+  height: 20px;
+  background: var(--editor-border);
+  flex-shrink: 0;
+}

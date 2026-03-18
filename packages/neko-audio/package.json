@@ -44,6 +44,16 @@
           }
         ],
         "priority": "option"
+      },
+      {
+        "viewType": "neko.audioProject",
+        "displayName": "Audio Project",
+        "selector": [
+          {
+            "filenamePattern": "*.nka"
+          }
+        ],
+        "priority": "default"
       }
     ],
     "commands": [
@@ -81,6 +91,16 @@
         "command": "neko.audio.fadeOut",
         "title": "Apply Fade Out",
         "category": "Neko Audio"
+      },
+      {
+        "command": "neko.audio.new",
+        "title": "New Audio Project",
+        "category": "Neko Audio"
+      },
+      {
+        "command": "neko.audio.exportAs",
+        "title": "Export Audio As...",
+        "category": "Neko Audio"
       }
     ],
     "configuration": {
@@ -102,8 +122,12 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "watch": "npm run compile -- --watch",
+    "compile": "npm run compile:extension && npm run compile:webview && npm run copy:extension && npm run copy:webview",
+    "compile:extension": "cd packages/extension && npm run build",
+    "compile:webview": "cd packages/webview && npm run build",
+    "copy:extension": "mkdir -p dist && cp packages/extension/dist/extension.js dist/extension.js",
+    "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp packages/webview/dist/*.html dist/webview/ 2>/dev/null || true && cp -R packages/webview/dist/assets/* dist/webview/assets/ 2>/dev/null || true",
+    "watch": "npm run compile:extension -- --watch",
     "lint": "eslint src --ext ts,tsx",
     "test": "vitest --passWithNoTests",
     "package": "vsce package"

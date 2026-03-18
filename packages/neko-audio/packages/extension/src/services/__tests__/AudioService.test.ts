@@ -1,0 +1,408 @@
+/**
+ * AudioService unit tests
+ *
+ * Tests AudioService methods with mocked EngineClient.dispatch().
+ * Verifies request construction, response parsing, and error handling.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// =============================================================================
+// Mocks — must be set up before importing AudioService
+// =============================================================================
+
+// Mock vscode module
+vi.mock('vscode', () => ({
+  extensions: {
+    getExtension: vi.fn(),
+  },
+  commands: {
+    executeCommand: vi.fn(),
+  },
+  Disposable: class {
+    dispose() {}
+  },
+}));
+
+// Mock logger
+vi.mock('../../utils/logger', () => ({
+  getLogger: () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
+// Mock EngineClient — vitest v4 requires `function` syntax for constructor mocks
+const mockDispatch = vi.fn();
+vi.mock('@neko/neko-client', () => ({
+  EngineClient: function MockEngineClient() {
+    return { dispatch: mockDispatch };
+  },
+}));
+
+import { AudioService } from '../AudioService';
+import * as vscode from 'vscode';
+
+// =============================================================================
+// Helper: create an initialized AudioService
+// =============================================================================
+
+async function createTestService(): Promise<AudioService> {
+  const mockExt = { isActive: true, activate: vi.fn() };
+  (vscode.extensions.getExtension as ReturnType<typeof vi.fn>).mockReturnValue(mockExt);
+  (vscode.commands.executeCommand as ReturnType<typeof vi.fn>).mockResolvedValue({ port: 9999 });
+
+  const service = await AudioService.tryCreate();
+  expect(service).not.toBeNull();
+  return service!;
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+describe('AudioService', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // =========================================================================
+  // Initialization
+  // =========================================================================
+
+  describe('tryCreate', () => {
+    it('returns null when engine extension is not installed', async () => {
+      (vscode.extensions.getExtension as ReturnType<typeof vi.fn>).mockReturnValue(null);
+      const service = await AudioService.tryCreate();
+      expect(service).toBeNull();
+    });
+
+    it('returns null when ensureFrameServer returns null', async () => {
+      const mockExt = { isActive: true, activate: vi.fn() };
+      (vscode.extensions.getExtension as ReturnType<typeof vi.fn>).mockReturnValue(mockExt);
+      (vscode.commands.executeCommand as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+      const service = await AudioService.tryCreate();
+      expect(service).toBeNull();
+    });
+
+    it('creates service when engine is available', async () => {
+      const service = await createTestService();
+      expect(service.isAvailable).toBe(true);
+      expect(service.port).toBe(9999);
+    });
+
+    it('activates inactive extension', async () => {
+      const mockExt = { isActive: false, activate: vi.fn().mockResolvedValue(undefined) };
+      (vscode.extensions.getExtension as ReturnType<typeof vi.fn>).mockReturnValue(mockExt);
+      (vscode.commands.executeCommand as ReturnType<typeof vi.fn>).mockResolvedValue({
+        port: 9999,
+      });
+
+      await AudioService.tryCreate();
+      expect(mockExt.activate).toHaveBeenCalled();
+    });
+  });
+
+  // =========================================================================
+  // probeAudio
+  // =========================================================================
+
+  describe('probeAudio', () => {
+    it('parses probe response correctly', async () => {
+      const service = await createTestService();
+
+      mockDispatch.mockResolvedValue({
+        status: 'ok',
+        data: {
+          duration: 120.5,
+          format: 'mp3',
+          audioStreams: [{ codec: 'mp3', sampleRate: 44100, channels: 2, bitrate: 320000 }],
+        },
+      });
+
+      const info = await service.probeAudio('/test/audio.mp3');
+      expect(info).toEqual({
+        duration: 120.5,
+        codec: 'mp3',
+        sampleRate: 44100,
+        channels: 2,
+        bitrate: 320000,
+        format: 'mp3',
+      });
+
+      expect(mockDispatch).toHaveBeenCalledWith({
+        group: 'videos',
+        action: 'probe',
+        options: { source: '/test/audio.mp3' },
+      });
+    });
+
+    it('handles missing audio streams gracefully', async () => {
+      const service = await createTestService();
+
+      mockDispatch.mockResolvedValue({
+        status: 'ok',
+        data: { duration: 10, format: 'wav', audioStreams: [] },
+      });
+
+      const info = await service.probeAudio('/test/empty.wav');
+      expect(info.codec).toBe('');
+      expect(info.sampleRate).toBe(0);
+      expect(info.channels).toBe(0);
+    });
+
+    it('throws on error response', async () => {
+      const service = await createTestService();
+      mockDispatch.mockResolvedValue({
+        status: 'error',
+        error: { message: 'File not found' },
+      });
+
+      await expect(service.probeAudio('/bad/path')).rejects.toThrow('File not found');
+    });
+  });
+
+  // =========================================================================
+  // getWaveform
+  // =========================================================================
+
+  describe('getWaveform', () => {
+    it('returns mono peaks for single-channel audio', async () => {
+      const service = await createTestService();
+
+      mockDispatch.mockResolvedValue({
+        status: 'ok',
+        data: {
+          waveform: {
+            sampleRate: 44100,
+            channels: 1,
+            peaksPerSecond: 10,
+            duration: 2,
+            peaks: [[0.1, 0.5, 0.8, 0.3]],
+          },
+        },
+      });
+
+      const waveform = await service.getWaveform('/test/mono.wav');
+      expect(waveform.peaks).toEqual([0.1, 0.5, 0.8, 0.3]);
+      expect(waveform.duration).toBe(2);
+    });
+
+    it('mixes multi-channel peaks to mono (max across channels)', async () => {
+      const service = await createTestService();
+
+      mockDispatch.mockResolvedValue({
+        status: 'ok',
+        data: {
+          waveform: {
+            sampleRate: 44100,
+            channels: 2,
+            peaksPerSecond: 10,
+            duration: 1,
+            peaks: [
+              [0.1, 0.5],
+              [0.3, 0.2],
+            ],
+          },
+        },
+      });
+
+      const waveform = await service.getWaveform('/test/stereo.wav');
+      expect(waveform.peaks).toEqual([0.3, 0.5]); // max(|0.1|,|0.3|), max(|0.5|,|0.2|)
+    });
+
+    it('handles empty peaks array', async () => {
+      const service = await createTestService();
+
+      mockDispatch.mockResolvedValue({
+        status: 'ok',
+        data: {
+          waveform: { sampleRate: 44100, channels: 0, peaksPerSecond: 0, duration: 0, peaks: [] },
+        },
+      });
+
+      const waveform = await service.getWaveform('/test/empty.wav');
+      expect(waveform.peaks).toEqual([]);
+    });
+  });
+
+  // =========================================================================
+  // transcode
+  // =========================================================================
+
+  describe('transcode', () => {
+    it('dispatches transcode with all options', async () => {
+      const service = await createTestService();
+
+      mockDispatch.mockResolvedValue({
+        status: 'ok',
+        data: { output: '/out/result.mp3' },
+      });
+
+      const result = await service.transcode('/in/audio.wav', '/out/result.mp3', {
+        format: 'mp3',
+        sampleRate: 48000,
+        bitrate: 192000,
+        channels: 1,
+        effects: [{ type: 'compressor', params: { threshold: -20 } }],
+      });
+
+      expect(result).toBe('/out/result.mp3');
+      expect(mockDispatch).toHaveBeenCalledWith({
+        group: 'audios',
+        action: 'transcode',
+        options: {
+          source: '/in/audio.wav',
+          output: '/out/result.mp3',
+          format: 'mp3',
+          sampleRate: 48000,
+          bitrate: 192000,
+          channels: 1,
+          effects: [{ type: 'compressor', params: { threshold: -20 } }],
+        },
+      });
+    });
+
+    it('dispatches trim with start/end times', async () => {
+      const service = await createTestService();
+      mockDispatch.mockResolvedValue({ status: 'ok', data: {} });
+
+      await service.transcode('/in/audio.wav', '/out/trimmed.wav', {
+        startTime: 5.0,
+        endTime: 15.0,
+      });
+
+      expect(mockDispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({ startTime: 5.0, endTime: 15.0 }),
+        }),
+      );
+    });
+
+    it('throws on transcode error', async () => {
+      const service = await createTestService();
+      mockDispatch.mockResolvedValue({
+        status: 'error',
+        error: { message: 'Unsupported codec' },
+      });
+
+      await expect(service.transcode('/in.wav', '/out.mp3')).rejects.toThrow('Unsupported codec');
+    });
+  });
+
+  // =========================================================================
+  // analyzeLoudness
+  // =========================================================================
+
+  describe('analyzeLoudness', () => {
+    it('parses loudness response', async () => {
+      const service = await createTestService();
+
+      mockDispatch.mockResolvedValue({
+        status: 'ok',
+        data: { integratedLoudness: -14.2, truePeak: -1.1, loudnessRange: 8.5 },
+      });
+
+      const result = await service.analyzeLoudness('/test/audio.mp3');
+      expect(result).toEqual({
+        integratedLoudness: -14.2,
+        truePeak: -1.1,
+        loudnessRange: 8.5,
+      });
+    });
+  });
+
+  // =========================================================================
+  // detectSilence
+  // =========================================================================
+
+  describe('detectSilence', () => {
+    it('returns silence regions', async () => {
+      const service = await createTestService();
+
+      mockDispatch.mockResolvedValue({
+        status: 'ok',
+        data: {
+          regions: [
+            { start: 0, end: 1.5 },
+            { start: 30, end: 31 },
+          ],
+        },
+      });
+
+      const regions = await service.detectSilence('/test/audio.mp3', -40, 0.5);
+      expect(regions).toHaveLength(2);
+      expect(regions[0]).toEqual({ start: 0, end: 1.5 });
+    });
+
+    it('passes threshold and minDuration options', async () => {
+      const service = await createTestService();
+      mockDispatch.mockResolvedValue({ status: 'ok', data: { regions: [] } });
+
+      await service.detectSilence('/test.wav', -35, 0.3);
+      expect(mockDispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({ threshold: -35, minDuration: 0.3 }),
+        }),
+      );
+    });
+  });
+
+  // =========================================================================
+  // Streaming
+  // =========================================================================
+
+  describe('streaming', () => {
+    it('startStream returns streamId and WebSocket URL', async () => {
+      const service = await createTestService();
+
+      mockDispatch.mockResolvedValue({
+        status: 'ok',
+        data: { streamId: 'stream-abc' },
+      });
+
+      const result = await service.startStream('/test/audio.mp3');
+      expect(result).toEqual({
+        streamId: 'stream-abc',
+        streamUrl: 'ws://127.0.0.1:9999/v1/streams/stream-abc',
+      });
+    });
+
+    it('startStream returns null on error', async () => {
+      const service = await createTestService();
+      mockDispatch.mockResolvedValue({ status: 'error', error: { message: 'fail' } });
+
+      const result = await service.startStream('/bad.mp3');
+      expect(result).toBeNull();
+    });
+
+    it('getStreamWebSocketUrl returns correct URL', async () => {
+      const service = await createTestService();
+      expect(service.getStreamWebSocketUrl('s1')).toBe('ws://127.0.0.1:9999/v1/streams/s1');
+    });
+  });
+
+  // =========================================================================
+  // Disposal
+  // =========================================================================
+
+  describe('dispose', () => {
+    it('marks service as unavailable after dispose', async () => {
+      const service = await createTestService();
+      expect(service.isAvailable).toBe(true);
+
+      await service.dispose();
+      expect(service.isAvailable).toBe(false);
+      expect(service.port).toBeNull();
+    });
+
+    it('throws on dispatch after dispose', async () => {
+      const service = await createTestService();
+      await service.dispose();
+
+      await expect(service.probeAudio('/test.mp3')).rejects.toThrow('AudioService not available');
+    });
+  });
+});

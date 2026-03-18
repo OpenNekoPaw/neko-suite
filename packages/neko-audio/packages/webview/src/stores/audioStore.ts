@@ -1,0 +1,216 @@
+/**
+ * Audio Editor Zustand Store
+ *
+ * Central state management for the audio editor.
+ * Organized into logical slices: file, playback, selection, ui.
+ */
+
+import { create } from 'zustand';
+import type { AudioInfo, WaveformData } from '../shared/types';
+
+// =============================================================================
+// State Types
+// =============================================================================
+
+export type PlaybackState = 'stopped' | 'playing' | 'paused';
+
+export interface Selection {
+  start: number;
+  end: number;
+}
+
+export interface Marker {
+  id: string;
+  time: number;
+  label: string;
+  color?: string;
+}
+
+export interface AudioStoreState {
+  // File info
+  filePath: string | null;
+  fileName: string | null;
+  audioInfo: AudioInfo | null;
+  waveform: WaveformData | null;
+
+  // Playback
+  playbackState: PlaybackState;
+  currentTime: number;
+  volume: number;
+  speed: number;
+  isMuted: boolean;
+  streamId: string | null;
+  streamUrl: string | null;
+
+  // Selection
+  selection: Selection | null;
+
+  // UI
+  showSpectrum: boolean;
+  showEffects: boolean;
+  showRecording: boolean;
+  showExport: boolean;
+  isLoading: boolean;
+  error: string | null;
+
+  // Project mode (.nka)
+  projectMode: boolean;
+  markers: Marker[];
+
+  // Silence regions (from analysis)
+  silenceRegions: Array<{ start: number; end: number }>;
+
+  // Loudness analysis result
+  loudness: LoudnessResult | null;
+
+  // Toast notifications
+  toast: ToastMessage | null;
+}
+
+export interface LoudnessResult {
+  integratedLoudness: number;
+  truePeak: number;
+  loudnessRange: number;
+}
+
+export interface ToastMessage {
+  id: number;
+  text: string;
+  level: 'info' | 'success' | 'error';
+}
+
+// =============================================================================
+// Actions
+// =============================================================================
+
+export interface AudioStoreActions {
+  // File
+  setFileInfo(filePath: string, fileName: string, audioInfo: AudioInfo): void;
+  setWaveform(waveform: WaveformData): void;
+
+  // Playback
+  setPlaybackState(state: PlaybackState): void;
+  setCurrentTime(time: number): void;
+  setVolume(volume: number): void;
+  setSpeed(speed: number): void;
+  toggleMute(): void;
+  setStreamInfo(streamId: string, streamUrl: string): void;
+  clearStreamInfo(): void;
+
+  // Selection
+  setSelection(selection: Selection | null): void;
+
+  // UI
+  toggleSpectrum(): void;
+  toggleEffects(): void;
+  toggleRecording(): void;
+  toggleExport(): void;
+  setLoading(loading: boolean): void;
+  setError(error: string | null): void;
+
+  // Project
+  setProjectMode(mode: boolean): void;
+  setMarkers(markers: Marker[]): void;
+  addMarker(marker: Marker): void;
+  removeMarker(id: string): void;
+
+  // Analysis
+  setSilenceRegions(regions: Array<{ start: number; end: number }>): void;
+  setLoudness(loudness: LoudnessResult | null): void;
+
+  // Toast
+  showToast(text: string, level?: 'info' | 'success' | 'error'): void;
+  clearToast(): void;
+
+  // Reset
+  reset(): void;
+}
+
+// =============================================================================
+// Store
+// =============================================================================
+
+const initialState: AudioStoreState = {
+  filePath: null,
+  fileName: null,
+  audioInfo: null,
+  waveform: null,
+
+  playbackState: 'stopped',
+  currentTime: 0,
+  volume: 1.0,
+  speed: 1.0,
+  isMuted: false,
+  streamId: null,
+  streamUrl: null,
+
+  selection: null,
+
+  showSpectrum: false,
+  showEffects: false,
+  showRecording: false,
+  showExport: false,
+  isLoading: true,
+  error: null,
+
+  projectMode: false,
+  markers: [],
+
+  silenceRegions: [],
+
+  loudness: null,
+  toast: null,
+};
+
+export const useAudioStore = create<AudioStoreState & AudioStoreActions>()((set) => ({
+  ...initialState,
+
+  // File
+  setFileInfo: (filePath, fileName, audioInfo) =>
+    set({ filePath, fileName, audioInfo, isLoading: false, error: null }),
+  setWaveform: (waveform) => set({ waveform }),
+
+  // Playback
+  setPlaybackState: (playbackState) => set({ playbackState }),
+  setCurrentTime: (currentTime) => set({ currentTime }),
+  setVolume: (volume) => set({ volume }),
+  setSpeed: (speed) => set({ speed }),
+  toggleMute: () => set((s) => ({ isMuted: !s.isMuted })),
+  setStreamInfo: (streamId, streamUrl) => set({ streamId, streamUrl }),
+  clearStreamInfo: () => set({ streamId: null, streamUrl: null }),
+
+  // Selection
+  setSelection: (selection) => set({ selection }),
+
+  // UI
+  toggleSpectrum: () => set((s) => ({ showSpectrum: !s.showSpectrum })),
+  toggleEffects: () => set((s) => ({ showEffects: !s.showEffects })),
+  toggleRecording: () => set((s) => ({ showRecording: !s.showRecording })),
+  toggleExport: () => set((s) => ({ showExport: !s.showExport })),
+  setLoading: (isLoading) => set({ isLoading }),
+  setError: (error) => set({ error, isLoading: false }),
+
+  // Project
+  setProjectMode: (projectMode) => set({ projectMode }),
+  setMarkers: (markers) => set({ markers }),
+  addMarker: (marker) => set((s) => ({ markers: [...s.markers, marker] })),
+  removeMarker: (id) => set((s) => ({ markers: s.markers.filter((m) => m.id !== id) })),
+
+  // Analysis
+  setSilenceRegions: (silenceRegions) => set({ silenceRegions }),
+  setLoudness: (loudness) => set({ loudness }),
+
+  // Toast
+  showToast: (text, level = 'info') => {
+    const id = Date.now();
+    set({ toast: { id, text, level } });
+    // Auto-clear after 4 seconds
+    setTimeout(() => {
+      set((s) => (s.toast?.id === id ? { toast: null } : {}));
+    }, 4000);
+  },
+  clearToast: () => set({ toast: null }),
+
+  // Reset
+  reset: () => set(initialState),
+}));
