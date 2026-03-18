@@ -1,6 +1,6 @@
 # neko-agent 架构
 
-> AI Agent 系统，提供对话、MCP 工具、技能系统、多模型路由等能力。
+> AI Agent 系统，提供对话、MCP 工具、技能系统、多模型 LLM 等能力。
 
 ---
 
@@ -15,9 +15,9 @@ neko-agent 是 Neko Suite 的 AI 能力中枢。它将 LLM 对话、工具执行
 ```
 packages/neko-agent/
 ├── packages/
-│   ├── agent/        # @neko/agent — Agent 运行时（核心）
-│   ├── platform/     # @neko/platform — AI 服务平台（多模型路由）
-│   ├── extension/    # @neko-agent/extension — VSCode Extension Host
+│   ├── agent/        # @neko/agent — Agent 运行时（核心，零 VSCode 依赖）
+│   ├── platform/     # @neko/platform — AI 服务平台（LLM 适配 + 媒体生成）
+│   ├── extension/    # @neko-agent/extension — VSCode Extension Host（纯胶水层）
 │   ├── webview/      # @neko-agent/webview — React 对话 UI
 │   └── cli-tui/      # @neko/cli — Ink TUI 终端界面
 ```
@@ -34,9 +34,9 @@ cli-tui ──→ agent ──→ platform ──→ shared
   └──→ shared            └──→ ai-sdk
 ```
 
-> **说明**：`agent` 通过 `@neko/shared` 的 `IService` 接口抽象 LLM 调用，`platform` 提供具体实现（多模型路由）。
-> `cli-tui` 直接复用 `@neko/platform`，通过 `createCLIPlatform()` 创建 platform 实例，`toSharedService()` 适配为 `IService`。
-> 两种接入方式（Extension / CLI）共享同一套 LLM 路由和 Provider 管理。
+> **说明**：`agent` 通过 `@neko/shared` 的 `IService` 接口抽象 LLM 调用，`platform` 提供具体实现。
+> `cli-tui` 直接复用 `@neko/platform`，通过 `createCLIPlatform()` 创建实例，`toSharedService()` 适配为 `IService`。
+> 两种接入方式（Extension / CLI）共享同一套 LLM 和 Provider 管理。
 
 ---
 
@@ -52,42 +52,49 @@ cli-tui ──→ agent ──→ platform ──→ shared
 │  │  Bootstrap → ChatViewProvider            │           │
 │  │         │         │                      │           │
 │  │  ServiceCollection                       │           │
-│  │    ├─ ChatMessageHandler                 │           │
-│  │    ├─ ConversationManager                │           │
-│  │    ├─ SystemPromptManager                │           │
-│  │    ├─ AgentRunner / AgentManager         │           │
-│  │    └─ ConfigBridge                       │           │
+│  │    ├─ MessageHandler (消息编排)           │           │
+│  │    ├─ ConversationHandler (会话持久化)    │           │
+│  │    ├─ SystemPromptManager (代理 Builder)  │           │
+│  │    ├─ AgentRunner (薄包装 AgentSession)   │           │
+│  │    ├─ AgentManager (LRU 多会话池)         │           │
+│  │    ├─ ConfigBridge (配置消息路由)          │           │
+│  │    ├─ AgentStreamProcessor (事件→UI)      │           │
+│  │    └─ 10 个专用 Handler (task/skill/plan...)│         │
 │  └──────────┬───────────────────────────────┘           │
 │             │                                            │
 │  ┌──────────▼──────────┐     ┌────────────────────────┐ │
 │  │    @neko/agent       │────→│    @neko/platform      │ │
 │  │                     │     │                        │ │
-│  │  AgentExecutor      │     │  LLMRoutingMgr         │ │
-│  │  ├─ ToolRegistry    │     │  ├─ Adapters (Claude,  │ │
-│  │  ├─ SkillRegistry   │     │  │   OpenAI, Google,   │ │
-│  │  ├─ MCPClient       │     │  │   Ollama)           │ │
-│  │  ├─ ConvCompressor  │     │  ├─ MediaService       │ │
-│  │  ├─ PermissionSystem│     │  └─ ToolRegistry       │ │
-│  │  └─ HookComposer    │     └────────────────────────┘ │
-│  └─────────────────────┘                                 │
-│         ▲ postMessage                                    │
-│  ┌──────┴──────────────────────────────┐                │
-│  │     Webview (React)                  │                │
-│  │     @neko-agent/webview             │                │
-│  │                                     │                │
-│  │  ChatView → MessageItem             │                │
-│  │  ToolCallDisplay / SettingsView     │                │
-│  │  Zustand State (conversation/config)│                │
-│  └─────────────────────────────────────┘                │
+│  │  AgentSession        │     │  LLM Adapters          │ │
+│  │  ├─ AgentExecutor    │     │  ├─ Anthropic          │ │
+│  │  │  (ReAct 循环)     │     │  ├─ OpenAI             │ │
+│  │  ├─ ToolRegistry     │     │  ├─ Google/Azure       │ │
+│  │  ├─ SkillService     │     │  ├─ Ollama/Generic     │ │
+│  │  ├─ MCPManager       │     │  │                     │ │
+│  │  ├─ ContextManager   │     │  MediaService           │ │
+│  │  ├─ PermissionSystem │     │  ├─ Runway/Luma        │ │
+│  │  ├─ HookComposer     │     │  ├─ MiniMax/Suno      │ │
+│  │  └─ SkillInjection   │     │  └─ Vidu/Midjourney   │ │
+│  │    Coordinator       │     │                        │ │
+│  └─────────────────────┘     │  ConfigManager          │ │
+│         ▲ postMessage         │  ├─ User Config         │ │
+│  ┌──────┴──────────────────┐ │  └─ Workspace MCP       │ │
+│  │  Webview (React)        │ │                          │ │
+│  │  @neko-agent/webview    │ │  ModelSelector            │ │
+│  │                         │ │  (优先级 fallback)        │ │
+│  │  ChatView + ContentBlock│ └────────────────────────┘ │
+│  │  Zustand State          │                             │
+│  │  Handler Registry       │                             │
+│  └─────────────────────────┘                             │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
 │                  CLI 终端（独立进程）                      │
 │                                                         │
 │  ┌──────────────────────────────────────────┐           │
-│  │     @neko/cli (cli-tui)  — UI 展示层     │           │
+│  │     @neko/cli (cli-tui)  — Ink React     │           │
 │  │                                          │           │
-│  │  App (Ink React)                         │           │
+│  │  App                                     │           │
 │  │    ├─ ChatView + Input + StatusBar       │           │
 │  │    ├─ Zustand Stores                     │           │
 │  │    │  (agent/conversation/config/ui)     │           │
@@ -102,11 +109,7 @@ cli-tui ──→ agent ──→ platform ──→ shared
 │  ┌──────────▼──────────┐     ┌────────────────────────┐ │
 │  │    @neko/agent       │────→│    @neko/platform      │ │
 │  │  AgentSession        │     │  (与 Extension 共享)    │ │
-│  │  ├─ ToolRegistry     │     │  ├─ Adapters           │ │
-│  │  ├─ MCPManager       │     │  ├─ ConfigManager      │ │
-│  │  ├─ SkillService     │     │  └─ MediaService       │ │
-│  │  └─ SystemPromptBuilder   └────────────────────────┘ │
-│  └─────────────────────┘                                │
+│  └─────────────────────┘     └────────────────────────┘ │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -116,84 +119,101 @@ cli-tui ──→ agent ──→ platform ──→ shared
 
 ### @neko/agent — Agent 运行时
 
-Agent 的核心执行引擎，无 VSCode 依赖，可复用于 CLI 场景。
+Agent 的核心执行引擎，零 VSCode 依赖，CLI/Extension 复用。109 个源文件。
 
 | 模块 | 职责 |
 |------|------|
-| `executor/` | AgentExecutor — ReAct 循环（Reasoning → Action → Observation） |
-| `tools/` | ToolRegistry + 内置工具（Read/Write/Bash/Grep）+ 注入管理 |
-| `skill/` | SkillRegistry + Loader + Matcher + Injector — 兼容 Claude Code 的技能系统 |
-| `mcp/` | MCP Client（Stdio/HTTP）+ 工具创建 + 测试服务 |
-| `hooks/` | Hook 组合器（Retry、Memory 等可组合的中间件） |
-| `memory/` | InMemorySessionMemory — 会话记忆存储 |
-| `context/` | ConversationCompressor（对话压缩）、LayeredContextManager（分层上下文）、持久化 |
-| `permission/` | 工具权限系统 — 规则匹配 + 权限 Hook |
-| `validation/` | 输出验证器（Image/Output/Mermaid/JSON/Length） |
+| `executor/` | AgentExecutor — ReAct 循环（think-phase → act-phase → hook-runner） |
+| `session/` | AgentSession 生命周期 + stepToEvents/recordStepInHistory 纯函数 + Initializer |
+| `tools/` | ToolRegistry + 内置工具（Read/Write/Bash/Grep）+ ToolSet 双层注入（always/dynamic）+ 元工具 |
+| `skill/` | SkillService + SkillRegistry + Loader + Matcher + 4-track 原子注入（Coordinator + Injector + ToolGuard） |
+| `mcp/` | MCP Client（Stdio/HTTP）+ 工具桥接 + 测试服务 |
+| `context/` | ContextManager + TokenBudgetManager + ConversationCompressor |
+| `permission/` | IPermissionManager 接口 + 规则匹配（plan/ask/auto 三模式） |
+| `hooks/` | ExecutorHooks + composeHooks + factory |
+| `hook-loader/` | HookLoader — 用户自定义 Hook 加载（.hook/ 目录，IHookFileSystem/IHookCompiler 接口） |
+| `prompt/` | SystemPromptComposer（分层合成）+ SystemPromptBuilder（多语言 + AGENTS.md） |
+| `plan/` | Plan 管理器 + Markdown 解析 |
+| `input/` | InputProcessor — @ 文件引用解析（IFileReader 接口） |
 | `subagent/` | 子 Agent 管理 |
-| `prompt/` | Prompt 管理器 + 链式执行 |
-| `session/` | Agent 会话生命周期 |
-| `task/` | 任务管理器 + 持久化 + 恢复 |
+| `task/` | 后台任务管理器 + 持久化 + 恢复 |
+| `validation/` | 输出验证器（Image/Output/Mermaid/JSON/Length） |
+| `memory/` | InMemorySessionMemory |
 | `commands/` | 内置斜杠命令处理 |
+| `errors/` | 统一错误类型 |
 
 ### @neko/platform — AI 服务平台
 
-多模型路由和 AI 服务抽象层。
+LLM 适配和媒体生成服务。62 个源文件。
 
 ```
 配置策略：
 ├─ Providers/Models: 用户配置（~/.neko/config.json），首次运行生成默认值
 ├─ MCP Servers: 用户配置 + 工作区配置（workspace 按 id 覆盖 user）
 └─ 标量设置: 用户配置 + @neko/shared DEFAULT_CONFIG fallback
+
+模型选择: 优先级 fallback（显式指定 → 配置默认 → 首个可用）
 ```
 
 | 模块 | 职责 |
 |------|------|
-| `core/` | BaseRegistry、HttpClient、ConcurrencyPool（re-export from @neko/shared） |
-| `llm/` | LLM 路由管理 + Adapter 注册（Claude/OpenAI/Google/Ollama） |
-| `provider/` | ProviderRegistry（适配器路由）、PlatformError（统一错误分类） |
-| `config/` | ConfigManager（用户配置 + 工作区 MCP 合并）、ChatModelService、导入导出 |
-| `tools/` | AI 工具（图像/视频/音频生成、分析、文档） |
-| `media/` | 媒体生成服务 + 路由 + 任务执行 |
-| `service/` | 服务层 — 工具注册、Prompt 管理 |
+| `llm/adapter/` | 7 个 LLM 适配器（Anthropic/OpenAI/Google/Azure/Ollama/Generic + AI-SDK 统一）+ AdapterRegistry + StreamAggregator |
+| `provider/` | ProviderRegistry（适配器查找）+ PlatformError（统一错误分类） |
+| `config/` | ConfigManager（用户配置 + 工作区 MCP 合并）+ ChatModelService + 导入导出 + 首次运行默认值 |
+| `media/` | MediaService + 8 个适配器（Runway/Luma/MiniMax/Suno/Vidu/Midjourney/LibLib/OpenAI-compat）+ 路由 + 任务执行 |
+| `service/` | IService 门面 + ModelSelector（优先级 fallback）+ PromptManager + ToolRegistry |
+| `core/` | BaseRegistry + HttpClient + ConcurrencyPool（re-export from @neko/shared） |
+| `types/` | Provider/Model/Config 类型定义 |
 
 ### @neko-agent/extension — VSCode 扩展
 
-桥接 UI 和 Agent 后端。
+纯 VSCode 集成层（胶水代码），不含 AI 业务逻辑。52 个源文件。
+
+所有 AI 功能委托给 `@neko/agent` 和 `@neko/platform`。Extension 只负责：
+- VSCode EventEmitter 桥接
+- postMessage 消息路由
+- 文件系统操作（IFileReader/IHookFileSystem 的 VSCode 实现）
+- Webview 生命周期管理
 
 | 模块 | 职责 |
 |------|------|
-| `bootstrap/` | 服务初始化、核心服务组装 |
-| `chat/` | ChatViewProvider + 消息处理 + 会话管理 + 设置管理 |
-| `chat/handlers/` | 专用处理器（模型预设、集成、计划模式、任务、文件操作、技能） |
-| `ai/` | AgentRunner + AgentManager + Context + Hooks |
-| `services/` | ConfigBridge、文件服务（hooks/prompts/skills）、连接状态 |
-| `tools/` | 扩展级工具注册（NekoCut、NekoCanvas 工具） |
+| `bootstrap/` | 服务初始化 + ServiceCollection 组装 |
+| `chat/` | ChatViewProvider + MessageHandler + 10 个专用 Handler（task/skill/plan/provider/settings/context/conversation/file/integration/slashCommand） |
+| `chat/message/` | AgentStreamProcessor（AgentEvent → postMessage）+ AttachmentProcessor |
+| `ai/` | AgentRunner（薄包装 AgentSession）+ AgentManager（LRU 多会话池，max=10）+ HookManager（esbuild 编译）+ AgentContext |
+| `services/` | ConfigBridge（配置消息路由）+ SkillFileService/PromptFileService/HookFileService（文件监听）+ ConnectionStateManager |
+| `editor/` | EditorModel + EditorRegistry（活动编辑器抽象） |
+| `tools/` | 扩展工具注册（NekoCut/NekoCanvas API 桥接） |
 
 ### @neko-agent/webview — 对话 UI
 
-React 对话界面，通过 postMessage 与 Extension Host 通信。
+React 对话界面，通过 postMessage 与 Extension Host 通信。117 个源文件。
 
 | 模块 | 职责 |
 |------|------|
-| `components/` | ChatView、MessageItem、ToolCallDisplay、MermaidBlock、SettingsView |
-| `handlers/` | 消息处理注册（streaming、tool、conversation） |
-| `hooks/` | 全局状态（conversation/config/ui/resource） |
-| `config/` | 预设配置（providers、prompts、MCP servers） |
+| `components/` | ChatView + ContentBlocks 时序渲染 + SettingsView + ToolCallDisplay + MermaidBlock |
+| `handlers/` | 消息处理注册表（streaming/tool/conversation/config/task） |
+| `hooks/` | Zustand 状态管理（多会话隔离：conversation/config/ui/resource） |
+| `messages/` | type-safe postMessage 构建器 |
+| `config/` | 预设配置（providers/prompts/MCP servers） |
+| `i18n/` | 国际化 |
 
 ### @neko/cli — 命令行界面
 
-独立可执行 CLI，直接复用 `@neko/agent` + `@neko/platform`（与 Extension 共享同一套 LLM 路由）。
+独立可执行 CLI，直接复用 `@neko/agent` + `@neko/platform`。52 个源文件。
 
 CLI 特有的 bootstrap 层（`createCLIPlatform()`）负责：
 - 从环境变量注入 API Key（`ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等）
-- 基于文件的用户配置（`~/.neko/config.json`）
+- 基于文件的用户配置（`~/.neko/config.json`，与 Extension 共享）
 - `toSharedService()` 适配 platform Service → `@neko/shared.IService`
 
-```
-nekoagent run "prompt"       # 单次执行
-nekoagent interactive        # 交互模式
-nekoagent config show/set    # 配置管理
-```
+| 模块 | 职责 |
+|------|------|
+| `components/` | Ink React 组件（ChatView/Input/StatusBar/ToolCallDisplay） |
+| `adapters/` | LLMServiceAdapter（IService 桥接） |
+| `stores/` | Zustand 状态（agent/conversation/config/ui） |
+| `hooks/` | useAgentSession + useKeyboardShortcuts |
+| `core/` | createCLIPlatform + bootstrap |
 
 ---
 
@@ -203,12 +223,18 @@ nekoagent config show/set    # 配置管理
 
 ```
 Webview → Extension:
-  sendMessage, newConversation, switchConversation,
-  updateProvider, getSettings, cancelTask
+  sendMessage, confirmTool, stopAgent,
+  newConversation, switchConversation, deleteConversation,
+  getSettings, updateSettings, invokeSlashCommand,
+  executeSkill, cancelSkill, planApprove/Reject,
+  searchProjectFiles, getTasks, cancelTask
 
 Extension → Webview:
-  thinking, streamText, streamThinking, toolCall,
-  toolResult, streamComplete, taskUpdated
+  thinking, streamText, streamThinking,
+  toolCall, toolResult, toolConfirmation,
+  streamComplete, agentPhase, error,
+  taskCreated, taskUpdated, contextTokenCount,
+  conversations, activeConversation, settings, tabState
 ```
 
 ### Agent 执行流
@@ -217,20 +243,27 @@ Extension → Webview:
 用户输入
   │
   ▼
-ChatMessageHandler（Extension）
+MessageHandler（Extension — 消息编排）
+  ├─ InputProcessor 解析 @ 文件引用
+  ├─ AttachmentProcessor 处理附件
   │
   ▼
-AgentRunner → AgentExecutor（ReAct 循环）
+AgentRunner → AgentSession → AgentExecutor（ReAct 循环）
   │
-  ├─ LLM 调用 → @neko/platform → Claude/OpenAI/Google API（流式）
+  ├─ LLM 调用 → IService → @neko/platform → Claude/OpenAI/Google API（流式）
   │
   ├─ 工具调用 → ToolRegistry → 内置/MCP/扩展工具
-  │     ├─ 权限检查 → PermissionSystem
-  │     └─ Hook 链 → Retry/Memory/Validation
+  │     ├─ 权限检查 → PermissionSystem（plan/ask/auto）
+  │     ├─ ToolGuard → 技能白名单
+  │     └─ Hook 链 → ExecutorHooks
   │
-  ├─ 技能匹配 → SkillRegistry → 发现 + 注入
+  ├─ 技能 → SkillService → 发现 + 4-track 原子注入
   │
-  └─ 上下文管理 → ConversationCompressor → 压缩/摘要
+  └─ 上下文 → ContextManager + TokenBudgetManager → 压缩/摘要
+         │
+         ▼
+AgentStreamProcessor（Extension — 事件翻译）
+  └─ AgentEvent → webview.postMessage
 ```
 
 ---
@@ -239,14 +272,16 @@ AgentRunner → AgentExecutor（ReAct 循环）
 
 | 模式 | 应用 |
 |------|------|
-| **Factory** | `createPlatform()`、`createAgent()` — 统一实例化 |
-| **Registry** | ToolRegistry、SkillRegistry、ProviderRegistry、AdapterRegistry |
-| **Strategy** | SelectionStrategy、RoutingStrategy、LLMRoutingStrategy |
-| **Adapter** | LLMAdapter（Claude/OpenAI/Google/Ollama）— Provider 抽象 |
-| **Chain/Composite** | ChainPromptExecutor、composeHooks — 多步执行 |
-| **Facade** | Service（platform）、ChatViewProvider（extension） |
-| **Observer** | EventEmitter — hooks 和 handlers 中的响应式通知 |
-| **依赖注入** | 构造函数注入 — 解耦依赖 |
+| **Factory** | `createPlatform()`、`createAgentSession()`、`createCLIPlatform()` |
+| **Registry** | ToolRegistry、SkillRegistry、ProviderRegistry、AdapterRegistry、MediaAdapterRegistry |
+| **Adapter** | 7 个 LLMAdapter + 8 个 MediaAdapter — 统一接口适配异构 API |
+| **Facade** | Service（platform 门面）、ChatViewProvider（extension 门面） |
+| **Observer** | vscode.EventEmitter（AgentRunner）、onProgress（MediaService） |
+| **Strategy** | ExecutionMode（plan/ask/auto）、ToolInjectionLayer（always/dynamic） |
+| **Composite** | composeHooks — 多个 ExecutorHooks 组合 |
+| **Coordinator** | SkillInjectionCoordinator — 4-track 原子注入/回滚 |
+| **LRU Cache** | AgentManager — 多会话池化（max=10，驱逐非运行中最久未用） |
+| **依赖注入** | 构造函数注入 — AgentSession/Service/ConfigManager 均通过接口解耦 |
 
 ---
 
@@ -258,5 +293,5 @@ AgentRunner → AgentExecutor（ReAct 循环）
 | Webview | React 18 + Zustand + Tailwind + Vite |
 | AI SDK | Vercel AI SDK (@ai-sdk/anthropic, @ai-sdk/openai, @ai-sdk/google) |
 | MCP | MCP Protocol（Stdio/HTTP 传输） |
-| CLI | commander + chalk + ora + inquirer |
-| 测试 | Vitest |
+| CLI | Ink 5 + React 18 + Zustand + commander + chalk |
+| 测试 | Vitest v4 |
