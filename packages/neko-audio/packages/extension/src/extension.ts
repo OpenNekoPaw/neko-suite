@@ -11,7 +11,6 @@
  */
 
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { AudioEditorProvider } from './providers/AudioEditorProvider';
 import { AudioProjectProvider } from './providers/AudioProjectProvider';
 import { AudioService } from './services/AudioService';
@@ -20,6 +19,22 @@ import { createVSCodeLogger } from '@neko/shared/vscode/extension';
 import { setRootLogger, getLogger } from './utils/logger';
 
 const logger = getLogger('Extension');
+
+// =============================================================================
+// Template
+// =============================================================================
+
+/** Default .nka project template for new audio projects */
+function getAudioProjectTemplate(name: string): string {
+  const data = {
+    version: '1.0',
+    name,
+    audioSource: null,
+    effectsChain: [],
+    markers: [],
+  };
+  return JSON.stringify(data, null, 2);
+}
 
 // =============================================================================
 // Extension State
@@ -121,76 +136,55 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
       }
     }),
 
-    // New Audio Project command
-    vscode.commands.registerCommand('neko.audio.new', async () => {
-      // 1. Pick source audio file
-      const sourceUris = await vscode.window.showOpenDialog({
-        canSelectMany: false,
-        filters: { 'Audio Files': ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'] },
-        title: 'Select Source Audio File',
-      });
-      if (!sourceUris || sourceUris.length === 0) return;
-      const sourceUri = sourceUris[0]!;
-
-      // 2. Probe audio metadata
-      if (!sharedAudioService?.isAvailable) {
-        vscode.window.showErrorMessage('Audio engine not available');
+    // New Audio Project — create .nka file with inline rename (unified pattern)
+    vscode.commands.registerCommand('neko.audio.new', async (uri?: vscode.Uri) => {
+      // Determine target folder from context menu uri or workspace root
+      let targetFolder: vscode.Uri | undefined = uri;
+      if (!targetFolder) {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (workspaceFolders && workspaceFolders.length > 0) {
+          targetFolder = workspaceFolders[0]?.uri;
+        }
+      }
+      if (!targetFolder) {
+        vscode.window.showErrorMessage(vscode.l10n.t('neko.audio.new.noFolder'));
         return;
       }
 
-      try {
-        const audioInfo = await sharedAudioService.probeAudio(sourceUri.fsPath);
-
-        // 3. Determine output location
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const targetDir = workspaceFolder ?? path.dirname(sourceUri.fsPath);
-
-        // Generate unique name
-        const baseName = 'Untitled';
-        let counter = 0;
-        let nkaPath = path.join(targetDir, `${baseName}.nka`);
+      // Generate a unique default file name (Untitled.nka, Untitled-1.nka, ...)
+      const baseName = 'Untitled';
+      const ext = '.nka';
+      let fileName = `${baseName}${ext}`;
+      let fileUri = vscode.Uri.joinPath(targetFolder, fileName);
+      let counter = 1;
+      while (true) {
         try {
-          while (true) {
-            await vscode.workspace.fs.stat(vscode.Uri.file(nkaPath));
-            counter++;
-            nkaPath = path.join(targetDir, `${baseName}-${counter}.nka`);
-          }
+          await vscode.workspace.fs.stat(fileUri);
+          // File exists, try next name
+          fileName = `${baseName}-${counter}${ext}`;
+          fileUri = vscode.Uri.joinPath(targetFolder, fileName);
+          counter++;
         } catch {
-          // File doesn't exist, use this path
+          // File does not exist — use this name
+          break;
         }
+      }
 
-        // 4. Compute relative path from .nka to audio source
-        const relativePath = path.relative(targetDir, sourceUri.fsPath);
+      try {
+        // Create .nka file with default template
+        const title = fileName.replace(/\.nka$/, '');
+        const content = getAudioProjectTemplate(title);
+        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
 
-        // 5. Create .nka JSON
-        const project = {
-          version: '1.0',
-          name: path.basename(sourceUri.fsPath, path.extname(sourceUri.fsPath)),
-          audioSource: {
-            filePath: relativePath,
-            duration: audioInfo.duration,
-            sampleRate: audioInfo.sampleRate,
-            channels: audioInfo.channels,
-            format: audioInfo.format,
-          },
-          effectsChain: [],
-          markers: [],
-        };
+        // Reveal in explorer, wait for file tree to refresh, then trigger inline rename
+        await vscode.commands.executeCommand('revealInExplorer', fileUri);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        await vscode.commands.executeCommand('renameFile');
 
-        const content = JSON.stringify(project, null, 2);
-        const nkaUri = vscode.Uri.file(nkaPath);
-        await vscode.workspace.fs.writeFile(nkaUri, Buffer.from(content, 'utf-8'));
-
-        // 6. Open the .nka file
-        await vscode.commands.executeCommand(
-          'vscode.openWith',
-          nkaUri,
-          AudioProjectProvider.viewType,
-        );
-        logger.info(`Created audio project: ${nkaPath}`);
+        logger.info(`Created audio project: ${fileUri.fsPath}`);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        vscode.window.showErrorMessage(`Failed to create audio project: ${msg}`);
+        vscode.window.showErrorMessage(vscode.l10n.t('neko.audio.new.failed', msg));
       }
     }),
 

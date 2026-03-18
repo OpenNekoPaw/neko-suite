@@ -94,6 +94,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - Phase I: 响度面板 + Toast 通知 + AudioStreamClient public API + 78 测试 ✅
 
 ### neko-audio — 待完成
+- Engine 代理麦克风录制（`cpal` 替代 webview getUserMedia，[ADR](./docs/architecture/device-access.md)）
 - neko-preview：高级预览待完成
 
 ---

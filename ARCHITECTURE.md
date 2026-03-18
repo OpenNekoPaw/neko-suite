@@ -228,6 +228,7 @@ Extension Host
 | 3D 能力 | [architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md) | bevy_ecs 独立 crate + native-scene + R3F 前端，不用 Bevy 全框架 |
 | 2D 能力 | [architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md) | native-puppet（bevy_ecs + inox2d + bevy_animation），替代 Spine/Live2D；WS 实时流供 neko-live |
 | 面板放置策略 | [architecture/panel-placement.md](./docs/architecture/panel-placement.md) | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器；消除侧栏幽灵数据冲突 |
+| 外部设备访问 | [architecture/device-access.md](./docs/architecture/device-access.md) | Webview 沙箱限制硬件 API，通过 neko-engine Rust sidecar 代理设备 I/O（cpal/nokhwa/midir/gilrs） |
 
 ---
 

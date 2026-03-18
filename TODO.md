@@ -199,6 +199,18 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 | neko-assets Phase 5 | 社区分发（.neko 包格式 + 远程注册表） | — |
 | neko-vr | VR/AR 沉浸式创作（立体渲染 + Electron WebXR App + 手部追踪；前置 Phase 3 + 5） | Phase 7 |
 
+### neko-engine 设备代理（[ADR](./docs/architecture/device-access.md)）
+
+Webview 沙箱限制硬件 API，通过 neko-engine Rust sidecar 代理设备 I/O，复用已有 HTTP/WebSocket 通道。
+
+| 优先级 | 设备 | Rust crate | 新增 Action | 受益模块 | 估计工作量 |
+|--------|------|-----------|-------------|---------|-----------|
+| P1 | 麦克风录制 | `cpal` | `audios:list_input_devices/record_start/record_stop` | neko-audio | ~300 行 Rust |
+| P2 | 摄像头捕获 | `nokhwa` / FFmpeg | `cameras:list_devices/capture_start/capture_stop` | neko-live | ~500 行 Rust |
+| P3 | MIDI 输入 | `midir` | `midi:list_ports/connect/disconnect` | neko-audio | ~150 行 Rust |
+| P3 | Gamepad | `gilrs` | `gamepad:list/connect/disconnect` | neko-model | ~200 行 Rust |
+| — | 手写板压感 | 不需要代理 | — | neko-sketch | `PointerEvent.pressure` 直接可用 |
+
 ---
 
-*最后更新：2026-03-18（neko-audio Phase A-I 完成：命令集成 + .nka 项目 + 响度面板 + Toast + AudioStreamClient public API + 3 文件 78 测试）*
+*最后更新：2026-03-18（新增设备访问 ADR；neko-audio Phase A-I 完成）*

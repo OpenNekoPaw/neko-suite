@@ -94,7 +94,7 @@
       },
       {
         "command": "neko.audio.new",
-        "title": "New Audio Project",
+        "title": "%neko.audio.new.title%",
         "category": "Neko Audio"
       },
       {
@@ -103,6 +103,15 @@
         "category": "Neko Audio"
       }
     ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "neko.audio.new",
+          "group": "navigation@10",
+          "when": "explorerResourceIsFolder"
+        }
+      ]
+    },
     "configuration": {
       "title": "Neko Audio",
       "properties": {

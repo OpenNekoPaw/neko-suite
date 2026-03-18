@@ -111,6 +111,7 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 3D 能力 | [docs/architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md) | bevy_ecs 独立 crate + native-scene，不用 Bevy 全框架；混合策略（内置轻量 + MCP 桥接 Blender） |
 | 2D 能力 | [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md) | neko-sketch 轻量绘画 + Spine/Live2D；混合策略（内置轻量 + MCP 桥接 PS/ComfyUI） |
 | 面板放置 | [docs/architecture/panel-placement.md](./docs/architecture/panel-placement.md) | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器 |
+| 设备访问 | [docs/architecture/device-access.md](./docs/architecture/device-access.md) | Webview 沙箱限制硬件 API，通过 engine Rust sidecar 代理（cpal/nokhwa/midir/gilrs） |
 
 ### Rust 引擎开发约束
 

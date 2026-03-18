@@ -33,16 +33,18 @@ const logger = getLogger('AudioProject');
 // .nka Project Schema
 // =============================================================================
 
+interface AudioSource {
+  filePath: string;
+  duration: number;
+  sampleRate: number;
+  channels: number;
+  format: string;
+}
+
 interface AudioProject {
   version: '1.0';
   name: string;
-  audioSource: {
-    filePath: string;
-    duration: number;
-    sampleRate: number;
-    channels: number;
-    format: string;
-  };
+  audioSource: AudioSource | null;
   effectsChain: Array<{
     id: string;
     type: string;
@@ -479,6 +481,23 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
       const raw = await vscode.workspace.fs.readFile(nkaUri);
       const project = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
 
+      // Empty project (no audio source yet) — send minimal init
+      if (!project.audioSource) {
+        await panel.webview.postMessage({
+          type: 'project:init',
+          payload: {
+            filePath: null,
+            fileName: project.name,
+            audioInfo: null,
+            project: {
+              effectsChain: project.effectsChain,
+              markers: project.markers,
+            },
+          },
+        });
+        return;
+      }
+
       // Resolve audio source path (relative to .nka file)
       const nkaDir = path.dirname(nkaUri.fsPath);
       const audioPath = path.isAbsolute(project.audioSource.filePath)
@@ -551,6 +570,7 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
     try {
       const raw = await vscode.workspace.fs.readFile(nkaUri);
       const project = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
+      if (!project.audioSource) return null;
       const nkaDir = path.dirname(nkaUri.fsPath);
       return path.isAbsolute(project.audioSource.filePath)
         ? project.audioSource.filePath
