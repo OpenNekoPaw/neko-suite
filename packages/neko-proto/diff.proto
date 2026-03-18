@@ -301,6 +301,109 @@ message ElementContentDiff {
 }
 
 // =============================================================================
+// Canvas Structural Diff
+// =============================================================================
+
+enum CanvasChangeType {
+  CANVAS_CHANGE_TYPE_ADDED = 0;
+  CANVAS_CHANGE_TYPE_REMOVED = 1;
+  CANVAS_CHANGE_TYPE_MODIFIED = 2;
+  CANVAS_CHANGE_TYPE_UNCHANGED = 3;
+}
+
+message CanvasPropertyChange {
+  // Property name (e.g. "position", "size", "rotation", "label")
+  string property = 1;
+  // JSON-encoded previous value
+  string previous = 2;
+  // JSON-encoded current value
+  string current = 3;
+}
+
+message CanvasNodeChange {
+  string node_id = 1;
+  // Node type ("media" | "storyboard" | "annotation" | "group")
+  string node_type = 2;
+  // Optional label or title for display
+  optional string label = 3;
+  CanvasChangeType change_type = 4;
+  repeated CanvasPropertyChange property_changes = 5;
+  // For group nodes: child IDs added/removed
+  repeated string child_ids_added = 6;
+  repeated string child_ids_removed = 7;
+}
+
+message CanvasConnectionChange {
+  string connection_id = 1;
+  CanvasChangeType change_type = 2;
+  // Source/target node IDs
+  string source_id = 3;
+  string target_id = 4;
+  // Connection type ("default" | "sequence" | "reference")
+  optional string connection_type = 5;
+  optional string label = 6;
+}
+
+message CanvasDiffSummary {
+  uint32 nodes_added = 1;
+  uint32 nodes_removed = 2;
+  uint32 nodes_modified = 3;
+  uint32 connections_added = 4;
+  uint32 connections_removed = 5;
+  uint32 connections_modified = 6;
+}
+
+message CanvasContentDiff {
+  // Canvas metadata comparison
+  optional string name_current = 1;
+  optional string name_previous = 2;
+  // Node-level changes
+  repeated CanvasNodeChange node_changes = 3;
+  // Connection-level changes
+  repeated CanvasConnectionChange connection_changes = 4;
+  // Summary statistics
+  CanvasDiffSummary summary = 5;
+  // Total node counts
+  uint32 total_nodes_current = 6;
+  uint32 total_nodes_previous = 7;
+}
+
+// =============================================================================
+// Audio Silence Detection
+// =============================================================================
+
+message SilenceRegion {
+  // Silence start time (seconds)
+  double start = 1;
+  // Silence end time (seconds)
+  double end = 2;
+  // Duration of the silence region (seconds)
+  double duration = 3;
+  // RMS level in this region (dB, negative values)
+  double rms_db = 4;
+}
+
+message AudioSilenceDetection {
+  // Silence threshold used for detection (dB)
+  double threshold_db = 1;
+  // Minimum duration to be classified as silence (seconds)
+  double min_silence_duration = 2;
+  // Total number of silence regions detected
+  uint32 silence_region_count = 3;
+  // Total silence duration (seconds)
+  double total_silence_duration = 4;
+  // Total audio duration (seconds)
+  double total_duration = 5;
+  // Silence percentage (0.0 - 1.0)
+  double silence_percent = 6;
+  // Detected silence regions
+  repeated SilenceRegion silence_regions_a = 7;
+  repeated SilenceRegion silence_regions_b = 8;
+  // Regions where silence pattern differs between A and B
+  repeated SilenceRegion diff_regions = 9;
+}
+
+// =============================================================================
 // DiffResult — top-level diff output
 // =============================================================================
 

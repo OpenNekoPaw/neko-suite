@@ -19,11 +19,11 @@
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
 | **neko-assets** | Alpha | 85% | Phase 1-3 ✅ + 外部媒体库 ✅ + AI 分类 + 缩略图 + 多云支持 + 跨扩展集成，Phase 4-5 待开发 |
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
-| **neko-canvas** | Alpha | 75% | 无限画布 + 6 种节点 + 连接标签 + 图层面板 + 富文本 + 分组 + 画板导出 + 原地粘贴 + i18n |
+| **neko-canvas** | Alpha | 85% | 无限画布 + 6 种节点 + 连接标签 + 图层面板 + 富文本 + 分组 + 画板导出 + 原地粘贴 + 旋转 + 框选 + Port UI 面板 + i18n |
 | **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL，Rust/TS 双端类型源 |
-| **neko-model** | Alpha | 65% | 3D 创作套件，Phase 3.1 ✅ + Phase 3.2 ✅ + Phase 3.3 ✅（PBR 渲染 + 粒子 + 后处理 + 时间线集成 + CSG/文字/几何体建模 + 骨骼表情） |
-| **neko-sketch** | Alpha | 85% | S.1 ✅ 绘画基础；S.2 ✅ 骨骼动画；S.3 ✅ 高级 2D（滤镜/粒子/场景/绘制/资产）；S.4 规划中 |
-| **neko-audio** | Planned | 5% | 仅扩展入口骨架 |
+| **neko-model** | Alpha | 65% | 3D 创作套件，Phase 3.1-3.3 ✅（PBR 渲染 + 粒子 + 后处理 + 时间线集成 + CSG/文字/几何体建模 + 骨骼表情） |
+| **neko-sketch** | Alpha | 85% | S.1-S.3 ✅（绘画 + 骨骼动画 + 高级 2D）；S.4 规划中 |
+| **neko-audio** | Alpha | 90% | 完整音频工作站：波形编辑 + 播放 + 频谱分析 + 12 种效果链 + 麦克风录制 + AI 降噪/标准化 + 导出 + .nka 项目 + 命令集成 + 响度面板 + 78 测试 |
 | **neko-live** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-suite** | Stable | 90% | Extension Pack 门户 |
 
@@ -43,15 +43,6 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 > 目标：AI Agent 驱动的智能剪辑 — **进度 ~70%**
 
-### neko-agent — 已完成
-- Agent 核心引擎（executor/session/context/memory/MCP/Skill/hooks/permission）
-- LLM 平台层（Claude/OpenAI adapter + routing + workflow + 中英双语预设）
-- Assistant UI（ChatView + AgentControlCenter + SettingsView + i18n）
-- Agent CLI（交互式 + MCP + 文件引用）
-- ChatViewProvider Handler 拆分（-61%）+ AgentExecutor 流式化
-- AI 视频生成（MediaGenerationService + 8 MediaAdapter + 智能路由）
-- Skill 系统重构：Coordinator 唯一状态源 + SkillService 去状态化（SRP）
-
 ### neko-agent — 待完成
 - 分镜→批量视频生成 → 自动排列到时间线
 
@@ -60,91 +51,50 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - AI 字幕生成 / 自动配乐 / 画面描述（→ Phase 4 音频工作站阶段，依赖 neko-audio）
 - MCP 桥接专业软件 Blender / ComfyUI / Photoshop（→ Phase 3.4 AI 辅助 3D + neko-model）
 
-### neko-story ✅
-- Fountain 解析器 + LSP（补全/定义/悬停/符号/诊断）+ Webview 渲染 + 时间线生成 + PDF 导出
-
 ---
 
 ## Phase 3: 视觉增强 + 3D 能力
 
 > 目标：专业视觉效果和 3D 场景编辑 — **进度 ~75%**
 
-### neko-canvas — 已完成
-- 无限画布（5%-1600% 缩放 + 网格背景 + 视口裁剪）
-- 6 种节点（Annotation/Storyboard/Media/Text/Artboard/Group）+ 内联文本编辑
-- 多选（Cmd+click）+ 属性面板 + 上下文菜单 + 拖放导入 + 10+ 快捷键 + i18n
-- GroupNode 分组管理（子节点列表 + 标签 + 颜色 + 组/取消组操作）
-- TextNode 富文本工具栏（字号/粗体/对齐/颜色）
-- 连接标签编辑（PropertyPanel 内 label/type 编辑）
-- 图层面板（LayerPanel 集成，节点可见性 + 拖拽排序）
-- 画板导出（ArtboardNode → postMessage → Extension 保存对话框）
-- 原地粘贴（Shift+Cmd+V，零偏移复制）
-
 ### neko-canvas — 待完成
-- 节点 resize/rotate + 框选
+- 节点 resize/rotate + 框选 ✅（rotate + 框选 + Port UI 面板已完成）
 - WebGPU 渲染 + 特效系统 + 自定义转场 + 导出
 
-### neko-model (3D) — Alpha
+### neko-model (3D) — 待完成
 
 > 架构设计见 [docs/architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md)
 
-- Phase 3.1 ✅：基础 3D 视口 + 场景组装（native-scene bevy_ecs + glTF/VRM + R3F + 骨骼动画 + SceneTree + TransformGizmo + EngineClient 集成）
-- Phase 3.2 ✅：AI 捏脸 + 基础建模
-  - ✅ 参数化面部编辑器（22 个参数，5 个分类）
-  - ✅ Morph Target 驱动捏脸（自动绑定 morphTargetInfluences）
-  - ✅ VRM 表情预设（@pixiv/three-vrm，17 个标准表情）
-  - ✅ 延迟测试工具（100 次测试 + 统计 + 建议）
-  - ✅ CSG 布尔运算（BSP 树算法，Union/Difference/Intersection）
-  - ✅ 3D 文字挤出（cosmic-text 字形轮廓 → ear-clipping 三角化 → Z 轴挤出）
-  - ✅ 参数化几何体（6 种标准形状：Cube/Sphere/Cylinder/Cone/Torus/Plane）
-  - ✅ 骨骼驱动表情 UI（口型同步 6 音素 + 眼球追踪 + 眉毛滑块）
-  - ✅ ProceduralMesh 统一抽象 + AssetCache.register_procedural_mesh() GPU 管线
-  - ✅ 前端 4 面板（骨骼表情 / CSG / 3D 文字 / 几何体创建）+ 通信层
-  - ⬜ AI MCP Tools（face.generate_params / face.from_image / face.adjust）
-- Phase 3.3 ✅：PBR 渲染 + 时间线集成（12 步完成）
-  - ✅ PBR 材质管线（Metallic-Roughness + Normal/AO/Emissive 贴图）
-  - ✅ IBL 环境光照（HDRI → Cubemap → Irradiance + Prefiltered + BRDF LUT）
-  - ✅ 粒子系统（GPU 实例化 + 6 种发射器 + 力场 + 碰撞）
-  - ✅ 后处理管线（Bloom + Tone Mapping + FXAA + Vignette + Color Grading）
-  - ✅ SceneRenderOutput → GpuLayer 时间线集成
-  - ✅ 前端 scene3d 类型集成（neko-cut 时间线 + neko-canvas 节点）
+- Phase 3.1-3.3 ✅（基础 3D 视口 + AI 捏脸 + CSG/文字/几何体建模 + PBR 渲染 + 粒子 + 后处理 + 时间线集成）
+- Phase 3.2 遗留：AI MCP Tools（face.generate_params / face.from_image / face.adjust）
 - Phase 3.4：AI 辅助 3D + 3DGS + MCP 桥接（Text-to-3D + Image-to-3D + Blender MCP）
 
-### neko-sketch (2D) — Alpha
+### neko-sketch (2D) — 待完成
 
 > 架构设计见 [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md)
 
-- Phase S.1 ✅：绘画基础（WebGL2 引擎 + 7 种笔刷 + 压感 + 12 混合模式 + 图层/选区/历史 + .nks I/O）
-- Phase S.2 ✅：2D 骨骼动画 + 逐帧动画
-  - ✅ native-puppet crate（bevy_ecs 0.15 + inox2d + bevy_animation）
-  - ✅ INP 手动解析（绕过 inox2d 0.3.0 `pub(crate)` 限制）
-  - ✅ bevy_animation ParameterCurve 桥接层（anim_play/stop/seek/anims 端点）
-  - ✅ `GET /v1/puppets/stream`（60fps WebSocket PuppetDelta 推送，供 neko-live）
-  - ✅ AnimationPanel UI（动画列表 + 播放控制 + IInochi2DController.connectStream）
-  - ✅ 逐帧动画（洋葱皮渲染 + 帧管理 + 精灵表导出）
-- Phase S.3 ✅：高级 2D 功能
-  - ✅ 滤镜系统（FilterPipeline ping-pong FBO + FilterRegistry 6 内置 GLSL 滤镜 + FilterPanel UI）
-  - ✅ 粒子系统（ParticleSimulation 对象池 + ParticleRenderer WebGL2 实例化 + ParticlePanel UI）
-  - ✅ 精灵表导出（OffscreenCanvas 网格装箱 + Aseprite/TexturePacker 兼容 JSON）
-  - ✅ 变形动画（MorphEngine 顶点变形 + 关键帧插值 + MorphEditor UI）
-  - ✅ 场景系统（Scene/SceneLayer/CameraConfig + 视差渲染 + 4 个场景模板 + 氛围效果 5 预设）
-  - ✅ 像素绘制（Bresenham 直线 + flood fill + 1x/2x/4x/8x 画笔 + 像素网格）
-  - ✅ 矢量绘制（贝塞尔路径 + 矩形/椭圆/多边形/星形 + SVG 导出 + Canvas2D 渲染）
-  - ✅ 资产集成（精灵表/场景 JSON 导出 + VSCode 命令注册）
-  - ✅ 渲染管线集成（filterFn 回调 + SketchRenderer.renderWithEffects）
-  - ✅ 单元测试（7 文件 42 测试：pixel-tool/vector-tool/morph-engine/parallax/particle/frame/atmosphere）
-  - ✅ 画板响应修复（RAF 连续渲染 + ResizeObserver 自适应 + dirty flag 模式）
-  - ✅ 国际化支持（I18nProvider + useTranslation hook + 130 翻译 key + 中英双语 13 组件全覆盖）
+- Phase S.1-S.3 ✅（绘画基础 + 2D 骨骼动画 + 逐帧动画 + 高级 2D 功能）
 - Phase S.4：AI 辅助 + 跨模块集成（sketch.generate / style_transfer / → neko-cut/canvas）
 
 ---
 
 ## Phase 4: 音频工作站
 
-> 目标：专业音频编辑 — **进度 ~15%**
+> 目标：专业音频编辑 — **进度 ~90%**
 
-- neko-preview：VideoPreviewProvider + AudioPreviewProvider ✅ + WebCodecs 播放器 + 波形可视化 + i18n，高级预览待完成
-- neko-audio：波形编辑 + 音频效果（均衡器/压缩/降噪）+ 录音
+### neko-audio — ✅ 已完成
+- Phase A: 双包基础设施（extension + webview）✅
+- Phase B: 核心播放（波形显示 + 播放/暂停/Seek/音量/速度）✅
+- Phase C: 编辑功能（选区裁剪 + 音频属性面板）✅
+- Phase D: 频谱分析（AnalyserNode FFT + Canvas 频率条形图）✅
+- Phase E: 效果链（12 种效果 + 动态参数编辑器 + Apply transcode）✅
+- Phase F: 麦克风录制（getUserMedia + MediaRecorder + 电平表 + 设备选择）✅
+- Phase G: AI 降噪 + 标准化 + 导出（denoise/normalize/exportAs）✅
+- Phase H: 命令集成 + .nka 项目 + ExportPanel + 速度同步 ✅
+- Phase I: 响度面板 + Toast 通知 + AudioStreamClient public API + 78 测试 ✅
+
+### neko-audio — 待完成
+- neko-preview：高级预览待完成
 
 ---
 
@@ -177,6 +127,16 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ---
 
+## Phase 6: 资产管理与协作
+
+> 目标：统一资产管理 + AI 模型资产化 + 社区分发 — **进度 ~55%**
+
+- Phase 1-3.5 ✅（统一核心 + 深度集成 + 注册表 + 缩略图 + 外部媒体库）
+- Phase 4（待开发）：Handler 实现（Shader/Preset/Model）+ AI 模型资产化 + IAIAnalysisService
+- Phase 5（待开发）：社区分发（`.neko` 包格式 + 远程注册表 + CLI）
+
+---
+
 ## Phase 7: VR/AR 沉浸式创作（远期规划）
 
 > 目标：VR/AR 场景编辑 + 沉浸式预览 — **进度 ~0%** | **前置：Phase 3 + Phase 5**
@@ -201,12 +161,6 @@ Layer 3: MCP 桥接（专业导出）
 └─ ComfyUI MCP → AI 生成 VR 环境
 ```
 
-**现有可复用基础**：
-- wgpu PBR 渲染管线 → 扩展双 Pass 立体渲染（~300 行 Rust）
-- bevy_ecs Skeleton + VRM → 手部/面部追踪映射
-- WebSocket 60fps 流 → 已验证 <20ms 延迟
-- EngineClient 零 VSCode 依赖 → 外部 App 直接复用
-
 **需新建**：
 - `native-core/src/vr/stereo_renderer.rs` — 双眼渲染 + 镜头畸变校正
 - `neko-vr/` 扩展 — VSCode XR 元数据编辑 + Electron 沉浸式预览
@@ -217,17 +171,6 @@ Layer 3: MCP 桥接（专业导出）
 - Phase 7.2：Electron WebXR 外部 App + 手部追踪（3-4 周）
 - Phase 7.3：AR 能力（平面检测 + 光照估计 + 图像追踪）（4-6 周）
 - Phase 7.4：AI 辅助 XR（neko-agent VR 场景生成 + 手势识别 + 语音指令）
-
----
-
-## Phase 6: 资产管理与协作
-
-> 目标：统一资产管理 + AI 模型资产化 + 社区分发 — **进度 ~55%**
-
-- Phase 1-3 ✅：统一核心 + 深度集成 + 注册表 + 缩略图
-- Phase 3.5 ✅：外部媒体库（健康检查 + 路径变量 + TreeView + 多云支持）
-- Phase 4（待开发）：Handler 实现（Shader/Preset/Model）+ AI 模型资产化 + IAIAnalysisService
-- Phase 5（待开发）：社区分发（`.neko` 包格式 + 远程注册表 + CLI）
 
 ---
 
@@ -309,4 +252,4 @@ neko-engine (分段渲染 + 转场 + 特效)
 
 ---
 
-*最后更新: 2026-03-17（neko-agent Skill 系统重构：Coordinator 唯一状态源 + SkillService 去状态化；neko-canvas 6 功能增强：GroupNode 分组 + TextNode 富文本 + 连接标签 + 图层面板 + 画板导出 + 原地粘贴；Phase 8 交互视频创作规划；Phase 5 虚拟制片详细规划；Phase 7 VR/AR 远期规划）*
+*最后更新: 2026-03-18（neko-audio Phase A-I 全部完成：命令集成 + .nka 项目 + 响度面板 + Toast + public API + 78 测试，进度 75% → 90%）*

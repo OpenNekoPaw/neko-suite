@@ -7,7 +7,8 @@
 
 import * as vscode from 'vscode';
 import { Platform, createPlatform, FileUserConfigManager } from '@neko/platform';
-import { MCPManager, TaskManager, ToolRegistry } from '@neko/agent';
+import { MCPManager, TaskManager, ToolRegistry, createAllMCPTools } from '@neko/agent';
+import type { ITaskStorage, SerializableTask } from '@neko/shared';
 import { ServiceCollection, createServiceId, getLogger } from '../base';
 
 const logger = getLogger('ServiceBootstrap');
@@ -48,19 +49,12 @@ export {
 // VSCode Task Storage
 // =============================================================================
 
-interface TaskRecord {
-  id: string;
-  status: string;
-  createdAt: number;
-  completedAt?: number;
-}
-
-class VSCodeTaskStorage {
+class VSCodeTaskStorage implements ITaskStorage {
   private readonly STORAGE_KEY = 'neko.agent.tasks';
 
   constructor(private readonly globalState: vscode.Memento) {}
 
-  async save(task: TaskRecord): Promise<void> {
+  async save(task: SerializableTask): Promise<void> {
     const tasks = await this.loadAll();
     const index = tasks.findIndex((t) => t.id === task.id);
     if (index >= 0) {
@@ -71,18 +65,18 @@ class VSCodeTaskStorage {
     await this.globalState.update(this.STORAGE_KEY, tasks);
   }
 
-  async load(id: string): Promise<TaskRecord | undefined> {
+  async load(id: string): Promise<SerializableTask | undefined> {
     const tasks = await this.loadAll();
     return tasks.find((t) => t.id === id);
   }
 
-  async loadPending(): Promise<TaskRecord[]> {
+  async loadPending(): Promise<SerializableTask[]> {
     const tasks = await this.loadAll();
     return tasks.filter((t) => t.status === 'pending' || t.status === 'running');
   }
 
-  async loadAll(): Promise<TaskRecord[]> {
-    return this.globalState.get<TaskRecord[]>(this.STORAGE_KEY, []);
+  async loadAll(): Promise<SerializableTask[]> {
+    return this.globalState.get<SerializableTask[]>(this.STORAGE_KEY, []);
   }
 
   async delete(id: string): Promise<void> {
@@ -96,8 +90,7 @@ class VSCodeTaskStorage {
     const now = Date.now();
     const filtered = tasks.filter((t) => {
       if (t.status === 'completed' || t.status === 'failed') {
-        const completedAt = t.completedAt ?? t.createdAt;
-        return now - completedAt < olderThanMs;
+        return now - t.updatedAt < olderThanMs;
       }
       return true;
     });
@@ -137,7 +130,7 @@ export async function bootstrapCoreServices(
   // ==========================================================================
   const taskStorage = new VSCodeTaskStorage(context.globalState);
   const taskManager = new TaskManager({
-    storage: taskStorage as any,
+    storage: taskStorage,
     cleanupIntervalMs: 60 * 60 * 1000, // 1 hour
     retentionPeriodMs: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
@@ -249,9 +242,9 @@ async function connectMCPServers(
   }
 
   // Register all MCP tools once after all servers are connected
-  const tools = await mcpManager.getAllTools();
+  const tools = await createAllMCPTools(mcpManager);
   for (const tool of tools) {
-    toolRegistry.register(tool as any);
+    toolRegistry.register(tool);
   }
 }
 

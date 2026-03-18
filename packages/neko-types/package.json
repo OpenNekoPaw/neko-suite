@@ -5,7 +5,8 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "generate": "node ../../scripts/proto-gen-ts.mjs"
+    "generate": "node ../../scripts/proto-gen-ts.mjs",
+    "test": "vitest --run --passWithNoTests"
   },
   "exports": {
     ".": "./src/index.ts",

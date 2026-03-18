@@ -58,6 +58,8 @@ export interface CanvasNodeBase {
   size: { width: number; height: number };
   /** Z-index for layering */
   zIndex: number;
+  /** Rotation angle in degrees (0-360, default 0) */
+  rotation?: number;
   /** Whether node is locked from editing */
   locked?: boolean;
   /** Port definitions for data-flow connections (optional, backward compatible) */

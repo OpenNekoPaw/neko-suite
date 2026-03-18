@@ -34,8 +34,9 @@ cli-tui ──→ agent ──→ platform ──→ shared
   └──→ shared            └──→ ai-sdk
 ```
 
-> **说明**：`agent` 通过 `IService` 接口抽象 LLM 调用，`platform` 提供 `IService` 的具体实现（多模型路由）。
-> `cli-tui` 同样通过 `LLMServiceAdapter` 实现 `IService`，桥接内置 `LLMClient` 到 `agent` 层。
+> **说明**：`agent` 通过 `@neko/shared` 的 `IService` 接口抽象 LLM 调用，`platform` 提供具体实现（多模型路由）。
+> `cli-tui` 直接复用 `@neko/platform`，通过 `createCLIPlatform()` 创建 platform 实例，`toSharedService()` 适配为 `IService`。
+> 两种接入方式（Extension / CLI）共享同一套 LLM 路由和 Provider 管理。
 
 ---
 
@@ -91,17 +92,20 @@ cli-tui ──→ agent ──→ platform ──→ shared
 │  │    ├─ Zustand Stores                     │           │
 │  │    │  (agent/conversation/config/ui)     │           │
 │  │    └─ useAgentSession Hook               │           │
-│  │         │                                │           │
-│  │  LLMClient → LLMServiceAdapter(IService) │           │
+│  │                                          │           │
+│  │  createCLIPlatform()                     │           │
+│  │    ├─ createPlatform(...)                │           │
+│  │    ├─ collectEnvApiKeys()                │           │
+│  │    └─ toSharedService() → IService       │           │
 │  └──────────┬───────────────────────────────┘           │
 │             │                                            │
-│  ┌──────────▼──────────┐                                │
-│  │    @neko/agent       │                                │
-│  │  AgentSession        │                                │
-│  │  ├─ ToolRegistry     │                                │
-│  │  ├─ MCPManager       │                                │
-│  │  ├─ SkillService     │                                │
-│  │  └─ SystemPromptBuilder                              │
+│  ┌──────────▼──────────┐     ┌────────────────────────┐ │
+│  │    @neko/agent       │────→│    @neko/platform      │ │
+│  │  AgentSession        │     │  (与 Extension 共享)    │ │
+│  │  ├─ ToolRegistry     │     │  ├─ Adapters           │ │
+│  │  ├─ MCPManager       │     │  ├─ ConfigManager      │ │
+│  │  ├─ SkillService     │     │  └─ MediaService       │ │
+│  │  └─ SystemPromptBuilder   └────────────────────────┘ │
 │  └─────────────────────┘                                │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -136,22 +140,18 @@ Agent 的核心执行引擎，无 VSCode 依赖，可复用于 CLI 场景。
 多模型路由和 AI 服务抽象层。
 
 ```
-三级配置：Builtin Presets → User Config → Workspace Config
-
-路由策略：
-├─ Priority（优先级）
-├─ Round-Robin（轮询）
-├─ Weighted（加权）
-├─ Cost/Latency-Optimal（成本/延迟最优）
-└─ Capability-Match（能力匹配）
+配置策略：
+├─ Providers/Models: 用户配置（~/.neko/config.json），首次运行生成默认值
+├─ MCP Servers: 用户配置 + 工作区配置（workspace 按 id 覆盖 user）
+└─ 标量设置: 用户配置 + @neko/shared DEFAULT_CONFIG fallback
 ```
 
 | 模块 | 职责 |
 |------|------|
-| `core/` | Registry、Strategy、Router、HealthMonitor、CircuitBreaker、RateLimiter |
+| `core/` | BaseRegistry、HttpClient、ConcurrencyPool（re-export from @neko/shared） |
 | `llm/` | LLM 路由管理 + Adapter 注册（Claude/OpenAI/Google/Ollama） |
-| `provider/` | Provider 注册、分组、重试执行器 |
-| `config/` | 三级配置管理器 |
+| `provider/` | ProviderRegistry（适配器路由）、PlatformError（统一错误分类） |
+| `config/` | ConfigManager（用户配置 + 工作区 MCP 合并）、ChatModelService、导入导出 |
 | `tools/` | AI 工具（图像/视频/音频生成、分析、文档） |
 | `media/` | 媒体生成服务 + 路由 + 任务执行 |
 | `service/` | 服务层 — 工具注册、Prompt 管理 |
@@ -182,7 +182,12 @@ React 对话界面，通过 postMessage 与 Extension Host 通信。
 
 ### @neko/cli — 命令行界面
 
-独立可执行 CLI，复用 @neko/agent 核心。
+独立可执行 CLI，直接复用 `@neko/agent` + `@neko/platform`（与 Extension 共享同一套 LLM 路由）。
+
+CLI 特有的 bootstrap 层（`createCLIPlatform()`）负责：
+- 从环境变量注入 API Key（`ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等）
+- 基于文件的用户配置（`~/.neko/config.json`）
+- `toSharedService()` 适配 platform Service → `@neko/shared.IService`
 
 ```
 nekoagent run "prompt"       # 单次执行

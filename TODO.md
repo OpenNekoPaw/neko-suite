@@ -4,35 +4,16 @@
 
 ---
 
-## 🔴 P0 — 阻塞性（本迭代必须完成）
-
-### 构建/测试修复 ✅ 已完成
-1. [x] `@neko-model/webview` 测试脚本缺少 `--passWithNoTests`（已修复）
-2. [x] `neko-sketch/packages/extension/package.json` 入口 `./src/index.ts` 文件不存在（Knip 配置已修正：从整体 ignore 改为分子包正确配置入口）
-
----
-
-## 🟡 P1 — 核心功能（当前迭代）
-
-### neko-engine（3D PBR 渲染 Phase 3）✅ 已完成（12/12）
-
-### neko-model（3D 编辑器 Phase 2）✅ 已完成（11/11）
-
----
-
 ## 🟢 P2 — 增强功能（可延后）
 
 ### neko-engine
 - [ ] WebGPU 实时预览优化（降低 GPU→CPU 回读延迟）
 - [ ] 高精度波形 Zoom（按需加载超过 800 点的精细波形）
 - [ ] 渲染能力补齐：shapes / keyframes（effects ✅ subtitles ✅ letter_spacing ⚠️ cosmic-text 限制）
-- [x] 转场系统接入 export pipeline（TextureTransitionProcessor，18 种转场 GPU texture 路径）
-
-### neko-sketch（S.2 + S.3）✅ 已完成
 
 ### neko-canvas
-- [ ] 节点 resize/rotate + 框选 + 分组节点
-- [ ] Port 系统 + UI 面板
+- [x] 节点 resize/rotate + 框选 + 分组节点（resize ✅ 分组 ✅ rotate ✅ 框选 ✅）
+- [x] Port 系统 + UI 面板（Port 类型/渲染 ✅ PortEditor UI 面板 ✅）
 
 ### neko-tools（媒体 Diff）
 - [ ] Diff 后端增强（Phase 3）
@@ -57,11 +38,11 @@
 
 ### neko-proto
 - [ ] 接入 protoc/buf 自动生成（当前手动维护，同步成本高）
-- [ ] 补齐 diff.proto 剩余类型定义
+- [x] 补齐 diff.proto 剩余类型定义（CanvasContentDiff + AudioSilenceDetection 已添加）
 
 ### EditOperation 遗留项
-- [ ] neko-types `package.json` 缺少 test script（测试文件已写但无法运行）
-- [ ] 操作 undo/redo 正确性手动验证
+- [x] neko-types `package.json` 缺少 test script（已添加，11 文件 242 测试通过）
+- [x] 操作 undo/redo 正确性验证（invert 30+ / roundtrip 40+ / historySlice 15+ 测试已覆盖）
 
 ---
 
@@ -137,51 +118,34 @@
 - [ ] Release workflow（`.github/workflows/release.yml`，tag 触发 vsix 打包）
 - [ ] ESLint warn → error 升级（`no-console` + `no-explicit-any`）
 
-### 代码质量（2026-03-16 更新）
+### 代码质量
 
 **扫描基线**：`pnpm build` ✅ | `pnpm test` ✅ | `pnpm check` ❌（Knip 未使用导出）
 
-**源码 TODO 扫描**：12 处（P0: 0 | P1: 0 | P2: 2 | 一般: 3 | 误报: 7）— 无阻塞项
+**源码 TODO 扫描**：10 处（P0: 0 | P1: 0 | P2: 0 | 一般: 3 | 误报: 7）— 无阻塞项
 
 **扫描基线**：Knip 5 未使用文件 | 435 未使用导出 | 16 未使用依赖 | **0 循环依赖** ✅
 
-**循环依赖修复** ✅ **完成（2026-03-14）**
-- neko-types: 2 处 → 0（ToolFilterOptions 移至 tool.ts）
-- neko-cut webview: 3 处 → 0（已自动修复）
-- neko-agent platform: 2 处 → 0（已自动修复）
-- **成果**：7 → 0（100% 清理）
+**`as any`：452 处（生产 0 ✅ + 测试 452）**
 
-**`console.log` 清理** ✅ **完成（2026-03-14）**
-- neko-tools webview: 21 处 → 0（迁移至 Logger）
-- neko-client: 3 处 → 0（EngineClient + H264StreamClient）
-- neko-model: 4 处 → 0（extension + webview 组件）
-- neko-story: 1 处 → 0（ErrorBoundary）
-- neko-audio/neko-live: 2 处 → 0（extension 激活日志）
-- **保留**：ExportIntegrationTest.ts / simpleExportTest.js（CLI 测试脚本）
-- **保留**：cli-tui 包（CLI 工具的标准 stdout/stderr 输出）
+生产代码 `as any` 已全部清除（18 → 0），修复方式：
+- i18n 动态键：移除不必要的 `as any`（`t()` 签名已接受 `string`）
+- 类型联合：利用判别联合自动窄化 + 精确类型断言（`BezierShape`）
+- 全局 API：Window 接口扩展（`vite-env.d.ts` / `global.d.ts`）+ `'X' in globalThis`
+- 泛型不兼容：BaseNode 引入 `BaseNodeInput` 放宽 prop 约束
+- 接口对齐：`VSCodeTaskStorage` 实现 `ITaskStorage` + `createAllMCPTools()` 包装 MCP 工具
+- 动态对象：`Record<string, unknown>` 中间变量 + `typeof` 守卫
 
-**`as any`：470 处（生产 18 + 测试 452）** — 生产代码减少 71 处 ✅（80% 改善）
+**`as unknown as`（模式 1：TimelineElement 联合类型字段访问）：42 → 5 ✅**
 
-| 包 | 生产 | 测试 | 热点 |
-|----|------|------|------|
-| neko-cut | 9 | 242 | TimelineTrack.tsx (4) |
-| neko-canvas | 3 | 0 | TextNode/ArtboardNode/LayerPanel |
-| neko-agent | 2 | 216 | serviceBootstrap.ts |
-| neko-preview | 1 | 0 | useVscodeMessage.ts |
-| 其他 | 3 | 194 | 低债务 |
+neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减少 88%），修复方式：
+- 引入 `ToolElement`（`TimelineElement & Partial<ToolElementExtensions>`）+ `ToolTrack` 类型，集中声明运行时 UI 扩展字段
+- `findElement()` 返回 `ToolElement`，将类型断言集中在 1 处
+- `mergeElement()` / `createElement()` 工具函数消除 handler 中 spread+cast 模式
+- 判别联合自动窄化访问 `src`/`content`/`shapes` 等子类型字段
+- 剩余 5 处：`helpers.ts` 1 处（`createElement` 集中断言）+ `shapeHandler.ts` 4 处（Shape↔Record 固有转换）
 
-**已修复（2026-03-14）**：
-- render-handlers.ts: 9 处 → 0（类型守卫 + ProjectData 类型）
-- MediaDiffViewer.tsx: 5 处 → 0（联合类型断言）
-- keyframeHandler.ts: 3 处 → 0（交叉类型 `TimelineElement & { keyframes: ... }`）
-- maskHandler.ts: 3 处 → 0（移除不必要的 `as any`）
-
-**ESLint 配置优化（2026-03-14）** ✅：
-- 测试文件关闭 `@typescript-eslint/no-explicit-any` 规则（452 处不再警告）
-- 测试文件关闭 `@typescript-eslint/no-non-null-assertion` 规则
-- 生产代码保持严格检查（18 处仍会警告）
-
-**未使用导出分析（2026-03-14）** 📊：
+**未使用导出分析** 📊：
 - 总计：962 处（435 导出 + 527 类型）
 - Barrel exports (index.ts): 146 处（34%）
 - Phase 2 类型定义: ~200 处（21%）- 规划功能，暂不清理
@@ -194,11 +158,13 @@
 - neko-agent webview: ~200 处（hooks/index.ts 29 + handlers）
 - neko-canvas webview: ~120 处（components/index.ts 34 + hooks/index.ts 46）
 
-**清理策略**：
-- P1: 16 个未使用 devDependencies（`pnpm check:unused:fix`）
-- P2: ~150 处 barrel exports 和工具函数
-- P3: ~200 处 Hook 类型定义
-- 保留: ~600 处 Phase 2 功能类型和公共 API
+**待清理**：
+
+| 优先级 | 任务 | 预期收益 |
+|--------|------|----------|
+| P3 | 清理 ~200 处 Hook 类型定义 | 代码整洁 |
+| P3 | ESLint warn → error 升级 | 质量守门 |
+| P3 | Release workflow（vsix 打包发布） | 自动化发布 |
 
 **大文件（>1000 LOC）：5 个待拆分**
 
@@ -209,17 +175,6 @@
 | ExportPanel.tsx | 1112 | 提取子组件和 hooks |
 | AudioDiffViewer.tsx | 1081 | 分离波形渲染和交互逻辑 |
 | AssetVariantDiffEditorProvider.ts | 1071 | 重构 |
-
-**清理优先级**
-
-| 优先级 | 任务 | 预期收益 |
-|--------|------|----------|
-| P1 | ~~清理 16 个未使用 devDependencies~~ ✅ | 减少安装时间 |
-| P2 | ~~清理 ~150 处 barrel exports~~ ✅ | 减少 bundle size |
-| P2 | ~~neko-cut 测试补充（6% → 15%）~~ ✅ 468 tests / 12 files | 回归保护 |
-| P3 | 清理 ~200 处 Hook 类型定义 | 代码整洁 |
-| P3 | ESLint warn → error 升级 | 质量守门 |
-| P3 | Release workflow（vsix 打包发布） | 自动化发布 |
 
 **其他技术债务**
 
@@ -239,11 +194,11 @@
 | neko-protocol | 共享协议仓库（Proto IDL → TS/Go/Rust 生成） | — |
 | @neko/types 重组 | domain/ 分层 + exports 子路径隔离 | — |
 | @neko/media-analysis | 从 neko-tools 提取纯 Diff 算法包 | — |
-| neko-audio | 波形编辑 + 均衡器 + 录音 | Phase 4 |
+| neko-audio 遗留 | neko-preview 高级预览 | Phase 4 |
 | neko-live | 动捕 + 虚拟形象 + 直播（前置 neko-audio；5.1 MediaPipe/VMC 追踪 + VRM 预览；5.2 录制 + 音视频同步；5.3 RTMP→OBS 推流；虚拟摄像头不做，改 RTMP） | Phase 5 |
 | neko-assets Phase 5 | 社区分发（.neko 包格式 + 远程注册表） | — |
 | neko-vr | VR/AR 沉浸式创作（立体渲染 + Electron WebXR App + 手部追踪；前置 Phase 3 + 5） | Phase 7 |
 
 ---
 
-*最后更新：2026-03-16（P0 构建修复 2 项已完成；Knip 配置修正 neko-sketch/neko-model 子包入口；扫描基线 pnpm test ✅）*
+*最后更新：2026-03-18（neko-audio Phase A-I 完成：命令集成 + .nka 项目 + 响度面板 + Toast + AudioStreamClient public API + 3 文件 78 测试）*
