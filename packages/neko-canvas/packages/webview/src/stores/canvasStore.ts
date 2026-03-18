@@ -51,6 +51,13 @@ export interface CanvasStore {
     size: { width: number; height: number },
     position: { x: number; y: number },
   ) => void;
+  /** Real-time rotation update (no history) */
+  rotateNode: (id: string, rotation: number) => void;
+  /** Record history + final rotation (call on rotate end) */
+  rotateNodeEnd: (id: string, rotation: number) => void;
+
+  /** Update node port definitions (records history) */
+  updateNodePorts: (id: string, ports: PortDefinition[]) => void;
 
   // ==================== Reorder Actions ====================
   /** Reorder a node to a new zIndex (for layer panel drag) */
@@ -258,6 +265,53 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ...canvasData,
         nodes: canvasData.nodes.map((node) =>
           node.id === id ? { ...node, size, position } : node,
+        ),
+      },
+    });
+  },
+
+  rotateNode: (id, rotation) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    // No history recording – called on every mousemove during rotation
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: canvasData.nodes.map((node) =>
+          node.id === id ? { ...node, rotation } : node,
+        ),
+      },
+    });
+  },
+
+  rotateNodeEnd: (id, rotation) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    recordHistory(canvasData);
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: canvasData.nodes.map((node) =>
+          node.id === id ? { ...node, rotation } : node,
+        ),
+      },
+    });
+  },
+
+  updateNodePorts: (id, ports) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    recordHistory(canvasData);
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: canvasData.nodes.map((node) =>
+          node.id === id ? { ...node, ports } : node,
         ),
       },
     });

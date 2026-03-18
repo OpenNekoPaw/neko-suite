@@ -410,6 +410,20 @@ export class AudioStreamClient {
   }
 
   // =========================================================================
+  // Public Accessors (for AnalyserNode integration)
+  // =========================================================================
+
+  /** Expose AudioContext for external AnalyserNode connection */
+  getAudioContext(): AudioContext | null {
+    return this.audioCtx;
+  }
+
+  /** Expose GainNode for external AnalyserNode connection */
+  getGainNode(): GainNode | null {
+    return this.gainNode;
+  }
+
+  // =========================================================================
   // Stats
   // =========================================================================
 

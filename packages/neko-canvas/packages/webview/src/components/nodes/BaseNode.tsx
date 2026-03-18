@@ -7,21 +7,36 @@
  * - Otherwise falls back to legacy 4-direction anchor points
  */
 
-import { useCallback, type ReactNode } from 'react';
-import type { CanvasNode, CanvasViewport, PortDefinition } from '@neko/shared';
+import { useCallback, useMemo, type ReactNode } from 'react';
+import type { CanvasViewport, CanvasNodeType, PortDefinition } from '@neko/shared';
 import { getDefaultPorts } from '@neko/shared';
 import { useNodeDrag } from '../../hooks/useNodeDrag';
 import { useNodeResize, type ResizeHandle } from '../../hooks/useNodeResize';
+import { useNodeRotate } from '../../hooks/useNodeRotate';
 import clsx from 'clsx';
 
 // =============================================================================
 // Types
 // =============================================================================
 
+/** Minimal node shape that BaseNode needs — accepts both CanvasNode and extended types */
+interface BaseNodeInput {
+  id: string;
+  type: string;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  zIndex: number;
+  rotation?: number;
+  locked?: boolean;
+  ports?: PortDefinition[];
+}
+
 export interface BaseNodeProps {
-  node: CanvasNode;
+  node: BaseNodeInput;
   viewport: CanvasViewport;
   isSelected: boolean;
+  /** Container ref for coordinate conversion (needed for rotation) */
+  containerRef?: React.RefObject<HTMLElement | null>;
   onSelect?: (nodeId: string, multi: boolean) => void;
   /** Called on every mousemove during drag (real-time position update) */
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
@@ -39,6 +54,10 @@ export interface BaseNodeProps {
     size: { width: number; height: number },
     position: { x: number; y: number },
   ) => void;
+  /** Called on every mousemove during rotation */
+  onRotate?: (nodeId: string, rotation: number) => void;
+  /** Called on mouseup when rotation ends */
+  onRotateEnd?: (nodeId: string, rotation: number) => void;
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   children: ReactNode;
   className?: string;
@@ -88,11 +107,14 @@ export function BaseNode({
   node,
   viewport,
   isSelected,
+  containerRef,
   onSelect,
   onDrag,
   onMove,
   onResize,
   onResizeEnd,
+  onRotate,
+  onRotateEnd,
   onConnectionStart,
   children,
   className,
@@ -127,12 +149,36 @@ export function BaseNode({
     disabled: node.locked,
   });
 
+  // Node rotation
+  const nodeCenter = useMemo(
+    () => ({
+      x: node.position.x + node.size.width / 2,
+      y: node.position.y + node.size.height / 2,
+    }),
+    [node.position.x, node.position.y, node.size.width, node.size.height],
+  );
+
+  const {
+    rotation: currentRotation,
+    isRotating,
+    startRotate,
+  } = useNodeRotate({
+    nodeId: node.id,
+    initialRotation: node.rotation ?? 0,
+    nodeCenter,
+    viewport,
+    containerRef: containerRef ?? { current: null },
+    onRotate,
+    onRotateEnd,
+    disabled: node.locked,
+  });
+
   // Use resize position/size when resizing, otherwise drag position + node size
   const currentPosition = isResizing ? resizePosition : dragPosition;
   const currentSize = isResizing ? size : node.size;
 
   // Resolve ports: explicit node.ports > default ports for type > empty
-  const ports = node.ports ?? getDefaultPorts(node.type);
+  const ports = node.ports ?? getDefaultPorts(node.type as CanvasNodeType);
   const hasPorts = ports.length > 0;
 
   // Handle node click for selection
@@ -228,9 +274,9 @@ export function BaseNode({
     <div
       className={clsx(
         'absolute select-none',
-        isResizing && 'pointer-events-auto',
+        (isResizing || isRotating) && 'pointer-events-auto',
         isDragging && 'cursor-grabbing',
-        !isDragging && !isResizing && !node.locked && 'cursor-grab',
+        !isDragging && !isResizing && !isRotating && !node.locked && 'cursor-grab',
         node.locked && 'cursor-not-allowed opacity-80',
         className,
       )}
@@ -239,7 +285,9 @@ export function BaseNode({
         top: currentPosition.y,
         width: currentSize.width,
         height: currentSize.height,
-        zIndex: isDragging || isResizing ? 1000 : node.zIndex,
+        zIndex: isDragging || isResizing || isRotating ? 1000 : node.zIndex,
+        transform: currentRotation ? `rotate(${currentRotation}deg)` : undefined,
+        transformOrigin: 'center center',
       }}
       onMouseDown={dragHandlers.onMouseDown}
       onClick={handleClick}
@@ -267,6 +315,47 @@ export function BaseNode({
             onMouseDown={(e) => startResize(handle, e)}
           />
         ))}
+
+      {/* Rotation handle (visible when selected, above node top center) */}
+      {isSelected && !node.locked && (
+        <>
+          {/* Connector line from node top to rotation handle */}
+          <div
+            className="absolute z-20 pointer-events-none"
+            style={{
+              left: '50%',
+              top: -24,
+              width: 1,
+              height: 20,
+              backgroundColor: 'var(--node-selected)',
+              opacity: 0.5,
+              transform: 'translateX(-50%)',
+            }}
+          />
+          {/* Rotation handle circle */}
+          <div
+            className="absolute z-20 flex items-center justify-center transition-all duration-150 hover:scale-125"
+            style={{
+              left: '50%',
+              top: -36,
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              backgroundColor: 'var(--node-selected)',
+              border: '2px solid var(--node-bg)',
+              transform: 'translateX(-50%)',
+              cursor: 'grab',
+              fontSize: 9,
+              color: 'var(--node-bg)',
+              lineHeight: 1,
+            }}
+            onMouseDown={startRotate}
+            title={`Rotation: ${Math.round(currentRotation)}°`}
+          >
+            ↻
+          </div>
+        </>
+      )}
 
       {/* Port-based connections (always visible for data flow clarity) */}
       {hasPorts &&

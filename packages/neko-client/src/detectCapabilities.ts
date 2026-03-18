@@ -32,7 +32,7 @@ export async function detectCapabilities(): Promise<CapabilityReport> {
   // ── MediaSource (MSE) ──
   const hasMS = typeof MediaSource !== 'undefined';
   check('MediaSource', hasMS);
-  check('ManagedMediaSource', typeof (globalThis as any).ManagedMediaSource !== 'undefined');
+  check('ManagedMediaSource', 'ManagedMediaSource' in globalThis);
 
   // ── MSE isTypeSupported ──
   if (hasMS) {

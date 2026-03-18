@@ -11,6 +11,7 @@
 import { useCallback } from 'react';
 import type { CanvasNode, CanvasConnection, ConnectionType } from '@neko/shared';
 import { t } from '../../i18n';
+import { PortEditor } from './PortEditor';
 
 // =============================================================================
 // Types
@@ -22,6 +23,7 @@ export interface PropertyPanelProps {
   onUpdateNode: (id: string, updates: Partial<CanvasNode>) => void;
   onUpdateNodeData: (id: string, data: Record<string, unknown>) => void;
   onUpdateConnection?: (id: string, updates: Partial<CanvasConnection>) => void;
+  onUpdatePorts?: (id: string, ports: import('@neko/shared').PortDefinition[]) => void;
   onDeleteNode: (id: string) => void;
   onToggleLock: (id: string) => void;
   width?: number;
@@ -37,6 +39,7 @@ export function PropertyPanel({
   onUpdateNode,
   onUpdateNodeData,
   onUpdateConnection,
+  onUpdatePorts,
   onDeleteNode,
   onToggleLock,
   width = 240,
@@ -130,6 +133,13 @@ export function PropertyPanel({
                   onUpdateNode(node.id, { size: { ...node.size, height: Math.max(30, v) } })
                 }
               />
+              <NumberField
+                label="R"
+                value={node.rotation ?? 0}
+                onChange={(v) =>
+                  onUpdateNode(node.id, { rotation: ((v % 360) + 360) % 360 })
+                }
+              />
             </div>
           </PanelSection>
 
@@ -157,6 +167,11 @@ export function PropertyPanel({
             node={node}
             onUpdateData={(data) => onUpdateNodeData(node.id, data)}
           />
+
+          {/* Port editor */}
+          {onUpdatePorts && (
+            <PortEditor node={node} onUpdatePorts={onUpdatePorts} />
+          )}
 
           {/* Actions */}
           <PanelSection title={t('panel.actions')}>

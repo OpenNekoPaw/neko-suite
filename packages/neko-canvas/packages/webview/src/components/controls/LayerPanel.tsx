@@ -196,12 +196,13 @@ function LayerItem({
 
   // 获取节点名称
   const getNodeName = (): string => {
-    const data = node.data as any;
-    if (data.name) return data.name;
-    if (data.title) return data.title;
-    if (data.label) return data.label;
-    if (data.content) return data.content.slice(0, 20) + (data.content.length > 20 ? '...' : '');
-    if (data.assetPath) return data.assetPath.split('/').pop() || 'Media';
+    const data = node.data as Record<string, unknown>;
+    if (typeof data.name === 'string') return data.name;
+    if (typeof data.title === 'string') return data.title;
+    if (typeof data.label === 'string') return data.label;
+    if (typeof data.content === 'string')
+      return data.content.slice(0, 20) + (data.content.length > 20 ? '...' : '');
+    if (typeof data.assetPath === 'string') return data.assetPath.split('/').pop() || 'Media';
     return `${label} ${node.id.slice(-4)}`;
   };
 

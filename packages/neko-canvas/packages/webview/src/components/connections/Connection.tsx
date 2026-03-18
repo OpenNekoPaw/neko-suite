@@ -92,14 +92,42 @@ function getPortAnchorPoint(node: CanvasNode, portId: string): Point | null {
   }
 }
 
+/** Rotate a point around a center by given degrees */
+function rotatePoint(point: Point, center: Point, angleDeg: number): Point {
+  if (angleDeg === 0) return point;
+  const rad = (angleDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  return {
+    x: center.x + dx * cos - dy * sin,
+    y: center.y + dx * sin + dy * cos,
+  };
+}
+
+function getNodeCenter(node: CanvasNode): Point {
+  return {
+    x: node.position.x + node.size.width / 2,
+    y: node.position.y + node.size.height / 2,
+  };
+}
+
 function getAnchorPoint(node: CanvasNode, anchor: string, portId?: string): Point {
+  let point: Point;
   if (portId) {
     const portPoint = getPortAnchorPoint(node, portId);
-    if (portPoint) return portPoint;
+    point = portPoint ?? getPortAnchorPoint(node, anchor) ?? getLegacyAnchorPoint(node, anchor);
+  } else {
+    point = getPortAnchorPoint(node, anchor) ?? getLegacyAnchorPoint(node, anchor);
   }
-  const portPoint = getPortAnchorPoint(node, anchor);
-  if (portPoint) return portPoint;
-  return getLegacyAnchorPoint(node, anchor);
+
+  // Apply node rotation if present
+  const rotation = node.rotation ?? 0;
+  if (rotation !== 0) {
+    return rotatePoint(point, getNodeCenter(node), rotation);
+  }
+  return point;
 }
 
 function getAnchorDirection(node: CanvasNode, anchor: string, portId?: string): string {

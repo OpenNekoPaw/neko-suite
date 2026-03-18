@@ -21,8 +21,7 @@ let vscodeApi: VsCodeApi | null = null;
 
 function getVsCodeApi(): VsCodeApi {
   if (!vscodeApi) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vscodeApi = (window as any).acquireVsCodeApi?.() ?? null;
+    vscodeApi = window.acquireVsCodeApi?.() ?? null;
     if (!vscodeApi) {
       // Fallback for dev mode (outside VSCode)
       logger.warn('acquireVsCodeApi not available, using mock');

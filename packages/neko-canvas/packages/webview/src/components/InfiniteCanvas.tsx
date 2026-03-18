@@ -28,6 +28,7 @@ import type { ArtboardCanvasNode } from '../types/extendedCanvas';
 import { useViewportTransform } from '../hooks/useViewportTransform';
 import { useViewportCulling } from '../hooks/useViewportCulling';
 import { useConnectionDrag } from '../hooks/useConnectionDrag';
+import { useMarqueeSelect } from '../hooks/useMarqueeSelect';
 
 // =============================================================================
 // Types
@@ -58,6 +59,10 @@ export interface InfiniteCanvasProps {
     position: { x: number; y: number },
   ) => void;
   onNodeUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
+  /** Called on every mousemove during node rotation */
+  onNodeRotate?: (nodeId: string, rotation: number) => void;
+  /** Called on mouseup when node rotation ends */
+  onNodeRotateEnd?: (nodeId: string, rotation: number) => void;
   onConnectionSelect?: (connectionId: string) => void;
   onConnectionStart?: (nodeId: string, anchor: string) => void;
   onConnectionComplete?: (
@@ -68,6 +73,8 @@ export interface InfiniteCanvasProps {
   ) => void;
   onConnectionCancel?: () => void;
   onCanvasClick?: () => void;
+  /** Called when marquee selection completes */
+  onMarqueeSelect?: (nodeIds: string[], additive: boolean) => void;
   /** 是否启用视口裁剪（默认启用） */
   enableCulling?: boolean;
 }
@@ -89,11 +96,14 @@ export function InfiniteCanvas({
   onNodeResize,
   onNodeResizeEnd,
   onNodeUpdateData,
+  onNodeRotate,
+  onNodeRotateEnd,
   onConnectionSelect,
   onConnectionStart,
   onConnectionComplete,
   onConnectionCancel,
   onCanvasClick,
+  onMarqueeSelect,
   enableCulling = true,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -117,6 +127,19 @@ export function InfiniteCanvas({
     onConnectionStart,
     onConnectionComplete,
     onConnectionCancel,
+  });
+
+  // Marquee selection hook
+  const {
+    marqueeRect,
+    isSelecting: isMarqueeSelecting,
+    handlers: marqueeHandlers,
+  } = useMarqueeSelect({
+    viewport,
+    containerRef: containerRef as React.RefObject<HTMLElement | null>,
+    nodes,
+    onSelect: onMarqueeSelect,
+    enabled: !viewportState.isPanning && !isDraggingConnection,
   });
 
   // Viewport culling - 只渲染可见节点
@@ -168,6 +191,7 @@ export function InfiniteCanvas({
   const getCursor = () => {
     if (viewportState.isPanning) return 'grabbing';
     if (isDraggingConnection) return 'crosshair';
+    if (isMarqueeSelecting) return 'crosshair';
     return 'default';
   };
 
@@ -178,10 +202,17 @@ export function InfiniteCanvas({
       style={{ cursor: getCursor() }}
       onMouseDown={(e) => {
         viewportHandlers.onMouseDown(e);
+        marqueeHandlers.onMouseDown(e);
         handleCanvasClick(e);
       }}
-      onMouseMove={viewportHandlers.onMouseMove}
-      onMouseUp={viewportHandlers.onMouseUp}
+      onMouseMove={(e) => {
+        viewportHandlers.onMouseMove(e);
+        marqueeHandlers.onMouseMove(e);
+      }}
+      onMouseUp={(e) => {
+        viewportHandlers.onMouseUp();
+        marqueeHandlers.onMouseUp(e);
+      }}
       onMouseLeave={viewportHandlers.onMouseLeave}
     >
       {/* Background grid */}
@@ -207,16 +238,35 @@ export function InfiniteCanvas({
             nodes,
             viewport,
             isSelected,
+            containerRef as React.RefObject<HTMLElement | null>,
             onNodeSelect,
             onNodeDrag,
             onNodeMove,
             onNodeResize,
             onNodeResizeEnd,
+            onNodeRotate,
+            onNodeRotateEnd,
             onNodeUpdateData,
             startDragConnection,
           );
         })}
       </CanvasViewport>
+
+      {/* Marquee selection rectangle */}
+      {marqueeRect && (
+        <div
+          className="absolute pointer-events-none z-50"
+          style={{
+            left: marqueeRect.x - (containerRef.current?.getBoundingClientRect().left ?? 0),
+            top: marqueeRect.y - (containerRef.current?.getBoundingClientRect().top ?? 0),
+            width: marqueeRect.width,
+            height: marqueeRect.height,
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            border: '1px solid rgba(59, 130, 246, 0.6)',
+            borderRadius: 2,
+          }}
+        />
+      )}
 
       {/* Canvas info overlay */}
       <div className="absolute bottom-2 left-2 text-xs text-gray-500 pointer-events-none">
@@ -243,6 +293,7 @@ function renderNode(
   allNodes: CanvasNode[],
   viewport: ViewportType,
   isSelected: boolean,
+  containerRef: React.RefObject<HTMLElement | null>,
   onSelect?: (nodeId: string, multi: boolean) => void,
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void,
   onMove?: (nodeId: string, position: { x: number; y: number }) => void,
@@ -256,17 +307,22 @@ function renderNode(
     size: { width: number; height: number },
     position: { x: number; y: number },
   ) => void,
+  onRotate?: (nodeId: string, rotation: number) => void,
+  onRotateEnd?: (nodeId: string, rotation: number) => void,
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void,
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void,
 ): React.ReactNode {
   const commonProps = {
     viewport,
     isSelected,
+    containerRef,
     onSelect,
     onDrag,
     onMove,
     onResize,
     onResizeEnd,
+    onRotate,
+    onRotateEnd,
     onConnectionStart,
     onUpdateData,
   };

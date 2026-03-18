@@ -92,6 +92,16 @@ export const en = {
   'panel.groupColor': 'Color',
   'panel.groupChildren': 'Children',
 
+  // Ports
+  'panel.ports': 'Ports',
+  'panel.addPort': 'Add Port',
+  'panel.removePort': 'Remove',
+  'panel.defaultPorts': 'Using default ports',
+  'panel.customizePorts': 'Customize',
+
+  // Rotation
+  'panel.rotation': 'Rotation',
+
   // Loading
   loading: 'Loading canvas...',
 

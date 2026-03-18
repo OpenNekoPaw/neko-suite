@@ -280,25 +280,23 @@ export class EntityService {
    * Deep merge metadata objects
    */
   private deepMergeMetadata(target: EntityMetadata, source: EntityMetadata): EntityMetadata {
-    const result = { ...target };
+    const result: Record<string, unknown> = { ...target };
 
     for (const key of Object.keys(source) as Array<keyof EntityMetadata>) {
       const sourceValue = source[key];
       const targetValue = result[key];
 
       if (this.isPlainObject(sourceValue) && this.isPlainObject(targetValue)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (result as any)[key] = {
+        result[key] = {
           ...targetValue,
           ...sourceValue,
         };
       } else if (sourceValue !== undefined) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (result as any)[key] = sourceValue;
+        result[key] = sourceValue;
       }
     }
 
-    return result;
+    return result as EntityMetadata;
   }
 
   /**

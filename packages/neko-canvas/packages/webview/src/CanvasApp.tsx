@@ -110,6 +110,10 @@ export function CanvasApp() {
     moveNodeEnd,
     resizeNode,
     resizeNodeEnd,
+    rotateNode,
+    rotateNodeEnd,
+    selectNodes,
+    updateNodePorts,
     updateConnection,
     reorderNode,
     removeNode,
@@ -398,6 +402,14 @@ export function CanvasApp() {
       resizeNodeEnd(nodeId, size, position),
     [resizeNodeEnd],
   );
+  const handleNodeRotate = useCallback(
+    (nodeId: string, rotation: number) => rotateNode(nodeId, rotation),
+    [rotateNode],
+  );
+  const handleNodeRotateEnd = useCallback(
+    (nodeId: string, rotation: number) => rotateNodeEnd(nodeId, rotation),
+    [rotateNodeEnd],
+  );
   const handleConnectionSelect = useCallback(
     (connectionId: string) => selectConnection(connectionId),
     [selectConnection],
@@ -418,6 +430,19 @@ export function CanvasApp() {
     [startConnection, completeConnection],
   );
   const handleConnectionCancel = useCallback(() => cancelConnection(), [cancelConnection]);
+  const handleMarqueeSelect = useCallback(
+    (nodeIds: string[], additive: boolean) => {
+      if (additive) {
+        // Merge with existing selection
+        const existing = new Set(selection.nodeIds);
+        for (const id of nodeIds) existing.add(id);
+        selectNodes(Array.from(existing));
+      } else {
+        selectNodes(nodeIds);
+      }
+    },
+    [selection.nodeIds, selectNodes],
+  );
 
   // =========================================================================
   // Zoom handlers
@@ -590,12 +615,15 @@ export function CanvasApp() {
             onNodeMove={handleNodeMove}
             onNodeResize={handleNodeResize}
             onNodeResizeEnd={handleNodeResizeEnd}
+            onNodeRotate={handleNodeRotate}
+            onNodeRotateEnd={handleNodeRotateEnd}
             onNodeUpdateData={handleNodeUpdateData}
             onConnectionSelect={handleConnectionSelect}
             onConnectionStart={handleConnectionStart}
             onConnectionComplete={handleConnectionComplete}
             onConnectionCancel={handleConnectionCancel}
             onCanvasClick={handleCanvasClick}
+            onMarqueeSelect={handleMarqueeSelect}
           />
 
           {/* Empty state hint */}
@@ -707,6 +735,7 @@ export function CanvasApp() {
               onUpdateNode={handleUpdateNode}
               onUpdateNodeData={handleNodeUpdateData}
               onUpdateConnection={updateConnection}
+              onUpdatePorts={updateNodePorts}
               onDeleteNode={handleDeleteNode}
               onToggleLock={handleToggleLock}
               width={propertyPanelWidth}

@@ -58,7 +58,7 @@ export function ArtboardNode({ node, viewport, isSelected, onSelect, onMove }: A
 
   return (
     <BaseNode
-      node={node as any}
+      node={node}
       viewport={viewport}
       isSelected={isSelected}
       onSelect={onSelect}

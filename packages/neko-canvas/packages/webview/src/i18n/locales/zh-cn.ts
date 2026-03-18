@@ -92,6 +92,16 @@ export const zhCN = {
   'panel.groupColor': '颜色',
   'panel.groupChildren': '子节点',
 
+  // Ports
+  'panel.ports': '端口',
+  'panel.addPort': '添加端口',
+  'panel.removePort': '移除',
+  'panel.defaultPorts': '使用默认端口',
+  'panel.customizePorts': '自定义',
+
+  // Rotation
+  'panel.rotation': '旋转',
+
   // Loading
   loading: '加载画布中...',
 
