@@ -2,6 +2,7 @@
 //!
 //! Provides audio-related operations: probing, transcoding, streaming, and waveform generation.
 
+use crate::audio::mic_capture::{AudioInputDevice, MicCaptureService, MonitorData, RecordCaptureConfig, RecordingResult};
 use crate::audio::{
     AudioCodec as InternalAudioCodec, AudioDecoder, AudioEncoder, AudioEncoderConfig,
     FfmpegAudioDecoder, FfmpegAudioEncoder, SampleFormat,
@@ -41,6 +42,8 @@ pub struct AudioService {
     active_streams: Arc<ActiveStreams>,
     /// Delegate for stream playback control (stop/pause/resume/speed/seek/loop)
     playback: StreamPlaybackDelegate,
+    /// Microphone capture service (lazy-initialized)
+    mic_capture: Arc<MicCaptureService>,
 }
 
 impl AudioService {
@@ -56,7 +59,13 @@ impl AudioService {
             task_service,
             active_streams,
             playback,
+            mic_capture: Arc::new(MicCaptureService::new()),
         }
+    }
+
+    /// Get mic capture service reference (for monitor endpoint access)
+    pub fn mic_capture(&self) -> &MicCaptureService {
+        &self.mic_capture
     }
 }
 
@@ -383,6 +392,26 @@ impl IAudioService for AudioService {
         })
         .await
         .map_err(|e| Error::Other(format!("Silence detection task failed: {}", e)))?
+    }
+
+    fn list_input_devices(&self) -> Vec<AudioInputDevice> {
+        self.mic_capture.list_devices()
+    }
+
+    fn record_start(
+        &self,
+        device_id: Option<&str>,
+        config: RecordCaptureConfig,
+    ) -> Result<StreamId> {
+        self.mic_capture.start_capture(device_id, config)
+    }
+
+    async fn record_stop(&self, stream_id: &str) -> Result<RecordingResult> {
+        self.mic_capture.stop_capture(stream_id).await
+    }
+
+    fn monitor_data(&self, stream_id: &str) -> Option<MonitorData> {
+        self.mic_capture.get_monitor_data(stream_id)
     }
 }
 

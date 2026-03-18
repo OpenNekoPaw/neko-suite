@@ -50,11 +50,9 @@ export function RecordingPanel() {
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
-        borderTop: '1px solid var(--vscode-panel-border, #333)',
       }}
     >
-      {/* Header */}
-      <h3 style={{ margin: 0, fontSize: 12 }}>{t('audio.recording.title')}</h3>
+      {/* Device selector */}
 
       {/* Device selector */}
       {devices.length > 0 && (

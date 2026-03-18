@@ -92,12 +92,11 @@ export function EffectsPanel({ chain }: EffectsPanelProps) {
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
-        borderTop: '1px solid var(--vscode-panel-border, #333)',
       }}
     >
-      {/* Header */}
+      {/* Header actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <h3 style={{ margin: 0, fontSize: 12, flex: 1 }}>{t('audio.effects.title')}</h3>
+        <span style={{ flex: 1 }} />
         <div style={{ position: 'relative' }}>
           <button
             className="btn"

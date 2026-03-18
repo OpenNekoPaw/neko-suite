@@ -15,9 +15,12 @@
 //! - PuppetsController: puppets:* actions (2D puppet management)
 
 mod audio;
+mod camera;
 mod canvas;
 mod effects;
+mod gamepad;
 mod image;
+mod midi;
 mod models;
 mod node;
 mod puppets;
@@ -29,9 +32,12 @@ pub(crate) mod utils;
 mod video;
 
 pub use audio::AudioController;
+pub use camera::CameraController;
 pub use canvas::CanvasController;
 pub use effects::EffectsController;
+pub use gamepad::GamepadController;
 pub use image::ImageController;
+pub use midi::MidiController;
 pub use models::ModelsController;
 pub use node::NodeController;
 pub use puppets::PuppetsController;

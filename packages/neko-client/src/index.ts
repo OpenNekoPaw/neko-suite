@@ -102,6 +102,20 @@ export type {
   ShaderParamDef,
   EffectPresetInfo,
   EffectApplyResult,
+  // Audio input / recording
+  AudioInputDevice,
+  RecordStartResult,
+  RecordingResult,
+  MonitorData,
+  // Camera
+  CameraDevice,
+  CameraCaptureOptions,
+  // MIDI
+  MidiPort,
+  MidiConnectResult,
+  // Gamepad
+  GamepadInfo,
+  GamepadConnectResult,
 } from './engine/types';
 
 export { transformDiffResponse } from './engine/responseTransform';

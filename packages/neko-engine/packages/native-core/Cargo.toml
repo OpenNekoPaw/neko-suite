@@ -79,6 +79,15 @@ image.workspace = true
 # Loudness measurement - ITU-R BS.1770-4
 ebur128.workspace = true
 
+# Audio capture - cross-platform mic input (WASAPI/CoreAudio/ALSA)
+cpal = "0.15"
+# WAV file writing
+hound = "3.5"
+# MIDI input - cross-platform
+midir = "0.10"
+# Gamepad input - cross-platform
+gilrs = "0.11"
+
 # Base64 encoding
 base64.workspace = true
 

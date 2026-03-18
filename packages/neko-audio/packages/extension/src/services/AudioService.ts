@@ -333,6 +333,46 @@ export class AudioService implements vscode.Disposable {
   }
 
   // =========================================================================
+  // Audio Input / Recording (engine-proxy)
+  // =========================================================================
+
+  async listInputDevices(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      sampleRates: number[];
+      channels: number[];
+      isDefault: boolean;
+    }>
+  > {
+    if (!this._client) throw new Error('AudioService not available');
+    return this._client.listInputDevices();
+  }
+
+  async recordStart(options: {
+    outputPath: string;
+    deviceId?: string;
+    sampleRate?: number;
+    channels?: number;
+  }): Promise<{ streamId: string; monitorUrl: string }> {
+    if (!this._client) throw new Error('AudioService not available');
+    return this._client.recordStart(options);
+  }
+
+  async recordStop(
+    streamId: string,
+  ): Promise<{
+    path: string;
+    durationSeconds: number;
+    format: string;
+    sampleRate: number;
+    channels: number;
+  }> {
+    if (!this._client) throw new Error('AudioService not available');
+    return this._client.recordStop(streamId);
+  }
+
+  // =========================================================================
   // Dispatch
   // =========================================================================
 

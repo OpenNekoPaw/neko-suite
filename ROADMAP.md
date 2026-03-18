@@ -11,7 +11,7 @@
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
 | **neko-types** | Alpha | 90% | 共享类型 + 横切关注点统一 + Operations 类型安全 + 文档完善 |
-| **neko-engine** | Alpha | 85% | GPU PBR 渲染 + 编解码 + FIFO 导出 + 统一 HTTP/WS + 响度标准化 + 预加载优化 + 粒子/后处理/IBL |
+| **neko-engine** | Alpha | 88% | GPU PBR 渲染 + 编解码 + FIFO 导出 + 统一 HTTP/WS + 响度标准化 + 预加载优化 + 粒子/后处理/IBL + 设备代理（mic/midi/gamepad） |
 | **neko-cut** | Alpha | 82% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 拖拽修复 |
 | **neko-agent** | Alpha | 75% | Agent 引擎 + LLM 平台 + CLI + UI + Handler 拆分 + 流式化 + 剧本→时间线 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
@@ -23,7 +23,7 @@
 | **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL，Rust/TS 双端类型源 |
 | **neko-model** | Alpha | 65% | 3D 创作套件，Phase 3.1-3.3 ✅（PBR 渲染 + 粒子 + 后处理 + 时间线集成 + CSG/文字/几何体建模 + 骨骼表情） |
 | **neko-sketch** | Alpha | 85% | S.1-S.3 ✅（绘画 + 骨骼动画 + 高级 2D）；S.4 规划中 |
-| **neko-audio** | Alpha | 90% | 完整音频工作站：波形编辑 + 播放 + 频谱分析 + 12 种效果链 + 麦克风录制 + AI 降噪/标准化 + 导出 + .nka 项目 + 命令集成 + 响度面板 + 78 测试 |
+| **neko-audio** | Alpha | 92% | 完整音频工作站：波形编辑 + 播放 + 频谱分析 + 12 种效果链 + Engine 麦克风录制 + AI 降噪/标准化 + 导出 + .nka 项目 + 78 测试 |
 | **neko-live** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-suite** | Stable | 90% | Extension Pack 门户 |
 
@@ -94,8 +94,15 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - Phase I: 响度面板 + Toast 通知 + AudioStreamClient public API + 78 测试 ✅
 
 ### neko-audio — 待完成
-- Engine 代理麦克风录制（`cpal` 替代 webview getUserMedia，[ADR](./docs/architecture/device-access.md)）
+- ~~Engine 代理麦克风录制~~ ✅（`cpal` 采集 + WAV 写入 + `/v1/monitor` 电平端点 + 双模式 useRecording）
 - neko-preview：高级预览待完成
+
+### neko-engine 设备代理 — ✅ P1-P3 框架完成
+- P1 麦克风（`cpal`）：✅ 完整实现（3 个 action + monitor 端点 + TS 双模式录制）
+- P2 摄像头（FFmpeg avdevice）：✅ 框架完成（trait + controller + TS 方法），capture 实现 TODO
+- P3A MIDI（`midir`）：✅ 完整实现（端口枚举 + 连接 + 事件解析 + broadcast）
+- P3B Gamepad（`gilrs`）：✅ 完整实现（枚举 + 120Hz 事件轮询 + broadcast）
+- 详见 [ADR: 设备访问策略](./docs/architecture/device-access.md)
 
 ---
 
@@ -253,4 +260,4 @@ neko-engine (分段渲染 + 转场 + 特效)
 
 ---
 
-*最后更新: 2026-03-18（neko-audio Phase A-I 全部完成：命令集成 + .nka 项目 + 响度面板 + Toast + public API + 78 测试，进度 75% → 90%）*
+*最后更新: 2026-03-18（neko-engine 设备代理 P1-P3 完成：cpal 麦克风 + midir MIDI + gilrs Gamepad + camera 框架 + 15 个新 EngineClient 方法）*

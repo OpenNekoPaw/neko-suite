@@ -1,8 +1,8 @@
 /**
- * TransportBar - Top toolbar with file info and action buttons
+ * TransportBar - Unified top bar with file info, playback controls, and volume/speed.
  *
- * Displays file metadata and provides quick access to
- * editing actions, spectrum toggle, effects panel, and recording.
+ * Merges the previous TransportBar (file info + tool icons) and AudioControls
+ * (playback + volume + speed) into a single top bar.
  */
 
 import { useCallback } from 'react';
@@ -10,20 +10,92 @@ import { useAudioStore } from '../stores/audioStore';
 import { postMessage } from '../shared/useVscodeMessage';
 import { t } from '../i18n';
 
-export function TransportBar() {
+interface TransportBarProps {
+  onTogglePlay: () => void;
+  onSeek: (time: number) => void;
+  onStop: () => void;
+}
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 100);
+  return `${m}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+}
+
+const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
+
+export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps) {
   const {
     fileName,
     audioInfo,
+    playbackState,
+    currentTime,
+    volume,
+    speed,
+    isMuted,
     selection,
-    showSpectrum,
-    showEffects,
-    showRecording,
-    showExport,
-    toggleSpectrum,
-    toggleEffects,
-    toggleRecording,
-    toggleExport,
+    setVolume,
+    setSpeed,
+    toggleMute,
+    setSelection,
   } = useAudioStore();
+
+  const duration = audioInfo?.duration ?? 0;
+  const isPlaying = playbackState === 'playing';
+
+  // Keyboard shortcuts
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      switch (e.key) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          onTogglePlay();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          onSeek(Math.max(0, currentTime - 5));
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          onSeek(Math.min(duration, currentTime + 5));
+          break;
+        case 'Home':
+          e.preventDefault();
+          onSeek(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          onSeek(duration);
+          break;
+        case 'Escape':
+          e.preventDefault();
+          setSelection(null);
+          break;
+        case 'a':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            setSelection({ start: 0, end: duration });
+          }
+          break;
+        case 's':
+          e.preventDefault();
+          onStop();
+          break;
+      }
+    },
+    [onTogglePlay, onSeek, onStop, currentTime, duration, setSelection],
+  );
+
+  const handleSpeedChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const newSpeed = parseFloat(e.target.value);
+      setSpeed(newSpeed);
+      postMessage({ type: 'editor:speed', speed: newSpeed });
+    },
+    [setSpeed],
+  );
 
   const handleTrim = useCallback(() => {
     if (!selection) return;
@@ -34,24 +106,8 @@ export function TransportBar() {
     });
   }, [selection]);
 
-  const handleAnalyzeLoudness = useCallback(() => {
-    postMessage({ type: 'editor:analyzeLoudness' });
-  }, []);
-
-  const handleDetectSilence = useCallback(() => {
-    postMessage({ type: 'editor:detectSilence' });
-  }, []);
-
-  const handleDenoise = useCallback(() => {
-    postMessage({ type: 'editor:denoise' });
-  }, []);
-
-  const handleNormalize = useCallback(() => {
-    postMessage({ type: 'editor:normalize' });
-  }, []);
-
   return (
-    <div className="audio-editor__toolbar">
+    <div className="audio-editor__toolbar" tabIndex={0} onKeyDown={handleKeyDown}>
       {/* File name */}
       <span className="file-info" title={fileName ?? ''}>
         {fileName}
@@ -73,81 +129,89 @@ export function TransportBar() {
         </>
       )}
 
-      <span style={{ flex: 1 }} />
+      <span className="divider" />
 
-      {/* Edit buttons (visible when selection exists) */}
+      {/* Playback controls */}
+      <button
+        className={`btn btn--icon ${isPlaying ? 'btn--active' : ''}`}
+        onClick={onTogglePlay}
+        title={isPlaying ? t('audio.controls.pause') : t('audio.controls.play')}
+      >
+        {isPlaying ? '⏸' : '▶'}
+      </button>
+
+      <button className="btn btn--icon" onClick={onStop} title={t('audio.controls.stop')}>
+        ⏹
+      </button>
+
+      <span className="time-display">
+        {formatTime(currentTime)} / {formatTime(duration)}
+      </span>
+
+      {/* Selection info + trim */}
       {selection && (
         <>
-          <button className="btn" onClick={handleTrim} title={t('audio.edit.trim')}>
+          <span className="divider" />
+          <span className="time-display" style={{ opacity: 0.7, fontSize: 11 }}>
+            {t('audio.waveform.selection', {
+              start: formatTime(selection.start),
+              end: formatTime(selection.end),
+            })}
+          </span>
+          <button
+            className="btn"
+            onClick={handleTrim}
+            title={t('audio.edit.trim')}
+            style={{ fontSize: 11 }}
+          >
             {t('audio.edit.trim')}
           </button>
-          <span className="divider" />
         </>
       )}
 
-      {/* Analysis */}
+      <span style={{ flex: 1 }} />
+
+      {/* Volume */}
       <button
         className="btn btn--icon"
-        onClick={handleAnalyzeLoudness}
-        title={t('audio.analysis.loudness')}
+        onClick={toggleMute}
+        title={isMuted ? t('audio.controls.volume') : t('audio.controls.mute')}
       >
-        📏
+        {isMuted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
       </button>
-
-      <button
-        className="btn btn--icon"
-        onClick={handleDetectSilence}
-        title={t('audio.analysis.silence')}
-      >
-        🔇
-      </button>
-
-      <button className="btn btn--icon" onClick={handleDenoise} title={t('audio.analysis.denoise')}>
-        🧹
-      </button>
-
-      <button
-        className="btn btn--icon"
-        onClick={handleNormalize}
-        title={t('audio.analysis.normalize')}
-      >
-        📐
-      </button>
+      <input
+        type="range"
+        className="slider"
+        min="0"
+        max="1"
+        step="0.05"
+        value={isMuted ? 0 : volume}
+        onChange={(e) => setVolume(parseFloat(e.target.value))}
+        style={{ width: 80 }}
+      />
 
       <span className="divider" />
 
-      {/* Panel toggles */}
-      <button
-        className={`btn btn--icon ${showSpectrum ? 'btn--active' : ''}`}
-        onClick={toggleSpectrum}
-        title={t('audio.spectrum.toggle')}
+      {/* Speed */}
+      <label style={{ fontSize: 11, opacity: 0.7 }}>{t('audio.controls.speed')}</label>
+      <select
+        value={speed}
+        onChange={handleSpeedChange}
+        style={{
+          background: 'var(--input-bg)',
+          color: 'var(--input-fg)',
+          border: '1px solid var(--input-border)',
+          borderRadius: 3,
+          padding: '2px 4px',
+          fontSize: 11,
+        }}
       >
-        📊
-      </button>
-
-      <button
-        className={`btn btn--icon ${showEffects ? 'btn--active' : ''}`}
-        onClick={toggleEffects}
-        title={t('audio.effects.title')}
-      >
-        🎛
-      </button>
-
-      <button
-        className={`btn btn--icon ${showRecording ? 'btn--active' : ''}`}
-        onClick={toggleRecording}
-        title={t('audio.recording.title')}
-      >
-        🎙
-      </button>
-
-      <button
-        className={`btn btn--icon ${showExport ? 'btn--active' : ''}`}
-        onClick={toggleExport}
-        title={t('audio.export.toggle')}
-      >
-        💾
-      </button>
+        {SPEED_OPTIONS.map((s) => (
+          <option key={s} value={s}>
+            {s}x
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

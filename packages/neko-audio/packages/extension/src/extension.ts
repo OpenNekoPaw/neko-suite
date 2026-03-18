@@ -12,7 +12,7 @@
 
 import * as vscode from 'vscode';
 import { AudioEditorProvider } from './providers/AudioEditorProvider';
-import { AudioProjectProvider } from './providers/AudioProjectProvider';
+import { AudioProjectProvider, type AudioProject } from './providers/AudioProjectProvider';
 import { AudioService } from './services/AudioService';
 import type { NekoAudioAPI } from './types/api';
 import { createVSCodeLogger } from '@neko/shared/vscode/extension';
@@ -26,7 +26,7 @@ const logger = getLogger('Extension');
 
 /** Default .nka project template for new audio projects */
 function getAudioProjectTemplate(name: string): string {
-  const data = {
+  const data: AudioProject = {
     version: '1.0',
     name,
     audioSource: null,

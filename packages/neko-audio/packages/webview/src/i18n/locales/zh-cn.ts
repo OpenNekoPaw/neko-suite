@@ -47,6 +47,11 @@ const audio: MessageBundle = {
   'audio.effects.noEffects': '未添加效果',
   'audio.effects.clear': '清除全部',
 
+  // Empty project
+  'audio.import.empty': '暂无音频源，导入文件以开始编辑。',
+  'audio.import.button': '选择音频文件',
+  'audio.import.failed': '导入音频失败：{error}',
+
   // Recording
   'audio.recording.title': '录音',
   'audio.recording.start': '开始录音',

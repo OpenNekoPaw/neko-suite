@@ -389,6 +389,60 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider 
             break;
           }
 
+          case 'editor:listInputDevices': {
+            try {
+              const devices = await this._audioService?.listInputDevices();
+              await webviewPanel.webview.postMessage({
+                type: 'editor:inputDevices',
+                payload: devices ?? [],
+              });
+            } catch (error) {
+              logger.error('List input devices failed:', error);
+            }
+            break;
+          }
+
+          case 'editor:recordStart': {
+            const outputDir = require('path').dirname(filePath);
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const outputPath =
+              (msg.outputPath as string) ??
+              require('path').join(outputDir, `recording-${timestamp}.wav`);
+            try {
+              const result = await this._audioService?.recordStart({
+                outputPath,
+                deviceId: msg.deviceId as string | undefined,
+                sampleRate: msg.sampleRate as number | undefined,
+                channels: msg.channels as number | undefined,
+              });
+              if (result) {
+                await webviewPanel.webview.postMessage({
+                  type: 'editor:recordStartResult',
+                  payload: result,
+                });
+              }
+            } catch (error) {
+              logger.error('Record start failed:', error);
+            }
+            break;
+          }
+
+          case 'editor:recordStop': {
+            const streamId = msg.streamId as string;
+            try {
+              const result = await this._audioService?.recordStop(streamId);
+              if (result) {
+                await webviewPanel.webview.postMessage({
+                  type: 'editor:recordStopResult',
+                  payload: result,
+                });
+              }
+            } catch (error) {
+              logger.error('Record stop failed:', error);
+            }
+            break;
+          }
+
           default:
             break;
         }

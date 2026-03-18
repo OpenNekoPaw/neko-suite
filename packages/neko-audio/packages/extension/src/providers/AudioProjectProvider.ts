@@ -33,7 +33,7 @@ const logger = getLogger('AudioProject');
 // .nka Project Schema
 // =============================================================================
 
-interface AudioSource {
+export interface AudioSource {
   filePath: string;
   duration: number;
   sampleRate: number;
@@ -41,7 +41,7 @@ interface AudioSource {
   format: string;
 }
 
-interface AudioProject {
+export interface AudioProject {
   version: '1.0';
   name: string;
   audioSource: AudioSource | null;
@@ -450,6 +450,118 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
               await webviewPanel.webview.postMessage({
                 type: 'editor:recordingSaved',
                 payload: { success: false, error: errMsg },
+              });
+            }
+            break;
+          }
+
+          case 'editor:listInputDevices': {
+            try {
+              const devices = await this._audioService?.listInputDevices();
+              await webviewPanel.webview.postMessage({
+                type: 'editor:inputDevices',
+                payload: devices ?? [],
+              });
+            } catch (error) {
+              logger.error('List input devices failed:', error);
+            }
+            break;
+          }
+
+          case 'editor:recordStart': {
+            const audioPath = await this.resolveAudioPath(document.uri);
+            const outputDir = audioPath
+              ? path.dirname(audioPath)
+              : path.dirname(document.uri.fsPath);
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const outputPath =
+              (msg.outputPath as string) ?? path.join(outputDir, `recording-${timestamp}.wav`);
+            try {
+              const result = await this._audioService?.recordStart({
+                outputPath,
+                deviceId: msg.deviceId as string | undefined,
+                sampleRate: msg.sampleRate as number | undefined,
+                channels: msg.channels as number | undefined,
+              });
+              if (result) {
+                await webviewPanel.webview.postMessage({
+                  type: 'editor:recordStartResult',
+                  payload: result,
+                });
+              }
+            } catch (error) {
+              logger.error('Record start failed:', error);
+            }
+            break;
+          }
+
+          case 'editor:recordStop': {
+            const streamId = msg.streamId as string;
+            try {
+              const result = await this._audioService?.recordStop(streamId);
+              if (result) {
+                await webviewPanel.webview.postMessage({
+                  type: 'editor:recordStopResult',
+                  payload: result,
+                });
+              }
+            } catch (error) {
+              logger.error('Record stop failed:', error);
+            }
+            break;
+          }
+
+          case 'project:importSource': {
+            // User wants to import an audio file into the empty project
+            const sourceUris = await vscode.window.showOpenDialog({
+              canSelectMany: false,
+              filters: { 'Audio Files': ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'] },
+              title: vscode.l10n.t('neko.audio.import.title'),
+            });
+            if (!sourceUris || sourceUris.length === 0) break;
+            const sourceUri = sourceUris[0]!;
+
+            if (!this._audioService?.isAvailable) {
+              logger.error('AudioService not available for import');
+              break;
+            }
+
+            try {
+              const audioInfo = await this._audioService.probeAudio(sourceUri.fsPath);
+              const nkaDir = path.dirname(document.uri.fsPath);
+              const relativePath = path.relative(nkaDir, sourceUri.fsPath);
+
+              // Read current project, update audioSource, write back
+              const raw = await vscode.workspace.fs.readFile(document.uri);
+              const project = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
+              project.audioSource = {
+                filePath: relativePath,
+                duration: audioInfo.duration,
+                sampleRate: audioInfo.sampleRate,
+                channels: audioInfo.channels,
+                format: audioInfo.format,
+              };
+              await vscode.workspace.fs.writeFile(
+                document.uri,
+                Buffer.from(JSON.stringify(project, null, 2), 'utf-8'),
+              );
+
+              // Fire dirty event
+              this._onDidChangeCustomDocument.fire({
+                document,
+                undo: () => {},
+                redo: () => {},
+              });
+
+              // Re-initialize webview with full audio data
+              await this.initializeWebview(webviewPanel, document.uri);
+              logger.info(`Imported audio source: ${sourceUri.fsPath}`);
+            } catch (error) {
+              const errMsg = error instanceof Error ? error.message : String(error);
+              logger.error('Import audio source failed:', error);
+              await webviewPanel.webview.postMessage({
+                type: 'editor:importSourceFailed',
+                payload: { error: errMsg },
               });
             }
             break;

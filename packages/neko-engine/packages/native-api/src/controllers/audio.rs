@@ -347,6 +347,69 @@ impl Controller for AudioController {
 
                 Ok(ActionResponse::ok("", response))
             }
+            "list_input_devices" => {
+                let devices = self.audio_service.list_input_devices();
+                let response = serde_json::to_value(&devices)?;
+                Ok(ActionResponse::ok("", response))
+            }
+            "record_start" => {
+                #[derive(Debug, Deserialize, Default)]
+                #[serde(rename_all = "camelCase")]
+                struct RecordStartOptions {
+                    device_id: Option<String>,
+                    output_path: Option<String>,
+                    sample_rate: Option<u32>,
+                    channels: Option<u16>,
+                }
+
+                let opts: RecordStartOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let output_path = opts.output_path.ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "outputPath required for audios:record_start".to_string(),
+                    )
+                })?;
+
+                use neko_native_core::audio::mic_capture::RecordCaptureConfig;
+
+                let config = RecordCaptureConfig {
+                    sample_rate: opts.sample_rate.unwrap_or(48000),
+                    channels: opts.channels.unwrap_or(1),
+                    output_path: std::path::PathBuf::from(&output_path),
+                };
+
+                let stream_id = self
+                    .audio_service
+                    .record_start(opts.device_id.as_deref(), config)?;
+
+                let response = serde_json::json!({
+                    "streamId": stream_id.as_str(),
+                    "monitorUrl": format!("/v1/monitor/{}", stream_id.as_str()),
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+            "record_stop" => {
+                #[derive(Debug, Deserialize, Default)]
+                #[serde(rename_all = "camelCase")]
+                struct RecordStopOptions {
+                    stream_id: Option<String>,
+                }
+
+                let opts: RecordStopOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let stream_id = opts.stream_id.ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "streamId required for audios:record_stop".to_string(),
+                    )
+                })?;
+
+                let result = self.audio_service.record_stop(&stream_id).await?;
+                let response = serde_json::to_value(&result)?;
+                Ok(ActionResponse::ok("", response))
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "audios".to_string(),
                 action: action.to_string(),
@@ -465,6 +528,9 @@ mod tests {
         assert!(actions.contains(&"loop"));
         assert!(actions.contains(&"analyze_loudness"));
         assert!(actions.contains(&"detect_silence"));
-        assert_eq!(actions.len(), 13);
+        assert!(actions.contains(&"list_input_devices"));
+        assert!(actions.contains(&"record_start"));
+        assert!(actions.contains(&"record_stop"));
+        assert_eq!(actions.len(), 16);
     }
 }

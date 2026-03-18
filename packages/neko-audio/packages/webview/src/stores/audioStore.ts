@@ -26,6 +26,8 @@ export interface Marker {
   color?: string;
 }
 
+export type SidePanelType = 'effects' | 'recording' | 'export';
+
 export interface AudioStoreState {
   // File info
   filePath: string | null;
@@ -47,9 +49,7 @@ export interface AudioStoreState {
 
   // UI
   showSpectrum: boolean;
-  showEffects: boolean;
-  showRecording: boolean;
-  showExport: boolean;
+  activeSidePanel: SidePanelType | null;
   isLoading: boolean;
   error: string | null;
 
@@ -85,7 +85,7 @@ export interface ToastMessage {
 
 export interface AudioStoreActions {
   // File
-  setFileInfo(filePath: string, fileName: string, audioInfo: AudioInfo): void;
+  setFileInfo(filePath: string | null, fileName: string, audioInfo: AudioInfo | null): void;
   setWaveform(waveform: WaveformData): void;
 
   // Playback
@@ -102,9 +102,8 @@ export interface AudioStoreActions {
 
   // UI
   toggleSpectrum(): void;
-  toggleEffects(): void;
-  toggleRecording(): void;
-  toggleExport(): void;
+  toggleSidePanel(panel: SidePanelType): void;
+  closeSidePanel(): void;
   setLoading(loading: boolean): void;
   setError(error: string | null): void;
 
@@ -147,9 +146,7 @@ const initialState: AudioStoreState = {
   selection: null,
 
   showSpectrum: false,
-  showEffects: false,
-  showRecording: false,
-  showExport: false,
+  activeSidePanel: null,
   isLoading: true,
   error: null,
 
@@ -184,9 +181,9 @@ export const useAudioStore = create<AudioStoreState & AudioStoreActions>()((set)
 
   // UI
   toggleSpectrum: () => set((s) => ({ showSpectrum: !s.showSpectrum })),
-  toggleEffects: () => set((s) => ({ showEffects: !s.showEffects })),
-  toggleRecording: () => set((s) => ({ showRecording: !s.showRecording })),
-  toggleExport: () => set((s) => ({ showExport: !s.showExport })),
+  toggleSidePanel: (panel) =>
+    set((s) => ({ activeSidePanel: s.activeSidePanel === panel ? null : panel })),
+  closeSidePanel: () => set({ activeSidePanel: null }),
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error, isLoading: false }),
 

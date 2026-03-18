@@ -20,9 +20,13 @@ pub mod groups {
     pub const PUPPETS: &str = "puppets";
     pub const EFFECTS: &str = "effects";
 
+    pub const CAMERAS: &str = "cameras";
+    pub const MIDI: &str = "midi";
+    pub const GAMEPAD: &str = "gamepad";
+
     pub const ALL: &[&str] = &[
         NODES, TASKS, VIDEOS, AUDIOS, IMAGES, TIMELINES, STREAMS, MODELS, CANVAS, SCENES, PUPPETS,
-        EFFECTS,
+        EFFECTS, CAMERAS, MIDI, GAMEPAD,
     ];
 }
 
@@ -64,6 +68,9 @@ pub mod actions {
         "loop",
         "analyze_loudness",
         "detect_silence",
+        "list_input_devices",
+        "record_start",
+        "record_stop",
     ];
 
     pub const IMAGES: &[&str] = &["probe", "capture", "encode", "diff"];
@@ -139,4 +146,10 @@ pub mod actions {
     ];
 
     pub const EFFECTS: &[&str] = &["apply", "list", "info", "register"];
+
+    pub const CAMERAS: &[&str] = &["list_devices", "capture_start", "capture_stop", "snapshot"];
+
+    pub const MIDI: &[&str] = &["list_ports", "connect", "disconnect"];
+
+    pub const GAMEPAD: &[&str] = &["list", "connect", "disconnect"];
 }

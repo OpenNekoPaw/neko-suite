@@ -1,8 +1,8 @@
 /**
  * AudioEditor - Main audio editor component
  *
- * Orchestrates webview message handling, playback, and renders the editor layout.
- * Phase B: waveform display + playback + controls + keyboard shortcuts.
+ * 3-column layout: Toolbar | Center (waveform + spectrum + loudness) | SidePanel
+ * Unified TransportBar at top with playback controls.
  */
 
 import { useCallback, useRef } from 'react';
@@ -12,13 +12,12 @@ import { useAudioPlayback } from '../hooks/useAudioPlayback';
 import { useEffectsChain } from '../hooks/useEffectsChain';
 import type { AudioEffectInstance } from '../types/audioEffects';
 import { EditableWaveform } from '../components/EditableWaveform';
-import { AudioControls } from '../components/AudioControls';
 import { TransportBar } from '../components/TransportBar';
+import { Toolbar } from '../components/Toolbar';
+import { SidePanel } from '../components/SidePanel';
 import { SpectrumAnalyzer } from '../components/SpectrumAnalyzer';
-import { EffectsPanel } from '../components/EffectsPanel';
-import { RecordingPanel } from '../components/RecordingPanel';
-import { ExportPanel } from '../components/ExportPanel';
 import { LoudnessPanel } from '../components/LoudnessPanel';
+import { EmptyProject } from '../components/EmptyProject';
 import { Toast } from '../components/Toast';
 import type { ExtensionMessage } from '../shared/types';
 import { t } from '../i18n';
@@ -30,10 +29,9 @@ export function AudioEditor() {
   const {
     isLoading,
     error,
+    audioInfo,
+    projectMode,
     showSpectrum,
-    showEffects,
-    showRecording,
-    showExport,
     setFileInfo,
     setWaveform,
     setStreamInfo,
@@ -53,7 +51,6 @@ export function AudioEditor() {
   effectsRef.current = effectsChain.effects;
 
   const markersRef = useRef(useAudioStore.getState().markers);
-  // Sync markers ref on render
   markersRef.current = useAudioStore.getState().markers;
 
   // Handle messages from Extension Host
@@ -69,7 +66,6 @@ export function AudioEditor() {
           break;
 
         case 'project:init':
-          // .nka project initialization — restore saved state
           setFileInfo(
             message.payload.filePath,
             message.payload.fileName,
@@ -88,7 +84,6 @@ export function AudioEditor() {
 
         case 'save':
         case 'saveAs': {
-          // Extension requesting project data for save
           const store = useAudioStore.getState();
           const saveData = {
             effectsChain: effectsRef.current.map((e) => ({
@@ -109,7 +104,6 @@ export function AudioEditor() {
         }
 
         case 'revert':
-          // Extension will re-send project:init after revert
           break;
 
         case 'editor:waveform':
@@ -161,18 +155,23 @@ export function AudioEditor() {
           }
           break;
 
+        case 'editor:inputDevices':
+        case 'editor:recordStartResult':
+        case 'editor:recordStopResult':
+          break;
+
         case 'command': {
           const cmd = (message as { command: string }).command;
           const store = useAudioStore.getState();
           switch (cmd) {
             case 'toggleRecording':
-              store.toggleRecording();
+              store.toggleSidePanel('recording');
               break;
             case 'toggleSpectrum':
               store.toggleSpectrum();
               break;
             case 'toggleExport':
-              store.toggleExport();
+              store.toggleSidePanel('export');
               break;
             case 'denoise':
               postMessage({ type: 'editor:denoise' });
@@ -238,22 +237,26 @@ export function AudioEditor() {
     );
   }
 
+  // Empty project — no audio source yet
+  if (projectMode && !audioInfo) {
+    return <EmptyProject />;
+  }
+
   return (
     <div className="audio-editor">
-      <TransportBar />
+      <TransportBar onTogglePlay={togglePlay} onSeek={seek} onStop={stop} />
 
-      <div className="audio-editor__main">
-        <EditableWaveform onSeek={seek} />
-        <SpectrumAnalyzer audioClientRef={audioClientRef} enabled={showSpectrum} />
+      <div className="audio-editor__body">
+        <Toolbar />
+
+        <div className="audio-editor__center">
+          <EditableWaveform onSeek={seek} />
+          <SpectrumAnalyzer audioClientRef={audioClientRef} enabled={showSpectrum} />
+          <LoudnessPanel />
+        </div>
+
+        <SidePanel />
       </div>
-
-      <LoudnessPanel />
-
-      {showEffects && <EffectsPanel chain={effectsChain} />}
-      {showRecording && <RecordingPanel />}
-      {showExport && <ExportPanel />}
-
-      <AudioControls onTogglePlay={togglePlay} onSeek={seek} onStop={stop} />
 
       <Toast />
     </div>

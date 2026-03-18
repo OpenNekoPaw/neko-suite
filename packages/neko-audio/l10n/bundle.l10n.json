@@ -1,5 +1,6 @@
 {
   "neko.audio.new.title": "New Audio Project",
   "neko.audio.new.noFolder": "No folder selected. Please open a workspace or right-click a folder.",
-  "neko.audio.new.failed": "Failed to create audio project: {0}"
+  "neko.audio.new.failed": "Failed to create audio project: {0}",
+  "neko.audio.import.title": "Select Audio Source"
 }

@@ -1,5 +1,6 @@
 {
   "neko.audio.new.title": "新建音频",
   "neko.audio.new.noFolder": "未选择文件夹。请打开工作区或右键点击文件夹。",
-  "neko.audio.new.failed": "创建音频工程失败：{0}"
+  "neko.audio.new.failed": "创建音频工程失败：{0}",
+  "neko.audio.import.title": "选择音频源文件"
 }

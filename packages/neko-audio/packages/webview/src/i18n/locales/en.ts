@@ -47,6 +47,11 @@ const audio: MessageBundle = {
   'audio.effects.noEffects': 'No effects added',
   'audio.effects.clear': 'Clear All',
 
+  // Empty project
+  'audio.import.empty': 'No audio source. Import a file to start editing.',
+  'audio.import.button': 'Select Audio File',
+  'audio.import.failed': 'Failed to import audio: {error}',
+
   // Recording
   'audio.recording.title': 'Recording',
   'audio.recording.start': 'Start Recording',

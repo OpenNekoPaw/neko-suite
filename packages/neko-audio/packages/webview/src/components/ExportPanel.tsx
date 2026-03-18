@@ -36,7 +36,7 @@ const BITRATES = [96, 128, 192, 256, 320];
 // =============================================================================
 
 export function ExportPanel() {
-  const { toggleExport, audioInfo } = useAudioStore();
+  const { audioInfo } = useAudioStore();
 
   const [format, setFormat] = useState('wav');
   const [sampleRate, setSampleRate] = useState(audioInfo?.sampleRate ?? 44100);
@@ -57,83 +57,70 @@ export function ExportPanel() {
   }, [format, sampleRate, bitrate, channels, isLossy]);
 
   return (
-    <div className="audio-editor__panel export-panel">
-      <div className="panel-header">
-        <span className="panel-title">{t('audio.export.title')}</span>
-        <button className="btn btn--icon" onClick={toggleExport} title={t('audio.effects.remove')}>
-          ✕
-        </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Format */}
+      <div className="form-group">
+        <label className="form-label">{t('audio.export.format')}</label>
+        <select className="form-select" value={format} onChange={(e) => setFormat(e.target.value)}>
+          {FORMATS.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
       </div>
 
-      <div className="panel-body">
-        {/* Format */}
+      {/* Sample Rate */}
+      <div className="form-group">
+        <label className="form-label">{t('audio.export.sampleRate')}</label>
+        <select
+          className="form-select"
+          value={sampleRate}
+          onChange={(e) => setSampleRate(Number(e.target.value))}
+        >
+          {SAMPLE_RATES.map((r) => (
+            <option key={r} value={r}>
+              {r >= 1000 ? `${r / 1000}kHz` : `${r}Hz`}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Bitrate (lossy only) */}
+      {isLossy && (
         <div className="form-group">
-          <label className="form-label">{t('audio.export.format')}</label>
+          <label className="form-label">{t('audio.export.bitrate')}</label>
           <select
             className="form-select"
-            value={format}
-            onChange={(e) => setFormat(e.target.value)}
+            value={bitrate}
+            onChange={(e) => setBitrate(Number(e.target.value))}
           >
-            {FORMATS.map((f) => (
-              <option key={f.value} value={f.value}>
-                {f.label}
+            {BITRATES.map((b) => (
+              <option key={b} value={b}>
+                {b} kbps
               </option>
             ))}
           </select>
         </div>
+      )}
 
-        {/* Sample Rate */}
-        <div className="form-group">
-          <label className="form-label">{t('audio.export.sampleRate')}</label>
-          <select
-            className="form-select"
-            value={sampleRate}
-            onChange={(e) => setSampleRate(Number(e.target.value))}
-          >
-            {SAMPLE_RATES.map((r) => (
-              <option key={r} value={r}>
-                {r >= 1000 ? `${r / 1000}kHz` : `${r}Hz`}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Bitrate (lossy only) */}
-        {isLossy && (
-          <div className="form-group">
-            <label className="form-label">{t('audio.export.bitrate')}</label>
-            <select
-              className="form-select"
-              value={bitrate}
-              onChange={(e) => setBitrate(Number(e.target.value))}
-            >
-              {BITRATES.map((b) => (
-                <option key={b} value={b}>
-                  {b} kbps
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Channels */}
-        <div className="form-group">
-          <label className="form-label">{t('audio.export.channels')}</label>
-          <select
-            className="form-select"
-            value={channels}
-            onChange={(e) => setChannels(Number(e.target.value))}
-          >
-            <option value={1}>{t('audio.export.mono')}</option>
-            <option value={2}>{t('audio.export.stereo')}</option>
-          </select>
-        </div>
-
-        {/* Export button */}
-        <button className="btn btn--primary export-btn" onClick={handleExport}>
-          {t('audio.export.export')}
-        </button>
+      {/* Channels */}
+      <div className="form-group">
+        <label className="form-label">{t('audio.export.channels')}</label>
+        <select
+          className="form-select"
+          value={channels}
+          onChange={(e) => setChannels(Number(e.target.value))}
+        >
+          <option value={1}>{t('audio.export.mono')}</option>
+          <option value={2}>{t('audio.export.stereo')}</option>
+        </select>
       </div>
+
+      {/* Export button */}
+      <button className="btn" onClick={handleExport}>
+        {t('audio.export.export')}
+      </button>
     </div>
   );
 }

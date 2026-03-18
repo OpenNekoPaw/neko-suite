@@ -6,10 +6,12 @@
 
 mod decoder;
 mod encoder;
+pub mod mic_capture;
 mod traits;
 
 pub use decoder::FfmpegAudioDecoder;
 pub use encoder::FfmpegAudioEncoder;
+pub use mic_capture::MicCaptureService;
 pub use traits::{
     AudioCodec, AudioDecoder, AudioEncoder, AudioEncoderConfig, AudioInfo, DecodedAudioFrame,
     EncodedAudioPacket, SampleFormat,

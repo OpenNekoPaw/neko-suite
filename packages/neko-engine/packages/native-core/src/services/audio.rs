@@ -1,5 +1,6 @@
 //! Audio service trait
 
+use crate::audio::mic_capture::{AudioInputDevice, MonitorData, RecordCaptureConfig, RecordingResult};
 use crate::domain::{AudioTranscodeOptions, LoudnessAnalysis, SilenceAnalysis};
 use crate::error::Result;
 use crate::services::IStreamPlayback;
@@ -53,4 +54,20 @@ pub trait IAudioService: IStreamPlayback {
         threshold_dbfs: f64,
         min_duration: f64,
     ) -> Result<SilenceAnalysis>;
+
+    /// List available audio input devices
+    fn list_input_devices(&self) -> Vec<AudioInputDevice>;
+
+    /// Start recording from an input device
+    fn record_start(
+        &self,
+        device_id: Option<&str>,
+        config: RecordCaptureConfig,
+    ) -> Result<StreamId>;
+
+    /// Stop an active recording
+    async fn record_stop(&self, stream_id: &str) -> Result<RecordingResult>;
+
+    /// Get real-time monitor data for level meters
+    fn monitor_data(&self, stream_id: &str) -> Option<MonitorData>;
 }

@@ -276,6 +276,12 @@ define_actions!(AudioAction {
     AnalyzeLoudness => "analyze_loudness",
     /// Detect silence regions in audio
     DetectSilence => "detect_silence",
+    /// List available audio input devices
+    ListInputDevices => "list_input_devices",
+    /// Start recording from an input device
+    RecordStart => "record_start",
+    /// Stop an active recording
+    RecordStop => "record_stop",
 });
 
 define_actions!(ImageAction {

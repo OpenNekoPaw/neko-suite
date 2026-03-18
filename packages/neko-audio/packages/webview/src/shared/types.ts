@@ -110,6 +110,36 @@ export interface CommandMessage {
     | 'toggleExport';
 }
 
+/** Engine input devices result */
+export interface EditorInputDevicesMessage {
+  type: 'editor:inputDevices';
+  payload: Array<{
+    id: string;
+    name: string;
+    sampleRates: number[];
+    channels: number[];
+    isDefault: boolean;
+  }>;
+}
+
+/** Engine recording started result */
+export interface EditorRecordStartResultMessage {
+  type: 'editor:recordStartResult';
+  payload: { streamId: string; monitorUrl: string };
+}
+
+/** Engine recording stopped result */
+export interface EditorRecordStopResultMessage {
+  type: 'editor:recordStopResult';
+  payload: {
+    path: string;
+    durationSeconds: number;
+    format: string;
+    sampleRate: number;
+    channels: number;
+  };
+}
+
 export type ExtensionMessage =
   | EditorInitMessage
   | EditorWaveformMessage
@@ -119,6 +149,9 @@ export type ExtensionMessage =
   | EditorLoudnessResultMessage
   | EditorSilenceResultMessage
   | EditorEffectsResultMessage
+  | EditorInputDevicesMessage
+  | EditorRecordStartResultMessage
+  | EditorRecordStopResultMessage
   | ProjectInitMessage
   | ProjectSaveRequestMessage
   | ProjectSaveAsRequestMessage
@@ -216,9 +249,9 @@ export interface ExportAsMessage {
 export interface ProjectInitMessage {
   type: 'project:init';
   payload: {
-    filePath: string;
+    filePath: string | null;
     fileName: string;
-    audioInfo: AudioInfo;
+    audioInfo: AudioInfo | null;
     project: {
       effectsChain: Array<{
         id: string;
@@ -264,6 +297,31 @@ export interface ProjectChangedMessage {
   type: 'project:changed';
 }
 
+/** Request engine input device list */
+export interface ListInputDevicesMessage {
+  type: 'editor:listInputDevices';
+}
+
+/** Start engine recording */
+export interface RecordStartMessage {
+  type: 'editor:recordStart';
+  deviceId?: string;
+  outputPath?: string;
+  sampleRate?: number;
+  channels?: number;
+}
+
+/** Stop engine recording */
+export interface RecordStopMessage {
+  type: 'editor:recordStop';
+  streamId: string;
+}
+
+/** Request to import audio source into project */
+export interface ProjectImportSourceMessage {
+  type: 'project:importSource';
+}
+
 export type WebviewMessage =
   | ReadyMessage
   | PlayMessage
@@ -280,5 +338,9 @@ export type WebviewMessage =
   | DenoiseMessage
   | NormalizeMessage
   | ExportAsMessage
+  | ListInputDevicesMessage
+  | RecordStartMessage
+  | RecordStopMessage
   | ProjectSaveDataMessage
-  | ProjectChangedMessage;
+  | ProjectChangedMessage
+  | ProjectImportSourceMessage;

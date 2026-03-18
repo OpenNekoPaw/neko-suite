@@ -444,3 +444,84 @@ export interface StreamHandle {
   audioStreamId?: string;
   audioWsUrl?: string;
 }
+
+// =============================================================================
+// Audio Input / Recording Types
+// =============================================================================
+
+/** Audio input device info (from cpal) */
+export interface AudioInputDevice {
+  id: string;
+  name: string;
+  sampleRates: number[];
+  channels: number[];
+  isDefault: boolean;
+}
+
+/** Result of starting a recording */
+export interface RecordStartResult {
+  streamId: string;
+  monitorUrl: string;
+}
+
+/** Result of stopping a recording */
+export interface RecordingResult {
+  path: string;
+  durationSeconds: number;
+  format: string;
+  sampleRate: number;
+  channels: number;
+}
+
+/** Real-time monitor data for level meters */
+export interface MonitorData {
+  rms: number;
+  peak: number;
+  clipping: boolean;
+}
+
+// =============================================================================
+// Camera Types
+// =============================================================================
+
+export interface CameraDevice {
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
+
+export interface CameraCaptureOptions {
+  deviceId?: string;
+  resolutionWidth?: number;
+  resolutionHeight?: number;
+  fps?: number;
+}
+
+// =============================================================================
+// MIDI Types
+// =============================================================================
+
+export interface MidiPort {
+  id: string;
+  name: string;
+}
+
+export interface MidiConnectResult {
+  streamId: string;
+  wsUrl: string;
+}
+
+// =============================================================================
+// Gamepad Types
+// =============================================================================
+
+export interface GamepadInfo {
+  id: string;
+  name: string;
+  connected: boolean;
+}
+
+export interface GamepadConnectResult {
+  streamId: string;
+  wsUrl: string;
+}

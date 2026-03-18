@@ -263,12 +263,29 @@ midir callback (<1ms) → JSON 序列化 (~0.1ms) → WebSocket (~2ms)
 
 ---
 
+## 实现状态
+
+| 设备 | 状态 | Rust crate | 关键文件 |
+|------|------|-----------|---------|
+| **麦克风** | ✅ 完整 | `cpal` + `hound` | `native-core/src/audio/mic_capture.rs` + `native-http/src/routes/monitor.rs` |
+| **摄像头** | ⚠️ 框架 | FFmpeg avdevice | `native-core/src/services/impls/camera.rs`（capture TODO） |
+| **MIDI** | ✅ 完整 | `midir` | `native-core/src/services/impls/midi.rs` |
+| **Gamepad** | ✅ 完整 | `gilrs` | `native-core/src/services/impls/gamepad.rs` |
+| **手写板** | ✅ 无需代理 | — | webview `PointerEvent.pressure` |
+
+**TS 层**：`EngineClient` 新增 15 个方法（5 录制 + 3 camera + 3 MIDI + 3 gamepad + 1 monitor），类型定义在 `@neko/neko-client/engine/types.ts`。
+
+**待完成**：
+- 摄像头 capture 实现（FFmpeg avdevice → H.264 → WebSocket，属 neko-live Phase 5 前置）
+
+---
+
 ## 受影响模块
 
-| 模块 | 设备需求 | 方案 | 优先级 |
-|------|---------|------|--------|
-| **neko-audio** | 麦克风录制 | Engine `cpal` 代理（替代 webview getUserMedia）| P1 |
-| **neko-sketch** | 手写板压感 | Webview `PointerEvent.pressure` 直接使用 | 已可用 |
-| **neko-live** | 摄像头 | Engine FFmpeg/nokhwa 代理 → H264StreamClient | P2 |
-| **neko-audio** | MIDI 控制器 | Engine `midir` 代理 | P3 |
-| **neko-model** | Gamepad/VR 手柄 | Engine `gilrs` 代理 | P3 |
+| 模块 | 设备需求 | 方案 | 状态 |
+|------|---------|------|------|
+| **neko-audio** | 麦克风录制 | Engine `cpal` 代理 + `/v1/monitor` 电平 | ✅ 完整 |
+| **neko-sketch** | 手写板压感 | Webview `PointerEvent.pressure` 直接使用 | ✅ 可用 |
+| **neko-live** | 摄像头 | Engine FFmpeg/avdevice → H264StreamClient | ⚠️ 框架 |
+| **neko-audio** | MIDI 控制器 | Engine `midir` → broadcast → `/v1/midi/{id}` WS | ✅ 完整 |
+| **neko-model** | Gamepad/VR 手柄 | Engine `gilrs` → broadcast → `/v1/gamepad/{id}` WS | ✅ 完整 |

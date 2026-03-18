@@ -6,8 +6,9 @@ use crate::router::ActionRouter;
 use crate::session::SessionManager;
 use neko_native_core::gpu::GpuContext;
 use neko_native_core::services::{
-    AudioService, EffectsService, ExportService, ImageService, IPuppetService, NodeService,
-    PuppetService, SceneService, TaskService, TimelineService, VideoService,
+    AudioService, CameraService, EffectsService, ExportService, GamepadService, ImageService,
+    IPuppetService, MidiService, NodeService, PuppetService, SceneService, TaskService,
+    TimelineService, VideoService,
 };
 use neko_types::{ActionRequest, ActionResponse};
 use std::sync::Arc;
@@ -29,6 +30,12 @@ pub struct EngineApi {
     gpu_ctx: Option<Arc<GpuContext>>,
     /// Puppet service — exposed for WS stream endpoint
     puppet_service: Option<Arc<dyn IPuppetService>>,
+    /// Audio service — exposed for monitor endpoint
+    audio_service: Arc<AudioService>,
+    /// MIDI service — exposed for WS event stream endpoint
+    midi_service: Arc<MidiService>,
+    /// Gamepad service — exposed for WS event stream endpoint
+    gamepad_service: Arc<GamepadService>,
 }
 
 impl EngineApi {
@@ -55,6 +62,7 @@ impl EngineApi {
         let node_service = Arc::new(node_service);
         let video_service = Arc::new(VideoService::new(gpu_ctx.clone(), task_service.clone()));
         let audio_service = Arc::new(AudioService::new(gpu_ctx.clone(), task_service.clone()));
+        let audio_service_ref = audio_service.clone();
         let image_service = Arc::new(ImageService::new(gpu_ctx.clone()));
         let timeline_service =
             Arc::new(TimelineService::new(gpu_ctx.clone(), task_service.clone()));
@@ -103,6 +111,13 @@ impl EngineApi {
         let puppet_svc = Arc::new(PuppetService::new());
         let puppet_service_dyn: Option<Arc<dyn IPuppetService>> = Some(puppet_svc.clone());
 
+        // Device services
+        let camera_service = Arc::new(CameraService::new());
+        let midi_service = Arc::new(MidiService::new());
+        let gamepad_service = Arc::new(GamepadService::new());
+        let midi_service_ref = midi_service.clone();
+        let gamepad_service_ref = gamepad_service.clone();
+
         // Create router
         let router = ActionRouter::new(
             task_service,
@@ -115,6 +130,9 @@ impl EngineApi {
             effects_service,
             scene_service,
             Some(puppet_svc),
+            camera_service,
+            midi_service,
+            gamepad_service,
             resource_registry.clone(),
             stream_registry.clone(),
         );
@@ -126,6 +144,9 @@ impl EngineApi {
             session_manager,
             gpu_ctx,
             puppet_service: puppet_service_dyn,
+            audio_service: audio_service_ref,
+            midi_service: midi_service_ref,
+            gamepad_service: gamepad_service_ref,
         })
     }
 
@@ -190,6 +211,21 @@ impl EngineApi {
     /// Get the session manager
     pub fn session_manager(&self) -> &Arc<SessionManager> {
         &self.session_manager
+    }
+
+    /// Get the audio service (for monitor endpoint)
+    pub fn audio_service(&self) -> &Arc<AudioService> {
+        &self.audio_service
+    }
+
+    /// Get the MIDI service (for WS event stream endpoint)
+    pub fn midi_service(&self) -> &Arc<MidiService> {
+        &self.midi_service
+    }
+
+    /// Get the gamepad service (for WS event stream endpoint)
+    pub fn gamepad_service(&self) -> &Arc<GamepadService> {
+        &self.gamepad_service
     }
 
     /// Check if GPU is available

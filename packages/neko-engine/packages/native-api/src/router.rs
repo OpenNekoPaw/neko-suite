@@ -1,15 +1,17 @@
 //! ActionRouter - Routes ActionRequest to appropriate controllers
 
 use crate::controllers::{
-    AudioController, CanvasController, Controller, EffectsController, ImageController,
-    ModelsController, NodeController, PuppetsController, ScenesController, StreamController,
-    TaskController, TimelineController, VideoController,
+    AudioController, CameraController, CanvasController, Controller, EffectsController,
+    GamepadController, ImageController, MidiController, ModelsController, NodeController,
+    PuppetsController, ScenesController, StreamController, TaskController, TimelineController,
+    VideoController,
 };
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_native_core::services::{
-    AudioService, EffectsService, ExportService, ImageService, NodeService, PuppetService,
-    SceneService, TaskService, TimelineService, VideoService,
+    AudioService, CameraService, EffectsService, ExportService, GamepadService, ImageService,
+    MidiService, NodeService, PuppetService, SceneService, TaskService, TimelineService,
+    VideoService,
 };
 use neko_types::registry::{self, groups};
 use neko_types::{ActionRequest, ActionResponse};
@@ -29,6 +31,9 @@ pub struct ActionRouter {
     canvas_controller: CanvasController,
     scenes_controller: ScenesController,
     puppets_controller: PuppetsController,
+    camera_controller: CameraController,
+    midi_controller: MidiController,
+    gamepad_controller: GamepadController,
 }
 
 impl ActionRouter {
@@ -44,6 +49,9 @@ impl ActionRouter {
         effects_service: Option<Arc<EffectsService>>,
         scene_service: Option<Arc<SceneService>>,
         puppet_service: Option<Arc<PuppetService>>,
+        camera_service: Arc<CameraService>,
+        midi_service: Arc<MidiService>,
+        gamepad_service: Arc<GamepadService>,
         resource_registry: Arc<ResourceRegistry>,
         stream_registry: Arc<StreamRegistry>,
     ) -> Self {
@@ -72,6 +80,9 @@ impl ActionRouter {
             canvas_controller: CanvasController::new(),
             scenes_controller: ScenesController::new(scene_service),
             puppets_controller: PuppetsController::new(puppet_service),
+            camera_controller: CameraController::new(camera_service),
+            midi_controller: MidiController::new(midi_service),
+            gamepad_controller: GamepadController::new(gamepad_service),
         }
     }
 
@@ -146,6 +157,21 @@ impl ActionRouter {
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
+            groups::CAMERAS => {
+                self.camera_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
+            groups::MIDI => {
+                self.midi_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
+            groups::GAMEPAD => {
+                self.gamepad_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
             _ => Err(ApiError::UnknownAction {
                 group: request.group.clone(),
                 action: request.action.clone(),
@@ -173,6 +199,9 @@ impl ActionRouter {
             groups::PUPPETS => Some(self.puppets_controller.actions()),
             groups::STREAMS => Some(self.stream_controller.actions()),
             groups::EFFECTS => Some(self.effects_controller.actions()),
+            groups::CAMERAS => Some(self.camera_controller.actions()),
+            groups::MIDI => Some(self.midi_controller.actions()),
+            groups::GAMEPAD => Some(self.gamepad_controller.actions()),
             _ => None,
         }
     }
@@ -194,6 +223,10 @@ mod tests {
         let resource_registry = Arc::new(ResourceRegistry::new());
         let stream_registry = Arc::new(StreamRegistry::new());
 
+        let camera_service = Arc::new(CameraService::new());
+        let midi_service = Arc::new(MidiService::new());
+        let gamepad_service = Arc::new(GamepadService::new());
+
         ActionRouter::new(
             task_service,
             node_service,
@@ -205,6 +238,9 @@ mod tests {
             None, // No GPU = no effects service in tests
             scene_service,
             puppet_service,
+            camera_service,
+            midi_service,
+            gamepad_service,
             resource_registry,
             stream_registry,
         )

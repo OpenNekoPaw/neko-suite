@@ -30,6 +30,16 @@ import type {
   EffectPresetInfo,
   EffectApplyResult,
   ShaderParamDef,
+  AudioInputDevice,
+  RecordStartResult,
+  RecordingResult,
+  MonitorData,
+  CameraDevice,
+  CameraCaptureOptions,
+  MidiPort,
+  MidiConnectResult,
+  GamepadInfo,
+  GamepadConnectResult,
 } from './engine/types';
 import { transformDiffResponse } from './engine/responseTransform';
 
@@ -762,6 +772,173 @@ export class EngineClient {
     } catch {
       return false;
     }
+  }
+
+  // =========================================================================
+  // Audio Input / Recording
+  // =========================================================================
+
+  /** List available audio input devices */
+  async listInputDevices(): Promise<AudioInputDevice[]> {
+    const resp = await this.dispatch({
+      group: 'audios',
+      action: 'list_input_devices',
+      options: {},
+    });
+    this.assertOk(resp, 'audios:list_input_devices');
+    return (resp.data ?? []) as AudioInputDevice[];
+  }
+
+  /** Start recording from an input device */
+  async recordStart(options: {
+    outputPath: string;
+    deviceId?: string;
+    sampleRate?: number;
+    channels?: number;
+  }): Promise<RecordStartResult> {
+    const resp = await this.dispatch({
+      group: 'audios',
+      action: 'record_start',
+      options,
+    });
+    this.assertOk(resp, 'audios:record_start');
+    return resp.data as RecordStartResult;
+  }
+
+  /** Stop an active recording */
+  async recordStop(streamId: string): Promise<RecordingResult> {
+    const resp = await this.dispatch({
+      group: 'audios',
+      action: 'record_stop',
+      options: { streamId },
+    });
+    this.assertOk(resp, 'audios:record_stop');
+    return resp.data as RecordingResult;
+  }
+
+  /** Get the monitor URL for real-time level data */
+  getMonitorUrl(streamId: string): string {
+    return `${this.baseUrl}/v1/monitor/${streamId}`;
+  }
+
+  /** Fetch current monitor data (RMS/Peak/Clipping) */
+  async fetchMonitorData(streamId: string): Promise<MonitorData> {
+    const res = await fetch(this.getMonitorUrl(streamId));
+    if (!res.ok) throw new Error(`Monitor fetch failed: ${res.status}`);
+    return (await res.json()) as MonitorData;
+  }
+
+  // =========================================================================
+  // Camera
+  // =========================================================================
+
+  /** List available camera devices */
+  async listCameraDevices(): Promise<CameraDevice[]> {
+    const resp = await this.dispatch({
+      group: 'cameras',
+      action: 'list_devices',
+      options: {},
+    });
+    this.assertOk(resp, 'cameras:list_devices');
+    return (resp.data ?? []) as CameraDevice[];
+  }
+
+  /** Start camera capture */
+  async startCameraCapture(opts?: CameraCaptureOptions): Promise<StreamHandle> {
+    const resp = await this.dispatch({
+      group: 'cameras',
+      action: 'capture_start',
+      options: (opts ?? {}) as Record<string, unknown>,
+    });
+    this.assertOk(resp, 'cameras:capture_start');
+    const data = resp.data as Record<string, unknown>;
+    const streamId = data.streamId as string;
+    return {
+      streamId,
+      wsUrl: `ws://127.0.0.1:${this.port}/v1/streams/${streamId}`,
+    };
+  }
+
+  /** Stop camera capture */
+  async stopCameraCapture(streamId: string): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'cameras',
+      action: 'capture_stop',
+      options: { streamId },
+    });
+    this.assertOk(resp, 'cameras:capture_stop');
+  }
+
+  // =========================================================================
+  // MIDI
+  // =========================================================================
+
+  /** List available MIDI input ports */
+  async listMidiPorts(): Promise<MidiPort[]> {
+    const resp = await this.dispatch({
+      group: 'midi',
+      action: 'list_ports',
+      options: {},
+    });
+    this.assertOk(resp, 'midi:list_ports');
+    return (resp.data ?? []) as MidiPort[];
+  }
+
+  /** Connect to a MIDI port */
+  async connectMidi(portId: string): Promise<MidiConnectResult> {
+    const resp = await this.dispatch({
+      group: 'midi',
+      action: 'connect',
+      options: { portId },
+    });
+    this.assertOk(resp, 'midi:connect');
+    return resp.data as MidiConnectResult;
+  }
+
+  /** Disconnect from a MIDI port */
+  async disconnectMidi(streamId: string): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'midi',
+      action: 'disconnect',
+      options: { streamId },
+    });
+    this.assertOk(resp, 'midi:disconnect');
+  }
+
+  // =========================================================================
+  // Gamepad
+  // =========================================================================
+
+  /** List connected gamepads */
+  async listGamepads(): Promise<GamepadInfo[]> {
+    const resp = await this.dispatch({
+      group: 'gamepad',
+      action: 'list',
+      options: {},
+    });
+    this.assertOk(resp, 'gamepad:list');
+    return (resp.data ?? []) as GamepadInfo[];
+  }
+
+  /** Connect to a gamepad for event streaming */
+  async connectGamepad(gamepadId: string): Promise<GamepadConnectResult> {
+    const resp = await this.dispatch({
+      group: 'gamepad',
+      action: 'connect',
+      options: { gamepadId },
+    });
+    this.assertOk(resp, 'gamepad:connect');
+    return resp.data as GamepadConnectResult;
+  }
+
+  /** Disconnect from a gamepad */
+  async disconnectGamepad(streamId: string): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'gamepad',
+      action: 'disconnect',
+      options: { streamId },
+    });
+    this.assertOk(resp, 'gamepad:disconnect');
   }
 
   // =========================================================================
