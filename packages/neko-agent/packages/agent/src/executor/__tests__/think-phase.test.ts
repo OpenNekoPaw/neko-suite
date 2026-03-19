@@ -6,7 +6,13 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { think, thinkStream, parseToolCallArgs, type ThinkDeps } from '../think-phase';
+import {
+  think,
+  thinkStream,
+  parseToolCallArgs,
+  extractThinkTags,
+  type ThinkDeps,
+} from '../think-phase';
 import type {
   AgentContext,
   IService,
@@ -259,5 +265,58 @@ describe('thinkStream', () => {
     expect(final.toolCalls).toHaveLength(1);
     expect(final.toolCalls![0]!.name).toBe('Read');
     expect(final.toolCalls![0]!.arguments).toEqual({ path: '/tmp' });
+  });
+});
+
+// =======================
+// extractThinkTags
+// ============================
+
+describe('extractThinkTags', () => {
+  it('should return original content when no <think> tags present', () => {
+    const result = extractThinkTags('Hello world');
+    expect(result.content).toBe('Hello world');
+    expect(result.thinking).toBeNull();
+  });
+
+  it('should extract and strip single <think> tag', () => {
+    const result = extractThinkTags('<think>Requesting more details</think>Hello there!');
+    expect(result.content).toBe('Hello there!');
+    expect(result.thinking).toBe('Requesting more details');
+  });
+
+  it('should extract and strip multiple <think> tags', () => {
+    const result = extractThinkTags(
+      '<think>First thought</think>Some text<think>Second thought</think>More text',
+    );
+    expect(result.content).toBe('Some textMore text');
+    expect(result.thinking).toBe('First thought\n\nSecond thought');
+  });
+
+  it('should handle <think> tags with whitespace', () => {
+    const result = extractThinkTags('<think>  Thinking content  </think>  Response text  ');
+    expect(result.content).toBe('Response text');
+    expect(result.thinking).toBe('Thinking content');
+  });
+
+  it('should handle multiline <think> content', () => {
+    const result = extractThinkTags(`<think>
+Line 1
+Line 2
+</think>Response`);
+    expect(result.content).toBe('Response');
+    expect(result.thinking).toBe('Line 1\nLine 2');
+  });
+
+  it('should handle empty <think> tags', () => {
+    const result = extractThinkTags('<think></think>Content');
+    expect(result.content).toBe('Content');
+    expect(result.thinking).toBeNull();
+  });
+
+  it('should be case insensitive', () => {
+    const result = extractThinkTags('<THINK>Uppercase</THINK>Text');
+    expect(result.content).toBe('Text');
+    expect(result.thinking).toBe('Uppercase');
   });
 });

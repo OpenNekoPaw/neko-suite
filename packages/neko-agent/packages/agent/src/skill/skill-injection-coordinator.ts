@@ -9,14 +9,13 @@
  * - Track A: System prompt section (via SystemPromptComposer)
  * - Track B: Permission allow rules (via PermissionHooks)
  * - Track C: Active allowed tools state + ToolGuard (for runtime isToolAllowed)
- * - Track D: ToolSet activation (via IToolInjectionManager)
  *
  * NOT to be confused with:
  * - SkillService — stateless orchestration: discovery, matching, injection preparation
  * - SkillInjector — prepares SkillInjection from Skill/SlashCommand objects
  */
 
-import type { Skill, SkillInjection, IToolInjectionManager } from '@neko/shared';
+import type { Skill, SkillInjection } from '@neko/shared';
 import type { ISystemPromptComposer } from '../prompt/system-prompt-composer-types';
 import type { IPermissionManager } from '../permission/permission-manager-types';
 import { createToolGuard, type IToolGuard } from './tool-guard';
@@ -37,9 +36,6 @@ export interface SkillInjectionCoordinatorDeps {
 
   /** Callback to sync composed prompt into history[0] */
   syncSystemPrompt: () => void;
-
-  /** Tool injection manager for Track D: ToolSet activation (optional) */
-  getToolInjectionManager?: () => IToolInjectionManager | null;
 }
 
 /**
@@ -51,7 +47,6 @@ interface ActiveInjection {
   allowRules: string[];
   allowedTools: string[] | undefined;
   toolGuard: IToolGuard;
-  activatedToolSets: string[];
 }
 
 // =============================================================================
@@ -93,7 +88,6 @@ export class SkillInjectionCoordinator {
     this._deps.syncSystemPrompt();
 
     const allowRules: string[] = [];
-    const activatedToolSets: string[] = [];
     try {
       // Track B: Add permission allow rules
       const permissionHooks = this._deps.getPermissionHooks();
@@ -107,27 +101,12 @@ export class SkillInjectionCoordinator {
       // Track C: Record state + create ToolGuard
       const toolGuard = createToolGuard(injection.allowedTools, injection.name);
 
-      // Track D: Activate associated ToolSets
-      if (skill?.toolSets && skill.toolSets.length > 0) {
-        const manager = this._deps.getToolInjectionManager?.();
-        if (manager) {
-          const state = manager.getState();
-          for (const toolSetName of skill.toolSets) {
-            if (!state.activeToolSets.includes(toolSetName)) {
-              manager.activateToolSet(toolSetName);
-              activatedToolSets.push(toolSetName);
-            }
-          }
-        }
-      }
-
       this._activeInjection = {
         name: injection.name,
         skill,
         allowRules,
         allowedTools: injection.allowedTools,
         toolGuard,
-        activatedToolSets,
       };
     } catch (error) {
       // Rollback Track A: remove prompt section
@@ -139,14 +118,6 @@ export class SkillInjectionCoordinator {
       if (ph) {
         for (const rule of allowRules) {
           ph.removeAllowRule(rule);
-        }
-      }
-
-      // Rollback partial Track D: deactivate any ToolSets already activated
-      const manager = this._deps.getToolInjectionManager?.();
-      if (manager) {
-        for (const ts of activatedToolSets) {
-          manager.deactivateToolSet(ts);
         }
       }
 
@@ -231,16 +202,6 @@ export class SkillInjectionCoordinator {
       if (permissionHooks && this._activeInjection.allowRules.length > 0) {
         for (const rule of this._activeInjection.allowRules) {
           permissionHooks.removeAllowRule(rule);
-        }
-      }
-
-      // Track D: Deactivate ToolSets
-      if (this._activeInjection.activatedToolSets.length > 0) {
-        const manager = this._deps.getToolInjectionManager?.();
-        if (manager) {
-          for (const ts of this._activeInjection.activatedToolSets) {
-            manager.deactivateToolSet(ts);
-          }
         }
       }
 

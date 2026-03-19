@@ -120,7 +120,6 @@ export class AgentSession implements IAgentSession {
       promptComposer: this._promptComposer,
       getPermissionHooks: () => this._permissionHooks,
       syncSystemPrompt: () => this._syncSystemPrompt(),
-      getToolInjectionManager: () => this._toolInjectionManager,
     });
   }
 

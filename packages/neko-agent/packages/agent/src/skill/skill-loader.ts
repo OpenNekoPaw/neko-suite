@@ -34,7 +34,6 @@ import type {
   ToolsFileFrontmatter,
   SkillReference,
   SkillScript,
-  SkillContentConfig,
 } from '@neko/shared';
 import {
   createSkill,
@@ -249,27 +248,6 @@ export class SkillLoader {
       }
     }
 
-    // Progressive Disclosure: Load references and scripts metadata (not content)
-    const references = await this.loadReferences(directoryPath);
-    const scripts = await this.loadScripts(directoryPath);
-
-    // Parse allowed tools from frontmatter
-    const parsedAllowedTools = frontmatter['allowed-tools']
-      ? Array.isArray(frontmatter['allowed-tools'])
-        ? frontmatter['allowed-tools']
-        : [frontmatter['allowed-tools']]
-      : undefined;
-
-    // Build content config if any content exists
-    let contentConfig: SkillContentConfig | undefined;
-    if (references.length > 0 || scripts.length > 0 || parsedAllowedTools) {
-      contentConfig = {
-        references: references.length > 0 ? references : undefined,
-        scripts: scripts.length > 0 ? scripts : undefined,
-        allowedTools: parsedAllowedTools,
-      };
-    }
-
     const skill = createSkill(
       frontmatter,
       parsed.content,
@@ -277,7 +255,6 @@ export class SkillLoader {
       directoryPath,
       validRefs.length > 0 ? validRefs : undefined,
       toolDefinitions,
-      contentConfig,
     );
 
     // Validate

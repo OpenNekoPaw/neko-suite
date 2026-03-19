@@ -57,7 +57,7 @@ export async function think(deps: ThinkDeps, context: AgentContext): Promise<Age
   }
 
   // Extract text content from message
-  const content =
+  const rawContent =
     typeof response.message.content === 'string'
       ? response.message.content
       : Array.isArray(response.message.content)
@@ -67,6 +67,9 @@ export async function think(deps: ThinkDeps, context: AgentContext): Promise<Age
             .join('')
         : '';
 
+  // Extract and strip <think> tags from content
+  const { content, thinking: extractedThinking } = extractThinkTags(rawContent);
+
   // Preserve the original tool call ID from the API response
   const toolCalls = response.message.toolCalls?.map((tc) => ({
     id: tc.id,
@@ -74,13 +77,17 @@ export async function think(deps: ThinkDeps, context: AgentContext): Promise<Age
     arguments: parseToolCallArgs(tc.function.arguments),
   }));
 
-  // Add assistant message to context
-  context.messages.push(response.message);
+  // Add assistant message to context (with stripped content)
+  context.messages.push({
+    ...response.message,
+    content,
+  });
 
   const step: AgentStep = {
     type: 'think',
     content,
-    thinking: response.thinking,
+    // Prefer API thinking field, fallback to extracted <think> tags
+    thinking: response.thinking || extractedThinking || undefined,
     toolCalls: toolCalls?.map((tc) => ({
       id: tc.id,
       name: tc.name,
@@ -108,6 +115,7 @@ export async function* thinkStream(
 
   // Accumulate streaming response
   let content = '';
+  let accumulatedThinking = ''; // Track extracted thinking content
   const toolCallMap = new Map<string, { id: string; name: string; arguments: string }>();
   let finishReason: string | undefined;
 
@@ -118,11 +126,22 @@ export async function* thinkStream(
       case 'content':
         if (chunk.content) {
           content += chunk.content;
-          yield {
-            type: 'content_delta',
-            content: chunk.content,
-            timestamp: Date.now(),
-          };
+
+          // Extract and strip <think> tags from the delta
+          const { content: cleanDelta, thinking: deltaThinking } = extractThinkTags(chunk.content);
+
+          if (deltaThinking) {
+            accumulatedThinking += (accumulatedThinking ? '\n\n' : '') + deltaThinking;
+          }
+
+          // Only yield if there's clean content (not just thinking tags)
+          if (cleanDelta) {
+            yield {
+              type: 'content_delta',
+              content: cleanDelta,
+              timestamp: Date.now(),
+            };
+          }
         }
         break;
 
@@ -164,10 +183,13 @@ export async function* thinkStream(
     arguments: parseToolCallArgs(tc.arguments),
   }));
 
-  // Build assistant message and add to context
+  // Extract and strip <think> tags from accumulated content
+  const { content: strippedContent, thinking: extractedThinking } = extractThinkTags(content);
+
+  // Build assistant message and add to context (with stripped content)
   const assistantMessage: ChatMessage = {
     role: 'assistant',
-    content,
+    content: strippedContent,
     toolCalls:
       toolCalls.length > 0
         ? toolCalls.map((tc) => ({
@@ -182,7 +204,8 @@ export async function* thinkStream(
   // Yield final think step
   const step: AgentStep = {
     type: 'think',
-    content,
+    content: strippedContent,
+    thinking: accumulatedThinking || extractedThinking || undefined,
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     timestamp: Date.now(),
   };
@@ -207,6 +230,31 @@ export function parseToolCallArgs(rawArgs: string): Record<string, unknown> {
     // LLM returned malformed JSON — pass raw string as fallback
     return { _raw: rawArgs };
   }
+}
+
+/**
+ * Extract and strip <think> tags from model output.
+ * Some models (e.g., gpt-5.1-codex) output thinking content as <think>...</think> tags
+ * in the text content instead of using the API's thinking field.
+ *
+ * @returns { content: stripped text, thinking: extracted thinking content or null }
+ */
+export function extractThinkTags(text: string): { content: string; thinking: string | null } {
+  const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+  const matches = [...text.matchAll(thinkRegex)];
+
+  if (matches.length === 0) {
+    return { content: text, thinking: null };
+  }
+
+  // Extract all thinking content
+  const thinkingParts = matches.map((m) => m[1]?.trim()).filter(Boolean);
+  const thinking = thinkingParts.length > 0 ? thinkingParts.join('\n\n') : null;
+
+  // Strip all <think> tags from content
+  const content = text.replace(thinkRegex, '').trim();
+
+  return { content, thinking };
 }
 
 /**
