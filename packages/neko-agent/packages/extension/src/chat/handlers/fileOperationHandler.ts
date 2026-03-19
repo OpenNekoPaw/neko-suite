@@ -11,6 +11,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import type { Platform } from '@neko/platform';
 import { getLogger, handleError } from '../../base';
 
@@ -272,6 +273,17 @@ export class FileOperationHandler {
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
       logger.error('Failed to open command file:', error);
+      handleError(error, { showToUser: true, severity: 'error' });
+    }
+  }
+
+  async handleOpenConfigFile(): Promise<void> {
+    try {
+      const configPath = path.join(os.homedir(), '.neko', 'config.json');
+      const uri = vscode.Uri.file(configPath);
+      await vscode.commands.executeCommand('vscode.open', uri);
+    } catch (error) {
+      logger.error('Failed to open config file:', error);
       handleError(error, { showToUser: true, severity: 'error' });
     }
   }

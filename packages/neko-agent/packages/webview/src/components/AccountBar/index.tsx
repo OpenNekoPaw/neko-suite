@@ -115,7 +115,7 @@ export function AccountBar({
               <button
                 onClick={() => {
                   setOpen(false);
-                  onOpenOnboarding();
+                  postMessage({ type: 'openConfigFile' });
                 }}
                 className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
               >

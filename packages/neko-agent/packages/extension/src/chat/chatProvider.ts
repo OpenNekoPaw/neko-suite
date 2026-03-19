@@ -147,6 +147,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Build system prompt with available skills summary appended
+   */
+  private _buildSystemPromptWithSkills(
+    skillService: ReturnType<typeof createSkillService>,
+  ): string {
+    const basePrompt = this._systemPrompt.getPrompt();
+    const skills = skillService.registry.listSkills().filter((s) => s.enabled !== false);
+    if (skills.length === 0) return basePrompt;
+
+    const lines = ['\n\n# Available Skills\n'];
+    for (const skill of skills) {
+      const desc = skill.description?.split('\n')[0] ?? '';
+      lines.push(`- **${skill.name}**: ${desc}`);
+    }
+    lines.push(
+      '\nWhen a user request matches a skill, tell the user which skill is available and ask if they want to activate it.',
+    );
+    return basePrompt + lines.join('\n');
+  }
+
+  /**
    * Populate the skill registry from builtin skills/commands and a disk scan result.
    * Called once on startup and again whenever the file watcher fires.
    */
@@ -207,6 +228,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         // Create a temporary AgentRunner to get ToolSkills (they are registered during configure)
         this._initializeToolSkills();
 
+        // Wire up SkillService: create instance, populate from disk, keep in sync.
+        const skillFileService = getSkillFileService();
+        const skillService = createSkillService();
+
         this._providers = new ProviderManager(this._context, this._platform);
         this._messages = new MessageHandler(
           this._settings,
@@ -214,13 +239,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._conversations,
           this._agentManager,
           this._editorRegistry,
-          () => this._systemPrompt.getPrompt(),
+          () => this._buildSystemPromptWithSkills(skillService),
           this._platform,
         );
 
-        // Wire up SkillService: create instance, populate from disk, keep in sync.
-        const skillFileService = getSkillFileService();
-        const skillService = createSkillService();
         skillFileService
           .getSkills()
           .then((result) => {
@@ -553,6 +575,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           break;
         case 'openFile':
           this._fileOperationHandler.handleOpenFile(message.filePath as string);
+          break;
+        case 'openConfigFile':
+          this._fileOperationHandler.handleOpenConfigFile();
           break;
         case 'openPromptConfig':
           this._fileOperationHandler.handleOpenPromptConfig(
