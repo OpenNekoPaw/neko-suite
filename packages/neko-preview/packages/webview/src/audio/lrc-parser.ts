@@ -93,6 +93,16 @@ export function parseLrc(content: string): LrcResult {
   // Sort by time ascending
   lines.sort((a, b) => a.time - b.time);
 
+  // If no timed lines found but content has text, treat as plain-text lyrics
+  if (lines.length === 0) {
+    for (const rawLine of content.split(/\r?\n/)) {
+      const text = rawLine.trim();
+      if (text && !META_TAG_RE.test(text)) {
+        lines.push({ time: -1, text });
+      }
+    }
+  }
+
   return { lines, metadata };
 }
 

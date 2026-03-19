@@ -22,12 +22,15 @@ export function LyricsView({ lyrics, currentTime }: LyricsViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLDivElement>(null);
 
+  // Detect plain-text (unsynchronized) lyrics — all lines have time === -1
+  const isUnsynchronized = lyrics.length > 0 && lyrics[0]?.time === -1;
+
   const currentIndex = useMemo(
-    () => findCurrentLineIndex(lyrics, currentTime),
-    [lyrics, currentTime],
+    () => (isUnsynchronized ? -1 : findCurrentLineIndex(lyrics, currentTime)),
+    [lyrics, currentTime, isUnsynchronized],
   );
 
-  // Auto-scroll active line to center
+  // Auto-scroll active line to center (only for synced lyrics)
   useEffect(() => {
     const el = activeRef.current;
     if (el) {
@@ -44,6 +47,23 @@ export function LyricsView({ lyrics, currentTime }: LyricsViewProps) {
             <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
           </svg>
           <div>{t('preview.audio.noLyrics')}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Unsynchronized plain-text lyrics — static scrollable display
+  if (isUnsynchronized) {
+    return (
+      <div className="audio-player__lyrics audio-player__lyrics--has-content" ref={containerRef}>
+        <div className="audio-player__lyrics-scroll">
+          <div className="audio-player__lyrics-spacer" />
+          {lyrics.map((line, i) => (
+            <div key={i} className="audio-player__lyrics-line audio-player__lyrics-line--static">
+              {line.text}
+            </div>
+          ))}
+          <div className="audio-player__lyrics-spacer" />
         </div>
       </div>
     );

@@ -40,6 +40,7 @@ const preview: MessageBundle = {
   'preview.audio.viewCover': '封面',
   'preview.audio.viewLyrics': '歌词',
   'preview.audio.viewWaveform': '波形',
+  'preview.audio.viewSpectrum': '频谱',
 };
 
 export const bundles: Record<string, MessageBundle> = {

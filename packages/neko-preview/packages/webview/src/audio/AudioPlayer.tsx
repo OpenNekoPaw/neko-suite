@@ -13,6 +13,7 @@ import { useTranslation } from '../i18n/I18nContext';
 import { CoverView } from './CoverView';
 import { LyricsView } from './LyricsView';
 import { WaveformCanvas } from './WaveformCanvas';
+import { SpectrumCanvas } from './SpectrumCanvas';
 import { AudioControls, type ViewMode } from './AudioControls';
 import type {
   MediaInfo,
@@ -307,6 +308,13 @@ export function AudioPlayer() {
                 onSeeking={handleScrub}
               />
             </div>
+          </div>
+
+          {/* Spectrum */}
+          <div
+            className={`audio-player__view ${viewMode === 'spectrum' ? 'audio-player__view--active' : ''}`}
+          >
+            <SpectrumCanvas audioClient={audioClientRef.current} isPlaying={isPlaying} />
           </div>
         </div>
       </div>

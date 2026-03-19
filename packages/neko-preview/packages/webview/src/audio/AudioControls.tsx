@@ -11,7 +11,7 @@ import { formatTime } from '@neko/neko-client';
 import { useTranslation } from '../i18n/I18nContext';
 import { ProgressBar } from '../shared/ProgressBar';
 
-export type ViewMode = 'cover' | 'lyrics' | 'waveform';
+export type ViewMode = 'cover' | 'lyrics' | 'waveform' | 'spectrum';
 
 const SPEED_OPTIONS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
@@ -242,6 +242,16 @@ export function AudioControls({
             {/* Waveform icon */}
             <svg viewBox="0 0 24 24">
               <path d="M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12-6v8h2V8h-2zm4 2v4h2v-4h-2z" />
+            </svg>
+          </button>
+          <button
+            className={`audio-player__view-tab ${viewMode === 'spectrum' ? 'audio-player__view-tab--active' : ''}`}
+            onClick={() => onViewModeChange('spectrum')}
+            title={t('preview.audio.viewSpectrum')}
+          >
+            {/* Spectrum/equalizer icon */}
+            <svg viewBox="0 0 24 24">
+              <path d="M3 17h2v-7H3v7zm4 2h2V5H7v14zm4 0h2V8h-2v11zm4-14v16h2V5h-2zm4 4v8h2V9h-2z" />
             </svg>
           </button>
         </div>

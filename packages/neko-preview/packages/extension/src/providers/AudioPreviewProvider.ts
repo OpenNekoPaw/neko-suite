@@ -144,16 +144,25 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
               logger.error('Waveform generation failed:', error);
             }
 
-            // Look for .lrc lyrics file in same directory
+            // Look for lyrics: external .lrc file first, then embedded metadata
+            let lrcContent: string | null = null;
             try {
               const lrcPath = filePath.replace(/\.[^.]+$/, '.lrc');
-              const lrcContent = await fs.readFile(lrcPath, 'utf-8');
+              lrcContent = await fs.readFile(lrcPath, 'utf-8');
+            } catch {
+              // No external .lrc file
+            }
+
+            // Fall back to embedded lyrics from ID3v2 USLT / Vorbis LYRICS
+            if (!lrcContent && mediaInfo.metadata?.lyrics) {
+              lrcContent = mediaInfo.metadata.lyrics;
+            }
+
+            if (lrcContent) {
               await webviewPanel.webview.postMessage({
                 type: 'preview:lyrics',
                 payload: { lrcContent },
               });
-            } catch {
-              // No .lrc file found — silently skip
             }
             break;
           }

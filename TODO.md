@@ -25,13 +25,15 @@
 - [ ] 大量节点性能优化（Canvas 2D 渲染 或 OffscreenCanvas + Worker，当前 DOM/SVG 方案 <1000 节点足够）
 
 ### neko-proto
-- [ ] 接入 protoc/buf 自动生成（当前手动维护，同步成本高）
+- [ ] ~~接入 protoc/buf 自动生成~~ → 降级为 P3。Proto→TS 已有成熟自定义生成器（proto-gen-ts.mjs），项目用 JSON 非 protobuf 二进制，buf/protoc 核心价值用不上。真正痛点是 Rust 域模型手动同步，考虑增强 `__engine-check.ts` 漂移检测覆盖面即可
 - [x] 补齐 diff.proto 剩余类型定义（CanvasContentDiff + AudioSilenceDetection 已添加）
 
 ### neko-preview（音频播放器现代化）
 - [x] Phase 1：视觉重设计 + 视图切换框架（Apple Music 风格布局 + 封面/歌词/波形三视图 + `--neko-audio-*` 主题变量 + speed 控制 + 拖拽 seek storm 修复）
 - [x] Phase 2：Engine 元数据扩展（FFmpeg metadata dict → ID3/Vorbis 标签提取 + ATTACHED_PIC 封面流提取 + CoverArtInfo base64 DTO + MediaInfo 扩展 + 真实封面展示 + 模糊背景 + metadata title/artist 显示）
 - [x] Phase 3：歌词支持（LRC 时间标签解析 + 多标签/元数据/二分查找 + 同目录 .lrc 查找 + 滚动高亮歌词视图 + smooth scroll 居中 + 渐隐遮罩）
+- [x] Phase 4：频谱可视化（AnalyserNode FFT 实时频率柱状图 + 第四视图 + 主题感知颜色 + DPR 缩放）
+- [x] Phase 5：嵌入歌词提取（ID3v2 USLT / Vorbis LYRICS → metadata.lyrics 回退 + 纯文本歌词静态展示）
 
 ### EditOperation 遗留项
 - [x] neko-types `package.json` 缺少 test script（已添加，11 文件 242 测试通过）
@@ -103,7 +105,7 @@
 - [ ] Phase 7.4：AI 辅助 XR（neko-agent VR 场景生成 MCP Tools + 手势识别 + 语音指令）
 
 ### 跨语言架构对齐
-- [ ] Step 2：Engine ComputeService（`/v1/compute/evaluate_frame`，消除 ~1285 行 TS 重复计算）
+- [ ] Step 2：Engine ComputeService — 降级为 P3。实际可消除 ~600-700 行（非 1285 行，约一半是 UI 交互必需：timeToPixels/框选碰撞/scrubber 实时预览）。HTTP 往返 ~5-10ms 对属性面板拖拽有延迟风险。当前双端计算不一致的实际 bug 为零，新增缓动/蒙版类型频率低。若实施，优先做渲染路径（缓动+蒙版+合成层），保留 UI 交互路径的 TS 计算
 - [ ] Step 3：UI 状态分离（Track/Element UI 字段移入前端 Store）
 
 ---
@@ -178,7 +180,7 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 
 | 优先级 | 问题 | 影响 |
 |--------|------|------|
-| 高 | neko-engine 性能监控（telemetry 基础已有，需接入指标面板） | 性能盲区 |
+| 低 | neko-engine 性能监控面板（采集层 ✅ + HTTP 端点 ✅ + TS 类型 ✅，仅缺独立 Dashboard UI；Alpha 阶段可通过端点直接查询） | 体验优化 |
 | 中 | AI SDK 依赖倒置（`AISdkAdapter` 直接依赖 Vercel AI SDK） | 可替换性差 |
 | 中 | neko-types JSDoc 覆盖率低 | 开发体验差 |
 | 低 | 国际化扩展（neko-cut/neko-agent/neko-sketch 已完成，其他包待补） | 国际化缺口 |
@@ -212,4 +214,4 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 
 ---
 
-*最后更新：2026-03-20（neko-preview 音频播放器现代化 Phase 1-3 全部完成）*
+*最后更新：2026-03-20（neko-preview 音频播放器现代化 Phase 1-5 全部完成）*

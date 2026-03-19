@@ -70,22 +70,38 @@ export function AudioEditor() {
           );
           break;
 
-        case 'project:init':
-          setFileInfo(
-            message.payload.filePath,
-            message.payload.fileName,
-            message.payload.audioInfo,
-          );
-          setProjectMode(true);
-          if (message.payload.project.markers) {
-            setMarkers(message.payload.project.markers);
-          }
-          if (message.payload.project.effectsChain) {
-            effectsChain.replaceAll(
-              message.payload.project.effectsChain as unknown as AudioEffectInstance[],
+        case 'project:init': {
+          const payload = message.payload;
+          // v2 format: has projectData
+          if ('projectData' in payload) {
+            const { projectData, waveforms } = payload;
+            setProjectMode(true);
+            setFileInfo(null, projectData.name, null);
+            // Initialize project store with v2 data
+            const { useAudioProjectStore } = require('../stores/audioProjectStore');
+            useAudioProjectStore.getState().initProject(projectData as any, waveforms);
+            if (projectData.markers) {
+              setMarkers(projectData.markers as any);
+            }
+          } else {
+            // v1 format (legacy)
+            setFileInfo(
+              (payload as any).filePath,
+              (payload as any).fileName,
+              (payload as any).audioInfo,
             );
+            setProjectMode(true);
+            if ((payload as any).project?.markers) {
+              setMarkers((payload as any).project.markers);
+            }
+            if ((payload as any).project?.effectsChain) {
+              effectsChain.replaceAll(
+                (payload as any).project.effectsChain as unknown as AudioEffectInstance[],
+              );
+            }
           }
           break;
+        }
 
         case 'save':
         case 'saveAs': {

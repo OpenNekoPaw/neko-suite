@@ -40,6 +40,7 @@ const preview: MessageBundle = {
   'preview.audio.viewCover': 'Cover',
   'preview.audio.viewLyrics': 'Lyrics',
   'preview.audio.viewWaveform': 'Waveform',
+  'preview.audio.viewSpectrum': 'Spectrum',
 };
 
 export const bundles: Record<string, MessageBundle> = {
