@@ -4,6 +4,8 @@
 //! - Video stream info (codec, resolution, fps, duration)
 //! - Audio stream info (codec, sample rate, channels)
 //! - Subtitle stream info
+//! - Container-level metadata tags (title, artist, album, etc.)
+//! - Embedded cover art (attached pictures)
 
 use crate::error::{Error, Result};
 use ffmpeg_next as ffmpeg;
@@ -38,6 +40,15 @@ pub struct SubtitleStream {
     pub is_forced: bool,
 }
 
+/// Embedded cover art data
+#[derive(Debug, Clone)]
+pub struct CoverArt {
+    /// MIME type (image/jpeg, image/png, etc.)
+    pub mime_type: String,
+    /// Raw image bytes
+    pub data: Vec<u8>,
+}
+
 /// Media file information
 #[derive(Debug, Clone)]
 pub struct MediaInfo {
@@ -69,6 +80,10 @@ pub struct MediaInfo {
     pub has_subtitles: bool,
     /// Subtitle stream info
     pub subtitle_streams: Vec<SubtitleStream>,
+    /// Container-level metadata tags (title, artist, album, etc.)
+    pub metadata: HashMap<String, String>,
+    /// Embedded cover art
+    pub cover_art: Option<CoverArt>,
 }
 
 impl Default for MediaInfo {
@@ -88,6 +103,8 @@ impl Default for MediaInfo {
             audio_bitrate: None,
             has_subtitles: false,
             subtitle_streams: Vec::new(),
+            metadata: HashMap::new(),
+            cover_art: None,
         }
     }
 }
@@ -221,6 +238,54 @@ pub fn probe_media_info<P: AsRef<Path>>(path: P) -> Result<MediaInfo> {
     }
 
     info.has_subtitles = !info.subtitle_streams.is_empty();
+
+    // Extract container-level metadata tags
+    // FFmpeg normalizes ID3v2/Vorbis/APE/WMA tags to common keys:
+    // title, artist, album, genre, date, track, composer, album_artist, comment
+    for (key, value) in input.metadata().iter() {
+        info.metadata.insert(key.to_lowercase(), value.to_string());
+    }
+
+    // Also check audio stream metadata (some formats store tags at stream level)
+    if let Some(stream) = input.streams().best(ffmpeg::media::Type::Audio) {
+        for (key, value) in stream.metadata().iter() {
+            let k = key.to_lowercase();
+            // Don't overwrite container-level tags
+            info.metadata.entry(k).or_insert_with(|| value.to_string());
+        }
+    }
+
+    // Extract embedded cover art (ATTACHED_PIC disposition)
+    for stream in input.streams() {
+        let disposition = stream.disposition();
+        if disposition.contains(ffmpeg::format::stream::Disposition::ATTACHED_PIC) {
+            // The attached_pic is stored directly on the AVStream struct
+            unsafe {
+                let av_stream = stream.as_ptr();
+                let pkt = &(*av_stream).attached_pic;
+                if !pkt.data.is_null() && pkt.size > 0 {
+                    let data = std::slice::from_raw_parts(pkt.data, pkt.size as usize).to_vec();
+
+                    // Detect MIME type from magic bytes
+                    let mime_type = if data.starts_with(&[0xFF, 0xD8, 0xFF]) {
+                        "image/jpeg"
+                    } else if data.starts_with(&[0x89, 0x50, 0x4E, 0x47]) {
+                        "image/png"
+                    } else if data.starts_with(b"RIFF") && data.len() > 12 && &data[8..12] == b"WEBP" {
+                        "image/webp"
+                    } else {
+                        "image/jpeg" // fallback
+                    };
+
+                    info.cover_art = Some(CoverArt {
+                        mime_type: mime_type.to_string(),
+                        data,
+                    });
+                    break; // Use first cover art found
+                }
+            }
+        }
+    }
 
     Ok(info)
 }

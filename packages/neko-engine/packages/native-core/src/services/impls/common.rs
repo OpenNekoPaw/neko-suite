@@ -4,8 +4,9 @@ use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
 use crate::domain::{LoudnessAnalysis, SilenceAnalysis, SilenceRegion};
 use crate::error::{Error, Result};
 use crate::media_service::MediaInfo as InternalMediaInfo;
+use base64::Engine as _;
 use ebur128::{EbuR128, Mode};
-use neko_types::{MediaInfo, WaveformData};
+use neko_types::{CoverArtInfo, MediaInfo, WaveformData};
 
 /// Convert internal probe MediaInfo to neko_types::MediaInfo
 ///
@@ -58,6 +59,11 @@ pub fn convert_media_info(info: InternalMediaInfo) -> MediaInfo {
                 title: s.title,
             })
             .collect(),
+        metadata: info.metadata,
+        cover_art: info.cover_art.map(|ca| CoverArtInfo {
+            mime_type: ca.mime_type,
+            data_base64: base64::engine::general_purpose::STANDARD.encode(&ca.data),
+        }),
     }
 }
 

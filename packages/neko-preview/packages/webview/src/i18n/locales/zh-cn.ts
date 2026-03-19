@@ -33,6 +33,13 @@ const preview: MessageBundle = {
   'preview.audio.mute': '静音',
   'preview.audio.unmute': '取消静音',
   'preview.audio.volumeLabel': '音量：{percent}%',
+  'preview.audio.skipBack': '后退 10 秒',
+  'preview.audio.skipForward': '前进 10 秒',
+  'preview.audio.speedLabel': '播放速度',
+  'preview.audio.noLyrics': '暂无歌词',
+  'preview.audio.viewCover': '封面',
+  'preview.audio.viewLyrics': '歌词',
+  'preview.audio.viewWaveform': '波形',
 };
 
 export const bundles: Record<string, MessageBundle> = {

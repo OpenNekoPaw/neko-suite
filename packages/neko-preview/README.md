@@ -42,8 +42,10 @@ Webview (React + Vite)
   │   └── VideoControls (播放/暂停/进度/速度/音量)
   └── AudioPlayer
       ├── Web Audio API (AudioContext → AudioBufferSourceNode)
-      ├── WaveformCanvas (Canvas 波形可视化)
-      └── AudioControls (播放/暂停/进度/音量)
+      ├── WaveformCanvas (Canvas 波形可视化，CSS 变量主题适配)
+      ├── CoverView (封面艺术 / 占位首字母 + 渐变)
+      ├── LyricsView (歌词视图，Phase 3 接入滚动歌词)
+      └── AudioControls (播放/暂停/跳转/进度/速度/音量/视图切换)
 ```
 
 ### 数据流
@@ -56,6 +58,13 @@ Webview (React + Vite)
 
 - **i18n**：Webview 使用 `@neko/shared` 的 `I18nService` + `I18nProvider`。翻译文件位于 `webview/src/i18n/locales/`（en + zh-cn），命名空间 `preview`（含 video/audio 前缀）。
 - **错误边界**：Webview 入口已包裹 `ErrorBoundary`。
+
+### 音频播放器现代化（Phase 1 ✅）
+
+Apple Music 风格的现代化 UI，三视图可切换（封面 / 歌词 / 波形），`--neko-audio-*` CSS 变量从 VSCode 主题派生但做媒体化调整，自动适配 Light/Dark/HC 主题。
+
+- Phase 2（待做）：Engine 元数据扩展 → 真实封面 + ID3/Vorbis 标签
+- Phase 3（待做）：.lrc 歌词解析 → 滚动歌词
 
 ## 构建
 

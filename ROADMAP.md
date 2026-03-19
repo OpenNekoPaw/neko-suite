@@ -10,20 +10,20 @@
 
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
-| **neko-types** | Alpha | 90% | 共享类型 + 横切关注点统一 + Operations 类型安全 + 文档完善 |
+| **neko-types** | Alpha | 92% | 共享类型 + 横切关注点统一 + Operations 类型安全（audio/canvas/sketch 全覆盖）+ 文档完善 |
 | **neko-engine** | Alpha | 88% | GPU PBR 渲染 + 编解码 + FIFO 导出 + 统一 HTTP/WS + 响度标准化 + 预加载优化 + 粒子/后处理/IBL + 设备代理（mic/midi/gamepad） |
 | **neko-cut** | Alpha | 82% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 拖拽修复 |
 | **neko-agent** | Alpha | 75% | Agent 引擎 + LLM 平台 + CLI + UI + Handler 拆分 + 流式化 + 剧本→时间线 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
-| **neko-preview** | Alpha | 70% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + i18n |
+| **neko-preview** | Alpha | 75% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + 音频播放器现代化（Apple Music 风格三视图） + i18n |
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
 | **neko-assets** | Alpha | 85% | Phase 1-3 ✅ + 外部媒体库 ✅ + AI 分类 + 缩略图 + 多云支持 + 跨扩展集成，Phase 4-5 待开发 |
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
-| **neko-canvas** | Alpha | 85% | 无限画布 + 6 种节点 + 连接标签 + 图层面板 + 富文本 + 分组 + 画板导出 + 原地粘贴 + 旋转 + 框选 + Port UI 面板 + i18n |
+| **neko-canvas** | Alpha | 87% | 无限画布 + 6 种节点 + 连接标签 + 图层面板 + 富文本 + 分组 + 画板导出 + 原地粘贴 + 旋转 + 框选 + Port UI 面板 + EditOperation 集成 + i18n |
 | **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL，Rust/TS 双端类型源 |
 | **neko-model** | Alpha | 65% | 3D 创作套件，Phase 3.1-3.3 ✅（PBR 渲染 + 粒子 + 后处理 + 时间线集成 + CSG/文字/几何体建模 + 骨骼表情） |
-| **neko-sketch** | Alpha | 85% | S.1-S.3 ✅（绘画 + 骨骼动画 + 高级 2D）；S.4 规划中 |
-| **neko-audio** | Alpha | 93% | 完整音频工作站：波形编辑 + 播放 + 频谱分析 + 12 种效果链 + Engine 麦克风录制 + AI 降噪/标准化 + 导出 + .nka 项目 + 右键新建 + l10n + 78 测试 |
+| **neko-sketch** | Alpha | 87% | S.1-S.3 ✅（绘画 + 骨骼动画 + 高级 2D）+ EditOperation 集成；S.4 规划中 |
+| **neko-audio** | Alpha | 95% | 完整音频工作站：波形编辑 + 播放 + 频谱分析 + 12 种效果链 + Engine 麦克风录制 + AI 降噪/标准化 + 导出 + .nka 项目 + 右键新建 + l10n + EditOperation 集成 + 78 测试 |
 | **neko-live** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-suite** | Stable | 90% | Extension Pack 门户 |
 
@@ -59,7 +59,10 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ### neko-canvas — 待完成
 - 节点 resize/rotate + 框选 ✅（rotate + 框选 + Port UI 面板已完成）
-- WebGPU 渲染 + 特效系统 + 自定义转场 + 导出
+- 画板导出为图片 ✅（PNG/SVG，html-to-image 截图 + Extension 保存对话框）
+- 大量节点性能优化（按需，当前 DOM/SVG 方案足够）
+
+> **已移除**：WebGPU 渲染管线 / 特效系统 / 自定义转场。画布编辑器是节点图编排工具，不需要 GPU 合成；视频特效/转场属于 neko-cut 职责。
 
 ### neko-model (3D) — 待完成
 
@@ -261,4 +264,4 @@ neko-engine (分段渲染 + 转场 + 特效)
 
 ---
 
-*最后更新: 2026-03-18（neko-audio Phase J：右键新建 + l10n + 空项目支持；neko-engine 设备代理 P1-P3 完成）*
+*最后更新: 2026-03-19（neko-preview 音频播放器现代化 Phase 1 + EditOperation 全包接入）*

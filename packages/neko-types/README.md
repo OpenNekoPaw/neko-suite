@@ -79,6 +79,34 @@ import { I18nProvider, useI18n } from '@neko/shared/i18n/react';
 import { nekoTailwindPreset } from '@neko/shared/theme/tailwind-preset';
 ```
 
+### EditOperation 指令系统
+
+`src/operations/` 提供统一的编辑操作抽象，支持 undo/redo、AI 集成和操作审计：
+
+```
+operations/
+├── types.ts      # 操作类型定义（audio / canvas / sketch + neko-cut 原有）
+├── apply.ts      # applyOperation() — 将操作应用到项目数据
+├── invert.ts     # invertOperation() — 生成逆操作（用于 undo）
+└── helpers.ts    # createMeta() / isUserOperation() 等工具函数
+```
+
+**操作域**：
+
+| 域 | 前缀 | 操作类型 |
+|------|------|------|
+| neko-cut | `track.*` / `element.*` | 轨道/元素 CRUD、移动、修剪、分割 |
+| neko-canvas | `canvas.node.*` / `canvas.connection.*` | 节点/连接 CRUD、分组、重排 |
+| neko-audio | `audio.effect.*` / `audio.marker.*` | 效果链/标记 CRUD、排序、切换 |
+| neko-sketch | `sketch.layer.*` / `sketch.stroke.*` / `sketch.canvas.*` | 图层/笔画/画布操作 |
+
+**使用方式**：
+
+```typescript
+import type { EditOperation } from '@neko/shared';
+import { applyAudioOperation, invertOperation, createMeta } from '@neko/shared';
+```
+
 ### 设计原则
 
 | 原则 | 说明 |

@@ -1,24 +1,45 @@
 // =============================================================================
-// Helpers — ProjectData 不可变更新辅助函数
+// Helpers — 不可变更新辅助函数
 // =============================================================================
 
-import type { ProjectData } from '../types/project';
 import type { TimelineTrack } from '../types/timelineTrack';
 import type { TimelineElement } from '../types/element';
 import type { ShapeInstance } from '../types/shape';
 import type { WebviewElement } from './webview-types';
+import type { OperationMeta, OperationSource } from './types';
 import { OperationError } from './errors';
+
+// =============================================================================
+// HasTracks — 泛型约束，任何包含 tracks 字段的数据结构
+// =============================================================================
+
+/** Any data structure that contains a tracks array (ProjectData, AudioProjectData, etc.) */
+export interface HasTracks {
+  tracks: TimelineTrack[];
+}
+
+/**
+ * 创建操作元数据
+ */
+export function createMeta(source: OperationSource = 'user', description?: string): OperationMeta {
+  return {
+    id: `op-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    timestamp: Date.now(),
+    source,
+    description,
+  };
+}
 
 /**
  * 查找 track，找不到则抛出 OperationError
  */
-export function findTrack(
-  project: ProjectData,
+export function findTrack<T extends HasTracks>(
+  data: T,
   trackId: string,
 ): { track: TimelineTrack; index: number } {
-  const index = project.tracks.findIndex((t) => t.id === trackId);
+  const index = data.tracks.findIndex((t) => t.id === trackId);
   if (index === -1) throw OperationError.trackNotFound(trackId);
-  return { track: project.tracks[index]!, index };
+  return { track: data.tracks[index]!, index };
 }
 
 /**
@@ -46,29 +67,29 @@ export function findShape(
 }
 
 /**
- * 不可变更新 track — 返回新的 ProjectData
+ * 不可变更新 track — 返回新数据（泛型，支持 ProjectData / AudioProjectData）
  */
-export function updateTrackInProject(
-  project: ProjectData,
+export function updateTrackInProject<T extends HasTracks>(
+  data: T,
   trackId: string,
   updater: (track: TimelineTrack) => TimelineTrack,
-): ProjectData {
-  const { index } = findTrack(project, trackId);
-  const newTracks = [...project.tracks];
+): T {
+  const { index } = findTrack(data, trackId);
+  const newTracks = [...data.tracks];
   newTracks[index] = updater(newTracks[index]!);
-  return { ...project, tracks: newTracks };
+  return { ...data, tracks: newTracks };
 }
 
 /**
- * 不可变更新 element — 返回新的 ProjectData
+ * 不可变更新 element — 返回新数据（泛型，支持 ProjectData / AudioProjectData）
  */
-export function updateElementInProject(
-  project: ProjectData,
+export function updateElementInProject<T extends HasTracks>(
+  data: T,
   trackId: string,
   elementId: string,
   updater: (element: TimelineElement) => TimelineElement,
-): ProjectData {
-  return updateTrackInProject(project, trackId, (track) => {
+): T {
+  return updateTrackInProject(data, trackId, (track) => {
     const { index } = findElement(track, elementId);
     const newElements = [...track.elements];
     newElements[index] = updater(newElements[index]!);
@@ -77,17 +98,17 @@ export function updateElementInProject(
 }
 
 /**
- * 不可变更新 shape — 返回新的 ProjectData
+ * 不可变更新 shape — 返回新数据
  * 注意：shapes 是 WebviewShapeElement 的 UI 扩展字段
  */
-export function updateShapeInProject(
-  project: ProjectData,
+export function updateShapeInProject<T extends HasTracks>(
+  data: T,
   trackId: string,
   elementId: string,
   shapeId: string,
   updater: (shape: ShapeInstance) => ShapeInstance,
-): ProjectData {
-  return updateElementInProject(project, trackId, elementId, (element) => {
+): T {
+  return updateElementInProject(data, trackId, elementId, (element) => {
     const shapes: ShapeInstance[] = (element as WebviewElement).shapes ?? [];
     const { index } = findShape(shapes, shapeId);
     const newShapes = [...shapes];

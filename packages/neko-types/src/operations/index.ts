@@ -6,6 +6,9 @@ export * from './types';
 export * from './errors';
 export { applyOperation } from './apply';
 export { invertOperation } from './invert';
+export { applyCanvasOperation } from './apply-canvas';
+export { applySketchOperation, type SketchDocumentData } from './apply-sketch';
+export { applyAudioOperation, type AudioProjectData } from './apply-audio';
 export {
   findTrack,
   findElement,
@@ -17,4 +20,5 @@ export {
   setShapes,
   pickKeys,
   arrayMove,
+  createMeta,
 } from './helpers';

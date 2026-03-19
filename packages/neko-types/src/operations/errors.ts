@@ -14,6 +14,10 @@ export type OperationErrorCode =
   | 'KEYFRAME_NOT_FOUND'
   | 'EFFECT_NOT_FOUND'
   | 'MASK_NOT_FOUND'
+  | 'NODE_NOT_FOUND'
+  | 'LAYER_NOT_FOUND'
+  | 'CONNECTION_NOT_FOUND'
+  | 'MARKER_NOT_FOUND'
   | 'INVALID_INDEX'
   | 'INVALID_OPERATION'
   | 'TYPE_MISMATCH';
@@ -74,5 +78,23 @@ export class OperationError extends BaseError {
 
   static invalidOperation(message: string): OperationError {
     return new OperationError('INVALID_OPERATION', message);
+  }
+
+  static nodeNotFound(nodeId: string): OperationError {
+    return new OperationError('NODE_NOT_FOUND', `Node not found: ${nodeId}`, { nodeId });
+  }
+
+  static layerNotFound(layerId: string): OperationError {
+    return new OperationError('LAYER_NOT_FOUND', `Layer not found: ${layerId}`, { layerId });
+  }
+
+  static connectionNotFound(connectionId: string): OperationError {
+    return new OperationError('CONNECTION_NOT_FOUND', `Connection not found: ${connectionId}`, {
+      connectionId,
+    });
+  }
+
+  static markerNotFound(markerId: string): OperationError {
+    return new OperationError('MARKER_NOT_FOUND', `Marker not found: ${markerId}`, { markerId });
   }
 }

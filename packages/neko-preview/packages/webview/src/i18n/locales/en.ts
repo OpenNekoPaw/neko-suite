@@ -33,6 +33,13 @@ const preview: MessageBundle = {
   'preview.audio.mute': 'Mute',
   'preview.audio.unmute': 'Unmute',
   'preview.audio.volumeLabel': 'Volume: {percent}%',
+  'preview.audio.skipBack': 'Skip back 10s',
+  'preview.audio.skipForward': 'Skip forward 10s',
+  'preview.audio.speedLabel': 'Playback speed',
+  'preview.audio.noLyrics': 'No lyrics available',
+  'preview.audio.viewCover': 'Cover',
+  'preview.audio.viewLyrics': 'Lyrics',
+  'preview.audio.viewWaveform': 'Waveform',
 };
 
 export const bundles: Record<string, MessageBundle> = {

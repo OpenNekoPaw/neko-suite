@@ -42,6 +42,33 @@ import type {
   ClipboardPasteOperation,
   ProjectUpdateOperation,
   BatchOperation,
+  // Canvas
+  CanvasNodeAddOperation,
+  CanvasNodeRemoveOperation,
+  CanvasNodeUpdateOperation,
+  CanvasNodeReorderOperation,
+  CanvasNodeGroupOperation,
+  CanvasNodeUngroupOperation,
+  CanvasConnectionAddOperation,
+  CanvasConnectionRemoveOperation,
+  // Sketch
+  SketchLayerAddOperation,
+  SketchLayerRemoveOperation,
+  SketchLayerUpdateOperation,
+  SketchLayerMoveOperation,
+  SketchLayerDuplicateOperation,
+  SketchLayerGroupOperation,
+  SketchLayerUngroupOperation,
+  SketchStrokeApplyOperation,
+  SketchCanvasUpdateOperation,
+  // Audio
+  AudioEffectAddOperation,
+  AudioEffectRemoveOperation,
+  AudioEffectUpdateOperation,
+  AudioEffectMoveOperation,
+  AudioMarkerAddOperation,
+  AudioMarkerRemoveOperation,
+  AudioMarkerUpdateOperation,
 } from './types';
 
 /**
@@ -597,6 +624,271 @@ export function invertOperation(op: EditOperation): EditOperation {
         type: 'project.update',
         meta,
         payload: { updates: updateOp.before.updates },
+        before: { updates: updateOp.payload.updates },
+      };
+    }
+
+    // =========================================================================
+    // Canvas Operations
+    // =========================================================================
+
+    case 'canvas.node.add': {
+      const addOp = op as CanvasNodeAddOperation;
+      return {
+        type: 'canvas.node.remove',
+        meta,
+        payload: { nodeId: addOp.payload.node.id },
+        before: { node: addOp.payload.node, connections: [], index: 0 },
+      };
+    }
+
+    case 'canvas.node.remove': {
+      const removeOp = op as CanvasNodeRemoveOperation;
+      return {
+        type: 'canvas.node.add',
+        meta,
+        payload: { node: removeOp.before.node },
+      };
+    }
+
+    case 'canvas.node.update': {
+      const updateOp = op as CanvasNodeUpdateOperation;
+      return {
+        type: 'canvas.node.update',
+        meta,
+        payload: { nodeId: updateOp.payload.nodeId, updates: updateOp.before.updates },
+        before: { updates: updateOp.payload.updates },
+      };
+    }
+
+    case 'canvas.node.reorder': {
+      const reorderOp = op as CanvasNodeReorderOperation;
+      return {
+        type: 'canvas.node.reorder',
+        meta,
+        payload: { nodeId: reorderOp.payload.nodeId, newZIndex: reorderOp.before.oldZIndex },
+        before: { oldZIndex: reorderOp.payload.newZIndex },
+      };
+    }
+
+    case 'canvas.node.group': {
+      const groupOp = op as CanvasNodeGroupOperation;
+      return {
+        type: 'canvas.node.ungroup',
+        meta,
+        payload: { groupId: groupOp.payload.groupNode.id },
+        before: { groupNode: groupOp.payload.groupNode, childIds: groupOp.payload.childIds },
+      };
+    }
+
+    case 'canvas.node.ungroup': {
+      const ungroupOp = op as CanvasNodeUngroupOperation;
+      return {
+        type: 'canvas.node.group',
+        meta,
+        payload: { groupNode: ungroupOp.before.groupNode, childIds: ungroupOp.before.childIds },
+      };
+    }
+
+    case 'canvas.connection.add': {
+      const addOp = op as CanvasConnectionAddOperation;
+      return {
+        type: 'canvas.connection.remove',
+        meta,
+        payload: { connectionId: addOp.payload.connection.id },
+        before: { connection: addOp.payload.connection },
+      };
+    }
+
+    case 'canvas.connection.remove': {
+      const removeOp = op as CanvasConnectionRemoveOperation;
+      return {
+        type: 'canvas.connection.add',
+        meta,
+        payload: { connection: removeOp.before.connection },
+      };
+    }
+
+    // =========================================================================
+    // Sketch Operations
+    // =========================================================================
+
+    case 'sketch.layer.add': {
+      const addOp = op as SketchLayerAddOperation;
+      return {
+        type: 'sketch.layer.remove',
+        meta,
+        payload: { layerId: addOp.payload.layer.id },
+        before: {
+          layer: addOp.payload.layer,
+          parentId: addOp.payload.parentId,
+          index: addOp.payload.index ?? 0,
+        },
+      };
+    }
+
+    case 'sketch.layer.remove': {
+      const removeOp = op as SketchLayerRemoveOperation;
+      return {
+        type: 'sketch.layer.add',
+        meta,
+        payload: {
+          layer: removeOp.before.layer,
+          parentId: removeOp.before.parentId,
+          index: removeOp.before.index,
+        },
+      };
+    }
+
+    case 'sketch.layer.update': {
+      const updateOp = op as SketchLayerUpdateOperation;
+      return {
+        type: 'sketch.layer.update',
+        meta,
+        payload: { layerId: updateOp.payload.layerId, updates: updateOp.before.updates },
+        before: { updates: updateOp.payload.updates },
+      };
+    }
+
+    case 'sketch.layer.move': {
+      const moveOp = op as SketchLayerMoveOperation;
+      return {
+        type: 'sketch.layer.move',
+        meta,
+        payload: {
+          layerId: moveOp.payload.layerId,
+          targetParentId: moveOp.before.parentId,
+          targetIndex: moveOp.before.index,
+        },
+        before: { parentId: moveOp.payload.targetParentId, index: moveOp.payload.targetIndex },
+      };
+    }
+
+    case 'sketch.layer.duplicate': {
+      const dupOp = op as SketchLayerDuplicateOperation;
+      return {
+        type: 'sketch.layer.remove',
+        meta,
+        payload: { layerId: dupOp.payload.newLayer.id },
+        before: { layer: dupOp.payload.newLayer, index: 0 },
+      };
+    }
+
+    case 'sketch.layer.group': {
+      const groupOp = op as SketchLayerGroupOperation;
+      return {
+        type: 'sketch.layer.ungroup',
+        meta,
+        payload: { groupId: groupOp.payload.groupLayer.id },
+        before: { groupLayer: groupOp.payload.groupLayer, childIds: groupOp.payload.childIds },
+      };
+    }
+
+    case 'sketch.layer.ungroup': {
+      const ungroupOp = op as SketchLayerUngroupOperation;
+      return {
+        type: 'sketch.layer.group',
+        meta,
+        payload: { groupLayer: ungroupOp.before.groupLayer, childIds: ungroupOp.before.childIds },
+      };
+    }
+
+    case 'sketch.stroke.apply': {
+      const strokeOp = op as SketchStrokeApplyOperation;
+      return {
+        type: 'sketch.stroke.apply',
+        meta,
+        payload: { layerId: strokeOp.payload.layerId, regionAfter: strokeOp.before.regionBefore },
+        before: { regionBefore: strokeOp.payload.regionAfter },
+      };
+    }
+
+    case 'sketch.canvas.update': {
+      const updateOp = op as SketchCanvasUpdateOperation;
+      return {
+        type: 'sketch.canvas.update',
+        meta,
+        payload: { updates: updateOp.before.updates },
+        before: { updates: updateOp.payload.updates },
+      };
+    }
+
+    // =========================================================================
+    // Audio Operations
+    // =========================================================================
+
+    case 'audio.effect.add': {
+      const addOp = op as AudioEffectAddOperation;
+      return {
+        type: 'audio.effect.remove',
+        meta,
+        payload: { effectId: addOp.payload.effect.id },
+        before: { effect: addOp.payload.effect, index: addOp.payload.index ?? 0 },
+      };
+    }
+
+    case 'audio.effect.remove': {
+      const removeOp = op as AudioEffectRemoveOperation;
+      return {
+        type: 'audio.effect.add',
+        meta,
+        payload: { effect: removeOp.before.effect, index: removeOp.before.index },
+      };
+    }
+
+    case 'audio.effect.update': {
+      const updateOp = op as AudioEffectUpdateOperation;
+      return {
+        type: 'audio.effect.update',
+        meta,
+        payload: { effectId: updateOp.payload.effectId, updates: updateOp.before.updates },
+        before: { updates: updateOp.payload.updates },
+      };
+    }
+
+    case 'audio.effect.toggle': {
+      // toggle 自身即逆操作
+      return { ...op, meta };
+    }
+
+    case 'audio.effect.move': {
+      const moveOp = op as AudioEffectMoveOperation;
+      return {
+        type: 'audio.effect.move',
+        meta,
+        payload: {
+          effectId: moveOp.payload.effectId,
+          fromIndex: moveOp.payload.toIndex,
+          toIndex: moveOp.payload.fromIndex,
+        },
+      };
+    }
+
+    case 'audio.marker.add': {
+      const addOp = op as AudioMarkerAddOperation;
+      return {
+        type: 'audio.marker.remove',
+        meta,
+        payload: { markerId: addOp.payload.marker.id },
+        before: { marker: addOp.payload.marker },
+      };
+    }
+
+    case 'audio.marker.remove': {
+      const removeOp = op as AudioMarkerRemoveOperation;
+      return {
+        type: 'audio.marker.add',
+        meta,
+        payload: { marker: removeOp.before.marker },
+      };
+    }
+
+    case 'audio.marker.update': {
+      const updateOp = op as AudioMarkerUpdateOperation;
+      return {
+        type: 'audio.marker.update',
+        meta,
+        payload: { markerId: updateOp.payload.markerId, updates: updateOp.before.updates },
         before: { updates: updateOp.payload.updates },
       };
     }

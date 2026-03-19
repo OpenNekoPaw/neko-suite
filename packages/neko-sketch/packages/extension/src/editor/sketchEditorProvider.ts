@@ -199,6 +199,15 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
         this.outlineProvider?.updateData(outlineData);
         break;
       }
+      case 'operationApplied': {
+        // EditOperation sync from webview — fire dirty event
+        this._onDidChangeCustomDocument.fire({
+          document,
+          undo: () => {},
+          redo: () => {},
+        });
+        break;
+      }
       case 'file:import': {
         const filters: Record<string, string[]> = {
           Images: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'psd'],

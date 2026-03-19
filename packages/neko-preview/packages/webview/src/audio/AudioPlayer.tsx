@@ -1,18 +1,28 @@
 /**
- * AudioPlayer - Main audio preview component
+ * AudioPlayer - Main audio preview component (modern layout)
  *
  * Connects to neko-engine's PCM audio stream via WebSocket,
- * plays through Web Audio API (AudioStreamClient), and visualizes waveform.
+ * plays through Web Audio API (AudioStreamClient), and provides
+ * three switchable views: cover art, lyrics, waveform.
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { AudioStreamClient } from '@neko/neko-client';
 import { useExtensionMessage, useVscodeReady } from '../shared/useVscodeMessage';
 import { useTranslation } from '../i18n/I18nContext';
+import { CoverView } from './CoverView';
+import { LyricsView } from './LyricsView';
 import { WaveformCanvas } from './WaveformCanvas';
-import { AudioControls } from './AudioControls';
-import type { MediaInfo, PreviewInitMessage, PreviewWaveformMessage } from '../shared/types';
+import { AudioControls, type ViewMode } from './AudioControls';
+import type {
+  MediaInfo,
+  PreviewInitMessage,
+  PreviewLyricsMessage,
+  PreviewStreamReadyMessage,
+  PreviewWaveformMessage,
+} from '../shared/types';
 import { getLogger } from '../utils/logger';
+import { parseLrc, type LrcLine } from './lrc-parser';
 
 const logger = getLogger('AudioPlayer');
 
@@ -29,8 +39,12 @@ export function AudioPlayer() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolume] = useState(1.0);
+  const [speed, setSpeed] = useState(1.0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('cover');
+  const [fileName, setFileName] = useState('');
+  const [lyrics, setLyrics] = useState<LrcLine[]>([]);
 
   // Refs
   const audioClientRef = useRef<AudioStreamClient | null>(null);
@@ -58,7 +72,6 @@ export function AudioPlayer() {
     if (newTime >= mediaInfo.duration) {
       setCurrentTime(mediaInfo.duration);
       setIsPlaying(false);
-      // Fade out before disposing
       const client = audioClientRef.current;
       if (client) {
         client.fadeOut().then(() => {
@@ -81,7 +94,11 @@ export function AudioPlayer() {
     const now = performance.now();
     if (now - statusThrottleRef.current > 1000) {
       statusThrottleRef.current = now;
-      postMessage({ type: 'preview:statusUpdate', playbackState: 'playing', currentTime: newTime });
+      postMessage({
+        type: 'preview:statusUpdate',
+        playbackState: 'playing',
+        currentTime: newTime,
+      });
     }
 
     animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
@@ -99,139 +116,135 @@ export function AudioPlayer() {
   }, [isPlaying, updatePlaybackTime]);
 
   // =========================================================================
-  // Extension message handling
+  // Extension message handlers
   // =========================================================================
 
   useExtensionMessage((msg) => {
     switch (msg.type) {
       case 'preview:init': {
-        const { mediaInfo: info } = (msg as PreviewInitMessage).payload;
-        setMediaInfo(info);
+        const initMsg = msg as PreviewInitMessage;
+        setMediaInfo(initMsg.payload.mediaInfo);
+        const path = initMsg.payload.filePath;
+        setFileName(
+          path
+            .split('/')
+            .pop()
+            ?.replace(/\.[^.]+$/, '') ?? t('preview.audio.defaultFilename'),
+        );
         setIsLoading(false);
+        logger.info('Media info received', initMsg.payload.mediaInfo);
         break;
       }
-
       case 'preview:waveform': {
-        const waveform = (msg as PreviewWaveformMessage).payload;
-        setWaveformData({
-          peaks: waveform.peaks,
-          duration: waveform.duration,
-        });
+        const waveMsg = msg as PreviewWaveformMessage;
+        setWaveformData({ peaks: waveMsg.payload.peaks, duration: waveMsg.payload.duration });
         break;
       }
-
       case 'preview:streamReady': {
-        const { audioStreamUrl } = msg.payload as {
-          streamId: string;
-          streamUrl: string;
-          audioStreamId?: string;
-          audioStreamUrl?: string;
-        };
-
-        // Dispose previous client
-        audioClientRef.current?.dispose();
-
-        const streamUrl = audioStreamUrl;
-        if (streamUrl) {
-          const audioClient = new AudioStreamClient({
-            websocketUrl: streamUrl,
-            volume,
-            onConnectionChange: (connected) => {
-              logger.info(`Stream connected: ${connected}`);
-            },
-            onError: (err) => {
-              logger.warn('Stream error:', err);
-            },
-          });
-          audioClientRef.current = audioClient;
-          audioClient.connect();
+        const streamMsg = msg as PreviewStreamReadyMessage;
+        const wsUrl = streamMsg.payload.audioStreamUrl ?? streamMsg.payload.streamUrl;
+        logger.info('Audio stream ready', wsUrl);
+        const client = new AudioStreamClient({ websocketUrl: wsUrl });
+        audioClientRef.current = client;
+        client.setVolume(volume);
+        break;
+      }
+      case 'preview:lyrics': {
+        const lyricsMsg = msg as PreviewLyricsMessage;
+        const result = parseLrc(lyricsMsg.payload.lrcContent);
+        if (result.lines.length > 0) {
+          setLyrics(result.lines);
+          setViewMode('lyrics');
         }
         break;
       }
-
-      default:
-        break;
     }
   });
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      const ac = audioClientRef.current;
-      if (ac) {
-        ac.setVolume(0);
-        ac.dispose();
-      }
-    };
-  }, []);
 
   // =========================================================================
   // Playback controls
   // =========================================================================
 
-  const handlePlay = useCallback(() => {
-    if (!mediaInfo) return;
-
-    const startTime = currentTime >= mediaInfo.duration ? 0 : currentTime;
-    setCurrentTime(startTime);
-    setIsPlaying(true);
-    playStartTimeRef.current = startTime;
-    playWallTimeRef.current = performance.now();
-
-    postMessage({ type: 'preview:play', startTime });
-    postMessage({ type: 'preview:statusUpdate', playbackState: 'playing', currentTime: startTime });
-  }, [mediaInfo, currentTime, postMessage]);
-
-  const handlePause = useCallback(() => {
-    setIsPlaying(false);
-    audioClientRef.current?.pause();
-    postMessage({ type: 'preview:pause' });
-    postMessage({ type: 'preview:statusUpdate', playbackState: 'paused', currentTime });
-  }, [postMessage, currentTime]);
-
-  const handleResume = useCallback(() => {
-    setIsPlaying(true);
-    playStartTimeRef.current = currentTime;
-    playWallTimeRef.current = performance.now();
-    audioClientRef.current?.resume();
-    postMessage({ type: 'preview:resume' });
-    postMessage({ type: 'preview:statusUpdate', playbackState: 'playing', currentTime });
-  }, [currentTime, postMessage]);
-
   const handleTogglePlay = useCallback(() => {
     if (isPlaying) {
-      handlePause();
-    } else if (audioClientRef.current) {
-      handleResume();
+      postMessage({ type: 'preview:pause' });
+      setIsPlaying(false);
+      const client = audioClientRef.current;
+      if (client) {
+        client.fadeOut().then(() => {
+          client.dispose();
+        });
+        audioClientRef.current = null;
+      }
     } else {
-      handlePlay();
+      postMessage({ type: 'preview:play', startTime: currentTime });
+      playStartTimeRef.current = currentTime;
+      playWallTimeRef.current = performance.now();
+      setIsPlaying(true);
     }
-  }, [isPlaying, handlePlay, handlePause, handleResume]);
+  }, [isPlaying, currentTime, postMessage]);
 
-  /** Scrub: drag-preview only — updates UI time without backend seek */
+  const handleSeek = useCallback(
+    (time: number) => {
+      setCurrentTime(time);
+      playStartTimeRef.current = time;
+      playWallTimeRef.current = performance.now();
+      postMessage({ type: 'preview:seek', time });
+    },
+    [postMessage],
+  );
+
   const handleScrub = useCallback((time: number) => {
     setCurrentTime(time);
   }, []);
 
-  /** Seek: commits to backend on mouseup */
-  const handleSeek = useCallback(
-    (time: number) => {
-      setCurrentTime(time);
-      if (isPlaying) {
-        playStartTimeRef.current = time;
-        playWallTimeRef.current = performance.now();
-      }
-      // Reset audio clock so it re-syncs after seek
-      audioClientRef.current?.resetClock();
-      postMessage({ type: 'preview:seek', time });
+  const handleVolumeChange = useCallback((v: number) => {
+    setVolume(v);
+    const client = audioClientRef.current;
+    if (client) {
+      client.setVolume(v);
+    }
+  }, []);
+
+  const handleSpeedChange = useCallback(
+    (s: number) => {
+      setSpeed(s);
+      postMessage({ type: 'preview:speed', speed: s });
     },
-    [isPlaying, postMessage],
+    [postMessage],
   );
 
-  const handleVolumeChange = useCallback((newVolume: number) => {
-    setVolume(newVolume);
-    audioClientRef.current?.setVolume(newVolume);
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      const client = audioClientRef.current;
+      if (client) {
+        client.dispose();
+        audioClientRef.current = null;
+      }
+    };
   }, []);
+
+  // =========================================================================
+  // Derived values
+  // =========================================================================
+
+  const subtitle = mediaInfo
+    ? [
+        mediaInfo.audioCodec?.toUpperCase(),
+        mediaInfo.audioSampleRate ? `${(mediaInfo.audioSampleRate / 1000).toFixed(1)} kHz` : null,
+        mediaInfo.audioChannels === 1
+          ? t('preview.audio.mono')
+          : mediaInfo.audioChannels === 2
+            ? t('preview.audio.stereo')
+            : mediaInfo.audioChannels
+              ? `${mediaInfo.audioChannels}ch`
+              : null,
+        mediaInfo.bitrate ? `${Math.round(mediaInfo.bitrate / 1000)} kbps` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
 
   // =========================================================================
   // Render
@@ -254,44 +267,59 @@ export function AudioPlayer() {
     return <div className="error">{t('preview.audio.noMediaInfo')}</div>;
   }
 
-  // Extract filename from path
-  const fileName = mediaInfo.format || t('preview.audio.defaultFilename');
+  // Build cover art data URI from engine metadata
+  const coverUri = mediaInfo?.coverArt
+    ? `data:${mediaInfo.coverArt.mimeType};base64,${mediaInfo.coverArt.dataBase64}`
+    : undefined;
+
+  // Use metadata title if available, otherwise filename
+  const displayName = mediaInfo?.metadata?.title || fileName;
 
   return (
     <div className="audio-player">
-      {/* File info header */}
-      <div className="audio-player__info">
-        <div className="audio-player__icon">
-          <svg viewBox="0 0 24 24">
-            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-          </svg>
-        </div>
-        <div className="audio-player__meta">
-          <div className="audio-player__filename">{fileName}</div>
-          <div className="audio-player__details">
-            {mediaInfo.audioCodec?.toUpperCase() ?? t('preview.audio.unknownCodec')} •{' '}
-            {mediaInfo.audioSampleRate
-              ? `${(mediaInfo.audioSampleRate / 1000).toFixed(1)} kHz`
-              : ''}{' '}
-            •{' '}
-            {mediaInfo.audioChannels === 1
-              ? t('preview.audio.mono')
-              : mediaInfo.audioChannels === 2
-                ? t('preview.audio.stereo')
-                : `${mediaInfo.audioChannels}ch`}
-            {mediaInfo.bitrate ? ` • ${Math.round(mediaInfo.bitrate / 1000)} kbps` : ''}
+      {/* Main visual area — switchable views */}
+      <div className="audio-player__visual">
+        <div className="audio-player__visual-content">
+          {/* Cover */}
+          <div
+            className={`audio-player__view ${viewMode === 'cover' ? 'audio-player__view--active' : ''}`}
+          >
+            <CoverView fileName={fileName} isPlaying={isPlaying} coverUri={coverUri} />
+          </div>
+
+          {/* Lyrics */}
+          <div
+            className={`audio-player__view ${viewMode === 'lyrics' ? 'audio-player__view--active' : ''}`}
+          >
+            <LyricsView lyrics={lyrics} currentTime={currentTime} />
+          </div>
+
+          {/* Waveform */}
+          <div
+            className={`audio-player__view ${viewMode === 'waveform' ? 'audio-player__view--active' : ''}`}
+          >
+            <div className="audio-player__waveform-container">
+              <WaveformCanvas
+                peaks={waveformData?.peaks ?? null}
+                duration={mediaInfo.duration}
+                currentTime={currentTime}
+                onSeekCommit={handleSeek}
+                onSeeking={handleScrub}
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Waveform visualization */}
-      <div className="audio-player__waveform-container">
-        <WaveformCanvas
-          peaks={waveformData?.peaks ?? null}
-          duration={mediaInfo.duration}
-          currentTime={currentTime}
-          onSeek={handleSeek}
-        />
+      {/* Metadata */}
+      <div className="audio-player__info">
+        <div className="audio-player__title">{displayName}</div>
+        {mediaInfo?.metadata?.artist && (
+          <div className="audio-player__subtitle">{mediaInfo.metadata.artist}</div>
+        )}
+        {subtitle && !mediaInfo?.metadata?.artist && (
+          <div className="audio-player__subtitle">{subtitle}</div>
+        )}
       </div>
 
       {/* Controls */}
@@ -300,10 +328,14 @@ export function AudioPlayer() {
         currentTime={currentTime}
         duration={mediaInfo.duration}
         volume={volume}
+        speed={speed}
+        viewMode={viewMode}
         onTogglePlay={handleTogglePlay}
         onSeek={handleSeek}
         onScrub={handleScrub}
         onVolumeChange={handleVolumeChange}
+        onSpeedChange={handleSpeedChange}
+        onViewModeChange={setViewMode}
       />
     </div>
   );

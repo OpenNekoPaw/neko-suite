@@ -48,29 +48,12 @@
         "selector": [
           {
             "filenamePattern": "*.nkp"
-          }
-        ],
-        "priority": "default"
-      },
-      {
-        "viewType": "neko.puppetEditor",
-        "displayName": "%neko.sketch.puppet.title%",
-        "selector": [
+          },
           {
             "filenamePattern": "*.inp"
           }
         ],
-        "priority": "option"
-      },
-      {
-        "viewType": "neko.sketchEditor",
-        "displayName": "%neko.sketch.editImage.title%",
-        "selector": [
-          {
-            "filenamePattern": "*.{png,jpg,jpeg,webp,bmp}"
-          }
-        ],
-        "priority": "option"
+        "priority": "default"
       }
     ],
     "views": {

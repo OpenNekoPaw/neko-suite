@@ -15,6 +15,7 @@ import type { Keyframe } from '../types/keyframe';
 import type { EffectParameterKeyframe } from '../types/effects';
 import type { MaskPropertyKeyframe, MaskShapeKeyframe } from '../types/mask';
 import type { ProjectData } from '../types/project';
+import type { CanvasNode, CanvasConnection } from '../types/canvas';
 
 // =============================================================================
 // Operation Meta — 操作元数据
@@ -524,6 +525,274 @@ export interface BatchOperation {
 }
 
 // =============================================================================
+// Canvas Operations — 无限画布节点/连线操作
+// =============================================================================
+
+export interface CanvasNodeAddOperation {
+  type: 'canvas.node.add';
+  meta: OperationMeta;
+  payload: { node: CanvasNode };
+}
+
+export interface CanvasNodeRemoveOperation {
+  type: 'canvas.node.remove';
+  meta: OperationMeta;
+  payload: { nodeId: string };
+  /** 被删除的节点快照 + 关联连线，用于 invert */
+  before: { node: CanvasNode; connections: CanvasConnection[]; index: number };
+}
+
+export interface CanvasNodeUpdateOperation {
+  type: 'canvas.node.update';
+  meta: OperationMeta;
+  payload: { nodeId: string; updates: Partial<Omit<CanvasNode, 'id' | 'type'>> };
+  before: { updates: Partial<Omit<CanvasNode, 'id' | 'type'>> };
+}
+
+export interface CanvasNodeReorderOperation {
+  type: 'canvas.node.reorder';
+  meta: OperationMeta;
+  payload: { nodeId: string; newZIndex: number };
+  before: { oldZIndex: number };
+}
+
+export interface CanvasNodeGroupOperation {
+  type: 'canvas.node.group';
+  meta: OperationMeta;
+  payload: { groupNode: CanvasNode; childIds: string[] };
+}
+
+export interface CanvasNodeUngroupOperation {
+  type: 'canvas.node.ungroup';
+  meta: OperationMeta;
+  payload: { groupId: string };
+  before: { groupNode: CanvasNode; childIds: string[] };
+}
+
+export interface CanvasConnectionAddOperation {
+  type: 'canvas.connection.add';
+  meta: OperationMeta;
+  payload: { connection: CanvasConnection };
+}
+
+export interface CanvasConnectionRemoveOperation {
+  type: 'canvas.connection.remove';
+  meta: OperationMeta;
+  payload: { connectionId: string };
+  before: { connection: CanvasConnection };
+}
+
+export type CanvasOperation =
+  | CanvasNodeAddOperation
+  | CanvasNodeRemoveOperation
+  | CanvasNodeUpdateOperation
+  | CanvasNodeReorderOperation
+  | CanvasNodeGroupOperation
+  | CanvasNodeUngroupOperation
+  | CanvasConnectionAddOperation
+  | CanvasConnectionRemoveOperation;
+
+// =============================================================================
+// Sketch Operations — 2D 绘画图层/笔画操作
+// =============================================================================
+
+/** Sketch 图层可更新字段 */
+export interface SketchLayerUpdates {
+  name?: string;
+  visible?: boolean;
+  locked?: boolean;
+  opacity?: number;
+  blendMode?: string;
+  offsetX?: number;
+  offsetY?: number;
+  clippingMask?: boolean;
+  maskLayerId?: string | null;
+}
+
+/** Sketch 图层快照（不含 texture/pendingData，仅可序列化字段） */
+export interface SketchLayerSnapshot {
+  id: string;
+  name: string;
+  type: string;
+  visible: boolean;
+  locked: boolean;
+  opacity: number;
+  blendMode: string;
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+  clippingMask: boolean;
+  maskLayerId: string | null;
+  children: SketchLayerSnapshot[];
+}
+
+/** 区域像素快照（用于笔画 undo） */
+export interface RegionSnapshot {
+  layerId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Base64 编码的像素数据 */
+  data: string;
+}
+
+export interface SketchLayerAddOperation {
+  type: 'sketch.layer.add';
+  meta: OperationMeta;
+  payload: { layer: SketchLayerSnapshot; parentId?: string; index?: number };
+}
+
+export interface SketchLayerRemoveOperation {
+  type: 'sketch.layer.remove';
+  meta: OperationMeta;
+  payload: { layerId: string };
+  before: { layer: SketchLayerSnapshot; parentId?: string; index: number };
+}
+
+export interface SketchLayerUpdateOperation {
+  type: 'sketch.layer.update';
+  meta: OperationMeta;
+  payload: { layerId: string; updates: SketchLayerUpdates };
+  before: { updates: SketchLayerUpdates };
+}
+
+export interface SketchLayerMoveOperation {
+  type: 'sketch.layer.move';
+  meta: OperationMeta;
+  payload: { layerId: string; targetParentId?: string; targetIndex: number };
+  before: { parentId?: string; index: number };
+}
+
+export interface SketchLayerDuplicateOperation {
+  type: 'sketch.layer.duplicate';
+  meta: OperationMeta;
+  payload: { sourceLayerId: string; newLayer: SketchLayerSnapshot };
+}
+
+export interface SketchLayerGroupOperation {
+  type: 'sketch.layer.group';
+  meta: OperationMeta;
+  payload: { groupLayer: SketchLayerSnapshot; childIds: string[] };
+}
+
+export interface SketchLayerUngroupOperation {
+  type: 'sketch.layer.ungroup';
+  meta: OperationMeta;
+  payload: { groupId: string };
+  before: { groupLayer: SketchLayerSnapshot; childIds: string[] };
+}
+
+export interface SketchStrokeApplyOperation {
+  type: 'sketch.stroke.apply';
+  meta: OperationMeta;
+  payload: { layerId: string; regionAfter: RegionSnapshot };
+  before: { regionBefore: RegionSnapshot };
+}
+
+export interface SketchCanvasUpdateOperation {
+  type: 'sketch.canvas.update';
+  meta: OperationMeta;
+  payload: { updates: { width?: number; height?: number; dpi?: number; backgroundColor?: string } };
+  before: { updates: { width?: number; height?: number; dpi?: number; backgroundColor?: string } };
+}
+
+export type SketchOperation =
+  | SketchLayerAddOperation
+  | SketchLayerRemoveOperation
+  | SketchLayerUpdateOperation
+  | SketchLayerMoveOperation
+  | SketchLayerDuplicateOperation
+  | SketchLayerGroupOperation
+  | SketchLayerUngroupOperation
+  | SketchStrokeApplyOperation
+  | SketchCanvasUpdateOperation;
+
+// =============================================================================
+// Audio Operations — 音频项目效果链/标记操作
+// =============================================================================
+
+/** 音频效果实例快照 */
+export interface AudioEffectSnapshot {
+  id: string;
+  type: string;
+  name: string;
+  enabled: boolean;
+  params: Record<string, unknown>;
+}
+
+/** 音频标记快照 */
+export interface AudioMarkerSnapshot {
+  id: string;
+  time: number;
+  label: string;
+  color?: string;
+}
+
+export interface AudioEffectAddOperation {
+  type: 'audio.effect.add';
+  meta: OperationMeta;
+  payload: { effect: AudioEffectSnapshot; index?: number };
+}
+
+export interface AudioEffectRemoveOperation {
+  type: 'audio.effect.remove';
+  meta: OperationMeta;
+  payload: { effectId: string };
+  before: { effect: AudioEffectSnapshot; index: number };
+}
+
+export interface AudioEffectUpdateOperation {
+  type: 'audio.effect.update';
+  meta: OperationMeta;
+  payload: { effectId: string; updates: Partial<Omit<AudioEffectSnapshot, 'id'>> };
+  before: { updates: Partial<Omit<AudioEffectSnapshot, 'id'>> };
+}
+
+export interface AudioEffectToggleOperation {
+  type: 'audio.effect.toggle';
+  meta: OperationMeta;
+  payload: { effectId: string; field: 'enabled' };
+}
+
+export interface AudioEffectMoveOperation {
+  type: 'audio.effect.move';
+  meta: OperationMeta;
+  payload: { effectId: string; fromIndex: number; toIndex: number };
+}
+
+export interface AudioMarkerAddOperation {
+  type: 'audio.marker.add';
+  meta: OperationMeta;
+  payload: { marker: AudioMarkerSnapshot };
+}
+
+export interface AudioMarkerRemoveOperation {
+  type: 'audio.marker.remove';
+  meta: OperationMeta;
+  payload: { markerId: string };
+  before: { marker: AudioMarkerSnapshot };
+}
+
+export interface AudioMarkerUpdateOperation {
+  type: 'audio.marker.update';
+  meta: OperationMeta;
+  payload: { markerId: string; updates: Partial<Omit<AudioMarkerSnapshot, 'id'>> };
+  before: { updates: Partial<Omit<AudioMarkerSnapshot, 'id'>> };
+}
+
+export type AudioOperation =
+  | AudioEffectAddOperation
+  | AudioEffectRemoveOperation
+  | AudioEffectUpdateOperation
+  | AudioEffectToggleOperation
+  | AudioEffectMoveOperation
+  | AudioMarkerAddOperation
+  | AudioMarkerRemoveOperation
+  | AudioMarkerUpdateOperation;
+
+// =============================================================================
 // EditOperation 联合类型
 // =============================================================================
 
@@ -535,6 +804,9 @@ export type EditOperation =
   | KeyframeOperation
   | ClipboardOperation
   | ProjectOperation
+  | CanvasOperation
+  | SketchOperation
+  | AudioOperation
   | BatchOperation;
 
 /**

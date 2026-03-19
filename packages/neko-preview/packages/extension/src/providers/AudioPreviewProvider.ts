@@ -13,6 +13,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as fs from 'fs/promises';
 import { PreviewService, type MediaInfo } from '../services/PreviewService';
 import { getWebviewHtml } from '../utils/html';
 import type { StatusBarManager } from '../ui/StatusBarManager';
@@ -141,6 +142,18 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
               });
             } catch (error) {
               logger.error('Waveform generation failed:', error);
+            }
+
+            // Look for .lrc lyrics file in same directory
+            try {
+              const lrcPath = filePath.replace(/\.[^.]+$/, '.lrc');
+              const lrcContent = await fs.readFile(lrcPath, 'utf-8');
+              await webviewPanel.webview.postMessage({
+                type: 'preview:lyrics',
+                payload: { lrcContent },
+              });
+            } catch {
+              // No .lrc file found — silently skip
             }
             break;
           }

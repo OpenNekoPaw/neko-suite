@@ -13,6 +13,7 @@ import {
   updateLayer,
   groupLayers,
 } from '../../layer';
+import { useSketchOperationStore } from '../sketchOperationStore';
 
 export interface LayerSlice {
   // State
@@ -49,30 +50,53 @@ export const createLayerSlice: StateCreator<LayerSlice> = (set, get) => ({
       layers: addLayer(state.layers, newLayer),
       activeLayerId: newLayer.id,
     });
+    useSketchOperationStore.getState().recordLayerAdd(newLayer as any);
   },
 
-  removeLayerById: (id) =>
-    set((state) => ({
+  removeLayerById: (id) => {
+    const state = get();
+    const layer = state.layers.find((l) => l.id === id);
+    set({
       layers: removeLayer(state.layers, id),
       activeLayerId: state.activeLayerId === id ? null : state.activeLayerId,
-    })),
+    });
+    if (layer) {
+      useSketchOperationStore.getState().recordLayerRemove(id, layer as any);
+    }
+  },
 
   setActiveLayer: (id) => set({ activeLayerId: id }),
 
-  moveLayerTo: (id, index) =>
-    set((state) => ({
-      layers: moveLayer(state.layers, id, index),
-    })),
+  moveLayerTo: (id, index) => {
+    const state = get();
+    const oldIndex = state.layers.findIndex((l) => l.id === id);
+    set({ layers: moveLayer(state.layers, id, index) });
+    useSketchOperationStore.getState().recordLayerMove(id, undefined, index, undefined, oldIndex);
+  },
 
-  duplicateLayerById: (id) =>
-    set((state) => ({
-      layers: duplicateLayer(state.layers, id),
-    })),
+  duplicateLayerById: (id) => {
+    const state = get();
+    const newLayers = duplicateLayer(state.layers, id);
+    set({ layers: newLayers });
+    // Find the new layer (last one added)
+    const newLayer = newLayers.find((l) => !state.layers.some((ol) => ol.id === l.id));
+    if (newLayer) {
+      useSketchOperationStore.getState().recordLayerDuplicate(newLayer as any, id);
+    }
+  },
 
-  updateLayerProps: (id, updates) =>
-    set((state) => ({
-      layers: updateLayer(state.layers, id, updates),
-    })),
+  updateLayerProps: (id, updates) => {
+    const state = get();
+    const oldLayer = state.layers.find((l) => l.id === id);
+    const before: Record<string, unknown> = {};
+    if (oldLayer) {
+      for (const key of Object.keys(updates)) {
+        before[key] = (oldLayer as any)[key];
+      }
+    }
+    set({ layers: updateLayer(state.layers, id, updates) });
+    useSketchOperationStore.getState().recordLayerUpdate(id, updates, before);
+  },
 
   groupSelectedLayers: (ids) =>
     set((state) => ({

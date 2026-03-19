@@ -232,6 +232,36 @@ Extension Host
 
 ---
 
+## EditOperation 指令系统
+
+所有编辑器共享统一的 `EditOperation` 抽象（定义在 `@neko/shared` 的 `operations/`），实现操作级别的 undo/redo、AI 集成和审计追踪。
+
+```
+Webview (用户操作)
+  │
+  ├─ 构建 EditOperation（type + payload + before + meta）
+  ├─ 应用到本地状态（applyOperation）
+  ├─ 记录到 undo 栈（invertOperation 生成逆操作）
+  └─ postMessage('operationApplied', operation)
+        │
+        ▼
+Extension Host
+  ├─ 增量更新内存缓存（applyOperation）
+  ├─ 触发 dirty 事件（onDidChangeCustomDocument）
+  └─ 可选：转发给 AI Agent 分析
+```
+
+**操作域覆盖**：
+
+| 编辑器 | 操作前缀 | 接入方式 |
+|--------|---------|---------|
+| neko-cut | `track.*` / `element.*` | editorStore 内置 dispatch |
+| neko-audio | `audio.effect.*` / `audio.marker.*` | audioProjectStore（dispatch + undo/redo） |
+| neko-canvas | `canvas.node.*` / `canvas.connection.*` | canvasOperationStore 桥接层 |
+| neko-sketch | `sketch.layer.*` / `sketch.stroke.*` | sketchOperationStore 桥接层 |
+
+---
+
 ## 设计原则
 
 **SOLID 驱动**：每个模块单一职责，面向接口编程，通过依赖注入解耦。

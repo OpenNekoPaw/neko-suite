@@ -3,25 +3,47 @@
 // =============================================================================
 
 import type { ProjectData } from '../types/project';
+import type { CanvasData } from '../types/canvas';
 import type {
   EditOperation,
+  TrackOperation,
+  ElementOperation,
+  ElementSplitOperation,
   ClipboardPasteOperation,
   ProjectUpdateOperation,
   BatchOperation,
+  CanvasOperation,
+  SketchOperation,
+  AudioOperation,
 } from './types';
 import { applyTrackOperation } from './apply-track';
 import { applyElementOperation, applyElementSplitOperation } from './apply-element';
 import { applyShapeOperation } from './apply-shape';
 import { applyKeyframeOperation } from './apply-keyframe';
+import { applyCanvasOperation } from './apply-canvas';
+import { applySketchOperation, type SketchDocumentData } from './apply-sketch';
+import { applyAudioOperation, type AudioProjectData } from './apply-audio';
 import { updateTrackInProject } from './helpers';
 import { OperationError } from './errors';
 
 /**
- * 将 EditOperation 应用到 ProjectData，返回新的 ProjectData（不可变）
+ * 将 EditOperation 应用到数据，返回新数据（不可变）
+ *
+ * 支持 ProjectData（neko-cut）、CanvasData（neko-canvas）、
+ * SketchDocumentData（neko-sketch）、AudioProjectData（neko-audio）
+ *
+ * AudioProjectData 支持 TrackOperation / ElementOperation / AudioOperation
  *
  * @throws OperationError 当目标不存在或操作无效时
  */
-export function applyOperation(project: ProjectData, op: EditOperation): ProjectData {
+export function applyOperation(data: ProjectData, op: EditOperation): ProjectData;
+export function applyOperation(data: CanvasData, op: CanvasOperation): CanvasData;
+export function applyOperation(data: SketchDocumentData, op: SketchOperation): SketchDocumentData;
+export function applyOperation(
+  data: AudioProjectData,
+  op: AudioOperation | TrackOperation | ElementOperation | ElementSplitOperation,
+): AudioProjectData;
+export function applyOperation(data: unknown, op: EditOperation): unknown {
   switch (op.type) {
     // Track operations
     case 'track.add':
@@ -29,7 +51,7 @@ export function applyOperation(project: ProjectData, op: EditOperation): Project
     case 'track.update':
     case 'track.reorder':
     case 'track.toggle':
-      return applyTrackOperation(project, op);
+      return applyTrackOperation(data as ProjectData, op);
 
     // Element operations
     case 'element.add':
@@ -39,13 +61,13 @@ export function applyOperation(project: ProjectData, op: EditOperation): Project
     case 'element.toggle':
     case 'element.linkAudio':
     case 'element.unlinkAudio':
-      return applyElementOperation(project, op);
+      return applyElementOperation(data as ProjectData, op);
 
     // Element split operations
     case 'element.splitAt':
     case 'element.splitKeepLeft':
     case 'element.splitKeepRight':
-      return applyElementSplitOperation(project, op);
+      return applyElementSplitOperation(data as ProjectData, op);
 
     // Shape operations
     case 'shape.addElement':
@@ -57,29 +79,63 @@ export function applyOperation(project: ProjectData, op: EditOperation): Project
     case 'shape.updateStyle':
     case 'shape.toggle':
     case 'shape.reorder':
-      return applyShapeOperation(project, op);
+      return applyShapeOperation(data as ProjectData, op);
 
     // Keyframe operations
     case 'keyframe.add':
     case 'keyframe.remove':
     case 'keyframe.update':
-      return applyKeyframeOperation(project, op);
+      return applyKeyframeOperation(data as ProjectData, op);
 
     // Clipboard paste
     case 'clipboard.paste':
-      return applyClipboardPaste(project, op);
+      return applyClipboardPaste(data as ProjectData, op);
 
     // Project update
     case 'project.update':
-      return applyProjectUpdate(project, op);
+      return applyProjectUpdate(data as ProjectData, op);
+
+    // Canvas operations
+    case 'canvas.node.add':
+    case 'canvas.node.remove':
+    case 'canvas.node.update':
+    case 'canvas.node.reorder':
+    case 'canvas.node.group':
+    case 'canvas.node.ungroup':
+    case 'canvas.connection.add':
+    case 'canvas.connection.remove':
+      return applyCanvasOperation(data as CanvasData, op);
+
+    // Sketch operations
+    case 'sketch.layer.add':
+    case 'sketch.layer.remove':
+    case 'sketch.layer.update':
+    case 'sketch.layer.move':
+    case 'sketch.layer.duplicate':
+    case 'sketch.layer.group':
+    case 'sketch.layer.ungroup':
+    case 'sketch.stroke.apply':
+    case 'sketch.canvas.update':
+      return applySketchOperation(data as SketchDocumentData, op);
+
+    // Audio operations
+    case 'audio.effect.add':
+    case 'audio.effect.remove':
+    case 'audio.effect.update':
+    case 'audio.effect.toggle':
+    case 'audio.effect.move':
+    case 'audio.marker.add':
+    case 'audio.marker.remove':
+    case 'audio.marker.update':
+      return applyAudioOperation(data as AudioProjectData, op);
 
     // Batch
     case 'batch':
-      return applyBatch(project, op);
+      return applyBatch(data, op);
 
     default:
       throw OperationError.invalidOperation(
-        `Unknown operation type: ${(op as Record<string, unknown>).type}`,
+        `Unknown operation type: ${(op as unknown as Record<string, unknown>).type}`,
       );
   }
 }
@@ -104,6 +160,9 @@ function applyProjectUpdate(project: ProjectData, op: ProjectUpdateOperation): P
   return { ...project, ...op.payload.updates };
 }
 
-function applyBatch(project: ProjectData, op: BatchOperation): ProjectData {
-  return op.payload.operations.reduce((proj, childOp) => applyOperation(proj, childOp), project);
+function applyBatch(data: unknown, op: BatchOperation): unknown {
+  return op.payload.operations.reduce(
+    (current, childOp) => applyOperation(current as any, childOp),
+    data,
+  );
 }

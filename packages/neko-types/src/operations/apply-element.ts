@@ -2,16 +2,16 @@
 // Apply Element Operations — 元素操作的 apply 实现
 // =============================================================================
 
-import type { ProjectData } from '../types/project';
 import type { TimelineElement, MediaElement } from '../types/element';
 import type { ElementOperation, ElementSplitOperation } from './types';
+import type { HasTracks } from './helpers';
 import { findTrack, findElement, updateTrackInProject, updateElementInProject } from './helpers';
 
-export function applyElementOperation(project: ProjectData, op: ElementOperation): ProjectData {
+export function applyElementOperation<T extends HasTracks>(data: T, op: ElementOperation): T {
   switch (op.type) {
     case 'element.add': {
       const { trackId, element, index } = op.payload;
-      return updateTrackInProject(project, trackId, (track) => {
+      return updateTrackInProject(data, trackId, (track) => {
         const newElements = [...track.elements];
         if (index !== undefined) {
           newElements.splice(index, 0, element);
@@ -24,7 +24,7 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
 
     case 'element.remove': {
       const { trackId, elementId } = op.payload;
-      return updateTrackInProject(project, trackId, (track) => {
+      return updateTrackInProject(data, trackId, (track) => {
         const { element } = findElement(track, elementId);
         const effectiveDuration = element.duration - element.trimStart - element.trimEnd;
         let newElements = track.elements.filter((e) => e.id !== elementId);
@@ -46,7 +46,7 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
 
     case 'element.update': {
       const { trackId, elementId, updates } = op.payload;
-      return updateElementInProject(project, trackId, elementId, (element) => {
+      return updateElementInProject(data, trackId, elementId, (element) => {
         const merged = { ...element, ...updates } as TimelineElement;
         // 如果更新 duration 且 trimStart + trimEnd >= newDuration，重置 trim
         if (updates.duration !== undefined) {
@@ -61,10 +61,10 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
     case 'element.move': {
       const { fromTrackId, toTrackId, elementId } = op.payload;
       // 从源 track 移除
-      const { track: fromTrack } = findTrack(project, fromTrackId);
+      const { track: fromTrack } = findTrack(data, fromTrackId);
       const { element } = findElement(fromTrack, elementId);
 
-      let result = updateTrackInProject(project, fromTrackId, (track) => ({
+      let result = updateTrackInProject(data, fromTrackId, (track) => ({
         ...track,
         elements: track.elements.filter((e) => e.id !== elementId),
       }));
@@ -81,7 +81,7 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
     case 'element.toggle': {
       const { trackId, elementId, field } = op.payload;
       return updateElementInProject(
-        project,
+        data,
         trackId,
         elementId,
         (element) =>
@@ -94,7 +94,7 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
 
     case 'element.linkAudio': {
       const { videoTrackId, videoElementId, audioTrackId, audioElement, audioTrack } = op.payload;
-      let result = project;
+      let result = data;
 
       // 如果需要创建新的 audio track
       if (audioTrack) {
@@ -127,7 +127,7 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
       const { linkedAudioId, audioTrackId } = op.before;
 
       // 清除视频元素的 linkedAudioId
-      let result = updateElementInProject(project, videoTrackId, videoElementId, (element) => {
+      let result = updateElementInProject(data, videoTrackId, videoElementId, (element) => {
         const { linkedAudioId: _, ...rest } = element as MediaElement;
         return rest as TimelineElement;
       });
@@ -148,16 +148,16 @@ export function applyElementOperation(project: ProjectData, op: ElementOperation
   }
 }
 
-export function applyElementSplitOperation(
-  project: ProjectData,
+export function applyElementSplitOperation<T extends HasTracks>(
+  data: T,
   op: ElementSplitOperation,
-): ProjectData {
+): T {
   switch (op.type) {
     case 'element.splitAt': {
       const { trackId, elementId, splitPoint, rightElement } = op.payload;
       // 修改原元素的 trimEnd（左半部分）
       let result = updateElementInProject(
-        project,
+        data,
         trackId,
         elementId,
         (element) =>
@@ -179,7 +179,7 @@ export function applyElementSplitOperation(
     case 'element.splitKeepLeft': {
       const { trackId, elementId, splitPoint, newName } = op.payload;
       return updateElementInProject(
-        project,
+        data,
         trackId,
         elementId,
         (element) =>
@@ -194,7 +194,7 @@ export function applyElementSplitOperation(
     case 'element.splitKeepRight': {
       const { trackId, elementId, splitPoint, newStartTime, newName } = op.payload;
       return updateElementInProject(
-        project,
+        data,
         trackId,
         elementId,
         (element) =>

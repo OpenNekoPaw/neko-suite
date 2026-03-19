@@ -45,6 +45,8 @@ export interface MediaInfo {
   audioCodec?: string;
   audioSampleRate?: number;
   audioChannels?: number;
+  metadata?: Record<string, string>;
+  coverArt?: { mimeType: string; dataBase64: string };
 }
 
 // =============================================================================
@@ -163,6 +165,8 @@ export class PreviewService implements vscode.Disposable {
       audioCodec: audio?.codec as string | undefined,
       audioSampleRate: audio?.sampleRate as number | undefined,
       audioChannels: audio?.channels as number | undefined,
+      metadata: data.metadata as Record<string, string> | undefined,
+      coverArt: data.coverArt as { mimeType: string; dataBase64: string } | undefined,
     };
   }
 

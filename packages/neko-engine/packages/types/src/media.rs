@@ -1,6 +1,17 @@
 //! Media information types — probe response DTOs
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+/// Embedded cover art information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoverArtInfo {
+    /// MIME type (image/jpeg, image/png, etc.)
+    pub mime_type: String,
+    /// Base64-encoded image data
+    pub data_base64: String,
+}
 
 /// Media file information (videos:probe / audios:probe response)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,6 +32,12 @@ pub struct MediaInfo {
     /// Subtitle streams
     #[serde(default)]
     pub subtitle_streams: Vec<SubtitleStreamInfo>,
+    /// Container-level metadata tags (title, artist, album, etc.)
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, String>,
+    /// Embedded cover art (base64-encoded)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_art: Option<CoverArtInfo>,
 }
 
 impl MediaInfo {
@@ -196,6 +213,8 @@ mod tests {
             video_streams: vec![],
             audio_streams: vec![],
             subtitle_streams: vec![],
+            metadata: HashMap::new(),
+            cover_art: None,
         };
         if video {
             info.video_streams.push(VideoStreamInfo {

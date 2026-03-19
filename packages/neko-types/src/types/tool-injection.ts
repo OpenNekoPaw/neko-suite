@@ -1,9 +1,9 @@
 /**
- * Tool Injection Types - Two-layer tool injection mechanism
+ * Tool Injection Types
  *
- * Layers:
- * - always: Core tools always injected (file ops, shell, meta-tools, alwaysActive ToolSets)
- * - dynamic: Tools from manually activated ToolSets
+ * With 1M context window, all tools are always visible.
+ * The two-layer mechanism is retained for compatibility but
+ * budgets are set high enough to never constrain.
  */
 
 import type { ToolInjectionLayer } from './tool-category';
@@ -26,16 +26,16 @@ export interface ToolInjectionConfig {
 }
 
 /**
- * Default injection configuration
+ * Default injection configuration — unconstrained for 1M context
  */
 export const DEFAULT_INJECTION_CONFIG: ToolInjectionConfig = {
   maxToolsPerLayer: {
-    always: 25, // Core tools (9) + alwaysActive ToolSets (~12) + buffer
-    dynamic: 30, // Activated ToolSets
+    always: 200,
+    dynamic: 200,
   },
   tokenBudgetPerLayer: {
-    always: 10000,
-    dynamic: 12000,
+    always: 500000,
+    dynamic: 500000,
   },
 };
 

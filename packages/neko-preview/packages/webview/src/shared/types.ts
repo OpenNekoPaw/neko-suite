@@ -20,6 +20,8 @@ export interface MediaInfo {
   audioCodec?: string;
   audioSampleRate?: number;
   audioChannels?: number;
+  metadata?: Record<string, string>;
+  coverArt?: { mimeType: string; dataBase64: string };
 }
 
 // =============================================================================
@@ -62,11 +64,19 @@ export interface PreviewWaveformMessage {
   };
 }
 
+export interface PreviewLyricsMessage {
+  type: 'preview:lyrics';
+  payload: {
+    lrcContent: string;
+  };
+}
+
 export type ExtensionMessage =
   | PreviewInitMessage
   | PreviewStreamReadyMessage
   | PreviewFrameDataMessage
-  | PreviewWaveformMessage;
+  | PreviewWaveformMessage
+  | PreviewLyricsMessage;
 
 // =============================================================================
 // Webview → Extension Messages

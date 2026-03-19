@@ -72,3 +72,12 @@ Extension Host（Node.js）
 | 2D 骨骼后端 | neko-engine native-puppet（bevy_ecs + inox2d + bevy_animation） |
 | 通信 | EngineClient HTTP + WebSocket（@neko/neko-client） |
 | Extension | VSCode Extension API + TypeScript + esbuild |
+
+### EditOperation 集成
+
+Webview 端通过 `sketchOperationStore` 桥接层记录编辑操作：
+
+- **操作类型**：`sketch.layer.*`（图层 CRUD/移动/分组）、`sketch.stroke.*`（笔画应用）、`sketch.canvas.*`（画布配置）
+- **Store**：`stores/sketchOperationStore.ts` — 记录操作 → postMessage 同步
+- **layerSlice 集成**：5 个图层操作方法在执行后自动调用 operationStore 记录
+- **Extension 同步**：`operationApplied` 消息 → SketchEditorProvider dirty 事件

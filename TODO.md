@@ -16,33 +16,30 @@
 - [x] Port 系统 + UI 面板（Port 类型/渲染 ✅ PortEditor UI 面板 ✅）
 
 ### neko-tools（媒体 Diff）
-- [ ] Diff 后端增强（Phase 3）
-  - [ ] 音频静音检测（协议已定义，未实现）
-  - [ ] 视频场景切割检测
-- [ ] AI 生成内容对比（基于现有 MediaDiff 扩展，无需新子包）
-  - [ ] CompareView N 文件网格对比（现有仅支持 2 文件）
-  - [ ] AI 元数据面板（展示 prompt / model / seed 等生成参数）
-  - [ ] 用户评分/标注组件（主观质量评价）
-  - [ ] neko-agent 集成入口（`neko.tools.compareAIResults` 命令）
-- [ ] 自定义 AI API 诊断（在 neko-agent 配置页内置，非独立包）
-  - [ ] 连通性测试（鉴权验证）
-  - [ ] 延迟测试（首 token 时间 / 总响应时间）
-  - [ ] 兼容性检测（streaming / tool_use 支持）
-  - [ ] 配额检查（速率限制 / 余额）
+- [ ] 音频静音检测 UI（数据层已就绪：engine 后端 ✅ + Proto 类型 ✅ + Analyzer 接收 ✅，仅缺 AudioDiffViewer 沉默区域可视化）
+- [ ] CompareView N 文件网格对比（现有仅支持 2 文件，AI 生成场景需对比 3-8 个变体）
+- [ ] 视频场景切割检测（需 engine 新增 FFmpeg scene filter，优先级低）
 
 ### neko-canvas（高级功能）
-- [ ] WebGPU 渲染管线（当前 Canvas 2D 降级实现）
-- [ ] 特效系统（复用 neko-engine WGSL shaders）
-- [ ] 自定义转场（复用 engine 转场类型）
-- [ ] 导出功能
+- [x] 画板导出为图片（PNG/SVG，html-to-image 截图 + Extension 保存）
+- [ ] 大量节点性能优化（Canvas 2D 渲染 或 OffscreenCanvas + Worker，当前 DOM/SVG 方案 <1000 节点足够）
 
 ### neko-proto
 - [ ] 接入 protoc/buf 自动生成（当前手动维护，同步成本高）
 - [x] 补齐 diff.proto 剩余类型定义（CanvasContentDiff + AudioSilenceDetection 已添加）
 
+### neko-preview（音频播放器现代化）
+- [x] Phase 1：视觉重设计 + 视图切换框架（Apple Music 风格布局 + 封面/歌词/波形三视图 + `--neko-audio-*` 主题变量 + speed 控制 + 拖拽 seek storm 修复）
+- [ ] Phase 2：Engine 元数据扩展（FFmpeg metadata dict → ID3/Vorbis 标签提取 + 封面流提取 + MediaInfo 扩展 + 真实封面展示 + 模糊背景）
+- [ ] Phase 3：歌词支持（.lrc 时间标签解析 + 嵌入歌词提取 + 同目录 .lrc 查找 + 滚动高亮歌词视图）
+
 ### EditOperation 遗留项
 - [x] neko-types `package.json` 缺少 test script（已添加，11 文件 242 测试通过）
 - [x] 操作 undo/redo 正确性验证（invert 30+ / roundtrip 40+ / historySlice 15+ 测试已覆盖）
+- [x] neko-audio EditOperation 接入（audioProjectStore：dispatch + undo/redo + Extension 同步）
+- [x] neko-canvas EditOperation 接入（canvasOperationStore 桥接层，14 个操作方法记录 EditOperation）
+- [x] neko-sketch EditOperation 接入（sketchOperationStore 桥接层，layerSlice 5 个操作方法记录）
+- [x] neko-types operations 扩展（audio 8 类型 + canvas 8 类型 + sketch 8 类型 + apply/invert 全覆盖）
 
 ---
 
@@ -214,4 +211,4 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 
 ---
 
-*最后更新：2026-03-18（MIDI/Gamepad WS 端点完成；设备代理仅剩摄像头 capture 实现）*
+*最后更新：2026-03-19（neko-preview 音频播放器现代化 Phase 1 完成；EditOperation 全包接入完成）*

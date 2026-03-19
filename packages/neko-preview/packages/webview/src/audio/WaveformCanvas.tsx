@@ -2,7 +2,8 @@
  * WaveformCanvas - Audio waveform visualization
  *
  * Renders waveform peaks data on a Canvas element with
- * a playback position indicator.
+ * a playback position indicator. Colors are theme-aware
+ * via CSS custom properties.
  */
 
 import { useRef, useEffect, useCallback } from 'react';
@@ -14,17 +15,25 @@ interface WaveformCanvasProps {
   duration: number;
   /** Current playback time in seconds */
   currentTime: number;
-  /** Seek callback */
-  onSeek: (time: number) => void;
+  /** Called on drag end — commits the seek */
+  onSeekCommit: (time: number) => void;
+  /** Called during drag — updates UI time only */
+  onSeeking?: (time: number) => void;
 }
 
-// Colors (VSCode theme-aware via CSS variables fallback)
-const WAVE_COLOR = '#0e639c';
-const WAVE_BG_COLOR = 'rgba(255, 255, 255, 0.05)';
-const PROGRESS_COLOR = '#1a8fff';
-const CURSOR_COLOR = '#fff';
+/** Read a CSS custom property from :root, with fallback */
+function getCssVar(name: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
 
-export function WaveformCanvas({ peaks, duration, currentTime, onSeek }: WaveformCanvasProps) {
+export function WaveformCanvas({
+  peaks,
+  duration,
+  currentTime,
+  onSeekCommit,
+  onSeeking,
+}: WaveformCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   /** CSS logical dimensions (independent of DPR) */
@@ -46,11 +55,17 @@ export function WaveformCanvas({ peaks, duration, currentTime, onSeek }: Wavefor
     if (width === 0 || height === 0) return;
     const centerY = height / 2;
 
+    // Theme-aware colors
+    const waveColor = getCssVar('--neko-audio-accent', '#0e639c');
+    const waveBgColor = getCssVar('--neko-audio-surface', 'rgba(255, 255, 255, 0.05)');
+    const progressColor = getCssVar('--neko-audio-accent-hover', '#1a8fff');
+    const cursorColor = getCssVar('--neko-audio-text-primary', '#fff');
+
     // Clear
     ctx.clearRect(0, 0, width, height);
 
     // Background
-    ctx.fillStyle = WAVE_BG_COLOR;
+    ctx.fillStyle = waveBgColor;
     ctx.fillRect(0, 0, width, height);
 
     if (!peaks || peaks.length === 0) {
@@ -77,7 +92,7 @@ export function WaveformCanvas({ peaks, duration, currentTime, onSeek }: Wavefor
       const barHeight = Math.max(1, peakValue * halfHeight);
 
       // Color based on whether we've played past this point
-      ctx.fillStyle = x < progressX ? PROGRESS_COLOR : WAVE_COLOR;
+      ctx.fillStyle = x < progressX ? progressColor : waveColor;
 
       // Draw symmetric bar (above and below center)
       ctx.fillRect(x, centerY - barHeight, barWidth - 0.5, barHeight * 2);
@@ -85,7 +100,7 @@ export function WaveformCanvas({ peaks, duration, currentTime, onSeek }: Wavefor
 
     // Draw playback cursor
     if (duration > 0) {
-      ctx.fillStyle = CURSOR_COLOR;
+      ctx.fillStyle = cursorColor;
       ctx.fillRect(progressX - 1, 0, 2, height);
     }
   }, [peaks, duration, currentTime]);
@@ -138,34 +153,34 @@ export function WaveformCanvas({ peaks, duration, currentTime, onSeek }: Wavefor
   }, [draw]);
 
   // =========================================================================
-  // Click to seek
+  // Drag to seek (scrub/commit pattern — matches ProgressBar)
   // =========================================================================
 
-  const handleClick = useCallback(
-    (e: React.MouseEvent) => {
+  const getTimeFromClientX = useCallback(
+    (clientX: number): number => {
       const canvas = canvasRef.current;
-      if (!canvas || duration <= 0) return;
-
+      if (!canvas || duration <= 0) return 0;
       const rect = canvas.getBoundingClientRect();
-      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      onSeek(ratio * duration);
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      return ratio * duration;
     },
-    [duration, onSeek],
+    [duration],
   );
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      handleClick(e);
+      e.preventDefault();
+      const time = getTimeFromClientX(e.clientX);
+      onSeeking?.(time);
 
       const handleMouseMove = (ev: MouseEvent) => {
-        const canvas = canvasRef.current;
-        if (!canvas || duration <= 0) return;
-        const rect = canvas.getBoundingClientRect();
-        const ratio = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-        onSeek(ratio * duration);
+        const t = getTimeFromClientX(ev.clientX);
+        onSeeking?.(t);
       };
 
-      const handleMouseUp = () => {
+      const handleMouseUp = (ev: MouseEvent) => {
+        const t = getTimeFromClientX(ev.clientX);
+        onSeekCommit(t);
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
       };
@@ -173,7 +188,7 @@ export function WaveformCanvas({ peaks, duration, currentTime, onSeek }: Wavefor
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [handleClick, duration, onSeek],
+    [getTimeFromClientX, onSeekCommit, onSeeking],
   );
 
   // =========================================================================
