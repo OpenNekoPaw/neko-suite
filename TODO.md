@@ -30,8 +30,8 @@
 
 ### neko-preview（音频播放器现代化）
 - [x] Phase 1：视觉重设计 + 视图切换框架（Apple Music 风格布局 + 封面/歌词/波形三视图 + `--neko-audio-*` 主题变量 + speed 控制 + 拖拽 seek storm 修复）
-- [ ] Phase 2：Engine 元数据扩展（FFmpeg metadata dict → ID3/Vorbis 标签提取 + 封面流提取 + MediaInfo 扩展 + 真实封面展示 + 模糊背景）
-- [ ] Phase 3：歌词支持（.lrc 时间标签解析 + 嵌入歌词提取 + 同目录 .lrc 查找 + 滚动高亮歌词视图）
+- [x] Phase 2：Engine 元数据扩展（FFmpeg metadata dict → ID3/Vorbis 标签提取 + ATTACHED_PIC 封面流提取 + CoverArtInfo base64 DTO + MediaInfo 扩展 + 真实封面展示 + 模糊背景 + metadata title/artist 显示）
+- [x] Phase 3：歌词支持（LRC 时间标签解析 + 多标签/元数据/二分查找 + 同目录 .lrc 查找 + 滚动高亮歌词视图 + smooth scroll 居中 + 渐隐遮罩）
 
 ### EditOperation 遗留项
 - [x] neko-types `package.json` 缺少 test script（已添加，11 文件 242 测试通过）
@@ -212,4 +212,4 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 
 ---
 
-*最后更新：2026-03-19（neko-preview 音频播放器现代化 Phase 1 完成；EditOperation 全包接入完成）*
+*最后更新：2026-03-20（neko-preview 音频播放器现代化 Phase 1-3 全部完成）*

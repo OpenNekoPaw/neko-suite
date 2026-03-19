@@ -2,23 +2,25 @@
  * AudioProjectProvider - CustomEditorProvider for .nka audio project files
  *
  * Opens .nka (Neko Audio Project) files with full save/revert/dirty state support.
- * Unlike AudioEditorProvider (readonly, for raw audio files), this provider
- * persists effects chain, markers, and viewport state.
+ * Supports both v1 (single-source) and v2 (multi-track) .nka formats.
+ * v1 files are automatically migrated to v2 on open.
  *
- * .nka JSON schema:
+ * .nka v2 JSON schema:
  * {
- *   version: '1.0',
+ *   version: '2.0',
  *   name: string,
- *   audioSource: { filePath, duration, sampleRate, channels, format },
- *   effectsChain: AudioEffectInstance[],
- *   markers: Array<{ id, time, label, color? }>,
+ *   sampleRate: number,
+ *   channels: number,
+ *   tracks: TimelineTrack[],
+ *   masterEffectsChain: AudioEffectSnapshot[],
+ *   markers: AudioMarkerSnapshot[],
  * }
  *
  * Data flow:
- * 1. Open .nka → parse JSON → resolve audioSource → probe → waveform
- * 2. Send project:init to webview (includes effectsChain + markers)
- * 3. Webview edits → project:changed → fire onDidChangeCustomDocument
- * 4. Save → post 'save' → webview sends project:saveData → write .nka
+ * 1. Open .nka → parse JSON → migrate v1→v2 if needed → probe tracks → waveforms
+ * 2. Send project:init to webview (includes tracks + masterEffectsChain + markers + waveforms)
+ * 3. Webview edits → operationApplied → apply to cache → fire onDidChangeCustomDocument
+ * 4. Save → serialize cache → write .nka
  */
 
 import * as vscode from 'vscode';
@@ -26,26 +28,37 @@ import * as path from 'path';
 import type { AudioService } from '../services/AudioService';
 import { getWebviewHtml } from '../utils/html';
 import { getLogger } from '../utils/logger';
-import { applyAudioOperation, type AudioProjectData, type EditOperation } from '@neko/shared';
+import {
+  applyAudioOperation,
+  applyOperation,
+  type AudioProjectData,
+  type AudioProjectDataV1,
+  type EditOperation,
+  type AudioOperation,
+  type TrackOperation,
+  type ElementOperation,
+} from '@neko/shared';
+import type { TimelineTrack } from '@neko/shared';
+import type { WaveformData } from '../types/api';
+import { generateId } from '@neko/shared';
 
 const logger = getLogger('AudioProject');
 
 // =============================================================================
-// .nka Project Schema
+// .nka Project Schema — v1 (legacy) and v2 (multi-track)
 // =============================================================================
 
-export interface AudioSource {
-  filePath: string;
-  duration: number;
-  sampleRate: number;
-  channels: number;
-  format: string;
-}
-
-export interface AudioProject {
+/** v1 schema (legacy, single-source) */
+export interface AudioProjectV1 {
   version: '1.0';
   name: string;
-  audioSource: AudioSource | null;
+  audioSource: {
+    filePath: string;
+    duration: number;
+    sampleRate: number;
+    channels: number;
+    format: string;
+  } | null;
   effectsChain: Array<{
     id: string;
     type: string;
@@ -54,6 +67,70 @@ export interface AudioProject {
     params: Record<string, unknown>;
   }>;
   markers: Array<{ id: string; time: number; label: string; color?: string }>;
+}
+
+/** v2 schema (multi-track) — matches AudioProjectData from @neko/shared */
+export type AudioProjectV2 = AudioProjectData;
+
+/** Union of all .nka versions for parsing */
+export type AudioProject = AudioProjectV1 | AudioProjectV2;
+
+// =============================================================================
+// v1 → v2 Migration
+// =============================================================================
+
+function isV1Project(project: AudioProject): project is AudioProjectV1 {
+  return project.version === '1.0' || !('tracks' in project);
+}
+
+function migrateV1toV2(v1: AudioProjectV1, nkaDir: string): AudioProjectV2 {
+  const tracks: TimelineTrack[] = [];
+  if (v1.audioSource) {
+    // Resolve relative path
+    const filePath = path.isAbsolute(v1.audioSource.filePath)
+      ? v1.audioSource.filePath
+      : path.resolve(nkaDir, v1.audioSource.filePath);
+
+    tracks.push({
+      id: generateId(),
+      type: 'audio',
+      name: path.basename(filePath, path.extname(filePath)),
+      elements: [
+        {
+          id: generateId(),
+          type: 'audio',
+          name: path.basename(filePath),
+          src: filePath,
+          duration: v1.audioSource.duration,
+          startTime: 0,
+          trimStart: 0,
+          trimEnd: 0,
+          transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+          opacity: 1,
+          blendMode: 'normal',
+          effects: [],
+          muted: false,
+          hidden: false,
+          locked: false,
+          speed: 1,
+        } as any, // AudioElement extends BaseTimelineElement
+      ],
+      muted: false,
+      locked: false,
+      hidden: false,
+      isMain: true,
+    });
+  }
+
+  return {
+    version: '2.0',
+    name: v1.name,
+    sampleRate: v1.audioSource?.sampleRate ?? 48000,
+    channels: v1.audioSource?.channels ?? 2,
+    tracks,
+    masterEffectsChain: v1.effectsChain ?? [],
+    markers: v1.markers ?? [],
+  };
 }
 
 // =============================================================================
@@ -66,10 +143,10 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
   private readonly _disposables: vscode.Disposable[] = [];
   private _audioService: AudioService | null = null;
 
-  // In-memory project data cache for incremental operation sync
+  // In-memory project data cache for incremental operation sync (v2 format)
   private readonly _projectDataCache = new Map<string, AudioProjectData>();
 
-  // Save/revert coordination: webview sends project data back via postMessage
+  // Save coordination: no longer needs webview round-trip, uses cache directly
   private _pendingSaveResolve: ((data: AudioProject) => void) | null = null;
 
   private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
@@ -106,38 +183,25 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
   }
 
   async saveCustomDocument(document: vscode.CustomDocument): Promise<void> {
-    const panel = this._activePanels.get(document.uri.toString());
-    if (!panel) return;
+    const docKey = document.uri.toString();
+    const cached = this._projectDataCache.get(docKey);
+    if (!cached) return;
 
-    const webviewData = await this.requestProjectData(panel, undefined);
-    if (webviewData) {
-      // Merge webview state (effectsChain, markers) into existing project on disk
-      const raw = await vscode.workspace.fs.readFile(document.uri);
-      const project = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
-      project.effectsChain = webviewData.effectsChain ?? project.effectsChain;
-      project.markers = webviewData.markers ?? project.markers;
-      const content = JSON.stringify(project, null, 2);
-      await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'));
-    }
+    // Serialize cache directly to .nka (v2 format)
+    const content = JSON.stringify(cached, null, 2);
+    await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'));
   }
 
   async saveCustomDocumentAs(
     document: vscode.CustomDocument,
     destination: vscode.Uri,
   ): Promise<void> {
-    const panel = this._activePanels.get(document.uri.toString());
-    if (!panel) return;
+    const docKey = document.uri.toString();
+    const cached = this._projectDataCache.get(docKey);
+    if (!cached) return;
 
-    const webviewData = await this.requestProjectData(panel, destination.fsPath);
-    if (webviewData) {
-      // Read current project, merge webview state, write to new location
-      const raw = await vscode.workspace.fs.readFile(document.uri);
-      const project = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
-      project.effectsChain = webviewData.effectsChain ?? project.effectsChain;
-      project.markers = webviewData.markers ?? project.markers;
-      const content = JSON.stringify(project, null, 2);
-      await vscode.workspace.fs.writeFile(destination, Buffer.from(content, 'utf-8'));
-    }
+    const content = JSON.stringify(cached, null, 2);
+    await vscode.workspace.fs.writeFile(destination, Buffer.from(content, 'utf-8'));
   }
 
   async revertCustomDocument(document: vscode.CustomDocument): Promise<void> {
@@ -232,7 +296,17 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
             const cached = this._projectDataCache.get(docKey);
             if (cached) {
               try {
-                const newData = applyAudioOperation(cached, operation as any);
+                const opType = operation.type;
+                let newData: AudioProjectData;
+                if (opType.startsWith('audio.')) {
+                  newData = applyAudioOperation(cached, operation as AudioOperation);
+                } else {
+                  // track.* / element.* operations — use generic applyOperation
+                  newData = applyOperation(
+                    cached,
+                    operation as TrackOperation | ElementOperation | AudioOperation,
+                  );
+                }
                 this._projectDataCache.set(docKey, newData);
               } catch (e) {
                 logger.error('Incremental sync failed, will resync on save', e);
@@ -676,102 +750,97 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
   private async initializeWebview(panel: vscode.WebviewPanel, nkaUri: vscode.Uri): Promise<void> {
     try {
       const raw = await vscode.workspace.fs.readFile(nkaUri);
-      const project = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
-
-      // Empty project (no audio source yet) — send minimal init
-      if (!project.audioSource) {
-        await panel.webview.postMessage({
-          type: 'project:init',
-          payload: {
-            filePath: null,
-            fileName: project.name,
-            audioInfo: null,
-            project: {
-              effectsChain: project.effectsChain,
-              markers: project.markers,
-            },
-          },
-        });
-        return;
-      }
-
-      // Resolve audio source path (relative to .nka file)
+      const parsed = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
       const nkaDir = path.dirname(nkaUri.fsPath);
-      const audioPath = path.isAbsolute(project.audioSource.filePath)
-        ? project.audioSource.filePath
-        : path.resolve(nkaDir, project.audioSource.filePath);
 
-      if (!this._audioService?.isAvailable) {
-        logger.error('AudioService not available for project init');
-        return;
+      // Migrate v1 → v2 if needed
+      const projectData: AudioProjectData = isV1Project(parsed)
+        ? migrateV1toV2(parsed, nkaDir)
+        : parsed;
+
+      // Cache project data for incremental sync
+      const docKey = nkaUri.toString();
+      this._projectDataCache.set(docKey, projectData);
+
+      // Collect waveforms for all audio elements across tracks
+      const waveforms: Record<string, WaveformData> = {};
+
+      if (this._audioService?.isAvailable) {
+        for (const track of projectData.tracks) {
+          for (const element of track.elements) {
+            if (element.type === 'audio' && 'src' in element) {
+              const src = (element as any).src as string;
+              try {
+                const waveform = await this._audioService.getWaveform(src);
+                if (waveform) {
+                  waveforms[element.id] = waveform;
+                }
+              } catch (error) {
+                logger.error(`Waveform generation failed for ${src}:`, error);
+              }
+            }
+          }
+        }
       }
 
-      // Probe audio metadata
-      const audioInfo = await this._audioService.probeAudio(audioPath);
-
-      // Send project:init
+      // Send project:init v2
       await panel.webview.postMessage({
         type: 'project:init',
         payload: {
-          filePath: audioPath,
-          fileName: path.basename(audioPath),
-          audioInfo,
-          project: {
-            effectsChain: project.effectsChain,
-            markers: project.markers,
-          },
+          projectData,
+          waveforms,
         },
       });
-
-      // Generate and send waveform
-      try {
-        const waveform = await this._audioService.getWaveform(audioPath);
-        if (waveform) {
-          await panel.webview.postMessage({
-            type: 'editor:waveform',
-            payload: waveform,
-          });
-        }
-      } catch (error) {
-        logger.error('Waveform generation failed:', error);
-      }
     } catch (error) {
       logger.error('Failed to initialize project:', error);
     }
   }
 
-  /** Request project data from webview for saving */
-  private async requestProjectData(
-    panel: vscode.WebviewPanel,
-    savePath: string | undefined,
-  ): Promise<AudioProject | null> {
-    return new Promise<AudioProject | null>((resolve) => {
-      this._pendingSaveResolve = resolve;
-
-      const msgType = savePath ? 'saveAs' : 'save';
-      const payload = savePath ? { type: msgType, path: savePath } : { type: msgType };
-      panel.webview.postMessage(payload);
-
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        if (this._pendingSaveResolve === resolve) {
-          this._pendingSaveResolve = null;
-          resolve(null);
+  /**
+   * Resolve the first audio source path from cache (for playback/analysis commands).
+   * In multi-track mode, returns the first audio element's src.
+   */
+  private resolveAudioPathFromCache(nkaUri: vscode.Uri): string | null {
+    const cached = this._projectDataCache.get(nkaUri.toString());
+    if (!cached) return null;
+    for (const track of cached.tracks) {
+      for (const element of track.elements) {
+        if (element.type === 'audio' && 'src' in element) {
+          return (element as any).src as string;
         }
-      }, 5000);
-    });
+      }
+    }
+    return null;
   }
 
-  /** Resolve audio file path from .nka URI */
+  /** @deprecated Use resolveAudioPathFromCache instead */
   private async resolveAudioPath(nkaUri: vscode.Uri): Promise<string | null> {
+    // Try cache first
+    const fromCache = this.resolveAudioPathFromCache(nkaUri);
+    if (fromCache) return fromCache;
+
+    // Fallback: read from disk (handles case where cache not yet populated)
     try {
       const raw = await vscode.workspace.fs.readFile(nkaUri);
-      const project = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
-      if (!project.audioSource) return null;
+      const parsed = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
       const nkaDir = path.dirname(nkaUri.fsPath);
-      return path.isAbsolute(project.audioSource.filePath)
-        ? project.audioSource.filePath
-        : path.resolve(nkaDir, project.audioSource.filePath);
+
+      if (isV1Project(parsed)) {
+        if (!parsed.audioSource) return null;
+        return path.isAbsolute(parsed.audioSource.filePath)
+          ? parsed.audioSource.filePath
+          : path.resolve(nkaDir, parsed.audioSource.filePath);
+      }
+
+      // v2: find first audio element
+      for (const track of parsed.tracks) {
+        for (const element of track.elements) {
+          if (element.type === 'audio' && 'src' in element) {
+            return (element as any).src as string;
+          }
+        }
+      }
+      return null;
     } catch {
       return null;
     }

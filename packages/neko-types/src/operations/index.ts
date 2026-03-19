@@ -8,7 +8,7 @@ export { applyOperation } from './apply';
 export { invertOperation } from './invert';
 export { applyCanvasOperation } from './apply-canvas';
 export { applySketchOperation, type SketchDocumentData } from './apply-sketch';
-export { applyAudioOperation, type AudioProjectData } from './apply-audio';
+export { applyAudioOperation, type AudioProjectData, type AudioProjectDataV1 } from './apply-audio';
 export {
   findTrack,
   findElement,
@@ -21,4 +21,5 @@ export {
   pickKeys,
   arrayMove,
   createMeta,
+  type HasTracks,
 } from './helpers';
