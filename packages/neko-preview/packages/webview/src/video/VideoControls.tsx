@@ -216,12 +216,7 @@ export function VideoControls({
 
           {/* Connection indicator */}
           {!isConnected && (
-            <span
-              style={{ fontSize: 10, color: 'var(--vscode-errorForeground, #f44)' }}
-              title={t('preview.video.disconnected')}
-            >
-              &#x25CF;
-            </span>
+            <span className="controls__connection-dot" title={t('preview.video.disconnected')} />
           )}
         </div>
       </div>

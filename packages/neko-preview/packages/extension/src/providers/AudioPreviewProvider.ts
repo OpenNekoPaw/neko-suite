@@ -119,6 +119,9 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
       }
     };
 
+    // Track whether the stream has reached EOF (WebSocket closed by engine)
+    let streamEof = false;
+
     // Handle messages from webview — registered early so no messages are lost
     const messageDisposable = webviewPanel.webview.onDidReceiveMessage(
       async (msg: Record<string, unknown>) => {
@@ -168,52 +171,60 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
           }
 
           case 'preview:play': {
-            try {
-              // Stop previous stream for this panel
-              await stopPanelStream();
-
-              const result = await this._previewService?.dispatch({
-                group: 'audios',
-                action: 'stream',
-                options: {
-                  source: filePath,
-                  sessionId: `audio-preview-${Date.now()}`,
-                },
-              });
-
-              if (result?.status === 'ok') {
-                const data = result.data as Record<string, unknown> | undefined;
-                const streamId = data?.streamId as string;
-                activeAudioStreamId = streamId;
-                const streamUrl = this._previewService?.getStreamWebSocketUrl(streamId);
-
-                const startTime = (msg.startTime as number) ?? 0;
-                if (startTime > 0 && streamId) {
-                  await this._previewService?.dispatch({
-                    group: 'audios',
-                    action: 'seek',
-                    options: { streamId, time: startTime },
-                  });
-                }
-
-                await webviewPanel.webview.postMessage({
-                  type: 'preview:streamReady',
-                  payload: {
-                    streamId,
-                    streamUrl,
-                    audioStreamId: streamId,
-                    audioStreamUrl: streamUrl,
+            streamEof = false;
+            if (activeAudioStreamId) {
+              // Resume existing stream
+              const startTime = (msg.startTime as number) ?? 0;
+              if (startTime > 0) {
+                await this._previewService?.seekStreams(null, activeAudioStreamId, startTime);
+              }
+              await this._previewService?.resumeStreams(null, activeAudioStreamId);
+            } else {
+              // First play or stream lost — create new stream
+              try {
+                const result = await this._previewService?.dispatch({
+                  group: 'audios',
+                  action: 'stream',
+                  options: {
+                    source: filePath,
+                    sessionId: `audio-preview-${Date.now()}`,
                   },
                 });
+
+                if (result?.status === 'ok') {
+                  const data = result.data as Record<string, unknown> | undefined;
+                  const streamId = data?.streamId as string;
+                  activeAudioStreamId = streamId;
+                  const streamUrl = this._previewService?.getStreamWebSocketUrl(streamId);
+
+                  const startTime = (msg.startTime as number) ?? 0;
+                  if (startTime > 0 && streamId) {
+                    await this._previewService?.seekStreams(null, streamId, startTime);
+                  }
+
+                  await webviewPanel.webview.postMessage({
+                    type: 'preview:streamReady',
+                    payload: {
+                      streamId,
+                      streamUrl,
+                      audioStreamId: streamId,
+                      audioStreamUrl: streamUrl,
+                    },
+                  });
+                }
+              } catch (error) {
+                logger.error('Failed to create audio stream:', error);
               }
-            } catch (error) {
-              logger.error('Failed to start audio stream:', error);
             }
             break;
           }
 
           case 'preview:pause':
             await this._previewService?.pauseStreams(null, activeAudioStreamId);
+            break;
+
+          case 'preview:eof':
+            streamEof = true;
             break;
 
           case 'preview:resume':
@@ -234,6 +245,18 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
             const time = msg.time as number;
             if (typeof time === 'number') {
               await this._previewService?.seekStreams(null, activeAudioStreamId, time);
+              // Only reconnect WebSocket if EOF closed it
+              if (streamEof && activeAudioStreamId) {
+                streamEof = false;
+                const streamUrl = this._previewService?.getStreamWebSocketUrl(activeAudioStreamId);
+                await webviewPanel.webview.postMessage({
+                  type: 'preview:streamReconnect',
+                  payload: {
+                    streamId: activeAudioStreamId,
+                    audioStreamUrl: streamUrl,
+                  },
+                });
+              }
             }
             break;
           }

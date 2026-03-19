@@ -4,6 +4,7 @@
 //! Implementations can be swapped for testing or different backends.
 
 mod audio;
+pub mod audio_mixdown;
 pub mod camera;
 mod effects;
 mod export;

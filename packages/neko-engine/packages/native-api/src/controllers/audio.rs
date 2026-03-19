@@ -117,6 +117,20 @@ struct DetectSilenceOptions {
     min_duration: Option<f64>,
 }
 
+/// Options for audios:mixdown
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct MixdownRequestOptions {
+    /// Track data as JSON array of MixdownTrack
+    tracks: Option<Value>,
+    /// Sample rate (default: 48000)
+    sample_rate: Option<u32>,
+    /// Channels (default: 2)
+    channels: Option<u16>,
+    /// Timeline time to mix at (default: 0.0)
+    time: Option<f64>,
+}
+
 impl Controller for AudioController {
     async fn handle(
         &self,
@@ -410,6 +424,40 @@ impl Controller for AudioController {
                 let response = serde_json::to_value(&result)?;
                 Ok(ActionResponse::ok("", response))
             }
+            "mixdown" => {
+                let opts: MixdownRequestOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let tracks = opts.tracks.ok_or_else(|| {
+                    ApiError::InvalidRequest("tracks required for audios:mixdown".to_string())
+                })?;
+                let sample_rate = opts.sample_rate.unwrap_or(48000);
+                let channels = opts.channels.unwrap_or(2);
+                let time = opts.time.unwrap_or(0.0);
+
+                use neko_native_core::services::audio_mixdown::{AudioMixdown, MixdownTrack};
+                use base64::Engine;
+
+                let mixdown_tracks: Vec<MixdownTrack> = serde_json::from_value(tracks)
+                    .map_err(|e| ApiError::InvalidRequest(format!("invalid tracks: {}", e)))?;
+
+                let mut mixer = AudioMixdown::new(mixdown_tracks, sample_rate, channels);
+                mixer.initialize()?;
+
+                let buf = mixer.mix_buffer(time)?;
+                let s16_bytes = AudioMixdown::to_s16_bytes(&buf);
+                mixer.close();
+
+                let response = serde_json::json!({
+                    "sampleRate": sample_rate,
+                    "channels": channels,
+                    "samples": buf.samples,
+                    "timestamp": buf.timestamp,
+                    "dataBase64": base64::engine::general_purpose::STANDARD.encode(&s16_bytes),
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "audios".to_string(),
                 action: action.to_string(),
@@ -531,6 +579,7 @@ mod tests {
         assert!(actions.contains(&"list_input_devices"));
         assert!(actions.contains(&"record_start"));
         assert!(actions.contains(&"record_stop"));
-        assert_eq!(actions.len(), 16);
+        assert!(actions.contains(&"mixdown"));
+        assert_eq!(actions.len(), 17);
     }
 }

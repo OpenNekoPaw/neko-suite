@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use crate::animation::{Easing, EasingType};
-use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
+use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat, SoftLimiter};
 use crate::domain::{ElementType, Timeline};
 use crate::error::Result;
 
@@ -410,76 +410,5 @@ impl AudioMixer {
 impl Drop for AudioMixer {
     fn drop(&mut self) {
         self.close();
-    }
-}
-
-/// Soft limiter to prevent clipping with smooth gain reduction
-struct SoftLimiter {
-    threshold: f32,     // Limiting threshold (default 0.95)
-    knee_width: f32,    // Soft knee width (default 0.1)
-    release_coeff: f32, // Release coefficient
-    envelope: f32,      // Envelope follower state
-}
-
-/// Minimum envelope value to avoid extreme gain when dividing by envelope.
-/// At threshold=0.95, max gain = 0.95 / 0.01 = 95x which is safe.
-const MIN_ENVELOPE: f32 = 0.01;
-
-impl SoftLimiter {
-    fn new(threshold: f32, release_ms: f32, sample_rate: u32) -> Self {
-        let release_samples = release_ms * 0.001 * sample_rate as f32;
-        let release_coeff = if release_samples > 0.0 {
-            (-2.2 / release_samples).exp()
-        } else {
-            0.0
-        };
-        Self {
-            threshold,
-            knee_width: 0.1,
-            release_coeff,
-            envelope: MIN_ENVELOPE,
-        }
-    }
-
-    fn process(&mut self, sample: f32) -> f32 {
-        // Guard against NaN/Inf input propagating through the limiter
-        if !sample.is_finite() {
-            return 0.0;
-        }
-
-        let abs_sample = sample.abs();
-
-        // Peak envelope follower (never drops below MIN_ENVELOPE)
-        if abs_sample > self.envelope {
-            self.envelope = abs_sample;
-        } else {
-            self.envelope = (self.release_coeff * self.envelope
-                + (1.0 - self.release_coeff) * abs_sample)
-                .max(MIN_ENVELOPE);
-        }
-
-        // Soft knee compression
-        let over = self.envelope - self.threshold;
-        let out = if over <= -self.knee_width {
-            // Below knee: no compression
-            sample
-        } else if over >= self.knee_width {
-            // Above knee: full compression
-            sample * (self.threshold / self.envelope)
-        } else {
-            // In knee: smooth transition
-            let knee_factor = (over + self.knee_width) / (2.0 * self.knee_width);
-            let gain = 1.0 - knee_factor * (1.0 - self.threshold / self.envelope);
-            sample * gain
-        };
-
-        // Final safety: clamp output to valid range
-        out.clamp(-1.0, 1.0)
-    }
-
-    fn process_buffer(&mut self, buffer: &mut [f32]) {
-        for sample in buffer.iter_mut() {
-            *sample = self.process(*sample);
-        }
     }
 }

@@ -116,6 +116,7 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
     // Per-panel stream state (independent of other panels)
     let activeVideoStreamId: string | null = null;
     let activeAudioStreamId: string | null = null;
+    let streamEof = false;
 
     const stopPanelStreams = async () => {
       if (activeVideoStreamId || activeAudioStreamId) {
@@ -147,39 +148,58 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
           }
 
           case 'preview:play': {
-            const mediaInfo = await mediaInfoPromise;
-            if (!mediaInfo) return;
-            // Stop previous streams for this panel
-            await stopPanelStreams();
-
-            const startTime = (msg.startTime as number) ?? 0;
-            const speed = (msg.speed as number) ?? 1.0;
-            const result = await this._previewService?.startVideoPlayback(
-              filePath,
-              mediaInfo,
-              startTime,
-              speed,
-            );
-            if (result?.videoStreamId) {
-              activeVideoStreamId = result.videoStreamId;
-              activeAudioStreamId = result.audioStreamId;
-
-              const streamUrl = this._previewService?.getStreamWebSocketUrl(result.videoStreamId);
-              let audioStreamUrl: string | null = null;
-              if (result.audioStreamId) {
-                audioStreamUrl =
-                  this._previewService?.getStreamWebSocketUrl(result.audioStreamId) ?? null;
+            streamEof = false;
+            if (activeVideoStreamId) {
+              // Resume existing streams
+              const startTime = (msg.startTime as number) ?? 0;
+              const speed = (msg.speed as number) ?? 1.0;
+              if (startTime > 0) {
+                await this._previewService?.seekStreams(
+                  activeVideoStreamId,
+                  activeAudioStreamId,
+                  startTime,
+                );
               }
-              if (streamUrl) {
-                await webviewPanel.webview.postMessage({
-                  type: 'preview:streamReady',
-                  payload: {
-                    streamId: result.videoStreamId,
-                    streamUrl,
-                    audioStreamId: result.audioStreamId,
-                    audioStreamUrl,
-                  },
-                });
+              await this._previewService?.setStreamSpeed(
+                activeVideoStreamId,
+                activeAudioStreamId,
+                speed,
+              );
+              await this._previewService?.resumeStreams(activeVideoStreamId, activeAudioStreamId);
+            } else {
+              // First play or streams lost — create new
+              const mediaInfo = await mediaInfoPromise;
+              if (!mediaInfo) return;
+
+              const startTime = (msg.startTime as number) ?? 0;
+              const speed = (msg.speed as number) ?? 1.0;
+              const result = await this._previewService?.startVideoPlayback(
+                filePath,
+                mediaInfo,
+                startTime,
+                speed,
+              );
+              if (result?.videoStreamId) {
+                activeVideoStreamId = result.videoStreamId;
+                activeAudioStreamId = result.audioStreamId;
+
+                const streamUrl = this._previewService?.getStreamWebSocketUrl(result.videoStreamId);
+                let audioStreamUrl: string | null = null;
+                if (result.audioStreamId) {
+                  audioStreamUrl =
+                    this._previewService?.getStreamWebSocketUrl(result.audioStreamId) ?? null;
+                }
+                if (streamUrl) {
+                  await webviewPanel.webview.postMessage({
+                    type: 'preview:streamReady',
+                    payload: {
+                      streamId: result.videoStreamId,
+                      streamUrl,
+                      audioStreamId: result.audioStreamId,
+                      audioStreamUrl,
+                    },
+                  });
+                }
               }
             }
             break;
@@ -187,6 +207,10 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
 
           case 'preview:pause':
             await this._previewService?.pauseStreams(activeVideoStreamId, activeAudioStreamId);
+            break;
+
+          case 'preview:eof':
+            streamEof = true;
             break;
 
           case 'preview:resume':
@@ -205,6 +229,25 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
                 activeAudioStreamId,
                 time,
               );
+              // Only reconnect WebSockets if EOF closed them
+              if (streamEof && activeVideoStreamId) {
+                streamEof = false;
+                const streamUrl = this._previewService?.getStreamWebSocketUrl(activeVideoStreamId);
+                let audioStreamUrl: string | null = null;
+                if (activeAudioStreamId) {
+                  audioStreamUrl =
+                    this._previewService?.getStreamWebSocketUrl(activeAudioStreamId) ?? null;
+                }
+                await webviewPanel.webview.postMessage({
+                  type: 'preview:streamReconnect',
+                  payload: {
+                    streamId: activeVideoStreamId,
+                    streamUrl,
+                    audioStreamId: activeAudioStreamId,
+                    audioStreamUrl,
+                  },
+                });
+              }
             }
             break;
           }

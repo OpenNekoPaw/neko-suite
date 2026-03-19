@@ -454,7 +454,6 @@ body {
 
 .audio-player .audio-player__progress {
 	width: 100%;
-	max-width: 400px;
 	padding: 12px 0 4px;
 	flex-shrink: 0;
 }
@@ -569,7 +568,6 @@ body {
 	align-items: center;
 	justify-content: space-between;
 	width: 100%;
-	max-width: 400px;
 	padding: 8px 0 0;
 	flex-shrink: 0;
 	gap: 12px;
@@ -711,6 +709,12 @@ body {
 }
 
 .video-player__controls-overlay .controls__btn {
+	color: rgba(255, 255, 255, 0.85);
+	border-radius: 50%;
+}
+
+.video-player__controls-overlay .controls__btn:hover {
+	background: rgba(255, 255, 255, 0.15);
 	color: #fff;
 }
 
@@ -719,20 +723,31 @@ body {
 }
 
 .video-player__controls-overlay .controls__speed {
+	color: rgba(255, 255, 255, 0.85);
+	border: none;
+	background: rgba(255, 255, 255, 0.1);
+	border-radius: 6px;
+	padding: 4px 8px;
+	font-weight: 600;
+}
+
+.video-player__controls-overlay .controls__speed:hover {
+	background: rgba(255, 255, 255, 0.2);
 	color: #fff;
-	border-color: rgba(255, 255, 255, 0.3);
 }
 
 .video-player__controls-overlay .controls__progress-track {
 	background: rgba(255, 255, 255, 0.25);
+	height: 6px;
+	border-radius: 3px;
 }
 
 .video-player__controls-overlay .controls__progress-fill {
-	background: #ff0000;
+	background: #fff;
 }
 
 .video-player__controls-overlay .controls__progress-thumb {
-	background: #ff0000;
+	background: #fff;
 }
 
 .video-player__controls-overlay .controls__btn--active {
@@ -750,6 +765,16 @@ body {
 
 .video-player__controls-overlay .controls__volume-slider::-webkit-slider-thumb {
 	background: #fff;
+}
+
+/* Connection status indicator */
+.controls__connection-dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--vscode-errorForeground, #f44);
+	flex-shrink: 0;
 }
 
 .controls--hidden {
@@ -783,11 +808,11 @@ body {
 	width: 32px;
 	height: 32px;
 	border: none;
-	border-radius: 4px;
+	border-radius: 6px;
 	background: transparent;
 	color: var(--vscode-editor-foreground, #ccc);
 	cursor: pointer;
-	transition: background 0.1s;
+	transition: background 0.15s, color 0.15s;
 }
 
 .controls__btn:hover {
@@ -814,8 +839,9 @@ body {
 }
 
 .controls__btn--play {
-	width: 36px;
-	height: 36px;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
 }
 
 .controls__btn--play svg {
@@ -928,18 +954,21 @@ body {
 
 .controls__speed {
 	font-size: 11px;
-	padding: 2px 6px;
-	border-radius: 3px;
-	border: 1px solid var(--vscode-panel-border, #333);
+	font-weight: 600;
+	padding: 4px 8px;
+	border-radius: 6px;
+	border: none;
 	background: transparent;
-	color: var(--vscode-editor-foreground, #ccc);
+	color: var(--vscode-descriptionForeground, #999);
 	cursor: pointer;
 	min-width: 40px;
 	text-align: center;
+	transition: background 0.15s, color 0.15s;
 }
 
 .controls__speed:hover {
 	background: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.1));
+	color: var(--vscode-editor-foreground, #ccc);
 }
 
 /* ==========================================================================

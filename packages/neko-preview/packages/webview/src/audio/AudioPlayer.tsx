@@ -20,6 +20,7 @@ import type {
   PreviewInitMessage,
   PreviewLyricsMessage,
   PreviewStreamReadyMessage,
+  PreviewStreamReconnectMessage,
   PreviewWaveformMessage,
 } from '../shared/types';
 import { getLogger } from '../utils/logger';
@@ -75,12 +76,9 @@ export function AudioPlayer() {
       setIsPlaying(false);
       const client = audioClientRef.current;
       if (client) {
-        client.fadeOut().then(() => {
-          client.dispose();
-        });
-        audioClientRef.current = null;
+        client.pause();
       }
-      postMessage({ type: 'preview:stop' });
+      postMessage({ type: 'preview:eof' });
       postMessage({
         type: 'preview:statusUpdate',
         playbackState: 'stopped',
@@ -116,6 +114,17 @@ export function AudioPlayer() {
     };
   }, [isPlaying, updatePlaybackTime]);
 
+  // Cleanup on unmount — dispose audio client
+  useEffect(() => {
+    return () => {
+      const client = audioClientRef.current;
+      if (client) {
+        client.dispose();
+        audioClientRef.current = null;
+      }
+    };
+  }, []);
+
   // =========================================================================
   // Extension message handlers
   // =========================================================================
@@ -145,9 +154,33 @@ export function AudioPlayer() {
         const streamMsg = msg as PreviewStreamReadyMessage;
         const wsUrl = streamMsg.payload.audioStreamUrl ?? streamMsg.payload.streamUrl;
         logger.info('Audio stream ready', wsUrl);
-        const client = new AudioStreamClient({ websocketUrl: wsUrl });
+        // Dispose previous client if any (e.g. stream recreation)
+        const prev = audioClientRef.current;
+        if (prev) {
+          prev.dispose();
+        }
+        const client = new AudioStreamClient({ websocketUrl: wsUrl, volume });
         audioClientRef.current = client;
-        client.setVolume(volume);
+        client.connect().catch((err) => {
+          logger.error('AudioStreamClient connect failed', err);
+        });
+        break;
+      }
+      case 'preview:streamReconnect': {
+        // EOF closed the WebSocket — reconnect to the same streamId
+        const reconnectMsg = msg as PreviewStreamReconnectMessage;
+        const wsUrl = reconnectMsg.payload.audioStreamUrl;
+        if (!wsUrl) break;
+        logger.info('Audio stream reconnect', wsUrl);
+        const prev = audioClientRef.current;
+        if (prev) {
+          prev.dispose();
+        }
+        const client = new AudioStreamClient({ websocketUrl: wsUrl, volume });
+        audioClientRef.current = client;
+        client.connect().catch((err) => {
+          logger.error('AudioStreamClient reconnect failed', err);
+        });
         break;
       }
       case 'preview:lyrics': {
@@ -168,16 +201,19 @@ export function AudioPlayer() {
 
   const handleTogglePlay = useCallback(() => {
     if (isPlaying) {
+      // Pause — keep client alive
       postMessage({ type: 'preview:pause' });
       setIsPlaying(false);
       const client = audioClientRef.current;
       if (client) {
-        client.fadeOut().then(() => {
-          client.dispose();
-        });
-        audioClientRef.current = null;
+        client.pause();
       }
     } else {
+      // Resume — reuse existing client
+      const client = audioClientRef.current;
+      if (client) {
+        client.resume();
+      }
       postMessage({ type: 'preview:play', startTime: currentTime });
       playStartTimeRef.current = currentTime;
       playWallTimeRef.current = performance.now();
@@ -190,6 +226,11 @@ export function AudioPlayer() {
       setCurrentTime(time);
       playStartTimeRef.current = time;
       playWallTimeRef.current = performance.now();
+      // Reset audio clock so post-seek packets re-establish timing
+      const client = audioClientRef.current;
+      if (client) {
+        client.resetClock();
+      }
       postMessage({ type: 'preview:seek', time });
     },
     [postMessage],

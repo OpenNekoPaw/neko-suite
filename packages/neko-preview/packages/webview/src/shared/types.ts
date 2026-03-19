@@ -71,9 +71,20 @@ export interface PreviewLyricsMessage {
   };
 }
 
+export interface PreviewStreamReconnectMessage {
+  type: 'preview:streamReconnect';
+  payload: {
+    streamId: string;
+    audioStreamUrl?: string | null;
+    streamUrl?: string | null;
+    audioStreamId?: string | null;
+  };
+}
+
 export type ExtensionMessage =
   | PreviewInitMessage
   | PreviewStreamReadyMessage
+  | PreviewStreamReconnectMessage
   | PreviewFrameDataMessage
   | PreviewWaveformMessage
   | PreviewLyricsMessage;
@@ -125,6 +136,10 @@ export interface StatusUpdateMessage {
   currentTime: number;
 }
 
+export interface EofMessage {
+  type: 'preview:eof';
+}
+
 export type WebviewMessage =
   | ReadyMessage
   | PlayMessage
@@ -134,4 +149,5 @@ export type WebviewMessage =
   | SeekMessage
   | SpeedMessage
   | CaptureFrameMessage
-  | StatusUpdateMessage;
+  | StatusUpdateMessage
+  | EofMessage;

@@ -223,6 +223,21 @@ export class AudioStreamClient {
 
     // --- Prebuffer phase: accumulate data before starting playback ---
     if (this.isPrebuffering) {
+      // Detect PTS discontinuity during prebuffer (stale pre-seek packets
+      // followed by post-seek packets). If PTS jumps significantly, discard
+      // the stale data and restart prebuffer with the new position.
+      if (this.prebufferQueue.length > 0) {
+        const lastPts = this.prebufferQueue[this.prebufferQueue.length - 1]!.ptsSeconds;
+        const ptsDelta = Math.abs(ptsSeconds - lastPts);
+        if (ptsDelta > 0.5) {
+          logger.info(
+            `PTS discontinuity in prebuffer: delta=${ptsDelta.toFixed(3)}s — flushing stale packets`,
+          );
+          this.prebufferQueue = [];
+          this.prebufferAccum = 0;
+        }
+      }
+
       this.prebufferQueue.push({ audioBuffer, ptsSeconds });
       this.prebufferAccum += audioBuffer.duration;
 
@@ -385,6 +400,11 @@ export class AudioStreamClient {
     if (!this.isPaused) return;
     this.isPaused = false;
 
+    // Resume AudioContext if suspended (browser autoplay policy)
+    if (this.audioCtx?.state === 'suspended') {
+      this.audioCtx.resume().catch(() => {});
+    }
+
     if (this.gainNode && this.audioCtx) {
       this.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
       this.gainNode.gain.setValueAtTime(this.config.volume, this.audioCtx.currentTime);
@@ -466,15 +486,16 @@ export class AudioStreamClient {
       }
 
       // Create a fresh gain node for post-seek audio
+      // Start muted — prebuffer completion will fade-in, or resume() will restore volume
       this.gainNode = this.audioCtx.createGain();
-      this.gainNode.gain.value = 0; // start muted; fade-in happens on prebuffer complete
+      this.gainNode.gain.value = 0;
       this.gainNode.connect(this.audioCtx.destination);
     }
 
     this.ptsOffset = null;
     this.nextPlayTime = 0;
     this.lastCalibrationTime = 0;
-    this.isPaused = false;
+    // Preserve pause state — don't unpause on seek
 
     // Reset prebuffer state — next prebuffer completion will fade-in
     this.isPrebuffering = true;

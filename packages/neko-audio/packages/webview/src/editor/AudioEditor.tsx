@@ -8,6 +8,7 @@
 import { useCallback, useRef } from 'react';
 import { useExtensionMessage, useVscodeReady, postMessage } from '../shared/useVscodeMessage';
 import { useAudioStore } from '../stores/audioStore';
+import { useAudioProjectStore } from '../stores/audioProjectStore';
 import { useAudioPlayback } from '../hooks/useAudioPlayback';
 import { useEffectsChain } from '../hooks/useEffectsChain';
 import { useDragDrop } from '../hooks/useDragDrop';
@@ -19,6 +20,7 @@ import { SidePanel } from '../components/SidePanel';
 import { SpectrumAnalyzer } from '../components/SpectrumAnalyzer';
 import { LoudnessPanel } from '../components/LoudnessPanel';
 import { EmptyProject } from '../components/EmptyProject';
+import { AudioTimeline } from '../components/Timeline/AudioTimeline';
 import { Toast } from '../components/Toast';
 import type { ExtensionMessage } from '../shared/types';
 import { t } from '../i18n';
@@ -58,6 +60,10 @@ export function AudioEditor() {
   const markersRef = useRef(useAudioStore.getState().markers);
   markersRef.current = useAudioStore.getState().markers;
 
+  // v2 multi-track project state (must be before any early returns)
+  const isV2 = useAudioProjectStore((s) => s.audioProjectData !== null);
+  const v2HasTracks = useAudioProjectStore((s) => (s.audioProjectData?.tracks.length ?? 0) > 0);
+
   // Handle messages from Extension Host
   const handleMessage = useCallback(
     (message: ExtensionMessage) => {
@@ -78,7 +84,6 @@ export function AudioEditor() {
             setProjectMode(true);
             setFileInfo(null, projectData.name, null);
             // Initialize project store with v2 data
-            const { useAudioProjectStore } = require('../stores/audioProjectStore');
             useAudioProjectStore.getState().initProject(projectData as any, waveforms);
             if (projectData.markers) {
               setMarkers(projectData.markers as any);
@@ -259,7 +264,7 @@ export function AudioEditor() {
   }
 
   // Empty project — no audio source yet
-  if (projectMode && !audioInfo) {
+  if (projectMode && !audioInfo && !v2HasTracks) {
     return <EmptyProject />;
   }
 
@@ -277,9 +282,15 @@ export function AudioEditor() {
         <Toolbar />
 
         <div className="audio-editor__center">
-          <EditableWaveform onSeek={seek} />
-          <SpectrumAnalyzer audioClientRef={audioClientRef} enabled={showSpectrum} />
-          <LoudnessPanel />
+          {isV2 ? (
+            <AudioTimeline />
+          ) : (
+            <>
+              <EditableWaveform onSeek={seek} />
+              <SpectrumAnalyzer audioClientRef={audioClientRef} enabled={showSpectrum} />
+              <LoudnessPanel />
+            </>
+          )}
         </div>
 
         <SidePanel />

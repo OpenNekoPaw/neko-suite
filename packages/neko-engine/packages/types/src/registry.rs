@@ -71,6 +71,7 @@ pub mod actions {
         "list_input_devices",
         "record_start",
         "record_stop",
+        "mixdown",
     ];
 
     pub const IMAGES: &[&str] = &["probe", "capture", "encode", "diff"];

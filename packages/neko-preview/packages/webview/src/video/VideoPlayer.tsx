@@ -201,11 +201,11 @@ export function VideoPlayer() {
       // Directional filter: reject frames that arrived before the seek target.
       // The backend skips pre-target frames, but a few may arrive from the
       // WebSocket buffer (in-flight before the seek was processed).
-      // Allow up to 0.5s tolerance for keyframe alignment.
+      // Allow up to 0.1s tolerance for keyframe alignment.
       const seekTarget = seekFilterRef.current;
       if (seekTarget !== null) {
         const frameSec = frame.timestamp / 1_000_000;
-        if (frameSec < seekTarget - 0.5) {
+        if (frameSec < seekTarget - 0.1) {
           frame.close();
           return;
         }
@@ -258,21 +258,12 @@ export function VideoPlayer() {
     }
 
     if (newTime >= mediaInfo.duration) {
-      // Reached end — stop stream and clean up clients
+      // Reached end — pause stream (keep clients alive for seek-back)
       setCurrentTime(mediaInfo.duration);
       setIsPlaying(false);
       schedulerRef.current?.flush();
-      clientRef.current?.dispose();
-      clientRef.current = null;
-      // Fade out audio before disposing
-      const audioClient = audioClientRef.current;
-      if (audioClient) {
-        audioClient.fadeOut().then(() => {
-          audioClient.dispose();
-        });
-        audioClientRef.current = null;
-      }
-      postMessage({ type: 'preview:stop' });
+      audioClientRef.current?.pause();
+      postMessage({ type: 'preview:eof' });
       postMessage({
         type: 'preview:statusUpdate',
         playbackState: 'stopped',
@@ -406,6 +397,56 @@ export function VideoPlayer() {
         break;
       }
 
+      case 'preview:streamReconnect': {
+        // EOF closed WebSockets — reconnect to the same streamIds
+        const { streamUrl: reconnStreamUrl, audioStreamUrl: reconnAudioUrl } = msg.payload as {
+          streamId: string;
+          streamUrl?: string;
+          audioStreamId?: string;
+          audioStreamUrl?: string;
+        };
+        logger.info(`streamReconnect: video=${reconnStreamUrl} audio=${reconnAudioUrl}`);
+
+        // Reconnect H264 client
+        if (reconnStreamUrl) {
+          clientRef.current?.dispose();
+          schedulerRef.current?.dispose();
+          schedulerRef.current = new FrameScheduler(mediaInfo?.fps || 25);
+          const info = mediaInfo;
+          const client = new H264StreamClient({
+            websocketUrl: reconnStreamUrl,
+            width: info?.width || 1920,
+            height: info?.height || 1080,
+            onFrame,
+            onConnectionChange: setIsConnected,
+            onError: (err) => {
+              logger.error('Stream reconnect error:', err);
+              setError(err.message);
+            },
+          });
+          clientRef.current = client;
+          client.connect();
+        }
+
+        // Reconnect audio client
+        if (reconnAudioUrl) {
+          audioClientRef.current?.dispose();
+          const audioClient = new AudioStreamClient({
+            websocketUrl: reconnAudioUrl,
+            volume,
+            onConnectionChange: (connected) => {
+              logger.info(`Audio stream reconnected: ${connected}`);
+            },
+            onError: (err) => {
+              logger.warn('Audio stream reconnect error:', err);
+            },
+          });
+          audioClientRef.current = audioClient;
+          audioClient.connect(audioCtxRef.current ?? undefined);
+        }
+        break;
+      }
+
       case 'preview:frameData': {
         const { imageDataUrl } = msg.payload;
         setPosterUrl(imageDataUrl);
@@ -462,6 +503,7 @@ export function VideoPlayer() {
 
   const handlePause = useCallback(() => {
     setIsPlaying(false);
+    schedulerRef.current?.flush();
     audioClientRef.current?.pause();
     postMessage({ type: 'preview:pause' });
     postMessage({ type: 'preview:statusUpdate', playbackState: 'paused', currentTime });
@@ -473,9 +515,12 @@ export function VideoPlayer() {
       audioCtxRef.current.resume().catch(() => {});
     }
 
+    // Flush stale frames accumulated during pause
+    schedulerRef.current?.flush();
     setIsPlaying(true);
     playStartTimeRef.current = currentTime;
     playWallTimeRef.current = performance.now();
+    clockSourceRef.current = 'wall';
     audioClientRef.current?.resume();
     postMessage({ type: 'preview:resume' });
     postMessage({ type: 'preview:statusUpdate', playbackState: 'playing', currentTime });
@@ -485,10 +530,10 @@ export function VideoPlayer() {
     if (isPlaying) {
       handlePause();
     } else if (clientRef.current) {
-      // Stream already exists — resume instead of creating a new one
+      // Stream exists — resume
       handleResume();
     } else {
-      // No stream yet — start fresh
+      // No stream yet (lost or never created) — start fresh
       handlePlay();
     }
   }, [isPlaying, handlePlay, handlePause, handleResume]);
