@@ -161,6 +161,8 @@ export const DEFAULT_READ_ONLY_TOOLS = [
   'GitStatus',
   'GitDiff',
   'GitLog',
+  // Neko Suite meta tools (no side effects)
+  'GetContext',
 ];
 
 /**
@@ -183,7 +185,9 @@ export const READ_ONLY_MCP_PREFIXES = [
  */
 export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
   mode: 'ask',
-  rules: {},
+  rules: {
+    allow: ['GetContext', 'ActivateSkill', 'DeactivateSkill'],
+  },
   readOnlyTools: DEFAULT_READ_ONLY_TOOLS,
   readOnlyMcpPrefixes: READ_ONLY_MCP_PREFIXES,
 };
