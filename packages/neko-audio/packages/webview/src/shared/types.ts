@@ -28,8 +28,33 @@ export interface WaveformData {
 }
 
 // =============================================================================
+// Audio Project Data (v2, mirrors @neko/shared AudioProjectData)
+//
+// NOTE: Webview cannot import from extension host due to sandbox isolation.
+// This is a lightweight mirror for the message protocol.
+// =============================================================================
+
+export interface AudioProjectDataMessage {
+  version: string;
+  name: string;
+  sampleRate: number;
+  channels: number;
+  tracks: unknown[]; // TimelineTrack[] — typed loosely here, store will cast
+  masterEffectsChain: unknown[];
+  markers: unknown[];
+}
+
+// =============================================================================
 // Extension → Webview Messages
 // =============================================================================
+
+export interface ProjectInitV2Message {
+  type: 'project:init';
+  payload: {
+    projectData: AudioProjectDataMessage;
+    waveforms: Record<string, WaveformData>;
+  };
+}
 
 export interface EditorInitMessage {
   type: 'editor:init';
@@ -152,6 +177,7 @@ export type ExtensionMessage =
   | EditorInputDevicesMessage
   | EditorRecordStartResultMessage
   | EditorRecordStopResultMessage
+  | ProjectInitV2Message
   | ProjectInitMessage
   | ProjectSaveRequestMessage
   | ProjectSaveAsRequestMessage

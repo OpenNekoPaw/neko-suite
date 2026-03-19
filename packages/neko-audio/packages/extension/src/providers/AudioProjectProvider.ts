@@ -32,7 +32,6 @@ import {
   applyAudioOperation,
   applyOperation,
   type AudioProjectData,
-  type AudioProjectDataV1,
   type EditOperation,
   type AudioOperation,
   type TrackOperation,
@@ -145,9 +144,6 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
 
   // In-memory project data cache for incremental operation sync (v2 format)
   private readonly _projectDataCache = new Map<string, AudioProjectData>();
-
-  // Save coordination: no longer needs webview round-trip, uses cache directly
-  private _pendingSaveResolve: ((data: AudioProject) => void) | null = null;
 
   private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
     vscode.CustomDocumentEditEvent<vscode.CustomDocument>
@@ -280,12 +276,7 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
             break;
 
           case 'project:saveData': {
-            // Webview responding to save request with serialized project data
-            const data = msg.data as AudioProject;
-            if (this._pendingSaveResolve) {
-              this._pendingSaveResolve(data);
-              this._pendingSaveResolve = null;
-            }
+            // Legacy: webview responding to save request (v1 compat, no longer primary path)
             break;
           }
 
@@ -621,14 +612,13 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
           }
 
           case 'project:importSource': {
-            // User wants to import an audio file into the empty project
+            // User wants to import an audio file — creates a new track
             const sourceUris = await vscode.window.showOpenDialog({
-              canSelectMany: false,
+              canSelectMany: true,
               filters: { 'Audio Files': ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'] },
               title: vscode.l10n.t('neko.audio.import.title'),
             });
             if (!sourceUris || sourceUris.length === 0) break;
-            const sourceUri = sourceUris[0]!;
 
             if (!this._audioService?.isAvailable) {
               logger.error('AudioService not available for import');
@@ -636,35 +626,11 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
             }
 
             try {
-              const audioInfo = await this._audioService.probeAudio(sourceUri.fsPath);
-              const nkaDir = path.dirname(document.uri.fsPath);
-              const relativePath = path.relative(nkaDir, sourceUri.fsPath);
-
-              // Read current project, update audioSource, write back
-              const raw = await vscode.workspace.fs.readFile(document.uri);
-              const project = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
-              project.audioSource = {
-                filePath: relativePath,
-                duration: audioInfo.duration,
-                sampleRate: audioInfo.sampleRate,
-                channels: audioInfo.channels,
-                format: audioInfo.format,
-              };
-              await vscode.workspace.fs.writeFile(
-                document.uri,
-                Buffer.from(JSON.stringify(project, null, 2), 'utf-8'),
-              );
-
-              // Fire dirty event
-              this._onDidChangeCustomDocument.fire({
+              await this.importAudioFiles(
+                sourceUris.map((u) => u.fsPath),
                 document,
-                undo: () => {},
-                redo: () => {},
-              });
-
-              // Re-initialize webview with full audio data
-              await this.initializeWebview(webviewPanel, document.uri);
-              logger.info(`Imported audio source: ${sourceUri.fsPath}`);
+                webviewPanel,
+              );
             } catch (error) {
               const errMsg = error instanceof Error ? error.message : String(error);
               logger.error('Import audio source failed:', error);
@@ -677,11 +643,9 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
           }
 
           case 'project:dropImportSource': {
-            // User dropped an audio file onto the editor
+            // User dropped audio file(s) onto the editor
             const droppedUris = (msg as Record<string, unknown>).uris as string[] | undefined;
             if (!droppedUris || droppedUris.length === 0) break;
-
-            const droppedUri = vscode.Uri.parse(droppedUris[0]!);
 
             if (!this._audioService?.isAvailable) {
               logger.error('AudioService not available for drop import');
@@ -689,32 +653,8 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
             }
 
             try {
-              const audioInfo = await this._audioService.probeAudio(droppedUri.fsPath);
-              const nkaDir = path.dirname(document.uri.fsPath);
-              const relativePath = path.relative(nkaDir, droppedUri.fsPath);
-
-              const raw = await vscode.workspace.fs.readFile(document.uri);
-              const project = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
-              project.audioSource = {
-                filePath: relativePath,
-                duration: audioInfo.duration,
-                sampleRate: audioInfo.sampleRate,
-                channels: audioInfo.channels,
-                format: audioInfo.format,
-              };
-              await vscode.workspace.fs.writeFile(
-                document.uri,
-                Buffer.from(JSON.stringify(project, null, 2), 'utf-8'),
-              );
-
-              this._onDidChangeCustomDocument.fire({
-                document,
-                undo: () => {},
-                redo: () => {},
-              });
-
-              await this.initializeWebview(webviewPanel, document.uri);
-              logger.info(`Drop-imported audio source: ${droppedUri.fsPath}`);
+              const fsPaths = droppedUris.map((u) => vscode.Uri.parse(u).fsPath);
+              await this.importAudioFiles(fsPaths, document, webviewPanel);
             } catch (error) {
               const errMsg = error instanceof Error ? error.message : String(error);
               logger.error('Drop import audio source failed:', error);
@@ -745,6 +685,74 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
   // =========================================================================
   // Helpers
   // =========================================================================
+
+  /**
+   * Import audio files as new tracks into the project.
+   * Each file creates a new track with a single AudioElement clip.
+   */
+  private async importAudioFiles(
+    filePaths: string[],
+    document: vscode.CustomDocument,
+    panel: vscode.WebviewPanel,
+  ): Promise<void> {
+    const docKey = document.uri.toString();
+    const cached = this._projectDataCache.get(docKey);
+    if (!cached || !this._audioService?.isAvailable) return;
+
+    const newTracks = [...cached.tracks];
+
+    for (const filePath of filePaths) {
+      const audioInfo = await this._audioService.probeAudio(filePath);
+      const elementId = generateId();
+      const trackId = generateId();
+
+      const element = {
+        id: elementId,
+        type: 'audio' as const,
+        name: path.basename(filePath),
+        src: filePath,
+        duration: audioInfo.duration,
+        startTime: 0,
+        trimStart: 0,
+        trimEnd: 0,
+        transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+        effects: [],
+        muted: false,
+        hidden: false,
+        locked: false,
+        speed: 1,
+      } as any;
+
+      const track: TimelineTrack = {
+        id: trackId,
+        type: 'audio',
+        name: path.basename(filePath, path.extname(filePath)),
+        elements: [element],
+        muted: false,
+        locked: false,
+        hidden: false,
+        isMain: false,
+      };
+
+      newTracks.push(track);
+    }
+
+    // Update cache immutably
+    this._projectDataCache.set(docKey, { ...cached, tracks: newTracks });
+
+    // Fire dirty event
+    this._onDidChangeCustomDocument.fire({
+      document,
+      undo: () => {},
+      redo: () => {},
+    });
+
+    // Re-initialize webview with updated project
+    await this.initializeWebview(panel, document.uri);
+    logger.info(`Imported ${filePaths.length} audio file(s) as new tracks`);
+  }
 
   /** Read .nka JSON and send project:init to webview */
   private async initializeWebview(panel: vscode.WebviewPanel, nkaUri: vscode.Uri): Promise<void> {

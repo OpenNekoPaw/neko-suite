@@ -12,7 +12,7 @@
 
 import * as vscode from 'vscode';
 import { AudioEditorProvider } from './providers/AudioEditorProvider';
-import { AudioProjectProvider, type AudioProject } from './providers/AudioProjectProvider';
+import { AudioProjectProvider } from './providers/AudioProjectProvider';
 import { AudioService } from './services/AudioService';
 import { AudioOutlineProvider } from './views/audioOutlineProvider';
 import { AudioStatusBar } from './views/audioStatusBar';
@@ -26,13 +26,15 @@ const logger = getLogger('Extension');
 // Template
 // =============================================================================
 
-/** Default .nka project template for new audio projects */
+/** Default .nka project template for new audio projects (v2 multi-track) */
 function getAudioProjectTemplate(name: string): string {
-  const data: AudioProject = {
-    version: '1.0',
+  const data = {
+    version: '2.0',
     name,
-    audioSource: null,
-    effectsChain: [],
+    sampleRate: 48000,
+    channels: 2,
+    tracks: [],
+    masterEffectsChain: [],
     markers: [],
   };
   return JSON.stringify(data, null, 2);
