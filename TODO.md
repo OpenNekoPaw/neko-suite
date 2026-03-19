@@ -64,6 +64,7 @@
 - [ ] 智能素材推荐（根据剧本自动检索资产库）
 - [ ] 场景描述 → 自动配乐
 - [ ] 场景描写辅助
+- [ ] AI API 诊断（配置页内置：连通性/延迟/兼容性/配额检查，从 neko-tools 迁移）
 
 ### neko-model AI MCP Tools
 - [ ] `face.generate_params`（文本 → 参数向量）

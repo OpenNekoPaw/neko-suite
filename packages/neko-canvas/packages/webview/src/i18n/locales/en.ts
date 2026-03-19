@@ -107,4 +107,10 @@ export const en = {
 
   // Canvas
   'canvas.dropHint': 'Drop files here to add to canvas',
+
+  // Artboard
+  'artboard.label': 'Artboard',
+  'artboard.exportPng': 'Export as PNG',
+  'artboard.exportSvg': 'Export as SVG',
+  'artboard.exporting': 'Exporting...',
 } as const satisfies MessageBundle;

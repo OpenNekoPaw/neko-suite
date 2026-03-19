@@ -221,6 +221,12 @@ export interface IAgentSession {
    */
   setExecutionMode(mode: ExecutionMode): void;
 
+  /**
+   * Wire an ISkillProvider into the meta tools.
+   * Called by the extension layer after the skill system is initialized.
+   */
+  setSkillProvider(provider: import('../tools/core/meta-tools').ISkillProvider): void;
+
   // ---------------------------------------------------------------------------
   // Execution
   // ---------------------------------------------------------------------------

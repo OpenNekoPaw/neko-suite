@@ -266,11 +266,11 @@ export {
   ToolInjectionManager,
   createToolInjectionManager,
   // Core meta tools
-  SearchToolsTool,
   ActivateSkillTool,
   DeactivateSkillTool,
   GetContextTool,
   createCoreMetaTools,
+  type ISkillProvider,
   // Core file/system tools
   ReadTool,
   WriteTool,

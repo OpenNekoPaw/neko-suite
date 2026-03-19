@@ -112,3 +112,11 @@
 | 引擎通信 | EngineClient HTTP → neko-engine Rust |
 | i18n | @neko/shared (en + zh-cn, 95 keys) |
 | 测试 | Vitest v4 (3 files / 78 tests) |
+
+### EditOperation 集成
+
+Webview 端通过 `audioProjectStore` 管理编辑操作，支持 dispatch + undo/redo + Extension 同步：
+
+- **操作类型**：`audio.effect.*`（效果链 CRUD/排序/切换）、`audio.marker.*`（标记 CRUD）
+- **Store**：`stores/audioProjectStore.ts` — dispatch → apply → history → postMessage
+- **Extension 同步**：`operationApplied` 消息 → AudioProjectProvider 增量更新内存缓存 + dirty 事件

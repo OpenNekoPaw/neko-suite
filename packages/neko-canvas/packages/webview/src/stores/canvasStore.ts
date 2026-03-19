@@ -8,6 +8,7 @@ import type {
 } from '@neko/shared';
 import { getDefaultPorts, arePortTypesCompatible } from '@neko/shared';
 import { useHistoryStore } from './historyStore';
+import { useCanvasOperationStore } from './canvasOperationStore';
 
 // =============================================================================
 // Types
@@ -153,6 +154,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       },
     });
 
+    useCanvasOperationStore.getState().recordNodeAdd(newNode);
     return id;
   },
 
@@ -162,6 +164,14 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
     recordHistory(canvasData);
 
+    const oldNode = canvasData.nodes.find((n) => n.id === id);
+    const before: Partial<CanvasNode> = {};
+    if (oldNode) {
+      for (const key of Object.keys(updates) as Array<keyof CanvasNode>) {
+        (before as any)[key] = (oldNode as any)[key];
+      }
+    }
+
     set({
       canvasData: {
         ...canvasData,
@@ -170,6 +180,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ),
       },
     });
+
+    useCanvasOperationStore.getState().recordNodeUpdate(id, updates, before);
   },
 
   updateNodeData: (id, data) => {
@@ -177,6 +189,12 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (!canvasData) return;
 
     recordHistory(canvasData);
+
+    const oldNode = canvasData.nodes.find((n) => n.id === id);
+    const before: Partial<CanvasNode> = {};
+    if (oldNode) {
+      before.data = oldNode.data;
+    }
 
     set({
       canvasData: {
@@ -186,6 +204,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ),
       },
     });
+
+    useCanvasOperationStore
+      .getState()
+      .recordNodeUpdate(id, { data: { ...oldNode?.data, ...data } } as any, before);
   },
 
   removeNode: (id) => {
@@ -193,6 +215,11 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (!canvasData) return;
 
     recordHistory(canvasData);
+
+    const removedNode = canvasData.nodes.find((n) => n.id === id);
+    const removedConnections = canvasData.connections.filter(
+      (conn) => conn.sourceId === id || conn.targetId === id,
+    );
 
     set({
       canvasData: {
@@ -208,6 +235,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         nodeIds: selection.nodeIds.filter((nodeId) => nodeId !== id),
       },
     });
+
+    if (removedNode) {
+      useCanvasOperationStore.getState().recordNodeRemove(id, removedNode, removedConnections);
+    }
   },
 
   moveNode: (id, position) => {
@@ -228,7 +259,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const { canvasData } = get();
     if (!canvasData) return;
 
-    // Record history before final position update (undo support)
+    const oldNode = canvasData.nodes.find((n) => n.id === id);
     recordHistory(canvasData);
 
     set({
@@ -237,6 +268,12 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         nodes: canvasData.nodes.map((node) => (node.id === id ? { ...node, position } : node)),
       },
     });
+
+    if (oldNode) {
+      useCanvasOperationStore
+        .getState()
+        .recordNodeUpdate(id, { position } as any, { position: oldNode.position } as any);
+    }
   },
 
   resizeNode: (id, size, position) => {
@@ -258,6 +295,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const { canvasData } = get();
     if (!canvasData) return;
 
+    const oldNode = canvasData.nodes.find((n) => n.id === id);
     recordHistory(canvasData);
 
     set({
@@ -268,6 +306,16 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ),
       },
     });
+
+    if (oldNode) {
+      useCanvasOperationStore
+        .getState()
+        .recordNodeUpdate(
+          id,
+          { size, position } as any,
+          { size: oldNode.size, position: oldNode.position } as any,
+        );
+    }
   },
 
   rotateNode: (id, rotation) => {
@@ -278,9 +326,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     set({
       canvasData: {
         ...canvasData,
-        nodes: canvasData.nodes.map((node) =>
-          node.id === id ? { ...node, rotation } : node,
-        ),
+        nodes: canvasData.nodes.map((node) => (node.id === id ? { ...node, rotation } : node)),
       },
     });
   },
@@ -289,32 +335,42 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const { canvasData } = get();
     if (!canvasData) return;
 
+    const oldNode = canvasData.nodes.find((n) => n.id === id);
     recordHistory(canvasData);
 
     set({
       canvasData: {
         ...canvasData,
-        nodes: canvasData.nodes.map((node) =>
-          node.id === id ? { ...node, rotation } : node,
-        ),
+        nodes: canvasData.nodes.map((node) => (node.id === id ? { ...node, rotation } : node)),
       },
     });
+
+    if (oldNode) {
+      useCanvasOperationStore
+        .getState()
+        .recordNodeUpdate(id, { rotation } as any, { rotation: oldNode.rotation } as any);
+    }
   },
 
   updateNodePorts: (id, ports) => {
     const { canvasData } = get();
     if (!canvasData) return;
 
+    const oldNode = canvasData.nodes.find((n) => n.id === id);
     recordHistory(canvasData);
 
     set({
       canvasData: {
         ...canvasData,
-        nodes: canvasData.nodes.map((node) =>
-          node.id === id ? { ...node, ports } : node,
-        ),
+        nodes: canvasData.nodes.map((node) => (node.id === id ? { ...node, ports } : node)),
       },
     });
+
+    if (oldNode) {
+      useCanvasOperationStore
+        .getState()
+        .recordNodeUpdate(id, { ports } as any, { ports: oldNode.ports } as any);
+    }
   },
 
   // ==================== Reorder Actions ====================
@@ -322,6 +378,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const { canvasData } = get();
     if (!canvasData) return;
 
+    const oldNode = canvasData.nodes.find((n) => n.id === id);
     recordHistory(canvasData);
 
     set({
@@ -332,6 +389,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ),
       },
     });
+
+    if (oldNode) {
+      useCanvasOperationStore.getState().recordNodeReorder(id, newZIndex, oldNode.zIndex);
+    }
   },
 
   // ==================== Group Actions ====================
@@ -381,6 +442,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       selection: { nodeIds: [id], connectionIds: [] },
     });
 
+    useCanvasOperationStore.getState().recordNodeGroup(groupNode as CanvasNode, childIds);
     return id;
   },
 
@@ -407,6 +469,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       },
       selection: { nodeIds: childIds, connectionIds: [] },
     });
+
+    useCanvasOperationStore.getState().recordNodeUngroup(groupId, groupNode, childIds);
   },
 
   // ==================== Connection Actions ====================
@@ -426,6 +490,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       },
     });
 
+    useCanvasOperationStore.getState().recordConnectionAdd(newConnection);
     return id;
   },
 
@@ -449,6 +514,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const { canvasData, selection } = get();
     if (!canvasData) return;
 
+    const removedConnection = canvasData.connections.find((c) => c.id === id);
     recordHistory(canvasData);
 
     set({
@@ -461,6 +527,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         connectionIds: selection.connectionIds.filter((connId) => connId !== id),
       },
     });
+
+    if (removedConnection) {
+      useCanvasOperationStore.getState().recordConnectionRemove(id, removedConnection);
+    }
   },
 
   startConnection: (nodeId, anchor) => {

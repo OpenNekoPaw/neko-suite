@@ -375,6 +375,15 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         });
         break;
 
+      case 'operationApplied':
+        // EditOperation sync from webview — fire dirty event
+        this._onDidChangeCustomDocument.fire({
+          document,
+          undo: () => {},
+          redo: () => {},
+        });
+        break;
+
       // =================================================================
       // Media playback via shared neko-preview API
       // =================================================================
@@ -567,37 +576,44 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
 
       case 'exportArtboard': {
-        // Export artboard metadata as JSON configuration file
         const artboardData = message.data as Record<string, unknown>;
         const artboardName = (artboardData.name as string) || 'Untitled Artboard';
         const safeName = artboardName.replace(/[^a-zA-Z0-9_\-\s]/g, '').trim();
+        const format = (artboardData.format as string) || 'png';
+        const imageData = artboardData.data as string | undefined;
+
+        // 如果 webview 报告导出错误
+        if (artboardData.error) {
+          vscode.window.showErrorMessage('Failed to capture artboard');
+          break;
+        }
+
+        if (!imageData) {
+          vscode.window.showErrorMessage('No image data received');
+          break;
+        }
 
         const saveUri = await vscode.window.showSaveDialog({
           defaultUri: vscode.Uri.joinPath(
             vscode.Uri.file(document.uri.fsPath).with({
               path: document.uri.fsPath.replace(/[^/\\]+$/, ''),
             }),
-            `${safeName}.artboard.json`,
+            `${safeName}.${format}`,
           ),
           filters: {
-            'Artboard Config': ['json'],
+            [format.toUpperCase()]: [format],
             'All Files': ['*'],
           },
         });
 
         if (saveUri) {
           try {
-            const exportData = {
-              type: 'artboard',
-              ...artboardData,
-              exportedAt: new Date().toISOString(),
-            };
-            const content = JSON.stringify(exportData, null, 2);
-            await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf-8'));
+            const buffer = Buffer.from(imageData, 'base64');
+            await vscode.workspace.fs.writeFile(saveUri, buffer);
             vscode.window.showInformationMessage(`Artboard exported: ${saveUri.fsPath}`);
           } catch (error) {
             logger.error(`Failed to export artboard: ${error}`);
-            vscode.window.showErrorMessage(`Failed to export artboard`);
+            vscode.window.showErrorMessage('Failed to export artboard');
           }
         }
         break;

@@ -122,10 +122,8 @@ export class ToolInjectionManager implements IToolInjectionManager {
   /**
    * Get dynamic-layer tools based on active ToolSets
    *
-   * Note: We rely on LLM to use SearchToolSets and ActivateToolSet to
-   * discover and activate tool sets as needed. This approach:
-   * - Leverages LLM's semantic understanding
-   * - Avoids false positives from keyword matching
+   * With 1M context, all ToolSets are alwaysActive so this layer
+   * is effectively unused but retained for compatibility.
    */
   private getDynamicTools(): string[] {
     if (!this.toolProvider) {

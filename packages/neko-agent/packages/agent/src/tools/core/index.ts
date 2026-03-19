@@ -1,22 +1,21 @@
 /**
  * Core Tools Module
  *
- * Contains the core meta tools that are always injected (always layer):
- * - SearchToolSets: Discover available tool sets
- * - ActivateToolSet: Activate a tool set to gain access to its tools
- * - DeactivateToolSet: Deactivate a tool set to free up context
- * - GetContext: Get current context information
+ * Meta tools (always layer):
+ * - GetContext: Get current context information (skills, tool categories)
+ * - ActivateSkill: Activate a skill for domain-specific instructions
+ * - DeactivateSkill: Clear the active skill
  *
- * And core file/system tools:
+ * Core file/system tools:
  * - Read, Write, Bash, ListDirectory, Grep
  */
 
 export {
-  SearchToolsTool,
   ActivateSkillTool,
   DeactivateSkillTool,
   GetContextTool,
   createCoreMetaTools,
+  type ISkillProvider,
 } from './meta-tools';
 
 // Core file/system tools

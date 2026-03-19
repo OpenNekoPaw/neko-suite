@@ -26,6 +26,7 @@ import * as path from 'path';
 import type { AudioService } from '../services/AudioService';
 import { getWebviewHtml } from '../utils/html';
 import { getLogger } from '../utils/logger';
+import { applyAudioOperation, type AudioProjectData, type EditOperation } from '@neko/shared';
 
 const logger = getLogger('AudioProject');
 
@@ -64,6 +65,9 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
 
   private readonly _disposables: vscode.Disposable[] = [];
   private _audioService: AudioService | null = null;
+
+  // In-memory project data cache for incremental operation sync
+  private readonly _projectDataCache = new Map<string, AudioProjectData>();
 
   // Save/revert coordination: webview sends project data back via postMessage
   private _pendingSaveResolve: ((data: AudioProject) => void) | null = null;
@@ -218,6 +222,28 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
               this._pendingSaveResolve(data);
               this._pendingSaveResolve = null;
             }
+            break;
+          }
+
+          case 'operationApplied': {
+            // Incremental sync: apply EditOperation to in-memory cache
+            const operation = msg.operation as EditOperation;
+            const docKey = document.uri.toString();
+            const cached = this._projectDataCache.get(docKey);
+            if (cached) {
+              try {
+                const newData = applyAudioOperation(cached, operation as any);
+                this._projectDataCache.set(docKey, newData);
+              } catch (e) {
+                logger.error('Incremental sync failed, will resync on save', e);
+              }
+            }
+            // Fire dirty event
+            this._onDidChangeCustomDocument.fire({
+              document,
+              undo: () => {},
+              redo: () => {},
+            });
             break;
           }
 

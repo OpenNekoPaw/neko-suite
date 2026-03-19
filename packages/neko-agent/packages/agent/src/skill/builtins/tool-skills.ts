@@ -1,15 +1,9 @@
 /**
- * Builtin ToolSets - Define tool sets for dynamic injection
+ * Builtin ToolSets - Semantic tool groupings
  *
- * ToolSets control which tools are visible to LLM based on user intent.
- * This reduces token consumption and improves tool selection accuracy.
- *
- * LLM discovers and activates tool sets via SearchToolSets / ActivateToolSet.
- * Keyword matching was removed — LLM semantic understanding replaces it.
- *
- * Categories:
- * - Always Active (3): Loaded in the always layer, ~12 tools
- * - On-Demand (11): Activated by LLM via ActivateToolSet
+ * With 1M context window, all tools are always visible to LLM.
+ * ToolSets serve as semantic categories for organization and GetContext display.
+ * All ToolSets are alwaysActive — no dynamic injection needed.
  */
 
 import type { ToolGroup, IToolGroupRegistry } from '@neko/shared';
@@ -61,7 +55,7 @@ export const timelineQueryToolSet: ToolGroup = {
 };
 
 // =============================================================================
-// On-Demand ToolSets (activated by LLM via ActivateToolSet)
+// Domain ToolSets (all alwaysActive with 1M context)
 // =============================================================================
 
 /**
@@ -71,6 +65,7 @@ export const fileEditingToolSet: ToolGroup = {
   name: 'file-editing',
   description: 'File editing tools for writing, editing, creating, and deleting files',
   tools: ['Write', 'Edit', 'CreateDirectory', 'DeleteFile'],
+  alwaysActive: true,
   priority: 90,
   source: 'builtin',
   enabled: true,
@@ -84,6 +79,7 @@ export const gitOperationsToolSet: ToolGroup = {
   name: 'git-operations',
   description: 'Git version control tools for status, diff, and log',
   tools: ['GitStatus', 'GitDiff', 'GitLog'],
+  alwaysActive: true,
   priority: 80,
   source: 'builtin',
   enabled: true,
@@ -97,6 +93,7 @@ export const shellExecutionToolSet: ToolGroup = {
   name: 'shell-execution',
   description: 'Shell command execution tool for running terminal commands',
   tools: ['Bash'],
+  alwaysActive: true,
   priority: 70,
   source: 'builtin',
   enabled: true,
@@ -118,6 +115,7 @@ export const elementEditingToolSet: ToolGroup = {
     'SplitElement',
     'BatchTimelineOps',
   ],
+  alwaysActive: true,
   priority: 80,
   dependencies: ['timeline-query'],
   source: 'builtin',
@@ -132,6 +130,7 @@ export const effectsTransitionsToolSet: ToolGroup = {
   name: 'effects-transitions',
   description: 'Visual effects and transition tools',
   tools: ['AddEffect', 'UpdateEffect', 'RemoveEffect', 'SetTransition', 'RemoveTransition'],
+  alwaysActive: true,
   priority: 70,
   dependencies: ['timeline-query'],
   source: 'builtin',
@@ -146,6 +145,7 @@ export const animationKeyframesToolSet: ToolGroup = {
   name: 'animation-keyframes',
   description: 'Animation and keyframe tools for creating motion effects',
   tools: ['GetKeyframes', 'AddKeyframe', 'UpdateKeyframe', 'RemoveKeyframe'],
+  alwaysActive: true,
   priority: 60,
   dependencies: ['timeline-query'],
   source: 'builtin',
@@ -160,6 +160,7 @@ export const colorGradingToolSet: ToolGroup = {
   name: 'color-grading-tools',
   description: 'Color correction and grading tools',
   tools: ['SetColorCorrection', 'ResetColorCorrection'],
+  alwaysActive: true,
   priority: 60,
   dependencies: ['timeline-query'],
   source: 'builtin',
@@ -174,6 +175,7 @@ export const audioEditingToolSet: ToolGroup = {
   name: 'audio-editing',
   description: 'Audio editing tools for volume, properties, and speed',
   tools: ['SetAudioProperties', 'AddAudioKeyframe', 'SetPlaybackSpeed', 'SeparateAudio'],
+  alwaysActive: true,
   priority: 60,
   dependencies: ['timeline-query'],
   source: 'builtin',
@@ -188,6 +190,7 @@ export const trackManagementToolSet: ToolGroup = {
   name: 'track-management',
   description: 'Track management tools for adding, deleting, and organizing tracks',
   tools: ['AddTrack', 'DeleteTrack', 'ReorderTracks', 'SetTrackProperties'],
+  alwaysActive: true,
   priority: 50,
   dependencies: ['timeline-query'],
   source: 'builtin',
@@ -202,6 +205,7 @@ export const shapeMaskToolSet: ToolGroup = {
   name: 'shape-mask',
   description: 'Shape and mask tools for creating and editing shapes and masks',
   tools: ['AddShape', 'UpdateShape', 'AddMask', 'UpdateMask', 'RemoveMask'],
+  alwaysActive: true,
   priority: 50,
   dependencies: ['timeline-query'],
   source: 'builtin',
@@ -216,6 +220,7 @@ export const exportRenderToolSet: ToolGroup = {
   name: 'export-render',
   description: 'Export and render tools for video output and preview',
   tools: ['ExportVideo', 'GetExportProgress', 'RenderFrame', 'RenderClip', 'GetThumbnail'],
+  alwaysActive: true,
   priority: 70,
   source: 'builtin',
   enabled: true,
@@ -238,6 +243,7 @@ export const aiGenerationToolSet: ToolGroup = {
     'EnhanceVideo',
     'OptimizeAudio',
   ],
+  alwaysActive: true,
   priority: 70,
   source: 'builtin',
   enabled: true,
@@ -249,14 +255,14 @@ export const aiGenerationToolSet: ToolGroup = {
 // =============================================================================
 
 /**
- * All builtin ToolSets
+ * All builtin ToolSets (all alwaysActive)
  */
 export const builtinToolGroups: ToolGroup[] = [
-  // Always active
+  // Core
   coreSystemToolSet,
   planModeToolSet,
   timelineQueryToolSet,
-  // On-demand
+  // Domain
   fileEditingToolSet,
   gitOperationsToolSet,
   shellExecutionToolSet,

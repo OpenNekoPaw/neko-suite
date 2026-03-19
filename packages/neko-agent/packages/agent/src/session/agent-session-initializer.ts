@@ -17,6 +17,7 @@ import type { PermissionMode } from '../permission/types';
 import type { ToolConfirmationRequest } from '../permission/types';
 
 import { AgentExecutor } from '../executor';
+import type { Tool } from '@neko/shared';
 import { ConversationCompressor } from '../context';
 import { createExecutorHooks } from '../hooks';
 import { ToolGroupRegistry, registerBuiltinToolGroups } from '../skill';
@@ -55,6 +56,7 @@ export interface SessionComponents {
   executor: AgentExecutor;
   permissionHooks: IPermissionManager;
   history: ChatMessage[];
+  metaTools: Tool[];
 }
 
 /**
@@ -157,6 +159,7 @@ export function initializeSession(
     executor,
     permissionHooks,
     history,
+    metaTools,
   };
 }
 

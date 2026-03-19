@@ -154,15 +154,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   ): string {
     const basePrompt = this._systemPrompt.getPrompt();
     const skills = skillService.registry.listSkills().filter((s) => s.enabled !== false);
+    logger.info(`Building system prompt with ${skills.length} skills`);
     if (skills.length === 0) return basePrompt;
 
     const lines = ['\n\n# Available Skills\n'];
+    lines.push(
+      'Skills are specialized instruction sets that get automatically activated when your request matches them. The following skills are registered:\n',
+    );
     for (const skill of skills) {
       const desc = skill.description?.split('\n')[0] ?? '';
       lines.push(`- **${skill.name}**: ${desc}`);
     }
     lines.push(
-      '\nWhen a user request matches a skill, tell the user which skill is available and ask if they want to activate it.',
+      "\nUse `ActivateSkill` to activate a skill when the user's request matches a skill domain.",
+      'Use `GetContext` to see all registered skills and current state.',
     );
     return basePrompt + lines.join('\n');
   }
@@ -193,6 +198,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     for (const command of [...scanResult.personal.commands, ...scanResult.project.commands]) {
       skillService.registry.registerCommand(command);
     }
+
+    logger.info(
+      `Skill registry populated: ${skillService.skillCount} skills, ${skillService.commandCount} commands`,
+      {
+        builtin: builtinSkills.length,
+        personal: scanResult.personal.skills.length,
+        project: scanResult.project.skills.length,
+      },
+    );
   }
 
   private _initializeServices(): void {

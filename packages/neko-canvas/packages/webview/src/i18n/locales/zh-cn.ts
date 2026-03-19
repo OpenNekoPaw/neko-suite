@@ -107,4 +107,10 @@ export const zhCN = {
 
   // Canvas
   'canvas.dropHint': '拖放文件到画布中添加',
+
+  // Artboard
+  'artboard.label': '画板',
+  'artboard.exportPng': '导出为 PNG',
+  'artboard.exportSvg': '导出为 SVG',
+  'artboard.exporting': '导出中...',
 } as const satisfies MessageBundle;

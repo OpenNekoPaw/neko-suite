@@ -15,9 +15,11 @@
  * - Converts AgentStep to AgentEvent for unified event streaming
  */
 
-import type { ChatMessage, Skill } from '@neko/shared';
+import type { ChatMessage, Skill, Tool } from '@neko/shared';
 import type { SkillInjection } from '../skill';
 import { SkillInjectionCoordinator } from '../skill';
+import type { ISkillProvider } from '../tools/core/meta-tools';
+import { ActivateSkillTool, DeactivateSkillTool, GetContextTool } from '../tools/core/meta-tools';
 import { stepToEvents, recordStepInHistory, type StreamState } from './step-event-converter';
 
 import type {
@@ -84,6 +86,9 @@ export class AgentSession implements IAgentSession {
   // Skill injection (3-track coordinator)
   private _skillCoordinator!: SkillInjectionCoordinator;
 
+  // Meta tools (for ISkillProvider wiring)
+  private _metaTools: Tool[] = [];
+
   // State
   private _history: ChatMessage[] = [];
   private _isRunning = false;
@@ -113,6 +118,7 @@ export class AgentSession implements IAgentSession {
     this._executor = components.executor;
     this._permissionHooks = components.permissionHooks;
     this._history = components.history;
+    this._metaTools = components.metaTools;
 
     // SkillInjectionCoordinator requires closures over Session fields
     // (e.g. _permissionHooks changes on configure()), so created here
@@ -148,6 +154,22 @@ export class AgentSession implements IAgentSession {
 
   getExecutionMode(): ExecutionMode {
     return this._executionMode;
+  }
+
+  /**
+   * Wire an ISkillProvider into the meta tools (GetContext, ActivateSkill, DeactivateSkill).
+   * Called by the extension layer after the skill system is initialized.
+   */
+  setSkillProvider(provider: ISkillProvider): void {
+    for (const tool of this._metaTools) {
+      if (tool instanceof GetContextTool) {
+        tool.setSkillProvider(provider);
+      } else if (tool instanceof ActivateSkillTool) {
+        tool.setSkillProvider(provider);
+      } else if (tool instanceof DeactivateSkillTool) {
+        tool.setSkillProvider(provider);
+      }
+    }
   }
 
   setExecutionMode(mode: ExecutionMode): void {

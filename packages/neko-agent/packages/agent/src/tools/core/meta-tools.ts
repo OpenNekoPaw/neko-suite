@@ -1,8 +1,10 @@
 /**
  * Core Meta Tools
  *
- * These are the core tools that are always injected (L1 layer).
- * They allow the LLM to discover and activate additional capabilities.
+ * With 1M context, all tools are always visible. Meta tools now focus on:
+ * - GetContext: Current state overview (active skill, registered skills, tool categories)
+ * - ActivateSkill: AI-driven skill activation (injects domain-specific instructions)
+ * - DeactivateSkill: Clear the active skill
  */
 
 import type {
@@ -15,34 +17,50 @@ import type {
 } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 
+// =============================================================================
+// Skill Provider Interface
+// =============================================================================
+
 /**
- * SearchToolSets - Meta tool for discovering available tool sets
- *
- * Allows the LLM to search for tool sets by keyword or category,
- * enabling on-demand tool discovery and activation.
+ * Interface for providing skill information to meta tools.
+ * Set by the extension layer after initialization.
  */
-export class SearchToolsTool extends BuiltinTool {
-  readonly name = 'SearchToolSets';
+export interface ISkillProvider {
+  /** List all registered skills (name + description) */
+  listSkills(): Array<{ name: string; description: string }>;
+  /** Get active skill info */
+  getActiveSkill(): { name: string; description: string } | null;
+  /** Activate a skill by name. Returns injection result or error. */
+  activateSkill(name: string): { success: boolean; message: string; allowedTools?: string[] };
+  /** Deactivate the current active skill */
+  deactivateSkill(): { success: boolean; message: string };
+}
+
+// =============================================================================
+// GetContext Tool
+// =============================================================================
+
+/**
+ * GetContext - Get current context information
+ */
+export class GetContextTool extends BuiltinTool {
+  readonly name = 'GetContext';
   readonly description =
-    'Search for available tools by keyword or category. Use this when you need a capability that is not currently available.';
+    'Get current context: active skill, registered skills, and available tool categories.';
   readonly parameters = {
     type: 'object',
     properties: {
-      query: {
-        type: 'string',
-        description: 'Search query (keywords to match against tool names and descriptions)',
-      },
-      category: {
-        type: 'string',
-        description: 'Optional: Filter by tool category (e.g., "timeline", "audio", "effects")',
+      includeTools: {
+        type: 'boolean',
+        description: 'Include full list of available tools grouped by category',
       },
     },
-    required: ['query'],
   };
   readonly category: ToolCategory = 'system';
 
   private categoryRegistry: IToolCategoryRegistry;
   private skillRegistry?: IToolGroupRegistry;
+  private _skillProvider?: ISkillProvider;
 
   constructor(categoryRegistry: IToolCategoryRegistry, skillRegistry?: IToolGroupRegistry) {
     super();
@@ -50,162 +68,56 @@ export class SearchToolsTool extends BuiltinTool {
     this.skillRegistry = skillRegistry;
   }
 
+  setSkillProvider(provider: ISkillProvider): void {
+    this._skillProvider = provider;
+  }
+
   async execute(args: Record<string, unknown>): Promise<ToolResult> {
-    const validation = this.validateArgs(args);
-    if (!validation.valid) {
-      return this.error(validation.error ?? 'Invalid arguments');
+    const includeTools = args.includeTools as boolean | undefined;
+
+    const result: Record<string, unknown> = {};
+
+    // Active skill
+    if (this._skillProvider) {
+      result.activeSkill = this._skillProvider.getActiveSkill();
+      result.registeredSkills = this._skillProvider.listSkills();
     }
 
-    const query = (args.query as string).toLowerCase();
-    const categoryFilter = args.category as string | undefined;
-
-    // Search through categories
-    const categories = this.categoryRegistry.listCategories();
-    const matchedCategories: Array<{
-      id: string;
-      name: string;
-      description: string;
-      toolCount: number;
-      tools: Array<{ name: string; description: string }>;
-      relevance: number;
-    }> = [];
-
-    for (const category of categories) {
-      // Skip if category filter doesn't match
-      if (categoryFilter && category.id !== categoryFilter) {
-        continue;
-      }
-
-      // Get tools in this category
-      const categoryTools = this.categoryRegistry.getToolsByCategory(category.id);
-
-      // Calculate relevance based on keyword matching
-      let relevance = 0;
-      const queryWords = query.split(/\s+/);
-
-      // Match against category name and description
-      for (const word of queryWords) {
-        if (category.displayName.toLowerCase().includes(word)) {
-          relevance += 2;
-        }
-        if (category.description.toLowerCase().includes(word)) {
-          relevance += 1;
-        }
-      }
-
-      // Match against tool names
-      const matchedTools: Array<{ name: string; description: string }> = [];
-      for (const tool of categoryTools) {
-        let toolRelevance = 0;
-        for (const word of queryWords) {
-          if (tool.name.toLowerCase().includes(word)) {
-            toolRelevance += 3;
-          }
-        }
-        if (toolRelevance > 0) {
-          relevance += toolRelevance;
-          matchedTools.push({
-            name: tool.name,
-            description: `[${tool.layer}] ${tool.category}`,
-          });
-        }
-      }
-
-      if (relevance > 0 || categoryFilter) {
-        matchedCategories.push({
-          id: category.id,
-          name: category.displayName,
-          description: category.description,
-          toolCount: categoryTools.length,
-          tools:
-            matchedTools.length > 0
-              ? matchedTools
-              : categoryTools.slice(0, 3).map((t) => ({
-                  name: t.name,
-                  description: `[${t.layer}] ${t.category}`,
-                })),
-          relevance,
-        });
-      }
-    }
-
-    // Sort by relevance
-    matchedCategories.sort((a, b) => b.relevance - a.relevance);
-
-    // Also search skills if available
-    const matchedSkills: Array<{
-      name: string;
-      description: string;
-      tools: string[];
-      relevance: number;
-    }> = [];
-
+    // Tool categories (semantic groupings)
     if (this.skillRegistry) {
-      const skills = this.skillRegistry.list();
-      for (const skill of skills) {
-        let relevance = 0;
-        const queryWords = query.split(/\s+/);
-
-        for (const word of queryWords) {
-          if (skill.name.toLowerCase().includes(word)) {
-            relevance += 3;
-          }
-          if (skill.description.toLowerCase().includes(word)) {
-            relevance += 2;
-          }
-        }
-
-        if (relevance > 0) {
-          matchedSkills.push({
-            name: skill.name,
-            description: skill.description,
-            tools: skill.tools.slice(0, 5),
-            relevance,
-          });
-        }
-      }
-
-      matchedSkills.sort((a, b) => b.relevance - a.relevance);
+      const allGroups = this.skillRegistry.list();
+      result.toolCategories = allGroups
+        .filter((g) => g.enabled)
+        .map((g) => ({ name: g.name, description: g.description, toolCount: g.tools.length }));
     }
 
-    // Generate actionable suggestion
-    let suggestion = '';
-    let nextAction = '';
-
-    if (matchedSkills.length > 0) {
-      const topSkill = matchedSkills[0];
-      suggestion = `Found ${matchedSkills.length} matching tool set(s). Best match: "${topSkill.name}" - ${topSkill.description}`;
-      nextAction = `To use these tools, call: ActivateToolSet({ skillName: "${topSkill.name}" })`;
-    } else if (matchedCategories.length > 0) {
-      const topCategory = matchedCategories[0];
-      suggestion = `Found ${matchedCategories.length} relevant categories. Top match: "${topCategory.name}" (${topCategory.toolCount} tools)`;
-      nextAction = 'Check the tools list above and activate the appropriate tool set.';
-    } else {
-      suggestion = 'No matching tools found.';
-      nextAction = 'Try different keywords or use GetContext to see all available skills.';
+    // Full tool list by category
+    if (includeTools) {
+      const categories = this.categoryRegistry.listCategories();
+      result.tools = categories.map((cat) => ({
+        category: cat.displayName,
+        tools: this.categoryRegistry.getToolsByCategory(cat.id).map((t) => t.name),
+      }));
     }
 
-    return this.success({
-      skills: matchedSkills.slice(0, 5),
-      categories: matchedCategories.slice(0, 3),
-      suggestion,
-      nextAction,
-      totalSkills: matchedSkills.length,
-      totalCategories: matchedCategories.length,
-    });
+    return this.success(result);
   }
 }
 
+// =============================================================================
+// ActivateSkill Tool
+// =============================================================================
+
 /**
- * ActivateToolSet - Meta tool for activating a tool set
+ * ActivateSkill - AI-driven skill activation
  *
- * Allows the LLM to dynamically activate a tool set to gain access
- * to its associated tools and capabilities.
+ * Activates a registered skill, injecting domain-specific instructions
+ * into the conversation context. Only one skill can be active at a time.
  */
 export class ActivateSkillTool extends BuiltinTool {
-  readonly name = 'ActivateToolSet';
+  readonly name = 'ActivateSkill';
   readonly description =
-    'Activate a tool set to gain access to its tools and capabilities. Use SearchToolSets first to find available tool sets.';
+    'Activate a skill to receive specialized domain instructions. Use GetContext to see available skills. Only one skill can be active at a time.';
   readonly parameters = {
     type: 'object',
     properties: {
@@ -213,22 +125,15 @@ export class ActivateSkillTool extends BuiltinTool {
         type: 'string',
         description: 'Name of the skill to activate',
       },
-      reason: {
-        type: 'string',
-        description: 'Brief explanation of why this skill is needed',
-      },
     },
     required: ['skillName'],
   };
   readonly category: ToolCategory = 'system';
 
-  private injectionManager: IToolInjectionManager;
-  private skillRegistry?: IToolGroupRegistry;
+  private _skillProvider?: ISkillProvider;
 
-  constructor(injectionManager: IToolInjectionManager, skillRegistry?: IToolGroupRegistry) {
-    super();
-    this.injectionManager = injectionManager;
-    this.skillRegistry = skillRegistry;
+  setSkillProvider(provider: ISkillProvider): void {
+    this._skillProvider = provider;
   }
 
   async execute(args: Record<string, unknown>): Promise<ToolResult> {
@@ -237,186 +142,82 @@ export class ActivateSkillTool extends BuiltinTool {
       return this.error(validation.error ?? 'Invalid arguments');
     }
 
-    const skillName = args.skillName as string;
-    const reason = args.reason as string | undefined;
-
-    // Check if tool set exists
-    if (this.skillRegistry) {
-      const skill = this.skillRegistry.get(skillName);
-      if (!skill) {
-        // Try to find similar tool sets
-        const allSkills = this.skillRegistry.list();
-        const similar = allSkills
-          .filter((s) => s.name.toLowerCase().includes(skillName.toLowerCase()))
-          .map((s) => s.name);
-
-        return this.error(
-          `Tool set "${skillName}" not found.${similar.length > 0 ? ` Did you mean: ${similar.join(', ')}?` : ' Use SearchToolSets to find available tool sets.'}`,
-        );
-      }
-
-      if (!skill.enabled) {
-        return this.error(`Tool set "${skillName}" is disabled.`);
-      }
-    }
-
-    // Activate the tool set
-    try {
-      this.injectionManager.activateToolSet(skillName);
-
-      // Get the tools that are now available
-      const state = this.injectionManager.getState();
-      const activeToolSets = state.activeToolSets;
-
-      let activatedTools: string[] = [];
-      if (this.skillRegistry) {
-        activatedTools = this.skillRegistry.getActiveTools([skillName]);
-      }
-
-      return this.success({
-        activated: true,
-        skillName,
-        reason: reason ?? 'User requested',
-        activeToolSets,
-        newTools: activatedTools,
-        message: `Tool set "${skillName}" activated. ${activatedTools.length} tools are now available.`,
-      });
-    } catch (error) {
-      return this.error(
-        `Failed to activate tool set: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-}
-
-/**
- * DeactivateToolSet - Meta tool for deactivating a tool set
- */
-export class DeactivateSkillTool extends BuiltinTool {
-  readonly name = 'DeactivateToolSet';
-  readonly description =
-    'Deactivate a tool set to free up context space. Use when a tool set is no longer needed.';
-  readonly parameters = {
-    type: 'object',
-    properties: {
-      skillName: {
-        type: 'string',
-        description: 'Name of the skill to deactivate',
-      },
-    },
-    required: ['skillName'],
-  };
-  readonly category: ToolCategory = 'system';
-
-  private injectionManager: IToolInjectionManager;
-
-  constructor(injectionManager: IToolInjectionManager) {
-    super();
-    this.injectionManager = injectionManager;
-  }
-
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
-    const validation = this.validateArgs(args);
-    if (!validation.valid) {
-      return this.error(validation.error ?? 'Invalid arguments');
+    if (!this._skillProvider) {
+      return this.error('Skill system not initialized');
     }
 
     const skillName = args.skillName as string;
+    const result = this._skillProvider.activateSkill(skillName);
 
-    // Check if tool set is active
-    const state = this.injectionManager.getState();
-    if (!state.activeToolSets.includes(skillName)) {
-      return this.error(`Tool set "${skillName}" is not currently active.`);
+    if (!result.success) {
+      return this.error(result.message);
     }
-
-    // Deactivate the tool set
-    this.injectionManager.deactivateToolSet(skillName);
-
-    const newState = this.injectionManager.getState();
 
     return this.success({
-      deactivated: true,
+      activated: true,
       skillName,
-      activeToolSets: newState.activeToolSets,
-      message: `Tool set "${skillName}" deactivated.`,
+      message: result.message,
+      allowedTools: result.allowedTools,
     });
   }
 }
 
+// =============================================================================
+// DeactivateSkill Tool
+// =============================================================================
+
 /**
- * GetContext - Meta tool for getting current context information
+ * DeactivateSkill - Clear the active skill
  */
-export class GetContextTool extends BuiltinTool {
-  readonly name = 'GetContext';
+export class DeactivateSkillTool extends BuiltinTool {
+  readonly name = 'DeactivateSkill';
   readonly description =
-    'Get information about the current context, including active skills, available tools, and token usage.';
+    'Deactivate the currently active skill, removing its specialized instructions.';
   readonly parameters = {
     type: 'object',
-    properties: {
-      includeTools: {
-        type: 'boolean',
-        description: 'Include list of currently available tools',
-      },
-    },
+    properties: {},
   };
   readonly category: ToolCategory = 'system';
 
-  private injectionManager: IToolInjectionManager;
-  private categoryRegistry: IToolCategoryRegistry;
+  private _skillProvider?: ISkillProvider;
 
-  constructor(injectionManager: IToolInjectionManager, categoryRegistry: IToolCategoryRegistry) {
-    super();
-    this.injectionManager = injectionManager;
-    this.categoryRegistry = categoryRegistry;
+  setSkillProvider(provider: ISkillProvider): void {
+    this._skillProvider = provider;
   }
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
-    const includeTools = args.includeTools as boolean | undefined;
-
-    const state = this.injectionManager.getState();
-    const tokenUsage = this.injectionManager.getTokenUsage();
-
-    // Calculate total tools from all categories
-    const allCategories = this.categoryRegistry.listCategories();
-    const totalTools = allCategories.reduce((sum, cat) => {
-      return sum + this.categoryRegistry.getToolsByCategory(cat.id).length;
-    }, 0);
-
-    const result: Record<string, unknown> = {
-      activeToolSets: state.activeToolSets,
-      tokenUsage: tokenUsage.map((u) => ({
-        layer: u.layer,
-        used: u.used,
-        budget: u.budget,
-        percentage: u.budget > 0 ? Math.round((u.used / u.budget) * 100) : 0,
-      })),
-      totalTools,
-    };
-
-    if (includeTools) {
-      const injectedTools = state.injectedTools;
-      result.tools = {
-        always: injectedTools.get('always') ?? [],
-        dynamic: injectedTools.get('dynamic') ?? [],
-      };
+  async execute(_args: Record<string, unknown>): Promise<ToolResult> {
+    if (!this._skillProvider) {
+      return this.error('Skill system not initialized');
     }
 
-    return this.success(result);
+    const result = this._skillProvider.deactivateSkill();
+
+    if (!result.success) {
+      return this.error(result.message);
+    }
+
+    return this.success({
+      deactivated: true,
+      message: result.message,
+    });
   }
 }
+
+// =============================================================================
+// Factory
+// =============================================================================
 
 /**
  * Factory function to create all core meta tools
  */
 export function createCoreMetaTools(
   categoryRegistry: IToolCategoryRegistry,
-  injectionManager: IToolInjectionManager,
+  _injectionManager: IToolInjectionManager,
   skillRegistry?: IToolGroupRegistry,
 ): Tool[] {
   return [
-    new SearchToolsTool(categoryRegistry, skillRegistry),
-    new ActivateSkillTool(injectionManager, skillRegistry),
-    new DeactivateSkillTool(injectionManager),
-    new GetContextTool(injectionManager, categoryRegistry),
+    new GetContextTool(categoryRegistry, skillRegistry),
+    new ActivateSkillTool(),
+    new DeactivateSkillTool(),
   ];
 }

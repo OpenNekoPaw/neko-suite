@@ -3,11 +3,13 @@
  * 提供固定尺寸的容器区域，用于独立编辑和导出
  */
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import type { CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import type { ArtboardCanvasNode } from '../../types/extendedCanvas';
 import { ARTBOARD_PRESETS } from '../../types/extendedCanvas';
+import { exportArtboard, type ExportFormat } from '../../utils/artboardExport';
+import { t } from '../../i18n';
 import clsx from 'clsx';
 
 // =============================================================================
@@ -29,31 +31,69 @@ export interface ArtboardNodeProps {
 
 export function ArtboardNode({ node, viewport, isSelected, onSelect, onMove }: ArtboardNodeProps) {
   const { name, description, backgroundColor, showBorder = true, preset } = node.data;
+  const [exporting, setExporting] = useState(false);
 
   // 获取预设信息
   const presetInfo = preset ? ARTBOARD_PRESETS[preset] : null;
 
-  // Export handler: send artboard metadata to extension for saving
-  const handleExport = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
+  const doExport = useCallback(
+    async (format: ExportFormat) => {
       const vscodeApi = (window as unknown as Record<string, unknown>).vscode as
         | { postMessage: (msg: unknown) => void }
         | undefined;
-      if (vscodeApi) {
+      if (!vscodeApi) return;
+
+      setExporting(true);
+      try {
+        const width = presetInfo?.width ?? node.size.width;
+        const height = presetInfo?.height ?? node.size.height;
+
+        const data = await exportArtboard({
+          nodeId: node.id,
+          format,
+          width,
+          height,
+          backgroundColor: backgroundColor || '#1a1a1a',
+        });
+
         vscodeApi.postMessage({
           type: 'exportArtboard',
           data: {
             name: name || 'Untitled Artboard',
-            preset,
-            width: presetInfo?.width ?? node.size.width,
-            height: presetInfo?.height ?? node.size.height,
-            backgroundColor: backgroundColor || '#1a1a1a',
+            format,
+            data,
           },
         });
+      } catch {
+        vscodeApi.postMessage({
+          type: 'exportArtboard',
+          data: {
+            name: name || 'Untitled Artboard',
+            format,
+            error: true,
+          },
+        });
+      } finally {
+        setExporting(false);
       }
     },
-    [name, preset, presetInfo, node.size, backgroundColor],
+    [node.id, name, presetInfo, node.size, backgroundColor],
+  );
+
+  const handleExportPng = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      doExport('png');
+    },
+    [doExport],
+  );
+
+  const handleExportSvg = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      doExport('svg');
+    },
+    [doExport],
   );
 
   return (
@@ -90,7 +130,7 @@ export function ArtboardNode({ node, viewport, isSelected, onSelect, onMove }: A
         </div>
 
         {/* 画板内容区域 */}
-        <div className="flex-1 relative overflow-hidden">
+        <div className="flex-1 relative overflow-hidden" data-artboard-content>
           {/* 网格背景（可选） */}
           <div
             className="absolute inset-0 opacity-10"
@@ -119,15 +159,28 @@ export function ArtboardNode({ node, viewport, isSelected, onSelect, onMove }: A
 
         {/* 画板底部信息 */}
         <div className="flex items-center justify-between px-3 py-1.5 bg-gray-800/50 border-t border-gray-700 text-xs text-gray-500">
-          <span>Artboard</span>
+          <span>{t('artboard.label')}</span>
           <div className="flex items-center gap-2">
-            <button
-              className="hover:text-gray-300 transition-colors"
-              title="Export"
-              onClick={handleExport}
-            >
-              ↗ Export
-            </button>
+            {exporting ? (
+              <span className="text-yellow-400">{t('artboard.exporting')}</span>
+            ) : (
+              <>
+                <button
+                  className="hover:text-gray-300 transition-colors"
+                  title={t('artboard.exportPng')}
+                  onClick={handleExportPng}
+                >
+                  PNG
+                </button>
+                <button
+                  className="hover:text-gray-300 transition-colors"
+                  title={t('artboard.exportSvg')}
+                  onClick={handleExportSvg}
+                >
+                  SVG
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

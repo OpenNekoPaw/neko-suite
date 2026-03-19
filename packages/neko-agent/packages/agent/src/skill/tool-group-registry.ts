@@ -3,7 +3,7 @@
  *
  * Responsibility: Manage named collections of tools (ToolSets/ToolGroups) that
  * represent semantic capabilities (e.g., "GitHub", "Analysis", "Media").
- * Discovery is handled by the LLM via the SearchToolSets meta-tool.
+ * Discovery is handled by the LLM via the GetContext meta-tool.
  *
  * NOT to be confused with:
  * - ToolRegistry (tools/)         → tool execution dispatch
@@ -94,7 +94,7 @@ export class ToolGroupRegistry implements IToolGroupRegistry {
    * Match ToolGroups by user input.
    *
    * @deprecated triggerKeywords have been removed. This method always returns an
-   * empty array. Tool set discovery is now handled by the LLM via SearchToolSets
+   * empty array. Tool set discovery is now handled by the LLM via GetContext
    * meta-tool. Will be removed in a future major version.
    */
   match(_input: string): ToolGroupMatch[] {
