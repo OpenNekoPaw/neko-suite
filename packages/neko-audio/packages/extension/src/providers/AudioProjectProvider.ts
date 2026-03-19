@@ -105,9 +105,14 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
     const panel = this._activePanels.get(document.uri.toString());
     if (!panel) return;
 
-    const projectData = await this.requestProjectData(panel, undefined);
-    if (projectData) {
-      const content = JSON.stringify(projectData, null, 2);
+    const webviewData = await this.requestProjectData(panel, undefined);
+    if (webviewData) {
+      // Merge webview state (effectsChain, markers) into existing project on disk
+      const raw = await vscode.workspace.fs.readFile(document.uri);
+      const project = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
+      project.effectsChain = webviewData.effectsChain ?? project.effectsChain;
+      project.markers = webviewData.markers ?? project.markers;
+      const content = JSON.stringify(project, null, 2);
       await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'));
     }
   }
@@ -119,10 +124,14 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
     const panel = this._activePanels.get(document.uri.toString());
     if (!panel) return;
 
-    const projectData = await this.requestProjectData(panel, destination.fsPath);
-    if (projectData) {
-      // Update audioSource relative path for new location
-      const content = JSON.stringify(projectData, null, 2);
+    const webviewData = await this.requestProjectData(panel, destination.fsPath);
+    if (webviewData) {
+      // Read current project, merge webview state, write to new location
+      const raw = await vscode.workspace.fs.readFile(document.uri);
+      const project = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
+      project.effectsChain = webviewData.effectsChain ?? project.effectsChain;
+      project.markers = webviewData.markers ?? project.markers;
+      const content = JSON.stringify(project, null, 2);
       await vscode.workspace.fs.writeFile(destination, Buffer.from(content, 'utf-8'));
     }
   }
@@ -559,6 +568,56 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
             } catch (error) {
               const errMsg = error instanceof Error ? error.message : String(error);
               logger.error('Import audio source failed:', error);
+              await webviewPanel.webview.postMessage({
+                type: 'editor:importSourceFailed',
+                payload: { error: errMsg },
+              });
+            }
+            break;
+          }
+
+          case 'project:dropImportSource': {
+            // User dropped an audio file onto the editor
+            const droppedUris = (msg as Record<string, unknown>).uris as string[] | undefined;
+            if (!droppedUris || droppedUris.length === 0) break;
+
+            const droppedUri = vscode.Uri.parse(droppedUris[0]!);
+
+            if (!this._audioService?.isAvailable) {
+              logger.error('AudioService not available for drop import');
+              break;
+            }
+
+            try {
+              const audioInfo = await this._audioService.probeAudio(droppedUri.fsPath);
+              const nkaDir = path.dirname(document.uri.fsPath);
+              const relativePath = path.relative(nkaDir, droppedUri.fsPath);
+
+              const raw = await vscode.workspace.fs.readFile(document.uri);
+              const project = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProject;
+              project.audioSource = {
+                filePath: relativePath,
+                duration: audioInfo.duration,
+                sampleRate: audioInfo.sampleRate,
+                channels: audioInfo.channels,
+                format: audioInfo.format,
+              };
+              await vscode.workspace.fs.writeFile(
+                document.uri,
+                Buffer.from(JSON.stringify(project, null, 2), 'utf-8'),
+              );
+
+              this._onDidChangeCustomDocument.fire({
+                document,
+                undo: () => {},
+                redo: () => {},
+              });
+
+              await this.initializeWebview(webviewPanel, document.uri);
+              logger.info(`Drop-imported audio source: ${droppedUri.fsPath}`);
+            } catch (error) {
+              const errMsg = error instanceof Error ? error.message : String(error);
+              logger.error('Drop import audio source failed:', error);
               await webviewPanel.webview.postMessage({
                 type: 'editor:importSourceFailed',
                 payload: { error: errMsg },

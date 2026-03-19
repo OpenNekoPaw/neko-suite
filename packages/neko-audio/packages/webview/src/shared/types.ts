@@ -322,6 +322,12 @@ export interface ProjectImportSourceMessage {
   type: 'project:importSource';
 }
 
+/** Request to import audio source via drag-and-drop */
+export interface ProjectDropImportSourceMessage {
+  type: 'project:dropImportSource';
+  uris: string[];
+}
+
 export type WebviewMessage =
   | ReadyMessage
   | PlayMessage
@@ -343,4 +349,5 @@ export type WebviewMessage =
   | RecordStopMessage
   | ProjectSaveDataMessage
   | ProjectChangedMessage
-  | ProjectImportSourceMessage;
+  | ProjectImportSourceMessage
+  | ProjectDropImportSourceMessage;

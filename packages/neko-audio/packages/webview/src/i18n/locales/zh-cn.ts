@@ -49,6 +49,7 @@ const audio: MessageBundle = {
 
   // Empty project
   'audio.import.empty': '暂无音频源，导入文件以开始编辑。',
+  'audio.import.drop': '拖放音频文件到此处',
   'audio.import.button': '选择音频文件',
   'audio.import.failed': '导入音频失败：{error}',
 

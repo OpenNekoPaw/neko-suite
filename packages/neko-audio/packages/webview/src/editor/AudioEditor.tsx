@@ -10,6 +10,7 @@ import { useExtensionMessage, useVscodeReady, postMessage } from '../shared/useV
 import { useAudioStore } from '../stores/audioStore';
 import { useAudioPlayback } from '../hooks/useAudioPlayback';
 import { useEffectsChain } from '../hooks/useEffectsChain';
+import { useDragDrop } from '../hooks/useDragDrop';
 import type { AudioEffectInstance } from '../types/audioEffects';
 import { EditableWaveform } from '../components/EditableWaveform';
 import { TransportBar } from '../components/TransportBar';
@@ -45,6 +46,10 @@ export function AudioEditor() {
 
   const { togglePlay, seek, stop, audioClientRef } = useAudioPlayback();
   const effectsChain = useEffectsChain();
+
+  // Drag-drop support for importing audio into project
+  const editorRef = useRef<HTMLDivElement>(null);
+  const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useDragDrop(editorRef);
 
   // Keep ref to latest effects/markers for serialization in save handler
   const effectsRef = useRef(effectsChain.effects);
@@ -243,7 +248,13 @@ export function AudioEditor() {
   }
 
   return (
-    <div className="audio-editor">
+    <div
+      ref={editorRef}
+      className="audio-editor"
+      onDragOver={projectMode ? handleDragOver : undefined}
+      onDragLeave={projectMode ? handleDragLeave : undefined}
+      onDrop={projectMode ? handleDrop : undefined}
+    >
       <TransportBar onTogglePlay={togglePlay} onSeek={seek} onStop={stop} />
 
       <div className="audio-editor__body">
@@ -257,6 +268,12 @@ export function AudioEditor() {
 
         <SidePanel />
       </div>
+
+      {isDragOver && projectMode && (
+        <div className="audio-editor__drop-overlay">
+          <div className="audio-editor__drop-overlay-text">{t('audio.import.drop')}</div>
+        </div>
+      )}
 
       <Toast />
     </div>

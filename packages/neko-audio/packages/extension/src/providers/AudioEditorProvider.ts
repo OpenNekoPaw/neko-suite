@@ -18,6 +18,8 @@
 
 import * as vscode from 'vscode';
 import type { AudioService } from '../services/AudioService';
+import type { AudioOutlineProvider } from '../views/audioOutlineProvider';
+import type { AudioStatusBar } from '../views/audioStatusBar';
 import { getWebviewHtml } from '../utils/html';
 import { getLogger } from '../utils/logger';
 
@@ -27,12 +29,20 @@ const logger = getLogger('AudioEditor');
 // AudioEditorProvider
 // =============================================================================
 
-export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider {
+export class AudioEditorProvider implements vscode.CustomEditorProvider<vscode.CustomDocument> {
   static readonly viewType = 'neko.audioEditor';
+
+  private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
+    vscode.CustomDocumentEditEvent<vscode.CustomDocument>
+  >();
+  public readonly onDidChangeCustomDocument = this._onDidChangeCustomDocument.event;
 
   private readonly _disposables: vscode.Disposable[] = [];
   private _audioService: AudioService | null = null;
+  private _outlineProvider: AudioOutlineProvider | null = null;
+  private _statusBar: AudioStatusBar | null = null;
   private readonly _activePanels = new Set<vscode.WebviewPanel>();
+  private activeWebviewPanel: vscode.WebviewPanel | undefined;
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
 
@@ -48,6 +58,16 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider 
   /** Inject a shared AudioService instance */
   setAudioService(service: AudioService): void {
     this._audioService = service;
+  }
+
+  /** Inject outline provider for audio metadata display */
+  setOutlineProvider(provider: AudioOutlineProvider): void {
+    this._outlineProvider = provider;
+  }
+
+  /** Inject status bar for audio info display */
+  setStatusBar(statusBar: AudioStatusBar): void {
+    this._statusBar = statusBar;
   }
 
   // =========================================================================
@@ -69,6 +89,7 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider 
   ): Promise<void> {
     // Track active panels for command forwarding
     this._activePanels.add(webviewPanel);
+    this.activeWebviewPanel = webviewPanel;
 
     // Configure webview
     webviewPanel.webview.options = {
@@ -128,6 +149,41 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider 
               type: 'editor:init',
               payload: { filePath, fileName, audioInfo },
             });
+
+            // Update outline view with audio metadata
+            if (this._outlineProvider) {
+              this._outlineProvider.updateData({
+                fileName,
+                format: {
+                  formatName: audioInfo.format,
+                  duration: audioInfo.duration,
+                  bitrate: audioInfo.bitrate || 0,
+                  size: 0,
+                },
+                streams: [
+                  {
+                    index: 0,
+                    codecName: audioInfo.codec,
+                    codecType: 'audio',
+                    sampleRate: audioInfo.sampleRate,
+                    channels: audioInfo.channels,
+                    bitrate: audioInfo.bitrate,
+                  },
+                ],
+              });
+            }
+
+            // Update status bar with audio info
+            if (this._statusBar) {
+              this._statusBar.update({
+                duration: audioInfo.duration,
+                sampleRate: audioInfo.sampleRate,
+                channels: audioInfo.channels,
+                codec: audioInfo.codec,
+                bitrate: audioInfo.bitrate,
+              });
+              this._statusBar.show();
+            }
 
             // Generate and send waveform data
             try {
@@ -456,7 +512,59 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider 
       messageDisposable.dispose();
       this._activePanels.delete(webviewPanel);
       await stopPanelStream();
+      this._statusBar?.hide();
+      this._outlineProvider?.updateData(null);
     });
+  }
+
+  // =====================
+  // CustomEditorProvider Methods
+  // =============
+
+  async saveCustomDocument(
+    document: vscode.CustomDocument,
+    _cancellation: vscode.CancellationToken,
+  ): Promise<void> {
+    // Notify webview to save
+    this.activeWebviewPanel?.webview.postMessage({ type: 'save' });
+  }
+
+  async saveCustomDocumentAs(
+    document: vscode.CustomDocument,
+    destination: vscode.Uri,
+    _cancellation: vscode.CancellationToken,
+  ): Promise<void> {
+    // Notify webview to save as
+    this.activeWebviewPanel?.webview.postMessage({
+      type: 'saveAs',
+      path: destination.fsPath,
+    });
+  }
+
+  async revertCustomDocument(
+    document: vscode.CustomDocument,
+    _cancellation: vscode.CancellationToken,
+  ): Promise<void> {
+    // Notify webview to revert
+    this.activeWebviewPanel?.webview.postMessage({ type: 'revert' });
+  }
+
+  async backupCustomDocument(
+    document: vscode.CustomDocument,
+    context: vscode.CustomDocumentBackupContext,
+    _cancellation: vscode.CancellationToken,
+  ): Promise<vscode.CustomDocumentBackup> {
+    // For now, return a simple backup that does nothing
+    return {
+      id: context.destination.toString(),
+      delete: async () => {
+        try {
+          await vscode.workspace.fs.delete(context.destination);
+        } catch {
+          // Ignore errors
+        }
+      },
+    };
   }
 
   // =========================================================================

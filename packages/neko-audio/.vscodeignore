@@ -4,6 +4,7 @@ packages/**
 node_modules/**
 *.ts
 !dist/**
+!l10n/**
 .gitignore
 tsconfig.json
 *.md

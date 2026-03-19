@@ -14,6 +14,8 @@ import * as vscode from 'vscode';
 import { AudioEditorProvider } from './providers/AudioEditorProvider';
 import { AudioProjectProvider, type AudioProject } from './providers/AudioProjectProvider';
 import { AudioService } from './services/AudioService';
+import { AudioOutlineProvider } from './views/audioOutlineProvider';
+import { AudioStatusBar } from './views/audioStatusBar';
 import type { NekoAudioAPI } from './types/api';
 import { createVSCodeLogger } from '@neko/shared/vscode/extension';
 import { setRootLogger, getLogger } from './utils/logger';
@@ -43,6 +45,8 @@ function getAudioProjectTemplate(name: string): string {
 let audioProvider: AudioEditorProvider | null = null;
 let projectProvider: AudioProjectProvider | null = null;
 let sharedAudioService: AudioService | null = null;
+let outlineProvider: AudioOutlineProvider | null = null;
+let statusBar: AudioStatusBar | null = null;
 
 // =============================================================================
 // Activation
@@ -90,6 +94,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
     }),
   );
   context.subscriptions.push(projectProvider);
+
+  // Register outline view
+  outlineProvider = new AudioOutlineProvider();
+  const outlineView = vscode.window.createTreeView('nekoAudio.outline', {
+    treeDataProvider: outlineProvider,
+    showCollapseAll: true,
+  });
+  context.subscriptions.push(outlineView, outlineProvider);
+
+  // Connect outline to audio provider
+  audioProvider.setOutlineProvider(outlineProvider);
+
+  // Register status bar
+  statusBar = new AudioStatusBar();
+  context.subscriptions.push(statusBar);
+  audioProvider.setStatusBar(statusBar);
 
   // Helper: forward command to active audio webview
   const forwardCommand = (command: string): boolean => {

@@ -188,26 +188,6 @@ export interface Skill {
    * @default true
    */
   enabled: boolean;
-
-  /**
-   * Content configuration (references, scripts, tools)
-   * Loaded from skill directory structure for progressive disclosure
-   */
-  contentConfig?: SkillContentConfig;
-
-  /**
-   * ToolSets to activate when this skill is applied.
-   *
-   * When a skill is activated via SkillService.apply(), these tool sets are
-   * automatically loaded into the dynamic injection layer, making their tools
-   * available to LLM without requiring a separate ActivateToolSet call.
-   *
-   * Declared in SKILL.md frontmatter as `tool-sets: set-a, set-b`.
-   *
-   * @neko-extension Not in Claude Code spec.
-   * @example ["element-editing", "effects-transitions"]
-   */
-  toolSets?: string[];
 }
 
 // =============================================================================
@@ -518,13 +498,6 @@ export interface SkillFrontmatter {
 
   /** Enabled state */
   enabled?: boolean;
-
-  /**
-   * ToolSet names to activate when this skill is applied (comma-separated).
-   * @neko-extension Not in Claude Code spec.
-   * @example "element-editing, effects-transitions"
-   */
-  'tool-sets'?: string;
 }
 
 /**
@@ -626,25 +599,9 @@ export interface SkillScript {
 }
 
 /**
- * Skill content configuration
- * Defines the skill directory structure and what to use
- */
-export interface SkillContentConfig {
-  /** References in references/ directory */
-  references?: SkillReference[];
-  /** Scripts in scripts/ directory */
-  scripts?: SkillScript[];
-  /** Allowed tools (Tool names or patterns like "Bash(git:*)") */
-  allowedTools?: string[];
-}
-
-/**
  * Configured Skill (with UI/settings extensions)
  */
 export interface ConfiguredSkill extends Skill {
-  /** Content configuration (references, scripts, tools) */
-  contentConfig?: SkillContentConfig;
-
   /** User notes/documentation */
   notes?: string;
 
@@ -659,9 +616,6 @@ export interface ConfiguredSkill extends Skill {
  * Configured Slash Command
  */
 export interface ConfiguredSlashCommand extends SlashCommand {
-  /** Content configuration (references, scripts, tools) */
-  contentConfig?: SkillContentConfig;
-
   /** User notes/documentation */
   notes?: string;
 
@@ -867,7 +821,6 @@ export function createSkill(
   directoryPath?: string,
   supportFileRefs?: string[],
   toolDefinitions?: SkillToolDefinition[],
-  contentConfig?: SkillContentConfig,
 ): Skill {
   return {
     name: frontmatter.name,
@@ -882,13 +835,6 @@ export function createSkill(
     source,
     directoryPath,
     enabled: frontmatter.enabled ?? true,
-    contentConfig,
-    toolSets: frontmatter['tool-sets']
-      ? frontmatter['tool-sets']
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0)
-      : undefined,
   };
 }
 
