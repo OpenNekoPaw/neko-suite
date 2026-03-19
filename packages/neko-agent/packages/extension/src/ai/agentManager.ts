@@ -159,6 +159,12 @@ export interface IAgentManager extends vscode.Disposable {
    * Reverses all injection tracks via SkillInjectionCoordinator.
    */
   clearActiveSkill(conversationId: string): void;
+
+  /**
+   * Set the skill provider for meta tools (GetContext, ActivateSkill, DeactivateSkill).
+   * Applied to all existing and future AgentRunners.
+   */
+  setSkillProvider(provider: import('@neko/agent').ISkillProvider): void;
 }
 
 // =============================================================================
@@ -181,6 +187,9 @@ export class AgentManager implements IAgentManager {
 
   /** Platform 实例（共享） */
   private _platform?: Platform;
+
+  /** Skill provider for meta tools */
+  private _skillProvider?: import('@neko/agent').ISkillProvider;
 
   /** 事件订阅 */
   private _agentDisposables = new Map<string, vscode.Disposable[]>();
@@ -231,6 +240,9 @@ export class AgentManager implements IAgentManager {
 
       // 创建新 Agent
       agent = new AgentRunner();
+      if (this._skillProvider) {
+        agent.setSkillProvider(this._skillProvider);
+      }
       this._agents.set(conversationId, agent);
 
       // 监听 Agent 事件
@@ -424,6 +436,14 @@ export class AgentManager implements IAgentManager {
   clearActiveSkill(conversationId: string): void {
     const agent = this._agents.get(conversationId);
     agent?.clearActiveSkill();
+  }
+
+  setSkillProvider(provider: import('@neko/agent').ISkillProvider): void {
+    this._skillProvider = provider;
+    // Apply to all existing agents
+    for (const agent of this._agents.values()) {
+      agent.setSkillProvider(provider);
+    }
   }
 
   // -------------------------------------------------------------------------

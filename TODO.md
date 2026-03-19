@@ -35,6 +35,12 @@
 - [x] Phase 4：频谱可视化（AnalyserNode FFT 实时频率柱状图 + 第四视图 + 主题感知颜色 + DPR 缩放）
 - [x] Phase 5：嵌入歌词提取（ID3v2 USLT / Vorbis LYRICS → metadata.lyrics 回退 + 纯文本歌词静态展示）
 
+### neko-preview（风格主题优化）
+- [ ] 统一 `--neko-audio-*` 变量为 `--neko-preview-*`，覆盖 audio + video 两个 webview
+- [ ] 深色/浅色主题适配验证（VSCode 主题切换时 canvas 组件颜色跟随）
+- [ ] 视频播放器控件样式对齐音频播放器（进度条/音量/速度控件复用 shared 组件）
+- [ ] 高对比度主题支持（`vscode-high-contrast` / `vscode-high-contrast-light`）
+
 ### EditOperation 遗留项
 - [x] neko-types `package.json` 缺少 test script（已添加，11 文件 242 测试通过）
 - [x] 操作 undo/redo 正确性验证（invert 30+ / roundtrip 40+ / historySlice 15+ 测试已覆盖）
@@ -61,6 +67,7 @@
 - [ ] Phase 5：质量评估（黑帧检测 / VQA / SAM 智能蒙版）
 
 ### neko-agent 创意助手
+- [x] 工具系统简化（1M context 全工具常驻 + meta-tools 重构为 GetContext/ActivateSkill/DeactivateSkill + ISkillProvider 桥接）
 - [ ] 批量时间线操作 Skill（当前仅支持单元素操作）
 - [ ] AI 字幕生成 Skill（调用 Whisper / 云端 ASR）
 - [ ] 智能素材推荐（根据剧本自动检索资产库）
@@ -113,7 +120,10 @@
 ## 📋 技术债务
 
 ### CI/CD（待完成项）
-- [ ] 覆盖率阈值启用（vitest 已统一到 v4，待取消 `vitest.shared.ts` 注释的 thresholds）
+- [x] 覆盖率阈值启用（`vitest.shared.ts` thresholds 已生效：lines 30% / branches 20% / functions 25% / statements 30%；CI `pnpm test --coverage` 不达标即 fail）
+  - ⚠️ 遗留：neko-agent 根包自定义 coverage 配置未接入 `sharedCoverage()`，无阈值
+  - 📈 后续：阈值从 30% 渐进提升到 50%+（随测试补充自然提升）
+  - 💡 可选：接入 Codecov/Coveralls 做 PR 覆盖率评论 + 趋势追踪
 - [ ] CI code-quality 移除 `continue-on-error`（本地稳定后使其成为阻塞门禁）
 - [ ] Release workflow（`.github/workflows/release.yml`，tag 触发 vsix 打包）
 - [ ] ESLint warn → error 升级（`no-console` + `no-explicit-any`）
@@ -214,4 +224,4 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 
 ---
 
-*最后更新：2026-03-20（neko-preview 音频播放器现代化 Phase 1-5 全部完成）*
+*最后更新：2026-03-21（neko-agent 工具系统简化 + ISkillProvider 桥接完成）*

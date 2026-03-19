@@ -274,6 +274,11 @@ export interface IAgentRunner extends vscode.Disposable {
   // -------------------------------------------------------------------------
 
   /**
+   * Wire an ISkillProvider into the session's meta tools.
+   */
+  setSkillProvider(provider: import('@neko/agent').ISkillProvider): void;
+
+  /**
    * Apply a skill injection to the session context.
    * Merges the injection's system prompt into the conversation and
    * grants any specified tool allowances.
@@ -323,6 +328,7 @@ export class AgentRunner implements IAgentRunner {
   private _promptBuilder?: SystemPromptBuilder;
   private _toolGroupRegistry?: ToolGroupRegistry;
   private _isRunning = false;
+  private _skillProvider?: import('@neko/agent').ISkillProvider;
 
   // Pending messages queue (for messages sent while agent is running)
   private _pendingMessages: string[] = [];
@@ -434,6 +440,11 @@ export class AgentRunner implements IAgentRunner {
         logger.error('Validation error:', { message: error.message, details: error.details });
       },
     });
+
+    // Wire skill provider into meta tools if available
+    if (this._skillProvider) {
+      this._session.setSkillProvider(this._skillProvider);
+    }
   }
 
   getConfig(): IAgentConfig | undefined {
@@ -637,6 +648,11 @@ export class AgentRunner implements IAgentRunner {
   // -------------------------------------------------------------------------
   // Skill Injection
   // -------------------------------------------------------------------------
+
+  setSkillProvider(provider: import('@neko/agent').ISkillProvider): void {
+    this._skillProvider = provider;
+    this._session?.setSkillProvider(provider);
+  }
 
   applySkillInjection(
     injection: import('@neko/agent').SkillInjection,

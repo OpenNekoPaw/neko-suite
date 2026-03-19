@@ -276,6 +276,42 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           getActiveConversationId: () => this._conversations.getActiveId(),
         });
 
+        // Bridge skillService to ISkillProvider for meta tools
+        if (this._agentManager) {
+          this._agentManager.setSkillProvider({
+            listSkills: () =>
+              skillService.registry
+                .listSkills()
+                .filter((s) => s.enabled !== false)
+                .map((s) => ({ name: s.name, description: s.description || '' })),
+            getActiveSkill: () => {
+              const activeId = this._conversations.getActiveId();
+              if (!activeId) return null;
+              const skill = this._agentManager?.getActiveSkill(activeId);
+              return skill ? { name: skill.name, description: skill.description || '' } : null;
+            },
+            activateSkill: (name: string) => {
+              const skill = skillService.registry.getSkill(name);
+              if (!skill) return { success: false, message: `Skill "${name}" not found` };
+              const activeId = this._conversations.getActiveId();
+              if (!activeId) return { success: false, message: 'No active conversation' };
+              const injection = skillService.apply(skill);
+              this._agentManager?.applySkillInjection(activeId, injection, skill);
+              return {
+                success: true,
+                message: `Activated skill "${name}"`,
+                allowedTools: injection.allowedTools,
+              };
+            },
+            deactivateSkill: () => {
+              const activeId = this._conversations.getActiveId();
+              if (!activeId) return { success: false, message: 'No active conversation' };
+              this._agentManager?.clearActiveSkill(activeId);
+              return { success: true, message: 'Skill deactivated' };
+            },
+          });
+        }
+
         // Update handler dependencies via type-safe updateDeps()
         this._taskHandler.updateDeps({
           platform: this._platform,
