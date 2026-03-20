@@ -44,52 +44,42 @@ export function TrackLane({
     removeTrack(track.id);
   }, [track.id, removeTrack]);
 
-  const trackBtnClass =
-    'text-[10px] px-1 py-px cursor-pointer text-[var(--vscode-descriptionForeground)] border border-[var(--vscode-panel-border)] rounded-sm';
-
   return (
     <div
-      className="flex border-b border-[var(--vscode-panel-border)] transition-opacity"
+      className="flex border-b border-[var(--editor-border)] transition-opacity"
       style={{ height: trackHeight, opacity: track.muted ? 0.5 : 1 }}
     >
       {/* Track header */}
       <div
-        className="flex flex-col justify-center px-2 shrink-0 border-r border-[var(--vscode-panel-border)] bg-[var(--vscode-sideBar-background)] overflow-hidden"
+        className="flex flex-col justify-center px-2 shrink-0 border-r border-[var(--editor-border)] bg-[var(--track-header-bg)] overflow-hidden"
         style={{ width: labelWidth, minWidth: labelWidth }}
       >
-        <div className="text-xs font-medium text-[var(--vscode-editor-foreground)] truncate">
+        <div className="text-xs font-medium text-[var(--activity-fg)] truncate mb-1">
           {track.name}
         </div>
-        <div className="flex gap-1 mt-0.5">
+        <div className="flex gap-1 items-center">
           <button
             onClick={handleToggleMute}
             title={track.muted ? 'Unmute' : 'Mute'}
-            className={`${trackBtnClass} ${track.muted ? 'bg-[var(--vscode-inputValidation-errorBackground)]' : 'bg-transparent'}`}
+            className={`neko-track-btn ${track.muted ? 'active-mute' : ''}`}
           >
             M
           </button>
           <button
             onClick={handleToggleLock}
             title={track.locked ? 'Unlock' : 'Lock'}
-            className={`${trackBtnClass} ${track.locked ? 'bg-[var(--vscode-inputValidation-warningBackground)]' : 'bg-transparent'}`}
+            className={`neko-track-btn ${track.locked ? 'active-lock' : ''}`}
           >
             L
           </button>
-          <button
-            onClick={handleRemove}
-            title="Remove track"
-            className={`${trackBtnClass} bg-transparent ml-auto`}
-          >
+          <button onClick={handleRemove} title="Remove track" className="neko-track-btn remove">
             ×
           </button>
         </div>
       </div>
 
       {/* Element lane */}
-      <div
-        className="flex-1 relative bg-[var(--vscode-editor-background)]"
-        style={{ width: timelineWidth }}
-      >
+      <div className="flex-1 relative bg-[var(--timeline-bg)]" style={{ width: timelineWidth }}>
         {track.elements.map((element) => {
           const left = element.startTime * pps;
           const width = element.duration * pps;

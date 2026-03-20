@@ -110,20 +110,23 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
 
   return (
     <div
-      className="flex items-center gap-2 px-3 h-10 shrink-0 bg-[var(--toolbar-bg)] border-b border-[var(--editor-border)]"
+      className="neko-daw-transport flex items-center gap-2 px-3 h-10 shrink-0"
       tabIndex={0}
       onKeyDown={handleKeyDown}
     >
       {/* File name */}
-      <span className="text-xs opacity-80 truncate max-w-[200px]" title={fileName ?? ''}>
+      <span
+        className="text-[12px] font-medium text-[var(--activity-fg)] opacity-85 truncate max-w-[180px]"
+        title={fileName ?? ''}
+      >
         {fileName}
       </span>
 
       {/* Format info */}
       {audioInfo && (
         <>
-          <span className="w-px h-4 bg-[var(--editor-border)] shrink-0" />
-          <span className="text-xs opacity-60 whitespace-nowrap">
+          <span className="w-px h-4 bg-[var(--editor-border)] shrink-0 opacity-60" />
+          <span className="text-[11px] text-[var(--activity-inactive)] whitespace-nowrap">
             {audioInfo.codec.toUpperCase()} · {(audioInfo.sampleRate / 1000).toFixed(1)}kHz ·{' '}
             {audioInfo.channels === 1
               ? 'Mono'
@@ -135,7 +138,7 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
         </>
       )}
 
-      <span className="w-px h-4 bg-[var(--editor-border)] shrink-0" />
+      <span className="w-px h-4 bg-[var(--editor-border)] shrink-0 opacity-60" />
 
       {/* Playback controls */}
       <MacIconButton
@@ -144,22 +147,33 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
         onClick={onTogglePlay}
         title={isPlaying ? t('audio.controls.pause') : t('audio.controls.play')}
       >
-        {isPlaying ? '⏸' : '▶'}
+        {isPlaying ? (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+            <rect x="4" y="3" width="4" height="14" rx="1.5" />
+            <rect x="12" y="3" width="4" height="14" rx="1.5" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+            <path d="M5 3.5l12 6.5-12 6.5V3.5z" />
+          </svg>
+        )}
       </MacIconButton>
 
       <MacIconButton size="sm" onClick={onStop} title={t('audio.controls.stop')}>
-        ⏹
+        <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+          <rect x="3" y="3" width="14" height="14" rx="2" />
+        </svg>
       </MacIconButton>
 
-      <span className="text-xs font-mono opacity-80 whitespace-nowrap">
+      <span className="text-[12px] font-mono text-[var(--activity-fg)] opacity-75 whitespace-nowrap tabular-nums">
         {formatTime(currentTime)} / {formatTime(duration)}
       </span>
 
       {/* Selection info + trim */}
       {selection && (
         <>
-          <span className="w-px h-4 bg-[var(--editor-border)] shrink-0" />
-          <span className="text-[11px] font-mono opacity-60 whitespace-nowrap">
+          <span className="w-px h-4 bg-[var(--editor-border)] shrink-0 opacity-60" />
+          <span className="text-[11px] font-mono text-[var(--activity-inactive)] whitespace-nowrap">
             {t('audio.waveform.selection', {
               start: formatTime(selection.start),
               end: formatTime(selection.end),
@@ -170,7 +184,7 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
             size="sm"
             onClick={handleTrim}
             title={t('audio.edit.trim')}
-            className="text-[11px] px-2 py-1"
+            className="text-[11px] px-2 py-0.5"
           >
             {t('audio.edit.trim')}
           </MacButton>
@@ -185,11 +199,43 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
         onClick={toggleMute}
         title={isMuted ? t('audio.controls.volume') : t('audio.controls.mute')}
       >
-        {isMuted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
+        {isMuted || volume === 0 ? (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5" opacity="0.5">
+            <path
+              d="M9 4L5 7.5H2v5h3l4 3.5V4zM14 8l-4 4M14 12l-4-4"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </svg>
+        ) : volume < 0.5 ? (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+            <path d="M9 4L5 7.5H2v5h3l4 3.5V4z" />
+            <path
+              d="M13 8a4 4 0 010 4"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+            <path d="M9 4L5 7.5H2v5h3l4 3.5V4z" />
+            <path
+              d="M13 7a5 5 0 010 6M15.5 5a8 8 0 010 10"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </svg>
+        )}
       </MacIconButton>
       <input
         type="range"
-        className="neko-slider w-20 bg-[var(--neko-surface)]"
+        className="neko-slider w-16 bg-[var(--neko-surface)]"
         min="0"
         max="1"
         step="0.05"
@@ -197,14 +243,16 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
         onChange={(e) => setVolume(parseFloat(e.target.value))}
       />
 
-      <span className="w-px h-4 bg-[var(--editor-border)] shrink-0" />
+      <span className="w-px h-4 bg-[var(--editor-border)] shrink-0 opacity-60" />
 
       {/* Speed */}
-      <label className="text-[11px] opacity-60">{t('audio.controls.speed')}</label>
+      <label className="text-[11px] text-[var(--activity-inactive)]">
+        {t('audio.controls.speed')}
+      </label>
       <select
         value={speed}
         onChange={handleSpeedChange}
-        className="text-[11px] px-1 py-0.5 bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded"
+        className="text-[11px] px-1.5 py-0.5 bg-[var(--btn-bg)] text-[var(--activity-fg)] border border-[var(--btn-border)] rounded-md appearance-none cursor-pointer hover:bg-[var(--btn-bg-hover)] transition-colors"
       >
         {SPEED_OPTIONS.map((s) => (
           <option key={s} value={s}>

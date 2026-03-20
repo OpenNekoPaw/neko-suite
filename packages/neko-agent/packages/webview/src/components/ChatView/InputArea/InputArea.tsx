@@ -441,7 +441,7 @@ export function InputArea({
               disabled={!canSend}
               className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full transition-all ${
                 canSend
-                  ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)]'
+                  ? 'bg-gradient-to-br from-[var(--vscode-charts-blue,#0e63c8)] to-[var(--vscode-charts-purple,#6b3fa0)] text-[var(--vscode-button-foreground)] hover:opacity-90 shadow-[0_2px_8px_rgba(0,0,0,0.25)]'
                   : 'bg-[var(--vscode-input-background)] text-[var(--vscode-descriptionForeground)] opacity-50 cursor-not-allowed'
               }`}
               title={t('chat.input.send')}

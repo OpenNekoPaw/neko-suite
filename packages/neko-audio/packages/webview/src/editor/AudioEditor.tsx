@@ -235,7 +235,7 @@ export function AudioEditor() {
   // Error state
   if (error) {
     return (
-      <div className="flex items-center justify-center w-full h-full bg-[var(--editor-bg)] text-[var(--vscode-errorForeground,#f44)]">
+      <div className="flex items-center justify-center w-full h-full bg-[var(--editor-bg)] text-red-400">
         <div>{error}</div>
       </div>
     );
@@ -254,24 +254,30 @@ export function AudioEditor() {
       onDragLeave={projectMode ? handleDragLeave : undefined}
       onDrop={projectMode ? handleDrop : undefined}
     >
-      <TransportBar onTogglePlay={togglePlay} onSeek={seek} onStop={stop} />
-
       <div className="flex flex-1 overflow-hidden">
+        {/* Left: vertical toolbar */}
         <Toolbar />
 
+        {/* Center + Right: transport bar + timeline + side panel */}
         <div className="flex flex-col flex-1 overflow-hidden">
-          {isV2 ? (
-            <AudioTimeline />
-          ) : (
-            <>
-              <EditableWaveform onSeek={seek} />
-              <SpectrumAnalyzer audioClientRef={audioClientRef} enabled={showSpectrum} />
-              <LoudnessPanel />
-            </>
-          )}
-        </div>
+          <TransportBar onTogglePlay={togglePlay} onSeek={seek} onStop={stop} />
 
-        <SidePanel />
+          <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-col flex-1 overflow-hidden">
+              {isV2 ? (
+                <AudioTimeline />
+              ) : (
+                <>
+                  <EditableWaveform onSeek={seek} />
+                  <SpectrumAnalyzer audioClientRef={audioClientRef} enabled={showSpectrum} />
+                  <LoudnessPanel />
+                </>
+              )}
+            </div>
+
+            <SidePanel />
+          </div>
+        </div>
       </div>
 
       {isDragOver && projectMode && (

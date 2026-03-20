@@ -53,67 +53,61 @@ export function AudioPlayer() {
   const audioClientRef = useRef<AudioStreamClient | null>(null);
   const playStartTimeRef = useRef(0);
   const playWallTimeRef = useRef(0);
-  const animFrameRef = useRef(0);
   const statusThrottleRef = useRef(0);
 
   // =========================================================================
   // Time tracking during playback
   // =========================================================================
 
-  const updatePlaybackTime = useCallback(() => {
+  // RAF animation loop — defined entirely inside useEffect to avoid stale closures
+  // and ensure React 18 concurrent mode flushes renders on every frame.
+  useEffect(() => {
     if (!isPlaying || !mediaInfo) return;
 
-    let newTime: number;
-    const audioClient = audioClientRef.current;
-    if (audioClient && audioClient.isClockReady) {
-      newTime = audioClient.getCurrentTime();
-    } else {
-      const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
-      newTime = playStartTimeRef.current + elapsed;
-    }
+    let rafId: number;
 
-    if (newTime >= mediaInfo.duration) {
-      setCurrentTime(mediaInfo.duration);
-      setIsPlaying(false);
-      const client = audioClientRef.current;
-      if (client) {
-        client.pause();
+    const tick = () => {
+      let newTime: number;
+      const audioClient = audioClientRef.current;
+      if (audioClient && audioClient.isClockReady) {
+        newTime = audioClient.getCurrentTime();
+      } else {
+        const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
+        newTime = playStartTimeRef.current + elapsed * speed;
       }
-      postMessage({ type: 'preview:eof' });
-      postMessage({
-        type: 'preview:statusUpdate',
-        playbackState: 'stopped',
-        currentTime: mediaInfo.duration,
-      });
-      return;
-    }
 
-    setCurrentTime(newTime);
-
-    // Throttle status updates to ~1/sec
-    const now = performance.now();
-    if (now - statusThrottleRef.current > 1000) {
-      statusThrottleRef.current = now;
-      postMessage({
-        type: 'preview:statusUpdate',
-        playbackState: 'playing',
-        currentTime: newTime,
-      });
-    }
-
-    animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
-  }, [isPlaying, mediaInfo, postMessage]);
-
-  useEffect(() => {
-    if (isPlaying) {
-      animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
-    }
-    return () => {
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
+      if (newTime >= mediaInfo.duration) {
+        setCurrentTime(mediaInfo.duration);
+        setIsPlaying(false);
+        audioClientRef.current?.pause();
+        postMessage({ type: 'preview:eof' });
+        postMessage({
+          type: 'preview:statusUpdate',
+          playbackState: 'stopped',
+          currentTime: mediaInfo.duration,
+        });
+        return;
       }
+
+      setCurrentTime(newTime);
+
+      // Throttle status updates to ~1/sec
+      const now = performance.now();
+      if (now - statusThrottleRef.current > 1000) {
+        statusThrottleRef.current = now;
+        postMessage({
+          type: 'preview:statusUpdate',
+          playbackState: 'playing',
+          currentTime: newTime,
+        });
+      }
+
+      rafId = requestAnimationFrame(tick);
     };
-  }, [isPlaying, updatePlaybackTime]);
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isPlaying, mediaInfo, speed, postMessage]);
 
   // Cleanup on unmount — dispose audio client
   useEffect(() => {
@@ -252,9 +246,15 @@ export function AudioPlayer() {
   const handleSpeedChange = useCallback(
     (s: number) => {
       setSpeed(s);
+      // Reset wall-clock baseline so the fallback path uses the new speed
+      // from the current position (matches VideoPlayer's handleSpeedChange).
+      if (isPlaying) {
+        playStartTimeRef.current = currentTime;
+        playWallTimeRef.current = performance.now();
+      }
       postMessage({ type: 'preview:speed', speed: s });
     },
-    [postMessage],
+    [isPlaying, currentTime, postMessage],
   );
 
   // Cleanup on unmount

@@ -43,14 +43,14 @@ export function AudioTimeline() {
   const playheadLeft = currentTime * PIXELS_PER_SECOND * zoom;
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
+    <div className="flex flex-col flex-1 overflow-hidden bg-[var(--timeline-bg)]">
       {/* Ruler row */}
       <div
-        className="flex shrink-0 border-b border-[var(--vscode-panel-border)]"
+        className="flex shrink-0 border-b border-[var(--editor-border)]"
         style={{ height: RULER_HEIGHT }}
       >
         <div
-          className="shrink-0 border-r border-[var(--vscode-panel-border)]"
+          className="shrink-0 border-r border-[var(--editor-border)]"
           style={{ width: TRACK_LABEL_WIDTH, minWidth: TRACK_LABEL_WIDTH }}
         />
         <div ref={rulerRef} className="flex-1 overflow-hidden relative">
@@ -81,8 +81,8 @@ export function AudioTimeline() {
 
           {tracks.length === 0 && (
             <div
-              className="flex items-center justify-center text-[13px] text-[var(--vscode-descriptionForeground)]"
-              style={{ height: TRACK_HEIGHT * 3 }}
+              className="neko-timeline-guides flex items-center justify-center text-[13px] text-[var(--activity-inactive)]"
+              style={{ height: TRACK_HEIGHT * 6, width: '100%' }}
             >
               No tracks — import audio files to get started
             </div>
@@ -91,7 +91,7 @@ export function AudioTimeline() {
 
         {/* Playhead */}
         <div
-          className="absolute top-0 bottom-0 w-px bg-[var(--vscode-editor-foreground)] pointer-events-none z-10"
+          className="absolute top-0 bottom-0 w-px bg-[var(--waveform-cursor)] pointer-events-none z-10"
           style={{ left: TRACK_LABEL_WIDTH + playheadLeft }}
         />
       </div>

@@ -105,7 +105,6 @@ export function VideoPlayer() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const playStartTimeRef = useRef<number>(0);
   const playWallTimeRef = useRef<number>(0);
-  const animFrameRef = useRef<number>(0);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statusThrottleRef = useRef<number>(0);
   const statsThrottleRef = useRef<number>(0);
@@ -228,107 +227,109 @@ export function VideoPlayer() {
   // Time tracking during playback
   // =========================================================================
 
-  const updatePlaybackTime = useCallback(() => {
+  // RAF animation loop — defined entirely inside useEffect to avoid stale closures
+  // and ensure React 18 concurrent mode flushes renders on every frame.
+  useEffect(() => {
     if (!isPlaying || !mediaInfo) return;
 
-    // Use audio master clock if available, otherwise fall back to wall clock
-    let newTime: number;
-    const audioClient = audioClientRef.current;
-    if (audioClient && audioClient.isClockReady) {
-      // Detect wall→audio clock transition: reset scheduler's A/V offset
-      // because the master clock domain has changed.
-      if (clockSourceRef.current === 'wall') {
-        clockSourceRef.current = 'audio';
-        schedulerRef.current?.flush();
-        logger.info('Clock source switched: wall -> audio, scheduler flushed');
-      }
-      newTime = audioClient.getCurrentTime();
-    } else {
-      // Wall-clock fallback: don't advance until the first video frame arrives,
-      // so the clock doesn't run ahead while the stream is still connecting.
-      const h264Stats = clientRef.current?.getStats();
-      if (!h264Stats || h264Stats.framesDecoded === 0) {
-        // No frames yet — keep resetting the wall-clock base
-        playWallTimeRef.current = performance.now();
-        newTime = playStartTimeRef.current;
+    let rafId: number;
+
+    const tick = () => {
+      // Use audio master clock if available, otherwise fall back to wall clock
+      let newTime: number;
+      const audioClient = audioClientRef.current;
+      if (audioClient && audioClient.isClockReady) {
+        // Detect wall→audio clock transition: reset scheduler's A/V offset
+        // because the master clock domain has changed.
+        if (clockSourceRef.current === 'wall') {
+          clockSourceRef.current = 'audio';
+          schedulerRef.current?.flush();
+          logger.info('Clock source switched: wall -> audio, scheduler flushed');
+        }
+        newTime = audioClient.getCurrentTime();
       } else {
-        const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
-        newTime = playStartTimeRef.current + elapsed * speed;
+        // Wall-clock fallback: don't advance until the first video frame arrives,
+        // so the clock doesn't run ahead while the stream is still connecting.
+        const h264Stats = clientRef.current?.getStats();
+        if (!h264Stats || h264Stats.framesDecoded === 0) {
+          // No frames yet — keep resetting the wall-clock base
+          playWallTimeRef.current = performance.now();
+          newTime = playStartTimeRef.current;
+        } else {
+          const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
+          newTime = playStartTimeRef.current + elapsed * speed;
+        }
       }
-    }
 
-    if (newTime >= mediaInfo.duration) {
-      // Reached end — pause stream (keep clients alive for seek-back)
-      setCurrentTime(mediaInfo.duration);
-      setIsPlaying(false);
-      schedulerRef.current?.flush();
-      audioClientRef.current?.pause();
-      postMessage({ type: 'preview:eof' });
-      postMessage({
-        type: 'preview:statusUpdate',
-        playbackState: 'stopped',
-        currentTime: mediaInfo.duration,
-      });
-      return;
-    }
-
-    // --- Frame scheduling: render/skip/wait based on master clock ---
-    const scheduler = schedulerRef.current;
-    if (scheduler) {
-      const masterClockUs = newTime * 1_000_000;
-      const result = scheduler.schedule(masterClockUs);
-      if (result.action === 'render' && result.frame) {
-        renderFrame(result.frame);
+      if (newTime >= mediaInfo.duration) {
+        // Reached end — pause stream (keep clients alive for seek-back)
+        setCurrentTime(mediaInfo.duration);
+        setIsPlaying(false);
+        schedulerRef.current?.flush();
+        audioClientRef.current?.pause();
+        postMessage({ type: 'preview:eof' });
+        postMessage({
+          type: 'preview:statusUpdate',
+          playbackState: 'stopped',
+          currentTime: mediaInfo.duration,
+        });
+        return;
       }
-      // Log scheduling decisions periodically or when frames are skipped
-      if (result.skipped > 0) {
+
+      // --- Frame scheduling: render/skip/wait based on master clock ---
+      const scheduler = schedulerRef.current;
+      if (scheduler) {
+        const masterClockUs = newTime * 1_000_000;
+        const result = scheduler.schedule(masterClockUs);
+        if (result.action === 'render' && result.frame) {
+          renderFrame(result.frame);
+        }
+        // Log scheduling decisions periodically or when frames are skipped
+        if (result.skipped > 0) {
+          logger.debug(
+            `Schedule: skipped=${result.skipped} action=${result.action} delta=${(result.deltaUs / 1000).toFixed(1)}ms queue=${scheduler.getStats().queueLength}`,
+          );
+        }
+      }
+
+      setCurrentTime(newTime);
+
+      // Throttle status updates to ~1/sec
+      const now = performance.now();
+      if (now - statusThrottleRef.current > 1000) {
+        statusThrottleRef.current = now;
+        postMessage({
+          type: 'preview:statusUpdate',
+          playbackState: 'playing',
+          currentTime: newTime,
+        });
+
+        // Periodic diagnostic log
+        const h264 = clientRef.current?.getStats();
+        const sched = schedulerRef.current?.getStats();
+        const audio = audioClientRef.current?.getStats();
+        const clockSrc = audioClient && audioClient.isClockReady ? 'audio' : 'wall';
         logger.debug(
-          `Schedule: skipped=${result.skipped} action=${result.action} delta=${(result.deltaUs / 1000).toFixed(1)}ms queue=${scheduler.getStats().queueLength}`,
+          `Tick: time=${newTime.toFixed(2)}s clock=${clockSrc} h264=[recv=${h264?.packetsReceived} dec=${h264?.framesDecoded} drop=${h264?.framesDropped}] sched=[q=${sched?.queueLength} rend=${sched?.rendered} skip=${sched?.skipped} bp=${sched?.backpressure}] ${audio ? `audio=[prebuf=${audio.prebuffering} drift=${audio.driftMs.toFixed(1)}ms]` : 'audio=none'}`,
         );
       }
-    }
 
-    setCurrentTime(newTime);
-
-    // Throttle status updates to ~1/sec
-    const now = performance.now();
-    if (now - statusThrottleRef.current > 1000) {
-      statusThrottleRef.current = now;
-      postMessage({ type: 'preview:statusUpdate', playbackState: 'playing', currentTime: newTime });
-
-      // Periodic diagnostic log
-      const h264 = clientRef.current?.getStats();
-      const sched = schedulerRef.current?.getStats();
-      const audio = audioClientRef.current?.getStats();
-      const clockSrc = audioClient && audioClient.isClockReady ? 'audio' : 'wall';
-      logger.debug(
-        `Tick: time=${newTime.toFixed(2)}s clock=${clockSrc} h264=[recv=${h264?.packetsReceived} dec=${h264?.framesDecoded} drop=${h264?.framesDropped}] sched=[q=${sched?.queueLength} rend=${sched?.rendered} skip=${sched?.skipped} bp=${sched?.backpressure}] ${audio ? `audio=[prebuf=${audio.prebuffering} drift=${audio.driftMs.toFixed(1)}ms]` : 'audio=none'}`,
-      );
-    }
-
-    // Collect stats for debug overlay (~2/sec)
-    if (showStats && now - statsThrottleRef.current > 500) {
-      statsThrottleRef.current = now;
-      setSyncStats({
-        scheduler: schedulerRef.current?.getStats() ?? null,
-        h264: clientRef.current?.getStats() ?? null,
-        audio: audioClientRef.current?.getStats() ?? null,
-      });
-    }
-
-    animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
-  }, [isPlaying, mediaInfo, speed, showStats, renderFrame, postMessage]);
-
-  useEffect(() => {
-    if (isPlaying) {
-      animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
-    }
-    return () => {
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
+      // Collect stats for debug overlay (~2/sec)
+      if (showStats && now - statsThrottleRef.current > 500) {
+        statsThrottleRef.current = now;
+        setSyncStats({
+          scheduler: schedulerRef.current?.getStats() ?? null,
+          h264: clientRef.current?.getStats() ?? null,
+          audio: audioClientRef.current?.getStats() ?? null,
+        });
       }
+
+      rafId = requestAnimationFrame(tick);
     };
-  }, [isPlaying, updatePlaybackTime]);
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isPlaying, mediaInfo, speed, showStats, renderFrame, postMessage]);
 
   // =========================================================================
   // Extension message handling

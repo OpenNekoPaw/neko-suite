@@ -115,6 +115,13 @@ export class AudioStreamClient {
   private isPaused = false;
 
   /**
+   * AudioContext time recorded when pause() was called.
+   * Used in resume() to compensate ptsOffset for elapsed pause duration,
+   * since AudioContext.currentTime keeps advancing during gain-muted pause.
+   */
+  private pausedAtCtxTime: number | null = null;
+
+  /**
    * Seek generation counter. Incremented on resetClock().
    * Packets arriving during prebuffer whose generation is stale are discarded,
    * preventing pre-seek PCM data from leaking into the post-seek buffer.
@@ -385,6 +392,13 @@ export class AudioStreamClient {
     if (this.isPaused) return;
     this.isPaused = true;
 
+    if (this.audioCtx) {
+      // Snapshot the AudioContext clock so resume() can compensate ptsOffset.
+      // AudioContext.currentTime keeps ticking even with gain = 0, which would
+      // cause getCurrentTime() to drift forward by the entire pause duration.
+      this.pausedAtCtxTime = this.audioCtx.currentTime;
+    }
+
     if (this.gainNode && this.audioCtx) {
       this.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
       this.gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
@@ -399,6 +413,16 @@ export class AudioStreamClient {
   resume(): void {
     if (!this.isPaused) return;
     this.isPaused = false;
+
+    // Compensate ptsOffset for the time elapsed while paused.
+    // AudioContext.currentTime advanced continuously during the gain-muted pause,
+    // so without this correction getCurrentTime() would return a value that's
+    // "pause duration" seconds ahead of the actual media position.
+    if (this.pausedAtCtxTime !== null && this.audioCtx && this.ptsOffset !== null) {
+      const pauseDuration = this.audioCtx.currentTime - this.pausedAtCtxTime;
+      this.ptsOffset += pauseDuration;
+    }
+    this.pausedAtCtxTime = null;
 
     // Resume AudioContext if suspended (browser autoplay policy)
     if (this.audioCtx?.state === 'suspended') {

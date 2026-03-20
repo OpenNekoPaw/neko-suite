@@ -64,7 +64,7 @@ export function SidePanel() {
       {/* Panel */}
       <div
         ref={rootRef}
-        className="flex flex-col shrink-0 bg-[var(--activity-bg)] border-l border-[var(--editor-border)] overflow-hidden"
+        className="flex flex-col shrink-0 bg-[var(--toolbar-bg)] border-l border-[var(--editor-border)] overflow-hidden"
         style={{ width }}
       >
         {/* Header */}

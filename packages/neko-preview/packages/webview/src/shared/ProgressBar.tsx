@@ -121,7 +121,7 @@ export function ProgressBar({
         onMouseLeave={handleMouseLeave}
       >
         <div
-          className={`absolute top-0 left-0 h-full rounded-full ${fillBg} transition-all`}
+          className={`absolute top-0 left-0 h-full rounded-full ${fillBg}`}
           style={{ width: `${progress}%` }}
         />
         <div

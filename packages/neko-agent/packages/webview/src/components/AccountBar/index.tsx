@@ -79,7 +79,7 @@ export function AccountBar({
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-52 bg-[var(--vscode-menu-background)] border border-[var(--vscode-menu-border)] rounded shadow-lg z-50 py-1">
+        <div className="absolute right-0 top-full mt-1.5 w-52 neko-glass-dropdown z-50 py-1.5">
           {ssoSession ? (
             <>
               <div className="px-3 py-2 border-b border-[var(--vscode-menu-separatorBackground)]">

@@ -342,3 +342,50 @@ body {
 .animate-slide-in {
   animation: toast-slide-in 0.3s ease-out;
 }
+
+/* ── Neko visual design tokens ────────────────────────────────────────────── */
+
+/* Gradient accent bar — horizontal colorful strip (used at top of modals/cards) */
+.neko-gradient-bar {
+  background: linear-gradient(
+    90deg,
+    var(--vscode-charts-purple, #9c3eda),
+    var(--vscode-charts-blue, #1a85ff),
+    var(--vscode-charts-purple, #9c3eda)
+  );
+  background-size: 200% 100%;
+  height: 2px;
+  animation: neko-gradient-shift 6s ease infinite;
+}
+
+@keyframes neko-gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Elevated floating card — deep shadow + large radius for modals/overlays */
+.neko-float-card {
+  background-color: var(--vscode-panel-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.28),
+    0 8px 16px rgba(0, 0, 0, 0.14),
+    0 2px 4px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+/* Glass dropdown — frosted glass panel for menus/dropdowns */
+.neko-glass-dropdown {
+  background-color: color-mix(in srgb, var(--vscode-menu-background, #252526) 92%, transparent);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid color-mix(in srgb, var(--vscode-menu-border, #454545) 80%, transparent);
+  border-radius: 12px;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.24),
+    0 4px 8px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}

@@ -5,100 +5,179 @@
 @tailwind utilities;
 
 /* =======================
-   Theme Variables
+   neko-audio DAW Design System
+   Own palette — not dependent on vscode-editor-background.
+   Gradient accent is placed in the TransportBar header strip.
    ======================= */
 
 @layer base {
   :root {
-    /* VSCode theme tokens */
-    --editor-bg: var(--vscode-editor-background, #1e1e1e);
-    --editor-fg: var(--vscode-editor-foreground, #cccccc);
-    --editor-border: var(--vscode-panel-border, #444444);
-    --toolbar-bg: var(--vscode-titleBar-activeBackground, #333333);
-    --activity-bg: var(--vscode-activityBar-background, #2c2c2c);
-    --activity-fg: var(--vscode-activityBar-foreground, #cccccc);
-    --activity-inactive: var(--vscode-activityBar-inactiveForeground, #888888);
-    --accent: var(--vscode-focusBorder, #007acc);
+    /* === Dark DAW palette — macOS Sonoma dark (pure solid colors) === */
+    --editor-bg:       #1C1C1E;   /* systemBackground dark */
+    --editor-fg:       rgba(255, 255, 255, 0.88);
+    --editor-border:   rgba(255, 255, 255, 0.08);
+    --toolbar-bg:      #2C2C2E;   /* secondarySystemBackground dark */
+    --activity-bg:     #1C1C1E;   /* sidebar — same as bg */
+    --activity-fg:     rgba(255, 255, 255, 0.85);
+    --activity-inactive: rgba(255, 255, 255, 0.35);
+    --accent:          var(--vscode-button-background, #0A84FF);
 
-    /* Audio-specific waveform colors (Canvas rendering) */
-    --waveform-played: #4a9eff;
-    --waveform-unplayed: #264f78;
-    --waveform-cursor: #ffffff;
-    --selection-bg: rgba(74, 158, 255, 0.2);
-    --selection-border: rgba(74, 158, 255, 0.6);
+    /* Timeline */
+    --timeline-bg:     #2C2C2E;   /* same as toolbar — unified surface */
+    --ruler-bg:        #1C1C1E;   /* ruler = bg level */
+    --track-header-bg: #242426;   /* track header — slightly lighter than bg */
+    --track-alt-bg:    rgba(255, 255, 255, 0.018);
 
-    /* macOS theme variables (shared with neko-preview) */
-    --neko-glass: rgba(255, 255, 255, 0.08);
-    --neko-glass-hover: rgba(255, 255, 255, 0.12);
-    --neko-surface: rgba(255, 255, 255, 0.05);
-    --neko-preview-surface: rgba(255, 255, 255, 0.06);
-    --neko-preview-primary: #0A84FF;
-    --neko-preview-text-primary: rgba(255, 255, 255, 0.9);
-    --neko-preview-text-secondary: rgba(255, 255, 255, 0.6);
+    /* Transport bar — solid, no gradient */
+    --transport-bg:    #2C2C2E;
+
+    /* Waveform */
+    --waveform-played:    #4a9eff;
+    --waveform-unplayed:  #2d5f8a;
+    --waveform-cursor:    #ffffff;
+    --selection-bg:       rgba(74, 158, 255, 0.15);
+    --selection-border:   rgba(74, 158, 255, 0.50);
+
+    /* Button states */
+    --btn-bg:          rgba(255, 255, 255, 0.07);
+    --btn-bg-hover:    rgba(255, 255, 255, 0.12);
+    --btn-bg-active:   rgba(255, 255, 255, 0.18);
+    --btn-border:      rgba(255, 255, 255, 0.10);
+
+    /* Shared tokens */
+    --neko-glass:          rgba(255, 255, 255, 0.07);
+    --neko-glass-hover:    rgba(255, 255, 255, 0.12);
+    --neko-glass-active:   rgba(255, 255, 255, 0.18);
+    --neko-surface:        rgba(255, 255, 255, 0.05);
+    --neko-surface-hover:  rgba(255, 255, 255, 0.09);
+    --neko-preview-primary:        var(--accent);
+    --neko-preview-text-primary:   rgba(255, 255, 255, 0.90);
+    --neko-preview-text-secondary: rgba(255, 255, 255, 0.50);
+    --neko-preview-surface:        rgba(255, 255, 255, 0.06);
+    --neko-preview-bg:     #1C1C1E;
   }
 
-  /* Light theme */
+  /* === Light DAW palette — macOS Sonoma light === */
   body.vscode-light,
-  body[data-vscode-theme-kind="vscode-light"] {
-    --neko-glass: rgba(0, 0, 0, 0.05);
-    --neko-glass-hover: rgba(0, 0, 0, 0.08);
-    --neko-surface: rgba(0, 0, 0, 0.03);
-    --neko-preview-surface: rgba(0, 0, 0, 0.04);
-    --neko-preview-primary: #007AFF;
-    --neko-preview-text-primary: rgba(0, 0, 0, 0.9);
-    --neko-preview-text-secondary: rgba(0, 0, 0, 0.6);
+  body[data-vscode-theme-kind="vscode-light"],
+  body[data-vscode-theme-kind="vscode-high-contrast-light"] {
+    /* Layer order (darkest → lightest):
+       sidebar #3A3A3C < bg #F2F2F7 < ruler #E8E8ED < timeline #EBEBF0 < transport #FFFFFF
+       Clear separation between every surface zone. */
+    --editor-bg:       #F2F2F7;   /* window background */
+    --editor-fg:       rgba(0, 0, 0, 0.82);
+    --editor-border:   rgba(0, 0, 0, 0.11);
+    --toolbar-bg:      #FFFFFF;   /* side panel — lightest surface */
+    --activity-bg:     #3A3A3C;   /* toolbar sidebar — visually distinct dark */
+    --activity-fg:     rgba(255, 255, 255, 0.88);
+    --activity-inactive: rgba(255, 255, 255, 0.42);
+    --accent:          var(--vscode-button-background, #007AFF);
+
+    /* Timeline layers — each noticeably different */
+    --timeline-bg:     #EBEBF0;   /* track lane — cool gray */
+    --ruler-bg:        #E0E0E6;   /* ruler — slightly darker than lane */
+    --track-header-bg: #3A3A3C;   /* track label — dark, matches toolbar */
+    --track-alt-bg:    rgba(0, 0, 0, 0.025);
+
+    /* Transport bar — white, distinct from timeline */
+    --transport-bg:    #FFFFFF;
+
+    /* Waveform */
+    --waveform-played:    #007AFF;
+    --waveform-unplayed:  #A0BFDF;
+    --waveform-cursor:    #1C1C1E;
+    --selection-bg:       rgba(0, 122, 255, 0.10);
+    --selection-border:   rgba(0, 122, 255, 0.40);
+
+    /* Button states */
+    --btn-bg:          rgba(0, 0, 0, 0.055);
+    --btn-bg-hover:    rgba(0, 0, 0, 0.10);
+    --btn-bg-active:   rgba(0, 0, 0, 0.15);
+    --btn-border:      rgba(0, 0, 0, 0.13);
+
+    /* Shared tokens */
+    --neko-glass:          rgba(0, 0, 0, 0.055);
+    --neko-glass-hover:    rgba(0, 0, 0, 0.10);
+    --neko-glass-active:   rgba(0, 0, 0, 0.15);
+    --neko-surface:        rgba(0, 0, 0, 0.04);
+    --neko-surface-hover:  rgba(0, 0, 0, 0.08);
+    --neko-preview-primary:        var(--accent);
+    --neko-preview-text-primary:   rgba(0, 0, 0, 0.85);
+    --neko-preview-text-secondary: rgba(0, 0, 0, 0.45);
+    --neko-preview-surface:        rgba(0, 0, 0, 0.04);
+    --neko-preview-bg:     #F2F2F7;
   }
 
-  /* High contrast */
+  /* === High contrast === */
   body.vscode-high-contrast,
   body[data-vscode-theme-kind="vscode-high-contrast"] {
-    --neko-glass: rgba(255, 255, 255, 0.15);
-    --neko-glass-hover: rgba(255, 255, 255, 0.25);
-    --neko-surface: rgba(255, 255, 255, 0.1);
-    --neko-preview-surface: rgba(255, 255, 255, 0.12);
-    --neko-preview-primary: #3794FF;
-    --neko-preview-text-primary: #FFFFFF;
-    --neko-preview-text-secondary: rgba(255, 255, 255, 0.8);
+    --editor-bg:       #000000;
+    --editor-fg:       #ffffff;
+    --editor-border:   rgba(255, 255, 255, 0.35);
+    --toolbar-bg:      #111111;
+    --activity-bg:     #000000;
+    --activity-fg:     #ffffff;
+    --activity-inactive: rgba(255, 255, 255, 0.65);
+    --timeline-bg:     #080808;
+    --ruler-bg:        #000000;
+    --track-alt-bg:    transparent;
+    --transport-gradient: var(--toolbar-bg);
+    --neko-glass:          rgba(255, 255, 255, 0.18);
+    --neko-glass-hover:    rgba(255, 255, 255, 0.28);
+    --neko-glass-active:   rgba(255, 255, 255, 0.38);
+    --neko-surface:        rgba(255, 255, 255, 0.12);
+    --neko-preview-primary:        #3794FF;
+    --neko-preview-text-primary:   #ffffff;
+    --neko-preview-text-secondary: rgba(255, 255, 255, 0.80);
   }
 
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
-
-  html, body, #root {
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-  }
-
+  /* Global reset */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, #root { width: 100%; height: 100%; overflow: hidden; }
   body {
     background: var(--editor-bg);
     color: var(--editor-fg);
-    font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
+    font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
     font-size: var(--vscode-font-size, 13px);
   }
 }
 
 /* =======================
-   Utility classes for CSS features Tailwind cannot express
+   DAW Utility Classes
    ======================= */
 
 @layer components {
-  /* Toolbar active indicator (left accent bar) */
+  /* Transport bar — solid surface with bottom separator */
+  .neko-daw-transport {
+    background: var(--transport-bg);
+    border-bottom: 1px solid var(--editor-border);
+    box-shadow: 0 1px 0 var(--editor-border);
+  }
+
+  /* Timeline empty-area guide lines */
+  .neko-timeline-guides {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 55px,
+      var(--editor-border) 55px,
+      var(--editor-border) 56px
+    );
+  }
+
+  /* Toolbar active indicator */
   .neko-toolbar-indicator {
     position: absolute;
     left: 0;
     top: 50%;
     transform: translateY(-50%);
     width: 2px;
-    height: 16px;
+    height: 14px;
     border-radius: 0 2px 2px 0;
     background: var(--accent);
   }
 
-  /* Resize handle with hover accent */
+  /* Resize handle */
   .neko-resize-handle {
     width: 3px;
     flex-shrink: 0;
@@ -106,58 +185,96 @@
     background: transparent;
     transition: background 0.15s;
   }
-  .neko-resize-handle:hover {
-    background: var(--accent);
-  }
+  .neko-resize-handle:hover { background: var(--accent); }
 
-  /* Drop overlay with color-mix background */
+  /* Drop overlay */
   .neko-drop-overlay-bg {
     background: color-mix(in srgb, var(--editor-bg) 85%, transparent);
   }
 
-  /* Drag-over state with color-mix */
+  /* Drag-over */
   .neko-drag-over-bg {
-    background: color-mix(in srgb, var(--vscode-focusBorder, #007fd4) 8%, transparent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
 
-  /* Range slider (reuse macOS style from neko-preview) */
+  /* Pill button — track M/L/× controls */
+  .neko-track-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+    font-weight: 500;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.60);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+    line-height: 1;
+  }
+  .neko-track-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: rgba(255, 255, 255, 0.88);
+  }
+  .neko-track-btn.active-mute {
+    background: rgba(255, 59, 48, 0.30);
+    border-color: rgba(255, 59, 48, 0.45);
+    color: #ff6b6b;
+  }
+  .neko-track-btn.active-lock {
+    background: rgba(255, 159, 10, 0.25);
+    border-color: rgba(255, 159, 10, 0.40);
+    color: #ffb340;
+  }
+  .neko-track-btn.remove {
+    margin-left: auto;
+    opacity: 0.45;
+  }
+  .neko-track-btn.remove:hover {
+    background: rgba(255, 59, 48, 0.25);
+    border-color: rgba(255, 59, 48, 0.40);
+    color: #ff6b6b;
+    opacity: 1;
+  }
+
+  /* Range slider — macOS style */
   .neko-slider {
     -webkit-appearance: none;
     appearance: none;
-    height: 4px;
+    height: 3px;
     border-radius: 2px;
+    background: var(--btn-bg);
     outline: none;
     cursor: pointer;
   }
   .neko-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 12px;
-    height: 12px;
+    width: 11px;
+    height: 11px;
     border-radius: 50%;
-    background: var(--neko-preview-text-primary, #fff);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    background: var(--neko-preview-text-primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
     cursor: pointer;
+    transition: transform 0.10s;
   }
+  .neko-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
   .neko-slider::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
+    width: 11px;
+    height: 11px;
     border-radius: 50%;
-    background: var(--neko-preview-text-primary, #fff);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    background: var(--neko-preview-text-primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
     border: none;
     cursor: pointer;
   }
 }
 
-/* Toast slide-in animation */
+/* Toast animation */
 @keyframes neko-toast-slide-in {
-  from {
-    transform: translateY(-100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
 }
