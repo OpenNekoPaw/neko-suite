@@ -31,61 +31,46 @@
 
 neko-preview 是唯一未接入 Tailwind 的主要 webview 包。当前使用 1009 行手写 CSS（`player.css`），无 `tailwind.config.js`、无 `postcss.config.js`。
 
-### 0.2 接入步骤
+### 0.2 接入步骤 ✅
 
-1. 添加依赖：
+1. 添加 `tailwindcss` / `postcss` / `autoprefixer` devDependencies
+2. 创建 `tailwind.config.js`（引用 `nekoTailwindPreset`，content 扫描 `video.html` / `audio.html` / `src/**/*.{tsx,ts}`）
+3. 创建 `postcss.config.js`
+4. 在 `player.css` 顶部添加 `@tailwind base/components/utilities` 指令
 
-```bash
-cd packages/neko-preview/packages/webview
-pnpm add -D tailwindcss postcss autoprefixer
+### 0.3 Tailwind + CSS 协作策略
+
+**不是全面替换 CSS，而是分层协作**：
+
+```
+player.css 结构：
+├── @tailwind base/components/utilities      — Tailwind 指令
+├── @layer base { :root 主题变量 }            — CSS 变量定义 + 主题覆盖
+├── @layer components {                       — 不可 Tailwind 化的工具类（~90 行）
+│   ├── .neko-audio-bg                        — color-mix() 渐变背景
+│   ├── .neko-cover-gradient                  — 封面占位符渐变
+│   ├── .neko-fade-mask                       — mask-image 歌词渐隐
+│   ├── .neko-scrollbar-hide                  — ::-webkit-scrollbar 隐藏
+│   ├── .neko-slider                          — ::-webkit-slider-thumb 伪元素
+│   └── .neko-*-bg / .neko-speed-border       — color-mix() 背景/边框
+│ }
+├── @keyframes neko-cover-pulse               — 自定义动画
+└── 视频播放器 + 共享 controls CSS             — Phase 3 再迁移
 ```
 
-2. 创建配置文件：
+**JSX 中只用 Tailwind 类 + 上述工具类**，不再使用 BEM 类名。
 
-```js
-// tailwind.config.js
-import { nekoTailwindPreset } from '@neko/shared/theme/tailwind-preset';
+### 0.4 不可 Tailwind 化的 CSS 特性（保留为工具类）
 
-/** @type {import('tailwindcss').Config} */
-export default {
-  presets: [nekoTailwindPreset],
-  content: [
-    "./video.html",
-    "./audio.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
-  plugins: [],
-}
-```
-
-```js
-// postcss.config.js
-export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-}
-```
-
-3. 在 `player.css` 顶部添加 Tailwind 指令：
-
-```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* 保留现有 CSS，逐步迁移到 Tailwind 类 */
-```
-
-4. 两个入口（`video/main.tsx`、`audio/main.tsx`）已 import `player.css`，无需改动。
-
-### 0.3 迁移策略
-
-**渐进式迁移**，不一次性重写：
-- 新增/修改的组件用 Tailwind 类
-- 现有 CSS 保留，逐步替换
-- `player.css` 中的 BEM 类和 Tailwind 共存（Tailwind 的 `@layer` 不会冲突）
+| CSS 特性 | 原因 | 工具类 |
+|---------|------|--------|
+| `color-mix(in srgb, ...)` | Tailwind 颜色值必须静态，`color-mix()` 是运行时 CSS 函数 | `.neko-audio-bg` / `.neko-cover-gradient` / `.neko-*-bg` |
+| `::-webkit-slider-thumb` | 伪元素需要多属性组合，Tailwind 语法过长 | `.neko-slider` |
+| `mask-image: linear-gradient()` | Tailwind 无 `mask-image` 工具类 | `.neko-fade-mask` |
+| `::-webkit-scrollbar` | Tailwind 不支持滚动条伪元素 | `.neko-scrollbar-hide` |
+| `@keyframes` 自定义动画 | 非内置动画需自定义 | `@keyframes neko-cover-pulse` |
+| CSS 变量作用域定义 | Tailwind 只能引用变量，不能定义 | `@layer base :root {}` |
+| `body[data-vscode-theme-kind]` | Tailwind `dark:` 不支持自定义属性选择器 | `@layer base` 主题覆盖 |
 
 ---
 
@@ -254,135 +239,50 @@ body.vscode-high-contrast-light .controls__btn {
 
 ---
 
-## Phase 2：macOS 风格组件重构（React + Tailwind）
+## Phase 2：macOS 风格组件重构（React + Tailwind）✅
 
-### 2.1 音频播放器 macOS 化
+### 2.1 实施结果
 
-当前 AudioPlayer 已有 Apple Music 风格布局，在此基础上增强 macOS 质感。BEM CSS 类逐步迁移为 Tailwind 类。
+删除 520 行 BEM CSS 规则，替换为 ~90 行 `@layer components` 工具类 + JSX 中的 Tailwind 类。CSS 体积从 33.5KB → 26.2KB（减少 22%）。
 
-**封面区域**：
-```tsx
-{/* 模糊背景光晕 + 分层阴影 */}
-<div className="relative rounded-neko-lg shadow-neko-xl overflow-hidden">
-  <div className="absolute -inset-5 bg-cover bg-center blur-[40px] saturate-[1.2] opacity-35" />
-  <img className="relative z-10 w-full h-full object-contain" />
-</div>
-```
+**迁移的组件**：
 
-**控件区域**：
-```tsx
-{/* 播放按钮：macOS 实心圆 + 按压缩放 */}
-<button className="w-13 h-13 rounded-full bg-[var(--neko-preview-text-primary)]
-  text-[var(--neko-preview-bg)] shadow-neko-sm
-  transition-all duration-150 hover:scale-[1.08] active:scale-95" />
+| 组件 | 改动 |
+|------|------|
+| AudioPlayer.tsx | BEM `audio-player__*` → Tailwind flex/padding/text + `.neko-audio-bg` 工具类 |
+| AudioControls.tsx | BEM 按钮/滑块 → MacIconButton / MacButton / MacTabs / MacSlider 组件 |
+| ProgressBar.tsx | BEM `controls__progress-*` → Tailwind group-hover + `.neko-progress-track-bg` |
+| CoverView.tsx | BEM `audio-player__cover*` → Tailwind + inline style（`color-mix` 渐变） |
+| LyricsView.tsx | BEM `audio-player__lyrics*` → Tailwind + `.neko-fade-mask` / `.neko-scrollbar-hide` |
+| WaveformCanvas.tsx | `audio-player__waveform` → `w-full h-full` |
+| SpectrumCanvas.tsx | `audio-player__spectrum-container` → Tailwind 类 |
 
-{/* 视图切换：毛玻璃胶囊 */}
-<div className="flex gap-0.5 bg-[var(--neko-preview-glass)]
-  backdrop-blur-[var(--neko-preview-glass-blur)] rounded-neko-sm p-0.5">
-  <button className="w-8 h-7 rounded-[6px] transition-all duration-200
-    data-[active=true]:bg-[var(--neko-preview-surface)]
-    data-[active=true]:shadow-neko-sm" />
-</div>
-
-{/* 音量滑块：macOS 细轨道 */}
-<input type="range" className="w-16 h-1 appearance-none rounded-full bg-white/25
-  [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3
-  [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full
-  [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-neko-sm" />
-```
-
-**进度条**：
-```tsx
-{/* 细轨道 + hover 膨胀 + 圆形 thumb */}
-<div className="group relative w-full py-1.5 cursor-pointer">
-  <div className="h-1 group-hover:h-2 rounded-full bg-white/10 transition-all duration-150">
-    <div className="h-full rounded-full bg-[var(--neko-preview-accent)]"
-      style={{ width: `${progress}%` }} />
-    <div className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full
-      bg-white shadow-neko-sm opacity-0 group-hover:opacity-100 transition-opacity"
-      style={{ left: `${progress}%` }} />
-  </div>
-</div>
-```
-
-### 2.2 视频播放器 macOS 化
-
-保持底部渐变叠加层布局，控件质感对齐音频播放器：
-
-```tsx
-{/* 底部渐变叠加层 */}
-<div className={`absolute bottom-0 inset-x-0 pt-10
-  bg-gradient-to-t from-black/85 to-transparent
-  transition-opacity duration-300
-  ${visible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-  <div className="px-4 pb-3 flex flex-col gap-2">
-    <ProgressBar />
-    <div className="flex items-center gap-3">
-      <PlayButton />
-      <VolumeControl size="sm" />
-      <TimeDisplay />
-      <div className="flex-1" />
-      <SpeedButton />
-      <PiPButton />
-    </div>
-  </div>
-</div>
-
-{/* 视频控件按钮：统一 macOS 风格 */}
-<button className="w-8 h-8 flex items-center justify-center rounded-full
-  text-white/80 hover:text-white hover:bg-white/10
-  transition-all duration-150 active:scale-95" />
-```
-
-### 2.3 共享控件提取（neko-preview 内部）
+### 2.2 新建的 macOS 风格共享组件
 
 ```
 packages/neko-preview/packages/webview/src/shared/
-├── ProgressBar.tsx      ← 已存在，用 Tailwind 重写样式
-├── VolumeControl.tsx    ← 新增
-├── SpeedButton.tsx      ← 新增
-├── useMediaKeyboard.ts  ← 新增
-├── types.ts             ← 已存在
-└── useVscodeMessage.ts  ← 已存在
+├── MacButton.tsx       — 4 种变体（primary/secondary/ghost/icon）+ 3 种尺寸
+├── MacIconButton.tsx   — 圆形图标按钮（default/primary 变体 + 4 种尺寸）
+├── MacTabs.tsx         — 分段控件（毛玻璃背景 + 滑动活跃指示器）
+├── MacSlider.tsx       — 滑块（使用 .neko-slider CSS 工具类）
+├── ProgressBar.tsx     — 进度条（Tailwind group-hover 膨胀效果）
+├── types.ts            — 消息协议类型
+└── useVscodeMessage.ts — postMessage 通信 hook
 ```
 
-**VolumeControl**：
-```typescript
-interface VolumeControlProps {
-  volume: number;
-  onVolumeChange: (volume: number) => void;
-  size?: 'sm' | 'md';  // sm=视频(紧凑), md=音频(宽松)
-  className?: string;
-}
-```
+### 2.3 CSS 工具类清单（`@layer components`）
 
-**SpeedButton**：
-```typescript
-interface SpeedButtonProps {
-  speed: number;
-  options?: number[];  // 默认 [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-  onSpeedChange: (speed: number) => void;
-  className?: string;
-}
-```
-
-**useMediaKeyboard**：
-```typescript
-interface MediaKeyboardOptions {
-  isPlaying: boolean;
-  currentTime: number;
-  duration: number;
-  volume: number;
-  speed: number;
-  onTogglePlay: () => void;
-  onSeek: (time: number) => void;
-  onVolumeChange: (volume: number) => void;
-  onSpeedChange: (speed: number) => void;
-  extraKeys?: Record<string, (e: KeyboardEvent) => void>;
-}
-// 共享：空格/k(播放) ←/→(±5s) ↑/↓(音量) m(静音)
-// 扩展：视频 f(全屏) d(统计) p(PiP)
-```
+| 工具类 | 用途 | 不可 Tailwind 原因 |
+|--------|------|-------------------|
+| `.neko-audio-bg` | 渐变背景 + CSS 变量定义 | `color-mix()` 运行时函数 |
+| `.neko-cover-gradient` | 封面占位符渐变 | `color-mix()` |
+| `.neko-fade-mask` | 歌词上下渐隐遮罩 | `mask-image` 无 Tailwind 类 |
+| `.neko-scrollbar-hide` | 隐藏滚动条 | `::-webkit-scrollbar` 伪元素 |
+| `.neko-slider` | 滑块轨道 + thumb 样式 | `::-webkit-slider-thumb` 伪元素 |
+| `.neko-progress-track-bg` | 进度条轨道背景 | `color-mix()` |
+| `.neko-speed-border` | 速度按钮边框 | `color-mix()` |
+| `.neko-tabs-bg` | 标签栏背景 | `color-mix()` |
+| `.neko-volume-track-bg` | 音量滑块轨道背景 | `color-mix()` |
 
 ---
 
@@ -1124,10 +1024,10 @@ neko-suite 注册了 **13 个自定义文件扩展名**，当前在 VSCode 文�
 ## 实施顺序
 
 ```
-Phase 0    neko-preview Tailwind 基础设施接入                    [0.5d]
-Phase 1    macOS Design Token 体系 + CSS 变量统一 + 主题覆盖     [1d]
-Phase 2    macOS 风格组件重构 + 共享控件提取                      [2d]
-Phase 3    macOS 全局组件模式（按钮/输入/面板/动效规范）           [0.5d]
+Phase 0    neko-preview Tailwind 基础设施接入                    [0.5d] ✅
+Phase 1    macOS Design Token 体系 + CSS 变量统一 + 主题覆盖     [1d]   ✅
+Phase 2    macOS 风格组件重构 + 共享控件提取                      [2d]   ✅
+Phase 3    视频播放器 macOS 化 + useMediaKeyboard                [0.5d]
 Phase 4    neko-audio Tailwind 接入 + macOS 化                   [1d]
 Phase 5    neko-story VSCode 主题接入                             [0.5d]
 Phase 5.5  macOS VSCode 主题配色（Dark + Light）                  [1d]

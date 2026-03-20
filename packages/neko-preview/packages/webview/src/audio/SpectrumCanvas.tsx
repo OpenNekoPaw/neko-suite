@@ -70,9 +70,9 @@ export function SpectrumCanvas({ audioClient, isPlaying }: SpectrumCanvasProps) 
     const { width, height } = logicalSizeRef.current;
     if (width === 0 || height === 0) return;
 
-    const accentColor = getCssVar('--neko-audio-accent', '#0e639c');
-    const accentHover = getCssVar('--neko-audio-accent-hover', '#1a8fff');
-    const bgColor = getCssVar('--neko-audio-surface', 'rgba(255, 255, 255, 0.05)');
+    const accentColor = getCssVar('--neko-preview-accent', '#0e639c');
+    const accentHover = getCssVar('--neko-preview-accent-hover', '#1a8fff');
+    const bgColor = getCssVar('--neko-preview-surface', 'rgba(255, 255, 255, 0.05)');
 
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = bgColor;
@@ -169,7 +169,10 @@ export function SpectrumCanvas({ audioClient, isPlaying }: SpectrumCanvasProps) 
   }, []);
 
   return (
-    <div ref={containerRef} className="audio-player__spectrum-container">
+    <div
+      ref={containerRef}
+      className="w-full h-full relative rounded-lg bg-neko-surface overflow-hidden"
+    >
       <canvas ref={canvasRef} />
     </div>
   );

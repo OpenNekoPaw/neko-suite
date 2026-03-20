@@ -15,7 +15,7 @@
 | **neko-cut** | Alpha | 82% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 拖拽修复 |
 | **neko-agent** | Alpha | 75% | Agent 引擎 + LLM 平台 + CLI + UI + Handler 拆分 + 流式化 + 剧本→时间线 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
-| **neko-preview** | Alpha | 75% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + 音频播放器现代化（Apple Music 风格三视图） + i18n + 流生命周期重构（tab 级 stream 复用） + UI 现代化规划（macOS 风格 + Tailwind 统一） |
+| **neko-preview** | Alpha | 80% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + 音频播放器现代化（Apple Music 风格四视图） + i18n + 流生命周期重构 + UI 现代化 Phase 0-2 ✅（Tailwind 接入 + macOS Design Token + 音频组件 Tailwind 化） |
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
 | **neko-assets** | Alpha | 85% | Phase 1-3 ✅ + 外部媒体库 ✅ + AI 分类 + 缩略图 + 多云支持 + 跨扩展集成，Phase 4-5 待开发 |
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
@@ -106,7 +106,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ## Phase 4.5: UI 现代化与主题统一
 
-> 目标：统一 macOS 视觉风格 + VSCode 主题配色 + 图标系统 — **进度 ~0%** | **设计完成，待实施**
+> 目标：统一 macOS 视觉风格 + VSCode 主题配色 + 图标系统 — **进度 ~30%** | **Phase 0-2 已完成**
 
 **价值定位**：提升 neko-suite 整体视觉一致性和现代感，与 macOS 设计语言对齐，改善用户体验。
 
@@ -114,21 +114,21 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 **里程碑**：
 
-### Phase 0: neko-preview Tailwind 基础设施接入 [0.5d]
-- 添加 tailwind.config.js + postcss.config.js
-- 在 player.css 顶部添加 @tailwind 指令
+### Phase 0: neko-preview Tailwind 基础设施接入 ✅
+- tailwind.config.js + postcss.config.js + @tailwind 指令
 - 渐进式迁移（新增组件用 Tailwind，现有 CSS 保留）
 
-### Phase 1: macOS Design Token 体系 + CSS 变量统一 [1d]
+### Phase 1: macOS Design Token 体系 + CSS 变量统一 ✅
 - 扩展 @neko/shared 全局 Token（neko-glass / neko-surface / borderRadius / boxShadow / backdropBlur）
-- 统一 CSS 变量：`--neko-audio-*` → `--neko-preview-*`
+- 统一 CSS 变量：`--neko-audio-*` → `--neko-preview-*`（~40 处替换）
 - 添加深色/浅色/高对比度三层主题覆盖
 
-### Phase 2: macOS 风格组件重构 + 共享控件提取 [2d]
-- 音频/视频播放器 macOS 化（毛玻璃、圆角、阴影、按压缩放）
-- 提取共享控件（VolumeControl / SpeedButton / useMediaKeyboard）
+### Phase 2: macOS 风格组件重构 + 共享控件提取 ✅
+- 音频播放器 macOS 化（AudioPlayer/AudioControls/ProgressBar/CoverView/LyricsView 全部 Tailwind 化）
+- 新建 4 个 macOS 风格共享组件（MacButton/MacIconButton/MacTabs/MacSlider）
+- WaveformCanvas/SpectrumCanvas getCssVar 变量名更新
 
-### Phase 3: macOS 全局组件模式 [0.5d]
+### Phase 3: 视频播放器 macOS 化 [待开始]
 - 定义按钮体系（Primary / Secondary / Ghost / Icon）
 - 输入控件规范（输入框 / 滑块）
 - 动效规范（hover / active / transition）
@@ -316,4 +316,4 @@ neko-engine (分段渲染 + 转场 + 特效)
 
 ---
 
-*最后更新: 2026-03-21（UI 现代化设计完成 + Phase 4.5 规划）*
+*最后更新: 2026-03-21（UI 现代化 Phase 0-2 完成 + neko-preview 音频组件 Tailwind 化）*

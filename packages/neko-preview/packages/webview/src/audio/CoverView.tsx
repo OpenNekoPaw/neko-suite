@@ -18,24 +18,38 @@ export function CoverView({ fileName, isPlaying, coverUri }: CoverViewProps) {
   const letter = getDisplayLetter(fileName);
 
   return (
-    <div
-      className={`relative w-full h-full flex items-center justify-center ${isPlaying ? 'animate-pulse' : ''}`}
-    >
+    <div className="relative w-full h-full flex items-center justify-center">
       {coverUri ? (
         <>
           <div
-            className="absolute inset-0 bg-cover bg-center blur-3xl opacity-30"
-            style={{ backgroundImage: `url(${coverUri})` }}
+            className="absolute -inset-5 bg-cover bg-center opacity-35"
+            style={{
+              backgroundImage: `url(${coverUri})`,
+              filter: 'blur(40px) saturate(1.2)',
+            }}
           />
           <img
-            className="relative z-10 max-w-[60%] max-h-[60%] rounded-lg shadow-2xl object-contain"
+            className="relative z-10 rounded-xl object-contain"
+            style={{
+              width: 'min(280px, 60vh, 100%)',
+              aspectRatio: '1',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2)',
+            }}
             src={coverUri}
             alt="Album art"
           />
         </>
       ) : (
-        <div className="audio-player__cover-placeholder">
-          <span className="audio-player__cover-letter">{letter}</span>
+        <div
+          className="flex items-center justify-center rounded-xl overflow-hidden select-none"
+          style={{
+            width: 'min(280px, 60vh, 100%)',
+            aspectRatio: '1',
+            background: `linear-gradient(135deg, color-mix(in srgb, var(--neko-preview-accent) 60%, #000) 0%, color-mix(in srgb, var(--neko-preview-accent) 30%, #000) 100%)`,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2)',
+          }}
+        >
+          <span className="text-7xl font-bold text-white/85 uppercase leading-none">{letter}</span>
         </div>
       )}
     </div>

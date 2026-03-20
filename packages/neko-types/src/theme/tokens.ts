@@ -109,6 +109,18 @@ export const vscodeCSSTokens = {
     'neko-glass-active': 'var(--neko-glass-active, rgba(255, 255, 255, 0.16))',
     'neko-surface': 'var(--neko-surface, rgba(255, 255, 255, 0.05))',
     'neko-surface-hover': 'var(--neko-surface-hover, rgba(255, 255, 255, 0.08))',
+
+    // Preview player colors (theme-aware via CSS variables)
+    'neko-preview-primary': 'var(--neko-preview-primary, #0A84FF)',
+    'neko-preview-primary-hover': 'var(--neko-preview-primary-hover, #409CFF)',
+    'neko-preview-primary-active': 'var(--neko-preview-primary-active, #0070E0)',
+    'neko-preview-text-primary': 'var(--neko-preview-text-primary, rgba(255, 255, 255, 0.9))',
+    'neko-preview-text-secondary': 'var(--neko-preview-text-secondary, rgba(255, 255, 255, 0.6))',
+    'neko-preview-text-tertiary': 'var(--neko-preview-text-tertiary, rgba(255, 255, 255, 0.4))',
+    'neko-preview-accent': 'var(--neko-preview-accent, #0e639c)',
+    'neko-preview-accent-hover': 'var(--neko-preview-accent-hover, #1177bb)',
+    'neko-preview-surface': 'var(--neko-preview-surface, rgba(255, 255, 255, 0.05))',
+    'neko-preview-bg': 'var(--neko-preview-bg, #1a1a1a)',
   },
 
   fontFamily: {

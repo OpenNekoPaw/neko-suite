@@ -328,35 +328,27 @@ export function AudioPlayer() {
   const displayName = mediaInfo?.metadata?.title || fileName;
 
   return (
-    <div className="flex flex-col h-full bg-neko-preview-bg text-neko-preview-text-primary p-6">
+    <div className="neko-audio-bg flex flex-col items-center w-full h-full px-8 pt-6 pb-5 overflow-hidden font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
       {/* Main visual area — switchable views */}
-      <div className="flex-1 flex items-center justify-center mb-6 min-h-0">
-        <div className="relative w-full h-full max-w-2xl">
+      <div className="relative flex-1 flex items-center justify-center w-full min-h-0 py-2">
+        <div className="relative w-full h-full">
           {/* Cover */}
           <div
-            className={`absolute inset-0 transition-opacity duration-300 ${
-              viewMode === 'cover' ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
+            className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${viewMode === 'cover' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           >
             <CoverView fileName={fileName} isPlaying={isPlaying} coverUri={coverUri} />
           </div>
-
           {/* Lyrics */}
           <div
-            className={`absolute inset-0 transition-opacity duration-300 ${
-              viewMode === 'lyrics' ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
+            className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${viewMode === 'lyrics' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           >
             <LyricsView lyrics={lyrics} currentTime={currentTime} />
           </div>
-
           {/* Waveform */}
           <div
-            className={`absolute inset-0 transition-opacity duration-300 ${
-              viewMode === 'waveform' ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
+            className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${viewMode === 'waveform' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           >
-            <div className="w-full h-full flex items-center">
+            <div className="w-full h-full relative rounded-lg bg-[var(--neko-preview-surface)] overflow-hidden cursor-pointer">
               <WaveformCanvas
                 peaks={waveformData?.peaks ?? null}
                 duration={mediaInfo.duration}
@@ -366,35 +358,36 @@ export function AudioPlayer() {
               />
             </div>
           </div>
-
           {/* Spectrum */}
           <div
-            className={`absolute inset-0 transition-opacity duration-300 ${
-              viewMode === 'spectrum' ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
+            className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${viewMode === 'spectrum' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           >
-            <SpectrumCanvas audioClient={audioClientRef.current} isPlaying={isPlaying} />
+            <div className="w-full h-full relative rounded-lg bg-[var(--neko-preview-surface)] overflow-hidden">
+              <SpectrumCanvas audioClient={audioClientRef.current} isPlaying={isPlaying} />
+            </div>
           </div>
         </div>
       </div>
 
       {/* Metadata */}
-      <div className="text-center mb-4 flex-shrink-0">
-        <div className="text-base font-semibold text-neko-preview-text-primary truncate">
+      <div className="flex flex-col items-center gap-1 pt-4 pb-1 shrink-0 w-full max-w-[400px]">
+        <div className="font-semibold text-[17px] text-neko-preview-text-primary whitespace-nowrap overflow-hidden text-ellipsis max-w-full text-center tracking-[-0.01em]">
           {displayName}
         </div>
         {mediaInfo?.metadata?.artist && (
-          <div className="text-sm text-neko-preview-text-secondary truncate mt-1">
+          <div className="text-[13px] text-neko-preview-text-secondary whitespace-nowrap overflow-hidden text-ellipsis max-w-full text-center">
             {mediaInfo.metadata.artist}
           </div>
         )}
         {subtitle && !mediaInfo?.metadata?.artist && (
-          <div className="text-sm text-neko-preview-text-secondary truncate mt-1">{subtitle}</div>
+          <div className="text-[13px] text-neko-preview-text-secondary whitespace-nowrap overflow-hidden text-ellipsis max-w-full text-center">
+            {subtitle}
+          </div>
         )}
       </div>
 
       {/* Controls */}
-      <div className="flex-shrink-0">
+      <div className="shrink-0 w-full">
         <AudioControls
           isPlaying={isPlaying}
           currentTime={currentTime}

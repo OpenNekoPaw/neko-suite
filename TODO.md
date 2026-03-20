@@ -36,10 +36,10 @@
 - [x] Phase 5：嵌入歌词提取（ID3v2 USLT / Vorbis LYRICS → metadata.lyrics 回退 + 纯文本歌词静态展示）
 
 ### neko-preview（UI 现代化 — Phase 0-3）
-- [ ] Phase 0：Tailwind 基础设施接入（tailwind.config.js + postcss.config.js + @tailwind 指令）
-- [ ] Phase 1：macOS Design Token 体系（扩展 @neko/shared token + CSS 变量统一 `--neko-preview-*` + 深色/浅色/高对比度主题覆盖）
-- [ ] Phase 2：macOS 风格组件重构（音频/视频播放器 macOS 化 + 共享控件提取 VolumeControl/SpeedButton/useMediaKeyboard）
-- [ ] Phase 3：macOS 全局组件模式（按钮体系 4 种 + 输入控件 + 动效规范）
+- [x] Phase 0：Tailwind 基础设施接入（tailwind.config.js + postcss.config.js + @tailwind 指令）
+- [x] Phase 1：macOS Design Token 体系（扩展 @neko/shared token + CSS 变量统一 `--neko-preview-*` + 深色/浅色/高对比度主题覆盖）
+- [x] Phase 2：macOS 风格组件重构（AudioPlayer/AudioControls/ProgressBar/CoverView/LyricsView Tailwind 化 + MacButton/MacIconButton/MacTabs/MacSlider 共享组件）
+- [ ] Phase 3：视频播放器 macOS 化 + useMediaKeyboard 共享 hook
 
 ### neko-audio（UI 现代化 — Phase 4）
 - [ ] Tailwind 接入（同 Phase 0 模式）
@@ -53,7 +53,7 @@
 - [ ] File Icon Theme（contributes.iconThemes + 13 个自定义文件扩展名图标）
 
 ### @neko/shared（UI 现代化 — Phase 1 + 5.6）
-- [ ] macOS Design Token 扩展（neko-glass / neko-surface / borderRadius / boxShadow / backdropBlur）
+- [x] macOS Design Token 扩展（neko-glass / neko-surface / borderRadius / boxShadow / backdropBlur）
 - [ ] 统一 SVG 图标模块（@neko/shared/icons + ~25 个去重图标 + stroke 描边 macOS SF Symbols 风格）
 
 ### neko-preview（风格主题优化）— 已移至 UI 现代化 Phase 0-3
@@ -245,4 +245,4 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 
 ---
 
-*最后更新：2026-03-21（UI 现代化任务规划 + Phase 0-5.6 分解）*
+*最后更新：2026-03-21（neko-preview UI 现代化 Phase 0-2 完成：Tailwind 接入 + macOS Design Token + 音频组件重构）*

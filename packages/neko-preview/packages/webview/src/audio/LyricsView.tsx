@@ -41,9 +41,9 @@ export function LyricsView({ lyrics, currentTime }: LyricsViewProps) {
   // No lyrics — show placeholder
   if (lyrics.length === 0) {
     return (
-      <div className="audio-player__lyrics">
-        <div className="audio-player__lyrics-placeholder">
-          <svg viewBox="0 0 24 24">
+      <div className="w-full h-full flex items-center justify-center text-neko-preview-text-secondary text-sm">
+        <div className="text-center opacity-60">
+          <svg viewBox="0 0 24 24" className="w-10 h-10 fill-current opacity-40 mx-auto mb-2">
             <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
           </svg>
           <div>{t('preview.audio.noLyrics')}</div>
@@ -52,43 +52,58 @@ export function LyricsView({ lyrics, currentTime }: LyricsViewProps) {
     );
   }
 
+  const scrollContainerClass =
+    'w-full h-full overflow-y-auto overflow-x-hidden scroll-smooth scrollbar-none ' +
+    '[mask-image:linear-gradient(to_bottom,transparent_0%,black_15%,black_85%,transparent_100%)]';
+
   // Unsynchronized plain-text lyrics — static scrollable display
   if (isUnsynchronized) {
     return (
-      <div className="audio-player__lyrics audio-player__lyrics--has-content" ref={containerRef}>
-        <div className="audio-player__lyrics-scroll">
-          <div className="audio-player__lyrics-spacer" />
+      <div className={scrollContainerClass} ref={containerRef}>
+        <div className="flex flex-col items-center px-4 w-full">
+          <div className="flex-shrink-0 h-[40%]" />
           {lyrics.map((line, i) => (
-            <div key={i} className="audio-player__lyrics-line audio-player__lyrics-line--static">
+            <div
+              key={i}
+              className="py-2 px-3 text-center text-base font-medium leading-relaxed text-neko-preview-text-primary opacity-70 max-w-full break-words"
+            >
               {line.text}
             </div>
           ))}
-          <div className="audio-player__lyrics-spacer" />
+          <div className="flex-shrink-0 h-[40%]" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="audio-player__lyrics audio-player__lyrics--has-content" ref={containerRef}>
-      <div className="audio-player__lyrics-scroll">
+    <div className={scrollContainerClass} ref={containerRef}>
+      <div className="flex flex-col items-center px-4 w-full">
         {/* Top spacer for centering first line */}
-        <div className="audio-player__lyrics-spacer" />
+        <div className="flex-shrink-0 h-[40%]" />
 
-        {lyrics.map((line, i) => (
-          <div
-            key={`${i}-${line.time}`}
-            ref={i === currentIndex ? activeRef : undefined}
-            className={`audio-player__lyrics-line ${
-              i === currentIndex ? 'audio-player__lyrics-line--active' : ''
-            } ${i < currentIndex ? 'audio-player__lyrics-line--past' : ''}`}
-          >
-            {line.text}
-          </div>
-        ))}
+        {lyrics.map((line, i) => {
+          const isActive = i === currentIndex;
+          const isPast = i < currentIndex;
+          return (
+            <div
+              key={`${i}-${line.time}`}
+              ref={isActive ? activeRef : undefined}
+              className={`py-2 px-3 text-center font-medium leading-relaxed max-w-full break-words transition-all duration-300 ${
+                isActive
+                  ? 'text-lg font-semibold text-neko-preview-text-primary opacity-100 scale-100'
+                  : isPast
+                    ? 'text-base text-neko-preview-text-secondary opacity-30 scale-95'
+                    : 'text-base text-neko-preview-text-secondary opacity-40 scale-95'
+              }`}
+            >
+              {line.text}
+            </div>
+          );
+        })}
 
         {/* Bottom spacer for centering last line */}
-        <div className="audio-player__lyrics-spacer" />
+        <div className="flex-shrink-0 h-[40%]" />
       </div>
     </div>
   );

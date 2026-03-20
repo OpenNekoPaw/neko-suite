@@ -56,10 +56,10 @@ export function WaveformCanvas({
     const centerY = height / 2;
 
     // Theme-aware colors
-    const waveColor = getCssVar('--neko-audio-accent', '#0e639c');
-    const waveBgColor = getCssVar('--neko-audio-surface', 'rgba(255, 255, 255, 0.05)');
-    const progressColor = getCssVar('--neko-audio-accent-hover', '#1a8fff');
-    const cursorColor = getCssVar('--neko-audio-text-primary', '#fff');
+    const waveColor = getCssVar('--neko-preview-accent', '#0e639c');
+    const waveBgColor = getCssVar('--neko-preview-surface', 'rgba(255, 255, 255, 0.05)');
+    const progressColor = getCssVar('--neko-preview-accent-hover', '#1a8fff');
+    const cursorColor = getCssVar('--neko-preview-text-primary', '#fff');
 
     // Clear
     ctx.clearRect(0, 0, width, height);
@@ -203,7 +203,7 @@ export function WaveformCanvas({
     >
       <canvas
         ref={canvasRef}
-        className="audio-player__waveform"
+        className="w-full h-full"
         style={{ position: 'absolute', top: 0, left: 0 }}
       />
     </div>
