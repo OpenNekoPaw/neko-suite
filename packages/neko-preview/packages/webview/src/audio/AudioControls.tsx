@@ -1,9 +1,10 @@
 /**
  * AudioControls - Modern playback controls for audio preview
  *
- * Apple Music-inspired layout:
- *   - Centered play/pause with skip forward/backward
- *   - Bottom bar: volume | view tabs | speed
+ * Layout (top to bottom):
+ *   1. Volume slider + Speed button
+ *   2. Progress bar + time display
+ *   3. Transport controls (skip back / play / skip forward)
  */
 
 import { useCallback } from 'react';
@@ -12,7 +13,6 @@ import { useTranslation } from '../i18n/I18nContext';
 import { ProgressBar } from '../shared/ProgressBar';
 import { MacIconButton } from '../shared/MacIconButton';
 import { MacButton } from '../shared/MacButton';
-import { MacTabs, type MacTab } from '../shared/MacTabs';
 import { MacSlider } from '../shared/MacSlider';
 
 export type ViewMode = 'cover' | 'lyrics' | 'waveform' | 'spectrum';
@@ -25,13 +25,11 @@ interface AudioControlsProps {
   duration: number;
   volume: number;
   speed: number;
-  viewMode: ViewMode;
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
   onScrub?: (time: number) => void;
   onVolumeChange: (volume: number) => void;
   onSpeedChange: (speed: number) => void;
-  onViewModeChange: (mode: ViewMode) => void;
 }
 
 export function AudioControls({
@@ -40,29 +38,19 @@ export function AudioControls({
   duration,
   volume,
   speed,
-  viewMode,
   onTogglePlay,
   onSeek,
   onScrub,
   onVolumeChange,
   onSpeedChange,
-  onViewModeChange,
 }: AudioControlsProps) {
   const { t } = useTranslation();
-
-  // =========================
-  // Speed cycling
-  // ===============
 
   const handleSpeedClick = useCallback(() => {
     const currentIndex = SPEED_OPTIONS.indexOf(speed);
     const nextIndex = (currentIndex + 1) % SPEED_OPTIONS.length;
     onSpeedChange(SPEED_OPTIONS[nextIndex] ?? 1.0);
   }, [speed, onSpeedChange]);
-
-  // ==============
-  // Keyboard shortcuts
-  // ==========================
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -101,136 +89,12 @@ export function AudioControls({
     [onTogglePlay, onSeek, onVolumeChange, currentTime, duration, volume],
   );
 
-  // ==========================
-  // View tabs configuration
-  // =================
-
-  const viewTabs: MacTab[] = [
-    {
-      id: 'cover',
-      title: t('preview.audio.viewCover'),
-      icon: (
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'lyrics',
-      title: t('preview.audio.viewLyrics'),
-      icon: (
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'waveform',
-      title: t('preview.audio.viewWaveform'),
-      icon: (
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12-6v8h2V8h-2zm4 2v4h2v-4h-2z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'spectrum',
-      title: t('preview.audio.viewSpectrum'),
-      icon: (
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M3 17h2v-7H3v7zm4 2h2V5H7v14zm4 0h2V8h-2v11zm4-14v16h2V5h-2zm4 4v8h2V9h-2z" />
-        </svg>
-      ),
-    },
-  ];
-
-  // ===============
-  // Render
-  // ====================
-
   return (
     <div tabIndex={0} onKeyDown={handleKeyDown} className="w-full outline-none">
-      {/* Progress bar */}
-      <div className="w-full pt-3 pb-1 flex-shrink-0">
-        <ProgressBar
-          currentTime={currentTime}
-          duration={duration}
-          onSeekCommit={onSeek}
-          onSeeking={onScrub}
-        />
-        <div className="flex justify-between text-[11px] text-neko-preview-text-secondary pt-1 tabular-nums">
-          <span>{formatTime(currentTime)}</span>
-          <span>{formatTime(duration)}</span>
-        </div>
-      </div>
-
-      {/* Transport controls: skip back / play / skip forward */}
-      <div className="flex items-center justify-center gap-4 py-2">
-        {/* Skip backward 10s */}
-        <MacIconButton
-          size="md"
-          onClick={() => onSeek(Math.max(0, currentTime - 10))}
-          title={t('preview.audio.skipBack')}
-        >
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-            <path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
-            <text
-              x="12"
-              y="15.5"
-              textAnchor="middle"
-              fontSize="7"
-              fill="currentColor"
-              fontWeight="700"
-            >
-              10
-            </text>
-          </svg>
-        </MacIconButton>
-
-        {/* Play / Pause */}
-        <MacIconButton
-          size="xl"
-          variant="primary"
-          onClick={onTogglePlay}
-          title={isPlaying ? t('preview.audio.pauseButton') : t('preview.audio.playButton')}
-        >
-          {isPlaying ? (
-            <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
-              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          )}
-        </MacIconButton>
-
-        {/* Skip forward 10s */}
-        <MacIconButton
-          size="md"
-          onClick={() => onSeek(Math.min(duration, currentTime + 10))}
-          title={t('preview.audio.skipForward')}
-        >
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-            <path d="M12.01 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z" />
-            <text
-              x="12"
-              y="15.5"
-              textAnchor="middle"
-              fontSize="7"
-              fill="currentColor"
-              fontWeight="700"
-            >
-              10
-            </text>
-          </svg>
-        </MacIconButton>
-      </div>
-
-      {/* Bottom bar: volume | view tabs | speed */}
-      <div className="flex items-center justify-between gap-4 pt-2">
+      {/* Row 1: Volume + Speed (above progress bar) */}
+      <div className="flex items-center justify-between gap-4 pb-2">
         {/* Volume */}
-        <div className="flex items-center gap-2 min-w-[100px]">
+        <div className="flex items-center gap-1.5">
           <MacIconButton
             size="sm"
             onClick={() => onVolumeChange(volume > 0 ? 0 : 1)}
@@ -259,13 +123,6 @@ export function AudioControls({
           />
         </div>
 
-        {/* View mode tabs */}
-        <MacTabs
-          tabs={viewTabs}
-          activeTab={viewMode}
-          onChange={(id) => onViewModeChange(id as ViewMode)}
-        />
-
         {/* Speed */}
         <MacButton
           variant="secondary"
@@ -276,6 +133,80 @@ export function AudioControls({
         >
           {speed === 1 ? '1x' : `${speed}x`}
         </MacButton>
+      </div>
+
+      {/* Row 2: Progress bar + time */}
+      <div className="w-full pb-1 flex-shrink-0">
+        <ProgressBar
+          currentTime={currentTime}
+          duration={duration}
+          onSeekCommit={onSeek}
+          onSeeking={onScrub}
+        />
+        <div className="flex justify-between text-[11px] text-neko-preview-text-secondary pt-1 tabular-nums">
+          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(duration)}</span>
+        </div>
+      </div>
+
+      {/* Row 3: Transport controls (skip back / play / skip forward) */}
+      <div className="flex items-center justify-center gap-6 py-2">
+        <MacIconButton
+          size="md"
+          onClick={() => onSeek(Math.max(0, currentTime - 10))}
+          title={t('preview.audio.skipBack')}
+        >
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+            <path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
+            <text
+              x="12"
+              y="15.5"
+              textAnchor="middle"
+              fontSize="7"
+              fill="currentColor"
+              fontWeight="700"
+            >
+              10
+            </text>
+          </svg>
+        </MacIconButton>
+
+        <MacIconButton
+          size="xl"
+          variant="primary"
+          onClick={onTogglePlay}
+          title={isPlaying ? t('preview.audio.pauseButton') : t('preview.audio.playButton')}
+        >
+          {isPlaying ? (
+            <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          )}
+        </MacIconButton>
+
+        <MacIconButton
+          size="md"
+          onClick={() => onSeek(Math.min(duration, currentTime + 10))}
+          title={t('preview.audio.skipForward')}
+        >
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+            <path d="M12.01 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z" />
+            <text
+              x="12"
+              y="15.5"
+              textAnchor="middle"
+              fontSize="7"
+              fill="currentColor"
+              fontWeight="700"
+            >
+              10
+            </text>
+          </svg>
+        </MacIconButton>
       </div>
     </div>
   );

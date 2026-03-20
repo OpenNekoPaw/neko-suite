@@ -15,6 +15,7 @@ import { LyricsView } from './LyricsView';
 import { WaveformCanvas } from './WaveformCanvas';
 import { SpectrumCanvas } from './SpectrumCanvas';
 import { AudioControls, type ViewMode } from './AudioControls';
+import { ViewTabs } from './ViewTabs';
 import type {
   MediaInfo,
   PreviewInitMessage,
@@ -369,8 +370,11 @@ export function AudioPlayer() {
         </div>
       </div>
 
+      {/* View mode tabs — below visual area, centered */}
+      <ViewTabs viewMode={viewMode} onViewModeChange={setViewMode} />
+
       {/* Metadata */}
-      <div className="flex flex-col items-center gap-1 pt-4 pb-1 shrink-0 w-full max-w-[400px]">
+      <div className="flex flex-col items-center gap-1 pt-3 pb-1 shrink-0 w-full max-w-[400px]">
         <div className="font-semibold text-[17px] text-neko-preview-text-primary whitespace-nowrap overflow-hidden text-ellipsis max-w-full text-center tracking-[-0.01em]">
           {displayName}
         </div>
@@ -394,13 +398,11 @@ export function AudioPlayer() {
           duration={mediaInfo.duration}
           volume={volume}
           speed={speed}
-          viewMode={viewMode}
           onTogglePlay={handleTogglePlay}
           onSeek={handleSeek}
           onScrub={handleScrub}
           onVolumeChange={handleVolumeChange}
           onSpeedChange={handleSpeedChange}
-          onViewModeChange={setViewMode}
         />
       </div>
     </div>
