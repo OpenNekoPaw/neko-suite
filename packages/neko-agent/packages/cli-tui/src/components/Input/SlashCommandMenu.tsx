@@ -8,6 +8,7 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { tokens } from '../../theme/tokens';
+import { getCliCommands } from '@neko/agent';
 
 export interface SlashCommandOption {
   readonly name: string;
@@ -90,13 +91,9 @@ export function SlashCommandMenu({
 
 /**
  * Built-in slash commands available in TUI mode.
+ * Dynamically derived from shared builtin-commands.ts.
  */
-export const TUI_COMMANDS: SlashCommandOption[] = [
-  { name: 'help', description: 'Show available commands' },
-  { name: 'clear', description: 'Clear conversation history' },
-  { name: 'compact', description: 'Compress context tokens' },
-  { name: 'model', description: 'Switch or list models' },
-  { name: 'config', description: 'Show/set configuration' },
-  { name: 'status', description: 'Show current status' },
-  { name: 'exit', description: 'Quit the TUI' },
-];
+export const TUI_COMMANDS: SlashCommandOption[] = getCliCommands().map((cmd) => ({
+  name: cmd.name,
+  description: cmd.description,
+}));
