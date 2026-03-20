@@ -19,9 +19,17 @@ interface ProgressBarProps {
   onSeekCommit: (time: number) => void;
   /** Called during drag — updates UI time only (no backend seek) */
   onSeeking?: (time: number) => void;
+  /** Visual variant: 'default' uses theme colors, 'video' uses white for dark overlays */
+  variant?: 'default' | 'video';
 }
 
-export function ProgressBar({ currentTime, duration, onSeekCommit, onSeeking }: ProgressBarProps) {
+export function ProgressBar({
+  currentTime,
+  duration,
+  onSeekCommit,
+  onSeeking,
+  variant = 'default',
+}: ProgressBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [seekingTime, setSeekingTime] = useState(0);
@@ -98,21 +106,26 @@ export function ProgressBar({ currentTime, duration, onSeekCommit, onSeeking }: 
   const displayTime = isDragging ? seekingTime : currentTime;
   const progress = duration > 0 ? (displayTime / duration) * 100 : 0;
 
+  const isVideo = variant === 'video';
+  const trackBg = isVideo ? 'bg-white/25' : 'bg-neko-preview-text-secondary/20';
+  const fillBg = isVideo ? 'bg-white' : 'bg-neko-preview-primary';
+  const thumbBg = isVideo ? 'bg-white' : 'bg-neko-preview-text-primary';
+
   return (
     <div className="relative w-full">
       <div
         ref={trackRef}
-        className="relative h-1 rounded-full bg-neko-preview-text-secondary/20 cursor-pointer transition-all duration-150 hover:h-1.5 group"
+        className={`relative h-1 rounded-full ${trackBg} cursor-pointer transition-all duration-150 hover:h-1.5 group`}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
         <div
-          className="absolute top-0 left-0 h-full rounded-full bg-neko-preview-primary transition-all"
+          className={`absolute top-0 left-0 h-full rounded-full ${fillBg} transition-all`}
           style={{ width: `${progress}%` }}
         />
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-neko-preview-text-primary shadow-neko-sm opacity-0 group-hover:opacity-100 transition-opacity -ml-1.5"
+          className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full ${thumbBg} shadow-neko-sm opacity-0 group-hover:opacity-100 transition-opacity -ml-1.5`}
           style={{ left: `${progress}%` }}
         />
       </div>

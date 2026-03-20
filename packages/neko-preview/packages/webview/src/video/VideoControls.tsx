@@ -109,6 +109,7 @@ export function VideoControls({
         duration={duration}
         onSeekCommit={onSeek}
         onSeeking={onScrub}
+        variant="video"
       />
 
       {/* Row 2: Buttons */}
