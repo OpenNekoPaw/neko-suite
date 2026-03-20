@@ -17,6 +17,8 @@ export const chat = {
   'chat.categoryVideo': '视频',
   'chat.categoryAudio': '音频',
   'chat.categoryOther': '其他',
+  'chat.mediaModelNone': 'media:无',
+  'chat.noMediaModelsConfigured': '未配置媒体模型',
   'chat.emptyState.title': 'Neko Suite AI 助手',
   'chat.emptyState.description': '问我任何关于视频编辑、时间轴管理或项目组织的问题。',
   'chat.emptyState.disclaimer': 'AI 回复可能不准确。',

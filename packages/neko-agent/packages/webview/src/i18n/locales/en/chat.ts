@@ -17,6 +17,8 @@ export const chat = {
   'chat.categoryVideo': 'Video',
   'chat.categoryAudio': 'Audio',
   'chat.categoryOther': 'Other',
+  'chat.mediaModelNone': 'media:none',
+  'chat.noMediaModelsConfigured': 'No media models configured',
   'chat.emptyState.title': 'Neko Suite AI Assistant',
   'chat.emptyState.description':
     'Ask me anything about video editing, timeline management, or project organization.',
