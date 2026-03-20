@@ -11,11 +11,14 @@ import {
   type SlashCommandContext,
 } from '../core/slash-commands';
 import type { CLIConfig } from '../core/types';
+import type { SkillService, ToolRegistry } from '@neko/agent';
 
 export { isSlashCommand };
 
 export interface TUISlashCommandContext {
   readonly config: CLIConfig;
+  skillService?: SkillService;
+  toolRegistry?: ToolRegistry;
   onConfigUpdate: (updates: Partial<CLIConfig>) => void;
   onOutput: (text: string) => void;
 }
@@ -30,6 +33,8 @@ export async function handleTUISlashCommand(
 ): Promise<{ handled: boolean; output?: string; error?: string }> {
   const cliContext: SlashCommandContext = {
     config: context.config,
+    skillService: context.skillService,
+    toolRegistry: context.toolRegistry,
     onConfigUpdate: context.onConfigUpdate,
   };
 

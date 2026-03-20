@@ -7,6 +7,7 @@
 
 import { useCallback } from 'react';
 import { handleTUISlashCommand, isSlashCommand } from '../adapters/slash-adapter';
+import type { SkillService, ToolRegistry } from '@neko/agent';
 import { useConfigStore } from '../stores/config-store';
 import { useConversationStore } from '../stores/conversation-store';
 import { useAgentStore } from '../stores/agent-store';
@@ -25,6 +26,8 @@ interface SlashCommandHandlers {
 export function useSlashCommands(sessionActions: {
   clearHistory: () => void;
   updateModel?: (model: string) => void;
+  skillService?: SkillService;
+  toolRegistry?: ToolRegistry;
 }): SlashCommandHandlers {
   const handleCommand = useCallback(
     async (input: string) => {
@@ -124,6 +127,8 @@ export function useSlashCommands(sessionActions: {
       try {
         const result = await handleTUISlashCommand(input, {
           config,
+          skillService: sessionActions.skillService,
+          toolRegistry: sessionActions.toolRegistry,
           onConfigUpdate: (updates) => {
             useConfigStore.getState().setConfig(updates);
           },

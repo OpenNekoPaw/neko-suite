@@ -48,13 +48,27 @@ export function App({ config, service }: AppProps): React.JSX.Element {
   }, [config]);
 
   // Initialize agent session
-  const { submit, cancel, clearHistory, confirmTool, updateModel, updateMode } = useAgentSession({
+  const {
+    submit,
+    cancel,
+    clearHistory,
+    confirmTool,
+    updateModel,
+    updateMode,
+    skillService,
+    toolRegistry,
+  } = useAgentSession({
     config,
     service,
   });
 
   // Slash command handling
-  const { handleCommand, onClear } = useSlashCommands({ clearHistory, updateModel });
+  const { handleCommand, onClear } = useSlashCommands({
+    clearHistory,
+    updateModel,
+    skillService,
+    toolRegistry,
+  });
 
   // Global keyboard shortcuts
   useKeyboard({

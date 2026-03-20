@@ -21,6 +21,7 @@ import {
   type IAgentSession,
   type InputProcessor,
   type SystemPromptBuilder,
+  type SkillService,
 } from '@neko/agent';
 import {
   createPlatform,
@@ -61,6 +62,10 @@ export interface AgentSessionHandle {
   updateModel: (model: string) => void;
   /** Switch execution mode and rebuild system prompt */
   updateMode: (mode: ExecutionMode) => void;
+  /** Skill service (for slash commands) */
+  readonly skillService: SkillService | undefined;
+  /** Tool registry (for slash commands) */
+  readonly toolRegistry: ToolRegistry | undefined;
   /** Whether session is initialized */
   readonly isReady: boolean;
 }
@@ -88,6 +93,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const mcpManagerRef = useRef<MCPManager | null>(null);
   const platformRef = useRef<Platform | null>(null);
   const promptBuilderRef = useRef<SystemPromptBuilder | null>(null);
+  const skillServiceRef = useRef<ReturnType<typeof createSkillService> | null>(null);
+  const toolRegistryRef = useRef<ToolRegistry | null>(null);
   const isReadyRef = useRef(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
 
@@ -156,6 +163,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
         // 2. Tool Registry
         const toolRegistry = new ToolRegistry();
+        toolRegistryRef.current = toolRegistry;
         const mcpTools = await createAllMCPTools(mcpManager);
         toolRegistry.registerMany(mcpTools);
         const coreTools = createCoreTools({ defaultCwd: config.workDir });
@@ -166,6 +174,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         if (config.skillsDir) {
           const skillLoader = createNodeSkillLoader(fs, path);
           skillService = createSkillService();
+          skillServiceRef.current = skillService;
           const loadResult = await skillLoader.loadFromDirectory(config.skillsDir);
           for (const skill of loadResult.skills) {
             skillService.registry.registerSkill(skill);
@@ -397,6 +406,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     confirmTool,
     updateModel,
     updateMode,
+    skillService: skillServiceRef.current ?? undefined,
+    toolRegistry: toolRegistryRef.current ?? undefined,
     isReady: isReadyRef.current,
   };
 }
