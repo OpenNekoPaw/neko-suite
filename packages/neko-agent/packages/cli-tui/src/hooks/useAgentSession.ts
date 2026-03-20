@@ -162,9 +162,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         toolRegistry.registerMany(coreTools);
 
         // 3. Skills
+        let skillService: ReturnType<typeof createSkillService> | undefined;
         if (config.skillsDir) {
           const skillLoader = createNodeSkillLoader(fs, path);
-          const skillService = createSkillService();
+          skillService = createSkillService();
           const loadResult = await skillLoader.loadFromDirectory(config.skillsDir);
           for (const skill of loadResult.skills) {
             skillService.registry.registerSkill(skill);
@@ -231,6 +232,36 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         });
 
         sessionRef.current = session;
+
+        // Wire skill provider to meta tools
+        if (skillService) {
+          session.setSkillProvider({
+            listSkills: () =>
+              skillService!.registry
+                .listSkills()
+                .filter((s) => s.enabled !== false)
+                .map((s) => ({ name: s.name, description: s.description || '' })),
+            getActiveSkill: () => {
+              const skill = session.getActiveSkill();
+              return skill ? { name: skill.name, description: skill.description || '' } : null;
+            },
+            activateSkill: (name: string) => {
+              const skill = skillService!.registry.getSkill(name);
+              if (!skill) return { success: false, message: `Skill "${name}" not found` };
+              const injection = skillService!.apply(skill);
+              session.applySkillInjection(injection, skill);
+              return {
+                success: true,
+                message: `Activated skill "${name}"`,
+                allowedTools: injection.allowedTools,
+              };
+            },
+            deactivateSkill: () => {
+              session.clearActiveSkill();
+              return { success: true, message: 'Skill deactivated' };
+            },
+          });
+        }
 
         // 7. Input Processor
         inputProcessorRef.current = createInputProcessor({
