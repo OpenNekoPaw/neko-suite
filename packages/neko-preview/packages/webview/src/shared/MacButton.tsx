@@ -24,7 +24,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   primary:
     'bg-neko-preview-primary hover:bg-neko-preview-primary-hover active:bg-neko-preview-primary-active text-white',
   secondary:
-    'bg-neko-glass hover:bg-neko-glass-hover active:bg-neko-glass-active border border-neko-preview-text-secondary/25 text-neko-preview-text-primary',
+    'bg-neko-glass hover:bg-neko-glass-hover active:bg-neko-glass-active neko-speed-border text-neko-preview-text-primary',
   ghost:
     'bg-transparent hover:bg-neko-surface active:bg-neko-surface-hover text-neko-preview-text-primary',
   icon: 'bg-transparent hover:bg-neko-surface active:bg-neko-surface-hover text-neko-preview-text-secondary hover:text-neko-preview-text-primary rounded-full',

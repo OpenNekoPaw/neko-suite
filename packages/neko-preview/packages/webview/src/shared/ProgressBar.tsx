@@ -107,7 +107,7 @@ export function ProgressBar({
   const progress = duration > 0 ? (displayTime / duration) * 100 : 0;
 
   const isVideo = variant === 'video';
-  const trackBg = isVideo ? 'bg-white/25' : 'bg-neko-preview-text-secondary/20';
+  const trackBg = isVideo ? 'bg-white/25' : 'neko-progress-track-bg';
   const fillBg = isVideo ? 'bg-white' : 'bg-neko-preview-primary';
   const thumbBg = isVideo ? 'bg-white' : 'bg-neko-preview-text-primary';
 

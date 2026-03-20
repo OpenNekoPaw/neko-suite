@@ -26,7 +26,7 @@ interface MacTabsProps {
 export function MacTabs({ tabs, activeTab, onChange, className = '' }: MacTabsProps) {
   return (
     <div
-      className={`inline-flex items-center gap-0.5 bg-neko-preview-text-secondary/10 rounded-neko-md p-0.5 ${className}`}
+      className={`inline-flex items-center gap-0.5 neko-tabs-bg rounded-neko-md p-0.5 ${className}`}
     >
       {tabs.map((tab) => {
         const isActive = tab.id === activeTab;
