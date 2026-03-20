@@ -12,6 +12,7 @@
  * 4. Default values
  */
 
+import path from 'path';
 import { ConfigManager, FileUserConfigManager, type ConfigManagerOptions } from '@neko/platform';
 import type { CLIConfig } from './types';
 import { DEFAULT_CLI_CONFIG } from './types';
@@ -179,7 +180,11 @@ export function loadConfig(
       rawWorkspace.temperature ??
       rawUser.temperature ??
       DEFAULT_CLI_CONFIG.temperature;
-    const skillsDir = overrides.skillsDir ?? rawWorkspace.skillsDir ?? rawUser.skillsDir;
+    const skillsDir =
+      overrides.skillsDir ??
+      rawWorkspace.skillsDir ??
+      rawUser.skillsDir ??
+      path.join(workDir, '.neko', 'skills');
     const thinkingBudget =
       rawWorkspace.thinkingBudget ?? rawUser.thinkingBudget ?? DEFAULT_CLI_CONFIG.thinkingBudget;
 
