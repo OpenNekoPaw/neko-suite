@@ -8,29 +8,10 @@ import { arrayMove } from './helpers';
 import { OperationError } from './errors';
 
 // =============================================================================
-// AudioProjectData v1 (legacy) — for migration
+// AudioProjectData — multi-track audio project
 // =============================================================================
 
-/** @deprecated Use AudioProjectData (v2) instead */
-export interface AudioProjectDataV1 {
-  version: string;
-  name: string;
-  audioSource: {
-    filePath: string;
-    duration: number;
-    sampleRate: number;
-    channels: number;
-    format: string;
-  } | null;
-  effectsChain: AudioEffectSnapshot[];
-  markers: AudioMarkerSnapshot[];
-}
-
-// =============================================================================
-// AudioProjectData v2 — multi-track
-// =============================================================================
-
-/** Audio project data v2 — multi-track, reuses TimelineTrack from neko-types */
+/** Audio project data — multi-track, reuses TimelineTrack from neko-types */
 export interface AudioProjectData {
   version: string; // '2.0'
   name: string;

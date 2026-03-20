@@ -178,7 +178,6 @@ export type ExtensionMessage =
   | EditorRecordStartResultMessage
   | EditorRecordStopResultMessage
   | ProjectInitV2Message
-  | ProjectInitMessage
   | ProjectSaveRequestMessage
   | ProjectSaveAsRequestMessage
   | ProjectRevertMessage
@@ -271,25 +270,6 @@ export interface ExportAsMessage {
 // =============================================================================
 // Project Messages (for .nka files)
 // =============================================================================
-
-export interface ProjectInitMessage {
-  type: 'project:init';
-  payload: {
-    filePath: string | null;
-    fileName: string;
-    audioInfo: AudioInfo | null;
-    project: {
-      effectsChain: Array<{
-        id: string;
-        type: string;
-        name: string;
-        enabled: boolean;
-        params: Record<string, unknown>;
-      }>;
-      markers: Array<{ id: string; time: number; label: string; color?: string }>;
-    };
-  };
-}
 
 export interface ProjectSaveRequestMessage {
   type: 'save';

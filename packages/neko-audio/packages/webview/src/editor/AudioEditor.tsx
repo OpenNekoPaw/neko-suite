@@ -12,7 +12,6 @@ import { useAudioProjectStore } from '../stores/audioProjectStore';
 import { useAudioPlayback } from '../hooks/useAudioPlayback';
 import { useEffectsChain } from '../hooks/useEffectsChain';
 import { useDragDrop } from '../hooks/useDragDrop';
-import type { AudioEffectInstance } from '../types/audioEffects';
 import { EditableWaveform } from '../components/EditableWaveform';
 import { TransportBar } from '../components/TransportBar';
 import { Toolbar } from '../components/Toolbar';
@@ -77,33 +76,12 @@ export function AudioEditor() {
           break;
 
         case 'project:init': {
-          const payload = message.payload;
-          // v2 format: has projectData
-          if ('projectData' in payload) {
-            const { projectData, waveforms } = payload;
-            setProjectMode(true);
-            setFileInfo(null, projectData.name, null);
-            // Initialize project store with v2 data
-            useAudioProjectStore.getState().initProject(projectData as any, waveforms);
-            if (projectData.markers) {
-              setMarkers(projectData.markers as any);
-            }
-          } else {
-            // v1 format (legacy)
-            setFileInfo(
-              (payload as any).filePath,
-              (payload as any).fileName,
-              (payload as any).audioInfo,
-            );
-            setProjectMode(true);
-            if ((payload as any).project?.markers) {
-              setMarkers((payload as any).project.markers);
-            }
-            if ((payload as any).project?.effectsChain) {
-              effectsChain.replaceAll(
-                (payload as any).project.effectsChain as unknown as AudioEffectInstance[],
-              );
-            }
+          const { projectData, waveforms } = message.payload as any;
+          setProjectMode(true);
+          setFileInfo(null, projectData.name ?? '', null);
+          useAudioProjectStore.getState().initProject(projectData as any, waveforms);
+          if (projectData.markers) {
+            setMarkers(projectData.markers as any);
           }
           break;
         }
