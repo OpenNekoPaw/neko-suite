@@ -641,31 +641,39 @@ export function VideoPlayer() {
 
   if (isLoading) {
     return (
-      <div className="loading">
-        <div className="loading__spinner" />
+      <div className="flex flex-col items-center justify-center h-full gap-3 text-neko-preview-text-secondary">
+        <div className="w-8 h-8 border-3 border-vscode-panel-border border-t-vscode-button rounded-full animate-spin" />
         <span>{t('preview.video.loading')}</span>
       </div>
     );
   }
 
   if (error) {
-    return <div className="error">{t('preview.video.error', { error })}</div>;
+    return (
+      <div className="flex items-center justify-center h-full text-vscode-error p-5 text-center">
+        {t('preview.video.error', { error })}
+      </div>
+    );
   }
 
   if (!mediaInfo) {
-    return <div className="error">{t('preview.video.noMediaInfo')}</div>;
+    return (
+      <div className="flex items-center justify-center h-full text-vscode-error p-5 text-center">
+        {t('preview.video.noMediaInfo')}
+      </div>
+    );
   }
 
   return (
-    <div className="video-player" onMouseMove={showControls}>
-      <div className="video-player__canvas-container">
+    <div className="absolute inset-0" onMouseMove={showControls}>
+      <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black">
         {/* Hidden video element for PiP */}
         <video ref={pipVideoRef} style={{ display: 'none' }} playsInline muted />
 
-        {/* Canvas for H.264 decoded frames — keep rendering but visually hide during PiP */}
+        {/* Canvas for H.264 decoded frames */}
         <canvas
           ref={canvasRef}
-          className="video-player__canvas"
+          className="max-w-full max-h-full object-contain"
           style={{
             display: isPlaying || !posterUrl ? 'block' : 'none',
             visibility: isPiPActive ? 'hidden' : 'visible',
@@ -674,31 +682,40 @@ export function VideoPlayer() {
 
         {/* Poster image when paused */}
         {!isPlaying && posterUrl && (
-          <img src={posterUrl} className="video-player__poster" alt="Video preview" />
+          <img
+            src={posterUrl}
+            className="max-w-full max-h-full object-contain"
+            alt="Video preview"
+          />
         )}
 
         {/* Stats debug overlay (toggle with 'D' key) */}
         {showStats && (
-          <div className="video-player__stats-overlay">{formatSyncStats(syncStats)}</div>
+          <div className="absolute top-2 left-2 px-3 py-2 bg-black/75 rounded text-[11px] font-mono leading-relaxed text-white/90 whitespace-pre pointer-events-none z-20">
+            {formatSyncStats(syncStats)}
+          </div>
         )}
 
-        {/* PiP active overlay — shown when video is in Picture-in-Picture */}
+        {/* PiP active overlay */}
         {isPiPActive && isPlaying && (
-          <div className="video-player__overlay video-player__pip-overlay">
-            <div className="video-player__pip-icon">
-              <svg viewBox="0 0 24 24">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 cursor-default">
+            <div className="w-12 h-12 opacity-70">
+              <svg viewBox="0 0 24 24" className="w-12 h-12 fill-white/70">
                 <path d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z" />
               </svg>
             </div>
-            <span className="video-player__pip-text">{t('preview.video.pipActive')}</span>
+            <span className="text-sm text-white/70">{t('preview.video.pipActive')}</span>
           </div>
         )}
 
         {/* Play overlay when paused */}
         {!isPlaying && (
-          <div className="video-player__overlay" onClick={handleTogglePlay}>
-            <div className="video-player__play-icon">
-              <svg viewBox="0 0 24 24">
+          <div
+            className="absolute inset-0 flex items-center justify-center cursor-pointer transition-[background] duration-150 hover:bg-black/20"
+            onClick={handleTogglePlay}
+          >
+            <div className="w-16 h-16 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center transition-all duration-150 hover:scale-110 hover:bg-white/25">
+              <svg viewBox="0 0 24 24" className="w-7 h-7 fill-white ml-1">
                 <path d="M8 5v14l11-7z" />
               </svg>
             </div>
@@ -707,7 +724,10 @@ export function VideoPlayer() {
       </div>
 
       {/* Controls overlay at bottom */}
-      <div className={`video-player__controls-overlay ${controlsVisible ? '' : 'is-hidden'}`}>
+      <div
+        className={`absolute bottom-0 left-0 right-0 pt-10 z-10 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        style={{ background: 'linear-gradient(transparent 0%, rgba(0, 0, 0, 0.85) 100%)' }}
+      >
         <VideoControls
           isPlaying={isPlaying}
           currentTime={currentTime}

@@ -23,6 +23,58 @@
 - 通过 `color-mix()` 和 `rgba` 在 VSCode 基色上叠加 macOS 质感
 - 高对比度模式下回退为纯色 + 边框，不使用透明/模糊效果
 
+### 技术架构：Tailwind 筑基 + CSS 变量桥接 + 原生 CSS 攻坚
+
+针对多媒体播放器与编辑器场景，采用三层协作模型：
+
+**第一层：Tailwind 筑基 — "快"和"稳"**
+
+| 维度 | 说明 |
+|------|------|
+| 应用场景 | 响应式布局、间距、标准色阶、交互反馈（hover/active）、基础毛玻璃卡片 |
+| 核心优势 | 极速构建 UI 框架，保证多端视觉一致性 |
+| 代码位置 | 业务组件的 `className` 中 |
+| neko-suite 实例 | `flex flex-col items-center px-8`、`hover:scale-110 active:scale-95`、`transition-opacity duration-300` |
+
+**第二层：CSS 变量桥接 — 语义化连接**
+
+不在 JSX 中写长串方括号（`bg-[#1a2b3c]`），而是建立语义化变量系统：
+
+```
+定义层（CSS）：
+  :root { --neko-preview-primary: #0A84FF; }        ← color-mix/gradient 等复杂逻辑
+
+桥接层（tokens.ts）：
+  'neko-preview-primary': 'var(--neko-preview-primary, #0A84FF)'  ← 注册为 Tailwind token
+
+消费层（JSX）：
+  className="bg-neko-preview-primary"                ← 简洁，IDE 自动补全
+  className="bg-[var(--neko-preview-surface)]"       ← 备选，偶尔使用的变量
+```
+
+**第三层：原生 CSS 攻坚 — "美"和"深"**
+
+| 维度 | 说明 |
+|------|------|
+| 应用场景 | 复杂滤镜、`mask-image` 渐隐、`color-mix()` 动态着色、伪元素（滑块/滚动条）、高性能动画帧 |
+| 核心优势 | 突破原子化限制，实现 1px 级精细视觉渲染与运行时逻辑 |
+| 代码位置 | `player.css` 的 `@layer components` 中 |
+| neko-suite 实例 | `.neko-audio-bg`（color-mix 渐变）、`.neko-slider`（slider-thumb 伪元素）、`.neko-fade-mask`（mask-image）、`@keyframes neko-cover-pulse` |
+
+**多媒体组件适用指南**：
+
+| 组件类型 | 推荐方案 | 原因 |
+|---------|---------|------|
+| 播放控制栏 | 100% Tailwind | 响应式断点处理按钮隐藏/显示极具优势 |
+| 封面/卡片 | Tailwind + CSS 工具类 | 布局用 Tailwind，`color-mix()` 渐变/`blur()` 背景用 CSS |
+| 歌词滚动视图 | Tailwind + `.neko-fade-mask` | 布局用 Tailwind，`mask-image` 渐隐用 CSS |
+| 音视频轨道/刻度线 | 100% 原生 CSS / Canvas | `background-repeat` 绘制重复刻度 + `will-change: transform` 优化滚动 |
+| 波形/频谱可视化 | Canvas + CSS 变量 | Canvas 绘制 + `getCssVar()` 读取主题色 |
+| 进度条/滑块 | Tailwind + `.neko-slider` | 布局/hover 用 Tailwind，`::-webkit-slider-thumb` 伪元素用 CSS |
+| 主题适配 | Tailwind `dark:` + CSS 变量 | 基础深浅模式用 Tailwind 变体，VSCode 高级主题覆盖用 CSS 变量 |
+
+**核心原则**：Tailwind 负责"快"和"稳"，原生 CSS 负责"美"和"深"。在多媒体领域，放弃任何一方都会导致开发效率或视觉表现的短板。
+
 ---
 
 ## Phase 0：neko-preview Tailwind 基础设施接入
@@ -1027,7 +1079,7 @@ neko-suite 注册了 **13 个自定义文件扩展名**，当前在 VSCode 文�
 Phase 0    neko-preview Tailwind 基础设施接入                    [0.5d] ✅
 Phase 1    macOS Design Token 体系 + CSS 变量统一 + 主题覆盖     [1d]   ✅
 Phase 2    macOS 风格组件重构 + 共享控件提取                      [2d]   ✅
-Phase 3    视频播放器 macOS 化 + useMediaKeyboard                [0.5d]
+Phase 3    视频播放器 macOS 化                                    [0.5d] ✅
 Phase 4    neko-audio Tailwind 接入 + macOS 化                   [1d]
 Phase 5    neko-story VSCode 主题接入                             [0.5d]
 Phase 5.5  macOS VSCode 主题配色（Dark + Light）                  [1d]

@@ -15,7 +15,7 @@
 | **neko-cut** | Alpha | 82% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 拖拽修复 |
 | **neko-agent** | Alpha | 75% | Agent 引擎 + LLM 平台 + CLI + UI + Handler 拆分 + 流式化 + 剧本→时间线 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
-| **neko-preview** | Alpha | 80% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + 音频播放器现代化（Apple Music 风格四视图） + i18n + 流生命周期重构 + UI 现代化 Phase 0-2 ✅（Tailwind 接入 + macOS Design Token + 音频组件 Tailwind 化） |
+| **neko-preview** | Alpha | 82% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + 音频播放器现代化（Apple Music 风格四视图） + i18n + 流生命周期重构 + UI 现代化 Phase 0-3 ✅（Tailwind + macOS 风格，全部 BEM CSS 清除） |
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
 | **neko-assets** | Alpha | 85% | Phase 1-3 ✅ + 外部媒体库 ✅ + AI 分类 + 缩略图 + 多云支持 + 跨扩展集成，Phase 4-5 待开发 |
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
@@ -106,7 +106,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ## Phase 4.5: UI 现代化与主题统一
 
-> 目标：统一 macOS 视觉风格 + VSCode 主题配色 + 图标系统 — **进度 ~30%** | **Phase 0-2 已完成**
+> 目标：统一 macOS 视觉风格 + VSCode 主题配色 + 图标系统 — **进度 ~40%** | **Phase 0-3 已完成**
 
 **价值定位**：提升 neko-suite 整体视觉一致性和现代感，与 macOS 设计语言对齐，改善用户体验。
 
@@ -128,7 +128,10 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - 新建 4 个 macOS 风格共享组件（MacButton/MacIconButton/MacTabs/MacSlider）
 - WaveformCanvas/SpectrumCanvas getCssVar 变量名更新
 
-### Phase 3: 视频播放器 macOS 化 [待开始]
+### Phase 3: 视频播放器 macOS 化 ✅
+- VideoPlayer/VideoControls 全部 Tailwind 化
+- 使用共享 MacIconButton/MacSlider 组件
+- 删除全部 BEM CSS（player.css 1009行→183行，CSS 产物 33.5KB→21.6KB）
 - 定义按钮体系（Primary / Secondary / Ghost / Icon）
 - 输入控件规范（输入框 / 滑块）
 - 动效规范（hover / active / transition）
@@ -316,4 +319,4 @@ neko-engine (分段渲染 + 转场 + 特效)
 
 ---
 
-*最后更新: 2026-03-21（UI 现代化 Phase 0-2 完成 + neko-preview 音频组件 Tailwind 化）*
+*最后更新: 2026-03-21（UI 现代化 Phase 0-3 完成 + neko-preview 全部 Tailwind 化）*

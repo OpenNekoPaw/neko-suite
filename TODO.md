@@ -39,7 +39,7 @@
 - [x] Phase 0：Tailwind 基础设施接入（tailwind.config.js + postcss.config.js + @tailwind 指令）
 - [x] Phase 1：macOS Design Token 体系（扩展 @neko/shared token + CSS 变量统一 `--neko-preview-*` + 深色/浅色/高对比度主题覆盖）
 - [x] Phase 2：macOS 风格组件重构（AudioPlayer/AudioControls/ProgressBar/CoverView/LyricsView Tailwind 化 + MacButton/MacIconButton/MacTabs/MacSlider 共享组件）
-- [ ] Phase 3：视频播放器 macOS 化 + useMediaKeyboard 共享 hook
+- [x] Phase 3：视频播放器 macOS 化（VideoPlayer/VideoControls Tailwind 化 + 共享 MacIconButton/MacSlider + 删除全部 BEM CSS，player.css 1009行→183行）
 
 ### neko-audio（UI 现代化 — Phase 4）
 - [ ] Tailwind 接入（同 Phase 0 模式）
@@ -245,4 +245,4 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 
 ---
 
-*最后更新：2026-03-21（neko-preview UI 现代化 Phase 0-2 完成：Tailwind 接入 + macOS Design Token + 音频组件重构）*
+*最后更新：2026-03-21（neko-preview UI 现代化 Phase 0-3 完成：音频+视频全部 Tailwind 化，CSS 1009→183 行）*
