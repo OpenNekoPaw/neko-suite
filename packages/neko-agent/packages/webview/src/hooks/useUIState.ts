@@ -14,6 +14,7 @@ export interface UIState {
   activeTab: TabType;
   inputValue: string;
   selectedModel: string;
+  selectedMediaModel: string;
 }
 
 /**
@@ -23,6 +24,7 @@ export interface UIStateActions {
   setActiveTab: React.Dispatch<React.SetStateAction<TabType>>;
   setInputValue: React.Dispatch<React.SetStateAction<string>>;
   setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
+  setSelectedMediaModel: React.Dispatch<React.SetStateAction<string>>;
   clearInput: () => void;
 }
 
@@ -38,6 +40,7 @@ const DEFAULT_UI_STATE: UIState = {
   activeTab: 'chat',
   inputValue: '',
   selectedModel: 'auto',
+  selectedMediaModel: 'none',
 };
 
 /**
@@ -53,6 +56,9 @@ export function useUIState(initialState?: Partial<UIState>): UseUIStateReturn {
   const [selectedModel, setSelectedModel] = useState(
     initialState?.selectedModel ?? DEFAULT_UI_STATE.selectedModel,
   );
+  const [selectedMediaModel, setSelectedMediaModel] = useState(
+    initialState?.selectedMediaModel ?? DEFAULT_UI_STATE.selectedMediaModel,
+  );
 
   const clearInput = useCallback(() => {
     setInputValue('');
@@ -63,10 +69,12 @@ export function useUIState(initialState?: Partial<UIState>): UseUIStateReturn {
     activeTab,
     inputValue,
     selectedModel,
+    selectedMediaModel,
     // Actions
     setActiveTab,
     setInputValue,
     setSelectedModel,
+    setSelectedMediaModel,
     clearInput,
   };
 }

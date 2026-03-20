@@ -43,6 +43,8 @@ export function AIAssistant() {
     setInputValue,
     selectedModel,
     setSelectedModel,
+    selectedMediaModel,
+    setSelectedMediaModel,
     clearInput,
   } = ui;
 
@@ -336,10 +338,19 @@ export function AIAssistant() {
   };
 
   // Get available models from Platform ConfigManager (via settings.chatModelOptions)
-  const availableModels =
+  const allModels =
     settings.chatModelOptions.length > 0
       ? settings.chatModelOptions
       : [{ id: 'auto', label: 'Auto', providerId: '', modelId: '' }];
+
+  // Split into chat and media models
+  const MEDIA_CATEGORIES = new Set(['image', 'video', 'audio']);
+  const availableModels = allModels.filter(
+    (m) => m.id === 'auto' || !m.category || !MEDIA_CATEGORIES.has(m.category),
+  );
+  const availableMediaModels = allModels.filter(
+    (m) => m.category && MEDIA_CATEGORIES.has(m.category),
+  );
 
   return (
     <div className="flex flex-col h-screen bg-[var(--vscode-sideBar-background,var(--vscode-editor-background))] text-[var(--vscode-foreground)]">
@@ -368,6 +379,9 @@ export function AIAssistant() {
           selectedModel={selectedModel}
           availableModels={availableModels}
           onModelSelect={setSelectedModel}
+          selectedMediaModel={selectedMediaModel}
+          availableMediaModels={availableMediaModels}
+          onMediaModelSelect={setSelectedMediaModel}
           executionMode={settings.executionMode}
           onExecutionModeChange={handleExecutionModeChange}
           promptMode={settings.promptMode}

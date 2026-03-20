@@ -5,6 +5,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { ModelSelector } from './ModelSelector';
+import { MediaModelSelector } from './MediaModelSelector';
 import { ModeSelector } from './ModeSelector';
 import { PromptModeToggle } from './PromptModeToggle';
 import { AttachmentPreview } from './FileAttachment';
@@ -48,6 +49,9 @@ export function InputArea({
     selectedModel,
     availableModels,
     onModelSelect,
+    selectedMediaModel,
+    availableMediaModels,
+    onMediaModelSelect,
     executionMode,
     onExecutionModeChange,
     promptMode,
@@ -488,6 +492,16 @@ export function InputArea({
               selectedModel={selectedModel}
               models={availableModels}
               onSelect={onModelSelect}
+            />
+
+            {/* Divider */}
+            <div className="w-px h-4 bg-[var(--vscode-panel-border)] mx-0.5" />
+
+            {/* Media model selector */}
+            <MediaModelSelector
+              selectedModel={selectedMediaModel}
+              models={availableMediaModels}
+              onSelect={onMediaModelSelect}
             />
           </div>
 

@@ -14,10 +14,14 @@ import type { ChatModelOption } from '@neko/shared';
 import type { SlashCommand, SkillSummary } from '@/components/ChatView/InputArea/types';
 
 export interface InputAreaContextValue {
-  // Model
+  // Chat Model
   selectedModel: string;
   availableModels: ChatModelOption[];
   onModelSelect: (modelId: string) => void;
+  // Media Model
+  selectedMediaModel: string;
+  availableMediaModels: ChatModelOption[];
+  onMediaModelSelect: (modelId: string) => void;
   // Execution mode
   executionMode: ShellExecutionMode;
   onExecutionModeChange: (mode: ShellExecutionMode) => void;
@@ -45,6 +49,9 @@ export function InputAreaProvider({
       selectedModel: value.selectedModel,
       availableModels: value.availableModels,
       onModelSelect: value.onModelSelect,
+      selectedMediaModel: value.selectedMediaModel,
+      availableMediaModels: value.availableMediaModels,
+      onMediaModelSelect: value.onMediaModelSelect,
       executionMode: value.executionMode,
       onExecutionModeChange: value.onExecutionModeChange,
       promptMode: value.promptMode,
@@ -60,6 +67,9 @@ export function InputAreaProvider({
       value.selectedModel,
       value.availableModels,
       value.onModelSelect,
+      value.selectedMediaModel,
+      value.availableMediaModels,
+      value.onMediaModelSelect,
       value.executionMode,
       value.onExecutionModeChange,
       value.promptMode,
