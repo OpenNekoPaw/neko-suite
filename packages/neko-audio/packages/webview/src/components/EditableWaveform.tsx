@@ -238,17 +238,11 @@ export function EditableWaveform({ onSeek }: EditableWaveformProps) {
   return (
     <div
       ref={containerRef}
-      className="audio-editor__waveform"
-      style={{
-        width: '100%',
-        height: '100%',
-        position: 'relative',
-        overflow: 'hidden',
-        cursor: isDragging ? 'col-resize' : 'crosshair',
-      }}
+      className="w-full h-full relative overflow-hidden"
+      style={{ cursor: isDragging ? 'col-resize' : 'crosshair' }}
       onMouseDown={handleMouseDown}
     >
-      <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0 }} />
+      <canvas ref={canvasRef} className="absolute top-0 left-0" />
     </div>
   );
 }

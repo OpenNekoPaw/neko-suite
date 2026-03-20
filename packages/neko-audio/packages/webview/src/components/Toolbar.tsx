@@ -21,18 +21,19 @@ interface ToolbarButtonProps {
 function ToolbarButton({ icon, title, active, onClick }: ToolbarButtonProps) {
   return (
     <button
-      className={`toolbar-btn ${active ? 'toolbar-btn--active' : ''}`}
+      className={`relative w-10 h-10 flex items-center justify-center rounded-lg transition-all duration-150
+        ${active ? 'bg-neko-glass-active text-[var(--activity-fg)]' : 'text-[var(--activity-inactive)] hover:text-[var(--activity-fg)] hover:bg-neko-surface'}`}
       onClick={onClick}
       title={title}
     >
-      {active && <span className="toolbar-btn__indicator" />}
-      <span className="toolbar-btn__icon">{icon}</span>
+      {active && <span className="neko-toolbar-indicator" />}
+      <span className="text-base">{icon}</span>
     </button>
   );
 }
 
 function ToolbarDivider() {
-  return <div className="toolbar-divider" />;
+  return <div className="w-6 h-px mx-auto my-1 bg-[var(--editor-border)] opacity-50" />;
 }
 
 export function Toolbar() {
@@ -60,7 +61,7 @@ export function Toolbar() {
   }, []);
 
   return (
-    <div className="audio-toolbar">
+    <div className="flex flex-col items-center w-12 shrink-0 py-2 gap-0.5 bg-[var(--activity-bg)] border-r border-[var(--editor-border)]">
       {/* View toggles */}
       <ToolbarButton
         icon="📊"

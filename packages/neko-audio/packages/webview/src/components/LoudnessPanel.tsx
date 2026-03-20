@@ -16,25 +16,25 @@ export function LoudnessPanel() {
   const isHot = loudness.truePeak > -1;
 
   return (
-    <div className="audio-loudness">
-      <span className="audio-loudness__item">
-        <span className="audio-loudness__label">{t('audio.analysis.integrated')}</span>
-        <span className="audio-loudness__value">{loudness.integratedLoudness.toFixed(1)} LUFS</span>
+    <div className="flex items-center gap-3 px-3 py-1.5 shrink-0 text-[11px] bg-[var(--activity-bg)] border-t border-[var(--editor-border)]">
+      <span className="inline-flex items-center gap-1.5">
+        <span className="opacity-60">{t('audio.analysis.integrated')}</span>
+        <span className="font-mono">{loudness.integratedLoudness.toFixed(1)} LUFS</span>
       </span>
-      <span className="audio-loudness__sep" />
-      <span className="audio-loudness__item">
-        <span className="audio-loudness__label">{t('audio.analysis.truePeak')}</span>
+      <span className="w-px h-3 bg-[var(--editor-border)]" />
+      <span className="inline-flex items-center gap-1.5">
+        <span className="opacity-60">{t('audio.analysis.truePeak')}</span>
         <span
-          className="audio-loudness__value"
+          className="font-mono"
           style={isHot ? { color: 'var(--vscode-errorForeground)' } : undefined}
         >
           {loudness.truePeak.toFixed(1)} dBTP
         </span>
       </span>
-      <span className="audio-loudness__sep" />
-      <span className="audio-loudness__item">
-        <span className="audio-loudness__label">{t('audio.analysis.range')}</span>
-        <span className="audio-loudness__value">{loudness.loudnessRange.toFixed(1)} LU</span>
+      <span className="w-px h-3 bg-[var(--editor-border)]" />
+      <span className="inline-flex items-center gap-1.5">
+        <span className="opacity-60">{t('audio.analysis.range')}</span>
+        <span className="font-mono">{loudness.loudnessRange.toFixed(1)} LU</span>
       </span>
     </div>
   );

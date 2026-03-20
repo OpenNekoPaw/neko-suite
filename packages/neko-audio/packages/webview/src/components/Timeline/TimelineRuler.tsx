@@ -63,39 +63,21 @@ export function TimelineRuler({
   return (
     <div
       onClick={handleClick}
-      style={{
-        width: timelineWidth,
-        height: RULER_HEIGHT,
-        position: 'relative',
-        cursor: 'pointer',
-        background: 'var(--vscode-editorGroupHeader-tabsBackground)',
-        userSelect: 'none',
-      }}
+      className="relative cursor-pointer select-none bg-[var(--vscode-editorGroupHeader-tabsBackground)]"
+      style={{ width: timelineWidth, height: RULER_HEIGHT }}
     >
       {ticks.map(({ time, x, major }) => (
-        <div key={time} style={{ position: 'absolute', left: x }}>
+        <div key={time} className="absolute" style={{ left: x }}>
           <div
+            className="absolute bottom-0 bg-[var(--vscode-editor-foreground)]"
             style={{
               width: 1,
               height: major ? 12 : 6,
-              background: major
-                ? 'var(--vscode-editor-foreground)'
-                : 'var(--vscode-editorLineNumber-foreground)',
-              position: 'absolute',
-              bottom: 0,
+              opacity: major ? 1 : 0.4,
             }}
           />
           {major && (
-            <span
-              style={{
-                position: 'absolute',
-                top: 2,
-                left: 4,
-                fontSize: 10,
-                color: 'var(--vscode-descriptionForeground)',
-                whiteSpace: 'nowrap',
-              }}
-            >
+            <span className="absolute top-0.5 left-1 text-[10px] text-[var(--vscode-descriptionForeground)] whitespace-nowrap">
               {formatTime(time)}
             </span>
           )}

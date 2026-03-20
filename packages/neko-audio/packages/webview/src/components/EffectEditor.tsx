@@ -11,6 +11,7 @@ import type {
   AudioEffectParams,
 } from '../types/audioEffects';
 import { getAudioEffectDefinition } from '../types/audioEffects';
+import { MacIconButton } from '../shared/MacIconButton';
 import { t } from '../i18n';
 
 interface EffectEditorProps {
@@ -35,57 +36,40 @@ export function EffectEditor({
 
   return (
     <div
-      className={`effect-editor ${effect.enabled ? '' : 'effect-editor--disabled'}`}
-      style={{
-        border: '1px solid var(--vscode-panel-border, #333)',
-        borderRadius: 4,
-        padding: 8,
-        opacity: effect.enabled ? 1 : 0.5,
-      }}
+      className={`border border-[var(--vscode-panel-border,#333)] rounded p-2 transition-opacity ${effect.enabled ? 'opacity-100' : 'opacity-50'}`}
     >
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+      <div className="flex items-center gap-1.5 mb-1.5">
         <button
-          className="btn btn--icon"
+          className="w-5 h-5 flex items-center justify-center rounded-full text-[10px] bg-transparent text-[var(--editor-fg)] border-none cursor-pointer hover:bg-neko-surface transition-colors"
           onClick={() => onToggle(effect.id)}
           title={t('audio.effects.bypass')}
-          style={{ fontSize: 10, width: 20, height: 20, padding: 0 }}
         >
           {effect.enabled ? '●' : '○'}
         </button>
-        <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>
-          {t(definition.nameKey) || effect.type}
-        </span>
+        <span className="flex-1 text-xs font-medium">{t(definition.nameKey) || effect.type}</span>
         {onMoveUp && (
-          <button
-            className="btn btn--icon"
-            onClick={onMoveUp}
-            style={{ fontSize: 10, width: 20, height: 20, padding: 0 }}
-          >
+          <MacIconButton size="sm" onClick={onMoveUp} className="w-5 h-5 text-[10px]">
             ▲
-          </button>
+          </MacIconButton>
         )}
         {onMoveDown && (
-          <button
-            className="btn btn--icon"
-            onClick={onMoveDown}
-            style={{ fontSize: 10, width: 20, height: 20, padding: 0 }}
-          >
+          <MacIconButton size="sm" onClick={onMoveDown} className="w-5 h-5 text-[10px]">
             ▼
-          </button>
+          </MacIconButton>
         )}
-        <button
-          className="btn btn--icon"
+        <MacIconButton
+          size="sm"
           onClick={() => onRemove(effect.id)}
           title={t('audio.effects.remove')}
-          style={{ fontSize: 10, width: 20, height: 20, padding: 0, color: '#f44' }}
+          className="w-5 h-5 text-[10px] text-[#f44]"
         >
           ✕
-        </button>
+        </MacIconButton>
       </div>
 
       {/* Parameters */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div className="flex flex-col gap-1">
         {definition.parameterDefinitions.map((paramDef) => (
           <ParameterControl
             key={paramDef.key}
@@ -138,19 +122,18 @@ function ParameterControl({ paramDef, value, onChange }: ParameterControlProps) 
   switch (paramDef.type) {
     case 'slider':
       return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <label style={{ fontSize: 10, width: 60, flexShrink: 0, opacity: 0.8 }}>{label}</label>
+        <div className="flex items-center gap-1.5">
+          <label className="text-[10px] w-[60px] shrink-0 opacity-70">{label}</label>
           <input
             type="range"
-            className="slider"
+            className="neko-slider flex-1 bg-[var(--neko-surface)]"
             min={paramDef.min}
             max={paramDef.max}
             step={paramDef.step}
             value={typeof value === 'number' ? value : (paramDef.min ?? 0)}
             onChange={handleSliderChange}
-            style={{ flex: 1 }}
           />
-          <span style={{ fontSize: 10, width: 50, textAlign: 'right', flexShrink: 0 }}>
+          <span className="text-[10px] w-[50px] text-right shrink-0">
             {typeof value === 'number' ? formatValue(value, paramDef) : '—'}
           </span>
         </div>
@@ -158,20 +141,12 @@ function ParameterControl({ paramDef, value, onChange }: ParameterControlProps) 
 
     case 'select':
       return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <label style={{ fontSize: 10, width: 60, flexShrink: 0, opacity: 0.8 }}>{label}</label>
+        <div className="flex items-center gap-1.5">
+          <label className="text-[10px] w-[60px] shrink-0 opacity-70">{label}</label>
           <select
             value={typeof value === 'string' ? value : ''}
             onChange={handleSelectChange}
-            style={{
-              flex: 1,
-              fontSize: 11,
-              padding: '2px 4px',
-              background: 'var(--vscode-input-background, #1e1e1e)',
-              color: 'var(--vscode-input-foreground, #ccc)',
-              border: '1px solid var(--vscode-input-border, #333)',
-              borderRadius: 3,
-            }}
+            className="flex-1 text-[11px] px-1 py-0.5 bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded"
           >
             {paramDef.options?.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -184,8 +159,8 @@ function ParameterControl({ paramDef, value, onChange }: ParameterControlProps) 
 
     case 'boolean':
       return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <label style={{ fontSize: 10, width: 60, flexShrink: 0, opacity: 0.8 }}>{label}</label>
+        <div className="flex items-center gap-1.5">
+          <label className="text-[10px] w-[60px] shrink-0 opacity-70">{label}</label>
           <input
             type="checkbox"
             checked={typeof value === 'boolean' ? value : false}

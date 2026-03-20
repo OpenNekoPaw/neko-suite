@@ -8,6 +8,7 @@
 import { useRef } from 'react';
 import { postMessage } from '../shared/useVscodeMessage';
 import { useDragDrop } from '../hooks/useDragDrop';
+import { MacButton } from '../shared/MacButton';
 import { t } from '../i18n';
 
 export function EmptyProject() {
@@ -21,18 +22,19 @@ export function EmptyProject() {
   return (
     <div
       ref={containerRef}
-      className={`audio-editor__empty ${isDragOver ? 'audio-editor__empty--drag-over' : ''}`}
+      className={`flex flex-col items-center justify-center w-full h-full gap-4 transition-colors duration-200
+        ${isDragOver ? 'neko-drag-over-bg' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="audio-editor__empty-icon">{isDragOver ? '⬇' : '♫'}</div>
-      <div className="audio-editor__empty-text">
+      <div className="text-5xl opacity-40">{isDragOver ? '⬇' : '♫'}</div>
+      <div className="text-sm text-[var(--editor-fg)] opacity-60">
         {isDragOver ? t('audio.import.drop') : t('audio.import.empty')}
       </div>
-      <button className="btn" onClick={handleImport}>
+      <MacButton variant="secondary" size="sm" onClick={handleImport}>
         {t('audio.import.button')}
-      </button>
+      </MacButton>
     </div>
   );
 }

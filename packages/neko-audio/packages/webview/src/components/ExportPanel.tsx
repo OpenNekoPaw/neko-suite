@@ -8,6 +8,7 @@
 import { useState, useCallback } from 'react';
 import { useAudioStore } from '../stores/audioStore';
 import { postMessage } from '../shared/useVscodeMessage';
+import { MacButton } from '../shared/MacButton';
 import { t } from '../i18n';
 
 // =============================================================================
@@ -30,6 +31,9 @@ const FORMATS: FormatOption[] = [
 
 const SAMPLE_RATES = [8000, 16000, 22050, 44100, 48000, 96000];
 const BITRATES = [96, 128, 192, 256, 320];
+
+const selectClass =
+  'w-full text-[11px] px-2 py-1 bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded';
 
 // =============================================================================
 // ExportPanel
@@ -57,11 +61,11 @@ export function ExportPanel() {
   }, [format, sampleRate, bitrate, channels, isLossy]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div className="flex flex-col gap-2 p-2">
       {/* Format */}
-      <div className="form-group">
-        <label className="form-label">{t('audio.export.format')}</label>
-        <select className="form-select" value={format} onChange={(e) => setFormat(e.target.value)}>
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] opacity-70">{t('audio.export.format')}</label>
+        <select className={selectClass} value={format} onChange={(e) => setFormat(e.target.value)}>
           {FORMATS.map((f) => (
             <option key={f.value} value={f.value}>
               {f.label}
@@ -71,10 +75,10 @@ export function ExportPanel() {
       </div>
 
       {/* Sample Rate */}
-      <div className="form-group">
-        <label className="form-label">{t('audio.export.sampleRate')}</label>
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] opacity-70">{t('audio.export.sampleRate')}</label>
         <select
-          className="form-select"
+          className={selectClass}
           value={sampleRate}
           onChange={(e) => setSampleRate(Number(e.target.value))}
         >
@@ -88,10 +92,10 @@ export function ExportPanel() {
 
       {/* Bitrate (lossy only) */}
       {isLossy && (
-        <div className="form-group">
-          <label className="form-label">{t('audio.export.bitrate')}</label>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] opacity-70">{t('audio.export.bitrate')}</label>
           <select
-            className="form-select"
+            className={selectClass}
             value={bitrate}
             onChange={(e) => setBitrate(Number(e.target.value))}
           >
@@ -105,10 +109,10 @@ export function ExportPanel() {
       )}
 
       {/* Channels */}
-      <div className="form-group">
-        <label className="form-label">{t('audio.export.channels')}</label>
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] opacity-70">{t('audio.export.channels')}</label>
         <select
-          className="form-select"
+          className={selectClass}
           value={channels}
           onChange={(e) => setChannels(Number(e.target.value))}
         >
@@ -118,9 +122,9 @@ export function ExportPanel() {
       </div>
 
       {/* Export button */}
-      <button className="btn" onClick={handleExport}>
+      <MacButton variant="primary" size="sm" onClick={handleExport} className="mt-1">
         {t('audio.export.export')}
-      </button>
+      </MacButton>
     </div>
   );
 }

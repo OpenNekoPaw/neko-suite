@@ -12,6 +12,7 @@ import { EffectsPanel } from './EffectsPanel';
 import { RecordingPanel } from './RecordingPanel';
 import { ExportPanel } from './ExportPanel';
 import { useEffectsChain } from '../hooks/useEffectsChain';
+import { MacIconButton } from '../shared/MacIconButton';
 import { t } from '../i18n';
 
 const PANEL_TITLES: Record<SidePanelType, string> = {
@@ -58,20 +59,26 @@ export function SidePanel() {
   return (
     <>
       {/* Resize handle */}
-      <div className="audio-editor__resize-handle" onPointerDown={handleResizeStart} />
+      <div className="neko-resize-handle" onPointerDown={handleResizeStart} />
 
       {/* Panel */}
-      <div ref={rootRef} className="audio-side-panel" style={{ width }}>
+      <div
+        ref={rootRef}
+        className="flex flex-col shrink-0 bg-[var(--activity-bg)] border-l border-[var(--editor-border)] overflow-hidden"
+        style={{ width }}
+      >
         {/* Header */}
-        <div className="audio-side-panel__header">
-          <span className="audio-side-panel__title">{t(PANEL_TITLES[activeSidePanel])}</span>
-          <button className="btn btn--icon" onClick={closeSidePanel} title="Close">
+        <div className="flex items-center h-9 px-3 shrink-0 border-b border-[var(--editor-border)]">
+          <span className="flex-1 text-xs font-medium text-[var(--editor-fg)] truncate">
+            {t(PANEL_TITLES[activeSidePanel])}
+          </span>
+          <MacIconButton size="sm" onClick={closeSidePanel} title="Close">
             ✕
-          </button>
+          </MacIconButton>
         </div>
 
         {/* Content */}
-        <div className="audio-side-panel__content">
+        <div className="flex-1 overflow-y-auto">
           {activeSidePanel === 'effects' && <EffectsPanel chain={effectsChain} />}
           {activeSidePanel === 'recording' && <RecordingPanel />}
           {activeSidePanel === 'export' && <ExportPanel />}

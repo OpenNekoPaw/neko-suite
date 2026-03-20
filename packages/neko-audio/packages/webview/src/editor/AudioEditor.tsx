@@ -226,7 +226,7 @@ export function AudioEditor() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="audio-editor__loading">
+      <div className="flex items-center justify-center w-full h-full bg-[var(--editor-bg)] text-[var(--editor-fg)]">
         <div>{t('audio.loading')}</div>
       </div>
     );
@@ -235,7 +235,7 @@ export function AudioEditor() {
   // Error state
   if (error) {
     return (
-      <div className="audio-editor__error">
+      <div className="flex items-center justify-center w-full h-full bg-[var(--editor-bg)] text-[var(--vscode-errorForeground,#f44)]">
         <div>{error}</div>
       </div>
     );
@@ -249,17 +249,17 @@ export function AudioEditor() {
   return (
     <div
       ref={editorRef}
-      className="audio-editor"
+      className="flex flex-col w-full h-full bg-[var(--editor-bg)] text-[var(--editor-fg)] overflow-hidden relative"
       onDragOver={projectMode ? handleDragOver : undefined}
       onDragLeave={projectMode ? handleDragLeave : undefined}
       onDrop={projectMode ? handleDrop : undefined}
     >
       <TransportBar onTogglePlay={togglePlay} onSeek={seek} onStop={stop} />
 
-      <div className="audio-editor__body">
+      <div className="flex flex-1 overflow-hidden">
         <Toolbar />
 
-        <div className="audio-editor__center">
+        <div className="flex flex-col flex-1 overflow-hidden">
           {isV2 ? (
             <AudioTimeline />
           ) : (
@@ -275,8 +275,10 @@ export function AudioEditor() {
       </div>
 
       {isDragOver && projectMode && (
-        <div className="audio-editor__drop-overlay">
-          <div className="audio-editor__drop-overlay-text">{t('audio.import.drop')}</div>
+        <div className="absolute inset-0 z-50 flex items-center justify-center neko-drop-overlay-bg">
+          <div className="text-lg font-medium text-[var(--editor-fg)]">
+            {t('audio.import.drop')}
+          </div>
         </div>
       )}
 

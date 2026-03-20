@@ -43,26 +43,17 @@ export function AudioTimeline() {
   const playheadLeft = currentTime * PIXELS_PER_SECOND * zoom;
 
   return (
-    <div
-      className="audio-timeline"
-      style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}
-    >
+    <div className="flex flex-col flex-1 overflow-hidden">
       {/* Ruler row */}
       <div
-        style={{
-          display: 'flex',
-          height: RULER_HEIGHT,
-          borderBottom: '1px solid var(--vscode-panel-border)',
-        }}
+        className="flex shrink-0 border-b border-[var(--vscode-panel-border)]"
+        style={{ height: RULER_HEIGHT }}
       >
         <div
-          style={{
-            width: TRACK_LABEL_WIDTH,
-            minWidth: TRACK_LABEL_WIDTH,
-            borderRight: '1px solid var(--vscode-panel-border)',
-          }}
+          className="shrink-0 border-r border-[var(--vscode-panel-border)]"
+          style={{ width: TRACK_LABEL_WIDTH, minWidth: TRACK_LABEL_WIDTH }}
         />
-        <div ref={rulerRef} style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+        <div ref={rulerRef} className="flex-1 overflow-hidden relative">
           <TimelineRuler
             totalDuration={totalDuration}
             zoomLevel={zoom}
@@ -73,18 +64,8 @@ export function AudioTimeline() {
       </div>
 
       {/* Tracks area */}
-      <div
-        ref={tracksRef}
-        onScroll={handleTracksScroll}
-        style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative' }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            minWidth: timelineWidth + TRACK_LABEL_WIDTH,
-          }}
-        >
+      <div ref={tracksRef} onScroll={handleTracksScroll} className="flex-1 overflow-auto relative">
+        <div className="flex flex-col" style={{ minWidth: timelineWidth + TRACK_LABEL_WIDTH }}>
           {tracks.map((track) => (
             <TrackLane
               key={track.id}
@@ -100,14 +81,8 @@ export function AudioTimeline() {
 
           {tracks.length === 0 && (
             <div
-              style={{
-                height: TRACK_HEIGHT * 3,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--vscode-descriptionForeground)',
-                fontSize: 13,
-              }}
+              className="flex items-center justify-center text-[13px] text-[var(--vscode-descriptionForeground)]"
+              style={{ height: TRACK_HEIGHT * 3 }}
             >
               No tracks — import audio files to get started
             </div>
@@ -116,16 +91,8 @@ export function AudioTimeline() {
 
         {/* Playhead */}
         <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            bottom: 0,
-            left: TRACK_LABEL_WIDTH + playheadLeft,
-            width: 1,
-            background: 'var(--vscode-editor-foreground)',
-            pointerEvents: 'none',
-            zIndex: 10,
-          }}
+          className="absolute top-0 bottom-0 w-px bg-[var(--vscode-editor-foreground)] pointer-events-none z-10"
+          style={{ left: TRACK_LABEL_WIDTH + playheadLeft }}
         />
       </div>
     </div>

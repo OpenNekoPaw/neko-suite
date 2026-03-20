@@ -19,50 +19,23 @@ export function Toast() {
 
   if (!toast) return null;
 
+  const color = levelColors[toast.level] ?? levelColors.info;
+
   return (
     <div
+      className="fixed bottom-4 right-4 max-w-[360px] px-3.5 py-2 rounded-md text-xs leading-relaxed
+        text-[var(--vscode-editor-foreground)] bg-[var(--vscode-editorWidget-background)]
+        shadow-lg flex items-center gap-2 z-[9999]"
       style={{
-        position: 'fixed',
-        bottom: 16,
-        right: 16,
-        maxWidth: 360,
-        padding: '8px 14px',
-        borderRadius: 6,
-        fontSize: 12,
-        lineHeight: 1.4,
-        color: 'var(--vscode-editor-foreground)',
-        background: 'var(--vscode-editorWidget-background)',
-        border: `1px solid ${levelColors[toast.level] ?? levelColors.info}`,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        zIndex: 9999,
-        animation: 'fadeIn 0.2s ease',
+        border: `1px solid ${color}`,
+        animation: 'neko-toast-slide-in 0.2s ease',
       }}
     >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          background: levelColors[toast.level] ?? levelColors.info,
-          flexShrink: 0,
-        }}
-      />
-      <span style={{ flex: 1 }}>{toast.text}</span>
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />
+      <span className="flex-1">{toast.text}</span>
       <button
         onClick={clearToast}
-        style={{
-          background: 'none',
-          border: 'none',
-          color: 'var(--vscode-editor-foreground)',
-          cursor: 'pointer',
-          opacity: 0.5,
-          fontSize: 14,
-          padding: 0,
-          lineHeight: 1,
-        }}
+        className="bg-transparent border-none text-[var(--vscode-editor-foreground)] cursor-pointer opacity-50 hover:opacity-100 text-sm p-0 leading-none transition-opacity"
       >
         ×
       </button>

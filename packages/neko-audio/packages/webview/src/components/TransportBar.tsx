@@ -8,6 +8,8 @@
 import { useCallback } from 'react';
 import { useAudioStore } from '../stores/audioStore';
 import { postMessage } from '../shared/useVscodeMessage';
+import { MacButton } from '../shared/MacButton';
+import { MacIconButton } from '../shared/MacIconButton';
 import { t } from '../i18n';
 
 interface TransportBarProps {
@@ -107,17 +109,21 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
   }, [selection]);
 
   return (
-    <div className="audio-editor__toolbar" tabIndex={0} onKeyDown={handleKeyDown}>
+    <div
+      className="flex items-center gap-2 px-3 h-10 shrink-0 bg-[var(--toolbar-bg)] border-b border-[var(--editor-border)]"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
       {/* File name */}
-      <span className="file-info" title={fileName ?? ''}>
+      <span className="text-xs opacity-80 truncate max-w-[200px]" title={fileName ?? ''}>
         {fileName}
       </span>
 
       {/* Format info */}
       {audioInfo && (
         <>
-          <span className="divider" />
-          <span className="file-info">
+          <span className="w-px h-4 bg-[var(--editor-border)] shrink-0" />
+          <span className="text-xs opacity-60 whitespace-nowrap">
             {audioInfo.codec.toUpperCase()} · {(audioInfo.sampleRate / 1000).toFixed(1)}kHz ·{' '}
             {audioInfo.channels === 1
               ? 'Mono'
@@ -129,82 +135,76 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
         </>
       )}
 
-      <span className="divider" />
+      <span className="w-px h-4 bg-[var(--editor-border)] shrink-0" />
 
       {/* Playback controls */}
-      <button
-        className={`btn btn--icon ${isPlaying ? 'btn--active' : ''}`}
+      <MacIconButton
+        size="sm"
+        active={isPlaying}
         onClick={onTogglePlay}
         title={isPlaying ? t('audio.controls.pause') : t('audio.controls.play')}
       >
         {isPlaying ? '⏸' : '▶'}
-      </button>
+      </MacIconButton>
 
-      <button className="btn btn--icon" onClick={onStop} title={t('audio.controls.stop')}>
+      <MacIconButton size="sm" onClick={onStop} title={t('audio.controls.stop')}>
         ⏹
-      </button>
+      </MacIconButton>
 
-      <span className="time-display">
+      <span className="text-xs font-mono opacity-80 whitespace-nowrap">
         {formatTime(currentTime)} / {formatTime(duration)}
       </span>
 
       {/* Selection info + trim */}
       {selection && (
         <>
-          <span className="divider" />
-          <span className="time-display" style={{ opacity: 0.7, fontSize: 11 }}>
+          <span className="w-px h-4 bg-[var(--editor-border)] shrink-0" />
+          <span className="text-[11px] font-mono opacity-60 whitespace-nowrap">
             {t('audio.waveform.selection', {
               start: formatTime(selection.start),
               end: formatTime(selection.end),
             })}
           </span>
-          <button
-            className="btn"
+          <MacButton
+            variant="ghost"
+            size="sm"
             onClick={handleTrim}
             title={t('audio.edit.trim')}
-            style={{ fontSize: 11 }}
+            className="text-[11px] px-2 py-1"
           >
             {t('audio.edit.trim')}
-          </button>
+          </MacButton>
         </>
       )}
 
-      <span style={{ flex: 1 }} />
+      <span className="flex-1" />
 
       {/* Volume */}
-      <button
-        className="btn btn--icon"
+      <MacIconButton
+        size="sm"
         onClick={toggleMute}
         title={isMuted ? t('audio.controls.volume') : t('audio.controls.mute')}
       >
         {isMuted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
-      </button>
+      </MacIconButton>
       <input
         type="range"
-        className="slider"
+        className="neko-slider w-20 bg-[var(--neko-surface)]"
         min="0"
         max="1"
         step="0.05"
         value={isMuted ? 0 : volume}
         onChange={(e) => setVolume(parseFloat(e.target.value))}
-        style={{ width: 80 }}
       />
 
-      <span className="divider" />
+      <span className="w-px h-4 bg-[var(--editor-border)] shrink-0" />
 
       {/* Speed */}
-      <label style={{ fontSize: 11, opacity: 0.7 }}>{t('audio.controls.speed')}</label>
+      <label className="text-[11px] opacity-60">{t('audio.controls.speed')}</label>
       <select
         value={speed}
         onChange={handleSpeedChange}
-        style={{
-          background: 'var(--input-bg)',
-          color: 'var(--input-fg)',
-          border: '1px solid var(--input-border)',
-          borderRadius: 3,
-          padding: '2px 4px',
-          fontSize: 11,
-        }}
+        className="text-[11px] px-1 py-0.5 bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded"
       >
         {SPEED_OPTIONS.map((s) => (
           <option key={s} value={s}>

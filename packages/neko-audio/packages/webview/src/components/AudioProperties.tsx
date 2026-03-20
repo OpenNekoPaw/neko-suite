@@ -25,45 +25,37 @@ export function AudioProperties({
   onGainChange,
 }: AudioPropertiesProps) {
   return (
-    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <h3 style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>{t('audio.properties.title')}</h3>
+    <div className="flex flex-col gap-3 p-3">
+      <h3 className="m-0 text-[13px] opacity-70">{t('audio.properties.title')}</h3>
 
       {/* Volume */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <label style={{ fontSize: 11, width: 50, flexShrink: 0 }}>
-          {t('audio.properties.volume')}
-        </label>
+      <div className="flex items-center gap-2">
+        <label className="text-[11px] w-[50px] shrink-0">{t('audio.properties.volume')}</label>
         <input
           type="range"
-          className="slider"
+          className="neko-slider flex-1 bg-[var(--neko-surface)]"
           min="0"
           max="2"
           step="0.01"
           value={volume}
           onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-          style={{ flex: 1 }}
         />
-        <span style={{ fontSize: 11, width: 40, textAlign: 'right' }}>
-          {Math.round(volume * 100)}%
-        </span>
+        <span className="text-[11px] w-10 text-right">{Math.round(volume * 100)}%</span>
       </div>
 
       {/* Pan */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <label style={{ fontSize: 11, width: 50, flexShrink: 0 }}>
-          {t('audio.properties.pan')}
-        </label>
+      <div className="flex items-center gap-2">
+        <label className="text-[11px] w-[50px] shrink-0">{t('audio.properties.pan')}</label>
         <input
           type="range"
-          className="slider"
+          className="neko-slider flex-1 bg-[var(--neko-surface)]"
           min="-1"
           max="1"
           step="0.01"
           value={pan}
           onChange={(e) => onPanChange(parseFloat(e.target.value))}
-          style={{ flex: 1 }}
         />
-        <span style={{ fontSize: 11, width: 40, textAlign: 'right' }}>
+        <span className="text-[11px] w-10 text-right">
           {pan === 0
             ? 'C'
             : pan < 0
@@ -73,21 +65,18 @@ export function AudioProperties({
       </div>
 
       {/* Gain */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <label style={{ fontSize: 11, width: 50, flexShrink: 0 }}>
-          {t('audio.properties.gain')}
-        </label>
+      <div className="flex items-center gap-2">
+        <label className="text-[11px] w-[50px] shrink-0">{t('audio.properties.gain')}</label>
         <input
           type="range"
-          className="slider"
+          className="neko-slider flex-1 bg-[var(--neko-surface)]"
           min="-20"
           max="20"
           step="0.5"
           value={gain}
           onChange={(e) => onGainChange(parseFloat(e.target.value))}
-          style={{ flex: 1 }}
         />
-        <span style={{ fontSize: 11, width: 40, textAlign: 'right' }}>
+        <span className="text-[11px] w-10 text-right">
           {gain > 0 ? '+' : ''}
           {gain.toFixed(1)}dB
         </span>

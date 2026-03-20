@@ -131,18 +131,8 @@ export function SpectrumAnalyzer({ audioClientRef, enabled }: SpectrumAnalyzerPr
   if (!enabled) return null;
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        width: '100%',
-        height: 80,
-        position: 'relative',
-        overflow: 'hidden',
-        borderRadius: 4,
-        flexShrink: 0,
-      }}
-    >
-      <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0 }} />
+    <div ref={containerRef} className="w-full h-20 relative overflow-hidden rounded shrink-0">
+      <canvas ref={canvasRef} className="absolute top-0 left-0" />
     </div>
   );
 }

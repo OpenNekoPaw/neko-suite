@@ -11,6 +11,7 @@ import { AUDIO_EFFECT_DEFINITIONS } from '../types/audioEffects';
 import type { EffectsChain } from '../hooks/useEffectsChain';
 import { EffectEditor } from './EffectEditor';
 import { postMessage } from '../shared/useVscodeMessage';
+import { MacButton } from '../shared/MacButton';
 import { t } from '../i18n';
 
 interface EffectsPanelProps {
@@ -86,25 +87,19 @@ export function EffectsPanel({ chain }: EffectsPanelProps) {
   }, [chain.effects]);
 
   return (
-    <div
-      style={{
-        padding: 8,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-      }}
-    >
+    <div className="flex flex-col gap-2 p-2">
       {/* Header actions */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ flex: 1 }} />
-        <div style={{ position: 'relative' }}>
-          <button
-            className="btn"
+      <div className="flex items-center">
+        <span className="flex-1" />
+        <div className="relative">
+          <MacButton
+            variant="ghost"
+            size="sm"
             onClick={() => setShowAddMenu(!showAddMenu)}
-            style={{ fontSize: 11, padding: '2px 8px' }}
+            className="text-[11px] px-2 py-0.5"
           >
             + {t('audio.effects.add')}
-          </button>
+          </MacButton>
 
           {/* Add dropdown */}
           {showAddMenu && (
@@ -115,11 +110,11 @@ export function EffectsPanel({ chain }: EffectsPanelProps) {
 
       {/* Effects list */}
       {chain.effects.length === 0 ? (
-        <div style={{ fontSize: 11, opacity: 0.5, textAlign: 'center', padding: 12 }}>
+        <div className="text-[11px] opacity-50 text-center py-3">
           {t('audio.effects.noEffects')}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="flex flex-col gap-1.5">
           {chain.effects.map((effect, index) => (
             <EffectEditor
               key={effect.id}
@@ -140,21 +135,23 @@ export function EffectsPanel({ chain }: EffectsPanelProps) {
 
       {/* Apply / Clear buttons */}
       {chain.effects.length > 0 && (
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            className="btn"
+        <div className="flex gap-1.5">
+          <MacButton
+            variant="primary"
+            size="sm"
             onClick={handleApply}
-            style={{ flex: 1, fontSize: 11, padding: '4px 8px' }}
+            className="flex-1 text-[11px]"
           >
             {t('audio.effects.apply')}
-          </button>
-          <button
-            className="btn"
+          </MacButton>
+          <MacButton
+            variant="ghost"
+            size="sm"
             onClick={chain.clearAll}
-            style={{ fontSize: 11, padding: '4px 8px', opacity: 0.7 }}
+            className="text-[11px] opacity-70"
           >
             {t('audio.effects.clear')}
-          </button>
+          </MacButton>
         </div>
       )}
     </div>
@@ -174,63 +171,22 @@ function AddEffectMenu({ onSelect, onClose }: AddEffectMenuProps) {
   return (
     <>
       {/* Backdrop */}
-      <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={onClose} />
+      <div className="fixed inset-0 z-[99]" onClick={onClose} />
       {/* Menu */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '100%',
-          right: 0,
-          zIndex: 100,
-          background: 'var(--vscode-menu-background, #252526)',
-          border: '1px solid var(--vscode-menu-border, #454545)',
-          borderRadius: 4,
-          padding: 4,
-          minWidth: 180,
-          maxHeight: 300,
-          overflowY: 'auto',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-        }}
-      >
+      <div className="absolute top-full right-0 z-[100] min-w-[180px] max-h-[300px] overflow-y-auto p-1 rounded bg-[var(--vscode-menu-background,#252526)] border border-[var(--vscode-menu-border,#454545)] shadow-xl">
         {CATEGORY_ORDER.map((category) => {
           const effects = effectsByCategory.get(category);
           if (!effects || effects.length === 0) return null;
           return (
             <div key={category}>
-              <div
-                style={{
-                  fontSize: 10,
-                  opacity: 0.5,
-                  padding: '4px 8px 2px',
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5,
-                }}
-              >
+              <div className="text-[10px] opacity-50 px-2 pt-1 pb-0.5 uppercase tracking-wider">
                 {CATEGORY_LABELS[category]}
               </div>
               {effects.map((effect) => (
                 <button
                   key={effect.type}
                   onClick={() => onSelect(effect.type)}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '4px 8px',
-                    fontSize: 12,
-                    background: 'transparent',
-                    color: 'var(--vscode-menu-foreground, #ccc)',
-                    border: 'none',
-                    borderRadius: 3,
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background =
-                      'var(--vscode-menu-selectionBackground, #094771)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                  }}
+                  className="block w-full text-left px-2 py-1 text-xs bg-transparent text-[var(--vscode-menu-foreground,#ccc)] border-none rounded cursor-pointer hover:bg-[var(--vscode-menu-selectionBackground,#094771)]"
                 >
                   {t(effect.nameKey) || effect.type}
                 </button>

@@ -60,7 +60,7 @@ function WaveformThumbnail({
   }, [samples, width, mid]);
 
   return (
-    <svg width={width} height={height} style={{ display: 'block' }}>
+    <svg width={width} height={height} className="block">
       <path
         d={pathD}
         stroke="var(--vscode-editor-foreground)"
@@ -78,8 +78,8 @@ export function AudioClip({ element, left, width, height, waveform, locked }: Au
 
   return (
     <div
+      className="absolute rounded overflow-hidden border border-[var(--vscode-panel-border)] transition-opacity"
       style={{
-        position: 'absolute',
         left,
         top: 1,
         width: Math.max(width, 4),
@@ -87,32 +87,19 @@ export function AudioClip({ element, left, width, height, waveform, locked }: Au
         background: isMuted
           ? 'var(--vscode-editorInlayHint-background)'
           : 'var(--vscode-editor-selectionBackground)',
-        borderRadius: 3,
-        overflow: 'hidden',
         cursor: locked ? 'not-allowed' : 'grab',
         opacity: isMuted ? 0.4 : 1,
-        border: '1px solid var(--vscode-panel-border)',
       }}
       title={clipName}
     >
       {/* Clip label */}
-      <div
-        style={{
-          fontSize: 10,
-          padding: '1px 4px',
-          color: 'var(--vscode-editor-foreground)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          lineHeight: '14px',
-        }}
-      >
+      <div className="text-[10px] px-1 py-px text-[var(--vscode-editor-foreground)] truncate leading-[14px]">
         {clipName}
       </div>
 
       {/* Waveform */}
       {waveform && width > 10 && (
-        <div style={{ position: 'absolute', top: 14, left: 0, right: 0, bottom: 0 }}>
+        <div className="absolute top-3.5 left-0 right-0 bottom-0">
           <WaveformThumbnail
             peaks={waveform.peaks}
             width={Math.max(width - 2, 1)}

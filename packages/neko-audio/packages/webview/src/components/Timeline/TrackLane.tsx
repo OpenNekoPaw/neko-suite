@@ -44,89 +44,41 @@ export function TrackLane({
     removeTrack(track.id);
   }, [track.id, removeTrack]);
 
+  const trackBtnClass =
+    'text-[10px] px-1 py-px cursor-pointer text-[var(--vscode-descriptionForeground)] border border-[var(--vscode-panel-border)] rounded-sm';
+
   return (
     <div
-      style={{
-        display: 'flex',
-        height: trackHeight,
-        borderBottom: '1px solid var(--vscode-panel-border)',
-        opacity: track.muted ? 0.5 : 1,
-      }}
+      className="flex border-b border-[var(--vscode-panel-border)] transition-opacity"
+      style={{ height: trackHeight, opacity: track.muted ? 0.5 : 1 }}
     >
       {/* Track header */}
       <div
-        style={{
-          width: labelWidth,
-          minWidth: labelWidth,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          padding: '0 8px',
-          borderRight: '1px solid var(--vscode-panel-border)',
-          background: 'var(--vscode-sideBar-background)',
-          overflow: 'hidden',
-        }}
+        className="flex flex-col justify-center px-2 shrink-0 border-r border-[var(--vscode-panel-border)] bg-[var(--vscode-sideBar-background)] overflow-hidden"
+        style={{ width: labelWidth, minWidth: labelWidth }}
       >
-        <div
-          style={{
-            fontSize: 12,
-            fontWeight: 500,
-            color: 'var(--vscode-editor-foreground)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
+        <div className="text-xs font-medium text-[var(--vscode-editor-foreground)] truncate">
           {track.name}
         </div>
-        <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
+        <div className="flex gap-1 mt-0.5">
           <button
             onClick={handleToggleMute}
             title={track.muted ? 'Unmute' : 'Mute'}
-            style={{
-              fontSize: 10,
-              padding: '1px 4px',
-              cursor: 'pointer',
-              background: track.muted
-                ? 'var(--vscode-inputValidation-errorBackground)'
-                : 'transparent',
-              color: 'var(--vscode-descriptionForeground)',
-              border: '1px solid var(--vscode-panel-border)',
-              borderRadius: 2,
-            }}
+            className={`${trackBtnClass} ${track.muted ? 'bg-[var(--vscode-inputValidation-errorBackground)]' : 'bg-transparent'}`}
           >
             M
           </button>
           <button
             onClick={handleToggleLock}
             title={track.locked ? 'Unlock' : 'Lock'}
-            style={{
-              fontSize: 10,
-              padding: '1px 4px',
-              cursor: 'pointer',
-              background: track.locked
-                ? 'var(--vscode-inputValidation-warningBackground)'
-                : 'transparent',
-              color: 'var(--vscode-descriptionForeground)',
-              border: '1px solid var(--vscode-panel-border)',
-              borderRadius: 2,
-            }}
+            className={`${trackBtnClass} ${track.locked ? 'bg-[var(--vscode-inputValidation-warningBackground)]' : 'bg-transparent'}`}
           >
             L
           </button>
           <button
             onClick={handleRemove}
             title="Remove track"
-            style={{
-              fontSize: 10,
-              padding: '1px 4px',
-              cursor: 'pointer',
-              background: 'transparent',
-              color: 'var(--vscode-descriptionForeground)',
-              border: '1px solid var(--vscode-panel-border)',
-              borderRadius: 2,
-              marginLeft: 'auto',
-            }}
+            className={`${trackBtnClass} bg-transparent ml-auto`}
           >
             ×
           </button>
@@ -135,12 +87,8 @@ export function TrackLane({
 
       {/* Element lane */}
       <div
-        style={{
-          flex: 1,
-          position: 'relative',
-          width: timelineWidth,
-          background: 'var(--vscode-editor-background)',
-        }}
+        className="flex-1 relative bg-[var(--vscode-editor-background)]"
+        style={{ width: timelineWidth }}
       >
         {track.elements.map((element) => {
           const left = element.startTime * pps;
