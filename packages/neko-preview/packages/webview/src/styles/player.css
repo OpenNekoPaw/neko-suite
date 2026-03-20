@@ -20,13 +20,14 @@
   --neko-surface: rgba(255, 255, 255, 0.05);
   --neko-surface-hover: rgba(255, 255, 255, 0.08);
 
-  /* Unified preview variables (replaces --neko-preview-*) */
+  /* Unified preview variables */
   --neko-preview-primary: #0A84FF;
   --neko-preview-primary-hover: #409CFF;
   --neko-preview-primary-active: #0070E0;
   --neko-preview-text-primary: rgba(255, 255, 255, 0.9);
   --neko-preview-text-secondary: rgba(255, 255, 255, 0.6);
   --neko-preview-text-tertiary: rgba(255, 255, 255, 0.4);
+  --neko-preview-surface: rgba(255, 255, 255, 0.06);
 }
 
 /* Light theme override */
@@ -45,6 +46,7 @@ body[data-vscode-theme-kind="vscode-high-contrast-light"] {
   --neko-preview-text-primary: rgba(0, 0, 0, 0.9);
   --neko-preview-text-secondary: rgba(0, 0, 0, 0.6);
   --neko-preview-text-tertiary: rgba(0, 0, 0, 0.4);
+  --neko-preview-surface: rgba(0, 0, 0, 0.04);
 }
 
 /* High contrast theme override */

@@ -17,6 +17,13 @@ interface CoverViewProps {
 export function CoverView({ fileName, isPlaying, coverUri }: CoverViewProps) {
   const letter = getDisplayLetter(fileName);
 
+  const coverStyle = {
+    width: 'min(280px, 60vh, 100%)' as const,
+    aspectRatio: '1' as const,
+    boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2)',
+    animation: isPlaying ? 'neko-cover-pulse 3s ease-in-out infinite' : 'none',
+  };
+
   return (
     <div className="relative w-full h-full flex items-center justify-center">
       {coverUri ? (
@@ -30,11 +37,7 @@ export function CoverView({ fileName, isPlaying, coverUri }: CoverViewProps) {
           />
           <img
             className="relative z-10 rounded-xl object-contain"
-            style={{
-              width: 'min(280px, 60vh, 100%)',
-              aspectRatio: '1',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2)',
-            }}
+            style={coverStyle}
             src={coverUri}
             alt="Album art"
           />
@@ -43,10 +46,8 @@ export function CoverView({ fileName, isPlaying, coverUri }: CoverViewProps) {
         <div
           className="flex items-center justify-center rounded-xl overflow-hidden select-none"
           style={{
-            width: 'min(280px, 60vh, 100%)',
-            aspectRatio: '1',
+            ...coverStyle,
             background: `linear-gradient(135deg, color-mix(in srgb, var(--neko-preview-accent) 60%, #000) 0%, color-mix(in srgb, var(--neko-preview-accent) 30%, #000) 100%)`,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2)',
           }}
         >
           <span className="text-7xl font-bold text-white/85 uppercase leading-none">{letter}</span>
