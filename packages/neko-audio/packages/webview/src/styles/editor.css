@@ -1,401 +1,163 @@
-/* Audio Editor Styles */
+/* Audio Editor Styles — Tailwind + CSS layered architecture */
 
-:root {
-  --editor-bg: var(--vscode-editor-background, #1e1e1e);
-  --editor-fg: var(--vscode-editor-foreground, #cccccc);
-  --editor-border: var(--vscode-panel-border, #444444);
-  --toolbar-bg: var(--vscode-titleBar-activeBackground, #333333);
-  --activity-bg: var(--vscode-activityBar-background, #2c2c2c);
-  --activity-fg: var(--vscode-activityBar-foreground, #cccccc);
-  --activity-inactive: var(--vscode-activityBar-inactiveForeground, #888888);
-  --button-bg: var(--vscode-button-background, #0078d4);
-  --button-fg: var(--vscode-button-foreground, #ffffff);
-  --button-hover: var(--vscode-button-hoverBackground, #1a8cff);
-  --input-bg: var(--vscode-input-background, #3c3c3c);
-  --input-fg: var(--vscode-input-foreground, #cccccc);
-  --input-border: var(--vscode-input-border, #555555);
-  --accent: var(--vscode-focusBorder, #007acc);
-  --waveform-played: #4a9eff;
-  --waveform-unplayed: #264f78;
-  --waveform-cursor: #ffffff;
-  --selection-bg: rgba(74, 158, 255, 0.2);
-  --selection-border: rgba(74, 158, 255, 0.6);
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =======================
+   Theme Variables
+   ======================= */
+
+@layer base {
+  :root {
+    /* VSCode theme tokens */
+    --editor-bg: var(--vscode-editor-background, #1e1e1e);
+    --editor-fg: var(--vscode-editor-foreground, #cccccc);
+    --editor-border: var(--vscode-panel-border, #444444);
+    --toolbar-bg: var(--vscode-titleBar-activeBackground, #333333);
+    --activity-bg: var(--vscode-activityBar-background, #2c2c2c);
+    --activity-fg: var(--vscode-activityBar-foreground, #cccccc);
+    --activity-inactive: var(--vscode-activityBar-inactiveForeground, #888888);
+    --accent: var(--vscode-focusBorder, #007acc);
+
+    /* Audio-specific waveform colors (Canvas rendering) */
+    --waveform-played: #4a9eff;
+    --waveform-unplayed: #264f78;
+    --waveform-cursor: #ffffff;
+    --selection-bg: rgba(74, 158, 255, 0.2);
+    --selection-border: rgba(74, 158, 255, 0.6);
+
+    /* macOS theme variables (shared with neko-preview) */
+    --neko-glass: rgba(255, 255, 255, 0.08);
+    --neko-glass-hover: rgba(255, 255, 255, 0.12);
+    --neko-surface: rgba(255, 255, 255, 0.05);
+    --neko-preview-surface: rgba(255, 255, 255, 0.06);
+    --neko-preview-primary: #0A84FF;
+    --neko-preview-text-primary: rgba(255, 255, 255, 0.9);
+    --neko-preview-text-secondary: rgba(255, 255, 255, 0.6);
+  }
+
+  /* Light theme */
+  body.vscode-light,
+  body[data-vscode-theme-kind="vscode-light"] {
+    --neko-glass: rgba(0, 0, 0, 0.05);
+    --neko-glass-hover: rgba(0, 0, 0, 0.08);
+    --neko-surface: rgba(0, 0, 0, 0.03);
+    --neko-preview-surface: rgba(0, 0, 0, 0.04);
+    --neko-preview-primary: #007AFF;
+    --neko-preview-text-primary: rgba(0, 0, 0, 0.9);
+    --neko-preview-text-secondary: rgba(0, 0, 0, 0.6);
+  }
+
+  /* High contrast */
+  body.vscode-high-contrast,
+  body[data-vscode-theme-kind="vscode-high-contrast"] {
+    --neko-glass: rgba(255, 255, 255, 0.15);
+    --neko-glass-hover: rgba(255, 255, 255, 0.25);
+    --neko-surface: rgba(255, 255, 255, 0.1);
+    --neko-preview-surface: rgba(255, 255, 255, 0.12);
+    --neko-preview-primary: #3794FF;
+    --neko-preview-text-primary: #FFFFFF;
+    --neko-preview-text-secondary: rgba(255, 255, 255, 0.8);
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body, #root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    background: var(--editor-bg);
+    color: var(--editor-fg);
+    font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
+    font-size: var(--vscode-font-size, 13px);
+  }
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* =======================
+   Utility classes for CSS features Tailwind cannot express
+   ======================= */
+
+@layer components {
+  /* Toolbar active indicator (left accent bar) */
+  .neko-toolbar-indicator {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 16px;
+    border-radius: 0 2px 2px 0;
+    background: var(--accent);
+  }
+
+  /* Resize handle with hover accent */
+  .neko-resize-handle {
+    width: 3px;
+    flex-shrink: 0;
+    cursor: ew-resize;
+    background: transparent;
+    transition: background 0.15s;
+  }
+  .neko-resize-handle:hover {
+    background: var(--accent);
+  }
+
+  /* Drop overlay with color-mix background */
+  .neko-drop-overlay-bg {
+    background: color-mix(in srgb, var(--editor-bg) 85%, transparent);
+  }
+
+  /* Drag-over state with color-mix */
+  .neko-drag-over-bg {
+    background: color-mix(in srgb, var(--vscode-focusBorder, #007fd4) 8%, transparent);
+  }
+
+  /* Range slider (reuse macOS style from neko-preview) */
+  .neko-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  .neko-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--neko-preview-text-primary, #fff);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+  }
+  .neko-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--neko-preview-text-primary, #fff);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    border: none;
+    cursor: pointer;
+  }
 }
 
-html, body, #root {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
-body {
-  background: var(--editor-bg);
-  color: var(--editor-fg);
-  font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
-  font-size: var(--vscode-font-size, 13px);
-}
-
-/* ==========================================================================
-   Main Layout: TransportBar (top) + Body (3-column)
-   ========================================================================== */
-
-.audio-editor {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
-  position: relative;
-}
-
-.audio-editor__drop-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--editor-bg) 85%, transparent);
-  border: 2px dashed var(--vscode-focusBorder, #007fd4);
-  pointer-events: none;
-}
-
-.audio-editor__drop-overlay-text {
-  font-size: 18px;
-  color: var(--vscode-focusBorder, #007fd4);
-  opacity: 0.9;
-}
-
-/* Top bar: file info + playback + volume/speed */
-.audio-editor__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: var(--toolbar-bg);
-  border-bottom: 1px solid var(--editor-border);
-  min-height: 36px;
-  flex-shrink: 0;
-}
-
-/* 3-column body: Toolbar | Center | SidePanel */
-.audio-editor__body {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-
-/* Center content: waveform + spectrum + loudness */
-.audio-editor__center {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 8px;
-  gap: 8px;
-}
-
-.audio-editor__waveform {
-  flex: 1;
-  min-height: 120px;
-  position: relative;
-}
-
-/* Resize handle between center and side panel */
-.audio-editor__resize-handle {
-  width: 3px;
-  flex-shrink: 0;
-  cursor: ew-resize;
-  background: transparent;
-  transition: background 0.15s;
-}
-
-.audio-editor__resize-handle:hover {
-  background: var(--accent);
-}
-
-/* ==========================================================================
-   Left Toolbar (48px vertical icon strip)
-   ========================================================================== */
-
-.audio-toolbar {
-  width: 48px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 4px 0;
-  gap: 2px;
-  background: var(--activity-bg);
-  border-right: 1px solid var(--editor-border);
-}
-
-.toolbar-btn {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--activity-inactive);
-  cursor: pointer;
-  transition: color 0.1s, background 0.1s;
-}
-
-.toolbar-btn:hover {
-  color: var(--activity-fg);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.toolbar-btn--active {
-  color: var(--activity-fg);
-}
-
-.toolbar-btn__indicator {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 2px;
-  height: 16px;
-  border-radius: 0 2px 2px 0;
-  background: var(--accent);
-}
-
-.toolbar-btn__icon {
-  font-size: 18px;
-  line-height: 1;
-}
-
-.toolbar-divider {
-  width: 24px;
-  height: 1px;
-  margin: 4px 0;
-  background: var(--editor-border);
-}
-
-/* ==========================================================================
-   Right Side Panel
-   ========================================================================== */
-
-.audio-side-panel {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--editor-bg);
-  border-left: 1px solid var(--editor-border);
-  overflow: hidden;
-}
-
-.audio-side-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--toolbar-bg);
-  border-bottom: 1px solid var(--editor-border);
-  flex-shrink: 0;
-}
-
-.audio-side-panel__title {
-  font-size: 12px;
-  font-weight: 600;
-  opacity: 0.9;
-}
-
-.audio-side-panel__content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-/* ==========================================================================
-   Loudness Panel (compact inline)
-   ========================================================================== */
-
-.audio-loudness {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  font-size: 11px;
-  flex-shrink: 0;
-  border-top: 1px solid var(--editor-border);
-}
-
-.audio-loudness__item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.audio-loudness__label {
-  opacity: 0.6;
-}
-
-.audio-loudness__value {
-  font-family: 'Cascadia Code', 'Fira Code', monospace;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.audio-loudness__sep {
-  width: 1px;
-  height: 14px;
-  background: var(--editor-border);
-  flex-shrink: 0;
-}
-
-/* ==========================================================================
-   Full-page states (loading, error, empty)
-   ========================================================================== */
-
-.audio-editor__loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  flex-direction: column;
-  gap: 12px;
-  color: var(--editor-fg);
-  opacity: 0.7;
-}
-
-.audio-editor__error {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  color: var(--vscode-errorForeground, #f44);
-  padding: 20px;
-  text-align: center;
-}
-
-.audio-editor__empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  flex-direction: column;
-  gap: 16px;
-  color: var(--editor-fg);
-}
-
-.audio-editor__empty-icon {
-  font-size: 48px;
-  opacity: 0.3;
-}
-
-.audio-editor__empty-text {
-  opacity: 0.6;
-  font-size: 14px;
-}
-
-.audio-editor__empty--drag-over {
-  border: 2px dashed var(--vscode-focusBorder, #007fd4);
-  background: color-mix(in srgb, var(--vscode-focusBorder, #007fd4) 8%, transparent);
-}
-
-.audio-editor__empty--drag-over .audio-editor__empty-icon {
-  opacity: 0.7;
-}
-
-/* ==========================================================================
-   Shared UI Components
-   ========================================================================== */
-
-/* Buttons */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border: none;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 12px;
-  font-family: inherit;
-  background: var(--button-bg);
-  color: var(--button-fg);
-  transition: background 0.1s;
-}
-
-.btn:hover {
-  background: var(--button-hover);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn--icon {
-  padding: 4px;
-  background: transparent;
-  color: var(--editor-fg);
-  min-width: 28px;
-  min-height: 28px;
-}
-
-.btn--icon:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.btn--active {
-  background: var(--accent);
-}
-
-/* Time display */
-.time-display {
-  font-family: 'Cascadia Code', 'Fira Code', monospace;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: var(--editor-fg);
-}
-
-/* Slider */
-.slider {
-  appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--input-bg);
-  outline: none;
-  cursor: pointer;
-}
-
-.slider::-webkit-slider-thumb {
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--button-bg);
-  cursor: pointer;
-}
-
-/* File info */
-.file-info {
-  font-size: 11px;
-  opacity: 0.7;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 300px;
-}
-
-/* Divider */
-.divider {
-  width: 1px;
-  height: 20px;
-  background: var(--editor-border);
-  flex-shrink: 0;
+/* Toast slide-in animation */
+@keyframes neko-toast-slide-in {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
