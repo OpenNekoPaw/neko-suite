@@ -25,6 +25,9 @@ export const nekoTailwindPreset = {
       colors: { ...vscodeCSSTokens.colors },
       fontFamily: { ...vscodeCSSTokens.fontFamily },
       fontSize: { ...vscodeCSSTokens.fontSize },
+      borderRadius: { ...vscodeCSSTokens.borderRadius },
+      boxShadow: { ...vscodeCSSTokens.boxShadow },
+      backdropBlur: { ...vscodeCSSTokens.backdropBlur },
     },
   },
 };

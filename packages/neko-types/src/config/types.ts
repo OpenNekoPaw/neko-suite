@@ -52,6 +52,14 @@ export interface UnifiedConfig {
   /** Default model ID */
   defaultModel?: string;
 
+  /** Default media models by type */
+  defaultMediaModels?: {
+    image?: string;
+    video?: string;
+    audio?: string;
+    music?: string;
+  };
+
   /** Global default maxTokens */
   maxTokens?: number;
 

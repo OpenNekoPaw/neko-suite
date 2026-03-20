@@ -102,6 +102,13 @@ export const vscodeCSSTokens = {
 
     // Legacy alias
     'vscode-border': 'var(--vscode-panel-border)',
+
+    // macOS surface colors (theme-aware via CSS variables)
+    'neko-glass': 'var(--neko-glass, rgba(255, 255, 255, 0.08))',
+    'neko-glass-hover': 'var(--neko-glass-hover, rgba(255, 255, 255, 0.12))',
+    'neko-glass-active': 'var(--neko-glass-active, rgba(255, 255, 255, 0.16))',
+    'neko-surface': 'var(--neko-surface, rgba(255, 255, 255, 0.05))',
+    'neko-surface-hover': 'var(--neko-surface-hover, rgba(255, 255, 255, 0.08))',
   },
 
   fontFamily: {
@@ -112,5 +119,25 @@ export const vscodeCSSTokens = {
   fontSize: {
     vscode: 'var(--vscode-font-size)',
     'vscode-editor': 'var(--vscode-editor-font-size)',
+  },
+
+  // macOS Design Tokens
+  borderRadius: {
+    'neko-sm': '6px',
+    'neko-md': '8px',
+    'neko-lg': '10px',
+    'neko-xl': '12px',
+  },
+
+  boxShadow: {
+    'neko-sm': '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08)',
+    'neko-md': '0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0.06)',
+    'neko-lg': '0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05)',
+    'neko-xl': '0 20px 25px rgba(0, 0, 0, 0.15), 0 10px 10px rgba(0, 0, 0, 0.04)',
+  },
+
+  backdropBlur: {
+    'neko-glass': 'blur(20px)',
+    'neko-glass-sm': 'blur(10px)',
   },
 } as const;

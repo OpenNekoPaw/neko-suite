@@ -294,29 +294,19 @@ export function AudioPlayer() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4">
-        <div className="w-8 h-8 border-2 border-neko-preview-primary border-t-transparent rounded-full animate-spin" />
-        <span className="text-sm text-neko-preview-text-secondary">
-          {t('preview.audio.loading')}
-        </span>
+      <div className="loading">
+        <div className="loading__spinner" />
+        <span>{t('preview.audio.loading')}</span>
       </div>
     );
   }
 
   if (error) {
-    return (
-      <div className="flex items-center justify-center h-full text-sm text-red-400">
-        {t('preview.audio.error', { error })}
-      </div>
-    );
+    return <div className="error">{t('preview.audio.error', { error })}</div>;
   }
 
   if (!mediaInfo) {
-    return (
-      <div className="flex items-center justify-center h-full text-sm text-neko-preview-text-secondary">
-        {t('preview.audio.noMediaInfo')}
-      </div>
-    );
+    return <div className="error">{t('preview.audio.noMediaInfo')}</div>;
   }
 
   // Build cover art data URI from engine metadata
@@ -328,35 +318,29 @@ export function AudioPlayer() {
   const displayName = mediaInfo?.metadata?.title || fileName;
 
   return (
-    <div className="flex flex-col h-full bg-neko-preview-bg text-neko-preview-text-primary p-6">
+    <div className="audio-player">
       {/* Main visual area — switchable views */}
-      <div className="flex-1 flex items-center justify-center mb-6 min-h-0">
-        <div className="relative w-full h-full max-w-2xl">
+      <div className="audio-player__visual">
+        <div className="audio-player__visual-content">
           {/* Cover */}
           <div
-            className={`absolute inset-0 transition-opacity duration-300 ${
-              viewMode === 'cover' ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
+            className={`audio-player__view ${viewMode === 'cover' ? 'audio-player__view--active' : ''}`}
           >
             <CoverView fileName={fileName} isPlaying={isPlaying} coverUri={coverUri} />
           </div>
 
           {/* Lyrics */}
           <div
-            className={`absolute inset-0 transition-opacity duration-300 ${
-              viewMode === 'lyrics' ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
+            className={`audio-player__view ${viewMode === 'lyrics' ? 'audio-player__view--active' : ''}`}
           >
             <LyricsView lyrics={lyrics} currentTime={currentTime} />
           </div>
 
           {/* Waveform */}
           <div
-            className={`absolute inset-0 transition-opacity duration-300 ${
-              viewMode === 'waveform' ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
+            className={`audio-player__view ${viewMode === 'waveform' ? 'audio-player__view--active' : ''}`}
           >
-            <div className="w-full h-full flex items-center">
+            <div className="audio-player__waveform-container">
               <WaveformCanvas
                 peaks={waveformData?.peaks ?? null}
                 duration={mediaInfo.duration}
@@ -369,9 +353,7 @@ export function AudioPlayer() {
 
           {/* Spectrum */}
           <div
-            className={`absolute inset-0 transition-opacity duration-300 ${
-              viewMode === 'spectrum' ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
+            className={`audio-player__view ${viewMode === 'spectrum' ? 'audio-player__view--active' : ''}`}
           >
             <SpectrumCanvas audioClient={audioClientRef.current} isPlaying={isPlaying} />
           </div>
@@ -379,37 +361,31 @@ export function AudioPlayer() {
       </div>
 
       {/* Metadata */}
-      <div className="text-center mb-4 flex-shrink-0">
-        <div className="text-base font-semibold text-neko-preview-text-primary truncate">
-          {displayName}
-        </div>
+      <div className="audio-player__info">
+        <div className="audio-player__title">{displayName}</div>
         {mediaInfo?.metadata?.artist && (
-          <div className="text-sm text-neko-preview-text-secondary truncate mt-1">
-            {mediaInfo.metadata.artist}
-          </div>
+          <div className="audio-player__subtitle">{mediaInfo.metadata.artist}</div>
         )}
         {subtitle && !mediaInfo?.metadata?.artist && (
-          <div className="text-sm text-neko-preview-text-secondary truncate mt-1">{subtitle}</div>
+          <div className="audio-player__subtitle">{subtitle}</div>
         )}
       </div>
 
       {/* Controls */}
-      <div className="flex-shrink-0">
-        <AudioControls
-          isPlaying={isPlaying}
-          currentTime={currentTime}
-          duration={mediaInfo.duration}
-          volume={volume}
-          speed={speed}
-          viewMode={viewMode}
-          onTogglePlay={handleTogglePlay}
-          onSeek={handleSeek}
-          onScrub={handleScrub}
-          onVolumeChange={handleVolumeChange}
-          onSpeedChange={handleSpeedChange}
-          onViewModeChange={setViewMode}
-        />
-      </div>
+      <AudioControls
+        isPlaying={isPlaying}
+        currentTime={currentTime}
+        duration={mediaInfo.duration}
+        volume={volume}
+        speed={speed}
+        viewMode={viewMode}
+        onTogglePlay={handleTogglePlay}
+        onSeek={handleSeek}
+        onScrub={handleScrub}
+        onVolumeChange={handleVolumeChange}
+        onSpeedChange={handleSpeedChange}
+        onViewModeChange={setViewMode}
+      />
     </div>
   );
 }

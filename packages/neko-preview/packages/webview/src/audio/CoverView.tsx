@@ -18,14 +18,20 @@ export function CoverView({ fileName, isPlaying, coverUri }: CoverViewProps) {
   const letter = getDisplayLetter(fileName);
 
   return (
-    <div className={`audio-player__cover ${isPlaying ? 'audio-player__cover--playing' : ''}`}>
+    <div
+      className={`relative w-full h-full flex items-center justify-center ${isPlaying ? 'animate-pulse' : ''}`}
+    >
       {coverUri ? (
         <>
           <div
-            className="audio-player__cover-blur"
+            className="absolute inset-0 bg-cover bg-center blur-3xl opacity-30"
             style={{ backgroundImage: `url(${coverUri})` }}
           />
-          <img className="audio-player__cover-img" src={coverUri} alt="Album art" />
+          <img
+            className="relative z-10 max-w-[60%] max-h-[60%] rounded-lg shadow-2xl object-contain"
+            src={coverUri}
+            alt="Album art"
+          />
         </>
       ) : (
         <div className="audio-player__cover-placeholder">

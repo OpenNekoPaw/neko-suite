@@ -68,7 +68,7 @@ export function useDragDrop(containerRef: React.RefObject<HTMLElement | null>): 
       .filter((u) => u && !u.startsWith('#') && isAudioUri(u));
 
     if (uris.length > 0) {
-      postMessage({ type: 'project:dropImportSource', uris: [uris[0]!] });
+      postMessage({ type: 'project:dropImportSource', uris });
       return;
     }
 
@@ -77,16 +77,13 @@ export function useDragDrop(containerRef: React.RefObject<HTMLElement | null>): 
     if (jsonData) {
       try {
         const data = JSON.parse(jsonData);
-        const filePath =
-          data.type === 'asset'
-            ? data.files?.[0]?.path
-            : data.type === 'media-file'
-              ? data.files?.[0]?.path
-              : null;
-        if (filePath && isAudioUri(filePath)) {
+        const files: string[] = (data.files ?? [])
+          .map((f: { path?: string }) => f.path)
+          .filter((p: string | undefined): p is string => !!p && isAudioUri(p));
+        if (files.length > 0) {
           postMessage({
             type: 'project:dropImportSource',
-            uris: [`file://${filePath}`],
+            uris: files.map((f) => `file://${f}`),
           });
           return;
         }

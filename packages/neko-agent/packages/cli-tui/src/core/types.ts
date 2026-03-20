@@ -16,6 +16,13 @@ export interface CLIConfig {
   model: string;
   /** Media model IDs (for image/video/audio generation, empty if none) */
   mediaModels: string[];
+  /** Default media models by type */
+  defaultMediaModels?: {
+    image?: string;
+    video?: string;
+    audio?: string;
+    music?: string;
+  };
   /** API key (from env or config) */
   apiKey?: string;
   /** API base URL (optional) */

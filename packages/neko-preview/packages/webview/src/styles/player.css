@@ -4,6 +4,64 @@
  * Uses VSCode CSS variables for theme integration.
  */
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =======================
+   Theme Variables - macOS Design Tokens
+   ================= */
+
+:root {
+  /* Dark theme (default) */
+  --neko-glass: rgba(255, 255, 255, 0.08);
+  --neko-glass-hover: rgba(255, 255, 255, 0.12);
+  --neko-glass-active: rgba(255, 255, 0.16);
+  --neko-surface: rgba(255, 255, 255, 0.05);
+  --neko-surface-hover: rgba(255, 255, 255, 0.08);
+
+  /* Unified preview variables (replaces --neko-preview-*) */
+  --neko-preview-primary: #0A84FF;
+  --neko-preview-primary-hover: #409CFF;
+  --neko-preview-primary-active: #0070E0;
+  --neko-preview-text-primary: rgba(255, 255, 255, 0.9);
+  --neko-preview-text-secondary: rgba(255, 255, 0.6);
+  --neko-preview-text-tertiary: rgba(255, 255, 255, 0.4);
+}
+
+/* Light theme override */
+body[data-vscode-theme-kind="vscode-light"],
+body[data-vscode-theme-kind="vscode-high-contrast-light"] {
+  --neko-glass: rgba(0, 0, 0, 0.05);
+  --neko-glass-hover: rgba(0, 0, 0, 0.08);
+  --neko-glass-active: rgba(0, 0, 0, 0.12);
+  --neko-surface: rgba(0, 0, 0, 0.03);
+  --neko-surface-hover: rgba(0, 0, 0, 0.06);
+
+  --neko-preview-primary: #007AFF;
+  --neko-preview-primary-hover: #0051D5;
+  --neko-preview-primary-active: #004FC7;
+  --neko-preview-text-primary: rgba(0, 0, 0, 0.9);
+  --neko-preview-text-secondary: rgba(0, 0, 0, 0.6);
+  --neko-preview-text-tertiary: rgba(0, 0, 0, 0.4);
+}
+
+/* High contrast theme override */
+body[data-vscode-theme-kind="vscode-high-contrast"] {
+  --neko-glass: rgba(255, 255, 255, 0.15);
+  --neko-glass-hover: rgba(255, 255, 255, 0.25);
+  --neko-glass-active: rgba(255, 255, 255, 0.35);
+  --neko-surface: rgba(255, 255, 255, 0.1);
+  --neko-surface-hover: rgba(255, 255, 255, 0.2);
+
+  --neko-preview-primary: #3794FF;
+  --neko-preview-primary-hover: #6CB0FF;
+  --neko-preview-primary-active: #1E7FE0;
+  --neko-preview-text-primary: #FFFFFF;
+  --neko-preview-text-secondary: rgba(255, 255, 255, 0.8);
+  --neko-preview-text-tertiary: rgba(255, 255, 255, 0.6);
+}
+
 /* Reset */
 *,
 *::before,
@@ -168,16 +226,14 @@ body {
    ========================================================================== */
 
 .audio-player {
-	/* Theme-derived custom properties */
-	--neko-audio-bg: color-mix(in srgb, var(--vscode-editor-background, #1e1e1e) 85%, #000);
-	--neko-audio-surface: color-mix(in srgb, var(--vscode-editor-background, #1e1e1e) 70%, #fff 5%);
-	--neko-audio-accent: var(--vscode-button-background, #0e639c);
-	--neko-audio-accent-hover: var(--vscode-button-hoverBackground, #1177bb);
-	--neko-audio-text-primary: var(--vscode-editor-foreground, #cccccc);
-	--neko-audio-text-secondary: var(--vscode-descriptionForeground, #999);
-	--neko-audio-border: var(--vscode-panel-border, #333);
-	--neko-audio-gradient-start: color-mix(in srgb, var(--vscode-button-background, #0e639c) 25%, var(--vscode-editor-background, #1e1e1e));
-	--neko-audio-gradient-end: var(--neko-audio-bg);
+	/* Theme-derived custom properties (migrated from --neko-preview-* to --neko-preview-*) */
+	--neko-preview-bg: color-mix(in srgb, var(--vscode-editor-background, #1e1e1e) 85%, #000);
+	--neko-preview-surface: color-mix(in srgb, var(--vscode-editor-background, #1e1e1e) 70%, #fff 5%);
+	--neko-preview-accent: var(--vscode-button-background, #0e639c);
+	--neko-preview-accent-hover: var(--vscode-button-hoverBackground, #1177bb);
+	--neko-preview-border: var(--vscode-panel-border, #333);
+	--neko-preview-gradient-start: color-mix(in srgb, var(--vscode-button-background, #0e639c) 25%, var(--vscode-editor-background, #1e1e1e));
+	--neko-preview-gradient-end: var(--neko-preview-bg);
 
 	display: flex;
 	flex-direction: column;
@@ -187,7 +243,7 @@ body {
 	padding: 24px 32px 20px;
 	gap: 0;
 	overflow: hidden;
-	background: linear-gradient(180deg, var(--neko-audio-gradient-start) 0%, var(--neko-audio-gradient-end) 50%);
+	background: linear-gradient(180deg, var(--neko-preview-gradient-start) 0%, var(--neko-preview-gradient-end) 50%);
 	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -246,8 +302,8 @@ body {
 	align-items: center;
 	justify-content: center;
 	background: linear-gradient(135deg,
-		color-mix(in srgb, var(--neko-audio-accent) 60%, #000) 0%,
-		color-mix(in srgb, var(--neko-audio-accent) 30%, #000) 100%);
+		color-mix(in srgb, var(--neko-preview-accent) 60%, #000) 0%,
+		color-mix(in srgb, var(--neko-preview-accent) 30%, #000) 100%);
 	user-select: none;
 }
 
@@ -295,7 +351,7 @@ body {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	color: var(--neko-audio-text-secondary);
+	color: var(--neko-preview-text-secondary);
 	font-size: 15px;
 }
 
@@ -344,7 +400,7 @@ body {
 	font-size: 16px;
 	font-weight: 500;
 	line-height: 1.6;
-	color: var(--neko-audio-text-secondary);
+	color: var(--neko-preview-text-secondary);
 	opacity: 0.4;
 	transition: opacity 0.3s, color 0.3s, transform 0.3s;
 	transform: scale(0.95);
@@ -353,7 +409,7 @@ body {
 }
 
 .audio-player__lyrics-line--active {
-	color: var(--neko-audio-text-primary);
+	color: var(--neko-preview-text-primary);
 	opacity: 1;
 	font-size: 18px;
 	font-weight: 600;
@@ -366,7 +422,7 @@ body {
 
 .audio-player__lyrics-line--static {
 	opacity: 0.7;
-	color: var(--neko-audio-text-primary);
+	color: var(--neko-preview-text-primary);
 }
 
 .audio-player__lyrics-placeholder {
@@ -389,7 +445,7 @@ body {
 	height: 100%;
 	position: relative;
 	border-radius: 8px;
-	background: var(--neko-audio-surface);
+	background: var(--neko-preview-surface);
 	overflow: hidden;
 	cursor: pointer;
 }
@@ -406,7 +462,7 @@ body {
 	height: 100%;
 	position: relative;
 	border-radius: 8px;
-	background: var(--neko-audio-surface);
+	background: var(--neko-preview-surface);
 	overflow: hidden;
 }
 
@@ -431,7 +487,7 @@ body {
 .audio-player__title {
 	font-weight: 600;
 	font-size: 17px;
-	color: var(--neko-audio-text-primary);
+	color: var(--neko-preview-text-primary);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -442,7 +498,7 @@ body {
 
 .audio-player__subtitle {
 	font-size: 13px;
-	color: var(--neko-audio-text-secondary);
+	color: var(--neko-preview-text-secondary);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -461,7 +517,7 @@ body {
 .audio-player__progress .controls__progress-track {
 	height: 6px;
 	border-radius: 3px;
-	background: color-mix(in srgb, var(--neko-audio-text-secondary) 20%, transparent);
+	background: color-mix(in srgb, var(--neko-preview-text-secondary) 20%, transparent);
 }
 
 .audio-player__progress .controls__progress-track:hover {
@@ -469,14 +525,14 @@ body {
 }
 
 .audio-player__progress .controls__progress-fill {
-	background: var(--neko-audio-accent);
+	background: var(--neko-preview-accent);
 	border-radius: 3px;
 }
 
 .audio-player__progress .controls__progress-thumb {
 	width: 14px;
 	height: 14px;
-	background: var(--neko-audio-text-primary);
+	background: var(--neko-preview-text-primary);
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
@@ -489,7 +545,7 @@ body {
 	justify-content: space-between;
 	font-size: 11px;
 	font-variant-numeric: tabular-nums;
-	color: var(--neko-audio-text-secondary);
+	color: var(--neko-preview-text-secondary);
 	padding-top: 4px;
 }
 
@@ -511,7 +567,7 @@ body {
 	border: none;
 	border-radius: 50%;
 	background: transparent;
-	color: var(--neko-audio-text-primary);
+	color: var(--neko-preview-text-primary);
 	cursor: pointer;
 	transition: transform 0.15s, background 0.15s, color 0.15s;
 	padding: 0;
@@ -541,12 +597,12 @@ body {
 .audio-player__ctrl-btn--play {
 	width: 52px;
 	height: 52px;
-	background: var(--neko-audio-text-primary);
-	color: var(--neko-audio-bg);
+	background: var(--neko-preview-text-primary);
+	color: var(--neko-preview-bg);
 }
 
 .audio-player__ctrl-btn--play:hover {
-	background: var(--neko-audio-text-primary);
+	background: var(--neko-preview-text-primary);
 	transform: scale(1.08);
 }
 
@@ -590,14 +646,14 @@ body {
 	border: none;
 	border-radius: 50%;
 	background: transparent;
-	color: var(--neko-audio-text-secondary);
+	color: var(--neko-preview-text-secondary);
 	cursor: pointer;
 	transition: color 0.15s;
 	padding: 0;
 }
 
 .audio-player__volume-btn:hover {
-	color: var(--neko-audio-text-primary);
+	color: var(--neko-preview-text-primary);
 }
 
 .audio-player__volume-btn svg {
@@ -612,7 +668,7 @@ body {
 	-webkit-appearance: none;
 	appearance: none;
 	border-radius: 2px;
-	background: color-mix(in srgb, var(--neko-audio-text-secondary) 25%, transparent);
+	background: color-mix(in srgb, var(--neko-preview-text-secondary) 25%, transparent);
 	outline: none;
 	cursor: pointer;
 }
@@ -623,7 +679,7 @@ body {
 	width: 12px;
 	height: 12px;
 	border-radius: 50%;
-	background: var(--neko-audio-text-primary);
+	background: var(--neko-preview-text-primary);
 }
 
 /* View tabs */
@@ -631,7 +687,7 @@ body {
 	display: flex;
 	align-items: center;
 	gap: 2px;
-	background: color-mix(in srgb, var(--neko-audio-text-secondary) 10%, transparent);
+	background: color-mix(in srgb, var(--neko-preview-text-secondary) 10%, transparent);
 	border-radius: 8px;
 	padding: 2px;
 }
@@ -645,19 +701,19 @@ body {
 	border: none;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--neko-audio-text-secondary);
+	color: var(--neko-preview-text-secondary);
 	cursor: pointer;
 	transition: background 0.2s, color 0.2s;
 	padding: 0;
 }
 
 .audio-player__view-tab:hover {
-	color: var(--neko-audio-text-primary);
+	color: var(--neko-preview-text-primary);
 }
 
 .audio-player__view-tab--active {
-	background: var(--neko-audio-surface);
-	color: var(--neko-audio-text-primary);
+	background: var(--neko-preview-surface);
+	color: var(--neko-preview-text-primary);
 	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
@@ -673,9 +729,9 @@ body {
 	font-weight: 600;
 	padding: 4px 8px;
 	border-radius: 6px;
-	border: 1px solid color-mix(in srgb, var(--neko-audio-text-secondary) 25%, transparent);
+	border: 1px solid color-mix(in srgb, var(--neko-preview-text-secondary) 25%, transparent);
 	background: transparent;
-	color: var(--neko-audio-text-secondary);
+	color: var(--neko-preview-text-secondary);
 	cursor: pointer;
 	min-width: 36px;
 	text-align: center;
@@ -684,8 +740,8 @@ body {
 }
 
 .audio-player__speed-btn:hover {
-	color: var(--neko-audio-text-primary);
-	border-color: var(--neko-audio-text-secondary);
+	color: var(--neko-preview-text-primary);
+	border-color: var(--neko-preview-text-secondary);
 }
 
 /* ==========================================================================

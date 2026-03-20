@@ -99,21 +99,30 @@ export function ProgressBar({ currentTime, duration, onSeekCommit, onSeeking }: 
   const progress = duration > 0 ? (displayTime / duration) * 100 : 0;
 
   return (
-    <div className="controls__progress-wrapper">
+    <div className="relative w-full">
       <div
         ref={trackRef}
-        className="controls__progress-track"
+        className="relative h-1 rounded-full bg-neko-preview-text-secondary/20 cursor-pointer transition-all duration-150 hover:h-1.5 group"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
-        <div className="controls__progress-fill" style={{ width: `${progress}%` }} />
-        <div className="controls__progress-thumb" style={{ left: `${progress}%` }} />
+        <div
+          className="absolute top-0 left-0 h-full rounded-full bg-neko-preview-primary transition-all"
+          style={{ width: `${progress}%` }}
+        />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-neko-preview-text-primary shadow-neko-sm opacity-0 group-hover:opacity-100 transition-opacity -ml-1.5"
+          style={{ left: `${progress}%` }}
+        />
       </div>
 
       {/* Hover tooltip */}
       {hoverTime !== null && !isDragging && (
-        <div className="controls__progress-tooltip" style={{ left: `${hoverX}px` }}>
+        <div
+          className="absolute -top-8 -translate-x-1/2 px-2 py-1 bg-neko-glass backdrop-blur-neko-glass-sm rounded-neko-sm text-xs text-neko-preview-text-primary shadow-neko-md pointer-events-none"
+          style={{ left: `${hoverX}px` }}
+        >
           {formatTime(hoverTime)}
         </div>
       )}

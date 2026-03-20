@@ -169,6 +169,14 @@ export function loadConfig(
       })
       .map((m) => m.id);
 
+    // Default media models by type
+    const defaultMediaModels = {
+      image: rawWorkspace.defaultMediaModels?.image ?? rawUser.defaultMediaModels?.image,
+      video: rawWorkspace.defaultMediaModels?.video ?? rawUser.defaultMediaModels?.video,
+      audio: rawWorkspace.defaultMediaModels?.audio ?? rawUser.defaultMediaModels?.audio,
+      music: rawWorkspace.defaultMediaModels?.music ?? rawUser.defaultMediaModels?.music,
+    };
+
     // Workspace overrides user for scalars
     const maxTokens =
       overrides.maxTokens ??
@@ -193,6 +201,7 @@ export function loadConfig(
       providerType,
       model,
       mediaModels,
+      defaultMediaModels,
       apiKey,
       baseUrl,
       maxTokens,

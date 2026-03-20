@@ -35,11 +35,32 @@
 - [x] Phase 4：频谱可视化（AnalyserNode FFT 实时频率柱状图 + 第四视图 + 主题感知颜色 + DPR 缩放）
 - [x] Phase 5：嵌入歌词提取（ID3v2 USLT / Vorbis LYRICS → metadata.lyrics 回退 + 纯文本歌词静态展示）
 
-### neko-preview（风格主题优化）
-- [ ] 统一 `--neko-audio-*` 变量为 `--neko-preview-*`，覆盖 audio + video 两个 webview
-- [ ] 深色/浅色主题适配验证（VSCode 主题切换时 canvas 组件颜色跟随）
-- [ ] 视频播放器控件样式对齐音频播放器（进度条/音量/速度控件复用 shared 组件）
-- [ ] 高对比度主题支持（`vscode-high-contrast` / `vscode-high-contrast-light`）
+### neko-preview（UI 现代化 — Phase 0-3）
+- [ ] Phase 0：Tailwind 基础设施接入（tailwind.config.js + postcss.config.js + @tailwind 指令）
+- [ ] Phase 1：macOS Design Token 体系（扩展 @neko/shared token + CSS 变量统一 `--neko-preview-*` + 深色/浅色/高对比度主题覆盖）
+- [ ] Phase 2：macOS 风格组件重构（音频/视频播放器 macOS 化 + 共享控件提取 VolumeControl/SpeedButton/useMediaKeyboard）
+- [ ] Phase 3：macOS 全局组件模式（按钮体系 4 种 + 输入控件 + 动效规范）
+
+### neko-audio（UI 现代化 — Phase 4）
+- [ ] Tailwind 接入（同 Phase 0 模式）
+- [ ] macOS 化（工具栏按钮、面板容器使用 Phase 3 组件模式）
+
+### neko-story（UI 现代化 — Phase 5）
+- [ ] VSCode 主题接入（硬编码颜色替换为 var(--vscode-*) 变量）
+
+### neko-tools（UI 现代化 — Phase 5.5-5.6）
+- [ ] macOS VSCode 主题配色（contributes.themes + Neko macOS Dark/Light 两套完整配色）
+- [ ] File Icon Theme（contributes.iconThemes + 13 个自定义文件扩展名图标）
+
+### @neko/shared（UI 现代化 — Phase 1 + 5.6）
+- [ ] macOS Design Token 扩展（neko-glass / neko-surface / borderRadius / boxShadow / backdropBlur）
+- [ ] 统一 SVG 图标模块（@neko/shared/icons + ~25 个去重图标 + stroke 描边 macOS SF Symbols 风格）
+
+### neko-preview（风格主题优化）— 已移至 UI 现代化 Phase 0-3
+- ~~[ ] 统一 `--neko-audio-*` 变量为 `--neko-preview-*`，覆盖 audio + video 两个 webview~~
+- ~~[ ] 深色/浅色主题适配验证（VSCode 主题切换时 canvas 组件颜色跟随）~~
+- ~~[ ] 视频播放器控件样式对齐音频播放器（进度条/音量/速度控件复用 shared 组件）~~
+- ~~[ ] 高对比度主题支持（`vscode-high-contrast` / `vscode-high-contrast-light`）~~
 
 ### EditOperation 遗留项
 - [x] neko-types `package.json` 缺少 test script（已添加，11 文件 242 测试通过）
@@ -224,4 +245,4 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 
 ---
 
-*最后更新：2026-03-21（neko-agent 工具系统简化 + ISkillProvider 桥接完成）*
+*最后更新：2026-03-21（UI 现代化任务规划 + Phase 0-5.6 分解）*

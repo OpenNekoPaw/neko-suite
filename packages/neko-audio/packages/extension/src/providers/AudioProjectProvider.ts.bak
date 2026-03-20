@@ -700,60 +700,43 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
     if (!cached || !this._audioService?.isAvailable) return;
 
     const newTracks = [...cached.tracks];
-    const errors: string[] = [];
 
     for (const filePath of filePaths) {
-      try {
-        logger.info(`Importing audio file: ${filePath}`);
-        const audioInfo = await this._audioService.probeAudio(filePath);
-        const elementId = generateId();
-        const trackId = generateId();
+      const audioInfo = await this._audioService.probeAudio(filePath);
+      const elementId = generateId();
+      const trackId = generateId();
 
-        const element = {
-          id: elementId,
-          type: 'audio' as const,
-          name: path.basename(filePath),
-          src: filePath,
-          duration: audioInfo.duration,
-          startTime: 0,
-          trimStart: 0,
-          trimEnd: 0,
-          transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
-          opacity: 1,
-          blendMode: 'normal',
-          effects: [],
-          muted: false,
-          hidden: false,
-          locked: false,
-          speed: 1,
-        } as any;
+      const element = {
+        id: elementId,
+        type: 'audio' as const,
+        name: path.basename(filePath),
+        src: filePath,
+        duration: audioInfo.duration,
+        startTime: 0,
+        trimStart: 0,
+        trimEnd: 0,
+        transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+        effects: [],
+        muted: false,
+        hidden: false,
+        locked: false,
+        speed: 1,
+      } as any;
 
-        const track: TimelineTrack = {
-          id: trackId,
-          type: 'audio',
-          name: path.basename(filePath, path.extname(filePath)),
-          elements: [element],
-          muted: false,
-          locked: false,
-          hidden: false,
-          isMain: false,
-        };
+      const track: TimelineTrack = {
+        id: trackId,
+        type: 'audio',
+        name: path.basename(filePath, path.extname(filePath)),
+        elements: [element],
+        muted: false,
+        locked: false,
+        hidden: false,
+        isMain: false,
+      };
 
-        newTracks.push(track);
-        logger.info(`Successfully imported: ${filePath}`);
-      } catch (error) {
-        const errMsg = error instanceof Error ? error.message : String(error);
-        logger.error(`Failed to import ${filePath}:`, error);
-        errors.push(`${path.basename(filePath)}: ${errMsg}`);
-      }
-    }
-
-    // Show errors if any
-    if (errors.length > 0) {
-      await panel.webview.postMessage({
-        type: 'editor:importSourceFailed',
-        payload: { error: `Failed to import some files:\n${errors.join('\n')}` },
-      });
+      newTracks.push(track);
     }
 
     // Update cache immutably
@@ -768,8 +751,7 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
 
     // Re-initialize webview with updated project
     await this.initializeWebview(panel, document.uri);
-    const successCount = filePaths.length - errors.length;
-    logger.info(`Imported ${successCount}/${filePaths.length} audio file(s) as new tracks`);
+    logger.info(`Imported ${filePaths.length} audio file(s) as new tracks`);
   }
 
   /** Read .nka JSON and send project:init to webview */

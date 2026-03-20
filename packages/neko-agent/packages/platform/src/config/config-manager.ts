@@ -296,6 +296,10 @@ export class ConfigManager {
     return this.getScalar('defaultModel') ?? DEFAULT_CONFIG.defaultModel;
   }
 
+  getDefaultMediaModels(): { image?: string; video?: string; audio?: string; music?: string } {
+    return this.getScalar('defaultMediaModels') ?? {};
+  }
+
   getTemperature(): number {
     return this.getScalar('temperature') ?? DEFAULT_CONFIG.temperature;
   }
