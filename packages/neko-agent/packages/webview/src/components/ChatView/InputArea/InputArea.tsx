@@ -7,7 +7,6 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import { ModelSelector } from './ModelSelector';
 import { MediaModelSelector } from './MediaModelSelector';
 import { ModeSelector } from './ModeSelector';
-import { PromptModeToggle } from './PromptModeToggle';
 import { AttachmentPreview } from './FileAttachment';
 import { SlashCommandMenu, getFilteredCommands } from './SlashCommandMenu';
 import { FileReferenceMenu, getFilteredFiles, parseFileReference } from './FileReferenceMenu';
@@ -54,8 +53,6 @@ export function InputArea({
     onMediaModelSelect,
     executionMode,
     onExecutionModeChange,
-    promptMode,
-    onPromptModeChange,
     contextTokenCount,
     isCompressing,
     onCompressContext,
@@ -519,10 +516,7 @@ export function InputArea({
               <div className="w-px h-4 bg-[var(--vscode-panel-border)] mx-1" />
             )}
 
-            {/* Prompt mode toggle */}
-            <PromptModeToggle mode={promptMode} onChange={onPromptModeChange} />
-
-            {/* Mode selector */}
+            {/* Mode selector (plan/ask/auto) */}
             <ModeSelector mode={executionMode} onChange={onExecutionModeChange} />
           </div>
         </div>
