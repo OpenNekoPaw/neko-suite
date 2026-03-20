@@ -126,7 +126,7 @@ Agent 的核心执行引擎，零 VSCode 依赖，CLI/Extension 复用。109 个
 | `executor/` | AgentExecutor — ReAct 循环（think-phase → act-phase → hook-runner） |
 | `session/` | AgentSession 生命周期 + stepToEvents/recordStepInHistory 纯函数 + Initializer |
 | `tools/` | ToolRegistry + 内置工具（Read/Write/Bash/Grep）+ ToolSet 双层注入（always/dynamic）+ 元工具 |
-| `skill/` | SkillService + SkillRegistry + Loader + Matcher + 4-track 原子注入（Coordinator + Injector + ToolGuard） |
+| `skill/` | SkillService + SkillRegistry + Loader + Matcher + 3-track 原子注入（Coordinator + Injector + ToolGuard）+ 斜杠命令（command 字段） |
 | `mcp/` | MCP Client（Stdio/HTTP）+ 工具桥接 + 测试服务 |
 | `context/` | ContextManager + TokenBudgetManager + ConversationCompressor |
 | `permission/` | IPermissionManager 接口 + 规则匹配（plan/ask/auto 三模式） |
@@ -139,7 +139,7 @@ Agent 的核心执行引擎，零 VSCode 依赖，CLI/Extension 复用。109 个
 | `task/` | 后台任务管理器 + 持久化 + 恢复 |
 | `validation/` | 输出验证器（Image/Output/Mermaid/JSON/Length） |
 | `memory/` | InMemorySessionMemory |
-| `commands/` | 内置斜杠命令处理 |
+| `commands/` | 内置斜杠命令处理（help/status/clear/config/skills/tools/plan 等） |
 | `errors/` | 统一错误类型 |
 
 ### @neko/platform — AI 服务平台
@@ -257,7 +257,7 @@ AgentRunner → AgentSession → AgentExecutor（ReAct 循环）
   │     ├─ ToolGuard → 技能白名单
   │     └─ Hook 链 → ExecutorHooks
   │
-  ├─ 技能 → SkillService → 发现 + 4-track 原子注入
+  ├─ 技能 → SkillService → 发现 + 3-track 原子注入
   │
   └─ 上下文 → ContextManager + TokenBudgetManager → 压缩/摘要
          │
@@ -279,7 +279,7 @@ AgentStreamProcessor（Extension — 事件翻译）
 | **Observer** | vscode.EventEmitter（AgentRunner）、onProgress（MediaService） |
 | **Strategy** | ExecutionMode（plan/ask/auto）、ToolInjectionLayer（always/dynamic） |
 | **Composite** | composeHooks — 多个 ExecutorHooks 组合 |
-| **Coordinator** | SkillInjectionCoordinator — 4-track 原子注入/回滚 |
+| **Coordinator** | SkillInjectionCoordinator — 3-track 原子注入/回滚 |
 | **LRU Cache** | AgentManager — 多会话池化（max=10，驱逐非运行中最久未用） |
 | **依赖注入** | 构造函数注入 — AgentSession/Service/ConfigManager 均通过接口解耦 |
 

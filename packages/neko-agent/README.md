@@ -46,7 +46,7 @@ packages/
 ├── agent/      # @neko/agent — Agent 运行时（零 VSCode 依赖，CLI/Extension 复用）
 │   ├── executor/     ReAct 循环引擎（think-phase + act-phase + hook-runner）
 │   ├── session/      Agent 会话生命周期 + 事件转换
-│   ├── skill/        技能系统（SkillService + 4-track 原子注入 + ToolGuard）
+│   ├── skill/        技能系统（SkillService + 3-track 原子注入 + ToolGuard + 斜杠命令）
 │   ├── tools/        工具注册 + 双层注入（always/dynamic）+ 元工具
 │   ├── mcp/          MCP Client（Stdio/HTTP）+ 工具桥接
 │   ├── context/      分层上下文管理 + token 预算 + 对话压缩
@@ -60,7 +60,7 @@ packages/
 │   ├── task/         后台任务管理 + 持久化
 │   ├── validation/   输出验证器（Image/Output/Mermaid/JSON/Length）
 │   ├── memory/       InMemorySessionMemory
-│   ├── commands/     内置斜杠命令处理
+│   ├── commands/     内置斜杠命令处理（help/status/clear/config/skills/tools/plan 等）
 │   └── errors/       统一错误类型
 ├── platform/   # @neko/platform — AI 服务平台
 │   ├── llm/adapter/  7 个 LLM 适配器（Anthropic/OpenAI/Google/Azure/Ollama/Generic + AI-SDK）
@@ -117,19 +117,20 @@ packages/
 
 ### 技能系统
 
-从 `.md` 文件加载技能（YAML frontmatter + Markdown body），4-track 原子注入/移除：
+从 `.neko/skills/<name>/SKILL.md` 加载技能（YAML frontmatter + Markdown body），3-track 原子注入/移除：
 
 | Track | 注入内容 |
 |-------|---------|
 | A | 系统提示词 section（SystemPromptComposer） |
 | B | 权限允许规则（PermissionHooks） |
 | C | 工具白名单（ToolGuard，运行时 isToolAllowed） |
-| D | ToolSet 激活（IToolInjectionManager） |
+
+技能支持可选的斜杠命令触发（frontmatter 中 `command: commit`），支持参数插值（`$ARGUMENTS`, `$1-$99`）。
 
 ### 工具系统
 
-- **双层注入**：`always`（核心工具 + 常驻 ToolSets）+ `dynamic`（按需激活）
-- **元工具**：`SearchToolSets` / `ActivateToolSet` / `DeactivateToolSet` — LLM 自主发现工具
+- **所有工具始终可见**（1M context，无需动态注入）
+- **元工具**：`GetContext` / `ActivateSkill` / `DeactivateSkill` — AI 自主发现和激活技能
 - **来源**：内置（Read/Write/Bash/Grep）、MCP 服务器、扩展工具（NekoCut/NekoCanvas）
 
 ### MCP 集成
