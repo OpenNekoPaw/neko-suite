@@ -123,6 +123,7 @@ player.css 结构：
 | `@keyframes` 自定义动画 | 非内置动画需自定义 | `@keyframes neko-cover-pulse` |
 | CSS 变量作用域定义 | Tailwind 只能引用变量，不能定义 | `@layer base :root {}` |
 | `body[data-vscode-theme-kind]` | Tailwind `dark:` 不支持自定义属性选择器 | `@layer base` 主题覆盖 |
+| **Tailwind `/20` 透明度修饰符** | **CSS 变量颜色已含 alpha 通道，Tailwind 的 `bg-token/20` 输出 `rgba(0,0,0,0)` 透明** | **`.neko-progress-track-bg` / `.neko-tabs-bg` / `.neko-speed-border`** |
 
 ---
 
@@ -317,9 +318,30 @@ packages/neko-preview/packages/webview/src/shared/
 ├── MacIconButton.tsx   — 圆形图标按钮（default/primary 变体 + 4 种尺寸）
 ├── MacTabs.tsx         — 分段控件（毛玻璃背景 + 滑动活跃指示器）
 ├── MacSlider.tsx       — 滑块（使用 .neko-slider CSS 工具类）
-├── ProgressBar.tsx     — 进度条（Tailwind group-hover 膨胀效果）
+├── ProgressBar.tsx     — 进度条（variant: default/video，Tailwind group-hover 膨胀）
 ├── types.ts            — 消息协议类型
 └── useVscodeMessage.ts — postMessage 通信 hook
+
+packages/neko-preview/packages/webview/src/audio/
+└── ViewTabs.tsx        — 视图模式切换（封面/歌词/波形/频谱），独立于 AudioControls
+```
+
+### 2.4 音频播放器布局（Apple Music 风格）
+
+```
+┌─────────────────────────────────┐
+│         视觉区域（flex-1）         │  封面/歌词/波形/频谱
+│                                   │
+├─────────────────────────────────┤
+│       [⊙] [♪] [≋] [≡]          │  ViewTabs — 视图切换
+├─────────────────────────────────┤
+│         标题 / 艺术家              │  Metadata
+├─────────────────────────────────┤
+│  🔊 ━━━━━━━        1x          │  音量 + 速度（进度条上方）
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │  进度条
+│  0:00                    3:46   │  时间
+│         ⟲10   ▶   10⟳          │  播放控件
+└─────────────────────────────────┘
 ```
 
 ### 2.3 CSS 工具类清单（`@layer components`）
