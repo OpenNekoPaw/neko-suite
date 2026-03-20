@@ -446,18 +446,91 @@ packages/neko-preview/packages/webview/src/audio/
 
 ---
 
-## Phase 4：neko-audio Tailwind 迁移 + macOS 化（P1）
+## Phase 4：neko-audio Tailwind 迁移 + macOS 化（P1）✅
 
-### 4.1 现状
+### 4.1 实施结果
 
-`editor.css`（401 行）使用 21 个 `--neko-audio-editor-*` CSS 变量，已映射到 `var(--vscode-*)`。未使用 Tailwind。
+删除 46 个 BEM 类名引用，504 行旧代码替换为 363 行 Tailwind + macOS 组件代码（净减 141 行）。CSS 从 401 行精简为 ~140 行（`@layer base` 主题变量 + `@layer components` 工具类）。构建产出 CSS 18.9KB。
 
-### 4.2 方案
+### 4.2 实施步骤
 
-1. 接入 Tailwind（同 Phase 0 模式：添加 tailwind.config.js + postcss.config.js）
-2. 渐进式迁移：新增/修改组件用 Tailwind，现有 CSS 逐步替换
-3. 工具栏按钮、面板容器使用 Phase 3 定义的 macOS 组件模式
-4. 添加高对比度 + 浅色主题覆盖
+**Step 1-2：基础设施 + CSS 精简**（`28dff7a`）
+1. 添加 `tailwindcss` / `postcss` / `autoprefixer` devDependencies
+2. 创建 `tailwind.config.js`（引用 `nekoTailwindPreset`）+ `postcss.config.js`
+3. `editor.css` 精简为 @layer 分层架构：
+   - `@layer base`：CSS 变量（dark/light/high-contrast 三套）+ 全局重置
+   - `@layer components`：不可 Tailwind 化的工具类（`.neko-toolbar-indicator` / `.neko-resize-handle` / `.neko-slider` / `.neko-drop-overlay-bg` / `.neko-drag-over-bg`）
+   - `@keyframes neko-toast-slide-in`
+
+**Step 3：全量组件迁移**（`d0caf61`）
+
+迁移 20 个 TSX 文件（16 组件 + 2 共享按钮 + 2 Canvas 容器）：
+
+| 组件 | 改动 |
+|------|------|
+| AudioEditor.tsx | BEM `audio-editor__*` 6 个类 → Tailwind flex 布局 |
+| Toolbar.tsx | BEM `audio-toolbar` / `toolbar-btn*` 6 个类 → Tailwind + `.neko-toolbar-indicator` |
+| TransportBar.tsx | BEM `btn` / `slider` / `divider` 5 个类 → MacIconButton + `.neko-slider` |
+| SidePanel.tsx | BEM `audio-side-panel__*` 5 个类 → Tailwind flex + MacIconButton |
+| EmptyProject.tsx | BEM `audio-editor__empty*` 4 个类 → Tailwind + MacButton |
+| Toast.tsx | 全内联样式 → Tailwind fixed/flex + `neko-toast-slide-in` |
+| ExportPanel.tsx | BEM `form-group` / `form-label` / `form-select` → Tailwind select + MacButton |
+| LoudnessPanel.tsx | BEM `audio-loudness__*` 5 个类 → Tailwind inline-flex + font-mono |
+| EffectsPanel.tsx | BEM `btn` + 内联样式 → Tailwind + MacButton + dropdown menu |
+| EffectEditor.tsx | BEM `effect-editor*` + `btn--icon` → Tailwind + MacIconButton |
+| RecordingPanel.tsx | BEM `btn` + 内联样式 → Tailwind + MacButton |
+| AudioProperties.tsx | BEM `slider` + 内联样式 → Tailwind + `.neko-slider` |
+| SpectrumAnalyzer.tsx | 内联样式 → Tailwind `w-full h-20 relative` |
+| EditableWaveform.tsx | BEM `audio-editor__waveform` → Tailwind `w-full h-full relative` |
+| AudioTimeline.tsx | BEM `audio-timeline` + 内联样式 → Tailwind flex 布局 |
+| TimelineRuler.tsx | 全内联样式 → Tailwind absolute + bg 工具类 |
+| TrackLane.tsx | 全内联样式 → Tailwind flex + conditional classes |
+| AudioClip.tsx | 全内联样式 → Tailwind absolute + rounded + border |
+
+### 4.3 新建的 macOS 风格共享组件
+
+```
+packages/neko-audio/packages/webview/src/shared/
+├── MacButton.tsx       — 4 种变体（primary/secondary/ghost/icon）+ 3 种尺寸
+├── MacIconButton.tsx   — 圆形图标按钮（default/primary 变体 + 4 种尺寸）
+├── types.ts            — 消息协议类型（已有）
+└── useVscodeMessage.ts — postMessage 通信 hook（已有）
+```
+
+注意：MacButton / MacIconButton 是 neko-preview 同名组件的本地副本，避免 `no-cross-extension-deps` 规则冲突。未来 Phase 6 可考虑提取到 `@neko/shared/components`。
+
+### 4.4 CSS 工具类清单（`@layer components`）
+
+| 工具类 | 用途 | 不可 Tailwind 原因 |
+|--------|------|-------------------|
+| `.neko-toolbar-indicator` | 工具栏激活指示条（左侧 2px 蓝条） | 复合定位 + transform + pseudo-element 风格 |
+| `.neko-resize-handle` | 面板拖拽调整大小手柄 | `cursor: ew-resize` + hover 渐变 |
+| `.neko-slider` | range input 滑块样式 | `::-webkit-slider-thumb` / `::-moz-range-thumb` 伪元素 |
+| `.neko-drop-overlay-bg` | 拖放覆盖层半透明背景 | `color-mix()` 运行时函数 |
+| `.neko-drag-over-bg` | 拖入目标高亮背景 | `color-mix()` 运行时函数 |
+| `@keyframes neko-toast-slide-in` | Toast 滑入动画 | 自定义 keyframes |
+
+### 4.5 editor.css 分层结构
+
+```
+editor.css (~140 行):
+├── @tailwind base/components/utilities      — Tailwind 指令
+├── @layer base {                            — CSS 变量定义
+│   ├── :root { --editor-bg/fg/border, --toolbar-bg, --activity-bg/fg }
+│   ├── :root { --waveform-played/unplayed/cursor, --selection-bg/border }
+│   ├── :root { --neko-glass/surface/preview-primary/text }
+│   ├── body.vscode-light { 浅色主题覆盖 }
+│   ├── body.vscode-high-contrast { 高对比度覆盖 }
+│   └── html/body/#root 全局重置
+│ }
+├── @layer components {                      — 工具类
+│   ├── .neko-toolbar-indicator
+│   ├── .neko-resize-handle
+│   ├── .neko-drop-overlay-bg / .neko-drag-over-bg
+│   └── .neko-slider (含 thumb 伪元素)
+│ }
+└── @keyframes neko-toast-slide-in
+```
 
 ---
 
@@ -1102,7 +1175,7 @@ Phase 0    neko-preview Tailwind 基础设施接入                    [0.5d] �
 Phase 1    macOS Design Token 体系 + CSS 变量统一 + 主题覆盖     [1d]   ✅
 Phase 2    macOS 风格组件重构 + 共享控件提取                      [2d]   ✅
 Phase 3    视频播放器 macOS 化                                    [0.5d] ✅
-Phase 4    neko-audio Tailwind 接入 + macOS 化                   [1d]
+Phase 4    neko-audio Tailwind 接入 + macOS 化                   [1d]   ✅
 Phase 5    neko-story VSCode 主题接入                             [0.5d]
 Phase 5.5  macOS VSCode 主题配色（Dark + Light）                  [1d]
 Phase 5.6  SVG 图标统一 + File Icon Theme                         [2d]
