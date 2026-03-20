@@ -26,8 +26,8 @@ interface SlashCommandHandlers {
 export function useSlashCommands(sessionActions: {
   clearHistory: () => void;
   updateModel?: (model: string) => void;
-  skillService?: SkillService;
-  toolRegistry?: ToolRegistry;
+  getSkillService?: () => SkillService | undefined;
+  getToolRegistry?: () => ToolRegistry | undefined;
 }): SlashCommandHandlers {
   const handleCommand = useCallback(
     async (input: string) => {
@@ -127,8 +127,8 @@ export function useSlashCommands(sessionActions: {
       try {
         const result = await handleTUISlashCommand(input, {
           config,
-          skillService: sessionActions.skillService,
-          toolRegistry: sessionActions.toolRegistry,
+          skillService: sessionActions.getSkillService?.(),
+          toolRegistry: sessionActions.getToolRegistry?.(),
           onConfigUpdate: (updates) => {
             useConfigStore.getState().setConfig(updates);
           },

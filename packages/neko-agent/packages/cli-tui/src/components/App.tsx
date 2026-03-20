@@ -55,8 +55,8 @@ export function App({ config, service }: AppProps): React.JSX.Element {
     confirmTool,
     updateModel,
     updateMode,
-    skillService,
-    toolRegistry,
+    getSkillService,
+    getToolRegistry,
   } = useAgentSession({
     config,
     service,
@@ -66,8 +66,8 @@ export function App({ config, service }: AppProps): React.JSX.Element {
   const { handleCommand, onClear } = useSlashCommands({
     clearHistory,
     updateModel,
-    skillService,
-    toolRegistry,
+    getSkillService,
+    getToolRegistry,
   });
 
   // Global keyboard shortcuts

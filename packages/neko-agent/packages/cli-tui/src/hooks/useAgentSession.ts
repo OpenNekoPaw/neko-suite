@@ -63,9 +63,9 @@ export interface AgentSessionHandle {
   /** Switch execution mode and rebuild system prompt */
   updateMode: (mode: ExecutionMode) => void;
   /** Skill service (for slash commands) */
-  readonly skillService: SkillService | undefined;
+  readonly getSkillService: () => SkillService | undefined;
   /** Tool registry (for slash commands) */
-  readonly toolRegistry: ToolRegistry | undefined;
+  readonly getToolRegistry: () => ToolRegistry | undefined;
   /** Whether session is initialized */
   readonly isReady: boolean;
 }
@@ -406,8 +406,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     confirmTool,
     updateModel,
     updateMode,
-    skillService: skillServiceRef.current ?? undefined,
-    toolRegistry: toolRegistryRef.current ?? undefined,
+    getSkillService: () => skillServiceRef.current ?? undefined,
+    getToolRegistry: () => toolRegistryRef.current ?? undefined,
     isReady: isReadyRef.current,
   };
 }
