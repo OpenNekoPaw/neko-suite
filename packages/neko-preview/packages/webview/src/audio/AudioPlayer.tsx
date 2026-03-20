@@ -328,9 +328,9 @@ export function AudioPlayer() {
   const displayName = mediaInfo?.metadata?.title || fileName;
 
   return (
-    <div className="neko-audio-bg flex flex-col items-center w-full h-full px-8 pt-6 pb-5 overflow-hidden font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+    <div className="neko-audio-bg flex flex-col items-center w-full h-full px-8 pt-6 pb-5 overflow-hidden">
       {/* Main visual area — switchable views */}
-      <div className="relative flex-1 flex items-center justify-center w-full min-h-0 py-2">
+      <div className="relative flex-1 flex items-center justify-center w-full min-h-[120px] py-2">
         <div className="relative w-full h-full">
           {/* Cover */}
           <div

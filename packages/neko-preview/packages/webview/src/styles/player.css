@@ -30,6 +30,7 @@
 }
 
 /* Light theme override */
+body.vscode-light,
 body[data-vscode-theme-kind="vscode-light"],
 body[data-vscode-theme-kind="vscode-high-contrast-light"] {
   --neko-glass: rgba(0, 0, 0, 0.05);
@@ -47,6 +48,7 @@ body[data-vscode-theme-kind="vscode-high-contrast-light"] {
 }
 
 /* High contrast theme override */
+body.vscode-high-contrast,
 body[data-vscode-theme-kind="vscode-high-contrast"] {
   --neko-glass: rgba(255, 255, 255, 0.15);
   --neko-glass-hover: rgba(255, 255, 255, 0.25);
