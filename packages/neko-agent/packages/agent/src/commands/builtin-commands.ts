@@ -61,7 +61,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
     name: 'resume',
     description: 'Show recent conversations to resume',
     category: 'session',
-    availableInCli: false,
+    availableInCli: true,
     availableInExtension: true,
   },
 
@@ -113,7 +113,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
     name: 'compact',
     description: 'Compress conversation context to save tokens',
     category: 'context',
-    availableInCli: false,
+    availableInCli: true,
     availableInExtension: true,
   },
 
@@ -124,7 +124,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
     name: 'plan',
     description: 'Toggle plan mode (design before implement)',
     category: 'mode',
-    availableInCli: false,
+    availableInCli: true,
     availableInExtension: true,
   },
 
@@ -137,7 +137,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
     usage: '[info <name> | active | clear]',
     category: 'resources',
     availableInCli: true,
-    availableInExtension: false,
+    availableInExtension: true,
   },
   {
     name: 'commands',
@@ -153,7 +153,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
     usage: '[info <name> | search <query>]',
     category: 'resources',
     availableInCli: true,
-    availableInExtension: false,
+    availableInExtension: true,
   },
   {
     name: 'tasks',
