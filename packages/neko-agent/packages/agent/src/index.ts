@@ -213,7 +213,6 @@ export {
   // Builtins
   registerBuiltins,
   builtinSkills,
-  builtinCommands,
   builtinToolGroups,
   registerBuiltinToolGroups,
   // ToolGroup Registry

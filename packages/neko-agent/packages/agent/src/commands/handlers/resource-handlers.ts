@@ -7,7 +7,7 @@
 import type { CommandHandler } from '../types';
 
 /**
- * Handle /skills command (CLI only)
+ * Handle /skills command
  */
 export const handleSkills: CommandHandler = (args, context) => {
   const { skillService } = context;
@@ -21,7 +21,6 @@ export const handleSkills: CommandHandler = (args, context) => {
   }
 
   if (args.length === 0) {
-    // List all skills
     const skills = skillService.registry.listSkills();
     if (skills.length === 0) {
       return {
@@ -39,9 +38,15 @@ export const handleSkills: CommandHandler = (args, context) => {
     ];
 
     for (const skill of skills) {
-      const s = skill as { name: string; description?: string; enabled?: boolean };
+      const s = skill as {
+        name: string;
+        description?: string;
+        enabled?: boolean;
+        command?: string;
+      };
       const status = s.enabled === false ? ' (disabled)' : '';
-      lines.push(`  ${s.name}${status}`);
+      const cmd = s.command ? ` [/${s.command}]` : '';
+      lines.push(`  ${s.name}${cmd}${status}`);
       if (s.description) {
         lines.push(`      ${s.description}`);
       }
@@ -67,7 +72,6 @@ export const handleSkills: CommandHandler = (args, context) => {
           error: 'Usage: /skills info <name>',
         };
       }
-      // Would need to get skill details from service
       return {
         handled: true,
         continueExecution: true,
@@ -109,50 +113,10 @@ export const handleSkills: CommandHandler = (args, context) => {
 };
 
 /**
- * Handle /commands command (CLI only)
+ * Handle /commands command — now redirects to /skills
  */
-export const handleCommands: CommandHandler = (_args, context) => {
-  const { skillService } = context;
-
-  if (!skillService) {
-    return {
-      handled: true,
-      continueExecution: true,
-      error: 'Skill service not available',
-    };
-  }
-
-  const commands = skillService.registry.listCommands();
-  if (commands.length === 0) {
-    return {
-      handled: true,
-      continueExecution: true,
-      output: 'No custom commands registered.',
-    };
-  }
-
-  const lines = [
-    '',
-    'Available Commands:',
-    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-    '',
-  ];
-
-  for (const cmd of commands) {
-    const c = cmd as { command: string; description?: string; enabled?: boolean };
-    const status = c.enabled === false ? ' (disabled)' : '';
-    lines.push(`  /${c.command}${status}`);
-    if (c.description) {
-      lines.push(`      ${c.description}`);
-    }
-  }
-  lines.push('');
-
-  return {
-    handled: true,
-    continueExecution: true,
-    output: lines.join('\n'),
-  };
+export const handleCommands: CommandHandler = (args, context) => {
+  return handleSkills(args, context);
 };
 
 /**

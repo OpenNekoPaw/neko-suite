@@ -179,9 +179,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           for (const skill of loadResult.skills) {
             skillService.registry.registerSkill(skill);
           }
-          for (const command of loadResult.commands) {
-            skillService.registry.registerCommand(command);
-          }
+          // Commands from loadResult are now loaded as Skills with command field
         }
 
         // 4. LLM Service — use Platform for multi-provider routing

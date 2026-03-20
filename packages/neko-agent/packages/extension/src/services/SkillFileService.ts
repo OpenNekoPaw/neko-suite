@@ -27,7 +27,7 @@ import type {
   ConfiguredSlashCommand,
 } from '@neko/shared';
 import { SkillLoader, createNodeSkillLoader } from '@neko/agent';
-import { builtinSkills, builtinCommands } from '@neko/agent';
+import { builtinSkills } from '@neko/agent';
 
 const logger = getLogger('SkillFileService');
 
@@ -564,13 +564,6 @@ Add your command instructions here.
       enabled: true,
     }));
 
-    // Builtin commands (from agent package)
-    const builtinCommandConfigs: ConfiguredSlashCommand[] = builtinCommands.map((c) => ({
-      ...c,
-      source: 'builtin' as SkillSource,
-      enabled: true,
-    }));
-
     // Personal and project skills
     const skills: ConfiguredSkill[] = [
       ...builtinSkillConfigs,
@@ -578,14 +571,7 @@ Add your command instructions here.
       ...result.project.skills.map((s) => ({ ...s, enabled: true })),
     ];
 
-    // Personal and project commands
-    const commands: ConfiguredSlashCommand[] = [
-      ...builtinCommandConfigs,
-      ...result.personal.commands.map((c) => ({ ...c, enabled: true })),
-      ...result.project.commands.map((c) => ({ ...c, enabled: true })),
-    ];
-
-    return { skills, commands };
+    return { skills, commands: [] };
   }
 
   // ==========================================================================

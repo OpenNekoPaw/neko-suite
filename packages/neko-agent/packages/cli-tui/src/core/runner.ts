@@ -118,9 +118,6 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       for (const skill of loadResult.skills) {
         skillService.registry.registerSkill(skill);
       }
-      for (const command of loadResult.commands) {
-        skillService.registry.registerCommand(command);
-      }
     }
 
     // Create LLM service via Platform
@@ -547,9 +544,6 @@ async function initializeInteractiveSession(
     const loadResult = await skillLoader.loadFromDirectory(config.skillsDir);
     for (const skill of loadResult.skills) {
       skillService.registry.registerSkill(skill);
-    }
-    for (const command of loadResult.commands) {
-      skillService.registry.registerCommand(command);
     }
   }
 

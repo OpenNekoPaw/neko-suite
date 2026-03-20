@@ -99,24 +99,19 @@ export type CommandCategory =
  * Command execution context - provides access to services and state
  */
 export interface CommandContext {
-  /** Skill service for skill/command management */
+  /** Skill service for skill management */
   skillService?: {
-    /** Skill registry - use for register/get/list operations */
+    /** Skill registry */
     registry: {
       skillCount: number;
-      commandCount: number;
       listSkills(): unknown[];
       listAllSkills(): unknown[];
-      listCommands(): unknown[];
       getSkill(name: string): unknown | undefined;
-      getCommand(name: string): unknown | undefined;
-      hasCommand(name: string): boolean;
+      getSkillByCommand(name: string): unknown | undefined;
       searchSkills(keyword: string): unknown[];
     };
     /** Number of registered skills */
     skillCount: number;
-    /** Number of registered commands */
-    commandCount: number;
     /** Get currently active skill */
     getActiveSkill(): { name: string } | null;
     /** Clear active skill */

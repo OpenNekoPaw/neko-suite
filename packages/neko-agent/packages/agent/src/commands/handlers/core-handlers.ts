@@ -136,7 +136,6 @@ export function generateCliStatusText(context: CommandContext): string {
     'Resources:',
     `  MCP Servers:  ${config?.mcpServers?.length ?? 0}`,
     `  Skills:       ${skillService?.skillCount ?? 0}`,
-    `  Commands:     ${skillService?.commandCount ?? 0}`,
     `  Tools:        ${toolRegistry?.size ?? 0}`,
     '',
   ];

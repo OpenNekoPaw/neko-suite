@@ -132,11 +132,8 @@ export async function executeSlashCommand(
   input: string,
   context: CommandContext,
   skillService?: {
-    getCommand(name: string): unknown | undefined;
-    applyCommand(
-      command: unknown,
-      args?: string,
-    ): { applied: boolean; injection?: unknown; error?: string };
+    getSkillByCommand(name: string): unknown | undefined;
+    apply(skill: unknown, args?: string): unknown;
   },
 ): Promise<CommandResult> {
   const { command, args } = parseSlashCommand(input);
@@ -147,23 +144,23 @@ export async function executeSlashCommand(
     return builtinResult;
   }
 
-  // Try user-defined slash command via skill service
+  // Try user-defined slash command via skill (skills with command field)
   if (skillService) {
-    const slashCommand = skillService.getCommand(command);
-    if (slashCommand) {
-      const result = skillService.applyCommand(slashCommand, args.join(' '));
-      if (result.applied) {
+    const skill = skillService.getSkillByCommand(command);
+    if (skill) {
+      try {
+        const injection = skillService.apply(skill, args.join(' '));
         return {
           handled: true,
           continueExecution: true,
-          output: `Command /${command} activated`,
-          data: { injection: result.injection },
+          output: `Skill /${command} activated`,
+          data: { injection },
         };
-      } else {
+      } catch (error) {
         return {
           handled: true,
           continueExecution: true,
-          error: result.error || `Failed to execute command: /${command}`,
+          error: `Failed to execute /${command}: ${error instanceof Error ? error.message : String(error)}`,
         };
       }
     }

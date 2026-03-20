@@ -66,22 +66,16 @@ function toCommandContext(context: SlashCommandContext): CommandContext {
       ? {
           registry: {
             skillCount: context.skillService.skillCount,
-            commandCount: context.skillService.commandCount,
             listSkills: () => context.skillService!.registry.listSkills() as unknown[],
             listAllSkills: () => context.skillService!.registry.listAllSkills() as unknown[],
-            listCommands: () => context.skillService!.registry.listCommands() as unknown[],
             getSkill: (name: string) =>
               context.skillService!.registry.getSkill(name) as unknown | undefined,
-            getCommand: (name: string) =>
-              context.skillService!.registry.getCommand(name) as unknown | undefined,
-            hasCommand: (name: string) => context.skillService!.registry.hasCommand(name),
+            getSkillByCommand: (name: string) =>
+              context.skillService!.registry.getSkillByCommand(name) as unknown | undefined,
             searchSkills: (keyword: string) =>
               context.skillService!.registry.searchSkills(keyword) as unknown[],
           },
           skillCount: context.skillService.skillCount,
-          commandCount: context.skillService.commandCount,
-          // Active skill state is owned by SkillInjectionCoordinator (via AgentSession).
-          // CLI slash command context doesn't hold a session, so these are no-ops.
           getActiveSkill: () => null,
           clearActiveSkill: () => {},
         }
@@ -149,17 +143,13 @@ export async function handleSlashCommand(
     commandContext,
     context.skillService
       ? {
-          getCommand: (name: string) => context.skillService!.registry.getCommand(name),
-          applyCommand: (cmd: unknown, cmdArgs?: string) => {
-            const result = context.skillService!.applyCommand(
-              cmd as Parameters<typeof context.skillService.applyCommand>[0],
-              cmdArgs,
+          getSkillByCommand: (name: string) =>
+            context.skillService!.registry.getSkillByCommand(name),
+          apply: (skill: unknown, args?: string) => {
+            return context.skillService!.apply(
+              skill as Parameters<typeof context.skillService.apply>[0],
+              args,
             );
-            return {
-              applied: result.applied,
-              injection: result.injection,
-              error: result.error,
-            };
           },
         }
       : undefined,

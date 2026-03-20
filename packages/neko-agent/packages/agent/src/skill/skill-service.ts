@@ -4,20 +4,14 @@
  * This service integrates:
  * - SkillMatcher: Semantic skill discovery
  * - SkillInjector: Prompt injection preparation
- * - User confirmation flow
  *
  * IMPORTANT: This service is fully stateless — it only builds injection payloads
  * and performs discovery/matching. Active skill state is owned exclusively by
  * SkillInjectionCoordinator (accessed via AgentSession).
- *
- * For registry operations (register, get, list), use the registry directly:
- *   const registry = skillService.registry;
- *   registry.registerSkill(skill);
  */
 
 import type {
   Skill,
-  SlashCommand,
   SkillMatch,
   SkillInjection,
   ISkillRegistry,
@@ -34,28 +28,15 @@ import { KeywordSkillMatcher } from './skill-matcher';
 // Types
 // =============================================================================
 
-// SkillDiscoveryResult and SkillApplicationResult are imported from @neko/shared
 export type { SkillDiscoveryResult, SkillApplicationResult };
 
-/**
- * User confirmation callback
- * Returns true if user confirms, false if rejected
- */
 export type ConfirmSkillCallback = (skill: Skill, match: SkillMatch) => Promise<boolean>;
 
-/**
- * Skill service configuration
- */
 export interface SkillServiceConfig {
-  /** Skill registry */
   registry?: ISkillRegistry;
-  /** Skill matcher */
   matcher?: ISkillMatcher;
-  /** Skill injector */
   injector?: ISkillInjector;
-  /** Minimum relevance score to suggest skill (0-1) */
   minRelevanceThreshold?: number;
-  /** Auto-apply skills above this threshold without confirmation */
   autoApplyThreshold?: number;
 }
 
@@ -63,17 +44,7 @@ export interface SkillServiceConfig {
 // Service
 // =============================================================================
 
-/**
- * Skill Service — Stateless orchestration
- *
- * Focuses on: discovery, matching, injection preparation.
- * For registry operations, access the registry directly via `skillService.registry`.
- *
- * Active skill state is NOT managed here — use SkillInjectionCoordinator
- * (via AgentSession) for getActiveSkill/clearActiveSkill/isToolAllowed.
- */
 export class SkillService {
-  /** Skill registry - use directly for register/get/list operations */
   readonly registry: ISkillRegistry;
 
   private readonly _matcher: ISkillMatcher;
@@ -90,41 +61,22 @@ export class SkillService {
   }
 
   // ===========================================================================
-  // Core Orchestration Methods
+  // Core
   // ===========================================================================
 
   /**
-   * Apply a skill — prepare injection payload (no argument interpolation)
+   * Apply a skill — prepare injection payload.
+   * @param skill Skill to apply
+   * @param args Optional arguments (for skills with command trigger)
    */
-  apply(skill: Skill): SkillInjection {
-    return this._injector.injectSkill(skill);
-  }
-
-  /**
-   * Apply a slash command with arguments
-   */
-  applyCommand(command: SlashCommand, args?: string): SkillApplicationResult {
-    try {
-      const injection = this._injector.injectCommand(command, args);
-      return { applied: true, injection };
-    } catch (error) {
-      return {
-        applied: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
+  apply(skill: Skill, args?: string): SkillInjection {
+    return this._injector.injectSkill(skill, args);
   }
 
   // ===========================================================================
   // Discovery
   // ===========================================================================
 
-  /**
-   * Discover skills that match the user's input
-   *
-   * @param userInput The user's message
-   * @returns Discovery result with matched skills
-   */
   discover(userInput: string): SkillDiscoveryResult {
     const skills = this.registry.listSkills();
     const allMatches = this._matcher.match(userInput, skills);
@@ -150,13 +102,6 @@ export class SkillService {
     };
   }
 
-  /**
-   * Discover and apply skill with optional confirmation
-   *
-   * @param userInput User's message
-   * @param confirmCallback Callback for user confirmation (if required)
-   * @returns Application result or null if no skill matched
-   */
   async discoverAndApply(
     userInput: string,
     confirmCallback?: ConfirmSkillCallback,
@@ -184,23 +129,14 @@ export class SkillService {
   }
 
   // ===========================================================================
-  // Convenience Getters (delegate to registry)
+  // Convenience
   // ===========================================================================
 
-  /** Number of registered skills */
   get skillCount(): number {
     return this.registry.skillCount;
   }
-
-  /** Number of registered commands */
-  get commandCount(): number {
-    return this.registry.commandCount;
-  }
 }
 
-/**
- * Create a skill service with default configuration
- */
 export function createSkillService(config?: SkillServiceConfig): SkillService {
   return new SkillService(config);
 }

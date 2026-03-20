@@ -188,6 +188,31 @@ export interface Skill {
    * @default true
    */
   enabled: boolean;
+
+  // ===========================================================================
+  // Optional Slash Command Integration
+  // ===========================================================================
+
+  /**
+   * Optional slash command trigger (without /).
+   * When set, this skill is also registered as a slash command.
+   * @example "commit", "review-pr"
+   */
+  command?: string;
+
+  /**
+   * Argument hint shown in slash command autocomplete.
+   * Only meaningful when `command` is set.
+   * @example "[message]", "[pr-number] [priority]"
+   */
+  argumentHint?: string;
+
+  /**
+   * Whether content supports argument interpolation ($ARGUMENTS, $1-$99).
+   * Only meaningful when `command` is set.
+   * @default false
+   */
+  supportsArguments?: boolean;
 }
 
 // =============================================================================
@@ -328,17 +353,12 @@ export interface SkillInjection {
  */
 export interface ISkillInjector {
   /**
-   * Inject a skill (no argument interpolation)
+   * Inject a skill (with optional argument interpolation for command-enabled skills)
    */
-  injectSkill(skill: Skill): SkillInjection;
+  injectSkill(skill: Skill, args?: string): SkillInjection;
 
   /**
-   * Inject a slash command (with argument interpolation)
-   */
-  injectCommand(command: SlashCommand, args?: string): SkillInjection;
-
-  /**
-   * Interpolate arguments in content (for slash commands only)
+   * Interpolate arguments in content
    */
   interpolate(content: string, args: string): string;
 }
@@ -348,7 +368,7 @@ export interface ISkillInjector {
 // =============================================================================
 
 /**
- * Combined registry for skills and slash commands
+ * Skill registry — unified storage for skills (including command-enabled skills)
  */
 export interface ISkillRegistry {
   // Skill operations
@@ -358,19 +378,17 @@ export interface ISkillRegistry {
   listSkills(): Skill[];
   listAllSkills(): Skill[];
 
-  // Slash command operations
-  registerCommand(command: SlashCommand): void;
-  unregisterCommand(name: string): void;
-  getCommand(name: string): SlashCommand | undefined;
-  listCommands(): SlashCommand[];
-  hasCommand(name: string): boolean;
+  /**
+   * Find a skill by its command trigger name.
+   * Only returns skills that have the `command` field set.
+   */
+  getSkillByCommand(commandName: string): Skill | undefined;
 
   // Search
   searchSkills(keyword: string): Skill[];
 
   // Counts
   readonly skillCount: number;
-  readonly commandCount: number;
 
   // Clear
   clear(): void;
@@ -422,20 +440,11 @@ export interface ISkillService {
   readonly skillCount: number;
 
   /**
-   * Number of registered commands (convenience getter)
+   * Apply a skill (inject into conversation).
+   * @param skill Skill to apply
+   * @param args Optional arguments (for skills with command trigger)
    */
-  readonly commandCount: number;
-
-  /**
-   * Apply a skill (inject into conversation)
-   */
-  apply(skill: Skill): SkillInjection;
-
-  /**
-   * Apply a slash command with arguments.
-   * Returns a SkillApplicationResult with applied status, injection payload, and optional error.
-   */
-  applyCommand(command: SlashCommand, args?: string): SkillApplicationResult;
+  apply(skill: Skill, args?: string): SkillInjection;
 
   /**
    * Discover skills matching user input

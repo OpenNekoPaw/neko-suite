@@ -129,23 +129,26 @@ export class SkillHandler {
       return { applied: false, error: 'SkillService not initialized' };
     }
 
-    // Look up slash command by name
-    const slashCommand = skillService.registry.getCommand(command);
-    if (!slashCommand) {
+    // Look up skill by command name
+    const skill = skillService.registry.getSkillByCommand(command);
+    if (!skill) {
       return { applied: false, error: `Unknown command: /${command}` };
     }
 
-    // Apply the slash command with argument interpolation
-    const result = skillService.applyCommand(slashCommand, args);
-    if (!result.applied || !result.injection) {
-      return result;
+    // Apply the skill with argument interpolation
+    try {
+      const injection = skillService.apply(skill, args);
+
+      // Send injection to webview for conversation context
+      this._sendSkillInjection(webview, injection);
+
+      return { applied: true, injection };
+    } catch (error) {
+      return {
+        applied: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
-
-    // Send injection to webview for conversation context
-    // Note: SlashCommand doesn't have toolDefinitions, only Skill does
-    this._sendSkillInjection(webview, result.injection);
-
-    return result;
   }
 
   // ===========================================================================

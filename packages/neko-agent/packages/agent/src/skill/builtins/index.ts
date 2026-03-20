@@ -1,15 +1,10 @@
 /**
- * Builtin Skills and Slash Commands - Creative Media Domain
+ * Builtin Skills - Creative Media Domain
  *
- * Neko Suite focuses on creative content creation, so builtin skills are
- * limited to media generation, video editing, and content creation tasks.
- *
- * Key distinction:
- * - Skill: Semantic discovery, no slash command, no argument support
- * - SlashCommand: Explicit /command trigger, supports $ARGUMENTS and $1, $2, etc.
+ * Skills with a `command` field are also registered as slash commands.
  */
 
-import type { Skill, SlashCommand, ISkillRegistry } from '@neko/shared';
+import type { Skill, ISkillRegistry } from '@neko/shared';
 import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
 
 // Re-export ai-generate for external use
@@ -434,21 +429,10 @@ export const builtinSkills: Skill[] = [
 ];
 
 /**
- * All builtin slash commands (explicit /command trigger)
- *
- * Slash commands have been removed from builtin skills.
- * Users can create custom slash commands in .neko/commands/ directory.
- */
-export const builtinCommands: SlashCommand[] = [];
-
-/**
- * Register all builtin skills and commands to a registry
+ * Register all builtin skills to a registry
  */
 export function registerBuiltins(registry: ISkillRegistry): void {
   for (const skill of builtinSkills) {
     registry.registerSkill(skill);
-  }
-  for (const command of builtinCommands) {
-    registry.registerCommand(command);
   }
 }

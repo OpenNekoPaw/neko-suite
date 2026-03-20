@@ -41,7 +41,7 @@ import {
   SlashCommandHandler,
   ConversationMessageHandler,
 } from './handlers';
-import { createSkillService, builtinSkills, builtinCommands } from '@neko/agent';
+import { createSkillService, builtinSkills } from '@neko/agent';
 import { getSkillFileService, type SkillScanResult } from '../services/SkillFileService';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
@@ -185,28 +185,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     for (const skill of builtinSkills) {
       skillService.registry.registerSkill({ ...skill, source: 'builtin' as const, enabled: true });
     }
-    for (const command of builtinCommands) {
-      skillService.registry.registerCommand({
-        ...command,
-        source: 'builtin' as const,
-        enabled: true,
-      });
-    }
     for (const skill of [...scanResult.personal.skills, ...scanResult.project.skills]) {
       skillService.registry.registerSkill(skill);
     }
-    for (const command of [...scanResult.personal.commands, ...scanResult.project.commands]) {
-      skillService.registry.registerCommand(command);
-    }
 
-    logger.info(
-      `Skill registry populated: ${skillService.skillCount} skills, ${skillService.commandCount} commands`,
-      {
-        builtin: builtinSkills.length,
-        personal: scanResult.personal.skills.length,
-        project: scanResult.project.skills.length,
-      },
-    );
+    logger.info(`Skill registry populated: ${skillService.skillCount} skills`, {
+      builtin: builtinSkills.length,
+      personal: scanResult.personal.skills.length,
+      project: scanResult.project.skills.length,
+    });
   }
 
   private _initializeServices(): void {

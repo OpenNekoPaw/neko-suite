@@ -48,11 +48,10 @@ export {
   type SkillServiceConfig,
 } from './skill-service';
 
-// Builtin skills and commands
+// Builtin skills
 export {
   registerBuiltins,
   builtinSkills,
-  builtinCommands,
   // ToolGroups
   builtinToolGroups,
   registerBuiltinToolGroups,
@@ -84,9 +83,6 @@ export type {
   // Core types - Skill (semantic discovery)
   Skill,
   SkillSource,
-
-  // Core types - Slash Command (explicit trigger)
-  SlashCommand,
 
   // Matching
   SkillMatch,
