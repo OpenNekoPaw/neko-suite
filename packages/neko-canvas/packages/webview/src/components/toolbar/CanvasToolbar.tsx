@@ -13,6 +13,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useHistoryStore } from '../../stores/historyStore';
 import { t } from '../../i18n';
+import { PlusIcon, LayersIcon, UndoIcon, RedoIcon } from '@neko/shared/icons';
 
 // =============================================================================
 // Types
@@ -92,19 +93,7 @@ export function CanvasToolbar({
     >
       {/* Add Node Button */}
       <ToolbarButton
-        icon={
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M12 5v14" />
-            <path d="M5 12h14" />
-          </svg>
-        }
+        icon={<PlusIcon size={18} />}
         title={t('toolbar.addNode')}
         isActive={expandedPanel === 'add'}
         onClick={() => togglePanel('add')}
@@ -112,20 +101,7 @@ export function CanvasToolbar({
 
       {/* Layer Panel Toggle */}
       <ToolbarButton
-        icon={
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M12 2L2 7l10 5 10-5-10-5z" />
-            <path d="M2 17l10 5 10-5" />
-            <path d="M2 12l10 5 10-5" />
-          </svg>
-        }
+        icon={<LayersIcon size={18} />}
         title={t('toolbar.layers')}
         isActive={isLayerPanelOpen}
         onClick={onToggleLayerPanel}
@@ -135,19 +111,7 @@ export function CanvasToolbar({
 
       {/* Undo */}
       <ToolbarButton
-        icon={
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M3 7v6h6" />
-            <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13" />
-          </svg>
-        }
+        icon={<UndoIcon size={18} />}
         title={`${t('toolbar.undo')} (⌘Z)`}
         onClick={onUndo}
         disabled={!canUndo}
@@ -155,19 +119,7 @@ export function CanvasToolbar({
 
       {/* Redo */}
       <ToolbarButton
-        icon={
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M21 7v6h-6" />
-            <path d="M3 17a9 9 0 019-9 9 9 0 016 2.3L21 13" />
-          </svg>
-        }
+        icon={<RedoIcon size={18} />}
         title={`${t('toolbar.redo')} (⇧⌘Z)`}
         onClick={onRedo}
         disabled={!canRedo}
@@ -194,18 +146,29 @@ export function CanvasToolbar({
 
       {expandedPanel === 'add' && (
         <div
-          className="absolute left-full top-0 ml-1 py-[4px] min-w-[220px]"
+          className="absolute left-full top-0 ml-1.5"
           style={{
-            backgroundColor: 'var(--vscode-menu-background, #252526)',
-            border: '1px solid var(--vscode-menu-border, #454545)',
-            borderRadius: 4,
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.36)',
-            color: 'var(--vscode-menu-foreground, #cccccc)',
+            minWidth: 210,
+            padding: '5px',
+            background: 'rgba(32, 32, 36, 0.92)',
+            backdropFilter: 'blur(22px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(22px) saturate(180%)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 12,
+            boxShadow: '0 16px 48px rgba(0,0,0,0.60), 0 2px 8px rgba(0,0,0,0.40)',
+            color: 'var(--toolbar-fg, #e8e8ed)',
           }}
         >
           <div
-            className="px-[28px] py-[4px] text-[11px] uppercase tracking-wide"
-            style={{ color: 'var(--vscode-descriptionForeground, #717171)' }}
+            style={{
+              padding: '4px 10px 4px 12px',
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: 'var(--toolbar-fg-secondary, #8e8e93)',
+              userSelect: 'none',
+            }}
           >
             {t('toolbar.addNode')}
           </div>
@@ -251,13 +214,23 @@ export function CanvasToolbar({
           />
 
           <div
-            className="my-[4px] mx-0 h-px"
-            style={{ backgroundColor: 'var(--vscode-menu-separatorBackground, #454545)' }}
+            style={{
+              height: 1,
+              margin: '4px 4px',
+              background: 'rgba(255,255,255,0.07)',
+            }}
           />
 
           <div
-            className="px-[28px] py-[4px] text-[11px] uppercase tracking-wide"
-            style={{ color: 'var(--vscode-descriptionForeground, #717171)' }}
+            style={{
+              padding: '4px 10px 4px 12px',
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: 'var(--toolbar-fg-secondary, #8e8e93)',
+              userSelect: 'none',
+            }}
           >
             {t('toolbar.addMedia')}
           </div>
@@ -347,33 +320,52 @@ interface AddPanelItemProps {
 function AddPanelItem({ icon, label, shortcut, onClick }: AddPanelItemProps) {
   return (
     <button
-      className="w-full h-[26px] px-0 flex items-center text-[12px] text-left border-0 bg-transparent"
       style={{
-        color: 'var(--vscode-menu-foreground, #cccccc)',
+        display: 'flex',
+        alignItems: 'center',
+        width: '100%',
+        height: 28,
+        padding: '0 6px 0 4px',
+        fontSize: 13,
+        textAlign: 'left',
+        border: 'none',
+        borderRadius: 7,
+        background: 'transparent',
+        color: 'var(--toolbar-fg, #e8e8ed)',
         cursor: 'pointer',
-        fontFamily: 'var(--vscode-font-family)',
+        fontFamily: 'var(--vscode-font-family, inherit)',
+        transition: 'background 0.1s ease',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = 'var(--vscode-menu-selectionBackground, #094771)';
-        e.currentTarget.style.color = 'var(--vscode-menu-selectionForeground, #ffffff)';
+        e.currentTarget.style.background = 'rgba(59,130,246,0.75)';
+        e.currentTarget.style.color = '#fff';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = 'transparent';
-        e.currentTarget.style.color = 'var(--vscode-menu-foreground, #cccccc)';
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.color = 'var(--toolbar-fg, #e8e8ed)';
       }}
       onClick={onClick}
     >
-      {/* Icon area - fixed width for alignment (matches ContextMenu) */}
-      <span className="w-[28px] flex-shrink-0 flex items-center justify-center text-[13px]">
+      <span
+        style={{
+          width: 26,
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 13,
+        }}
+      >
         {icon}
       </span>
-      {/* Label */}
-      <span className="flex-1 pr-4">{label}</span>
-      {/* Shortcut */}
+      <span style={{ flex: 1, paddingRight: 12 }}>{label}</span>
       {shortcut && (
         <span
-          className="pr-[10px] text-[11px]"
-          style={{ color: 'var(--vscode-descriptionForeground, #717171)' }}
+          style={{
+            fontSize: 11,
+            paddingRight: 4,
+            color: 'rgba(232,232,237,0.35)',
+          }}
         >
           {shortcut}
         </span>

@@ -1,5 +1,6 @@
 import { OpenTab, TabType } from '@/components/types';
 import { useTranslation } from '@/i18n/I18nContext';
+import { CloseIcon } from '@neko/shared/icons';
 
 interface TabBarProps {
   tabs: OpenTab[];
@@ -28,14 +29,7 @@ export function TabBar({ tabs, activeTabId, activeView, onSwitchTab, onCloseTab 
             onClick={(e) => onCloseTab(tab.id, e)}
             className="opacity-0 group-hover:opacity-100 hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded p-0.5 transition-opacity flex-shrink-0"
           >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <CloseIcon className="w-3 h-3" />
           </button>
         </div>
       ))}

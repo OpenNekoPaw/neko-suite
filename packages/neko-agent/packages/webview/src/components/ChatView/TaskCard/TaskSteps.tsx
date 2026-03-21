@@ -5,6 +5,7 @@
 import { useState, useCallback } from 'react';
 import type { TaskStep } from '@/components/TaskListView';
 import { formatDuration, getStepStatusIcon, getStepStatusColor } from './task-utils';
+import { ChevronRightIcon as ChevronIcon } from '@neko/shared/icons';
 
 interface TaskStepsProps {
   steps: TaskStep[];
@@ -85,10 +86,4 @@ export function TaskSteps({ steps, currentStepId }: TaskStepsProps) {
   );
 }
 
-export function ChevronIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
-  );
-}
+export { ChevronRightIcon as ChevronIcon } from '@neko/shared/icons';

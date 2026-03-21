@@ -82,7 +82,7 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
         className="flex items-center gap-1 px-2 py-1 text-[11px] text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-colors"
       >
         {getSelectedLabel()}
-        <ChevronDownIcon />
+        <ChevronDownIcon className="w-3 h-3" />
       </button>
 
       {isOpen && (

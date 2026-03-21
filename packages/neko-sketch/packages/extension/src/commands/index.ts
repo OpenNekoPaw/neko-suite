@@ -30,7 +30,7 @@ function getSketchTemplate(name: string, width = 1920, height = 1080): string {
     layers: [
       {
         id: 'layer-1',
-        name: 'Background',
+        name: vscode.l10n.t('neko.sketch.template.layer.background'),
         type: 'fill',
         visible: true,
         locked: false,
@@ -46,7 +46,7 @@ function getSketchTemplate(name: string, width = 1920, height = 1080): string {
       },
       {
         id: 'layer-2',
-        name: 'Layer 1',
+        name: vscode.l10n.t('neko.sketch.template.layer.default'),
         type: 'raster',
         visible: true,
         locked: false,

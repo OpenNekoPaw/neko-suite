@@ -32,6 +32,25 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "themes": [
+      {
+        "label": "Neko macOS Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/neko-macos-dark-color-theme.json"
+      },
+      {
+        "label": "Neko macOS Light",
+        "uiTheme": "vs",
+        "path": "./themes/neko-macos-light-color-theme.json"
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "neko-file-icons",
+        "label": "Neko File Icons",
+        "path": "./themes/neko-file-icon-theme.json"
+      }
+    ],
     "languages": [
       {
         "id": "nekotools-jvi",

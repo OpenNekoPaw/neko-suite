@@ -74,7 +74,7 @@ export function PropertyPanel({
       >
         <PanelHeader title={t('panel.properties')} />
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+          <p className="text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
             {t('panel.noSelection')}
           </p>
         </div>
@@ -91,7 +91,9 @@ export function PropertyPanel({
       style={{
         backgroundColor: 'var(--toolbar-bg)',
         borderLeft: '1px solid var(--toolbar-border)',
-        width: 240,
+        width,
+        minWidth: 200,
+        maxWidth: 400,
       }}
     >
       <PanelHeader
@@ -146,14 +148,25 @@ export function PropertyPanel({
           {/* Layer */}
           <PanelSection title={t('panel.layer')}>
             <div className="flex items-center justify-between">
-              <span className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+              <span className="text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
                 Z-Index: {node.zIndex}
               </span>
               <button
-                className="text-xs px-2 py-1 rounded transition-colors"
                 style={{
-                  color: node.locked ? '#eab308' : 'var(--toolbar-fg-secondary)',
-                  backgroundColor: 'var(--control-hover)',
+                  fontSize: 11,
+                  padding: '3px 8px',
+                  borderRadius: 5,
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s',
+                  color: node.locked ? '#ffffff' : '#ffffff',
+                  backgroundColor: node.locked ? '#f59e0b' : '#6b7280',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = node.locked ? '#d97706' : '#4b5563';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = node.locked ? '#f59e0b' : '#6b7280';
                 }}
                 onClick={() => onToggleLock(node.id)}
               >
@@ -176,16 +189,22 @@ export function PropertyPanel({
           {/* Actions */}
           <PanelSection title={t('panel.actions')}>
             <button
-              className="w-full text-xs py-1.5 rounded transition-colors"
               style={{
-                backgroundColor: 'var(--button-secondary-bg)',
-                color: '#f48771',
+                width: '100%',
+                fontSize: 12,
+                padding: '5px 0',
+                borderRadius: 6,
+                border: 'none',
+                backgroundColor: '#ef4444',
+                color: '#ffffff',
+                cursor: 'pointer',
+                transition: 'background 0.15s',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = '0.85';
+                e.currentTarget.style.backgroundColor = '#dc2626';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = '1';
+                e.currentTarget.style.backgroundColor = '#ef4444';
               }}
               onClick={() => onDeleteNode(node.id)}
             >
@@ -205,10 +224,17 @@ export function PropertyPanel({
 function PanelHeader({ title }: { title: string }) {
   return (
     <div
-      className="flex items-center px-3 py-2 text-sm font-medium"
+      className="flex items-center px-3 shrink-0"
       style={{
-        color: 'var(--toolbar-fg)',
+        height: 36,
+        color: 'var(--panel-fg)',
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: '0.02em',
         borderBottom: '1px solid var(--toolbar-border)',
+        /* 与 canvas titlebar 背景统一，稍深于 panel body */
+        backgroundColor: 'rgba(0,0,0,0.12)',
+        userSelect: 'none',
       }}
     >
       {title}
@@ -218,8 +244,25 @@ function PanelHeader({ title }: { title: string }) {
 
 function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="px-3 py-2" style={{ borderBottom: '1px solid var(--toolbar-border)' }}>
-      <div className="text-xs font-medium mb-2" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+    <div
+      className="px-3"
+      style={{
+        paddingTop: 10,
+        paddingBottom: 10,
+        borderBottom: '1px solid var(--panel-divider)',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: 'var(--panel-fg-secondary)',
+          marginBottom: 8,
+          userSelect: 'none',
+        }}
+      >
         {title}
       </div>
       {children}
@@ -245,25 +288,42 @@ function NumberField({
   );
 
   return (
-    <div className="flex items-center gap-1">
-      <span className="text-xs w-4 text-center" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+    <div className="flex items-center gap-1.5">
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          width: 14,
+          textAlign: 'center',
+          color: 'var(--panel-fg-secondary)',
+          userSelect: 'none',
+          flexShrink: 0,
+        }}
+      >
         {label}
       </span>
       <input
         type="number"
         value={Math.round(value)}
         onChange={handleChange}
-        className="flex-1 w-full text-xs px-1.5 py-1 rounded border outline-none"
+        className="flex-1 min-w-0 outline-none"
         style={{
+          fontSize: 12,
+          padding: '3px 6px',
+          borderRadius: 5,
+          border: '1px solid var(--control-border)',
           backgroundColor: 'var(--control-bg)',
-          borderColor: 'var(--control-border)',
-          color: 'var(--toolbar-fg)',
+          color: 'var(--control-fg)',
+          fontVariantNumeric: 'tabular-nums',
+          transition: 'border-color 0.15s, box-shadow 0.15s',
         }}
         onFocus={(e) => {
-          e.currentTarget.style.borderColor = 'var(--node-selected)';
+          e.currentTarget.style.borderColor = 'var(--accent-blue)';
+          e.currentTarget.style.boxShadow = '0 0 0 2.5px rgba(59,130,246,0.20)';
         }}
         onBlur={(e) => {
-          e.currentTarget.style.borderColor = 'var(--toolbar-border)';
+          e.currentTarget.style.borderColor = 'var(--control-border)';
+          e.currentTarget.style.boxShadow = 'none';
         }}
       />
     </div>
@@ -278,7 +338,7 @@ function MultiSelectionInfo({ nodes }: { nodes: CanvasNode[] }) {
 
   return (
     <div className="px-3 py-3">
-      <p className="text-xs mb-2" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+      <p className="text-xs mb-2" style={{ color: 'var(--panel-fg-secondary)' }}>
         {t('panel.multiSelected', { count: nodes.length })}
       </p>
       <div className="space-y-1">
@@ -286,10 +346,10 @@ function MultiSelectionInfo({ nodes }: { nodes: CanvasNode[] }) {
           <div
             key={type}
             className="flex items-center justify-between text-xs"
-            style={{ color: 'var(--toolbar-fg)' }}
+            style={{ color: 'var(--panel-fg)' }}
           >
             <span>{getNodeTypeLabel(type)}</span>
-            <span style={{ color: 'var(--toolbar-fg-secondary)' }}>×{count}</span>
+            <span style={{ color: 'var(--panel-fg-secondary)' }}>×{count}</span>
           </div>
         ))}
       </div>
@@ -316,7 +376,7 @@ function NodeSpecificProperties({
             style={{
               backgroundColor: 'var(--control-bg)',
               borderColor: 'var(--control-border)',
-              color: 'var(--toolbar-fg)',
+              color: 'var(--control-fg)',
               minHeight: 60,
             }}
             value={(data.content as string) ?? ''}
@@ -338,7 +398,7 @@ function NodeSpecificProperties({
             <div>
               <label
                 className="text-xs block mb-1"
-                style={{ color: 'var(--toolbar-fg-secondary)' }}
+                style={{ color: 'var(--panel-fg-secondary)' }}
               >
                 {t('panel.title')}
               </label>
@@ -348,7 +408,7 @@ function NodeSpecificProperties({
                 style={{
                   backgroundColor: 'var(--control-bg)',
                   borderColor: 'var(--control-border)',
-                  color: 'var(--toolbar-fg)',
+                  color: 'var(--control-fg)',
                 }}
                 value={(data.title as string) ?? ''}
                 onChange={(e) => onUpdateData({ title: e.target.value })}
@@ -357,7 +417,7 @@ function NodeSpecificProperties({
             <div>
               <label
                 className="text-xs block mb-1"
-                style={{ color: 'var(--toolbar-fg-secondary)' }}
+                style={{ color: 'var(--panel-fg-secondary)' }}
               >
                 {t('panel.description')}
               </label>
@@ -366,7 +426,7 @@ function NodeSpecificProperties({
                 style={{
                   backgroundColor: 'var(--control-bg)',
                   borderColor: 'var(--control-border)',
-                  color: 'var(--toolbar-fg)',
+                  color: 'var(--control-fg)',
                   minHeight: 40,
                 }}
                 value={(data.description as string) ?? ''}
@@ -385,7 +445,7 @@ function NodeSpecificProperties({
             <div>
               <label
                 className="text-xs block mb-1"
-                style={{ color: 'var(--toolbar-fg-secondary)' }}
+                style={{ color: 'var(--panel-fg-secondary)' }}
               >
                 {t('panel.fontSize')}
               </label>
@@ -394,7 +454,7 @@ function NodeSpecificProperties({
                 style={{
                   backgroundColor: 'var(--control-bg)',
                   borderColor: 'var(--control-border)',
-                  color: 'var(--toolbar-fg)',
+                  color: 'var(--control-fg)',
                 }}
                 value={(textStyle.fontSize as number) ?? 14}
                 onChange={(e) =>
@@ -411,7 +471,7 @@ function NodeSpecificProperties({
               </select>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+              <label className="text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
                 {t('panel.fontWeight')}
               </label>
               <button
@@ -420,7 +480,7 @@ function NodeSpecificProperties({
                   backgroundColor:
                     textStyle.fontWeight === 'bold' ? 'var(--node-selected)' : 'var(--control-bg)',
                   borderColor: 'var(--control-border)',
-                  color: 'var(--toolbar-fg)',
+                  color: textStyle.fontWeight === 'bold' ? 'var(--panel-fg)' : 'var(--control-fg)',
                   fontWeight: 'bold',
                 }}
                 onClick={() =>
@@ -438,7 +498,7 @@ function NodeSpecificProperties({
             <div>
               <label
                 className="text-xs block mb-1"
-                style={{ color: 'var(--toolbar-fg-secondary)' }}
+                style={{ color: 'var(--panel-fg-secondary)' }}
               >
                 {t('panel.textAlign')}
               </label>
@@ -446,14 +506,26 @@ function NodeSpecificProperties({
                 {(['left', 'center', 'right'] as const).map((align) => (
                   <button
                     key={align}
-                    className="flex-1 text-xs py-0.5 rounded border transition-colors"
                     style={{
+                      flex: 1,
+                      fontSize: 11,
+                      padding: '3px 0',
+                      borderRadius: 5,
+                      border: '1px solid',
+                      cursor: 'pointer',
+                      transition: 'background 0.15s, border-color 0.15s',
                       backgroundColor:
                         (textStyle.textAlign ?? 'left') === align
-                          ? 'var(--node-selected)'
-                          : 'var(--control-bg)',
-                      borderColor: 'var(--control-border)',
-                      color: 'var(--toolbar-fg)',
+                          ? 'rgba(59,130,246,0.20)'
+                          : 'rgba(0,0,0,0.18)',
+                      borderColor:
+                        (textStyle.textAlign ?? 'left') === align
+                          ? 'rgba(59,130,246,0.45)'
+                          : 'var(--control-border)',
+                      color:
+                        (textStyle.textAlign ?? 'left') === align
+                          ? '#93bbfd'
+                          : 'var(--panel-fg)',
                     }}
                     onClick={() => onUpdateData({ style: { ...textStyle, textAlign: align } })}
                   >
@@ -463,7 +535,7 @@ function NodeSpecificProperties({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+              <label className="text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
                 {t('panel.textColor')}
               </label>
               <input
@@ -486,7 +558,7 @@ function NodeSpecificProperties({
             <div>
               <label
                 className="text-xs block mb-1"
-                style={{ color: 'var(--toolbar-fg-secondary)' }}
+                style={{ color: 'var(--panel-fg-secondary)' }}
               >
                 {t('panel.groupLabel')}
               </label>
@@ -496,14 +568,14 @@ function NodeSpecificProperties({
                 style={{
                   backgroundColor: 'var(--control-bg)',
                   borderColor: 'var(--control-border)',
-                  color: 'var(--toolbar-fg)',
+                  color: 'var(--control-fg)',
                 }}
                 value={(data.label as string) ?? ''}
                 onChange={(e) => onUpdateData({ label: e.target.value })}
               />
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+              <label className="text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
                 {t('panel.groupColor')}
               </label>
               <input
@@ -516,7 +588,7 @@ function NodeSpecificProperties({
             <div>
               <label
                 className="text-xs block mb-1"
-                style={{ color: 'var(--toolbar-fg-secondary)' }}
+                style={{ color: 'var(--panel-fg-secondary)' }}
               >
                 {t('panel.groupChildren')} ({childIds.length})
               </label>
@@ -524,7 +596,7 @@ function NodeSpecificProperties({
                 {childIds.length === 0 ? (
                   <span
                     className="text-[10px] italic"
-                    style={{ color: 'var(--toolbar-fg-secondary)' }}
+                    style={{ color: 'var(--panel-fg-secondary)' }}
                   >
                     {t('group.empty')}
                   </span>
@@ -535,7 +607,7 @@ function NodeSpecificProperties({
                       className="text-[10px] px-1.5 py-0.5 rounded truncate"
                       style={{
                         backgroundColor: 'var(--control-bg)',
-                        color: 'var(--toolbar-fg)',
+                        color: 'var(--control-fg)',
                       }}
                     >
                       {id.slice(-8)}
@@ -552,10 +624,10 @@ function NodeSpecificProperties({
     case 'media':
       return (
         <PanelSection title={t('panel.media')}>
-          <div className="space-y-1 text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+          <div className="space-y-1 text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
             <div className="flex justify-between">
               <span>{t('panel.type')}</span>
-              <span style={{ color: 'var(--toolbar-fg)' }}>
+              <span style={{ color: 'var(--panel-fg)' }}>
                 {(data.mediaType as string) ?? 'unknown'}
               </span>
             </div>
@@ -567,7 +639,7 @@ function NodeSpecificProperties({
             {data.duration != null && (
               <div className="flex justify-between">
                 <span>{t('panel.duration')}</span>
-                <span style={{ color: 'var(--toolbar-fg)' }}>
+                <span style={{ color: 'var(--panel-fg)' }}>
                   {formatDuration(data.duration as number)}
                 </span>
               </div>
@@ -597,7 +669,7 @@ function ConnectionProperties({
           style={{
             backgroundColor: 'var(--control-bg)',
             borderColor: 'var(--control-border)',
-            color: 'var(--toolbar-fg)',
+            color: 'var(--control-fg)',
           }}
           value={connection.label ?? ''}
           placeholder={t('panel.connectionLabelPlaceholder')}
@@ -617,7 +689,7 @@ function ConnectionProperties({
           style={{
             backgroundColor: 'var(--control-bg)',
             borderColor: 'var(--control-border)',
-            color: 'var(--toolbar-fg)',
+            color: 'var(--control-fg)',
           }}
           value={connection.type ?? 'default'}
           onChange={(e) => onUpdate?.(connection.id, { type: e.target.value as ConnectionType })}
@@ -629,22 +701,22 @@ function ConnectionProperties({
       </PanelSection>
 
       <PanelSection title={t('panel.connectionInfo')}>
-        <div className="space-y-1 text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+        <div className="space-y-1 text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
           <div className="flex justify-between">
             <span>ID</span>
-            <span className="truncate max-w-[120px]" style={{ color: 'var(--toolbar-fg)' }}>
+            <span className="truncate max-w-[120px]" style={{ color: 'var(--panel-fg)' }}>
               {connection.id.slice(-8)}
             </span>
           </div>
           <div className="flex justify-between">
             <span>Source</span>
-            <span className="truncate max-w-[120px]" style={{ color: 'var(--toolbar-fg)' }}>
+            <span className="truncate max-w-[120px]" style={{ color: 'var(--panel-fg)' }}>
               {connection.sourceId.slice(-8)}
             </span>
           </div>
           <div className="flex justify-between">
             <span>Target</span>
-            <span className="truncate max-w-[120px]" style={{ color: 'var(--toolbar-fg)' }}>
+            <span className="truncate max-w-[120px]" style={{ color: 'var(--panel-fg)' }}>
               {connection.targetId.slice(-8)}
             </span>
           </div>

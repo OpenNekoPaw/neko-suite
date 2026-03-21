@@ -81,7 +81,7 @@ export const TimelineRuler = memo(function TimelineRuler({
         style={{ height: RULER_HEIGHT }}
         onClick={handleRulerClick}
       >
-        <div className="relative h-full" style={{ width: timelineWidth }}>
+        <div className="relative h-full" style={{ minWidth: timelineWidth, width: '100%' }}>
           {timeMarkers.map((time) => (
             <div
               key={time}

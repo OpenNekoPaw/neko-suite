@@ -11,16 +11,16 @@ import {
   SketchCanvas,
   Toolbar,
   BrushPanel,
-  ColorPanel,
   LayerPanel,
   FrameTimeline,
   FrameControls,
   FilterPanel,
   ParticlePanel,
   ScenePanel,
-  AtmospherePanel,
   PalettePanel,
   SpriteSheetPlayer,
+  VectorToolbar,
+  CollapsiblePanel,
 } from './components';
 import { deserializeDocument, serializeDocument } from './utils/document-serializer';
 import { dispatchKeyboardAction } from './utils/keyboard-dispatcher';
@@ -186,19 +186,40 @@ export function App() {
                 style={{ touchAction: 'none' }}
               />
               <div
-                className="flex flex-col flex-shrink-0 border-l border-[var(--sketch-border)] overflow-y-auto"
+                className="flex-shrink-0 overflow-hidden border-l border-[var(--sketch-border)]"
                 style={{ width: sidebarWidth }}
               >
-                <BrushPanel />
-                <ColorPanel />
-                <PalettePanel />
-                <LayerPanel />
-                <FilterPanel />
-                <FrameControls />
-                <SpriteSheetPlayer />
-                <ParticlePanel />
-                <ScenePanel />
-                <AtmospherePanel />
+                <div className="flex flex-col h-full overflow-y-auto">
+                  <CollapsiblePanel titleKey={activeTool === 'eraser' ? 'sketch.tool.eraser' : 'sketch.panel.brush'}>
+                    <BrushPanel />
+                  </CollapsiblePanel>
+                  {activeTool === 'shape' && (
+                    <CollapsiblePanel titleKey="sketch.panel.vector">
+                      <VectorToolbar />
+                    </CollapsiblePanel>
+                  )}
+                  <CollapsiblePanel titleKey="sketch.panel.palette">
+                    <PalettePanel />
+                  </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.layers">
+                    <LayerPanel />
+                  </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.filters" defaultExpanded={false}>
+                    <FilterPanel />
+                  </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.frames" defaultExpanded={false}>
+                    <FrameControls />
+                  </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.spritesheet" defaultExpanded={false}>
+                    <SpriteSheetPlayer />
+                  </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.particles" defaultExpanded={false}>
+                    <ParticlePanel />
+                  </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.scene" defaultExpanded={false}>
+                    <ScenePanel />
+                  </CollapsiblePanel>
+                </div>
               </div>
             </>
           )}

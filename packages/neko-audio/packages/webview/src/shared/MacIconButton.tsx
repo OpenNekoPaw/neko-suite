@@ -36,10 +36,12 @@ export function MacIconButton({
 
   const variantClasses =
     variant === 'primary'
-      ? 'bg-neko-preview-text-primary text-neko-preview-bg hover:scale-105'
-      : 'bg-transparent text-neko-preview-text-secondary hover:text-neko-preview-text-primary hover:scale-110';
+      ? 'bg-neko-preview-primary text-white shadow-neko-sm hover:opacity-90 active:scale-95'
+      : 'bg-[var(--btn-bg)] border border-[var(--btn-border)] text-[var(--editor-fg)] hover:bg-[var(--btn-bg-hover)] active:bg-[var(--btn-bg-active)] active:scale-95 transition-all duration-100';
 
-  const activeClass = active ? 'bg-neko-glass-active' : '';
+  const activeClass = active
+    ? '!bg-[var(--accent)] !text-white !border-transparent shadow-neko-sm'
+    : '';
   const { button: buttonSize } = sizeClasses[size];
 
   return (

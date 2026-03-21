@@ -4,6 +4,7 @@
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { SendIcon, StopIcon, PlusIcon } from '@neko/shared/icons';
 import { ModelSelector } from './ModelSelector';
 import { MediaModelSelector } from './MediaModelSelector';
 import { ModeSelector } from './ModeSelector';
@@ -525,34 +526,5 @@ export function InputArea({
   );
 }
 
-// Icons
-function SendIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M5 10l7-7m0 0l7 7m-7-7v18"
-      />
-    </svg>
-  );
-}
-
-function StopIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
-      <rect x="6" y="6" width="12" height="12" rx="1" />
-    </svg>
-  );
-}
-
-function PlusIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-    </svg>
-  );
-}
 
 export type { MessageAttachment, ProjectFile };

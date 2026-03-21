@@ -5,5 +5,7 @@
   "neko.sketch.new.noFolder": "未打开工作区文件夹",
   "neko.puppet.new.title": "新建 Puppet",
   "neko.puppet.new.noFolder": "未打开工作区文件夹",
-  "neko.puppet.import.filter": "Inochi2D Puppet"
+  "neko.puppet.import.filter": "Inochi2D Puppet",
+  "neko.sketch.template.layer.background": "背景",
+  "neko.sketch.template.layer.default": "图层 1"
 }

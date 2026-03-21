@@ -262,16 +262,25 @@ const PropertyGroup = memo(function PropertyGroup({
   const [expanded, setExpanded] = useState(disabled ? false : defaultExpanded);
 
   return (
-    <div className="border-b border-[var(--vscode-panel-border)]">
-      <button
-        className="w-full flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <span className={`transform transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
-        {t(titleKey)}
+    <div className="nk-prop-group">
+      <button className="nk-prop-group-header" onClick={() => setExpanded(!expanded)}>
+        <svg
+          className={`nk-prop-group-chevron ${expanded ? 'expanded' : ''}`}
+          viewBox="0 0 12 12"
+          fill="none"
+        >
+          <path
+            d="M4 2.5L7.5 6 4 9.5"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className="nk-prop-group-title">{t(titleKey)}</span>
       </button>
       {expanded && (
-        <div className={`px-2 pb-2 space-y-1.5 ${disabled ? 'opacity-50' : ''}`}>{children}</div>
+        <div className={`nk-prop-group-body ${disabled ? 'opacity-50' : ''}`}>{children}</div>
       )}
     </div>
   );
@@ -724,10 +733,10 @@ export const PropertyPanel = memo(function PropertyPanel({
   const isDisabled = !element;
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="nk-prop-panel">
       {/* AI Actions Button - show when element is selected */}
       {element && onExecuteAIAction && (
-        <div className="p-2 border-b border-[var(--vscode-panel-border)]">
+        <div className="px-2 py-2 border-b border-[var(--nk-border)]">
           <AIActionsButton element={element} onExecuteAction={onExecuteAIAction} />
         </div>
       )}
@@ -749,12 +758,10 @@ export const PropertyPanel = memo(function PropertyPanel({
       >
         {renderPropertyRows(TRANSFORM_PROPERTIES, 'animTransform')}
         {/* Blend Mode selector */}
-        <div className="flex items-center gap-2 px-1 py-0.5">
-          <label className="text-xs text-muted-foreground whitespace-nowrap min-w-[72px]">
-            {t('blendMode.title')}
-          </label>
+        <div className="nk-prop-row">
+          <label className="nk-prop-label">{t('blendMode.title')}</label>
           <select
-            className="flex-1 h-6 text-xs bg-input border border-border rounded px-1 text-foreground"
+            className="nk-prop-input"
             value={element?.blendMode ?? 'normal'}
             onChange={(e) => handleBlendModeChange(e.target.value)}
             disabled={isDisabled}

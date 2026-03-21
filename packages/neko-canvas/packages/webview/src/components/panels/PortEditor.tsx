@@ -92,7 +92,7 @@ export function PortEditor({ node, onUpdatePorts }: PortEditorProps) {
   return (
     <div className="px-3 py-2" style={{ borderBottom: '1px solid var(--toolbar-border)' }}>
       <div className="flex items-center justify-between mb-2">
-        <div className="text-xs font-medium" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+        <div className="text-xs font-medium" style={{ color: 'var(--panel-fg-secondary)' }}>
           {t('panel.ports')}
         </div>
         <div className="flex gap-1">
@@ -101,7 +101,7 @@ export function PortEditor({ node, onUpdatePorts }: PortEditorProps) {
               className="text-[10px] px-1.5 py-0.5 rounded transition-colors"
               style={{
                 backgroundColor: 'var(--control-bg)',
-                color: 'var(--toolbar-fg)',
+                color: 'var(--panel-fg)',
                 border: '1px solid var(--control-border)',
               }}
               onClick={handleCustomize}
@@ -114,7 +114,7 @@ export function PortEditor({ node, onUpdatePorts }: PortEditorProps) {
                 className="text-[10px] px-1.5 py-0.5 rounded transition-colors"
                 style={{
                   backgroundColor: 'var(--control-bg)',
-                  color: 'var(--toolbar-fg)',
+                  color: 'var(--panel-fg)',
                   border: '1px solid var(--control-border)',
                 }}
                 onClick={() => setIsAddingPort(true)}
@@ -125,7 +125,7 @@ export function PortEditor({ node, onUpdatePorts }: PortEditorProps) {
                 className="text-[10px] px-1.5 py-0.5 rounded transition-colors"
                 style={{
                   backgroundColor: 'var(--control-bg)',
-                  color: 'var(--toolbar-fg-secondary)',
+                  color: 'var(--panel-fg-secondary)',
                   border: '1px solid var(--control-border)',
                 }}
                 onClick={handleResetToDefault}
@@ -142,7 +142,7 @@ export function PortEditor({ node, onUpdatePorts }: PortEditorProps) {
       {!hasCustomPorts && (
         <div
           className="text-[10px] italic mb-1.5"
-          style={{ color: 'var(--toolbar-fg-secondary)' }}
+          style={{ color: 'var(--panel-fg-secondary)' }}
         >
           {t('panel.defaultPorts')}
         </div>
@@ -151,7 +151,7 @@ export function PortEditor({ node, onUpdatePorts }: PortEditorProps) {
       {/* Port list */}
       <div className="space-y-1.5">
         {activePorts.length === 0 ? (
-          <div className="text-[10px] italic" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+          <div className="text-[10px] italic" style={{ color: 'var(--panel-fg-secondary)' }}>
             No ports
           </div>
         ) : (
@@ -219,7 +219,7 @@ function PortItem({
           className="flex-1 min-w-0 text-[10px] px-1 py-0 rounded border-0 outline-none"
           style={{
             backgroundColor: 'transparent',
-            color: 'var(--toolbar-fg)',
+            color: 'var(--panel-fg)',
           }}
           value={port.label ?? port.id}
           onChange={(e) => onUpdate({ label: e.target.value || undefined })}
@@ -231,7 +231,7 @@ function PortItem({
           }}
         />
       ) : (
-        <span className="flex-1 truncate" style={{ color: 'var(--toolbar-fg)' }}>
+        <span className="flex-1 truncate" style={{ color: 'var(--panel-fg)' }}>
           {port.label ?? port.id}
         </span>
       )}
@@ -265,7 +265,7 @@ function PortItem({
           className="text-[10px] px-0.5 py-0 rounded border-0 outline-none w-10"
           style={{
             backgroundColor: 'transparent',
-            color: 'var(--toolbar-fg-secondary)',
+            color: 'var(--panel-fg-secondary)',
           }}
           value={port.position}
           onChange={(e) => onUpdate({ position: e.target.value as ConnectionAnchor })}
@@ -277,7 +277,7 @@ function PortItem({
           ))}
         </select>
       ) : (
-        <span className="flex-shrink-0" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+        <span className="flex-shrink-0" style={{ color: 'var(--panel-fg-secondary)' }}>
           {port.position[0]?.toUpperCase()}
         </span>
       )}
@@ -344,7 +344,7 @@ function AddPortForm({
           style={{
             backgroundColor: 'var(--control-bg)',
             borderColor: isIdValid || id.length === 0 ? 'var(--control-border)' : '#f48771',
-            color: 'var(--toolbar-fg)',
+            color: 'var(--panel-fg)',
           }}
           placeholder="Port ID"
           value={id}
@@ -359,7 +359,7 @@ function AddPortForm({
           style={{
             backgroundColor: 'var(--control-bg)',
             borderColor: 'var(--control-border)',
-            color: 'var(--toolbar-fg)',
+            color: 'var(--panel-fg)',
           }}
           value={type}
           onChange={(e) => handleTypeChange(e.target.value as 'input' | 'output')}
@@ -376,7 +376,7 @@ function AddPortForm({
           style={{
             backgroundColor: 'var(--control-bg)',
             borderColor: 'var(--control-border)',
-            color: 'var(--toolbar-fg)',
+            color: 'var(--panel-fg)',
           }}
           value={dataType}
           onChange={(e) => setDataType(e.target.value as PortDataType)}
@@ -393,7 +393,7 @@ function AddPortForm({
           style={{
             backgroundColor: 'var(--control-bg)',
             borderColor: 'var(--control-border)',
-            color: 'var(--toolbar-fg)',
+            color: 'var(--panel-fg)',
           }}
           value={position}
           onChange={(e) => setPosition(e.target.value as ConnectionAnchor)}
@@ -411,7 +411,7 @@ function AddPortForm({
           className="text-[10px] px-2 py-0.5 rounded transition-colors"
           style={{
             backgroundColor: 'var(--control-bg)',
-            color: 'var(--toolbar-fg-secondary)',
+            color: 'var(--panel-fg-secondary)',
             border: '1px solid var(--control-border)',
           }}
           onClick={onCancel}
@@ -422,7 +422,7 @@ function AddPortForm({
           className="text-[10px] px-2 py-0.5 rounded transition-colors"
           style={{
             backgroundColor: isIdValid ? 'var(--node-selected)' : 'var(--control-bg)',
-            color: isIdValid ? 'white' : 'var(--toolbar-fg-secondary)',
+            color: isIdValid ? 'white' : 'var(--panel-fg-secondary)',
             border: '1px solid var(--control-border)',
             opacity: isIdValid ? 1 : 0.5,
             cursor: isIdValid ? 'pointer' : 'not-allowed',

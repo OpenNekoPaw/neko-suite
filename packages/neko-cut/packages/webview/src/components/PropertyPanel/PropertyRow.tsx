@@ -116,7 +116,8 @@ export const PropertyRow = memo(function PropertyRow({
             onChange={handleNumberChange}
             onBlur={handleNumberCommit}
             disabled={disabled}
-            className="w-20 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-2 py-1 text-[11px] outline-none focus:border-[var(--vscode-focusBorder)] disabled:opacity-50"
+            className="nk-prop-input"
+            style={{ width: '72px', flex: 'none' }}
           />
         );
 
@@ -132,7 +133,7 @@ export const PropertyRow = memo(function PropertyRow({
               onChange={handleNumberChange}
               onPointerUp={handleNumberCommit}
               disabled={disabled}
-              className="flex-1 h-1 accent-[var(--vscode-button-background)]"
+              className="nk-prop-slider"
             />
             <input
               type="number"
@@ -143,7 +144,7 @@ export const PropertyRow = memo(function PropertyRow({
               onChange={handleNumberChange}
               onBlur={handleNumberCommit}
               disabled={disabled}
-              className="w-14 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-1.5 py-0.5 text-[10px] outline-none focus:border-[var(--vscode-focusBorder)] disabled:opacity-50"
+              className="nk-prop-input-sm"
             />
           </div>
         );
@@ -156,7 +157,7 @@ export const PropertyRow = memo(function PropertyRow({
             onChange={handleStringChange}
             onBlur={handleStringCommit}
             disabled={disabled}
-            className="flex-1 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-2 py-1 text-[11px] outline-none focus:border-[var(--vscode-focusBorder)] disabled:opacity-50"
+            className="nk-prop-input"
           />
         );
 
@@ -170,26 +171,29 @@ export const PropertyRow = memo(function PropertyRow({
               if (typeof value === 'boolean') onCommit?.(value);
             }}
             disabled={disabled}
-            className="w-4 h-4 accent-[var(--vscode-button-background)]"
+            className="w-4 h-4"
+            style={{ accentColor: 'var(--nk-accent)' }}
           />
         );
 
       case 'color':
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <input
               type="color"
               value={typeof value === 'string' ? value : '#ffffff'}
               onChange={handleStringChange}
               disabled={disabled}
-              className="w-8 h-6 rounded cursor-pointer border border-[var(--vscode-input-border)]"
+              className="w-7 h-6 cursor-pointer border border-[var(--nk-input-border)] rounded"
+              style={{ padding: '1px 2px', background: 'transparent' }}
             />
             <input
               type="text"
               value={typeof value === 'string' ? value : '#ffffff'}
               onChange={handleStringChange}
               disabled={disabled}
-              className="w-20 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-2 py-1 text-[11px] outline-none focus:border-[var(--vscode-focusBorder)] disabled:opacity-50"
+              className="nk-prop-input"
+              style={{ flex: 1 }}
             />
           </div>
         );
@@ -200,7 +204,7 @@ export const PropertyRow = memo(function PropertyRow({
             value={typeof value === 'string' ? value : ''}
             onChange={handleSelectChange}
             disabled={disabled}
-            className="flex-1 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-2 py-1 text-[11px] outline-none focus:border-[var(--vscode-focusBorder)] disabled:opacity-50"
+            className="nk-prop-input"
           >
             {definition.options?.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -216,18 +220,12 @@ export const PropertyRow = memo(function PropertyRow({
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <label className="w-16 text-[10px] text-[var(--vscode-descriptionForeground)] shrink-0 truncate">
-        {t(definition.labelKey)}
-      </label>
+    <div className="nk-prop-row">
+      <label className="nk-prop-label">{t(definition.labelKey)}</label>
 
       <div className="flex-1 flex items-center">{renderInput()}</div>
 
-      {definition.unit && (
-        <span className="text-[10px] text-[var(--vscode-descriptionForeground)] w-5">
-          {definition.unit}
-        </span>
-      )}
+      {definition.unit && <span className="nk-prop-unit">{definition.unit}</span>}
 
       {definition.animatable && (
         <div className="flex items-center gap-1">
@@ -241,7 +239,7 @@ export const PropertyRow = memo(function PropertyRow({
             <button
               onClick={onRemoveKeyframe}
               disabled={disabled}
-              className="w-4 h-4 flex items-center justify-center rounded hover:bg-[var(--vscode-list-hoverBackground)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-4 h-4 flex items-center justify-center rounded icon-button"
               title={t('propertyPanel.removeKeyframe')}
               aria-label={t('propertyPanel.removeKeyframe')}
             >

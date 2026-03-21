@@ -1,30 +1,41 @@
 /**
  * VectorToolbar - vector drawing tool options
  *
- * Shape tools (path, rectangle, ellipse, polygon) and fill/stroke controls.
+ * Shown in the sidebar when activeTool === 'shape'. Manages its own
+ * activeShape state internally so it can be dropped into the sidebar
+ * without any props from the parent.
+ *
+ * Shape sub-types: path, rectangle, ellipse, polygon, star.
  */
 import { useState } from 'react';
+import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 
 export type VectorShapeTool = 'path' | 'rectangle' | 'ellipse' | 'polygon' | 'star';
 
-interface VectorToolbarProps {
-  onShapeSelect: (shape: VectorShapeTool) => void;
-  activeShape: VectorShapeTool;
-}
-
 const SHAPE_ICONS: Record<VectorShapeTool, string> = {
-  path: '✐',
+  path:      '✐',
   rectangle: '▭',
-  ellipse: '◯',
-  polygon: '⬠',
-  star: '★',
+  ellipse:   '◯',
+  polygon:   '⬠',
+  star:      '★',
 };
 
-export function VectorToolbar({ onShapeSelect, activeShape }: VectorToolbarProps) {
+export function VectorToolbar() {
   const { t } = useTranslation();
+  const setActiveShapeType = useSketchStore((s) => s.setActiveShapeType);
+
+  const [activeShape, setActiveShape] = useState<VectorShapeTool>('rectangle');
   const [polygonSides, setPolygonSides] = useState(6);
-  const [starPoints, setStarPoints] = useState(5);
+  const [starPoints, setStarPoints]     = useState(5);
+
+  const handleShapeSelect = (shape: VectorShapeTool) => {
+    setActiveShape(shape);
+    // Sync overlapping shapes to the store's ShapeType for canvas rendering
+    if (shape === 'rectangle' || shape === 'ellipse') {
+      setActiveShapeType(shape);
+    }
+  };
 
   return (
     <div className="sketch-panel" role="region" aria-label={t('sketch.panel.vector')}>
@@ -35,12 +46,10 @@ export function VectorToolbar({ onShapeSelect, activeShape }: VectorToolbarProps
         {(Object.entries(SHAPE_ICONS) as [VectorShapeTool, string][]).map(([shape, icon]) => (
           <button
             key={shape}
-            className={`flex-1 text-xs py-1 rounded border ${
-              activeShape === shape
-                ? 'border-[var(--vscode-focusBorder)] bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
-                : 'border-[var(--vscode-button-border)] hover:bg-[var(--vscode-button-hoverBackground)]'
+            className={`sketch-button flex-1 justify-center py-1 px-0${
+              activeShape === shape ? ' active' : ''
             }`}
-            onClick={() => onShapeSelect(shape)}
+            onClick={() => handleShapeSelect(shape)}
             title={shape}
             aria-label={shape}
             aria-pressed={activeShape === shape}
@@ -52,8 +61,8 @@ export function VectorToolbar({ onShapeSelect, activeShape }: VectorToolbarProps
 
       {/* Polygon sides */}
       {activeShape === 'polygon' && (
-        <div className="flex items-center gap-1 text-[10px] mb-0.5">
-          <span className="w-10 opacity-60">{t('sketch.vector.sides')}</span>
+        <div className="sketch-panel-row">
+          <label>{t('sketch.vector.sides')}</label>
           <input
             type="range"
             min={3}
@@ -61,17 +70,19 @@ export function VectorToolbar({ onShapeSelect, activeShape }: VectorToolbarProps
             step={1}
             value={polygonSides}
             onChange={(e) => setPolygonSides(parseInt(e.target.value, 10))}
-            className="flex-1 h-3"
+            className="sketch-slider"
             aria-label={t('sketch.vector.sidesLabel')}
           />
-          <span className="w-4 text-right tabular-nums">{polygonSides}</span>
+          <span className="w-4 text-right tabular-nums text-xs" style={{ color: 'var(--sketch-text-secondary)' }}>
+            {polygonSides}
+          </span>
         </div>
       )}
 
       {/* Star points */}
       {activeShape === 'star' && (
-        <div className="flex items-center gap-1 text-[10px] mb-0.5">
-          <span className="w-10 opacity-60">{t('sketch.vector.points')}</span>
+        <div className="sketch-panel-row">
+          <label>{t('sketch.vector.points')}</label>
           <input
             type="range"
             min={3}
@@ -79,10 +90,12 @@ export function VectorToolbar({ onShapeSelect, activeShape }: VectorToolbarProps
             step={1}
             value={starPoints}
             onChange={(e) => setStarPoints(parseInt(e.target.value, 10))}
-            className="flex-1 h-3"
+            className="sketch-slider"
             aria-label={t('sketch.vector.pointsLabel')}
           />
-          <span className="w-4 text-right tabular-nums">{starPoints}</span>
+          <span className="w-4 text-right tabular-nums text-xs" style={{ color: 'var(--sketch-text-secondary)' }}>
+            {starPoints}
+          </span>
         </div>
       )}
     </div>

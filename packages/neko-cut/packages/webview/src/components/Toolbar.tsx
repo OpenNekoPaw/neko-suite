@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useEditorStore } from '../stores/editor-store';
 import { ExportPanel } from './Timeline/ExportPanel';
 import { formatTimeFull } from '../utils';
+import { PlayIcon, PauseIcon, SkipBackIcon, SkipForwardIcon, UndoIcon, RedoIcon, ZoomInIcon, ZoomOutIcon } from '@neko/shared/icons';
 
 export function Toolbar() {
   const {
@@ -37,9 +38,7 @@ export function Toolbar() {
           className="p-1.5 hover:bg-vscode-list-hover rounded text-vscode-fg"
           title="Go to start"
         >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M15 3l-8 7 8 7V3zM5 3v14h2V3H5z" />
-          </svg>
+          <SkipBackIcon className="w-4 h-4" />
         </button>
 
         <button
@@ -57,15 +56,7 @@ export function Toolbar() {
           className="p-2 bg-vscode-button hover:bg-vscode-button-hover rounded text-vscode-button-fg"
           title={isPlaying ? 'Pause' : 'Play'}
         >
-          {isPlaying ? (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M5 4h3v12H5V4zm7 0h3v12h-3V4z" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M6 4l10 6-10 6V4z" />
-            </svg>
-          )}
+          {isPlaying ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4" />}
         </button>
 
         <button
@@ -83,9 +74,7 @@ export function Toolbar() {
           className="p-1.5 hover:bg-vscode-list-hover rounded text-vscode-fg"
           title="Go to end"
         >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M5 3l8 7-8 7V3zm10 0v14h-2V3h2z" />
-          </svg>
+          <SkipForwardIcon className="w-4 h-4" />
         </button>
 
         <span className="ml-2 text-sm font-mono text-vscode-fg">
@@ -101,9 +90,7 @@ export function Toolbar() {
           className="p-1.5 hover:bg-vscode-list-hover rounded disabled:opacity-30 text-vscode-fg"
           title="Undo (Cmd+Z)"
         >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" />
-          </svg>
+          <UndoIcon className="w-4 h-4" />
         </button>
 
         <button
@@ -112,9 +99,7 @@ export function Toolbar() {
           className="p-1.5 hover:bg-vscode-list-hover rounded disabled:opacity-30 text-vscode-fg"
           title="Redo (Cmd+Shift+Z)"
         >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M12.293 3.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 9H9a5 5 0 00-5 5v2a1 1 0 11-2 0v-2a7 7 0 017-7h5.586l-2.293-2.293a1 1 0 010-1.414z" />
-          </svg>
+          <RedoIcon className="w-4 h-4" />
         </button>
 
         <div className="w-px h-4 bg-vscode-panel-border mx-1" />
@@ -161,14 +146,7 @@ export function Toolbar() {
           className="p-1.5 hover:bg-vscode-list-hover rounded text-vscode-fg"
           title="Zoom out"
         >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" />
-            <path
-              fillRule="evenodd"
-              d="M5 8a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1z"
-              clipRule="evenodd"
-            />
-          </svg>
+          <ZoomOutIcon className="w-4 h-4" />
         </button>
 
         <span className="text-xs text-vscode-description w-12 text-center">
@@ -180,14 +158,7 @@ export function Toolbar() {
           className="p-1.5 hover:bg-vscode-list-hover rounded text-vscode-fg"
           title="Zoom in"
         >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" />
-            <path
-              fillRule="evenodd"
-              d="M8 5a1 1 0 011 1v1h1a1 1 0 110 2H9v1a1 1 0 11-2 0V9H6a1 1 0 110-2h1V6a1 1 0 011-1z"
-              clipRule="evenodd"
-            />
-          </svg>
+          <ZoomInIcon className="w-4 h-4" />
         </button>
 
         <div className="w-px h-4 bg-vscode-panel-border mx-1" />

@@ -6,30 +6,33 @@
 
 /* =======================
    neko-audio DAW Design System
-   Own palette — not dependent on vscode-editor-background.
-   Gradient accent is placed in the TransportBar header strip.
+   VSCode token mapping — follows host theme (dark/light/high-contrast).
+   Waveform / selection colors remain DAW-specific.
    ======================= */
 
 @layer base {
   :root {
-    /* === Dark DAW palette — macOS Sonoma dark (pure solid colors) === */
-    --editor-bg:       #1C1C1E;   /* systemBackground dark */
-    --editor-fg:       rgba(255, 255, 255, 0.88);
-    --editor-border:   rgba(255, 255, 255, 0.08);
-    --toolbar-bg:      #2C2C2E;   /* secondarySystemBackground dark */
-    --activity-bg:     #1C1C1E;   /* sidebar — same as bg */
-    --activity-fg:     rgba(255, 255, 255, 0.85);
-    --activity-inactive: rgba(255, 255, 255, 0.35);
-    --accent:          var(--vscode-button-background, #0A84FF);
+    /* === Dark DAW palette — VSCode token mapping (follows host theme) === */
+    --editor-bg:       var(--vscode-editor-background, #1c1c1e);
+    --editor-fg:       var(--vscode-editor-foreground, rgba(255, 255, 255, 0.88));
+    --editor-border:   var(--vscode-panel-border, rgba(255, 255, 255, 0.08));
+    --toolbar-bg:      var(--vscode-sideBar-background, #242426);
+    --activity-bg:     var(--vscode-sideBar-background, #242426);
+    --activity-fg:     var(--vscode-editor-foreground, rgba(255, 255, 255, 0.85));
+    --activity-inactive: var(--vscode-descriptionForeground, rgba(255, 255, 255, 0.35));
+    --accent:          var(--vscode-focusBorder, #0a84ff);
+    --accent-soft:     color-mix(in srgb, var(--accent) 16%, transparent);
+    --accent-glow:     color-mix(in srgb, var(--accent) 35%, transparent);
+    --audio-hover:     rgba(255, 255, 255, 0.06);
 
-    /* Timeline */
-    --timeline-bg:     #2C2C2E;   /* same as toolbar — unified surface */
-    --ruler-bg:        #1C1C1E;   /* ruler = bg level */
-    --track-header-bg: #242426;   /* track header — slightly lighter than bg */
+    /* Timeline — follows VSCode token hierarchy */
+    --timeline-bg:     var(--vscode-editor-background, #1c1c1e);   /* track lanes = editor level */
+    --ruler-bg:        var(--vscode-sideBar-background, #242426);   /* ruler = surface level */
+    --track-header-bg: var(--vscode-sideBar-background, #242426);   /* track labels = surface level */
     --track-alt-bg:    rgba(255, 255, 255, 0.018);
 
-    /* Transport bar — solid, no gradient */
-    --transport-bg:    #2C2C2E;
+    /* Transport bar — surface level */
+    --transport-bg:    var(--vscode-sideBar-background, #242426);
 
     /* Waveform */
     --waveform-played:    #4a9eff;
@@ -54,72 +57,79 @@
     --neko-preview-text-primary:   rgba(255, 255, 255, 0.90);
     --neko-preview-text-secondary: rgba(255, 255, 255, 0.50);
     --neko-preview-surface:        rgba(255, 255, 255, 0.06);
-    --neko-preview-bg:     #1C1C1E;
+    --neko-preview-bg:     var(--vscode-editor-background, #1c1c1e);
   }
 
-  /* === Light DAW palette — macOS Sonoma light === */
+  /* === Light DAW palette — VSCode token mapping === */
   body.vscode-light,
   body[data-vscode-theme-kind="vscode-light"],
   body[data-vscode-theme-kind="vscode-high-contrast-light"] {
-    /* Layer order (darkest → lightest):
-       sidebar #3A3A3C < bg #F2F2F7 < ruler #E8E8ED < timeline #EBEBF0 < transport #FFFFFF
-       Clear separation between every surface zone. */
-    --editor-bg:       #F2F2F7;   /* window background */
-    --editor-fg:       rgba(0, 0, 0, 0.82);
-    --editor-border:   rgba(0, 0, 0, 0.11);
-    --toolbar-bg:      #FFFFFF;   /* side panel — lightest surface */
-    --activity-bg:     #3A3A3C;   /* toolbar sidebar — visually distinct dark */
-    --activity-fg:     rgba(255, 255, 255, 0.88);
-    --activity-inactive: rgba(255, 255, 255, 0.42);
-    --accent:          var(--vscode-button-background, #007AFF);
+    --editor-bg:         var(--vscode-editor-background, #f5f5f7);
+    --editor-fg:         var(--vscode-editor-foreground, rgba(0, 0, 0, 0.82));
+    --editor-border:     var(--vscode-panel-border, rgba(0, 0, 0, 0.10));
+    --toolbar-bg:        var(--vscode-sideBar-background, #ebebed);
+    --activity-bg:       var(--vscode-sideBar-background, #ebebed);
+    --activity-fg:       var(--vscode-editor-foreground, rgba(0, 0, 0, 0.82));
+    --activity-inactive: var(--vscode-descriptionForeground, rgba(0, 0, 0, 0.45));
+    --accent:            var(--vscode-focusBorder, #007aff);
+    --accent-subtle:     color-mix(in srgb, var(--accent) 12%, transparent);
+    --audio-hover:       rgba(0, 0, 0, 0.04);
 
-    /* Timeline layers — each noticeably different */
-    --timeline-bg:     #EBEBF0;   /* track lane — cool gray */
-    --ruler-bg:        #E0E0E6;   /* ruler — slightly darker than lane */
-    --track-header-bg: #3A3A3C;   /* track label — dark, matches toolbar */
-    --track-alt-bg:    rgba(0, 0, 0, 0.025);
+    /* Timeline layers */
+    --timeline-bg:       var(--vscode-editor-background, #f5f5f7);
+    --ruler-bg:          var(--vscode-sideBar-background, #ebebed);
+    --track-header-bg:   var(--vscode-sideBar-background, #ebebed);
+    --track-alt-bg:      rgba(0, 0, 0, 0.018);
 
-    /* Transport bar — white, distinct from timeline */
-    --transport-bg:    #FFFFFF;
+    /* Transport bar */
+    --transport-bg:      var(--vscode-sideBar-background, #ebebed);
+    --transport-border:  var(--accent);
 
     /* Waveform */
-    --waveform-played:    #007AFF;
-    --waveform-unplayed:  #A0BFDF;
-    --waveform-cursor:    #1C1C1E;
-    --selection-bg:       rgba(0, 122, 255, 0.10);
-    --selection-border:   rgba(0, 122, 255, 0.40);
+    --waveform-played:   #007AFF;
+    --waveform-unplayed: #A4C0DC;
+    --waveform-cursor:   #1C1C1E;
+    --selection-bg:      rgba(0, 122, 255, 0.10);
+    --selection-border:  rgba(0, 122, 255, 0.40);
 
-    /* Button states */
-    --btn-bg:          rgba(0, 0, 0, 0.055);
-    --btn-bg-hover:    rgba(0, 0, 0, 0.10);
-    --btn-bg-active:   rgba(0, 0, 0, 0.15);
-    --btn-border:      rgba(0, 0, 0, 0.13);
+    /* Button states — on light surfaces */
+    --btn-bg:            rgba(0, 0, 0, 0.060);
+    --btn-bg-hover:      rgba(0, 0, 0, 0.110);
+    --btn-bg-active:     rgba(0, 0, 0, 0.160);
+    --btn-border:        rgba(0, 0, 0, 0.120);
+    /* Button states ��� on dark surfaces (toolbar) */
+    --btn-dark-bg:       rgba(255, 255, 255, 0.10);
+    --btn-dark-hover:    rgba(255, 255, 255, 0.18);
+    --btn-dark-active:   rgba(255, 255, 255, 0.26);
+    --btn-dark-border:   rgba(255, 255, 255, 0.14);
 
     /* Shared tokens */
-    --neko-glass:          rgba(0, 0, 0, 0.055);
-    --neko-glass-hover:    rgba(0, 0, 0, 0.10);
-    --neko-glass-active:   rgba(0, 0, 0, 0.15);
+    --neko-glass:          rgba(0, 0, 0, 0.060);
+    --neko-glass-hover:    rgba(0, 0, 0, 0.110);
+    --neko-glass-active:   rgba(0, 0, 0, 0.160);
     --neko-surface:        rgba(0, 0, 0, 0.04);
     --neko-surface-hover:  rgba(0, 0, 0, 0.08);
     --neko-preview-primary:        var(--accent);
     --neko-preview-text-primary:   rgba(0, 0, 0, 0.85);
     --neko-preview-text-secondary: rgba(0, 0, 0, 0.45);
     --neko-preview-surface:        rgba(0, 0, 0, 0.04);
-    --neko-preview-bg:     #F2F2F7;
+    --neko-preview-bg:     var(--vscode-editor-background, #f5f5f7);
   }
 
   /* === High contrast === */
   body.vscode-high-contrast,
   body[data-vscode-theme-kind="vscode-high-contrast"] {
-    --editor-bg:       #000000;
-    --editor-fg:       #ffffff;
-    --editor-border:   rgba(255, 255, 255, 0.35);
-    --toolbar-bg:      #111111;
-    --activity-bg:     #000000;
-    --activity-fg:     #ffffff;
+    --editor-bg:       var(--vscode-editor-background, #000000);
+    --editor-fg:       var(--vscode-editor-foreground, #ffffff);
+    --editor-border:   var(--vscode-panel-border, rgba(255, 255, 255, 0.35));
+    --toolbar-bg:      var(--vscode-sideBar-background, #111111);
+    --activity-bg:     var(--vscode-sideBar-background, #000000);
+    --activity-fg:     var(--vscode-editor-foreground, #ffffff);
     --activity-inactive: rgba(255, 255, 255, 0.65);
-    --timeline-bg:     #080808;
-    --ruler-bg:        #000000;
+    --accent-soft:     color-mix(in srgb, var(--accent) 30%, transparent);
+    --audio-hover:     rgba(255, 255, 255, 0.10);
+    --timeline-bg:     var(--vscode-editor-background, #000000);
+    --ruler-bg:        var(--vscode-sideBar-background, #111111);
     --track-alt-bg:    transparent;
     --transport-gradient: var(--toolbar-bg);
     --neko-glass:          rgba(255, 255, 255, 0.18);
@@ -147,6 +157,96 @@
    ======================= */
 
 @layer components {
+  /* ── Audio toolbar  (mirrors .sketch-toolbar pattern) ── */
+  .audio-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 5px;
+    background: var(--activity-bg);
+    border-right: 1px solid var(--editor-border);
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .audio-toolbar-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--activity-inactive);
+    cursor: pointer;
+    transition:
+      background 120ms ease,
+      color 120ms ease,
+      border-color 120ms ease,
+      box-shadow 120ms ease,
+      transform 80ms ease;
+    flex-shrink: 0;
+  }
+
+  .audio-toolbar-btn:hover {
+    background: var(--audio-hover);
+    color: var(--activity-fg);
+    border-color: var(--editor-border);
+  }
+
+  .audio-toolbar-btn:active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    transform: scale(0.93);
+  }
+
+  .audio-toolbar-btn.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent);
+    box-shadow:
+      0 0 0 1.5px var(--accent-soft),
+      0 1px 4px var(--accent-glow);
+  }
+
+  .audio-toolbar-btn:focus-visible {
+    outline: 1.5px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  /* Thin horizontal separator between toolbar groups */
+  .audio-toolbar-sep {
+    width: 20px;
+    height: 1px;
+    background: var(--editor-border);
+    margin: 3px 0;
+    flex-shrink: 0;
+    border-radius: 1px;
+  }
+
+  /* Side panel header — sketch-style uppercase small title */
+  .audio-panel-header {
+    display: flex;
+    align-items: center;
+    height: 36px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--editor-border);
+    flex-shrink: 0;
+  }
+
+  .audio-panel-title {
+    flex: 1;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--activity-inactive);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   /* Transport bar — solid surface with bottom separator */
   .neko-daw-transport {
     background: var(--transport-bg);

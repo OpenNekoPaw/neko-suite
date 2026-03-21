@@ -1,7 +1,7 @@
 export { SketchCanvas } from './SketchCanvas';
+export { CollapsiblePanel } from './CollapsiblePanel';
 export { Toolbar } from './Toolbar';
 export { BrushPanel } from './BrushPanel';
-export { ColorPanel } from './ColorPanel';
 export { LayerPanel } from './LayerPanel';
 export { FrameTimeline } from './FrameTimeline';
 export { FrameControls } from './FrameControls';
@@ -9,7 +9,6 @@ export { FilterPanel } from './FilterPanel';
 export { ParticlePanel } from './ParticlePanel';
 export { MorphEditor } from './MorphEditor';
 export { ScenePanel } from './ScenePanel';
-export { AtmospherePanel } from './AtmospherePanel';
 export { PixelGrid } from './PixelGrid';
 export { PalettePanel } from './PalettePanel';
 export { VectorToolbar } from './VectorToolbar';

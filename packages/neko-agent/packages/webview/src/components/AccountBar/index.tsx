@@ -10,6 +10,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { SsoSession, ConfiguredProvider } from '@/components/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import { postMessage } from '@/components/hooks/useVSCode';
+import { ChevronDownIcon } from '@neko/shared/icons';
 
 interface AccountBarProps {
   ssoSession: SsoSession | null;
@@ -72,9 +73,7 @@ export function AccountBar({
         ) : (
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--vscode-charts-green)] flex-shrink-0" />
         )}
-        <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronDownIcon className="w-3 h-3 opacity-60" />
       </button>
 
       {/* Dropdown */}

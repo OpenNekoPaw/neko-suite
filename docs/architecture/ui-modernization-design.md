@@ -534,376 +534,96 @@ editor.css (~140 行):
 
 ---
 
-## Phase 5：neko-story 主题接入（P1）
+## Phase 5：neko-story 主题接入（P1）✅
 
-### 5.1 现状
+### 5.1 实施结果
 
-`screenplay.css`（229 行）硬编码深色颜色值（`#1e1e1e`、`#d4d4d4`、`#569cd6` 等），完全不响应 VSCode 主题切换。
+`screenplay.css` 完成 VSCode 主题接入，现在响应 dark / light / high-contrast 三套主题切换。保留 Fountain 剧本排版领域 CSS 不变，不引入 Tailwind。
 
-### 5.2 方案：最小替换
+**颜色变量替换**：
 
-```css
-/* 替换映射 */
-#1e1e1e  → var(--vscode-editor-background, #1e1e1e)
-#d4d4d4  → var(--vscode-editor-foreground, #d4d4d4)
-#569cd6  → var(--vscode-button-background, #569cd6)
-#333     → var(--vscode-panel-border, #333)
+| 原值 | 替换为 |
+|------|--------|
+| `#1e1e1e` | `var(--vscode-editor-background, #1e1e1e)` |
+| `#d4d4d4` | `var(--vscode-editor-foreground, #d4d4d4)` |
+| `#569cd6` | `var(--vscode-button-background, #569cd6)` |
+
+**额外优化**（超出最小替换范围）：
+
+原文件中 4 处硬编码的 `rgba(255,255,255, ...)` 在浅色主题下会显示为白色透明（不可见），因此提取为命名变量并加入主题覆盖：
+
+```
+:root {
+  --hover-bg:         rgba(255, 255, 255, 0.05)  /* dark */
+  --divider-color:    rgba(255, 255, 255, 0.1)
+  --page-break-color: rgba(255, 255, 255, 0.3)
+  --empty-state-color: rgba(255, 255, 255, 0.5)
+}
+body.vscode-light {
+  --hover-bg:         rgba(0, 0, 0, 0.04)        /* light 覆盖 */
+  --divider-color:    rgba(0, 0, 0, 0.1)
+  ...
+}
+body.vscode-high-contrast {
+  --hover-bg:         var(--vscode-list-hoverBackground)   /* 高对比度：纯色 */
+  --divider-color:    var(--vscode-contrastBorder)
+  ...
+}
 ```
 
-保留 Fountain 剧本排版的领域特殊 CSS，仅替换颜色值。`print.css` 不改。
-不迁移 Tailwind（剧本排版的领域 CSS 占比高，Tailwind 收益低）。
+`.note` 背景从 `rgba(106, 153, 85, 0.1)` 改为 `color-mix(in srgb, #6a9955 12%, transparent)`，保持 Fountain 语法高亮色的固定绿色，同时兼容 `color-mix()`。
+
+**Fountain 语法高亮色**（7 个）保留为固定值，不跟随主题：`--character-color` / `--parenthetical-color` / `--transition-color` 等，并加注释说明为有意不跟随主题的领域色。
 
 ---
 
-## Phase 5.5：macOS 风格 VSCode 主题配色（P1）
+## Phase 5.5：macOS 风格 VSCode 主题配色（P1）✅
 
-### 5.5.1 目标
+### 5.5.1 实施结果
 
-提供 Neko macOS Light / Dark 两套颜色主题，让 VSCode 原生 UI（侧边栏/标签栏/状态栏等）的配色与 Webview 内的 macOS 风格统一。
+在 `neko-tools` 中新增两套完整 VSCode 颜色主题，通过 `contributes.themes` 注册：
 
-### 5.5.2 放置位置
-
-在 `neko-tools` 扩展的 `package.json` 中声明（主题是跨功能关注点，不绑定特定编辑器）：
-
-```jsonc
-// packages/neko-tools/package.json → contributes
-"themes": [
-  {
-    "label": "Neko macOS Dark",
-    "uiTheme": "vs-dark",
-    "path": "./themes/neko-macos-dark-color-theme.json"
-  },
-  {
-    "label": "Neko macOS Light",
-    "uiTheme": "vs",
-    "path": "./themes/neko-macos-light-color-theme.json"
-  }
-]
+```
+packages/neko-tools/
+└── themes/
+    ├── neko-macos-dark-color-theme.json   — 暖灰色阶 + #0A84FF
+    └── neko-macos-light-color-theme.json  — 冷灰色阶 + #007AFF
 ```
 
-### 5.5.3 配色方案 — 暗色主题
+同时在 `contributes` 中一并注册了 `iconThemes`（见 Phase 5.6）。
 
-基于 macOS Sonoma 暖灰色阶 + Apple 系统蓝（`#0A84FF`）：
+### 5.5.2 配色方案
 
-```jsonc
-{
-  "name": "Neko macOS Dark",
-  "type": "dark",
-  "colors": {
-    // ── 全局 ──
-    "foreground": "#A3A2A2",
-    "focusBorder": "#0A84FF",
-    "selection.background": "#0A84FF40",
-    "widget.shadow": "#00000040",
+| 区域 | 暗色 | 浅色 |
+|------|------|------|
+| 编辑器背景 | `#1C1C1E`（systemGray6） | `#FFFFFF` |
+| 侧边栏背景 | `#2C2C2E`（systemGray5） | `#F2F2F7`（systemGray6 Light） |
+| 强调色 | `#0A84FF`（Apple 蓝，暗色） | `#007AFF`（Apple 蓝，浅色） |
+| 错误色 | `#FF453A`（Apple 红，暗色） | `#FF3B30`（Apple 红，浅色） |
+| 成功色 | `#30D158`（Apple 绿，暗色） | `#34C759`（Apple 绿，浅色） |
 
-    // ── 编辑器 ──
-    "editor.background": "#1C1C1E",
-    "editor.foreground": "#FFFFFFD8",
-    "editor.lineHighlightBackground": "#2C2C2E",
-    "editor.selectionBackground": "#0A84FF40",
-    "editor.findMatchBackground": "#FFD60A40",
-    "editor.findMatchHighlightBackground": "#FFD60A20",
-    "editorCursor.foreground": "#0A84FF",
-    "editorLineNumber.foreground": "#48484A",
-    "editorLineNumber.activeForeground": "#8E8E93",
-    "editorIndentGuide.background": "#2C2C2E",
-    "editorIndentGuide.activeBackground": "#48484A",
-    "editorBracketMatch.background": "#0A84FF30",
-    "editorBracketMatch.border": "#0A84FF",
-    "editorRuler.foreground": "#2C2C2E",
-    "editorGutter.addedBackground": "#30D158",
-    "editorGutter.modifiedBackground": "#0A84FF",
-    "editorGutter.deletedBackground": "#FF453A",
+完整颜色定义见 `themes/neko-macos-*-color-theme.json`。
 
-    // ── 侧边栏 ──
-    "sideBar.background": "#2C2C2E",
-    "sideBar.foreground": "#DEDEDE",
-    "sideBar.border": "#1C1C1E",
-    "sideBarTitle.foreground": "#EBEBEB",
-    "sideBarSectionHeader.background": "#2C2C2E",
-    "sideBarSectionHeader.foreground": "#8E8E93",
+**与设计方案的差异**：
+- `editorIndentGuide.background` → `editorIndentGuide.background1`（VSCode 1.85+ 弃用旧键名）
+- 浅色主题补全了暗色主题已有的全部 key（设计稿浅色部分为精简版本）
+- 新增 `statusBarItem.remoteBackground/Foreground`、`tab.hoverBackground` 等设计稿未列出的补充 key
 
-    // ── 活动栏 ──
-    "activityBar.background": "#1C1C1E",
-    "activityBar.foreground": "#0A84FF",
-    "activityBar.inactiveForeground": "#636366",
-    "activityBar.border": "#1C1C1E",
-    "activityBar.activeBorder": "#0A84FF",
-    "activityBarBadge.background": "#FF453A",
-    "activityBarBadge.foreground": "#FFFFFF",
+### 5.5.3 配色来源
 
-    // ── 标题栏 ──
-    "titleBar.activeBackground": "#2C2C2E",
-    "titleBar.activeForeground": "#DEDEDE",
-    "titleBar.inactiveBackground": "#1C1C1E",
-    "titleBar.inactiveForeground": "#636366",
-    "titleBar.border": "#1C1C1E",
+暗色：Apple 暗色系统色（`#0A84FF` / `#FF453A` / `#30D158`），灰阶基于 `systemGray6`（`#1C1C1E`）→ `systemGray2`（`#636366`）。
 
-    // ── 标签页 ──
-    "tab.activeBackground": "#1C1C1E",
-    "tab.activeForeground": "#EBEBEB",
-    "tab.activeBorderTop": "#0A84FF",
-    "tab.inactiveBackground": "#2C2C2E",
-    "tab.inactiveForeground": "#8E8E93",
-    "tab.border": "#1C1C1E",
-    "tab.hoverBackground": "#3A3A3C",
-    "editorGroupHeader.tabsBackground": "#2C2C2E",
-
-    // ── 面板 ──
-    "panel.background": "#1C1C1E",
-    "panel.border": "#2C2C2E",
-    "panelTitle.activeForeground": "#EBEBEB",
-    "panelTitle.activeBorder": "#0A84FF",
-    "panelTitle.inactiveForeground": "#636366",
-
-    // ── 状态栏 ──
-    "statusBar.background": "#1C1C1E",
-    "statusBar.foreground": "#8E8E93",
-    "statusBar.border": "#2C2C2E",
-    "statusBar.debuggingBackground": "#FF9F0A",
-    "statusBar.debuggingForeground": "#000000",
-    "statusBar.noFolderBackground": "#2C2C2E",
-    "statusBarItem.hoverBackground": "#3A3A3C",
-    "statusBarItem.remoteBackground": "#30D158",
-    "statusBarItem.remoteForeground": "#000000",
-
-    // ── 按钮 ──
-    "button.background": "#0A84FF",
-    "button.foreground": "#FFFFFF",
-    "button.hoverBackground": "#409CFF",
-    "button.secondaryBackground": "#3A3A3C",
-    "button.secondaryForeground": "#DEDEDE",
-    "button.secondaryHoverBackground": "#48484A",
-
-    // ── 输入框 ──
-    "input.background": "#3A3A3C",
-    "input.foreground": "#DEDEDE",
-    "input.border": "#48484A",
-    "input.placeholderForeground": "#636366",
-    "inputOption.activeBackground": "#0A84FF30",
-    "inputOption.activeBorder": "#0A84FF",
-    "inputValidation.errorBorder": "#FF453A",
-    "inputValidation.warningBorder": "#FFD60A",
-    "inputValidation.infoBorder": "#0A84FF",
-
-    // ── 列表/树 ──
-    "list.activeSelectionBackground": "#0A84FF30",
-    "list.activeSelectionForeground": "#FFFFFF",
-    "list.inactiveSelectionBackground": "#3A3A3C",
-    "list.hoverBackground": "#2C2C2E",
-    "list.focusOutline": "#0A84FF",
-    "list.highlightForeground": "#0A84FF",
-    "tree.indentGuidesStroke": "#3A3A3C",
-
-    // ── 下拉/菜单 ──
-    "dropdown.background": "#3A3A3C",
-    "dropdown.foreground": "#DEDEDE",
-    "dropdown.border": "#48484A",
-    "menu.background": "#2C2C2E",
-    "menu.foreground": "#DEDEDE",
-    "menu.selectionBackground": "#0A84FF",
-    "menu.selectionForeground": "#FFFFFF",
-    "menu.separatorBackground": "#48484A",
-
-    // ── 通知 ──
-    "notifications.background": "#2C2C2E",
-    "notifications.foreground": "#DEDEDE",
-    "notifications.border": "#3A3A3C",
-
-    // ── 滚动条 ──
-    "scrollbar.shadow": "#00000030",
-    "scrollbarSlider.background": "#63636650",
-    "scrollbarSlider.hoverBackground": "#63636680",
-    "scrollbarSlider.activeBackground": "#636366A0",
-
-    // ── Widget ──
-    "editorWidget.background": "#2C2C2E",
-    "editorWidget.foreground": "#DEDEDE",
-    "editorHoverWidget.background": "#2C2C2E",
-    "editorHoverWidget.border": "#3A3A3C",
-    "editorSuggestWidget.background": "#2C2C2E",
-    "editorSuggestWidget.border": "#3A3A3C",
-    "editorSuggestWidget.selectedBackground": "#0A84FF30",
-
-    // ── 徽章 ──
-    "badge.background": "#FF453A",
-    "badge.foreground": "#FFFFFF",
-
-    // ── 进度条 ──
-    "progressBar.background": "#0A84FF",
-
-    // ── 错误/警告 ──
-    "editorError.foreground": "#FF453A",
-    "editorWarning.foreground": "#FFD60A",
-    "editorInfo.foreground": "#0A84FF",
-
-    // ── Git 装饰 ──
-    "gitDecoration.addedResourceForeground": "#30D158",
-    "gitDecoration.modifiedResourceForeground": "#0A84FF",
-    "gitDecoration.deletedResourceForeground": "#FF453A",
-    "gitDecoration.untrackedResourceForeground": "#30D158",
-    "gitDecoration.ignoredResourceForeground": "#48484A",
-    "gitDecoration.conflictingResourceForeground": "#FF9F0A",
-
-    // ── Diff ──
-    "diffEditor.insertedTextBackground": "#30D15820",
-    "diffEditor.removedTextBackground": "#FF453A20",
-    "diffEditor.insertedLineBackground": "#30D15815",
-    "diffEditor.removedLineBackground": "#FF453A15",
-
-    // ── 终端 ANSI ──
-    "terminal.foreground": "#DEDEDE",
-    "terminal.ansiBlack": "#1C1C1E",
-    "terminal.ansiRed": "#FF453A",
-    "terminal.ansiGreen": "#30D158",
-    "terminal.ansiYellow": "#FFD60A",
-    "terminal.ansiBlue": "#0A84FF",
-    "terminal.ansiMagenta": "#BF5AF2",
-    "terminal.ansiCyan": "#64D2FF",
-    "terminal.ansiWhite": "#DEDEDE",
-    "terminal.ansiBrightBlack": "#636366",
-    "terminal.ansiBrightRed": "#FF6961",
-    "terminal.ansiBrightGreen": "#4BDE80",
-    "terminal.ansiBrightYellow": "#FFE066",
-    "terminal.ansiBrightBlue": "#409CFF",
-    "terminal.ansiBrightMagenta": "#DA8FFF",
-    "terminal.ansiBrightCyan": "#8BE9FF",
-    "terminal.ansiBrightWhite": "#FFFFFF",
-
-    // ── Charts ──
-    "charts.red": "#FF453A",
-    "charts.green": "#30D158",
-    "charts.blue": "#0A84FF",
-    "charts.yellow": "#FFD60A",
-    "charts.orange": "#FF9F0A",
-    "charts.purple": "#BF5AF2"
-  }
-}
-```
-
-### 5.5.4 配色方案 — 浅色主题
-
-基于 macOS Sonoma 冷灰色阶 + Apple 系统蓝（`#007AFF`）：
-
-```jsonc
-{
-  "name": "Neko macOS Light",
-  "type": "light",
-  "colors": {
-    "foreground": "#3C3C43",
-    "focusBorder": "#007AFF",
-    "editor.background": "#FFFFFF",
-    "editor.foreground": "#1D1D1F",
-    "editor.lineHighlightBackground": "#F2F2F7",
-    "editor.selectionBackground": "#007AFF30",
-    "editorCursor.foreground": "#007AFF",
-    "editorLineNumber.foreground": "#C7C7CC",
-    "editorLineNumber.activeForeground": "#8E8E93",
-
-    "sideBar.background": "#F2F2F7",
-    "sideBar.foreground": "#3C3C43",
-    "sideBar.border": "#E5E5EA",
-
-    "activityBar.background": "#F2F2F7",
-    "activityBar.foreground": "#007AFF",
-    "activityBar.inactiveForeground": "#8E8E93",
-    "activityBar.activeBorder": "#007AFF",
-    "activityBarBadge.background": "#FF3B30",
-
-    "titleBar.activeBackground": "#E5E5EA",
-    "titleBar.activeForeground": "#1D1D1F",
-    "titleBar.border": "#D1D1D6",
-
-    "tab.activeBackground": "#FFFFFF",
-    "tab.activeForeground": "#1D1D1F",
-    "tab.activeBorderTop": "#007AFF",
-    "tab.inactiveBackground": "#F2F2F7",
-    "tab.inactiveForeground": "#8E8E93",
-    "tab.border": "#E5E5EA",
-    "editorGroupHeader.tabsBackground": "#F2F2F7",
-
-    "panel.background": "#FFFFFF",
-    "panel.border": "#E5E5EA",
-    "panelTitle.activeBorder": "#007AFF",
-
-    "statusBar.background": "#F2F2F7",
-    "statusBar.foreground": "#3C3C43",
-    "statusBar.border": "#E5E5EA",
-    "statusBar.debuggingBackground": "#FF9500",
-
-    "button.background": "#007AFF",
-    "button.foreground": "#FFFFFF",
-    "button.hoverBackground": "#0055D4",
-    "button.secondaryBackground": "#E5E5EA",
-    "button.secondaryForeground": "#3C3C43",
-
-    "input.background": "#FFFFFF",
-    "input.foreground": "#1D1D1F",
-    "input.border": "#D1D1D6",
-    "input.placeholderForeground": "#AEAEB2",
-
-    "list.activeSelectionBackground": "#007AFF20",
-    "list.activeSelectionForeground": "#007AFF",
-    "list.hoverBackground": "#F2F2F7",
-
-    "dropdown.background": "#FFFFFF",
-    "dropdown.border": "#D1D1D6",
-    "menu.background": "#FFFFFF",
-    "menu.selectionBackground": "#007AFF",
-    "menu.selectionForeground": "#FFFFFF",
-
-    "scrollbarSlider.background": "#AEAEB240",
-    "scrollbarSlider.hoverBackground": "#AEAEB260",
-
-    "editorWidget.background": "#FFFFFF",
-    "editorSuggestWidget.selectedBackground": "#007AFF15",
-    "badge.background": "#FF3B30",
-    "progressBar.background": "#007AFF",
-
-    "editorError.foreground": "#FF3B30",
-    "editorWarning.foreground": "#FF9500",
-    "editorInfo.foreground": "#007AFF",
-
-    "gitDecoration.addedResourceForeground": "#34C759",
-    "gitDecoration.modifiedResourceForeground": "#007AFF",
-    "gitDecoration.deletedResourceForeground": "#FF3B30",
-
-    "terminal.ansiBlack": "#1D1D1F",
-    "terminal.ansiRed": "#FF3B30",
-    "terminal.ansiGreen": "#34C759",
-    "terminal.ansiYellow": "#FFCC00",
-    "terminal.ansiBlue": "#007AFF",
-    "terminal.ansiMagenta": "#AF52DE",
-    "terminal.ansiCyan": "#5AC8FA",
-    "terminal.ansiWhite": "#F2F2F7",
-
-    "charts.red": "#FF3B30",
-    "charts.green": "#34C759",
-    "charts.blue": "#007AFF",
-    "charts.yellow": "#FFCC00",
-    "charts.orange": "#FF9500",
-    "charts.purple": "#AF52DE"
-  }
-}
-```
-
-### 5.5.5 配色来源
-
-暗色主题使用 Apple 暗色系统色（`#0A84FF` / `#FF453A` / `#30D158` 等），灰阶基于 `systemGray6`（`#1C1C1E`）到 `systemGray2`（`#636366`）。
-
-浅色主题使用 Apple 浅色系统色（`#007AFF` / `#FF3B30` / `#34C759` 等），灰阶基于 `systemGray6`（`#F2F2F7`）到 `systemGray2`（`#AEAEB2`）。
+浅色：Apple 浅色系统色（`#007AFF` / `#FF3B30` / `#34C759`），灰阶基于 `systemGray6`（`#F2F2F7`）→ `systemGray2`（`#AEAEB2`）。
 
 > 参考 [Apple HIG - Color](https://developer.apple.com/design/human-interface-guidelines/color)
 
 ---
 
-## Phase 5.6：Webview SVG 图标统一 + File Icon Theme（P1）
+## Phase 5.6：Webview SVG 图标统一 + File Icon Theme（P1）✅
 
-### 5.6.1 Webview SVG 图标现状
+### 5.6.1 Webview SVG 图标现状（分析）
 
 完整盘点发现 **60+ 个内联 SVG 图标**，分布在 5 个包中，存在严重的风格不一致：
-
-**风格分裂**：
 
 | 包 | 图标数 | 风格 | viewBox | currentColor |
 |---|---|---|---|---|
@@ -913,153 +633,54 @@ editor.css (~140 行):
 | neko-canvas | ~4 | stroke 描边（线条风格） | 24×24 | ✅ |
 | neko-sketch | 1 | fill 填充 | 24×24 | ✅ |
 
-**核心问题**：
-1. **描边 vs 填充混用** — neko-agent 用 stroke 描边（线条感），neko-preview/neko-cut 用 fill 填充（实心感），视觉语言不统一
-2. **相同图标多次定义** — ChevronIcon 在 6 处重复定义，CheckIcon/ErrorIcon 各 3-4 处
-3. **viewBox 不统一** — 24×24 和 20×20 混用
-4. **部分图标缺少 currentColor** — neko-preview 的播放/音量图标直接写 fill 属性，不跟随主题
+**重复图标**：ChevronIcon 6 处重复，CheckIcon/ErrorIcon 各 3-4 处，PlayIcon/PauseIcon/VolumeIcon 跨 3-5 个组件重复定义。
 
-**重复图标清单**：
+### 5.6.2 实施结果：`@neko/shared/icons` 图标模块
 
-| 图标 | 重复定义位置 |
-|------|------------|
-| ChevronIcon | agent/MessageContent, agent/ToolCallDisplay, agent/DiffBlock, agent/ThinkingBlock, agent/AudioPlayer, agent/DropdownMenu |
-| CheckIcon | agent/MessageContent, agent/ToolCallDisplay, agent/DiffBlock, agent/PlanReview |
-| ErrorIcon (X) | agent/ToolCallDisplay, agent/DiffBlock, agent/PlanReview |
-| PlayIcon | preview/VideoControls, preview/AudioControls, cut/Toolbar, agent/AudioPlayer, agent/VideoPlayer |
-| PauseIcon | preview/VideoControls, preview/AudioControls, cut/Toolbar |
-| VolumeIcon | preview/VideoControls, preview/AudioControls |
-
-### 5.6.2 方案：统一 SVG 图标系统
-
-**目标风格**：macOS SF Symbols 风格 — **stroke 描边、圆角端点、1.5-2px 线宽、24×24 viewBox**。
-
-理由：
-- 与 macOS 视觉语言一致（SF Symbols 以描边为主）
-- neko-agent（图标最多的包）已采用此风格，迁移成本最低
-- 描边风格在小尺寸下辨识度优于填充风格
-
-**实施方案**：在 `@neko/shared` L2 React 层新建图标模块：
+在 `@neko/shared` L2 React 层新建统一图标模块，共 **33 个图标**，通过 `@neko/shared/icons` 子路径导出（`package.json` 的 `"./*": "./src/*"` 通配符已覆盖，无需新增 exports 条目）：
 
 ```
 packages/neko-types/src/icons/
-├── index.ts                    — 统一导出
-├── media.tsx                   — 媒体控件：Play, Pause, Stop, SkipBack, SkipForward, Volume, VolumeOff
-├── navigation.tsx              — 导航：ChevronRight, ChevronDown, ArrowLeft, ArrowRight
-├── action.tsx                  — 操作：Copy, Check, Download, Refresh, Edit, Send, Plus, Upload
-├── status.tsx                  — 状态：Error, Warning, Success, Loading
-├── editor.tsx                  — 编辑器：Code, File, Zoom​In, Zoom​Out, Undo, Redo
-└── types.ts                    — IconProps 接口
+├── types.ts        — IconProps { size=16, className, strokeWidth=2 }
+├── media.tsx       — Play, Pause, Stop, SkipBack, SkipForward, Volume, VolumeOff, VolumeLow
+├── navigation.tsx  — ChevronRight/Down/Left/Up, ArrowLeft, ArrowRight
+├── action.tsx      — Copy, Check, Download, Refresh, Edit, Send, Plus, Upload, Trash, Search, Close
+├── status.tsx      — Error, Warning, Success, Loading, Info
+├── editor.tsx      — Code, File, ZoomIn, ZoomOut, Undo, Redo, Scissors, Layers, Settings
+└── index.ts        — 统一再导出
 ```
 
-通过 `@neko/shared/icons` 子路径导出。
+**统一风格**：stroke 描边 + `currentColor`、圆角端点（`strokeLinecap="round"`）、24×24 viewBox、默认尺寸 16px。
 
-**接口设计**：
+**迁移状态**：图标库已就绪，各包内联 SVG 的迁移替换为**下一阶段按需进行**，优先级：neko-agent（已是 stroke 风格，改动最小）→ neko-preview / neko-cut（需从 fill 转 stroke）。
 
-```typescript
-// types.ts
-interface IconProps {
-  size?: number;           // 默认 16
-  className?: string;      // Tailwind 类
-  strokeWidth?: number;    // 默认 2
-}
+### 5.6.3 实施结果：File Icon Theme
 
-// 示例：统一的 Play 图标
-export function PlayIcon({ size = 16, className, strokeWidth = 2 }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth={strokeWidth}
-      strokeLinecap="round" strokeLinejoin="round"
-      className={className}>
-      <polygon points="6,3 20,12 6,21" />
-    </svg>
-  );
-}
+neko-suite 的 13 个自定义扩展名在 VSCode 文件树中现在有专属图标：
+
+```
+packages/neko-tools/themes/
+├── neko-file-icon-theme.json     — File Icon Theme 定义
+└── icons/
+    ├── file-timeline.svg  (.jvi) — 紫色 #6366F1，胶片条 + 刻度点
+    ├── file-canvas.svg    (.jvc) — 橙色 #F97316，画板 + 中心圆
+    ├── file-audio.svg     (.nka) — 绿色 #22C55E，7 根波形竖线
+    ├── file-sketch.svg    (.nks) — 粉色 #EC4899，铅笔
+    ├── file-puppet.svg  (.nkp/.inp) — 黄色 #EAB308，关节人偶
+    ├── file-model.svg     (.nkm) — 青色 #06B6D4，等轴测立方体
+    ├── file-3d.svg    (.gltf/.glb) — 蓝色 #3B82F6，开口六面体
+    ├── file-avatar.svg    (.vrm) — 紫色 #A855F7，人物剪影
+    ├── file-diff.svg  (.asset-diff) — 橙红 #F97316，双矩形 diff
+    └── file-story.svg (.story/.fountain) — 青色 #14B8A6，剧本文档
 ```
 
-**迁移策略**：
-1. 先在 `@neko/shared/icons` 定义全部 ~25 个去重后的图标
-2. neko-agent 最先迁移（图标最多，已是 stroke 风格，改动最小）
-3. neko-preview / neko-cut 后迁移（需要从 fill 转 stroke）
-4. 各包中的内联 SVG 替换为 `import { PlayIcon } from '@neko/shared/icons'`
-
-### 5.6.3 File Icon Theme — 支持 neko-suite 自定义文件格式
-
-neko-suite 注册了 **13 个自定义文件扩展名**，当前在 VSCode 文件树中全部显示为默认图标，无法区分。
-
-**需要图标的文件格式**：
-
-| 扩展名 | 格式 | 所属包 | 图标含义 |
-|--------|------|--------|---------|
-| `.jvi` | JVI Timeline | neko-cut | 视频时间线/剪辑 |
-| `.jvc` | JVC Canvas | neko-canvas | 画布/合成 |
-| `.nka` | NKA Audio | neko-audio | 音频项目 |
-| `.nks` | NKS Sketch | neko-sketch | 2D 绘画 |
-| `.nkp` | NKP Puppet | neko-sketch | 骨骼/木偶 |
-| `.inp` | INP Puppet | neko-sketch | Live2D 兼容木偶 |
-| `.nkm` | NKM Model | neko-model | 3D 模型项目 |
-| `.gltf` | glTF | neko-model | 3D 模型（文本） |
-| `.glb` | glTF Binary | neko-model | 3D 模型（二进制） |
-| `.vrm` | VRM Avatar | neko-model | VR 虚拟形象 |
-| `.asset-diff` | Asset Diff | neko-tools | 资产对比 |
-| `.story` | Story Script | neko-story | 剧本 |
-| `.fountain` | Fountain | neko-story | Fountain 剧本 |
-
-**实施方案**：在 `neko-tools` 扩展中声明 File Icon Theme：
-
-```jsonc
-// packages/neko-tools/package.json → contributes
-"iconThemes": [
-  {
-    "id": "neko-file-icons",
-    "label": "Neko File Icons",
-    "path": "./themes/neko-file-icon-theme.json"
-  }
-]
-```
-
-```jsonc
-// themes/neko-file-icon-theme.json
-{
-  "hidesExplorerArrows": false,
-  "fileExtensions": {
-    "jvi": "_neko_timeline",
-    "jvc": "_neko_canvas",
-    "nka": "_neko_audio",
-    "nks": "_neko_sketch",
-    "nkp": "_neko_puppet",
-    "inp": "_neko_puppet",
-    "nkm": "_neko_model",
-    "gltf": "_neko_3d",
-    "glb": "_neko_3d",
-    "vrm": "_neko_avatar",
-    "asset-diff": "_neko_diff",
-    "story": "_neko_story",
-    "fountain": "_neko_story"
-  },
-  "iconDefinitions": {
-    "_neko_timeline": { "iconPath": "./icons/file-timeline.svg" },
-    "_neko_canvas":   { "iconPath": "./icons/file-canvas.svg" },
-    "_neko_audio":    { "iconPath": "./icons/file-audio.svg" },
-    "_neko_sketch":   { "iconPath": "./icons/file-sketch.svg" },
-    "_neko_puppet":   { "iconPath": "./icons/file-puppet.svg" },
-    "_neko_model":    { "iconPath": "./icons/file-model.svg" },
-    "_neko_3d":       { "iconPath": "./icons/file-3d.svg" },
-    "_neko_avatar":   { "iconPath": "./icons/file-avatar.svg" },
-    "_neko_diff":     { "iconPath": "./icons/file-diff.svg" },
-    "_neko_story":    { "iconPath": "./icons/file-story.svg" }
-  }
-}
-```
-
-图标 SVG 设计风格与 Webview 图标统一：stroke 描边、macOS SF Symbols 风格、16×16 viewBox。
+SVG 设计风格：stroke 描边、16×16 viewBox、各文件类型专属主题色（非 currentColor，文件图标需固定色）。
 
 ### 5.6.4 字体
 
-**不需要自定义字体**，理由不变：
-- `var(--vscode-font-family)` 自动跟随用户设置
-- macOS 上就是 SF Pro，Windows 上 Segoe UI
-- macOS 风格核心是颜色/透明度/动效，不是字体
+**不需要自定义字体**：
+- `var(--vscode-font-family)` 自动跟随用户设置（macOS 即 SF Pro）
+- macOS 风格核心是颜色/透明度/动效，不在字体
 
 ---
 
@@ -1176,9 +797,9 @@ Phase 1    macOS Design Token 体系 + CSS 变量统一 + 主题覆盖     [1d] 
 Phase 2    macOS 风格组件重构 + 共享控件提取                      [2d]   ✅
 Phase 3    视频播放器 macOS 化                                    [0.5d] ✅
 Phase 4    neko-audio Tailwind 接入 + macOS 化                   [1d]   ✅
-Phase 5    neko-story VSCode 主题接入                             [0.5d]
-Phase 5.5  macOS VSCode 主题配色（Dark + Light）                  [1d]
-Phase 5.6  SVG 图标统一 + File Icon Theme                         [2d]
+Phase 5    neko-story VSCode 主题接入                             [0.5d] ✅
+Phase 5.5  macOS VSCode 主题配色（Dark + Light）                  [1d]   ✅
+Phase 5.6  SVG 图标统一 + File Icon Theme                         [2d]   ✅
 Phase 6    跨包共享组件 (ContextMenu/CollapsibleSection/Ruler)    [1.5d, 按需触发]
 ```
 

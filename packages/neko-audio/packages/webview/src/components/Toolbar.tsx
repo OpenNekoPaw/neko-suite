@@ -202,23 +202,18 @@ interface ToolbarButtonProps {
 function ToolbarButton({ icon, title, active, onClick }: ToolbarButtonProps) {
   return (
     <button
-      className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-150
-        ${
-          active
-            ? 'bg-neko-glass-active text-[var(--activity-fg)]'
-            : 'text-[var(--activity-inactive)] hover:text-[var(--activity-fg)] hover:bg-neko-surface'
-        }`}
+      className={`audio-toolbar-btn${active ? ' active' : ''}`}
       onClick={onClick}
       title={title}
+      aria-pressed={active}
     >
-      {active && <span className="neko-toolbar-indicator" />}
       {icon}
     </button>
   );
 }
 
 function ToolbarDivider() {
-  return <div className="w-6 h-px mx-auto my-1 bg-[var(--editor-border)] opacity-40" />;
+  return <div className="audio-toolbar-sep" />;
 }
 
 export function Toolbar() {
@@ -246,7 +241,7 @@ export function Toolbar() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center w-11 shrink-0 py-2 gap-0.5 bg-[var(--activity-bg)] border-r border-[var(--editor-border)]">
+    <div className="audio-toolbar">
       {/* View toggles */}
       <ToolbarButton
         icon={<IconSpectrum />}

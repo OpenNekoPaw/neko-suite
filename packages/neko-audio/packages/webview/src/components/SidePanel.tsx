@@ -68,8 +68,8 @@ export function SidePanel() {
         style={{ width }}
       >
         {/* Header */}
-        <div className="flex items-center h-9 px-3 shrink-0 border-b border-[var(--editor-border)]">
-          <span className="flex-1 text-xs font-medium text-[var(--editor-fg)] truncate">
+        <div className="audio-panel-header">
+          <span className="audio-panel-title">
             {t(PANEL_TITLES[activeSidePanel])}
           </span>
           <MacIconButton size="sm" onClick={closeSidePanel} title="Close">

@@ -7,6 +7,7 @@
 import { useState, memo } from 'react';
 import { Plan, PlanStep } from '@/components/types';
 import { useTranslation } from '@/i18n/I18nContext';
+import { ChevronRightIcon, CheckIcon, CloseIcon, EditIcon } from '@neko/shared/icons';
 
 interface PlanReviewProps {
   plan: Plan;
@@ -271,13 +272,7 @@ function PlanReviewComponent({
 export const PlanReview = memo(PlanReviewComponent);
 
 // Icons
-function ChevronIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
-  );
-}
+const ChevronIcon = ChevronRightIcon;
 
 function PlanIcon({ className }: { className?: string }) {
   return (
@@ -292,31 +287,4 @@ function PlanIcon({ className }: { className?: string }) {
   );
 }
 
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-  );
-}
-
-function XIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  );
-}
-
-function EditIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-      />
-    </svg>
-  );
-}
+const XIcon = CloseIcon;

@@ -5,6 +5,7 @@
 
 import { useRef } from 'react';
 import { useClickOutsideSingle } from './useClickOutside';
+export { ChevronDownIcon } from '@neko/shared/icons';
 
 interface DropdownMenuProps<T> {
   isOpen: boolean;
@@ -60,13 +61,3 @@ export function DropdownMenu<T>({
   );
 }
 
-/**
- * Chevron Down Icon
- */
-export function ChevronDownIcon({ className = 'w-3 h-3' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-    </svg>
-  );
-}

@@ -2,62 +2,116 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =============================================================================
+   CSS Custom Properties — macOS-inspired theme layer on top of VSCode tokens
+   ============================================================================= */
+
 :root {
-  /* Map to VSCode theme variables with fallbacks */
+  /* ── Canvas ─────────────────────────────────────────────────────────────── */
+  --canvas-bg:         var(--vscode-editor-background, #1c1c1e);
+  --canvas-grid:       var(--vscode-editorWidget-border, #2c2c2e);
+  --canvas-grid-major: var(--vscode-editorRuler-foreground, #3a3a3c);
 
-  /* Canvas background */
-  --canvas-bg: var(--vscode-editor-background, #1e1e1e);
-  --canvas-grid: var(--vscode-editorWidget-border, #2a2a2a);
-  --canvas-grid-major: var(--vscode-editorRuler-foreground, #333333);
+  /* ── Toolbar / Panel ─────────────────────────────────────────────────────── */
+  --toolbar-bg:           var(--vscode-sideBar-background, #1e1e20);
+  /* fallback 提高到 0.10，保证在任何 VSCode 主题下分隔线都可见 */
+  --toolbar-border:       var(--vscode-sideBar-border, rgba(255,255,255,0.10));
+  --toolbar-fg:           var(--vscode-sideBar-foreground, #e8e8ed);
+  --toolbar-fg-secondary: var(--vscode-descriptionForeground, #8e8e93);
 
-  /* Toolbar / Panel */
-  --toolbar-bg: var(--vscode-sideBar-background, #252526);
-  --toolbar-border: var(--vscode-sideBar-border, #3c3c3c);
-  --toolbar-fg: var(--vscode-sideBar-foreground, #cccccc);
-  --toolbar-fg-secondary: var(--vscode-descriptionForeground, #999999);
+  /* ── Glassmorphism surface ───────────────────────────────────────────────── */
+  --glass-bg:        rgba(30, 30, 32, 0.82);
+  --glass-bg-light:  rgba(46, 46, 50, 0.70);
+  /* 边框略提高，浮层与背景有层次感 */
+  --glass-border:    rgba(255, 255, 255, 0.11);
+  --glass-shadow:    0 8px 28px rgba(0, 0, 0, 0.52);
+  --glass-shadow-sm: 0 3px 12px rgba(0, 0, 0, 0.38);
+  --glass-blur:      blur(18px) saturate(160%);
 
-  /* Status bar - match VSCode exactly */
-  --statusbar-bg: var(--vscode-statusBar-background, #007acc);
+  /* ── Title bar ───────────────────────────────────────────────────────────── */
+  --titlebar-bg:     var(--vscode-titleBar-activeBackground, #1e1e20);
+  --titlebar-fg:     var(--vscode-titleBar-activeForeground, #e8e8ed);
+  /* titlebar 底部线与 toolbar-border 统一 */
+  --titlebar-border: var(--vscode-sideBar-border, rgba(255,255,255,0.06));
+
+  /* ── Status bar ──────────────────────────────────────────────────────────── */
+  --statusbar-bg: var(--vscode-statusBar-background, #1c6bc5);
   --statusbar-fg: var(--vscode-statusBar-foreground, #ffffff);
 
-  /* Title bar */
-  --titlebar-bg: var(--vscode-titleBar-activeBackground, #3c3c3c);
-  --titlebar-fg: var(--vscode-titleBar-activeForeground, #cccccc);
-  --titlebar-border: var(--vscode-titleBar-border, #3c3c3c);
+  /* ── Nodes ───────────────────────────────────────────────────────────────── */
+  --node-bg:         var(--vscode-editorWidget-background, rgba(40, 40, 44, 0.95));
+  --node-border:     rgba(0, 0, 0, 0.10);
+  /* 选中高亮：跟随 VSCode focusBorder，不强制写死蓝色 */
+  --node-selected:   var(--vscode-focusBorder, #3b82f6);
+  --node-header-bg:  rgba(0, 0, 0, 0.03);
+  --node-divider:    rgba(0, 0, 0, 0.08);
+  --node-radius:     10px;
+  /* 节点阴影：单层，无 inset */
+  --node-shadow:     0 2px 12px rgba(0, 0, 0, 0.44);
+  /* 选中光环：外描边 1.5px + 低强度光晕，避免过曝 */
+  --node-shadow-sel: 0 0 0 1.5px var(--node-selected),
+                     0 4px 20px rgba(59, 130, 246, 0.20);
+  --node-fg:         #000000;
+  --node-fg-secondary: #555555;
 
-  /* Node styling */
-  --node-bg: var(--vscode-editorWidget-background, #2d2d2d);
-  --node-border: var(--vscode-editorWidget-border, #454545);
-  --node-selected: var(--vscode-focusBorder, #007acc);
-  --node-header-bg: var(--vscode-sideBarSectionHeader-background, #383838);
+  /* ── Controls ────────────────────────────────────────────────────────────── */
+  --control-bg:         rgba(255, 255, 255, 0.95);
+  --control-border:     rgba(0, 0, 0, 0.14);
+  --control-shadow:     inset 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 0 rgba(255, 255, 255, 0.8);
+  /* hover 提高到 0.10，有明确反馈感 */
+  --control-hover:      rgba(0, 0, 0, 0.06);
+  --control-active:     rgba(59, 130, 246, 0.22);
+  --control-fg:         #000000;
+  --control-radius:     8px;
+  --panel-divider:      rgba(0, 0, 0, 0.08);
+  --panel-fg:           #000000;
+  --panel-fg-secondary: #555555;
 
-  /* Controls */
-  --control-bg: var(--vscode-input-background, #3c3c3c);
-  --control-border: var(--vscode-input-border, #3c3c3c);
-  --control-hover: var(--vscode-list-hoverBackground, #2a2d2e);
-  --control-active: var(--vscode-list-activeSelectionBackground, #094771);
-  --control-fg: var(--vscode-foreground, #cccccc);
+  /* ── Buttons ─────────────────────────────────────────────────────────────── */
+  --button-bg:           #2563eb;
+  --button-fg:           #ffffff;
+  --button-hover:        #1d4ed8;
+  /* 渐变幅度收窄，避免高对比度下过于突兀 */
+  --button-gradient:     linear-gradient(180deg, #3b7bfd 0%, #2563eb 100%);
+  --button-shadow:       0 1px 6px rgba(37, 99, 235, 0.35);
+  --button-secondary-bg: rgba(255, 255, 255, 0.07);
+  --button-secondary-fg: #e8e8ed;
+  --button-radius:       7px;
 
-  /* Buttons */
-  --button-bg: var(--vscode-button-background, #0e639c);
-  --button-fg: var(--vscode-button-foreground, #ffffff);
-  --button-hover: var(--vscode-button-hoverBackground, #1177bb);
-  --button-secondary-bg: var(--vscode-button-secondaryBackground, #3a3d41);
-  --button-secondary-fg: var(--vscode-button-secondaryForeground, #cccccc);
+  /* ── Badge ───────────────────────────────────────────────────────────────── */
+  --badge-bg:     rgba(59, 130, 246, 0.14);
+  --badge-fg:     #93bbfd;
+  --badge-border: rgba(59, 130, 246, 0.22);
 
-  /* Badge */
-  --badge-bg: var(--vscode-badge-background, #4d4d4d);
-  --badge-fg: var(--vscode-badge-foreground, #ffffff);
+  /* ── Connections ─────────────────────────────────────────────────────────── */
+  --connection-default:   rgba(160, 160, 170, 0.65);
+  --connection-sequence:  #30d158;
+  --connection-reference: #ff9f0a;
 
-  /* Connection styling - data flow colors */
-  --connection-default: var(--vscode-editorLineNumber-activeForeground, #9a9a9a);
-  --connection-sequence: #4ec9b0;
-  --connection-reference: #ce9178;
+  /* ── Scrollbar ───────────────────────────────────────────────────────────── */
+  --scrollbar-bg:   rgba(255, 255, 255, 0.10);
+  --scrollbar-hover:rgba(255, 255, 255, 0.20);
 
-  /* Scrollbar */
-  --scrollbar-bg: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.4));
-  --scrollbar-hover: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.7));
+  /* ── Accent / System colors — 略微降饱和，与深色背景协调 ──────────────── */
+  --accent-blue:   #3b82f6;
+  --accent-green:  #34c759;
+  --accent-orange: #f59e0b;
+  --accent-red:    #ef4444;
+  --accent-purple: #a855f7;
+  --accent-teal:   #38bdf8;
+
+  /* ── Radius scale ────────────────────────────────────────────────────────── */
+  --radius-xs:  4px;
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-xl:  18px;
+  --radius-2xl: 24px;
 }
+
+/* =============================================================================
+   Base reset
+   ============================================================================= */
 
 html,
 body,
@@ -68,15 +122,23 @@ body,
   padding: 0;
   overflow: hidden;
   background-color: var(--canvas-bg);
-  color: var(--vscode-foreground, #cccccc);
-  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
-  font-size: var(--vscode-font-size, 13px);
+  color: var(--toolbar-fg);
+  /* 统一字体栈：优先 VSCode 注入的字体变量，fallback 为系统字体 */
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  /* 锁定基准字号为 13px，与 VSCode 面板一致 */
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar styling to match VSCode */
+/* =============================================================================
+   Scrollbar — macOS thin style
+   ============================================================================= */
+
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -85,16 +147,505 @@ body,
 
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar-bg);
-  border-radius: 5px;
+  border-radius: 100px;
+  transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-hover);
 }
 
-/* Connection animation */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* =============================================================================
+   Focus ring — macOS blue ring
+   ============================================================================= */
+
+*:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+/* =============================================================================
+   Inputs — macOS-style inset field
+   ============================================================================= */
+
+input,
+textarea,
+select {
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif);
+  font-size: 12px;
+  line-height: 1.5;
+  background-color: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  color: var(--control-fg);
+  box-shadow: var(--control-shadow);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--accent-blue) !important;
+  box-shadow: 0 0 0 2.5px rgba(59, 130, 246, 0.22);
+  outline: none;
+}
+
+/* =============================================================================
+   Glassmorphism utility classes
+   ============================================================================= */
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  /* 顶部单像素亮线：模拟玻璃磨砂高光，强度控制在 5% 避免与边框叠加 */
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-right: 1px solid var(--glass-border);
+  border-bottom: 1px solid var(--glass-border);
+  border-left: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-sm {
+  background: var(--glass-bg-light);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-sm);
+}
+
+/* =============================================================================
+   Panel chrome — sidebar panels
+   ============================================================================= */
+
+.panel-chrome {
+  background: var(--toolbar-bg);
+  border-right: 1px solid var(--toolbar-border);
+}
+
+.panel-section-header {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--panel-fg-secondary);
+  padding: 10px 12px 4px;
+  user-select: none;
+}
+
+/* =============================================================================
+   Toolbar button active indicator
+   ============================================================================= */
+
+.toolbar-active-indicator {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 24px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--accent-blue) 0%, #5ac8fa 100%);
+  box-shadow: 0 0 10px rgba(0, 122, 255, 0.70);
+}
+
+/* =============================================================================
+   Node cards — macOS window / card style
+   ============================================================================= */
+
+.node-card {
+  background: var(--node-bg);
+  border: 1px solid var(--node-border);
+  border-radius: var(--node-radius);
+  box-shadow: var(--node-shadow);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.node-card.selected {
+  /* 选中：仅用 outline 模拟外描边，不改变元素盒模型也不叠加多重阴影 */
+  outline: 1.5px solid var(--node-selected);
+  outline-offset: 0;
+  box-shadow: 0 4px 18px rgba(59, 130, 246, 0.18);
+  border-color: rgba(59, 130, 246, 0.30);
+}
+
+.node-card:hover:not(.selected) {
+  /* hover：仅加深投影，不加 inset 高光避免冲突 */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.52);
+  border-color: rgba(255, 255, 255, 0.13);
+}
+
+.node-header {
+  background: var(--node-header-bg);
+  border-bottom: 1px solid var(--node-border);
+  border-radius: var(--node-radius) var(--node-radius) 0 0;
+}
+
+/* =============================================================================
+   Context / dropdown menu — macOS popover
+   ============================================================================= */
+
+.mac-menu {
+  background: rgba(32, 32, 35, 0.90);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  /* 单一外边框，强度与 glass-border 保持一致 */
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  /* 单层深阴影，不叠加多个 shadow */
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.58);
+  padding: 5px;
+  min-width: 200px;
+}
+
+.mac-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--toolbar-fg);
+  cursor: pointer;
+  transition: background 0.1s ease, color 0.1s ease;
+  user-select: none;
+}
+
+.mac-menu-item:hover {
+  /* 用低饱和蓝色背景，而非纯蓝色块，避免与菜单文字对比过强 */
+  background: rgba(59, 130, 246, 0.70);
+  color: #fff;
+}
+
+.mac-menu-item.destructive:hover {
+  background: rgba(239, 68, 68, 0.70);
+  color: #fff;
+}
+
+.mac-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mac-menu-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--toolbar-fg-secondary);
+  padding: 4px 10px 2px;
+  user-select: none;
+}
+
+/* =============================================================================
+   Zoom controls — pill style
+   ============================================================================= */
+
+.zoom-pill {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  /* 边框与 glass-border 统一，不单独加粗 */
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  /* 单层阴影，去掉 inset */
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.40);
+}
+
+.zoom-pill-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--toolbar-fg);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.zoom-pill-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.zoom-pill-btn:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.zoom-pill-btn:disabled {
+  opacity: 0.30;
+  cursor: not-allowed;
+}
+
+.zoom-pill-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: rgba(255, 255, 255, 0.10);
+}
+
+/* =============================================================================
+   MiniMap — frosted glass card
+   ============================================================================= */
+
+.minimap-card {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+}
+
+/* =============================================================================
+   Property panel section
+   ============================================================================= */
+
+.prop-section {
+  border-bottom: 1px solid var(--panel-divider);
+  padding: 10px 12px;
+}
+
+.prop-section:last-child {
+  border-bottom: none;
+}
+
+.prop-label {
+  font-size: 11px;
+  color: var(--panel-fg-secondary);
+  margin-bottom: 5px;
+  user-select: none;
+}
+
+.prop-input {
+  width: 100%;
+  padding: 3px 7px;
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  color: var(--control-fg);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--control-shadow);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.prop-input:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.20);
+  outline: none;
+}
+
+/* =============================================================================
+   Buttons — macOS capsule / rounded rect
+   ============================================================================= */
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 14px;
+  background: var(--button-gradient);
+  color: var(--button-fg);
+  border: none;
+  border-radius: var(--button-radius);
+  box-shadow: var(--button-shadow);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 14px rgba(0, 122, 255, 0.50);
+}
+
+.btn-primary:active {
+  filter: brightness(0.94);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 14px;
+  background: var(--button-secondary-bg);
+  color: var(--button-secondary-fg);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: var(--button-radius);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-secondary:hover {
+  background: rgba(255,255,255,0.13);
+}
+
+.btn-destructive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 14px;
+  background: rgba(255, 69, 58, 0.15);
+  color: var(--accent-red);
+  border: 1px solid rgba(255, 69, 58, 0.30);
+  border-radius: var(--button-radius);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-destructive:hover {
+  background: rgba(255, 69, 58, 0.28);
+  border-color: rgba(255, 69, 58, 0.55);
+}
+
+.btn-destructive:active {
+  background: rgba(255, 69, 58, 0.35);
+}
+
+/* =============================================================================
+   Badge / tag
+   ============================================================================= */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+.badge-blue {
+  background: rgba(0, 122, 255, 0.18);
+  color: #4da3ff;
+  border: 1px solid rgba(0, 122, 255, 0.30);
+}
+
+.badge-green {
+  background: rgba(48, 209, 88, 0.15);
+  color: #34c759;
+  border: 1px solid rgba(48, 209, 88, 0.28);
+}
+
+.badge-yellow {
+  background: rgba(255, 214, 10, 0.15);
+  color: #ffd60a;
+  border: 1px solid rgba(255, 214, 10, 0.28);
+}
+
+.badge-red {
+  background: rgba(255, 69, 58, 0.15);
+  color: var(--accent-red);
+  border: 1px solid rgba(255, 69, 58, 0.28);
+}
+
+.badge-neutral {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--toolbar-fg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+/* =============================================================================
+   Scrollbar — macOS overlay style
+   ============================================================================= */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* =============================================================================
+   Selection
+   ============================================================================= */
+
+::selection {
+  background: rgba(0, 122, 255, 0.35);
+  color: inherit;
+}
+
+/* =============================================================================
+   Focus ring — accessible keyboard nav
+   ============================================================================= */
+
+:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+/* =============================================================================
+   Animations — canvas-specific only (不重复 Tailwind animate-* 类)
+   ============================================================================= */
+
+@keyframes neko-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes neko-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes neko-slide-in-r {
+  from { opacity: 0; transform: translateX(10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* 用独立前缀避免与 Tailwind animate-* 冲突 */
+.neko-fade-in    { animation: neko-fade-in    0.18s ease both; }
+.neko-scale-in   { animation: neko-scale-in   0.18s ease both; }
+.neko-slide-in-r { animation: neko-slide-in-r 0.18s ease both; }
+
+/* =============================================================================
+   Canvas connection animation
+   ============================================================================= */
+
 @keyframes flowDot {
-  0% { offset-distance: 0%; }
+  0%   { offset-distance: 0%; }
   100% { offset-distance: 100%; }
 }
 
@@ -102,19 +653,17 @@ body,
   stroke-opacity: 1 !important;
 }
 
-/* Focus ring matching VSCode */
-*:focus-visible {
-  outline: 1px solid var(--node-selected);
-  outline-offset: -1px;
-}
+/* =============================================================================
+   Semantic color helpers — 仅保留 Tailwind 没有的语义别名
+   ============================================================================= */
 
-/* Input styling to match VSCode */
-input, textarea, select {
-  font-family: var(--vscode-font-family, inherit);
-  font-size: var(--vscode-font-size, 13px);
-}
+.text-canvas-secondary { color: var(--toolbar-fg-secondary); }
+.text-canvas-accent    { color: var(--accent-blue); }
+.text-canvas-danger    { color: var(--accent-red); }
+.text-canvas-success   { color: var(--accent-green); }
 
-input:focus, textarea:focus, select:focus {
-  border-color: var(--node-selected) !important;
-  outline: none;
-}
+/* canvas 特有圆角别名（覆盖 Tailwind 默认值，与 --radius-* 对齐） */
+.rounded-canvas-sm { border-radius: var(--radius-sm); }
+.rounded-canvas-md { border-radius: var(--radius-md); }
+.rounded-canvas-lg { border-radius: var(--radius-lg); }
+.rounded-canvas-xl { border-radius: var(--radius-xl); }

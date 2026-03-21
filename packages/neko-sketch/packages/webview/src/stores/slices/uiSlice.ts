@@ -6,12 +6,10 @@ import type { StateCreator } from 'zustand';
 export interface UISlice {
   showSidebar: boolean;
   showBrushPanel: boolean;
-  showColorPanel: boolean;
   showLayerPanel: boolean;
   sidebarWidth: number;
   toggleSidebar: () => void;
   toggleBrushPanel: () => void;
-  toggleColorPanel: () => void;
   toggleLayerPanel: () => void;
   setSidebarWidth: (width: number) => void;
 }
@@ -19,12 +17,10 @@ export interface UISlice {
 export const createUISlice: StateCreator<UISlice> = (set) => ({
   showSidebar: true,
   showBrushPanel: true,
-  showColorPanel: true,
   showLayerPanel: true,
   sidebarWidth: 240,
   toggleSidebar: () => set((s) => ({ showSidebar: !s.showSidebar })),
   toggleBrushPanel: () => set((s) => ({ showBrushPanel: !s.showBrushPanel })),
-  toggleColorPanel: () => set((s) => ({ showColorPanel: !s.showColorPanel })),
   toggleLayerPanel: () => set((s) => ({ showLayerPanel: !s.showLayerPanel })),
   setSidebarWidth: (width) => set({ sidebarWidth: Math.max(200, Math.min(400, width)) }),
 });

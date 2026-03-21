@@ -84,7 +84,7 @@ export function MediaModelSelector({ selectedModel, models, onSelect }: MediaMod
         }`}
       >
         {getSelectedLabel()}
-        <ChevronDownIcon />
+        <ChevronDownIcon className="w-3 h-3" />
       </button>
 
       {isOpen && (

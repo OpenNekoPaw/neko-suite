@@ -1,0 +1,30 @@
+{
+  "hidesExplorerArrows": false,
+  "fileExtensions": {
+    "jvi": "_neko_timeline",
+    "jvc": "_neko_canvas",
+    "nka": "_neko_audio",
+    "nks": "_neko_sketch",
+    "nkp": "_neko_puppet",
+    "inp": "_neko_puppet",
+    "nkm": "_neko_model",
+    "gltf": "_neko_3d",
+    "glb": "_neko_3d",
+    "vrm": "_neko_avatar",
+    "asset-diff": "_neko_diff",
+    "story": "_neko_story",
+    "fountain": "_neko_story"
+  },
+  "iconDefinitions": {
+    "_neko_timeline": { "iconPath": "./icons/file-timeline.svg" },
+    "_neko_canvas":   { "iconPath": "./icons/file-canvas.svg" },
+    "_neko_audio":    { "iconPath": "./icons/file-audio.svg" },
+    "_neko_sketch":   { "iconPath": "./icons/file-sketch.svg" },
+    "_neko_puppet":   { "iconPath": "./icons/file-puppet.svg" },
+    "_neko_model":    { "iconPath": "./icons/file-model.svg" },
+    "_neko_3d":       { "iconPath": "./icons/file-3d.svg" },
+    "_neko_avatar":   { "iconPath": "./icons/file-avatar.svg" },
+    "_neko_diff":     { "iconPath": "./icons/file-diff.svg" },
+    "_neko_story":    { "iconPath": "./icons/file-story.svg" }
+  }
+}

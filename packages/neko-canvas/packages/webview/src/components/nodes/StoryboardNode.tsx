@@ -77,8 +77,11 @@ export function StoryboardNode({
       <div className="flex flex-col h-full">
         {/* Header with color accent */}
         <div
-          className="px-3 py-2 border-b border-[var(--node-border)]"
-          style={{ backgroundColor: color ? `${color}20` : undefined }}
+          className="px-3 py-2"
+          style={{
+            backgroundColor: color ? `${color}18` : 'var(--node-header-bg)',
+            borderBottom: '1px solid var(--node-divider)',
+          }}
         >
           <div className="flex items-center gap-2">
             {/* Color indicator */}
@@ -94,7 +97,7 @@ export function StoryboardNode({
                 onChange={(val) => onUpdateData?.(node.id, { title: val })}
                 placeholder={t('node.editPlaceholder')}
                 className="text-sm font-medium truncate"
-                style={{ color: 'var(--toolbar-fg)' }}
+                style={{ color: 'var(--node-fg)' }}
                 disabled={node.locked}
               />
             </div>
@@ -102,7 +105,7 @@ export function StoryboardNode({
             {duration && (
               <div
                 className="text-xs flex-shrink-0"
-                style={{ color: 'var(--toolbar-fg-secondary)' }}
+                style={{ color: 'var(--node-fg-secondary)' }}
               >
                 {formatDuration(duration)}
               </div>
@@ -111,25 +114,28 @@ export function StoryboardNode({
         </div>
 
         {/* Description area - editable */}
-        <div className="flex-1 p-3 overflow-hidden">
+        <div
+          className="flex-1 p-3 overflow-hidden"
+          style={{ borderBottom: '1px solid var(--node-divider)' }}
+        >
           <EditableText
             value={description || ''}
             onChange={(val) => onUpdateData?.(node.id, { description: val })}
             multiline
             placeholder={t('node.descPlaceholder')}
             className="text-xs line-clamp-4"
-            style={{ color: 'var(--toolbar-fg-secondary)' }}
+            style={{ color: 'var(--node-fg-secondary)' }}
             disabled={node.locked}
           />
         </div>
 
         {/* Footer */}
-        <div className="px-3 py-1.5 border-t border-[var(--node-border)] bg-black/20">
+        <div className="px-3 py-1.5" style={{ backgroundColor: 'var(--node-header-bg)' }}>
           <div className="flex items-center justify-between">
-            <span className="text-xs uppercase" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+            <span className="text-xs uppercase" style={{ color: 'var(--node-fg-secondary)' }}>
               {t('node.storyboard')}
             </span>
-            <span className="text-xs" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+            <span className="text-xs" style={{ color: 'var(--node-fg-secondary)' }}>
               📋
             </span>
           </div>

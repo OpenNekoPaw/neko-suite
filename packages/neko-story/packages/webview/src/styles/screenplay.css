@@ -10,10 +10,13 @@
   --font-size: 12pt;
   --line-height: 1;
 
-  /* Colors for dark theme */
-  --bg-color: #1e1e1e;
-  --text-color: #d4d4d4;
-  --scene-heading-color: #569cd6;
+  /* Colors — derived from VSCode theme, falling back to VS Dark defaults */
+  --bg-color: var(--vscode-editor-background, #1e1e1e);
+  --text-color: var(--vscode-editor-foreground, #d4d4d4);
+  --scene-heading-color: var(--vscode-button-background, #569cd6);
+  --border-subtle: var(--vscode-panel-border, #333);
+
+  /* Fountain syntax highlight colors (intentionally fixed, not theme-derived) */
   --character-color: #dcdcaa;
   --parenthetical-color: #9cdcfe;
   --transition-color: #c586c0;
@@ -21,7 +24,28 @@
   --note-color: #6a9955;
   --synopsis-color: #ce9178;
   --lyrics-color: #d7ba7d;
+
   --hover-bg: rgba(255, 255, 255, 0.05);
+  --divider-color: rgba(255, 255, 255, 0.1);
+  --page-break-color: rgba(255, 255, 255, 0.3);
+  --empty-state-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Light theme overrides */
+body.vscode-light {
+  --hover-bg: rgba(0, 0, 0, 0.04);
+  --divider-color: rgba(0, 0, 0, 0.1);
+  --page-break-color: rgba(0, 0, 0, 0.2);
+  --empty-state-color: rgba(0, 0, 0, 0.4);
+}
+
+/* High contrast — remove transparency */
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --hover-bg: var(--vscode-list-hoverBackground, transparent);
+  --divider-color: var(--vscode-contrastBorder, #333);
+  --page-break-color: var(--vscode-contrastBorder, #333);
+  --empty-state-color: var(--vscode-editor-foreground, #d4d4d4);
 }
 
 * {
@@ -62,7 +86,7 @@ body {
   text-align: center;
   margin-bottom: 2em;
   padding-bottom: 2em;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--divider-color);
 }
 
 .title-page .title {
@@ -171,13 +195,13 @@ body {
   font-style: italic;
   margin: 0.5em 0;
   padding: 0.5em;
-  background-color: rgba(106, 153, 85, 0.1);
+  background-color: color-mix(in srgb, #6a9955 12%, transparent);
   border-radius: 4px;
 }
 
 /* Page Break */
 .page-break {
-  border-top: 1px dashed rgba(255, 255, 255, 0.3);
+  border-top: 1px dashed var(--page-break-color);
   margin: 2em 0;
   text-align: center;
   position: relative;
@@ -192,7 +216,7 @@ body {
   background-color: var(--bg-color);
   padding: 0 1em;
   font-size: 0.7em;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--page-break-color);
 }
 
 /* Lyrics */
@@ -221,7 +245,7 @@ body {
 .empty-state {
   text-align: center;
   padding: 4em 2em;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--empty-state-color);
 }
 
 .empty-state h2 {

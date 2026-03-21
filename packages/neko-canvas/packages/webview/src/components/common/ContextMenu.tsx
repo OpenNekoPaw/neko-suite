@@ -84,15 +84,20 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 min-w-[200px] py-[4px]"
+      className="fixed z-50"
       style={{
         left: x,
         top: y,
-        backgroundColor: 'var(--vscode-menu-background, #252526)',
-        border: '1px solid var(--vscode-menu-border, #454545)',
-        borderRadius: 4,
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.36)',
-        color: 'var(--vscode-menu-foreground, #cccccc)',
+        minWidth: 210,
+        padding: '5px',
+        /* macOS-style frosted popover */
+        background: 'rgba(32, 32, 36, 0.92)',
+        backdropFilter: 'blur(22px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(22px) saturate(180%)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: 12,
+        boxShadow: '0 16px 48px rgba(0,0,0,0.60), 0 2px 8px rgba(0,0,0,0.40)',
+        color: 'var(--toolbar-fg, #e8e8ed)',
       }}
     >
       {items.map((entry, i) => {
@@ -100,8 +105,11 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
           return (
             <div
               key={`sep-${i}`}
-              className="my-[4px] mx-0 h-px"
-              style={{ backgroundColor: 'var(--vscode-menu-separatorBackground, #454545)' }}
+              style={{
+                height: 1,
+                margin: '4px 4px',
+                background: 'rgba(255,255,255,0.07)',
+              }}
             />
           );
         }
@@ -110,53 +118,68 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         return (
           <button
             key={`item-${i}`}
-            className="w-full h-[26px] px-0 flex items-center text-[12px] text-left border-0 bg-transparent"
             style={{
+              display: 'flex',
+              alignItems: 'center',
+              width: '100%',
+              height: 28,
+              padding: '0 6px 0 4px',
+              fontSize: 13,
+              textAlign: 'left',
+              border: 'none',
+              borderRadius: 7,
+              background: 'transparent',
               color: item.disabled
-                ? 'var(--vscode-disabledForeground, #6b6b6b)'
-                : 'var(--vscode-menu-foreground, #cccccc)',
+                ? 'rgba(232,232,237,0.30)'
+                : 'var(--toolbar-fg, #e8e8ed)',
               cursor: item.disabled ? 'default' : 'pointer',
-              fontFamily: 'var(--vscode-font-family)',
-              opacity: 1,
+              fontFamily: 'var(--vscode-font-family, inherit)',
+              transition: 'background 0.1s ease',
             }}
             onMouseEnter={(e) => {
               if (!item.disabled) {
-                e.currentTarget.style.backgroundColor =
-                  'var(--vscode-menu-selectionBackground, #094771)';
-                e.currentTarget.style.color = 'var(--vscode-menu-selectionForeground, #ffffff)';
-                // Also update shortcut color
-                const shortcut = e.currentTarget.querySelector(
-                  '[data-shortcut]',
-                ) as HTMLElement | null;
-                if (shortcut)
-                  shortcut.style.color = 'var(--vscode-menu-selectionForeground, #ffffff)';
+                e.currentTarget.style.background = 'rgba(59,130,246,0.75)';
+                e.currentTarget.style.color = '#fff';
+                const sc = e.currentTarget.querySelector('[data-shortcut]') as HTMLElement | null;
+                if (sc) sc.style.color = 'rgba(255,255,255,0.65)';
               }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.background = 'transparent';
               e.currentTarget.style.color = item.disabled
-                ? 'var(--vscode-disabledForeground, #6b6b6b)'
-                : 'var(--vscode-menu-foreground, #cccccc)';
-              const shortcut = e.currentTarget.querySelector(
-                '[data-shortcut]',
-              ) as HTMLElement | null;
-              if (shortcut) shortcut.style.color = 'var(--vscode-descriptionForeground, #717171)';
+                ? 'rgba(232,232,237,0.30)'
+                : 'var(--toolbar-fg, #e8e8ed)';
+              const sc = e.currentTarget.querySelector('[data-shortcut]') as HTMLElement | null;
+              if (sc) sc.style.color = 'rgba(232,232,237,0.35)';
             }}
             onClick={() => handleItemClick(item)}
             disabled={item.disabled}
           >
-            {/* Icon area - fixed width for alignment */}
-            <span className="w-[28px] flex-shrink-0 flex items-center justify-center text-[13px]">
+            {/* Icon — fixed width */}
+            <span
+              style={{
+                width: 26,
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 13,
+              }}
+            >
               {item.icon ?? ''}
             </span>
             {/* Label */}
-            <span className="flex-1 pr-4">{item.label}</span>
+            <span style={{ flex: 1, paddingRight: 12 }}>{item.label}</span>
             {/* Shortcut */}
             {item.shortcut && (
               <span
                 data-shortcut
-                className="pr-[10px] text-[11px]"
-                style={{ color: 'var(--vscode-descriptionForeground, #717171)' }}
+                style={{
+                  fontSize: 11,
+                  paddingRight: 4,
+                  color: 'rgba(232,232,237,0.35)',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
               >
                 {item.shortcut}
               </span>

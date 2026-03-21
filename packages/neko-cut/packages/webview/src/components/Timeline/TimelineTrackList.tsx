@@ -169,7 +169,8 @@ export const TimelineTrackList = memo(function TimelineTrackList({
         <div
           className="relative flex"
           style={{
-            width: timelineWidth + TRACK_LABEL_WIDTH,
+            minWidth: timelineWidth + TRACK_LABEL_WIDTH,
+            width: '100%',
             minHeight: tracks.length * TRACK_HEIGHT,
           }}
         >
@@ -400,7 +401,7 @@ export const TimelineTrackList = memo(function TimelineTrackList({
           </div>
 
           {/* Track content area - positioned after labels */}
-          <div className="relative flex-1" style={{ width: timelineWidth }}>
+          <div className="relative flex-1" style={{ minWidth: timelineWidth }}>
             {tracks.map((track, index) => (
               <TimelineTrack
                 key={track.id}

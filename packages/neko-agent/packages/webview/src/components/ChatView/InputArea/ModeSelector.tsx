@@ -53,7 +53,7 @@ export function ModeSelector({ mode, onChange }: ModeSelectorProps) {
         title={t('chat.executionMode.title')}
       >
         <span>{currentMode ? t(currentMode.labelKey) : mode}</span>
-        <ChevronDownIcon />
+        <ChevronDownIcon className="w-3 h-3" />
       </button>
 
       {isOpen && (
