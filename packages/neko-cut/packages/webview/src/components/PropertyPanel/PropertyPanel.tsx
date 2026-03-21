@@ -3,7 +3,8 @@
  * 属性面板组件 - 显示和编辑选中元素的属性
  */
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo } from 'react';
+import { CollapsibleSection } from '@neko/shared/components';
 import { PropertyRow, type PropertyDefinition } from './PropertyRow';
 import { NormalizeLoudnessButton } from './NormalizeLoudnessButton';
 import { AIActionsButton } from './AIActionsButton';
@@ -258,31 +259,17 @@ const PropertyGroup = memo(function PropertyGroup({
   disabled = false,
 }: PropertyGroupProps) {
   const { t } = useTranslation();
-  // When disabled, default to collapsed state
-  const [expanded, setExpanded] = useState(disabled ? false : defaultExpanded);
-
   return (
-    <div className="nk-prop-group">
-      <button className="nk-prop-group-header" onClick={() => setExpanded(!expanded)}>
-        <svg
-          className={`nk-prop-group-chevron ${expanded ? 'expanded' : ''}`}
-          viewBox="0 0 12 12"
-          fill="none"
-        >
-          <path
-            d="M4 2.5L7.5 6 4 9.5"
-            stroke="currentColor"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-        <span className="nk-prop-group-title">{t(titleKey)}</span>
-      </button>
-      {expanded && (
-        <div className={`nk-prop-group-body ${disabled ? 'opacity-50' : ''}`}>{children}</div>
-      )}
-    </div>
+    <CollapsibleSection
+      title={t(titleKey)}
+      defaultExpanded={defaultExpanded}
+      disabled={disabled}
+    >
+      {/* Preserve horizontal padding matching the original .nk-prop-group-body */}
+      <div style={{ padding: '0 10px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {children}
+      </div>
+    </CollapsibleSection>
   );
 });
 

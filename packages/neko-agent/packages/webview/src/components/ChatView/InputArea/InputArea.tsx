@@ -57,6 +57,7 @@ export function InputArea({
     contextTokenCount,
     isCompressing,
     onCompressContext,
+    mediaModelCallCount,
     skills,
     onSlashCommand,
     onRequestFiles,
@@ -155,10 +156,25 @@ export function InputArea({
     e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
   };
 
+  // Cycle execution mode: plan → ask → auto → plan
+  const EXECUTION_MODES: import('@/components/types').ShellExecutionMode[] = ['plan', 'ask', 'auto'];
+  const cycleExecutionMode = useCallback(() => {
+    const idx = EXECUTION_MODES.indexOf(executionMode);
+    const next = EXECUTION_MODES[(idx + 1) % EXECUTION_MODES.length];
+    onExecutionModeChange(next!);
+  }, [executionMode, onExecutionModeChange]);
+
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Ignore key events during IME composition (e.g., Chinese/Japanese input)
     if (e.nativeEvent.isComposing || e.keyCode === 229) {
+      return;
+    }
+
+    // Shift+Tab: cycle execution mode
+    if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault();
+      cycleExecutionMode();
       return;
     }
 
@@ -411,9 +427,8 @@ export function InputArea({
         {/* File attachment preview */}
         <AttachmentPreview attachedFiles={attachedFiles} onRemove={handleRemoveFile} />
 
-        {/* Input row with inline buttons */}
+        {/* Input row */}
         <div className="flex items-end gap-1 px-2 py-2">
-          {/* Textarea */}
           <textarea
             ref={textareaRef}
             value={inputValue}
@@ -426,100 +441,98 @@ export function InputArea({
             className="flex-1 px-2 py-1.5 bg-transparent text-[var(--vscode-foreground)] resize-none outline-none text-[13px] min-h-[32px] max-h-[120px] placeholder:text-[var(--vscode-descriptionForeground)]"
             rows={1}
           />
+        </div>
 
-          {/* Send/Cancel button - Codex style circular */}
+        {/* Bottom action bar — single row: + / [pie] [mediaCount] | [llm] [media] [spacer] [mode] [send/stop] */}
+        <div className="flex items-center px-2 pb-2 gap-0.5 border-t border-[var(--vscode-panel-border)] border-opacity-30">
+          {/* Attachment button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center justify-center w-7 h-7 text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded-md transition-colors"
+            title={t('chat.input.attach')}
+          >
+            <PlusIcon className="w-4 h-4" />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,video/*,audio/*,.txt,.md,.json,.js,.ts,.tsx,.jsx,.py,.go,.rs,.java,.c,.cpp,.h,.hpp,.css,.html,.xml,.yaml,.yml,.toml"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+
+          {/* Slash command button */}
+          <button
+            onClick={handleSlashClick}
+            className="flex items-center justify-center w-7 h-7 text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded-md transition-colors font-medium text-[13px]"
+            title="Commands"
+          >
+            /
+          </button>
+
+          {/* Token usage pie chart */}
+          <UsageIndicator
+            tokenCount={contextTokenCount}
+            isCompressing={isCompressing}
+            onCompress={onCompressContext}
+          />
+
+          {/* Media model call count badge */}
+          <div
+            className="flex items-center gap-0.5 px-1 text-[10px] text-[var(--vscode-descriptionForeground)]"
+            title={`Media model calls: ${mediaModelCallCount}`}
+          >
+            <MediaCallIcon className="w-3 h-3" />
+            <span>{mediaModelCallCount}</span>
+          </div>
+
+          {/* Separator */}
+          <div className="w-px h-4 bg-[var(--vscode-panel-border)] mx-1 flex-shrink-0" />
+
+          {/* LLM model selector */}
+          <ModelSelector
+            selectedModel={selectedModel}
+            models={availableModels}
+            onSelect={onModelSelect}
+          />
+
+          {/* Media model selector */}
+          <MediaModelSelector
+            selectedModel={selectedMediaModel}
+            models={availableMediaModels}
+            onSelect={onMediaModelSelect}
+          />
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Execution mode selector */}
+          <ModeSelector mode={executionMode} onChange={onExecutionModeChange} />
+
+          {/* Send / Stop button */}
           {isThinking ? (
             <button
               onClick={onCancel}
-              className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-[var(--vscode-errorForeground)] text-white hover:opacity-90 transition-opacity"
+              className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-[var(--vscode-errorForeground)] text-white hover:opacity-90 transition-opacity"
               title={t('chat.input.cancel')}
             >
-              <StopIcon className="w-4 h-4" />
+              <StopIcon className="w-3.5 h-3.5" />
             </button>
           ) : (
             <button
               onClick={handleSend}
               disabled={!canSend}
-              className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full transition-all ${
+              className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-all ${
                 canSend
                   ? 'bg-gradient-to-br from-[var(--vscode-charts-blue,#0e63c8)] to-[var(--vscode-charts-purple,#6b3fa0)] text-[var(--vscode-button-foreground)] hover:opacity-90 shadow-[0_2px_8px_rgba(0,0,0,0.25)]'
                   : 'bg-[var(--vscode-input-background)] text-[var(--vscode-descriptionForeground)] opacity-50 cursor-not-allowed'
               }`}
               title={t('chat.input.send')}
             >
-              <SendIcon className="w-4 h-4" />
+              <SendIcon className="w-3.5 h-3.5" />
             </button>
           )}
-        </div>
-
-        {/* Bottom action bar */}
-        <div className="flex items-center justify-between px-2 pb-2 border-t border-[var(--vscode-panel-border)] border-opacity-30">
-          {/* Left actions */}
-          <div className="flex items-center gap-0.5">
-            {/* Attachment button */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center w-7 h-7 text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded-md transition-colors"
-              title={t('chat.input.attach')}
-            >
-              <PlusIcon className="w-4 h-4" />
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*,video/*,audio/*,.txt,.md,.json,.js,.ts,.tsx,.jsx,.py,.go,.rs,.java,.c,.cpp,.h,.hpp,.css,.html,.xml,.yaml,.yml,.toml"
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-
-            {/* Slash command button */}
-            <button
-              onClick={handleSlashClick}
-              className="flex items-center justify-center w-7 h-7 text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded-md transition-colors font-medium text-[13px]"
-              title="Commands"
-            >
-              /
-            </button>
-
-            {/* Divider */}
-            <div className="w-px h-4 bg-[var(--vscode-panel-border)] mx-1" />
-
-            {/* Model selector */}
-            <ModelSelector
-              selectedModel={selectedModel}
-              models={availableModels}
-              onSelect={onModelSelect}
-            />
-
-            {/* Divider */}
-            <div className="w-px h-4 bg-[var(--vscode-panel-border)] mx-0.5" />
-
-            {/* Media model selector */}
-            <MediaModelSelector
-              selectedModel={selectedMediaModel}
-              models={availableMediaModels}
-              onSelect={onMediaModelSelect}
-            />
-          </div>
-
-          {/* Right actions */}
-          <div className="flex items-center gap-0.5">
-            {/* Usage indicator */}
-            <UsageIndicator
-              tokenCount={contextTokenCount}
-              isCompressing={isCompressing}
-              onCompress={onCompressContext}
-            />
-
-            {/* Divider (only show if token count is significant) */}
-            {contextTokenCount >= 100 && (
-              <div className="w-px h-4 bg-[var(--vscode-panel-border)] mx-1" />
-            )}
-
-            {/* Mode selector (plan/ask/auto) */}
-            <ModeSelector mode={executionMode} onChange={onExecutionModeChange} />
-          </div>
         </div>
       </div>
     </div>
@@ -528,3 +541,14 @@ export function InputArea({
 
 
 export type { MessageAttachment, ProjectFile };
+
+/** Small icon indicating media model calls (image/video/audio generation) */
+function MediaCallIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" fill="currentColor">
+      <path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm1 0v8h10V3H3z" />
+      <path d="M6.5 5.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM5 6.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z" />
+      <path d="M3 10l2.5-3 2 2.5 1.5-1.5L12 10H3z" />
+    </svg>
+  );
+}

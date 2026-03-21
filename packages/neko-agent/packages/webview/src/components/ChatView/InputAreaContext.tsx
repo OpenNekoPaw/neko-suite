@@ -32,6 +32,8 @@ export interface InputAreaContextValue {
   contextTokenCount: number;
   isCompressing: boolean;
   onCompressContext?: () => Promise<void>;
+  // Media model call count (per conversation)
+  mediaModelCallCount: number;
   // Skills
   skills: SkillSummary[];
   onSlashCommand?: (command: SlashCommand) => void;
@@ -59,6 +61,7 @@ export function InputAreaProvider({
       contextTokenCount: value.contextTokenCount,
       isCompressing: value.isCompressing,
       onCompressContext: value.onCompressContext,
+      mediaModelCallCount: value.mediaModelCallCount,
       skills: value.skills,
       onSlashCommand: value.onSlashCommand,
       onRequestFiles: value.onRequestFiles,
@@ -77,6 +80,7 @@ export function InputAreaProvider({
       value.contextTokenCount,
       value.isCompressing,
       value.onCompressContext,
+      value.mediaModelCallCount,
       value.skills,
       value.onSlashCommand,
       value.onRequestFiles,

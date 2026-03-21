@@ -70,9 +70,9 @@ export const chat = {
   'chat.executionMode.title': '执行模式：计划（模拟运行）、询问（确认）、自动（仅白名单）',
   'chat.executionMode.plan': '计划',
   'chat.executionMode.planDesc': '模拟运行，仅显示命令',
-  'chat.executionMode.ask': '执行前询问',
+  'chat.executionMode.ask': '审批',
   'chat.executionMode.askDesc': '执行前确认',
-  'chat.executionMode.auto': '自动执行',
+  'chat.executionMode.auto': '自动',
   'chat.executionMode.autoDesc': '自动执行安全命令',
   'chat.executionMode.deny': '禁止执行',
 

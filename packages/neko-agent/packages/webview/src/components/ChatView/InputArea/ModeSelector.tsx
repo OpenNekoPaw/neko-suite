@@ -49,8 +49,8 @@ export function ModeSelector({ mode, onChange }: ModeSelectorProps) {
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 px-2 py-1 text-[11px] text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-colors"
-        title={t('chat.executionMode.title')}
+        className="flex items-center gap-0.5 px-1.5 py-1 text-[11px] text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-colors"
+        title={`${t('chat.executionMode.title')} (Shift+Tab)`}
       >
         <span>{currentMode ? t(currentMode.labelKey) : mode}</span>
         <ChevronDownIcon className="w-3 h-3" />

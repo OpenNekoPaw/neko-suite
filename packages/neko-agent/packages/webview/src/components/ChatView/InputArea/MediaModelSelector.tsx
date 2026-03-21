@@ -10,6 +10,7 @@ import type { ChatModelOption, ModelCategory } from '@neko/shared';
 import { useClickOutsideSingle } from './useClickOutside';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useTranslation } from '@/i18n/I18nContext';
+import { ModelDot, getCategoryColor } from './ModelIcon';
 
 interface MediaModelSelectorProps {
   selectedModel: string;
@@ -57,32 +58,34 @@ export function MediaModelSelector({ selectedModel, models, onSelect }: MediaMod
 
   const getSelectedLabel = () => {
     if (!selectedModel || selectedModel === 'none') {
-      return t('chat.mediaModelNone') || 'media:none';
+      return t('chat.mediaModelNone') || '无';
     }
     const model = models.find((m) => m.id === selectedModel);
-    if (model) {
-      // Show short label: "media:model-name"
-      const shortName = model.label.includes('/')
-        ? model.label.split('/').pop()?.trim()
-        : model.label;
-      return `media:${shortName}`;
-    }
-    return `media:${selectedModel}`;
+    const raw = model?.label ?? selectedModel;
+    // Take part after last '/' then truncate
+    const short = raw.includes('/') ? (raw.split('/').pop()?.trim() ?? raw) : raw;
+    return short.length > 12 ? `${short.slice(0, 11)}…` : short;
   };
 
   const hasModels = models.length > 0;
   const isNone = !selectedModel || selectedModel === 'none';
+  const selectedModelObj = isNone ? null : models.find((m) => m.id === selectedModel);
+  const dotColor = isNone
+    ? 'var(--vscode-editorWarning-foreground)'
+    : getCategoryColor(selectedModelObj?.category);
 
   return (
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-1 px-2 py-1 text-[11px] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-colors ${
+        className={`flex items-center gap-1 px-1.5 py-1 text-[11px] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-colors ${
           isNone
             ? 'text-[var(--vscode-editorWarning-foreground)]'
             : 'text-[var(--vscode-descriptionForeground)]'
         }`}
+        title={selectedModelObj?.label ?? 'No media model'}
       >
+        <ModelDot color={dotColor} />
         {getSelectedLabel()}
         <ChevronDownIcon className="w-3 h-3" />
       </button>

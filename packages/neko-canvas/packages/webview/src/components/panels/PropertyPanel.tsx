@@ -10,6 +10,7 @@
 
 import { useCallback } from 'react';
 import type { CanvasNode, CanvasConnection, ConnectionType } from '@neko/shared';
+import { CollapsibleSection } from '@neko/shared/components';
 import { t } from '../../i18n';
 import { PortEditor } from './PortEditor';
 
@@ -51,8 +52,8 @@ export function PropertyPanel({
       <div
         className="flex flex-col h-full overflow-y-auto"
         style={{
-          backgroundColor: 'var(--toolbar-bg)',
-          borderLeft: '1px solid var(--toolbar-border)',
+          backgroundColor: 'var(--neko-surface)',
+          borderLeft: '1px solid var(--neko-border)',
           width,
         }}
       >
@@ -67,14 +68,14 @@ export function PropertyPanel({
       <div
         className="flex flex-col h-full"
         style={{
-          backgroundColor: 'var(--toolbar-bg)',
-          borderLeft: '1px solid var(--toolbar-border)',
+          backgroundColor: 'var(--neko-surface)',
+          borderLeft: '1px solid var(--neko-border)',
           width,
         }}
       >
         <PanelHeader title={t('panel.properties')} />
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
+          <p className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
             {t('panel.noSelection')}
           </p>
         </div>
@@ -89,8 +90,8 @@ export function PropertyPanel({
     <div
       className="flex flex-col h-full overflow-y-auto"
       style={{
-        backgroundColor: 'var(--toolbar-bg)',
-        borderLeft: '1px solid var(--toolbar-border)',
+        backgroundColor: 'var(--neko-surface)',
+        borderLeft: '1px solid var(--neko-border)',
         width,
         minWidth: 200,
         maxWidth: 400,
@@ -109,7 +110,7 @@ export function PropertyPanel({
       ) : (
         <>
           {/* Position & Size */}
-          <PanelSection title={t('panel.transform')}>
+          <CollapsibleSection title={t('panel.transform')}>
             <div className="grid grid-cols-2 gap-2">
               <NumberField
                 label="X"
@@ -143,12 +144,12 @@ export function PropertyPanel({
                 }
               />
             </div>
-          </PanelSection>
+          </CollapsibleSection>
 
           {/* Layer */}
-          <PanelSection title={t('panel.layer')}>
+          <CollapsibleSection title={t('panel.layer')}>
             <div className="flex items-center justify-between">
-              <span className="text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
+              <span className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
                 Z-Index: {node.zIndex}
               </span>
               <button
@@ -173,7 +174,7 @@ export function PropertyPanel({
                 {node.locked ? '🔒 ' + t('menu.unlock') : '🔓 ' + t('menu.lock')}
               </button>
             </div>
-          </PanelSection>
+          </CollapsibleSection>
 
           {/* Node-specific properties */}
           <NodeSpecificProperties
@@ -187,7 +188,7 @@ export function PropertyPanel({
           )}
 
           {/* Actions */}
-          <PanelSection title={t('panel.actions')}>
+          <CollapsibleSection title={t('panel.actions')}>
             <button
               style={{
                 width: '100%',
@@ -210,7 +211,7 @@ export function PropertyPanel({
             >
               🗑 {t('menu.delete')}
             </button>
-          </PanelSection>
+          </CollapsibleSection>
         </>
       )}
     </div>
@@ -223,52 +224,12 @@ export function PropertyPanel({
 
 function PanelHeader({ title }: { title: string }) {
   return (
-    <div
-      className="flex items-center px-3 shrink-0"
-      style={{
-        height: 36,
-        color: 'var(--panel-fg)',
-        fontSize: 12,
-        fontWeight: 600,
-        letterSpacing: '0.02em',
-        borderBottom: '1px solid var(--toolbar-border)',
-        /* 与 canvas titlebar 背景统一，稍深于 panel body */
-        backgroundColor: 'rgba(0,0,0,0.12)',
-        userSelect: 'none',
-      }}
-    >
+    <div className="neko-panel-header">
       {title}
     </div>
   );
 }
 
-function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div
-      className="px-3"
-      style={{
-        paddingTop: 10,
-        paddingBottom: 10,
-        borderBottom: '1px solid var(--panel-divider)',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          color: 'var(--panel-fg-secondary)',
-          marginBottom: 8,
-          userSelect: 'none',
-        }}
-      >
-        {title}
-      </div>
-      {children}
-    </div>
-  );
-}
 
 function NumberField({
   label,
@@ -295,7 +256,7 @@ function NumberField({
           fontWeight: 600,
           width: 14,
           textAlign: 'center',
-          color: 'var(--panel-fg-secondary)',
+          color: 'var(--neko-fg-secondary)',
           userSelect: 'none',
           flexShrink: 0,
         }}
@@ -338,7 +299,7 @@ function MultiSelectionInfo({ nodes }: { nodes: CanvasNode[] }) {
 
   return (
     <div className="px-3 py-3">
-      <p className="text-xs mb-2" style={{ color: 'var(--panel-fg-secondary)' }}>
+      <p className="text-xs mb-2" style={{ color: 'var(--neko-fg-secondary)' }}>
         {t('panel.multiSelected', { count: nodes.length })}
       </p>
       <div className="space-y-1">
@@ -346,10 +307,10 @@ function MultiSelectionInfo({ nodes }: { nodes: CanvasNode[] }) {
           <div
             key={type}
             className="flex items-center justify-between text-xs"
-            style={{ color: 'var(--panel-fg)' }}
+            style={{ color: 'var(--neko-fg)' }}
           >
             <span>{getNodeTypeLabel(type)}</span>
-            <span style={{ color: 'var(--panel-fg-secondary)' }}>×{count}</span>
+            <span style={{ color: 'var(--neko-fg-secondary)' }}>×{count}</span>
           </div>
         ))}
       </div>
@@ -370,7 +331,7 @@ function NodeSpecificProperties({
   switch (nodeType) {
     case 'annotation':
       return (
-        <PanelSection title={t('panel.content')}>
+        <CollapsibleSection title={t('panel.content')}>
           <textarea
             className="w-full text-xs px-2 py-1.5 rounded border outline-none resize-none"
             style={{
@@ -388,17 +349,17 @@ function NodeSpecificProperties({
               e.currentTarget.style.borderColor = 'var(--control-border)';
             }}
           />
-        </PanelSection>
+        </CollapsibleSection>
       );
 
     case 'storyboard':
       return (
-        <PanelSection title={t('panel.storyboard')}>
+        <CollapsibleSection title={t('panel.storyboard')}>
           <div className="space-y-2">
             <div>
               <label
                 className="text-xs block mb-1"
-                style={{ color: 'var(--panel-fg-secondary)' }}
+                style={{ color: 'var(--neko-fg-secondary)' }}
               >
                 {t('panel.title')}
               </label>
@@ -417,7 +378,7 @@ function NodeSpecificProperties({
             <div>
               <label
                 className="text-xs block mb-1"
-                style={{ color: 'var(--panel-fg-secondary)' }}
+                style={{ color: 'var(--neko-fg-secondary)' }}
               >
                 {t('panel.description')}
               </label>
@@ -434,18 +395,18 @@ function NodeSpecificProperties({
               />
             </div>
           </div>
-        </PanelSection>
+        </CollapsibleSection>
       );
 
     case 'text': {
       const textStyle = (data.style as Record<string, unknown>) ?? {};
       return (
-        <PanelSection title={t('panel.textStyle')}>
+        <CollapsibleSection title={t('panel.textStyle')}>
           <div className="space-y-2">
             <div>
               <label
                 className="text-xs block mb-1"
-                style={{ color: 'var(--panel-fg-secondary)' }}
+                style={{ color: 'var(--neko-fg-secondary)' }}
               >
                 {t('panel.fontSize')}
               </label>
@@ -471,7 +432,7 @@ function NodeSpecificProperties({
               </select>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
+              <label className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
                 {t('panel.fontWeight')}
               </label>
               <button
@@ -480,7 +441,7 @@ function NodeSpecificProperties({
                   backgroundColor:
                     textStyle.fontWeight === 'bold' ? 'var(--node-selected)' : 'var(--control-bg)',
                   borderColor: 'var(--control-border)',
-                  color: textStyle.fontWeight === 'bold' ? 'var(--panel-fg)' : 'var(--control-fg)',
+                  color: textStyle.fontWeight === 'bold' ? 'var(--neko-fg)' : 'var(--control-fg)',
                   fontWeight: 'bold',
                 }}
                 onClick={() =>
@@ -498,7 +459,7 @@ function NodeSpecificProperties({
             <div>
               <label
                 className="text-xs block mb-1"
-                style={{ color: 'var(--panel-fg-secondary)' }}
+                style={{ color: 'var(--neko-fg-secondary)' }}
               >
                 {t('panel.textAlign')}
               </label>
@@ -525,7 +486,7 @@ function NodeSpecificProperties({
                       color:
                         (textStyle.textAlign ?? 'left') === align
                           ? '#93bbfd'
-                          : 'var(--panel-fg)',
+                          : 'var(--neko-fg)',
                     }}
                     onClick={() => onUpdateData({ style: { ...textStyle, textAlign: align } })}
                   >
@@ -535,7 +496,7 @@ function NodeSpecificProperties({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
+              <label className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
                 {t('panel.textColor')}
               </label>
               <input
@@ -546,19 +507,19 @@ function NodeSpecificProperties({
               />
             </div>
           </div>
-        </PanelSection>
+        </CollapsibleSection>
       );
     }
 
     case 'group': {
       const childIds = (data.childIds as string[]) ?? [];
       return (
-        <PanelSection title={t('panel.group')}>
+        <CollapsibleSection title={t('panel.group')}>
           <div className="space-y-2">
             <div>
               <label
                 className="text-xs block mb-1"
-                style={{ color: 'var(--panel-fg-secondary)' }}
+                style={{ color: 'var(--neko-fg-secondary)' }}
               >
                 {t('panel.groupLabel')}
               </label>
@@ -575,7 +536,7 @@ function NodeSpecificProperties({
               />
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
+              <label className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
                 {t('panel.groupColor')}
               </label>
               <input
@@ -588,7 +549,7 @@ function NodeSpecificProperties({
             <div>
               <label
                 className="text-xs block mb-1"
-                style={{ color: 'var(--panel-fg-secondary)' }}
+                style={{ color: 'var(--neko-fg-secondary)' }}
               >
                 {t('panel.groupChildren')} ({childIds.length})
               </label>
@@ -596,7 +557,7 @@ function NodeSpecificProperties({
                 {childIds.length === 0 ? (
                   <span
                     className="text-[10px] italic"
-                    style={{ color: 'var(--panel-fg-secondary)' }}
+                    style={{ color: 'var(--neko-fg-secondary)' }}
                   >
                     {t('group.empty')}
                   </span>
@@ -617,17 +578,17 @@ function NodeSpecificProperties({
               </div>
             </div>
           </div>
-        </PanelSection>
+        </CollapsibleSection>
       );
     }
 
     case 'media':
       return (
-        <PanelSection title={t('panel.media')}>
-          <div className="space-y-1 text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
+        <CollapsibleSection title={t('panel.media')}>
+          <div className="space-y-1 text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
             <div className="flex justify-between">
               <span>{t('panel.type')}</span>
-              <span style={{ color: 'var(--panel-fg)' }}>
+              <span style={{ color: 'var(--neko-fg)' }}>
                 {(data.mediaType as string) ?? 'unknown'}
               </span>
             </div>
@@ -639,13 +600,13 @@ function NodeSpecificProperties({
             {data.duration != null && (
               <div className="flex justify-between">
                 <span>{t('panel.duration')}</span>
-                <span style={{ color: 'var(--panel-fg)' }}>
+                <span style={{ color: 'var(--neko-fg)' }}>
                   {formatDuration(data.duration as number)}
                 </span>
               </div>
             )}
           </div>
-        </PanelSection>
+        </CollapsibleSection>
       );
 
     default:
@@ -662,7 +623,7 @@ function ConnectionProperties({
 }) {
   return (
     <>
-      <PanelSection title={t('panel.connectionLabel')}>
+      <CollapsibleSection title={t('panel.connectionLabel')}>
         <input
           type="text"
           className="w-full text-xs px-2 py-1 rounded border outline-none"
@@ -681,9 +642,9 @@ function ConnectionProperties({
             e.currentTarget.style.borderColor = 'var(--control-border)';
           }}
         />
-      </PanelSection>
+      </CollapsibleSection>
 
-      <PanelSection title={t('panel.connectionType')}>
+      <CollapsibleSection title={t('panel.connectionType')}>
         <select
           className="w-full text-xs px-2 py-1 rounded border outline-none"
           style={{
@@ -698,30 +659,30 @@ function ConnectionProperties({
           <option value="sequence">Sequence</option>
           <option value="reference">Reference</option>
         </select>
-      </PanelSection>
+      </CollapsibleSection>
 
-      <PanelSection title={t('panel.connectionInfo')}>
-        <div className="space-y-1 text-xs" style={{ color: 'var(--panel-fg-secondary)' }}>
+      <CollapsibleSection title={t('panel.connectionInfo')}>
+        <div className="space-y-1 text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
           <div className="flex justify-between">
             <span>ID</span>
-            <span className="truncate max-w-[120px]" style={{ color: 'var(--panel-fg)' }}>
+            <span className="truncate max-w-[120px]" style={{ color: 'var(--neko-fg)' }}>
               {connection.id.slice(-8)}
             </span>
           </div>
           <div className="flex justify-between">
             <span>Source</span>
-            <span className="truncate max-w-[120px]" style={{ color: 'var(--panel-fg)' }}>
+            <span className="truncate max-w-[120px]" style={{ color: 'var(--neko-fg)' }}>
               {connection.sourceId.slice(-8)}
             </span>
           </div>
           <div className="flex justify-between">
             <span>Target</span>
-            <span className="truncate max-w-[120px]" style={{ color: 'var(--panel-fg)' }}>
+            <span className="truncate max-w-[120px]" style={{ color: 'var(--neko-fg)' }}>
               {connection.targetId.slice(-8)}
             </span>
           </div>
         </div>
-      </PanelSection>
+      </CollapsibleSection>
     </>
   );
 }

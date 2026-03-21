@@ -1,6 +1,7 @@
 /**
  * UsageIndicator Component
- * Shows context token usage and allows manual compression
+ * Compact SVG pie chart showing context token usage percentage.
+ * Click to trigger context compression.
  */
 
 import { useState, useCallback } from 'react';
@@ -9,40 +10,26 @@ import { getLogger } from '../../../utils/logger';
 
 const logger = getLogger('UsageIndicator');
 
+// Pie chart geometry
+const RADIUS = 5;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+
 interface UsageIndicatorProps {
-  /** Current context token count */
   tokenCount: number;
-  /** Maximum context tokens (for percentage calculation) */
   maxTokens?: number;
-  /** Whether compression is in progress */
   isCompressing?: boolean;
-  /** Callback to trigger compression */
   onCompress?: () => Promise<void>;
 }
 
-/**
- * Format token count for display
- */
 function formatTokenCount(count: number): string {
-  if (count >= 1000000) {
-    return `${(count / 1000000).toFixed(1)}M`;
-  }
-  if (count >= 1000) {
-    return `${(count / 1000).toFixed(1)}K`;
-  }
+  if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
   return count.toString();
 }
 
-/**
- * Get color based on usage percentage
- */
 function getUsageColor(percentage: number): string {
-  if (percentage >= 90) {
-    return 'var(--vscode-errorForeground)';
-  }
-  if (percentage >= 70) {
-    return 'var(--vscode-editorWarning-foreground)';
-  }
+  if (percentage >= 90) return 'var(--vscode-errorForeground)';
+  if (percentage >= 70) return 'var(--vscode-editorWarning-foreground)';
   return 'var(--vscode-descriptionForeground)';
 }
 
@@ -57,21 +44,17 @@ export function UsageIndicator({
 
   const percentage = Math.min((tokenCount / maxTokens) * 100, 100);
   const color = getUsageColor(percentage);
+  // stroke-dashoffset controls how much of the arc is "filled"
+  const dashOffset = CIRCUMFERENCE * (1 - percentage / 100);
 
   const handleClick = useCallback(async () => {
     if (!onCompress || isCompressing) return;
-
     try {
       await onCompress();
     } catch (error) {
       logger.error('Compression failed:', error);
     }
   }, [onCompress, isCompressing]);
-
-  // Don't show if no tokens yet (no conversation started)
-  if (tokenCount === 0) {
-    return null;
-  }
 
   return (
     <div className="relative">
@@ -80,7 +63,7 @@ export function UsageIndicator({
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
         disabled={isCompressing || !onCompress}
-        className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors ${
+        className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
           isCompressing
             ? 'opacity-50 cursor-wait'
             : onCompress
@@ -89,29 +72,52 @@ export function UsageIndicator({
         }`}
         title={t('chat.usage.clickToCompress')}
       >
-        {/* Token icon */}
-        <TokenIcon className="w-3 h-3" style={{ color }} />
-
-        {/* Token count */}
-        <span style={{ color }}>
-          {isCompressing ? (
-            <span className="animate-pulse">{t('chat.usage.compressing')}</span>
-          ) : (
-            formatTokenCount(tokenCount)
-          )}
-        </span>
-
-        {/* Progress bar (only show if usage is significant) */}
-        {percentage >= 20 && (
-          <div className="w-8 h-1 bg-[var(--vscode-input-background)] rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${percentage}%`,
-                backgroundColor: color,
-              }}
+        {isCompressing ? (
+          /* Spinning ring while compressing */
+          <svg width="14" height="14" viewBox="0 0 14 14" className="animate-spin">
+            <circle
+              cx="7" cy="7" r={RADIUS}
+              fill="none"
+              stroke="var(--vscode-descriptionForeground)"
+              strokeWidth="2"
+              strokeDasharray={`${CIRCUMFERENCE * 0.75} ${CIRCUMFERENCE * 0.25}`}
+              strokeLinecap="round"
             />
-          </div>
+          </svg>
+        ) : (
+          /* Pie chart */
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            style={{ transform: 'rotate(-90deg)' }}
+          >
+            {/* Track (background circle) */}
+            <circle
+              cx="7" cy="7" r={RADIUS}
+              fill="none"
+              stroke="var(--vscode-input-background)"
+              strokeWidth="10"
+            />
+            {/* Filled arc */}
+            <circle
+              cx="7" cy="7" r={RADIUS}
+              fill="none"
+              stroke={color}
+              strokeWidth="10"
+              strokeDasharray={CIRCUMFERENCE}
+              strokeDashoffset={dashOffset}
+              strokeLinecap="butt"
+            />
+            {/* Border ring */}
+            <circle
+              cx="7" cy="7" r={RADIUS}
+              fill="none"
+              stroke={color}
+              strokeWidth="0.5"
+              opacity="0.4"
+            />
+          </svg>
         )}
       </button>
 
@@ -122,9 +128,9 @@ export function UsageIndicator({
             {t('chat.usage.tokens')}: {tokenCount.toLocaleString()} / {maxTokens.toLocaleString()}
           </div>
           <div className="text-[var(--vscode-descriptionForeground)]">
-            {percentage.toFixed(1)}% {t('chat.usage.used')}
+            {percentage.toFixed(1)}% {t('chat.usage.used')} — {formatTokenCount(tokenCount)}
           </div>
-          {onCompress && (
+          {onCompress && !isCompressing && (
             <div className="text-[var(--vscode-textLink-foreground)] mt-1">
               {t('chat.usage.clickToCompress')}
             </div>
@@ -132,15 +138,5 @@ export function UsageIndicator({
         </div>
       )}
     </div>
-  );
-}
-
-// Token icon
-function TokenIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 16 16" fill="currentColor">
-      <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zM2 8a6 6 0 1 1 12 0A6 6 0 0 1 2 8z" />
-      <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z" />
-    </svg>
   );
 }

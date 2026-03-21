@@ -86,6 +86,8 @@ export function AIAssistant() {
   // Context management state (session-bound using Map for conversation isolation)
   const conversationTokenCountRef = useRef<Map<string, number>>(new Map());
   const conversationCompressingRef = useRef<Map<string, boolean>>(new Map());
+  // Media model call count per conversation
+  const conversationMediaCallCountRef = useRef<Map<string, number>>(new Map());
   // Force update counter to trigger re-render when ref values change
   const [, forceUpdate] = useState(0);
 
@@ -137,6 +139,9 @@ export function AIAssistant() {
   const isCompressing = activeConversationId
     ? (conversationCompressingRef.current.get(activeConversationId) ?? false)
     : false;
+  const mediaModelCallCount = activeConversationId
+    ? (conversationMediaCallCountRef.current.get(activeConversationId) ?? 0)
+    : 0;
 
   // Force update function for context handlers
   const triggerForceUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
@@ -389,6 +394,7 @@ export function AIAssistant() {
           contextTokenCount={contextTokenCount}
           isCompressing={isCompressing}
           onCompressContext={handleCompressContext}
+          mediaModelCallCount={mediaModelCallCount}
           skills={skills}
           onSlashCommand={handleSlashCommand}
           onRequestFiles={(filter) => VSCodeMessages.searchProjectFiles(filter)}

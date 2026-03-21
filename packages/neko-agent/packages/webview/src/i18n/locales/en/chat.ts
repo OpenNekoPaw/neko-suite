@@ -73,9 +73,9 @@ export const chat = {
     'Execution mode: plan (dry-run), ask (confirm), auto (whitelist only)',
   'chat.executionMode.plan': 'Plan',
   'chat.executionMode.planDesc': 'Dry-run, show commands only',
-  'chat.executionMode.ask': 'Ask before executing',
+  'chat.executionMode.ask': 'Approve',
   'chat.executionMode.askDesc': 'Confirm before execution',
-  'chat.executionMode.auto': 'Auto execute',
+  'chat.executionMode.auto': 'Auto',
   'chat.executionMode.autoDesc': 'Auto-execute safe commands',
   'chat.executionMode.deny': 'Never execute',
 

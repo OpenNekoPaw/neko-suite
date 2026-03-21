@@ -186,8 +186,8 @@ export function App() {
                 style={{ touchAction: 'none' }}
               />
               <div
-                className="flex-shrink-0 overflow-hidden border-l border-[var(--sketch-border)]"
-                style={{ width: sidebarWidth }}
+                className="flex-shrink-0 overflow-hidden border-l border-[var(--neko-border)]"
+                style={{ width: sidebarWidth, background: 'var(--neko-surface)' }}
               >
                 <div className="flex flex-col h-full overflow-y-auto">
                   <CollapsiblePanel titleKey={activeTool === 'eraser' ? 'sketch.tool.eraser' : 'sketch.panel.brush'}>

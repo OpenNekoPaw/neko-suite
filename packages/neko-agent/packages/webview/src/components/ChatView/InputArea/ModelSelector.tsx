@@ -3,11 +3,11 @@
  */
 
 import { useState, useRef, useMemo } from 'react';
-import type { ChatModelOption } from '@neko/shared';
+import type { ChatModelOption, ModelCategory } from '@neko/shared';
 import { useClickOutsideSingle } from './useClickOutside';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useTranslation } from '@/i18n/I18nContext';
-import type { ModelCategory } from '@neko/shared';
+import { ModelDot, getProviderColor } from './ModelIcon';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -58,7 +58,10 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
   const getSelectedLabel = () => {
     if (selectedModel === 'auto') return t('chat.autoMode');
     const model = models.find((m) => m.id === selectedModel);
-    return model?.label || t('chat.autoMode');
+    const label = model?.label ?? t('chat.autoMode');
+    // Show only the part after the last '/' (e.g. "openai / gpt-4o" → "gpt-4o")
+    const short = label.includes('/') ? (label.split('/').pop()?.trim() ?? label) : label;
+    return short.length > 16 ? `${short.slice(0, 15)}…` : short;
   };
 
   const getCategoryLabel = (category: string): string => {
@@ -75,12 +78,17 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
 
   const hasModels = models.length > 1;
 
+  const selectedModelObj = selectedModel === 'auto' ? null : models.find((m) => m.id === selectedModel);
+  const dotColor = selectedModelObj ? getProviderColor(selectedModelObj.providerId) : '#6B7280';
+
   return (
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 px-2 py-1 text-[11px] text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-colors"
+        className="flex items-center gap-1 px-1.5 py-1 text-[11px] text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-colors"
+        title={selectedModelObj?.label ?? t('chat.autoMode')}
       >
+        <ModelDot color={dotColor} />
         {getSelectedLabel()}
         <ChevronDownIcon className="w-3 h-3" />
       </button>

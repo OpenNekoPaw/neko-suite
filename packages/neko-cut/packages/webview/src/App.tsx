@@ -295,16 +295,16 @@ function App() {
             onPointerMove={handleHResizeMove}
             onPointerUp={handleHResizeEnd}
             className={`w-1 flex-shrink-0 cursor-ew-resize transition-colors ${
-              isHResizing ? 'bg-[var(--nk-accent)]' : 'bg-[var(--nk-border)] hover:bg-[var(--nk-accent)]'
+              isHResizing ? 'bg-[var(--neko-accent)]' : 'bg-[var(--neko-border)] hover:bg-[var(--neko-accent)]'
             }`}
             style={{ touchAction: 'none' }}
           />
           {/* PropertyPanel */}
           <div
-            className="flex-shrink-0 overflow-hidden border-l border-[var(--nk-border)]"
+            className="flex-shrink-0 overflow-hidden border-l border-[var(--neko-border)]"
             style={{
               width: propertyPanelWidth,
-              background: 'var(--nk-bg-elevated)',
+              background: 'var(--neko-surface)',
             }}
           >
             <PropertyPanelInline />
