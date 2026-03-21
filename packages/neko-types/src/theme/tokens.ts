@@ -153,3 +153,101 @@ export const vscodeCSSTokens = {
     'neko-glass-sm': 'blur(10px)',
   },
 } as const;
+
+// =============================================================================
+// Neko Design Token System
+// CSS custom properties injected via Tailwind addBase plugin.
+// All @neko/shared/components reference these --neko-* variables.
+// Covers dark (default), light, and high-contrast VSCode themes.
+// =============================================================================
+
+export const nekoDesignTokens = {
+  dark: {
+    // Surface layers
+    '--neko-surface':       'var(--vscode-sideBar-background, #242426)',
+    '--neko-elevated':      'var(--vscode-editorWidget-background, #2c2c2e)',
+    // Glass material (frosted glass panels / menus)
+    '--neko-glass-bg':      'rgba(30, 30, 32, 0.88)',
+    '--neko-glass-border':  'rgba(255, 255, 255, 0.09)',
+    '--neko-glass-blur':    'blur(20px) saturate(180%)',
+    '--neko-glass-shadow':  '0 20px 60px rgba(0,0,0,0.55), 0 6px 20px rgba(0,0,0,0.40), 0 1px 4px rgba(0,0,0,0.25)',
+    // Text
+    '--neko-fg':            'var(--vscode-editor-foreground, #e8e8ed)',
+    '--neko-fg-secondary':  'var(--vscode-descriptionForeground, #8e8e93)',
+    '--neko-fg-muted':      'rgba(232, 232, 237, 0.38)',
+    // Interactive
+    '--neko-accent':        'var(--vscode-focusBorder, #0a84ff)',
+    '--neko-accent-soft':   'color-mix(in srgb, var(--neko-accent) 16%, transparent)',
+    '--neko-accent-glow':   'color-mix(in srgb, var(--neko-accent) 35%, transparent)',
+    '--neko-hover':         'rgba(255, 255, 255, 0.06)',
+    '--neko-danger':        '#ff453a',
+    '--neko-danger-hover':  '#ff6961',
+    // Border
+    '--neko-border':        'rgba(255, 255, 255, 0.08)',
+    '--neko-divider':       'rgba(255, 255, 255, 0.06)',
+    // Shadow scale
+    '--neko-shadow-sm':     '0 2px 6px rgba(0,0,0,0.38), 0 1px 2px rgba(0,0,0,0.28)',
+    '--neko-shadow-md':     '0 4px 14px rgba(0,0,0,0.44), 0 2px 6px rgba(0,0,0,0.32)',
+    '--neko-shadow-lg':     '0 12px 32px rgba(0,0,0,0.52), 0 4px 12px rgba(0,0,0,0.36)',
+    '--neko-shadow-xl':     '0 24px 64px rgba(0,0,0,0.60), 0 8px 24px rgba(0,0,0,0.44)',
+    // Radius scale
+    '--neko-radius-sm':     '6px',
+    '--neko-radius-md':     '8px',
+    '--neko-radius-lg':     '12px',
+    '--neko-radius-xl':     '16px',
+  },
+  light: {
+    '--neko-surface':       'var(--vscode-sideBar-background, #ebebed)',
+    '--neko-elevated':      'var(--vscode-editorWidget-background, #ffffff)',
+    '--neko-glass-bg':      'rgba(242, 242, 247, 0.92)',
+    '--neko-glass-border':  'rgba(0, 0, 0, 0.08)',
+    '--neko-glass-blur':    'blur(20px) saturate(180%)',
+    '--neko-glass-shadow':  '0 20px 60px rgba(0,0,0,0.20), 0 6px 20px rgba(0,0,0,0.12)',
+    '--neko-fg':            'var(--vscode-editor-foreground, #1c1c1e)',
+    '--neko-fg-secondary':  'var(--vscode-descriptionForeground, #636366)',
+    '--neko-fg-muted':      'rgba(28, 28, 30, 0.38)',
+    '--neko-accent':        'var(--vscode-focusBorder, #007aff)',
+    '--neko-accent-soft':   'color-mix(in srgb, var(--neko-accent) 14%, transparent)',
+    '--neko-accent-glow':   'color-mix(in srgb, var(--neko-accent) 28%, transparent)',
+    '--neko-hover':         'rgba(0, 0, 0, 0.04)',
+    '--neko-danger':        '#ff3b30',
+    '--neko-danger-hover':  '#ff6961',
+    '--neko-border':        'rgba(0, 0, 0, 0.08)',
+    '--neko-divider':       'rgba(0, 0, 0, 0.05)',
+    '--neko-shadow-sm':     '0 2px 6px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)',
+    '--neko-shadow-md':     '0 4px 14px rgba(0,0,0,0.15), 0 2px 6px rgba(0,0,0,0.10)',
+    '--neko-shadow-lg':     '0 12px 32px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.12)',
+    '--neko-shadow-xl':     '0 24px 64px rgba(0,0,0,0.22), 0 8px 24px rgba(0,0,0,0.14)',
+    '--neko-radius-sm':     '6px',
+    '--neko-radius-md':     '8px',
+    '--neko-radius-lg':     '12px',
+    '--neko-radius-xl':     '16px',
+  },
+  highContrast: {
+    '--neko-surface':       'var(--vscode-sideBar-background)',
+    '--neko-elevated':      'var(--vscode-editorWidget-background)',
+    '--neko-glass-bg':      'var(--vscode-editor-background)',
+    '--neko-glass-border':  'var(--vscode-contrastBorder)',
+    '--neko-glass-blur':    'none',
+    '--neko-glass-shadow':  'none',
+    '--neko-fg':            'var(--vscode-editor-foreground)',
+    '--neko-fg-secondary':  'var(--vscode-editor-foreground)',
+    '--neko-fg-muted':      'var(--vscode-editor-foreground)',
+    '--neko-accent':        'var(--vscode-focusBorder)',
+    '--neko-accent-soft':   'var(--vscode-list-activeSelectionBackground)',
+    '--neko-accent-glow':   'transparent',
+    '--neko-hover':         'var(--vscode-list-hoverBackground)',
+    '--neko-danger':        'var(--vscode-errorForeground)',
+    '--neko-danger-hover':  'var(--vscode-errorForeground)',
+    '--neko-border':        'var(--vscode-contrastBorder)',
+    '--neko-divider':       'var(--vscode-contrastBorder)',
+    '--neko-shadow-sm':     'none',
+    '--neko-shadow-md':     'none',
+    '--neko-shadow-lg':     'none',
+    '--neko-shadow-xl':     'none',
+    '--neko-radius-sm':     '0px',
+    '--neko-radius-md':     '0px',
+    '--neko-radius-lg':     '0px',
+    '--neko-radius-xl':     '0px',
+  },
+} as const;

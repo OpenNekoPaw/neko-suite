@@ -1,9 +1,10 @@
 /**
  * Toolbar - vertical tool selector
  *
- * macOS-style icon toolbar. Base styles come from .sketch-toolbar /
- * .sketch-toolbar button in index.css. Active tool gets accent-soft highlight.
+ * macOS-style icon toolbar. Uses shared VerticalToolbar + ToolbarButton
+ * from @neko/shared/components with the unified .neko-toolbar-btn CSS class.
  */
+import { VerticalToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer } from '@neko/shared/components';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import type { ToolType } from '../types';
@@ -28,39 +29,27 @@ export function Toolbar() {
   const toggleSidebar = useSketchStore((s) => s.toggleSidebar);
 
   return (
-    <div className="sketch-toolbar" role="toolbar" aria-label={t('sketch.toolbar.ariaLabel')}>
-      {TOOLS.map((tool) => {
-        const label    = t(tool.key);
-        const isActive = activeTool === tool.type;
-        return (
-          <button
-            key={tool.type}
-            title={label}
-            aria-label={label}
-            aria-pressed={isActive}
-            className={isActive ? 'active' : ''}
-            onClick={() => setActiveTool(tool.type)}
-          >
-            {tool.icon}
-          </button>
-        );
-      })}
+    <VerticalToolbar>
+      {TOOLS.map((tool) => (
+        <ToolbarButton
+          key={tool.type}
+          icon={tool.icon}
+          title={t(tool.key)}
+          active={activeTool === tool.type}
+          onClick={() => setActiveTool(tool.type)}
+        />
+      ))}
 
-      {/* Push sidebar toggle to the bottom */}
-      <div className="mt-auto" />
+      <ToolbarSpacer />
+      <ToolbarSeparator />
 
-      <div className="sketch-toolbar-sep" aria-hidden="true" />
-
-      <button
+      <ToolbarButton
+        icon={<SidebarIcon />}
         title={t('sketch.sidebar.toggle')}
-        aria-label={t('sketch.sidebar.toggle')}
-        aria-pressed={showSidebar}
-        className={showSidebar ? 'active' : ''}
+        active={showSidebar}
         onClick={toggleSidebar}
-      >
-        <SidebarIcon />
-      </button>
-    </div>
+      />
+    </VerticalToolbar>
   );
 }
 
