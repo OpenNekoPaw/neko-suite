@@ -11,7 +11,7 @@ import type {
   AudioEffectParams,
 } from '../types/audioEffects';
 import { getAudioEffectDefinition } from '../types/audioEffects';
-import { MacIconButton } from '../shared/MacIconButton';
+import { MacIconButton } from '@neko/shared/components';
 import { t } from '../i18n';
 
 interface EffectEditorProps {

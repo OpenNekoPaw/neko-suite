@@ -8,7 +8,7 @@
 import { useCallback } from 'react';
 import { useRecording } from '../hooks/useRecording';
 import { postMessage } from '../shared/useVscodeMessage';
-import { MacButton } from '../shared/MacButton';
+import { MacButton } from '@neko/shared/components';
 import { t } from '../i18n';
 
 export function RecordingPanel() {

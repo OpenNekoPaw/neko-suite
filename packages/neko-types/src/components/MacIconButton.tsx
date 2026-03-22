@@ -1,14 +1,14 @@
 /**
- * MacIconButton - macOS-style icon button (local copy from neko-preview)
+ * MacIconButton - macOS-style icon button
  *
  * Circular button with icon, commonly used in media controls.
  */
 
 import { type ReactNode, type ButtonHTMLAttributes } from 'react';
 
-type IconButtonSize = 'sm' | 'md' | 'lg' | 'xl';
+export type IconButtonSize = 'sm' | 'md' | 'lg' | 'xl';
 
-interface MacIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface MacIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: IconButtonSize;
   children: ReactNode;
   active?: boolean;
@@ -36,12 +36,10 @@ export function MacIconButton({
 
   const variantClasses =
     variant === 'primary'
-      ? 'bg-neko-preview-primary text-white shadow-neko-sm hover:opacity-90 active:scale-95'
-      : 'bg-[var(--btn-bg)] border border-[var(--btn-border)] text-[var(--editor-fg)] hover:bg-[var(--btn-bg-hover)] active:bg-[var(--btn-bg-active)] active:scale-95 transition-all duration-100';
+      ? 'bg-neko-preview-text-primary text-neko-preview-bg hover:scale-105'
+      : 'bg-transparent text-neko-preview-text-secondary hover:text-neko-preview-text-primary hover:scale-110';
 
-  const activeClass = active
-    ? '!bg-[var(--accent)] !text-white !border-transparent shadow-neko-sm'
-    : '';
+  const activeClass = active ? 'bg-neko-glass-active' : '';
   const { button: buttonSize } = sizeClasses[size];
 
   return (

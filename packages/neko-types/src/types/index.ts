@@ -133,6 +133,9 @@ export * from './skill-conflict';
 // Context persistence types (cross-session state)
 export * from './context-persistence';
 
+// Project memory types (cross-session agent memory)
+export * from './project-memory';
+
 // Prompt types (prompt template management)
 export * from './prompt';
 

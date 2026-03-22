@@ -1,5 +1,5 @@
 /**
- * MacButton - macOS-style button component (local copy from neko-preview)
+ * MacButton - macOS-style button component
  *
  * Variants:
  * - primary: Solid background with accent color
@@ -10,10 +10,10 @@
 
 import { type ReactNode, type ButtonHTMLAttributes } from 'react';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'icon';
-type ButtonSize = 'sm' | 'md' | 'lg';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'icon';
+export type ButtonSize = 'sm' | 'md' | 'lg';
 
-interface MacButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface MacButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   children: ReactNode;
@@ -24,7 +24,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   primary:
     'bg-neko-preview-primary hover:bg-neko-preview-primary-hover active:bg-neko-preview-primary-active text-white',
   secondary:
-    'bg-neko-glass hover:bg-neko-glass-hover active:bg-neko-glass-active border border-[var(--editor-border)] text-neko-preview-text-primary',
+    'bg-neko-glass hover:bg-neko-glass-hover active:bg-neko-glass-active neko-speed-border text-neko-preview-text-primary',
   ghost:
     'bg-transparent hover:bg-neko-surface active:bg-neko-surface-hover text-neko-preview-text-primary',
   icon: 'bg-transparent hover:bg-neko-surface active:bg-neko-surface-hover text-neko-preview-text-secondary hover:text-neko-preview-text-primary rounded-full',

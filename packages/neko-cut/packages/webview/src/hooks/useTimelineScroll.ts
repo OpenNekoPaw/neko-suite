@@ -11,7 +11,6 @@ export interface TimelineScrollOptions {
   currentTime: number;
   isPlaying: boolean;
   tracksRef: RefObject<HTMLDivElement>;
-  rulerRef: RefObject<HTMLDivElement>;
 }
 
 export interface VisibleRange {
@@ -24,7 +23,6 @@ export function useTimelineScroll({
   currentTime,
   isPlaying,
   tracksRef,
-  rulerRef,
 }: TimelineScrollOptions) {
   // Virtualization: track visible range for efficient rendering
   const [visibleRange, setVisibleRange] = useState<VisibleRange>({ startTime: 0, endTime: 100 });
@@ -76,16 +74,12 @@ export function useTimelineScroll({
     return () => window.removeEventListener('scrollToElement', handleScrollToElement);
   }, [zoomLevel, tracksRef]);
 
-  // Sync scroll between ruler and tracks
+  // Track scroll for virtualization visible range
   useEffect(() => {
     const tracksContainer = tracksRef.current;
-    const rulerContainer = rulerRef.current;
-    if (!tracksContainer || !rulerContainer) return;
+    if (!tracksContainer) return;
 
     const handleTracksScroll = () => {
-      rulerContainer.scrollLeft = tracksContainer.scrollLeft;
-
-      // Update visible range for virtualization
       const scrollLeft = tracksContainer.scrollLeft;
       const containerWidth = tracksContainer.clientWidth;
       const startTime = Math.max(
@@ -97,21 +91,12 @@ export function useTimelineScroll({
       setVisibleRange({ startTime, endTime });
     };
 
-    const handleRulerScroll = () => {
-      tracksContainer.scrollLeft = rulerContainer.scrollLeft;
-    };
-
     // Initial visible range calculation
     handleTracksScroll();
 
     tracksContainer.addEventListener('scroll', handleTracksScroll);
-    rulerContainer.addEventListener('scroll', handleRulerScroll);
-
-    return () => {
-      tracksContainer.removeEventListener('scroll', handleTracksScroll);
-      rulerContainer.removeEventListener('scroll', handleRulerScroll);
-    };
-  }, [zoomLevel, tracksRef, rulerRef]);
+    return () => tracksContainer.removeEventListener('scroll', handleTracksScroll);
+  }, [zoomLevel, tracksRef]);
 
   // 滚动到指定时间（用于 Minimap 跳转）
   const scrollToTime = (time: number) => {

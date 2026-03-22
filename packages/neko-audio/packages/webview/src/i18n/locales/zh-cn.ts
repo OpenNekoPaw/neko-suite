@@ -89,6 +89,21 @@ const audio: MessageBundle = {
   'audio.toast.normalizeStarted': '正在标准化…',
   'audio.toast.exportStarted': '正在导出…',
 
+  // Track operations (context menu)
+  'audio.track.mute': '静音轨道',
+  'audio.track.unmute': '取消静音',
+  'audio.track.lock': '锁定轨道',
+  'audio.track.unlock': '解锁轨道',
+  'audio.track.moveUp': '上移',
+  'audio.track.moveDown': '下移',
+  'audio.track.delete': '删除轨道',
+
+  // Clip operations (context menu)
+  'audio.clip.mute': '静音片段',
+  'audio.clip.unmute': '取消静音',
+  'audio.clip.duplicate': '复制片段',
+  'audio.clip.delete': '删除片段',
+
   // Export
   'audio.export.title': '导出为',
   'audio.export.format': '格式',

@@ -89,6 +89,21 @@ const audio: MessageBundle = {
   'audio.toast.normalizeStarted': 'Normalizing...',
   'audio.toast.exportStarted': 'Exporting...',
 
+  // Track operations (context menu)
+  'audio.track.mute': 'Mute Track',
+  'audio.track.unmute': 'Unmute Track',
+  'audio.track.lock': 'Lock Track',
+  'audio.track.unlock': 'Unlock Track',
+  'audio.track.moveUp': 'Move Up',
+  'audio.track.moveDown': 'Move Down',
+  'audio.track.delete': 'Delete Track',
+
+  // Clip operations (context menu)
+  'audio.clip.mute': 'Mute Clip',
+  'audio.clip.unmute': 'Unmute Clip',
+  'audio.clip.duplicate': 'Duplicate Clip',
+  'audio.clip.delete': 'Delete Clip',
+
   // Export
   'audio.export.title': 'Export As',
   'audio.export.format': 'Format',

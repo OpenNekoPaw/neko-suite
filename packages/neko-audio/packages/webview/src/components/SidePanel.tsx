@@ -12,7 +12,7 @@ import { EffectsPanel } from './EffectsPanel';
 import { RecordingPanel } from './RecordingPanel';
 import { ExportPanel } from './ExportPanel';
 import { useEffectsChain } from '../hooks/useEffectsChain';
-import { MacIconButton } from '../shared/MacIconButton';
+import { MacIconButton } from '@neko/shared/components';
 import { t } from '../i18n';
 
 const PANEL_TITLES: Record<SidePanelType, string> = {

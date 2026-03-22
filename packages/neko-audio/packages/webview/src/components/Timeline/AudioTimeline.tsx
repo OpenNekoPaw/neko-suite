@@ -21,7 +21,6 @@ export function AudioTimeline() {
   const zoom = Math.max(zoomLevel, 0.1);
 
   const tracksRef = useRef<HTMLDivElement>(null);
-  const rulerRef = useRef<HTMLDivElement>(null);
 
   const totalDuration = useMemo(() => {
     return Math.max(getTotalDuration(tracks), 30);
@@ -33,12 +32,7 @@ export function AudioTimeline() {
     useAudioStore.getState().setCurrentTime(time);
   }, []);
 
-  // Sync horizontal scroll between ruler and tracks
-  const handleTracksScroll = useCallback(() => {
-    if (tracksRef.current && rulerRef.current) {
-      rulerRef.current.scrollLeft = tracksRef.current.scrollLeft;
-    }
-  }, []);
+  // Scroll sync is handled by the ruler canvas via scrollRef — no manual sync needed.
 
   const playheadLeft = currentTime * PIXELS_PER_SECOND * zoom;
 
@@ -53,18 +47,19 @@ export function AudioTimeline() {
           className="shrink-0 border-r border-[var(--editor-border)]"
           style={{ width: TRACK_LABEL_WIDTH, minWidth: TRACK_LABEL_WIDTH }}
         />
-        <div ref={rulerRef} className="flex-1 overflow-hidden relative">
+        <div className="flex-1 overflow-hidden relative">
           <TimelineRuler
             totalDuration={totalDuration}
             zoomLevel={zoom}
             timelineWidth={timelineWidth}
             onSeek={handleSeek}
+            scrollRef={tracksRef}
           />
         </div>
       </div>
 
       {/* Tracks area */}
-      <div ref={tracksRef} onScroll={handleTracksScroll} className="flex-1 overflow-auto relative">
+      <div ref={tracksRef} className="flex-1 overflow-auto relative">
         <div className="flex flex-col" style={{ minWidth: timelineWidth + TRACK_LABEL_WIDTH }}>
           {tracks.map((track) => (
             <TrackLane

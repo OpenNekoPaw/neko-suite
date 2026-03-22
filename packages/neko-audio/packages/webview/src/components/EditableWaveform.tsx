@@ -10,6 +10,10 @@
 
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useAudioStore } from '../stores/audioStore';
+import { ContextMenu } from '@neko/shared/components';
+import type { MenuItem } from '@neko/shared/components';
+import { postMessage } from '../shared/useVscodeMessage';
+import { t } from '../i18n';
 
 // Colors
 const WAVE_COLOR = '#264f78';
@@ -34,6 +38,8 @@ export function EditableWaveform({ onSeek }: EditableWaveformProps) {
   const { waveform, currentTime, selection, silenceRegions, setSelection } = useAudioStore();
   const duration = waveform?.duration ?? 0;
   const peaks = waveform?.peaks ?? null;
+
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
 
   // =========================================================================
   // Drawing
@@ -171,6 +177,37 @@ export function EditableWaveform({ onSeek }: EditableWaveformProps) {
     [duration],
   );
 
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const items: MenuItem[] = [
+        {
+          label: t('audio.edit.trim'),
+          disabled: !selection,
+          onClick: () => {
+            if (selection) {
+              postMessage({ type: 'editor:trim', startTime: selection.start, endTime: selection.end });
+            }
+          },
+        },
+        { separator: true },
+        {
+          label: t('audio.edit.selectAll'),
+          shortcut: '⌘A',
+          onClick: () => setSelection({ start: 0, end: duration }),
+        },
+        {
+          label: t('audio.edit.clearSelection'),
+          disabled: !selection,
+          onClick: () => setSelection(null),
+        },
+      ];
+      setContextMenu({ x: e.clientX, y: e.clientY, items });
+    },
+    [selection, duration, setSelection],
+  );
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return; // Left click only
@@ -241,8 +278,17 @@ export function EditableWaveform({ onSeek }: EditableWaveformProps) {
       className="w-full h-full relative overflow-hidden"
       style={{ cursor: isDragging ? 'col-resize' : 'crosshair' }}
       onMouseDown={handleMouseDown}
+      onContextMenu={handleContextMenu}
     >
       <canvas ref={canvasRef} className="absolute top-0 left-0" />
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenu.items}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

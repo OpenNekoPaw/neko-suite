@@ -8,8 +8,7 @@
 import { useCallback } from 'react';
 import { useAudioStore } from '../stores/audioStore';
 import { postMessage } from '../shared/useVscodeMessage';
-import { MacButton } from '../shared/MacButton';
-import { MacIconButton } from '../shared/MacIconButton';
+import { MacButton, MacIconButton } from '@neko/shared/components';
 import { t } from '../i18n';
 
 interface TransportBarProps {
@@ -235,7 +234,7 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
       </MacIconButton>
       <input
         type="range"
-        className="neko-slider w-16 bg-[var(--neko-surface)]"
+        className="neko-slider w-16 bg-[var(--btn-bg)]"
         min="0"
         max="1"
         step="0.05"

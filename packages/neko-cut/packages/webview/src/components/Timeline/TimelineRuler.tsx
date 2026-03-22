@@ -4,8 +4,8 @@
  * Preserves the neko-cut layout structure:
  *   [TRACK_LABEL_WIDTH spacer] | [shared canvas ruler]
  *
- * Maps local props (totalDuration, zoomLevel, rulerRef, seek) to
- * the shared component's unified API (duration, pixelsPerSecond, onSeek, scrollRef).
+ * The ruler canvas is viewport-width and redraws based on the tracks
+ * container's scroll position (scrollRef). It does NOT scroll itself.
  */
 
 import { memo } from 'react';
@@ -17,14 +17,15 @@ export interface TimelineRulerProps {
   totalDuration: number;
   zoomLevel: number;
   timelineWidth: number;
-  rulerRef: RefObject<HTMLDivElement>;
+  /** The scrollable tracks container — ruler mirrors its scrollLeft via redraw. */
+  scrollRef: RefObject<HTMLDivElement>;
   seek: (time: number) => void;
 }
 
 export const TimelineRuler = memo(function TimelineRuler({
   totalDuration,
   zoomLevel,
-  rulerRef,
+  scrollRef,
   seek,
 }: TimelineRulerProps) {
   return (
@@ -35,18 +36,14 @@ export const TimelineRuler = memo(function TimelineRuler({
         style={{ width: TRACK_LABEL_WIDTH }}
       />
 
-      {/* Scrollable ruler area */}
-      <div
-        ref={rulerRef}
-        className="flex-1 overflow-x-auto scrollbar-hide"
-        style={{ height: RULER_HEIGHT }}
-      >
+      {/* Ruler area — fills remaining width, no scrolling needed */}
+      <div className="flex-1 overflow-hidden" style={{ height: RULER_HEIGHT }}>
         <SharedRuler
           duration={totalDuration}
           pixelsPerSecond={PIXELS_PER_SECOND * zoomLevel}
           onSeek={seek}
           height={RULER_HEIGHT}
-          scrollRef={rulerRef}
+          scrollRef={scrollRef}
         />
       </div>
     </div>

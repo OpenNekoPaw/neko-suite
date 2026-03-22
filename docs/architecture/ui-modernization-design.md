@@ -518,7 +518,7 @@ editor.css (~140 行):
 ├── @layer base {                            — CSS 变量定义
 │   ├── :root { --editor-bg/fg/border, --toolbar-bg, --activity-bg/fg }
 │   ├── :root { --waveform-played/unplayed/cursor, --selection-bg/border }
-│   ├── :root { --neko-glass/surface/preview-primary/text }
+│   ├── :root { --neko-glass/preview-primary/text }
 │   ├── body.vscode-light { 浅色主题覆盖 }
 │   ├── body.vscode-high-contrast { 高对比度覆盖 }
 │   └── html/body/#root 全局重置
@@ -531,6 +531,22 @@ editor.css (~140 行):
 │ }
 └── @keyframes neko-toast-slide-in
 ```
+
+### 4.6 Bug 修复：`--neko-surface` 命名冲突（事后补丁）
+
+**问题根因**：初始迁移时，`MacButton.tsx` 的 ghost/icon 变体使用了 `hover:bg-neko-surface` Tailwind 类来实现悬停半透明效果，导致 `editor.css` 在三套主题的 `@layer base` 中将共享设计 token `--neko-surface` 覆写为透明值（`rgba(255,255,255,0.05)` 等）。
+
+**影响**：共享 Tailwind preset 的 `addComponents` 为 `.neko-vtoolbar`（垂直工具栏容器）注入了 `background: var(--neko-surface)`，期望获得不透明侧边栏背景色 `var(--vscode-sideBar-background)`。被 editor.css 覆写后，左侧工具栏和右侧面板的背景变为透明，与 TransportBar 颜色不一致，造成视觉割裂。
+
+**修复内容**：
+
+| 文件 | 修改 |
+|------|------|
+| `shared/MacButton.tsx` | ghost/icon 变体的 hover/active 状态改用语义正确的 `neko-glass` / `neko-glass-active` token |
+| `styles/editor.css` | 删除三套主题中 `--neko-surface` 和 `--neko-surface-hover` 的本地覆写；删除迁移后遗留的死代码（`.audio-toolbar*` / `.audio-panel-*` 共 ~70 行） |
+| `components/TransportBar.tsx` | range slider 轨道背景从 `bg-[var(--neko-surface)]` 改为 `bg-[var(--btn-bg)]` |
+
+**经验教训**：`--neko-surface` 在共享设计 token 体系（`nekoDesignTokens`）中语义为"不透明表面背景"，不可本地覆写为透明值。需要半透明叠加效果时应使用 `--neko-glass` / `--neko-glass-hover` / `--neko-glass-active` 系列变量。
 
 ---
 

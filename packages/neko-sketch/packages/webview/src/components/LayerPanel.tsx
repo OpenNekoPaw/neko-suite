@@ -4,19 +4,65 @@
  * macOS source-list style: rows use .sketch-item-row for hover/selected states,
  * action buttons use .sketch-icon-button with danger variant for remove.
  */
+import { useState, useCallback } from 'react';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
+import { ContextMenu } from '@neko/shared/components';
+import type { MenuItem } from '@neko/shared/components';
 import type { LayerData } from '../types';
 
 export function LayerPanel() {
   const { t } = useTranslation();
-  const layers           = useSketchStore((s) => s.layers);
-  const activeLayerId    = useSketchStore((s) => s.activeLayerId);
-  const setActiveLayer   = useSketchStore((s) => s.setActiveLayer);
-  const addNewLayer      = useSketchStore((s) => s.addNewLayer);
-  const removeLayerById  = useSketchStore((s) => s.removeLayerById);
-  const updateLayerProps = useSketchStore((s) => s.updateLayerProps);
-  const show             = useSketchStore((s) => s.showLayerPanel);
+  const layers              = useSketchStore((s) => s.layers);
+  const activeLayerId       = useSketchStore((s) => s.activeLayerId);
+  const setActiveLayer      = useSketchStore((s) => s.setActiveLayer);
+  const addNewLayer         = useSketchStore((s) => s.addNewLayer);
+  const removeLayerById     = useSketchStore((s) => s.removeLayerById);
+  const updateLayerProps    = useSketchStore((s) => s.updateLayerProps);
+  const duplicateLayerById  = useSketchStore((s) => s.duplicateLayerById);
+  const moveLayerTo         = useSketchStore((s) => s.moveLayerTo);
+  const show                = useSketchStore((s) => s.showLayerPanel);
+
+  const [layerMenu, setLayerMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+
+  const handleLayerContextMenu = useCallback(
+    (e: React.MouseEvent, layer: LayerData) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const arrayIndex = layers.findIndex((l) => l.id === layer.id);
+      const items: MenuItem[] = [
+        {
+          label: t('sketch.layer.duplicate'),
+          onClick: () => duplicateLayerById(layer.id),
+        },
+        { separator: true },
+        {
+          label: t('sketch.layer.moveUp'),
+          disabled: arrayIndex >= layers.length - 1,
+          onClick: () => moveLayerTo(layer.id, arrayIndex + 1),
+        },
+        {
+          label: t('sketch.layer.moveDown'),
+          disabled: arrayIndex <= 0,
+          onClick: () => moveLayerTo(layer.id, arrayIndex - 1),
+        },
+        { separator: true },
+        {
+          label: t('sketch.layer.mergeDown'),
+          disabled: true,
+          onClick: () => { /* not implemented */ },
+        },
+        { separator: true },
+        {
+          label: t('sketch.layer.delete'),
+          danger: true,
+          onClick: () => removeLayerById(layer.id),
+        },
+      ];
+      setLayerMenu({ x: e.clientX, y: e.clientY, items });
+    },
+    [layers, t, duplicateLayerById, moveLayerTo, removeLayerById],
+  );
 
   if (!show) return null;
 
@@ -46,9 +92,19 @@ export function LayerPanel() {
             onToggleVisible={() => updateLayerProps(layer.id, { visible: !layer.visible })}
             onToggleLock={() => updateLayerProps(layer.id, { locked: !layer.locked })}
             onRemove={() => removeLayerById(layer.id)}
+            onContextMenu={(e) => handleLayerContextMenu(e, layer)}
           />
         ))}
       </div>
+
+      {layerMenu && (
+        <ContextMenu
+          x={layerMenu.x}
+          y={layerMenu.y}
+          items={layerMenu.items}
+          onClose={() => setLayerMenu(null)}
+        />
+      )}
     </div>
   );
 }
@@ -60,9 +116,10 @@ function LayerItem(props: {
   onToggleVisible: () => void;
   onToggleLock: () => void;
   onRemove: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const { t } = useTranslation();
-  const { layer, isActive, onSelect, onToggleVisible, onToggleLock, onRemove } = props;
+  const { layer, isActive, onSelect, onToggleVisible, onToggleLock, onRemove, onContextMenu } = props;
 
   return (
     <div
@@ -71,6 +128,7 @@ function LayerItem(props: {
       aria-selected={isActive}
       className={`sketch-item-row${isActive ? ' active' : ''}`}
       onClick={onSelect}
+      onContextMenu={onContextMenu}
       onKeyDown={(e) => {
         if (e.key === 'Enter') onSelect();
       }}

@@ -62,7 +62,6 @@ export function Timeline() {
   // Refs
   const timelineRef = useRef<HTMLDivElement>(null);
   const tracksRef = useRef<HTMLDivElement>(null);
-  const rulerRef = useRef<HTMLDivElement>(null);
 
   // UI state
   const [showExportPanel, setShowExportPanel] = useState(false);
@@ -109,7 +108,6 @@ export function Timeline() {
     currentTime,
     isPlaying,
     tracksRef,
-    rulerRef,
   });
 
   // 4. Selection box
@@ -240,12 +238,12 @@ export function Timeline() {
         />
       )}
 
-      {/* Ruler */}
+      {/* Ruler — canvas redraws based on tracksRef scroll, no separate scroll container needed */}
       <TimelineRuler
         totalDuration={totalDuration}
         zoomLevel={zoomLevel}
         timelineWidth={timelineWidth}
-        rulerRef={rulerRef}
+        scrollRef={tracksRef}
         seek={seek}
       />
 

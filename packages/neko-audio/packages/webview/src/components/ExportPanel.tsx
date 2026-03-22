@@ -8,7 +8,7 @@
 import { useState, useCallback } from 'react';
 import { useAudioStore } from '../stores/audioStore';
 import { postMessage } from '../shared/useVscodeMessage';
-import { MacButton } from '../shared/MacButton';
+import { MacButton } from '@neko/shared/components';
 import { t } from '../i18n';
 
 // =============================================================================

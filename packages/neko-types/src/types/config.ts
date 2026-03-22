@@ -84,6 +84,7 @@ export type ProviderType =
   | 'azure'
   | 'ollama'
   | 'generic'
+  | 'newapi'
   // Media generation providers
   | 'xai'
   | 'kling'

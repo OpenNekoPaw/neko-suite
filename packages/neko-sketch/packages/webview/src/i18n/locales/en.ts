@@ -29,6 +29,8 @@ export const en: MessageBundle = {
   'sketch.layer.lock': 'Lock layer',
   'sketch.layer.unlock': 'Unlock layer',
   'sketch.layer.remove': 'Remove layer',
+  'sketch.layer.moveUp': 'Move Up',
+  'sketch.layer.moveDown': 'Move Down',
 
   // Brush panel
   'sketch.brush.pencil': 'Pencil',

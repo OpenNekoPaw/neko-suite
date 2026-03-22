@@ -11,7 +11,7 @@ import { AUDIO_EFFECT_DEFINITIONS } from '../types/audioEffects';
 import type { EffectsChain } from '../hooks/useEffectsChain';
 import { EffectEditor } from './EffectEditor';
 import { postMessage } from '../shared/useVscodeMessage';
-import { MacButton } from '../shared/MacButton';
+import { MacButton } from '@neko/shared/components';
 import { t } from '../i18n';
 
 interface EffectsPanelProps {

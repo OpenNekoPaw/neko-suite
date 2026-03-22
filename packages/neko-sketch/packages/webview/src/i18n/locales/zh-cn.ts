@@ -29,6 +29,8 @@ export const zhCN: MessageBundle = {
   'sketch.layer.lock': '锁定图层',
   'sketch.layer.unlock': '解锁图层',
   'sketch.layer.remove': '移除图层',
+  'sketch.layer.moveUp': '上移',
+  'sketch.layer.moveDown': '下移',
 
   // Brush panel
   'sketch.brush.pencil': '铅笔',
