@@ -351,6 +351,77 @@ When an official AI SDK provider package is released (e.g., `@ai-sdk/minimax`):
 
 No changes needed in `MediaTaskExecutor` or any other consumer.
 
+## Chat-Based Image Generation (2026-03-23)
+
+### Background
+
+Traditional image generation uses dedicated endpoints (`/v1/images/generations`). But multimodal LLMs (Gemini, GPT-image) generate images via chat completions (`/v1/chat/completions`) with `modalities: ['text', 'image']`. This is an industry trend — newer models increasingly embed image generation into the chat API.
+
+### Two Image Generation Paths
+
+```
+Path 1 (standard): Dedicated image models — flux, dall-e, imagen
+  → NewAPIImageModel → POST /v1/images/generations
+
+Path 2 (chat): Multimodal LLMs — gemini-3-pro-image-preview, gpt-image-1.5
+  → NewAPIChatImageModel → POST /v1/chat/completions + modalities: ['text', 'image']
+```
+
+### Path Selection Logic
+
+Determined by model capabilities in `MediaTaskExecutor.tryAISDK()`:
+
+```
+model has 'chat' + 'image_generation' capabilities → imageMode: 'chat'
+model has only 'image_generation' capability        → imageMode: 'standard'
+```
+
+The `imageMode` is passed through `resolveProvider()` → `createNewAPIProvider()` to select the correct `ImageModelV3` implementation.
+
+### NewAPIChatImageModel
+
+Implements `ImageModelV3` but internally sends a chat completions request:
+
+```typescript
+// Request
+POST /v1/chat/completions
+{
+  "model": "gemini-3-pro-image-preview",
+  "messages": [{ "role": "user", "content": "Generate a cute cat" }],
+  "modalities": ["text", "image"]
+}
+
+// Response: content array with image parts (base64)
+```
+
+Handles multiple response formats:
+- `{ type: 'image_url', image_url: { url: 'data:image/png;base64,...' } }`
+- `{ type: 'image', data: 'base64...' }`
+- String content with embedded `data:image/...;base64,...` URLs
+
+### No Conflict with Agent Chat Model
+
+Chat LLM and media models are independently configured:
+- `defaultModel` → LLM for agent reasoning (e.g., `gpt-5.1-codex`)
+- `defaultMediaModels.image` → image generation model (e.g., `gemini-3-pro-image-preview`)
+
+Agent framework filters inline images from LLM responses (`think-phase.ts` line 62: `.filter(part.type === 'text')`), so even if the chat LLM can generate images, it won't bypass the `GenerateImage` tool.
+
+### NewAPI Video: Sora Format
+
+NewAPI video generation now uses the official Sora format:
+
+```
+POST /v1/videos (multipart/form-data)
+  - model: "sora-2"
+  - prompt: "..."
+  - seconds: "8" (string, not duration number)
+  - input_reference: binary file (for image-to-video)
+
+GET /v1/videos/{video_id} → poll status
+GET /v1/videos/{video_id}/content → download video file
+```
+
 ## Risk Assessment
 
 | Risk | Impact | Mitigation |

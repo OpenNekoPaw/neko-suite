@@ -240,10 +240,21 @@ export class MediaTaskExecutor {
     onProgress: (progress: number) => void,
     legacyAdapter?: MediaAdapter,
   ): Promise<TaskOutput | null> {
+    // Infer image generation mode from model capabilities:
+    // Models with both 'chat' and 'image_generation' use chat completions (Gemini, GPT-image)
+    // Models with only 'image_generation' use dedicated /v1/images/generations (flux, dall-e)
+    const capabilities = model.capabilities ?? [];
+    const imageMode =
+      capabilities.includes('chat') &&
+      (capabilities.includes('image_generation') || capabilities.includes('text_to_image'))
+        ? ('chat' as const)
+        : ('standard' as const);
+
     const resolved = resolveProvider(
       provider.type,
       { apiUrl: provider.apiUrl, apiKey: provider.apiKey ?? '' },
       legacyAdapter as import('@neko/ai-sdk').LegacyMediaAdapter | undefined,
+      { imageMode },
     );
     if (!resolved) return null;
 
@@ -300,12 +311,16 @@ export class MediaTaskExecutor {
 
         onProgress(100);
         const video = result.video;
+        // Handle both base64 (file type) and URL (url type) responses
+        const videoUrl = video.base64
+          ? `data:${video.mediaType};base64,${video.base64}`
+          : ((video as { url?: string }).url ?? '');
         return {
           data: {
             outputs: [
               {
                 type: 'video' as const,
-                url: video.base64 ? `data:${video.mediaType};base64,${video.base64}` : '',
+                url: videoUrl,
                 mimeType: video.mediaType,
               },
             ],

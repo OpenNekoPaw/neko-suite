@@ -20,6 +20,7 @@ export function resolveProvider(
   providerType: string,
   config: ProviderConfig,
   legacyAdapter?: LegacyMediaAdapter,
+  options?: { imageMode?: 'standard' | 'chat' },
 ): ResolvedProvider | null {
   switch (providerType) {
     case 'openai': {
@@ -39,7 +40,7 @@ export function resolveProvider(
     case 'newapi':
     case 'oneapi':
     case 'generic':
-      return createNewAPIProvider(config);
+      return createNewAPIProvider(config, options);
 
     default:
       break;
